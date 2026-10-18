@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '#components/ui/alert';
 import { Button } from '#components/ui/button';
 import { Input } from '#components/ui/input';
 import { Textarea } from '#components/ui/textarea';
+import { Spinner } from '#components/ui/spinner';
 import {
   Field,
   FieldDescription,
@@ -209,12 +210,15 @@ function initialForm(
 export function ArticleEditor({
   data,
   article: a,
+  draftKey,
   busy,
   onSave,
   onCancel,
 }: {
   data: TaskData;
   article: ArticleProposal;
+  /** The artifact version being edited. */
+  draftKey: string;
   busy: boolean;
   onSave: (article: ArticleDraft) => Promise<boolean>;
   onCancel: () => void;
@@ -224,9 +228,10 @@ export function ArticleEditor({
   const locales = [
     ...new Set([...(target?.locales || []), ...Object.keys(a.draft.locales)]),
   ];
-  // Kept in the task draft store: navigation asks before discarding it, like the other drafts on this page.
+  // Kept in the task draft store: navigation asks before discarding it, like the other drafts on this page. One
+  // draft per version, so an edit left on an older version never replaces a newer one.
   const [raw, setRaw, clear] = useTaskDraft(
-    'article',
+    `article:${draftKey}`,
     JSON.stringify(initialForm(a, base, locales)),
   );
   const form = JSON.parse(raw) as EditForm;
@@ -349,7 +354,7 @@ export function ArticleEditor({
                     <Textarea
                       {...props}
                       rows={f === 'body' ? 18 : 3}
-                      className={f === 'body' ? 'nr-stage-edit' : undefined}
+                      className='field-sizing-fixed'
                     />
                   )}
                   {err(key)}
@@ -384,6 +389,7 @@ export function ArticleEditor({
           {$t('common.cancel')}
         </Button>
         <Button type='submit' disabled={busy}>
+          {busy && <Spinner data-icon='inline-start' />}
           {$t('common.save')}
         </Button>
       </div>

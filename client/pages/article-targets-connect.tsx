@@ -213,6 +213,8 @@ function TargetsPanel({
     stale?: boolean;
   }>();
   const [busy, setBusy] = useState<string>('');
+  // After a failed save, fields revalidate as they change (T3.3).
+  const [submitted, setSubmitted] = useState(false);
   const focusLater = (key: string) =>
     setTimeout(() => document.getElementById(`${id}-${key}`)?.focus(), 0);
   const load = useCallback(async () => {
@@ -253,15 +255,20 @@ function TargetsPanel({
   async function startEdit(t?: ArticleTargetView) {
     setErrors({});
     setFormError(undefined);
+    setSubmitted(false);
     if (!t) {
       setForm(formFor());
       focusLater('name');
       return;
     }
-    // Edit from the latest saved settings, not the list on screen (T3.8).
-    const fresh = await load();
-    const current = fresh?.targets.find((x) => x.id === t.id);
-    if (!current) return;
+    // Edit from the latest saved settings, not the list on screen (T3.8). A failed reload shows the load Alert.
+    const fresh = await run(`edit-${t.id}`, load);
+    if (!fresh) return;
+    const current = fresh.targets.find((x) => x.id === t.id);
+    if (!current) {
+      toast.error(() => $t('articles.targetMissing'));
+      return;
+    }
     setForm(formFor(current));
     focusLater('name');
   }
@@ -299,6 +306,7 @@ function TargetsPanel({
     if (!form || !list) return;
     const found = validate(form);
     setErrors(found);
+    setSubmitted(true);
     setFormError(undefined);
     const first = (
       ['name', 'address', 'repo', 'branch', 'advanced'] as const
@@ -473,23 +481,40 @@ function TargetsPanel({
       busy={busy === 'save'}
       update={(patch) => {
         update(patch);
-        setErrors((old) =>
-          Object.fromEntries(
-            Object.entries(old).filter(
-              ([k]) =>
-                !(k in patch) && !(k === 'address' && 'baseUrl' in patch),
-            ),
-          ),
-        );
+        // Client checks run again on every change after a failed save; a server error on the key stays until
+        // the key itself changes.
+        if (submitted)
+          setErrors((old) => ({
+            ...validate({ ...form, ...patch }),
+            ...(old.secret && !('secret' in patch)
+              ? { secret: old.secret }
+              : {}),
+          }));
       }}
       changeKind={(k) => void changeKind(k)}
       onSave={() => void save()}
       onCancel={cancel}
-      onReload={() => void load().then(() => setFormError(undefined))}
+      onReload={() =>
+        void load().then((next) => {
+          if (next) setFormError(undefined);
+        })
+      }
     />
   );
   return (
     <div className='flex flex-col gap-4'>
+      {loadError && (
+        <Alert variant='destructive'>
+          <AlertDescription>
+            {$t(loadError.key)}{' '}
+            {loadError.retry && (
+              <Button variant='outline' size='sm' onClick={() => void load()}>
+                {$t('common.retry')}
+              </Button>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
       {form?.isNew && editor}
       {list.targets.length === 0 && !form ? (
         <Empty className='min-h-40 border border-dashed p-6 md:p-6'>
@@ -573,39 +598,46 @@ function TargetsPanel({
                     disabled={disabled}
                     onClick={() => void startEdit(t)}
                   >
+                    {busy === `edit-${t.id}` && (
+                      <Spinner data-icon='inline-start' />
+                    )}
                     {$t('articlePublishing.edit')}
                   </Button>,
                 )}
-              {canRemove && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <Button
-                        variant='ghost'
-                        size='icon'
-                        aria-label={$t('articlePublishing.actions', {
-                          0: t.name,
-                        })}
-                        disabled={disabled}
-                      />
-                    }
-                  >
-                    {busy === `remove-${t.id}` ? (
-                      <Spinner />
-                    ) : (
-                      <MoreHorizontal />
-                    )}
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align='end' className='w-auto min-w-40'>
-                    <DropdownMenuItem
-                      variant='destructive'
-                      onClick={() => void remove(t)}
+              {canRemove &&
+                locked(
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          variant='ghost'
+                          size='icon'
+                          aria-label={$t('articlePublishing.actions', {
+                            0: t.name,
+                          })}
+                          disabled={disabled}
+                        />
+                      }
                     >
-                      {$t('articlePublishing.delete')}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+                      {busy === `remove-${t.id}` ? (
+                        <Spinner />
+                      ) : (
+                        <MoreHorizontal />
+                      )}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align='end'
+                      className='w-auto min-w-40'
+                    >
+                      <DropdownMenuItem
+                        variant='destructive'
+                        onClick={() => void remove(t)}
+                      >
+                        {$t('articlePublishing.delete')}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>,
+                )}
             </CardFooter>
           </Card>
         ),
@@ -770,7 +802,7 @@ function EditCard({
             <Field data-invalid={Boolean(errors.secret)}>
               <FieldLabel htmlFor={`${id}-secret`}>
                 {$t('articlePublishing.secret')}
-                {form.kind === 'git-files' || form.hasSecret ? '' : ' *'}
+                {form.hasSecret ? '' : ' *'}
               </FieldLabel>
               <Input
                 id={`${id}-secret`}
@@ -812,7 +844,7 @@ function EditCard({
                 id={`${id}-advanced`}
                 rows={14}
                 spellCheck={false}
-                className='max-h-[60dvh] font-mono text-xs'
+                className='field-sizing-fixed font-mono text-xs'
                 value={form.advanced}
                 onChange={(e) =>
                   update({ advanced: e.target.value, touched: true })

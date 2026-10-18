@@ -164,7 +164,8 @@ export class ArticleTargets {
           (sameDownstream ? previous?.gitToken : undefined))
         : undefined,
     };
-    if (target.kind !== 'git-files' && !next.secret)
+    // Every kind writes with its credential (a Git target commits with its token).
+    if (!next.secret)
       fail(
         previous && !sameEndpoint ? 'secretForNewEndpoint' : 'secretRequired',
       );

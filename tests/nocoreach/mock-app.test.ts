@@ -1658,10 +1658,11 @@ for (const target of [
           format: 'frontmatter',
           frontmatter: { title: 'title', description: 'description' },
         },
+        secret: 'fictional-token',
       }),
     );
     expect((await data(call('nrArticles', 'targets'))).targets).toMatchObject([
-      { id: 'blog', hasSecret: false },
+      { id: 'blog', hasSecret: true },
     ]);
     covered.add('articles');
 

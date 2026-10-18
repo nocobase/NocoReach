@@ -159,6 +159,7 @@ it('edits a new article with validation on save and sends only what it fills in'
         <ArticleEditor
           data={data}
           article={fresh}
+          draftKey='a1'
           busy={false}
           onSave={onSave}
           onCancel={vi.fn()}

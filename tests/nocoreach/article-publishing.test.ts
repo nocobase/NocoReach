@@ -508,7 +508,11 @@ describe('Git files target', () => {
       'content/blog/hello/index.md': file,
       'README.md': 'readme',
     });
-    const { delivery } = await setup(gitTarget(), { github: git.fetcher });
+    const { delivery } = await setup(
+      gitTarget(),
+      { github: git.fetcher },
+      { secret: 'gh-token' },
+    );
     expect(await delivery.provider('1', 'repo').search('hel', 5)).toEqual([
       { id: 'hello', slug: 'hello', title: 'hello' },
     ]);

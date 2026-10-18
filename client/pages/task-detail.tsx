@@ -277,12 +277,15 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   // An article to publish to a target (article-review.tsx): read field by field, or edited as a new version.
   if(out.article){
    const missingChecks=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key));
+   // A target removed after the draft was written cannot receive it: say so instead of offering a publish that fails.
+   const articleTarget=out.article.targetId,targetGone=!(data.articleTargets||[]).some(t=>t.id===articleTarget);
    return <StageCard icon={<Eye/>} title={$t('articleTask.reviewTitle')} at={out.createdAt}
-    actions={editing||!allowed?undefined:<><Button disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote}})}><Rocket/>{$t(mockSettingsAvailable() ? 'taskDetail.simulatePublish' : 'taskDetail.publishLive')}</Button>{requestButton}<Button ref={editButtonRef} variant='ghost' disabled={busy} onClick={()=>setEditing(true)}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
+    actions={editing||!allowed?undefined:<>{!targetGone&&<Button disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote}})}><Rocket/>{$t(mockSettingsAvailable() ? 'taskDetail.simulatePublish' : 'taskDetail.publishLive')}</Button>}{requestButton}<Button ref={editButtonRef} variant='ghost' disabled={busy} onClick={()=>setEditing(true)}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
     {!editing&&request(getStageExecutor().agent)}
+    {targetGone&&<p role='alert' className='text-sm text-destructive'>{$t('articles.targetMissing')}</p>}
     <p className="text-sm text-muted-foreground">{$t('taskDetail.artifactVersion',{0:getStageExecutor()[producer.kind],1:out.createdBy==='agent'?'':$t('taskDetail.recordedAside'),2:out.version})}</p>
     <LastFeedback w={w} stage={stage} out={out}/>
-    {editing?<ArticleEditor data={data} article={out.article} busy={busy} onCancel={()=>{setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}} onSave={async article=>{const d=await act('editArticleDraft',{artifactId:out.id,article});if(d){setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}return Boolean(d);}}/>:<>
+    {editing?<ArticleEditor data={data} article={out.article} draftKey={out.id} busy={busy} onCancel={()=>{setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}} onSave={async article=>{const d=await act('editArticleDraft',{artifactId:out.id,article});if(d){setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}return Boolean(d);}}/>:<>
      <ArticleReview key={out.id} data={data} article={out.article} notes={out.content}/>
      <Checklist stage={stage} checked={checked} setChecked={setChecked} busy={busy}/>
      <Reveal label={$t('taskDetail.editReleaseNotes')} defaultOpen={Boolean(relNote)}><label className="nr-field">{$t('taskDetail.releaseNotesGoPublishRecord')}<textarea aria-label={$t('taskDetail.releaseNotes')} rows={3} value={relNote} disabled={busy} placeholder={$t('taskDetail.oneTwoSentencesWhatChanged')} onChange={e=>{setRelNote(e.target.value);}}/></label></Reveal>
