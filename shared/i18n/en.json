@@ -6446,7 +6446,6 @@
   "collectorPage.connectXiaohongshu": "Connect Xiaohongshu",
   "collectorPage.connectBilibili": "Connect Bilibili",
   "collectorPage.connectYouTube": "Connect YouTube",
-  "collectorPage.connectionSettings": "Connection settings",
   "collectorPage.loadFailed": "Couldn't load collected data",
   "collectorPage.disconnectedKept": "Disconnected. Showing the data saved earlier",
   "collectorPage.collecting": "Collecting. Results refresh automatically",

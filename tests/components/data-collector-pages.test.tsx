@@ -1,6 +1,6 @@
 // 小红书, Bilibili and YouTube data pages (client/pages/data-*.tsx): each reads its platform's period report and lists
 // the saved records published in the range; connection settings stay in 数据源.
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import type { ComponentType } from 'react';
@@ -10,6 +10,7 @@ import DataXiaohongshu from '../../client/pages/data-xiaohongshu';
 import DataBilibili from '../../client/pages/data-bilibili';
 import DataYouTube from '../../client/pages/data-youtube';
 import { setDictionary } from '../../client/i18n';
+import { WorkspaceCacheProvider } from '#pages/workspace-cache';
 
 const { action } = vi.hoisted(() => ({ action: vi.fn() }));
 const authorization = vi.hoisted(() => ({
@@ -20,15 +21,14 @@ const authorization = vi.hoisted(() => ({
 vi.mock('#lib/nocoreach-api', () => ({
   nocobaseClient: { action, wrapRequests: vi.fn() },
 }));
+vi.mock('#lib/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
+}));
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => ({
     session: { user: { id: '1' }, session: { id: 'session-a' } },
     isPending: false,
-    refresh: vi.fn(),
   }),
-}));
-vi.mock('#lib/toast', () => ({
-  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }));
 vi.mock('@nocobase/app-plugin-authorization/client', () => ({
   useAuthorizationClient: () => authorization,
@@ -69,7 +69,11 @@ function show(Page: ComponentType, path: string) {
     ],
     { initialEntries: [path] },
   );
-  render(<RouterProvider router={router} />);
+  render(
+    <WorkspaceCacheProvider>
+      <RouterProvider router={router} />
+    </WorkspaceCacheProvider>,
+  );
   return router;
 }
 const calls = (name: string) => action.mock.calls.filter(([, a]) => a === name);
@@ -82,6 +86,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   setDictionary(null);
+  sessionStorage.clear();
+  vi.useRealTimers();
 });
 
 const xiaohongshu = {
@@ -228,13 +234,10 @@ it('keeps saved Bilibili videos readable after disconnecting, without turning un
   expect(
     screen.getByText('Disconnected. Showing the data saved earlier'),
   ).toBeVisible();
-  // A disconnected platform cannot collect; its settings stay one click away.
+  // A disconnected platform cannot collect.
   expect(
     screen.queryByRole('button', { name: 'Read now' }),
   ).not.toBeInTheDocument();
-  expect(
-    screen.getByRole('button', { name: 'Connection settings' }),
-  ).toBeVisible();
 });
 
 const youtube = {
@@ -359,14 +362,11 @@ it('sorts on the server from a column header and keeps the order in the URL', as
       body: { sort: 'views', order: 'asc' },
     }),
   );
-  // A third click goes back to the default, newest first, which leaves the URL.
+  // A third click goes back to the default, newest first, which leaves the URL
+  // and shows the report already read today without asking again.
   await userEvent.click(screen.getByRole('button', { name: '按播放排序' }));
-  await waitFor(() =>
-    expect(calls('report').at(-1)![2]).toMatchObject({
-      body: { sort: 'published', order: 'desc' },
-    }),
-  );
-  expect(router.state.location.search).toBe('');
+  await waitFor(() => expect(router.state.location.search).toBe(''));
+  expect(calls('report')).toHaveLength(3);
 });
 
 it('offers ticked videos to the Agent', async () => {
@@ -386,10 +386,36 @@ it('keeps the shown rows and offers Retry when a reload fails', async () => {
   action.mockResolvedValueOnce(youtube).mockRejectedValue(new Error('down'));
   show(DataYouTube, '/data/youtube');
   await screen.findByRole('link', { name: 'Tutorial' });
-  await userEvent.click(screen.getByRole('button', { name: '刷新' }));
+  await userEvent.click(screen.getByRole('button', { name: '按播放排序' }));
   expect(
     await screen.findByText('列表没有更新，显示的是上次的结果'),
   ).toBeVisible();
   expect(screen.getByRole('link', { name: 'Tutorial' })).toBeVisible();
   expect(screen.getByRole('button', { name: '重试' })).toBeVisible();
+});
+
+it('reuses the report read today when the page opens again, and reads it again on a new day or an explicit read', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(2026, 9, 18, 10));
+  action.mockImplementation(async (_resource, name) =>
+    name === 'sync' ? {} : youtube,
+  );
+  const router = show(DataYouTube, '/data/youtube');
+  const visit = async () => {
+    await act(() => router.navigate('/connections'));
+    await screen.findByText('Data sources page');
+    await act(() => router.navigate('/data/youtube'));
+    return screen.findByRole('link', { name: 'Tutorial' });
+  };
+  await screen.findByRole('link', { name: 'Tutorial' });
+  expect(calls('report')).toHaveLength(1);
+
+  expect(await visit()).toBeVisible();
+  expect(calls('report')).toHaveLength(1);
+  await userEvent.click(screen.getByRole('button', { name: '立即读取' }));
+  await waitFor(() => expect(calls('report')).toHaveLength(2));
+
+  vi.setSystemTime(new Date(2026, 9, 19, 0, 1));
+  await visit();
+  await waitFor(() => expect(calls('report')).toHaveLength(3));
 });

@@ -13,16 +13,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { RefreshCw } from 'lucide-react';
 import { Button } from '#components/ui/button';
 import { Card } from '#components/ui/card';
 import { Skeleton } from '#components/ui/skeleton';
 import { Spinner } from '#components/ui/spinner';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '#components/ui/tooltip';
 import {
   DataTable,
   makeSelectionColumn,
@@ -294,33 +288,6 @@ export function CollectorTable<T>({
         }
       />
     </Card>
-  );
-}
-
-/** Reads the report again: background collections change it while the page is open. */
-export function RefreshButton({
-  loading,
-  onClick,
-}: {
-  loading: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            variant='outline'
-            size='icon'
-            aria-label={$t('common.refresh')}
-            onClick={onClick}
-          />
-        }
-      >
-        <RefreshCw className={loading ? 'animate-spin' : undefined} />
-      </TooltipTrigger>
-      <TooltipContent>{$t('common.refresh')}</TooltipContent>
-    </Tooltip>
   );
 }
 

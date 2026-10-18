@@ -6446,7 +6446,6 @@
   "collectorPage.connectXiaohongshu": "接入小红书",
   "collectorPage.connectBilibili": "接入 Bilibili",
   "collectorPage.connectYouTube": "接入 YouTube",
-  "collectorPage.connectionSettings": "连接设置",
   "collectorPage.loadFailed": "无法加载采集数据",
   "collectorPage.disconnectedKept": "连接已断开，以下为此前保存的数据",
   "collectorPage.collecting": "正在采集，结果会自动刷新",

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/client';
-import { Trash2 } from 'lucide-react';
 import { $t, useNocoReachLocale } from '#i18n';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
@@ -102,13 +101,12 @@ function ClearButton({
   }
   return (
     <Button
-      variant='outline'
-      size='sm'
+      type='button'
+      variant='ghost'
       disabled={disabled || busy}
       title={disabled ? $t('collectorClear.waitForCollection') : undefined}
       onClick={() => void clear()}
     >
-      <Trash2 data-icon='inline-start' />
       {busy ? $t('common.loadingLoading') : $t('collectorClear.action')}
     </Button>
   );
