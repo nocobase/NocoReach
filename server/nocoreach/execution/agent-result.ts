@@ -63,6 +63,8 @@ const envelope = z.object({
   content: z.string().max(30000).optional(),
   pr: z.record(z.string(), z.unknown()).optional(),
   merged: z.object({ sha: z.string() }).optional(),
+  // Checked against the publishing target and the source article by TaskService (article-flow.ts).
+  article: z.record(z.string(), z.unknown()).optional(),
   error: z.string().optional(),
   message: z.string().optional(),
   report: z
@@ -94,6 +96,15 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
           'changes 提供实际修改文本的前后对比，最多 10 个文件，正文合计不超过 40000 字符，截断时标记 truncated=true；二进制文件只列在 files。完整 JSON 不超过 90000 字符。',
         ]
       : []),
+    ...(mode === 'article'
+      ? [
+          'article 是文章写作：不需要仓库，不提交、不推送、不开 PR，也不要调用任何 CMS、网站或发布接口；审核通过后由 NocoReach 发布。',
+          'data.article.source 是当前源稿文件（JSON：id、slug、status 和 locales 下各语言的 title、description、body，body 为 Markdown），先完整读取，改写时在源稿基础上修改。data.article.action 为 create 时 source 为 null，是新文章。',
+          'article 成功必须返回 article:{slug?,locales:{<语言>:{title?,description?,body?}},verifyText?,summary?}。语言只能取 data.article.target.locales，字段只能取 data.article.target.fields 中该语言支持的字段。',
+          '新文章必须给出 slug（小写字母、数字和连字符，最多 200 字符），以及第一个语言的 title 和 body。改写已有文章只返回实际修改的语言和字段，未修改的不要返回；body 必须是该语言的完整正文，不是片段。title 最多 300 字符，description 最多 2000 字符。',
+          'verifyText 是发布后能在页面上找到的独特短句，取自修改后的标题或正文原文，8-200 字符；没有合适的就省略。summary 一两句话说明改了什么。content 写给审核人的修改说明（Markdown），列出改动的语言、字段和理由。',
+        ]
+      : []),
     ...(mode === 'merge'
       ? ['merge 成功必须返回 merged.sha，值为实际合并提交的 SHA。']
       : []),
@@ -110,10 +121,10 @@ const invalid = (key: string, params: Record<string, unknown> = {}): never =>
   fail(systemMessageText(`agentResult.${key}`, params), 422);
 
 /** Only the exact Runner continuation footer is tolerated, never arbitrary text or a second JSON. */
-function summaryJson(summary: string | null): unknown {
+function summaryJson(summary: string | null, max = 100000): unknown {
   let raw = summary?.trim() || '';
   if (!raw) return invalid('empty');
-  if (raw.length > 100000) return invalid('tooLong');
+  if (raw.length > max) return invalid('tooLong');
   raw = raw
     .replace(
       /\n\nLocal continuation saved: [^\r\n]+ \([0-9a-f]{40}\); not pushed\.$/,
@@ -167,7 +178,8 @@ export function resultOf(
   taskId?: string,
 ): AgentResult {
   const parsed = envelope.safeParse(
-    normalizeSources(summaryJson(summary), taskId),
+    // An article carries complete bodies for several languages.
+    normalizeSources(summaryJson(summary, mode === 'article' ? 800000 : 100000), taskId),
   );
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
@@ -182,7 +194,7 @@ export function resultOf(
   const result = parsed.data;
   if (
     result.ok &&
-    (mode === 'plan' || mode === 'build' || resultKind) &&
+    (mode === 'plan' || mode === 'build' || mode === 'article' || resultKind) &&
     !result.content?.trim()
   )
     return invalid('content');
@@ -201,6 +213,8 @@ export function resultOf(
       });
     return { ...result, pr: pr.data };
   }
+  if (result.ok && mode === 'article' && !result.article)
+    return invalid('field', { 0: 'article' });
   if (
     result.ok &&
     mode === 'merge' &&

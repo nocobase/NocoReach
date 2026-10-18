@@ -86,6 +86,10 @@ export const TASK_COMMANDS = [
   'archiveTask',
   'unarchiveTask',
   'confirmPublish',
+  'linkArticle',
+  'editArticleDraft',
+  'retryPublish',
+  'rebaseArticle',
 ] as const;
 
 const list = (resource: string, actions: readonly string[]) =>
@@ -267,6 +271,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
       'list',
       'pages',
     ]),
+    'nrArticles.targets',
   ],
   analyze: [
     ...list('nrAiQuestions', ['suggest', 'topics']),
@@ -298,6 +303,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     ]),
     ...list('nrContentIndex', ['createWork', 'save']),
     'nrOnline.read',
+    'nrArticles.search',
   ],
   knowledge: [
     ...list('nrKnowledge', ['add', 'edit', 'remove', 'saveMemory']),
@@ -329,6 +335,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     ...list('nrAutomaticSources', ['ingest', 'disconnect']),
     ...list('nrProxyProfiles', ['selections', 'select', 'testConnection']),
     ...list('nrAgent', ['saveRepo', 'removeRepo']),
+    ...list('nrArticles', ['saveTarget', 'removeTarget', 'testTarget']),
   ],
   'app.projects': ['nrProjects.create'],
   'app.members': ['nrMembers.setRole'],

@@ -48,6 +48,8 @@ const browserActions = new Map([
   ['nrYouTube/clear', 'youtube'],
   ['nrBilibili/disconnect', 'bilibili'],
   ['nrXiaohongshu/disconnect', 'xiaohongshu'],
+  ['nrArticles/saveTarget', 'articles'],
+  ['nrArticles/removeTarget', 'articles'],
 ]);
 
 // Conversation runs may prepare and operate tasks, but cannot attest to a human
