@@ -1,4 +1,10 @@
-import { useContext, useEffect, useState, type PropsWithChildren } from 'react';
+import {
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type PropsWithChildren,
+} from 'react';
 import { useNavigationGuard } from '@nocobase/app-client';
 import { $t } from '#i18n';
 import { Button } from '#components/ui/button';
@@ -7,7 +13,6 @@ import {
   DraftContext,
   ScopeContext,
   useDraftContext,
-  useTaskDraftStatus,
   type Drafts,
 } from './draft-store.js';
 
@@ -64,10 +69,19 @@ export function TaskDraftScope({
 // Mounted beside the authenticated Outlet: drafts may outlive their task page,
 // but a guest/optional route destroys this subtree even without a browser reload.
 export function TaskDraftNavigationGuard() {
-  const { dirty } = useTaskDraftStatus();
-  useNavigationGuard(
-    () => !dirty || window.confirm($t('taskDetail.leaveWithDrafts')),
-  );
+  const { drafts } = useDraftContext();
+  const acknowledgedRef = useRef<Drafts>({});
+  useNavigationGuard(() => {
+    const changed = Object.entries(drafts).some(
+      ([key, entry]) => entry.dirty && acknowledgedRef.current[key] !== entry,
+    );
+    if (!changed) return true;
+    if (!window.confirm($t('taskDetail.leaveWithDrafts'))) return false;
+    // Acknowledgement is not a save or discard: keep recovery and unload protection.
+    // Entry identity makes any later edit require confirmation again.
+    acknowledgedRef.current = drafts;
+    return true;
+  });
   return null;
 }
 

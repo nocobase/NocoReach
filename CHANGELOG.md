@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Task draft navigation
+
+- Remember navigation confirmation for unchanged task drafts, preventing repeated prompts after leaving a manual Agent result editor while preserving draft recovery, new-edit confirmation, and browser unload protection.
+
 ## Unreleased — Online task tools
 
 - Preserve the application shell and active Agent conversation when a task link selects another project; reset only project-scoped navigation badge data.

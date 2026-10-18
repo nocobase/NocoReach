@@ -291,6 +291,56 @@ test.each(['source', 'related', 'sidebar', 'breadcrumb', 'back-forward'])(
     }
   },
 );
+test('confirms a failed agent manual draft once until its content changes', async () => {
+  const data = reviewData();
+  data.work.stageIndex = 0;
+  data.work.results = [];
+  data.work.flow!.stages[0].mode = 'analyze';
+  data.runs = [
+    {
+      id: 'failed-run',
+      status: 'failed',
+      mode: 'plan',
+      error: 'invalid_agent_result',
+      stepId: 'write',
+      planVersion: 0,
+      createdAt: '2026-10-16T08:00:00Z',
+    },
+  ];
+  mount(data);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: '我自己完成' }));
+  const editor = screen.getByRole('textbox', { name: '分析结果' });
+  await user.type(editor, 'Manual draft');
+  vi.mocked(window.confirm).mockReturnValue(false);
+  await user.click(screen.getByRole('link', { name: 'Sidebar' }));
+  expect(editor).toHaveValue('Manual draft');
+  expect(window.confirm).toHaveBeenCalledTimes(1);
+  vi.mocked(window.confirm).mockReturnValue(true);
+  await user.click(screen.getByRole('link', { name: 'Sidebar' }));
+  await screen.findByText('Other page');
+  expect(window.confirm).toHaveBeenCalledTimes(2);
+  // Repeated menu/history navigation must not warn for the acknowledged draft.
+  vi.mocked(window.confirm).mockReturnValue(false);
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  expect(screen.getByRole('textbox', { name: '分析结果' })).toHaveValue(
+    'Manual draft',
+  );
+  await user.click(screen.getByRole('link', { name: 'Sidebar' }));
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  expect(window.confirm).toHaveBeenCalledTimes(2);
+  expect(unload()).toBe(true);
+  await user.type(screen.getByRole('textbox', { name: '分析结果' }), '!');
+  await user.click(screen.getByRole('link', { name: 'Sidebar' }));
+  expect(window.confirm).toHaveBeenCalledTimes(3);
+  expect(screen.getByRole('textbox', { name: '分析结果' })).toHaveValue(
+    'Manual draft!',
+  );
+  expect(
+    action.mock.calls.filter(([, command]) => command === 'advance'),
+  ).toHaveLength(0);
+});
+
 test('Results return preserves its filters and retains both task drafts', async () => {
   mount(
     reviewData(),
@@ -892,7 +942,7 @@ test('brand navigation reaches the landing page with one confirmation and retain
   );
 });
 
-test('protects drafts when history leaves the authenticated workspace after leaving the task', async () => {
+test('protects newly edited drafts when history leaves the authenticated workspace after leaving the task', async () => {
   function Navigation() {
     const navigate = useNavigate();
     return (
@@ -934,6 +984,7 @@ test('protects drafts when history leaves the authenticated workspace after leav
   const user = await editBoth();
   await user.click(screen.getByRole('link', { name: 'Sidebar' }));
   await user.click(screen.getByRole('button', { name: 'Back' }));
+  await user.type(screen.getByRole('textbox', { name: '给执行者的话' }), '!');
   vi.mocked(window.confirm).mockReturnValue(false);
   await user.click(screen.getByRole('button', { name: 'Back' }));
   expect(screen.queryByText('Guest page')).toBeNull();
@@ -941,7 +992,7 @@ test('protects drafts when history leaves the authenticated workspace after leav
     'Draft body',
   );
   expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue(
-    'Draft comment',
+    'Draft comment!',
   );
   vi.mocked(window.confirm).mockReturnValue(true);
   await user.click(screen.getByRole('link', { name: 'Outside workspace' }));
