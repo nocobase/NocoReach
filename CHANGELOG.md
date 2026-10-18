@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Stable restart and health retry tests
+
+- Restart the timezone test application in a later second than the previous process, so Snowflake IDs cannot repeat on the same database.
+- Wait for the asynchronous YouTube sync grant check before asserting it in the health panel test.
+
 ## Unreleased — Project members and capability roles
 
 - Give projects their own members. Roles choose a project scope (the projects their holders belong to, or every project) and a short list of capabilities instead of individual actions with per-action project selections; the server expands capabilities into the existing action grants and resolves `$member` grants against project membership. Pages follow from capabilities.

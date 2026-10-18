@@ -541,10 +541,13 @@ it('checks the project-scoped YouTube sync grant before exposing health retry', 
   expect(
     screen.queryByRole('button', { name: '重试' }),
   ).not.toBeInTheDocument();
-  expect(authorization.can).toHaveBeenCalledWith({
-    resource: { type: 'nocoreach', id: '1' },
-    action: 'nrYouTube.sync',
-  });
+  // The grant check runs in an effect that may settle after the health rows render.
+  await waitFor(() =>
+    expect(authorization.can).toHaveBeenCalledWith({
+      resource: { type: 'nocoreach', id: '1' },
+      action: 'nrYouTube.sync',
+    }),
+  );
   authorization.can.mockImplementation(
     async ({ resource, action }) =>
       resource.id === '1' && action === 'nrYouTube.sync',
