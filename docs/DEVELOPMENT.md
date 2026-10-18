@@ -141,6 +141,15 @@ See [online task help](ONLINE-TASKS.zh-CN.md) for user instructions. Online task
 - `execution/agent-result.ts` manages result validation and Runner instructions. Build results must include release notes, page validation evidence, and change comparisons, returning explicit empty values when verification is unavailable. They also carry `visibleChanges`, the before/after a visitor or search result sees, in plain words, for the owner's review. It stays optional at the result boundary, so older Runners keep working, and `TaskService` drops malformed entries instead of rejecting the build.
 - Business tests live in `tests/nocoreach/`. `agents-app.test.ts` covers the official Runner protocol against real plugins and a database. Check relevant coverage when changing enqueueing, materials, cancellation, retries, or CLI distribution.
 
+### Article publishing
+
+See [ARTICLE-PUBLISHING.md](ARTICLE-PUBLISHING.md) for the model, states and limits, and [ARTICLE-API.md](ARTICLE-API.md) for the `http` protocol.
+
+- Publishing targets are per-project settings sealed in `nrVariables` (`server/nocoreach/articles/targets.ts`); credentials never reach the browser or the Runner, and changing a target's address or repository requires its key again. Saves need the browser confirmation session, like collector credentials.
+- A task's delivery is frozen at start in `work.delivery`. Article change steps run in mode `article` without a repository; the source article is an immutable snapshot delivered as the `article.json` material, and the proposal is validated against the target both by `task result` and on acceptance. Keep target I/O (link, rebase, publish, export and drift checks) outside business transactions and recheck state under the task lock before recording an outcome.
+- Publishing writes only the approved artifact's changed fields, adopts a write that already landed, treats a field both sides changed as a conflict, and blocks on a Git-only edit when the target exports to Git. Never publish from a later draft than the approved artifact, and never mark a release live from a CMS save alone: export and page checks are separate states.
+- `nocobase-api` is check-before-write and cannot prevent a stale editor form from overwriting a publish; the overwrite watch only reports it. Do not describe it as guaranteed. Build changes to files a target's exporter owns are blocked (`pr.protected`).
+
 ## Upgrades and releases
 
 Read the [application upgrade Skill](../.agents/skills/nocobase-app-upgrade/SKILL.md) before upgrades and the [deployment Skill](../.agents/skills/nocobase-deployment/SKILL.md) before building deployment packages or investigating production issues. Read the [CLI reference](../.agents/skills/nocobase-app-development/references/cli.md) before running `pnpm nocobase` commands. The following points differ from the general workflow.
