@@ -4,6 +4,10 @@ import { nocobaseClient as api } from '#lib/nocoreach-api';
 import type { Metric } from './data-parts';
 import { useSearchParams } from 'react-router';
 import { validRange, type Range } from './range-state';
+import {
+  useWorkspaceCache,
+  useWorkspaceCacheRevision,
+} from './workspace-cache';
 
 export interface ReportWindow {
   start: string;
@@ -58,10 +62,28 @@ export function useCollectorSort(
   return [{ sort, order }, set];
 }
 
+type CachedReport<T> = { report: T; day: string };
+const localDay = (date = new Date()) =>
+  `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+const nextDay = ({ day }: CachedReport<unknown>) => {
+  const [y, m, d] = day.split('-').map(Number);
+  return new Date(y, m - 1, d + 1).getTime();
+};
+const freshness = { staleTime: Infinity, expiresAt: nextDay };
+
+/** The cache key prefix of a platform's reports in one project; connection changes invalidate it. */
+export const collectorReportKey = (
+  resource: 'nrXiaohongshu' | 'nrBilibili' | 'nrYouTube',
+  projectId: number,
+) => `data-view:collector:${resource}:${projectId}:`;
+
 /**
  * The period report of a collector platform (`<resource>/report`), listing the first `limit` records in the asked
- * order. Keeps the last report (and the last error) while a newer one loads; `loading` says one is on its way. While a collection runs it polls only the platform's status, and reads the report
- * again once the collection ends, so a long read does not download the full report repeatedly.
+ * order. A report read today is reused from the session's workspace cache when the page opens again; `reload`
+ * (an explicit action, a retry or the end of a collection) always reads it again. Keeps the last report (and the
+ * last error) while a newer one loads; `loading` says one is on its way. While a collection runs it polls only the
+ * platform's status, and reads the report again once the collection ends, so a long read does not download the
+ * full report repeatedly.
  */
 export function useCollectorReport<T extends CollectorReport>(
   resource: 'nrXiaohongshu' | 'nrBilibili' | 'nrYouTube',
@@ -71,52 +93,85 @@ export function useCollectorReport<T extends CollectorReport>(
   running: (report: T) => boolean,
   { sort, order }: CollectorSort = { sort: 'published', order: 'desc' },
 ) {
-  const [storedData, setStoredData] = useState<T>();
-  const [dataOwner, setDataOwner] = useState('');
+  const cache = useWorkspaceCache();
+  const valid = validRange(range);
+  const { range: period, from, to } = range;
+  const key =
+    projectId && valid
+      ? collectorReportKey(resource, projectId) +
+        JSON.stringify([period, from, to, limit, sort, order])
+      : null;
+  const revision = useWorkspaceCacheRevision(key);
+  const [stored, setStored] = useState<{ owner: string; report: T }>();
   const owner = `${resource}:${projectId}`;
-  const data = dataOwner === owner ? storedData : undefined;
+  const cached = key ? cache.peek<CachedReport<T>>(key)?.report : undefined;
+  // Show the cached report of this period at once; otherwise keep the last one of this platform while loading.
+  const report =
+    cached ?? (stored?.owner === owner ? stored.report : undefined);
+  // The latest collection state polled while a collection runs, over the listed records.
+  const [live, setLive] = useState<{ key: string; status: Partial<T> }>();
+  const data =
+    report && live && live.key === key ? { ...report, ...live.status } : report;
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
   const sequenceRef = useRef(0);
-  const valid = validRange(range);
-  const { range: period, from, to } = range;
-  const load = useCallback(async () => {
-    if (!projectId || !valid) {
-      setLoading(false);
-      return;
-    }
-    const sequence = ++sequenceRef.current;
-    setLoading(true);
-    try {
-      const value = await api.action<T>(resource, 'report', {
-        method: 'POST',
-        body: { projectId, range: period, from, to, limit, sort, order },
-        unwrap: 'data',
-      });
-      if (sequence !== sequenceRef.current) return;
-      setStoredData(value);
-      setDataOwner(`${resource}:${projectId}`);
-      setError(null);
-    } catch (e) {
-      if (sequence === sequenceRef.current) setError(e);
-    } finally {
-      if (sequence === sequenceRef.current) setLoading(false);
-    }
-  }, [resource, projectId, valid, period, from, to, limit, sort, order]);
+  const load = useCallback(
+    async (force = true) => {
+      if (!key) {
+        setLoading(false);
+        return;
+      }
+      const sequence = ++sequenceRef.current;
+      if (
+        !force &&
+        cache.peek(key) !== undefined &&
+        cache.refreshAfter(key, Infinity, 0, nextDay) > 0
+      ) {
+        setLoading(false);
+        setError(null);
+        return;
+      }
+      setLoading(true);
+      try {
+        const value = await cache.load<CachedReport<T>>(
+          key,
+          async () => ({
+            report: await api.action<T>(resource, 'report', {
+              method: 'POST',
+              body: { projectId, range: period, from, to, limit, sort, order },
+              unwrap: 'data',
+            }),
+            day: localDay(),
+          }),
+          force,
+          freshness,
+        );
+        if (sequence !== sequenceRef.current) return;
+        setStored({ owner: `${resource}:${projectId}`, report: value.report });
+        setLive(undefined);
+        setError(null);
+      } catch (e) {
+        if (sequence === sequenceRef.current) setError(e);
+      } finally {
+        if (sequence === sequenceRef.current) setLoading(false);
+      }
+    },
+    [cache, key, resource, projectId, period, from, to, limit, sort, order],
+  );
   useEffect(() => {
-    void Promise.resolve().then(load);
+    void Promise.resolve().then(() => load(false));
     // A response for an earlier project or period must not replace this one.
     return () => {
       sequenceRef.current += 1;
     };
-  }, [load]);
+  }, [load, revision]);
   const active = Boolean(data && running(data));
   const runningRef = useRef(running);
   useEffect(() => {
     runningRef.current = running;
   });
   useEffect(() => {
-    if (!active || !projectId) return;
+    if (!active || !projectId || !key) return;
     let current = true;
     const timer = setInterval(() => {
       void api
@@ -128,7 +183,7 @@ export function useCollectorReport<T extends CollectorReport>(
         .then((status) => {
           if (!current) return;
           // Keep the listed records; take the latest collection state.
-          setStoredData((report) => report && { ...report, ...status });
+          setLive({ key, status });
           if (!runningRef.current({ ...status } as T)) void load();
         })
         .catch(() => undefined);
@@ -137,15 +192,8 @@ export function useCollectorReport<T extends CollectorReport>(
       current = false;
       clearInterval(timer);
     };
-  }, [active, projectId, resource, load]);
-  const reset = async () => {
-    // Fence outstanding reads and discard deleted records even if the reload fails.
-    sequenceRef.current += 1;
-    setStoredData(undefined);
-    setError(null);
-    await load();
-  };
-  return { data, error, loading, reload: load, reset, valid };
+  }, [active, projectId, resource, key, load]);
+  return { data, error, loading, reload: () => load(), valid };
 }
 
 export function windowSummary(w: ReportWindow | undefined) {

@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Collector data page follow-up
+
+- Move "Clear collected data" from the Xiaohongshu, Bilibili and YouTube data pages to their connection panels, and reduce the data page headers to the single read/search action used by the other Community pages.
+- Reuse a collector report read today when its data page opens again; read it again on a new day, an explicit read/search, Retry, the end of a collection, or a connection-panel change.
+- Update the YouTube authentication-provider tests to the two-step clear confirmation that failed CI after #146.
+
 ## Unreleased — Clear collected platform data
 
 - Add project-scoped clear actions to Bilibili, Xiaohongshu and YouTube data pages with two sequential confirmations. Upgrade the existing YouTube connection-panel action to the same confirmation flow.
