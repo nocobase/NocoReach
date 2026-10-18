@@ -49,7 +49,6 @@ const schedules = {
   plan: 'Schedule',
   customSchedule: 'Custom schedule',
   timezone: 'Schedule timezone',
-  displayTimezone: 'Execution timestamps are shown in {{timezone}}.',
   scheduling: 'Scheduling status',
   lifecycle: 'Definition status',
   target: 'Execution target',

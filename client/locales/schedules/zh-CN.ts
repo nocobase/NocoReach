@@ -44,7 +44,6 @@ const schedules: typeof enUS = {
   plan: '执行计划',
   customSchedule: '自定义计划',
   timezone: '调度时区',
-  displayTimezone: '执行时间按 {{timezone}} 时区显示。',
   scheduling: '调度状态',
   lifecycle: '定义状态',
   target: '执行目标',
