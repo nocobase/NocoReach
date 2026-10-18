@@ -6481,5 +6481,15 @@
   "collectorPage.notes": "notes",
   "collectorPage.videosHandOff": "These videos become one task: the agent sums up what people are saying and what to add. It starts right after you confirm.",
   "collectorPage.notesHandOff": "These notes become one task: the agent sums up what people are saying and what to add. It starts right after you confirm.",
-  "collectorPage.reloadFailed": "The list was not updated; showing the previous results"
+  "collectorPage.reloadFailed": "The list was not updated; showing the previous results",
+  "collectorClear.action": "Clear collected data",
+  "collectorClear.title": "Clear {0} data for this project?",
+  "collectorClear.help": "This clears all collected {0} data for this project, regardless of the date filter. Connection settings and search criteria are retained.",
+  "collectorClear.youtubeHelp": "This clears all collected {0} videos and captions for this project, regardless of the date filter, and pauses automatic collection. Connection settings and search criteria are retained.",
+  "collectorClear.continue": "Continue",
+  "collectorClear.finalTitle": "Confirm clearing again",
+  "collectorClear.finalHelp": "Clear all collected {0} data for this project? This cannot be undone. You can collect data again afterwards.",
+  "collectorClear.confirm": "Confirm clear",
+  "collectorClear.success": "Collected data cleared",
+  "collectorClear.waitForCollection": "Wait for the current operation to finish before clearing"
 }

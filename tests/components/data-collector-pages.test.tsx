@@ -20,6 +20,13 @@ const authorization = vi.hoisted(() => ({
 vi.mock('#lib/nocoreach-api', () => ({
   nocobaseClient: { action, wrapRequests: vi.fn() },
 }));
+vi.mock('@nocobase/app-plugin-authentication/client', () => ({
+  useAuthentication: () => ({
+    session: { user: { id: '1' }, session: { id: 'session-a' } },
+    isPending: false,
+    refresh: vi.fn(),
+  }),
+}));
 vi.mock('#lib/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }));

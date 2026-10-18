@@ -60,6 +60,7 @@ export class XiaohongshuSource {
     string,
     { requestId: string; controller: AbortController; committing: boolean }
   >();
+  private readonly clearing = new Set<string>();
   private readonly adapter: XiaohongshuAdapter;
   private readonly generations = new Map<string, number>();
   private changed(id: string) {
@@ -81,7 +82,7 @@ export class XiaohongshuSource {
     return config;
   }
   isCollectorBusy(id: string) {
-    return this.active.has(id);
+    return this.active.has(id) || this.clearing.has(id);
   }
   async resetCollector(id: string, collectorId: string) {
     await this.mutate(id, (old) =>
@@ -252,14 +253,16 @@ export class XiaohongshuSource {
     });
   }
   async search(id: string, values: Values) {
-    if (this.active.has(id)) throw new XiaohongshuError('busy');
+    if (this.active.has(id) || this.clearing.has(id))
+      throw new XiaohongshuError('busy');
     const current = await this.state(id);
     this.expected(current, values.revision);
     if (!current?.connected)
       fail(systemMessageText('xiaohongshu.errors.connectionRequired'), 409);
     const config = this.config(id, current.collectorId);
     // Recheck after the awaited read: two simultaneous HTTP calls must not both enter.
-    if (this.active.has(id)) throw new XiaohongshuError('busy');
+    if (this.active.has(id) || this.clearing.has(id))
+      throw new XiaohongshuError('busy');
     const requestId = randomUUID();
     const controller = new AbortController();
     const active = { requestId, controller, committing: false };
@@ -328,6 +331,29 @@ export class XiaohongshuSource {
     }
     return this.view(id);
   }
+  async clear(id: string, values: Values) {
+    if (this.active.has(id) || this.clearing.has(id))
+      throw new XiaohongshuError('busy');
+    this.clearing.add(id);
+    try {
+      await this.mutate(id, (state) => {
+        this.expected(state, values.revision);
+        return state
+          ? {
+              ...state,
+              revision: state.revision + 1,
+              notes: [],
+              latestIds: [],
+              lastRun: null,
+              verifiedAt: null,
+            }
+          : null;
+      });
+    } finally {
+      this.clearing.delete(id);
+    }
+    return this.view(id);
+  }
   async cancel(id: string, values: Values) {
     const active = this.active.get(id);
     if (!active || values.requestId !== active.requestId)
@@ -370,6 +396,7 @@ export class XiaohongshuSource {
       test: wrap((id, v) => this.test(id, v)),
       search: wrap((id, v) => this.search(id, v)),
       cancel: wrap((id, v) => this.cancel(id, v)),
+      clear: wrap((id, v) => this.clear(id, v)),
       disconnect: wrap((id, v) => this.disconnect(id, v)),
     };
     this.p.app.resourceManager.define({ name: 'nrXiaohongshu', actions });
