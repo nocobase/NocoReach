@@ -27,8 +27,8 @@
     "README.md"
   ],
   "peerDependencies": {
-    "@nocobase/app-client": "^3.0.0-beta.1",
-    "@nocobase/app-server": "^2.0.0-beta.4",
+    "@nocobase/app-client": "^3.0.0-beta.2",
+    "@nocobase/app-server": "^2.0.0-beta.8",
     "@nocobase/service-provider": "^0.0.2-beta.2",
     "react": "^19.2.0",
     "zod": "^4.6.5",

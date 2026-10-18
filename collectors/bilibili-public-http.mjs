@@ -21,7 +21,7 @@ const PATHS = {
   search: '/x/web-interface/wbi/search/type',
   video: '/x/web-interface/view',
 };
-const MAX_RESPONSE = 1024 * 1024;
+const MAX_RESPONSE = 20 * 1024 * 1024;
 const TIMEOUT = 20000;
 const MIXIN = [
   46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5, 49,

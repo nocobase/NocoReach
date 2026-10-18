@@ -5,6 +5,40 @@
 - Stop requesting and downloading YouTube captions in Collector. Keep video discovery, metadata and public metrics, with the existing bounded output and refusal handling.
 - Remove the caption section from YouTube data rows and update connection guidance. Retain the protocol-v1 empty transcript placeholder for compatibility.
 
+## Unreleased — Collector data page follow-up
+
+- Move "Clear collected data" from the Xiaohongshu, Bilibili and YouTube data pages to their connection panels, and reduce the data page headers to the single read/search action used by the other Community pages.
+- Reuse a collector report read today when its data page opens again; read it again on a new day, an explicit read/search, Retry, the end of a collection, or a connection-panel change.
+- Update the YouTube authentication-provider tests to the two-step clear confirmation that failed CI after #146.
+
+## Unreleased — Clear collected platform data
+
+- Add project-scoped clear actions to Bilibili, Xiaohongshu and YouTube data pages with two sequential confirmations. Upgrade the existing YouTube connection-panel action to the same confirmation flow.
+- Preserve collector settings and search criteria, enforce configuration permissions and session/revision checks, and reject concurrent collection. Clear saved metrics and provenance; YouTube also clears captions and pauses automatic collection.
+
+## Unreleased — Request SQL measurement isolation
+
+- Scope the access-key request cost test to its own asynchronous query context so background job transactions cannot cause intermittent CI failures. Retain zero-transaction and lock checks, add measurement calibration, and create an independent project fixture.
+
+## Unreleased — Collector data page layout
+
+- Lay out the Xiaohongshu, Bilibili and YouTube data pages like the other Community pages: a publishing trend chart, a table with right-aligned, server-sorted count and date columns, and a side card counting records by search term, video link or channel. Rows can be ticked and handed to the Agent. Platform caveats move into the header notes; unknown counts show "—".
+- Add `sort`/`order` parameters and `trend`/`groups` fields to the `nrXiaohongshu`, `nrBilibili` and `nrYouTube` `report` actions. Add a Refresh action, a page-shaped loading skeleton and Retry on failed loads.
+
+## Unreleased — Refresh saved Bilibili videos
+
+- Refresh saved videos even when they no longer appear on the first search page, updating changing metrics and filling missing publication dates. Preserve known values on incomplete responses and retain bounded sequential collection.
+- Adopt the current configuration revision after a successful refresh and record fresh metric timestamps.
+
+## Unreleased — Login session preparation
+
+- Update Authentication to `2.0.0-beta.10` with its required framework companions and port Default Template PR [#10986](https://github.com/nocobase/nocobase/pull/10986). Prepare the authenticated realtime connection before mounting business identity, caches and pages, preventing the initial permission invalidation from causing a second load and duplicate requests.
+- Show localized retry and sign-out actions when session preparation times out. Preserve later permission invalidation, session isolation and protected dialog cleanup. The full template baseline remains `1.0.0-beta.68`; this is a selective source update from `beta.69`.
+
+## Unreleased — Collector payload limits
+
+- Raise collector response and output limits from 1 MiB to 20 MiB across application, subprocess and browser collection boundaries. Raise automatic content ingestion from 1,000,000 to 20,000,000 JSON characters while retaining its 500-record batch limit.
+
 ## Unreleased — Collector data pages
 
 - Add Xiaohongshu, Bilibili and YouTube pages under Community. Each lists the saved notes or videos published in the selected period, compares publications with the previous period, sums the latest views, likes and comments, and can start a collection for members with the platform's use capability.

@@ -211,7 +211,7 @@ const SITE_ACTIONS: Record<Site, { use: string[]; configure: string[] }> = {
   },
   bilibili: {
     use: list('nrBilibili', ['status', 'report', 'test', 'sync', 'cancel']),
-    configure: list('nrBilibili', ['connect', 'disconnect']),
+    configure: list('nrBilibili', ['connect', 'disconnect', 'clear']),
   },
   xiaohongshu: {
     use: list('nrXiaohongshu', [
@@ -222,7 +222,7 @@ const SITE_ACTIONS: Record<Site, { use: string[]; configure: string[] }> = {
       'search',
       'cancel',
     ]),
-    configure: list('nrXiaohongshu', ['connect', 'disconnect']),
+    configure: list('nrXiaohongshu', ['connect', 'disconnect', 'clear']),
   },
   web: {
     use: list('nrSources', ['list', 'refresh']),

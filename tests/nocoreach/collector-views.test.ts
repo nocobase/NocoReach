@@ -82,3 +82,78 @@ it('lists only the newest records up to the limit while counting the whole perio
   expect(report({ range: 'all', limit: 'many' }).items).toHaveLength(5);
   expect(report({ range: 'all', limit: 0 }).items).toHaveLength(1);
 });
+
+it('sorts the period by a metric or by date, keeping unknown counts last', () => {
+  vi.useFakeTimers({ now: new Date('2026-10-17T12:00:00Z') });
+  const ids = (values: Record<string, unknown>) =>
+    report({ range: 'all', ...values }).items.map((v) => v.id);
+  expect(ids({ sort: 'views' })).toEqual([
+    'old',
+    'recent',
+    'undated',
+    'previous',
+    'unknown-count',
+  ]);
+  expect(ids({ sort: 'views', order: 'asc' })).toEqual([
+    'previous',
+    'undated',
+    'recent',
+    'old',
+    'unknown-count',
+  ]);
+  expect(ids({ order: 'asc' })).toEqual([
+    'old',
+    'unknown-count',
+    'previous',
+    'recent',
+    'undated',
+  ]);
+  // Anything else falls back to newest publication first.
+  expect(ids({ sort: 'title', order: 'sideways' })).toEqual(ids({}));
+  expect(report({ range: 'all', sort: 'views', limit: 1 }).matched).toBe(5);
+});
+
+it('counts publications per bucket of the window and records per origin', () => {
+  vi.useFakeTimers({ now: new Date('2026-10-17T12:00:00Z') });
+  const week = report({ range: '7' });
+  expect(week.trend.unit).toBe('day');
+  expect(week.trend.points).toHaveLength(7);
+  expect(week.trend.points.find((p) => p.date === '2026-10-12')).toEqual({
+    date: '2026-10-12',
+    published: 1,
+  });
+  expect(week.trend.points.reduce((n, p) => n + p.published, 0)).toBe(1);
+  // All time here spans 290 days: weeks start on Monday, the first one at the window's start.
+  const all = report({ range: 'all' });
+  expect(all.trend.unit).toBe('week');
+  expect(all.trend.points[0]).toEqual({ date: '2026-01-01', published: 1 });
+  expect(all.trend.points[1].date).toBe('2026-01-05');
+  expect(all.trend.points.reduce((n, p) => n + p.published, 0)).toBe(5);
+
+  const grouped = collectorPeriod(
+    {},
+    '1',
+    'bilibili',
+    { range: 'all' },
+    windowFor,
+    items,
+    (v) => ({ published: v.publishedAt, seen: v.firstSeenAt }),
+    [],
+    (v) =>
+      v.id === 'old'
+        ? [
+            { kind: 'video', name: 'BV1' },
+            { kind: 'term', name: 'NocoBase' },
+          ]
+        : [
+            { kind: 'term', name: 'NocoBase' },
+            { kind: 'term', name: 'NocoBase' },
+            { kind: 'term', name: '' },
+          ],
+  );
+  expect(grouped.groups).toEqual([
+    { kind: 'term', name: 'NocoBase', count: 5 },
+    { kind: 'video', name: 'BV1', count: 1 },
+  ]);
+  expect(report({ range: 'all' }).groups).toEqual([]);
+});

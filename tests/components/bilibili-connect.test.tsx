@@ -24,6 +24,7 @@ import {
 } from '../../client/pages/bilibili-api';
 import { confirmAction } from '../../client/components/reach/confirm';
 import { toast } from '../../client/lib/toast';
+import { nocobaseClient } from '../../client/lib/nocoreach-api';
 const authorization = vi.hoisted(() => ({
   revision: 0,
   can: vi.fn<
@@ -40,7 +41,8 @@ vi.mock('@nocobase/app-plugin-authorization/client', () => ({
 }));
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => ({
-    session: { session: { id: 'session-a' } },
+    session: { user: { id: 'admin-a' }, session: { id: 'session-a' } },
+    isPending: false,
     refresh: vi.fn(),
   }),
 }));
@@ -1012,4 +1014,35 @@ it('keeps search terms literal while translating collection status', async () =>
       new RegExp(`${enDictionary['common.searchTerm']}：正在读取…`),
     ),
   ).toBeVisible();
+});
+
+it('clears the saved videos from the connection after both confirmations and refreshes the status', async () => {
+  const clear = vi.spyOn(nocobaseClient, 'action').mockResolvedValue({});
+  call.mockResolvedValue({ ...connected(), total: 3 });
+  const { onChange } = view();
+  await userEvent.click(
+    await screen.findByRole('button', { name: '清理已获取数据' }),
+  );
+  await waitFor(() =>
+    expect(clear).toHaveBeenCalledWith(
+      'nrBilibili',
+      'clear',
+      expect.objectContaining({ body: { projectId: 1, revision: REV } }),
+    ),
+  );
+  expect(confirmAction).toHaveBeenCalledTimes(2);
+  await waitFor(() => expect(onChange).toHaveBeenCalled());
+  expect(
+    call.mock.calls.filter(([, action]) => action === 'status'),
+  ).toHaveLength(2);
+  clear.mockRestore();
+});
+
+it('offers no clearing to members without administration', async () => {
+  call.mockResolvedValue({ ...connected(), total: 3 });
+  view(1, false);
+  expect(await screen.findByRole('button', { name: '查看数据' })).toBeVisible();
+  expect(
+    screen.queryByRole('button', { name: '清理已获取数据' }),
+  ).not.toBeInTheDocument();
 });

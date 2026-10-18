@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { randomBytes, randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createAppTest } from '@nocobase/app-testing/server';
 import {
   DEFAULT_ADMIN_CREDENTIALS,
@@ -994,22 +995,34 @@ test('ordinary requests and execution authorization do not acquire management lo
   runtime.plugin.taskExecution.stop();
   const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
   const actor = admin.user.id;
+  const project = await runtime.plugin.projects.create({
+    name: 'Request query measurement',
+    domain: 'query-measurement.example.test',
+  });
+  const projectId = String(project.id);
   const key = await runtime.legacy.db.access!.as(actor, () =>
     runtime.keys!.create(actor, {
       name: 'Cost sample',
       type: 'personal',
       scope: {
-        groups: { 'nocoreach.business': { level: 'read', objects: ['1'] } },
+        groups: {
+          'nocoreach.business': { level: 'read', objects: [projectId] },
+        },
       },
     }),
   );
   const client = await connection.client();
+  const queryScope = new AsyncLocalStorage<string[]>();
   const measure = async (fetch: () => Promise<Response>) => {
     const queries: string[] = [];
-    const listener = (query: { sql: string }) => queries.push(query.sql);
+    // Shared-client events also include independent Scheduler and Runner jobs.
+    const listener = (query: { sql: string }) => {
+      if (queryScope.getStore() === queries) queries.push(query.sql);
+    };
     client.on('query', listener);
     try {
-      expect((await fetch()).status).toBe(200);
+      expect((await queryScope.run(queries, fetch)).status).toBe(200);
+      expect(queries.length).toBeGreaterThan(0);
       return {
         writes: queries.filter((sql) => /^(update|insert|delete)/iu.test(sql))
           .length,
@@ -1027,7 +1040,7 @@ test('ordinary requests and execution authorization do not acquire management lo
         'content-type': 'application/json',
         origin: 'http://localhost',
       },
-      body: JSON.stringify({ projectId: '1' }),
+      body: JSON.stringify({ projectId }),
     }),
   );
   const apiKey = await measure(() =>
@@ -1040,13 +1053,13 @@ test('ordinary requests and execution authorization do not acquire management lo
             'x-api-key': key.secret,
             'content-type': 'application/json',
           },
-          body: JSON.stringify({ projectId: '1' }),
+          body: JSON.stringify({ projectId }),
         },
       ),
     ),
   );
   const executionAuthorization = await measure(async () => {
-    await runtime.plugin.taskExecution.authorized(actor, '1');
+    await runtime.plugin.taskExecution.authorized(actor, projectId);
     return new Response(null, { status: 200 });
   });
   expect(executionAuthorization.writes).toBe(0);
@@ -1057,6 +1070,26 @@ test('ordinary requests and execution authorization do not acquire management lo
   expect(cookie.locks).toBe(0);
   expect(apiKey.transactions).toBe(0);
   expect(apiKey.locks).toBe(0);
+
+  // Calibrate against real SQL: exclude an unrelated transaction during the
+  // observation window, but still detect one belonging to the measured work.
+  const unrelated = await measure(async () => {
+    await queryScope.exit(() =>
+      connection.transaction(async (tx) => {
+        await tx.repository('nrSnapshots').count();
+      }),
+    );
+    await connection.repository('nrSnapshots').count();
+    return new Response(null, { status: 200 });
+  });
+  expect(unrelated.transactions).toBe(0);
+  const foreground = await measure(async () => {
+    await connection.transaction(async (tx) => {
+      await tx.repository('nrSnapshots').count();
+    });
+    return new Response(null, { status: 200 });
+  });
+  expect(foreground.transactions).toBe(1);
 });
 
 test('legacy membership migration is atomic, repeatable, and leaves the old snapshot unchanged after new role changes', async ({

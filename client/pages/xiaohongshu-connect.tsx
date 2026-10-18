@@ -12,6 +12,7 @@ import { ListSkeleton } from '#components/reach/states';
 import { Button } from '#components/ui/button';
 import { confirmAction } from '#components/reach/confirm';
 import { useBusinessAccess } from '#hooks/use-business-access';
+import { CollectorClear } from '#components/collector-clear';
 
 export interface XiaohongshuNote {
   id: string;
@@ -658,6 +659,18 @@ export function XiaohongshuConnect({
             >
               {$t('collectorPage.viewData')}
             </Button>
+            <CollectorClear
+              projectId={projectId}
+              resource='nrXiaohongshu'
+              revision={data.revision}
+              total={data.total}
+              disabled={Boolean(busy || data.running)}
+              errorMessage={xiaohongshuErrorMessage}
+              onCleared={async () => {
+                await load();
+                onChange();
+              }}
+            />
           </div>
         </section>
       ) : (

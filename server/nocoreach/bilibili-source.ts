@@ -75,6 +75,7 @@ interface Operation {
 }
 export class BilibiliSource {
   private readonly operations = new Map<string, Operation>();
+  private readonly clearing = new Set<string>();
   private readonly writes = new Map<string, Promise<unknown>>();
   private readonly generations = new Map<string, number>();
   private changed(id: string) {
@@ -92,7 +93,9 @@ export class BilibiliSource {
     return this.p.db.getRepository('nrSnapshots');
   }
   isCollectorBusy(id: string) {
-    return this.operations.has(id) || this.writes.has(id);
+    return (
+      this.operations.has(id) || this.writes.has(id) || this.clearing.has(id)
+    );
   }
   async resetCollector(id: string, collectorId: string) {
     await this.mutate(id, (old) =>
@@ -219,6 +222,30 @@ export class BilibiliSource {
     this.operations.get(id)?.controller.abort();
     return this.status(id);
   }
+  async clear(id: string, revision: unknown) {
+    if (this.operations.has(id) || this.clearing.has(id))
+      throw new BilibiliError('busy');
+    this.clearing.add(id);
+    try {
+      await this.serialize(id, () =>
+        this.mutate(id, (old) => {
+          this.expected(old, revision);
+          return old
+            ? {
+                ...old,
+                revision: randomUUID(),
+                videos: {},
+                lastRun: null,
+                verifiedAt: null,
+              }
+            : null;
+        }),
+      );
+    } finally {
+      this.clearing.delete(id);
+    }
+    return this.status(id);
+  }
   async cancel(id: string, requestId: unknown) {
     const operation = this.operations.get(id);
     if (operation && operation.id === requestId) {
@@ -234,7 +261,8 @@ export class BilibiliSource {
     });
   }
   async sync(id: string) {
-    if (this.operations.has(id)) throw new BilibiliError('busy');
+    if (this.operations.has(id) || this.clearing.has(id))
+      throw new BilibiliError('busy');
     const op: Operation = {
       id: randomUUID(),
       controller: new AbortController(),
@@ -311,13 +339,13 @@ export class BilibiliSource {
       // Discovery is useful even when optional detail enrichment is unavailable.
       // Serialize requests because the Collector shares a single browser/busy slot.
       let detailFailure = false;
-      if (!failure) {
+      if (!failure || failure.code === 'unconfirmed_empty') {
         const seen = new Set(
           found
             .filter((v) => v.completeness === 'video_metadata')
             .map((v) => v.id),
         );
-        const candidates = found
+        const discoveries = found
           .slice()
           .sort(publicationOrder)
           .filter((v) => {
@@ -326,6 +354,18 @@ export class BilibiliSource {
             return true;
           })
           .slice(0, MAX_SEARCH_DETAILS);
+        // Search only returns its first page. Refresh saved videos independently
+        // so older records can receive missing fields and changing metrics too.
+        const requested = new Set([
+          ...found
+            .filter((video) => video.completeness === 'video_metadata')
+            .map((video) => video.id),
+          ...discoveries.map((video) => video.id),
+        ]);
+        const saved = Object.values(state.videos)
+          .filter((video) => !requested.has(video.id))
+          .sort((a, b) => a.collectedAt.localeCompare(b.collectedAt));
+        const candidates = [...saved, ...discoveries];
         for (const video of candidates) {
           const detailSignal = AbortSignal.any([
             signal,
@@ -345,7 +385,12 @@ export class BilibiliSource {
                 ...video,
                 ...item,
                 collectedAt: result.collectedAt,
-                sources: [{ kind: 'video', value: video.id, url: video.url }],
+                configRevision: state.revision,
+                metricFetchedAt: undefined,
+                sources: [
+                  ...video.sources,
+                  { kind: 'video', value: video.id, url: video.url },
+                ],
               });
           } catch (error) {
             if (op.controller.signal.aborted)
@@ -567,12 +612,23 @@ export class BilibiliSource {
         { key: 'likes', value: (video) => video.likes },
         { key: 'comments', value: (video) => video.comments },
       ],
+      // A searched video also gets a `video` source when its details are read; it came from the search terms, so
+      // only a video found by its link alone counts under that link.
+      (video) => {
+        const terms = video.sources.filter((s) => s.kind === 'search');
+        return (terms.length ? terms : video.sources).map((source) => ({
+          kind: source.kind === 'search' ? 'term' : 'video',
+          name: source.value,
+        }));
+      },
     );
     return {
       ...status,
       window: period.window,
       kpis: period.kpis,
       matched: period.matched,
+      trend: period.trend,
+      groups: period.groups,
       videos: period.items.map((v) => ({
         ...v,
         fromEarlierConfig: v.configRevision !== state?.revision,
@@ -607,6 +663,7 @@ export class BilibiliSource {
       test: wrap((id, v) => this.test(id, v.collectorId)),
       sync: wrap((id) => this.sync(id)),
       cancel: wrap((id, v) => this.cancel(id, v.requestId)),
+      clear: wrap((id, v) => this.clear(id, v.revision)),
       disconnect: wrap((id, v) => this.disconnect(id, v.revision)),
     };
     this.p.app.resourceManager.define({ name: 'nrBilibili', actions });

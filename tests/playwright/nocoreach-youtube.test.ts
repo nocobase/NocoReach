@@ -395,7 +395,7 @@ test('real app and SQLite: bilingual upstream fixtures, captions, editing, cance
       /^Change$|^修改$/,
       /^Read now$|^立即读取$/,
       /^Disconnect$|^断开$/,
-      /^Delete saved videos$|^删除已保存视频$/,
+      /^Clear collected data$|^清理已获取数据$/,
     ])
       await expect(button(tab, name)).toHaveCount(0);
     const session = (await (
@@ -632,9 +632,9 @@ test('durable library: append across batches, change criteria, paginate, disconn
   await page.screenshot({
     path: info.outputPath('disconnected-saved-videos-zh-mobile.png'),
   });
-  await button(page, /^删除已保存视频$/).click();
+  await button(page, /^清理已获取数据$/).click();
   await expect(page.getByRole('alertdialog')).toContainText(
-    '不删除 YouTube 上的视频',
+    '连接配置和搜索条件会保留',
   );
   await page
     .getByRole('alertdialog')
@@ -645,13 +645,17 @@ test('durable library: append across batches, change criteria, paginate, disconn
   page.on('request', (request) => {
     if (request.url().endsWith('/nrYouTube/clear')) deletions++;
   });
-  await button(page, /^删除已保存视频$/).click();
+  await button(page, /^清理已获取数据$/).click();
   await page
     .getByRole('alertdialog')
-    .getByRole('button', { name: /^删除已保存视频$/ })
+    .getByRole('button', { name: /^继续确认$/ })
+    .click();
+  await page
+    .getByRole('alertdialog', { name: '再次确认清理' })
+    .getByRole('button', { name: /^确认清理$/ })
     .click();
   await expect.poll(async () => (await status(context, 2)).total).toBe(0);
-  await expect(button(page, /^删除已保存视频$/)).toHaveCount(0);
+  await expect(button(page, /^清理已获取数据$/)).toHaveCount(0);
   expect(deletions).toBe(1);
   expect((await status(context, 1)).videos).toEqual(projectA.videos);
   await info.attach('retention-evidence', {

@@ -1,24 +1,44 @@
 import { $t, useNocoReachLocale } from '#i18n';
-// 小红书 (社区): notes found by the project's manual browser search, counted by their estimated publication date.
-import { useState } from 'react';
+// 小红书 (社区): notes found by the project's manual browser search, counted by their estimated publication date, with
+// the same parts as the other 社区 pages (collector-content.tsx).
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { BookHeart, RefreshCw, Settings2 } from 'lucide-react';
+import { BookHeart, RefreshCw } from 'lucide-react';
 import { toast } from '#lib/toast';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { PageContainer, PageHeader } from '#components/reach/page';
-import { EmptyState, ListSkeleton, LoadError } from '#components/reach/states';
+import { EmptyState, LoadError } from '#components/reach/states';
+import { NotesTip } from '#components/reach/info-tip';
 import { Button } from '#components/ui/button';
-import { Card } from '#components/ui/card';
 import { useProject } from './reach-data';
 import { RangePicker } from './range-picker';
 import { useRange } from './range-state';
 import { safeLink } from './analytics';
 import {
   useCollectorReport,
+  useCollectorSort,
   windowSummary,
   type CollectorReport,
 } from './collector-report';
 import { ReportMetrics } from './collector-metrics';
+import {
+  CollectorBody,
+  CollectorGroupsCard,
+  CollectorSkeleton,
+  CollectorTable,
+  CollectorTrendCard,
+  TitleLink,
+} from './collector-content';
+import {
+  countColumn,
+  countText,
+  dateColumn,
+  retryable,
+  shortDate,
+  titleColumn,
+} from './collector-columns';
+import { HandOffBar } from './hand-off-bar';
+import { discussionsDraft } from './seo-hand-off';
 import { xiaohongshuRequest } from './xiaohongshu-api';
 import {
   xiaohongshuErrorMessage,
@@ -29,6 +49,22 @@ import './data-views.css';
 
 type Report = XiaohongshuView & CollectorReport & { notes: XiaohongshuNote[] };
 
+// Likes as the page showed them ("1.2万"), with separators when that was a plain number; sorting uses the parsed
+// number on the server.
+const likes = (note: XiaohongshuNote) =>
+  note.likesText && /^\d+$/.test(note.likesText)
+    ? countText(note.likes ?? Number(note.likesText))
+    : (note.likesText ?? '—');
+const summary = (note: XiaohongshuNote) =>
+  `${$t('xiaohongshu.displayedLikes', { 0: likes(note) })} · ${
+    note.estimatedPublishedAt
+      ? $t('xiaohongshu.estimatedPublicationDate', {
+          0: note.estimatedPublishedAt,
+        })
+      : $t('xiaohongshu.publicationTimeUnknown')
+  }`;
+const SORTS = ['likes'] as const;
+
 export default function DataXiaohongshu() {
   const { project } = useProject();
   const navigate = useNavigate();
@@ -36,16 +72,35 @@ export default function DataXiaohongshu() {
   const [range, setRange] = useRange();
   const [busy, setBusy] = useState(false);
   const [shown, setShown] = useState(20);
+  const [sort, setSort] = useCollectorSort(SORTS);
   const { can: canSearch } = useBusinessAccess(
     'nrXiaohongshu.search',
     project?.id ?? null,
   );
-  const { data, error, reload, valid } = useCollectorReport<Report>(
+  const { data, error, loading, reload, valid } = useCollectorReport<Report>(
     'nrXiaohongshu',
     project?.id,
     range,
     shown,
     (r) => Boolean(r.running),
+    sort,
+  );
+  const columns = useMemo(
+    () => [
+      titleColumn<XiaohongshuNote>(
+        $t('collectorPage.title'),
+        (note) => <TitleLink href={safeLink(note.url)}>{note.title}</TitleLink>,
+        summary,
+      ),
+      countColumn<XiaohongshuNote>('likes', $t('collectorView.likes'), likes),
+      dateColumn<XiaohongshuNote>(
+        $t('collectorPage.estimatedPublished'),
+        (note) => note.estimatedPublishedAt ?? '—',
+        (note) =>
+          $t('collectorPage.collectedShort', { 0: shortDate(note.lastSeenAt) }),
+      ),
+    ],
+    [],
   );
   const running = busy || Boolean(data?.running);
   const search = async () => {
@@ -74,27 +129,29 @@ export default function DataXiaohongshu() {
       <PageHeader
         title={$t('collectorPage.xiaohongshu')}
         description={$t('collectorPage.xiaohongshuDescription')}
-        actions={
+        info={
           hasData ? (
-            <div className='flex flex-wrap gap-2'>
-              {data?.connected && canSearch ? (
-                <Button
-                  variant='outline'
-                  size='sm'
-                  disabled={running}
-                  onClick={() => void search()}
-                >
-                  <RefreshCw data-icon='inline-start' />
-                  {running
-                    ? $t('xiaohongshu.collecting')
-                    : $t('xiaohongshu.searchNow')}
-                </Button>
-              ) : null}
-              <Button variant='ghost' size='sm' onClick={() => void settings()}>
-                <Settings2 data-icon='inline-start' />
-                {$t('collectorPage.connectionSettings')}
-              </Button>
-            </div>
+            <NotesTip
+              notes={[
+                $t('collectorPage.xiaohongshuDates'),
+                $t('collectorPage.unknownNote'),
+              ]}
+            />
+          ) : undefined
+        }
+        actions={
+          data?.connected && canSearch ? (
+            <Button
+              variant='outline'
+              size='sm'
+              disabled={running}
+              onClick={() => void search()}
+            >
+              <RefreshCw data-icon='inline-start' />
+              {running
+                ? $t('xiaohongshu.collecting')
+                : $t('xiaohongshu.searchNow')}
+            </Button>
           ) : undefined
         }
       />
@@ -108,15 +165,20 @@ export default function DataXiaohongshu() {
       />
       {error ? (
         <LoadError
-          title={$t('collectorPage.loadFailed')}
+          title={
+            data
+              ? $t('collectorPage.reloadFailed')
+              : $t('collectorPage.loadFailed')
+          }
           message={
             error instanceof Error
               ? xiaohongshuErrorMessage(error)
               : $t('common.tryAgainLater')
           }
+          onRetry={retryable(error) ? () => void reload() : undefined}
         />
       ) : null}
-      {!data && !error && valid ? <ListSkeleton rows={4} /> : null}
+      {!data && !error && valid ? <CollectorSkeleton /> : null}
       {data && !hasData ? (
         <EmptyState
           icon={<BookHeart />}
@@ -156,62 +218,49 @@ export default function DataXiaohongshu() {
             </p>
           ) : null}
           <ReportMetrics kpis={data.kpis} />
-          <Card className='gap-0 py-0'>
-            <h2 className='border-b border-border px-4 py-3 text-sm font-semibold'>
-              {$t('collectorPage.notesInRange', { 0: data.matched })}
-            </h2>
-            {data.notes.length ? (
-              data.notes.map((note) => (
-                <div
-                  key={note.id}
-                  className='min-w-0 border-b border-border px-4 py-2.5 last:border-0'
-                  data-note={note.id}
-                >
-                  <a
-                    className='nr-link break-words font-medium'
-                    href={safeLink(note.url)}
-                    target='_blank'
-                    rel='noreferrer'
-                  >
-                    {note.title}
-                  </a>
-                  <p className='text-xs text-muted-foreground'>
-                    {$t('xiaohongshu.displayedLikes', {
-                      0: note.likesText ?? $t('common.unknown'),
-                    })}{' '}
-                    ·{' '}
-                    {note.estimatedPublishedAt
-                      ? $t('xiaohongshu.estimatedPublicationDate', {
-                          0: note.estimatedPublishedAt,
-                        })
-                      : $t('xiaohongshu.publicationTimeUnknown')}{' '}
-                    ·{' '}
-                    {$t('xiaohongshu.collected', {
-                      0: new Date(note.lastSeenAt).toLocaleString(locale),
-                    })}
-                  </p>
-                </div>
-              ))
-            ) : (
-              <p className='px-4 py-3 text-sm text-muted-foreground'>
-                {$t('collectorPage.noneInRange')}
-              </p>
-            )}
-            {shown < data.matched ? (
-              <div className='px-4 py-3'>
-                <Button
-                  variant='outline'
-                  size='sm'
-                  onClick={() => setShown((n) => n + 20)}
-                >
-                  {$t('xiaohongshu.showMore')}
-                </Button>
-              </div>
-            ) : null}
-          </Card>
-          <p className='nr-footnote'>{$t('collectorPage.xiaohongshuDates')}</p>
+          <CollectorTrendCard trend={data.trend} matched={data.matched} />
+          <CollectorBody
+            list={
+              <CollectorTable
+                id='xiaohongshu-notes'
+                title={$t('collectorPage.notesInRange', { 0: data.matched })}
+                rows={data.notes}
+                rowId={(note) => note.id}
+                columns={columns}
+                sort={sort}
+                onSort={(next) => {
+                  setShown(20);
+                  setSort(next);
+                }}
+                loading={loading}
+                more={shown < data.matched}
+                onMore={() => setShown((n) => n + 20)}
+                handOff={(ticked) => ({
+                  playbookId: 'community-summary',
+                  description: $t('collectorPage.notesHandOff'),
+                  draft: () =>
+                    discussionsDraft(
+                      $t('collectorPage.xiaohongshu'),
+                      $t('collectorPage.notes'),
+                      ticked.map((note) => ({
+                        title: note.title,
+                        url: note.url,
+                        meta: summary(note),
+                      })),
+                    ),
+                })}
+              />
+            }
+            side={
+              <CollectorGroupsCard
+                title={$t('collectorPage.terms')}
+                groups={data.groups}
+              />
+            }
+          />
         </>
       ) : null}
+      <HandOffBar projectId={project?.id} />
     </PageContainer>
   );
 }

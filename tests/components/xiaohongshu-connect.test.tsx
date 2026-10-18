@@ -18,6 +18,7 @@ import {
 import { xiaohongshuRequest } from '../../client/pages/xiaohongshu-api';
 import { sourceState, getCatalog } from '../../client/pages/data-sources';
 import { setDictionary } from '../../client/i18n';
+import { nocobaseClient } from '../../client/lib/nocoreach-api';
 import english from '../../shared/i18n/en.json';
 
 // The panels link to their data pages, so they render inside a router.
@@ -826,4 +827,24 @@ it('retranslates exact owned errors but preserves unknown upstream payload text'
   await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(raw));
   await act(async () => setDictionary(null));
   expect(screen.getByRole('alert')).toHaveTextContent(raw);
+});
+
+it('clears the saved notes from the connection after both confirmations and refreshes the status', async () => {
+  const clear = vi.spyOn(nocobaseClient, 'action').mockResolvedValue({});
+  stored = { ...stored, connected: true, revision: 2, notes: [note], total: 1 };
+  const onChange = vi.fn();
+  setup(1, onChange);
+  await userEvent.click(
+    await screen.findByRole('button', { name: '清理已获取数据' }),
+  );
+  await waitFor(() =>
+    expect(clear).toHaveBeenCalledWith(
+      'nrXiaohongshu',
+      'clear',
+      expect.objectContaining({ body: { projectId: 1, revision: 2 } }),
+    ),
+  );
+  await waitFor(() => expect(onChange).toHaveBeenCalled());
+  expect(xiaohongshuRequest).toHaveBeenCalledTimes(2);
+  clear.mockRestore();
 });

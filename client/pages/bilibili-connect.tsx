@@ -42,6 +42,7 @@ import {
 import { Skeleton } from '#components/ui/skeleton';
 import { Textarea } from '#components/ui/textarea';
 import { confirmAction } from '#components/reach/confirm';
+import { CollectorClear } from '#components/collector-clear';
 import {
   bilibiliErrorMessage,
   bilibiliMessage,
@@ -923,14 +924,29 @@ function BilibiliPanel({
             : $t('bilibili.saveCriteriaStartCollectionManually')}
         </p>
         {state.total > 0 && (
-          <Button
-            type='button'
-            variant='outline'
-            className='self-start'
-            onClick={() => void navigate('/data/bilibili')}
-          >
-            {$t('collectorPage.viewData')}
-          </Button>
+          <div className='flex flex-wrap gap-2'>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => void navigate('/data/bilibili')}
+            >
+              {$t('collectorPage.viewData')}
+            </Button>
+            {isAdmin ? (
+              <CollectorClear
+                projectId={projectId}
+                resource='nrBilibili'
+                revision={state.revision}
+                total={state.total}
+                disabled={Boolean(busy) || running}
+                errorMessage={bilibiliErrorMessage}
+                onCleared={async () => {
+                  await load();
+                  onChange();
+                }}
+              />
+            ) : null}
+          </div>
         )}
         <p className='text-muted-foreground'>
           {$t('bilibili.searchCoversReturnedFirstPage')}

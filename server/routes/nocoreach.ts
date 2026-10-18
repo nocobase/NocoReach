@@ -51,6 +51,7 @@ const declaration = (method: 'get' | 'post') =>
       '200': dataResponse(z.unknown(), 'What the action returned.'),
       ...apiErrorResponses,
       '404': apiErrorResponse(404),
+      '400': apiErrorResponse(400, 'Clearing collected platform data requires POST.'),
       '409': apiErrorResponse(409),
     },
   });
@@ -83,9 +84,11 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
       }
       if (!session && runtime.legacy.resources.level(params.resource, params.action) !== 'public')
         throw failure(401, 'classicImport.signFirst', undefined, getRequestLocale(context));
+      if (['nrBilibili', 'nrXiaohongshu', 'nrYouTube'].includes(params.resource) && params.action === 'clear' && context.req.method !== 'POST')
+        throw new ApiError({ status: 'INVALID_ARGUMENT', reason: 'METHOD_NOT_ALLOWED', domain: 'nocoreach', message: 'Clearing collected data requires POST.' });
       // This is a confirmation precondition, never an identity source: compare with
       // the session authenticated for this very request, not a client-supplied user.
-      if (((params.resource === 'nrCollectors' && params.action === 'save') || (['nrXiaohongshu', 'nrBilibili'].includes(params.resource) && params.action === 'disconnect') ||
+      if (((params.resource === 'nrCollectors' && params.action === 'save') || (['nrXiaohongshu', 'nrBilibili'].includes(params.resource) && ['disconnect', 'clear'].includes(params.action)) ||
            (params.resource === 'nrYouTube' && ['connect', 'disconnect', 'clear'].includes(params.action))) &&
           context.req.header('X-NocoReach-Confirmation-Session') !== session?.session.id)
         throw failure(409, 'xiaohongshu.sessionExpiredSignNocoreachAgain', 'NOCOREACH_CONFIRMATION_SESSION_CHANGED', getRequestLocale(context));

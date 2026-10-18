@@ -1,24 +1,43 @@
 import { $t, getCurrentLocale, isChinese } from '#i18n';
-// Bilibili (社区): public videos found by the project's search terms and BV IDs, counted by publication date.
-import { useEffect, useState } from 'react';
+// Bilibili (社区): public videos found by the project's search terms and BV IDs, counted by publication date, with the
+// same parts as the other 社区 pages (collector-content.tsx).
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { RefreshCw, Settings2, TvMinimalPlay } from 'lucide-react';
+import { RefreshCw, TvMinimalPlay } from 'lucide-react';
 import { toast } from '#lib/toast';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { PageContainer, PageHeader } from '#components/reach/page';
-import { EmptyState, ListSkeleton, LoadError } from '#components/reach/states';
-import { Badge } from '#components/ui/badge';
+import { EmptyState, LoadError } from '#components/reach/states';
+import { NotesTip } from '#components/reach/info-tip';
 import { Button } from '#components/ui/button';
-import { Card } from '#components/ui/card';
 import { useProject } from './reach-data';
 import { RangePicker } from './range-picker';
 import { useRange } from './range-state';
 import {
   useCollectorReport,
+  useCollectorSort,
   windowSummary,
   type CollectorReport,
 } from './collector-report';
 import { ReportMetrics } from './collector-metrics';
+import {
+  CollectorBody,
+  CollectorGroupsCard,
+  CollectorSkeleton,
+  CollectorTable,
+  CollectorTrendCard,
+  TitleLink,
+} from './collector-content';
+import {
+  countColumn,
+  countText,
+  dateColumn,
+  retryable,
+  shortDate,
+  titleColumn,
+} from './collector-columns';
+import { HandOffBar } from './hand-off-bar';
+import { discussionsDraft } from './seo-hand-off';
 import {
   bilibiliErrorMessage,
   bilibiliMessage,
@@ -32,13 +51,26 @@ import './data-views.css';
 type Report = Omit<BilibiliStatus, 'recent'> &
   CollectorReport & { videos: BilibiliVideo[] };
 
-// Unknown counts stay unknown; Bilibili's search summaries never report a missing count as zero.
-const count = (value: number | null) =>
-  value === null
-    ? $t('common.unknown')
-    : value.toLocaleString(getCurrentLocale());
 const stamp = (value: string | null) =>
   value ? new Date(value).toLocaleString(getCurrentLocale()) : '—';
+const videoUrl = (id: string) =>
+  `https://www.bilibili.com/video/${encodeURIComponent(id)}`;
+// Unknown counts stay "—"; Bilibili's search summaries never report a missing count as zero.
+const summary = (v: BilibiliVideo) =>
+  $t('bilibili.viewsLikesComments', {
+    0: countText(v.views),
+    1: countText(v.likes),
+    2: countText(v.comments),
+  });
+// Bilibili gives publication times to the minute (UTC); they show in the reader's time zone.
+const published = (v: BilibiliVideo) =>
+  v.publishedAt
+    ? new Date(v.publishedAt).toLocaleString(getCurrentLocale(), {
+        dateStyle: 'short',
+        timeStyle: 'short',
+      })
+    : '—';
+const SORTS = ['views', 'likes', 'comments'] as const;
 
 export default function DataBilibili() {
   const { project } = useProject();
@@ -46,16 +78,43 @@ export default function DataBilibili() {
   const [range, setRange] = useRange();
   const [busy, setBusy] = useState(false);
   const [shown, setShown] = useState(20);
+  const [sort, setSort] = useCollectorSort(SORTS);
   const { can: canSync } = useBusinessAccess(
     'nrBilibili.sync',
     project?.id ?? null,
   );
-  const { data, error, reload, valid } = useCollectorReport<Report>(
+  const { data, error, loading, reload, valid } = useCollectorReport<Report>(
     'nrBilibili',
     project?.id,
     range,
     shown,
     (r) => r.checking,
+    sort,
+  );
+  const columns = useMemo(
+    () => [
+      titleColumn<BilibiliVideo>(
+        $t('collectorPage.title'),
+        (v) => (
+          <TitleLink href={videoUrl(v.id)} earlier={v.fromEarlierConfig}>
+            {v.title || v.id}
+          </TitleLink>
+        ),
+        (v) => `${summary(v)} · ${published(v)}`,
+      ),
+      ...SORTS.map((key) =>
+        countColumn<BilibiliVideo>(key, $t(`collectorView.${key}`), (v) =>
+          countText(v[key]),
+        ),
+      ),
+      dateColumn<BilibiliVideo>(
+        $t('collectorPage.publishedAt'),
+        published,
+        (v) =>
+          $t('collectorPage.collectedShort', { 0: shortDate(v.collectedAt) }),
+      ),
+    ],
+    [],
   );
   const running = busy || Boolean(data?.checking);
   const retryAt = data?.lastRun?.retryAt;
@@ -102,25 +161,29 @@ export default function DataBilibili() {
       <PageHeader
         title='Bilibili'
         description={$t('collectorPage.bilibiliDescription')}
-        actions={
+        info={
           hasData ? (
-            <div className='flex flex-wrap gap-2'>
-              {data?.connected && canSync ? (
-                <Button
-                  variant='outline'
-                  size='sm'
-                  disabled={running || cooling}
-                  onClick={() => void sync()}
-                >
-                  <RefreshCw data-icon='inline-start' />
-                  {running ? $t('common.loadingLoading') : $t('common.readNow')}
-                </Button>
-              ) : null}
-              <Button variant='ghost' size='sm' onClick={() => void settings()}>
-                <Settings2 data-icon='inline-start' />
-                {$t('collectorPage.connectionSettings')}
-              </Button>
-            </div>
+            <NotesTip
+              notes={[
+                $t('bilibili.searchCoversReturnedFirstPage'),
+                $t('collectorPage.datesNote'),
+                $t('collectorPage.bilibiliTimeNote'),
+                $t('collectorPage.unknownNote'),
+              ]}
+            />
+          ) : undefined
+        }
+        actions={
+          data?.connected && canSync ? (
+            <Button
+              variant='outline'
+              size='sm'
+              disabled={running || cooling}
+              onClick={() => void sync()}
+            >
+              <RefreshCw data-icon='inline-start' />
+              {running ? $t('common.loadingLoading') : $t('common.readNow')}
+            </Button>
           ) : undefined
         }
       />
@@ -134,15 +197,20 @@ export default function DataBilibili() {
       />
       {error ? (
         <LoadError
-          title={$t('collectorPage.loadFailed')}
+          title={
+            data
+              ? $t('collectorPage.reloadFailed')
+              : $t('collectorPage.loadFailed')
+          }
           message={
             error instanceof Error
               ? bilibiliErrorMessage(error)
               : $t('common.tryAgainLater')
           }
+          onRetry={retryable(error) ? () => void reload() : undefined}
         />
       ) : null}
-      {!data && !error && valid ? <ListSkeleton rows={4} /> : null}
+      {!data && !error && valid ? <CollectorSkeleton /> : null}
       {data && !hasData ? (
         <EmptyState
           icon={<TvMinimalPlay />}
@@ -191,70 +259,56 @@ export default function DataBilibili() {
             </p>
           ) : null}
           <ReportMetrics kpis={data.kpis} />
-          <Card className='gap-0 py-0'>
-            <h2 className='border-b border-border px-4 py-3 text-sm font-semibold'>
-              {$t('collectorPage.videosInRange', { 0: data.matched })}
-            </h2>
-            {data.videos.length ? (
-              data.videos.map((video) => (
-                <div
-                  key={video.id}
-                  className='flex min-w-0 flex-col gap-1 border-b border-border px-4 py-2.5 last:border-0'
-                  data-video={video.id}
-                >
-                  <a
-                    className='nr-link break-words font-medium'
-                    href={`https://www.bilibili.com/video/${encodeURIComponent(video.id)}`}
-                    target='_blank'
-                    rel='noreferrer'
-                  >
-                    {video.title || video.id}
-                  </a>
-                  {video.fromEarlierConfig ? (
-                    <Badge variant='outline' className='self-start'>
-                      {$t('bilibili.earlierConfiguration')}
-                    </Badge>
-                  ) : null}
-                  <p className='text-xs text-muted-foreground'>
-                    {$t('bilibili.viewsLikesComments', {
-                      0: count(video.views),
-                      1: count(video.likes),
-                      2: count(video.comments),
-                    })}{' '}
-                    ·{' '}
-                    {$t('bilibili.published', {
-                      0: video.publishedAt
-                        ? `${video.publishedAt.slice(0, 16).replace('T', ' ')} UTC (${$t('bilibili.minutePrecision')})`
-                        : $t('common.unknown'),
-                    })}{' '}
-                    ·{' '}
-                    {$t('bilibili.collected', { 0: stamp(video.collectedAt) })}
-                  </p>
-                </div>
-              ))
-            ) : (
-              <p className='px-4 py-3 text-sm text-muted-foreground'>
-                {$t('collectorPage.noneInRange')}
-              </p>
-            )}
-            {shown < data.matched ? (
-              <div className='px-4 py-3'>
-                <Button
-                  variant='outline'
-                  size='sm'
-                  onClick={() => setShown((n) => n + 20)}
-                >
-                  {$t('xiaohongshu.showMore')}
-                </Button>
-              </div>
-            ) : null}
-          </Card>
-          <p className='nr-footnote'>
-            {$t('bilibili.searchCoversReturnedFirstPage')}{' '}
-            {$t('collectorPage.datesNote')}
-          </p>
+          <CollectorTrendCard trend={data.trend} matched={data.matched} />
+          <CollectorBody
+            list={
+              <CollectorTable
+                id='bilibili-videos'
+                title={$t('collectorPage.videosInRange', { 0: data.matched })}
+                rows={data.videos}
+                rowId={(v) => v.id}
+                columns={columns}
+                sort={sort}
+                onSort={(next) => {
+                  setShown(20);
+                  setSort(next);
+                }}
+                loading={loading}
+                more={shown < data.matched}
+                onMore={() => setShown((n) => n + 20)}
+                handOff={(ticked) => ({
+                  playbookId: 'community-summary',
+                  description: $t('collectorPage.videosHandOff'),
+                  draft: () =>
+                    discussionsDraft(
+                      'Bilibili',
+                      $t('collectorPage.videos'),
+                      ticked.map((v) => ({
+                        title: v.title || v.id,
+                        url: videoUrl(v.id),
+                        meta: `${summary(v)} · ${published(v)}`,
+                      })),
+                    ),
+                })}
+              />
+            }
+            side={
+              <CollectorGroupsCard
+                title={$t('collectorPage.sources')}
+                note={$t('collectorPage.sourcesNote')}
+                groups={data.groups}
+                kinds
+                linkOf={(g) =>
+                  g.kind === 'video'
+                    ? videoUrl(g.name)
+                    : `https://search.bilibili.com/all?keyword=${encodeURIComponent(g.name)}`
+                }
+              />
+            }
+          />
         </>
       ) : null}
+      <HandOffBar projectId={project?.id} />
     </PageContainer>
   );
 }
