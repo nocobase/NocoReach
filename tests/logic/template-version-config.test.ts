@@ -16,7 +16,6 @@ describe('application template metadata', () => {
     'injects the adopted baseline in %s',
     async (command) => {
       vi.stubEnv('APP_BASE_PATH', '/studio/apps/nocoreach');
-      vi.stubEnv('AGENT_ANNOTATIONS_ENABLED', 'false');
       const manifest = JSON.parse(
         readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
       );

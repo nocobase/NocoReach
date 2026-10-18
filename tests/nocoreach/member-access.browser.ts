@@ -40,7 +40,6 @@ const child = spawn('pnpm', ['dev'], {
     APP_SERVER_PORT: '14053',
     APP_PUBLIC_ORIGIN: origin,
     APP_BASE_PATH: '/main',
-    AGENT_ANNOTATIONS_ENABLED: 'false',
     NOCOBASE_STRICT_STARTUP: 'true',
   },
   stdio: ['ignore', 'pipe', 'pipe'],
