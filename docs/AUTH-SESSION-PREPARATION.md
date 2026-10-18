@@ -40,12 +40,7 @@ Preparation is not a replacement for runtime authorization checks. Later reconne
 - `pnpm build` succeeds, including client/tooling type checks, client/server compilation, CLI/Runner packaging and deployment dependency verification. The local artifact targets Linux x64, Node 26; rebuild for the deployment runtime before releasing.
 - Changed TypeScript files pass ESLint; changed source and guidance pass Prettier and relative documentation link checks. Frozen-lockfile installation succeeds.
 - Existing unrelated peer warnings remain for the Anthropic SDK, Tiptap and the Agents plugin's exact react-day-picker peer. The new React DOM peer conflict was eliminated by reconciling application and mock-plugin framework changes together against the original lockfile, preserving existing third-party resolutions.
-- Actual browser verification passed with Playwright and local Chromium 152 against the production build, using a disposable SQLite application and a synthetic administrator. Login used the real form, cookies, HTTP API and WebSocket endpoint. No personal browser session or application database was used.
-- Normal login and an authenticated reload each issue exactly one `nrMembers/me` request. Normal login, delayed connection and retry recovery each keep the original browser document (one document load including initial navigation), with no uncaught page errors.
-- Holding the server's real HTTP Upgrade handshake for two seconds shows the preparation screen with zero member reads. Releasing it enters the protected application with one member read. Holding it beyond ten seconds shows the connection failure screen; retry after restoring connectivity succeeds with one member read. Signing out from the failure screen returns to the login form without mounting member consumers.
-- Screenshots and machine-readable results were saved locally under `storage/auth-browser-142/`. Playwright WebSocket routing was deliberately not used for failure simulation because it can open a synthetic connection before the real server handshake.
-- The fresh application reaches the first-project onboarding page. It also requests `nrMock/status`, which returns 404 without a project; this observation is outside the session-preparation assertions. These checks do not cover an existing populated workspace, production reverse proxies, other login providers or later reconnects. The change has not been deployed.
-- GitHub Actions tests and the Node 24 production build passed for implementation commit `2f0f3068a15f14702facdc81351d6921b8206067`.
+- No connected browser is available in this session, so actual browser login, delayed-WebSocket visual behavior and deployed behavior have not been verified. The change has not been deployed.
 
 ## Rollback
 
