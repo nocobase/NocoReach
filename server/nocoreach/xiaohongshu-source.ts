@@ -210,12 +210,15 @@ export class XiaohongshuSource {
         seen: note.firstSeenAt,
       }),
       [{ key: 'likes', value: (note) => note.likes }],
+      (note) => [{ kind: 'term', name: note.query }],
     );
     return {
       ...status,
       window: period.window,
       kpis: period.kpis,
       matched: period.matched,
+      trend: period.trend,
+      groups: period.groups,
       notes: period.items,
     };
   }

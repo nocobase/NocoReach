@@ -109,7 +109,7 @@ export class YouTubeLibrary {
     const size = 500;
     const result: Pick<
       SavedYouTubeVideo,
-      'id' | 'publishedAt' | 'firstSeenAt' | Metric
+      'id' | 'channel' | 'publishedAt' | 'firstSeenAt' | Metric
     >[] = [];
     for (let offset = 0; ; offset += size) {
       const rows = await this.repo().find({
@@ -122,6 +122,7 @@ export class YouTubeLibrary {
         const video = row.get('payload') as SavedYouTubeVideo;
         result.push({
           id: video.id,
+          channel: video.channel,
           publishedAt: video.publishedAt,
           firstSeenAt: video.firstSeenAt,
           views: video.views,
