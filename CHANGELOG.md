@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — YouTube metadata-only collection
+
+- Stop requesting and downloading YouTube captions in Collector. Keep video discovery, metadata and public metrics, with the existing bounded output and refusal handling.
+- Remove the caption section from YouTube data rows and update connection guidance. Retain the protocol-v1 empty transcript placeholder for compatibility.
+
 ## Unreleased — Collector data pages
 
 - Add Xiaohongshu, Bilibili and YouTube pages under Community. Each lists the saved notes or videos published in the selected period, compares publications with the previous period, sums the latest views, likes and comments, and can start a collection for members with the platform's use capability.

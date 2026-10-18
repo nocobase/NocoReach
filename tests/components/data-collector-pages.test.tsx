@@ -253,8 +253,8 @@ it('shows YouTube provenance and captions, and offers reading only with the sync
     youtube.videos[0].url,
   );
   expect(screen.getByText(/播放 10 · 点赞 — · 评论 —/)).toBeVisible();
-  await userEvent.click(screen.getByText(/字幕 · 人工字幕/));
-  expect(screen.getByText('Actual transcript')).toBeVisible();
+  expect(screen.queryByText('Actual transcript')).not.toBeInTheDocument();
+  expect(screen.queryByText('字幕')).not.toBeInTheDocument();
   await waitFor(() =>
     expect(authorization.can).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'nrYouTube.sync' }),
