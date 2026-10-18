@@ -367,7 +367,7 @@ describe('YouTube Collector protocol v1', () => {
   it('bounds streamed response bodies and stops a stalled body on cancellation', async () => {
     const f = fixture();
     f.fetchCollector.mockResolvedValueOnce(
-      new Response('x'.repeat(1024 * 1024 + 1)),
+      new Response('x'.repeat(20 * 1024 * 1024 + 1)),
     );
     await expect(f.provider.video(ID, signal(), request)).rejects.toMatchObject(
       { code: 'output_limit' },

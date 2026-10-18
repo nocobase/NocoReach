@@ -76,8 +76,8 @@ export function adaptContent(
   proposals: MappingProposal[] = [],
 ): AdaptedContent {
   const batch = incomingContent.parse(raw);
-  if (JSON.stringify(batch).length > 1000000)
-    throw new Error('Payload exceeds 1 MB');
+  if (JSON.stringify(batch).length > 20000000)
+    throw new Error('Payload exceeds 20 MB');
   if (Date.parse(batch.collectedAt) > now)
     throw new Error('Collection time is in the future');
   const source = `auto-${batch.channelId}`;

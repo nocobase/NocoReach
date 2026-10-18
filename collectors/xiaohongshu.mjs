@@ -12,7 +12,7 @@ import {
   CollectorError,
   createReadOnlyCollector,
 } from './read-only-browser.mjs';
-const MAX_OUTPUT = 1024 * 1024;
+const MAX_OUTPUT = 20 * 1024 * 1024;
 export function failureCode(error) {
   if (error instanceof CollectorError) return error.code;
   if (error?.name === 'AbortError') return 'cancelled';

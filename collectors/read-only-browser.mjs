@@ -205,7 +205,7 @@ export function createReadOnlyCollector({
         if (
           !Array.isArray(items) ||
           items.length > 20 ||
-          Buffer.byteLength(JSON.stringify(items)) > 1024 * 1024
+          Buffer.byteLength(JSON.stringify(items)) > 20 * 1024 * 1024
         )
           throw new CollectorError('invalid_response');
         if (!items.length) throw new CollectorError('no_results');
@@ -219,7 +219,7 @@ export function createReadOnlyCollector({
           !item ||
           typeof item !== 'object' ||
           Array.isArray(item) ||
-          Buffer.byteLength(JSON.stringify(item)) > 1024 * 1024
+          Buffer.byteLength(JSON.stringify(item)) > 20 * 1024 * 1024
         )
           throw new CollectorError('invalid_response');
         reply(200, { ...envelope, ok: true, kind, collectedAt: now(), item });

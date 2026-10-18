@@ -65,7 +65,7 @@ nocoreach:
 
 ## 协议与替换边界
 
-`server/nocoreach/xiaohongshu-adapter.ts` 的 `XiaohongshuAdapter` 是唯一平台传输边界。以后可以接正式 Runner，无需引入旧 daemon。HTTP 请求/响应必须匹配 `protocolVersion: 1`、`platform: xiaohongshu`、`projectId` 和随机 `requestId`。固定 POST `/health`、`/search`，携带部署 Bearer 令牌，不接受 Origin，不允许动态命令、URL、模块或浏览器 eval。请求体最多 4 KiB；响应最多 1 MiB；只支持固定子进程 argv，`shell: false`。
+`server/nocoreach/xiaohongshu-adapter.ts` 的 `XiaohongshuAdapter` 是唯一平台传输边界。以后可以接正式 Runner，无需引入旧 daemon。HTTP 请求/响应必须匹配 `protocolVersion: 1`、`platform: xiaohongshu`、`projectId` 和随机 `requestId`。固定 POST `/health`、`/search`，携带部署 Bearer 令牌，不接受 Origin，不允许动态命令、URL、模块或浏览器 eval。请求体最多 4 KiB；响应最多 20 MiB；只支持固定子进程 argv，`shell: false`。
 
 `collectors/read-only-browser.mjs` 仅支持静态注册的 xiaohongshu/bilibili，后者预留固定 video 读操作；未注册功能直接拒绝。没有生产 mock 开关。测试通过在本地创建 collector 时注入模拟函数，不改变生产 HTTP 权限。
 
