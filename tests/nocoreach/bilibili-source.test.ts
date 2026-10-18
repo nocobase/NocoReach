@@ -480,7 +480,7 @@ it('caps retained evidence at 500 without inventing growth or dropping current s
   const status = await service.status('1');
   expect(status.total).toBe(500);
   expect(status.recent).toHaveLength(5);
-  expect(status.lastRun).toMatchObject({ found: 20, added: 20, capped: true });
+  expect(status.lastRun).toMatchObject({ found: 520, added: 20, capped: true });
   expect(status.recent.every((v) => v.sources[0]?.value === 'NocoBase')).toBe(
     true,
   );
@@ -728,6 +728,62 @@ it('enriches search discoveries, preserves search provenance and retains known m
     comments: 28,
     publishedAt: '2024-12-04T03:04:00.000Z',
     firstSeenAt: first.recent[0].firstSeenAt,
+  });
+});
+
+it('refreshes saved videos missing from search and clears their earlier-configuration marker', async () => {
+  const { service, adapter } = setup();
+  await connect(service);
+  await service.sync('1');
+  await connect(service, { terms: 'changed query' });
+  expect((await service.status('1')).recent[0].fromEarlierConfig).toBe(true);
+  adapter.search.mockResolvedValue(batch(BV2));
+  const freshAt = '2026-10-18T08:00:00.000Z';
+  adapter.video.mockClear().mockImplementation(async (_c, input) => ({
+    collectedAt: freshAt,
+    items: [
+      {
+        ...item(input.bvid, 'video_metadata'),
+        views: 123,
+        likes: 62,
+        comments: 12,
+        publishedAt: '2025-05-29T09:59:00.000Z',
+        publishedAtPrecision: 'minute',
+      },
+    ],
+  }));
+  const result = await service.sync('1');
+  expect(adapter.video.mock.calls.map((call) => call[1].bvid)).toEqual([
+    BV1,
+    BV2,
+  ]);
+  expect(result.recent.find((video) => video.id === BV1)).toMatchObject({
+    views: 123,
+    likes: 62,
+    comments: 12,
+    collectedAt: freshAt,
+    publishedAt: '2025-05-29T09:59:00.000Z',
+    fromEarlierConfig: false,
+    metricFetchedAt: { views: freshAt, likes: freshAt, comments: freshAt },
+  });
+  expect(result.total).toBe(2);
+});
+
+it('refreshes saved videos when search has no verifiable results', async () => {
+  const { service, adapter } = setup();
+  await connect(service);
+  await service.sync('1');
+  adapter.search.mockRejectedValue(new BilibiliError('unconfirmed_empty'));
+  adapter.video.mockClear().mockResolvedValue({
+    ...batch(BV1, 'video_metadata'),
+    items: [{ ...item(BV1, 'video_metadata'), likes: 42 }],
+  });
+  const result = await service.sync('1');
+  expect(adapter.video).toHaveBeenCalledTimes(1);
+  expect(result.recent[0].likes).toBe(42);
+  expect(result.lastRun).toMatchObject({
+    partial: true,
+    errorCode: 'unconfirmed_empty',
   });
 });
 
