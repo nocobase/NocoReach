@@ -4,6 +4,7 @@ import {
   ARTICLE_FIELDS,
   fill,
   SLUG,
+  supportsStatus,
   type ArticleContent,
   type ArticleDraft,
   type ArticleSnapshot,
@@ -86,13 +87,9 @@ export function cleanDraft(
     if (!first?.title?.trim() || !first.body?.trim())
       throw new ArticleError('invalid', `locale:${target.locales[0]}`);
   }
-  if (
-    draft.status &&
-    !(target.kind === 'nocobase-api'
-      ? target.fields.status
-      : target.kind === 'http')
-  )
-    delete draft.status;
+  if (draft.status && !supportsStatus(target)) delete draft.status;
+  // A new article is a draft unless someone chose to publish it, whatever the target's own default is.
+  if (create && !draft.status && supportsStatus(target)) draft.status = 'draft';
   if (target.kind === 'git-files' && draft.slug && !create) delete draft.slug;
   return draft;
 }

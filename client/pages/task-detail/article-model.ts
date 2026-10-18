@@ -75,11 +75,18 @@ export function fieldLabel(path: string) {
 }
 
 /** One field as a ChangeView entry: the label stands where a file path would. */
-export const fieldChange = (path: string, before: string, after: string) => ({
-  path: fieldLabel(path),
-  before,
-  after,
-});
+export const fieldChange = (path: string, before: string, after: string) => {
+  // Status values read as words (Draft, Published), not as stored codes.
+  const show = (v: string) =>
+    path === 'status' && v
+      ? $t(
+          v === 'published'
+            ? 'articleTask.statusPublished'
+            : 'articleTask.statusDraft',
+        )
+      : v;
+  return { path: fieldLabel(path), before: show(before), after: show(after) };
+};
 
 export function articleContext(
   data: TaskData,

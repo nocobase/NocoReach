@@ -6,6 +6,8 @@ import { Button } from '#components/ui/button';
 import { Input } from '#components/ui/input';
 import { Textarea } from '#components/ui/textarea';
 import { Spinner } from '#components/ui/spinner';
+import { Label } from '#components/ui/label';
+import { RadioGroup, RadioGroupItem } from '#components/ui/radio-group';
 import {
   Field,
   FieldDescription,
@@ -19,6 +21,7 @@ import {
   type ArticleContent,
   type ArticleDraft,
   type ArticleField,
+  type ArticleStatus,
 } from '../../../shared/article-publishing.js';
 import { ChangeView } from '../change-view';
 import { Markdown } from '../doc-view';
@@ -180,6 +183,7 @@ export function ArticleReview({
 
 type EditForm = {
   slug: string;
+  status: ArticleStatus;
   verifyText: string;
   locales: Record<string, Record<ArticleField, string>>;
 };
@@ -192,6 +196,7 @@ function initialForm(
 ): EditForm {
   return {
     slug: a.draft.slug || base?.slug || '',
+    status: a.draft.status ?? base?.status ?? 'draft',
     verifyText: a.draft.verifyText || '',
     locales: Object.fromEntries(
       locales.map((l) => [
@@ -234,7 +239,14 @@ export function ArticleEditor({
     `article:${draftKey}`,
     JSON.stringify(initialForm(a, base, locales)),
   );
-  const form = JSON.parse(raw) as EditForm;
+  // Draft or published, where the target stores a status; a new article starts as a draft.
+  const withStatus = Boolean(target?.status);
+  const initial = initialForm(a, base, locales);
+  // A draft saved before status was part of the form has none: fall back to the version being edited.
+  const form = {
+    ...initial,
+    ...(JSON.parse(raw) as Partial<EditForm>),
+  };
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const create = !a.articleId;
@@ -280,7 +292,13 @@ export function ArticleEditor({
       }
     if (
       await onSave({
-        ...(a.draft.status ? { status: a.draft.status } : {}),
+        // The chosen status, or the draft's own where the target view does not say; an unchanged one is dropped
+        // against the base on the server.
+        ...(withStatus
+          ? { status: form.status }
+          : a.draft.status
+            ? { status: a.draft.status }
+            : {}),
         ...(create ? { slug: form.slug } : {}),
         locales: draftLocales,
         ...(form.verifyText.trim()
@@ -321,6 +339,35 @@ export function ArticleEditor({
             />
             <FieldDescription>{$t('articleTask.slugHelp')}</FieldDescription>
             {err('slug')}
+          </Field>
+        )}
+        {withStatus && (
+          <Field>
+            <FieldLabel id={`${id}-status`}>
+              {$t('articleTask.field.status')}
+            </FieldLabel>
+            <RadioGroup
+              aria-labelledby={`${id}-status`}
+              className='flex flex-wrap gap-4'
+              value={form.status}
+              onValueChange={(v) =>
+                set({ ...form, status: v as ArticleStatus })
+              }
+            >
+              {(['draft', 'published'] as const).map((v) => (
+                <div key={v} className='flex items-center gap-2'>
+                  <RadioGroupItem id={`${id}-status-${v}`} value={v} />
+                  <Label htmlFor={`${id}-status-${v}`}>
+                    {$t(
+                      v === 'draft'
+                        ? 'articleTask.statusDraft'
+                        : 'articleTask.statusPublished',
+                    )}
+                  </Label>
+                </div>
+              ))}
+            </RadioGroup>
+            <FieldDescription>{$t('articleTask.statusHelp')}</FieldDescription>
           </Field>
         )}
         {locales.map((l) => (

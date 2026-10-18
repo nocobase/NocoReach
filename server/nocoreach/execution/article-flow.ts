@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { randomUUID } from 'node:crypto';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
-import type { ArticleSnapshot } from '../../../shared/article-publishing.js';
+import { supportsStatus, type ArticleSnapshot, type ArticleTarget } from '../../../shared/article-publishing.js';
 import { articlePages, verifyPhrase, type ArticleDelivery, type ArticleProposal, type PublishOutcome } from '../articles/delivery.js';
 import { ArticleError, providerErrorKey } from '../articles/provider.js';
 import { fail, projectWork, type Artifact, type Work } from './model';
@@ -32,7 +32,7 @@ export class ArticleFlow {
   /** The project's targets for the task page, without credentials. */
   targets(project: string) {
     try {
-      return (this.s.p.articleTargets?.list(project).targets || []).map((t) => ({ id: t.id, name: t.name, kind: t.kind, locales: t.locales, capabilities: t.capabilities }));
+      return (this.s.p.articleTargets?.list(project).targets || []).map((t) => ({ id: t.id, name: t.name, kind: t.kind, locales: t.locales, capabilities: t.capabilities, status: supportsStatus(t as ArticleTarget) }));
     } catch {
       return [];
     }
@@ -118,7 +118,7 @@ export class ArticleFlow {
         target.kind === 'nocobase-api' ? Object.keys(target.fields.locales[l] || {}) : target.kind === 'git-files' ? ['body', ...(target.format === 'frontmatter' ? (target.frontmatter ? ['title', 'description'] : []) : Object.keys(target.metadata?.keys[l] || {}))] : ['title', 'description', 'body'],
       ]),
     );
-    return { target: { name: target.name, locales: target.locales, fields }, action: d.articleId ? 'update' : 'create', source: source ? { id: source.id, slug: source.slug, status: source.status, locales: source.locales } : null };
+    return { target: { name: target.name, locales: target.locales, fields, status: supportsStatus(target) }, action: d.articleId ? 'update' : 'create', source: source ? { id: source.id, slug: source.slug, status: source.status, locales: source.locales } : null };
   }
   /** Validate a Runner's article against the target; the artifact keeps the proposal and its base. */
   async proposal(project: string, input: any, article: unknown): Promise<ArticleProposal> {

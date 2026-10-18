@@ -265,6 +265,10 @@ export type ArticleTargetView = ArticleTarget & {
   capabilities: ArticleCapabilities;
 };
 
+/** Whether a target stores a draft/published status (Git files have none: committing publishes). */
+export const supportsStatus = (t: ArticleTarget) =>
+  t.kind === 'http' || (t.kind === 'nocobase-api' && Boolean(t.fields.status));
+
 export const fill = (value: string, slug: string) =>
   value.split('{slug}').join(slug);
 

@@ -240,6 +240,68 @@ it.each([
   },
 );
 
+it('chooses draft or published for a target that stores a status, starting from the draft', async () => {
+  const onSave = vi.fn(async () => true);
+  const user = userEvent.setup();
+  const withStatus = {
+    ...data,
+    articleTargets: [{ ...target, status: true }],
+  } as unknown as TaskData;
+  render(
+    <TaskDraftProvider>
+      <TaskDraftScope scope='1:1'>
+        <ArticleEditor
+          data={withStatus}
+          article={{
+            ...proposal,
+            articleId: null,
+            baseKey: null,
+            baseVersion: null,
+            draft: {
+              slug: 'new-post',
+              status: 'draft',
+              locales: { en: { title: 'New', body: 'Body' } },
+            },
+          }}
+          draftKey='status-choice'
+          busy={false}
+          onSave={onSave}
+          onCancel={vi.fn()}
+        />
+      </TaskDraftScope>
+    </TaskDraftProvider>,
+  );
+  expect(screen.getByRole('radio', { name: 'Draft' })).toBeChecked();
+  await user.click(screen.getByRole('radio', { name: 'Published' }));
+  await user.click(screen.getByRole('button', { name: 'Save' }));
+  expect(onSave).toHaveBeenCalledWith(
+    expect.objectContaining({ slug: 'new-post', status: 'published' }),
+  );
+});
+
+it('shows status changes as words in the review', async () => {
+  render(
+    <ArticleReview
+      data={data}
+      article={{
+        ...proposal,
+        articleId: null,
+        baseKey: null,
+        baseVersion: null,
+        draft: {
+          slug: 'new-post',
+          status: 'draft',
+          locales: { en: { title: 'New', body: 'Body' } },
+        },
+        changes: ['en.body', 'en.title', 'slug', 'status'],
+      }}
+      notes=''
+    />,
+  );
+  await userEvent.click(screen.getByRole('tab', { name: 'Status' }));
+  expect(screen.getByText('Draft')).toBeInTheDocument();
+});
+
 it('shows an overwrite after publishing with a comparison, and when it was restored', async () => {
   const release = {
     state: 'live',

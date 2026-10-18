@@ -100,7 +100,8 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
       ? [
           'article 是文章写作：不需要仓库，不提交、不推送、不开 PR，也不要调用任何 CMS、网站或发布接口；审核通过后由 NocoReach 发布。',
           'data.article.source 是当前源稿文件（JSON：id、slug、status 和 locales 下各语言的 title、description、body，body 为 Markdown），先完整读取，改写时在源稿基础上修改。data.article.action 为 create 时 source 为 null，是新文章。',
-          'article 成功必须返回 article:{slug?,locales:{<语言>:{title?,description?,body?}},verifyText?,summary?}。语言只能取 data.article.target.locales，字段只能取 data.article.target.fields 中该语言支持的字段。',
+          'article 成功必须返回 article:{slug?,status?,locales:{<语言>:{title?,description?,body?}},verifyText?,summary?}；verifyText 和 summary 都放在 article 里面。语言只能取 data.article.target.locales，字段只能取 data.article.target.fields 中该语言支持的字段。',
+          'status 只能是 draft 或 published，仅在 data.article.target.status 为 true 时有效：新文章默认 draft，任务明确要求直接公开时才写 published；改写已有文章时不要改变状态，除非任务明确要求。提交前先用 JSON 解析器检查结果是合法 JSON。',
           '新文章必须给出 slug（小写字母、数字和连字符，最多 200 字符），以及第一个语言的 title 和 body。改写已有文章只返回实际修改的语言和字段，未修改的不要返回；body 必须是该语言的完整正文，不是片段。title 最多 300 字符，description 最多 2000 字符。',
           'verifyText 是发布后能在页面上找到的独特短句，取自修改后的标题或正文原文，8-200 字符；没有合适的就省略。summary 一两句话说明改了什么。content 写给审核人的修改说明（Markdown），列出改动的语言、字段和理由。',
         ]
@@ -136,8 +137,46 @@ function summaryJson(summary: string | null, max = 100000): unknown {
   try {
     return JSON.parse(raw);
   } catch {
-    return invalid('json');
+    // Say where it went wrong (a position only, never the model's text) so the Agent can correct it: a complete
+    // value followed by more text (often a bracket closed too early), or text that is not JSON there.
+    const end = firstValueEnd(raw);
+    let complete = false;
+    if (end > 0 && end < raw.length) {
+      try {
+        JSON.parse(raw.slice(0, end));
+        complete = true;
+      } catch {
+        /* the first value itself is malformed */
+      }
+    }
+    if (complete) return invalid('jsonTrailing', { 0: end });
+    if (!/^[{[]/.test(raw)) return invalid('json');
+    return invalid('jsonSyntax', {
+      0: Math.max(1, end > 0 ? end : raw.length),
+    });
   }
+}
+
+/** Where the first top-level object or array closes (index after it), or -1. Strings and escapes are respected. */
+function firstValueEnd(raw: string): number {
+  let depth = 0,
+    inString = false,
+    escaped = false;
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (c === '\\') escaped = true;
+      else if (c === '"') inString = false;
+    } else if (c === '"') inString = true;
+    else if (c === '{' || c === '[') depth++;
+    else if (c === '}' || c === ']') {
+      depth--;
+      if (depth === 0) return i + 1;
+      if (depth < 0) return -1;
+    }
+  }
+  return -1;
 }
 
 /** Normalize only known mount aliases; never resolve paths or accept another task's identifier. */
@@ -179,7 +218,10 @@ export function resultOf(
 ): AgentResult {
   const parsed = envelope.safeParse(
     // An article carries complete bodies for several languages.
-    normalizeSources(summaryJson(summary, mode === 'article' ? 800000 : 100000), taskId),
+    normalizeSources(
+      summaryJson(summary, mode === 'article' ? 800000 : 100000),
+      taskId,
+    ),
   );
   if (!parsed.success) {
     const issue = parsed.error.issues[0];

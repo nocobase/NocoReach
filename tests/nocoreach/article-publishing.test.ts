@@ -187,6 +187,29 @@ describe('NocoBase API target', () => {
     }
   });
 
+  test('a new article without a status is created as a draft, not with the target default', async () => {
+    const cms = fakeNocoBase([]);
+    const { delivery } = await setup(
+      cmsTarget(),
+      { site: cms.fetcher },
+      { secret: 'cms-key' },
+    );
+    const p = delivery.proposal('1', {
+      targetId: 'cms',
+      articleId: null,
+      base: null,
+      baseKey: null,
+      draft: draft({ en: { title: 'T', body: 'B' } }, { slug: 'no-status' }),
+    });
+    expect(p.draft.status).toBe('draft');
+    expect(p.changes).toContain('status');
+    expect((await delivery.publish('1', p, null, 'k')).kind).toBe('published');
+    expect(cms.state.rows[0]).toMatchObject({
+      slug: 'no-status',
+      status: 'drafted',
+    });
+  });
+
   test('new articles: slug conflicts are reported and a retried create never duplicates', async () => {
     const cms = fakeNocoBase([row()]);
     const { delivery } = await setup(
