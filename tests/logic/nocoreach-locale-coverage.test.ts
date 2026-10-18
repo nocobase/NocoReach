@@ -64,8 +64,14 @@ describe('NocoReach semantic-key translations', () => {
     expect(new Set(Object.values(legacyKeys)).size).toBe(
       Object.values(legacyKeys).length,
     );
-    // A legacy alias may keep its historical source text while the visible translation is intentionally shortened.
+    // A legacy alias keeps its historical source text when the visible copy changes.
     const changedLegacyCopy: Record<string, string> = {
+      // Metadata-only collection no longer reads captions; historical aliases remain valid.
+      '每词最多 5 条结果，合计最多 15 个视频；不代表完整搜索结果。字幕优先人工，再自动，最多保留 30,000 字符。':
+        '每词最多 5 条结果，每次合计最多 15 个视频；不代表完整或最新搜索结果。仅获取视频信息和公开播放、点赞、评论数据，不读取字幕。',
+      '每词最多 5 条结果，每次合计最多 15 个视频；不代表完整或最新搜索结果。字幕优先人工，再自动，最多保留 30,000 字符。':
+        '每词最多 5 条结果，每次合计最多 15 个视频；不代表完整或最新搜索结果。仅获取视频信息和公开播放、点赞、评论数据，不读取字幕。',
+      '相关视频的内容、公开互动计数和可用字幕': '相关视频的信息和公开互动计数',
       // Collector connection setup moved into the platform panels.
       '请管理员按部署文档登记一次已授权的只读采集器，各项目即可选择。采集器必须能从 NocoReach 服务端访问；服务端的回环地址不代表你的电脑。':
         '请管理员在接入面板填写采集器地址和访问令牌。',
