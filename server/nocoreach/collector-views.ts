@@ -50,10 +50,17 @@ const kpi = (
   change: previous ? (value - previous) / previous : null,
 });
 
+/** How many records of the period a report returns: the page shows 20 and asks for more. */
+export function reportLimit(values: Record<string, unknown>) {
+  const limit = Number(values.limit);
+  return Number.isSafeInteger(limit) ? Math.min(Math.max(limit, 1), 200) : 20;
+}
+
 /**
  * Collector platforms return a publication date and the counts read at collection time, never a series. A data page
  * therefore counts the saved records published in the range (falling back to when they were first collected) and
- * sums their latest counts; the previous period compares publications only.
+ * sums their latest counts; the previous period compares publications only. Metrics cover every record of the period;
+ * `items` holds only the newest `limit` of them, and `matched` counts them all.
  */
 export function collectorPeriod<T>(
   host: unknown,
@@ -93,7 +100,8 @@ export function collectorPeriod<T>(
     : within(window.previousStart, window.previousEnd);
   return {
     window,
-    items: current.map((d) => d.item),
+    matched: current.length,
+    items: current.slice(0, reportLimit(values)).map((d) => d.item),
     kpis: [
       kpi('published', current.length, previous ? previous.length : null),
       ...metrics.map((m) =>

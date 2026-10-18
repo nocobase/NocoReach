@@ -133,6 +133,7 @@ export default function DataYouTube() {
     'nrYouTube',
     project?.id,
     range,
+    shown,
     (r) => r.syncing,
   );
   const running = busy || Boolean(data?.syncing);
@@ -247,18 +248,16 @@ export default function DataYouTube() {
           <ReportMetrics kpis={data.kpis} />
           <Card className='gap-0 py-0'>
             <h2 className='border-b border-border px-4 py-3 text-sm font-semibold'>
-              {$t('collectorPage.videosInRange', { 0: data.videos.length })}
+              {$t('collectorPage.videosInRange', { 0: data.matched })}
             </h2>
             {data.videos.length ? (
-              data.videos
-                .slice(0, shown)
-                .map((v) => <VideoRow key={v.id} v={v} />)
+              data.videos.map((v) => <VideoRow key={v.id} v={v} />)
             ) : (
               <p className='px-4 py-3 text-sm text-muted-foreground'>
                 {$t('collectorPage.noneInRange')}
               </p>
             )}
-            {shown < data.videos.length ? (
+            {shown < data.matched ? (
               <div className='px-4 py-3'>
                 <Button
                   variant='outline'

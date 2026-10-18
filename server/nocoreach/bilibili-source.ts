@@ -572,6 +572,7 @@ export class BilibiliSource {
       ...status,
       window: period.window,
       kpis: period.kpis,
+      matched: period.matched,
       videos: period.items.map((v) => ({
         ...v,
         fromEarlierConfig: v.configRevision !== state?.revision,

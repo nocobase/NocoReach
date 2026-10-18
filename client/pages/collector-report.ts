@@ -13,16 +13,20 @@ export interface ReportWindow {
 export interface CollectorReport {
   window: ReportWindow;
   kpis: Metric[];
+  /** Records of the period; the report lists only the newest `limit` of them. */
+  matched: number;
 }
 
 /**
- * The period report of a collector platform (`<resource>/report`). Keeps the last report while a newer one loads, and
- * reads again every few seconds while a collection is running so its results appear without a reload.
+ * The period report of a collector platform (`<resource>/report`), listing the newest `limit` records. Keeps the last
+ * report while a newer one loads. While a collection runs it polls only the platform's status, and reads the report
+ * again once the collection ends, so a long read does not download the full report repeatedly.
  */
 export function useCollectorReport<T extends CollectorReport>(
   resource: 'nrXiaohongshu' | 'nrBilibili' | 'nrYouTube',
   projectId: number | undefined,
   range: Range,
+  limit: number,
   running: (report: T) => boolean,
 ) {
   const [data, setData] = useState<T>();
@@ -36,7 +40,7 @@ export function useCollectorReport<T extends CollectorReport>(
     try {
       const value = await api.action<T>(resource, 'report', {
         method: 'POST',
-        body: { projectId, range: period, from, to },
+        body: { projectId, range: period, from, to, limit },
         unwrap: 'data',
       });
       if (sequence !== sequenceRef.current) return;
@@ -45,7 +49,7 @@ export function useCollectorReport<T extends CollectorReport>(
     } catch (e) {
       if (sequence === sequenceRef.current) setError(e);
     }
-  }, [resource, projectId, valid, period, from, to]);
+  }, [resource, projectId, valid, period, from, to, limit]);
   useEffect(() => {
     void Promise.resolve().then(load);
     // A response for an earlier project or period must not replace this one.
@@ -54,11 +58,33 @@ export function useCollectorReport<T extends CollectorReport>(
     };
   }, [load]);
   const active = Boolean(data && running(data));
+  const runningRef = useRef(running);
   useEffect(() => {
-    if (!active) return;
-    const timer = setInterval(() => void load(), 2000);
-    return () => clearInterval(timer);
-  }, [active, load]);
+    runningRef.current = running;
+  });
+  useEffect(() => {
+    if (!active || !projectId) return;
+    let current = true;
+    const timer = setInterval(() => {
+      void api
+        .action<Partial<T>>(resource, 'status', {
+          method: 'POST',
+          body: { projectId, summary: true },
+          unwrap: 'data',
+        })
+        .then((status) => {
+          if (!current) return;
+          // Keep the listed records; take the latest collection state.
+          setData((report) => report && { ...report, ...status });
+          if (!runningRef.current({ ...status } as T)) void load();
+        })
+        .catch(() => undefined);
+    }, 2000);
+    return () => {
+      current = false;
+      clearInterval(timer);
+    };
+  }, [active, projectId, resource, load]);
   return { data, error, reload: load, valid };
 }
 

@@ -100,14 +100,52 @@ export class YouTubeLibrary {
       videos: rows.map((row) => row.get('payload') as SavedYouTubeVideo),
     };
   }
-  /** Every saved video of the project, newest publication first, for period reports. */
-  async all(id: string) {
+  /**
+   * Dates and counts of every saved video, for period reports. Read in batches and without captions, so a large
+   * library is counted in full without holding every transcript in memory.
+   */
+  async summaries(id: string) {
+    const filter = { projectId: projectId(id) };
+    const size = 500;
+    const result: Pick<
+      SavedYouTubeVideo,
+      'id' | 'publishedAt' | 'firstSeenAt' | Metric
+    >[] = [];
+    for (let offset = 0; ; offset += size) {
+      const rows = await this.repo().find({
+        filter,
+        sort: ['id'],
+        limit: size,
+        offset,
+      });
+      for (const row of rows) {
+        const video = row.get('payload') as SavedYouTubeVideo;
+        result.push({
+          id: video.id,
+          publishedAt: video.publishedAt,
+          firstSeenAt: video.firstSeenAt,
+          views: video.views,
+          likes: video.likes,
+          comments: video.comments,
+        });
+      }
+      if (rows.length < size) return result;
+    }
+  }
+  /** Full saved videos by ID, in the order given. */
+  async byIds(id: string, videoIds: string[]) {
+    if (!videoIds.length) return [];
     const rows = await this.repo().find({
-      filter: { projectId: projectId(id) },
-      sort: ['-publishedAtKnown', '-publishedAt', 'id'],
-      limit: 2000,
+      filter: { projectId: projectId(id), videoId: { $in: videoIds } },
+      limit: videoIds.length,
     });
-    return rows.map((row) => row.get('payload') as SavedYouTubeVideo);
+    const byId = new Map(
+      rows.map((row) => {
+        const video = row.get('payload') as SavedYouTubeVideo;
+        return [video.id, video] as const;
+      }),
+    );
+    return videoIds.flatMap((videoId) => byId.get(videoId) ?? []);
   }
   async selected(id: string, videoIds: string[]) {
     if (!videoIds.length) return [];

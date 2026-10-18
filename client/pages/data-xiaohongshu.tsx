@@ -44,6 +44,7 @@ export default function DataXiaohongshu() {
     'nrXiaohongshu',
     project?.id,
     range,
+    shown,
     (r) => Boolean(r.running),
   );
   const running = busy || Boolean(data?.running);
@@ -157,10 +158,10 @@ export default function DataXiaohongshu() {
           <ReportMetrics kpis={data.kpis} />
           <Card className='gap-0 py-0'>
             <h2 className='border-b border-border px-4 py-3 text-sm font-semibold'>
-              {$t('collectorPage.notesInRange', { 0: data.notes.length })}
+              {$t('collectorPage.notesInRange', { 0: data.matched })}
             </h2>
             {data.notes.length ? (
-              data.notes.slice(0, shown).map((note) => (
+              data.notes.map((note) => (
                 <div
                   key={note.id}
                   className='min-w-0 border-b border-border px-4 py-2.5 last:border-0'
@@ -196,7 +197,7 @@ export default function DataXiaohongshu() {
                 {$t('collectorPage.noneInRange')}
               </p>
             )}
-            {shown < data.notes.length ? (
+            {shown < data.matched ? (
               <div className='px-4 py-3'>
                 <Button
                   variant='outline'

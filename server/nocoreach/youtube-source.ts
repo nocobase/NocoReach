@@ -436,7 +436,7 @@ export class YouTubeSource {
     const [
       { videos: _page, page: _number, pageSize: _size, ...status },
       saved,
-    ] = await Promise.all([this.status(id), this.library.all(id)]);
+    ] = await Promise.all([this.status(id), this.library.summaries(id)]);
     const period = collectorPeriod(
       this.p,
       id,
@@ -455,7 +455,12 @@ export class YouTubeSource {
       ...status,
       window: period.window,
       kpis: period.kpis,
-      videos: period.items,
+      matched: period.matched,
+      // Summaries leave captions out; read the full records for this page only.
+      videos: await this.library.byIds(
+        id,
+        period.items.map((video) => video.id),
+      ),
     };
   }
   async settled(id: string) {
@@ -517,7 +522,13 @@ export class YouTubeSource {
     this.p.app.resourceManager.define({
       name: 'nrYouTube',
       actions: {
-        status: wrap((id, v) => this.status(id, v.page ?? 1)),
+        // `summary` leaves out the saved page, for callers polling a running read.
+        status: wrap(async (id, v) => {
+          const status = await this.status(id, v.page ?? 1);
+          if (!v.summary) return status;
+          const { videos: _videos, ...rest } = status;
+          return rest;
+        }),
         report: wrap((id, v) => this.report(id, v, windowFor)),
         connect: wrap((id, v) => this.connect(id, v)),
         sync: wrap((id) => this.sync(id)),

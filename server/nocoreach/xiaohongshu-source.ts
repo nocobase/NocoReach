@@ -215,6 +215,7 @@ export class XiaohongshuSource {
       ...status,
       window: period.window,
       kpis: period.kpis,
+      matched: period.matched,
       notes: period.items,
     };
   }

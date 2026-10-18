@@ -72,3 +72,13 @@ it('starts all time at the earliest saved record and sums only known counts', ()
   expect(r.kpis[0]).toMatchObject({ value: 5, previous: null, change: null });
   expect(r.kpis[1]).toMatchObject({ value: 1106 });
 });
+
+it('lists only the newest records up to the limit while counting the whole period', () => {
+  vi.useFakeTimers({ now: new Date('2026-10-17T12:00:00Z') });
+  const r = report({ range: 'all', limit: 2 });
+  expect(r.matched).toBe(5);
+  expect(r.items.map((v) => v.id)).toEqual(['undated', 'recent']);
+  expect(r.kpis[0]).toMatchObject({ value: 5 });
+  expect(report({ range: 'all', limit: 'many' }).items).toHaveLength(5);
+  expect(report({ range: 'all', limit: 0 }).items).toHaveLength(1);
+});

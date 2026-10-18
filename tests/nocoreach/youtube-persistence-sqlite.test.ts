@@ -388,3 +388,34 @@ it('does not restore an invalid legacy publication date after migration cleared 
   expect(stored?.get('publishedAt')).toBeNull();
   expect(stored?.get('publishedAtKnown')).toBe(false);
 });
+
+it('reports every saved video of a large library and returns full records for the requested page only', async () => {
+  const f = await fixture();
+  const { YouTubeLibrary } =
+    await import('../../server/nocoreach/youtube-library.js');
+  // @ts-expect-error The server modules are plain JavaScript under ts-nocheck.
+  const { windowFor } = await import('../../server/nocoreach/data-views.js');
+  const library = new YouTubeLibrary(f.db);
+  // More than one summary batch (500 rows), and another project's record.
+  await library.save(
+    '1',
+    Array.from({ length: 501 }, (_, i) => ({
+      ...video(i + 1),
+      publishedAt: `2026-0${1 + (i % 9)}-15`,
+    })),
+  );
+  await library.save('2', [video(9999)]);
+  const report = await f.source.report(
+    '1',
+    { range: 'all', limit: 3 },
+    windowFor,
+  );
+  expect(report.matched).toBe(501);
+  expect(report.kpis.find((k) => k.key === 'total')?.value).toBe(501);
+  expect(report.kpis.find((k) => k.key === 'views')?.value).toBe(
+    (501 * 502) / 2,
+  );
+  expect(report.videos).toHaveLength(3);
+  expect(report.videos.every((v) => v.publishedAt === '2026-09-15')).toBe(true);
+  expect(report.videos[0].transcript.text).toBe('Previously read caption');
+});

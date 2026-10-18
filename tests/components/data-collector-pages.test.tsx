@@ -83,6 +83,7 @@ const xiaohongshu = {
   running: null,
   window: window28,
   kpis: [kpi('published', '期间发布', 1), kpi('total', '累计保存', 4)],
+  matched: 1,
   notes: [
     {
       id: '69a123456789abcdef012345',
@@ -111,7 +112,13 @@ it('lists Xiaohongshu notes of the period literally and searches with the curren
     'nrXiaohongshu',
     'report',
     expect.objectContaining({
-      body: { projectId: 1, range: '28', from: undefined, to: undefined },
+      body: {
+        projectId: 1,
+        range: '28',
+        from: undefined,
+        to: undefined,
+        limit: 20,
+      },
     }),
   );
   expect(screen.getByText(/页面显示点赞：未知/)).toBeVisible();
@@ -155,6 +162,7 @@ const bilibili = {
   lastRun: null,
   window: window28,
   kpis: [kpi('published', 'Published in period', 1)],
+  matched: 1,
   videos: [
     {
       id: 'BV1MW421X7gM',
@@ -211,6 +219,7 @@ const youtube = {
   lastSync: { at: '2026-10-16T00:00:00Z', ok: true, errors: [] },
   window: window28,
   kpis: [kpi('published', '期间发布', 1)],
+  matched: 1,
   videos: [
     {
       id: 'dQw4w9WgXcQ',
@@ -256,14 +265,45 @@ it('shows YouTube provenance and captions, and offers reading only with the sync
   ).not.toBeInTheDocument();
 });
 
-it('polls the YouTube report while a read is running', async () => {
-  action
-    .mockResolvedValueOnce({ ...youtube, syncing: true, videos: [] })
-    .mockResolvedValue(youtube);
+it('polls only the YouTube status while a read runs, then reads the report once', async () => {
+  let reports = 0;
+  action.mockImplementation(async (_resource, name) => {
+    if (name === 'status') return { syncing: false };
+    reports += 1;
+    return reports === 1
+      ? { ...youtube, syncing: true, matched: 0, videos: [] }
+      : youtube;
+  });
   show(DataYouTube, '/data/youtube');
   expect(await screen.findByText('读取完成后会自动更新')).toBeVisible();
   expect(
     await screen.findByRole('link', { name: 'Tutorial' }, { timeout: 4000 }),
   ).toBeVisible();
-  expect(calls('report').length).toBeGreaterThanOrEqual(2);
+  // The poll leaves the saved page and its captions out.
+  expect(calls('status')[0][2]).toMatchObject({
+    body: { projectId: 1, summary: true },
+  });
+  expect(calls('report')).toHaveLength(2);
+});
+
+it('asks the server for more records instead of slicing a full report', async () => {
+  action.mockImplementation(async (_resource, _name, options) => ({
+    ...xiaohongshu,
+    matched: 25,
+    notes: Array.from({ length: Math.min(25, options.body.limit) }, (_, i) => ({
+      ...xiaohongshu.notes[0],
+      id: `note-${i}`,
+      title: `Note ${i}`,
+    })),
+  }));
+  show(DataXiaohongshu, '/data/xiaohongshu');
+  expect(await screen.findByRole('link', { name: 'Note 19' })).toBeVisible();
+  expect(screen.getByText('笔记（25）')).toBeVisible();
+  expect(calls('report')[0][2]).toMatchObject({ body: { limit: 20 } });
+  await userEvent.click(screen.getByRole('button', { name: '显示更多' }));
+  expect(await screen.findByRole('link', { name: 'Note 24' })).toBeVisible();
+  expect(calls('report').at(-1)![2]).toMatchObject({ body: { limit: 40 } });
+  expect(
+    screen.queryByRole('button', { name: '显示更多' }),
+  ).not.toBeInTheDocument();
 });

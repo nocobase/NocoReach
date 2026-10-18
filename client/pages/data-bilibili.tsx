@@ -54,6 +54,7 @@ export default function DataBilibili() {
     'nrBilibili',
     project?.id,
     range,
+    shown,
     (r) => r.checking,
   );
   const running = busy || Boolean(data?.checking);
@@ -192,10 +193,10 @@ export default function DataBilibili() {
           <ReportMetrics kpis={data.kpis} />
           <Card className='gap-0 py-0'>
             <h2 className='border-b border-border px-4 py-3 text-sm font-semibold'>
-              {$t('collectorPage.videosInRange', { 0: data.videos.length })}
+              {$t('collectorPage.videosInRange', { 0: data.matched })}
             </h2>
             {data.videos.length ? (
-              data.videos.slice(0, shown).map((video) => (
+              data.videos.map((video) => (
                 <div
                   key={video.id}
                   className='flex min-w-0 flex-col gap-1 border-b border-border px-4 py-2.5 last:border-0'
@@ -236,7 +237,7 @@ export default function DataBilibili() {
                 {$t('collectorPage.noneInRange')}
               </p>
             )}
-            {shown < data.videos.length ? (
+            {shown < data.matched ? (
               <div className='px-4 py-3'>
                 <Button
                   variant='outline'
