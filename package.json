@@ -25,7 +25,6 @@
     "@ai-sdk/react": "2.0.0",
     "@base-ui/react": "^1.6.0",
     "@dicebear/core": "^9.4.3",
-    "@gchust/agent-annotations": "0.1.9",
     "@hookform/resolvers": "^5.0.1",
     "@nocobase/agent-runner": "0.1.0-beta.9",
     "@nocobase/app-cli-client": "0.1.0-beta.7",

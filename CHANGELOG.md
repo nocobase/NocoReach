@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Remove UI annotation tooling
+
+- Remove the `@gchust/agent-annotations` development dependency, Vite integration, theme host, environment toggle, and obsolete test and documentation references to align with the upstream template.
+- Business Agents, Runners, and task execution remain unchanged.
+
 ## Unreleased — Bilibili search detail enrichment
 
 - Enrich up to 20 unique search discoveries with sequential Collector video requests, prioritizing recent publications and sharing the existing batch deadline and cancellation boundary.

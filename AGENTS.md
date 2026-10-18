@@ -13,7 +13,7 @@ Before implementing features or fixes, read the [application development Skill](
 
 | Task                                                             | Project guidance                                                   |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Pages, routes, copy, themes, identity caches, UI annotations     | [Frontend](docs/DEVELOPMENT.md#frontend)                           |
+| Pages, routes, copy, themes, identity caches                     | [Frontend](docs/DEVELOPMENT.md#frontend)                           |
 | Business APIs, permissions, databases, sync, background services | [Backend and data](docs/DEVELOPMENT.md#backend-and-data)           |
 | Data collection, OAuth, proxies, public fetching                 | [Outbound networking](docs/DEVELOPMENT.md#outbound-networking)     |
 | Agents, Runners, task execution, results, review                 | [Task execution](docs/DEVELOPMENT.md#task-execution)               |

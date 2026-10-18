@@ -60,7 +60,6 @@ describe('development client file watching', () => {
       'junction',
     );
 
-    vi.stubEnv('AGENT_ANNOTATIONS_ENABLED', 'false');
     vi.stubEnv('PROXY_TARGET_URL', '');
     // `pnpm dev` always passes the mount path; the Vite preset refuses to serve without one.
     vi.stubEnv('APP_BASE_PATH', '/main');
