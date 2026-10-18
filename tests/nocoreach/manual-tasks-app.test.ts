@@ -716,6 +716,7 @@ test('retries durable draft deletion claims before expiry and reclaims quota wit
       permissionSet: 'nr.member',
       subject: { type: 'user', id: String(otherUser.id) },
     });
+  await runtime.legacy.db.access!.joinCreatedProject(String(otherUser.id), '1');
   expect(await roleOf(runtime.legacy.db, String(otherUser.id))).toBe('member');
   const other = await signIn(testApp, otherCredentials);
   const freshSession = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);

@@ -1,6 +1,7 @@
 import { z } from 'zod';
+import { CAPABILITIES, type RoleAccess } from './access-capabilities.js';
 
-export const memberRolesSchema = z.strictObject({
+const memberRolesSchema = z.strictObject({
   roles: z
     .array(
       z
@@ -10,45 +11,47 @@ export const memberRolesSchema = z.strictObject({
     )
     .max(30),
 });
-export const memberRoleUpdateSchema = memberRolesSchema.extend({
-  expectedRoles: memberRolesSchema.shape.roles,
-});
-export const memberInvitationSchema = memberRolesSchema
+const projectIds = z.array(z.string().regex(/^[1-9]\d{0,15}$/)).max(50);
+export const memberRoleUpdateSchema = memberRolesSchema
   .extend({
-    email: z
-      .email()
-      .max(320)
-      .transform((email) => email.trim().toLowerCase()),
+    expectedRoles: memberRolesSchema.shape.roles,
+    projectIds: projectIds.optional(),
+    expectedProjects: projectIds.optional(),
   })
-  .refine((input) => input.roles.length > 0, {
-    path: ['roles'],
-    message: 'Choose at least one role.',
-  });
+  .refine(
+    (input) =>
+      (input.projectIds === undefined) ===
+      (input.expectedProjects === undefined),
+    { path: ['expectedProjects'] },
+  );
+export const MAX_INVITATIONS = 50;
+export const memberInvitationSchema = z.strictObject({
+  emails: z
+    .array(
+      z
+        .email()
+        .max(320)
+        .transform((email) => email.trim().toLowerCase()),
+    )
+    .min(1)
+    .max(MAX_INVITATIONS),
+  projectIds,
+});
 export const businessRoleSchema = z.strictObject({
   key: z
     .string()
     .regex(/^nr\.[a-zA-Z0-9_.-]+$/)
     .max(64),
   title: z.string().trim().min(1).max(100),
-  grants: z
-    .array(
-      z.strictObject({
-        resource: z.strictObject({
-          type: z.string(),
-          id: z.string().min(1).max(128),
-        }),
-        actions: z
-          .array(z.strictObject({ action: z.string().min(1).max(160) }))
-          .min(1)
-          .max(300),
-      }),
-    )
-    .max(1000),
+  scope: z.enum(['member', 'all']),
+  capabilities: z.array(z.enum(CAPABILITIES as [string, ...string[]])).max(100),
   revision: z.string().optional(),
 });
 
 export type BusinessRoleInput = z.infer<typeof businessRoleSchema>;
-export type BusinessRole = BusinessRoleInput & {
+export type BusinessRole = RoleAccess & {
+  key: string;
+  title: string;
   builtIn: boolean;
   revision: string;
   assignable: boolean;
@@ -58,6 +61,7 @@ export type AccessMember = {
   name: string;
   account: string;
   roles: string[];
+  projects: string[];
   locked: boolean;
 };
 export type MemberInvitation = {
@@ -65,16 +69,32 @@ export type MemberInvitation = {
   source: 'users' | 'members';
   email: string;
   roles: string[];
+  projectIds: string[];
   invitedBy: string;
   status: 'pending' | 'expired' | 'accepted' | 'revoked';
   expiresAt: string;
 };
+/** One address of a batch invitation: invited, added at once as an existing member, or refused with a reason. */
+export type InvitationResult = {
+  email: string;
+  outcome: 'invited' | 'added' | 'alreadyMember' | 'failed';
+  reason?: string;
+  emailSent?: boolean;
+  inviteUrl?: string;
+};
 export type AccessCatalogue = {
-  actions: { resource: string; action: string; application: boolean }[];
-  pages: { type: string; id: string; actions: string[] }[];
   projects: { id: string; name: string }[];
 };
 
-// Translation names follow semantic camelCase; route/permission identities keep their original hyphens.
-export const accessPageLabelKey = (id: string) =>
-  `accessMembers.pages.${id.replace(/-([a-z])/g, (_match, letter: string) => letter.toUpperCase())}`;
+/** Split pasted addresses on lines, commas, semicolons and spaces. */
+export const parseEmails = (text: string) => [
+  ...new Set(
+    text
+      .split(/[\s,;，；]+/)
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  ),
+];
+
+export const capabilityLabelKey = (capability: string) =>
+  `accessMembers.capabilities.${capability}`;

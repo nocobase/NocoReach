@@ -67,7 +67,9 @@ try {
     throw new Error(
       'Development server did not become ready; see development.log',
     );
-  browser = await chromium.launch();
+  browser = await chromium.launch({
+    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
+  });
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
     locale: 'en-US',

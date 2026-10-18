@@ -1,15 +1,21 @@
 import { randomUUID } from 'node:crypto';
 import { lockUserForAdministration } from '@nocobase/app-plugin-authentication';
 import type { PermissionGrant } from '@nocobase/authorization/core';
-import type {
-  UserInvitation,
-  UserManagementService,
-  UserInvitationAcceptedContext,
+import {
+  UserManagementError,
+  type UserInvitation,
+  type UserManagementService,
+  type UserInvitationAcceptedContext,
 } from '@nocobase/app-plugin-users/server';
 import type { AppIdentityConfig } from '@nocobase/app-server/config';
 import type { DatabaseConnection } from '@nocobase/db';
-import type { MemberInvitation } from '../../shared/member-access.js';
+import { ApiError } from '@nocobase/app-server/router';
+import type {
+  InvitationResult,
+  MemberInvitation,
+} from '../../shared/member-access.js';
 import { ReachManagement, accessError } from './management.js';
+import { BUSINESS_MEMBER } from './service.js';
 
 type Account = {
   id: string;
@@ -26,6 +32,7 @@ type Offer = {
   activeEmail: string | null;
   invitedBy: string;
   roles: string[];
+  projectIds: string[] | null;
   ceiling: PermissionGrant[];
   status: 'pending' | 'accepted' | 'revoked';
   expiresAt: Date | string;
@@ -79,6 +86,7 @@ export class ReachInvitations {
       source: row.source,
       email: row.email,
       roles: row.roles,
+      projectIds: row.projectIds ?? [],
       invitedBy: row.invitedBy,
       status: status(row),
       expiresAt: new Date(row.expiresAt).toISOString(),
@@ -148,11 +156,96 @@ export class ReachInvitations {
     return rows.map((row) => this.view(row));
   }
 
+  /**
+   * Invite several addresses into the member role and the chosen projects. An address that already belongs to the
+   * application joins the projects at once; each address reports its own outcome.
+   */
+  async inviteMany(
+    actorId: string,
+    emails: readonly string[],
+    projectIds: readonly string[],
+    origin?: string,
+  ): Promise<InvitationResult[]> {
+    await this.access.require('nrMembers', 'setRole');
+    const known = new Set(
+      await this.access.projectIds(this.access.database.connection()),
+    );
+    for (const id of new Set(projectIds)) {
+      if (!known.has(id)) accessError('missingProject', 'INVALID_ARGUMENT');
+      if (!(await this.access.allows('nrProjects', 'list', id)))
+        accessError('ungrantable');
+    }
+    const results: InvitationResult[] = [];
+    for (const email of new Set(
+      emails.map((item) => item.trim().toLowerCase()),
+    ))
+      try {
+        const joined = await this.joinExisting(actorId, email, projectIds);
+        results.push(
+          joined === undefined
+            ? await this.create(
+                actorId,
+                email,
+                [BUSINESS_MEMBER],
+                origin,
+                projectIds,
+              )
+            : { email, outcome: joined ? 'added' : 'alreadyMember' },
+        );
+      } catch (error) {
+        if (error instanceof ApiError)
+          results.push({ email, outcome: 'failed', reason: error.reason });
+        else if (error instanceof UserManagementError)
+          results.push({ email, outcome: 'failed', reason: error.code });
+        else throw error;
+      }
+    return results;
+  }
+
+  /** An existing member joins the projects directly: true when any was added, undefined for a non-member. */
+  private async joinExisting(
+    actorId: string,
+    email: string,
+    projectIds: readonly string[],
+  ) {
+    return this.access.database.transaction(async (connection) => {
+      await this.access.lockManagement(connection);
+      const account = await connection
+        .repository<Account>('user')
+        .findOne({ filter: { email } });
+      if (
+        !account ||
+        account.kind !== 'person' ||
+        !(await this.access.role(account.id, connection))
+      )
+        return undefined;
+      await this.management.actorGrants(actorId, connection);
+      const before = await this.access.projectsOf(account.id, connection);
+      const added = projectIds.filter((id) => !before.has(id));
+      if (!added.length) return false;
+      await this.access.setProjects(connection, account.id, [
+        ...before,
+        ...added,
+      ]);
+      await this.access.event(
+        connection,
+        actorId,
+        'member.projects',
+        account.id,
+        {
+          added,
+        },
+      );
+      return true;
+    });
+  }
+
   async create(
     actorId: string,
     email: string,
     roles: string[],
     origin?: string,
+    projectIds: readonly string[] = [],
   ) {
     await this.access.require('nrMembers', 'setRole');
     this.link('placeholder', origin);
@@ -180,6 +273,7 @@ export class ReachInvitations {
         activeEmail: email,
         invitedBy: actorId,
         roles: [...new Set(roles)],
+        projectIds: [...new Set(projectIds)],
         ceiling: selected.flatMap((set) => [...set.grants]),
         status: 'pending',
         expiresAt: new Date(now.getTime() + TTL),
@@ -444,6 +538,16 @@ export class ReachInvitations {
       row.roles,
       row.ceiling,
     );
+    // Projects deleted since the invitation are skipped.
+    const known = new Set(await this.access.projectIds(connection));
+    const projects = (row.projectIds ?? []).filter((id) => known.has(id));
+    if (projects.length) {
+      const before = await this.access.projectsOf(userId, connection);
+      await this.access.setProjects(connection, userId, [
+        ...before,
+        ...projects,
+      ]);
+    }
     const consumed = await this.repository(connection).updateMany({
       filter: (f) =>
         f.and([

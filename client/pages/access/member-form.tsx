@@ -6,7 +6,6 @@ import { $t, useNocoReachLocale } from '#i18n';
 import { RouteDialog } from '#components/route-dialog';
 import { useRouteOverlay } from '#components/use-route-overlay';
 import { Button } from '#components/ui/button';
-import { Input } from '#components/ui/input';
 import {
   Field,
   FieldLabel,
@@ -16,66 +15,52 @@ import {
 } from '#components/ui/field';
 import { ListSkeleton } from '#components/reach/states';
 import { toast } from '#lib/toast';
-import { memberInvitationSchema } from '../../../shared/member-access.js';
 import {
   accessMessage,
   useAccessApi,
   useAccessQuery,
+  type AccessCatalogue,
   type AccessMember,
   type BusinessRole,
 } from './api';
 import { AccessError, RolePicker } from './components';
-import { InvitationLink } from './invitation-link';
+import { ProjectPicker } from './project-picker';
 
-type CreatedInvitation = {
-  inviteUrl?: string;
-  emailSent: boolean;
-  email: string;
-};
-
+/** Change a member's roles and the projects they belong to. */
 export default function MemberForm() {
   useNocoReachLocale();
   const { memberId } = useParams();
   const roles = useAccessQuery<{ items: BusinessRole[]; canManage: boolean }>(
     '/roles',
   );
-  const member = useAccessQuery<AccessMember>(
-    `/members/${memberId}`,
-    !!memberId,
-  );
+  const catalogue = useAccessQuery<AccessCatalogue>('/catalog');
+  const member = useAccessQuery<AccessMember>(`/members/${memberId}`);
   const busyRef = useRef(false);
-  const [invitation, setInvitation] = useState<CreatedInvitation>();
+  const error = roles.error || catalogue.error || member.error;
   return (
     <RouteDialog
-      title={$t(
-        memberId ? 'accessMembers.editRoles' : 'accessMembers.inviteMember',
-      )}
-      description={$t(
-        memberId
-          ? 'accessMembers.multiRoleHelp'
-          : 'accessMembers.invitationHelp',
-      )}
+      title={$t('accessMembers.editMember')}
+      description={$t('accessMembers.editMemberHelp')}
       beforeClose={() => !busyRef.current}
     >
-      {invitation ? (
-        <InvitationCreated value={invitation} />
-      ) : roles.error || member.error ? (
+      {error ? (
         <AccessError
-          error={roles.error || member.error}
+          error={error}
           retry={() => {
             void roles.refetch();
-            if (memberId) void member.refetch();
+            void catalogue.refetch();
+            void member.refetch();
           }}
         />
-      ) : !roles.data || (memberId && !member.data) ? (
+      ) : !roles.data || !catalogue.data || !member.data ? (
         <ListSkeleton />
       ) : roles.data.canManage ? (
         <Form
-          key={memberId || 'invite'}
+          key={memberId}
           member={member.data}
           roles={roles.data.items}
+          projects={catalogue.data.projects}
           busyRef={busyRef}
-          onInvited={setInvitation}
         />
       ) : (
         <p>{$t('accessMembers.errors.denied')}</p>
@@ -83,94 +68,76 @@ export default function MemberForm() {
     </RouteDialog>
   );
 }
+
 function Form({
   member,
   roles,
+  projects,
   busyRef,
-  onInvited,
 }: {
-  member?: AccessMember;
+  member: AccessMember;
   roles: BusinessRole[];
+  projects: AccessCatalogue['projects'];
   busyRef: { current: boolean };
-  onInvited: (value: CreatedInvitation) => void;
 }) {
   const { close } = useRouteOverlay();
-  const [email, setEmail] = useState('');
-  const [expectedRoles] = useState(() => [...(member?.roles || [])]);
+  // Background refetches never move the snapshot the server compares against.
+  const [expectedRoles] = useState(() => [...member.roles]);
+  const [expectedProjects] = useState(() => [...member.projects]);
+  // Projects the viewer cannot see stay as they are.
+  const visible = new Set(projects.map((project) => project.id));
   const [selected, setSelected] = useState(expectedRoles);
+  const [projectIds, setProjectIds] = useState(() =>
+    expectedProjects.filter((id) => visible.has(id)),
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>();
-  const [emailError, setEmailError] = useState('');
   const [roleError, setRoleError] = useState('');
   const [validated, setValidated] = useState(false);
   const ref = useRef<HTMLFormElement>(null);
   useEffect(() => {
-    if (!busy && (emailError || roleError))
-      ref.current
-        ?.querySelector<HTMLElement>(
-          emailError ? '[name=email]' : '[role=checkbox]',
-        )
-        ?.focus();
-  }, [busy, emailError, roleError]);
+    if (!busy && roleError)
+      ref.current?.querySelector<HTMLElement>('[role=checkbox]')?.focus();
+  }, [busy, roleError]);
   const call = useAccessApi();
   const queries = useQueryClient();
-  const emailInvalid =
-    !member && !memberInvitationSchema.shape.email.safeParse(email).success;
   const rolesInvalid = !selected.length;
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setValidated(true);
-    if (emailInvalid || rolesInvalid) {
-      ref.current
-        ?.querySelector<HTMLElement>(
-          emailInvalid ? '[name=email]' : '[role=checkbox]',
-        )
-        ?.focus();
+    if (rolesInvalid) {
+      ref.current?.querySelector<HTMLElement>('[role=checkbox]')?.focus();
       return;
     }
     if (busyRef.current) return;
     busyRef.current = true;
     setBusy(true);
     setError(undefined);
-    setEmailError('');
     setRoleError('');
     try {
-      if (member) {
-        await call(`/members/${member.id}/roles`, {
-          roles: selected,
-          expectedRoles,
-        });
-        toast.success(() => $t('accessMembers.rolesSaved', { 0: member.name }));
-      } else {
-        onInvited(
-          await call('/invitations', { email: email.trim(), roles: selected }),
-        );
-      }
+      await call(`/members/${member.id}/roles`, {
+        roles: selected,
+        expectedRoles,
+        projectIds: [
+          ...expectedProjects.filter((id) => !visible.has(id)),
+          ...projectIds,
+        ],
+        expectedProjects,
+      });
+      toast.success(() => $t('accessMembers.memberSaved', { 0: member.name }));
       void queries.invalidateQueries({ queryKey: ['reach-access'] });
       busyRef.current = false;
       setBusy(false);
-      if (member) await close();
+      await close();
     } catch (failure) {
       const reason =
         failure instanceof ApiClientError ? failure.reason : undefined;
       if (
         reason &&
-        [
-          'accountUnavailable',
-          'systemAccount',
-          'alreadyPending',
-          'alreadyMember',
-        ].includes(reason)
-      ) {
-        setEmailError(accessMessage(failure));
-        ref.current?.querySelector<HTMLElement>('[name=email]')?.focus();
-      } else if (
-        reason &&
         ['invalidRole', 'ungrantable', 'roleExpanded'].includes(reason)
-      ) {
+      )
         setRoleError(accessMessage(failure));
-        ref.current?.querySelector<HTMLElement>('[role=checkbox]')?.focus();
-      } else setError(failure);
+      else setError(failure);
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -184,36 +151,10 @@ function Form({
       onSubmit={(event) => void submit(event)}
     >
       <AccessError error={error} />
+      <p className='break-words text-sm'>
+        {member.name} · {member.account}
+      </p>
       <FieldGroup>
-        {member ? (
-          <p className='break-words text-sm'>
-            {member.name} · {member.account}
-          </p>
-        ) : (
-          <Field data-invalid={!!emailError || (validated && emailInvalid)}>
-            <FieldLabel htmlFor='invite-email'>
-              {$t('accessMembers.email')} *
-            </FieldLabel>
-            <Input
-              id='invite-email'
-              name='email'
-              autoComplete='off'
-              type='email'
-              value={email}
-              disabled={busy}
-              aria-invalid={!!emailError || (validated && emailInvalid)}
-              onChange={(event) => {
-                setEmail(event.target.value);
-                setEmailError('');
-              }}
-            />
-            {emailError ? (
-              <FieldError>{emailError}</FieldError>
-            ) : validated && emailInvalid ? (
-              <FieldError>{$t('accessMembers.enterEmail')}</FieldError>
-            ) : null}
-          </Field>
-        )}
         <Field data-invalid={!!roleError || (validated && rolesInvalid)}>
           <FieldLabel>{$t('accessMembers.roles')} *</FieldLabel>
           <FieldDescription>
@@ -234,33 +175,30 @@ function Form({
             <FieldError>{$t('accessMembers.chooseRole')}</FieldError>
           ) : null}
         </Field>
+        <Field>
+          <FieldLabel htmlFor='member-projects'>
+            {$t('accessMembers.projects')}
+          </FieldLabel>
+          <ProjectPicker
+            id='member-projects'
+            projects={projects}
+            value={projectIds}
+            onChange={setProjectIds}
+            disabled={busy}
+          />
+          <FieldDescription>
+            {$t('accessMembers.memberProjectsHint')}
+          </FieldDescription>
+        </Field>
       </FieldGroup>
       <div className='sticky bottom-0 flex flex-wrap justify-end gap-2 bg-background py-2'>
         <Button variant='outline' disabled={busy} onClick={() => void close()}>
           {$t('common.cancel')}
         </Button>
         <Button type='submit' disabled={busy}>
-          {$t(
-            busy
-              ? 'common.saving'
-              : member
-                ? 'common.save'
-                : 'accessMembers.invite',
-          )}
+          {$t(busy ? 'common.saving' : 'common.save')}
         </Button>
       </div>
     </form>
-  );
-}
-
-function InvitationCreated({ value }: { value: CreatedInvitation }) {
-  const { close } = useRouteOverlay();
-  return (
-    <div className='flex flex-col gap-4'>
-      <InvitationLink value={value} />
-      <div className='flex justify-end'>
-        <Button onClick={() => void close()}>{$t('accessMembers.done')}</Button>
-      </div>
-    </div>
   );
 }

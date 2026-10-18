@@ -54,7 +54,7 @@ export default function ProjectKnowledgePage(){
 // AI 写的内容用的语言 (2026-10-07): one line above 记忆; the analysis, opportunities, task documents and memory follow it.
 const getLanguageNames = (): Record<'zh-CN'|'en-US',string> => ({'zh-CN':$t('common.chineseLanguage'),'en-US':'English'});
 function LanguageSetting({project,onSaved,onError}:{project:Project;onSaved:(msg:Message)=>void;onError:(msg:Message)=>void}):ReactElement{
- const {can:canEdit}=useBusinessAccess('nrProjects.edit');
+ const {can:canEdit}=useBusinessAccess('nrProjects.edit',project.id);
  const value=project.language==='en-US'?'en-US':'zh-CN',[busy,setBusy]=useState(false);
  async function change(next:'zh-CN'|'en-US'){if(!canEdit||next===value)return;setBusy(true);onError('');try{await api.action('nrProjects','edit',{method:'POST',body:{projectId:String(project.id),language:next}});onSaved(() => ($t('projectKnowledge.changedAiWrittenContentUses',{0:getLanguageNames()[next]})));}catch(e){onError(() => (e instanceof Error?$legacyText(e.message):$t('common.notChangedTryAgain')));}finally{setBusy(false);}}
  return <div className="flex flex-wrap items-center gap-2 text-sm" data-project-language>

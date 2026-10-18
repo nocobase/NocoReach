@@ -431,10 +431,15 @@ test('project permissions cannot write shared Skills or application settings', a
       ),
     );
   const before = await runtime.plugin.projects.get('2');
-  for (const projectId of ['1', '2'])
-    expect(
-      (await keyed('nrProjects/edit', { projectId, language: 'en-US' })).status,
-    ).toBe(403);
+  // A project's language is a project setting: the key reaches only its own project.
+  expect(
+    (await keyed('nrProjects/edit', { projectId: '1', language: 'en-US' }))
+      .status,
+  ).toBe(200);
+  expect(
+    (await keyed('nrProjects/edit', { projectId: '2', language: 'en-US' }))
+      .status,
+  ).toBe(403);
   expect(
     (
       await keyed('nrSkills/edit', {

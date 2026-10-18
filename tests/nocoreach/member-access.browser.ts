@@ -92,15 +92,13 @@ try {
       data,
       headers: { origin },
     });
-  expect(
-    (
-      await post('/nocoreach/nrProjects/create', {
-        name: 'Access demonstration',
-        domain: 'access.example.test',
-        language: 'en',
-      })
-    ).status(),
-  ).toBe(200);
+  const createdProject = await post('/nocoreach/nrProjects/create', {
+    name: 'Access demonstration',
+    domain: 'access.example.test',
+    language: 'en',
+  });
+  expect(createdProject.status()).toBe(200);
+  const projectId = String((await createdProject.json()).data.id);
   const personCredentials = {
     email: 'synthetic-reader@example.test',
     password: 'fictional-password-123',
@@ -208,8 +206,8 @@ try {
   await page
     .getByRole('button', { name: 'Actions for Synthetic reader' })
     .click();
-  await page.getByRole('menuitem', { name: 'Edit roles' }).click();
-  await expect(page.getByRole('dialog', { name: 'Edit roles' })).toBeVisible();
+  await page.getByRole('menuitem', { name: 'Edit member' }).click();
+  await expect(page.getByRole('dialog', { name: 'Edit member' })).toBeVisible();
   await expect(
     page.getByRole('checkbox', { name: 'Member', exact: true }),
   ).toBeChecked();
@@ -226,15 +224,19 @@ try {
   await expect(
     page.getByRole('dialog', { name: 'Invite member' }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Invite', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Send invitations', exact: true })
+    .click();
   await expect(
-    page.getByText('Enter a valid email address.', { exact: true }),
+    page.getByText('Enter at least one email address.', { exact: true }),
   ).toBeVisible();
   await shot('invite-validation-en.png');
   await page
-    .getByLabel('Email', { exact: false })
+    .getByLabel('Email', { exact: true })
     .pressSequentially('new-browser@example.test');
-  await page.getByRole('checkbox', { name: 'Member', exact: true }).check();
+  await page.getByRole('combobox', { name: 'Projects' }).click();
+  await page.getByRole('option', { name: 'Access demonstration' }).click();
+  await page.keyboard.press('Escape');
   await shot('invite-form-en.png');
   let release!: () => void;
   const held = new Promise<void>((resolve) => {
@@ -244,19 +246,18 @@ try {
     if (route.request().method() === 'POST') await held;
     await route.continue();
   });
-  await page.getByRole('button', { name: 'Invite', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Send invitations', exact: true })
+    .click();
   await expect(
-    page.getByRole('button', { name: 'Saving…', exact: true }),
+    page.getByRole('button', { name: 'Sending…', exact: true }),
   ).toBeDisabled();
   await expect(
     page.getByRole('button', { name: 'Cancel', exact: true }),
   ).toBeDisabled();
   release();
   await expect(
-    page.getByText(
-      'No email was sent. Copy this link and privately share it with the invitee.',
-      { exact: true },
-    ),
+    page.getByText('Not emailed; copy the link', { exact: true }),
   ).toBeVisible();
   const newLink = await page
     .getByLabel('Invitation link', { exact: true })
@@ -265,7 +266,9 @@ try {
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await expect(page).toHaveURL(/members\?tab=invitations$/);
   await expect(
-    page.getByText('new-browser@example.test', { exact: true }),
+    page
+      .getByRole('table', { name: 'Pending invitations' })
+      .getByText('new-browser@example.test', { exact: true }),
   ).toBeVisible();
   await shot('invitations-pending-en.png');
   await page
@@ -304,17 +307,11 @@ try {
   await page
     .getByLabel('Role identifier', { exact: false })
     .pressSequentially('browser-reader');
-  await page.getByRole('checkbox', { name: 'Tasks', exact: true }).check();
-  const taskSection = page
-    .locator('details')
-    .filter({ has: page.locator('summary', { hasText: 'Tasks and review' }) });
-  await taskSection.locator('summary').click();
-  await taskSection.getByText('List', { exact: true }).click();
-  await taskSection.getByRole('combobox', { name: 'Data for List' }).click();
-  await page.getByRole('option', { name: 'Selected projects' }).click();
-  await taskSection
-    .getByRole('checkbox', { name: 'Access demonstration' })
-    .check();
+  await expect(
+    page.getByRole('radio', { name: /^Projects they belong to/ }),
+  ).toBeChecked();
+  await page.getByRole('checkbox', { name: /^View project data/ }).check();
+  await page.getByRole('checkbox', { name: 'YouTube', exact: true }).check();
   await shot('role-permissions-scope-en.png');
   await expect(page.locator('#role-title')).toHaveValue('Project reader');
   await expect(
@@ -329,11 +326,19 @@ try {
   ).toBeVisible();
   await page.goto(`${origin}/main/members/${person.id}/roles`);
   await page.getByRole('checkbox', { name: 'Project reader' }).check();
+  await page.getByRole('combobox', { name: 'Projects' }).click();
+  await page.getByRole('option', { name: 'Access demonstration' }).click();
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(
-    page.getByRole('dialog', { name: 'Edit roles', exact: true }),
+    page.getByRole('dialog', { name: 'Edit member', exact: true }),
   ).toBeHidden();
   await expect(page.getByText('Project reader', { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole('row', { name: /Synthetic reader/ })
+      .getByText('Access demonstration', { exact: true }),
+  ).toBeVisible();
   await shot('members-multiple-roles-en.png');
   const existingCredentials = {
     email: 'existing-browser@example.test',
@@ -348,10 +353,11 @@ try {
     ).status(),
   ).toBe(201);
   const invitation = await post('/nocoreachAccess/invitations', {
-    email: existingCredentials.email,
-    roles: ['nr.member', 'nr.browser-reader'],
+    emails: [existingCredentials.email],
+    projectIds: [projectId],
   });
   expect(invitation.status()).toBe(200);
+  expect((await invitation.json()).data[0].outcome).toBe('invited');
   const inviteeContext = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
     locale: 'en-US',
@@ -584,7 +590,8 @@ try {
           'validation',
           'pending',
           'roles-create',
-          'operation-project-selection',
+          'capability-role',
+          'project-membership',
           'en',
           'zh',
           '375px',

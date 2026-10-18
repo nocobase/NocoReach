@@ -107,8 +107,9 @@ export class ReachManagement {
         }
       }
       result.push({
-        ...set,
+        key: set.key,
         title: typeof set.title === 'string' ? set.title : set.key,
+        ...this.access.roleAccess(set.grants),
         revision: roleRevision(set),
         builtIn: [BUSINESS_ADMIN, BUSINESS_MEMBER].includes(set.key),
         assignable,
@@ -121,7 +122,8 @@ export class ReachManagement {
     await this.access.require('nrMembers', 'setRole');
     if ([BUSINESS_ADMIN, BUSINESS_MEMBER].includes(input.key))
       accessError('builtIn');
-    this.validateGrants(input.grants);
+    const grants = this.access.roleGrants(input);
+    this.validateGrants(grants);
     return this.access.database.transaction(async (connection) => {
       await this.access.lockManagement(connection);
       const sets =
@@ -134,15 +136,11 @@ export class ReachManagement {
       const actor = await this.actorGrants(actorId, connection);
       if (
         !actor.root &&
-        (!grantSubset(input.grants, actor.grants) ||
+        (!grantSubset(grants, actor.grants) ||
           (before && !grantSubset(before.grants, actor.grants)))
       )
         accessError('ungrantable');
-      const definition = {
-        key: input.key,
-        title: input.title,
-        grants: input.grants,
-      };
+      const definition = { key: input.key, title: input.title, grants };
       const saved = update
         ? await sets.update(input.key, definition)
         : await sets.create(definition);
@@ -151,10 +149,12 @@ export class ReachManagement {
         actorId,
         update ? 'role.update' : 'role.create',
         input.key,
-        { title: input.title },
+        { title: input.title, scope: input.scope },
       );
       return {
-        ...saved,
+        key: saved.key,
+        title: input.title,
+        ...this.access.roleAccess(saved.grants),
         revision: roleRevision(saved),
         builtIn: false,
         assignable: true,

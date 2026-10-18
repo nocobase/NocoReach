@@ -77,6 +77,8 @@ test('online conversation access follows each stored project after grants narrow
     permissionSet: 'nr.member',
     subject: { type: 'user', id: user.id },
   });
+  for (const project of [first, second])
+    await legacy.db.access!.joinCreatedProject(user.id, String(project.id));
   const client = await signIn(testApp, credentials);
   const conversations: OnlineConversation[] = [];
   for (const projectId of [String(first.id), String(second.id), null]) {
@@ -106,14 +108,17 @@ test('online conversation access follows each stored project after grants narrow
   expect((await client.fetch('/onlineAgents/models')).status).toBe(200);
   const listed = await client.fetch('/onlineAgents/conversations');
   expect(listed.status).toBe(200);
+  // A conversation without a project stays available to a reader of any of their projects.
   expect(
-    (await listed.json()).data.map((item: OnlineConversation) => item.id),
-  ).toEqual([conversations[0].id]);
+    (await listed.json()).data
+      .map((item: OnlineConversation) => item.id)
+      .sort(),
+  ).toEqual([conversations[0].id, conversations[2].id].sort());
   for (const [index, conversation] of conversations.entries()) {
     expect(
       (await client.fetch(`/onlineAgents/conversations/${conversation.id}`))
         .status,
-    ).toBe(index === 0 ? 200 : 403);
+    ).toBe(index === 1 ? 403 : 200);
   }
   for (const projectId of [String(first.id), String(second.id), null]) {
     expect(
@@ -125,7 +130,7 @@ test('online conversation access follows each stored project after grants narrow
           text: 'New question',
         })
       ).status,
-    ).toBe(projectId === String(first.id) ? 200 : 403);
+    ).toBe(projectId === String(second.id) ? 403 : 200);
   }
   expect(
     (
@@ -471,6 +476,10 @@ test('disabled accounts stop active work, and shutdown does not wait for a stall
       })
     ).status,
   ).toBe(200);
+  // Shared conversations need a member of at least one project.
+  await testApp.application.container
+    .resolve(nocoReachToken)
+    .legacy.db.access!.joinCreatedProject(member.id, '1');
   vi.spyOn(service, 'resolveModel').mockResolvedValue({
     modelService: 'test',
     model: 'test-model',

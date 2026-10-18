@@ -10,6 +10,7 @@ export type {
   BusinessRole,
   MemberInvitation,
   AccessCatalogue,
+  InvitationResult,
 } from '../../../shared/member-access.js';
 export function useAccessApi(namespace = 'nocoreachAccess') {
   const api = useApiClient();
@@ -57,38 +58,48 @@ export function useAccessQuery<T>(
     refetchOnWindowFocus: false,
   });
 }
+const REASONS = [
+  'invalidScope',
+  'invalidRole',
+  'inviterChanged',
+  'ungrantable',
+  'roleExpanded',
+  'builtIn',
+  'missing',
+  'missingProject',
+  'roleExists',
+  'changed',
+  'roleAssigned',
+  'accountUnavailable',
+  'systemAccount',
+  'originRequired',
+  'alreadyPending',
+  'alreadyMember',
+  'closed',
+  'originalInviter',
+  'wrongAccount',
+  'accepted',
+  'revoked',
+  'expired',
+  'invalidInvitation',
+  'interactiveOnly',
+  'scopeExceedsRoles',
+];
+/** The message of a known failure reason, such as one address of a batch invitation. */
+export function accessReasonMessage(reason?: string): string {
+  if (reason && REASONS.includes(reason))
+    return $t(`accessMembers.errors.${reason}`);
+  if (reason === 'LAST_BUSINESS_ADMIN')
+    return $t('accessMembers.errors.lastAdmin');
+  return $t('accessMembers.errors.failed');
+}
 export function accessMessage(error: unknown): string {
   if (error instanceof ApiClientError) {
-    const reasons = [
-      'invalidScope',
-      'invalidRole',
-      'inviterChanged',
-      'ungrantable',
-      'roleExpanded',
-      'builtIn',
-      'missing',
-      'roleExists',
-      'changed',
-      'roleAssigned',
-      'accountUnavailable',
-      'systemAccount',
-      'originRequired',
-      'alreadyPending',
-      'alreadyMember',
-      'closed',
-      'originalInviter',
-      'wrongAccount',
-      'accepted',
-      'revoked',
-      'expired',
-      'invalidInvitation',
-      'interactiveOnly',
-      'scopeExceedsRoles',
-    ];
-    if (error.reason && reasons.includes(error.reason))
-      return $t(`accessMembers.errors.${error.reason}`);
-    if (error.reason === 'LAST_BUSINESS_ADMIN')
-      return $t('accessMembers.errors.lastAdmin');
+    if (
+      error.reason &&
+      (REASONS.includes(error.reason) || error.reason === 'LAST_BUSINESS_ADMIN')
+    )
+      return accessReasonMessage(error.reason);
     if (error.status === 401) return $t('accessMembers.errors.signedOut');
     if (error.status === 403) return $t('accessMembers.errors.denied');
     if (error.status === 404) return $t('accessMembers.errors.missing');
