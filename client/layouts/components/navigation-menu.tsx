@@ -3,9 +3,11 @@ import { ChevronRight } from 'lucide-react';
 import {
   createContext,
   useContext,
+  useEffect,
   useRef,
   useState,
   type ReactElement,
+  type PointerEvent,
 } from 'react';
 import { Link } from 'react-router';
 
@@ -57,6 +59,45 @@ export type NavigationBadge =
 /** Counts keyed by the route name of the entry they stand beside. */
 export type NavigationBadges = Readonly<Record<string, NavigationBadge>>;
 
+const NavigationPrefetchContext = createContext<
+  ((name: string) => void) | undefined
+>(undefined);
+
+/** Keep speculative loading separate from click, disclosure, and mobile navigation. */
+function usePrefetchIntent(name: string) {
+  const prefetch = useContext(NavigationPrefetchContext);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const hoveredRef = useRef(false);
+  const focusedRef = useRef(false);
+  const cancel = () => {
+    clearTimeout(timerRef.current);
+  };
+  const start = () => {
+    cancel();
+    if (prefetch) timerRef.current = setTimeout(() => prefetch(name), 120);
+  };
+  useEffect(() => () => clearTimeout(timerRef.current), [name, prefetch]);
+  return {
+    onPointerEnter: (event: PointerEvent) => {
+      if (event.pointerType === 'touch') return;
+      hoveredRef.current = true;
+      start();
+    },
+    onPointerLeave: () => {
+      hoveredRef.current = false;
+      if (!focusedRef.current) cancel();
+    },
+    onFocus: () => {
+      focusedRef.current = true;
+      start();
+    },
+    onBlur: () => {
+      focusedRef.current = false;
+      if (!hoveredRef.current) cancel();
+    },
+  };
+}
+
 const NavigationBadgesContext = createContext<NavigationBadges>({});
 
 function useNavigationBadge(item: RouteNavigationItem): {
@@ -83,6 +124,7 @@ export function NavigationMenu({
   selectedKey,
   sections = true,
   badges = {},
+  onPrefetchIntent,
 }: {
   readonly items: readonly RouteNavigationItem[];
   readonly label: string;
@@ -94,6 +136,8 @@ export function NavigationMenu({
    * section's. They change while the page is open, so the layout passes them rather than the route declaring them.
    */
   readonly badges?: NavigationBadges;
+  /** Warm static resources only after a deliberate pointer or keyboard intent. */
+  readonly onPrefetchIntent?: (name: string) => void;
 }): ReactElement {
   // A group already divided into `section`s by the navigation stays one collapsible entry over them.
   const isSection = (item: RouteNavigationItem): boolean =>
@@ -110,33 +154,35 @@ export function NavigationMenu({
     else runs.push([item]);
   }
   return (
-    <NavigationBadgesContext value={badges}>
-      <nav aria-label={label}>
-        {runs.map((run) =>
-          Array.isArray(run) ? (
-            <SidebarGroup key={routeKey(run[0].route)}>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {run.map((item) => (
-                    <NavigationItem
-                      key={routeKey(item.route)}
-                      item={item}
-                      selectedKey={selectedKey}
-                    />
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          ) : (
-            <NavigationGroup
-              key={routeKey(run.route)}
-              item={run}
-              selectedKey={selectedKey}
-            />
-          ),
-        )}
-      </nav>
-    </NavigationBadgesContext>
+    <NavigationPrefetchContext value={onPrefetchIntent}>
+      <NavigationBadgesContext value={badges}>
+        <nav aria-label={label}>
+          {runs.map((run) =>
+            Array.isArray(run) ? (
+              <SidebarGroup key={routeKey(run[0].route)}>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {run.map((item) => (
+                      <NavigationItem
+                        key={routeKey(item.route)}
+                        item={item}
+                        selectedKey={selectedKey}
+                      />
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            ) : (
+              <NavigationGroup
+                key={routeKey(run.route)}
+                item={run}
+                selectedKey={selectedKey}
+              />
+            ),
+          )}
+        </nav>
+      </NavigationBadgesContext>
+    </NavigationPrefetchContext>
   );
 }
 
@@ -244,6 +290,7 @@ function NavigationItem({
   const isSelected = routeKey(item.route) === selectedKey;
   const children = item.children;
   const disclosure = useDisclosure(item, selectedKey);
+  const prefetchIntent = usePrefetchIntent(item.route.name);
   const badge = useNavigationBadge(item);
   const counted = badge.count > 0 ? `${label} · ${badge.text}` : null;
   const tooltip = inPopover
@@ -275,6 +322,7 @@ function NavigationItem({
 
   const link = item.route.componentLoader ? (
     <Link
+      {...prefetchIntent}
       to={item.route.path}
       onClick={navigate}
       aria-current={isSelected ? 'page' : undefined}
@@ -408,6 +456,7 @@ function NavigationSubItem({
   const Icon = item.route.navigation?.icon;
   const isSelected = routeKey(item.route) === selectedKey;
   const disclosure = useDisclosure(item, selectedKey);
+  const prefetchIntent = usePrefetchIntent(item.route.name);
   const children = item.children;
   if (item.section)
     return (
@@ -421,6 +470,7 @@ function NavigationSubItem({
 
   const link = item.route.componentLoader ? (
     <Link
+      {...prefetchIntent}
       to={item.route.path}
       onClick={onNavigate}
       aria-current={isSelected ? 'page' : undefined}
@@ -542,6 +592,7 @@ function NavigationPopover({
 }): ReactElement {
   const [open, setOpen] = useState(false);
   const restoringFocusRef = useRef(false);
+  const prefetchIntent = usePrefetchIntent(item.route.name);
   const Icon = item.route.navigation?.icon;
   const page = Boolean(item.route.componentLoader);
   const close = () => setOpen(false);
@@ -575,6 +626,7 @@ function NavigationPopover({
             render={
               page ? (
                 <Link
+                  {...prefetchIntent}
                   to={item.route.path}
                   aria-current={
                     routeKey(item.route) === selectedKey ? 'page' : undefined

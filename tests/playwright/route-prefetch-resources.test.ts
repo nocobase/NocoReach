@@ -6,7 +6,12 @@ import { fileURLToPath } from 'node:url';
 import { build, preview, type PreviewServer } from 'vite';
 import { routePrefetchPlugin } from '../../scripts/route-prefetch.js';
 
-type Site = { url: string; resources: string[]; requests: string[] };
+type Site = {
+  url: string;
+  resources: string[];
+  requests: string[];
+  stall: () => void;
+};
 // Build the real scheduler/import integration. Do not intercept requests in the
 // cache-reuse test: Playwright routing disables the browser HTTP cache.
 const test = base.extend<{ site: Site }>({
@@ -14,6 +19,7 @@ const test = base.extend<{ site: Site }>({
     const root = await mkdtemp(path.join(tmpdir(), 'nr-prefetch-browser-'));
     const app = fileURLToPath(new URL('../../', import.meta.url));
     let server: PreviewServer | undefined;
+    const stalled = new Set<import('node:http').ServerResponse>();
     try {
       await mkdir(path.join(root, 'client/pages/strategy'), {
         recursive: true,
@@ -31,12 +37,16 @@ const test = base.extend<{ site: Site }>({
         'globalThis.gateExecuted = true; export default () => null;',
       );
       await writeFile(
+        path.join(root, 'client/pages/members.tsx'),
+        'globalThis.membersExecuted = true; export default () => null;',
+      );
+      await writeFile(
         path.join(root, 'login.js'),
         'export default () => null;',
       );
       await writeFile(
         path.join(root, 'index.html'),
-        '<html><head></head><body><textarea aria-label="Draft"></textarea><button id="login">Login</button><button id="open">Open page</button><div class="page">Content</div><script type="module" src="/entry.js"></script></body></html>',
+        '<html><head></head><body><textarea aria-label="Draft"></textarea><button id="login">Login</button><button id="open">Open page</button><div class="page">Content</div><div id="menu"></div><script type="module" src="/entry.js"></script></body></html>',
       );
       await writeFile(
         path.join(root, 'entry.js'),
@@ -44,6 +54,12 @@ const test = base.extend<{ site: Site }>({
         import { scheduleRoutePrefetch } from ${JSON.stringify(path.join(app, 'client/routing/route-prefetch.ts'))};
         import { loadRouteModule } from ${JSON.stringify(path.join(app, 'client/routing/route-modules.ts'))};
         import { reloadOnStaleBuild } from ${JSON.stringify(path.join(app, 'client/lib/stale-build.ts'))};
+        import { createElement } from ${JSON.stringify(fileURLToPath(import.meta.resolve('react')))};
+        import { createRoot } from ${JSON.stringify(fileURLToPath(import.meta.resolve('react-dom/client')))};
+        import { MemoryRouter } from ${JSON.stringify(fileURLToPath(import.meta.resolve('react-router')))};
+        import { createTestI18nRuntime, TestI18nProvider } from ${JSON.stringify(fileURLToPath(import.meta.resolve('@nocobase/i18n/testing')))};
+        import { AppSidebarProvider } from ${JSON.stringify(path.join(app, 'client/layouts/components/app-sidebar.tsx'))};
+        import { NavigationMenu } from ${JSON.stringify(path.join(app, 'client/layouts/components/navigation-menu.tsx'))};
         reloadOnStaleBuild();
         window.preloadErrors = 0;
         window.hintErrors = 0;
@@ -59,7 +75,22 @@ const test = base.extend<{ site: Site }>({
           const [page] = await Promise.all([import('./client/pages/strategy/index.tsx'), import('./client/pages/nocoreach-page.tsx')]);
           return page;
         };
-        const stop = scheduleRoutePrefetch([{route: {name: 'growth-overview', source: 'application', componentLoader: loader}, children: []}]);
+        const items = [
+          {route: {id:'home', name: 'growth-overview', path: '/home', navigation: {title:'Insights'}, packageName:'fixture', source: 'application', componentLoader: loader}, children: []},
+          {route: {id:'members', name: 'members', path: '/members', navigation: {title:'Members'}, packageName:'fixture', source: 'application', componentLoader: () => import('./client/pages/members.tsx')}, children: []},
+        ];
+        const stop = scheduleRoutePrefetch(items);
+        createTestI18nRuntime({strict: false}).then(runtime => {
+          createRoot(document.querySelector('#menu')).render(
+            createElement(TestI18nProvider, {runtime},
+              createElement(MemoryRouter, null,
+                createElement(AppSidebarProvider, null,
+                  createElement(NavigationMenu, {items, label:'Menu', onPrefetchIntent: (name) => {window.lastIntent=name; stop.prioritize(name);}})
+                )
+              )
+            )
+          );
+        });
         document.querySelector('#login').onclick = async () => {
           await loadRouteModule(() => import('./login.js'));
           document.querySelector('#login').textContent = 'Login ready';
@@ -76,6 +107,7 @@ const test = base.extend<{ site: Site }>({
         configFile: false as const,
         cacheDir: path.join(root, '.cache'),
         logLevel: 'silent' as const,
+        esbuild: { jsx: 'automatic' as const },
       };
       const result = await build({
         ...options,
@@ -92,6 +124,7 @@ const test = base.extend<{ site: Site }>({
         await readFile(path.join(root, 'dist', manifest.fileName), 'utf8'),
       )['growth-overview'];
       const requests: string[] = [];
+      let stall = false;
       server = await preview({
         ...options,
         base: '/nested/',
@@ -101,6 +134,14 @@ const test = base.extend<{ site: Site }>({
             configurePreviewServer(server) {
               server.middlewares.use((request, _response, next) => {
                 requests.push(request.url!);
+                if (
+                  stall &&
+                  String(request.headers['sec-purpose']).includes('prefetch')
+                ) {
+                  stalled.add(_response);
+                  _response.on('close', () => stalled.delete(_response));
+                  return;
+                }
                 next();
               });
             },
@@ -119,8 +160,12 @@ const test = base.extend<{ site: Site }>({
         url: `http://127.0.0.1:${address.port}/nested/`,
         resources,
         requests,
+        stall: () => {
+          stall = true;
+        },
       });
     } finally {
+      for (const response of stalled) response.destroy();
       await page.unrouteAll({ behavior: 'ignoreErrors' });
       await page.close();
       if (server)
@@ -219,16 +264,63 @@ test('opening the same page while its speculative request is stalled does not wa
   page,
   site,
 }) => {
-  const hints: Route[] = [];
-  await page.route('**/assets/**', async (route) => {
-    if (route.request().headers()['sec-purpose']?.includes('prefetch'))
-      hints.push(route);
-    else await route.continue();
-  });
+  site.stall();
   await page.goto(site.url);
-  await expect.poll(() => hints.length, { timeout: 15_000 }).toBeGreaterThan(0);
+  await expect
+    .poll(
+      () =>
+        site.requests.some((url) =>
+          site.resources.some((file) => url.endsWith('/' + file)),
+        ),
+      { timeout: 15000 },
+    )
+    .toBe(true);
   await page.getByRole('button', { name: 'Open page' }).click();
   await expect(page.getByRole('button', { name: 'Page ready' })).toBeVisible({
     timeout: 2000,
   });
+});
+
+test('real menu hover and keyboard focus warm only the intended non-idle page', async ({
+  page,
+  site,
+}) => {
+  await page.goto(site.url);
+  const target = page.getByRole('link', { name: 'Members', exact: true });
+  await expect(target).toBeVisible();
+  await expect
+    .poll(
+      () => page.evaluate(() => Reflect.get(globalThis, 'hintLoads').length),
+      { timeout: 15000 },
+    )
+    .toBe(site.resources.length);
+  expect(site.requests.some((url) => /members-.*\.js/.test(url))).toBe(false);
+  await target.hover();
+  await expect
+    .poll(() => page.evaluate(() => Reflect.get(globalThis, 'lastIntent')))
+    .toBe('members');
+  await expect
+    .poll(() => site.requests.some((url) => /members-.*\.js/.test(url)))
+    .toBe(true);
+  expect(
+    await page.evaluate(() => Reflect.get(globalThis, 'membersExecuted')),
+  ).toBeUndefined();
+  await page.reload();
+  await page.mouse.move(1000, 700);
+  await target.focus();
+  await expect
+    .poll(() => page.evaluate(() => Reflect.get(globalThis, 'lastIntent')))
+    .toBe('members');
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Reflect.get(globalThis, 'hintLoads').some((url: string) =>
+          /members-.*\.js/.test(url),
+        ),
+      ),
+    )
+    .toBe(true);
+  expect(
+    await page.evaluate(() => Reflect.get(globalThis, 'membersExecuted')),
+  ).toBeUndefined();
 });

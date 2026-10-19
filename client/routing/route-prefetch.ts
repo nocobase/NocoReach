@@ -1,16 +1,25 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router';
 import type { RouteNavigationItem } from './route-navigation.js';
 import { cachedRouteModule, hasForegroundRouteLoad } from './route-modules.js';
 import { loadRouteResources, type RouteResources } from './route-resources.js';
 
-const MAX_PREFETCH_ROUTES = 3;
 const MAX_PREFETCH_RESOURCES = 24;
 const MAX_COMPLETED_RESOURCES = 128;
+// Idle speculation stays restricted to the existing high-traffic entries.
+const IDLE_ROUTES = new Set([
+  'growth-overview',
+  'opportunity-library',
+  'action-center',
+  'result-list',
+]);
 // Code URLs only, shared across navigation; no user or page data is retained.
 const completedResources = new Set<string>();
 const RESOURCE_TIMEOUT_MS = 10_000;
 type Connection = { saveData?: boolean; effectiveType?: string };
+export type RoutePrefetchScheduler = (() => void) & {
+  prioritize: (name: string) => void;
+};
 
 function existingResources(): Set<string> {
   return new Set(
@@ -29,13 +38,11 @@ export function scheduleRoutePrefetch(
   readResources: (
     signal: AbortSignal,
   ) => Promise<RouteResources> = loadRouteResources,
-): () => void {
+): RoutePrefetchScheduler {
   const routes = items.flatMap(
     function collect(item): RouteNavigationItem['route'][] {
       return [
-        ...(item.route.source === 'application' &&
-        item.route.componentLoader &&
-        !cachedRouteModule(item.route.componentLoader)
+        ...(item.route.source === 'application' && item.route.componentLoader
           ? [item.route]
           : []),
         ...item.children.flatMap(collect),
@@ -43,24 +50,48 @@ export function scheduleRoutePrefetch(
     },
   );
   const controller = new AbortController();
-  let timer: ReturnType<typeof setTimeout>;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   let idle: number | undefined;
   let resources: RouteResources | undefined;
-  const files: string[] = [];
+  let reading = false;
+  let idleSelected = false;
+  let idleFiles: string[] = [];
+  let intentFiles: string[] = [];
+  let intent: string | undefined;
+  let activeIntent: string | undefined;
   let cancelHint: (() => void) | undefined;
   let stopped = false;
+  const clearScheduled = () => {
+    clearTimeout(timer);
+    if (idle !== undefined) window.cancelIdleCallback(idle);
+    idle = undefined;
+  };
   const schedule = (delay = 1500) => {
     if (stopped) return;
+    clearScheduled();
     timer = setTimeout(() => {
-      if (window.requestIdleCallback)
+      // An explicit menu intent should not wait for the browser's idle callback.
+      if (!intent && !intentFiles.length && window.requestIdleCallback)
         idle = window.requestIdleCallback(() => {
+          idle = undefined;
           void next();
         });
       else void next();
     }, delay);
   };
+  const missing = (name: string, existing: Set<string>) => {
+    const route = routes.find((route) => route.name === name);
+    if (!route || cachedRouteModule(route.componentLoader!)) return [];
+    return [...new Set(resources?.[name] ?? [])]
+      .filter(
+        (file) =>
+          !completedResources.has(file) &&
+          !existing.has(new URL(file, document.baseURI).href),
+      )
+      .slice(0, MAX_PREFETCH_RESOURCES);
+  };
   const next = async () => {
-    if (stopped) return;
+    if (stopped || reading || cancelHint) return;
     const connection = (navigator as Navigator & { connection?: Connection })
       .connection;
     if (
@@ -76,73 +107,64 @@ export function scheduleRoutePrefetch(
       return;
     }
     if (!resources) {
+      reading = true;
       const timeout = setTimeout(() => controller.abort(), RESOURCE_TIMEOUT_MS);
       try {
         resources = await readResources(controller.signal);
       } catch {
         return;
       } finally {
+        reading = false;
         clearTimeout(timeout);
       }
       if (stopped || controller.signal.aborted) return;
-      // Count only missing resources against the budget. Walk pages round-robin
-      // so a large dependency graph cannot crowd out the other page entries.
-      const existing = existingResources();
-      const queues = routes
-        .filter((route) => !cachedRouteModule(route.componentLoader!))
-        .filter((route) => resources![route.name]?.length)
-        .slice(0, MAX_PREFETCH_ROUTES)
-        .map((route) => [...resources![route.name]]);
-      const selected = new Set<string>();
-      while (
-        queues.some((queue) => queue.length) &&
-        files.length < MAX_PREFETCH_RESOURCES
-      ) {
-        for (const queue of queues) {
-          let file: string | undefined;
-          while ((file = queue.shift())) {
-            if (
-              selected.has(file) ||
-              completedResources.has(file) ||
-              existing.has(new URL(file, document.baseURI).href)
-            )
-              continue;
-            selected.add(file);
-            files.push(file);
-            break;
-          }
-          if (files.length === MAX_PREFETCH_RESOURCES) break;
-        }
-      }
-      // Yield again and recheck foreground/network policy, without another idle delay.
-      if (files.length) schedule(0);
+      // Recheck foreground/network policy after metadata I/O.
+      schedule(0);
       return;
     }
-    // Navigation may have loaded a queued URL since metadata arrived. Skip it
-    // in this turn instead of spending an idle delay for each shared dependency.
     const existing = existingResources();
+    if (intent) {
+      activeIntent = intent;
+      intentFiles = missing(intent, existing);
+      intent = undefined;
+    }
+    if (!idleSelected) {
+      idleSelected = true;
+      // Empty/already-warmed pages do not consume the single idle-page allowance.
+      idleFiles =
+        routes
+          .filter((route) => IDLE_ROUTES.has(route.name))
+          .map((route) => missing(route.name, existing))
+          .find((files) => files.length) ?? [];
+    }
+    if (!intentFiles.length) activeIntent = undefined;
+    const queue = intentFiles.length ? intentFiles : idleFiles;
     let file: string | undefined;
-    while ((file = files.shift())) {
+    while ((file = queue.shift())) {
       if (
         !completedResources.has(file) &&
         !existing.has(new URL(file, document.baseURI).href)
       )
         break;
     }
-    if (!file) return;
+    if (!file) {
+      if (queue === intentFiles && idleFiles.length) schedule(150);
+      return;
+    }
     const resource = file;
     const link = document.createElement('link');
     link.rel = 'prefetch';
-    // Match Vite's module/style request credentials so the browser can reuse
-    // the prefetched response instead of downloading it again on navigation.
     link.crossOrigin = 'anonymous';
     link.href = file;
     link.setAttribute('fetchpriority', 'low');
-    const finish = () => {
+    const cleanup = () => {
       clearTimeout(timeout);
       link.onload = link.onerror = null;
       link.remove();
       cancelHint = undefined;
+    };
+    const finish = () => {
+      cleanup();
       schedule(150);
     };
     const timeout = setTimeout(finish, RESOURCE_TIMEOUT_MS);
@@ -154,23 +176,60 @@ export function scheduleRoutePrefetch(
     };
     link.onerror = finish;
     cancelHint = () => {
-      clearTimeout(timeout);
-      link.onload = link.onerror = null;
-      link.remove();
+      cleanup();
+      queue.unshift(resource);
     };
     document.head.append(link);
   };
   if (routes.length) schedule();
-  return () => {
-    stopped = true;
-    controller.abort();
-    clearTimeout(timer);
-    if (idle !== undefined) window.cancelIdleCallback(idle);
-    cancelHint?.();
-  };
+  return Object.assign(
+    () => {
+      stopped = true;
+      controller.abort();
+      clearScheduled();
+      cancelHint?.();
+    },
+    {
+      prioritize(name: string) {
+        if (
+          stopped ||
+          !routes.some(
+            (route) =>
+              route.name === name && !cachedRouteModule(route.componentLoader!),
+          )
+        )
+          return;
+        if (resources && !resources[name]?.length) return;
+        if (
+          name === intent ||
+          (name === activeIntent && (intentFiles.length || cancelHint))
+        )
+          return;
+        intent = name;
+        // A stalled idle hint must not delay the newly targeted page. Actual navigation
+        // remains independent of every speculative request, including this one.
+        cancelHint?.();
+        schedule(0);
+      },
+    },
+  );
 }
 
-export function useRoutePrefetch(items: readonly RouteNavigationItem[]): void {
+export function useRoutePrefetch(
+  items: readonly RouteNavigationItem[],
+): (name: string) => void {
   const { pathname } = useLocation();
-  useEffect(() => scheduleRoutePrefetch(items), [items, pathname]);
+  const schedulerRef = useRef<RoutePrefetchScheduler | undefined>(undefined);
+  useEffect(() => {
+    const current = scheduleRoutePrefetch(items);
+    schedulerRef.current = current;
+    return () => {
+      current();
+      schedulerRef.current = undefined;
+    };
+  }, [items, pathname]);
+  return useCallback(
+    (name: string) => schedulerRef.current?.prioritize(name),
+    [],
+  );
 }

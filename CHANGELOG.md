@@ -1,14 +1,12 @@
 # NocoReach Changelog
 
-## Unreleased — Background route loading
+## Unreleased — Intent-driven route resource loading
 
-- Reference content-addressed route manifests from HTML so identical rebuilds preserve JS resource URLs and browser caches. Keep manifests bound to the document build and reuse successful reads.
-- Match speculative request credentials to Vite module/style loads so successful JS/CSS prefetches are reused on navigation instead of downloaded again.
-- Budget only missing resources and interleave page entries/dependencies across up to three permitted pages. Skip already loaded assets without an idle delay and yield briefly between sequential hints, improving time to useful prefetch while preserving foreground/network guards. Bound each queue to 24 resources and retain up to 128 successful URLs; failures remain retryable.
-
-- Prefetch build-generated JS/CSS resources for permitted high-traffic menu pages during idle time, without executing route loaders or poisoning Vite's dependency cache on failures.
-- Keep foreground navigation independent of stalled background requests; cancel queued work and bound metadata and resource hint waits. Preserve ordinary stale-build recovery for actual navigation failures.
-- Limit speculation to three pages per navigation, pause on hidden tabs or constrained connections, and retain page authorization and session data boundaries.
+- Prefetch permitted application menu resources after 120 ms of pointer hover or keyboard focus, without executing pages or fetching business data. Preserve menu navigation, nested groups and collapsed popovers; ignore touch hover and cancel short passes.
+- Prioritize the latest menu target over idle hints, deduplicate shared resources and retain network, visibility and foreground-navigation guards. Restrict idle speculation to one high-traffic page with missing resources per navigation; bound each page queue to 24 URLs and retain up to 128 successful URLs.
+- Emit content-addressed manifests from final JS/CSS chunks for application-owned menu entries. Keep metadata bound to the document build, preserve unchanged build hashes and match Vite request credentials for cache reuse.
+- Bound metadata and hint waits to ten seconds and dispose queued work on navigation, permission changes or unmount. Failed speculation never triggers stale-build reloads or delays actual imports.
+- Run the focused Chromium fixture in CI, covering real menu intent, JS/CSS cache reuse and same-page navigation during a stalled HTTP prefetch with browser caching enabled.
 
 ## Unreleased — Article publishing to several targets
 

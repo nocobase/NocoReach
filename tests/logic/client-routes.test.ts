@@ -5,10 +5,26 @@ import {
 } from '@nocobase/app-client/plugins';
 import { describe, expect, it } from 'vitest';
 
+import { routePrefetchPages } from '../../scripts/route-prefetch.js';
+
 import applicationRoutes from '../../client/routes.ts';
 import { REACH_PAGES } from '../../shared/access-pages.js';
 
 describe('app client routes', () => {
+  it('keeps the prefetch manifest aligned with application menu entries', () => {
+    const collect = (routes: readonly AppClientRegisteredRoute[]): string[] =>
+      routes.flatMap((route) => [
+        ...(route.componentLoader &&
+        route.navigation &&
+        !['runtimes', 'models', 'usage'].includes(route.name)
+          ? [route.name]
+          : []),
+        ...collect(route.children ?? []),
+      ]);
+    expect(Object.keys(routePrefetchPages).sort()).toEqual(
+      collect(resolveRoutes().routes).sort(),
+    );
+  });
   it('keeps the landing page and the authentication pages', () => {
     // The authentication plugin and this application have to agree on these paths: it sends an unknown visitor to
     // /login, sends a signed-in user who opens a guest page back to /, and mails a reset link to /reset-password,

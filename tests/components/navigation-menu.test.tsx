@@ -66,6 +66,7 @@ function shell(
   selectedKey?: string,
   sections = true,
   badges?: NavigationBadges,
+  onPrefetchIntent?: (name: string) => void,
 ) {
   return (
     <MemoryRouter>
@@ -77,6 +78,7 @@ function shell(
             selectedKey={selectedKey}
             sections={sections}
             badges={badges}
+            onPrefetchIntent={onPrefetchIntent}
           />
         </AppSidebar>
         <AppSidebarToggle />
@@ -481,4 +483,82 @@ describe('sidebar shell', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
     );
   });
+});
+
+describe('menu resource intent', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+  const items = [{ route: page('Target'), children: [] }];
+  it('debounces hover, cancels quick passes, and retains ordinary link navigation', async () => {
+    const prefetch = vi.fn();
+    render(shell(items, undefined, false, undefined, prefetch), {
+      wrapper: I18n,
+    });
+    const link = screen.getByRole('link', { name: 'Target' });
+    expect(link).toHaveAttribute('href', '/Target');
+    fireEvent.pointerEnter(link, { pointerType: 'mouse' });
+    await act(() => vi.advanceTimersByTimeAsync(100));
+    fireEvent.pointerLeave(link);
+    await act(() => vi.advanceTimersByTimeAsync(200));
+    expect(prefetch).not.toHaveBeenCalled();
+    fireEvent.pointerEnter(link, { pointerType: 'mouse' });
+    await act(() => vi.advanceTimersByTimeAsync(120));
+    expect(prefetch).toHaveBeenCalledExactlyOnceWith('Target');
+  });
+  it('supports keyboard focus, cancels blur and unmount, and ignores touch hover', async () => {
+    const prefetch = vi.fn();
+    const { unmount } = render(
+      shell(items, undefined, false, undefined, prefetch),
+      { wrapper: I18n },
+    );
+    const link = screen.getByRole('link', { name: 'Target' });
+    fireEvent.pointerEnter(link, { pointerType: 'touch' });
+    await act(() => vi.advanceTimersByTimeAsync(150));
+    expect(prefetch).not.toHaveBeenCalled();
+    fireEvent.focus(link);
+    await act(() => vi.advanceTimersByTimeAsync(60));
+    fireEvent.blur(link);
+    await act(() => vi.advanceTimersByTimeAsync(150));
+    expect(prefetch).not.toHaveBeenCalled();
+    fireEvent.focus(link);
+    await act(() => vi.advanceTimersByTimeAsync(120));
+    expect(prefetch).toHaveBeenCalledExactlyOnceWith('Target');
+    fireEvent.blur(link);
+    fireEvent.pointerEnter(link, { pointerType: 'mouse' });
+    unmount();
+    await act(() => vi.advanceTimersByTimeAsync(150));
+    expect(prefetch).toHaveBeenCalledTimes(1);
+  });
+  it('keeps a focused target pending when the pointer leaves it', async () => {
+    const prefetch = vi.fn();
+    render(shell(items, undefined, false, undefined, prefetch), {
+      wrapper: I18n,
+    });
+    const link = screen.getByRole('link', { name: 'Target' });
+    fireEvent.focus(link);
+    fireEvent.pointerEnter(link, { pointerType: 'mouse' });
+    fireEvent.pointerLeave(link);
+    await act(() => vi.advanceTimersByTimeAsync(120));
+    expect(prefetch).toHaveBeenCalledExactlyOnceWith('Target');
+  });
+  it.each([false, true])(
+    'supports nested menus and collapsed popovers (collapsed=%s)',
+    async (collapsed) => {
+      vi.useRealTimers();
+      setCollapsed(collapsed);
+      const prefetch = vi.fn();
+      const parent = { route: page('Parent'), children: items };
+      render(
+        shell([parent], routeKey(items[0].route), false, undefined, prefetch),
+        { wrapper: I18n },
+      );
+      const link = screen.getByRole('link', { name: 'Parent' });
+      const user = userEvent.setup();
+      await user.hover(link);
+      await waitFor(() => expect(prefetch).toHaveBeenCalledWith('Parent'));
+      const target = screen.getByRole('link', { name: 'Target' });
+      fireEvent.focus(target);
+      await waitFor(() => expect(prefetch).toHaveBeenCalledWith('Target'));
+    },
+  );
 });
