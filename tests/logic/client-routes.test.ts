@@ -100,10 +100,9 @@ describe('app client routes', () => {
       { name: 'models', authorizedAs: 'settings:agents.services' },
       { name: 'usage', authorizedAs: 'usage' },
       { name: 'member-invite', authorizedAs: 'members' },
-      { name: 'member-roles', authorizedAs: 'members' },
-      { name: 'roles', authorizedAs: 'members' },
       { name: 'role-new', authorizedAs: 'members' },
       { name: 'role-edit', authorizedAs: 'members' },
+      { name: 'member-roles', authorizedAs: 'members' },
       { name: 'keys', authorizedAs: 'members' },
       { name: 'key-new', authorizedAs: 'members' },
       { name: 'key-history', authorizedAs: 'members' },
@@ -131,17 +130,18 @@ describe('app client routes', () => {
     expect(schedules?.children?.[0]).not.toHaveProperty('authz');
   });
 
-  it('places Members, Roles, and API keys directly under Settings', () => {
+  it('places Members & roles and API keys directly under Settings, with roles as a members tab', () => {
     const settings = applicationRoutes[1]?.routes.find(
       (route) => route.name === 'nav-settings',
     );
     const children = settings?.children ?? [];
-    const memberPages = ['members', 'roles', 'keys'] as const;
+    const memberPages = ['members', 'keys'] as const;
 
     expect(children.map((route) => route.name)).toEqual(
       expect.arrayContaining(memberPages),
     );
     expect(children.some((route) => route.name === 'nav-access')).toBe(false);
+    expect(children.some((route) => route.name === 'roles')).toBe(false);
 
     expect(
       memberPages.map((name) => {
@@ -160,16 +160,6 @@ describe('app client routes', () => {
         path: '/members',
         title: 'nocoreach.nav.members',
         order: 2,
-        authz: {
-          resource: { type: 'page', id: 'members' },
-          action: 'access',
-        },
-      },
-      {
-        name: 'roles',
-        path: '/roles',
-        title: 'nocoreach.nav.roles',
-        order: 3,
         authz: {
           resource: { type: 'page', id: 'members' },
           action: 'access',
@@ -195,12 +185,8 @@ describe('app client routes', () => {
           name: 'member-roles',
           path: ':memberId/roles',
         }),
-      ]),
-    );
-    expect(children.find((route) => route.name === 'roles')?.children).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ name: 'role-new', path: 'new' }),
-        expect.objectContaining({ name: 'role-edit', path: ':roleKey' }),
+        expect.objectContaining({ name: 'role-new', path: 'roles/new' }),
+        expect.objectContaining({ name: 'role-edit', path: 'roles/:roleKey' }),
       ]),
     );
     expect(children.find((route) => route.name === 'keys')?.children).toEqual(

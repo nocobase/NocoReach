@@ -6159,6 +6159,7 @@
   "agentResult.material": "Task material",
   "agentResult.submissionConflict": "This run already has a submitted result. Identical retries are allowed; rerun the task to change it",
   "accessMembers.members": "Members",
+  "accessMembers.title": "Members & roles",
   "accessMembers.membersDescription": "Invite people and arrange their roles and projects.",
   "accessMembers.roles": "Roles",
   "accessMembers.rolesDescription": "A role decides what people can do, and in which projects.",

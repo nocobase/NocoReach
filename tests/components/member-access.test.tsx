@@ -15,7 +15,6 @@ import Members from '../../client/pages/members';
 import MemberForm from '../../client/pages/access/member-form';
 import InviteForm from '../../client/pages/access/invite-form';
 import AcceptInvitation from '../../client/pages/access/accept';
-import Roles from '../../client/pages/access/roles';
 import RoleForm from '../../client/pages/access/role-form';
 
 const state = vi.hoisted(() => ({
@@ -128,14 +127,8 @@ function setup(
             children: [
               { path: 'invite', element: <InviteForm /> },
               { path: ':memberId/roles', element: <MemberForm /> },
-            ],
-          },
-          {
-            path: '/roles',
-            element: <Roles />,
-            children: [
-              { path: 'new', element: <RoleForm /> },
-              { path: ':roleKey', element: <RoleForm /> },
+              { path: 'roles/new', element: <RoleForm /> },
+              { path: 'roles/:roleKey', element: <RoleForm /> },
             ],
           },
           {
@@ -175,7 +168,7 @@ it('shows multiple role names and hides management and pending reads without the
   ).toBe(false);
   await act(async () => setDictionary(null));
   expect(
-    screen.getByRole('heading', { name: '成员', exact: true }),
+    screen.getByRole('heading', { name: '成员与角色', exact: true }),
   ).toBeVisible();
 });
 
@@ -424,7 +417,7 @@ it('keeps an accepted invitation discoverable after navigating from the list and
 
 it('shows built-in and custom definitions without exposing edit controls to a reader', async () => {
   state.canManage = false;
-  setup('/roles');
+  setup('/members?tab=roles');
   expect(await screen.findByText('Built-in')).toBeVisible();
   expect(screen.getByText('Custom')).toBeVisible();
   expect(screen.queryByText('New role', { exact: true })).toBeNull();
@@ -434,7 +427,7 @@ it('shows built-in and custom definitions without exposing edit controls to a re
 });
 
 it('saves a role as a project scope and capabilities, with sites used and configured separately', async () => {
-  const router = setup('/roles/new');
+  const router = setup('/members/roles/new?tab=roles');
   const user = userEvent.setup();
   await user.type(await screen.findByLabelText('Role name *'), 'Operator');
   await user.type(screen.getByLabelText('Role identifier *'), 'operator');
@@ -461,11 +454,12 @@ it('saves a role as a project scope and capabilities, with sites used and config
       }),
     ),
   );
-  await waitFor(() => expect(router.state.location.pathname).toBe('/roles'));
+  await waitFor(() => expect(router.state.location.pathname).toBe('/members'));
+  expect(router.state.location.search).toBe('?tab=roles');
 });
 
 it('reads a fresh role definition independently of the cached parent list', async () => {
-  setup('/roles/nr.reader?q=Reader');
+  setup('/members/roles/nr.reader?tab=roles&q=Reader');
   expect(await screen.findByDisplayValue('Fresh reader')).toBeVisible();
   expect(state.request).toHaveBeenCalledWith(
     expect.objectContaining({ path: 'nocoreachAccess/roles/nr.reader' }),
@@ -490,7 +484,7 @@ it('keeps the opening role revision after a refresh and preserves a conflicting 
     }
     return request(input);
   });
-  const router = setup('/roles/nr.reader', client);
+  const router = setup('/members/roles/nr.reader?tab=roles', client);
   const name = await screen.findByLabelText('Role name *');
   await userEvent.clear(name);
   await userEvent.type(name, 'My unsaved draft');
@@ -520,7 +514,7 @@ it('keeps the opening role revision after a refresh and preserves a conflicting 
     }),
   );
   expect(name).toHaveValue('My unsaved draft');
-  expect(router.state.location.pathname).toBe('/roles/nr.reader');
+  expect(router.state.location.pathname).toBe('/members/roles/nr.reader');
 });
 
 it.each(['denied', 'failed'] as const)(
@@ -528,7 +522,7 @@ it.each(['denied', 'failed'] as const)(
   async (result) => {
     const permission = Promise.withResolvers<boolean>();
     state.authorization.can.mockReturnValue(permission.promise);
-    setup('/roles/nr.reader');
+    setup('/members/roles/nr.reader?tab=roles');
     await waitFor(() =>
       expect(state.request).toHaveBeenCalledWith(
         expect.objectContaining({ path: 'nocoreachAccess/roles/nr.reader' }),
@@ -553,7 +547,7 @@ it.each(['denied', 'failed'] as const)(
 );
 
 it('focuses a duplicate role identifier and clears its field error when edited', async () => {
-  setup('/roles/new');
+  setup('/members/roles/new?tab=roles');
   const user = userEvent.setup();
   await user.type(await screen.findByLabelText('Role name *'), 'Example');
   await user.type(screen.getByLabelText('Role identifier *'), 'duplicate');
@@ -578,4 +572,12 @@ it('focuses a duplicate role identifier and clears its field error when edited',
     'aria-invalid',
     'false',
   );
+});
+
+it('shows the roles tab for a role form whose link lost the tab query', async () => {
+  setup('/members/roles/nr.reader');
+  expect(await screen.findByDisplayValue('Fresh reader')).toBeVisible();
+  expect(
+    await screen.findByRole('button', { name: 'Roles', exact: true }),
+  ).toHaveAttribute('aria-current', 'page');
 });
