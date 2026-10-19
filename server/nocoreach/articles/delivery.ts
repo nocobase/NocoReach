@@ -58,6 +58,17 @@ export type ArticleProposal = {
   draft: ArticleDraft;
   changes: string[];
   conflicts?: FieldConflict[];
+  /** Fields a leg published before a rebase: still tracked for export and overwrites once it is adopted. */
+  carried?: string[];
+  /** The other targets the same article goes to (a task publishing to several targets). */
+  also?: AlsoProposal[];
+};
+/** The article for one other target: the draft as that target can hold it, against that target's own base. */
+export type AlsoProposal = Omit<ArticleProposal, 'also'> & {
+  /** Locales (`ja`), fields (`en.description`) and `status` the target cannot hold, left out. */
+  skipped: string[];
+  slug: string;
+  title: string;
 };
 
 /** Keep only the locales and fields the target maps, and drop a status the target has no field for. */
@@ -105,6 +116,56 @@ function mapped(
   return target.format === 'frontmatter'
     ? Boolean(target.frontmatter)
     : Boolean(target.metadata?.keys[locale]?.[field]);
+}
+
+/**
+ * The draft for another target. An existing article there gets the fields the draft holds; a new one gets the whole
+ * article as it will be after the change (the source with the draft applied). What the target cannot hold is left out.
+ */
+export function projectDraft(
+  target: ArticleTarget,
+  draft: ArticleDraft,
+  source: ArticleSnapshot | null,
+  create: boolean,
+) {
+  const skipped: string[] = [];
+  const whole = create && source;
+  const locales: ArticleDraft['locales'] = {};
+  for (const locale of new Set([
+    ...Object.keys(whole ? source.locales : {}),
+    ...Object.keys(draft.locales),
+  ])) {
+    const fields = {
+      ...(whole ? source.locales[locale] : {}),
+      ...draft.locales[locale],
+    };
+    // A field the draft clears ('') still counts for an existing article; a new one only takes filled fields.
+    const present = ARTICLE_FIELDS.filter((f) =>
+      whole ? Boolean(fields[f]?.trim()) : fields[f] !== undefined,
+    );
+    if (!present.length) continue;
+    if (!target.locales.includes(locale)) {
+      skipped.push(locale);
+      continue;
+    }
+    const kept: Partial<Record<(typeof ARTICLE_FIELDS)[number], string>> = {};
+    for (const f of present)
+      if (mapped(target, locale, f)) kept[f] = fields[f]!;
+      else skipped.push(`${locale}.${f}`);
+    if (Object.keys(kept).length) locales[locale] = kept;
+  }
+  const status = draft.status ?? (whole ? source.status : undefined);
+  if (status && !supportsStatus(target)) skipped.push('status');
+  const slug = draft.slug || (whole ? source.slug : undefined);
+  return {
+    draft: {
+      ...draft,
+      ...(slug ? { slug } : {}),
+      ...(status ? { status } : {}),
+      locales,
+    },
+    skipped,
+  };
 }
 
 const asChanges = (d: ArticleDraft): ArticleChanges => ({
@@ -178,6 +239,41 @@ export class ArticleDelivery {
       baseVersion: input.base?.version ?? null,
       draft,
       changes: changedFields(input.base, asChanges(draft)),
+    };
+  }
+  /** The proposal for another target, from the primary's draft (see projectDraft). */
+  alsoProposal(
+    project: string,
+    input: {
+      targetId: string;
+      articleId: string | null;
+      base: ArticleSnapshot | null;
+      baseKey: string | null;
+      source: ArticleSnapshot | null;
+      draft: ArticleDraft;
+    },
+  ): AlsoProposal {
+    const target = this.target(project, input.targetId);
+    const { draft, skipped } = projectDraft(
+      target,
+      input.draft,
+      input.source,
+      !input.articleId,
+    );
+    let p: ArticleProposal;
+    try {
+      p = this.proposal(project, { ...input, draft });
+    } catch (error) {
+      if (error instanceof ArticleError)
+        throw new ArticleError('invalid', `${target.name}: ${error.message}`);
+      throw error;
+    }
+    const slug = p.draft.slug || input.base?.slug || '';
+    return {
+      ...p,
+      skipped,
+      slug,
+      title: input.base?.locales[target.locales[0]]?.title || '',
     };
   }
   /**

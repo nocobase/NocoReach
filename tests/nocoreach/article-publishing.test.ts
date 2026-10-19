@@ -554,7 +554,7 @@ describe('Git files target', () => {
   const gitTarget = (): ArticleTarget =>
     ({
       ...ARTICLE_TARGET_PRESETS['git-files'],
-      id: 'repo',
+      id: 'git',
       name: 'Repo',
       repo: 'org/blog',
       locales: ['en'],
@@ -586,12 +586,12 @@ describe('Git files target', () => {
       { github: git.fetcher },
       { secret: 'gh-token' },
     );
-    expect(await delivery.provider('1', 'repo').search('hel', 5)).toEqual([
+    expect(await delivery.provider('1', 'git').search('hel', 5)).toEqual([
       { id: 'hello', slug: 'hello', title: 'hello' },
     ]);
-    const base = await delivery.read('1', 'repo', 'hello');
+    const base = await delivery.read('1', 'git', 'hello');
     const p = delivery.proposal('1', {
-      targetId: 'repo',
+      targetId: 'git',
       articleId: 'hello',
       base,
       baseKey: 'k',
@@ -607,9 +607,9 @@ describe('Git files target', () => {
       readFrontmatter(git.read('content/blog/hello/index.md')!).keys,
     ).toMatchObject({ description: 'New summary', layout: 'post' });
     // A commit to the article itself lands in the same window: nothing of ours is written.
-    const base2 = await delivery.read('1', 'repo', 'hello');
+    const base2 = await delivery.read('1', 'git', 'hello');
     const p2 = delivery.proposal('1', {
-      targetId: 'repo',
+      targetId: 'git',
       articleId: 'hello',
       base: base2,
       baseKey: 'k',
