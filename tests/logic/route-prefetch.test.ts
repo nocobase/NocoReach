@@ -1,186 +1,157 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  cachedRouteModule,
-  loadRouteModule,
-} from '../../client/routing/route-modules';
-import { scheduleRoutePrefetch } from '../../client/routing/route-prefetch';
-import { reloadOnStaleBuild } from '../../client/lib/stale-build';
-import type { RouteNavigationItem } from '../../client/routing/route-navigation';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { loadRouteModule } from '../../client/routing/route-modules.js';
+import { scheduleRoutePrefetch } from '../../client/routing/route-prefetch.js';
+import type { RouteNavigationItem } from '../../client/routing/route-navigation.js';
 
-const page = (
-  loader: () => Promise<{ default: () => null }>,
-): RouteNavigationItem => ({
+vi.mock('../../client/routing/route-resources.js', () => ({
+  loadRouteResources: vi.fn(),
+}));
+const loader = vi.fn(async () => ({ default: () => null }));
+const page = (name = 'test'): RouteNavigationItem => ({
   route: {
-    id: 'test',
-    name: 'test',
-    path: '/test',
+    id: name,
+    name,
+    path: `/${name}`,
     auth: 'required',
     authz: 'skip',
-    packageName: 'test',
+    packageName: 'nocoreach',
     source: 'application',
     componentLoader: loader,
   },
   children: [],
 });
+const hints = () =>
+  Array.from(
+    document.querySelectorAll<HTMLLinkElement>('link[rel="prefetch"]'),
+  );
+let stop: (() => void) | undefined;
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  vi.spyOn(document, 'readyState', 'get').mockReturnValue('complete');
+});
 afterEach(() => {
+  stop?.();
   vi.useRealTimers();
   vi.restoreAllMocks();
+  vi.clearAllMocks();
+  Reflect.deleteProperty(navigator, 'connection');
 });
-
-describe('route code warming', () => {
-  it('shares an in-flight import with navigation and caches the component', async () => {
-    const module = { default: () => null };
-    const loader = vi.fn(async () => module);
-    await Promise.all([loadRouteModule(loader, true), loadRouteModule(loader)]);
-    expect(loader).toHaveBeenCalledTimes(1);
-    expect(cachedRouteModule(loader)).toBe(module);
-  });
-  it('allows navigation to retry failed speculation', async () => {
-    const loader = vi
-      .fn()
-      .mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValue({ default: () => null });
-    await expect(loadRouteModule(loader, true)).rejects.toThrow('offline');
-    await expect(loadRouteModule(loader)).resolves.toHaveProperty('default');
-    expect(loader).toHaveBeenCalledTimes(2);
-  });
-  it('waits, loads serially, and cancels queued work', async () => {
-    vi.useFakeTimers();
-    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
-    vi.spyOn(document, 'readyState', 'get').mockReturnValue('complete');
-    let resolve!: (module: { default: () => null }) => void;
-    const first = vi.fn(
-      () =>
-        new Promise<{ default: () => null }>((done) => {
-          resolve = done;
-        }),
-    );
-    const second = vi.fn(async () => ({ default: () => null }));
-    const stop = scheduleRoutePrefetch([page(first), page(second)]);
-    expect(first).not.toHaveBeenCalled();
+it('does not execute loaders, block navigation, or emit Vite errors when resource hints fail', async () => {
+  const viteError = vi.fn();
+  window.addEventListener('vite:preloadError', viteError);
+  stop = scheduleRoutePrefetch([page()], async () => ({
+    test: ['/page.js', '/gate.js'],
+  }));
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(hints()).toHaveLength(1);
+  expect(hints()[0].getAttribute('fetchpriority')).toBe('low');
+  // Leave the background request unresolved, as on a stalled CDN.
+  const foreground = vi.fn(async () => ({ default: () => null }));
+  await expect(loadRouteModule(foreground)).resolves.toHaveProperty('default');
+  expect(foreground).toHaveBeenCalledOnce();
+  hints()[0].dispatchEvent(new Event('error'));
+  await vi.advanceTimersByTimeAsync(1500);
+  hints()[0].dispatchEvent(new Event('error'));
+  expect(loader).not.toHaveBeenCalled();
+  expect(viteError).not.toHaveBeenCalled();
+  window.removeEventListener('vite:preloadError', viteError);
+});
+it('uses only supplied application menu pages, caps routes, and deduplicates shared assets', async () => {
+  const plugin = page('plugin');
+  plugin.route = { ...plugin.route, source: 'plugin' };
+  stop = scheduleRoutePrefetch(
+    [page('a'), plugin, page('b'), page('c'), page('d')],
+    async () => ({
+      a: ['/shared.js'],
+      b: ['/shared.js', '/b.css'],
+      c: ['/c.js'],
+      d: ['/d.js'],
+      denied: ['/denied.js'],
+      plugin: ['/plugin.js'],
+    }),
+  );
+  const seen: string[] = [];
+  await vi.advanceTimersByTimeAsync(3000);
+  while (hints().length) {
+    seen.push(hints()[0].getAttribute('href')!);
+    hints()[0].dispatchEvent(new Event('load'));
     await vi.advanceTimersByTimeAsync(1500);
-    expect(first).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(second).not.toHaveBeenCalled();
-    stop();
-    resolve({ default: () => null });
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(second).not.toHaveBeenCalled();
+  }
+  expect(seen).toEqual(['/shared.js', '/b.css', '/c.js']);
+});
+it.each([
+  { saveData: true },
+  { effectiveType: '3g' },
+  { effectiveType: 'slow-2g' },
+])('pauses on constrained connections: %j', async (connection) => {
+  Object.defineProperty(navigator, 'connection', {
+    value: connection,
+    configurable: true,
   });
-  it.each([
-    { saveData: true },
-    { effectiveType: '3g' },
-    { effectiveType: 'slow-2g' },
-  ])('skips constrained connections: %j', async (connection) => {
-    vi.useFakeTimers();
-    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
-    vi.spyOn(document, 'readyState', 'get').mockReturnValue('complete');
-    Object.defineProperty(navigator, 'connection', {
-      value: connection,
-      configurable: true,
+  const read = vi.fn(async () => ({ test: ['/test.js'] }));
+  stop = scheduleRoutePrefetch([page()], read);
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(read).not.toHaveBeenCalled();
+});
+it('pauses in hidden tabs and during foreground imports', async () => {
+  const visibility = vi
+    .spyOn(document, 'visibilityState', 'get')
+    .mockReturnValue('hidden');
+  let resolve!: (value: { default: () => null }) => void;
+  const pending = loadRouteModule(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  const read = vi.fn(async () => ({ test: ['/test.js'] }));
+  stop = scheduleRoutePrefetch([page()], read);
+  await vi.advanceTimersByTimeAsync(3000);
+  visibility.mockReturnValue('visible');
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(read).not.toHaveBeenCalled();
+  resolve({ default: () => null });
+  await pending;
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(hints()).toHaveLength(1);
+});
+it('cancels metadata and ignores late responses after navigation or unmount', async () => {
+  let resolve!: (value: { test: string[] }) => void;
+  let signal!: AbortSignal;
+  stop = scheduleRoutePrefetch([page()], (value) => {
+    signal = value;
+    return new Promise((done) => {
+      resolve = done;
     });
-    const loader = vi.fn(async () => ({ default: () => null }));
-    const stop = scheduleRoutePrefetch([page(loader)]);
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(loader).not.toHaveBeenCalled();
-    stop();
-    Reflect.deleteProperty(navigator, 'connection');
   });
-  it('limits each idle queue to three uncached pages', async () => {
-    vi.useFakeTimers();
-    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
-    vi.spyOn(document, 'readyState', 'get').mockReturnValue('complete');
-    const loaders = Array.from({ length: 6 }, () =>
-      vi.fn(async () => ({ default: () => null })),
-    );
-    await loadRouteModule(loaders[0]);
-    const stop = scheduleRoutePrefetch(loaders.map(page));
-    await vi.advanceTimersByTimeAsync(15000);
-    expect(loaders.map((loader) => loader.mock.calls.length)).toEqual([
-      1, 1, 1, 1, 0, 0,
-    ]);
-    stop();
+  await vi.advanceTimersByTimeAsync(1500);
+  stop();
+  expect(signal.aborted).toBe(true);
+  resolve({ test: ['/late.js'] });
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(hints()).toHaveLength(0);
+});
+it('bounds stalled resource hints and removes them on cleanup', async () => {
+  stop = scheduleRoutePrefetch([page()], async () => ({
+    test: ['/a.js', '/b.js'],
+  }));
+  await vi.advanceTimersByTimeAsync(3000);
+  const first = hints()[0];
+  await vi.advanceTimersByTimeAsync(11500);
+  expect(first.isConnected).toBe(false);
+  expect(hints()[0].getAttribute('href')).toBe('/b.js');
+  stop();
+  await vi.advanceTimersByTimeAsync(20000);
+  expect(hints()).toHaveLength(0);
+});
+it('ignores metadata failures without affecting foreground imports', async () => {
+  stop = scheduleRoutePrefetch([page()], async () => {
+    throw new Error('offline');
   });
-  it('waits for foreground route imports', async () => {
-    vi.useFakeTimers();
-    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
-    vi.spyOn(document, 'readyState', 'get').mockReturnValue('complete');
-    let resolve!: (module: { default: () => null }) => void;
-    const foreground = loadRouteModule(
-      () =>
-        new Promise((done) => {
-          resolve = done;
-        }),
-    );
-    const loader = vi.fn(async () => ({ default: () => null }));
-    const stop = scheduleRoutePrefetch([page(loader)]);
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(loader).not.toHaveBeenCalled();
-    resolve({ default: () => null });
-    await foreground;
-    await vi.advanceTimersByTimeAsync(1500);
-    expect(loader).toHaveBeenCalledTimes(1);
-    stop();
-  });
-  it('pauses while the tab is hidden', async () => {
-    vi.useFakeTimers();
-    const visibility = vi
-      .spyOn(document, 'visibilityState', 'get')
-      .mockReturnValue('hidden');
-    vi.spyOn(document, 'readyState', 'get').mockReturnValue('complete');
-    const loader = vi.fn(async () => ({ default: () => null }));
-    const stop = scheduleRoutePrefetch([page(loader)]);
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(loader).not.toHaveBeenCalled();
-    visibility.mockReturnValue('visible');
-    await vi.advanceTimersByTimeAsync(1500);
-    expect(loader).toHaveBeenCalledTimes(1);
-    stop();
-  });
-  it('requires a full reload after speculative CSS failure, without rendering an unsafe retry', async () => {
-    vi.useFakeTimers();
-    const target = new EventTarget();
-    const reload = vi.fn();
-    const stop = reloadOnStaleBuild({
-      addEventListener: target.addEventListener.bind(target),
-      removeEventListener: target.removeEventListener.bind(target),
-      sessionStorage,
-      location: { reload },
-    });
-    const healthy = { default: () => null };
-    const cachedLoader = vi.fn(async () => healthy);
-    await loadRouteModule(cachedLoader);
-    const error = new Error('Unable to preload CSS for /assets/page.css');
-    let seen = false;
-    const loader = vi.fn(async () => {
-      // Vite marks CSS as seen before fetching: retrying would skip CSS and succeed.
-      if (seen) return healthy;
-      seen = true;
-      const event = Object.assign(new Event('vite:preloadError'), {
-        payload: error,
-      });
-      target.dispatchEvent(event);
-      throw error;
-    });
-    await expect(loadRouteModule(loader, true)).rejects.toThrow();
-    await vi.advanceTimersByTimeAsync(1);
-    expect(reload).not.toHaveBeenCalled();
-    await expect(loadRouteModule(loader)).rejects.toThrow();
-    await vi.advanceTimersByTimeAsync(1);
-    expect(reload).not.toHaveBeenCalled();
-    expect(loader).toHaveBeenCalledTimes(1);
-    expect(cachedRouteModule(loader)).toBeUndefined();
-    // Shared styles may also be referenced by another route; do not load it either.
-    const otherLoader = vi.fn(async () => healthy);
-    await expect(loadRouteModule(otherLoader)).rejects.toBe(error);
-    expect(otherLoader).not.toHaveBeenCalled();
-    const stopQueue = scheduleRoutePrefetch([page(otherLoader)]);
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(otherLoader).not.toHaveBeenCalled();
-    stopQueue();
-    // Pages whose dependencies were already loaded stay usable.
-    await expect(loadRouteModule(cachedLoader)).resolves.toBe(healthy);
-    expect(cachedRouteModule(cachedLoader)).toBe(healthy);
-    stop();
-  });
+  await vi.advanceTimersByTimeAsync(20000);
+  expect(hints()).toHaveLength(0);
+  await expect(
+    loadRouteModule(async () => ({ default: () => null })),
+  ).resolves.toHaveProperty('default');
 });

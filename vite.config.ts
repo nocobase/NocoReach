@@ -1,3 +1,4 @@
+import { routePrefetchPlugin } from './scripts/route-prefetch.js';
 import { createAppViteConfig } from '@nocobase/dev-config/vite/app';
 import { loadAppVitePlugins } from '@nocobase/dev-config/vite/plugins';
 import path from 'path';
@@ -41,6 +42,7 @@ export default createAppViteConfig(async (environment) => {
     },
     ...(command === 'build' ? { base: env.CDN_BASE_URL?.trim() || './' } : {}),
     plugins: [
+      routePrefetchPlugin(),
       ...(await loadAppVitePlugins({ appRoot: __dirname, environment })),
       ...(devClientConfig ? [devClientConfig] : []),
     ],

@@ -5,11 +5,6 @@ import type {
 import { act, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  loadRouteModule,
-  recordVitePreloadError,
-} from '../../client/routing/route-modules';
-
 import { ClientRoute } from '../../client/routing/client-route.tsx';
 
 vi.mock('@nocobase/app-plugin-authorization/client', () => ({
@@ -56,7 +51,7 @@ describe('client route loading recovery', () => {
     expect(screen.queryByText('Unable to load page')).not.toBeInTheDocument();
   });
 
-  it('waits for a superseded import and ignores its failure when loading the replacement', async () => {
+  it('loads the replacement without waiting for a superseded import', async () => {
     let rejectLoad!: (error: Error) => void;
     const pending = new Promise<AppClientRouteComponentModule>(
       (_resolve, reject) => {
@@ -71,6 +66,9 @@ describe('client route loading recovery', () => {
         route={{ ...route, componentLoader: async () => healthyModule }}
       />,
     );
+    expect(
+      await screen.findByText('Recovered page', {}, ROUTE_LOAD_TIMEOUT),
+    ).toBeVisible();
     await act(async () => {
       rejectLoad(new Error('Stale failure'));
       await pending.catch(() => undefined);
@@ -80,23 +78,4 @@ describe('client route loading recovery', () => {
     ).toBeVisible();
     expect(screen.queryByText('Unable to load page')).not.toBeInTheDocument();
   });
-});
-
-it('offers the full-page retry instead of rendering a route with failed prefetched styles', async () => {
-  const error = new Error('Unable to preload CSS for /assets/route.css');
-  const loader = vi
-    .fn()
-    .mockImplementationOnce(async () => {
-      recordVitePreloadError(error);
-      throw error;
-    })
-    .mockResolvedValue(healthyModule);
-  await expect(loadRouteModule(loader, true)).rejects.toBe(error);
-  render(<ClientRoute route={{ ...route, componentLoader: loader }} />);
-  expect(
-    await screen.findByText('Unable to load page', {}, ROUTE_LOAD_TIMEOUT),
-  ).toBeVisible();
-  expect(screen.getByRole('button')).toBeVisible();
-  expect(screen.queryByText('Recovered page')).not.toBeInTheDocument();
-  expect(loader).toHaveBeenCalledTimes(1);
 });

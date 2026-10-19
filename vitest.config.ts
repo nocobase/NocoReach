@@ -1,3 +1,4 @@
+import { routePrefetchPlugin } from './scripts/route-prefetch.js';
 import { fileURLToPath } from 'node:url';
 
 import { createReactVitestConfig } from '@nocobase/dev-config/vitest/react';
@@ -5,6 +6,7 @@ import { createReactVitestConfig } from '@nocobase/dev-config/vitest/react';
 const root = fileURLToPath(new URL('.', import.meta.url));
 
 export default createReactVitestConfig({
+  plugins: [routePrefetchPlugin()],
   test: {
     root,
     // Browser tests must use jsdom storage rather than Node 26's experimental process-global storage.

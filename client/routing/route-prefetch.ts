@@ -1,40 +1,41 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router';
 import type { RouteNavigationItem } from './route-navigation.js';
-import {
-  cachedRouteModule,
-  hasForegroundRouteLoad,
-  loadRouteModule,
-  routePreloadNeedsReload,
-} from './route-modules.js';
+import { cachedRouteModule, hasForegroundRouteLoad } from './route-modules.js';
+import { loadRouteResources, type RouteResources } from './route-resources.js';
 
 const MAX_PREFETCH_ROUTES = 3;
-
+const RESOURCE_TIMEOUT_MS = 10_000;
 type Connection = { saveData?: boolean; effectiveType?: string };
 
-/** The template loads on navigation only; warm permitted menu code without mounting pages. */
+/** Resource hints warm HTTP cache without evaluating modules or touching Vite's CSS cache. */
 export function scheduleRoutePrefetch(
   items: readonly RouteNavigationItem[],
+  readResources: (
+    signal: AbortSignal,
+  ) => Promise<RouteResources> = loadRouteResources,
 ): () => void {
-  const loaders = [
-    ...new Set(
-      items.flatMap(function collect(item): NonNullable<
-        RouteNavigationItem['route']['componentLoader']
-      >[] {
-        return [
-          ...(item.route.componentLoader ? [item.route.componentLoader] : []),
-          ...item.children.flatMap(collect),
-        ];
-      }),
-    ),
-  ]
-    .filter((loader) => !cachedRouteModule(loader))
-    .slice(0, MAX_PREFETCH_ROUTES);
-  let stopped = false;
+  const routes = items.flatMap(
+    function collect(item): RouteNavigationItem['route'][] {
+      return [
+        ...(item.route.source === 'application' &&
+        item.route.componentLoader &&
+        !cachedRouteModule(item.route.componentLoader)
+          ? [item.route]
+          : []),
+        ...item.children.flatMap(collect),
+      ];
+    },
+  );
+  const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout>;
   let idle: number | undefined;
+  let resources: RouteResources | undefined;
+  let files: string[] = [];
+  let cancelHint: (() => void) | undefined;
+  let stopped = false;
   const schedule = () => {
-    if (stopped || !loaders.length || routePreloadNeedsReload()) return;
+    if (stopped) return;
     timer = setTimeout(() => {
       if (window.requestIdleCallback)
         idle = window.requestIdleCallback(() => {
@@ -44,7 +45,7 @@ export function scheduleRoutePrefetch(
     }, 1500);
   };
   const next = async () => {
-    if (stopped || routePreloadNeedsReload()) return;
+    if (stopped) return;
     const connection = (navigator as Navigator & { connection?: Connection })
       .connection;
     if (
@@ -59,21 +60,70 @@ export function scheduleRoutePrefetch(
       schedule();
       return;
     }
-    const loader = loaders.shift();
-    if (loader && !cachedRouteModule(loader)) {
+    if (!resources) {
+      const timeout = setTimeout(() => controller.abort(), RESOURCE_TIMEOUT_MS);
       try {
-        await loadRouteModule(loader, true);
+        resources = await readResources(controller.signal);
       } catch {
-        /* Vite preload failures stop the queue; navigation offers a full reload. */
+        return;
+      } finally {
+        clearTimeout(timeout);
       }
+      if (stopped || controller.signal.aborted) return;
+      files = [
+        ...new Set(
+          routes
+            .filter((route) => resources![route.name]?.length)
+            .slice(0, MAX_PREFETCH_ROUTES)
+            .flatMap((route) => resources![route.name]),
+        ),
+      ];
+      // Recheck foreground activity and network policy after metadata arrives.
+      if (files.length) schedule();
+      return;
     }
-    schedule();
+    const file = files.shift();
+    if (!file) return;
+    // Existing foreground styles/modulepreloads need no speculative duplicate.
+    if (
+      Array.from(
+        document.querySelectorAll<HTMLLinkElement | HTMLScriptElement>(
+          'link[href], script[src]',
+        ),
+      ).some(
+        (element) => ('href' in element ? element.href : element.src) === file,
+      )
+    ) {
+      schedule();
+      return;
+    }
+    const link = document.createElement('link');
+    link.rel = 'prefetch';
+    link.href = file;
+    link.setAttribute('fetchpriority', 'low');
+    const finish = () => {
+      clearTimeout(timeout);
+      link.onload = link.onerror = null;
+      link.remove();
+      cancelHint = undefined;
+      schedule();
+    };
+    const timeout = setTimeout(finish, RESOURCE_TIMEOUT_MS);
+    link.onload = link.onerror = finish;
+    cancelHint = () => {
+      clearTimeout(timeout);
+      link.onload = link.onerror = null;
+      link.remove();
+    };
+    document.head.append(link);
   };
-  schedule();
+  if (routes.length) schedule();
   return () => {
     stopped = true;
+    controller.abort();
     clearTimeout(timer);
     if (idle !== undefined) window.cancelIdleCallback(idle);
+    cancelHint?.();
   };
 }
 
