@@ -6658,7 +6658,7 @@
   "articleTask.targetState.publishFailed": "发布没有完成",
   "articleTask.targetState.publishConflict": "有冲突",
   "articleTask.rowReason.changed": "文章已被他人修改",
-  "articleTask.rowReason.slug_taken": "地址已被占用",
+  "articleTask.rowReason.slugTaken": "地址已被占用",
   "articleTask.rowReason.missing": "找不到这篇文章",
   "articleTask.rowReason.downstream": "网站仓库中有未同步的修改",
   "articleTask.conflictSeveral": "{0} 个目标有冲突",

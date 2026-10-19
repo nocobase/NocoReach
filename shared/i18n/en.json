@@ -6658,7 +6658,7 @@
   "articleTask.targetState.publishFailed": "Did not complete",
   "articleTask.targetState.publishConflict": "Conflict",
   "articleTask.rowReason.changed": "Changed by someone else",
-  "articleTask.rowReason.slug_taken": "Address already taken",
+  "articleTask.rowReason.slugTaken": "Address already taken",
   "articleTask.rowReason.missing": "Article not found",
   "articleTask.rowReason.downstream": "Unsynced changes in the website repository",
   "articleTask.conflictSeveral": "{0} targets have conflicts",

@@ -54,7 +54,9 @@ export function TargetRows({ data, r }: { data: TaskData; r?: Release }) {
             </Tag>
             {state === 'publish_conflict' && a.conflict && (
               <span className='text-sm text-muted-foreground'>
-                {$t(`articleTask.rowReason.${a.conflict.reason}`)}
+                {$t(
+                  `articleTask.rowReason.${a.conflict.reason === 'slug_taken' ? 'slugTaken' : a.conflict.reason}`,
+                )}
               </span>
             )}
             {state === 'publish_failed' && (
