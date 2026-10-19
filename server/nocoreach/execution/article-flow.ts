@@ -1,7 +1,8 @@
 // @ts-nocheck
 import { randomUUID } from 'node:crypto';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
-import { supportsStatus, type ArticleSnapshot, type ArticleTarget } from '../../../shared/article-publishing.js';
+import { supportsStatus, type ArticleSnapshot } from '../../../shared/article-publishing.js';
+import type { ArticleTargets } from '../articles/targets.js';
 import { articlePages, verifyPhrase, type ArticleDelivery, type ArticleProposal, type PublishOutcome } from '../articles/delivery.js';
 import { ArticleError, providerErrorKey } from '../articles/provider.js';
 import { fail, projectWork, type Artifact, type Work } from './model';
@@ -32,7 +33,8 @@ export class ArticleFlow {
   /** The project's targets for the task page, without credentials. */
   targets(project: string) {
     try {
-      return (this.s.p.articleTargets?.list(project).targets || []).map((t) => ({ id: t.id, name: t.name, kind: t.kind, locales: t.locales, capabilities: t.capabilities, status: supportsStatus(t as ArticleTarget) }));
+      const list = (this.s.p.articleTargets as ArticleTargets | undefined)?.list(project);
+      return (list?.targets || []).map((t) => ({ id: t.id, name: t.name, kind: t.kind, locales: t.locales, capabilities: t.capabilities, status: supportsStatus(t), default: t.id === list?.defaultTargetId }));
     } catch {
       return [];
     }
@@ -103,7 +105,7 @@ export class ArticleFlow {
     if (w.article?.targetId && !linked) return fail(systemMessageText('articles.targetMissing'), 409);
     const chosen = choice && typeof choice === 'object' && typeof (choice as any).targetId === 'string' ? targets.find((t) => t.id === (choice as any).targetId) : undefined;
     if (choice && typeof choice === 'object' && !chosen && !linked) return fail(systemMessageText('articles.targetMissing'), 409);
-    const target = linked || chosen || (playbookId === 'blog-post' ? targets[0] : undefined);
+    const target = linked || chosen || (playbookId === 'blog-post' ? targets.find((t) => t.default) || targets[0] : undefined);
     if (!target) return;
     w.delivery = { kind: 'article', targetId: target.id, articleId: linked ? w.article.articleId || null : null, sourceKey: linked ? w.article.sourceKey || null : null };
   }

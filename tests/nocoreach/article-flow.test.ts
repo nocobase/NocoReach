@@ -460,6 +460,36 @@ test('a Git-only edit of the article blocks publishing until it is taken into th
   expect(f.cms.state.requests.some((r) => r.action === 'update')).toBe(false);
 });
 
+test('a blog post goes to the default target, and the task page marks it', async () => {
+  const f = await fixture();
+  const targets = f.s.p.articleTargets;
+  // A target view carries hasSecret and capabilities; the saved settings must not.
+  const { hasSecret, capabilities, ...cms } = targets.list('1').targets[0];
+  void hasSecret;
+  void capabilities;
+  await targets.save('1', {
+    revision: 1,
+    secret: 'cms-key',
+    target: { ...cms, id: 'other', name: 'Other CMS' },
+  });
+  expect((await f.view()).articleTargets.map((t) => [t.id, t.default])).toEqual(
+    [
+      ['cms', true],
+      ['other', false],
+    ],
+  );
+  await targets.setDefault('1', { revision: 2, id: 'other' });
+  expect((await f.view()).articleTargets.find((t) => t.default).id).toBe(
+    'other',
+  );
+  const d = await f.command('startTask', { playbookId: 'blog-post' });
+  expect(d.work.delivery).toMatchObject({
+    kind: 'article',
+    targetId: 'other',
+    articleId: null,
+  });
+});
+
 test('a blog post becomes a new article on the target; a code change to exported files cannot be approved', async () => {
   const f = await fixture({ downstream: true });
   let d = await f.command('startTask', { playbookId: 'blog-post' });

@@ -48,6 +48,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '#components/ui/dropdown-menu';
 import { confirmAction } from '#components/reach/confirm';
@@ -195,6 +196,10 @@ function TargetsPanel({
   );
   const { can: canTest } = useBusinessAccess(
     'nrArticles.testTarget',
+    projectId,
+  );
+  const { can: canSetDefault } = useBusinessAccess(
+    'nrArticles.setDefaultTarget',
     projectId,
   );
   const [list, setList] = useState<TargetList>();
@@ -404,6 +409,31 @@ function TargetsPanel({
       }
     });
   }
+  async function makeDefault(t: ArticleTargetView) {
+    if (!list) return;
+    await run(`default-${t.id}`, async () => {
+      try {
+        const next = await articleRequest<TargetList>(
+          'setDefaultTarget',
+          projectId,
+          { revision: list.revision, id: t.id },
+          sessionId,
+        );
+        setList(next);
+        toast.success(() => $t('articlePublishing.defaultSet', { 0: t.name }));
+        onChange();
+      } catch (e) {
+        toast.error(() =>
+          e instanceof Error ? e.message : $t('common.operationFailedRetry'),
+        );
+        if (
+          errorKey(e) === 'articles.targetMissing' ||
+          errorKey(e) === 'articles.stale'
+        )
+          void load();
+      }
+    });
+  }
   async function remove(t: ArticleTargetView) {
     if (!list) return;
     if (
@@ -547,6 +577,9 @@ function TargetsPanel({
               <CardTitle className='flex flex-wrap items-center gap-2'>
                 {t.name}
                 <Badge variant='secondary'>{$t(kindKey[t.kind])}</Badge>
+                {t.id === list.defaultTargetId && (
+                  <Badge>{$t('articlePublishing.default')}</Badge>
+                )}
               </CardTitle>
               <CardDescription className='break-all'>
                 {t.kind === 'git-files' ? `${t.repo} · ${t.branch}` : t.baseUrl}
@@ -604,7 +637,8 @@ function TargetsPanel({
                     {$t('articlePublishing.edit')}
                   </Button>,
                 )}
-              {canRemove &&
+              {(canRemove ||
+                (canSetDefault && t.id !== list.defaultTargetId)) &&
                 locked(
                   <DropdownMenu>
                     <DropdownMenuTrigger
@@ -619,7 +653,8 @@ function TargetsPanel({
                         />
                       }
                     >
-                      {busy === `remove-${t.id}` ? (
+                      {busy === `remove-${t.id}` ||
+                      busy === `default-${t.id}` ? (
                         <Spinner />
                       ) : (
                         <MoreHorizontal />
@@ -629,12 +664,24 @@ function TargetsPanel({
                       align='end'
                       className='w-auto min-w-40'
                     >
-                      <DropdownMenuItem
-                        variant='destructive'
-                        onClick={() => void remove(t)}
-                      >
-                        {$t('articlePublishing.delete')}
-                      </DropdownMenuItem>
+                      {canSetDefault && t.id !== list.defaultTargetId && (
+                        <DropdownMenuItem onClick={() => void makeDefault(t)}>
+                          {$t('articlePublishing.setDefault')}
+                        </DropdownMenuItem>
+                      )}
+                      {canRemove &&
+                        canSetDefault &&
+                        t.id !== list.defaultTargetId && (
+                          <DropdownMenuSeparator />
+                        )}
+                      {canRemove && (
+                        <DropdownMenuItem
+                          variant='destructive'
+                          onClick={() => void remove(t)}
+                        >
+                          {$t('articlePublishing.delete')}
+                        </DropdownMenuItem>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>,
                 )}

@@ -335,7 +335,12 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     ...list('nrAutomaticSources', ['ingest', 'disconnect']),
     ...list('nrProxyProfiles', ['selections', 'select', 'testConnection']),
     ...list('nrAgent', ['saveRepo', 'removeRepo']),
-    ...list('nrArticles', ['saveTarget', 'removeTarget', 'testTarget']),
+    ...list('nrArticles', [
+      'saveTarget',
+      'removeTarget',
+      'setDefaultTarget',
+      'testTarget',
+    ]),
   ],
   'app.projects': ['nrProjects.create'],
   'app.members': ['nrMembers.setRole'],

@@ -4,6 +4,7 @@
 
 - Preserve publication status when manually editing an article draft, and reject targets beyond the ten-target limit before saving configuration.
 - Create new articles as drafts unless the reviewer chooses Published in the article editor, whatever the target's own default, and show status changes as words in the review.
+- Keep an edited publishing target in its place and let administrators choose the default target new tasks publish to.
 - Tell the Agent where a malformed result goes wrong (extra content after a complete JSON value, or an unreadable position) so it can correct the submission.
 - Add publishing targets under Data sources: a NocoBase collection through its API, the new NocoReach article API protocol, or Markdown files in a GitHub repository. Each kind declares how it protects concurrent writes; credentials stay sealed on the server.
 - Blog and article tasks can publish to a target instead of opening a pull request. The Agent drafts a structured article (per-language title, summary and body), the owner reviews and edits it field by field, and the server publishes only the approved fields after rechecking the article. Conflicting edits keep both versions for a new review; retries never write twice.

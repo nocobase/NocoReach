@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   ARTICLE_CAPABILITIES,
   articleTargetSchema,
+  TARGET_ID,
   type ArticleTarget,
   type ArticleTargetView,
 } from '../../../shared/article-publishing.js';
@@ -33,6 +34,8 @@ const stored = z.object({
       }),
     )
     .max(10),
+  // Which target a new task publishes to; absent means the first one.
+  defaultTargetId: z.string().regex(TARGET_ID).optional(),
 });
 type Stored = z.infer<typeof stored>;
 type Entry = Stored['targets'][number];
@@ -81,8 +84,21 @@ export class ArticleTargets {
     const s = this.stored(id);
     return {
       revision: s.revision,
+      defaultTargetId: this.defaultOf(s),
       targets: s.targets.map((e) => this.view(e)),
     };
+  }
+  private defaultOf(s: Stored) {
+    return s.targets.some((e) => e.target.id === s.defaultTargetId)
+      ? s.defaultTargetId
+      : s.targets[0]?.target.id;
+  }
+  /** Validate the complete settings before writing, so a rejected change leaves the stored ones readable. */
+  private async persist(id: string, settings: Stored) {
+    const parsed = stored.safeParse(settings);
+    if (!parsed.success) fail('invalidTarget');
+    await this.variables.set(this.key(id), JSON.stringify(parsed.data), true);
+    return this.list(id);
   }
   target(id: string, targetId: string): ArticleTarget {
     const e = this.stored(id).targets.find((t) => t.target.id === targetId);
@@ -169,33 +185,39 @@ export class ArticleTargets {
       fail(
         previous && !sameEndpoint ? 'secretForNewEndpoint' : 'secretRequired',
       );
-    const targets = [
-      ...old.targets.filter((e) => e.target.id !== target.id),
-      next,
-    ];
-    const nextSettings = stored.safeParse({
+    // An edited target keeps its place: the order is what people see, and the first one is the fallback default.
+    const targets = previous
+      ? old.targets.map((e) => (e.target.id === target.id ? next : e))
+      : [...old.targets, next];
+    return this.persist(id, { ...old, revision: old.revision + 1, targets });
+  }
+  async setDefault(id: string, values: Record<string, unknown>) {
+    const old = this.stored(id);
+    if (values.revision !== old.revision) fail('stale', 409);
+    const targetId = values.id === null ? undefined : values.id;
+    if (
+      targetId !== undefined &&
+      !old.targets.some((e) => e.target.id === targetId)
+    )
+      fail('targetMissing', 404);
+    return this.persist(id, {
+      ...old,
       revision: old.revision + 1,
-      targets,
+      defaultTargetId: targetId as string | undefined,
     });
-    if (!nextSettings.success) fail('invalidTarget');
-    await this.variables.set(
-      this.key(id),
-      JSON.stringify(nextSettings.data),
-      true,
-    );
-    return this.list(id);
   }
   async remove(id: string, values: Record<string, unknown>) {
     const old = this.stored(id);
     if (values.revision !== old.revision) fail('stale', 409);
     const targets = old.targets.filter((e) => e.target.id !== values.id);
     if (targets.length === old.targets.length) fail('targetMissing', 404);
-    await this.variables.set(
-      this.key(id),
-      JSON.stringify({ revision: old.revision + 1, targets }),
-      true,
-    );
-    return this.list(id);
+    return this.persist(id, {
+      revision: old.revision + 1,
+      targets,
+      ...(old.defaultTargetId !== values.id && old.defaultTargetId
+        ? { defaultTargetId: old.defaultTargetId }
+        : {}),
+    });
   }
   /** Read one page of articles (and the downstream branch) to prove the settings and credentials work. */
   async test(id: string, targetId: string) {
@@ -259,12 +281,20 @@ export class ArticleTargets {
         search: wrap((id, v) => this.search(id, scalar(v.targetId), v.q)),
         saveTarget: wrap((id, v) => this.save(id, v), true),
         removeTarget: wrap((id, v) => this.remove(id, v), true),
+        setDefaultTarget: wrap((id, v) => this.setDefault(id, v), true),
         testTarget: wrap((id, v) => this.test(id, scalar(v.targetId)), true),
       },
     });
     p.app.acl.allow(
       'nrArticles',
-      ['targets', 'search', 'saveTarget', 'removeTarget', 'testTarget'],
+      [
+        'targets',
+        'search',
+        'saveTarget',
+        'removeTarget',
+        'setDefaultTarget',
+        'testTarget',
+      ],
       'loggedIn',
     );
   }

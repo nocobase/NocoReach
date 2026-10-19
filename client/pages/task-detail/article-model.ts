@@ -12,7 +12,7 @@ import type { Artifact, Release, TaskData } from '../task-execution-types';
 export type DeliveryChoice = { target: string; mode: 'new' | 'existing' };
 export const REPO = 'repo';
 
-/** The default: the linked article; a blog post → new article on the first target; other changes → pick an article. */
+/** The default: the linked article; otherwise the default target (a blog post → new article there; other changes → pick an article). */
 export function defaultDelivery(
   data: TaskData,
   playbookId: string,
@@ -26,7 +26,7 @@ export function defaultDelivery(
     };
   if (!targets.length) return { target: REPO, mode: 'new' };
   return {
-    target: targets[0].id,
+    target: (targets.find((t) => t.default) || targets[0]).id,
     mode: playbookId === 'blog-post' ? 'new' : 'existing',
   };
 }

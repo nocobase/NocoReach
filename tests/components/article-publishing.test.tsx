@@ -411,3 +411,62 @@ it('creates a publishing target: empty state, field errors on save, then a card 
   expect(onSaving).toHaveBeenLastCalledWith(false);
   expect(screen.queryByDisplayValue('secret-key')).not.toBeInTheDocument();
 });
+
+it('marks the default target and makes another one the default from its menu', async () => {
+  const card = (id: string, name: string) => ({
+    ...target,
+    id,
+    name,
+    baseUrl: `https://${id}.example.com`,
+    hasSecret: true,
+    fields: { id: 'id', slug: 'slug', version: 'updatedAt', locales: {} },
+  });
+  const targets = [card('cms', 'NocoBase CMS'), card('blog', 'Blog API')];
+  vi.mocked(articleRequest).mockImplementation(async (action: string) => {
+    if (action === 'targets')
+      return { revision: 3, defaultTargetId: 'cms', targets };
+    if (action === 'setDefaultTarget')
+      return { revision: 4, defaultTargetId: 'blog', targets };
+    throw new Error(action);
+  });
+  const user = userEvent.setup();
+  render(
+    <ArticleTargetsConnect
+      projectId={1}
+      onChange={vi.fn()}
+      onSavingChange={vi.fn()}
+    />,
+  );
+  await screen.findByText('Blog API');
+  expect(screen.getAllByText('Default')).toHaveLength(1);
+  // Permission checks resolve asynchronously: wait for the item rather than the first render.
+  await user.click(
+    screen.getByRole('button', { name: 'Actions for "Blog API"' }),
+  );
+  await user.click(
+    await screen.findByRole('menuitem', { name: 'Make default' }),
+  );
+  expect(articleRequest).toHaveBeenCalledWith(
+    'setDefaultTarget',
+    1,
+    { revision: 3, id: 'blog' },
+    'session-a',
+  );
+  await waitFor(() =>
+    expect(
+      within(
+        screen.getByText('Blog API').closest('[data-slot=card]') as HTMLElement,
+      ).getByText('Default'),
+    ).toBeInTheDocument(),
+  );
+  // The default target itself offers no "Make default".
+  await user.click(
+    screen.getByRole('button', { name: 'Actions for "Blog API"' }),
+  );
+  expect(
+    await screen.findByRole('menuitem', { name: 'Delete' }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole('menuitem', { name: 'Make default' }),
+  ).not.toBeInTheDocument();
+});

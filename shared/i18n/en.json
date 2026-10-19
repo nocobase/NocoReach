@@ -6642,5 +6642,8 @@
   "articleTask.statusPublished": "Published",
   "articleTask.statusHelp": "A draft is saved without appearing on the site; Published makes it public once approved.",
   "agentResult.jsonTrailing": "The agent result must be complete JSON: there is extra content after character {0} (often a bracket closed too early, or text added after the JSON)",
-  "agentResult.jsonSyntax": "The agent result must be complete JSON: it cannot be read near character {0} (for example, unbalanced brackets or quotes)"
+  "agentResult.jsonSyntax": "The agent result must be complete JSON: it cannot be read near character {0} (for example, unbalanced brackets or quotes)",
+  "articlePublishing.default": "Default",
+  "articlePublishing.setDefault": "Make default",
+  "articlePublishing.defaultSet": "New tasks now publish to \"{0}\" by default"
 }

@@ -4,7 +4,12 @@ import type {
   ArticleTargetView,
 } from '../../shared/article-publishing.js';
 
-export type TargetList = { revision: number; targets: ArticleTargetView[] };
+export type TargetList = {
+  revision: number;
+  // Which target new tasks publish to (the first one unless an administrator chose another).
+  defaultTargetId?: string;
+  targets: ArticleTargetView[];
+};
 export type TestResult =
   | { ok: true; sample: { id: string; title: string } | null }
   | { ok: false; code: string };

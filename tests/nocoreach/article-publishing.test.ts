@@ -378,6 +378,56 @@ describe('NocoBase API target', () => {
     ]);
   });
 
+  test('editing a target keeps its place; the default target is chosen explicitly and cleared on removal', async () => {
+    const cms = fakeNocoBase([row()]);
+    const { targets } = await setup(
+      cmsTarget(),
+      { site: cms.fetcher },
+      { secret: 'cms-key' },
+    );
+    const ids = () => targets.list('1').targets.map((t) => t.id);
+    await targets.save('1', {
+      revision: 1,
+      target: cmsTarget({
+        id: 'second',
+        name: 'Second',
+      } as Partial<ArticleTarget>),
+      secret: 'cms-key',
+    });
+    await targets.save('1', {
+      revision: 2,
+      target: cmsTarget({
+        id: 'third',
+        name: 'Third',
+      } as Partial<ArticleTarget>),
+      secret: 'cms-key',
+    });
+    // Without a choice the first target is the default.
+    expect(targets.list('1')).toMatchObject({ defaultTargetId: 'cms' });
+    await targets.save('1', {
+      revision: 3,
+      target: cmsTarget({ name: 'Renamed' }),
+    });
+    expect(ids()).toEqual(['cms', 'second', 'third']);
+    expect(targets.list('1').defaultTargetId).toBe('cms');
+    await targets.setDefault('1', { revision: 4, id: 'third' });
+    expect(targets.list('1')).toMatchObject({
+      revision: 5,
+      defaultTargetId: 'third',
+    });
+    await expect(
+      targets.setDefault('1', { revision: 5, id: 'missing' }),
+    ).rejects.toThrow('articles.targetMissing');
+    await expect(
+      targets.setDefault('1', { revision: 4, id: 'second' }),
+    ).rejects.toThrow('articles.stale');
+    // Removing another target keeps the choice; removing the default falls back to the first.
+    await targets.remove('1', { revision: 5, id: 'second' });
+    expect(targets.list('1').defaultTargetId).toBe('third');
+    await targets.remove('1', { revision: 6, id: 'third' });
+    expect(targets.list('1')).toMatchObject({ defaultTargetId: 'cms' });
+  });
+
   test('credentials stay on the server and cannot be redirected to a new endpoint', async () => {
     const cms = fakeNocoBase([row()]);
     const { targets } = await setup(
