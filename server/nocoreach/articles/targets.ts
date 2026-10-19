@@ -22,6 +22,7 @@ import {
   type Fetcher,
 } from './provider.js';
 
+const PLAYBOOK_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const secret = z.string().trim().min(1).max(4000);
 const stored = z.object({
   revision: z.number().int().nonnegative(),
@@ -36,6 +37,11 @@ const stored = z.object({
     .max(10),
   // Which target a new task publishes to; absent means the first one.
   defaultTargetId: z.string().regex(TARGET_ID).optional(),
+  // Where each playbook's new tasks publish (a target id, or 'repo' for a pull request); absent means the default.
+  playbookTargets: z
+    .record(z.string().regex(PLAYBOOK_ID), z.string().regex(TARGET_ID))
+    .refine((m) => Object.keys(m).length <= 100)
+    .optional(),
 });
 type Stored = z.infer<typeof stored>;
 type Entry = Stored['targets'][number];
@@ -85,8 +91,16 @@ export class ArticleTargets {
     return {
       revision: s.revision,
       defaultTargetId: this.defaultOf(s),
+      playbookTargets: this.playbooksOf(s),
       targets: s.targets.map((e) => this.view(e)),
     };
+  }
+  private playbooksOf(s: Stored): Record<string, string> {
+    return Object.fromEntries(
+      Object.entries(s.playbookTargets || {}).filter(
+        ([, t]) => t === 'repo' || s.targets.some((e) => e.target.id === t),
+      ),
+    );
   }
   private defaultOf(s: Stored) {
     return s.targets.some((e) => e.target.id === s.defaultTargetId)
@@ -147,6 +161,12 @@ export class ArticleTargets {
     const parsed = articleTargetSchema.safeParse(values.target);
     if (!parsed.success) fail('invalidTarget');
     const target = parsed.data;
+    // 'repo' stands for the website repository wherever a target is chosen; no new target takes it.
+    if (
+      target.id === 'repo' &&
+      !old.targets.some((e) => e.target.id === 'repo')
+    )
+      fail('invalidTarget');
     const unknownLocale = (map?: Record<string, unknown>) =>
       Object.keys(map || {}).some((l) => !target.locales.includes(l));
     if (
@@ -206,17 +226,53 @@ export class ArticleTargets {
       defaultTargetId: targetId as string | undefined,
     });
   }
+  async savePlaybooks(id: string, values: Record<string, unknown>) {
+    const old = this.stored(id);
+    if (values.revision !== old.revision) fail('stale', 409);
+    const map = values.playbookTargets;
+    if (!map || typeof map !== 'object' || Array.isArray(map))
+      fail('invalidPlaybookTargets');
+    const entries = Object.entries(map as Record<string, unknown>);
+    if (
+      entries.length > 100 ||
+      entries.some(
+        ([p, t]) =>
+          !PLAYBOOK_ID.test(p) ||
+          (t !== 'repo' && !old.targets.some((e) => e.target.id === t)),
+      )
+    )
+      fail('invalidPlaybookTargets');
+    const { playbookTargets: _, ...rest } = old;
+    return this.persist(id, {
+      ...rest,
+      revision: old.revision + 1,
+      ...(entries.length
+        ? {
+            playbookTargets: Object.fromEntries(entries) as Record<
+              string,
+              string
+            >,
+          }
+        : {}),
+    });
+  }
   async remove(id: string, values: Record<string, unknown>) {
     const old = this.stored(id);
     if (values.revision !== old.revision) fail('stale', 409);
     const targets = old.targets.filter((e) => e.target.id !== values.id);
     if (targets.length === old.targets.length) fail('targetMissing', 404);
+    const playbookTargets = Object.fromEntries(
+      Object.entries(old.playbookTargets || {}).filter(
+        ([, t]) => t !== values.id,
+      ),
+    );
     return this.persist(id, {
       revision: old.revision + 1,
       targets,
       ...(old.defaultTargetId !== values.id && old.defaultTargetId
         ? { defaultTargetId: old.defaultTargetId }
         : {}),
+      ...(Object.keys(playbookTargets).length ? { playbookTargets } : {}),
     });
   }
   /** Read one page of articles (and the downstream branch) to prove the settings and credentials work. */
@@ -282,6 +338,7 @@ export class ArticleTargets {
         saveTarget: wrap((id, v) => this.save(id, v), true),
         removeTarget: wrap((id, v) => this.remove(id, v), true),
         setDefaultTarget: wrap((id, v) => this.setDefault(id, v), true),
+        savePlaybookTargets: wrap((id, v) => this.savePlaybooks(id, v), true),
         testTarget: wrap((id, v) => this.test(id, scalar(v.targetId)), true),
       },
     });
@@ -293,6 +350,7 @@ export class ArticleTargets {
         'saveTarget',
         'removeTarget',
         'setDefaultTarget',
+        'savePlaybookTargets',
         'testTarget',
       ],
       'loggedIn',

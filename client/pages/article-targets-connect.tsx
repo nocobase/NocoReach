@@ -54,6 +54,11 @@ import {
 import { confirmAction } from '#components/reach/confirm';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import {
+  localizePlaybookList,
+  playbookRequest,
+  type PlaybookList,
+} from './playbook-model';
+import {
   ARTICLE_TARGET_KINDS,
   ARTICLE_TARGET_PRESETS,
   type ArticleTargetKind,
@@ -200,6 +205,10 @@ function TargetsPanel({
   );
   const { can: canSetDefault } = useBusinessAccess(
     'nrArticles.setDefaultTarget',
+    projectId,
+  );
+  const { can: canSetPlaybooks } = useBusinessAccess(
+    'nrArticles.savePlaybookTargets',
     projectId,
   );
   const [list, setList] = useState<TargetList>();
@@ -689,6 +698,29 @@ function TargetsPanel({
           </Card>
         ),
       )}
+      {list.targets.length > 0 && canSetPlaybooks && (
+        <PlaybookTargetsCard
+          id={id}
+          projectId={projectId}
+          list={list}
+          editing={editing}
+          locked={locked}
+          busy={busy}
+          save={(playbookTargets) =>
+            run('playbooks', async () => {
+              const next = await articleRequest<TargetList>(
+                'savePlaybookTargets',
+                projectId,
+                { revision: list.revision, playbookTargets },
+                sessionId,
+              );
+              setList(next);
+              onChange();
+            })
+          }
+          reload={load}
+        />
+      )}
       {list.targets.length > 0 && canSave && (
         <div>
           {locked(
@@ -704,6 +736,208 @@ function TargetsPanel({
         </div>
       )}
     </div>
+  );
+}
+
+const FOLLOW = 'default';
+/**
+ * Where each playbook with a change step publishes by default. Rows follow the panel's list: after any write they are
+ * derived again, keeping local choices whose target still exists; it saves with the latest revision.
+ */
+function PlaybookTargetsCard({
+  id,
+  projectId,
+  list,
+  editing,
+  locked,
+  busy,
+  save,
+  reload,
+}: {
+  id: string;
+  projectId: number;
+  list: TargetList;
+  editing: boolean;
+  locked: (child: React.ReactElement) => React.ReactNode;
+  busy: string;
+  save: (map: Record<string, string>) => Promise<void>;
+  reload: () => Promise<TargetList | undefined>;
+}) {
+  const [playbooks, setPlaybooks] = useState<{ id: string; name: string }[]>();
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [local, setLocal] = useState<Record<string, string>>({});
+  const [error, setError] = useState<{ key: string; stale?: boolean }>();
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let live = true;
+    playbookRequest<PlaybookList>('list', projectId).then(
+      (raw) => {
+        if (!live) return;
+        setLoadFailed(false);
+        setPlaybooks(
+          (localizePlaybookList(raw)?.playbooks || [])
+            .filter((p) => p.kind === 'build')
+            .map((p) => ({ id: p.id, name: p.name })),
+        );
+      },
+      () => {
+        if (live) setLoadFailed(true);
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [projectId, attempt]);
+  const saved = list.playbookTargets || {};
+  const usable = (v?: string) =>
+    v === FOLLOW || v === 'repo' || list.targets.some((t) => t.id === v);
+  const valueOf = (p: string) =>
+    usable(local[p]) ? local[p] : usable(saved[p]) ? saved[p] : FOLLOW;
+  const savedOf = (p: string) => (usable(saved[p]) ? saved[p] : FOLLOW);
+  const fallback =
+    list.targets.find((t) => t.id === list.defaultTargetId) || list.targets[0];
+  const label = (v: string) =>
+    v === FOLLOW
+      ? $t('articlePublishing.followDefault', { 0: fallback?.name || '' })
+      : v === 'repo'
+        ? $t('articleTask.repository')
+        : list.targets.find((t) => t.id === v)?.name || v;
+  if (playbooks && !playbooks.length) return null;
+  const dirty = Boolean(
+    playbooks?.some((p) => valueOf(p.id) !== savedOf(p.id)),
+  );
+  const saving = busy === 'playbooks',
+    disabled = Boolean(busy) || editing;
+  async function submit() {
+    if (!playbooks) return;
+    setError(undefined);
+    const map: Record<string, string> = Object.fromEntries(
+      playbooks
+        .map((p): [string, string] => [p.id, valueOf(p.id)])
+        .filter(([, v]) => v !== FOLLOW),
+    );
+    try {
+      await save(map);
+      setLocal({});
+      toast.success(() => $t('articlePublishing.byPlaybookSaved'));
+    } catch (e) {
+      setError(
+        errorKey(e) === 'articles.stale'
+          ? { key: 'articlePublishing.stale', stale: true }
+          : { key: 'articlePublishing.saveFailed' },
+      );
+    }
+  }
+  return (
+    <Card size='sm'>
+      <CardHeader>
+        <CardTitle>{$t('articlePublishing.byPlaybook')}</CardTitle>
+        <CardDescription>
+          {$t('articlePublishing.byPlaybookDescription')}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className='flex flex-col gap-4'>
+        {loadFailed ? (
+          <Alert variant='destructive'>
+            <AlertDescription>
+              {$t('articlePublishing.playbooksFailed')}{' '}
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={() => {
+                  setLoadFailed(false);
+                  setAttempt((n) => n + 1);
+                }}
+              >
+                {$t('common.retry')}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : !playbooks ? (
+          <div
+            role='status'
+            aria-label={$t('common.loadingLoading')}
+            className='flex flex-col gap-4'
+          >
+            <Skeleton className='h-8 w-full' />
+            <Skeleton className='h-8 w-full' />
+            <Skeleton className='h-8 w-full' />
+          </div>
+        ) : (
+          playbooks.map((p) => (
+            <Field
+              key={p.id}
+              className='grid gap-2 sm:grid-cols-2 sm:items-center'
+            >
+              <FieldLabel htmlFor={`${id}-playbook-${p.id}`}>
+                {p.name}
+              </FieldLabel>
+              {locked(
+                <Select
+                  value={valueOf(p.id)}
+                  disabled={disabled}
+                  onValueChange={(v) =>
+                    setLocal((old) => ({ ...old, [p.id]: String(v) }))
+                  }
+                >
+                  <SelectTrigger
+                    id={`${id}-playbook-${p.id}`}
+                    className='w-full'
+                  >
+                    <SelectValue className='min-w-0'>
+                      {(v: string) => (
+                        <span className='truncate'>{label(v)}</span>
+                      )}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className='w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal'>
+                    {[FOLLOW, ...list.targets.map((t) => t.id), 'repo'].map(
+                      (v) => (
+                        <SelectItem key={v} value={v}>
+                          {label(v)}
+                        </SelectItem>
+                      ),
+                    )}
+                  </SelectContent>
+                </Select>,
+              )}
+            </Field>
+          ))
+        )}
+        {error && (
+          <Alert variant='destructive'>
+            <AlertDescription>
+              {$t(error.key)}{' '}
+              {error.stale && (
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={() =>
+                    void reload().then((next) => {
+                      if (!next) return;
+                      setLocal({});
+                      setError(undefined);
+                    })
+                  }
+                >
+                  {$t('articlePublishing.reload')}
+                </Button>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
+      </CardContent>
+      {playbooks && (
+        <CardFooter className='flex justify-end'>
+          {locked(
+            <Button disabled={disabled || !dirty} onClick={() => void submit()}>
+              {saving && <Spinner data-icon='inline-start' />}
+              {$t('common.save')}
+            </Button>,
+          )}
+        </CardFooter>
+      )}
+    </Card>
   );
 }
 

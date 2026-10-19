@@ -23,6 +23,7 @@ import {
   type ArticleField,
   type ArticleStatus,
 } from '../../../shared/article-publishing.js';
+import { Reveal } from '#components/reach/reveal';
 import { ChangeView } from '../change-view';
 import { Markdown } from '../doc-view';
 import { localeName } from '../article-targets-api';
@@ -35,14 +36,19 @@ import { useTaskDraft } from './draft-store.js';
 import {
   articleContext,
   fieldChange,
+  fieldLabel,
   focusSoon,
+  joinNames,
+  nameOf,
   valueAt,
 } from './article-model';
 
 // The article an article step proposes, reviewed field by field against the version it was written from, and edited
 // in place (a save is a new immutable version). Conflicts from a rebase are listed first, with both versions.
 
-const draftContent = (a: ArticleProposal): Partial<ArticleContent> => ({
+const draftContent = (
+  a: Pick<ArticleProposal, 'draft'>,
+): Partial<ArticleContent> => ({
   slug: a.draft.slug,
   status: a.draft.status,
   locales: a.draft.locales,
@@ -72,6 +78,49 @@ function TargetLine({
         : $t('articleTask.createLine', { 0: name, 1: a.draft.slug || '' })}
     </p>
   );
+}
+
+/**
+ * One line per other target: update or new article, and what that target cannot hold. An update can be compared with
+ * that target's own version, which may differ from the primary's.
+ */
+function AlsoLines({ data, a }: { data: TaskData; a: ArticleProposal }) {
+  return (a.also || []).map((x) => {
+    const name = nameOf(data, x.targetId),
+      base = x.baseKey ? data.articleBases?.[x.baseKey] || null : null;
+    const left = x.skipped.map((p) =>
+      p.includes('.') || p === 'status'
+        ? fieldLabel(p)
+        : localeName(p, getCurrentLocale()),
+    );
+    const draft = draftContent(x);
+    return (
+      <div key={x.targetId} className='flex min-w-0 flex-col gap-1'>
+        <p className='text-sm text-muted-foreground'>
+          {x.articleId
+            ? $t('articleTask.alsoUpdateLine', {
+                0: name,
+                1: x.title || x.slug,
+                2: x.slug,
+              })
+            : $t('articleTask.alsoCreateLine', { 0: name })}
+          {left.length > 0 &&
+            ` · ${$t('articleTask.skipped', { 0: joinNames(left) })}`}
+        </p>
+        {x.articleId && base && x.changes.length > 0 && (
+          <div className='border-l pl-3'>
+            <Reveal label={$t('articleTask.alsoChanges', { 0: name })}>
+              <ChangeView
+                changes={x.changes.map((p) =>
+                  fieldChange(p, valueAt(base, p), valueAt(draft, p)),
+                )}
+              />
+            </Reveal>
+          </div>
+        )}
+      </div>
+    );
+  });
 }
 
 function ConflictList({
@@ -120,12 +169,29 @@ export function ArticleReview({
   return (
     <div className='flex flex-col gap-4'>
       <TargetLine target={target} a={a} base={base} />
+      {!a.changes.length && a.carried?.length ? (
+        <p className='text-sm text-muted-foreground'>
+          {$t('articleTask.alreadyPublished', {
+            0: target?.name || a.targetId,
+          })}
+        </p>
+      ) : null}
+      <AlsoLines data={data} a={a} />
       {a.conflicts?.length ? (
         <ConflictList
           conflicts={a.conflicts}
           targetName={target?.name || a.targetId}
         />
       ) : null}
+      {(a.also || []).map((x) =>
+        x.conflicts?.length ? (
+          <ConflictList
+            key={x.targetId}
+            conflicts={x.conflicts}
+            targetName={nameOf(data, x.targetId)}
+          />
+        ) : null,
+      )}
       {notes && <Markdown content={notes} />}
       {other.length > 0 && (
         <ChangeView

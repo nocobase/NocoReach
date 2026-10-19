@@ -7,13 +7,26 @@ import {
   within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
+import { NocoReachHttpError } from '../../client/lib/nocoreach-api';
 import { ArticleTargetsConnect } from '../../client/pages/article-targets-connect';
 import { articleRequest } from '../../client/pages/article-targets-api';
 import {
   ArticleEditor,
   ArticleReview,
 } from '../../client/pages/task-detail/article-review';
-import { DriftNotice } from '../../client/pages/task-detail/article-release';
+import {
+  DriftNotice,
+  TargetRows,
+} from '../../client/pages/task-detail/article-release';
+import { ArticleStart } from '../../client/pages/task-detail/article-start';
+import {
+  conflictHeading,
+  defaultDelivery,
+  deliveryPlan,
+  type DeliveryChoice,
+} from '../../client/pages/task-detail/article-model';
+import { playbookRequest } from '../../client/pages/playbook-model';
 import {
   TaskDraftProvider,
   TaskDraftScope,
@@ -44,6 +57,22 @@ vi.mock('../../client/pages/article-targets-api', async (original) => ({
   articleRequest: vi.fn(),
   searchArticles: vi.fn(),
 }));
+vi.mock('../../client/pages/playbook-model', async (original) => ({
+  ...(await original<typeof import('../../client/pages/playbook-model')>()),
+  playbookRequest: vi.fn(),
+}));
+const PLAYBOOKS = {
+  revision: 1,
+  playbooks: [
+    { id: 'blog-post', name: 'Blog post', kind: 'build' },
+    { id: 'optimize-page', name: 'Improve a page', kind: 'build' },
+    { id: 'research', name: 'Research', kind: 'plan' },
+  ],
+};
+const staleError = () =>
+  new NocoReachHttpError('stale', 409, {
+    error: { metadata: { key: 'articles.stale' } },
+  });
 vi.mock('../../client/components/reach/confirm', () => ({
   confirmAction: vi.fn(async () => true),
 }));
@@ -52,6 +81,8 @@ beforeEach(() => {
   cleanup();
   setDictionary(english);
   vi.mocked(articleRequest).mockReset();
+  vi.mocked(playbookRequest).mockReset();
+  vi.mocked(playbookRequest).mockResolvedValue(PLAYBOOKS as never);
 });
 afterEach(() => setDictionary(null));
 
@@ -469,4 +500,317 @@ it('marks the default target and makes another one the default from its menu', a
   expect(
     screen.queryByRole('menuitem', { name: 'Make default' }),
   ).not.toBeInTheDocument();
+});
+
+// Several targets and per-playbook targets (design: storage/ui-workflow/article-multi-target/design.md).
+const panelTarget = (id: string, name: string) => ({
+  ...target,
+  id,
+  name,
+  baseUrl: `https://${id}.example.com`,
+  hasSecret: true,
+  fields: { id: 'id', slug: 'slug', version: 'updatedAt', locales: {} },
+});
+
+it('sets a publishing target per playbook: saved choices, Save only after a change, stale saves reload', async () => {
+  const targets = [
+    panelTarget('cms', 'NocoBase CMS'),
+    panelTarget('news', 'News'),
+  ];
+  let saves = 0;
+  vi.mocked(articleRequest).mockImplementation(
+    async (action: string, _p: number, body?: object) => {
+      if (action === 'targets')
+        return {
+          revision: 3,
+          defaultTargetId: 'cms',
+          playbookTargets: { 'blog-post': 'news' },
+          targets,
+        };
+      if (action === 'savePlaybookTargets') {
+        saves++;
+        if (saves === 1) throw staleError();
+        return {
+          revision: 4,
+          defaultTargetId: 'cms',
+          playbookTargets: (body as { playbookTargets: object })
+            .playbookTargets,
+          targets,
+        };
+      }
+      throw new Error(action);
+    },
+  );
+  const user = userEvent.setup();
+  render(
+    <ArticleTargetsConnect
+      projectId={1}
+      onChange={vi.fn()}
+      onSavingChange={vi.fn()}
+    />,
+  );
+  expect(
+    await screen.findByText('Publishing target per playbook'),
+  ).toBeInTheDocument();
+  // Only playbooks with a change step are listed.
+  expect(screen.queryByText('Research')).not.toBeInTheDocument();
+  const blog = await screen.findByRole('combobox', { name: 'Blog post' });
+  const page = screen.getByRole('combobox', { name: 'Improve a page' });
+  expect(blog).toHaveTextContent('News');
+  expect(page).toHaveTextContent('Follow the default target (NocoBase CMS)');
+  const save = screen.getByRole('button', { name: 'Save' });
+  expect(save).toBeDisabled();
+  await user.click(page);
+  await user.click(
+    await screen.findByRole('option', {
+      name: 'Website source repository (PR)',
+    }),
+  );
+  expect(save).toBeEnabled();
+  await user.click(save);
+  expect(
+    await screen.findByText('The settings were changed by someone else.'),
+  ).toBeInTheDocument();
+  expect(articleRequest).toHaveBeenCalledWith(
+    'savePlaybookTargets',
+    1,
+    {
+      revision: 3,
+      playbookTargets: { 'blog-post': 'news', 'optimize-page': 'repo' },
+    },
+    'session-a',
+  );
+  // Reload replaces the local choices with the saved ones.
+  await user.click(screen.getByRole('button', { name: 'Reload' }));
+  await waitFor(() =>
+    expect(page).toHaveTextContent('Follow the default target (NocoBase CMS)'),
+  );
+  expect(
+    screen.queryByText('The settings were changed by someone else.'),
+  ).not.toBeInTheDocument();
+  await user.click(page);
+  await user.click(await screen.findByRole('option', { name: 'News' }));
+  await user.click(save);
+  await waitFor(() => expect(save).toBeDisabled());
+  expect(page).toHaveTextContent('News');
+});
+
+it('hides the per-playbook card without permission and shows a retry when playbooks cannot be read', async () => {
+  vi.mocked(articleRequest).mockImplementation(async (action: string) => {
+    if (action === 'targets')
+      return {
+        revision: 1,
+        defaultTargetId: 'cms',
+        targets: [panelTarget('cms', 'NocoBase CMS')],
+      };
+    throw new Error(action);
+  });
+  vi.mocked(playbookRequest).mockRejectedValueOnce(new Error('down'));
+  const user = userEvent.setup();
+  render(
+    <ArticleTargetsConnect
+      projectId={1}
+      onChange={vi.fn()}
+      onSavingChange={vi.fn()}
+    />,
+  );
+  expect(
+    await screen.findByText("Couldn't load the playbooks."),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Retry' }));
+  expect(
+    await screen.findByRole('combobox', { name: 'Blog post' }),
+  ).toBeInTheDocument();
+  cleanup();
+  authorization.can.mockImplementation(
+    async (...args: unknown[]) =>
+      !JSON.stringify(args).includes('savePlaybookTargets'),
+  );
+  render(
+    <ArticleTargetsConnect
+      projectId={1}
+      onChange={vi.fn()}
+      onSavingChange={vi.fn()}
+    />,
+  );
+  await screen.findByText('NocoBase CMS');
+  await waitFor(() => expect(authorization.can).toHaveBeenCalled());
+  expect(
+    screen.queryByText('Publishing target per playbook'),
+  ).not.toBeInTheDocument();
+  authorization.can.mockImplementation(async () => true);
+});
+
+it('reviews the other targets: update or new, and what each cannot hold', () => {
+  render(
+    <ArticleReview
+      data={
+        {
+          ...data,
+          articleTargets: [target, { ...target, id: 'news', name: 'News' }],
+        } as TaskData
+      }
+      article={{
+        ...proposal,
+        also: [
+          {
+            targetId: 'news',
+            articleId: '70',
+            baseKey: 'b2',
+            baseVersion: 'v',
+            draft: proposal.draft,
+            changes: ['zh.body'],
+            skipped: ['zh.title', 'ja'],
+            slug: 'hello',
+            title: 'Hello (news)',
+          },
+        ],
+      }}
+      notes=''
+    />,
+  );
+  expect(
+    screen.getByText(
+      'Also publishes to News · updates "Hello (news)" (hello) · Without: Chinese · Title, Japanese',
+    ),
+  ).toBeInTheDocument();
+});
+
+it('lists each target of a release with its state and a conflict with its details', async () => {
+  const release = {
+    state: 'publish_conflict',
+    note: '',
+    pages: [],
+    article: {
+      artifactId: 'a',
+      targetId: 'cms',
+      articleId: '7',
+      state: 'published',
+    },
+    also: [
+      {
+        targetId: 'news',
+        articleId: null,
+        slug: 'hello',
+        state: 'publish_conflict',
+        conflict: { reason: 'slug_taken', at: 'x' },
+      },
+      {
+        targetId: 'demo',
+        articleId: null,
+        state: 'publish_failed',
+        error: 'unavailable',
+      },
+    ],
+  } as const;
+  const d = {
+    ...data,
+    articleTargets: [
+      target,
+      { ...target, id: 'news', name: 'News' },
+      { ...target, id: 'demo', name: 'Demo' },
+    ],
+  } as TaskData;
+  render(<TargetRows data={d} r={release as never} />);
+  const rows = screen.getAllByRole('listitem');
+  expect(rows.map((r) => r.textContent)).toEqual([
+    expect.stringMatching(/^NocoBase CMSSaved/),
+    expect.stringMatching(/^NewsConflictAddress already taken/),
+    expect.stringMatching(/^DemoDid not complete/),
+  ]);
+  expect(conflictHeading(d, release as never)).toBe(
+    'The address "hello" is used by another article in News',
+  );
+  await userEvent.click(
+    within(rows[1]).getByRole('button', { name: /Details/ }),
+  );
+  expect(
+    screen.getByText(
+      'After another review, the article already at this address in this target is updated instead.',
+    ),
+  ).toBeInTheDocument();
+});
+
+it('chooses other targets on the start card: the primary leaves them, a limit applies', async () => {
+  const many = ['cms', 'a', 'b', 'c', 'd', 'e'].map((id) => ({
+    ...target,
+    id,
+    name: id.toUpperCase(),
+  }));
+  const d = {
+    ...data,
+    articleTargets: many,
+    work: { article: undefined },
+    agent: { repo: { repo: 'org/site', baseBranch: 'main' } },
+  } as unknown as TaskData;
+  function Harness() {
+    const [choice, setChoice] = useState<DeliveryChoice>({
+      target: 'cms',
+      mode: 'new',
+      also: [],
+    });
+    return (
+      <>
+        <ArticleStart
+          data={d}
+          projectId={1}
+          choice={choice}
+          setChoice={setChoice}
+          busy={false}
+          allowed
+          link={async () => true}
+        />
+        <output>{choice.also.join(',')}</output>
+      </>
+    );
+  }
+  const user = userEvent.setup();
+  render(<Harness />);
+  expect(
+    screen.getByText(
+      'Matched by address (slug): an existing article is updated, otherwise a new one is created.',
+    ),
+  ).toBeInTheDocument();
+  for (const n of ['A', 'B', 'C', 'D'])
+    await user.click(screen.getByRole('checkbox', { name: n }));
+  expect(screen.getByRole('checkbox', { name: 'E' })).toHaveAttribute(
+    'data-disabled',
+  );
+  expect(screen.getByText('Up to 4 more targets')).toBeInTheDocument();
+  await user.selectOptions(screen.getByLabelText('Publish to'), 'a');
+  expect(document.querySelector('output')?.textContent).toBe('b,c,d');
+  expect(screen.queryByRole('checkbox', { name: 'A' })).not.toBeInTheDocument();
+  await user.selectOptions(screen.getByLabelText('Publish to'), 'repo');
+  expect(document.querySelector('output')?.textContent).toBe('');
+  expect(screen.queryByText('Also publish to')).not.toBeInTheDocument();
+});
+
+it('defaults the start card to the playbook target, the repository, or the default target', () => {
+  const d = (entries: Record<string, string>) =>
+    ({
+      ...data,
+      articleTargets: [
+        { ...target, default: true },
+        { ...target, id: 'news', name: 'News' },
+      ],
+      articlePlaybookTargets: entries,
+      work: {},
+    }) as unknown as TaskData;
+  expect(defaultDelivery(d({ 'blog-post': 'news' }), 'blog-post')).toEqual({
+    target: 'news',
+    mode: 'new',
+    also: [],
+  });
+  expect(
+    defaultDelivery(d({ 'optimize-page': 'repo' }), 'optimize-page'),
+  ).toEqual({ target: 'repo', mode: 'new', also: [] });
+  expect(defaultDelivery(d({}), 'optimize-page')).toEqual({
+    target: 'cms',
+    mode: 'existing',
+    also: [],
+  });
+  expect(
+    deliveryPlan(d({}), { target: 'cms', mode: 'new', also: ['news', 'cms'] })
+      .delivery,
+  ).toEqual({ targetId: 'cms', also: ['news'] });
 });

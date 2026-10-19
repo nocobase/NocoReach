@@ -1,16 +1,18 @@
 import { useEffect, useId, useState } from 'react';
 import { $t } from '#i18n';
 import { Button } from '#components/ui/button';
+import { Checkbox } from '#components/ui/checkbox';
 import { Input } from '#components/ui/input';
 import { Label } from '#components/ui/label';
 import { RadioGroup, RadioGroupItem } from '#components/ui/radio-group';
 import type { ArticleSummary } from '../../../shared/article-publishing.js';
 import { errorStatus, searchArticles } from '../article-targets-api';
 import type { TaskData } from '../task-execution-types';
-import { REPO, type DeliveryChoice } from './article-model';
+import { MAX_ALSO, REPO, type DeliveryChoice } from './article-model';
 
 // Where a task's change goes, chosen before it starts (docs/ARTICLE-PUBLISHING.md): a publishing target (an existing
 // article, picked by search and saved on the task at once, or a new article), or the website repository as a PR.
+// Other targets can receive the same article: matched by slug, updated there or created.
 export function ArticleStart({
   data,
   projectId,
@@ -70,6 +72,7 @@ export function ArticleStart({
     };
   }, [searching, target, q, projectId, attempt]);
   const current = result?.key === `${target}:${q}` ? result : undefined;
+  const full = choice.also.length >= MAX_ALSO;
   return (
     <>
       <label className='nr-td-start-field'>
@@ -79,7 +82,15 @@ export function ArticleStart({
           value={choice.target}
           disabled={busy || !allowed}
           onChange={(e) =>
-            setChoice({ target: e.target.value, mode: choice.mode })
+            setChoice({
+              target: e.target.value,
+              mode: choice.mode,
+              // The new primary leaves the others; the repository takes no other target.
+              also:
+                e.target.value === REPO
+                  ? []
+                  : choice.also.filter((x) => x !== e.target.value),
+            })
           }
         >
           {targets.map((t) => (
@@ -93,6 +104,45 @@ export function ArticleStart({
           </option>
         </select>
       </label>
+      {target && targets.length > 1 && (
+        <div className='nr-td-start-field'>
+          <span id={`${id}-also`}>{$t('articleTask.alsoPublishTo')}</span>
+          <div
+            role='group'
+            aria-labelledby={`${id}-also`}
+            className='flex flex-wrap gap-x-4 gap-y-2'
+          >
+            {targets
+              .filter((t) => t.id !== target)
+              .map((t) => {
+                const checked = choice.also.includes(t.id);
+                return (
+                  <div key={t.id} className='flex items-center gap-2'>
+                    <Checkbox
+                      id={`${id}-also-${t.id}`}
+                      checked={checked}
+                      disabled={busy || !allowed || (!checked && full)}
+                      onCheckedChange={(on) =>
+                        setChoice({
+                          ...choice,
+                          also:
+                            on === true
+                              ? [...choice.also, t.id]
+                              : choice.also.filter((x) => x !== t.id),
+                        })
+                      }
+                    />
+                    <Label htmlFor={`${id}-also-${t.id}`}>{t.name}</Label>
+                  </div>
+                );
+              })}
+          </div>
+          <small>{$t('articleTask.alsoHelp')}</small>
+          {full && (
+            <small>{$t('articleTask.alsoLimit', { 0: MAX_ALSO })}</small>
+          )}
+        </div>
+      )}
       {target && (
         <div className='nr-td-start-field'>
           <span id={`${id}-article`}>{$t('articleTask.article')}</span>
@@ -103,7 +153,7 @@ export function ArticleStart({
             disabled={busy || !allowed}
             onValueChange={(v) =>
               setChoice({
-                target: choice.target,
+                ...choice,
                 mode: v as DeliveryChoice['mode'],
               })
             }

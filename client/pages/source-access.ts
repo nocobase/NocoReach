@@ -40,6 +40,7 @@ const managementActions: Record<string, readonly string[]> = {
     'saveTarget',
     'removeTarget',
     'setDefaultTarget',
+    'savePlaybookTargets',
     'testTarget',
   ]),
   keywords,

@@ -8,6 +8,8 @@ export type TargetList = {
   revision: number;
   // Which target new tasks publish to (the first one unless an administrator chose another).
   defaultTargetId?: string;
+  // Where each playbook's new tasks publish (a target id, or 'repo' for a pull request); absent means the default.
+  playbookTargets?: Record<string, string>;
   targets: ArticleTargetView[];
 };
 export type TestResult =
