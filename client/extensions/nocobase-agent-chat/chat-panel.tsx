@@ -27,7 +27,7 @@ import { useMediaQuery } from '#hooks/use-media-query';
 
 // Keep conversations, Markdown and run history outside the application's startup graph.
 const PanelBody = lazy(() =>
-  prepareBusinessLocale().then(() => import('./panel-body.js')),
+  prepareBusinessLocale('workspace').then(() => import('./panel-body.js')),
 );
 
 /** The chat panel; nothing while `ChatProvider` says the panel is not available (signed out, no provider). */

@@ -8,6 +8,7 @@ import {
 } from 'react';
 import type { I18nRuntime } from '@nocobase/i18n';
 import { messages, loadBusinessMessages } from './message-catalog.js';
+import type { MessageScope } from '../../shared/startup-pages.js';
 import { recognizeSystemMessage } from '../../shared/i18n/recognize.js';
 import { readStoredLocale } from '@nocobase/app-client';
 import { nocobaseClient } from '#lib/nocoreach-api';
@@ -24,11 +25,13 @@ let shortPatterns: Pattern[] | null = null;
 const cache = new Map<string, string>();
 const CJK = /[一-鿿]/;
 let connectedRuntime: I18nRuntime | undefined;
-const preparedRuntimes = new WeakSet<I18nRuntime>();
-let businessLocalePromise: Promise<void> | undefined;
+const preparedRuntimes = new WeakMap<I18nRuntime, number>();
+const businessLocalePromises: Partial<Record<MessageScope, Promise<void>>> = {};
+let appliedRevision = messages.revision;
 
 function attachBusinessMessages(runtime: I18nRuntime): void {
-  if (!messages.complete || preparedRuntimes.has(runtime)) return;
+  if (!messages.revision || preparedRuntimes.get(runtime) === messages.revision)
+    return;
   // The official instance continues to own namespace fallback and language changes.
   runtime.i18n.addResourceBundle(
     'zh-CN',
@@ -44,23 +47,28 @@ function attachBusinessMessages(runtime: I18nRuntime): void {
     true,
     false,
   );
-  preparedRuntimes.add(runtime);
+  preparedRuntimes.set(runtime, messages.revision);
 }
 
-export function prepareBusinessLocale(): Promise<void> {
-  const changed =
-    !messages.complete ||
-    (dictionary !== null && dictionary !== messages.english);
-  businessLocalePromise ??= loadBusinessMessages()
+export function prepareBusinessLocale(
+  scope: MessageScope = 'all',
+): Promise<void> {
+  businessLocalePromises[scope] ??= loadBusinessMessages(scope)
     .then(() => {
       if (connectedRuntime) attachBusinessMessages(connectedRuntime);
-      if (changed) setDictionary(isChinese() ? null : messages.english);
+      if (
+        appliedRevision !== messages.revision ||
+        (dictionary !== null && dictionary !== messages.english)
+      ) {
+        appliedRevision = messages.revision;
+        setDictionary(isChinese() ? null : messages.english);
+      }
     })
     .catch((error: unknown) => {
-      businessLocalePromise = undefined;
+      delete businessLocalePromises[scope];
       throw error;
     });
-  return businessLocalePromise;
+  return businessLocalePromises[scope];
 }
 
 export function isChinese(): boolean {
@@ -70,7 +78,7 @@ export function isChinese(): boolean {
 const listeners = new Set<() => void>();
 export const getCurrentLocale = (): string =>
   dictionary === null ? 'zh-CN' : 'en-US';
-const getLocaleSnapshot = () => `${getCurrentLocale()}:${messages.complete}`;
+const getLocaleSnapshot = () => `${getCurrentLocale()}:${messages.revision}`;
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
   return () => {

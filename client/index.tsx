@@ -13,6 +13,7 @@ import { AppStartupError } from './startup';
 import './styles.css';
 import { initializeTheme } from './theme/theme-preferences';
 import { themePresets } from './theme/theme-presets';
+import { preloadInitialPageResources } from './routing/initial-page-resources.js';
 
 const container = document.getElementById('root');
 
@@ -28,6 +29,7 @@ let app: ClientApplication | undefined;
 let applicationStarted = false;
 
 async function start(): Promise<void> {
+  let stopPreload: (() => void) | undefined;
   try {
     // Restore preferences at normal client startup; first-paint theme matching is deferred.
     initializeTheme(
@@ -41,8 +43,12 @@ async function start(): Promise<void> {
     await app.start();
     applicationStarted = true;
 
+    // Let framework/bootstrap resources finish first, then warm the selected
+    // page alongside session preparation without evaluating it or reading data.
+    stopPreload = preloadInitialPageResources(resolveAppBase());
     root.render(<AppClientRoot app={app} />);
   } catch (startupError) {
+    stopPreload?.();
     let error: unknown = startupError;
 
     if (app && applicationStarted) {

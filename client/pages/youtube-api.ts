@@ -1,6 +1,6 @@
 import { youtubeSystemErrors } from '#lib/youtube-errors';
 import { $t } from '#i18n';
-import { systemMessageKey } from '../../shared/i18n/messages';
+import { systemMessageKey } from '../i18n/message-catalog';
 import { transportErrorMessage } from '#lib/transport-error';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 export interface YouTubeVideo {

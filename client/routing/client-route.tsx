@@ -13,6 +13,7 @@ import { Button } from '#components/ui/button';
 
 import { cachedRouteModule, loadRouteModule } from './route-modules.js';
 import { NavigationData } from './navigation-data.js';
+import { pageMessageScope } from '../../shared/startup-pages.js';
 
 export interface ClientRouteProps {
   readonly route: AppClientRegisteredRoute;
@@ -20,6 +21,8 @@ export interface ClientRouteProps {
 
 export function ClientRoute({ route }: ClientRouteProps): ReactElement {
   const { authz, componentLoader } = route;
+  const messageScope =
+    route.packageName === 'nocoreach' ? pageMessageScope(route.name) : 'all';
   const checkAccess = authz !== 'skip';
   const { can: allowed, isPending: accessLoading } = useCan(
     authz === 'skip' ? undefined : authz,
@@ -32,7 +35,7 @@ export function ClientRoute({ route }: ClientRouteProps): ReactElement {
     if (checkAccess && (accessLoading || !allowed)) return;
     let active = true;
 
-    loadRouteModule(componentLoader!).then(
+    loadRouteModule(componentLoader!, messageScope).then(
       (module) => {
         if (active) {
           setComponentModule(module);
@@ -49,7 +52,7 @@ export function ClientRoute({ route }: ClientRouteProps): ReactElement {
     return () => {
       active = false;
     };
-  }, [allowed, accessLoading, checkAccess, componentLoader]);
+  }, [allowed, accessLoading, checkAccess, componentLoader, messageScope]);
 
   if (loadError) {
     return <ClientPageError route={route} />;

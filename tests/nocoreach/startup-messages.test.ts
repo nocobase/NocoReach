@@ -7,6 +7,75 @@ import aliases from '../../shared/i18n/legacy-keys.json';
 afterEach(() => vi.resetModules());
 
 describe('startup message boundary', () => {
+  it('keeps browser playbook identities equal to the server after loading only workspace copy', async () => {
+    vi.resetModules();
+    const { loadBusinessMessages } =
+      await import('../../client/i18n/message-catalog.js');
+    await loadBusinessMessages('workspace');
+    const client = await import('../../client/pages/playbook-catalog.js');
+    const server = await import('../../shared/playbook-catalog.js');
+    expect(client.SYSTEM_PLAYBOOKS).toEqual(server.SYSTEM_PLAYBOOKS);
+    for (const playbook of server.SYSTEM_PLAYBOOKS)
+      expect(client.stagesFor(playbook)).toEqual(server.stagesFor(playbook));
+  });
+
+  it('loads workspace copy with every historical alias, then fills other pages without changing existing values', async () => {
+    vi.resetModules();
+    const { messages, loadBusinessMessages } =
+      await import('../../client/i18n/message-catalog.js');
+    const first = loadBusinessMessages('workspace');
+    expect(loadBusinessMessages('workspace')).toBe(first);
+    await first;
+    expect(messages.complete).toBe(false);
+    expect(Object.keys(messages.chinese).length).toBeLessThan(6000);
+    expect(messages.chinese['strategy.insights']).toBe(
+      chinese['strategy.insights'],
+    );
+    expect(messages.chinese['optimizationWork.statuses']).toBe(
+      chinese['optimizationWork.statuses'],
+    );
+    expect(messages.legacy).toEqual(aliases);
+    const templates = (catalog: Record<string, string>) =>
+      Object.entries(catalog).filter(([, value]) => /\{\d+\}/.test(value));
+    expect(templates(messages.chinese)).toEqual(templates(chinese));
+    expect(messages.english['mock.externalWritesDisabled']).toBe(
+      english['mock.externalWritesDisabled'],
+    );
+    expect(messages.english['publicSources.singleReadExceeded']).toBe(
+      english['publicSources.singleReadExceeded'],
+    );
+    for (const [key, value] of Object.entries(messages.chinese)) {
+      expect(value).toBe(chinese[key as keyof typeof chinese]);
+      expect(messages.english[key]).toBe(english[key as keyof typeof english]);
+    }
+    await loadBusinessMessages();
+    expect(messages.complete).toBe(true);
+    expect(templates(messages.chinese)).toEqual(templates(chinese));
+    expect(messages.chinese).toEqual(chinese);
+    expect(messages.english).toEqual(english);
+    expect(messages.legacy).toEqual(aliases);
+  });
+
+  it('prepares only workspace resources before evaluating the three main menu pages', async () => {
+    vi.resetModules();
+    const adapter = await import('../../client/i18n/index.js');
+    const { loadRouteModule } =
+      await import('../../client/routing/route-modules.js');
+    const { messages } = await import('../../client/i18n/message-catalog.js');
+    const loader = vi.fn(async () => {
+      expect(messages.complete).toBe(false);
+      expect(adapter.$t('strategy.insights')).toBe(
+        chinese['strategy.insights'],
+      );
+      return { default: () => null };
+    });
+    await loadRouteModule(loader, 'workspace');
+    expect(loader).toHaveBeenCalledOnce();
+    await adapter.prepareBusinessLocale();
+    expect(messages.complete).toBe(true);
+    expect(adapter.$t('strategy.insights')).toBe(chinese['strategy.insights']);
+  });
+
   it('keeps shell translations exact while leaving business catalogs for the route loader', async () => {
     vi.resetModules();
     const { messages, loadBusinessMessages } =

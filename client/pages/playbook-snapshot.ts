@@ -1,5 +1,5 @@
 import { $legacyText } from '#i18n';
-import { SYSTEM_PLAYBOOKS, stagesFor } from '../../shared/playbook-catalog';
+import { SYSTEM_PLAYBOOKS, stagesFor } from './playbook-catalog';
 import type { FlowSnapshot, PlaybookSnapshot } from './playbook-model';
 
 type Origin = { id: string; system?: boolean; edited?: boolean };

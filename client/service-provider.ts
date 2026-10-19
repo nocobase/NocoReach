@@ -1,4 +1,8 @@
-import { ClientApplication, toasterToken } from '@nocobase/app-client';
+import {
+  ClientApplication,
+  resolveAppBase,
+  toasterToken,
+} from '@nocobase/app-client';
 import type { ClientServiceProviderConstructor } from '@nocobase/app-client/plugins';
 import { ServiceProvider } from '@nocobase/service-provider';
 
@@ -6,6 +10,7 @@ import { connectLocale, prepareBusinessLocale } from './i18n/index.js';
 import { reloadOnStaleBuild } from './lib/stale-build.js';
 import { connectToaster } from './lib/toast.js';
 import { createToaster } from './lib/toaster.js';
+import { initialPageName, pageMessageScope } from '../shared/startup-pages.js';
 
 export class DefaultClientServiceProvider extends ServiceProvider<ClientApplication> {
   public readonly name: string = 'nocoreach/client';
@@ -17,7 +22,10 @@ export class DefaultClientServiceProvider extends ServiceProvider<ClientApplicat
     this.disconnectLocale = connectLocale(this.app.runtime.i18n);
     // Public copy loads alongside identity preparation, without delaying app.start().
     // Route and chat loaders await it and own retry/error presentation if it fails.
-    void prepareBusinessLocale().catch(() => undefined);
+    const name = initialPageName(resolveAppBase(), window.location.pathname);
+    void prepareBusinessLocale(pageMessageScope(name ?? '')).catch(
+      () => undefined,
+    );
     // A tab left open across a deployment reloads into the new build instead of failing to load a page.
     this.stopStaleBuildReload = reloadOnStaleBuild();
     // What plugins and pages report through useToaster() reaches the Toaster in client/react-providers.ts from here.

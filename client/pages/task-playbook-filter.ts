@@ -1,11 +1,9 @@
-import english from '../../shared/i18n/en.json';
-import { systemMessageKey } from '../../shared/i18n/messages';
+import { messages, systemMessageKey } from '../i18n/message-catalog';
 import type { FlowSnapshot, PlaybookSnapshot } from './playbook-model';
 import { localizeWorkSnapshots } from './playbook-snapshot';
 
 type SnapshotWork = { flow?: FlowSnapshot; playbook?: PlaybookSnapshot };
 type Option = { name: string; label: string; value: string };
-const englishNames: Readonly<Record<string, string>> = english;
 
 // Keep the existing name-based facet: equal raw names span IDs and versions.
 // Labels may differ within that group because only system copy is translated.
@@ -60,7 +58,7 @@ function matchesName(raw: string, name: string, legacy: boolean): boolean {
     raw === name ||
     (legacy &&
       systemMessageKey(raw) !== undefined &&
-      englishNames[systemMessageKey(raw)!] === name)
+      messages.english[systemMessageKey(raw)!] === name)
   );
 }
 

@@ -34,7 +34,7 @@ it('builds shell copy separately and keeps the business catalog behind a dynamic
   const result = await compile(`
     import { english } from 'virtual:nocoreach-startup-messages';
     globalThis.shellTitle = english['common.currentProject'];
-    globalThis.openPage = () => import(${JSON.stringify(dictionary)});
+    globalThis.openPage = () => import('virtual:nocoreach-business-messages/workspace');
   `);
   if (Array.isArray(result) || !('output' in result))
     throw new Error('Unexpected build result');
@@ -53,4 +53,20 @@ it('rejects a static startup import of the full business dictionary', async () =
       `import english from ${JSON.stringify(dictionary)}; globalThis.copy = english;`,
     ),
   ).rejects.toThrow('Startup imports a deferred business resource');
+});
+
+it('rejects statically importing a generated business catalog into the startup entry', async () => {
+  await expect(
+    compile(
+      `import copy from 'virtual:nocoreach-business-messages/workspace'; globalThis.copy = copy;`,
+    ),
+  ).rejects.toThrow('Startup imports a deferred business resource');
+});
+
+it('rejects a full dictionary hidden behind a lazy business page', async () => {
+  await expect(
+    compile(
+      `globalThis.openPage = () => import(${JSON.stringify(dictionary)});`,
+    ),
+  ).rejects.toThrow('Browser imports a complete business dictionary');
 });

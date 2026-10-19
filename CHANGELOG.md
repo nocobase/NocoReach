@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Initial route resources
+
+- Preload the current Insights, Opportunities or Tasks URL's public code during application startup without evaluating pages or moving business reads ahead of authentication and authorization.
+- Remove hidden full-dictionary imports from browser playbook and collector helpers, preserve canonical snapshot identities, and reject complete dictionaries anywhere in the browser build.
+- Generate a shared workspace translation catalog from source dependencies and preserve every historical alias while removing duplicated alias text from delivered resources. Load remaining page copy on demand, with both languages and application overrides preserved.
+
 ## Unreleased — Application startup
 
 - Keep shell translations in the startup entry and load complete business catalogs alongside session preparation. Prepare resources before evaluating pages, preserve language fallback and historical messages, and retry failed resource loads.

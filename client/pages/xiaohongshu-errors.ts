@@ -1,4 +1,4 @@
-import { systemMessageKey } from '../../shared/i18n/messages';
+import { systemMessageKey } from '../i18n/message-catalog';
 import { $legacyText, $t } from '#i18n';
 import { transportErrorMessage } from '#lib/transport-error';
 

@@ -54,6 +54,7 @@ const test = base.extend<{ site: Site }>({
         `
         import { scheduleRoutePrefetch } from ${JSON.stringify(path.join(app, 'client/routing/route-prefetch.ts'))};
         import { loadRouteModule } from ${JSON.stringify(path.join(app, 'client/routing/route-modules.ts'))};
+        import { preloadInitialPageResources } from ${JSON.stringify(path.join(app, 'client/routing/initial-page-resources.ts'))};
         import { reloadOnStaleBuild } from ${JSON.stringify(path.join(app, 'client/lib/stale-build.ts'))};
         import { createElement } from ${JSON.stringify(fileURLToPath(import.meta.resolve('react')))};
         import { createRoot } from ${JSON.stringify(fileURLToPath(import.meta.resolve('react-dom/client')))};
@@ -62,6 +63,7 @@ const test = base.extend<{ site: Site }>({
         import { AppSidebarProvider } from ${JSON.stringify(path.join(app, 'client/layouts/components/app-sidebar.tsx'))};
         import { NavigationMenu } from ${JSON.stringify(path.join(app, 'client/layouts/components/navigation-menu.tsx'))};
         reloadOnStaleBuild();
+        if (new URLSearchParams(location.search).has('initial')) preloadInitialPageResources('/nested');
         window.preloadErrors = 0;
         window.hintErrors = 0;
         window.hintLoads = [];
@@ -181,6 +183,45 @@ const test = base.extend<{ site: Site }>({
       await rm(root, { recursive: true, force: true });
     }
   },
+});
+
+test('downloads the initial URL assets before page execution and reuses them on authorized opening', async ({
+  page,
+  site,
+}) => {
+  await page.goto(site.url + '?initial');
+  await page.waitForFunction((files) => {
+    const resources = performance.getEntriesByType('resource');
+    return files.every((file) =>
+      resources.some((entry) =>
+        new URL(entry.name).pathname.endsWith('/assets/' + file),
+      ),
+    );
+  }, site.resources);
+  expect(
+    await page.evaluate(
+      () => (globalThis as { pageExecuted?: boolean }).pageExecuted,
+    ),
+  ).toBeUndefined();
+  expect(
+    await page.evaluate(
+      () => (globalThis as { gateExecuted?: boolean }).gateExecuted,
+    ),
+  ).toBeUndefined();
+  await expect(page.locator('.page')).not.toHaveCSS('color', 'rgb(255, 0, 0)');
+  const counts = () =>
+    site.resources.map(
+      (file) =>
+        site.requests.filter((url) =>
+          url.split('?')[0].endsWith('/assets/' + file),
+        ).length,
+    );
+  const before = counts();
+  await page.locator('#open').click();
+  await expect(page.locator('#open')).toHaveText('Page ready');
+  await expect(page.locator('.page')).toHaveCSS('color', 'rgb(255, 0, 0)');
+  expect(counts()).toEqual(before);
+  expect(site.requests.some((url) => url.includes('/api/'))).toBe(false);
 });
 
 // A deliberately stalled request can lower Chromium's network-quality estimate
