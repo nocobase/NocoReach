@@ -30,6 +30,8 @@ import {
   selectedNavigationId,
 } from '../routing/route-navigation.js';
 
+import { useRoutePrefetch } from '../routing/route-prefetch.js';
+
 export interface AppLayoutProps {
   readonly routes: readonly AppClientRegisteredRoute[];
 }
@@ -40,6 +42,7 @@ export function AppLayout({ routes }: AppLayoutProps): ReactElement {
 
   const { t } = useTranslation();
   const { items: menuItems, denied } = useRouteNavigation(routes);
+  useRoutePrefetch(menuItems);
   const selectedKey = selectedNavigationId(
     routes,
     useLocation().pathname,

@@ -11,6 +11,8 @@ import { ErrorBoundary } from 'react-error-boundary';
 import { Loading } from '#components/loading';
 import { Button } from '#components/ui/button';
 
+import { cachedRouteModule, loadRouteModule } from './route-modules.js';
+
 export interface ClientRouteProps {
   readonly route: AppClientRegisteredRoute;
 }
@@ -29,7 +31,7 @@ export function ClientRoute({ route }: ClientRouteProps): ReactElement {
     if (checkAccess && !allowed) return;
     let active = true;
 
-    componentLoader!().then(
+    loadRouteModule(componentLoader!).then(
       (module) => {
         if (active) {
           setComponentModule(module);
@@ -55,11 +57,12 @@ export function ClientRoute({ route }: ClientRouteProps): ReactElement {
   if (checkAccess && accessLoading) return <ClientPageLoading />;
   if (checkAccess && !allowed) return <ClientPageDenied route={route} />;
 
-  if (!componentModule) {
+  const readyModule = cachedRouteModule(componentLoader!) ?? componentModule;
+  if (!readyModule) {
     return <ClientPageLoading />;
   }
 
-  const Component = componentModule.default;
+  const Component = readyModule.default;
 
   return (
     <ErrorBoundary fallback={<ClientPageError route={route} />}>

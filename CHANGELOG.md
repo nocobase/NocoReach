@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Background route loading
+
+- Warm permitted menu page code sequentially during idle time and reuse it on navigation, reducing route-loading waits. Pause on slow/data-saving connections and hidden tabs, preserve page authorization, and avoid automatic reloads after speculative import failures.
+
+
 ## Unreleased — Article publishing
 
 - Preserve publication status when manually editing an article draft, and reject targets beyond the ten-target limit before saving configuration.
