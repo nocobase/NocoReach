@@ -495,3 +495,44 @@ test('a conflict reloads the task so the page offers what the server holds now',
   expect(await screen.findByText('由 Research Claude 来做')).toBeVisible();
   expect(screen.getByText(/原来选的 Agent 已不可用/)).toBeVisible();
 });
+
+test('a failed run says why in plain words and what to do, from the official reason', () => {
+  const data = failedWithRemovedAgent();
+  data.work.agentId = 'codex';
+  data.agent!.agentId = 'codex';
+  data.runs = [
+    { ...data.runs[0], id: 'run-2', createdAt: '2026-10-19T08:49:00Z' },
+    { ...data.runs[0], id: 'run-1', createdAt: '2026-10-18T08:49:00Z' },
+  ];
+  data.execution = {
+    runId: 'run-2',
+    run: { failureReason: 'leaseExpired' },
+    events: [],
+    truncated: false,
+    canInspect: true,
+  };
+  mount(data);
+  expect(screen.getByText(/运行 Agent 的电脑中途断开了连接/)).toBeVisible();
+  expect(screen.getByText(/确认那台电脑开着、联网/)).toBeVisible();
+  expect(screen.getByText(/已经连续 2 次没做完/)).toBeVisible();
+  expect(document.body).not.toHaveTextContent('agent_failed');
+  expect(document.body).not.toHaveTextContent('leaseExpired');
+});
+
+test("without an official reason, the Agent's own message or a plain fallback is shown", () => {
+  const data = failedWithRemovedAgent();
+  data.work.agentId = 'codex';
+  data.agent!.agentId = 'codex';
+  data.runs[0].errorDetail = '仓库里找不到要改的页面';
+  data.runs[0].error = 'page_missing';
+  const view = mount(data);
+  expect(screen.getByText('Agent 说：仓库里找不到要改的页面')).toBeVisible();
+  view.unmount();
+  data.runs[0].errorDetail = 'agent_failed';
+  data.runs[0].error = 'agent_failed';
+  mount(data);
+  expect(
+    screen.getByText('这次运行没有完成，也没有留下具体原因。'),
+  ).toBeVisible();
+  expect(screen.queryByText(/已经连续/)).toBeNull();
+});

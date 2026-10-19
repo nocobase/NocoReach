@@ -50,7 +50,21 @@ type Update=(command:string,body?:object)=>Promise<Data|undefined>;
 type Member={id:string;name:string};
 type Run=Data['runs'][number];
 // Why a run stopped, in the owner's words; the raw error and the transcript stay in Technical details.
-const getRunErrors = (): Record<string,string> => ({interrupted_or_unknown:$t('taskDetail.runInterruptedResultUnknown'),context_changed:$t('taskDetail.taskChangedBeforeRun'),cancelled:$t('taskDetail.stoppedCheckChangesAlreadyPushed'),no_changes:$t('taskDetail.agentNotChangeFiles'),no_repo:$t('taskDetail.noWebsiteSourceRepositoryConnected'),revert_failed:$t('taskDetail.revertPrNotOpened'),agent_failed:$t('taskDetail.noUsableResult'),invalid_agent_result:$t('taskDetail.noUsableResult'),replaced_by_manual:$t('taskDetail.switchedDoing')});
+const getRunErrors = (): Record<string,string> => ({interrupted_or_unknown:$t('taskDetail.runInterruptedResultUnknown'),context_changed:$t('taskDetail.taskChangedBeforeRun'),cancelled:$t('taskDetail.stoppedCheckChangesAlreadyPushed'),no_changes:$t('taskDetail.agentNotChangeFiles'),no_repo:$t('taskDetail.noWebsiteSourceRepositoryConnected'),revert_failed:$t('taskDetail.revertPrNotOpened'),replaced_by_manual:$t('taskDetail.switchedDoing')});
+// The official run's failure reasons, grouped by what the owner can do about each (2026-10-19 user report: runs kept
+// failing as "agent_failed" with no reason, so retrying was all they could do).
+const FAILURE_GROUP:Record<string,string>={runnerOffline:'disconnected',leaseExpired:'disconnected',startTimeout:'disconnected',runnerUpgrade:'disconnected',toolAuth:'toolLogin',toolQuota:'quota',toolRateLimit:'quota',toolNetwork:'network',prepareNetwork:'network',idleTimeout:'stuck',stepLimit:'stuck',toolProcess:'stuck',contextOverflow:'tooLong',modelUnavailable:'model',queuedExpired:'notPicked',policyRefused:'notPicked',setupFailed:'setup',cliUnavailable:'setup',checkoutFailed:'setup',repoAccessDenied:'setup',repoAccessUnavailable:'setup',workspaceBusy:'setup',runnerDiskFull:'setup'};
+const getFailureCopy=():Record<string,[string,string]>=>({disconnected:[$t('taskDetail.failureDisconnected'),$t('taskDetail.failureDisconnectedNext')],toolLogin:[$t('taskDetail.failureToolLogin'),$t('taskDetail.failureToolLoginNext')],quota:[$t('taskDetail.failureQuota'),$t('taskDetail.failureQuotaNext')],network:[$t('taskDetail.failureNetwork'),$t('taskDetail.failureNetworkNext')],stuck:[$t('taskDetail.failureStuck'),$t('taskDetail.failureStuckNext')],tooLong:[$t('taskDetail.failureTooLong'),$t('taskDetail.failureTooLongNext')],model:[$t('taskDetail.failureModel'),$t('taskDetail.failureModelNext')],notPicked:[$t('taskDetail.failureNotPicked'),$t('taskDetail.failureNotPickedNext')],setup:[$t('taskDetail.failureSetup'),$t('taskDetail.failureSetupNext')],invalid:[$t('taskDetail.failureInvalidResult'),$t('taskDetail.failureInvalidResultNext')]});
+// What went wrong with `run` and what to do: the official reason (the task's latest run arrives with its execution),
+// then NocoReach's own codes, then whatever the Agent itself said; never a bare code.
+function failureOf(run:Run,data:Data):[string,string]{
+ const copy=getFailureCopy(),reason=data.execution?.runId===run.id?data.execution.run.failureReason:undefined,group=reason?FAILURE_GROUP[reason]:undefined;
+ if(group)return copy[group];
+ if(run.error==='invalid_agent_result')return copy.invalid;
+ const known=getRunErrors()[run.error||''];if(known)return [known,$t('taskDetail.failureUnknownNext')];
+ const said=run.errorDetail&&run.errorDetail!==run.error&&!/^[a-z_]+$/.test(run.errorDetail)?$legacyText(run.errorDetail):'';
+ return said?[$t('taskDetail.failureAgentSaid',{0:said}),$t('taskDetail.failureUnknownNext')]:[$t('taskDetail.failureUnknown'),$t('taskDetail.failureUnknownNext')];
+}
 const call=<T,>(projectId:number,taskId:string,action:string,body:object={})=>api.action<T>('nrTaskWork',action,{method:'POST',body:{projectId:String(projectId),taskId,...body},unwrap:'data'});
 // Tasks run by a playbook (new tasks, and tasks started with a flow) use this page; older step-plan tasks keep theirs.
 export function isPlaybookTask(d:Data){const w=d.work;return Boolean(w.playbook||w.flow)||(w.stage==='plan'&&!w.plan&&!w.simple);}
@@ -375,7 +389,14 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   if(!canRun)return <StageCard tone="error" icon={<AlertCircle/>} title={displayStageName(stage)} sub={<>{$t('taskDetail.noWebsiteSourceRepositoryConnectedMessage')}<Button variant="link" onClick={()=>navigate('/connections?source=repo')}>{$t('common.goDataSources')}</Button></>} actions={actions}>{body}</StageCard>;
   if(cur?.status==='queued')return <StageCard tone="live" label={$t('taskDetail.currentProgress')} icon={<Bot/>} title={$t('taskDetail.agentWorking',{0:stage.name})} sub={agent?.online?$t('taskDetail.handedOffAgentStartingNow'):<>{$t('taskDetail.agentComputerOffline')}<Button variant="link" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>} actions={actions}>{body}</StageCard>;
   if(cur?.status==='running')return <StageCard tone="live" label={$t('taskDetail.currentProgress')} icon={<Loader2 className="animate-spin motion-reduce:animate-none"/>} title={<>{$t('taskDetail.agentWorking',{0:stage.name})}{cur.cancelRequested?$t('taskDetail.stoppingAside'):''}</>} sub={$t('taskDetail.agentWorkingFor',{0:since(cur.createdAt)})} actions={actions}>{body}</StageCard>;
-  if(cur?.status==='failed')return <StageCard tone="error" icon={<AlertCircle/>} title={$t('taskDetail.agentDidNotFinish')} sub={$t('taskDetail.agentDidNotFinishHint',{0:getRunErrors()[cur.error||'']||$t('taskDetail.noUsableResult')})} actions={actions}>{body}{techLink}</StageCard>;
+  if(cur?.status==='failed'){
+   const [why,next]=failureOf(cur,data),stageRuns=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
+   const streak=stageRuns.findIndex(r=>r.status!=='failed'),failures=streak<0?stageRuns.length:streak;
+   return <StageCard tone="error" icon={<AlertCircle/>} title={$t('taskDetail.agentDidNotFinish')} actions={actions}>
+    <dl className="grid gap-x-2 gap-y-1 text-sm sm:grid-cols-[auto_1fr]"><dt className="text-muted-foreground">{$t('taskDetail.failureWhy')}</dt><dd>{why}</dd><dt className="text-muted-foreground">{$t('taskDetail.failureNext')}</dt><dd>{next}</dd></dl>
+    {failures>=2&&<p className="text-sm text-nr-ink-red">{$t('taskDetail.failureStreak',{0:failures})}</p>}
+    {body}{techLink}</StageCard>;
+  }
   return <StageCard icon={<Bot/>} title={displayStageName(stage)} sub={$t('taskDetail.stepDoneAgent',{0:stage.instruction})} actions={actions}>{body}</StageCard>;
  }
  return <StageCard icon={<Rocket/>} title={$t('common.confirmPublish')} sub={$t('taskDetail.prReviewApprovedConfirmAfter')}
