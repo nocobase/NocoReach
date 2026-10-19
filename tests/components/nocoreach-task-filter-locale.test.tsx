@@ -21,6 +21,7 @@ import {
 } from '../../client/i18n';
 import locales from '../../client/locales';
 import OptimizationWork from '../../client/pages/optimization-work';
+import { WorkspaceCacheProvider } from '../../client/pages/workspace-cache';
 import type { Work } from '../../client/pages/task-execution-types';
 import {
   playbookFilterOptions,
@@ -39,6 +40,15 @@ type Task = {
 const { fixture, taskRecords } = vi.hoisted(() => ({
   fixture: { tasks: [] as Task[] },
   taskRecords: vi.fn<() => Promise<Task[]>>(),
+}));
+vi.mock('@nocobase/app-plugin-authentication/client', () => ({
+  useAuthentication: () => ({
+    session: { user: { id: 'test' }, session: { id: 'test-session' } },
+    isPending: false,
+  }),
+}));
+vi.mock('@nocobase/app-plugin-authorization/client', () => ({
+  useAuthorizationRevision: () => 0,
 }));
 vi.mock('../../client/pages/me', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../client/pages/me')>()),
@@ -162,10 +172,12 @@ async function setup(
   render(
     <I18nProvider runtime={runtime}>
       <MemoryRouter initialEntries={[`/actions${query}`]}>
-        <Suspense fallback={<p>Transition pending</p>}>
-          <Page />
-          <SearchGate />
-        </Suspense>
+        <WorkspaceCacheProvider>
+          <Suspense fallback={<p>Transition pending</p>}>
+            <Page />
+            <SearchGate />
+          </Suspense>
+        </WorkspaceCacheProvider>
       </MemoryRouter>
     </I18nProvider>,
   );

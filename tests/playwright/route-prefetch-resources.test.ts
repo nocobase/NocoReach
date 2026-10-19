@@ -179,6 +179,16 @@ const test = base.extend<{ site: Site }>({
   },
 });
 
+// A deliberately stalled request can lower Chromium's network-quality estimate
+// for later contexts. Keep this cache-reuse fixture on a stable fast connection;
+// slow/data-saving guards are covered by the scheduler's unit tests.
+test.use({
+  launchOptions: {
+    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
+    args: ['--force-effective-connection-type=4G'],
+  },
+});
+
 test('failed or stalled background resources never reload the page or hold up unrelated navigation', async ({
   page,
   site,

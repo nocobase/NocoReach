@@ -165,7 +165,7 @@ export function scheduleRoutePrefetch(
     };
     const finish = () => {
       cleanup();
-      schedule(150);
+      schedule(activeIntent ? 0 : 150);
     };
     const timeout = setTimeout(finish, RESOURCE_TIMEOUT_MS);
     link.onload = () => {

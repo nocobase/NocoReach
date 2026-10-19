@@ -280,13 +280,17 @@ function SessionCache({
   const [cache] = useState(() => new WorkspaceCache(owner));
   useEffect(() => {
     cache.activate();
-    const refreshInsights = () =>
-      cache.invalidate((key) => key.startsWith('insights-overview:'), {
-        keepValue: true,
-      });
-    window.addEventListener('nocoreach:badges', refreshInsights);
+    const refreshBusiness = () =>
+      cache.invalidate(
+        (key) =>
+          ['insights-overview:', 'strategy-state:', 'project-tasks:'].some(
+            (prefix) => key.startsWith(prefix),
+          ),
+        { keepValue: true },
+      );
+    window.addEventListener('nocoreach:badges', refreshBusiness);
     return () => {
-      window.removeEventListener('nocoreach:badges', refreshInsights);
+      window.removeEventListener('nocoreach:badges', refreshBusiness);
       cache.dispose();
     };
   }, [cache]);

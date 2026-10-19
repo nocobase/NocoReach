@@ -10,7 +10,9 @@ import {cn} from '#lib/utils';
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
 import {PageContainer,PageHeader} from '#components/reach/page';
 import {Button} from '#components/ui/button';
-import {taskRecords,useProject} from './reach-data';
+import {useProject} from './reach-data';
+import {tasksQuery,useWorkspaceQuery} from './workspace-queries';
+import {useWorkspaceCache} from './workspace-cache';
 import {getWorkColumns,workState,isClosed,closeCommand,getCloseConfirm,type BoardState,type Work,type TaskData} from './task-execution-types';
 import {legacyPlaybookFilterLabel,matchesPlaybookFilter,playbookFilterOptions,playbookFilterValue} from './task-playbook-filter';
 import {WorkBoard,TaskTable,type TaskAction} from './work-board';
@@ -30,19 +32,21 @@ const getStatusOptions = (): [string,string][] => ([['',$t('optimizationWork.sta
 export default function OptimizationWork(){
  const {project,error:projectError}=useProject(),navigate=useNavigate();
  const {searchParams:params,search:q,inputProps,updateParams}=useUrlSearch();
- const [tasks,setTasks]=useState<Task[]>([]),[loading,setLoading]=useState(true),[error,setError]=useMessageState(''),[notice,setNotice]=useState<{text:Message;undo?:Task}>(),[busy,setBusy]=useState(false);
- const pending=useRef(false),generation=useRef(0),moveRequest=useRef({key:'',id:''});
+ const cache=useWorkspaceCache(),query=project?tasksQuery<Task>(project.id):null;
+ const taskView=useWorkspaceQuery(query);
+ const tasks=taskView.data??[],loading=taskView.data===undefined&&(!project||taskView.loading);
+ const [actionError,setError]=useMessageState(''),[notice,setNotice]=useState<{text:Message;undo?:Task}>(),[busy,setBusy]=useState(false);
+ const error=actionError||(taskView.error?$t('optimizationWork.notLoadTasksTryAgain'):'');
+ const pending=useRef(false),moveRequest=useRef({key:'',id:''});
  const legacyClosed=params.get('scope')==='archived'||params.get('status')==='closed',closed=params.get('scope')==='closed'||legacyClosed;
  const {mine,isAdmin}=useMe(),waiting=params.get('scope')==='waiting';
  const legacyPlaybook=!params.has('playbookName');
  const status=legacyClosed?'':params.get('status')||'',playbook=params.get(legacyPlaybook?'playbook':'playbookName')||'',owner=params.get('owner')||'';
  const done=!closed&&params.get('scope')==='done',board=(params.get('view')??savedView())==='board'&&!closed&&!done;
  const playbookOptions=playbookFilterOptions(tasks.map(t=>t.evidence?.work));
- async function load(){if(!project)return;const seq=++generation.current;setLoading(true);try{const rows=await taskRecords<Task>(project.id);if(seq===generation.current){setTasks(rows);setError('');}}catch{if(seq===generation.current)setError(() => ($t('optimizationWork.notLoadTasksTryAgain')));}finally{if(seq===generation.current)setLoading(false);}}
- useEffect(()=>{void load();return()=>{generation.current++;};},[project?.id]);
  useEffect(()=>{const task=params.get('task');if(task)navigate('/actions/'+encodeURIComponent(task),{replace:true});},[params.get('task')]);
  function param(key:string,value:string){updateParams(p=>{if(p.get('status')==='closed')p.delete('status');if(p.get('scope')==='archived')p.set('scope','closed');if(key==='playbookName')p.delete('playbook');if(key==='scope'&&value==='waiting'){p.delete('status');p.delete('owner');}value?p.set(key,value):p.delete(key);},key==='q');}
- function saved(t:Task,d:TaskData){setTasks(rows=>rows.map(row=>row.id===t.id?{...row,...d.task,evidence:{...row.evidence,work:d.work}}:row));refreshNavBadges();}
+ function saved(t:Task,d:TaskData){if(!query)return;taskView.replace((cache.peek<Task[]>(query.key)??tasks).map(row=>row.id===t.id?{...row,...d.task,evidence:{...row.evidence,work:d.work}}:row));refreshNavBadges();}
  async function move(t:Task,target:BoardState,beforeId?:number){
   if(!project||pending.current||beforeId===t.id)return;
   if(target==='done'&&workState(t.evidence?.work,t.status)!=='done'&&!(await confirmAction({title:() => ($t('optimizationWork.confirmWorkDone')),description:() => ($t('optimizationWork.nothingPublishedCannotCompletedWithout')),action:'optimizationWork.markDone',destructive:false})))return;
@@ -82,7 +86,7 @@ export default function OptimizationWork(){
  const location=useLocation();
  const newTask=()=>navigate({pathname:'/actions/new',search:location.search});
  return <PageContainer className="nr-page"><PageHeader title={$t('common.tasks')} description={$t('optimizationWork.workAgentOnlineAiPlaybook')} actions={tasks.length||loading?<Button onClick={()=>void newTask()}>{$t('manualTask.newTask')}</Button>:undefined}/>
-  {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}<Button disabled={busy} variant="outline" size="sm" onClick={()=>void load()}>{$t('common.reload')}</Button></p>}{notice&&<p role="status" className="nr-success">{renderMessage(notice.text)}{notice.undo&&<button type="button" disabled={busy} className="ml-auto underline-offset-4 hover:underline" onClick={()=>void undo(notice.undo!)}>{$t('optimizationWork.undo')}</button>}</p>}
+  {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}<Button disabled={busy} variant="outline" size="sm" onClick={()=>{setError('');taskView.reload();}}>{$t('common.reload')}</Button></p>}{notice&&<p role="status" className="nr-success">{renderMessage(notice.text)}{notice.undo&&<button type="button" disabled={busy} className="ml-auto underline-offset-4 hover:underline" onClick={()=>void undo(notice.undo!)}>{$t('optimizationWork.undo')}</button>}</p>}
   <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label={$t('common.filter')}>
    <div className="inline-flex flex-wrap overflow-hidden rounded-md border" role="group" aria-label={$t('optimizationWork.scope')}>{([['waiting',$t('optimizationWork.waitingForMe'),CircleDotIcon,waitingCount],['',$t('optimizationWork.current'),CircleDotIcon,tasks.length-closedCount-doneCount],['done',$t('common.completed'),CircleCheckIcon,doneCount],['closed',$t('common.closed'),ArchiveIcon,closedCount]] as const).map(([c,label,Icon,n])=>{const on=c===(waiting?'waiting':closed?'closed':done?'done':'');return <button key={label} type="button" aria-pressed={on} onClick={()=>param('scope',c)} className={cn('inline-flex h-8 items-center gap-1.5 px-3 text-sm text-muted-foreground transition-colors hover:text-foreground',on&&'bg-muted font-medium text-foreground')}><Icon className="size-3.5"/>{label} <span className="tabular-nums">{loading?'':n}</span></button>;})}</div>
    <label className="relative flex min-w-48 flex-1 items-center sm:max-w-72"><SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" aria-hidden="true"/><input aria-label={$t('optimizationWork.searchTasks')} {...inputProps} placeholder={$t('optimizationWork.searchTitleNumber')} className="w-full pl-8!"/></label>

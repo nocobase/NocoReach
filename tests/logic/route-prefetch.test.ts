@@ -77,6 +77,21 @@ it('skips fully warmed pages before selecting the single idle candidate', async 
   await vi.advanceTimersByTimeAsync(1501);
   expect(await drain()).toEqual(['/tasks.js']);
 });
+it('does not add the idle delay between resources for an explicit menu intent', async () => {
+  stop = scheduleRoutePrefetch([page('members')], async () => ({
+    members: ['/entry.js', '/style.css', '/dependency.js'],
+  }));
+  stop.prioritize('members');
+  await vi.advanceTimersByTimeAsync(2);
+  expect(hints()[0].getAttribute('href')).toBe('/entry.js');
+  hints()[0].dispatchEvent(new Event('load'));
+  await vi.advanceTimersByTimeAsync(1);
+  expect(hints()).toHaveLength(1);
+  expect(hints()[0].getAttribute('href')).toBe('/style.css');
+  hints()[0].dispatchEvent(new Event('load'));
+  await vi.advanceTimersByTimeAsync(1);
+  expect(hints()[0].getAttribute('href')).toBe('/dependency.js');
+});
 it('prioritizes the target immediately over a stalled idle hint, then resumes the idle page', async () => {
   stop = scheduleRoutePrefetch([page(), page('members')], async () => ({
     'growth-overview': ['/home.js', '/shared.js'],

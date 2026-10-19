@@ -12,6 +12,7 @@ import { Loading } from '#components/loading';
 import { Button } from '#components/ui/button';
 
 import { cachedRouteModule, loadRouteModule } from './route-modules.js';
+import { NavigationData } from './navigation-data.js';
 
 export interface ClientRouteProps {
   readonly route: AppClientRegisteredRoute;
@@ -28,7 +29,7 @@ export function ClientRoute({ route }: ClientRouteProps): ReactElement {
   const [loadError, setLoadError] = useState<unknown>();
 
   useEffect(() => {
-    if (checkAccess && !allowed) return;
+    if (checkAccess && (accessLoading || !allowed)) return;
     let active = true;
 
     loadRouteModule(componentLoader!).then(
@@ -48,7 +49,7 @@ export function ClientRoute({ route }: ClientRouteProps): ReactElement {
     return () => {
       active = false;
     };
-  }, [allowed, checkAccess, componentLoader]);
+  }, [allowed, accessLoading, checkAccess, componentLoader]);
 
   if (loadError) {
     return <ClientPageError route={route} />;
@@ -58,17 +59,14 @@ export function ClientRoute({ route }: ClientRouteProps): ReactElement {
   if (checkAccess && !allowed) return <ClientPageDenied route={route} />;
 
   const readyModule = cachedRouteModule(componentLoader!) ?? componentModule;
-  if (!readyModule) {
-    return <ClientPageLoading />;
-  }
-
-  const Component = readyModule.default;
+  const Component = readyModule?.default;
 
   return (
     <ErrorBoundary fallback={<ClientPageError route={route} />}>
+      <NavigationData route={route} />
       {/* The owning package is the page's namespace, so a plugin page translates with a bare useTranslation(). */}
       <NamespaceScope ns={route.packageName}>
-        <Component />
+        {Component ? <Component /> : <ClientPageLoading />}
       </NamespaceScope>
     </ErrorBoundary>
   );

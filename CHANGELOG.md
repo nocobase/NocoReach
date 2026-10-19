@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — First menu navigation
+
+- Start Insights, Opportunities and Tasks reads alongside their route modules after membership, page and project checks. Share pending requests and recently completed reads without fetching business data on hover.
+- Reuse project task snapshots across the three menus and retain visible Opportunities and Tasks content during revalidation. Invalidate shared business snapshots after mutations and preserve authentication, permission and project isolation.
+- Remove the idle pacing gap for explicit menu resource intent while retaining sequential low-priority hints and foreground navigation guards.
+
 ## Unreleased — Insights initial loading
 
 - Load a compact Insights snapshot without generating the full analysis context, and start independent data blocks concurrently.

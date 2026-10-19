@@ -1,4 +1,3 @@
-import { googleLocalFreshness } from '../../../shared/google-cache.js';
 import {
   useMessageState,
   getCurrentLocale,
@@ -20,7 +19,6 @@ import {
   type SourceCard,
   type Area,
 } from './insights-view';
-import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { useFreshData, useWorkspaceCache } from '../workspace-cache';
 import {
   insightsState,
@@ -33,7 +31,15 @@ import { PageContainer, PageHeader } from '#components/reach/page';
 import { HealthAlert } from '../data-health';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '#components/ui/button';
-import { taskRecords, useProject } from '../reach-data';
+import { useProject } from '../reach-data';
+import {
+  insightsQuery,
+  tasksQuery,
+  situationQuery,
+  metricsQuery,
+  useWorkspaceQuery,
+  navigationFreshness,
+} from '../workspace-queries';
 import { PageSkeleton } from '../workspace-cache';
 import { type Work } from '../task-execution-types';
 import type { StrategyState } from './model';
@@ -82,10 +88,8 @@ export default function StrategyPage() {
 }
 function ProjectInsights({ projectId }: { projectId: number }) {
   const cache = useWorkspaceCache();
-  const overviewKey = `insights-overview:${projectId}`;
-  const view = useFreshData<InsightsOverview>(overviewKey, () =>
-    request<InsightsOverview>(projectId, 'overview'),
-  );
+  const overviewKey = insightsQuery(projectId).key;
+  const view = useWorkspaceQuery(insightsQuery(projectId));
   const { replace } = view;
   const setState = useCallback(
     (state: StrategyState) => {
@@ -95,28 +99,9 @@ function ProjectInsights({ projectId }: { projectId: number }) {
     [cache, overviewKey, replace],
   );
   // These blocks have no dependency on the strategy snapshot or analysis context.
-  const taskView = useFreshData(`insights-tasks:${projectId}`, () =>
-    taskRecords<Task>(projectId),
-  );
-  const summaryView = useFreshData<{ areas: Area[] }>(
-    `insights-summary:${projectId}`,
-    () =>
-      api.action<{ areas: Area[] }>('nrInsights', 'summary', {
-        method: 'POST',
-        body: { projectId },
-        unwrap: 'data',
-      }),
-  );
-  const overview = useFreshData<{ cards: SourceCard[] }>(
-    `data-view:overview:${projectId}:${JSON.stringify({ range: '28' })}`,
-    () =>
-      api.action<{ cards: SourceCard[] }>('nrDataViews', 'overview', {
-        method: 'POST',
-        body: { projectId, range: '28' },
-        unwrap: 'data',
-      }),
-    googleLocalFreshness,
-  );
+  const taskView = useWorkspaceQuery(tasksQuery<Task>(projectId));
+  const summaryView = useWorkspaceQuery(situationQuery(projectId));
+  const overview = useWorkspaceQuery(metricsQuery(projectId));
   if (!view.data)
     return view.error ? (
       <PageContainer className='nr-page'>
@@ -158,6 +143,7 @@ function Insights({
   summaryView: ReturnType<typeof useFreshData<{ areas: Area[] }>>;
   overview: ReturnType<typeof useFreshData<{ cards: SourceCard[] }>>;
 }) {
+  const cache = useWorkspaceCache();
   const taskDataAvailable = taskView.data !== undefined;
   const tasks = taskView.data ?? [];
   const handOffReadRef = useRef({ active: false, sequence: 0 });
@@ -175,7 +161,12 @@ function Insights({
     try {
       const [nextState, nextTasks] = await Promise.all([
         request<StrategyState>(projectId, 'state'),
-        taskRecords<Task>(projectId),
+        cache.load(
+          tasksQuery<Task>(projectId).key,
+          tasksQuery<Task>(projectId).read,
+          true,
+          navigationFreshness,
+        ),
       ]);
       if (read.active && sequence === read.sequence) {
         setState(nextState);

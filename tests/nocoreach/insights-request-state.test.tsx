@@ -240,6 +240,8 @@ it('shows the cached overview and blocks immediately on return while revalidatin
   requests.overview.mockReturnValueOnce(pending.promise);
   const pendingTasks = deferred<unknown>();
   tasks.mockReturnValueOnce(pendingTasks.promise);
+  // A committed navigation hands its reads to the page for one second.
+  vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 1001);
   view.show(false);
   view.show(true);
   expect(screen.getByText(/2026-10-18/)).toBeInTheDocument();
@@ -296,6 +298,7 @@ it('removes a cached overview after a forbidden revalidation', async () => {
   requests.overview.mockRejectedValue(
     new NocoReachHttpError('Denied', 403, {}),
   );
+  vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 1001);
   view.show(false);
   view.show(true);
   await screen.findByText(english['strategy.notLoadInsightsTryAgain']);
