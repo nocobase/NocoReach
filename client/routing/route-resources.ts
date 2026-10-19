@@ -1,5 +1,3 @@
-import manifestUrl from 'virtual:nocoreach-route-prefetch';
-
 export type RouteResources = Readonly<Record<string, readonly string[]>>;
 
 let cachedResources: RouteResources | undefined;
@@ -8,6 +6,10 @@ let cachedResources: RouteResources | undefined;
 export async function loadRouteResources(
   signal: AbortSignal,
 ): Promise<RouteResources> {
+  // HTML binds metadata to this document's build without changing JS hashes.
+  const manifestUrl = document.querySelector<HTMLMetaElement>(
+    'meta[name="nocoreach-route-prefetch"]',
+  )?.content;
   if (!manifestUrl) return {};
   if (cachedResources) return cachedResources;
   const response = await fetch(manifestUrl, { signal });

@@ -46,6 +46,7 @@ it('does not execute loaders, block navigation, or emit Vite errors when resourc
   await vi.advanceTimersByTimeAsync(3000);
   expect(hints()).toHaveLength(1);
   expect(hints()[0].getAttribute('fetchpriority')).toBe('low');
+  expect(hints()[0].crossOrigin).toBe('anonymous');
   // Leave the background request unresolved, as on a stalled CDN.
   const foreground = vi.fn(async () => ({ default: () => null }));
   await expect(loadRouteModule(foreground)).resolves.toHaveProperty('default');
@@ -154,4 +155,63 @@ it('ignores metadata failures without affecting foreground imports', async () =>
   await expect(
     loadRouteModule(async () => ({ default: () => null })),
   ).resolves.toHaveProperty('default');
+});
+
+it('excludes loaded assets before budgeting and gives each page an early entry', async () => {
+  const loaded = Array.from({ length: 30 }, (_, i) => `/budget-loaded-${i}.js`);
+  const elements = loaded.map((file) => {
+    const link = document.createElement('link');
+    link.rel = 'modulepreload';
+    link.href = file;
+    document.head.append(link);
+    return link;
+  });
+  try {
+    const dependencies = Array.from(
+      { length: 30 },
+      (_, i) => `/budget-needed-${i}.js`,
+    );
+    stop = scheduleRoutePrefetch(
+      [page('a'), page('b'), page('c')],
+      async () => ({
+        a: [...loaded, '/budget-a.js', ...dependencies],
+        b: ['/budget-b.js', ...loaded, ...dependencies],
+        c: ['/budget-c.js', ...loaded, ...dependencies],
+      }),
+    );
+    const seen: string[] = [];
+    await vi.advanceTimersByTimeAsync(1501);
+    while (hints().length) {
+      seen.push(hints()[0].getAttribute('href')!);
+      hints()[0].dispatchEvent(new Event('load'));
+      await vi.advanceTimersByTimeAsync(150);
+    }
+    expect(seen.slice(0, 3)).toEqual([
+      '/budget-a.js',
+      '/budget-b.js',
+      '/budget-c.js',
+    ]);
+    expect(seen).toHaveLength(24);
+    expect(seen.some((file) => loaded.includes(file))).toBe(false);
+  } finally {
+    elements.forEach((element) => element.remove());
+  }
+});
+
+it('skips resources loaded during a pending hint without delaying the next useful resource', async () => {
+  stop = scheduleRoutePrefetch([page('late')], async () => ({
+    late: ['/late-first.js', '/late-loaded.js', '/late-needed.js'],
+  }));
+  await vi.advanceTimersByTimeAsync(1501);
+  const existing = document.createElement('link');
+  existing.rel = 'stylesheet';
+  existing.href = '/late-loaded.js';
+  document.head.append(existing);
+  try {
+    hints()[0].dispatchEvent(new Event('load'));
+    await vi.advanceTimersByTimeAsync(150);
+    expect(hints()[0].getAttribute('href')).toBe('/late-needed.js');
+  } finally {
+    existing.remove();
+  }
 });

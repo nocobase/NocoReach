@@ -12,6 +12,17 @@ const completedResources = new Set<string>();
 const RESOURCE_TIMEOUT_MS = 10_000;
 type Connection = { saveData?: boolean; effectiveType?: string };
 
+function existingResources(): Set<string> {
+  return new Set(
+    Array.from(
+      document.querySelectorAll<HTMLLinkElement | HTMLScriptElement>(
+        'link[rel="stylesheet"][href], link[rel="modulepreload"][href], link[rel="preload"][href], script[src]',
+      ),
+      (element) => ('href' in element ? element.href : element.src),
+    ),
+  );
+}
+
 /** Resource hints warm HTTP cache without evaluating modules or touching Vite's CSS cache. */
 export function scheduleRoutePrefetch(
   items: readonly RouteNavigationItem[],
@@ -35,10 +46,10 @@ export function scheduleRoutePrefetch(
   let timer: ReturnType<typeof setTimeout>;
   let idle: number | undefined;
   let resources: RouteResources | undefined;
-  let files: string[] = [];
+  const files: string[] = [];
   let cancelHint: (() => void) | undefined;
   let stopped = false;
-  const schedule = () => {
+  const schedule = (delay = 1500) => {
     if (stopped) return;
     timer = setTimeout(() => {
       if (window.requestIdleCallback)
@@ -46,7 +57,7 @@ export function scheduleRoutePrefetch(
           void next();
         });
       else void next();
-    }, 1500);
+    }, delay);
   };
   const next = async () => {
     if (stopped) return;
@@ -74,38 +85,57 @@ export function scheduleRoutePrefetch(
         clearTimeout(timeout);
       }
       if (stopped || controller.signal.aborted) return;
-      files = [
-        ...new Set(
-          routes
-            .filter((route) => resources![route.name]?.length)
-            .slice(0, MAX_PREFETCH_ROUTES)
-            .flatMap((route) => resources![route.name]),
-        ),
-      ]
-        .filter((file) => !completedResources.has(file))
-        .slice(0, MAX_PREFETCH_RESOURCES);
-      // Recheck foreground activity and network policy after metadata arrives.
-      if (files.length) schedule();
+      // Count only missing resources against the budget. Walk pages round-robin
+      // so a large dependency graph cannot crowd out the other page entries.
+      const existing = existingResources();
+      const queues = routes
+        .filter((route) => !cachedRouteModule(route.componentLoader!))
+        .filter((route) => resources![route.name]?.length)
+        .slice(0, MAX_PREFETCH_ROUTES)
+        .map((route) => [...resources![route.name]]);
+      const selected = new Set<string>();
+      while (
+        queues.some((queue) => queue.length) &&
+        files.length < MAX_PREFETCH_RESOURCES
+      ) {
+        for (const queue of queues) {
+          let file: string | undefined;
+          while ((file = queue.shift())) {
+            if (
+              selected.has(file) ||
+              completedResources.has(file) ||
+              existing.has(new URL(file, document.baseURI).href)
+            )
+              continue;
+            selected.add(file);
+            files.push(file);
+            break;
+          }
+          if (files.length === MAX_PREFETCH_RESOURCES) break;
+        }
+      }
+      // Yield again and recheck foreground/network policy, without another idle delay.
+      if (files.length) schedule(0);
       return;
     }
-    const file = files.shift();
-    if (!file) return;
-    // Existing foreground styles/modulepreloads need no speculative duplicate.
-    if (
-      completedResources.has(file) ||
-      Array.from(
-        document.querySelectorAll<HTMLLinkElement | HTMLScriptElement>(
-          'link[href], script[src]',
-        ),
-      ).some(
-        (element) => ('href' in element ? element.href : element.src) === file,
+    // Navigation may have loaded a queued URL since metadata arrived. Skip it
+    // in this turn instead of spending an idle delay for each shared dependency.
+    const existing = existingResources();
+    let file: string | undefined;
+    while ((file = files.shift())) {
+      if (
+        !completedResources.has(file) &&
+        !existing.has(new URL(file, document.baseURI).href)
       )
-    ) {
-      schedule();
-      return;
+        break;
     }
+    if (!file) return;
+    const resource = file;
     const link = document.createElement('link');
     link.rel = 'prefetch';
+    // Match Vite's module/style request credentials so the browser can reuse
+    // the prefetched response instead of downloading it again on navigation.
+    link.crossOrigin = 'anonymous';
     link.href = file;
     link.setAttribute('fetchpriority', 'low');
     const finish = () => {
@@ -113,11 +143,11 @@ export function scheduleRoutePrefetch(
       link.onload = link.onerror = null;
       link.remove();
       cancelHint = undefined;
-      schedule();
+      schedule(150);
     };
     const timeout = setTimeout(finish, RESOURCE_TIMEOUT_MS);
     link.onload = () => {
-      completedResources.add(file);
+      completedResources.add(resource);
       if (completedResources.size > MAX_COMPLETED_RESOURCES)
         completedResources.delete(completedResources.values().next().value!);
       finish();

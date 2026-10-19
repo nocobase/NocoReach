@@ -1,9 +1,7 @@
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import type { Plugin, ResolvedConfig } from 'vite';
 
-const VIRTUAL_ID = 'virtual:nocoreach-route-prefetch';
-const RESOLVED_ID = `\0${VIRTUAL_ID}`;
 // Keep speculation bounded to high-traffic application pages. Plugin loaders are opaque.
 const pages = {
   'growth-overview': 'client/pages/strategy/index.tsx',
@@ -15,31 +13,15 @@ const pages = {
 /** Emit resource URLs from the actual bundle; never execute a route to discover its dependencies. */
 export function routePrefetchPlugin(): Plugin {
   let config: ResolvedConfig;
-  let manifest: string;
   return {
     name: 'nocoreach-route-prefetch',
     configResolved(value) {
       config = value;
     },
-    resolveId(id) {
-      if (id === VIRTUAL_ID) return RESOLVED_ID;
-    },
-    load(id) {
-      if (id !== RESOLVED_ID) return;
-      if (config.command !== 'build') return 'export default undefined;';
-      manifest = this.emitFile({
-        type: 'asset',
-        // Allocate a build-specific URL before chunk hashing; the final graph
-        // includes this URL, so hashing the manifest itself would be circular.
-        fileName: `assets/route-prefetch-${randomUUID()}.json`,
-      });
-      return `export default import.meta.ROLLUP_FILE_URL_${manifest};`;
-    },
     generateBundle: {
       // Vite removes CSS-only JS chunks in generateBundle; inspect the final graph.
       order: 'post',
       handler(_options, bundle) {
-        if (!manifest) return;
         const resources: Record<string, string[]> = {};
         const chunks = Object.values(bundle).filter(
           (item) => item.type === 'chunk',
@@ -67,13 +49,38 @@ export function routePrefetchPlugin(): Plugin {
           resources[name] = [...files];
         }
         // URLs are relative to the emitted manifest, supporting nested mounts and CDN bases.
-        const directory = path.posix.dirname(this.getFileName(manifest));
+        const directory = 'assets';
         for (const name of Object.keys(resources)) {
           resources[name] = resources[name].map((file) =>
             path.posix.relative(directory, file),
           );
         }
-        this.setAssetSource(manifest, JSON.stringify(resources));
+        if (!Object.keys(resources).length) return;
+        const source = JSON.stringify(resources);
+        const digest = createHash('sha256')
+          .update(source)
+          .digest('hex')
+          .slice(0, 16);
+        const fileName = `assets/route-prefetch-${digest}.json`;
+        this.emitFile({ type: 'asset', fileName, source });
+        // Only HTML references the final manifest. Referencing it from JS would
+        // create a hash cycle (manifest -> chunks -> manifest) or churn every
+        // chunk on identical rebuilds. HTML already identifies the active build.
+        for (const asset of Object.values(bundle)) {
+          if (asset.type !== 'asset' || !asset.fileName.endsWith('.html'))
+            continue;
+          const url =
+            config.base === './' || config.base === ''
+              ? `./${path.posix.relative(path.posix.dirname(asset.fileName), fileName)}`
+              : `${config.base}${fileName}`;
+          const escapedUrl = url
+            .replaceAll('&', '&amp;')
+            .replaceAll('"', '&quot;');
+          asset.source = String(asset.source).replace(
+            '</head>',
+            `<meta name="nocoreach-route-prefetch" content="${escapedUrl}"></head>`,
+          );
+        }
       },
     },
   };
