@@ -2,6 +2,8 @@
 
 ## Unreleased — Background route loading
 
+- Bind resource manifests to individual builds and reuse successful reads. Bound each prefetch queue to 24 resources and retain up to 128 successful URLs across navigation; failures remain retryable.
+
 - Prefetch build-generated JS/CSS resources for permitted high-traffic menu pages during idle time, without executing route loaders or poisoning Vite's dependency cache on failures.
 - Keep foreground navigation independent of stalled background requests; cancel queued work and bound metadata and resource hint waits. Preserve ordinary stale-build recovery for actual navigation failures.
 - Limit speculation to three pages per navigation, pause on hidden tabs or constrained connections, and retain page authorization and session data boundaries.

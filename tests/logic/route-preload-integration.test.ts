@@ -48,8 +48,8 @@ it.each(['./', 'https://cdn.example.com/release/'])(
       });
       if (Array.isArray(result) || !('output' in result))
         throw new Error('Unexpected output');
-      const manifest = result.output.find(
-        (item) => item.fileName === 'assets/route-prefetch.json',
+      const manifest = result.output.find((item) =>
+        /^assets\/route-prefetch-[\w-]+\.json$/.test(item.fileName),
       );
       if (!manifest || manifest.type !== 'asset')
         throw new Error('Missing manifest');

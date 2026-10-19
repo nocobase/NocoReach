@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type { Plugin, ResolvedConfig } from 'vite';
 
 const VIRTUAL_ID = 'virtual:nocoreach-route-prefetch';
@@ -28,7 +29,9 @@ export function routePrefetchPlugin(): Plugin {
       if (config.command !== 'build') return 'export default undefined;';
       manifest = this.emitFile({
         type: 'asset',
-        fileName: 'assets/route-prefetch.json',
+        // Allocate a build-specific URL before chunk hashing; the final graph
+        // includes this URL, so hashing the manifest itself would be circular.
+        fileName: `assets/route-prefetch-${randomUUID()}.json`,
       });
       return `export default import.meta.ROLLUP_FILE_URL_${manifest};`;
     },

@@ -5,6 +5,10 @@ import { cachedRouteModule, hasForegroundRouteLoad } from './route-modules.js';
 import { loadRouteResources, type RouteResources } from './route-resources.js';
 
 const MAX_PREFETCH_ROUTES = 3;
+const MAX_PREFETCH_RESOURCES = 24;
+const MAX_COMPLETED_RESOURCES = 128;
+// Code URLs only, shared across navigation; no user or page data is retained.
+const completedResources = new Set<string>();
 const RESOURCE_TIMEOUT_MS = 10_000;
 type Connection = { saveData?: boolean; effectiveType?: string };
 
@@ -77,7 +81,9 @@ export function scheduleRoutePrefetch(
             .slice(0, MAX_PREFETCH_ROUTES)
             .flatMap((route) => resources![route.name]),
         ),
-      ];
+      ]
+        .filter((file) => !completedResources.has(file))
+        .slice(0, MAX_PREFETCH_RESOURCES);
       // Recheck foreground activity and network policy after metadata arrives.
       if (files.length) schedule();
       return;
@@ -86,6 +92,7 @@ export function scheduleRoutePrefetch(
     if (!file) return;
     // Existing foreground styles/modulepreloads need no speculative duplicate.
     if (
+      completedResources.has(file) ||
       Array.from(
         document.querySelectorAll<HTMLLinkElement | HTMLScriptElement>(
           'link[href], script[src]',
@@ -109,7 +116,13 @@ export function scheduleRoutePrefetch(
       schedule();
     };
     const timeout = setTimeout(finish, RESOURCE_TIMEOUT_MS);
-    link.onload = link.onerror = finish;
+    link.onload = () => {
+      completedResources.add(file);
+      if (completedResources.size > MAX_COMPLETED_RESOURCES)
+        completedResources.delete(completedResources.values().next().value!);
+      finish();
+    };
+    link.onerror = finish;
     cancelHint = () => {
       clearTimeout(timeout);
       link.onload = link.onerror = null;
