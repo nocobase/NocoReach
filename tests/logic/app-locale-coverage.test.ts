@@ -6,8 +6,13 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import enUS from '../../client/locales/en-US.ts';
-import zhCN from '../../client/locales/zh-CN.ts';
+import startupEnUS from '../../client/locales/en-US.ts';
+import startupZhCN from '../../client/locales/zh-CN.ts';
+import businessEn from '../../shared/i18n/en.json';
+import businessZh from '../../shared/i18n/zh.json';
+
+const enUS = { ...startupEnUS, ...businessEn };
+const zhCN = { ...startupZhCN, ...businessZh };
 
 const clientDirectory = fileURLToPath(new URL('../../client', import.meta.url));
 

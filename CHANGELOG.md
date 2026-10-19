@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Application startup
+
+- Keep shell translations in the startup entry and load complete business catalogs alongside session preparation. Prepare resources before evaluating pages, preserve language fallback and historical messages, and retry failed resource loads.
+- Load chat conversations, Markdown and run history when the panel first opens. Keep the panel dismissible during loading and preserve its mounted state after closing.
+
 ## Unreleased — First menu navigation
 
 - Start Insights, Opportunities and Tasks reads alongside their route modules after membership, page and project checks. Share pending requests and recently completed reads without fetching business data on hover.

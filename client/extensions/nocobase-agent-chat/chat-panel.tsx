@@ -1,8 +1,6 @@
-import { $t } from '#i18n';
-import { Maximize2Icon, Minimize2Icon, XIcon } from 'lucide-react';
+import { $t, prepareBusinessLocale } from '#i18n';
+import { XIcon } from 'lucide-react';
 import { useMe } from '../../pages/me.js';
-import { OnlineChatView } from '../../online-agent/chat.js';
-import { OnlineChatAction } from '../../online-agent/controls.js';
 import {
   CHAT_DOCK_QUERY,
   CHAT_MOBILE_QUERY,
@@ -10,16 +8,27 @@ import {
   CHAT_PANEL_ID,
   useChatPanel,
 } from '@nocobase/app-plugin-agents/client/chat';
-import { useEffect, useRef, useState, type ReactElement } from 'react';
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+} from 'react';
+import { ErrorBoundary } from 'react-error-boundary';
+import { Button } from '#components/ui/button';
+import { Spinner } from '#components/ui/spinner';
 
 import { Dialog, DialogContent, DialogTitle } from '#components/ui/dialog';
 import { cn } from 'cn';
 
-import { useOnlineChat } from '../../online-agent/context.js';
-import { ConversationView } from './conversation-view.js';
-import { PanelHeader } from './panel-header.js';
-import { HistoryList } from './history-list.js';
 import { useMediaQuery } from '#hooks/use-media-query';
+
+// Keep conversations, Markdown and run history outside the application's startup graph.
+const PanelBody = lazy(() =>
+  prepareBusinessLocale().then(() => import('./panel-body.js')),
+);
 
 /** The chat panel; nothing while `ChatProvider` says the panel is not available (signed out, no provider). */
 export function ChatPanel(): ReactElement | null {
@@ -77,7 +86,7 @@ function PanelFrame(): ReactElement | null {
           <DialogTitle className='sr-only'>
             {$t('onlineAgent.chat')}
           </DialogTitle>
-          <PanelBody compact />
+          <DeferredPanelBody compact />
         </DialogContent>
       </Dialog>
     );
@@ -101,94 +110,50 @@ function PanelFrame(): ReactElement | null {
             : 'absolute inset-y-0 right-0 z-30 w-[22rem] max-w-full border-l shadow-xl',
       )}
     >
-      <PanelBody compact={false} />
+      <DeferredPanelBody compact={false} />
     </aside>
   );
 }
 
-function PanelBody({ compact }: { compact: boolean }): ReactElement {
-  const panel = useChatPanel();
-  const chat = useOnlineChat();
-  const [runnerMounted, setRunnerMounted] = useState(chat.mode === 'runner');
-  if (chat.mode === 'runner' && !runnerMounted) setRunnerMounted(true);
-  const bodyRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (panel.open)
-      bodyRef.current
-        ?.querySelector<HTMLElement>('[data-active-chat="true"] textarea')
-        ?.focus();
-  }, [chat.mode, panel.open]);
-  const expanded = panel.mode === 'expanded';
+function DeferredPanelBody({ compact }: { compact: boolean }) {
   return (
-    <div
-      ref={bodyRef}
-      className={cn(
-        'flex min-h-0 flex-1 flex-col',
-        expanded && 'mx-auto w-full max-w-3xl',
-      )}
-    >
-      <div
-        hidden={chat.mode !== 'online'}
-        inert={chat.mode !== 'online'}
-        data-active-chat={chat.mode === 'online'}
-        className='flex min-h-0 flex-1 flex-col p-3'
-      >
-        <OnlineChatView
-          actions={
-            <>
-              {!compact && (
-                <OnlineChatAction
-                  label={$t(
-                    panel.mode === 'expanded'
-                      ? 'onlineAgent.collapse'
-                      : 'onlineAgent.expand',
-                  )}
-                  onClick={() =>
-                    panel.setMode(
-                      panel.mode === 'expanded' ? 'docked' : 'expanded',
-                    )
-                  }
-                >
-                  {panel.mode === 'expanded' ? (
-                    <Minimize2Icon />
-                  ) : (
-                    <Maximize2Icon />
-                  )}
-                </OnlineChatAction>
-              )}
-              <OnlineChatAction
-                label={$t('onlineAgent.close')}
-                onClick={panel.closeChat}
-              >
-                <XIcon />
-              </OnlineChatAction>
-            </>
-          }
-        />
-      </div>
-      {runnerMounted && (
-        <div
-          hidden={chat.mode !== 'runner'}
-          inert={chat.mode !== 'runner'}
-          data-active-chat={chat.mode === 'runner'}
-          className='flex min-h-0 flex-1 flex-col'
+    <ErrorBoundary fallback={<PanelLoading failed />}>
+      <Suspense fallback={<PanelLoading />}>
+        <PanelBody compact={compact} />
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
+
+function PanelLoading({ failed = false }: { failed?: boolean }) {
+  const panel = useChatPanel();
+  return (
+    <div className='flex min-h-0 flex-1 flex-col gap-3 p-3'>
+      <div className='flex items-center justify-between gap-2'>
+        <span className='text-sm font-medium'>{$t('onlineAgent.chat')}</span>
+        <Button
+          variant='ghost'
+          size='icon-sm'
+          aria-label={$t('onlineAgent.close')}
+          onClick={panel.closeChat}
         >
-          <PanelHeader compact={compact} />
-          {panel.view === 'history' && (
-            <div className='min-h-0 flex-1 overflow-y-auto p-3'>
-              <HistoryList
-                activeId={panel.conversationId}
-                onOpen={panel.selectConversation}
-              />
-            </div>
-          )}
-          <div
-            hidden={panel.view === 'history'}
-            inert={panel.view === 'history'}
-            className='flex min-h-0 flex-1 flex-col p-3'
-          >
-            <ConversationView conversationId={panel.conversationId} />
-          </div>
+          <XIcon />
+        </Button>
+      </div>
+      {failed ? (
+        <div role='alert' className='flex flex-col gap-3'>
+          <p>{$t('common.operationFailedRetry')}</p>
+          <Button variant='outline' onClick={() => window.location.reload()}>
+            {$t('common.reload')}
+          </Button>
+        </div>
+      ) : (
+        <div
+          role='status'
+          className='flex items-center gap-2 text-sm text-muted-foreground'
+        >
+          <Spinner aria-hidden='true' />
+          {$t('common.loading')}
         </div>
       )}
     </div>

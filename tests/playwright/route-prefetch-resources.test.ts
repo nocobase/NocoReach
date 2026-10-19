@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build, preview, type PreviewServer } from 'vite';
 import { routePrefetchPlugin } from '../../scripts/route-prefetch.js';
+import { startupMessagesPlugin } from '../../scripts/startup-messages.js';
 
 type Site = {
   url: string;
@@ -112,7 +113,10 @@ const test = base.extend<{ site: Site }>({
       const result = await build({
         ...options,
         base: './',
-        plugins: [routePrefetchPlugin()],
+        plugins: [
+          startupMessagesPlugin({ appRoot: app }),
+          routePrefetchPlugin(),
+        ],
       });
       if (Array.isArray(result) || !('output' in result))
         throw new Error('Unexpected output');

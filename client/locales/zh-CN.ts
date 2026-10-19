@@ -1,5 +1,5 @@
 import schedules from './schedules/zh-CN.js';
-import businessMessages from '../../shared/i18n/zh.json';
+import { chinese as businessMessages } from 'virtual:nocoreach-startup-messages';
 import systemZhCN from './system/zh-CN.js';
 import agentChat from '../extensions/nocobase-agent-chat/locales/zh-CN.js';
 import type { AppResource } from './en-US.js';

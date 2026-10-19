@@ -2,6 +2,7 @@ import type {
   AppClientRegisteredRoute,
   AppClientRouteComponentModule,
 } from '@nocobase/app-client/plugins';
+import { prepareBusinessLocale } from '../i18n/index.js';
 
 type Loader = NonNullable<AppClientRegisteredRoute['componentLoader']>;
 const modules = new WeakMap<
@@ -22,7 +23,8 @@ export function loadRouteModule(
 ): Promise<AppClientRouteComponentModule> {
   let entry = modules.get(loader);
   if (!entry) {
-    entry = { promise: Promise.resolve().then(loader) };
+    // Evaluate pages only after their synchronous copy helpers have full resources.
+    entry = { promise: prepareBusinessLocale().then(loader) };
     const current = entry;
     current.promise = current.promise
       .then((module) => {

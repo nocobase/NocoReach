@@ -1,5 +1,5 @@
 import schedules from './schedules/en-US.js';
-import businessMessages from '../../shared/i18n/en.json';
+import { english as businessMessages } from 'virtual:nocoreach-startup-messages';
 import systemEnUS from './system/en-US.js';
 import agentChat from '../extensions/nocobase-agent-chat/locales/en-US.js';
 import type { LocaleResource } from '@nocobase/i18n';
