@@ -98,7 +98,10 @@ test.each(['en-US', 'zh-CN'])(
   'missing configuration offers a permitted model link without a retry or billing warning: %s',
   async (locale) => {
     await setup('model_configuration', locale);
-    expect(screen.getByRole('button')).toHaveAttribute('href', '/main/models');
+    expect(screen.getByRole('button')).toHaveAttribute(
+      'href',
+      '/main/agents/models',
+    );
     expect(screen.queryByText('Run analysis again')).toBeNull();
     expect(screen.getByRole('alert')).not.toHaveTextContent(
       /charged|计费|billing/,
@@ -152,5 +155,8 @@ test('an open page advances its failure-date boundary at local midnight', async 
   expect(screen.queryByRole('alert')).toBeNull();
   view.nextDayFailure();
   expect(screen.getByRole('alert')).toBeVisible();
-  expect(screen.getByRole('button')).toHaveAttribute('href', '/main/models');
+  expect(screen.getByRole('button')).toHaveAttribute(
+    'href',
+    '/main/agents/models',
+  );
 });
