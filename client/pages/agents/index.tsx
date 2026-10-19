@@ -5,22 +5,20 @@ import {
   agentsRoute,
   modelsRoute,
   runtimesRoute,
+  usageRoute,
 } from '@nocobase/app-plugin-agents/client/routes';
-import type { AppClientRoutePageDefinition } from '@nocobase/app-client/plugins';
 import { cn } from 'cn';
 import { $t } from '#i18n';
 import { PageContainer, PageHeader } from '#components/reach/page';
 import { buttonVariants } from '#components/ui/button';
 import { Skeleton } from '#components/ui/skeleton';
+import { routeAccess } from './access.js';
 
-// Keep in sync with the authz of the matching child routes in client/nocoreach-routes.ts.
-const access = ({ authz }: AppClientRoutePageDefinition) =>
-  authz === 'skip' ? undefined : authz;
-const runnerAccess = access(agentsRoute);
+const runnerAccess = routeAccess(agentsRoute);
 
-// Runner agents, online agents, the runtimes runner agents come from and the models online agents call, as one page.
-// The runtimes and models tabs are the Agents plugin's own pages, which bring their own frame and heading, so every
-// tab renders its own page below this tab bar.
+// Runner agents beside the runtimes they come from, online agents beside the models they call, then what agents
+// used, as one page. The runtimes, models and usage tabs are the Agents plugin's own pages, which bring their own
+// frame and heading, so every tab renders its own page below this tab bar.
 export default function AgentsPage() {
   return useMatch('/agents') ? (
     <AgentIndex />
@@ -49,8 +47,9 @@ function AgentIndex() {
 
 function AgentsTabs() {
   const runner = useCan(runnerAccess);
-  const runtimes = useCan(access(runtimesRoute));
-  const models = useCan(access(modelsRoute));
+  const runtimes = useCan(routeAccess(runtimesRoute));
+  const models = useCan(routeAccess(modelsRoute));
+  const usage = useCan(routeAccess(usageRoute));
   const { search } = useLocation();
   const tabClass = cn(
     buttonVariants({ variant: 'ghost', size: 'sm' }),
@@ -61,11 +60,12 @@ function AgentsTabs() {
     ...(runner.can
       ? [{ path: 'runner', label: $t('common.runnerAgent') }]
       : []),
-    { path: 'online', label: $t('common.onlineAgent') },
     ...(runtimes.can
       ? [{ path: 'runtimes', label: $t('agentsPage.runtimes') }]
       : []),
+    { path: 'online', label: $t('common.onlineAgent') },
     ...(models.can ? [{ path: 'models', label: $t('agentsPage.models') }] : []),
+    ...(usage.can ? [{ path: 'usage', label: $t('agentsPage.usage') }] : []),
   ];
   return (
     <div className='px-6 pt-6 md:px-8 md:pt-8'>

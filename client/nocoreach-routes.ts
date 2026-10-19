@@ -170,11 +170,11 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     { ...page('agents', '/agents', () => import('./pages/agents/index.js'), { title: nav('agent'), icon: Bot, order: 1 }), children: [
       { ...page('runner-agents', 'runner', () => import('./pages/agents/runner.js')), authz: agentsRoute.authz },
       { ...page('online-agents', 'online', () => import('./online-agent/settings.js')), children: [page('online-agent-new', 'new', () => import('./online-agent/edit.js')), page('online-agent-edit', ':onlineAgentId/edit', () => import('./online-agent/edit.js'))] },
-      // The runtimes and models pages are tabs of Agent, keeping the Agents plugin's own grants.
+      // The runtimes, models and usage pages are tabs of Agent, keeping the Agents plugin's own grants.
       { ...runtimesRoute, path: 'runtimes', componentLoader: gated(runtimesRoute.componentLoader) },
       { ...modelsRoute, path: 'models', componentLoader: gated(modelsRoute.componentLoader) },
+      { ...usageRoute, path: 'usage', componentLoader: gated(usageRoute.componentLoader) },
     ] },
-    { ...usageRoute, componentLoader: gated(usageRoute.componentLoader), navigation: { title: nav('usage'), icon: ChartNoAxesCombined, order: 8 } },
     page('playbooks', '/playbooks', () => import('./pages/playbooks.js'), { title: nav('playbooks'), icon: Workflow, order: 3 }),
     page('skills', '/skills', () => import('./pages/skills.js'), { title: nav('skills'), icon: WandSparkles, order: 4 }),
     page('project-settings', '/project', () => import('./pages/project-knowledge.js'), { title: nav('projectKnowledge'), icon: NotebookPen, order: 5 }),

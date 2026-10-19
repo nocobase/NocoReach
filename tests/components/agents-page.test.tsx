@@ -5,7 +5,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import AgentsPage, { AgentsPageLayout } from '../../client/pages/agents/index';
 
 const access = vi.hoisted(() => ({ can: true, isPending: false }));
-// Resource ids denied on top of `access`: `runtimes` (page) and `agents.services` (settings) guard the plugin tabs.
+// Resource ids denied on top of `access`: `runtimes`, `usage` (pages) and `agents.services` (settings) guard the plugin tabs.
 const denied = vi.hoisted(() => new Set<string>());
 vi.mock('@nocobase/app-plugin-authorization/client', () => ({
   useCan: (request?: { resource: { id: string } }) =>
@@ -45,6 +45,7 @@ function mount(path = '/agents?view=saved') {
           },
           { path: 'runtimes', element: <h1>Runtimes page</h1> },
           { path: 'models', element: <h1>Models page</h1> },
+          { path: 'usage', element: <h1>Usage page</h1> },
         ],
       },
     ],
@@ -106,14 +107,15 @@ test('direct online editor URLs keep the online tab and list mounted', () => {
   );
 });
 
-test('shows runtimes and models as tabs of the Agent page', async () => {
+test('shows runtimes, models and usage as tabs of the Agent page', async () => {
   const user = userEvent.setup();
   const router = mount('/agents/runner');
   expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual([
     'Runner Agent',
-    '在线 Agent',
     '运行环境',
+    '在线 Agent',
     '模型',
+    '用量',
   ]);
   await user.click(screen.getByRole('link', { name: '运行环境' }));
   expect(await screen.findByText('Runtimes page')).toBeInTheDocument();
@@ -125,11 +127,15 @@ test('shows runtimes and models as tabs of the Agent page', async () => {
     'aria-current',
     'page',
   );
+  await user.click(screen.getByRole('link', { name: '用量' }));
+  expect(await screen.findByText('Usage page')).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe('/agents/usage');
 });
 
-test('hides the runtimes and models tabs without their grants', () => {
+test('hides the runtimes, models and usage tabs without their grants', () => {
   denied.add('runtimes');
   denied.add('agents.services');
+  denied.add('usage');
   mount('/agents/online');
   expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual([
     'Runner Agent',
