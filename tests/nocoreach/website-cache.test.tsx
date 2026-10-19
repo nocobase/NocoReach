@@ -345,6 +345,40 @@ it('evicts stored reports when unmounted without invalidating other projects', a
   expect(fetcher).toHaveBeenCalledTimes(3);
 });
 
+it('revalidates Insights after mutations without hiding the snapshot or accepting older responses', async () => {
+  const old = Promise.withResolvers<string>();
+  const current = Promise.withResolvers<string>();
+  const load = vi
+    .fn()
+    .mockResolvedValueOnce('cached')
+    .mockReturnValueOnce(old.promise)
+    .mockReturnValueOnce(current.promise);
+  function Insights() {
+    const { data, reload } = useFreshData('insights-overview:1', load);
+    return <button onClick={reload}>{data ?? 'loading'}</button>;
+  }
+  const tree = (show = true) => (
+    <WorkspaceCacheProvider>{show && <Insights />}</WorkspaceCacheProvider>
+  );
+  const view = render(tree());
+  await flush();
+  fireEvent.click(screen.getByText('cached'));
+  await flush();
+  await act(async () => window.dispatchEvent(new Event('nocoreach:badges')));
+  expect(screen.getByText('cached')).toBeTruthy();
+  expect(load).toHaveBeenCalledTimes(3);
+  await act(async () => current.resolve('updated'));
+  await act(async () => old.resolve('obsolete'));
+  expect(screen.getByText('updated')).toBeTruthy();
+  expect(screen.queryByText('obsolete')).toBeNull();
+  const next = Promise.withResolvers<string>();
+  load.mockReturnValueOnce(next.promise);
+  view.rerender(tree(false));
+  view.rerender(tree());
+  expect(screen.getByText('updated')).toBeTruthy();
+  await act(async () => next.resolve('latest'));
+});
+
 it.each(['summary', 'details'])(
   'clears search %s on connection changes, including storage, without clearing other projects',
   async (kind) => {

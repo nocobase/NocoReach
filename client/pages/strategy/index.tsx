@@ -21,7 +21,11 @@ import {
   type Area,
 } from './insights-view';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
-import { useFreshData } from '../workspace-cache';
+import { useFreshData, useWorkspaceCache } from '../workspace-cache';
+import {
+  insightsState,
+  type InsightsOverview,
+} from '../../../shared/insights-overview';
 import { RequestBlock } from './request-block';
 import { InfoTip } from '#components/reach/info-tip';
 import { AnalysisAlert } from './analysis-alert';
@@ -51,12 +55,7 @@ import {
   stageName,
   type PlaybookList,
 } from '../playbook-model';
-import {
-  request,
-  analysisRequest,
-  type Context,
-  type AnalysisStatus,
-} from './service';
+import { request, analysisRequest, type AnalysisStatus } from './service';
 import '../reach-workspace.css';
 import './strategy.css';
 type Task = {
@@ -82,37 +81,47 @@ export default function StrategyPage() {
   return <ProjectInsights key={project.id} projectId={project.id} />;
 }
 function ProjectInsights({ projectId }: { projectId: number }) {
-  const [state, setState] = useState<StrategyState>(),
-    [context, setContext] = useState<Context>(),
-    [error, setError] = useMessageState(''),
-    [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    let active = true;
-    setError('');
-    Promise.all([
-      request<StrategyState>(projectId, 'state'),
-      request<Context>(projectId, 'context'),
-    ])
-      .then(([s, c]) => {
-        if (active) {
-          setState(s);
-          setContext(c);
-        }
-      })
-      .catch(() => {
-        if (active) setError(() => $t('strategy.notLoadInsightsTryAgain'));
-      });
-    return () => {
-      active = false;
-    };
-  }, [projectId, attempt, setError]);
-  if (!state || !context)
-    return error ? (
+  const cache = useWorkspaceCache();
+  const overviewKey = `insights-overview:${projectId}`;
+  const view = useFreshData<InsightsOverview>(overviewKey, () =>
+    request<InsightsOverview>(projectId, 'overview'),
+  );
+  const { replace } = view;
+  const setState = useCallback(
+    (state: StrategyState) => {
+      const current = cache.peek<InsightsOverview>(overviewKey);
+      if (current) replace({ ...current, state: insightsState(state) });
+    },
+    [cache, overviewKey, replace],
+  );
+  // These blocks have no dependency on the strategy snapshot or analysis context.
+  const taskView = useFreshData(`insights-tasks:${projectId}`, () =>
+    taskRecords<Task>(projectId),
+  );
+  const summaryView = useFreshData<{ areas: Area[] }>(
+    `insights-summary:${projectId}`,
+    () =>
+      api.action<{ areas: Area[] }>('nrInsights', 'summary', {
+        method: 'POST',
+        body: { projectId },
+        unwrap: 'data',
+      }),
+  );
+  const overview = useFreshData<{ cards: SourceCard[] }>(
+    `data-view:overview:${projectId}:${JSON.stringify({ range: '28' })}`,
+    () =>
+      api.action<{ cards: SourceCard[] }>('nrDataViews', 'overview', {
+        method: 'POST',
+        body: { projectId, range: '28' },
+        unwrap: 'data',
+      }),
+    googleLocalFreshness,
+  );
+  if (!view.data)
+    return view.error ? (
       <PageContainer className='nr-page'>
-        <p role='alert'>{error}</p>
-        <Button onClick={() => setAttempt((n) => n + 1)}>
-          {$t('common.reload')}
-        </Button>
+        <p role='alert'>{$t('strategy.notLoadInsightsTryAgain')}</p>
+        <Button onClick={view.reload}>{$t('common.reload')}</Button>
       </PageContainer>
     ) : (
       <PageSkeleton title={$t('strategy.insights')} />
@@ -120,9 +129,13 @@ function ProjectInsights({ projectId }: { projectId: number }) {
   return (
     <Insights
       projectId={projectId}
-      state={state}
+      state={view.data.state}
       setState={setState}
-      context={context}
+      summary={view.data}
+      view={view}
+      taskView={taskView}
+      summaryView={summaryView}
+      overview={overview}
     />
   );
 }
@@ -130,16 +143,21 @@ function Insights({
   projectId,
   state,
   setState,
-  context,
+  summary,
+  view,
+  taskView,
+  summaryView,
+  overview,
 }: {
   projectId: number;
   state: StrategyState;
   setState: (s: StrategyState) => void;
-  context: Context;
+  summary: InsightsOverview;
+  view: ReturnType<typeof useFreshData<InsightsOverview>>;
+  taskView: ReturnType<typeof useFreshData<Task[]>>;
+  summaryView: ReturnType<typeof useFreshData<{ areas: Area[] }>>;
+  overview: ReturnType<typeof useFreshData<{ cards: SourceCard[] }>>;
 }) {
-  const taskView = useFreshData(`insights-tasks:${projectId}`, () =>
-    taskRecords<Task>(projectId),
-  );
   const taskDataAvailable = taskView.data !== undefined;
   const tasks = taskView.data ?? [];
   const handOffReadRef = useRef({ active: false, sequence: 0 });
@@ -177,8 +195,7 @@ function Insights({
     [handed, setHanded] = useState<HandOffResult>();
   const playbooks = localizePlaybookList(rawPlaybooks);
   const pendingRef = useRef(false),
-    operationRef = useRef({ key: '', id: '' }),
-    summary = context.evidence;
+    operationRef = useRef({ key: '', id: '' });
   async function mutate(action: string, body: object) {
     const key = JSON.stringify([action, state.revision, body]);
     if (operationRef.current.key !== key)
@@ -307,25 +324,6 @@ function Insights({
         : stageName(st)
       : $t('common.needsConfirmation');
   };
-  const summaryView = useFreshData<{ areas: Area[] }>(
-    `insights-summary:${projectId}`,
-    () =>
-      api.action<{ areas: Area[] }>('nrInsights', 'summary', {
-        method: 'POST',
-        body: { projectId },
-        unwrap: 'data',
-      }),
-  );
-  const overview = useFreshData<{ cards: SourceCard[] }>(
-    `data-view:overview:${projectId}:${JSON.stringify({ range: '28' })}`,
-    () =>
-      api.action<{ cards: SourceCard[] }>('nrDataViews', 'overview', {
-        method: 'POST',
-        body: { projectId, range: '28' },
-        unwrap: 'data',
-      }),
-    googleLocalFreshness,
-  );
   const last = generating
     ? $t('strategy.analyzing')
     : batch
@@ -363,6 +361,14 @@ function Insights({
           </Button>
         }
       />
+      {view.error != null && (
+        <p role='alert' className='nr-error'>
+          {$t('strategy.blockStale')}
+          <Button variant='link' onClick={view.reload}>
+            {$t('common.retry')}
+          </Button>
+        </p>
+      )}
       {error && (
         <p role='alert' className='nr-error'>
           {error}

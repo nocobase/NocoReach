@@ -10,6 +10,8 @@ import * as periods from './evidence-period.js';
 import { projectId, requireAccess } from './policy.js';
 import { memoryForAI, MEMORY_SECTIONS } from './execution/memory.js';
 import { projectWork } from './execution/model.js';
+import { insightsState, type InsightsOverview } from '../../shared/insights-overview.js';
+import type { StrategyState } from '../../shared/strategy-model.js';
 // Who created a task: it becomes the task's owner (2026-10-08).
 const creator=ctx=>{const u=ctx?.auth?.user;return u?.id!=null&&u.kind!=='service'?{createdBy:{id:String(u.id),name:String(u.nickname||u.username||u.id)}}:{};};
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -48,6 +50,16 @@ class StrategyService{
  repo(){return this.p.db.getRepository('nrSnapshots');}
  async row(id,transaction){return this.repo().findOne({filter:{key:`strategy:${id}`},transaction});}
  async state(id){return (await this.row(id))?.get('payload')||initial();}
+ async overview(id: string): Promise<InsightsOverview>{
+  // The page only needs the snapshot cutoff, not a newly generated AI context.
+  // Give this read a typed boundary around the ported service's dynamic plugin facade.
+  const reader = this as unknown as {
+   state(id: string): Promise<StrategyState>;
+   p: {sync: {snapshots(id: string): Promise<{key: string; payload?: {end?: string}}[]>}};
+  };
+  const [state,snapshots]=await Promise.all([reader.state(id),reader.p.sync.snapshots(id).catch(()=>[])]);
+  return {state:insightsState(state),periodDays:28,availableThrough:snapshots.find(s=>s.key==='project')?.payload?.end||null};
+ }
  async context(id,requestedDays=28){
   const days=periods.periodDays(requestedDays);
   const project=await this.p.project(id);let snapshots=[],candidates=[],warnings=[];
@@ -204,10 +216,10 @@ class StrategyService{
   proposal.status='approved';proposal.taskId=task.id;proposal.taskNo=task.get?.('evidence')?.no;proposal.approvedAt=new Date().toISOString();
  });}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,systemMessageText('strategy.workspaceRequestNotCompleteEdits'));}};
-  this.p.app.resourceManager.define({name:'nrStrategy',actions:{createFromResult:wrap((id,v,c)=>this.createFromResult(id,v,c)),state:wrap(id=>this.state(id)),reviewOpportunity:wrap((id,v)=>this.reviewOpportunity(id,v)),saveInsights:wrap((id,v,c)=>this.saveInsights(id,v,c)),context:wrap(async(id,v,c)=>{const context=await this.context(id,v.periodDays),evidenceToken=randomUUID();await c.cache.set(`nr-analysis:${id}:${c.auth.user.id}:${evidenceToken}`,context,86400000);return {...context,evidenceToken};}),saveGoal:wrap((id,v,c)=>this.saveGoal(id,v,c)),saveProposal:wrap((id,v)=>this.saveProposal(id,v)),approve:wrap((id,v,c)=>this.approve(id,v,c)),confirmDirection:wrap((id,v,c)=>this.confirmDirection(id,v,c)),decideSignal:wrap((id,v)=>this.decideSignal(id,v)),badges:wrap((id,v,c)=>this.badges(id,c))}});
+  this.p.app.resourceManager.define({name:'nrStrategy',actions:{createFromResult:wrap((id,v,c)=>this.createFromResult(id,v,c)),state:wrap(id=>this.state(id)),overview:wrap(id=>this.overview(String(id))),reviewOpportunity:wrap((id,v)=>this.reviewOpportunity(id,v)),saveInsights:wrap((id,v,c)=>this.saveInsights(id,v,c)),context:wrap(async(id,v,c)=>{const context=await this.context(id,v.periodDays),evidenceToken=randomUUID();await c.cache.set(`nr-analysis:${id}:${c.auth.user.id}:${evidenceToken}`,context,86400000);return {...context,evidenceToken};}),saveGoal:wrap((id,v,c)=>this.saveGoal(id,v,c)),saveProposal:wrap((id,v)=>this.saveProposal(id,v)),approve:wrap((id,v,c)=>this.approve(id,v,c)),confirmDirection:wrap((id,v,c)=>this.confirmDirection(id,v,c)),decideSignal:wrap((id,v)=>this.decideSignal(id,v)),badges:wrap((id,v,c)=>this.badges(id,c))}});
   this.p.db.on('nrTasks.beforeCreate',(model,options)=>this.numberTask(model,options));
   this.p.app.on('afterStart',()=>this.numberAll().catch(e=>this.p.app.logger.warn('NocoReach opportunity numbers not filled',{message:e.message})));
-  this.p.app.acl.allow('nrStrategy',['createFromResult','state','context','reviewOpportunity','saveGoal','saveProposal','approve','confirmDirection','decideSignal','saveInsights','badges'],'loggedIn');
+  this.p.app.acl.allow('nrStrategy',['createFromResult','state','overview','context','reviewOpportunity','saveGoal','saveProposal','approve','confirmDirection','decideSignal','saveInsights','badges'],'loggedIn');
  }
 }
 export { StrategyService, goalInput, proposalInput, insightInput, evidenceFrom, projectMemory, memoryFields };

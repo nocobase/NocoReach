@@ -262,7 +262,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     ...list('nrSearchIndex', ['view', 'page', 'sitemaps']),
     'nrSignals.current',
     ...list('nrSkills', ['list', 'get']),
-    ...list('nrStrategy', ['state', 'badges']),
+    ...list('nrStrategy', ['state', 'overview', 'badges']),
     ...list('nrTaskWork', [
       'results',
       'result',

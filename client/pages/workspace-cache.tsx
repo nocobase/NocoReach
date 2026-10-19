@@ -151,7 +151,10 @@ class WorkspaceCache {
       if (!listeners.size) this.listeners.delete(key);
     };
   }
-  invalidate(matches: (key: string) => boolean): void {
+  invalidate(
+    matches: (key: string) => boolean,
+    { keepValue = false }: { keepValue?: boolean } = {},
+  ): void {
     if (!this.active) return;
     const keys = new Set([...this.rows.keys(), ...this.listeners.keys()]);
     if (this.ownsStorage()) {
@@ -168,8 +171,12 @@ class WorkspaceCache {
     }
     for (const key of keys) {
       if (!matches(key)) continue;
-      // Removing the entry also fences responses that began before the change.
-      this.rows.delete(key);
+      // Replace the entry to fence older reads, including background refreshes.
+      // Business mutations may retain the visible snapshot while revalidating;
+      // permission/session changes and existing invalidations still clear it.
+      const value = keepValue ? this.rows.get(key)?.value : undefined;
+      if (value !== undefined) this.rows.set(key, { value, at: 0 });
+      else this.rows.delete(key);
       this.revisions.set(key, this.revision(key) + 1);
       this.listeners.get(key)?.forEach((listener) => listener());
     }
@@ -273,7 +280,15 @@ function SessionCache({
   const [cache] = useState(() => new WorkspaceCache(owner));
   useEffect(() => {
     cache.activate();
-    return () => cache.dispose();
+    const refreshInsights = () =>
+      cache.invalidate((key) => key.startsWith('insights-overview:'), {
+        keepValue: true,
+      });
+    window.addEventListener('nocoreach:badges', refreshInsights);
+    return () => {
+      window.removeEventListener('nocoreach:badges', refreshInsights);
+      cache.dispose();
+    };
   }, [cache]);
   return (
     <Context.Provider value={cache}>

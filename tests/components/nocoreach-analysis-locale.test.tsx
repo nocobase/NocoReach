@@ -82,6 +82,12 @@ beforeEach(() => {
   fixture.tasks = [];
   action.mockReset();
   action.mockImplementation(async (resource: string, operation: string) => {
+    if (resource === 'nrStrategy' && operation === 'overview')
+      return {
+        state: { revision: 1, goal: null, proposals: [] },
+        periodDays: 28,
+        availableThrough: null,
+      };
     if (resource === 'nrStrategy') {
       if (operation === 'state')
         return { revision: 1, goal: null, proposals: [] };

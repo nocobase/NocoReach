@@ -253,6 +253,12 @@ function setup() {
       ];
       return Promise.resolve(current);
     }
+    if (resource === 'nrStrategy' && action === 'overview')
+      return Promise.resolve({
+        state: current,
+        periodDays: 28,
+        availableThrough: null,
+      });
     if (resource === 'nrStrategy' && action === 'state')
       return Promise.resolve(current);
     if (resource === 'nrStrategy' && action === 'context')
@@ -349,6 +355,12 @@ it('ignores an old project handoff reload after switching to another project', a
       ...args: unknown[]
     ) => {
       if (String(options?.body?.projectId) === '2') {
+        if (resource === 'nrStrategy' && action === 'overview')
+          return Promise.resolve({
+            state: initial(),
+            periodDays: 28,
+            availableThrough: null,
+          });
         if (resource === 'nrStrategy' && action === 'state')
           return Promise.resolve(initial());
         if (resource === 'nrTaskWork' && action === 'list')

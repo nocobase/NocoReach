@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Insights initial loading
+
+- Load a compact Insights snapshot without generating the full analysis context, and start independent data blocks concurrently.
+- Reuse the last Insights snapshot within the authenticated project scope while refreshing on return. Fence older requests after mutations and clear unavailable data on permission or session changes.
+
 ## Unreleased — Intent-driven route resource loading
 
 - Prefetch permitted application menu resources after 120 ms of pointer hover or keyboard focus, without executing pages or fetching business data. Preserve menu navigation, nested groups and collapsed popovers; ignore touch hover and cancel short passes.

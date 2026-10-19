@@ -60,7 +60,12 @@ vi.mock('../../client/components/app-shell/nav-badges', () => ({
   refreshNavBadges: vi.fn(),
 }));
 
-const requests = { tasks, metrics: vi.fn(), summary: vi.fn() };
+const requests = {
+  tasks,
+  metrics: vi.fn(),
+  summary: vi.fn(),
+  overview: vi.fn(),
+};
 const blocks = [
   {
     kind: 'tasks',
@@ -124,6 +129,11 @@ beforeEach(() => {
   fixture.session.session.id = 'session-a';
   fixture.revision = 0;
   tasks.mockReset().mockResolvedValue([]);
+  requests.overview.mockReset().mockResolvedValue({
+    state: { revision: 1, goal: null, proposals: [] },
+    periodDays: 28,
+    availableThrough: null,
+  });
   requests.metrics.mockReset().mockResolvedValue({ cards: [] });
   requests.summary.mockReset().mockResolvedValue({ areas: [] });
   action
@@ -134,6 +144,8 @@ beforeEach(() => {
         operation: string,
         options: { body: { projectId: number } },
       ) => {
+        if (resource === 'nrStrategy' && operation === 'overview')
+          return requests.overview(options.body.projectId);
         if (resource === 'nrStrategy')
           return operation === 'state'
             ? { revision: 1, goal: null, proposals: [] }
@@ -191,6 +203,107 @@ async function setup(locale = 'en-US', report = false) {
     },
   };
 }
+
+it('starts independent blocks before the overview returns and never requests the AI context', async () => {
+  const pending = deferred<unknown>();
+  requests.overview.mockReturnValueOnce(pending.promise);
+  await setup();
+  await waitFor(() => expect(requests.metrics).toHaveBeenCalledTimes(1));
+  expect(requests.summary).toHaveBeenCalledTimes(1);
+  expect(tasks).toHaveBeenCalledTimes(1);
+  expect(
+    action.mock.calls.some(
+      ([resource, operation]) =>
+        resource === 'nrStrategy' && ['state', 'context'].includes(operation),
+    ),
+  ).toBe(false);
+  await act(async () =>
+    pending.resolve({
+      state: { revision: 1, goal: null, proposals: [] },
+      periodDays: 28,
+      availableThrough: '2026-10-18',
+    }),
+  );
+  expect(await screen.findByText(/2026-10-18/)).toBeInTheDocument();
+});
+
+it('shows the cached overview and blocks immediately on return while revalidating', async () => {
+  requests.overview.mockResolvedValueOnce({
+    state: { revision: 1, goal: null, proposals: [] },
+    periodDays: 28,
+    availableThrough: '2026-10-18',
+  });
+  tasks.mockResolvedValueOnce(values.tasks);
+  const view = await setup();
+  await screen.findByText(/Known task/);
+  const pending = deferred<unknown>();
+  requests.overview.mockReturnValueOnce(pending.promise);
+  const pendingTasks = deferred<unknown>();
+  tasks.mockReturnValueOnce(pendingTasks.promise);
+  view.show(false);
+  view.show(true);
+  expect(screen.getByText(/2026-10-18/)).toBeInTheDocument();
+  expect(screen.getByText(/Known task/)).toBeInTheDocument();
+  await waitFor(() => expect(requests.overview).toHaveBeenCalledTimes(2));
+  await act(async () => {
+    pending.resolve({
+      state: { revision: 2, goal: null, proposals: [] },
+      periodDays: 28,
+      availableThrough: '2026-10-19',
+    });
+    pendingTasks.resolve([]);
+  });
+  expect(await screen.findByText(/2026-10-19/)).toBeInTheDocument();
+  expect(screen.queryByText(/Known task/)).toBeNull();
+});
+
+it.each(['project', 'session', 'revision'])(
+  'does not expose the previous overview after changing %s',
+  async (scope) => {
+    requests.overview.mockResolvedValueOnce({
+      state: { revision: 1, goal: null, proposals: [] },
+      periodDays: 28,
+      availableThrough: '2026-10-18',
+    });
+    const view = await setup();
+    await screen.findByText(/2026-10-18/);
+    const pending = deferred<unknown>();
+    requests.overview.mockReturnValueOnce(pending.promise);
+    if (scope === 'project') fixture.project = 2;
+    if (scope === 'session') fixture.session.session.id = 'session-b';
+    if (scope === 'revision') fixture.revision++;
+    view.rerender();
+    expect(screen.queryByText(/2026-10-18/)).toBeNull();
+    await act(async () =>
+      pending.resolve({
+        state: { revision: 2, goal: null, proposals: [] },
+        periodDays: 28,
+        availableThrough: '2026-10-19',
+      }),
+    );
+    expect(await screen.findByText(/2026-10-19/)).toBeInTheDocument();
+  },
+);
+
+it('removes a cached overview after a forbidden revalidation', async () => {
+  requests.overview.mockResolvedValueOnce({
+    state: { revision: 1, goal: null, proposals: [] },
+    periodDays: 28,
+    availableThrough: '2026-10-18',
+  });
+  const view = await setup();
+  await screen.findByText(/2026-10-18/);
+  requests.overview.mockRejectedValue(
+    new NocoReachHttpError('Denied', 403, {}),
+  );
+  view.show(false);
+  view.show(true);
+  await screen.findByText(english['strategy.notLoadInsightsTryAgain']);
+  expect(screen.queryByText(/2026-10-18/)).toBeNull();
+  view.show(false);
+  view.show(true);
+  expect(screen.queryByText(/2026-10-18/)).toBeNull();
+});
 for (const block of blocks) {
   it.each(['en-US', 'zh-CN'])(
     `${block.kind}: initial failure is independent and retry restores real empty state (%s)`,

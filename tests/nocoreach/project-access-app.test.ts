@@ -107,6 +107,23 @@ test('a project-member role reaches only the projects its holder belongs to', as
   expect(saved.status).toBe(200);
   expect(await can(first)).toBe(true);
   expect(await can(second)).toBe(false);
+  const overview = (projectId: string) =>
+    client.fetch('/nocoreach/nrStrategy/overview', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: 'http://localhost',
+      },
+      body: JSON.stringify({ projectId }),
+    });
+  const permitted = await overview(first);
+  expect(permitted.status).toBe(200);
+  expect((await permitted.json()).data).toMatchObject({
+    periodDays: 28,
+    state: { revision: 0 },
+  });
+  expect((await overview(second)).status).toBe(403);
+
   // Application-wide and mixed-project reads never follow project membership.
   expect(await can()).toBe(false);
   const listed = await client.fetch('/nocoreach/nrProjects/list');
