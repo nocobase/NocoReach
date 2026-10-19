@@ -13,8 +13,6 @@ import {
   Clock,
   Bookmark,
   Bot,
-  Monitor,
-  BrainCircuit,
   ChartNoAxesCombined,
   ClipboardCheck,
   Earth,
@@ -42,7 +40,6 @@ import {
   Globe2,
   Store,
   Settings2,
-  ContactRound,
   KeyRound,
   BookHeart,
   TvMinimalPlay,
@@ -102,7 +99,7 @@ const page = (
   path,
   auth: 'required',
   authz: { resource: { type: 'page', id: name }, action: 'access' },
-  componentLoader: gated(load, false, !['members', 'roles', 'keys'].includes(name)),
+  componentLoader: gated(load, false, !['members', 'keys'].includes(name)),
   ...(navigation ? { navigation } : {}),
 });
 
@@ -172,10 +169,11 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     { ...page('agents', '/agents', () => import('./pages/agents/index.js'), { title: nav('agent'), icon: Bot, order: 1 }), children: [
       { ...page('runner-agents', 'runner', () => import('./pages/agents/runner.js')), authz: agentsRoute.authz },
       { ...page('online-agents', 'online', () => import('./online-agent/settings.js')), children: [page('online-agent-new', 'new', () => import('./online-agent/edit.js')), page('online-agent-edit', ':onlineAgentId/edit', () => import('./online-agent/edit.js'))] },
+      // The runtimes, models and usage pages are tabs of Agent, keeping the Agents plugin's own grants.
+      { ...runtimesRoute, path: 'runtimes', componentLoader: gated(runtimesRoute.componentLoader) },
+      { ...modelsRoute, path: 'models', componentLoader: gated(modelsRoute.componentLoader) },
+      { ...usageRoute, path: 'usage', componentLoader: gated(usageRoute.componentLoader) },
     ] },
-    { ...runtimesRoute, componentLoader: gated(runtimesRoute.componentLoader), navigation: { title: nav('runners'), icon: Monitor, order: 2 } },
-    { ...modelsRoute, componentLoader: gated(modelsRoute.componentLoader), navigation: { title: nav('models'), icon: BrainCircuit, order: 7 } },
-    { ...usageRoute, componentLoader: gated(usageRoute.componentLoader), navigation: { title: nav('usage'), icon: ChartNoAxesCombined, order: 8 } },
     page('playbooks', '/playbooks', () => import('./pages/playbooks.js'), { title: nav('playbooks'), icon: Workflow, order: 3 }),
     page('skills', '/skills', () => import('./pages/skills.js'), { title: nav('skills'), icon: WandSparkles, order: 4 }),
     page('project-settings', '/project', () => import('./pages/project-knowledge.js'), { title: nav('projectKnowledge'), icon: NotebookPen, order: 5 }),
@@ -216,11 +214,10 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     ] },
     { ...page('members', '/members', () => import('./pages/members.js'), { title: nav('members'), icon: Users, order: 2 }), children: [
       { name: 'member-invite', path: 'invite', componentLoader: () => import('./pages/access/invite-form.js') },
+      // Role paths come before :memberId/roles so /members/roles/roles opens the role, not a member.
+      { name: 'role-new', path: 'roles/new', componentLoader: () => import('./pages/access/role-form.js') },
+      { name: 'role-edit', path: 'roles/:roleKey', componentLoader: () => import('./pages/access/role-form.js') },
       { name: 'member-roles', path: ':memberId/roles', componentLoader: () => import('./pages/access/member-form.js') },
-    ] },
-    { ...page('roles', '/roles', () => import('./pages/access/roles.js'), { title: nav('roles'), icon: ContactRound, order: 3 }), authz: { resource: { type: 'page', id: 'members' }, action: 'access' }, children: [
-      { name: 'role-new', path: 'new', componentLoader: () => import('./pages/access/role-form.js') },
-      { name: 'role-edit', path: ':roleKey', componentLoader: () => import('./pages/access/role-form.js') },
     ] },
     { ...page('keys', '/keys', () => import('./pages/access/keys.js'), { title: nav('apiKeys'), icon: KeyRound, order: 4 }), authz: { resource: { type: 'page', id: 'members' }, action: 'access' }, children: [
         { name: 'key-new', path: 'new', componentLoader: () => import('./pages/access/key-form.js') },
