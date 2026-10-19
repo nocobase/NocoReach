@@ -51,6 +51,8 @@ function AgentsTabs() {
   const models = useCan(routeAccess(modelsRoute));
   const usage = useCan(routeAccess(usageRoute));
   const { search } = useLocation();
+  // The usage filters (range, grouping, the prices sheet) belong to the usage tab: neither carried into it nor out of it.
+  const inUsage = useMatch('/agents/usage/*') !== null;
   const tabClass = cn(
     buttonVariants({ variant: 'ghost', size: 'sm' }),
     'text-muted-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground',
@@ -77,7 +79,10 @@ function AgentsTabs() {
           <NavLink
             key={tab.path}
             className={tabClass}
-            to={{ pathname: `/agents/${tab.path}`, search }}
+            to={{
+              pathname: `/agents/${tab.path}`,
+              search: inUsage || tab.path === 'usage' ? '' : search,
+            }}
           >
             {tab.label}
           </NavLink>

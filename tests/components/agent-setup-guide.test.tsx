@@ -9,23 +9,29 @@ import {
 const state = vi.hoisted(() => ({
   runners: { loading: false, online: 0, options: [] as { value: string }[] },
   agents: { loading: false, failed: false, options: [] as { value: string }[] },
-  // Resource ids the viewer does not hold.
+  // Grants the viewer does not hold: a resource id (every action) or `id:action`.
   denied: new Set<string>(),
+  pending: false,
 }));
 vi.mock('@nocobase/app-plugin-agents/client/kit', () => ({
   useRunnerOptions: () => state.runners,
   useAgentOptions: () => state.agents,
 }));
 vi.mock('@nocobase/app-plugin-authorization/client', () => ({
-  useCan: (request?: { resource: { id: string } }) => ({
-    can: !request || !state.denied.has(request.resource.id),
-    isPending: false,
+  useCan: (request?: { resource: { id: string }; action: string }) => ({
+    can:
+      !state.pending &&
+      (!request ||
+        (!state.denied.has(request.resource.id) &&
+          !state.denied.has(`${request.resource.id}:${request.action}`))),
+    isPending: state.pending,
   }),
 }));
 beforeEach(() => {
   state.runners = { loading: false, online: 0, options: [] };
   state.agents = { loading: false, failed: false, options: [] };
   state.denied.clear();
+  state.pending = false;
 });
 
 function mount(element: React.ReactNode) {
@@ -51,6 +57,17 @@ test('leaves out the add button without the runtimes grant', () => {
   expect(screen.queryByRole('button')).not.toBeInTheDocument();
 });
 
+test('does not claim no runtime exists to a viewer who sees only their own', () => {
+  state.denied.add('agents.runners');
+  state.denied.add('agents.agents');
+  mount(<RunnerSetupGuide />);
+  expect(screen.queryByText('先添加一个运行环境')).not.toBeInTheDocument();
+  expect(
+    screen.getByText('请联系管理员启用 Runner Agent，或添加你自己的运行环境。'),
+  ).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '添加运行环境' })).toBeVisible();
+});
+
 test('says when every runtime is offline', () => {
   state.runners = { loading: false, online: 0, options: [{ value: 'r1' }] };
   mount(<RunnerSetupGuide />);
@@ -66,7 +83,7 @@ test('asks to enable an agent once a runtime is online', () => {
   const { unmount } = mount(<RunnerSetupGuide />);
   expect(screen.getByText(/在下方“新发现”中启用/)).toBeInTheDocument();
   unmount();
-  state.denied.add('agents.agents');
+  state.denied.add('agents.agents:manage');
   mount(<RunnerSetupGuide />);
   expect(
     screen.getByText('请联系管理员启用 Runner Agent。'),
@@ -84,21 +101,32 @@ test('shows nothing once an agent is enabled, while loading, or when agents cann
   failed.unmount();
   state.agents = { loading: false, failed: false, options: [] };
   state.runners = { loading: true, online: 0, options: [] };
+  const loading = mount(<RunnerSetupGuide />);
+  expect(loading.container).toBeEmptyDOMElement();
+  loading.unmount();
+  state.runners = { loading: false, online: 0, options: [] };
+  state.pending = true;
   expect(mount(<RunnerSetupGuide />).container).toBeEmptyDOMElement();
 });
 
-test('points to adding a model service, or to an administrator', () => {
-  const { unmount } = mount(<ModelSetupGuide compact={false} />);
+test('points to adding a model service only to who may add one', () => {
+  const { unmount } = mount(<ModelSetupGuide />);
   expect(screen.getByText('先添加模型服务')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '添加模型服务' })).toHaveAttribute(
     'href',
     '/agents/models?view=saved',
   );
   unmount();
-  state.denied.add('agents.services');
-  mount(<ModelSetupGuide compact />);
+  // Reading model services opens the models tab, but adding one takes manage.
+  state.denied.add('agents.services:manage');
+  mount(<ModelSetupGuide />);
   expect(
     screen.getByText('在线 Agent 需要模型服务才能回答问题，请联系管理员添加。'),
   ).toBeInTheDocument();
   expect(screen.queryByRole('button')).not.toBeInTheDocument();
+});
+
+test('waits for the model permission checks', () => {
+  state.pending = true;
+  expect(mount(<ModelSetupGuide />).container).toBeEmptyDOMElement();
 });

@@ -142,3 +142,17 @@ test('hides the runtimes, models and usage tabs without their grants', () => {
     '在线 Agent',
   ]);
 });
+
+test('keeps the usage filters to the usage tab', async () => {
+  const router = mount('/agents/runner?view=saved');
+  expect(screen.getByRole('link', { name: '用量' })).toHaveAttribute(
+    'href',
+    '/agents/usage',
+  );
+  await router.navigate('/agents/usage?groupBy=agent');
+  expect(await screen.findByText('Usage page')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Runner Agent' })).toHaveAttribute(
+    'href',
+    '/agents/runner',
+  );
+});

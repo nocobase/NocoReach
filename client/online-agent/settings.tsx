@@ -39,8 +39,12 @@ export default function OnlineAgentSettings() {
   const [revision, setRevision] = useState(0),
     { can: canManage } = useBusinessAccess('nrOnline.manage');
   const data = useOnlineResource<Agent[]>('definitions', revision);
-  // Online agents answer through a model service; with none configured, adding one comes first.
-  const catalog = useOnlineResource<{ services: unknown[] }>('models');
+  // Online agents answer through a model service; with none configured, adding one comes first. A failed catalog
+  // read shows no guide, and a refresh reads it again.
+  const catalog = useOnlineResource<{ services: unknown[] }>(
+    'models',
+    revision,
+  );
   const noModels = catalog.data?.services.length === 0;
   const refresh = () => setRevision((value) => value + 1);
   const saved = (agent: OnlineAgentDefinition) =>
@@ -75,11 +79,8 @@ export default function OnlineAgentSettings() {
           {$t('common.loading')}
         </p>
       )}
-      {noModels && !!data.data?.length && <ModelSetupGuide compact />}
-      {data.data?.length === 0 && noModels && (
-        <ModelSetupGuide compact={false} />
-      )}
-      {data.data?.length === 0 && !noModels && (
+      {noModels && <ModelSetupGuide />}
+      {data.data?.length === 0 && (
         <Empty className='min-h-48 border border-dashed'>
           <EmptyHeader>
             <EmptyMedia variant='icon'>
