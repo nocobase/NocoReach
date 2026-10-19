@@ -63,8 +63,11 @@ vi.mock('@nocobase/app-plugin-agents/client/chat', async (original) => ({
   CHAT_DOCK_QUERY: '(min-width: 1280px)',
   modifierKeyLabel: () => 'Ctrl',
 }));
+vi.mock('../../client/hooks/use-business-access', () => ({
+  useBusinessAccess: () => ({ can: true }),
+}));
 vi.mock('../../client/pages/me.js', () => ({
-  useMe: () => ({ isAdmin: true, me: { role: 'admin' } }),
+  useMe: () => ({ me: { role: 'member' } }),
 }));
 vi.mock('../../client/pages/reach-data.js', () => ({
   useProject: () => ({ project }),

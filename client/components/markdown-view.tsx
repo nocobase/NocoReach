@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 
 import { cn } from 'cn';
 
+import { MarkdownLink } from './markdown-link.js';
 import { remarkCjkAutolink } from './remark-cjk-autolink.js';
 
 const MENTION_HREF = /^mention:\/\/([a-z][a-z0-9_]{1,31})\//u;
@@ -84,15 +85,13 @@ export function MarkdownView({
           </span>
         );
       return (
-        <a
+        <MarkdownLink
           href={href}
-          target='_blank'
-          rel='noreferrer'
           className='font-medium text-primary underline underline-offset-4'
           {...props}
         >
           {children}
-        </a>
+        </MarkdownLink>
       );
     },
     p: ({ node: _node, ...props }) => (

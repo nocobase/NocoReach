@@ -99,7 +99,7 @@ function setup() {
       name === 'nrYouTubeVideos'
         ? videoRepo
         : name === 'users'
-          ? { findOne: async () => ({ id: 2, roles: [{ name: 'member' }] }) }
+          ? { findOne: async () => ({ id: 2, roles: [{ name: 'nr.member' }] }) }
           : repo,
     sequelize: {
       transaction: async (fn: (tx: object) => unknown) => fn({}),
@@ -109,6 +109,7 @@ function setup() {
   const profiles = new ProxyProfiles({ all: () => ({}), set: vi.fn() });
   const network = new OutboundNetwork(profiles);
   const host = {
+    collectors: { allowed: () => [] },
     db,
     network,
     project: vi.fn(async () => ({ id: '1' })),
@@ -172,6 +173,7 @@ describe('YouTube source lifecycle', () => {
       AbortSignal,
       { projectId: string; requestId: string },
     ];
+    expect(search[0]).toBe('NocoBase');
     expect(search[2]).toEqual({
       projectId: '1',
       requestId: expect.stringMatching(/^[0-9a-f-]{36}$/),

@@ -7,6 +7,10 @@ import inboxEnUS from '#extensions/nocobase-inbox/locales/en-US';
  * upgrade replaces this file, so put the application's own copy in `../en-US.ts` rather than here.
  */
 const systemEnUS = {
+  'auth.preparingSession': 'Preparing your session…',
+  'auth.connectionFailed': 'Unable to connect',
+  'auth.connectionFailedDescription':
+    'The connection could not be established. Retry to enter the application, or sign out.',
   'auth.passwordResetSuccess':
     'Your password has been reset. Sign in with your new password.',
   'auth.requestNewResetLink': 'Request a new reset link',

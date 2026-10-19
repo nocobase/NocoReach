@@ -120,8 +120,8 @@ describe('runtime mock collector boundaries', () => {
       completeness: 'search_summary',
       likes: null,
       comments: null,
-      publishedAt: null,
-      publishedAtPrecision: null,
+      publishedAt: '2026-10-11T09:00:00.000Z',
+      publishedAtPrecision: 'minute',
     });
     expect(detail.items[0]).toMatchObject({
       bvid: videos.items[0].bvid,

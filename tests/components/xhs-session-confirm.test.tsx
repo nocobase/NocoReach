@@ -3,11 +3,14 @@ import {
   act,
   cleanup,
   fireEvent,
-  render,
+  render as renderBase,
   screen,
   waitFor,
   within,
 } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
+import type { ReactElement } from 'react';
+import userEvent from '@testing-library/user-event';
 import { MeProvider, MemberGate } from '../../client/pages/me';
 import {
   XiaohongshuConnect,
@@ -15,6 +18,9 @@ import {
 } from '../../client/pages/xiaohongshu-connect';
 import { xiaohongshuRequest } from '../../client/pages/xiaohongshu-api';
 import { setDictionary } from '../../client/i18n';
+
+// The panels link to their data pages, so they render inside a router.
+const render = (ui: ReactElement) => renderBase(ui, { wrapper: MemoryRouter });
 
 const auth = vi.hoisted(() => ({
   session: { user: { id: 'admin-a' }, session: { id: 'session-a' } } as {
@@ -35,6 +41,10 @@ const calls = vi.hoisted(
       revision: number;
     }[],
 );
+const authz = vi.hoisted(() => ({
+  can: vi.fn(async () => true),
+  invalidate: vi.fn(),
+}));
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => ({
     ...auth,
@@ -44,6 +54,7 @@ vi.mock('@nocobase/app-plugin-authentication/client', () => ({
 }));
 vi.mock('@nocobase/app-plugin-authorization/client', () => ({
   useAuthorizationRevision: () => auth.revision,
+  useAuthorizationClient: () => authz,
 }));
 vi.mock('../../client/lib/nocoreach-api', () => ({
   nocobaseClient: {
@@ -115,7 +126,9 @@ afterEach(async () => {
   cleanup();
 });
 async function openDisconnect() {
-  fireEvent.click(await screen.findByRole('button', { name: '断开' }));
+  await userEvent
+    .setup()
+    .click(await screen.findByRole('button', { name: '断开' }));
   return await screen.findByRole('alertdialog');
 }
 async function confirmDisconnect() {

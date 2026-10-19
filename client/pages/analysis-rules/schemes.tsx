@@ -22,6 +22,7 @@ import {
   TooltipContent,
 } from '#components/ui/tooltip';
 import { Section } from '#components/reach/page';
+import { useBusinessAccess } from '#hooks/use-business-access';
 import { getSourceNames } from '../strategy/board';
 import type { View, Rule } from './types';
 type Execute = (
@@ -33,16 +34,28 @@ const errorText = (e: unknown) =>
 export function SchemeManager({
   view,
   disabled,
-  admin,
+  projectId,
   select,
   execute,
 }: {
   view: View;
   disabled: boolean;
-  admin: boolean;
+  projectId: number;
   select: (id: string) => void;
   execute: Execute;
 }) {
+  const { can: canCreate } = useBusinessAccess(
+    'nrAnalysisRules.create',
+    projectId,
+  );
+  const { can: canRename } = useBusinessAccess(
+    'nrAnalysisRules.rename',
+    projectId,
+  );
+  const { can: canActivate } = useBusinessAccess(
+    'nrAnalysisRules.activate',
+    projectId,
+  );
   const [dialog, setDialog] = useState<null | 'create' | 'rename' | 'activate'>(
       null,
     ),
@@ -103,7 +116,7 @@ export function SchemeManager({
       title={$t('analysisSchemes.title')}
       description={$t('analysisSchemes.help')}
       actions={
-        admin ? (
+        canCreate ? (
           <Button
             variant='outline'
             size='sm'
@@ -137,59 +150,59 @@ export function SchemeManager({
                   : $t('analysisSchemes.inactive')}
               </span>
             </button>
-            {admin ? (
-              <>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        variant='ghost'
-                        size='icon'
-                        disabled={disabled || view.schemes!.length >= 5}
-                        aria-label={$t('analysisSchemes.copyNamed', {
-                          0: s.name,
-                        })}
-                        onClick={() => open('create', s.id)}
-                      >
-                        <Copy className='size-4' />
-                      </Button>
-                    }
-                  />
-                  <TooltipContent>
-                    {$t('analysisSchemes.copyNamed', { 0: s.name })}
-                  </TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        variant='ghost'
-                        size='icon'
-                        disabled={disabled}
-                        aria-label={$t('analysisSchemes.renameNamed', {
-                          0: s.name,
-                        })}
-                        onClick={() => open('rename', s.id)}
-                      >
-                        <Pencil className='size-4' />
-                      </Button>
-                    }
-                  />
-                  <TooltipContent>
-                    {$t('analysisSchemes.renameNamed', { 0: s.name })}
-                  </TooltipContent>
-                </Tooltip>
-                {s.id !== view.activeSchemeId ? (
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    disabled={disabled}
-                    onClick={() => open('activate', s.id)}
-                  >
-                    {$t('analysisSchemes.use')}
-                  </Button>
-                ) : null}
-              </>
+            {canCreate ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant='ghost'
+                      size='icon'
+                      disabled={disabled || view.schemes!.length >= 5}
+                      aria-label={$t('analysisSchemes.copyNamed', {
+                        0: s.name,
+                      })}
+                      onClick={() => open('create', s.id)}
+                    >
+                      <Copy className='size-4' />
+                    </Button>
+                  }
+                />
+                <TooltipContent>
+                  {$t('analysisSchemes.copyNamed', { 0: s.name })}
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
+            {canRename ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant='ghost'
+                      size='icon'
+                      disabled={disabled}
+                      aria-label={$t('analysisSchemes.renameNamed', {
+                        0: s.name,
+                      })}
+                      onClick={() => open('rename', s.id)}
+                    >
+                      <Pencil className='size-4' />
+                    </Button>
+                  }
+                />
+                <TooltipContent>
+                  {$t('analysisSchemes.renameNamed', { 0: s.name })}
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
+            {canActivate && s.id !== view.activeSchemeId ? (
+              <Button
+                variant='outline'
+                size='sm'
+                disabled={disabled}
+                onClick={() => open('activate', s.id)}
+              >
+                {$t('analysisSchemes.use')}
+              </Button>
             ) : null}
           </div>
         ))}
@@ -312,7 +325,7 @@ export function AddRule({
   disabled: boolean;
   execute: Execute;
   rule?: Rule;
-  draft: (
+  draft?: (
     instruction: string,
   ) => Promise<{ draft: RuleDraft; revision: string }>;
 }) {
@@ -351,7 +364,7 @@ export function AddRule({
     setOpen(false);
   };
   const organize = async () => {
-    if (inflightRef.current) return;
+    if (inflightRef.current || !draft) return;
     if (!instruction.trim()) {
       setError(() => $t('analysisRules.instructionRequired'));
       return;
@@ -471,83 +484,88 @@ export function AddRule({
             className='flex min-h-0 flex-col gap-4'
           >
             <div className='min-h-0 flex flex-col gap-4 overflow-y-auto pr-1'>
-              <div className='flex flex-col gap-3 rounded-lg border bg-muted/30 p-3'>
-                <label className='flex flex-col gap-2 text-sm'>
-                  <span>{$t('analysisSchemes.intent')}</span>
-                  <Textarea
-                    rows={2}
-                    maxLength={2000}
+              {draft ? (
+                <div className='flex flex-col gap-3 rounded-lg border bg-muted/30 p-3'>
+                  <label className='flex flex-col gap-2 text-sm'>
+                    <span>{$t('analysisSchemes.intent')}</span>
+                    <Textarea
+                      rows={2}
+                      maxLength={2000}
+                      disabled={working}
+                      value={instruction}
+                      onChange={(e) => {
+                        setInstruction(e.target.value);
+                        setProposal(undefined);
+                      }}
+                    />
+                  </label>
+                  <Button
+                    variant='outline'
+                    size='sm'
                     disabled={working}
-                    value={instruction}
-                    onChange={(e) => {
-                      setInstruction(e.target.value);
-                      setProposal(undefined);
-                    }}
-                  />
-                </label>
-                <Button
-                  variant='outline'
-                  size='sm'
-                  disabled={working}
-                  onClick={() => void organize()}
-                >
-                  {working ? (
-                    <Loader2 className='size-4 animate-spin' />
-                  ) : (
-                    <Sparkles className='size-4' />
-                  )}
-                  {working
-                    ? $t('analysisSchemes.organizing')
-                    : $t('analysisSchemes.organize')}
-                </Button>
-                {proposal ? (
-                  <div
-                    className='flex flex-col gap-2 border-t pt-3'
-                    aria-live='polite'
+                    onClick={() => void organize()}
                   >
-                    <p className='text-sm font-medium'>
-                      {$t('analysisSchemes.reviewDraft')}
-                    </p>
-                    <dl className='flex flex-col gap-2 text-sm'>
-                      {[
-                        [$t('analysisSchemes.name'), proposal.name],
-                        [$t('analysisSchemes.source'), label(proposal.source)],
-                        [$t('analysisSchemes.condition'), proposal.condition],
-                        [$t('analysisSchemes.evidence'), proposal.evidence],
-                      ].map(([key, value]) => (
-                        <div key={key}>
-                          <dt className='text-xs text-muted-foreground'>
-                            {key}
-                          </dt>
-                          <dd>{value}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                    <p className='text-xs text-muted-foreground'>
-                      {$t('analysisSchemes.replaceHelp')}
-                    </p>
-                    <div className='flex gap-2'>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => {
-                          setFields(proposal);
-                          setProposal(undefined);
-                        }}
-                      >
-                        {$t('analysisSchemes.fill')}
-                      </Button>
-                      <Button
-                        variant='ghost'
-                        size='sm'
-                        onClick={() => setProposal(undefined)}
-                      >
-                        {$t('analysisSchemes.discard')}
-                      </Button>
+                    {working ? (
+                      <Loader2 className='size-4 animate-spin' />
+                    ) : (
+                      <Sparkles className='size-4' />
+                    )}
+                    {working
+                      ? $t('analysisSchemes.organizing')
+                      : $t('analysisSchemes.organize')}
+                  </Button>
+                  {proposal ? (
+                    <div
+                      className='flex flex-col gap-2 border-t pt-3'
+                      aria-live='polite'
+                    >
+                      <p className='text-sm font-medium'>
+                        {$t('analysisSchemes.reviewDraft')}
+                      </p>
+                      <dl className='flex flex-col gap-2 text-sm'>
+                        {[
+                          [$t('analysisSchemes.name'), proposal.name],
+                          [
+                            $t('analysisSchemes.source'),
+                            label(proposal.source),
+                          ],
+                          [$t('analysisSchemes.condition'), proposal.condition],
+                          [$t('analysisSchemes.evidence'), proposal.evidence],
+                        ].map(([key, value]) => (
+                          <div key={key}>
+                            <dt className='text-xs text-muted-foreground'>
+                              {key}
+                            </dt>
+                            <dd>{value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                      <p className='text-xs text-muted-foreground'>
+                        {$t('analysisSchemes.replaceHelp')}
+                      </p>
+                      <div className='flex gap-2'>
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          onClick={() => {
+                            setFields(proposal);
+                            setProposal(undefined);
+                          }}
+                        >
+                          {$t('analysisSchemes.fill')}
+                        </Button>
+                        <Button
+                          variant='ghost'
+                          size='sm'
+                          onClick={() => setProposal(undefined)}
+                        >
+                          {$t('analysisSchemes.discard')}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ) : null}
-              </div>
+                  ) : null}
+                </div>
+              ) : null}
               <label className='flex flex-col gap-2 text-sm'>
                 <span>{$t('analysisSchemes.name')} *</span>
                 <Input

@@ -12,6 +12,14 @@ export interface SavedYouTubeVideo extends Video {
 }
 const validMetric = (value: number | null) =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0;
+// Match the publication migration's calendar validation for legacy payloads, too.
+const publicationDate = (value: unknown) =>
+  typeof value === 'string' &&
+  /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+  Number.isFinite(Date.parse(value)) &&
+  new Date(value).toISOString().slice(0, 10) === value
+    ? value
+    : null;
 
 /** Records belong to a project, independently of its current discovery conditions. */
 export class YouTubeLibrary {
@@ -28,6 +36,9 @@ export class YouTubeLibrary {
       const previous = row?.get('payload') as SavedYouTubeVideo | undefined;
       const saved: SavedYouTubeVideo = {
         ...video,
+        publishedAt:
+          publicationDate(video.publishedAt) ??
+          publicationDate(previous?.publishedAt),
         firstSeenAt: previous?.firstSeenAt || video.fetchedAt,
         metricFetchedAt: { views: null, likes: null, comments: null },
         transcriptFetchedAt:
@@ -46,10 +57,14 @@ export class YouTubeLibrary {
       }
       if (video.transcript.status === 'failed' && previous?.transcript.text)
         saved.transcript = previous.transcript;
+      const publication = {
+        publishedAt: saved.publishedAt,
+        publishedAtKnown: saved.publishedAt !== null,
+      };
       if (row)
         await this.repo().update({
           filterByTk: key,
-          values: { payload: saved },
+          values: { payload: saved, ...publication },
         });
       else
         await this.repo().create({
@@ -58,6 +73,7 @@ export class YouTubeLibrary {
             projectId: project,
             videoId: video.id,
             payload: saved,
+            ...publication,
             createdAt: new Date(saved.firstSeenAt),
           },
         });
@@ -73,7 +89,7 @@ export class YouTubeLibrary {
     const page = Math.min(requested, Math.max(1, Math.ceil(total / pageSize)));
     const rows = await this.repo().find({
       filter,
-      sort: ['-createdAt', 'id'],
+      sort: ['-publishedAtKnown', '-publishedAt', 'id'],
       limit: pageSize,
       offset: (page - 1) * pageSize,
     });
@@ -83,6 +99,54 @@ export class YouTubeLibrary {
       pageSize,
       videos: rows.map((row) => row.get('payload') as SavedYouTubeVideo),
     };
+  }
+  /**
+   * Dates and counts of every saved video, for period reports. Read in batches and without captions, so a large
+   * library is counted in full without holding every transcript in memory.
+   */
+  async summaries(id: string) {
+    const filter = { projectId: projectId(id) };
+    const size = 500;
+    const result: Pick<
+      SavedYouTubeVideo,
+      'id' | 'channel' | 'publishedAt' | 'firstSeenAt' | Metric
+    >[] = [];
+    for (let offset = 0; ; offset += size) {
+      const rows = await this.repo().find({
+        filter,
+        sort: ['id'],
+        limit: size,
+        offset,
+      });
+      for (const row of rows) {
+        const video = row.get('payload') as SavedYouTubeVideo;
+        result.push({
+          id: video.id,
+          channel: video.channel,
+          publishedAt: video.publishedAt,
+          firstSeenAt: video.firstSeenAt,
+          views: video.views,
+          likes: video.likes,
+          comments: video.comments,
+        });
+      }
+      if (rows.length < size) return result;
+    }
+  }
+  /** Full saved videos by ID, in the order given. */
+  async byIds(id: string, videoIds: string[]) {
+    if (!videoIds.length) return [];
+    const rows = await this.repo().find({
+      filter: { projectId: projectId(id), videoId: { $in: videoIds } },
+      limit: videoIds.length,
+    });
+    const byId = new Map(
+      rows.map((row) => {
+        const video = row.get('payload') as SavedYouTubeVideo;
+        return [video.id, video] as const;
+      }),
+    );
+    return videoIds.flatMap((videoId) => byId.get(videoId) ?? []);
   }
   async selected(id: string, videoIds: string[]) {
     if (!videoIds.length) return [];

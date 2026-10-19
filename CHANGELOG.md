@@ -1,5 +1,145 @@
 # NocoReach Changelog
 
+## Unreleased — Article publishing to several targets
+
+- Let administrators choose, per playbook, where new tasks publish: the default target, a specific target, or the website repository as a pull request.
+- Publish one reviewed article to up to four other targets as well. Other targets are matched by slug (updated or created), leave out languages and fields they cannot hold, and publish, retry, rebase, export and report overwrites independently; the task card lists each target's state.
+
+## Unreleased — Article publishing
+
+- Preserve publication status when manually editing an article draft, and reject targets beyond the ten-target limit before saving configuration.
+- Create new articles as drafts unless the reviewer chooses Published in the article editor, whatever the target's own default, and show status changes as words in the review.
+- Keep an edited publishing target in its place and let administrators choose the default target new tasks publish to.
+- Tell the Agent where a malformed result goes wrong (extra content after a complete JSON value, or an unreadable position) so it can correct the submission.
+- Add publishing targets under Data sources: a NocoBase collection through its API, the new NocoReach article API protocol, or Markdown files in a GitHub repository. Each kind declares how it protects concurrent writes; credentials stay sealed on the server.
+- Blog and article tasks can publish to a target instead of opening a pull request. The Agent drafts a structured article (per-language title, summary and body), the owner reviews and edits it field by field, and the server publishes only the approved fields after rechecking the article. Conflicting edits keep both versions for a new review; retries never write twice.
+- For targets that export to Git, block publishing over Git-only edits, track the export before checking the live page, and block code changes to exported article files. Show an overwrite of a published article on its task for 14 days.
+- Preserve the approved publication status in export and overwrite comparisons so a newly saved draft does not trigger a false overwrite warning.
+
+## Unreleased — YouTube metadata-only collection
+
+- Stop requesting and downloading YouTube captions in Collector. Keep video discovery, metadata and public metrics, with the existing bounded output and refusal handling.
+- Remove the caption section from YouTube data rows and update connection guidance. Retain the protocol-v1 empty transcript placeholder for compatibility.
+
+## Unreleased — Collector data page follow-up
+
+- Move "Clear collected data" from the Xiaohongshu, Bilibili and YouTube data pages to their connection panels, and reduce the data page headers to the single read/search action used by the other Community pages.
+- Reuse a collector report read today when its data page opens again; read it again on a new day, an explicit read/search, Retry, the end of a collection, or a connection-panel change.
+- Update the YouTube authentication-provider tests to the two-step clear confirmation that failed CI after #146.
+
+## Unreleased — Clear collected platform data
+
+- Add project-scoped clear actions to Bilibili, Xiaohongshu and YouTube data pages with two sequential confirmations. Upgrade the existing YouTube connection-panel action to the same confirmation flow.
+- Preserve collector settings and search criteria, enforce configuration permissions and session/revision checks, and reject concurrent collection. Clear saved metrics and provenance; YouTube also clears captions and pauses automatic collection.
+
+## Unreleased — Request SQL measurement isolation
+
+- Scope the access-key request cost test to its own asynchronous query context so background job transactions cannot cause intermittent CI failures. Retain zero-transaction and lock checks, add measurement calibration, and create an independent project fixture.
+
+## Unreleased — Collector data page layout
+
+- Lay out the Xiaohongshu, Bilibili and YouTube data pages like the other Community pages: a publishing trend chart, a table with right-aligned, server-sorted count and date columns, and a side card counting records by search term, video link or channel. Rows can be ticked and handed to the Agent. Platform caveats move into the header notes; unknown counts show "—".
+- Add `sort`/`order` parameters and `trend`/`groups` fields to the `nrXiaohongshu`, `nrBilibili` and `nrYouTube` `report` actions. Add a Refresh action, a page-shaped loading skeleton and Retry on failed loads.
+
+## Unreleased — Refresh saved Bilibili videos
+
+- Refresh saved videos even when they no longer appear on the first search page, updating changing metrics and filling missing publication dates. Preserve known values on incomplete responses and retain bounded sequential collection.
+- Adopt the current configuration revision after a successful refresh and record fresh metric timestamps.
+
+## Unreleased — Login session preparation
+
+- Update Authentication to `2.0.0-beta.10` with its required framework companions and port Default Template PR [#10986](https://github.com/nocobase/nocobase/pull/10986). Prepare the authenticated realtime connection before mounting business identity, caches and pages, preventing the initial permission invalidation from causing a second load and duplicate requests.
+- Show localized retry and sign-out actions when session preparation times out. Preserve later permission invalidation, session isolation and protected dialog cleanup. The full template baseline remains `1.0.0-beta.68`; this is a selective source update from `beta.69`.
+
+## Unreleased — Collector payload limits
+
+- Raise collector response and output limits from 1 MiB to 20 MiB across application, subprocess and browser collection boundaries. Raise automatic content ingestion from 1,000,000 to 20,000,000 JSON characters while retaining its 500-record batch limit.
+
+## Unreleased — Collector data pages
+
+- Add Xiaohongshu, Bilibili and YouTube pages under Community. Each lists the saved notes or videos published in the selected period, compares publications with the previous period, sums the latest views, likes and comments, and can start a collection for members with the platform's use capability.
+- Add `report` actions to `nrXiaohongshu`, `nrBilibili` and `nrYouTube` on a shared period helper, granted through each platform's use capability; the pages are granted to every role like the other data pages.
+- Remove result lists from the connection panels, which now show the saved count and link to the data page. The Xiaohongshu panel reads `status` instead of `view`.
+
+## Unreleased — Task draft navigation
+
+- Remember navigation confirmation for unchanged task drafts, preventing repeated prompts after leaving a manual Agent result editor while preserving draft recovery, new-edit confirmation, and browser unload protection.
+
+## Unreleased — Online task tools
+
+- Preserve the application shell and active Agent conversation when a task link selects another project; reset only project-scoped navigation badge data.
+
+- Preserve the current user name when online tools claim unowned tasks; remove redundant task conversion and reuse Runner status within each detail request. Skip status calculation for ordinary list entries outside the requested page.
+
+- Open Markdown links to task details through the current router, preserving deployment paths, task project parameters and draft navigation guards; keep external links in separate tabs.
+
+- Let online assistants list current-user tasks across authorized projects and inspect Runner readiness with clickable, project-aware task links.
+- Delegate explicitly requested task starts and retries to Runner agents through existing business authorization, revision and idempotency checks; keep human review and publication in the task page.
+
+## Unreleased — Stable restart and health retry tests
+
+- Restart the timezone test application in a later second than the previous process, so Snowflake IDs cannot repeat on the same database.
+- Wait for the asynchronous YouTube sync grant check before asserting it in the health panel test.
+
+## Unreleased — Project members and capability roles
+
+- Give projects their own members. Roles choose a project scope (the projects their holders belong to, or every project) and a short list of capabilities instead of individual actions with per-action project selections; the server expands capabilities into the existing action grants and resolves `$member` grants against project membership. Pages follow from capabilities.
+- Collapse data source permissions into "use" per source (read, sync, search and test) and a single "configure sources" capability.
+- Invite up to 50 addresses at once into the member role and chosen projects, with a per-address outcome; existing members join the projects directly. Edit a member's roles and projects together, and add a project's creator as its member.
+- On upgrade, remove custom roles saved as individual actions, keep their holders as members, and add every current business member to every existing project. Built-in roles follow the capability catalogue at every start.
+
+## Unreleased — Remove UI annotation tooling
+
+- Remove the `@gchust/agent-annotations` development dependency, Vite integration, theme host, environment toggle, and obsolete test and documentation references to align with the upstream template.
+- Business Agents, Runners, and task execution remain unchanged.
+
+## Unreleased — Bilibili search detail enrichment
+
+- Enrich up to 20 unique search discoveries with sequential Collector video requests, prioritizing recent publications and sharing the existing batch deadline and cancellation boundary.
+- Preserve successful discovery results on optional detail failures, stop on throttling or access refusals without retries, and retain known metrics, titles and publication dates during incomplete refreshes.
+- Retain per-metric collection timestamps so incomplete refreshes cannot turn stale Bilibili metrics into fresh analysis signals.
+
+## Unreleased — Source publication ordering
+
+- Preserve validated Bilibili search publication timestamps and precision, retain known dates across incomplete refreshes, and order saved/recent videos by publication before truncation with stable ID ties.
+- Project YouTube publication dates into indexed database fields, backfill existing records, and sort before pagination with unknown dates last. Preserve known dates when refreshes return null.
+- Cover Xiaohongshu Collector order and estimated-date boundaries; document the existing YouTube search keyword configuration.
+
+## Unreleased — Application permissions, members and API keys
+
+- Preserve collector configuration and connection navigation guards when syncing main. Authorize collector configuration by project action grants and hand conversation saves to the browser for session confirmation.
+
+- Use framework permission sets as the application role source, with multiple-role assignments, explicit page/action grants, project data selections and protection for the final active administrator. Migrate existing members and retire unscoped default API keys atomically at release cutover.
+- Apply the same authorization boundary to legacy APIs, task execution, online work and plugin surfaces while retaining task ownership, review and attachment rules. Recheck actor and owner execution grants in Runner admission after source preparation, while allowing read-only selection without preparation. Share the action catalogue and application/project classifier across runtime checks, the role editor and key scopes.
+- Require application grants for shared Skill changes, including imports from Project Knowledge; keep project enablement scoped to its project. Project-limited keys cannot change shared configuration or another project's language settings.
+- Add Members, Roles and API Keys under Settings. Use action permissions for settings controls and preserve domain administrator semantics for task ownership/review. Expose My invitations in the account menu before business membership. Open source drawers for their permitted actions, and independently check each connection control, health retry and project or application-wide network operation.
+- Store one canonical business offer per invited email, with database-enforced deduplication, seven-day expiry, explicit acceptance, copy delivery, renewal and revocation. Bind new-account offers to public Users invitation tokens, keep existing-account offers identity-bound, and recheck current inviter grants and the original ceiling on acceptance. Recover interrupted issuance without duplicate authorization state.
+- Serialize role definitions and assignments with a database transaction lock. Preserve each editor's opening role revision or assignments across background refreshes, and validate them with current grantors after locking so concurrent saves, deletion, membership changes and invitation acceptance cannot silently overwrite one another. Reject API-key membership changes through both the new and classic endpoints.
+- Let active people manage their personal scoped keys; use independent service identities for organization keys. Recheck mutation authority under the management lock and validate organization scope against combined selected roles before creation. Keep credential changes, service identity retirement and audit atomic, and provide immediate rotation, stop and owner-authorized history after credential removal.
+- Keep invitation links and newly issued secrets visible after a follow-up query error, in transient component state only. Filter retired key history by actual owner and type before loading event payloads.
+- Remove the unmerged intermediate grant migration, unused administrator-only UI helpers, no-op task brief registration, redundant role queries and temporary measurement/export scaffolding. Keep regression coverage for actual authorization, concurrency, rollback and read-path cost invariants.
+
+## Unreleased — Runner chat business access
+
+- Let enabled Runner conversations discover and call existing NocoReach business actions, including task queries, creation, and execution, with the conversation user's permissions. Keep assigned-task snapshot/result credentials separate and recheck membership on every call.
+- Hand off OAuth and header-based credential configuration to the browser instead of advertising operations that cannot receive their required credentials through chat.
+- Preserve browser session confirmation for collector disconnections and YouTube connection changes or data clearing by handing those operations back to their connection panels.
+- Keep task review, manual execution and publication attestations in the browser; conversation task mutations use an explicit allowlist so new commands cannot silently bypass human review.
+
+## Unreleased — Calendar date ranges
+
+- Data pages and Results: Custom picks its dates from a calendar instead of two native date inputs. An outline trigger shows the committed range in the interface language and opens two months side by side (one on phones); days after today cannot be picked, and the range applies only on Apply. The first click starts a range and the second ends it, and a link with only one valid end keeps it. Closing without Apply, a preset or navigation discards the draft. The URL (`days=custom&from&to`), validation messages and the 490-day limit are unchanged.
+- Move `useMediaQuery` to `client/hooks/` so pages share it with the Agent chat panel.
+
+## Unreleased — Collector connection settings
+
+- Configure Xiaohongshu, Bilibili and YouTube Collector URLs and access tokens directly from Data connections, without restarting the application. Preserve deployment configuration for projects without an explicit override.
+- Encrypt project-scoped credentials, redact tokens, bind saves to the initiating session, reject stale edits and prevent configuration changes during collection. Retain saved content, invalidate previous verification and preserve YouTube automatic read preferences after credential changes.
+- Simplify connection panels around a ready Collector: remove the obsolete Xiaohongshu confirmation contract, unused setup guides and their translations. Resolve source configurations through one project-scoped Collector registry, store only credentials and their revision, and derive project metadata when reading.
+- Keep simulated collectors read-only, preserve actionable errors and refresh changed sessions, and guard connection saves across navigation. Keep saved content readable when collector credentials cannot be decrypted.
+- Preserve unsaved collection filters when Collector credentials change, refresh the source revision without remounting its form, and keep conflict recovery available after cancelling an edit. Recover from failed status refreshes, ignore superseded reads and errors, clear obsolete health notices and report unreadable local credentials accurately. Unchanged Collector saves no longer refresh the source panels.
+- Restore keyboard focus without removing source buttons from the tab order. Show collector choices by their count, retain a usable selection when deployment collectors change, translate generated project labels at render time while preserving custom names, and include the linked Collector setup guides in source packages.
+
 ## Unreleased — Results dashboard
 
 - Results opens on a dashboard of the project's own work for a period (28 days, 90 days by default, 12 months, all time or custom): what went live and what still waits to go live, how many live changes went up, down or stayed flat, the summed search clicks and views of the changed pages before and after going live, each live change as a bar with its status word, and up to ten results ordered for attention (down first, then work waiting for a person, then checks still to come). Site-wide metrics stay on Insights and the data pages.

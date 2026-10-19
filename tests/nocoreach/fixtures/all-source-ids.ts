@@ -7,6 +7,7 @@ export const ALL_SOURCE_IDS = [
   'github-discussions',
   'packages',
   'repo',
+  'articles',
   'gsc',
   'keywords',
   'trends',

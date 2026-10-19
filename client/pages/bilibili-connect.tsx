@@ -3,9 +3,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { $t, isChinese, useNocoReachLocale } from '#i18n';
 import { toast } from '#lib/toast';
+import { collectorName } from '#lib/collector-platforms';
+import { useBusinessAccess } from '#hooks/use-business-access';
 import { Alert, AlertDescription } from '#components/ui/alert';
 import { Badge } from '#components/ui/badge';
 import { Button } from '#components/ui/button';
@@ -40,6 +42,7 @@ import {
 import { Skeleton } from '#components/ui/skeleton';
 import { Textarea } from '#components/ui/textarea';
 import { confirmAction } from '#components/reach/confirm';
+import { CollectorClear } from '#components/collector-clear';
 import {
   bilibiliErrorMessage,
   bilibiliMessage,
@@ -121,10 +124,6 @@ const stamp = (value: string | null) =>
   value && Number.isFinite(Date.parse(value))
     ? new Date(value).toLocaleString(isChinese() ? 'zh-CN' : 'en-US')
     : $t('common.unknown');
-const count = (value: number | null) =>
-  value == null
-    ? $t('common.unknown')
-    : value.toLocaleString(isChinese() ? 'zh-CN' : 'en-US');
 
 function BilibiliForm({
   state,
@@ -132,6 +131,8 @@ function BilibiliForm({
   cancel,
   refresh,
   test,
+  canConnect,
+  canTest,
   blocked,
   resetTools,
 }: {
@@ -140,6 +141,8 @@ function BilibiliForm({
   cancel: () => void;
   refresh: () => void;
   test: (collectorId: string) => Promise<void>;
+  canConnect: boolean;
+  canTest: boolean;
   blocked: boolean;
   resetTools: () => void;
 }) {
@@ -186,6 +189,13 @@ function BilibiliForm({
       bvids: state.bvids.join('\n'),
     },
   });
+  useEffect(() => {
+    if (!state.collectors.some((c) => c.id === form.getValues('collectorId')))
+      form.setValue(
+        'collectorId',
+        state.collectorId || state.collectors[0]?.id || '',
+      );
+  }, [form, state.collectorId, state.collectors]);
   const [problem, setProblem] = useState<Failure | null>(null);
   const [testing, setTesting] = useState(false);
   const busy = form.formState.isSubmitting || testing || blocked;
@@ -203,7 +213,8 @@ function BilibiliForm({
     <form
       noValidate
       onSubmit={(event) => {
-        void submit(event);
+        if (canConnect) void submit(event);
+        else event.preventDefault();
       }}
       className='flex flex-col gap-4'
     >
@@ -213,162 +224,179 @@ function BilibiliForm({
           name='collectorId'
           control={form.control}
           render={({ field, fieldState }) => (
-            <Field data-invalid={fieldState.invalid}>
-              <FieldLabel htmlFor='bili-collector'>
-                {$t('bilibili.selectCollector')}{' '}
-                <span aria-hidden='true' className='text-destructive'>
-                  *
-                </span>
-              </FieldLabel>
-              <Select
-                items={state.collectors.map((c) => ({
-                  value: c.id,
-                  label: c.name,
-                }))}
-                value={field.value}
-                onValueChange={(v) => {
-                  if (v !== null) {
-                    field.onChange(v);
-                    resetTools();
-                  }
-                }}
-                disabled={disabled}
+            <>
+              <Field
+                data-invalid={fieldState.invalid}
+                hidden={state.collectors.length === 1}
               >
-                <SelectTrigger
-                  ref={field.ref}
-                  onBlur={field.onBlur}
-                  id='bili-collector'
-                  aria-describedby='bili-collector-error'
-                  aria-required='true'
-                  aria-invalid={fieldState.invalid}
-                  className='w-full min-w-0'
+                <FieldLabel htmlFor='bili-collector'>
+                  {$t('bilibili.selectCollector')}{' '}
+                  <span aria-hidden='true' className='text-destructive'>
+                    *
+                  </span>
+                </FieldLabel>
+                <Select
+                  items={state.collectors.map((c) => ({
+                    value: c.id,
+                    label: collectorName(c),
+                  }))}
+                  value={field.value}
+                  onValueChange={(v) => {
+                    if (v !== null) {
+                      field.onChange(v);
+                      resetTools();
+                    }
+                  }}
+                  disabled={disabled}
                 >
-                  <SelectValue className='min-w-0 truncate' />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {state.collectors.map((c) => (
-                      <SelectItem
-                        key={c.id}
-                        value={c.id}
-                        className='[&>span]:min-w-0 [&>span]:shrink [&>span]:whitespace-normal'
-                      >
-                        <span className='min-w-0 whitespace-normal break-words'>
-                          {c.name}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <FieldError
-                id='bili-collector-error'
-                errors={
-                  fieldState.error
-                    ? [{ message: $t(fieldState.error.message || '') }]
-                    : []
-                }
-              />
+                  <SelectTrigger
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    id='bili-collector'
+                    aria-describedby='bili-collector-error'
+                    aria-required='true'
+                    aria-invalid={fieldState.invalid}
+                    className='w-full min-w-0'
+                  >
+                    <SelectValue className='min-w-0 truncate' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {state.collectors.map((c) => (
+                        <SelectItem
+                          key={c.id}
+                          value={c.id}
+                          className='[&>span]:min-w-0 [&>span]:shrink [&>span]:whitespace-normal'
+                        >
+                          <span className='min-w-0 whitespace-normal break-words'>
+                            {collectorName(c)}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FieldError
+                  id='bili-collector-error'
+                  errors={
+                    fieldState.error
+                      ? [{ message: $t(fieldState.error.message || '') }]
+                      : []
+                  }
+                />
+              </Field>
+              {canTest && (
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  className='self-start'
+                  disabled={disabled || !field.value}
+                  onClick={() => {
+                    setTesting(true);
+                    setProblem(null);
+                    void test(field.value)
+                      .catch((e) => setProblem(failure(e)))
+                      .finally(() => setTesting(false));
+                  }}
+                >
+                  {testing
+                    ? $t('common.checking')
+                    : $t('common.checkCollector')}
+                </Button>
+              )}
+            </>
+          )}
+        />
+        {canConnect && (
+          <>
+            <Controller
+              name='terms'
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor='bili-terms'>
+                    {$t('common.searchTerm')}
+                  </FieldLabel>
+                  <Textarea
+                    {...field}
+                    id='bili-terms'
+                    aria-invalid={fieldState.invalid}
+                    aria-describedby='bili-terms-help bili-terms-error'
+                    disabled={disabled}
+                    rows={3}
+                  />
+                  <FieldDescription id='bili-terms-help'>
+                    {$t('bilibili.onePerLineUp3')}
+                  </FieldDescription>
+                  <FieldError
+                    id='bili-terms-error'
+                    errors={
+                      fieldState.error
+                        ? [{ message: $t(fieldState.error.message || '') }]
+                        : []
+                    }
+                  />
+                </Field>
+              )}
+            />
+            <Controller
+              name='bvids'
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor='bili-videos'>
+                    {$t('bilibili.bvIdsVideoLinks')}
+                  </FieldLabel>
+                  <Textarea
+                    {...field}
+                    id='bili-videos'
+                    aria-invalid={fieldState.invalid}
+                    aria-describedby='bili-videos-help bili-videos-error'
+                    disabled={disabled}
+                    rows={3}
+                  />
+                  <FieldDescription id='bili-videos-help'>
+                    {$t('bilibili.onePerLineUp5')}
+                  </FieldDescription>
+                  <FieldError
+                    id='bili-videos-error'
+                    errors={
+                      fieldState.error
+                        ? [{ message: $t(fieldState.error.message || '') }]
+                        : []
+                    }
+                  />
+                </Field>
+              )}
+            />
+          </>
+        )}
+      </FieldGroup>
+      {canConnect && (
+        <>
+          <p className='text-sm text-muted-foreground'>
+            {$t('bilibili.savingUpdatesCriteriaWithoutStarting')}
+          </p>
+          <div className='flex flex-wrap justify-end gap-2'>
+            {state.connected && (
               <Button
                 type='button'
                 variant='outline'
-                size='sm'
-                className='self-start'
-                disabled={disabled || !field.value}
-                onClick={() => {
-                  setTesting(true);
-                  setProblem(null);
-                  void test(field.value)
-                    .catch((e) => setProblem(failure(e)))
-                    .finally(() => setTesting(false));
-                }}
+                disabled={busy}
+                onClick={cancel}
               >
-                {testing ? $t('common.checking') : $t('common.checkCollector')}
+                {$t('bilibili.cancelChanges')}
               </Button>
-            </Field>
-          )}
-        />
-        <Controller
-          name='terms'
-          control={form.control}
-          render={({ field, fieldState }) => (
-            <Field data-invalid={fieldState.invalid}>
-              <FieldLabel htmlFor='bili-terms'>
-                {$t('common.searchTerm')}
-              </FieldLabel>
-              <Textarea
-                {...field}
-                id='bili-terms'
-                aria-invalid={fieldState.invalid}
-                aria-describedby='bili-terms-help bili-terms-error'
-                disabled={disabled}
-                rows={3}
-              />
-              <FieldDescription id='bili-terms-help'>
-                {$t('bilibili.onePerLineUp3')}
-              </FieldDescription>
-              <FieldError
-                id='bili-terms-error'
-                errors={
-                  fieldState.error
-                    ? [{ message: $t(fieldState.error.message || '') }]
-                    : []
-                }
-              />
-            </Field>
-          )}
-        />
-        <Controller
-          name='bvids'
-          control={form.control}
-          render={({ field, fieldState }) => (
-            <Field data-invalid={fieldState.invalid}>
-              <FieldLabel htmlFor='bili-videos'>
-                {$t('bilibili.bvIdsVideoLinks')}
-              </FieldLabel>
-              <Textarea
-                {...field}
-                id='bili-videos'
-                aria-invalid={fieldState.invalid}
-                aria-describedby='bili-videos-help bili-videos-error'
-                disabled={disabled}
-                rows={3}
-              />
-              <FieldDescription id='bili-videos-help'>
-                {$t('bilibili.onePerLineUp5')}
-              </FieldDescription>
-              <FieldError
-                id='bili-videos-error'
-                errors={
-                  fieldState.error
-                    ? [{ message: $t(fieldState.error.message || '') }]
-                    : []
-                }
-              />
-            </Field>
-          )}
-        />
-      </FieldGroup>
-      <p className='text-sm text-muted-foreground'>
-        {$t('bilibili.savingUpdatesCriteriaWithoutStarting')}
-      </p>
-      <div className='flex flex-wrap justify-end gap-2'>
-        {state.connected && (
-          <Button
-            type='button'
-            variant='outline'
-            disabled={busy}
-            onClick={cancel}
-          >
-            {$t('bilibili.cancelChanges')}
-          </Button>
-        )}
-        <Button type='submit' disabled={disabled}>
-          {form.formState.isSubmitting
-            ? $t('common.saving')
-            : $t('bilibili.saveConfiguration')}
-        </Button>
-      </div>
+            )}
+            <Button type='submit' disabled={disabled}>
+              {form.formState.isSubmitting
+                ? $t('common.saving')
+                : $t('bilibili.saveConfiguration')}
+            </Button>
+          </div>
+        </>
+      )}
     </form>
   );
 }
@@ -376,6 +404,7 @@ function BilibiliForm({
 export function BilibiliConnect(props: {
   projectId: number;
   isAdmin: boolean;
+  refreshKey?: number;
   onChange: () => void;
   onSavingChange?: (saving: boolean) => void;
 }) {
@@ -386,26 +415,62 @@ export function BilibiliConnect(props: {
 function BilibiliPanel({
   projectId,
   isAdmin,
+  refreshKey = 0,
   onChange,
   onSavingChange,
 }: {
   projectId: number;
   isAdmin: boolean;
+  refreshKey?: number;
   onChange: () => void;
   onSavingChange?: (saving: boolean) => void;
 }) {
   const { session, refresh: refreshSession } = useAuthentication();
-  const adminRef = useRef(isAdmin);
+  const navigate = useNavigate();
+  const { can: connectAllowed } = useBusinessAccess(
+    'nrBilibili.connect',
+    projectId,
+  );
+  const { can: testAllowed } = useBusinessAccess('nrBilibili.test', projectId);
+  const { can: syncAllowed } = useBusinessAccess('nrBilibili.sync', projectId);
+  const { can: cancelAllowed } = useBusinessAccess(
+    'nrBilibili.cancel',
+    projectId,
+  );
+  const { can: disconnectAllowed } = useBusinessAccess(
+    'nrBilibili.disconnect',
+    projectId,
+  );
+  const canConnect = isAdmin && connectAllowed;
+  const canTest = isAdmin && testAllowed;
+  const canSync = isAdmin && syncAllowed;
+  const canCancel = isAdmin && cancelAllowed;
+  const canDisconnect = isAdmin && disconnectAllowed;
+  const accessRef = useRef({
+    connect: canConnect,
+    test: canTest,
+    sync: canSync,
+    cancel: canCancel,
+    disconnect: canDisconnect,
+  });
+  useEffect(() => {
+    accessRef.current = {
+      connect: canConnect,
+      test: canTest,
+      sync: canSync,
+      cancel: canCancel,
+      disconnect: canDisconnect,
+    };
+  }, [canConnect, canTest, canSync, canCancel, canDisconnect]);
   const confirmationRef = useRef<AbortController | null>(null);
   const confirmingRef = useRef(false);
   const stoppingRef = useRef(false);
   useEffect(() => {
-    adminRef.current = isAdmin;
     const owner = new AbortController();
     confirmationRef.current = owner;
-    if (!isAdmin) owner.abort();
+    if (!canDisconnect) owner.abort();
     return () => owner.abort();
-  }, [isAdmin]);
+  }, [canDisconnect]);
   const [state, setState] = useState<BilibiliStatus | null>(null);
   const [error, setError] = useState<Failure | null>(null);
   const [loadError, setLoadError] = useState<Failure | null>(null);
@@ -421,7 +486,7 @@ function BilibiliPanel({
     readsRef = useRef(0),
     lockedRef = useRef(false);
   const load = useCallback(
-    async (edit = false) => {
+    async (edit = false, collectorChanged = false) => {
       const current = epochRef.current,
         sequence = ++readsRef.current;
       try {
@@ -433,6 +498,7 @@ function BilibiliPanel({
         )
           return;
         setState(next);
+        if (collectorChanged) setToolChecked(null);
         // A successful status read does not make the last mutation successful.
         setLoadError(null);
         if (edit) setEditing(true);
@@ -448,20 +514,17 @@ function BilibiliPanel({
     [projectId],
   );
   useEffect(() => {
-    aliveRef.current = true;
     let active = true;
-    void bilibiliRequest<BilibiliStatus>(projectId, 'status')
-      .then((next) => {
-        if (active) setState(next);
-      })
-      .catch((e) => {
-        if (active) setLoadError(failure(e));
-      });
+    aliveRef.current = true;
+    epochRef.current++;
+    void Promise.resolve().then(() => {
+      if (active) return load(false, true);
+    });
     return () => {
       active = false;
       aliveRef.current = false;
     };
-  }, [projectId]);
+  }, [load, refreshKey]);
   useEffect(() => {
     if (!state?.lastRun?.retryAt) return;
     const timer = setTimeout(
@@ -478,13 +541,13 @@ function BilibiliPanel({
     return () => clearInterval(timer);
   }, [state?.checking, busy, load]);
   async function mutate(
-    action: string,
+    action: 'connect' | 'sync' | 'disconnect',
     body: object = {},
     confirmation?: { signal: AbortSignal; sessionId: string },
   ) {
     if (
       !aliveRef.current ||
-      !adminRef.current ||
+      !accessRef.current[action] ||
       lockedRef.current ||
       confirmation?.signal.aborted
     )
@@ -493,7 +556,7 @@ function BilibiliPanel({
     const current = ++epochRef.current;
     const ownsRequest = () =>
       aliveRef.current &&
-      adminRef.current &&
+      accessRef.current[action] &&
       current === epochRef.current &&
       !confirmation?.signal.aborted;
     setBusy(action);
@@ -547,10 +610,8 @@ function BilibiliPanel({
         void load();
       }
     } finally {
-      if (aliveRef.current) {
-        if (action === 'connect') onSavingChange?.(false);
-        setBusy(null);
-      }
+      if (action === 'connect') onSavingChange?.(false);
+      if (aliveRef.current) setBusy(null);
       lockedRef.current = false;
     }
   }
@@ -570,7 +631,7 @@ function BilibiliPanel({
         <Skeleton className='h-24 w-full' />
       </div>
     );
-  const edit = isAdmin && state.configured && (editing || !state.connected);
+  const edit = canConnect && state.configured && (editing || !state.connected);
   const running = state.checking || busy === 'sync';
   const unavailable = [error, loadError].some(
     (value) => value !== null && [401, 403, 404].includes(value.status),
@@ -594,7 +655,7 @@ function BilibiliPanel({
             : $t('bilibili.opencliAvailablePlatformNotVerified')}
         </p>
       )}
-      {!state.configured && (
+      {!state.configured && !canConnect && (
         <Empty className='border'>
           <EmptyHeader>
             <EmptyTitle>
@@ -618,7 +679,7 @@ function BilibiliPanel({
           <EmptyHeader>
             <EmptyTitle>{$t('bilibili.bilibiliNotConfigured')}</EmptyTitle>
             <EmptyDescription>
-              {isAdmin
+              {canConnect
                 ? $t('bilibili.selectCollectorEnterSearchTerms')
                 : $t('bilibili.askAdministratorConfigureCollectorStart')}
             </EmptyDescription>
@@ -630,7 +691,9 @@ function BilibiliPanel({
           <CardHeader>
             <CardTitle>{$t('bilibili.bilibiliCollectionStatus')}</CardTitle>
             <CardDescription>
-              {state.collectors.find((c) => c.id === state.collectorId)?.name}
+              {collectorName(
+                state.collectors.find((c) => c.id === state.collectorId),
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className='flex flex-col gap-3'>
@@ -657,119 +720,127 @@ function BilibiliPanel({
             </p>
             {isAdmin && !edit && (
               <div className='flex flex-wrap gap-2'>
-                {running ? (
+                {running
+                  ? canCancel && (
+                      <Button
+                        type='button'
+                        variant='outline'
+                        disabled={stopping || !state.requestId}
+                        onClick={() => {
+                          if (
+                            stoppingRef.current ||
+                            !accessRef.current.cancel ||
+                            !aliveRef.current
+                          )
+                            return;
+                          stoppingRef.current = true;
+                          setStopping(true);
+                          const current = epochRef.current;
+                          void bilibiliRequest<BilibiliStatus>(
+                            projectId,
+                            'cancel',
+                            { requestId: state.requestId },
+                          )
+                            .then((next) => {
+                              if (
+                                aliveRef.current &&
+                                accessRef.current.cancel &&
+                                current === epochRef.current
+                              ) {
+                                setState(next);
+                                toast.info(() =>
+                                  $t(
+                                    'bilibili.requestedStopBilibiliCollection',
+                                  ),
+                                );
+                              }
+                            })
+                            .catch((e) => {
+                              if (
+                                aliveRef.current &&
+                                accessRef.current.cancel &&
+                                current === epochRef.current
+                              )
+                                setError(failure(e));
+                            })
+                            .finally(() => {
+                              stoppingRef.current = false;
+                              if (aliveRef.current) setStopping(false);
+                            });
+                        }}
+                      >
+                        {stopping
+                          ? $t('bilibili.stopping')
+                          : $t('bilibili.stopCollection')}
+                      </Button>
+                    )
+                  : canSync && (
+                      <Button
+                        type='button'
+                        disabled={!!busy || unavailable || cooling}
+                        onClick={() => {
+                          void mutate('sync');
+                        }}
+                      >
+                        {$t('common.readNow')}
+                      </Button>
+                    )}
+                {canConnect && (
                   <Button
                     type='button'
                     variant='outline'
-                    disabled={stopping || !state.requestId}
+                    disabled={!!busy || running || unavailable}
                     onClick={() => {
+                      void load(true);
+                    }}
+                  >
+                    {$t('common.modify')}
+                  </Button>
+                )}
+                {canDisconnect && (
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    disabled={!!busy || running || unavailable}
+                    onClick={() => {
+                      const confirmation = confirmationRef.current;
+                      const sessionId = session?.session.id;
                       if (
-                        stoppingRef.current ||
-                        !adminRef.current ||
-                        !aliveRef.current
+                        !confirmation ||
+                        confirmation.signal.aborted ||
+                        !sessionId ||
+                        !accessRef.current.disconnect ||
+                        confirmingRef.current
                       )
                         return;
-                      stoppingRef.current = true;
-                      setStopping(true);
-                      const current = epochRef.current;
-                      void bilibiliRequest<BilibiliStatus>(
-                        projectId,
-                        'cancel',
-                        { requestId: state.requestId },
-                      )
-                        .then((next) => {
+                      confirmingRef.current = true;
+                      void confirmAction({
+                        title: 'bilibili.disconnectBilibili',
+                        description: 'bilibili.stopFutureCollectionRetainSaved',
+                        action: 'common.disconnect',
+                        signal: confirmation.signal,
+                      })
+                        .then(async (ok) => {
                           if (
+                            ok &&
                             aliveRef.current &&
-                            adminRef.current &&
-                            current === epochRef.current
-                          ) {
-                            setState(next);
-                            toast.info(() =>
-                              $t('bilibili.requestedStopBilibiliCollection'),
-                            );
-                          }
-                        })
-                        .catch((e) => {
-                          if (
-                            aliveRef.current &&
-                            adminRef.current &&
-                            current === epochRef.current
+                            accessRef.current.disconnect &&
+                            !confirmation.signal.aborted
                           )
-                            setError(failure(e));
+                            await mutate(
+                              'disconnect',
+                              { revision: state.revision },
+                              { signal: confirmation.signal, sessionId },
+                            );
                         })
                         .finally(() => {
-                          stoppingRef.current = false;
-                          if (aliveRef.current) setStopping(false);
+                          confirmingRef.current = false;
                         });
                     }}
                   >
-                    {stopping
-                      ? $t('bilibili.stopping')
-                      : $t('bilibili.stopCollection')}
-                  </Button>
-                ) : (
-                  <Button
-                    type='button'
-                    disabled={!!busy || unavailable || cooling}
-                    onClick={() => {
-                      void mutate('sync');
-                    }}
-                  >
-                    {$t('common.readNow')}
+                    {$t('common.disconnect')}
                   </Button>
                 )}
-                <Button
-                  type='button'
-                  variant='outline'
-                  disabled={!!busy || running || unavailable}
-                  onClick={() => {
-                    void load(true);
-                  }}
-                >
-                  {$t('common.modify')}
-                </Button>
-                <Button
-                  type='button'
-                  variant='ghost'
-                  disabled={!!busy || running || unavailable}
-                  onClick={() => {
-                    const confirmation = confirmationRef.current;
-                    const sessionId = session?.session.id;
-                    if (
-                      !confirmation ||
-                      confirmation.signal.aborted ||
-                      !sessionId ||
-                      !adminRef.current ||
-                      confirmingRef.current
-                    )
-                      return;
-                    confirmingRef.current = true;
-                    void confirmAction({
-                      title: 'bilibili.disconnectBilibili',
-                      description: 'bilibili.stopFutureCollectionRetainSaved',
-                      action: 'common.disconnect',
-                      signal: confirmation.signal,
-                    })
-                      .then(async (ok) => {
-                        if (
-                          ok &&
-                          aliveRef.current &&
-                          adminRef.current &&
-                          !confirmation.signal.aborted
-                        )
-                          await mutate(
-                            'disconnect',
-                            { revision: state.revision },
-                            { signal: confirmation.signal, sessionId },
-                          );
-                      })
-                      .finally(() => {
-                        confirmingRef.current = false;
-                      });
-                  }}
-                >
-                  {$t('common.disconnect')}
-                </Button>
                 <Button
                   type='button'
                   variant='ghost'
@@ -800,10 +871,12 @@ function BilibiliPanel({
           </AlertDescription>
         </Alert>
       )}
-      {edit && (
+      {(edit || (canTest && !canConnect && state.configured)) && (
         <BilibiliForm
           state={state}
-          blocked={unavailable}
+          canConnect={canConnect}
+          canTest={canTest}
+          blocked={unavailable || running || Boolean(busy)}
           resetTools={() => setToolChecked(null)}
           save={(values) => mutate('connect', values)}
           cancel={() => setEditing(false)}
@@ -811,104 +884,77 @@ function BilibiliPanel({
             void load(true);
           }}
           test={async (collectorId) => {
-            if (!aliveRef.current || !adminRef.current) return;
+            if (
+              !aliveRef.current ||
+              !accessRef.current.test ||
+              lockedRef.current
+            )
+              return;
+            lockedRef.current = true;
+            setBusy('test');
             const current = epochRef.current;
             setToolChecked(null);
-            const health = await bilibiliRequest<{
-              upstream?: 'anonymous-http';
-            }>(projectId, 'test', { collectorId });
-            if (
-              aliveRef.current &&
-              adminRef.current &&
-              current === epochRef.current
-            )
-              setToolChecked(
-                health.upstream === 'anonymous-http'
-                  ? 'anonymous-http'
-                  : 'opencli',
-              );
+            try {
+              const health = await bilibiliRequest<{
+                upstream?: 'anonymous-http';
+              }>(projectId, 'test', { collectorId });
+              if (
+                aliveRef.current &&
+                accessRef.current.test &&
+                current === epochRef.current
+              )
+                setToolChecked(
+                  health.upstream === 'anonymous-http'
+                    ? 'anonymous-http'
+                    : 'opencli',
+                );
+            } finally {
+              lockedRef.current = false;
+              if (aliveRef.current) setBusy(null);
+            }
           }}
         />
       )}
-      <Card size='sm'>
-        <CardHeader>
-          <CardTitle>{$t('bilibili.recentlyCollectedVideos')}</CardTitle>
-          <CardDescription>
-            {$t('bilibili.showingLatest5RecordsRetained', {
-              0: state.total.toLocaleString(),
-            })}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className='flex flex-col gap-4'>
-          {!state.recent.length ? (
-            <Empty>
-              <EmptyHeader>
-                <EmptyTitle>{$t('bilibili.noVideosSavedYet')}</EmptyTitle>
-                <EmptyDescription>
-                  {$t('bilibili.saveCriteriaStartCollectionManually')}
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : (
-            <ul className='flex flex-col gap-4'>
-              {state.recent.map((video) => (
-                <li
-                  key={video.id}
-                  className='flex min-w-0 flex-col gap-1 text-sm'
-                >
-                  <a
-                    className='break-words font-medium text-primary underline underline-offset-4'
-                    href={`https://www.bilibili.com/video/${encodeURIComponent(video.id)}`}
-                    target='_blank'
-                    rel='noreferrer'
-                  >
-                    {video.title || video.id}
-                  </a>
-                  {video.fromEarlierConfig && (
-                    <Badge variant='outline' className='self-start'>
-                      {$t('bilibili.earlierConfiguration')}
-                    </Badge>
-                  )}
-                  <p className='text-muted-foreground'>
-                    {$t('bilibili.viewsLikesComments', {
-                      0: count(video.views),
-                      1: count(video.likes),
-                      2: count(video.comments),
-                    })}
-                  </p>
-                  <p className='text-muted-foreground'>
-                    {$t('bilibili.published', {
-                      0: video.publishedAt
-                        ? `${video.publishedAt.slice(0, 16).replace('T', ' ')} UTC (${$t('bilibili.minutePrecision')})`
-                        : $t('common.unknown'),
-                    })}
-                  </p>
-                  <p className='text-muted-foreground'>
-                    {$t('bilibili.collected', { 0: stamp(video.collectedAt) })}
-                  </p>
-                  <p className='break-words text-muted-foreground'>
-                    {$t('common.source', {
-                      0: video.sources
-                        .map((s) =>
-                          s.kind === 'search'
-                            ? $t('common.search', { 0: s.value })
-                            : s.value,
-                        )
-                        .join(' · '),
-                    })}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className='text-sm text-muted-foreground'>
-            {$t('bilibili.searchCoversReturnedFirstPage')}
-          </p>
-          <p className='text-sm text-muted-foreground'>
-            {$t('bilibili.up500RecentPublicRecords')}
-          </p>
-        </CardContent>
-      </Card>
+      <div className='flex flex-col gap-2 text-sm'>
+        <p className='text-muted-foreground'>
+          {state.total
+            ? $t('collectorPage.savedSummary', {
+                0: state.total.toLocaleString(),
+              })
+            : $t('bilibili.saveCriteriaStartCollectionManually')}
+        </p>
+        {state.total > 0 && (
+          <div className='flex flex-wrap gap-2'>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => void navigate('/data/bilibili')}
+            >
+              {$t('collectorPage.viewData')}
+            </Button>
+            {isAdmin ? (
+              <CollectorClear
+                projectId={projectId}
+                resource='nrBilibili'
+                revision={state.revision}
+                total={state.total}
+                disabled={Boolean(busy) || running}
+                errorMessage={bilibiliErrorMessage}
+                onCleared={async () => {
+                  await load();
+                  onChange();
+                }}
+              />
+            ) : null}
+          </div>
+        )}
+        <p className='text-muted-foreground'>
+          {$t('bilibili.searchCoversReturnedFirstPage')}
+        </p>
+        <p className='text-muted-foreground'>
+          {$t('bilibili.up500RecentPublicRecords')}
+        </p>
+      </div>
     </div>
   );
 }

@@ -114,7 +114,25 @@ function setup() {
     authenticationClientToken,
     client as unknown as AuthClient,
   );
-  const authz = new AuthorizationClient({ request: vi.fn() } as never);
+  const authz = new AuthorizationClient({
+    request: vi.fn(async () => ({
+      data: {
+        unrestricted: false,
+        permissions: [
+          {
+            resource: { type: 'nocoreach', id: '1' },
+            actions: [
+              'nrYouTube.connect',
+              'nrYouTube.sync',
+              'nrYouTube.cancel',
+              'nrYouTube.disconnect',
+              'nrYouTube.clear',
+            ],
+          },
+        ],
+      },
+    })),
+  } as never);
   container.instance(authorizationClientToken, authz);
   const app = { services: container } as unknown as ClientApplication;
   const queries = new QueryClient({
@@ -148,14 +166,19 @@ async function openDisconnect() {
 }
 async function openClear() {
   fireEvent.click(
-    await screen.findByRole('button', { name: '删除已保存视频' }),
+    await screen.findByRole('button', { name: '清理已获取数据' }),
   );
-  return screen.findByRole('alertdialog');
+  fireEvent.click(
+    within(await screen.findByRole('alertdialog')).getByRole('button', {
+      name: '继续确认',
+    }),
+  );
+  return screen.findByRole('alertdialog', { name: '再次确认清理' });
 }
 async function confirm(dialog: HTMLElement) {
   fireEvent.click(
     within(dialog).getByRole('button', {
-      name: /^(断开|替换|删除已保存视频)$/,
+      name: /^(断开|替换|确认清理)$/,
     }),
   );
   await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());

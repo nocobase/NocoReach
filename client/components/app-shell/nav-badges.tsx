@@ -68,35 +68,31 @@ export function NavBadgeProvider({ children }: PropsWithChildren) {
 }
 function AuthorizedBadges({ children }: PropsWithChildren) {
   const { project, error } = useProject();
-  if (!project || error)
-    return (
-      <Context.Provider
-        value={{
-          status: error ? 'error' : 'loading',
-          counts: null,
-          sources: null,
-        }}
-      >
-        {children}
-      </Context.Provider>
-    );
   return (
-    <ProjectBadges key={String(project.id)} projectId={String(project.id)}>
+    <ProjectBadges
+      projectId={project && !error ? String(project.id) : null}
+      error={!!error}
+    >
       {children}
     </ProjectBadges>
   );
 }
 function ProjectBadges({
   projectId,
+  error,
   children,
-}: PropsWithChildren<{ projectId: string }>) {
+}: PropsWithChildren<{ projectId: string | null; error: boolean }>) {
   const { pathname } = useLocation();
-  const [snapshot, setSnapshot] = useState<Snapshot>({
+  const [snapshot, setSnapshot] = useState<
+    Snapshot & { projectId: string | null }
+  >({
+    projectId,
     status: 'loading',
     counts: null,
     sources: null,
   });
   useEffect(() => {
+    if (!projectId) return;
     let active = true;
     let sequence = 0;
     const controllers = new Set<AbortController>();
@@ -104,14 +100,14 @@ function ProjectBadges({
       const request = ++sequence;
       const controller = new AbortController();
       controllers.add(controller);
-      // Defer publication so the effect only subscribes/starts I/O; project keys already clear old counts on render.
+      // Defer publication; the project-tagged snapshot hides old counts without remounting the shell.
       await Promise.resolve();
       if (!active || request !== sequence) return;
       // A refresh keeps ready counts on screen until the new ones arrive, so navigating does not blink the badges.
       setSnapshot((previous) =>
-        previous.status === 'ready'
+        previous.projectId === projectId && previous.status === 'ready'
           ? previous
-          : { ...previous, status: 'loading', counts: null },
+          : { projectId, status: 'loading', counts: null, sources: null },
       );
       void api
         .action<NavSources>('nrHealth', 'connected', {
@@ -176,5 +172,9 @@ function ProjectBadges({
       window.removeEventListener('focus', refresh);
     };
   }, [projectId, pathname]);
-  return <Context.Provider value={snapshot}>{children}</Context.Provider>;
+  const current: Snapshot =
+    projectId && snapshot.projectId === projectId
+      ? snapshot
+      : { status: error ? 'error' : 'loading', counts: null, sources: null };
+  return <Context.Provider value={current}>{children}</Context.Provider>;
 }

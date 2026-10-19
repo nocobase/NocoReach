@@ -1,7 +1,7 @@
 import { type Message, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useMemo,useState,type ReactElement} from 'react';
 import {ExternalLinkIcon,FileIcon,PencilIcon,PlusIcon,SearchIcon,Trash2Icon,XIcon} from 'lucide-react';
-import {AdminOnlyNote,useMe} from './me';
+import {useBusinessAccess} from '#hooks/use-business-access';
 import {PageContainer,PageHeader} from '#components/reach/page';
 import {Tag} from '#components/reach/tag';
 import {Button} from '#components/ui/button';
@@ -19,7 +19,10 @@ import {confirmAction} from '#components/reach/confirm';
 type Usage=Record<string,string[]>;
 const day=(iso:string)=>{const d=new Date(iso);return `${d.getMonth()+1}/${d.getDate()}`;};
 export default function SkillsPage(){
- const {project,error:projectError}=useProject(),{isAdmin}=useMe();
+ const {project,error:projectError}=useProject();
+ const {can:canCreate}=useBusinessAccess('nrSkills.create'),{can:canImport}=useBusinessAccess('nrSkills.import'),{can:canImportLink}=useBusinessAccess('nrSkills.importLink'),{can:canRemove}=useBusinessAccess('nrSkills.remove');
+ const {can:canReadLink}=useBusinessAccess('nrSkills.readLink',project?.id??null),{can:canEnable}=useBusinessAccess('nrSkills.setEnabled',project?.id??null);
+ const canAdd=canCreate||canImport||(canReadLink&&canImportLink);
  const [list,setList]=useState<SkillList>(),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[q,setQ]=useState(''),[filter,setFilter]=useState(''),[creating,setCreating]=useState(false),[open,setOpen]=useState<string|null>(null),[picked,setPicked]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[notice,setNotice]=useMessageState('');
  const usage:Usage={};for(const p of localizePlaybookList(rawPlaybooks)?.playbooks||[])for(const step of p.steps)for(const id of step.skills||[])(usage[id]||=[]).push(`${p.name} · ${step.name}`);
  const load=()=>{if(project)void skillRequest<SkillList>('list',project.id).then(setList).catch(()=>setError(() => ($t('skills.notLoadSkillsRefreshTry'))));};
@@ -27,45 +30,45 @@ export default function SkillsPage(){
  // Which 做法 steps name each Skill, from this project's playbooks.
  useEffect(()=>{if(!project)return;void playbookRequest<PlaybookList>('list',project.id).then(setRawPlaybooks).catch(()=>undefined);},[project?.id]);
  const visible=useMemo(()=>(list?.skills||[]).filter(s=>(!filter||(filter==='on')===s.enabled)&&(!q.trim()||`${s.name} ${s.description}`.toLowerCase().includes(q.trim().toLowerCase()))),[list,q,filter]);
- async function toggle(s:Skill,enabled:boolean){if(!project)return;setError('');setList(l=>l&&{...l,skills:l.skills.map(x=>x.id===s.id?{...x,enabled}:x)});
+ async function toggle(s:Skill,enabled:boolean){if(!project||!canEnable)return;setError('');setList(l=>l&&{...l,skills:l.skills.map(x=>x.id===s.id?{...x,enabled}:x)});
   try{await skillRequest('setEnabled',project.id,{skillId:s.id,enabled});setNotice(() => (enabled?$t('skills.enabledProject',{0:s.name}):$t('skills.turnedOffProject',{0:s.name})));}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.notChangedTryAgain')));load();}}
  // Built-in Skills remain editable; only untouched seed metadata is safe to translate.
  const selected=list?.skills.find(s=>s.id===open)||null;
  // Rows ticked to delete together (only those still listed and shown count).
  const ticked=visible.filter(s=>picked.includes(s.id)),allTicked=visible.length>0&&ticked.length===visible.length;
- async function removeTicked(){if(!project||!ticked.length)return;const used=ticked.filter(s=>usage[s.id]?.length).map(s=>s.name);
+ async function removeTicked(){if(!project||!canRemove||!ticked.length)return;const used=ticked.filter(s=>usage[s.id]?.length).map(s=>s.name);
   if(!(await confirmAction({title:() => ($t('skills.deleteSkills',{0:ticked.length})),description:() => (used.length?$t('skills.themSetPlaybooksStepsCannot',{0:used.join('、')}):undefined),action:'common.delete'})))return;setBusy(true);setError('');
   try{const r=await skillRequest<{removed:string[]}>('remove',project.id,{skillIds:ticked.map(s=>s.id)});setNotice(() => ($t('skills.skillsDeleted',{0:r.removed.length})));setPicked([]);load();}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.notDeletedTryAgain')));}finally{setBusy(false);}}
- return <PageContainer className="nr-page"><PageHeader title="Skills" description={$t('skills.instructionsHowKindWorkSkills')} actions={isAdmin&&<Button disabled={!project} onClick={()=>setCreating(true)}><PlusIcon/>{$t('skills.newSkill')}</Button>}/><AdminOnlyNote/>
+ return <PageContainer className="nr-page"><PageHeader title="Skills" description={$t('skills.instructionsHowKindWorkSkills')} actions={canAdd&&<Button disabled={!project} onClick={()=>setCreating(true)}><PlusIcon/>{$t('skills.newSkill')}</Button>}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
   <section className="flex flex-col gap-3" aria-label={$t('skills.skills')}>
    <div className="flex flex-wrap items-center gap-2"><label className="relative flex min-w-48 flex-1 items-center sm:max-w-72"><SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" aria-hidden="true"/><input aria-label={$t('skills.searchSkills')} value={q} onChange={e=>setQ(e.target.value)} placeholder={$t('skills.searchSkills')} className="w-full pl-8!"/></label>
     <select aria-label={$t('skills.filterEnabled')} value={filter} onChange={e=>setFilter(e.target.value)} className="min-w-32"><option value="">{$t('skills.all')}</option><option value="on">{$t('skills.enabledInProject')}</option><option value="off">{$t('common.off')}</option></select>
-    {ticked.length>0&&<span className="ml-auto flex items-center gap-2 text-sm" role="group" aria-label={$t('skills.selectedSkills')}><span className="text-muted-foreground">{$tj('skills.selected',{0:ticked.length})}</span><Button size="sm" variant="ghost" disabled={busy} onClick={()=>setPicked([])}>{$t('common.clearSelection')}</Button><Button size="sm" variant="outline" className="text-destructive" disabled={busy} onClick={()=>void removeTicked()}><Trash2Icon/>{$t('skills.deleteSelected')}</Button></span>}</div>
+    {canRemove&&ticked.length>0&&<span className="ml-auto flex items-center gap-2 text-sm" role="group" aria-label={$t('skills.selectedSkills')}><span className="text-muted-foreground">{$tj('skills.selected',{0:ticked.length})}</span><Button size="sm" variant="ghost" disabled={busy} onClick={()=>setPicked([])}>{$t('common.clearSelection')}</Button><Button size="sm" variant="outline" className="text-destructive" disabled={busy} onClick={()=>void removeTicked()}><Trash2Icon/>{$t('skills.deleteSelected')}</Button></span>}</div>
    {!list?<p role="status" className="text-sm text-muted-foreground">{$t('common.loadingLoading')}</p>:visible.length?<div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[40rem] table-fixed border-collapse text-sm" aria-label="Skills">
-    <colgroup><col className="w-10"/><col/><col className="w-56"/><col className="w-20"/><col className="w-20"/></colgroup>
-    <thead className="bg-muted/50 text-xs text-muted-foreground"><tr><th className="py-2 pr-0 pl-3"><input type="checkbox" aria-label={$t('common.select')} checked={allTicked} onChange={e=>setPicked(e.target.checked?visible.map(s=>s.id):[])}/></th>{[$t('skills.nameWhenUse'),$t('skills.usedPlaybooks'),$t('skills.attachedFiles'),$t('skills.currentProject')].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}</tr></thead>
+    <colgroup>{canRemove&&<col className="w-10"/>}<col/><col className="w-56"/><col className="w-20"/><col className="w-20"/></colgroup>
+    <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>{canRemove&&<th className="py-2 pr-0 pl-3"><input type="checkbox" aria-label={$t('common.select')} checked={allTicked} onChange={e=>setPicked(e.target.checked?visible.map(s=>s.id):[])}/></th>}{[$t('skills.nameWhenUse'),$t('skills.usedPlaybooks'),$t('skills.attachedFiles'),$t('skills.currentProject')].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}</tr></thead>
     <tbody>{visible.map(s=><tr key={s.id} data-skill-id={s.id} className="cursor-pointer border-t transition-colors hover:bg-muted/40" onClick={()=>setOpen(s.id)}>
-     <td className="py-2.5 pr-0 pl-3" onClick={e=>e.stopPropagation()}><input type="checkbox" aria-label={$t('common.selectValue',{0:s.name})} checked={picked.includes(s.id)} onChange={e=>setPicked(e.target.checked?[...picked,s.id]:picked.filter(x=>x!==s.id))}/></td>
+     {canRemove&&<td className="py-2.5 pr-0 pl-3" onClick={e=>e.stopPropagation()}><input type="checkbox" aria-label={$t('common.selectValue',{0:s.name})} checked={picked.includes(s.id)} onChange={e=>setPicked(e.target.checked?[...picked,s.id]:picked.filter(x=>x!==s.id))}/></td>}
      <td className="px-3 py-2.5"><button type="button" className="block w-full truncate text-left font-mono font-medium hover:underline" onClick={e=>{e.stopPropagation();setOpen(s.id);}}>{s.name}</button><p className="truncate text-xs text-muted-foreground">{s.builtIn&&s.createdAt&&s.createdAt===s.updatedAt?$legacyText(s.description):s.description}</p></td>
      <td className="truncate px-3 py-2.5 text-xs text-muted-foreground" title={(usage[s.id]||[]).join('、')}>{(usage[s.id]||[]).join('、')||'—'}</td>
      <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">{s.files.length}</td>
-     <td className="px-3 py-2.5" onClick={e=>e.stopPropagation()}><Switch aria-label={$t('skills.enableProjectValue',{0:s.name})} checked={s.enabled} disabled={!isAdmin} onCheckedChange={v=>void toggle(s,v)}/></td></tr>)}</tbody></table></div>
+     <td className="px-3 py-2.5" onClick={e=>e.stopPropagation()}><Switch aria-label={$t('skills.enableProjectValue',{0:s.name})} checked={s.enabled} disabled={!canEnable} onCheckedChange={v=>void toggle(s,v)}/></td></tr>)}</tbody></table></div>
    :<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{list.skills.length?$t('skills.noMatchingSkillsMessage'):$t('skills.noSkillsYetClickNew')}</p>}
    <p className="nr-footnote">{$t('skills.projectEnablementHelp')}</p>
   </section>
-  {project&&<NewSkill open={creating} projectId={project.id} onClose={()=>setCreating(false)} onCreated={s=>{setCreating(false);setNotice(() => ($t('skills.createdTasksUseOnceEnabled',{0:s.name})));load();setOpen(s.id);}}
+  {project&&creating&&canAdd&&<NewSkill projectId={project.id} canCreate={canCreate} canImport={canImport} canImportLink={canImportLink} canReadLink={canReadLink} onClose={()=>setCreating(false)} onCreated={s=>{setCreating(false);setNotice(() => ($t('skills.createdTasksUseOnceEnabled',{0:s.name})));load();setOpen(s.id);}}
    onImported={r=>{setCreating(false);setNotice(() => ([r.imported.length?$t('skills.skillsImportedTasksUseThem',{0:r.imported.length,1:r.imported.join('、')}):$t('skills.noSkillsImported'),r.skipped.length?$t('skills.skippedValueMessage',{0:r.skipped.length,1:r.skipped.map(x=>`${x.name}（${$legacyText(x.reason)}）`).join('、')}):''].join('')));load();}}/>}
-  {project&&<SkillDrawer projectId={project.id} readOnly={!isAdmin} skill={selected} usage={selected?usage[selected.id]||[]:[]} onClose={()=>setOpen(null)} onToggle={v=>selected&&void toggle(selected,v)} onChanged={(msg,closed)=>{load();if(closed){setNotice(msg);setOpen(null);}}}/>}
+  {project&&<SkillDrawer projectId={project.id} canEnable={canEnable} canRemove={canRemove} skill={selected} usage={selected?usage[selected.id]||[]:[]} onClose={()=>setOpen(null)} onToggle={v=>selected&&void toggle(selected,v)} onChanged={(msg,closed)=>{load();if(closed){setNotice(msg);setOpen(null);}}}/>}
  </PageContainer>;
 }
 // 新建: fill in name, when to use it and how; pick a Skill folder (with SKILL.md) or a single SKILL.md file; or paste a link
 // (GitHub, or an https SKILL.md) — read first to see what is there, a repository with several Skills lists them to pick one.
 type Imported={imported:string[];skipped:{name:string;reason:string}[]};
-function NewSkill({open,projectId,onClose,onCreated,onImported}:{open:boolean;projectId:number;onClose:()=>void;onCreated:(s:Skill)=>void;onImported:(r:Imported)=>void}):ReactElement{
- const [mode,setMode]=useState<'form'|'folder'|'link'>('form'),[url,setUrl]=useState(''),[link,setLink]=useState<LinkRead|null>(null),[ticked,setTicked]=useState<string[]>([]),[find,setFind]=useState(''),[reading,setReading]=useState(false),[name,setName]=useState(''),[description,setDescription]=useState(''),[body,setBody]=useState(''),[picked,setPicked]=useState<{files:{path:string;text:string}[];skipped:string[]}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useMessageState('');
- useEffect(()=>{if(open){setName('');setDescription('');setBody('');setPicked(null);setUrl('');setLink(null);setError('');}},[open, setError]);
- async function readLink(){setError('');if(!url.trim()){setError(() => ($t('skills.pasteLink')));return;}setReading(true);setLink(null);setTicked([]);setFind('');
+function NewSkill({projectId,canCreate,canImport,canImportLink,canReadLink,onClose,onCreated,onImported}:{projectId:number;canCreate:boolean;canImport:boolean;canImportLink:boolean;canReadLink:boolean;onClose:()=>void;onCreated:(s:Skill)=>void;onImported:(r:Imported)=>void}):ReactElement{
+ const canLink=canReadLink&&(canImport||canImportLink);
+ const [mode,setMode]=useState<'form'|'folder'|'link'>(canCreate?'form':canImport?'folder':'link'),[url,setUrl]=useState(''),[link,setLink]=useState<LinkRead|null>(null),[ticked,setTicked]=useState<string[]>([]),[find,setFind]=useState(''),[reading,setReading]=useState(false),[name,setName]=useState(''),[description,setDescription]=useState(''),[body,setBody]=useState(''),[picked,setPicked]=useState<{files:{path:string;text:string}[];skipped:string[]}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useMessageState('');
+ async function readLink(){if(!canLink)return;setError('');if(!url.trim()){setError(() => ($t('skills.pasteLink')));return;}setReading(true);setLink(null);setTicked([]);setFind('');
   try{setLink(await skillRequest<LinkRead>('readLink',projectId,{url:url.trim()}));}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('skills.notReadTryAgain')));}finally{setReading(false);}}
  // A repository with several Skills: tick any number (those already here cannot be), filter by name or use, tick all shown.
  const choices=link?.choices||[],shown=choices.filter(c=>!find.trim()||`${c.name} ${c.description}`.toLowerCase().includes(find.trim().toLowerCase())),selectable=shown.filter(c=>!c.exists).map(c=>c.path),allTicked=selectable.length>0&&selectable.every(p=>ticked.includes(p));
@@ -74,7 +77,8 @@ function NewSkill({open,projectId,onClose,onCreated,onImported}:{open:boolean;pr
   if(!folder&&r.files.length===1&&/\.(md|markdown)$/i.test(r.files[0].path))r.files[0].path='SKILL.md';
   if(!r.files.some(f=>f.path.toLowerCase()==='skill.md'||/^[^/]+\/skill\.md$/i.test(f.path))){setError(() => ($t('skills.noSkillMdFoundPick')));return;}
   setPicked(r);}
- async function save(){setError('');
+ const canSave=mode==='form'?canCreate:mode==='folder'?canImport:link?.choices?canImportLink:canImport;
+ async function save(){if(!canSave)return;setError('');
   if(mode==='form'){const n=name.trim().toLowerCase();if(!SKILL_NAME.test(n)||n.length>64){setError(() => ($t('skills.invalidName')));return;}if(!description.trim()){setError(() => ($t('skills.describeWhenUseSkill')));return;}if(!body.trim()){setError(() => ($t('skills.describeHow')));return;}}
   else if(mode==='folder'&&!picked){setError(() => ($t('skills.pickSkillFolderSkillMd')));return;}
   else if(mode==='link'&&link?.choices){if(!ticked.length){setError(() => ($t('skills.selectLeastOneSkill')));return;}
@@ -83,10 +87,10 @@ function NewSkill({open,projectId,onClose,onCreated,onImported}:{open:boolean;pr
   setBusy(true);try{const r=mode==='form'?await skillRequest<{skill:Skill}>('create',projectId,{name:name.trim().toLowerCase(),description,body}):await skillRequest<{skill:Skill}>('import',projectId,mode==='link'?{files:link!.files,source:link!.source}:{files:picked!.files});onCreated(r.skill);}
   catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('skills.notSavedTryAgain')));}finally{setBusy(false);}}
  const others=picked?picked.files.filter(f=>!/(^|\/)skill\.md$/i.test(f.path)).length:0;
- return <Dialog open={open} onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className="sm:max-w-2xl">
+ return <Dialog open onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className="sm:max-w-2xl">
   <DialogHeader><DialogTitle>{$t('skills.newSkill')}</DialogTitle><DialogDescription>{$t('skills.skillSpellsOutHowKind')}</DialogDescription></DialogHeader>
   <div className="flex flex-col gap-3">
-   <div className="nr-tabs" role="group" aria-label={$t('skills.howCreate')}>{([['form',$t('skills.write')],['folder',$t('skills.uploadFolder')],['link',$t('skills.enterLink')]] as const).map(([k,v])=><button key={k} type="button" aria-pressed={mode===k} onClick={()=>{setMode(k);setError('');}}>{v}</button>)}</div>
+   <div className="nr-tabs" role="group" aria-label={$t('skills.howCreate')}>{([['form',$t('skills.write')],['folder',$t('skills.uploadFolder')],['link',$t('skills.enterLink')]] as const).filter(([k])=>k==='form'?canCreate:k==='folder'?canImport:canLink).map(([k,v])=><button key={k} type="button" aria-pressed={mode===k} onClick={()=>{setMode(k);setError('');}}>{v}</button>)}</div>
    {mode==='form'?<>
     <label className="nr-field">{$t('common.name')}<input value={name} maxLength={64} disabled={busy} onChange={e=>setName(e.target.value)} placeholder="seo-title" className="font-mono"/><span className="text-xs text-muted-foreground">{$t('skills.lowercaseEnglishLettersNumbersHyphens')}</span></label>
     <label className="nr-field">{$t('skills.whenUse')}<textarea rows={2} maxLength={1024} disabled={busy} value={description} onChange={e=>setDescription(e.target.value)} placeholder={$t('skills.useWhenWritingChangingPage')}/><span className="text-xs text-muted-foreground">{$t('skills.agentUsesLineDecideWhen')}</span></label>
@@ -113,18 +117,19 @@ function NewSkill({open,projectId,onClose,onCreated,onImported}:{open:boolean;pr
    </>}
    {error&&<p role="alert" className="nr-error">{error}</p>}
   </div>
-  <DialogFooter><Button variant="ghost" disabled={busy} onClick={onClose}>{$t('common.cancel')}</Button><Button disabled={busy||reading} onClick={()=>void save()}>{busy?(mode==='link'&&link?.choices?$t('skills.importing'):$t('common.saving')):mode==='form'?$t('common.save'):mode==='link'&&link?.choices?$t('skills.importValue',{0:ticked.length}):$t('skills.import')}</Button></DialogFooter>
+  <DialogFooter><Button variant="ghost" disabled={busy} onClick={onClose}>{$t('common.cancel')}</Button><Button disabled={busy||reading||!canSave} onClick={()=>void save()}>{busy?(mode==='link'&&link?.choices?$t('skills.importing'):$t('common.saving')):mode==='form'?$t('common.save'):mode==='link'&&link?.choices?$t('skills.importValue',{0:ticked.length}):$t('skills.import')}</Button></DialogFooter>
  </DialogContent></Dialog>;
 }
 // One Skill: turn it on here, read and edit SKILL.md in place, look at, add and remove its files, delete it. What an action
 // did is said in the drawer (the page behind it is covered); deleting closes it and the page says so.
-function SkillDrawer({projectId,readOnly=false,skill,usage,onClose,onToggle,onChanged}:{projectId:number;readOnly?:boolean;skill:Skill|null;usage:string[];onClose:()=>void;onToggle:(v:boolean)=>void;onChanged:(msg:Message,closed?:boolean)=>void}):ReactElement{
+function SkillDrawer({projectId,canEnable,canRemove,skill,usage,onClose,onToggle,onChanged}:{projectId:number;canEnable:boolean;canRemove:boolean;skill:Skill|null;usage:string[];onClose:()=>void;onToggle:(v:boolean)=>void;onChanged:(msg:Message,closed?:boolean)=>void}):ReactElement{
+ const {can:canEdit}=useBusinessAccess('nrSkills.edit'),{can:canAddFiles}=useBusinessAccess('nrSkills.addFiles'),{can:canRemoveFile}=useBusinessAccess('nrSkills.removeFile');
  const [content,setContent]=useState<{body:string;files:{path:string;text:string}[]}>(),[draft,setDraft]=useState<{name:string;description:string;body:string}|null>(null),[shown,setShown]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[done,setDone]=useMessageState('');
  const read=()=>{if(skill)void skillRequest<{body:string;files:{path:string;text:string}[]}>('get',projectId,{skillId:skill.id}).then(r=>setContent({body:r.body,files:r.files})).catch(()=>setError(() => ($t('skills.notLoadSkill'))));};
  useEffect(()=>{setContent(undefined);setDraft(null);setShown('');setError('');read();},[skill?.id,skill?.updatedAt]);
  useEffect(()=>setDone(''),[setDone, skill?.id]);
  useUnsavedWarning(Boolean(draft&&content&&skill&&(draft.name!==skill.name||draft.description!==skill.description||draft.body!==content.body)));
- async function act(action:'edit'|'remove'|'removeFile'|'addFiles',body:object,message:Message,closed=false){if(!skill)return;setBusy(true);setError('');setDone('');
+ async function act(action:'edit'|'remove'|'removeFile'|'addFiles',body:object,message:Message,closed=false){if(!skill||!({edit:canEdit,remove:canRemove,removeFile:canRemoveFile,addFiles:canAddFiles}[action]))return;setBusy(true);setError('');setDone('');
   try{await skillRequest(action,projectId,{skillId:skill.id,...body});setDraft(null);if(!closed)setDone(message);onChanged(message,closed);}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.retryFailure')));}finally{setBusy(false);}}
  async function addFiles(list:FileList|null){if(!list?.length)return;const r=await readSkillFiles(list,false);if(!r.files.length){setError(() => ($t('skills.filesNotTextFilesToo')));return;}
   await act('addFiles',{files:r.files},() => ($t('skills.filesAdded',{0:r.files.length,1:r.skipped.length?$t('skills.skippedValueSuffix',{0:r.skipped.length}):''})));}
@@ -133,11 +138,11 @@ function SkillDrawer({projectId,readOnly=false,skill,usage,onClose,onToggle,onCh
   <SheetHeader className="sr-only"><SheetTitle>{skill?.name||'Skill'}</SheetTitle></SheetHeader>
   {skill&&<div className="flex flex-col gap-4 p-4 pt-12" aria-label={$t('skills.skillDetails')} role="region">
    <div className="flex flex-wrap items-center gap-2"><h2 className="font-mono text-base font-semibold">{skill.name}</h2>{skill.enabled?<Tag tone="green">{$t('skills.enabledInProject')}</Tag>:<Tag tone="grey">{$t('skills.offProject')}</Tag>}
-    <span className="ml-auto flex items-center gap-2">{!draft&&!readOnly&&<Button size="sm" variant="outline" disabled={busy||!content} onClick={()=>content&&setDraft({name:skill.name,description:skill.description,body:content.body})}><PencilIcon/>{$t('common.edit')}</Button>}
+    <span className="ml-auto flex items-center gap-2">{!draft&&canEdit&&<Button size="sm" variant="outline" disabled={busy||!content} onClick={()=>content&&setDraft({name:skill.name,description:skill.description,body:content.body})}><PencilIcon/>{$t('common.edit')}</Button>}
 </span></div>
-   <label className="flex items-center gap-2 text-sm"><Switch aria-label={$t('skills.enableProject')} checked={skill.enabled} disabled={readOnly} onCheckedChange={onToggle}/>{$t('skills.enableProject')}<span className="text-xs text-muted-foreground">{$t('skills.givenAgentEveryTaskUsed')}</span></label>
+   <label className="flex items-center gap-2 text-sm"><Switch aria-label={$t('skills.enableProject')} checked={skill.enabled} disabled={!canEnable} onCheckedChange={onToggle}/>{$t('skills.enableProject')}<span className="text-xs text-muted-foreground">{$t('skills.givenAgentEveryTaskUsed')}</span></label>
    {error&&<p role="alert" className="nr-error">{error}</p>}{done&&<p role="status" className="nr-success">{done}</p>}
-   {draft?<div className="flex flex-col gap-3">
+   {draft&&canEdit?<div className="flex flex-col gap-3">
     <label className="nr-field">{$t('common.name')}<input value={draft.name} maxLength={64} className="font-mono" onChange={e=>setDraft({...draft,name:e.target.value})}/></label>
     <label className="nr-field">{$t('skills.whenUse')}<textarea rows={2} maxLength={1024} value={draft.description} onChange={e=>setDraft({...draft,description:e.target.value})}/></label>
     <label className="nr-field">{$t('skills.how')}<textarea rows={16} value={draft.body} className="font-mono text-xs" onChange={e=>setDraft({...draft,body:e.target.value})}/></label>
@@ -149,14 +154,14 @@ function SkillDrawer({projectId,readOnly=false,skill,usage,onClose,onToggle,onCh
    <div className="flex flex-col gap-1.5"><h3 className="text-xs font-medium text-muted-foreground">{$t('skills.attachedFiles')}</h3>
     {content?.files.length?<ul className="flex flex-col divide-y rounded-lg border" aria-label={$t('skills.attachedFiles')}>{content.files.map(f=><li key={f.path} className="px-3 py-2">
      <div className="flex items-center gap-2 text-sm"><FileIcon className="size-3.5 text-muted-foreground" aria-hidden="true"/><button type="button" className="min-w-0 flex-1 truncate text-left font-mono text-xs hover:underline" aria-expanded={shown===f.path} onClick={()=>setShown(shown===f.path?'':f.path)}>{f.path}</button><span className="text-xs text-muted-foreground tabular-nums">{$tj('common.characters',{0:f.text.length.toLocaleString(getCurrentLocale())})}</span>
-      {!readOnly&&<Button size="icon-sm" variant="ghost" aria-label={$t('common.deleteValue',{0:f.path})} disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('skills.deleteAttachedFile',{0:f.path})),action:'common.delete'}))void act('removeFile',{path:f.path},() => ($t('skills.deleted',{0:f.path})));}}><XIcon/></Button>}</div>
+      {canRemoveFile&&<Button size="icon-sm" variant="ghost" aria-label={$t('common.deleteValue',{0:f.path})} disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('skills.deleteAttachedFile',{0:f.path})),action:'common.delete'}))void act('removeFile',{path:f.path},() => ($t('skills.deleted',{0:f.path})));}}><XIcon/></Button>}</div>
      {shown===f.path&&<pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted/30 p-2 text-xs">{f.text}</pre>}</li>)}</ul>
     :<p className="text-xs text-muted-foreground">{content?$t('skills.noAttachedFilesTemplatesExamples'):''}</p>}
-    {!readOnly&&<label className={cn('flex w-fit cursor-pointer items-center gap-1 text-xs text-primary hover:underline',busy&&'pointer-events-none opacity-50')}><PlusIcon className="size-3.5"/>{$t('skills.addFiles')}<input type="file" multiple className="sr-only" aria-label={$t('skills.addAttachedFiles')} disabled={busy} onChange={e=>{void addFiles(e.target.files);e.target.value='';}}/></label>}
+    {canAddFiles&&<label className={cn('flex w-fit cursor-pointer items-center gap-1 text-xs text-primary hover:underline',busy&&'pointer-events-none opacity-50')}><PlusIcon className="size-3.5"/>{$t('skills.addFiles')}<input type="file" multiple className="sr-only" aria-label={$t('skills.addAttachedFiles')} disabled={busy} onChange={e=>{void addFiles(e.target.files);e.target.value='';}}/></label>}
    </div>
    <div className="flex items-start gap-2 border-t pt-3"><div className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-muted-foreground"><p>{$tj('skills.updated',{0:usage.length?$t('skills.usedPlaybooksValue',{0:usage.join('、')}):$t('skills.noPlaybookUsesYet'),1:day(skill.updatedAt),2:skill.builtIn?$t('skills.builtExample'):''})}</p>
     {skill.source&&<a href={skill.source} target="_blank" rel="noopener noreferrer" className="flex w-fit max-w-full items-center gap-1 hover:underline"><ExternalLinkIcon className="size-3 shrink-0"/><span className="truncate">{$tj('common.source',{0:skill.source})}</span></a>}</div>
-    {!readOnly&&<Button size="sm" variant="ghost" className="text-destructive" disabled={busy} onClick={remove}><Trash2Icon/>{$t('common.delete')}</Button>}</div>
+    {canRemove&&<Button size="sm" variant="ghost" className="text-destructive" disabled={busy} onClick={remove}><Trash2Icon/>{$t('common.delete')}</Button>}</div>
   </div>}
  </SheetContent></Sheet>;
 }

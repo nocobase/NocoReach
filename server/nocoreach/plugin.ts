@@ -1,4 +1,7 @@
 // @ts-nocheck
+import { CollectorConnections } from './collector-connections.js';
+import { ArticleTargets } from './articles/targets.js';
+import { ArticleDelivery } from './articles/delivery.js';
 import { assertPristineMockDataset } from './mock-isolation.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { createHash, randomBytes } from 'node:crypto';
@@ -83,6 +86,9 @@ export class Connections{
  projects: Projects;
  network: OutboundNetwork;
  proxyProfiles: ProxyProfiles;
+ collectors: CollectorConnections;
+ articleTargets: ArticleTargets;
+ articles: ArticleDelivery;
  bilibili?: BilibiliSource;
  xiaohongshu?: XiaohongshuSource;
  constructor(app,variables,{basePath,publicOrigin,browserCollectors=[],mock}: {basePath:string;publicOrigin?:string;browserCollectors?:unknown;mock?:MockEngine}){this.publicOrigin=publicOrigin;this.mock=mock;this.browserCollectors=mock?.enabled?mockBrowserCollectors:browserCollectors;this.basePath=basePath;this.app=app;this.db=app.db;this.variables=variables;this.proxyProfiles=new ProxyProfiles(variables);this.network=new OutboundNetwork(this.proxyProfiles,mock);this.RETURN=`${basePath}/connections`;}
@@ -124,11 +130,15 @@ export class Connections{
   this.github=new GitHubSource(this);this.github.register();
   this.community=new CommunitySource(this);this.community.register();
   this.packages=new PackagesSource(this);this.packages.register();
-  this.youtube=new YouTubeSource(this,this.mock?.enabled?createMockYouTubeProvider(()=>this.network.mockContext('youtube')):undefined);this.youtube.register();
+  this.collectors=new CollectorConnections(this.variables,this.db,this.browserCollectors,this.mock?.enabled??false);this.collectors.register(this);
+  this.youtube=new YouTubeSource(this,this.mock?.enabled?createMockYouTubeProvider(()=>this.network.mockContext('youtube')):undefined);this.youtube.register(windowFor);
   this.hackernews=new HackerNewsSource(this);this.hackernews.register();
-  this.bilibili=new BilibiliSource(this,this.browserCollectors,this.mock?.enabled?createMockBilibiliAdapter(id=>this.network.mockContext('bilibili',id)):undefined);this.bilibili.register();
-  this.xiaohongshu=new XiaohongshuSource(this,this.browserCollectors,this.mock?.enabled?createMockXiaohongshuAdapter(id=>this.network.mockContext('xiaohongshu',id)):undefined);this.xiaohongshu.register();
+  this.bilibili=new BilibiliSource(this,this.mock?.enabled?createMockBilibiliAdapter(id=>this.network.mockContext('bilibili',id)):undefined);this.bilibili.register(windowFor);
+  this.xiaohongshu=new XiaohongshuSource(this,this.mock?.enabled?createMockXiaohongshuAdapter(id=>this.network.mockContext('xiaohongshu',id)):undefined);this.xiaohongshu.register(windowFor);
   this.network.bind(this.xiaohongshu,['test','search'],'xiaohongshu');
+  this.collectors.attach('xiaohongshu',this.xiaohongshu,['connect','test','search','disconnect']);
+  this.collectors.attach('bilibili',this.bilibili,['connect','test','sync','disconnect']);
+  this.collectors.attach('youtube',this.youtube,['connect','sync','disconnect','clear']);
   this.reddit=new RedditSource(this);this.reddit.register(windowFor);
   this.trends=new TrendsSource(this);this.trends.register();
   this.competitors=new CompetitorWatch(this);this.competitors.register();
@@ -153,6 +163,9 @@ export class Connections{
   this.dataViews=new DataViews(this);this.dataViews.register();
   new KeywordDetail(this).register();
   this.searchIndex=new SearchIndex(this);this.searchIndex.register();
+  // Article publishing targets (articles/): CMS and API calls use the project's website egress, repository calls GitHub's.
+  this.articleTargets=new ArticleTargets(this.variables,(id,connection)=>(url,init)=>this.network.fetch(connection,url,init,String(id)));this.articleTargets.register(this);
+  this.articles=new ArticleDelivery(this.articleTargets);
   this.taskExecution=new (TaskService)(this);this.taskExecution.register();
   this.taskCron=this.app.cronJobManager.addJob({name:'taskCron',cronTime:'*/2 * * * * *',onTick:()=>this.taskExecution.tick().catch(e=>this.app.logger.warn('NocoReach task tick failed',{message:e?.message}))});
   this.strategy=new StrategyService(this);this.strategy.register();

@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 // Use only a fresh isolated demo app and its synthetic administrator.
 const base = process.env.APP_URL?.replace(/\/$/, '') ?? '';
@@ -14,12 +14,6 @@ test.use({
     : {},
 });
 
-async function segment(input: Locator, index: number) {
-  await input.focus();
-  // Chromium/en-US uses month, day, year. Move to the first segment from any current segment.
-  for (let i = 0; i < 4; i++) await input.press('ArrowLeft');
-  for (let i = 0; i < index; i++) await input.press('ArrowRight');
-}
 async function signIn(page: Page) {
   await page.goto(`${base}/login`);
   await page
@@ -33,9 +27,15 @@ async function signIn(page: Page) {
   // Let sign-in's locale/session/authorization bootstrap finish before navigating and counting report requests.
   await page.waitForLoadState('networkidle');
 }
+// Day buttons are named by their full date, e.g. "Thursday, September 17th, 2026".
+const day = (page: Page, date: string) =>
+  page.getByRole('button', { name: new RegExp(`, ${date}, 2026`) });
+// The draft lives in the calendar; the neighbouring month's hidden outside days are skipped.
+const selected = (page: Page) =>
+  page.locator('[role=gridcell][aria-selected=true]:not([data-outside])');
 
 for (const source of ['github', 'downloads']) {
-  test(`${source}: segmented drafts, Apply, validation and navigation`, async ({
+  test(`${source}: calendar drafts, Apply, validation and navigation`, async ({
     page,
     browser,
   }, testInfo) => {
@@ -52,41 +52,38 @@ for (const source of ['github', 'downloads']) {
     await page.goto(url);
     expect((await initialResponse).ok()).toBe(true);
     await page.waitForLoadState('networkidle');
-    const start = page.getByLabel('Start date', { exact: true });
-    const end = page.getByLabel('End date', { exact: true });
-    await expect(start).toHaveValue('2026-09-01');
+    const committed = page.getByRole('button', {
+      name: 'Sep 1, 2026 – Sep 20, 2026',
+      exact: true,
+    });
+    await expect(committed).toBeVisible();
     await expect.poll(() => requests.length).toBeGreaterThan(0);
     await expect(page.locator('.nr-range-summary')).toContainText('2026-09-01');
     const before = requests.length;
-    // Delete just the day, observe empty DOM value, then retype. No fill() in the reproduction.
-    await segment(start, 1);
-    await start.press('Delete');
-    await expect(start).toHaveValue('');
-    await expect(end).toHaveValue('2026-09-20');
+
+    // The first click starts a new range and the second ends it; nothing is sent before Apply.
+    await committed.click();
+    await expect(
+      page.getByRole('grid', { name: 'August 2026', exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('grid', { name: 'September 2026', exact: true }),
+    ).toBeVisible();
+    await day(page, 'September 17th').click();
+    await expect(selected(page)).toHaveCount(1);
+    // The trigger keeps the committed range, so the calendar stays put between the clicks.
+    await expect(committed).toBeVisible();
     await page.getByRole('button', { name: 'Apply', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText(
-      'Enter a complete, valid start date.',
+      'Enter a complete, valid end date.',
     );
-    await segment(start, 1);
-    await page.keyboard.type('18');
-    await expect(start).toHaveValue('2026-09-18');
-    // Overwrite year, month and day independently at both endpoints.
-    for (const input of [start, end]) {
-      await segment(input, 2);
-      await input.press('Delete');
-      await page.keyboard.type('2026');
-      await segment(input, 0);
-      await input.press('Delete');
-      await page.keyboard.type('09');
-      await segment(input, 1);
-      await input.press('Delete');
-      await page.keyboard.type(input === start ? '17' : '21');
-    }
-    await expect(start).toHaveValue('2026-09-17');
-    await expect(end).toHaveValue('2026-09-21');
+    await day(page, 'September 21st').click();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(selected(page)).toHaveCount(5);
     expect(page.url()).toBe(url);
     expect(requests).toHaveLength(before);
     await page.screenshot({
+      animations: 'disabled',
       path: testInfo.outputPath(`${source}-draft-en.png`),
       fullPage: true,
     });
@@ -97,30 +94,32 @@ for (const source of ['github', 'downloads']) {
       from: '2026-09-17',
       to: '2026-09-21',
     });
+    await expect(page.getByRole('grid')).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: 'Sep 17, 2026 – Sep 21, 2026' }),
+    ).toBeFocused();
     await expect(page.locator('.nr-range-summary')).toContainText('2026-09-17');
     await page.reload();
-    await expect(start).toHaveValue('2026-09-17');
-    await expect(end).toHaveValue('2026-09-21');
+    await expect(
+      page.getByRole('button', { name: 'Sep 17, 2026 – Sep 21, 2026' }),
+    ).toBeVisible();
 
-    // Invalid calendar day and reversed/oversized ranges stay local.
-    await segment(start, 0);
-    await page.keyboard.type('02');
-    await segment(start, 1);
-    await page.keyboard.type('30');
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
-    await expect(page.getByRole('alert')).toContainText('valid start date');
-    await start.fill('2026-09-22');
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
-    await expect(page.getByRole('alert')).toContainText(
-      'on or before end date',
-    );
-    await start.fill('0001-09-18');
+    // Oversized linked ranges stay local and explain the limit.
+    const longUrl = `${base}/data/${source}?days=custom&from=2025-01-01&to=2026-05-06`;
+    await page.goto(longUrl);
+    await page
+      .getByRole('button', { name: 'Jan 1, 2025 – May 6, 2026' })
+      .click();
     await page.getByRole('button', { name: 'Apply', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('490 days');
+    expect(page.url()).toBe(longUrl);
     await page.screenshot({
+      animations: 'disabled',
       path: testInfo.outputPath(`${source}-validation-en.png`),
       fullPage: true,
     });
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('grid')).toHaveCount(0);
 
     const presetResponse = page.waitForResponse(
       (response) =>
@@ -131,39 +130,28 @@ for (const source of ['github', 'downloads']) {
       .getByRole('button', { name: 'Last 7 days', exact: true })
       .click();
     expect((await presetResponse).ok()).toBe(true);
-    expect(new URL(page.url()).searchParams.get('view')).toBe('repo');
     expect(new URL(page.url()).searchParams.has('from')).toBe(false);
     const presetUrl = page.url();
     const presetRequests = requests.length;
+    // Custom opens on the last 28 days without sending them, and stops at this month.
     await page.getByRole('button', { name: 'Custom', exact: true }).click();
+    await expect(page.getByRole('grid')).toHaveCount(2);
+    await expect(
+      page.getByRole('button', { name: 'Go to the Next Month' }),
+    ).toHaveAttribute('aria-disabled', 'true');
     expect(page.url()).toBe(presetUrl);
     expect(requests).toHaveLength(presetRequests);
-    await page.goto(url);
-    await page.goBack();
-    await expect(start).toHaveCount(0);
-    await page.goForward();
-    await expect(start).toHaveValue('2026-09-01');
-    await expect(end).toHaveValue('2026-09-20');
-    // Open the real native calendar indicator and select the next day with its keyboard navigation.
-    const bounds = await end.boundingBox();
-    await end.click({
-      position: { x: bounds!.width - 15, y: bounds!.height / 2 },
-    });
     await page.screenshot({
+      animations: 'disabled',
       path: testInfo.outputPath(`${source}-calendar-en.png`),
     });
-    await page.keyboard.press('ArrowRight');
-    await page.keyboard.press('Enter');
-    await expect(end).toHaveValue('2026-09-21');
-    expect(page.url()).toBe(url);
-    const startBounds = await start.boundingBox();
-    await start.click({
-      position: { x: startBounds!.width - 15, y: startBounds!.height / 2 },
-    });
-    await page.keyboard.press('ArrowRight');
-    await page.keyboard.press('Enter');
-    await expect(start).toHaveValue('2026-09-02');
-    expect(page.url()).toBe(url);
+    await page.keyboard.press('Escape');
+
+    await page.goto(url);
+    await page.goBack();
+    await expect(committed).toHaveCount(0);
+    await page.goForward();
+    await expect(committed).toBeVisible();
     await testInfo.attach('environment', {
       body: `${browser.version()}; en-US; Linux; headless Chromium`,
       contentType: 'text/plain',
@@ -171,7 +159,7 @@ for (const source of ['github', 'downloads']) {
   });
 }
 
-test('Chinese validation and narrow light/dark date controls', async ({
+test('Chinese validation and the narrow light/dark calendar', async ({
   page,
 }, testInfo) => {
   await signIn(page);
@@ -182,33 +170,40 @@ test('Chinese validation and narrow light/dark date controls', async ({
     `${base}/data/github?days=custom&from=2026-09-01&to=2026-09-20`,
   );
   expect((await initialResponse).ok()).toBe(true);
-  await expect(page.getByLabel('Start date', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Sep 1, 2026 – Sep 20, 2026' }),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Open account menu' }).click();
   await page.getByRole('menuitem', { name: /Language/ }).hover();
   await page.getByRole('menuitemradio', { name: '中文', exact: true }).click();
   await page.keyboard.press('Escape');
-  const end = page.getByLabel('结束日期', { exact: true });
-  await segment(end, 1);
-  await end.press('Delete');
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page
+    .getByRole('button', { name: '2026年9月1日 – 2026年9月20日' })
+    .click();
+  // One month at a time on a phone.
+  await expect(page.getByRole('grid')).toHaveCount(1);
+  await expect(
+    page.getByRole('grid', { name: '2026年9月', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: /^2026年9月5日/ }).click();
   await page.getByRole('button', { name: '应用', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText(
     '请输入完整且有效的结束日期。',
   );
-  await expect(page.getByLabel('开始日期', { exact: true })).toHaveValue(
-    '2026-09-01',
-  );
-  await page.setViewportSize({ width: 375, height: 812 });
   await page.screenshot({
+    animations: 'disabled',
     path: testInfo.outputPath('github-mobile-light-zh.png'),
   });
   await page.emulateMedia({ colorScheme: 'dark' });
   await expect(page.locator('html')).toHaveClass(/dark/);
   await page.screenshot({
+    animations: 'disabled',
     path: testInfo.outputPath('github-mobile-dark-zh.png'),
   });
-  for (const input of [page.getByLabel('开始日期', { exact: true }), end]) {
-    const bounds = await input.boundingBox();
-    expect(bounds!.x).toBeGreaterThanOrEqual(0);
-    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(375);
-  }
+  const bounds = await page
+    .locator('[data-slot=popover-content]')
+    .boundingBox();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(375);
 });

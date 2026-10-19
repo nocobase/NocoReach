@@ -24,6 +24,9 @@ import { SiteContentConnect } from '../../client/pages/site-content-connect';
 import { SyncPanel } from '../../client/pages/sync-panel';
 import { HealthPanel } from '../../client/pages/data-health';
 import { confirmAction } from '../../client/components/reach/confirm';
+vi.mock('../../client/hooks/use-business-access', () => ({
+  useBusinessAccess: () => ({ can: true, isPending: false }),
+}));
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => ({
     session: { user: { id: 'u' }, session: { id: 'locale-test' } },

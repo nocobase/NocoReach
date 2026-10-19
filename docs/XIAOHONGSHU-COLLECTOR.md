@@ -1,5 +1,7 @@
 # 小红书只读浏览器采集
 
+已部署 Collector 时，可直接在数据接入界面填写地址和令牌，保存后立即生效。见[界面配置说明](COLLECTOR-CONNECTIONS.md)。下方 config.yml 示例仍可用于部署预配置。
+
 当前能力：在已获授权、已登录的小红书浏览器中搜索一个词组，手动读取最多 20 条公开笔记，并保存到当前项目。不是官方 API，不自动登录、不读取或上传 Cookie、不发布或评论、不自动安装 OpenCLI。此版本不含创作者后台、粉丝增长、评论数或收藏统计。保存结果进入通用内容规则：新发现内容与准确点赞数门槛，可作为每日分析的信号证据；尚未接入全局数据健康。
 
 ## 先明确运行位置
@@ -34,9 +36,9 @@ nocoreach:
 
 ## 项目中的操作
 
-在“数据接入 → 小红书（浏览器采集）”选择已配置的采集器，填写 2–60 字的一个词组，确认有权使用该浏览器会话后保存。点击“检查采集器”只验证服务和 OpenCLI 安装，不会显示已经登录。点击“立即搜索”才实际验证本次平台读取并保存结果。
+在“数据接入 → 小红书（浏览器采集）”填写采集器地址和访问令牌（或选择既有部署采集器），填写 2–60 字的一个词组后保存。点击“检查采集器”只验证服务和 OpenCLI 安装，不会显示已经登录。点击“立即搜索”才实际验证本次平台读取并保存结果。
 
-配置、测试、搜索、取消和断开属于管理员设置操作。已加入 NocoReach 的成员通过“查看”入口读取已保存笔记，不能操作浏览器。无定时搜索；一次全局只运行一个采集请求，其他项目收到 busy。
+配置、测试、搜索、取消和断开属于管理员设置操作。已保存的笔记在“社区 → 小红书”页面按所选时间段查看，连接面板只显示已保存条数和“查看数据”入口；成员可查看笔记，不能操作浏览器。无定时搜索；一次全局只运行一个采集请求，其他项目收到 busy。
 
 关闭面板不取消采集；重新打开可看状态并取消。取消会中止本次应用请求、放弃结果并请求终止 CLI 子进程。采集器先发 SIGTERM，1 秒后仍未关闭则升级 SIGKILL；只有真实进程 close 后才释放共享采集器占用，取消回调本身不代表进程已退出。浏览器已经发出的请求未必能够撤销，不能保证页面瞬间停止变化。结果进入数据库提交阶段后，取消返回“正在保存，已无法取消”，不会误报已接受取消；等待保存锁期间接受的取消不会写入结果。应用关闭也中止活动请求。断开保留数据；修改连接或断开后，旧在途结果不能写进新配置。
 
@@ -63,7 +65,7 @@ nocoreach:
 
 ## 协议与替换边界
 
-`server/nocoreach/xiaohongshu-adapter.ts` 的 `XiaohongshuAdapter` 是唯一平台传输边界。以后可以接正式 Runner，无需引入旧 daemon。HTTP 请求/响应必须匹配 `protocolVersion: 1`、`platform: xiaohongshu`、`projectId` 和随机 `requestId`。固定 POST `/health`、`/search`，携带部署 Bearer 令牌，不接受 Origin，不允许动态命令、URL、模块或浏览器 eval。请求体最多 4 KiB；响应最多 1 MiB；只支持固定子进程 argv，`shell: false`。
+`server/nocoreach/xiaohongshu-adapter.ts` 的 `XiaohongshuAdapter` 是唯一平台传输边界。以后可以接正式 Runner，无需引入旧 daemon。HTTP 请求/响应必须匹配 `protocolVersion: 1`、`platform: xiaohongshu`、`projectId` 和随机 `requestId`。固定 POST `/health`、`/search`，携带部署 Bearer 令牌，不接受 Origin，不允许动态命令、URL、模块或浏览器 eval。请求体最多 4 KiB；响应最多 20 MiB；只支持固定子进程 argv，`shell: false`。
 
 `collectors/read-only-browser.mjs` 仅支持静态注册的 xiaohongshu/bilibili，后者预留固定 video 读操作；未注册功能直接拒绝。没有生产 mock 开关。测试通过在本地创建 collector 时注入模拟函数，不改变生产 HTTP 权限。
 

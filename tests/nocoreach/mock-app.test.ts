@@ -216,10 +216,11 @@ test('canonical repository status names remain failing HTTP responses through cl
   testApp,
 }) => {
   const { runtime, call } = await setup(testApp);
+  const original = runtime.legacy.resources.action('nrMock', 'status')!;
   runtime.legacy.resources.define({
-    name: 'nrMockHttpStatusProbe',
+    name: 'nrMock',
     actions: {
-      fail: (ctx: LegacyContext): Promise<void> => {
+      status: (ctx: LegacyContext): Promise<void> => {
         const values = ctx.action.params.values as Record<string, unknown>;
         ctx.throw(values.status, 'Query failed');
       },
@@ -235,13 +236,14 @@ test('canonical repository status names remain failing HTTP responses through cl
     [200, 500],
     [502, 502],
   ] as const) {
-    const response = await call('nrMockHttpStatusProbe', 'fail', { status });
+    const response = await call('nrMock', 'status', { status });
     expect(response.status).toBe(expected);
     expect(response.ok).toBe(false);
     const payload = await response.json();
     expect(payload.error.code).toBe(expected);
     expect(payload.data).toBeUndefined();
   }
+  runtime.legacy.resources.define({ name: 'nrMock', actions: { status: original } });
 });
 
 test('mock admin API enforces anonymous/member/outsider roles, revision, IDs and persistent isolated settings', async ({
@@ -875,7 +877,6 @@ test('Xiaohongshu uses the real HTTP adapter/parser, keeps old data for empty/er
     call('nrXiaohongshu', 'connect', {
       collectorId: 'nocoreach-mock',
       query: 'NocoBloom',
-      authorized: true,
       revision: 0,
     }),
   );
@@ -1640,6 +1641,31 @@ for (const target of [
     expect((await data(call('nrAgent', 'status'))).repo.repo).toBe(repository);
     covered.add('repo');
 
+    // Article publishing targets are sealed local settings; publishing itself is simulated in this deployment.
+    const articleTargets = await data(call('nrArticles', 'targets'));
+    await data(
+      call('nrArticles', 'saveTarget', {
+        revision: articleTargets.revision,
+        target: {
+          kind: 'git-files',
+          id: 'blog',
+          name: 'Blog files',
+          repo: repository,
+          branch: 'main',
+          root: 'content/blog',
+          locales: ['en'],
+          files: { en: 'content/blog/{slug}/index.md' },
+          format: 'frontmatter',
+          frontmatter: { title: 'title', description: 'description' },
+        },
+        secret: 'fictional-token',
+      }),
+    );
+    expect((await data(call('nrArticles', 'targets'))).targets).toMatchObject([
+      { id: 'blog', hasSecret: true },
+    ]);
+    covered.add('articles');
+
     await configure('normal', {
       clock: new Date(Date.parse(CLOCK) - 86400000).toISOString(),
     });
@@ -1860,7 +1886,6 @@ for (const target of [
       call('nrXiaohongshu', 'connect', {
         collectorId: 'nocoreach-mock',
         query: target.name,
-        authorized: true,
         revision: 0,
       }),
     );

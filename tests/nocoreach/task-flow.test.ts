@@ -335,7 +335,7 @@ test('stopping, manual takeover and interrupted Agent runs',async()=>{
 test('people and page: owner changes between runs, collaborators and linked pages come from real users and 网站内容',async()=>{
  const f=fixture();f.state.users.push({id:2,nickname:'Lin'},{id:3,nickname:'Mia'});
  // Lin has joined as 成员 in 设置 · 成员; Mia is a NocoBase user who has not joined, so she cannot own or join a task.
- f.state.nrSnapshots.push({id:8999,key:'nr-members',payload:{users:{'2':'member'}}});
+ f.state.users.find(user=>user.id===2).roles=[{name:'nr.member'}];
  f.state.nrSnapshots.push({id:9000,key:'site-content:1',payload:{pages:[{url:'https://example.com/docs/install',title:'安装指南',type:'docs'},{url:'https://example.com/blog/x',title:'X',type:'blog'}]}});
  assert.deepEqual((await f.s.members()).map(m=>m.name),['tester','Lin','Mia'],'without the members list: every user');
  f.s.p.members=new (__members.Members)(f.s.p);
@@ -357,7 +357,7 @@ test('people and page: owner changes between runs, collaborators and linked page
 
 test('roles: on a task with an owner, other members can only leave a message; the owner and 管理员 do the steps',async()=>{
  const f=fixture();f.state.users.push({id:2,nickname:'Lin'},{id:3,nickname:'Mia'});
- f.state.nrSnapshots.push({id:8999,key:'nr-members',payload:{users:{'2':'member','3':'member'}}});
+ for(const user of f.state.users.filter(user=>[2,3].includes(user.id)))user.roles=[{name:'nr.member'}];
  let d=await f.command('setOwner',{userId:'2'});assert.equal(d.work.humanOwnerId,'2');
  const as=async(actor,command,body={})=>f.s.update('1',{taskId:'1',revision:(await f.view()).work.revision,requestId:randomUUID(),command,...body},actor,actor==='2'?'Lin':'Mia');
  await assert.rejects(as('3','startTask',{playbookId:'change-research'}),e=>e.status===403&&/由 Lin 把关/.test(e.message));
@@ -367,12 +367,12 @@ test('roles: on a task with an owner, other members can only leave a message; th
  d=await as('2','selectPlaybook',{playbookId:'change-research'});assert.equal(d.work.playbookId,'change-research');
  // 管理员 (user 1) can still act on Lin's task; someone with no role left cannot.
  d=await f.command('setOwner',{userId:'3'});assert.equal(d.work.humanOwnerName,'Mia');
- f.state.nrSnapshots.find(r=>r.key==='nr-members').payload.users={'2':'member'};
- await assert.rejects(f.s.authorized('3'),e=>e.status===403);await f.s.authorized('2');
+ f.state.users.find(user=>user.id===3).roles=[];
+ await assert.rejects(f.s.requireMember('3'),e=>e.status===403);await f.s.requireMember('2');
 });
 
 test('notifications: the owner hears of a step waiting for them, becoming owner and others\' messages — not of their own doings',async()=>{
- const f=fixture();f.state.users.push({id:2,nickname:'Lin'},{id:3,nickname:'Mia'});f.state.nrSnapshots.push({id:8999,key:'nr-members',payload:{users:{'2':'member','3':'member'}}});
+ const f=fixture();f.state.users.push({id:2,nickname:'Lin',roles:[{name:'nr.member'}]},{id:3,nickname:'Mia',roles:[{name:'nr.member'}]});
  const told=[];f.s.p.notifications={taskEvents:async(task,w,events)=>{told.push(...events.map(e=>[e.kind,w.humanOwnerId,e.by||'',e.step||e.comment||'']));}};
  const as=async(actor,command,body={})=>f.s.update('1',{taskId:'1',revision:(await f.view()).work.revision,requestId:randomUUID(),command,...body},actor,'x');
  await f.command('setOwner',{userId:'2'});

@@ -327,6 +327,7 @@ function renderApplication(
     runtime: { routes: clientRoutes },
     services: {
       has: (token: unknown) => registered.has(token),
+      resolveIfCreated: (token: unknown) => registered.get(token),
       resolve: (token: unknown) => {
         if (registered.has(token)) return registered.get(token);
         throw new Error(`Unexpected service token: ${String(token)}`);

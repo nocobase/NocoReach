@@ -247,9 +247,6 @@ export function ScheduleFields({ schedule }: { schedule: Schedule }) {
           {format.date(schedule.nextRunAt)}
         </Field>
       </dl>
-      <p className='text-xs text-muted-foreground'>
-        {t('schedules.displayTimezone', { timezone: format.timeZone })}
-      </p>
     </div>
   );
 }

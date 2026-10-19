@@ -1,19 +1,22 @@
+import {
+  isCollectorConnectionError,
+  type CollectorResolver,
+  type ResolvedCollector,
+} from './collector-connections.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { projectId, requireAccess } from './policy.js';
+import { collectorPeriod, type WindowFor } from './collector-views.js';
 import type { LegacyApp } from './legacy/app.js';
 import type { LegacyDatabase, LegacyTransaction } from './legacy/database.js';
 import type { legacyContext } from './legacy/context.js';
 import type { OutboundNetwork } from './outbound-network.js';
 import {
-  collectorConfigs,
   HttpXiaohongshuAdapter,
   querySchema,
   XiaohongshuError,
-  XHS_MESSAGES,
   type XiaohongshuAdapter,
-  type XiaohongshuCollectorConfig,
   type XiaohongshuErrorCode,
   type XiaohongshuNote,
 } from './xiaohongshu-adapter.js';
@@ -42,6 +45,7 @@ interface State {
   verifiedAt: string | null;
 }
 interface Plugin {
+  collectors: CollectorResolver;
   db: Pick<LegacyDatabase, 'getRepository' | 'sequelize'>;
   app: Pick<LegacyApp, 'resourceManager' | 'acl'>;
   network: OutboundNetwork;
@@ -52,11 +56,11 @@ function fail(message: string, status = 400): never {
 }
 const revision = z.number().int().nonnegative();
 export class XiaohongshuSource {
-  private readonly configs: XiaohongshuCollectorConfig[];
   private readonly active = new Map<
     string,
     { requestId: string; controller: AbortController; committing: boolean }
   >();
+  private readonly clearing = new Set<string>();
   private readonly adapter: XiaohongshuAdapter;
   private readonly generations = new Map<string, number>();
   private changed(id: string) {
@@ -64,24 +68,35 @@ export class XiaohongshuSource {
   }
   constructor(
     private readonly p: Plugin,
-    config: unknown = [],
     adapter?: XiaohongshuAdapter,
   ) {
-    this.configs = collectorConfigs(config);
     this.adapter = adapter ?? new HttpXiaohongshuAdapter(p.network);
   }
   private allowed(id: string) {
-    return this.configs.filter(
-      (c) =>
-        c.platforms.includes('xiaohongshu') &&
-        (!c.projectIds || c.projectIds.includes(id)),
-    );
+    return this.p.collectors.allowed(id, 'xiaohongshu');
   }
   private config(id: string, collectorId: unknown) {
     const config = this.allowed(id).find((c) => c.id === collectorId);
     if (!config)
       fail(systemMessageText('xiaohongshu.errors.collectorUnavailable'), 409);
     return config;
+  }
+  isCollectorBusy(id: string) {
+    return this.active.has(id) || this.clearing.has(id);
+  }
+  async resetCollector(id: string, collectorId: string) {
+    await this.mutate(id, (old) =>
+      old
+        ? {
+            ...old,
+            collectorId,
+            revision: old.revision + 1,
+            verifiedAt: null,
+            lastRun: null,
+            latestIds: [],
+          }
+        : null,
+    );
   }
   private key(id: string) {
     return `xiaohongshu:${id}`;
@@ -133,19 +148,25 @@ export class XiaohongshuSource {
       fail(systemMessageText('xiaohongshu.errors.connectionChanged'), 409);
   }
   private describe(id: string, state: State | null) {
-    const permitted = Boolean(
-      this.allowed(id).find((c) => c.id === state?.collectorId),
-    );
+    let allowed: ResolvedCollector[] = [];
+    try {
+      allowed = this.allowed(id);
+    } catch (error) {
+      // Unreadable credentials disable collection, but must not hide saved notes.
+      if (!isCollectorConnectionError(error, 'unreadable')) throw error;
+    }
+    const permitted = allowed.some((c) => c.id === state?.collectorId);
     return {
       connected: Boolean(state?.connected && permitted),
       revision: state?.revision ?? 0,
-      collectors: this.allowed(id).map(({ id: collectorId, name }) => ({
+      collectors: allowed.map(({ id: collectorId, name, nameKey }) => ({
         id: collectorId,
         name,
+        nameKey,
       })),
       collectorId: permitted ? state?.collectorId : null,
       query: state?.query ?? '',
-      configured: this.allowed(id).length > 0,
+      configured: allowed.length > 0,
       verifiedAt: state?.verifiedAt ?? null,
       lastRun: state?.lastRun ?? null,
       total: state?.notes.length ?? 0,
@@ -175,13 +196,38 @@ export class XiaohongshuSource {
       latestIds: state?.latestIds ?? [],
     };
   }
+  /** The data page: notes published in the range, by their ID-derived date or when first collected. */
+  async report(id: string, values: Values, windowFor: WindowFor) {
+    const { state, status } = await this.snapshot(id);
+    const period = collectorPeriod(
+      this.p,
+      id,
+      'xiaohongshu',
+      values,
+      windowFor,
+      state?.notes ?? [],
+      (note) => ({
+        published: note.estimatedPublishedAt,
+        seen: note.firstSeenAt,
+      }),
+      [{ key: 'likes', value: (note) => note.likes }],
+      (note) => [{ kind: 'term', name: note.query }],
+    );
+    return {
+      ...status,
+      window: period.window,
+      kpis: period.kpis,
+      matched: period.matched,
+      trend: period.trend,
+      groups: period.groups,
+      notes: period.items,
+    };
+  }
   async connect(id: string, values: Values) {
     const config = this.config(id, values.collectorId);
     const query = querySchema.safeParse(values.query);
     if (!query.success)
       fail(systemMessageText('xiaohongshu.errors.invalidQuery'));
-    if (values.authorized !== true)
-      fail(systemMessageText('xiaohongshu.errors.authorizationRequired'));
     await this.mutate(id, (old) => {
       this.expected(old, values.revision);
       return {
@@ -207,14 +253,16 @@ export class XiaohongshuSource {
     });
   }
   async search(id: string, values: Values) {
-    if (this.active.has(id)) throw new XiaohongshuError('busy');
+    if (this.active.has(id) || this.clearing.has(id))
+      throw new XiaohongshuError('busy');
     const current = await this.state(id);
     this.expected(current, values.revision);
     if (!current?.connected)
       fail(systemMessageText('xiaohongshu.errors.connectionRequired'), 409);
     const config = this.config(id, current.collectorId);
     // Recheck after the awaited read: two simultaneous HTTP calls must not both enter.
-    if (this.active.has(id)) throw new XiaohongshuError('busy');
+    if (this.active.has(id) || this.clearing.has(id))
+      throw new XiaohongshuError('busy');
     const requestId = randomUUID();
     const controller = new AbortController();
     const active = { requestId, controller, committing: false };
@@ -283,6 +331,29 @@ export class XiaohongshuSource {
     }
     return this.view(id);
   }
+  async clear(id: string, values: Values) {
+    if (this.active.has(id) || this.clearing.has(id))
+      throw new XiaohongshuError('busy');
+    this.clearing.add(id);
+    try {
+      await this.mutate(id, (state) => {
+        this.expected(state, values.revision);
+        return state
+          ? {
+              ...state,
+              revision: state.revision + 1,
+              notes: [],
+              latestIds: [],
+              lastRun: null,
+              verifiedAt: null,
+            }
+          : null;
+      });
+    } finally {
+      this.clearing.delete(id);
+    }
+    return this.view(id);
+  }
   async cancel(id: string, values: Values) {
     const active = this.active.get(id);
     if (!active || values.requestId !== active.requestId)
@@ -305,7 +376,7 @@ export class XiaohongshuSource {
   stop() {
     for (const entry of this.active.values()) entry.controller.abort();
   }
-  register() {
+  register(windowFor: WindowFor) {
     const wrap =
       (fn: (id: string, values: Values) => unknown) =>
       async (ctx: Context, next: () => Promise<void>) => {
@@ -320,14 +391,15 @@ export class XiaohongshuSource {
     const actions = {
       status: wrap((id) => this.status(id)),
       view: wrap((id) => this.view(id)),
+      report: wrap((id, v) => this.report(id, v, windowFor)),
       connect: wrap((id, v) => this.connect(id, v)),
       test: wrap((id, v) => this.test(id, v)),
       search: wrap((id, v) => this.search(id, v)),
       cancel: wrap((id, v) => this.cancel(id, v)),
+      clear: wrap((id, v) => this.clear(id, v)),
       disconnect: wrap((id, v) => this.disconnect(id, v)),
     };
     this.p.app.resourceManager.define({ name: 'nrXiaohongshu', actions });
     this.p.app.acl.allow('nrXiaohongshu', Object.keys(actions), 'loggedIn');
   }
 }
-export { XHS_MESSAGES };

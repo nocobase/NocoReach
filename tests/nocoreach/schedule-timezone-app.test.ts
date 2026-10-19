@@ -158,6 +158,11 @@ test('timezone saves validate before writes, isolate tasks, roll back, and survi
     ).toBe(false);
     await server!.close();
     server = undefined;
+    // Snowflake IDs count seconds and a new process restarts the sequence for the same worker. Restarting within the
+    // second of the previous process's last ID could issue it again, so the restarted server starts in the next second.
+    await new Promise((resolve) =>
+      setTimeout(resolve, 1001 - (Date.now() % 1000)),
+    );
     app = await boot();
     expect(await app.runtime.schedules.timing()).toMatchObject({
       cron: '0 9 * * *',

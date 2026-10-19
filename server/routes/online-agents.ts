@@ -20,6 +20,7 @@ import { z } from 'zod';
 import { onlineAgentsToken } from '../providers/online-agents.js';
 import { nocoReachToken } from '../providers/nocoreach.js';
 import { roleOf } from '../nocoreach/policy.js';
+import { authorizationToken, type AuthorizationEnv } from '@nocobase/app-plugin-authorization/server';
 import { OnlineAgentError } from '../online-agent/errors.js';
 
 const model = z.strictObject({
@@ -59,11 +60,11 @@ const endpoint = (operationId: string, summary: string) =>
     summary,
     responses: { 200: dataResponse(z.unknown()), ...apiErrorResponses },
   });
-const owner = (context: Context<AuthEnv>) =>
+const owner = (context: Pick<Context<AuthEnv>, 'get'>) =>
   String(context.get('auth')!.user.id);
 
 export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
-  const router = new Hono<AuthEnv>();
+  const router = new Hono<AuthEnv & AuthorizationEnv>();
   const service = () => app.container.resolve(onlineAgentsToken);
   const runtime = () => app.container.resolve(nocoReachToken);
   const agents = app.container.resolve(agentsToken);
@@ -72,6 +73,10 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
     app.container.resolve(authenticationToken).required(),
   );
   router.use('/onlineAgents/*', bodyLimit({ maxSize: 100000 }));
+  router.use(
+    '/onlineAgents/*',
+    app.container.resolve(authorizationToken).middleware(),
+  );
   router.use('/onlineAgents/*', async (context, next) => {
     await runtime().ready;
     if (
@@ -82,7 +87,10 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
     if (session && session !== context.get('auth')!.session.id)
       throw new OnlineAgentError('sessionChanged');
     context.header('Cache-Control', 'no-store');
-    await next();
+    await runtime().legacy.db.access!.run(
+      { userId: owner(context), context: context.get('authz') },
+      next,
+    );
   });
   router.onError((error, context) =>
     apiErrorHandler(
@@ -97,12 +105,35 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
       context,
     ),
   );
-  const admin = async (context: Context<AuthEnv>) => {
-    if ((await roleOf(runtime().legacy.db, owner(context))) !== 'admin')
-      throw new OnlineAgentError('accessDenied', 403);
+  const admin = async (context: Pick<Context<AuthEnv>, 'get'>) => {
+    await runtime().legacy.db.access!.requireFor(
+      owner(context),
+      'nrOnline',
+      'manage',
+    );
   };
   const project = async (projectId: string | null) => {
+    await runtime().legacy.db.access!.require(
+      'nrOnline',
+      'read',
+      projectId ?? undefined,
+    );
     if (projectId) await runtime().plugin.project(projectId);
+  };
+  const canRead = (projectId?: string | null) =>
+    runtime().legacy.db.access!.allows(
+      'nrOnline',
+      'read',
+      projectId ?? undefined,
+    );
+  // Shared metadata is needed by readers of any project, including project-only roles.
+  const requireReader = async () => {
+    if (await canRead()) return;
+    const projects = (await runtime().plugin.projects.all()) as {
+      id: string | number;
+    }[];
+    for (const item of projects) if (await canRead(String(item.id))) return;
+    throw new OnlineAgentError('accessDenied', 403);
   };
   router.get(
     '/onlineAgents/definitions',
@@ -111,6 +142,7 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
       'List online agents and their model readiness',
     ),
     async (context) => {
+      await requireReader();
       const definitions = await service().definitions();
       const list = await Promise.all(
         definitions.map(async (agent) => {
@@ -160,8 +192,12 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
       'listOnlineAgentModels',
       'List configured chat models without credentials',
     ),
-    async (context) =>
-      context.json({ data: await agents.models.gateway.catalog('chat') }),
+    async (context) => {
+      await requireReader();
+      return context.json({
+        data: await agents.models.gateway.catalog('chat'),
+      });
+    },
   );
   router.get(
     '/onlineAgents/conversations',
@@ -169,8 +205,12 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
       'listOnlineConversations',
       "List only the current person's online conversations",
     ),
-    async (context) =>
-      context.json({ data: await service().conversations(owner(context)) }),
+    async (context) => {
+      const visible = [];
+      for (const conversation of await service().conversations(owner(context)))
+        if (await canRead(conversation.projectId)) visible.push(conversation);
+      return context.json({ data: visible });
+    },
   );
   router.post(
     '/onlineAgents/conversations',

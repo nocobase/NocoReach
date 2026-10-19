@@ -7,6 +7,10 @@ import { useTechnicalDetails } from './task-detail/technical-state.js';
 import { EvidenceDialog } from './task-detail/evidence.js';
 import { taskEvidence, whyText } from './task-detail/evidence-model.js';
 import { VisibleChanges } from './task-detail/visible-changes.js';
+import { ArticleStart } from './task-detail/article-start.js';
+import { ArticleEditor, ArticleReview } from './task-detail/article-review.js';
+import { ConflictBody, DriftNotice, PendingButton, TargetRows } from './task-detail/article-release.js';
+import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, publishingTitle, soleConflict, type DeliveryChoice } from './task-detail/article-model.js';
 import { TaskMedia } from './task-detail/media.js';
 import { TaskAgentField } from './task-detail/agent-field';
 import { hasTaskAgent } from './task-execution-types';
@@ -76,11 +80,13 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
  useNavigationGuard(()=>!busy);
  const pending=useRef(false),op=useRef({key:'',id:''});
  const w=data.work,runActive=data.runs.some(active);
+ // An article release moves on in the background (publishing, export): keep the card current while it does.
+ const releasePolling=w.release?.state==='publishing'||w.release?.state==='exporting';
  // The playbook chosen in the start card; the header's steps follow it before the task starts.
  const [pick,setPick]=useState(w.playbookId||data.playbookDefault||'optimize-page');
  const [evidenceOpen,setEvidenceOpen]=useState(false),[pageOpen,setPageOpen]=useState(false);
  useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setRawPlaybooks).catch(()=>undefined);void call<Member[]>(projectId,taskId,'members').then(m=>setMembers(Array.isArray(m)?m:[])).catch(()=>undefined);},[projectId]);
- useEffect(()=>{if(!runActive)return;const t=setInterval(()=>{if(!pending.current)void call<Data>(projectId,taskId,'get').then(next=>{setStoredData(next);setError('');}).catch(()=>setError(() => ($t('taskDetail.runStatusTemporarilyUnavailableRetry'))));},2500);return()=>clearInterval(t);},[runActive, projectId, taskId, setError]);
+ useEffect(()=>{if(!runActive&&!releasePolling)return;const t=setInterval(()=>{if(!pending.current)void call<Data>(projectId,taskId,'get').then(next=>{setStoredData(next);setError('');}).catch(()=>setError(() => ($t('taskDetail.runStatusTemporarilyUnavailableRetry'))));},2500);return()=>clearInterval(t);},[runActive, releasePolling, projectId, taskId, setError]);
  const update:Update=async(command,body={})=>{if(pending.current)return;pending.current=true;setBusy(true);setError('');const key=JSON.stringify([data.work.revision,command,body]);if(op.current.key!==key)op.current={key,id:crypto.randomUUID()};
   try{const d=await call<Data>(projectId,taskId,'advance',{revision:data.work.revision,requestId:op.current.id,command,...body});setStoredData(d);refreshNavBadges();return d;}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailed')));
    // A conflict means the page is behind the server (an Agent removed, another window's change): reload the task so
@@ -129,6 +135,7 @@ function TaskHeader({data,list,pick,busy,runActive,members,update,onEvidence,onP
      :<span>{$t('common.owner')} · <span className="text-foreground">{ownerName}</span></span>}
     {collab.length>0&&<span className="inline-flex items-center gap-1" title={collab.map(c=>c.name).join('、')}>{collab.slice(0,3).map(c=><ActorAvatar key={c.id} type="user" name={c.name} size="xs"/>)}{collab.length>3?`+${collab.length-3}`:''}</span>}
     {insight?.id&&<button type="button" className="nr-link" onClick={()=>navigate(`/opportunities?item=${encodeURIComponent(insight.id!)}`)}>{$tj('taskDetail.sourceAttribution',{0:insight.no?`O-${insight.no}`:$t('common.opportunity')})}</button>}
+    {w.article?.articleId&&<span className='max-w-60 truncate' title={w.article.slug}>{$t('articleTask.headerArticle',{0:w.article.title||w.article.slug})}</span>}
     {w.page&&<a className="nr-link inline-flex items-center gap-1" href={w.page.url} target="_blank" rel="noreferrer">{pathOf(w.page.url)}<ExternalLink className="size-3" aria-hidden="true"/></a>}
     {(data.related||[]).map(r=><button key={r.id} type="button" className="nr-link max-w-60 truncate" title={r.title} onClick={()=>navigate(`/actions/${r.id}`)}>{r.relation==='prev'?$t('taskDetail.previous'):$t('taskDetail.next')}{r.title}</button>)}
    </div>
@@ -201,10 +208,18 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId}:{data:D
  const p=list?.playbooks.find(x=>x.id===pick),handoff=(data.task.evidence?.handoff as {playbook?:string;content?:string}|undefined),brief=handoff?.content||data.task.brief||'',briefTitle=handoff?.content?$t('taskDetail.documentDelivered',{0:handoff.playbook}):$t('taskDetail.whatAgentReceive');
  const options=data.agent?.options||[],only=options.length===1?options[0]:undefined,ready=hasTaskAgent(data)||Boolean(only);
  // With exactly one Agent available nothing needs choosing: it is saved on the task as the start is confirmed.
- const start=async()=>{const d=await withUsableAgent(data,update,'startTask',{playbookId:pick,note});if(d)clear();};
+ // Article publishing (article-start.tsx): shown for playbooks that change something, when the project has a target.
+ const articleChoice=Boolean(p?.kind==='build'&&data.articleTargets?.length);
+ // A choice belongs to the playbook it was made for: another playbook starts again from its own default.
+ const [choiceState,setChoiceState]=useState<DeliveryChoice&{playbook:string}>();
+ const targetIds=(data.articleTargets||[]).map(t=>t.id);
+ const choice=choiceState&&choiceState.playbook===pick&&(choiceState.target==='repo'||targetIds.includes(choiceState.target))?{...choiceState,also:choiceState.also.filter(x=>targetIds.includes(x))}:undefined;
+ const delivery=defaultDelivery(data,pick),current=choice||delivery,plan=articleChoice?deliveryPlan(data,current):{ready:true,unlink:false,delivery:undefined};
+ const link=async(targetId:string|null,articleId?:string|null)=>Boolean(await update('linkArticle',{targetId,...(articleId!==undefined?{articleId}:{})}));
+ const start=async()=>{let revision=data.work.revision;if(!hasTaskAgent(data)&&only){const d=await update('setAgent',{agentId:only.id});if(!d)return;revision=d.work.revision;}if(plan.unlink){const d=await update('linkArticle',{targetId:null,revision});if(!d)return;revision=d.work.revision;}const d=await update('startTask',{playbookId:pick,note,revision,...(plan.delivery?{delivery:plan.delivery}:{})});if(d)clear();};
  const attachments=Array.isArray(data.task.evidence?.attachmentIds)&&data.task.evidence.attachmentIds.length>0;
  return <StageCard icon={<Play/>} title={$t('taskDetail.startAfterReview')} sub={handoff?$t('taskDetail.taskHandedOverDocumentDelivered',{0:handoff.playbook}):$t('taskDetail.agentNotStartedReadBrief')}
-  actions={<Button disabled={busy||!p||!ready} onClick={()=>void start()}>{$t('taskDetail.confirmStart')}</Button>}>
+  actions={<Button disabled={busy||!p||!ready||!plan.ready} onClick={()=>void start()}>{$t('taskDetail.confirmStart')}</Button>}>
   {brief&&<div className="nr-td-start-field" data-start-brief=""><span>{briefTitle}</span><div className="nr-td-start-brief"><p>{brief.replace(/[#*>`_]/g,'').replace(/^[ \t]+/gm,'').replace(/\n{2,}/g,'\n').trim().slice(0,600)}</p></div><button type="button" className="nr-link self-start text-xs" onClick={()=>setReading(true)}>{$t('taskDetail.viewFullText')}</button><DocReader open={reading} onClose={()=>setReading(false)} title={briefTitle} content={brief}/></div>}
   <div className="nr-td-start-grid">
    <label className="nr-td-start-field"><span>{$t('common.playbook')}</span><select aria-label={$t('common.playbook')} value={pick} disabled={busy||!list||!allowed} onChange={e=>setPick(e.target.value)}>
@@ -212,6 +227,7 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId}:{data:D
    </select>
     {p&&<small>{p.description}{p.description?' ':''}{$tj('taskDetail.runAgent',{0:p.kind==='build'?$t('taskDetail.onceChangedReviewResultBefore'):$t('taskDetail.writesDocumentReview')})}</small>}
    </label>
+   {articleChoice&&<ArticleStart data={data} projectId={projectId} choice={current} setChoice={c=>setChoiceState({...c,playbook:pick})} busy={busy} allowed={allowed} link={link}/>}
    <label className="nr-td-start-field"><span>{$t('taskDetail.notesOptional')}</span><textarea aria-label={$t('taskDetail.additionalNotes')} rows={3} value={note} disabled={busy||!allowed} placeholder={$t('taskDetail.changeEnglishVersionKeepTechnical')} onChange={e=>setNote(e.target.value)}/></label>
   </div>
   <AgentLine data={data} busy={busy} lockedReason={!allowed?$t('taskDetail.ownerAdminChange'):undefined} onChange={async agentId=>Boolean(await update('setAgent',{agentId}))}/>
@@ -256,6 +272,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  const navigate=useNavigate(),tech=useTechnicalDetails(),{allowed}=useContext(TaskAccess);const [manualOpen,setManual]=useTaskDraft('manual',false,false),[scopeOk,setScopeOk]=useState(false);
  const [checked,setChecked]=useState<string[]>([]),[editingOpen,setEditing]=useTaskDraft('editing',false,false),[draft,setDraft]=useTaskDraft('draft',w.results[index-1]?.content||''),[record,setRecord]=useTaskDraft('record',''),[note,setNote]=useTaskDraft('note',''),[url,setUrl]=useTaskDraft('url','');
  const [requestOpen,setRequest]=useTaskDraft('requesting',false,false);
+ const editButtonRef=useRef<HTMLButtonElement>(null);
  const manual=manualOpen||Boolean(record),editing=editingOpen||draft!==(w.results[index-1]?.content||'');
  const last=stages.slice(index+1).every(s=>s.kind==='observe'),nextOptions=w.playbook?.kind==='plan'&&last?w.playbook.next:[];
  const [next,setNext]=useState(nextOptions[0]||''),[relNote,setRelNote]=useTaskDraft('release',w.results[index-1]?.pr?.release||'');
@@ -270,6 +287,24 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  if(stage.kind==='review'&&stages[index+1]?.kind==='release'){
   const pr=out?.pr;
   if(!out)return <StageCard tone="error" icon={<AlertCircle/>} title={displayStageName(stage)} sub={$t('taskDetail.noChangesViewRefreshTry')}/>;
+  // An article to publish to a target (article-review.tsx): read field by field, or edited as a new version.
+  if(out.article){
+   const missingChecks=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key));
+   // A target removed after the draft was written cannot receive it: say so instead of offering a publish that fails.
+   const articleTarget=out.article.targetId,targetGone=!(data.articleTargets||[]).some(t=>t.id===articleTarget);
+   return <StageCard icon={<Eye/>} title={$t('articleTask.reviewTitle')} at={out.createdAt}
+    actions={editing||!allowed?undefined:<>{!targetGone&&<Button disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote}})}><Rocket/>{$t(mockSettingsAvailable() ? 'taskDetail.simulatePublish' : 'taskDetail.publishLive')}</Button>}{requestButton}<Button ref={editButtonRef} variant='ghost' disabled={busy} onClick={()=>setEditing(true)}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
+    {!editing&&request(getStageExecutor().agent)}
+    {targetGone&&<p role='alert' className='text-sm text-destructive'>{$t('articles.targetMissing')}</p>}
+    <p className="text-sm text-muted-foreground">{$t('taskDetail.artifactVersion',{0:getStageExecutor()[producer.kind],1:out.createdBy==='agent'?'':$t('taskDetail.recordedAside'),2:out.version})}</p>
+    <LastFeedback w={w} stage={stage} out={out}/>
+    {editing?<ArticleEditor data={data} article={out.article} draftKey={out.id} busy={busy} onCancel={()=>{setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}} onSave={async article=>{const d=await act('editArticleDraft',{artifactId:out.id,article});if(d){setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}return Boolean(d);}}/>:<>
+     <ArticleReview key={out.id} data={data} article={out.article} notes={out.content}/>
+     <Checklist stage={stage} checked={checked} setChecked={setChecked} busy={busy}/>
+     <Reveal label={$t('taskDetail.editReleaseNotes')} defaultOpen={Boolean(relNote)}><label className="nr-field">{$t('taskDetail.releaseNotesGoPublishRecord')}<textarea aria-label={$t('taskDetail.releaseNotes')} rows={3} value={relNote} disabled={busy} placeholder={$t('taskDetail.oneTwoSentencesWhatChanged')} onChange={e=>{setRelNote(e.target.value);}}/></label></Reveal>
+    </>}
+   </StageCard>;
+  }
   const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(pr?.outOfScope?.length&&!scopeOk);
   return <StageCard icon={<Eye/>} title={pr?$t('taskDetail.pageChangeReady'):$t('taskDetail.madeChangeYourselfAfterConfirm')} at={out.createdAt}
    actions={<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote},...(pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}><Rocket/>{$t(mockSettingsAvailable() ? 'taskDetail.simulatePublish' : 'taskDetail.publishLive')}</Button>{requestButton}</>}>
@@ -285,13 +320,23 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  if(stage.kind==='release'){
   const r=w.release,queued=cur?.status==='queued';
   if(!r)return <StageCard tone="error" icon={<AlertCircle/>} title={displayStageName(stage)} sub={$t('taskDetail.nothingPublishRefreshTryAgain')}/>;
+  // Article releases (article-release.tsx): saved in the target, exported, then the same page check as a PR.
+  if(r.article){
+   // Several targets: each has a row with its state; the title and the one action follow the aggregate.
+   const act2=allowed,rows=<TargetRows data={data} r={r}/>,sole=soleConflict(r);
+   if(r.state==='publishing')return <StageCard tone='live' label={$t('taskDetail.currentProgress')} icon={<Loader2 className='animate-spin motion-reduce:animate-none'/>} title={publishingTitle(data,r)} sub={$t('articleTask.publishingHint')}>{rows}</StageCard>;
+   if(r.state==='publish_failed')return <StageCard tone='error' icon={<AlertCircle/>} title={$t('articleTask.publishFailed')} sub={failedSub(r)} actions={act2?<PendingButton disabled={busy} onClick={()=>act('retryPublish',{})}>{$t('articleTask.retry')}</PendingButton>:undefined}>{rows}</StageCard>;
+   if(r.state==='publish_conflict')return <StageCard tone='error' icon={<AlertCircle/>} title={conflictHeading(data,r)} actions={act2&&canRebase(r)?<PendingButton disabled={busy} onClick={()=>act('rebaseArticle',{})}>{$t('articleTask.reviewAgain')}</PendingButton>:undefined}>{rows}{sole&&!r.also&&<ConflictBody data={data} r={sole}/>}</StageCard>;
+   if(r.state==='exporting')return <StageCard tone='live' label={$t('taskDetail.currentProgress')} icon={<Globe/>} title={$t('articleTask.exporting',{0:exportingNames(data,r)})} sub={$t('articleTask.exportingHint')} actions={act2?<Button variant='ghost' disabled={busy} onClick={()=>void act('confirmLive',{})}>{$t('taskDetail.iConfirmLive')}</Button>:undefined}>{rows}<PageLinks pages={r.pages}/><DriftNotice data={data} r={r}/></StageCard>;
+   if(r.state==='export_late')return <StageCard icon={<AlertCircle/>} title={$t('articleTask.exportLate')} sub={$t('articleTask.exportLateHint',{0:exportingNames(data,r)})} actions={act2?<><Button disabled={busy} onClick={()=>void act('confirmLive',{})}>{$t('taskDetail.iConfirmLive')}</Button><Button variant='outline' disabled={busy} onClick={()=>void act('waitLonger',{})}>{$t('common.waitAnother24Hours')}</Button></>:undefined}>{rows}<PageLinks pages={r.pages}/></StageCard>;
+  }
   const manualMark=<Button variant="ghost" disabled={busy} onClick={()=>void act('markMerged',{})}>{$t('taskDetail.publishedManually')}</Button>;
   if(r.state==='merging')return <StageCard tone="live" label={$t('taskDetail.currentProgress')} icon={<Loader2 className="animate-spin motion-reduce:animate-none"/>} title={$t('taskDetail.publishing')} sub={queued&&!data.agent?.online?<>{$t('taskDetail.agentComputerOfflinePublish')}<Button variant="link" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>:$t('taskDetail.publishingHint')} actions={queued?manualMark:undefined}/>;
   if(r.state==='merge_failed')return <StageCard tone="error" icon={<AlertCircle/>} title={$t('taskDetail.publishFailed')} sub={$t('taskDetail.publishFailedHint')} actions={<><Button disabled={busy} onClick={()=>void act('retryMerge',{})}>{$t('taskDetail.tryAgain')}</Button>{manualMark}</>}>{techLink}</StageCard>;
   const live=<Button variant={r.state==='verifying'?'ghost':'default'} disabled={busy} onClick={()=>void act('confirmLive',{})}>{$t('taskDetail.iConfirmLive')}</Button>;
-  if(r.state==='verifying')return <StageCard tone="live" label={$t('taskDetail.currentProgress')} icon={<Globe/>} title={$t('taskDetail.waitingSiteUpdate')} sub={$t('taskDetail.waitingSiteUpdateHint',{0:r.lastCheckAt?$t('taskDetail.lastCheckedNotSeenYet',{0:when(r.lastCheckAt)}):''})} actions={live}><PageLinks pages={r.pages}/></StageCard>;
+  if(r.state==='verifying')return <StageCard tone='live' label={$t('taskDetail.currentProgress')} icon={<Globe/>} title={$t('taskDetail.waitingSiteUpdate')} sub={$t('taskDetail.waitingSiteUpdateHint',{0:r.lastCheckAt?$t('taskDetail.lastCheckedNotSeenYet',{0:when(r.lastCheckAt)}):''})} actions={live}><TargetRows data={data} r={r}/><PageLinks pages={r.pages}/><DriftNotice data={data} r={r}/></StageCard>;
   const [title,sub]=r.reason==='manual'?[$t('taskDetail.waitingConfirmLive'),$t('taskDetail.madeChangeYourselfConfirmOnce')]:r.reason==='cannot_verify'?[$t('taskDetail.publishedWaitingConfirmLive'),$t('taskDetail.changeNoTextCheckedWeb')]:[$t('taskDetail.changeNotSeenLiveAfter'),$t('taskDetail.siteMayNotHaveUpdated')];
-  return <StageCard icon={<Globe/>} title={title} sub={sub} actions={<>{live}{!r.reason&&<Button variant="outline" disabled={busy} onClick={()=>void act('waitLonger',{})}>{$t('common.waitAnother24Hours')}</Button>}</>}><PageLinks pages={r.pages}/></StageCard>;
+  return <StageCard icon={<Globe/>} title={title} sub={sub} actions={<>{live}{!r.reason&&<Button variant='outline' disabled={busy} onClick={()=>void act('waitLonger',{})}>{$t('common.waitAnother24Hours')}</Button>}</>}><TargetRows data={data} r={r}/><PageLinks pages={r.pages}/><DriftNotice data={data} r={r}/></StageCard>;
  }
  if(stage.kind==='review'){
   const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(out?.pr?.outOfScope?.length&&!scopeOk);
@@ -315,7 +360,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  }
  if(stage.kind==='agent'){
   const approved=[...w.results.slice(0,index)].reverse().find(r=>r?.approvedAt&&!r.rejectedAt),source=approved?stages[w.results.indexOf(approved)]:undefined;
-  const agent=data.agent,isActive=cur&&active(cur),canRun=Boolean(agent?.repo)||withoutRepo(stage,stages);
+  const agent=data.agent,isActive=cur&&active(cur),canRun=Boolean(agent?.repo)||withoutRepo(stage,stages)||w.delivery?.kind==='article';
   const actions=!manual?<>
    {cur?.status!=='running'&&cur?.status!=='queued'&&canRun&&<Button disabled={busy||(!hasTaskAgent(data)&&(agent?.options||[]).length!==1)} onClick={()=>void withUsableAgent(data,update,'retryStage',{stageKey:stage.key})}>{cur?$t('taskDetail.tryAgain'):$t('taskDetail.handOffAgent')}</Button>}
    {cur?.status==='failed'&&cur.error==='invalid_agent_result'&&cur.mode==='plan'&&!cur.artifactId&&<Button variant='outline' disabled={busy} title={$t('agentResult.recoverHint')} onClick={()=>void act('recoverResult',{runId:cur.id})}>{$t('agentResult.recover')}</Button>}
@@ -354,6 +399,8 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
  if(r?.state==='live')return <StageCard tone="done" label={$t('common.completed')} icon={<Check/>} title={$t('taskDetail.live')} sub={$t('taskDetail.liveSince',{0:when(r.liveAt),1:(w.history||[]).some(e=>e.action==='live'&&e.actor==='system')?$t('taskDetail.sawChangeLive'):$t('common.confirmedLive')})}
   actions={r.pr&&r.mergedAt&&canRevert&&(!w.revert||w.revert.state==='failed')?<Button variant="outline" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('taskDetail.undoChangeConfirm')),description:() => ($t('taskDetail.undoChangeDescription')),action:'taskDetail.revertChange'}))void update('revertRelease');}}><Undo2/>{$t('taskDetail.revertCurrentChange')}</Button>:undefined}>
   {w.revert&&<p className={w.revert.state==='failed'?'nr-error':'nr-td-text'} data-revert={w.revert.state}>{w.revert.state==='opening'?$t('taskDetail.undoPreparing'):w.revert.state==='opened'?$t('taskDetail.undoPrepared'):$t('taskDetail.undoFailed',{0:w.revert.error||$t('errors.unknownReason')})}</p>}
+  <TargetRows data={data} r={r}/>
+  <DriftNotice data={data} r={r}/>
   <EffectList w={w}/>
   <PageLinks pages={r.pages}/>
   <Reveal label={$t('taskDetail.releaseNotes')}><p className="text-sm whitespace-pre-wrap">{r.note}</p></Reveal>
@@ -399,11 +446,11 @@ function ActivityCard({data,update,busy,members}:{data:Data;update:Update;busy:b
  async function send(){const d=await update('comment',{comment:text});if(d){clearText();}}
  return <section className="nr-td-section flex flex-col gap-3" aria-label={$t('common.activity')}><h2 className="text-base font-medium">{$t('common.activity')}</h2>
   {hidden>0&&<Button variant="link" size="sm" className="h-auto self-start p-0" onClick={()=>setAll(true)}>{$t('taskDetail.showEarlier',{0:hidden})}</Button>}
-  <ol className="nr-td-timeline">{shown.map(({e,t})=>{const who=t!.who===$t('common.you')?(e.actor&&people.get(e.actor))||$t('common.you'):t!.who;
+  <ol className="nr-td-timeline">{shown.map(({e,t,i})=>{const who=t!.who===$t('common.you')?(e.actor&&people.get(e.actor))||$t('common.you'):t!.who;
    if(e.action==='comment'||e.action==='requestStageChanges')return <li key={`${e.at}:${e.action}:${e.comment}`} className="nr-td-comment"><header><ActorAvatar type="user" name={who} size="xs"/><b>{who}</b>{e.action==='requestStageChanges'&&<Tag tone="violet">{$t('taskDetail.requestChanges')}</Tag>}<time>{when(e.at)}</time></header><p>{e.comment}</p></li>;
    const artifact=e.action==='runSucceeded'&&e.artifactId?artifacts.get(e.artifactId):undefined;
    const line=artifact?$t('taskDetail.deliveredVersion',{0:artifact.version,1:nameOf(artifact.stepId)}):plain[e.action]||t!.text;
-   return <li key={`${e.at}:${e.action}:${e.runId||''}`} className="nr-td-event">{eventIcons[e.action]||<Play/>}<b>{e.action==='runSucceeded'?executor:who}</b><span>{line}</span>{artifact&&<Button size="sm" variant="ghost" className="h-6 px-2" onClick={()=>setView(artifact)}>{$t('common.view')}</Button>}<time>{when(e.at)}</time></li>;})}
+   return <li key={`${e.at}:${e.action}:${e.runId||''}:${i}`} className="nr-td-event">{eventIcons[e.action]||<Play/>}<b>{e.action==='runSucceeded'?executor:who}</b><span>{line}</span>{artifact&&<Button size="sm" variant="ghost" className="h-6 px-2" onClick={()=>setView(artifact)}>{$t('common.view')}</Button>}<time>{when(e.at)}</time></li>;})}
    {!rows.length&&<li className="nr-td-muted">{$t('taskDetail.noActivityYet')}</li>}</ol>
   {view&&<DocReader open onClose={()=>setView(undefined)} title={`${nameOf(view.stepId)} · ${$t('taskDetail.versionNumber',{0:view.version})}`} meta={when(view.createdAt)} content={view.pr?'':view.content}>{view.pr&&<PageChange pr={view.pr} content={view.content}/>}</DocReader>}
   {((!done&&!closed)||Boolean(text))&&<div className="nr-td-composer"><textarea id="nr-composer" aria-label={$t('taskDetail.noteExecutor')} rows={3} value={text} disabled={busy} readOnly={done||closed} placeholder={$t('taskDetail.leaveNoteNextRunReads',{0:executor})} onChange={e=>{setText(e.target.value);}}/>{!done&&!closed&&<div><Button size="sm" disabled={busy||!text.trim()} onClick={()=>void send()}>{$t('taskDetail.send')}</Button></div>}</div>}

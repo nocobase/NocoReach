@@ -93,7 +93,7 @@ test('enabled deployments initialize a browsable demo before readiness without o
   expect(state.data.runs).toHaveLength(0);
 });
 
-test('demo catalog defaults to every available source connected and keeps deliberate disconnections', async ({
+test('demo catalog connects simulated sources, leaves publishing unconfigured and keeps deliberate disconnections', async ({
   testApp,
   connection,
 }) => {
@@ -124,6 +124,7 @@ test('demo catalog defaults to every available source connected and keeps delibe
     ['xiaohongshu', 'nrXiaohongshu', 'status'],
     ['bilibili', 'nrBilibili', 'status'],
     ['youtube', 'nrYouTube', 'status'],
+    ['articles', 'nrArticles', 'targets'],
   ]) {
     const response = await admin.fetch(`/nocoreach/${resource}/${action}`, {
       method: 'POST',
@@ -139,7 +140,10 @@ test('demo catalog defaults to every available source connected and keeps delibe
     const { data } = (await response.json()) as {
       data: Record<string, unknown>;
     };
-    input[key] = key === 'repo' ? data.repo : data;
+    if (key === 'articles') {
+      expect(data.targets).toEqual([]);
+      input[key] = { targets: (data.targets as unknown[]).length };
+    } else input[key] = key === 'repo' ? data.repo : data;
   }
   const states = Object.fromEntries(
     getCatalog()
@@ -149,7 +153,12 @@ test('demo catalog defaults to every available source connected and keeps delibe
   expect(Object.keys(states).length).toBeGreaterThan(15);
   for (const [source, state] of Object.entries(states))
     expect({ [source]: state }).toEqual({
-      [source]: source === 'xiaohongshu' ? 'done' : 'connected',
+      [source]:
+        source === 'articles'
+          ? 'ready'
+          : source === 'xiaohongshu'
+            ? 'done'
+            : 'connected',
     });
   expect(
     (input.google as { connection: { status: string } }).connection.status,

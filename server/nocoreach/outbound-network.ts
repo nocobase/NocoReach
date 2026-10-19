@@ -529,7 +529,7 @@ export class OutboundNetwork {
         target,
         { ...init, redirect: 'error' },
         undefined,
-        1024 * 1024,
+        20 * 1024 * 1024,
         false,
         loopback,
       ),

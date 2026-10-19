@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { $t, useMessageState, useNocoReachLocale } from '#i18n';
-import { xiaohongshuErrorMessage } from './xiaohongshu-errors';
+import { collectorName, type CollectorChoice } from '#lib/collector-platforms';
+import { useNavigate } from 'react-router';
+import {
+  xiaohongshuErrorMessage,
+  xiaohongshuRunMessage,
+} from './xiaohongshu-errors';
 import { xiaohongshuRequest } from './xiaohongshu-api';
-import { ListSkeleton, EmptyState } from '#components/reach/states';
-import { Search } from 'lucide-react';
+import { ListSkeleton } from '#components/reach/states';
 import { Button } from '#components/ui/button';
 import { confirmAction } from '#components/reach/confirm';
-import { useMe } from './me';
+import { useBusinessAccess } from '#hooks/use-business-access';
+import { CollectorClear } from '#components/collector-clear';
 
 export interface XiaohongshuNote {
   id: string;
@@ -26,7 +31,7 @@ export interface XiaohongshuView {
   revision: number;
   configured: boolean;
   collectorId: string | null;
-  collectors: { id: string; name: string }[];
+  collectors: CollectorChoice[];
   query: string;
   verifiedAt: string | null;
   lastRun: {
@@ -37,132 +42,184 @@ export interface XiaohongshuView {
   } | null;
   total: number;
   running: string | null;
-  notes: XiaohongshuNote[];
-  latestIds: string[];
 }
-const messages: Record<string, string> = {
-  collector_unreachable: 'xiaohongshu.cannotReachXiaohongshuCollectorCheck',
-  collector_unauthorized:
-    'xiaohongshu.collectorAuthenticationFailedAskAdministrator',
-  tool_missing: 'common.opencliNotInstalledCollectorAsk',
-  browser_unavailable: 'xiaohongshu.collectorCannotReachBrowserOpen',
-  login_required: 'xiaohongshu.signXiaohongshuYourselfCollectorBrowser',
-  security_block: 'xiaohongshu.xiaohongshuRequiresVerificationRestrictedAccess',
-  timeout: 'xiaohongshu.collectionTimedOutPreviousSuccessful',
-  invalid_response: 'xiaohongshu.collectorReturnedIncompleteInvalidData',
-  busy: 'common.collectorBusyAnotherRequestTry',
-  no_results: 'xiaohongshu.noVerifiableNotesReturnedCurrent',
-  cancelled: 'xiaohongshu.collectionCanceledPreviousSuccessfulResults',
-};
+function collectorSelection(view: XiaohongshuView, current = '') {
+  return view.collectors.some((collector) => collector.id === current)
+    ? current
+    : view.collectorId || view.collectors[0]?.id || '';
+}
+interface Failure {
+  status: number;
+  message: () => string;
+}
+function failure(error: unknown): Failure {
+  const status = Number((error as { status?: number })?.status || 0);
+  return {
+    status,
+    message: () =>
+      status === 401
+        ? $t('xiaohongshu.sessionExpiredSignNocoreachAgain')
+        : status === 403
+          ? $t('xiaohongshu.notPermissionPerformAction')
+          : status === 404
+            ? $t('xiaohongshu.projectEndpointNoLongerExists')
+            : error instanceof Error
+              ? xiaohongshuErrorMessage(error)
+              : $t('common.operationFailedRetry'),
+  };
+}
 
 export function XiaohongshuConnect({
   projectId,
+  refreshKey = 0,
   onChange,
 }: {
   projectId: number;
+  refreshKey?: number;
   onChange: () => void;
 }) {
-  const { isAdmin } = useMe();
+  const { can: canConnect } = useBusinessAccess(
+    'nrXiaohongshu.connect',
+    projectId,
+  );
+  const { can: canTest } = useBusinessAccess('nrXiaohongshu.test', projectId);
+  const { can: canSearch } = useBusinessAccess(
+    'nrXiaohongshu.search',
+    projectId,
+  );
+  const { can: canCancel } = useBusinessAccess(
+    'nrXiaohongshu.cancel',
+    projectId,
+  );
+  const { can: canDisconnect } = useBusinessAccess(
+    'nrXiaohongshu.disconnect',
+    projectId,
+  );
   const { session, refresh } = useAuthentication();
   const locale = useNocoReachLocale();
-  const adminRef = useRef(isAdmin);
+  const accessRef = useRef({
+    connect: canConnect,
+    test: canTest,
+    search: canSearch,
+    cancel: canCancel,
+    disconnect: canDisconnect,
+  });
   useEffect(() => {
-    adminRef.current = isAdmin;
-  }, [isAdmin]);
+    accessRef.current = {
+      connect: canConnect,
+      test: canTest,
+      search: canSearch,
+      cancel: canCancel,
+      disconnect: canDisconnect,
+    };
+  }, [canConnect, canTest, canSearch, canCancel, canDisconnect]);
   const [data, setData] = useState<XiaohongshuView | null>(null);
   const [collectorId, setCollectorId] = useState('');
   const [query, setQuery] = useState('');
-  const [authorized, setAuthorized] = useState(false);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState('');
   const [cancelling, setCancelling] = useState(false);
-  const [error, setError] = useMessageState('');
-  const [blocked, setBlocked] = useState(false);
+  const [error, setError] = useState<Failure | null>(null);
+  const [loadError, setLoadError] = useState<Failure | null>(null);
   const [notice, setNotice] = useMessageState('');
   const [submitted, setSubmitted] = useState(false);
-  const [shown, setShown] = useState(20);
+  const navigate = useNavigate();
   const mountedRef = useRef(true);
+  const initializedRef = useRef(false);
+  const readsRef = useRef(0);
   const confirmationRef = useRef<AbortController | null>(null);
   const lockRef = useRef(false);
   const cancelLockRef = useRef(false);
   const queryInputRef = useRef<HTMLInputElement>(null);
   const collectorInputRef = useRef<HTMLSelectElement>(null);
-  const authorizationInputRef = useRef<HTMLInputElement>(null);
-  const setFailure = useCallback(
-    (e: unknown) => {
-      if (!mountedRef.current) return;
-      const status = (e as { status?: number }).status;
-      setBlocked([401, 403, 404].includes(status ?? 0));
-      setError(() =>
-        status === 401
-          ? $t('xiaohongshu.sessionExpiredSignNocoreachAgain')
-          : status === 403
-            ? $t('xiaohongshu.notPermissionPerformAction')
-            : status === 404
-              ? $t('xiaohongshu.projectEndpointNoLongerExists')
-              : e instanceof Error
-                ? xiaohongshuErrorMessage(e)
-                : $t('common.operationFailedRetry'),
-      );
-    },
-    [setError],
-  );
+  const setFailure = useCallback((e: unknown) => {
+    if (mountedRef.current) setError(failure(e));
+  }, []);
+  function updateFromMutation(value: XiaohongshuView) {
+    // Reads started before this write must not replace its state or report stale errors.
+    readsRef.current += 1;
+    setData(value);
+    setLoadError(null);
+  }
   const load = useCallback(async () => {
-    const value = await xiaohongshuRequest<XiaohongshuView>(projectId, 'view');
-    if (mountedRef.current) setData(value);
-    return value;
+    const sequence = ++readsRef.current;
+    try {
+      const value = await xiaohongshuRequest<XiaohongshuView>(
+        projectId,
+        'status',
+      );
+      if (!mountedRef.current || sequence !== readsRef.current) return;
+      setData(value);
+      // A successful status read recovers read errors, not failed mutations.
+      setLoadError(null);
+      setCollectorId((current) => collectorSelection(value, current));
+      if (!initializedRef.current) {
+        setQuery(value.query);
+        initializedRef.current = true;
+      }
+      return value;
+    } catch (e) {
+      if (mountedRef.current && sequence === readsRef.current)
+        setLoadError(failure(e));
+    }
   }, [projectId]);
   useEffect(() => {
+    let active = true;
     mountedRef.current = true;
-    let disposed = false;
-    void xiaohongshuRequest<XiaohongshuView>(projectId, 'view')
-      .then((value) => {
-        if (disposed) return;
-        setData(value);
-        setCollectorId(value.collectorId || value.collectors[0]?.id || '');
-        setQuery(value.query);
-      })
-      .catch((e: unknown) => {
-        if (!disposed) setFailure(e);
-      });
+    void Promise.resolve().then(() => {
+      if (active) return load();
+    });
     return () => {
-      disposed = true;
+      active = false;
       mountedRef.current = false;
     };
     // Each project is keyed by the parent. Closing does not cancel an explicitly started collection.
-  }, [projectId, setFailure]);
+  }, [load]);
+  const refreshedKeyRef = useRef(refreshKey);
+  useEffect(() => {
+    if (busy || refreshedKeyRef.current === refreshKey) return;
+    refreshedKeyRef.current = refreshKey;
+    void Promise.resolve().then(() => {
+      if (!mountedRef.current) return;
+      setNotice('');
+      return load();
+    });
+  }, [busy, load, refreshKey, setNotice]);
   useEffect(() => {
     const owner = new AbortController();
     confirmationRef.current = owner;
-    if (!isAdmin) owner.abort();
+    if (!canDisconnect) owner.abort();
     return () => owner.abort();
-  }, [isAdmin]);
+  }, [canDisconnect]);
   useEffect(() => {
     if (!data?.running && busy !== 'search') return;
     const timer = setInterval(() => {
-      void load().catch(setFailure);
+      void load();
     }, 1500);
     return () => clearInterval(timer);
-    // Polling deliberately never updates the editable query or collector draft.
-  }, [data?.running, busy, load, setFailure]);
-  async function run(action: string, task: () => Promise<void>) {
+    // Polling preserves the editable query and any still-valid collector choice.
+  }, [data?.running, busy, load]);
+  async function run(
+    action: 'load' | 'edit' | 'connect' | 'test' | 'search' | 'disconnect',
+    task: () => Promise<void>,
+  ) {
     if (
       !mountedRef.current ||
       lockRef.current ||
-      (action !== 'load' && !adminRef.current)
+      (action !== 'load' &&
+        !accessRef.current[action === 'edit' ? 'connect' : action])
     )
       return;
     lockRef.current = true;
     setBusy(action);
-    setError('');
+    setError(null);
     setNotice('');
-    setBlocked(false);
     try {
       await task();
     } catch (e) {
       setFailure(e);
       if (mountedRef.current && (e as { status?: number }).status === 409)
-        await load().catch(setFailure);
+        await load();
     } finally {
       lockRef.current = false;
       if (mountedRef.current) setBusy('');
@@ -176,48 +233,60 @@ export function XiaohongshuConnect({
         { revision: rev },
       );
       if (mountedRef.current) {
-        setData(value);
+        updateFromMutation(value);
         setNotice(() => $t('xiaohongshu.xiaohongshuNotesCollectedSaved'));
       }
     } finally {
-      if (mountedRef.current) await load().catch(setFailure);
+      if (mountedRef.current) await load();
       // Keep the catalog's outcome current after errors and after this sheet
       // has closed, not only after a successful collection.
       onChange();
     }
   }
   const running = Boolean(data?.running || busy === 'search');
+  const blocked = [loadError, error].some((problem) =>
+    [401, 403, 404].includes(problem?.status ?? 0),
+  );
+  const errorState =
+    error || loadError ? (
+      <>
+        {loadError && (
+          <p role='alert' className='nr-error'>
+            {loadError.message()}
+          </p>
+        )}
+        {error && (
+          <p role='alert' className='nr-error'>
+            {error.message()}
+          </p>
+        )}
+        {!blocked && (
+          <Button
+            type='button'
+            variant='outline'
+            disabled={Boolean(busy)}
+            onClick={() =>
+              void run('load', async () => {
+                await load();
+              })
+            }
+          >
+            {$t('common.retry')}
+          </Button>
+        )}
+      </>
+    ) : null;
   if (!data)
     return (
       <div className='grid gap-3'>
-        {error ? (
-          <>
-            <p role='alert' className='nr-error'>
-              {error}
-            </p>
-            {!blocked && (
-              <Button
-                variant='outline'
-                onClick={() =>
-                  void run('load', async () => {
-                    const v = await load();
-                    setCollectorId(v.collectorId || v.collectors[0]?.id || '');
-                    setQuery(v.query);
-                  })
-                }
-              >
-                {$t('common.retry')}
-              </Button>
-            )}
-          </>
-        ) : (
+        {errorState || (
           <div role='status' aria-label={$t('common.loadingLoading')}>
             <ListSkeleton rows={3} />
           </div>
         )}
       </div>
     );
-  const form = isAdmin && (!data.connected || editing);
+  const form = canConnect && (!data.connected || editing);
   const queryValid =
     query.trim().length >= 2 &&
     query.trim().length <= 60 &&
@@ -226,7 +295,6 @@ export function XiaohongshuConnect({
   const fieldErrors = {
     collector: submitted && !collectorId,
     query: submitted && !queryValid,
-    authorization: submitted && !authorized,
   };
   const resetValidation = () => {
     setSubmitted(false);
@@ -241,39 +309,17 @@ export function XiaohongshuConnect({
       queryInputRef.current?.focus();
       return false;
     }
-    if (!authorized) {
-      authorizationInputRef.current?.focus();
-      return false;
-    }
     return true;
   };
   return (
     <div className='grid gap-4' data-xiaohongshu-connect>
-      <div className='rounded-md border border-border bg-muted/30 p-3 text-sm'>
-        <p className='font-medium'>
-          {$t('xiaohongshu.useAuthorizedBrowserManualCollection')}
-        </p>
-        <p className='mt-1 text-muted-foreground'>
-          {$t('xiaohongshu.searchPublicNotesReadUsing')}
-        </p>
-        <p className='mt-1 text-muted-foreground'>
-          {$t('xiaohongshu.resultsAvailableViewingArchivingNot')}
-        </p>
-        <p className='mt-1 text-muted-foreground'>
-          {$t('xiaohongshu.browserUsesCollectorComputerS')}
-        </p>
-      </div>
-      {error && (
-        <p role='alert' className='nr-error'>
-          {error}
-        </p>
-      )}
+      {errorState}
       {notice && (
         <p role='status' className='text-sm'>
           {notice}
         </p>
       )}
-      {!data.configured && (
+      {!data.configured && !canConnect && (
         <div className='grid gap-2 text-sm'>
           <h3 className='font-medium'>
             {$t('xiaohongshu.noXiaohongshuCollectorConfigured')}
@@ -283,13 +329,14 @@ export function XiaohongshuConnect({
           </p>
         </div>
       )}
-      {form && data.configured && (
+      {(form || (canTest && !canConnect)) && data.configured && (
         <form
           className='grid gap-3'
           onSubmit={(e) => {
             e.preventDefault();
+            if (!canConnect) return;
             if (!validate()) return;
-            void run('save', async () => {
+            void run('connect', async () => {
               const value = await xiaohongshuRequest<XiaohongshuView>(
                 projectId,
                 'connect',
@@ -297,13 +344,11 @@ export function XiaohongshuConnect({
                   collectorId,
                   query: query.trim(),
                   revision: data.revision,
-                  authorized,
                 },
               );
               if (mountedRef.current) {
-                setData(value);
+                updateFromMutation(value);
                 setEditing(false);
-                setAuthorized(false);
                 resetValidation();
                 setNotice(() =>
                   $t('xiaohongshu.connectionSavedBrowserLoginNot'),
@@ -313,7 +358,7 @@ export function XiaohongshuConnect({
             });
           }}
         >
-          <label className='nr-field'>
+          <label className='nr-field' hidden={data.collectors.length === 1}>
             {$t('xiaohongshu.collector')}{' '}
             <span aria-hidden='true' className='text-destructive'>
               *
@@ -335,7 +380,7 @@ export function XiaohongshuConnect({
               </option>
               {data.collectors.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name}
+                  {collectorName(c)}
                 </option>
               ))}
             </select>
@@ -345,83 +390,71 @@ export function XiaohongshuConnect({
               {$t('xiaohongshu.selectConfiguredCollector')}
             </p>
           )}
-          <label className='nr-field'>
-            {$t('xiaohongshu.xiaohongshuSearchPhrase')}{' '}
-            <span aria-hidden='true' className='text-destructive'>
-              *
-            </span>
-            <input
-              ref={queryInputRef}
-              aria-label={$t('xiaohongshu.xiaohongshuSearchPhrase')}
-              aria-required='true'
-              aria-invalid={fieldErrors.query}
-              value={query}
-              disabled={Boolean(busy) || running}
-              maxLength={60}
-              placeholder='NocoBase'
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </label>
-          {fieldErrors.query && (
-            <p role='alert' className='nr-error'>
-              {$t('xiaohongshu.errors.invalidQuery')}
-            </p>
-          )}
-          <p className='nr-footnote'>
-            {$t('xiaohongshu.enterOnePhraseManualSearch')}
-          </p>
-          <label className='flex items-start gap-2 text-sm'>
-            <input
-              ref={authorizationInputRef}
-              type='checkbox'
-              aria-required='true'
-              aria-invalid={fieldErrors.authorization}
-              checked={authorized}
-              disabled={Boolean(busy) || running}
-              onChange={(e) => setAuthorized(e.target.checked)}
-            />
-            <span>
-              {$t('xiaohongshu.iAmAuthorizedUseCollector')}{' '}
-              <span aria-hidden='true' className='text-destructive'>
-                *
-              </span>
-            </span>
-          </label>
-          {fieldErrors.authorization && (
-            <p role='alert' className='nr-error'>
-              {$t('xiaohongshu.errors.authorizationRequired')}
-            </p>
+          {canConnect && (
+            <>
+              <label className='nr-field'>
+                {$t('xiaohongshu.xiaohongshuSearchPhrase')}{' '}
+                <span aria-hidden='true' className='text-destructive'>
+                  *
+                </span>
+                <input
+                  ref={queryInputRef}
+                  aria-label={$t('xiaohongshu.xiaohongshuSearchPhrase')}
+                  aria-required='true'
+                  aria-invalid={fieldErrors.query}
+                  value={query}
+                  disabled={Boolean(busy) || running}
+                  maxLength={60}
+                  placeholder='NocoBase'
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </label>
+              {fieldErrors.query && (
+                <p role='alert' className='nr-error'>
+                  {$t('xiaohongshu.errors.invalidQuery')}
+                </p>
+              )}
+              <p className='nr-footnote'>
+                {$t('xiaohongshu.enterOnePhraseManualSearch')}
+              </p>
+            </>
           )}
           <div className='nr-step-actions flex-wrap'>
-            <Button
-              type='submit'
-              disabled={Boolean(busy) || running || blocked}
-            >
-              {busy === 'save'
-                ? $t('common.saving')
-                : $t('xiaohongshu.saveConnection')}
-            </Button>
-            <Button
-              type='button'
-              variant='outline'
-              disabled={Boolean(busy) || running || !collectorId || blocked}
-              onClick={() =>
-                void run('test', async () => {
-                  await xiaohongshuRequest(projectId, 'test', { collectorId });
-                  if (mountedRef.current)
-                    setNotice(() =>
-                      $t(
-                        'xiaohongshu.collectorReachableOpencliInstalledBrowser',
-                      ),
-                    );
-                })
-              }
-            >
-              {busy === 'test'
-                ? $t('common.checking')
-                : $t('common.checkCollector')}
-            </Button>
-            {editing && (
+            {canConnect && (
+              <Button
+                type='submit'
+                disabled={Boolean(busy) || running || blocked}
+              >
+                {busy === 'connect'
+                  ? $t('common.saving')
+                  : $t('xiaohongshu.saveConnection')}
+              </Button>
+            )}
+            {canTest && (
+              <Button
+                type='button'
+                variant='outline'
+                disabled={Boolean(busy) || running || !collectorId || blocked}
+                onClick={() =>
+                  void run('test', async () => {
+                    await xiaohongshuRequest(projectId, 'test', {
+                      collectorId,
+                    });
+                    if (mountedRef.current)
+                      setNotice(() =>
+                        $t(
+                          'xiaohongshu.collectorReachableOpencliInstalledBrowser',
+                        ),
+                      );
+                  })
+                }
+              >
+                {busy === 'test'
+                  ? $t('common.checking')
+                  : $t('common.checkCollector')}
+              </Button>
+            )}
+            {editing && canConnect && (
               <Button
                 type='button'
                 variant='ghost'
@@ -429,8 +462,7 @@ export function XiaohongshuConnect({
                 onClick={() => {
                   setEditing(false);
                   setQuery(data.query);
-                  setCollectorId(data.collectorId || '');
-                  setAuthorized(false);
+                  setCollectorId(collectorSelection(data));
                   resetValidation();
                 }}
               >
@@ -440,119 +472,132 @@ export function XiaohongshuConnect({
           </div>
         </form>
       )}
-      {data.connected && !editing && (
+      {data.connected && !form && (
         <section className='grid gap-2'>
           <h3 className='font-medium'>
             {$t('common.search', { 0: data.query })}
           </h3>
           <p className='nr-footnote'>
-            {data.collectors.find((c) => c.id === data.collectorId)?.name} ·{' '}
+            {collectorName(
+              data.collectors.find((c) => c.id === data.collectorId),
+            )}{' '}
+            ·{' '}
             {data.verifiedAt
               ? $t('xiaohongshu.lastSuccessfulCollection', {
                   0: new Date(data.verifiedAt).toLocaleString(locale),
                 })
               : $t('xiaohongshu.browserXiaohongshuLoginNotYet')}
           </p>
-          {isAdmin && (
+          {(canConnect || canSearch || canDisconnect) && (
             <div className='nr-step-actions flex-wrap'>
-              <Button
-                disabled={Boolean(busy) || running || blocked}
-                onClick={() => void run('search', () => search(data.revision))}
-              >
-                {running
-                  ? $t('xiaohongshu.collecting')
-                  : $t('xiaohongshu.searchNow')}
-              </Button>
-              <Button
-                variant='outline'
-                disabled={Boolean(busy) || running || blocked}
-                onClick={() =>
-                  void run('edit', async () => {
-                    const latest = await load();
-                    if (mountedRef.current) {
-                      setQuery(latest.query);
-                      setCollectorId(latest.collectorId || '');
-                      setEditing(true);
-                      setAuthorized(false);
-                      resetValidation();
-                    }
-                  })
-                }
-              >
-                {$t('xiaohongshu.editConnection')}
-              </Button>
-              <Button
-                variant='ghost'
-                disabled={Boolean(busy) || running || blocked}
-                onClick={() =>
-                  void run('disconnect', async () => {
-                    const confirmation = confirmationRef.current;
-                    const confirmationSessionId = session?.session.id;
-                    if (
-                      !confirmation ||
-                      confirmation.signal.aborted ||
-                      !confirmationSessionId
-                    )
-                      return;
-                    if (
-                      !(await confirmAction({
-                        title: 'xiaohongshu.disconnectXiaohongshuCollector',
-                        description: 'xiaohongshu.savedNotesKeptConnectionNo',
-                        action: 'common.disconnect',
-                        signal: confirmation.signal,
-                      }))
-                    )
-                      return;
-                    // The shared dialog has its own root; the initiating owner must still be active.
-                    if (
-                      !mountedRef.current ||
-                      !adminRef.current ||
-                      confirmation.signal.aborted
-                    )
-                      return;
-                    let value: XiaohongshuView;
-                    try {
-                      // Keep the initiating session, even when another tab replaces the cookie.
-                      value = await xiaohongshuRequest<XiaohongshuView>(
-                        projectId,
-                        'disconnect',
-                        { revision: data.revision },
-                        confirmationSessionId,
-                      );
-                    } catch (error) {
-                      // A late response must not refresh or report into a replacement owner.
+              {canSearch && (
+                <Button
+                  disabled={Boolean(busy) || running || blocked}
+                  onClick={() =>
+                    void run('search', () => search(data.revision))
+                  }
+                >
+                  {running
+                    ? $t('xiaohongshu.collecting')
+                    : $t('xiaohongshu.searchNow')}
+                </Button>
+              )}
+              {canConnect && (
+                <Button
+                  variant='outline'
+                  disabled={Boolean(busy) || running || blocked}
+                  onClick={() =>
+                    void run('edit', async () => {
+                      const latest = await load();
+                      if (latest && mountedRef.current) {
+                        setQuery(latest.query);
+                        setCollectorId(collectorSelection(latest));
+                        setEditing(true);
+                        resetValidation();
+                      }
+                    })
+                  }
+                >
+                  {$t('xiaohongshu.editConnection')}
+                </Button>
+              )}
+              {canDisconnect && (
+                <Button
+                  variant='ghost'
+                  disabled={Boolean(busy) || running || blocked}
+                  onClick={() =>
+                    void run('disconnect', async () => {
+                      const confirmation = confirmationRef.current;
+                      const confirmationSessionId = session?.session.id;
                       if (
-                        !mountedRef.current ||
-                        !adminRef.current ||
-                        confirmation.signal.aborted
+                        !confirmation ||
+                        confirmation.signal.aborted ||
+                        !confirmationSessionId
                       )
                         return;
                       if (
-                        error instanceof Error &&
-                        'code' in error &&
-                        error.code === 'NOCOREACH_CONFIRMATION_SESSION_CHANGED'
-                      ) {
-                        await refresh();
+                        !(await confirmAction({
+                          title: 'xiaohongshu.disconnectXiaohongshuCollector',
+                          description: 'xiaohongshu.savedNotesKeptConnectionNo',
+                          action: 'common.disconnect',
+                          signal: confirmation.signal,
+                        }))
+                      )
                         return;
+                      // The shared dialog has its own root; the initiating owner must still be active.
+                      if (
+                        !mountedRef.current ||
+                        !accessRef.current.disconnect ||
+                        confirmation.signal.aborted
+                      )
+                        return;
+                      let value: XiaohongshuView;
+                      try {
+                        // Keep the initiating session, even when another tab replaces the cookie.
+                        value = await xiaohongshuRequest<XiaohongshuView>(
+                          projectId,
+                          'disconnect',
+                          { revision: data.revision },
+                          confirmationSessionId,
+                        );
+                      } catch (error) {
+                        // A late response must not refresh or report into a replacement owner.
+                        if (
+                          !mountedRef.current ||
+                          !accessRef.current.disconnect ||
+                          confirmation.signal.aborted
+                        )
+                          return;
+                        if (
+                          error instanceof Error &&
+                          'code' in error &&
+                          error.code ===
+                            'NOCOREACH_CONFIRMATION_SESSION_CHANGED'
+                        ) {
+                          await refresh();
+                          return;
+                        }
+                        throw error;
                       }
-                      throw error;
-                    }
-                    if (
-                      mountedRef.current &&
-                      adminRef.current &&
-                      !confirmation.signal.aborted
-                    ) {
-                      setData(value);
-                      setNotice(() =>
-                        $t('xiaohongshu.xiaohongshuDisconnectedSavedNotesKept'),
-                      );
-                      onChange();
-                    }
-                  })
-                }
-              >
-                {$t('common.disconnect')}
-              </Button>
+                      if (
+                        mountedRef.current &&
+                        accessRef.current.disconnect &&
+                        !confirmation.signal.aborted
+                      ) {
+                        updateFromMutation(value);
+                        setNotice(() =>
+                          $t(
+                            'xiaohongshu.xiaohongshuDisconnectedSavedNotesKept',
+                          ),
+                        );
+                        onChange();
+                      }
+                    })
+                  }
+                >
+                  {$t('common.disconnect')}
+                </Button>
+              )}
             </div>
           )}
         </section>
@@ -562,13 +607,17 @@ export function XiaohongshuConnect({
           <p role='status' className='nr-footnote'>
             {$t('xiaohongshu.searchingCollectorBrowserUpAbout')}
           </p>
-          {isAdmin && data.running && (
+          {canCancel && data.running && (
             <Button
               variant='outline'
               disabled={cancelling || blocked}
               onClick={() => {
                 const requestId = data.running;
-                if (!requestId || !adminRef.current || cancelLockRef.current)
+                if (
+                  !requestId ||
+                  !accessRef.current.cancel ||
+                  cancelLockRef.current
+                )
                   return;
                 cancelLockRef.current = true;
                 setCancelling(true);
@@ -594,74 +643,44 @@ export function XiaohongshuConnect({
       )}
       {data.lastRun && !data.lastRun.ok && (
         <p role='status' className='nr-footnote'>
-          {$t(
-            messages[data.lastRun.errorCode || 'invalid_response'] ||
-              messages.invalid_response,
-          )}{' '}
-          {data.notes.length > 0 &&
-            $t('xiaohongshu.dataBelowPreviousSuccessfulCollection')}
+          {xiaohongshuRunMessage(data.lastRun.errorCode)}
         </p>
       )}
-      {!data.notes.length ? (
-        <EmptyState
-          icon={<Search />}
-          title={$t('xiaohongshu.noSavedNotesYet')}
-          description={$t(
-            isAdmin
+      {data.total > 0 ? (
+        <section className='grid gap-2'>
+          <p className='nr-footnote'>
+            {$t('collectorPage.savedSummary', { 0: data.total })}
+          </p>
+          <div className='nr-step-actions'>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => void navigate('/data/xiaohongshu')}
+            >
+              {$t('collectorPage.viewData')}
+            </Button>
+            <CollectorClear
+              projectId={projectId}
+              resource='nrXiaohongshu'
+              revision={data.revision}
+              total={data.total}
+              disabled={Boolean(busy || data.running)}
+              errorMessage={xiaohongshuErrorMessage}
+              onCleared={async () => {
+                await load();
+                onChange();
+              }}
+            />
+          </div>
+        </section>
+      ) : (
+        <p className='nr-footnote'>
+          {$t(
+            canConnect && canSearch
               ? 'xiaohongshu.saveConnectionChooseSearchNow'
               : 'xiaohongshu.noConfirmedNotesYetAsk',
           )}
-        />
-      ) : (
-        <section className='grid gap-2'>
-          <h3 className='font-medium'>
-            {$t('xiaohongshu.savedNotes', { 0: data.total })}
-          </h3>
-          <p className='nr-footnote'>
-            {$t('xiaohongshu.retentionAndMetricsHelp')}
-          </p>
-          <ul className='grid gap-3'>
-            {data.notes.slice(0, shown).map((note) => (
-              <li
-                className='min-w-0 rounded-md border border-border p-3'
-                key={note.id}
-              >
-                <a
-                  className='nr-link break-words font-medium'
-                  href={note.url}
-                  target='_blank'
-                  rel='noreferrer'
-                >
-                  {note.title}
-                </a>
-                <p className='mt-1 text-xs text-muted-foreground'>
-                  {$t('xiaohongshu.displayedLikes', {
-                    0: note.likesText ?? $t('common.unknown'),
-                  })}
-                </p>
-                <p className='mt-1 text-xs text-muted-foreground'>
-                  {note.estimatedPublishedAt
-                    ? $t('xiaohongshu.estimatedPublicationDate', {
-                        0: note.estimatedPublishedAt,
-                      })
-                    : $t('xiaohongshu.publicationTimeUnknown')}{' '}
-                  ·{' '}
-                  {$t('xiaohongshu.collected', {
-                    0: new Date(note.lastSeenAt).toLocaleString(locale),
-                  })}
-                </p>
-                <p className='mt-1 break-words text-xs text-muted-foreground'>
-                  {$t('common.searchTermValue', { 0: note.query })}
-                </p>
-              </li>
-            ))}
-          </ul>
-          {shown < data.notes.length && (
-            <Button variant='outline' onClick={() => setShown((n) => n + 20)}>
-              {$t('xiaohongshu.showMore')}
-            </Button>
-          )}
-        </section>
+        </p>
       )}
       <p className='nr-footnote'>
         {$t('xiaohongshu.currentlySupportsSearchResultCollection')}

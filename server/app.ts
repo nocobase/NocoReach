@@ -23,6 +23,7 @@ import {
 } from '@nocobase/app-server/runtime';
 import { spaRootRoutes } from '@nocobase/app-server/spa';
 import { taskAgentRetryGuard } from './routes/agent-retry-guard';
+import { accessGuard } from './routes/access-guard.js';
 import { MockDatasetSafetyProvider } from './providers/mock-dataset.js';
 import {
   assertMockJobsIsolation,
@@ -72,6 +73,7 @@ export function createApp(runtime: AppRuntimeContext): Application {
   app.addHttpMiddleware(sessionHttpMiddleware);
   app.addHttpMiddleware(i18nHttpMiddleware);
   app.addRoutes(healthCheckApiRoutes);
+  app.addRoutes(accessGuard);
   // The generic Agents retry cannot recreate a NocoReach task's business snapshot.
   // Install the subject-specific guard before plugin contributions (see AGENTS.md).
   app.addRoutes(mockExternalGuard);

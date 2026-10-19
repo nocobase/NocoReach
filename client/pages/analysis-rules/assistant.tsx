@@ -14,7 +14,7 @@ export function RulesAssistant({
   view: View;
   busy: boolean;
   propose: (instruction: string) => Promise<Proposal | undefined>;
-  apply: (proposal: Proposal) => Promise<boolean>;
+  apply?: (proposal: Proposal) => Promise<boolean>;
 }) {
   const [instruction, setInstruction] = useState('');
   const [exampleGroup, setExampleGroup] = useState(0);
@@ -208,7 +208,7 @@ export function RulesAssistant({
             >
               {$t('common.cancel')}
             </Button>
-            {active.changes.length ? (
+            {active.changes.length && apply ? (
               <Button
                 disabled={busy}
                 onClick={() => {

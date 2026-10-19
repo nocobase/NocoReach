@@ -6,6 +6,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   TestI18nProvider,
@@ -20,7 +21,11 @@ const runtime = await createTestI18nRuntime({
 });
 
 function I18n({ children }: { readonly children: ReactNode }) {
-  return <TestI18nProvider runtime={runtime}>{children}</TestI18nProvider>;
+  return (
+    <MemoryRouter>
+      <TestI18nProvider runtime={runtime}>{children}</TestI18nProvider>
+    </MemoryRouter>
+  );
 }
 
 const { signOut, refresh, showToast, resolveError } = vi.hoisted(() => ({

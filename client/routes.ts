@@ -27,6 +27,20 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
     path: '/inbox',
   },
   {
+    authz: 'skip',
+    auth: 'required',
+    componentLoader: () => import('./pages/access/accept.js'),
+    name: 'member-invitations',
+    path: '/member-invitations',
+  },
+  {
+    authz: 'skip',
+    auth: 'required',
+    componentLoader: () => import('./pages/access/accept.js'),
+    name: 'member-invitation-accept',
+    path: '/member-invitations/:invitationId',
+  },
+  {
     auth: 'guest',
     authz: 'skip',
     componentLoader: () => import('./pages/auth/login.js'),

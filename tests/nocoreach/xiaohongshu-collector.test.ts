@@ -337,7 +337,7 @@ async function syntheticCli(ignoreTerm: boolean, overflow = false) {
   const executable = path.join(directory, 'opencli');
   await writeFile(
     executable,
-    `#!${process.execPath}\nconst fs = require('node:fs');\nprocess.on('SIGTERM', () => {fs.writeFileSync(${JSON.stringify(termFile)}, 'yes'); ${ignoreTerm ? '' : 'setTimeout(() => process.exit(0), 600);'}});\nfs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));\n${overflow ? "process.stdout.write('x'.repeat(2 * 1024 * 1024));" : ''}\nsetInterval(() => {}, 100);\n`,
+    `#!${process.execPath}\nconst fs = require('node:fs');\nprocess.on('SIGTERM', () => {fs.writeFileSync(${JSON.stringify(termFile)}, 'yes'); ${ignoreTerm ? '' : 'setTimeout(() => process.exit(0), 600);'}});\nfs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));\n${overflow ? "process.stdout.write('x'.repeat(20 * 1024 * 1024 + 1));" : ''}\nsetInterval(() => {}, 100);\n`,
   );
   await chmod(executable, 0o700);
   const originalPath = process.env.PATH;

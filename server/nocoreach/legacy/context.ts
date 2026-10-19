@@ -65,6 +65,7 @@ export interface LegacyUser {
   readonly name?: string | null;
   readonly username?: string | null;
   readonly email?: string | null;
+  readonly kind?: 'person' | 'service';
 }
 
 export interface LegacyContextInput {
@@ -107,6 +108,7 @@ export function legacyContext(input: LegacyContextInput) {
             nickname: input.user.name ?? null,
             username: input.user.username ?? null,
             email: input.user.email ?? null,
+            kind: input.user.kind ?? 'person',
           },
         }
       : undefined,

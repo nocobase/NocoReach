@@ -1,13 +1,15 @@
+import {
+  isCollectorConnectionError,
+  type CollectorResolver,
+  type ResolvedCollector,
+} from './collector-connections.js';
 import { randomUUID } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
+import { collectorPeriod, type WindowFor } from './collector-views.js';
 import type { LegacyApp } from './legacy/app.js';
 import type { LegacyContext } from './legacy/context.js';
 import type { LegacyDatabase, LegacyTransaction } from './legacy/database.js';
 import type { OutboundNetwork } from './outbound-network.js';
-import {
-  parseBrowserCollectors,
-  type BrowserCollectorConfig,
-} from './browser-collector-config.js';
 import {
   BilibiliError,
   bilibiliConfig,
@@ -17,9 +19,11 @@ import {
   type BilibiliErrorCode,
   type BilibiliMetadata,
 } from './bilibili-adapter.js';
-export { BilibiliError, bilibiliConfig } from './bilibili-adapter.js';
 
 const MAX_VIDEOS = 500;
+const MAX_SEARCH_DETAILS = 20;
+const DETAIL_TIMEOUT_MS = 10_000;
+const metrics = ['views', 'likes', 'comments'] as const;
 interface Provenance {
   kind: 'search' | 'video';
   value: string;
@@ -29,9 +33,16 @@ export interface BilibiliVideo extends BilibiliMetadata {
   id: string;
   url: string;
   collectedAt: string;
+  // Legacy snapshots only have collectedAt; new merges preserve each metric's age.
+  metricFetchedAt?: Record<(typeof metrics)[number], string | null>;
   firstSeenAt: string;
   configRevision: string;
   sources: Provenance[];
+}
+function publicationOrder(a: BilibiliVideo, b: BilibiliVideo) {
+  const time = (value: string | null) =>
+    value && Number.isFinite(Date.parse(value)) ? Date.parse(value) : -Infinity;
+  return time(b.publishedAt) - time(a.publishedAt) || a.id.localeCompare(b.id);
 }
 interface LastRun {
   at: string;
@@ -51,6 +62,7 @@ interface State extends BilibiliConfig {
   verifiedAt: string | null;
 }
 interface Host {
+  collectors: CollectorResolver;
   db: LegacyDatabase;
   app: LegacyApp;
   network: OutboundNetwork;
@@ -63,34 +75,46 @@ interface Operation {
 }
 export class BilibiliSource {
   private readonly operations = new Map<string, Operation>();
+  private readonly clearing = new Set<string>();
   private readonly writes = new Map<string, Promise<unknown>>();
   private readonly generations = new Map<string, number>();
   private changed(id: string) {
     this.generations.set(id, (this.generations.get(id) ?? 0) + 1);
   }
-  private readonly configs: BrowserCollectorConfig[];
   private readonly adapter: BilibiliAdapter;
   constructor(
     private readonly p: Host,
-    configs: unknown = [],
     adapter?: BilibiliAdapter,
   ) {
-    this.configs = parseBrowserCollectors(configs);
     this.adapter = adapter ?? new HttpBilibiliAdapter(p.network);
     this.p.network?.bind(this, ['sync', 'test'], 'bilibili');
   }
   private repo() {
     return this.p.db.getRepository('nrSnapshots');
   }
+  isCollectorBusy(id: string) {
+    return (
+      this.operations.has(id) || this.writes.has(id) || this.clearing.has(id)
+    );
+  }
+  async resetCollector(id: string, collectorId: string) {
+    await this.mutate(id, (old) =>
+      old
+        ? {
+            ...old,
+            collectorId,
+            revision: randomUUID(),
+            verifiedAt: null,
+            lastRun: null,
+          }
+        : null,
+    );
+  }
   private key(id: string) {
     return `bilibili:${id}`;
   }
   private allowed(id: string) {
-    return this.configs.filter(
-      (c) =>
-        c.platforms.includes('bilibili') &&
-        (!c.projectIds || c.projectIds.includes(id)),
-    );
+    return this.p.collectors.allowed(id, 'bilibili');
   }
   private collector(id: string, collectorId: unknown) {
     const config = this.allowed(id).find((c) => c.id === collectorId);
@@ -198,6 +222,30 @@ export class BilibiliSource {
     this.operations.get(id)?.controller.abort();
     return this.status(id);
   }
+  async clear(id: string, revision: unknown) {
+    if (this.operations.has(id) || this.clearing.has(id))
+      throw new BilibiliError('busy');
+    this.clearing.add(id);
+    try {
+      await this.serialize(id, () =>
+        this.mutate(id, (old) => {
+          this.expected(old, revision);
+          return old
+            ? {
+                ...old,
+                revision: randomUUID(),
+                videos: {},
+                lastRun: null,
+                verifiedAt: null,
+              }
+            : null;
+        }),
+      );
+    } finally {
+      this.clearing.delete(id);
+    }
+    return this.status(id);
+  }
   async cancel(id: string, requestId: unknown) {
     const operation = this.operations.get(id);
     if (operation && operation.id === requestId) {
@@ -213,7 +261,8 @@ export class BilibiliSource {
     });
   }
   async sync(id: string) {
-    if (this.operations.has(id)) throw new BilibiliError('busy');
+    if (this.operations.has(id) || this.clearing.has(id))
+      throw new BilibiliError('busy');
     const op: Operation = {
       id: randomUUID(),
       controller: new AbortController(),
@@ -287,6 +336,77 @@ export class BilibiliSource {
             ? error
             : new BilibiliError('invalid_response');
       }
+      // Discovery is useful even when optional detail enrichment is unavailable.
+      // Serialize requests because the Collector shares a single browser/busy slot.
+      let detailFailure = false;
+      if (!failure || failure.code === 'unconfirmed_empty') {
+        const seen = new Set(
+          found
+            .filter((v) => v.completeness === 'video_metadata')
+            .map((v) => v.id),
+        );
+        const discoveries = found
+          .slice()
+          .sort(publicationOrder)
+          .filter((v) => {
+            if (seen.has(v.id)) return false;
+            seen.add(v.id);
+            return true;
+          })
+          .slice(0, MAX_SEARCH_DETAILS);
+        // Search only returns its first page. Refresh saved videos independently
+        // so older records can receive missing fields and changing metrics too.
+        const requested = new Set([
+          ...found
+            .filter((video) => video.completeness === 'video_metadata')
+            .map((video) => video.id),
+          ...discoveries.map((video) => video.id),
+        ]);
+        const saved = Object.values(state.videos)
+          .filter((video) => !requested.has(video.id))
+          .sort((a, b) => a.collectedAt.localeCompare(b.collectedAt));
+        const candidates = [...saved, ...discoveries];
+        for (const video of candidates) {
+          const detailSignal = AbortSignal.any([
+            signal,
+            AbortSignal.timeout(DETAIL_TIMEOUT_MS),
+          ]);
+          try {
+            detailSignal.throwIfAborted();
+            const result = await this.adapter.video(config, {
+              projectId: id,
+              requestId: op.id,
+              signal: detailSignal,
+              bvid: video.id,
+            });
+            detailSignal.throwIfAborted();
+            for (const item of result.items)
+              found.push({
+                ...video,
+                ...item,
+                collectedAt: result.collectedAt,
+                configRevision: state.revision,
+                metricFetchedAt: undefined,
+                sources: [
+                  ...video.sources,
+                  { kind: 'video', value: video.id, url: video.url },
+                ],
+              });
+          } catch (error) {
+            if (op.controller.signal.aborted)
+              throw new BilibiliError('cancelled');
+            detailFailure = true;
+            failure = detailSignal.aborted
+              ? new BilibiliError('timeout')
+              : error instanceof BilibiliError
+                ? error
+                : new BilibiliError('invalid_response');
+            // A deleted video does not block the next video. Stop on transport,
+            // authentication, throttling and verification errors without retries.
+            if (failure.code !== 'not_found') break;
+          }
+        }
+      }
       if (op.controller.signal.aborted) throw new BilibiliError('cancelled');
       const at = new Date().toISOString();
       await this.serialize(id, async () => {
@@ -300,7 +420,8 @@ export class BilibiliSource {
           const partial =
             found.length > 0 &&
             !!failure &&
-            ['unconfirmed_empty', 'not_found'].includes(failure.code);
+            (detailFailure ||
+              ['unconfirmed_empty', 'not_found'].includes(failure.code));
           const usable = (!failure || partial) && found.length > 0;
           const all = { ...cur.videos };
           const current = new Map<string, BilibiliVideo>();
@@ -319,20 +440,42 @@ export class BilibiliSource {
                 ).values(),
               ];
               // Within one batch, search summaries must not erase the preceding richer detail.
+              const preferred =
+                video.completeness === 'search_summary' &&
+                prior?.completeness === 'video_metadata'
+                  ? prior
+                  : video;
               all[video.id] = {
-                ...video,
-                ...(prior?.completeness === 'video_metadata' ? prior : {}),
+                ...preferred,
+                publishedAt:
+                  preferred.publishedAt ??
+                  video.publishedAt ??
+                  old?.publishedAt ??
+                  null,
+                publishedAtPrecision: preferred.publishedAt
+                  ? preferred.publishedAtPrecision
+                  : video.publishedAt
+                    ? video.publishedAtPrecision
+                    : (old?.publishedAtPrecision ?? null),
                 firstSeenAt: old?.firstSeenAt || video.firstSeenAt,
                 sources,
+                metricFetchedAt: { views: null, likes: null, comments: null },
               };
+              all[video.id].title ??= old?.title ?? null;
+              for (const metric of metrics) {
+                const source = preferred[metric] !== null ? preferred : old;
+                all[video.id][metric] = source?.[metric] ?? null;
+                all[video.id].metricFetchedAt![metric] =
+                  all[video.id][metric] === null
+                    ? null
+                    : source?.metricFetchedAt
+                      ? source.metricFetchedAt[metric]
+                      : (source?.collectedAt ?? null);
+              }
               current.set(video.id, all[video.id]);
             }
           const kept = Object.values(all)
-            .sort(
-              (a, b) =>
-                b.collectedAt.localeCompare(a.collectedAt) ||
-                a.id.localeCompare(b.id),
-            )
+            .sort(publicationOrder)
             .slice(0, MAX_VIDEOS);
           return {
             ...cur,
@@ -403,16 +546,23 @@ export class BilibiliSource {
   }
   private describe(id: string, state: State | null) {
     const op = this.operations.get(id);
-    const allowed = this.allowed(id);
+    let allowed: ResolvedCollector[] = [];
+    try {
+      allowed = this.allowed(id);
+    } catch (error) {
+      // Unreadable credentials disable collection, but must not hide saved videos.
+      if (!isCollectorConnectionError(error, 'unreadable')) throw error;
+    }
     const available = allowed.some((c) => c.id === state?.collectorId);
     const videos = Object.values(state?.videos || {});
     return {
       connected: !!state?.connected && available,
       configured: allowed.length > 0,
       revision: state?.revision || null,
-      collectors: allowed.map(({ id: collectorId, name }) => ({
+      collectors: allowed.map(({ id: collectorId, name, nameKey }) => ({
         id: collectorId,
         name,
+        nameKey,
       })),
       collectorId: available ? state?.collectorId : null,
       terms: state?.terms || [],
@@ -427,11 +577,7 @@ export class BilibiliSource {
       automatic: false,
       network: 'collector_browser' as const,
       recent: videos
-        .sort(
-          (a, b) =>
-            b.collectedAt.localeCompare(a.collectedAt) ||
-            a.id.localeCompare(b.id),
-        )
+        .sort(publicationOrder)
         .slice(0, 5)
         .map((v) => ({
           ...v,
@@ -439,10 +585,60 @@ export class BilibiliSource {
         })),
     };
   }
+  /** The data page: videos published in the range (or first collected, when Bilibili gave no date). */
+  async report(
+    id: string,
+    values: Record<string, unknown>,
+    windowFor: WindowFor,
+  ) {
+    let state: State | null, status: ReturnType<BilibiliSource['describe']>;
+    for (;;) {
+      const generation = this.generations.get(id) ?? 0;
+      state = await this.state(id);
+      if (generation !== (this.generations.get(id) ?? 0)) continue;
+      status = this.describe(id, state);
+      break;
+    }
+    const period = collectorPeriod(
+      this.p,
+      id,
+      'bilibili',
+      values,
+      windowFor,
+      Object.values(state?.videos || {}),
+      (video) => ({ published: video.publishedAt, seen: video.firstSeenAt }),
+      [
+        { key: 'views', value: (video) => video.views },
+        { key: 'likes', value: (video) => video.likes },
+        { key: 'comments', value: (video) => video.comments },
+      ],
+      // A searched video also gets a `video` source when its details are read; it came from the search terms, so
+      // only a video found by its link alone counts under that link.
+      (video) => {
+        const terms = video.sources.filter((s) => s.kind === 'search');
+        return (terms.length ? terms : video.sources).map((source) => ({
+          kind: source.kind === 'search' ? 'term' : 'video',
+          name: source.value,
+        }));
+      },
+    );
+    return {
+      ...status,
+      window: period.window,
+      kpis: period.kpis,
+      matched: period.matched,
+      trend: period.trend,
+      groups: period.groups,
+      videos: period.items.map((v) => ({
+        ...v,
+        fromEarlierConfig: v.configRevision !== state?.revision,
+      })),
+    };
+  }
   stop() {
     for (const op of this.operations.values()) op.controller.abort();
   }
-  register() {
+  register(windowFor: WindowFor) {
     const wrap =
       (fn: (id: string, v: Record<string, unknown>) => Promise<unknown>) =>
       async (ctx: LegacyContext, next: () => Promise<void>) => {
@@ -462,10 +658,12 @@ export class BilibiliSource {
       };
     const actions = {
       status: wrap((id) => this.status(id)),
+      report: wrap((id, v) => this.report(id, v, windowFor)),
       connect: wrap((id, v) => this.connect(id, v)),
       test: wrap((id, v) => this.test(id, v.collectorId)),
       sync: wrap((id) => this.sync(id)),
       cancel: wrap((id, v) => this.cancel(id, v.requestId)),
+      clear: wrap((id, v) => this.clear(id, v.revision)),
       disconnect: wrap((id, v) => this.disconnect(id, v.revision)),
     };
     this.p.app.resourceManager.define({ name: 'nrBilibili', actions });

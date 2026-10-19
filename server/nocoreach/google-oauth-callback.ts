@@ -6,7 +6,7 @@ import type { LegacyDatabase } from './legacy/database.js';
 import { CALLBACK_PATH, roleOf, secretKey } from './policy.js';
 
 interface Host {
-  db: Pick<LegacyDatabase, 'getRepository'>;
+  db: Pick<LegacyDatabase, 'getRepository' | 'access'>;
   project(id: string): Promise<unknown>;
   network: {
     run<T>(id: string, fn: () => Promise<T>): Promise<T>;
@@ -31,6 +31,7 @@ async function requireInitiator(
   host: Host,
   ctx: LegacyContext,
   userId: string,
+  projectId: string,
 ) {
   // Bind to the current account, not a role snapshot or the Google identity.
   if (!userId || ctx.auth?.user.id !== userId) fail('initiator_access_denied');
@@ -38,8 +39,10 @@ async function requireInitiator(
     .getRepository('users')
     .findOne({ filterByTk: userId });
   const user = row?.toJSON();
-  if (!user || user.disabledAt || (await roleOf(host.db, userId)) !== 'admin')
+  if (!user || user.disabledAt || (!host.db.access && (await roleOf(host.db, userId)) !== 'admin'))
     fail('initiator_access_denied');
+  try { await host.db.access?.requireFor(userId, 'nrGoogle', 'authorize', projectId); }
+  catch { fail('initiator_access_denied'); }
 }
 
 export async function googleOAuthCallback(
@@ -70,7 +73,7 @@ export async function googleOAuthCallback(
     await host.project(saved.id);
     if (ctx.request.query.error) fail('authorization_denied');
     stage = 'authorization';
-    await requireInitiator(host, ctx, saved.userId);
+    await requireInitiator(host, ctx, saved.userId, saved.id);
     const run =
       host.network.runProject?.bind(host.network) ??
       host.network.run.bind(host.network);
@@ -112,7 +115,7 @@ export async function googleOAuthCallback(
       // OAuth I/O must stay outside transactions. Re-read access after all upstream
       // awaits, immediately before persisting either credentials or link metadata.
       stage = 'authorization';
-      await requireInitiator(host, ctx, saved.userId);
+      await requireInitiator(host, ctx, saved.userId, saved.id);
       stage = 'save';
       await host.variable(secretKey(saved.id), tokens.refresh_token, true);
       await host.metadata(saved.id, {

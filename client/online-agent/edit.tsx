@@ -14,7 +14,7 @@ import { Input } from '#components/ui/input';
 import { Textarea } from '#components/ui/textarea';
 import { Field, FieldLabel, FieldDescription } from '#components/ui/field';
 import { Skeleton } from '#components/ui/skeleton';
-import { useMe } from '../pages/me.js';
+import { useBusinessAccess } from '#hooks/use-business-access';
 import type {
   OnlineAgentDefinition,
   OnlineModel,
@@ -39,7 +39,7 @@ export interface AgentSettingsContext {
 }
 export default function EditOnlineAgent() {
   const { onlineAgentId } = useParams(),
-    { isAdmin } = useMe();
+    { can: canManage, isPending } = useBusinessAccess('nrOnline.manage');
   const [reload, setReload] = useState(0);
   const data = useOnlineResource<Agent[]>('definitions', reload);
   const parent = useOutletContext<AgentSettingsContext>();
@@ -52,7 +52,7 @@ export default function EditOnlineAgent() {
     parent.refresh();
     void navigate(`/agents/online${location.search}`);
   };
-  if (!isAdmin || (onlineAgentId && (!agent || data.loading)))
+  if (!canManage || (onlineAgentId && (!agent || data.loading)))
     return (
       <RouteDialog
         title={$t('onlineAgent.edit')}
@@ -62,7 +62,7 @@ export default function EditOnlineAgent() {
           </Button>
         }
       >
-        {!isAdmin ? (
+        {!canManage && !isPending ? (
           <p>{$t('onlineAgent.accessDenied')}</p>
         ) : (
           <>
@@ -75,7 +75,7 @@ export default function EditOnlineAgent() {
               }
               retry={() => setReload((value) => value + 1)}
             />
-            {data.loading && (
+            {(data.loading || isPending) && (
               <div role='status' aria-label={$t('common.loading')}>
                 <Skeleton className='h-64 w-full' />
               </div>

@@ -2,7 +2,7 @@ import { type Message, useMessageState, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useState,type ReactElement} from 'react';
 import {useSearchParams} from 'react-router';
 import {ArrowDownIcon,ArrowUpIcon,FileSearchIcon,GitPullRequestIcon,MoreHorizontal,PencilIcon,PlusIcon,SettingsIcon,SparklesIcon,UserCheckIcon,XIcon} from 'lucide-react';
-import {AdminOnlyNote,useMe} from './me';
+import {useBusinessAccess} from '#hooks/use-business-access';
 import {PageContainer,PageHeader} from '#components/reach/page';
 import {Tag} from '#components/reach/tag';
 import {Button} from '#components/ui/button';
@@ -21,20 +21,21 @@ const icons:Record<StepKind,ReactElement>={analyze:<FileSearchIcon className="si
 // 做法 (SPEC §6.0): every kind of work as a few steps the Agent does and you review, grouped by the work it is. Built-in
 // playbooks are edited in place and can be restored; new ones start from one sentence the online AI turns into a draft.
 export default function PlaybooksPage(){
- const {project,error:projectError}=useProject(),{isAdmin}=useMe();const [params,setParams]=useSearchParams();
+ const {project,error:projectError}=useProject();const [params,setParams]=useSearchParams();
+ const {can:canSave}=useBusinessAccess('nrPlaybooks.save',project?.id??null),{can:canCopy}=useBusinessAccess('nrPlaybooks.copy',project?.id??null),{can:canRestore}=useBusinessAccess('nrPlaybooks.restore',project?.id??null),{can:canRemove}=useBusinessAccess('nrPlaybooks.remove',project?.id??null);
  const [rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[skills,setSkills]=useState<Skill[]>([]),[draft,setDraft]=useState<Draft|null>(null),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[notice,setNotice]=useMessageState(''),[creating,setCreating]=useState(false);
  const list=localizePlaybookList(rawPlaybooks);
  useEffect(()=>{if(!project)return;void playbookRequest<PlaybookList>('list',project.id).then(setRawPlaybooks).catch(()=>setError(() => ($t('playbooks.notLoadPlaybooksRefreshTry'))));void skillRequest<SkillList>('list',project.id).then(r=>setSkills(r.skills)).catch(()=>undefined);},[project?.id]);
  const id=params.get('id'),selected=list?.playbooks.find(p=>p.id===id)||(id===NEW?undefined:list?.playbooks[0]);
  const editing=Boolean(draft);
  async function pick(next:string){if(editing&&!(await confirmAction({title:() => ($t('common.discardUnsavedChanges')),action:'playbooks.discard'})))return;setDraft(null);setError('');setNotice('');const p=new URLSearchParams(params);p.set('id',next);setParams(p,{replace:true});}
- async function call(action:'save'|'copy'|'remove'|'restore',body:object,done:Message){if(!project||!list)return;setBusy(true);setError('');setNotice('');
+ async function call(action:'save'|'copy'|'remove'|'restore',body:object,done:Message){if(!project||!list||!({save:canSave,copy:canCopy,remove:canRemove,restore:canRestore}[action]))return;setBusy(true);setError('');setNotice('');
   try{const r=await playbookRequest<Saved>(action,project.id,{revision:list.revision,...body});setRawPlaybooks(r);setDraft(null);setNotice(done);const p=new URLSearchParams(params);p.set('id',r.playbook?.id||r.playbooks[0]?.id||'');setParams(p,{replace:true});}
   catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.notSavedTryAgain')));}finally{setBusy(false);}}
  function save(){if(!draft)return;const {id:playbookId,...rest}=draft;void call('save',{...(playbookId?{playbookId}:{}),...rest},() => (playbookId?$t('playbooks.savedTasksAlreadyStartedNot'):$t('playbooks.playbookCreated')));}
  function startNew(d:Draft){setCreating(false);setDraft(d);setError('');setNotice('');const p=new URLSearchParams(params);p.set('id',NEW);setParams(p,{replace:true});}
  return <PageContainer className="nr-page"><PageHeader title={$t('playbooks.title',undefined)} description={$t('playbooks.howKindWorkDoneSteps')}
-  actions={isAdmin&&<Button disabled={!list||busy} onClick={async()=>{if(editing&&!(await confirmAction({title:() => ($t('common.discardUnsavedChanges')),action:'playbooks.discard'})))return;setCreating(true);}}><SparklesIcon/>{$t('playbooks.newPlaybook')}</Button>}/><AdminOnlyNote/>
+  actions={canSave&&<Button disabled={!list||busy} onClick={async()=>{if(editing&&!(await confirmAction({title:() => ($t('common.discardUnsavedChanges')),action:'playbooks.discard'})))return;setCreating(true);}}><SparklesIcon/>{$t('playbooks.newPlaybook')}</Button>}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
   {!list?<p role="status" className="text-sm text-muted-foreground">{$t('playbooks.loadingPlaybooks')}</p>:<div className="grid items-start gap-4 lg:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
    <nav className="flex flex-col gap-1" aria-label={$t('playbooks.playbooks')}>{getCategories().map(([c,label])=>{const items=list.playbooks.filter(p=>p.category===c);return items.length?<div key={c} className="flex flex-col gap-1.5">
@@ -42,12 +43,12 @@ export default function PlaybooksPage(){
     {items.map(p=><button key={p.id} type="button" aria-current={!draft?.id&&id===NEW?false:selected?.id===p.id} onClick={()=>pick(p.id)} className="flex flex-col gap-0.5 rounded-lg border bg-card px-3 py-2 text-left text-card-foreground transition-colors hover:border-ring aria-[current=true]:border-primary aria-[current=true]:ring-1 aria-[current=true]:ring-primary">
      <span className="text-sm font-medium">{p.name}</span><span className="text-xs text-muted-foreground">{source(p)}</span></button>)}
    </div>:null;})}</nav>
-   {draft?<Editor draft={draft} list={list} skills={skills} busy={busy} onChange={setDraft} onSave={save} onCancel={()=>{setDraft(null);setError('');if(id===NEW)pick(list.playbooks[0]?.id||'');}}/>
-   :selected?<Detail p={selected} list={list} skills={skills} busy={busy} readOnly={!isAdmin} onEdit={()=>setDraft({id:selected.id,name:selected.name,category:selected.category,description:selected.description,steps:structuredClone(selected.steps),next:[...selected.next]})}
-     onCopy={()=>void call('copy',{playbookId:selected.id},() => ($t('playbooks.duplicatedKeepEditing')))} onRestore={async()=>{if(await confirmAction({title:() => ($t('playbooks.restoreDefault',{0:selected.name})),description:() => ($t('playbooks.changesDiscardedTasksAlreadyStarted')),action:'common.restoreDefault'}))void call('restore',{playbookId:selected.id},() => ($t('playbooks.defaultRestored')));}}
-     onRemove={async()=>{if(await confirmAction({title:() => ($t('playbooks.deletePlaybook',{0:selected.name})),description:() => ($t('playbooks.tasksAlreadyStartedNotAffected')),action:'common.delete'}))void call('remove',{playbookId:selected.id},() => ($t('playbooks.deleted')));}}/>:null}
+   {draft&&canSave?<Editor draft={draft} list={list} skills={skills} busy={busy} onChange={setDraft} onSave={save} onCancel={()=>{setDraft(null);setError('');if(id===NEW)pick(list.playbooks[0]?.id||'');}}/>
+   :selected?<Detail p={selected} list={list} skills={skills} busy={busy} onEdit={canSave?()=>setDraft({id:selected.id,name:selected.name,category:selected.category,description:selected.description,steps:structuredClone(selected.steps),next:[...selected.next]}):undefined}
+     onCopy={canCopy?()=>void call('copy',{playbookId:selected.id},() => ($t('playbooks.duplicatedKeepEditing'))):undefined} onRestore={canRestore?async()=>{if(await confirmAction({title:() => ($t('playbooks.restoreDefault',{0:selected.name})),description:() => ($t('playbooks.changesDiscardedTasksAlreadyStarted')),action:'common.restoreDefault'}))void call('restore',{playbookId:selected.id},() => ($t('playbooks.defaultRestored')));}:undefined}
+     onRemove={canRemove?async()=>{if(await confirmAction({title:() => ($t('playbooks.deletePlaybook',{0:selected.name})),description:() => ($t('playbooks.tasksAlreadyStartedNotAffected')),action:'common.delete'}))void call('remove',{playbookId:selected.id},() => ($t('playbooks.deleted')));}:undefined}/>:null}
   </div>}
-  {project&&list&&<NewPlaybook open={creating} projectId={project.id} onClose={()=>setCreating(false)} onDraft={startNew}/>}
+  {project&&list&&canSave&&<NewPlaybook open={creating} projectId={project.id} onClose={()=>setCreating(false)} onDraft={startNew}/>}
  </PageContainer>;
 }
 // The steps in order, then 上线 and 观察 when a step changes the repository.
@@ -61,14 +62,14 @@ function Steps({steps,skills}:{steps:Step[];skills:Skill[]}){
    <div className="min-w-0 flex-1"><p className="flex items-center gap-2 text-sm font-medium">{steps.length+i+1}. {n}<Tag tone="grey">{$t('common.system')}</Tag></p><p className="mt-0.5 text-xs text-muted-foreground">{d}</p></div></li>)}
  </ol>;
 }
-function Detail({p,list,skills,busy,readOnly=false,onEdit,onCopy,onRestore,onRemove}:{p:Playbook;list:PlaybookList;skills:Skill[];busy:boolean;readOnly?:boolean;onEdit:()=>void;onCopy:()=>void;onRestore:()=>void;onRemove:()=>void}){
+function Detail({p,list,skills,busy,onEdit,onCopy,onRestore,onRemove}:{p:Playbook;list:PlaybookList;skills:Skill[];busy:boolean;onEdit?:()=>void;onCopy?:()=>void;onRestore?:()=>void;onRemove?:()=>void}){
  const next=p.next.map(id=>list.playbooks.find(x=>x.id===id)?.name).filter(Boolean);
  return <section className="flex flex-col gap-3 rounded-lg border bg-card p-4 text-card-foreground" aria-label={$t('playbooks.playbookDetails')}>
   <div className="flex items-start gap-2"><div className="min-w-0 flex-1"><h2 className="text-lg font-semibold leading-snug">{p.name}</h2><p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><Tag tone="grey">{categoryName(p.category)}</Tag>{$tj('playbooks.runAgent',{0:source(p)})}</p></div>
-   {!readOnly&&<><Button size="sm" variant="outline" disabled={busy} onClick={onEdit}><PencilIcon/>{$t('common.edit')}</Button>
-   <DropdownMenu><DropdownMenuTrigger render={<Button size="icon-sm" variant="ghost" aria-label={$t('playbooks.moreActions')} disabled={busy}/>}><MoreHorizontal/></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-max">
-    <DropdownMenuItem onClick={onCopy}>{$t('playbooks.duplicate')}</DropdownMenuItem>{p.edited&&<DropdownMenuItem onClick={onRestore}>{$t('common.restoreDefault')}</DropdownMenuItem>}{!p.system&&<DropdownMenuItem variant="destructive" onClick={onRemove}>{$t('common.delete')}</DropdownMenuItem>}
-   </DropdownMenuContent></DropdownMenu></>}</div>
+   {onEdit&&<Button size="sm" variant="outline" disabled={busy} onClick={onEdit}><PencilIcon/>{$t('common.edit')}</Button>}
+   {(onCopy||(p.edited&&onRestore)||(!p.system&&onRemove))&&<DropdownMenu><DropdownMenuTrigger render={<Button size="icon-sm" variant="ghost" aria-label={$t('playbooks.moreActions')} disabled={busy}/>}><MoreHorizontal/></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-max">
+    {onCopy&&<DropdownMenuItem onClick={onCopy}>{$t('playbooks.duplicate')}</DropdownMenuItem>}{p.edited&&onRestore&&<DropdownMenuItem onClick={onRestore}>{$t('common.restoreDefault')}</DropdownMenuItem>}{!p.system&&onRemove&&<DropdownMenuItem variant="destructive" onClick={onRemove}>{$t('common.delete')}</DropdownMenuItem>}
+   </DropdownMenuContent></DropdownMenu>}</div>
   {p.description&&<p className="text-sm text-muted-foreground">{p.description}</p>}
   <div><h3 className="text-xs font-medium text-muted-foreground">{$t('common.steps')}</h3><Steps steps={p.steps} skills={skills}/></div>
   {next.length>0&&<p className="text-xs text-muted-foreground">{$tj('playbooks.continue',{0:next.join('、')})}</p>}
@@ -103,17 +104,18 @@ function Editor({draft,list,skills,busy,onChange,onSave,onCancel}:{draft:Draft;l
 }
 // 新建做法: one sentence → the online AI drafts it (one call) → it opens in the editor to check and save. Or start blank.
 function NewPlaybook({open,projectId,onClose,onDraft}:{open:boolean;projectId:number;onClose:()=>void;onDraft:(d:Draft)=>void}){
+ const {can:canDraft}=useBusinessAccess('nrPlaybooks.draft',projectId);
  const [request,setRequest]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useMessageState('');
  useEffect(()=>{if(open){setError('');}},[open, setError]);
- async function ask(){if(!request.trim()){setError(() => ($t('playbooks.describeOneSentenceWhatPlaybook')));return;}setBusy(true);setError('');
+ async function ask(){if(!canDraft)return;if(!request.trim()){setError(() => ($t('playbooks.describeOneSentenceWhatPlaybook')));return;}setBusy(true);setError('');
   try{const r=await playbookRequest<{draft:Draft}>('draft',projectId,{request:request.trim()});onDraft({...r.draft,next:r.draft.next||[]});setRequest('');}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('playbooks.draftNotWorkTryAgain')));}finally{setBusy(false);}}
  const blank:Draft={name:'',category:'research',description:'',steps:[{key:'',name:$t('common.analyze'),kind:'analyze',instruction:''},{key:'',name:$t('common.review'),kind:'review',checklist:[]}],next:[]};
  return <Dialog open={open} onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className="sm:max-w-lg">
   <DialogHeader><DialogTitle>{$t('playbooks.newPlaybook')}</DialogTitle><DialogDescription>{$t('playbooks.describeOneSentenceWhatPlaybookMessage')}</DialogDescription></DialogHeader>
-  <label className="nr-field">{$t('playbooks.whatPlaybook')}<textarea rows={3} value={request} maxLength={500} disabled={busy} onChange={e=>setRequest(e.target.value)} placeholder={$t('playbooks.afterReleaseSyncChangesChinese')}/></label>
-  <p className="nr-footnote">{$t('playbooks.draftingCallsOnlineAiOnce')}</p>
+  {canDraft&&<><label className="nr-field">{$t('playbooks.whatPlaybook')}<textarea rows={3} value={request} maxLength={500} disabled={busy} onChange={e=>setRequest(e.target.value)} placeholder={$t('playbooks.afterReleaseSyncChangesChinese')}/></label>
+  <p className="nr-footnote">{$t('playbooks.draftingCallsOnlineAiOnce')}</p></>}
   {error&&<p role="alert" className="nr-error">{error}</p>}
-  <DialogFooter className="sm:justify-between"><Button variant="ghost" disabled={busy} onClick={()=>onDraft(blank)}>{$t('playbooks.createWithoutAi')}</Button><Button disabled={busy} onClick={()=>void ask()}><SparklesIcon/>{busy?$t('playbooks.drafting'):$t('playbooks.draftAi')}</Button></DialogFooter>
+  <DialogFooter className="sm:justify-between"><Button variant="ghost" disabled={busy} onClick={()=>onDraft(blank)}>{$t('playbooks.createWithoutAi')}</Button>{canDraft&&<Button disabled={busy} onClick={()=>void ask()}><SparklesIcon/>{busy?$t('playbooks.drafting'):$t('playbooks.draftAi')}</Button>}</DialogFooter>
  </DialogContent></Dialog>;
 }
 // The Skills a step names, by name (Skills deleted since are left out). They always go to the Agent for this step.

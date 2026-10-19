@@ -4,7 +4,19 @@ import { MemoryRouter } from 'react-router';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { NocoReachHttpError } from '../../client/lib/nocoreach-api';
 import { RepoConnect } from '../../client/pages/repo-connect';
-const { action } = vi.hoisted(() => ({ action: vi.fn() }));
+const { action, authorization, access } = vi.hoisted(() => ({
+  action: vi.fn(),
+  authorization: { can: vi.fn(), invalidate: vi.fn() },
+  access: { actions: ['nrAgent.saveRepo', 'nrAgent.removeRepo'] },
+}));
+vi.mock('@nocobase/app-plugin-authorization/client', async (original) => ({
+  ...(await original<object>()),
+  useAuthorizationClient: () => authorization,
+  useAuthorizationRevision: () => 'test-revision',
+}));
+vi.mock('../../client/components/reach/confirm', () => ({
+  confirmAction: vi.fn(async () => true),
+}));
 vi.mock('../../client/lib/nocoreach-api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../client/lib/nocoreach-api')>()),
   nocobaseClient: { action },
@@ -17,6 +29,17 @@ const initial = {
   options: [{ id: 'agent', name: 'Team agent' }],
 };
 beforeEach(() => {
+  access.actions = ['nrAgent.saveRepo', 'nrAgent.removeRepo'];
+  authorization.can.mockReset();
+  authorization.can.mockImplementation(
+    async ({
+      resource,
+      action,
+    }: {
+      resource: { id: string };
+      action: string;
+    }) => resource.id === '1' && access.actions.includes(action),
+  );
   action.mockReset();
   action.mockResolvedValue(initial);
 });
@@ -90,4 +113,42 @@ test('shows translated validation errors next to the field and preserves input',
   await waitFor(() => expect(repo).toHaveAttribute('aria-invalid', 'true'));
   expect(repo).toHaveValue('invalid');
   expect(repo).toHaveAccessibleDescription('Enter a GitHub repository URL');
+});
+
+test('remove permission keeps repository settings read-only and allows only removal', async () => {
+  access.actions = ['nrAgent.removeRepo'];
+  const user = userEvent.setup();
+  mount();
+  const repo = await screen.findByRole('textbox', { name: '仓库链接' });
+  expect(repo).toHaveValue('team/site');
+  for (const input of screen.getAllByRole('textbox'))
+    expect(input).toBeDisabled();
+  expect(
+    screen.queryByRole('button', { name: '保存仓库' }),
+  ).not.toBeInTheDocument();
+  await user.click(await screen.findByRole('button', { name: '移除' }));
+  await waitFor(() =>
+    expect(action).toHaveBeenCalledWith(
+      'nrAgent',
+      'removeRepo',
+      expect.objectContaining({
+        body: expect.objectContaining({ projectId: '1', revision: 2 }),
+      }),
+    ),
+  );
+  expect(
+    action.mock.calls.some(([, operation]) => operation === 'saveRepo'),
+  ).toBe(false);
+});
+
+test('save permission exposes editing without granting removal', async () => {
+  access.actions = ['nrAgent.saveRepo'];
+  mount();
+  expect(
+    await screen.findByRole('textbox', { name: '仓库链接' }),
+  ).toBeEnabled();
+  expect(screen.getByRole('button', { name: '保存仓库' })).toBeEnabled();
+  expect(
+    screen.queryByRole('button', { name: '移除' }),
+  ).not.toBeInTheDocument();
 });

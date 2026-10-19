@@ -145,10 +145,24 @@ export class ManualTasks {
   }
 
   async authorize(actor: TaskCreator, projectId: string): Promise<void> {
+    await this.authorizeProject(actor, projectId, 'create');
+  }
+
+  private async authorizeProject(
+    actor: TaskCreator,
+    projectId: string,
+    operation: 'create' | 'read',
+  ): Promise<void> {
     await this.runtime.ready;
     const root = await this.runtime.users.isRoot(actor.id);
     if (!root && !(await roleOf(this.runtime.legacy.db, actor.id)))
       denied('TASK_CREATE_DENIED', 'NocoReach membership is required.');
+    await this.runtime.legacy.db.access?.requireFor(
+      actor.id,
+      operation === 'read' ? 'nrTaskWork' : 'nrTasks',
+      operation === 'read' ? 'get' : 'createManual',
+      projectId,
+    );
     // Projects are shared among NocoReach members, as all current task APIs are.
     await this.runtime.plugin.projects.get(projectId);
   }
@@ -319,7 +333,11 @@ export class ManualTasks {
   async read(actor: TaskCreator, id: string): Promise<TaskMediaRecord> {
     const file = await this.media.findOne({ filter: { id, deleting: false } });
     if (!file) denied('TASK_MEDIA_NOT_FOUND', 'File not found.', 'NOT_FOUND');
-    await this.authorize(actor, file.projectId);
+    await this.authorizeProject(
+      actor,
+      file.projectId,
+      file.taskId ? 'read' : 'create',
+    );
     if (file.taskId) {
       const row = await this.runtime.legacy.db
         .getRepository('nrTasks')
@@ -341,7 +359,7 @@ export class ManualTasks {
     projectId: string,
     taskId: string,
   ): Promise<TaskMediaView[]> {
-    await this.authorize(actor, projectId);
+    await this.authorizeProject(actor, projectId, 'read');
     const row = await this.runtime.legacy.db
       .getRepository('nrTasks')
       .findOne({ filter: { id: taskId, projectId } });

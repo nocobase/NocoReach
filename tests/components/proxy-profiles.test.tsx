@@ -32,9 +32,13 @@ import {
   sourceConnection,
 } from '../../client/pages/proxy-profiles/api';
 import { switchProject } from '../../client/pages/current-project';
-const state = vi.hoisted(() => ({ role: 'admin' }));
-vi.mock('../../client/pages/me', () => ({
-  useMe: () => ({ me: { role: state.role }, isAdmin: state.role === 'admin' }),
+const state = vi.hoisted(() => ({
+  canManage: true,
+  client: { can: vi.fn(), invalidate: vi.fn() },
+}));
+vi.mock('@nocobase/app-plugin-authorization/client', () => ({
+  useAuthorizationClient: () => state.client,
+  useAuthorizationRevision: () => state.canManage,
 }));
 vi.mock('../../client/pages/proxy-profiles/api', async (original) => ({
   ...(await original<object>()),
@@ -85,7 +89,21 @@ beforeEach(() => {
   setDictionary(null);
   cleanup();
   vi.mocked(proxyRequest).mockReset();
-  state.role = 'admin';
+  state.canManage = true;
+  state.client.can.mockReset();
+  state.client.can.mockImplementation(
+    async ({ resource, action }) =>
+      state.canManage &&
+      resource.type === 'nocoreach' &&
+      ((resource.id === '$app' &&
+        ['nrProxyProfiles.list', 'nrProxyProfiles.selectAll'].includes(
+          action,
+        )) ||
+        (resource.id === '1' &&
+          ['nrProxyProfiles.select', 'nrProxyProfiles.testConnection'].includes(
+            action,
+          ))),
+  );
   vi.mocked(switchProject).mockClear();
 });
 afterEach(() => {
@@ -123,7 +141,7 @@ function setup(path = '/proxy-profiles', network = false) {
   return router;
 }
 it('members cannot load or manage profiles', async () => {
-  state.role = 'member';
+  state.canManage = false;
   setup();
   expect(await screen.findByText('只有管理员能管理网络出口')).toBeVisible();
   expect(proxyRequest).not.toHaveBeenCalled();

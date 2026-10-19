@@ -1,6 +1,7 @@
 // Exact application-owned messages; upstream text must remain literal.
 export const youtubeSystemErrors = [
   'youtube.collectorNotConfigured',
+  'collectorConnection.unreadable',
   'youtube.collectorAmbiguous',
   'youtube.collectorUnauthorized',
   'youtube.collectorUnreachable',

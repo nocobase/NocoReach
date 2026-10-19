@@ -70,6 +70,7 @@ async function fixture(deadline?: AbortSignal) {
   };
   const source = new YouTubeSource(
     {
+      collectors: { allowed: () => [] },
       db,
       network,
       app: { logger: { warn: vi.fn() } },

@@ -34,6 +34,9 @@ const { action, fixture } = vi.hoisted(() => ({
 }));
 // Keep the real session-scoped WorkspaceCacheProvider while supplying the same
 // authenticated owner and permission revision that the application shell provides.
+vi.mock('../../client/hooks/use-business-access', () => ({
+  useBusinessAccess: () => ({ can: true, isPending: false }),
+}));
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => ({ session: fixture.session, isPending: false }),
 }));

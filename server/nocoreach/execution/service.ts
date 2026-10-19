@@ -17,6 +17,7 @@ import { serializeTaskInput, type TaskInput } from './task-materials';
 import type { LegacyDatabase, LegacyTransaction } from '../legacy/database';
 import { CHECKPOINTS, compare, dateOf, pageKey, shift, windows, type Partition } from './effect';
 import { listResults, readResult, resultBoard } from './result-view.js';
+import { ArticleFlow } from './article-flow.js';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
 // Roles and what only 管理员 may change live with the server code (server/policy.js); the same relative path works from
 // the source and from dist/execution.
@@ -30,6 +31,8 @@ const now = () => new Date().toISOString();
 const active = (r: Run) => r.status === 'queued' || r.status === 'running';
 // An analysis step needs no repository when nothing in the playbook changes one (research and outline documents).
 const withoutRepo = (w: Work, stage: Stage) => stage.kind === 'agent' && stage.mode === 'analyze' && !w.flow!.stages.some(changesRepo);
+// A task that delivers an article to a publishing target needs no repository for any step (article-flow.ts).
+const articleTask = (w: Work) => w.delivery?.kind === 'article';
 const ID = /^[1-9]\d{0,15}$/;
 const HOUR = 3600000;
 const httpsUrl = (v: unknown) => { try { const u = new URL(String(v)); return u.protocol === 'https:' && !u.username && !u.password ? u.href : ''; } catch { return ''; } };
@@ -69,7 +72,9 @@ export class TaskService {
   readonly agents: AgentStore;
   readonly runtime: TaskAgentsRuntime;
   readonly business: TaskBusiness;
-  constructor(readonly p: any, provider?: OnlineProvider) { this.provider = provider || new OnlineProvider(p); this.playbooks = new PlaybookStore(this); this.agents = new AgentStore(this); this.business = new TaskBusiness(this, p.agents); this.runtime = new TaskAgentsRuntime(p.agents, this, p.basePath || '/main'); }
+  readonly articleFlow: ArticleFlow;
+  private lastArticles = 0;
+  constructor(readonly p: any, provider?: OnlineProvider) { this.articleFlow = new ArticleFlow(this); this.provider = provider || new OnlineProvider(p); this.playbooks = new PlaybookStore(this); this.agents = new AgentStore(this); this.business = new TaskBusiness(this, p.agents); this.runtime = new TaskAgentsRuntime(p.agents, this, p.basePath || '/main'); }
   repo(name: string) { return this.p.db.getRepository(name); }
   key(kind: string, project: string, task: string, id = '') { return `nr-task-${kind}:${project}:${task}:${id}`; }
   async snapshot(key: string, tx?: any) { const r = await this.repo('nrSnapshots').findOne({ filter: { key }, transaction: tx }); return r?.get('payload'); }
@@ -130,7 +135,7 @@ export class TaskService {
     const content=work.contentId?await this.snapshot(this.key('content',project,'index',work.contentId),tx):null;
     const linked = [work.prevTaskId || task.evidence?.handoff?.taskId, work.nextTaskId].filter(Boolean).map(String);
     const related = (await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => ({ id: r.get('id'), title: r.get('title'), relation: String(r.get('id')) === String(work.nextTaskId) ? 'next' : 'prev' }));
-    return { task, content, work, runs: runs.map(({ input, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related };
+    return { task, content, work, runs: runs.map(({ input, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), articleBases: await this.articleFlow.bases(project, taskId, work, tx) };
   }
   private async withAgent(project: string, data: any, actor?: string) {
     // Actor-specific Runner eligibility opens plugin reads of its own.
@@ -153,10 +158,18 @@ export class TaskService {
     }
     return data;
   }
-  async authorized(actor: string) {
-    // Anyone who still has a role here; someone removed in 设置 · 成员 stops their queued runs.
-    if (!await policy.roleOf(this.p.db, actor)) return fail(systemMessageText('taskExecution.executionAuthorizationExpired'), 403);
+  async authorized(actor: string, project: string) {
+    if (!project) return fail(systemMessageText('taskExecution.executionAuthorizationExpired'), 403);
+    if (this.p.db.access) {
+      await this.p.db.access.freshFor(actor, 'nrTaskWork', 'execute', project);
+      return true;
+    }
+    await this.requireMember(actor);
     return true;
+  }
+  async requireMember(actor: string): Promise<void> {
+    // Membership-only rechecks use the caller's transaction connection.
+    if (!await policy.roleOf(this.p.db, actor)) return fail(systemMessageText('taskExecution.executionAuthorizationExpired'), 403);
   }
   async update(project: string, v: any, actor: string, actorName: string) {
     return this.updateTask(project, v, actor, actorName);
@@ -167,6 +180,10 @@ export class TaskService {
     if (!kinds.includes(stage.kind)) return fail(systemMessageText('taskExecution.actionNotSupportedCurrentStage'), 409);
     return { stage, index };
   }
+  // Used by article-flow.ts, which handles the article commands under the same lock.
+  flowStageOf(w: Work, key: unknown, kinds: StageKind[]) { return this.flowStage(w, key, kinds); }
+  flowArtifactOf(project: string, taskId: string, stageKey: string, content: string, actor: string, at: string, tx: any) { return this.flowArtifact(project, taskId, stageKey, content, actor, at, tx); }
+  enterStage(project: string, taskId: string, task: any, w: Work, index: number, tx: any, actor: string, at: string) { return this.enterFlowStage(project, taskId, task, w, index, tx, actor, at); }
   private async flowArtifact(project: string, taskId: string, stageKey: string, content: string, actor: string, at: string, tx: any, runId?: string): Promise<Artifact> {
     const versions: Artifact[] = await this.list('artifact', project, taskId, tx);
     const artifact: Artifact = { id: randomUUID(), stepId: stageKey, planVersion: 0, version: 1 + Math.max(0, ...versions.filter(a => a.stepId === stageKey && a.planVersion === 0).map(a => a.version)), content, createdAt: at, createdBy: actor, ...(runId ? { runId } : {}) };
@@ -179,20 +196,21 @@ export class TaskService {
     w.stageIndex = index; w.boardState = undefined;
     if (index >= stages.length) { w.stage = 'done'; return; }
     if (stages[index].kind === 'observe') { w.observeFrom = at; w.stage = 'done'; return; }
-    if (stages[index].kind === 'agent' && ((await this.agents.doc(project, tx)).repo || withoutRepo(w, stages[index]))) await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
+    if (stages[index].kind === 'agent' && ((await this.agents.doc(project, tx)).repo || withoutRepo(w, stages[index]) || articleTask(w))) await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
     // A change you made yourself has no PR to merge: it waits for you to say it is live.
     if (stages[index].kind === 'release' && this.simulated) {
       this.simulateRelease(w, actor, at);
       return;
     }
     if (stages[index].kind === 'release' && w.release?.state === 'merging') await this.queueMergeRun(project, taskId, task, w, tx, actor, at);
+    if (stages[index].kind === 'release' && w.release?.state === 'publishing') this.articleFlow.kick(project, taskId, tx);
   }
   // A run for the local Agent program: it reads the repository, writes a plan (plan step) or changes files (build step);
   // the program itself commits, pushes and opens the PR on the task's branch. An analysis in a playbook that never changes
   // the repository runs without one (repo null): the Agent works from the material and public pages only.
   private async queueAgentRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
     const index = w.stageIndex ?? 0, stage = w.flow!.stages[index], repo = (await this.agents.doc(project, tx)).repo || null;
-    if (!repo && !withoutRepo(w, stage)) return fail(systemMessageText('taskExecution.connectRepositoryUnderDataSources'), 409);
+    if (!repo && !withoutRepo(w, stage) && !articleTask(w)) return fail(systemMessageText('taskExecution.connectRepositoryUnderDataSources'), 409);
     if (!w.humanOwnerId) return fail(systemMessageText('taskExecution.assignOwnerFirst'), 409);
     if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail(systemMessageText('taskExecution.runInProgress'), 409);
     const context = await this.p.project(project);
@@ -200,14 +218,16 @@ export class TaskService {
     const reviews = await this.list('review', project, taskId, tx);
     // A step that only reads runs in the Agent's read-only mode ('plan', which every Agent program version knows); `step`
     // tells newer programs whether it is an analysis or a plan before changing.
-    const mode: 'plan' | 'build' = readsOnly(stage) ? 'plan' : 'build', step = stage.mode === 'analyze' ? 'analyze' : mode === 'plan' ? 'plan' : 'change', branch = `nocoreach/task-${taskId}`;
+    // An article task's change step writes the article itself ('article'): no repository, branch or pull request.
+    const mode: 'plan' | 'build' | 'article' = readsOnly(stage) ? 'plan' : articleTask(w) ? 'article' : 'build', step = stage.mode === 'analyze' ? 'analyze' : mode === 'plan' ? 'plan' : 'change', branch = `nocoreach/task-${taskId}`;
     // The page's data (search, visits, audit, tracked keywords, earlier tasks on it) as a short summary (2026-10-08).
     const data = await this.p.taskData?.forRun(project, { url: (content as any)?.url, taskId }).catch(() => '') || '';
     const knowledge = await this.p.knowledge?.forAgent(project) || [];
     const skills = await this.p.skills?.forAgent(project, stage.skills || []) || [];
     const resultKind = mode === 'plan' ? (w.playbookId === 'community-reply' ? 'communityReply' : w.playbookId === 'content-outline' ? 'content' : 'research') : undefined;
-    const input = serializeTaskInput({ resultKind, requiresRepository: !withoutRepo(w, stage), ...flowRunInput(context, task, w, index, content, reviews), knowledge, skills, mode, step, repo, branch, taskId, title: task.title, ...(data ? { data } : {}) });
-    const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, baseRejectedAt: w.results[index]?.rejectedAt, ownerId: w.humanOwnerId, actor, inputVersion: 1, capabilitySnapshot: mode === 'plan' ? ['repo.read'] : ['repo.read', 'repo.write', 'pr.open'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'configured-agent' }, flowStage: index, mode, branch };
+    const article = mode === 'article' ? { article: await this.articleFlow.runInput(project, w, tx), delivery: w.delivery } : {}, protectedPaths = mode === 'build' ? this.articleFlow.ownedTemplates(project) : [];
+    const input = serializeTaskInput({ resultKind, requiresRepository: !withoutRepo(w, stage) && !articleTask(w), ...flowRunInput(context, task, w, index, content, reviews), knowledge, skills, mode, step, repo: articleTask(w) ? null : repo, branch, taskId, title: task.title, ...(data ? { data } : {}), ...article, ...(protectedPaths.length ? { protectedPaths } : {}) });
+    const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, baseRejectedAt: w.results[index]?.rejectedAt, ownerId: w.humanOwnerId, actor, inputVersion: 1, capabilitySnapshot: mode === 'plan' ? ['repo.read'] : mode === 'article' ? ['article.draft'] : ['repo.read', 'repo.write', 'pr.open'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'configured-agent' }, flowStage: index, mode, branch };
     run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
     await this.put(this.key('run', project, taskId, run.id), run, tx);
     w.latestRun = { id: run.id, status: run.status };
@@ -420,19 +440,25 @@ export class TaskService {
   async updateTask(project: string, v: any, actor: string, actorName: string) {
     if (!v || !/^[a-zA-Z0-9-]{20,80}$/.test(v.requestId || '') || !Number.isSafeInteger(v.revision) || v.revision < 0) return fail(systemMessageText('taskExecution.invalidRequestIdVersion'));
     const taskId = String(v.taskId);
+    if (['startTask', 'approveStage', 'retryStage', 'retryMerge', 'retryPublish', 'revertRelease', 'confirmPublish'].includes(v.command) && this.p.db.access)
+      await this.p.db.access.requireFor(actor, 'nrTaskWork', 'execute', project);
     // Read plugin state outside the business lock (SQLite may have a single connection).
     // Recheck ownership, revision, current stage and run eligibility under the lock below.
     const recoveryRequest = v as { command?: string; runId?: string; stageKey?: string };
     let recoverySummary: string | null = null;
     if (recoveryRequest.command === 'recoverResult') {
-      await this.authorized(actor);
+      await this.authorized(actor, project);
       const work = projectWork(await this.task(project, taskId));
       if (work.humanOwnerId !== actor && await policy.roleOf((this.p as { db: LegacyDatabase }).db, actor) !== 'admin')
         return fail(systemMessageText('agentResult.recoveryUnavailable'), 403);
       const run = await this.snapshot(this.key('run', project, taskId, String(recoveryRequest.runId))) as Run | null;
       if (!run) return fail(systemMessageText('agentResult.recoveryUnavailable'), 409);
+      if (run.actor !== actor) await this.authorized(run.actor, project);
+      if (run.ownerId !== actor && run.ownerId !== run.actor) await this.authorized(run.ownerId, project);
       recoverySummary = await this.runtime.completedSummary(run);
     }
+    // Article commands read the publishing target here, outside the lock; the result is rechecked under it.
+    const articleRead = ['linkArticle', 'rebaseArticle'].includes(v.command) || (v.command === 'startTask' && Array.isArray(v.delivery?.also) && v.delivery.also.length) ? (await this.authorized(actor, project), await this.articleFlow.preRead(project, taskId, v)) : {};
     const hash = digest({ ...v, actor });
     const data = await this.lock(project, taskId, async tx => {
       if(v.command==='moveWork') await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:`nr-task-board:${project}`},transaction:tx});
@@ -476,6 +502,7 @@ export class TaskService {
         if(!Number.isFinite(prev)||!Number.isFinite(next)||(next-prev)<0.000001) return fail(systemMessageText('taskExecution.tooManyItemsPositionMove'),409);
         w.sortOrder=(prev+next)/2;w.boardState=v.state;event.previous=from;event.note=v.state;
       } else if (v.command === 'startSimple') {
+        await this.member(actor, tx);
         if(w.stage!=='plan' || w.plan) return fail(systemMessageText('taskExecution.planExistsKeepAdjust'),409);
         if(!['content','research'].includes(v.kind)) return fail(systemMessageText('taskExecution.pickContentChangeResearch'));
         const scope=text(v.scope,5000);
@@ -489,7 +516,7 @@ export class TaskService {
         if(typeof v.contentId!=='string' || !/^[a-f0-9]{64}$/.test(v.contentId)) return fail(systemMessageText('taskExecution.invalidContentNumber'));
         if(!await this.snapshot(this.key('content',project,'index',v.contentId),tx)) return fail(systemMessageText('taskExecution.contentNotBelongProject'),404);
         w.contentId=v.contentId;
-      } else if (v.command === 'takeOwnership') { w.humanOwnerId = actor; w.humanOwnerName = actorName; }
+      } else if (v.command === 'takeOwnership') { await this.member(actor, tx); w.humanOwnerId = actor; w.humanOwnerName = actorName; }
       else if (v.command === 'setOwner') {
         // A run's result is applied only for the owner who started it, so the owner changes between runs.
         if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail(systemMessageText('taskExecution.executorRunningChangeOwnerAfter'), 409);
@@ -562,8 +589,9 @@ export class TaskService {
         w.playbookId = p.id; w.playbook = { id: p.id, name: p.name, kind: p.kind, version: p.version, next: [...p.next], system: p.system === true, edited: p.edited === true };
         w.flow = { id: p.id, name: p.name, version: p.version, stages: stagesFor(p), system: p.system === true, edited: p.edited === true };
         w.note = typeof v.note === 'string' ? v.note.trim().slice(0, 3000) : '';
-        if (!w.humanOwnerId) { w.humanOwnerId = actor; w.humanOwnerName = actorName; }
+        if (!w.humanOwnerId) { await this.member(actor, tx); w.humanOwnerId = actor; w.humanOwnerName = actorName; }
         w.stage = 'flow'; w.step = 0; w.results = []; event.note = p.name;
+        await this.articleFlow.startDelivery(project, taskId, w, p.id, w.flow.stages.some(changesRepo), v.delivery, tx, articleRead);
         await this.enterFlowStage(project, taskId, task, w, 0, tx, actor, at);
       } else if (v.command === 'comment') {
         // A message for the executor; the next run reads the latest ones.
@@ -579,7 +607,10 @@ export class TaskService {
           if (missing.length) return fail(systemMessageText('messages.confirmFirst', { 0: missing.map(c => c.label).join('、') }), 409);
           // Changes outside the registered directories need an explicit yes before they can move on (SPEC §10).
           if (output.pr?.outOfScope?.length && v.confirmOutOfScope !== true) return fail(systemMessageText('messages.confirmChangesOutsideAllowedScope', { 0: output.pr.outOfScope.join('、') }), 409);
-          if (w.flow!.stages[index + 1]?.kind === 'release') {
+          // Files a publishing target exports would be rewritten by its exporter: they are published as articles instead.
+          if (output.pr?.protected?.length) return fail(systemMessageText('articles.protectedPaths', { 0: output.pr.protected.join('、') }), 409);
+          if (w.flow!.stages[index + 1]?.kind === 'release' && output.article) w.release = this.articleFlow.release(project, task, output, optional(v.release?.note, 2000));
+          else if (w.flow!.stages[index + 1]?.kind === 'release') {
             const pr = output.pr, rel = v.release || {};
             const base = { note: optional(rel.note, 2000) || pr?.release || task.title, pages: await this.releasePages(project, Array.isArray(rel.pages) ? rel.pages : pr?.pages || [], w, tx), ...(pr?.verifyText ? { verifyText: pr.verifyText } : {}) };
             w.release = pr?.headSha ? { state: 'merging', pr: { number: pr.number, url: pr.url, headSha: pr.headSha }, ...base } : { state: 'not_seen', reason: 'manual', ...base };
@@ -633,8 +664,8 @@ export class TaskService {
         if (!run || run.status !== 'failed' || run.error !== 'invalid_agent_result' || run.mode !== 'plan' || run.artifactId ||
             w.latestRun?.id !== run.id || runs.some(active) || !canApplyRun(w, run) || w.flow?.stages[index + 1]?.kind !== 'review')
           return fail(systemMessageText('agentResult.recoveryUnavailable'), 409);
-        await this.authorized(run.actor);
-        await this.authorized(run.ownerId);
+        await this.requireMember(run.actor);
+        await this.requireMember(run.ownerId);
         const result = resultOf(recoverySummary, run.mode, (JSON.parse(run.input) as TaskInput).resultKind, run.taskId);
         if (!result.ok) return fail(systemMessageText('agentResult.recoveryUnavailable'), 409);
         const artifact = { ...(await this.flowArtifact(project, taskId, run.stepId, text(result.content), 'agent', at, tx)), runId: run.id, ...(result.report ? { report: result.report } : {}) };
@@ -667,7 +698,8 @@ export class TaskService {
             await this.put(this.key('run', project, taskId, x.id), { ...x, status: 'failed', error: 'replaced_by_manual', endedAt: at }, tx);
           }
           w.release = { ...r, state: r.verifyText && r.pages.length ? 'verifying' : 'not_seen', ...(r.verifyText && r.pages.length ? {} : { reason: 'cannot_verify' }), error: undefined, mergedAt: at, checks: 0, nextCheckAt: at, deadline: new Date(Date.now() + 24 * HOUR).toISOString() };
-        } else if (v.command === 'confirmLive') { if (r.state !== 'verifying' && r.state !== 'not_seen') return fail(systemMessageText('taskExecution.prNotMergedYet'), 409); await this.goLive(project, taskId, task, w, tx, actor, at); }
+        } else if (v.command === 'confirmLive') { if (!['verifying', 'not_seen', 'exporting', 'export_late'].includes(r.state)) return fail(systemMessageText('taskExecution.prNotMergedYet'), 409); await this.goLive(project, taskId, task, w, tx, actor, at); }
+        else if (r.state === 'export_late') w.release = { ...r, state: 'exporting', nextCheckAt: at, deadline: new Date(Date.now() + 24 * HOUR).toISOString() };
         else { if (r.state !== 'not_seen' || r.reason) return fail(systemMessageText('taskExecution.noNeedWaitAnymore'), 409); w.release = { ...r, state: 'verifying', nextCheckAt: at, deadline: new Date(Date.now() + 24 * HOUR).toISOString() }; }
         void index;
       } else if (v.command === 'revertRelease') {
@@ -705,7 +737,7 @@ export class TaskService {
         if (v.url) { try { const u = new URL(text(v.url, 2000)); if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password) throw Error(); url = u.href; } catch { return fail(systemMessageText('taskExecution.enterValidPageUrl')); } }
         w.receipt = { note: text(v.note, 5000), url, recordedAt: at, recordedBy: actor };
         await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
-      } else return fail(systemMessageText('taskWork.actionNotSupported'));
+      } else if (!(await this.articleFlow.command(project, taskId, task, w, v, actor, at, tx, articleRead, event))) return fail(systemMessageText('taskWork.actionNotSupported'));
       w.history.push(event);
       await this.save(task, w, tx); await this.put(opKey, { hash, at, actor }, tx);
       return this.view(project, taskId, tx);
@@ -727,7 +759,7 @@ export class TaskService {
       return fresh.status === 'running' ? fresh : null;
     });
   }
-  async finish(run: Run, result?: { content: string; usage?: any; pr?: any; report?: any }, error?: string, errorDetail?: string) {
+  async finish(run: Run, result?: { content: string; usage?: any; pr?: any; report?: any; article?: any }, error?: string, errorDetail?: string) {
     return this.lock(run.projectId, run.taskId, async tx => {
       const key = this.key('run', run.projectId, run.taskId, run.id), fresh: Run = await this.snapshot(key, tx);
       if (!fresh || fresh.status !== 'running') return;
@@ -736,7 +768,7 @@ export class TaskService {
       fresh.endedAt = now(); fresh.status = result ? 'succeeded' : 'failed';
       if (result) {
         // Preserve a late result as a candidate even if a human edited or replanned meanwhile.
-        const artifact: Artifact = { id: randomUUID(), stepId: run.stepId, planVersion: run.planVersion, version: 1 + Math.max(0, ...(await this.list('artifact', run.projectId, run.taskId, tx)).filter(a => a.stepId === run.stepId && a.planVersion === run.planVersion).map(a => a.version)), content: text(result.content), createdAt: now(), createdBy: 'agent', runId: run.id , ...(result.pr ? { pr: result.pr } : {}), ...(result.report ? { report: result.report } : {}) };
+        const artifact: Artifact = { id: randomUUID(), stepId: run.stepId, planVersion: run.planVersion, version: 1 + Math.max(0, ...(await this.list('artifact', run.projectId, run.taskId, tx)).filter(a => a.stepId === run.stepId && a.planVersion === run.planVersion).map(a => a.version)), content: text(result.content), createdAt: now(), createdBy: 'agent', runId: run.id , ...(result.pr ? { pr: result.pr } : {}), ...(result.report ? { report: result.report } : {}), ...(result.article ? { article: result.article } : {}) };
         await this.put(this.key('artifact', run.projectId, run.taskId, artifact.id), artifact, tx);
         fresh.artifactId = artifact.id; fresh.usage = result.usage;
         if (!stale) { w.results[run.flowStage ?? w.step] = artifact; w.boardState=undefined; }
@@ -765,6 +797,7 @@ export class TaskService {
         if (rows.length < 100) break;
       }
       if (Date.now() - this.lastVerify > 5 * 60000) { this.lastVerify = Date.now(); await this.verifyReleases().catch(() => undefined); }
+      if (Date.now() - this.lastArticles > 60000) { this.lastArticles = Date.now(); await this.articleFlow.tick().catch(() => undefined); }
       if (!this.legacyDone) { this.legacyDone = true; await this.archiveLegacy().catch(() => { this.legacyDone = false; }); }
       if (Date.now() - this.lastEffects > HOUR) { this.lastEffects = Date.now(); await this.observeEffects().catch(() => undefined); }
     } finally { this.busy = false; }
@@ -777,6 +810,8 @@ export class TaskService {
     return r;
   }
   async validateAgentResult(r: Run, v: AgentResult) {
+    // `task result` checks an article against its target before saving, so the Agent can correct it.
+    if (v.ok && r.mode === 'article') { await this.articleFlow.proposal(r.projectId, JSON.parse(r.input), v.article); return; }
     if (!v.ok || r.mode !== 'build') return;
     const repo = (await this.agents.doc(r.projectId)).repo, p = v.pr || {};
     if (!repo) return fail(systemMessageText('taskExecution.repositorySettingsRemoved'), 409);
@@ -799,8 +834,12 @@ export class TaskService {
       pr = { url: p.url, number: p.number, branch: p.branch, ...(typeof p.headSha === 'string' && /^[0-9a-f]{7,40}$/.test(p.headSha) ? { headSha: p.headSha } : {}), files, ...(p.checks && typeof p.checks.ok === 'boolean' ? { checks: { ok: p.checks.ok, summary: String(p.checks.summary || '').slice(0, 2000) } } : {}), outOfScope: files.map((f: any) => f.path).filter((f: string) => !allowedPath(repo, f)) };
       const release = optional(p.release, 2000), verifyText = optional(p.verifyText, 200), pages = (Array.isArray(p.pages) ? p.pages : []).map((x: unknown) => optional(x, 500)).filter(Boolean).slice(0, 10), changes = cleanChanges(p.changes), visibleChanges = cleanVisibleChanges(p.visibleChanges);
       Object.assign(pr, release ? { release } : {}, verifyText ? { verifyText } : {}, pages.length ? { pages } : {}, changes.length ? { changes } : {}, visibleChanges.length ? { visibleChanges } : {});
+      const owned = this.articleFlow.owned(r.projectId, files.map((f: any) => f.path));
+      if (owned.length) pr.protected = owned;
     }
-    await this.finish(r, { content: text(v.content, 30000), ...(pr ? { pr } : {}), ...(v.report ? { report: v.report } : {}) });
+    // An article step's draft is checked against its target and base here; a mismatch is an invalid result.
+    const article = r.mode === 'article' ? await this.articleFlow.proposal(r.projectId, JSON.parse(r.input), v.article) : undefined;
+    await this.finish(r, { content: text(v.content, 30000), ...(pr ? { pr } : {}), ...(v.report ? { report: v.report } : {}), ...(article ? { article } : {}) });
     return { accepted: true };
   }
   // The merge result: merged at the reviewed commit (then the live check starts) or why it could not be merged.
@@ -827,6 +866,7 @@ export class TaskService {
   async createContentWork(project:string,v:any,actor:string,actorName=actor) {
     if(!/^[a-f0-9]{64}$/.test(v.contentId||'')||!/^[a-zA-Z0-9-]{20,80}$/.test(v.requestId||'')) return fail(systemMessageText('taskExecution.invalidContentRequestNumber'));
     return this.lock(project,'content-create',async tx=>{
+      await this.member(actor, tx);
       const key=this.key('content-create',project,'index',v.requestId),previous=await this.snapshot(key,tx);
       if(previous){if(previous.contentId!==v.contentId||previous.actor!==actor)return fail(systemMessageText('taskExecution.requestIdAlreadyUsed'),409);return this.task(project,String(previous.taskId),tx);}
       const content=await this.snapshot(this.key('content',project,'index',v.contentId),tx);if(!content)return fail(systemMessageText('taskExecution.contentNotFound'),404);

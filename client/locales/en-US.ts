@@ -5,6 +5,7 @@ import agentChat from '../extensions/nocobase-agent-chat/locales/en-US.js';
 import type { LocaleResource } from '@nocobase/i18n';
 
 const enUS = {
+  'nocoreach.nav.apiKeys': 'API keys',
   ...businessMessages,
   schedules,
   ...systemEnUS,
@@ -72,6 +73,9 @@ const enUS = {
   'nocoreach.nav.x': 'X',
   'nocoreach.nav.discord': 'Discord',
   'nocoreach.nav.slack': 'Slack',
+  'nocoreach.nav.xiaohongshu': 'Xiaohongshu',
+  'nocoreach.nav.bilibili': 'Bilibili',
+  'nocoreach.nav.youtube': 'YouTube',
   'nocoreach.nav.aiTeam': 'AI team',
   'nocoreach.nav.agent': 'Agent',
   'nocoreach.nav.runners': 'Runner',
@@ -85,6 +89,7 @@ const enUS = {
   'nocoreach.nav.connections': 'Data sources',
   'nocoreach.nav.proxyProfiles': 'Network',
   'nocoreach.nav.members': 'Members',
+  'nocoreach.nav.roles': 'Roles',
   'auth.platform': 'AI growth team',
   'auth.marketingTitleFirst': 'Find what to do,',
   'auth.marketingTitleSecond': 'hand it to an Agent,',

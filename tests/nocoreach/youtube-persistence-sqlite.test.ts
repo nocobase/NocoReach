@@ -59,6 +59,7 @@ async function fixture() {
     video: vi.fn(async (key: string) => video(Number(key.slice(5)))),
   };
   const host = {
+    collectors: { allowed: () => [] },
     db,
     network,
     project: async () => ({}),
@@ -277,4 +278,144 @@ it('analysis reads only the current discovery batch and never another project or
     revision: (await f.source.status('1')).revision,
   });
   expect(await f.source.analysisData('1')).toEqual([]);
+});
+
+it('orders publication dates across database pages, places unknowns last and preserves dates on refresh', async () => {
+  const f = await fixture();
+  const { YouTubeLibrary } =
+    await import('../../server/nocoreach/youtube-library.js');
+  const library = new YouTubeLibrary(f.db);
+  await library.save(
+    '1',
+    Array.from({ length: 45 }, (_, i) => ({
+      ...video(
+        i + 1,
+        `2026-09-${String(28 - (i % 28)).padStart(2, '0')}T00:00:00.000Z`,
+      ),
+      publishedAt:
+        i < 2
+          ? null
+          : `2026-10-${String(Math.ceil((i - 1) / 2)).padStart(2, '0')}`,
+    })),
+  );
+  const pages = await Promise.all(
+    [1, 2, 3].map((page) => library.list('1', page)),
+  );
+  const ids = pages.flatMap((page) => page.videos.map((v) => v.id));
+  const expected = Array.from({ length: 43 }, (_, i) => i + 3)
+    .sort((a, b) => Math.ceil((b - 2) / 2) - Math.ceil((a - 2) / 2) || a - b)
+    .concat([1, 2])
+    .map(id);
+  expect(ids).toEqual(expected);
+  await library.save('1', [video(45)]);
+  expect((await library.list('1')).videos[0]).toMatchObject({
+    id: id(45),
+    publishedAt: '2026-10-22',
+  });
+  await library.save('1', [{ ...video(45), publishedAt: '2026-10-01' }]);
+  expect((await library.list('1')).videos[0].id).toBe(id(43));
+});
+
+describeMigration('202610170001_youtube_publication_order', {
+  sources: migrations,
+  reversible: true,
+  before: async ({ connection }) => {
+    for (let n = 1; n <= 105; n++) {
+      await connection.repository('nrYouTubeVideos').createOne({
+        values: {
+          id: `1:${id(n)}`,
+          projectId: '1',
+          videoId: id(n),
+          payload: {
+            ...video(n),
+            publishedAt: n === 1 ? null : n === 2 ? '2026-02-30' : '2026-10-15',
+          },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    }
+  },
+  up: async ({ connection, expectCollection }) => {
+    await expectCollection('nrYouTubeVideos').toHaveIndex([
+      'projectId',
+      'publishedAtKnown',
+      'publishedAt',
+      'id',
+    ]);
+    const rows = await connection
+      .repository('nrYouTubeVideos')
+      .findMany({ limit: 200 });
+    rows.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    expect(rows).toHaveLength(105);
+    expect(rows.slice(0, 2).map((r) => r.publishedAt)).toEqual([null, null]);
+    expect(
+      rows
+        .slice(2)
+        .every((r) => r.publishedAt === '2026-10-15' && r.publishedAtKnown),
+    ).toBe(true);
+  },
+});
+
+it('does not restore an invalid legacy publication date after migration cleared its projection', async () => {
+  const f = await fixture();
+  const { YouTubeLibrary } =
+    await import('../../server/nocoreach/youtube-library.js');
+  const library = new YouTubeLibrary(f.db);
+  await library.save('1', [
+    video(1),
+    { ...video(2), publishedAt: '2020-01-01' },
+  ]);
+  const previous = (await library.list('1')).videos.find(
+    (v) => v.id === id(1),
+  )!;
+  // The publication migration deliberately leaves legacy payloads intact.
+  await f.db.getRepository('nrYouTubeVideos').update({
+    filterByTk: `1:${id(1)}`,
+    values: {
+      payload: { ...previous, publishedAt: '2026-02-30' },
+      publishedAt: null,
+      publishedAtKnown: false,
+    },
+  });
+  await library.save('1', [video(1)]);
+  const result = await library.list('1');
+  expect(result.videos.map((v) => v.id)).toEqual([id(2), id(1)]);
+  expect(result.videos[1].publishedAt).toBeNull();
+  const stored = await f.db
+    .getRepository('nrYouTubeVideos')
+    .findOne({ filterByTk: `1:${id(1)}` });
+  expect(stored?.get('publishedAt')).toBeNull();
+  expect(stored?.get('publishedAtKnown')).toBe(false);
+});
+
+it('reports every saved video of a large library and returns full records for the requested page only', async () => {
+  const f = await fixture();
+  const { YouTubeLibrary } =
+    await import('../../server/nocoreach/youtube-library.js');
+  // @ts-expect-error The server modules are plain JavaScript under ts-nocheck.
+  const { windowFor } = await import('../../server/nocoreach/data-views.js');
+  const library = new YouTubeLibrary(f.db);
+  // More than one summary batch (500 rows), and another project's record.
+  await library.save(
+    '1',
+    Array.from({ length: 501 }, (_, i) => ({
+      ...video(i + 1),
+      publishedAt: `2026-0${1 + (i % 9)}-15`,
+    })),
+  );
+  await library.save('2', [video(9999)]);
+  const report = await f.source.report(
+    '1',
+    { range: 'all', limit: 3 },
+    windowFor,
+  );
+  expect(report.matched).toBe(501);
+  expect(report.kpis.find((k) => k.key === 'total')?.value).toBe(501);
+  expect(report.kpis.find((k) => k.key === 'views')?.value).toBe(
+    (501 * 502) / 2,
+  );
+  expect(report.videos).toHaveLength(3);
+  expect(report.videos.every((v) => v.publishedAt === '2026-09-15')).toBe(true);
+  expect(report.videos[0].transcript.text).toBe('Previously read caption');
 });
