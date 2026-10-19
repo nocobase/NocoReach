@@ -92,11 +92,35 @@ test('opportunity decisions: ignore or restore only; ignored ones are not brough
  await service.reviewOpportunity(1,{insightId:'old',status:'pending'});assert.equal(state.opportunityMeta.old.status,'pending');assert.ok(state.opportunityMeta.old.restoredAt);
  assert.equal(withoutIgnored(state,next).length,4);
 });
+test('the same thing raised again in other words keeps its card; one change backing another action does not',()=>{
+ const {mergeCards}=__opportunity_board;let n=0;const uuid=()=>'new-'+(++n);
+ const old={id:'o2',no:2,title:'给 field 接口页补 JS 字段与联动示例',objective:'减少提问',suggestion:'补示例',target:'https://docs.nocobase.com/api/i-field',audience:'开发者',signalIds:['community-covered:field'],firstSeenAt:'2026-10-09',evidenceText:'e',observation:'o'};
+ const digest={id:'o1',title:'把插件分享主题做成文档专栏',objective:'g',suggestion:'s',target:'社区插件分享类主题',signalIds:['community-digest'],firstSeenAt:'2026-10-09'};
+ const replies={id:'o27',title:'回复 3 个无人回应的论坛主题',objective:'g',suggestion:'s',target:'近 14 天 3 个无人回复主题',signalIds:['community-unanswered'],firstSeenAt:'2026-10-15'};
+ const state={proposals:[],insights:{generatedAt:'2026-10-11',items:[]},insightHistory:[{generatedAt:'2026-10-09',items:[old,digest,replies]}]};
+ const reworded={...old,id:undefined,objective:'让开发者少走弯路',audience:'低代码开发者',signalIds:['community-covered:field']};
+ const [a]=mergeCards(state,[reworded],'2026-10-11T09:00:00Z',uuid);
+ assert.equal(a.id,'o2','same changes and same page: the same opportunity');assert.equal(a.firstSeenAt,'2026-10-09');assert.notEqual(a.change,'new','a re-raise, not a new opportunity');
+ const [b]=mergeCards(state,[{...replies,id:undefined,title:'回复 4 个无人回应的论坛主题',target:'近 14 天无人回复的论坛主题'}],'now',uuid);
+ assert.equal(b.id,'o27','the page worded differently, the same title apart from its numbers');
+ const [c]=mergeCards(state,[{...digest,id:undefined,title:'为 AI Portal 建发布进度说明页',target:'AI Portal 主题（新页面）'}],'now',uuid);
+ assert.match(c.id,/^new-/,'a community digest backs several actions: another page and title is another opportunity');
+ const [d]=mergeCards(state,[{...reworded,signalIds:['community-covered:field','community-gap:bug']}],'now',uuid);
+ assert.match(d.id,/^new-/,'other changes cited: another opportunity');
+ const [e,f]=mergeCards(state,[reworded,{...reworded,suggestion:'另写一篇排错页'}],'now',uuid);
+ assert.equal(e.id,'o2');assert.match(f.id,/^new-/,'a second card for the same thing gets its own id instead of being dropped');
+ // Its latest card handed off: a new card, never an older undecided copy of the same thing.
+ const handedOff={...old,id:'o9',no:9};
+ const later={proposals:[{taskId:5,insight:{id:'o9'}}],insights:{generatedAt:'2026-10-12',items:[handedOff]},insightHistory:state.insightHistory};
+ assert.match(mergeCards(later,[reworded],'now',uuid)[0].id,/^new-/);
+});
+
 test('menu counts: personal waiting tasks and all pending opportunities',async()=>{
  const {StrategyService}=__strategy_service;const {newPending}=__opportunity_board;
  const stages=[{key:'build',name:'修改',kind:'agent'},{key:'review',name:'看效果并发布',kind:'review'}],work=(i,extra={})=>({schemaVersion:2,revision:1,stage:'flow',plan:null,planVersion:0,step:0,results:[],history:[],flow:{stages},stageIndex:i,...extra});
  const tasks=[{id:1,evidence:{work:work(1)}},{id:2,evidence:{work:work(0)}},{id:3,evidence:{work:work(1,{archivedAt:'x'})}},{id:4,evidence:{work:work(1,{cancelledAt:'x'})}},{id:5,status:'待处理',evidence:{}}];
- const state={revision:1,proposals:[{taskId:9,insight:{id:'b'}}],opportunityMeta:{c:{status:'ignored'}},insights:{generatedAt:'2026-10-13',evidence:{analysisVersion:3},items:[{id:'a',change:'new'},{id:'b',change:'new'},{id:'c',change:'new'},{id:'d',change:'unchanged'}]},insightHistory:[{generatedAt:'2026-10-12',evidence:{},items:[{id:'e',change:'new'}]}]};
+ const state={revision:1,proposals:[{taskId:9,insight:{id:'b'}}],opportunityMeta:{c:{status:'ignored'}},insights:{generatedAt:'2026-10-13',evidence:{analysisVersion:3},items:[{id:'a',change:'new'},{id:'b',change:'new'},{id:'c',change:'new'},{id:'d',change:'unchanged'}]},insightHistory:[{generatedAt:'2026-09-28',evidence:{},items:[{id:'e',change:'new'}]}]};
+ // e was last raised 15 days before the latest analysis: expired, so it is not counted (14 days, 2026-10-19).
  assert.equal(newPending(state),1,'only a: b is handed off, c ignored, d not new, e from an older analysis');assert.equal(newPending({}),0);
  const filters=[];const s=new StrategyService({db:{getRepository:n=>n==='nrTasks'?{find:async({filter})=>{filters.push(filter);return tasks;}}:{findOne:async()=>({get:()=>state})}}});
  s.p.taskExecution={tasks:async id=>s.p.db.getRepository('nrTasks').find({filter:{projectId:id}})};

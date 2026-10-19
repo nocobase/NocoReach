@@ -1884,7 +1884,7 @@
   "community.dataAlreadyReadKept": "Data already read is kept.",
   "siteAudit.noIssuesPagesRead": "No issues on the pages read.",
   "strategy.expired": "Expired",
-  "strategy.expiredLatestAnalysisNotSuggest": "Expired: the latest analysis didn't suggest it again",
+  "strategy.expiredLatestAnalysisNotSuggest": "Expired: no analysis in the last {0} days suggested it again",
   "taskDetail.runningCurrently": "Running for {0}, currently:",
   "messages.connected": "Connected",
   "messages.connectedValue": "Connected{0}",

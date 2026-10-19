@@ -85,15 +85,32 @@ it('opportunities count unchanged/evidence/latest and restored history once, exc
       insight: card('handed'),
     },
   ];
+  // Not raised again: pending for 14 days after the last analysis that raised it, counted from the latest analysis.
   s.insightHistory = [
-    batch([card('unchanged'), card('restored'), card('expired')]),
+    batch([card('unchanged'), card('restored')]),
+    { ...batch([card('quiet')]), generatedAt: '2026-10-06T09:00:00Z' },
+    { ...batch([card('lastDay')]), generatedAt: '2026-09-30T23:00:00Z' },
+    { ...batch([card('expired'), card('quiet')]), generatedAt: '2026-09-29' },
   ];
   expect(
     rowsFor(s)
       .filter((r) => opportunityState(r, s).state === 'pending')
       .map((r) => r.card.id)
       .sort(),
-  ).toEqual(['evidence', 'new', 'restored', 'unchanged']);
+  ).toEqual(['evidence', 'lastDay', 'new', 'quiet', 'restored', 'unchanged']);
+  const expired = rowsFor(s).find((r) => r.card.id === 'expired')!;
+  expect(opportunityState(expired, s)).toEqual({
+    state: 'archived',
+    reason: 'expired',
+  });
+  // Without a dated latest analysis nothing older stays pending.
+  const undated = { ...s, insights: { ...s.insights!, generatedAt: '' } };
+  expect(
+    opportunityState(
+      rowsFor(undated).find((r) => r.card.id === 'lastDay')!,
+      undated,
+    ).state,
+  ).toBe('archived');
 });
 it('insights count opportunity rows once and standalone action signals, preserving linked task and verdict precedence', () => {
   const signals = [
