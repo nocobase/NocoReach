@@ -6158,6 +6158,7 @@
   "agentResult.material": "任务材料",
   "agentResult.submissionConflict": "本次运行已经提交成果；相同成果可重复提交，修改成果请重新运行任务",
   "accessMembers.members": "成员",
+  "accessMembers.title": "成员与角色",
   "accessMembers.membersDescription": "邀请成员，安排他们的角色和所在项目。",
   "accessMembers.roles": "角色",
   "accessMembers.rolesDescription": "角色决定能做什么，以及在哪些项目里做。",

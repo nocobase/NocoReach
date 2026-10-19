@@ -1,5 +1,11 @@
-import { useState } from 'react';
-import { Link, Outlet, useLocation, useSearchParams } from 'react-router';
+import { lazy, Suspense, useState } from 'react';
+import {
+  Link,
+  Outlet,
+  useLocation,
+  useMatch,
+  useSearchParams,
+} from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Users,
@@ -11,7 +17,7 @@ import {
   Ban,
 } from 'lucide-react';
 import { useNocoReachLocale, $t } from '#i18n';
-import { PageContainer, PageHeader } from '#components/reach/page';
+import { PageContainer } from '#components/reach/page';
 import { EmptyState, ListSkeleton } from '#components/reach/states';
 import { confirmAction } from '#components/reach/confirm';
 import { Button } from '#components/ui/button';
@@ -41,10 +47,30 @@ import {
   type MemberInvitation,
   type BusinessRole,
 } from './access/api';
-import { AccessError, Refresh, RowMenu, Pager } from './access/components';
+import {
+  AccessError,
+  AccessHeader,
+  Refresh,
+  RowMenu,
+  Pager,
+} from './access/components';
 import { InvitationLink } from './access/invitation-link';
+const Roles = lazy(() => import('./access/roles'));
 
-export default function Members() {
+export default function MembersAndRoles() {
+  const [params] = useSearchParams();
+  // An open role form belongs to the roles tab even when its link lost the query.
+  const roleForm = useMatch('/members/roles/:roleKey');
+  return params.get('tab') === 'roles' || roleForm ? (
+    <Suspense fallback={<ListSkeleton />}>
+      <Roles />
+    </Suspense>
+  ) : (
+    <Members />
+  );
+}
+
+function Members() {
   const locale = useNocoReachLocale();
   const { me } = useMe();
   const [params, setParams] = useSearchParams();
@@ -229,9 +255,10 @@ export default function Members() {
     (invites && canManage ? pending.error : null);
   return (
     <PageContainer className='nr-page'>
-      <PageHeader
-        title={$t('accessMembers.members')}
-        description={$t('accessMembers.membersDescription')}
+      <AccessHeader
+        tab={invites ? 'invitations' : 'members'}
+        invitations={canManage}
+        onChange={() => setPage(0)}
         actions={
           <>
             {nonempty ? inviteButton : null}
@@ -247,39 +274,6 @@ export default function Members() {
           </>
         }
       />
-      <nav
-        className='flex flex-wrap gap-2'
-        aria-label={$t('accessMembers.memberViews')}
-      >
-        {[
-          ['members', 'accessMembers.members'],
-          ['invitations', 'accessMembers.pending'],
-        ].map(([tab, key]) =>
-          tab === 'members' || canManage ? (
-            <Button
-              key={tab}
-              variant={
-                (invites ? 'invitations' : 'members') === tab
-                  ? 'secondary'
-                  : 'ghost'
-              }
-              onClick={() => {
-                const next = new URLSearchParams(params);
-                next.set('tab', tab);
-                setParams(next);
-                setPage(0);
-              }}
-              aria-current={
-                (invites ? 'invitations' : 'members') === tab
-                  ? 'page'
-                  : undefined
-              }
-            >
-              {$t(key)}
-            </Button>
-          ) : null,
-        )}
-      </nav>
       <AccessError error={error} retry={reload} />
       {!members.data || (invites && canManage && !pending.data) ? (
         !error && <ListSkeleton />

@@ -42,7 +42,6 @@ import {
   Globe2,
   Store,
   Settings2,
-  ContactRound,
   KeyRound,
   BookHeart,
   TvMinimalPlay,
@@ -102,7 +101,7 @@ const page = (
   path,
   auth: 'required',
   authz: { resource: { type: 'page', id: name }, action: 'access' },
-  componentLoader: gated(load, false, !['members', 'roles', 'keys'].includes(name)),
+  componentLoader: gated(load, false, !['members', 'keys'].includes(name)),
   ...(navigation ? { navigation } : {}),
 });
 
@@ -216,11 +215,10 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     ] },
     { ...page('members', '/members', () => import('./pages/members.js'), { title: nav('members'), icon: Users, order: 2 }), children: [
       { name: 'member-invite', path: 'invite', componentLoader: () => import('./pages/access/invite-form.js') },
+      // Role paths come before :memberId/roles so /members/roles/roles opens the role, not a member.
+      { name: 'role-new', path: 'roles/new', componentLoader: () => import('./pages/access/role-form.js') },
+      { name: 'role-edit', path: 'roles/:roleKey', componentLoader: () => import('./pages/access/role-form.js') },
       { name: 'member-roles', path: ':memberId/roles', componentLoader: () => import('./pages/access/member-form.js') },
-    ] },
-    { ...page('roles', '/roles', () => import('./pages/access/roles.js'), { title: nav('roles'), icon: ContactRound, order: 3 }), authz: { resource: { type: 'page', id: 'members' }, action: 'access' }, children: [
-      { name: 'role-new', path: 'new', componentLoader: () => import('./pages/access/role-form.js') },
-      { name: 'role-edit', path: ':roleKey', componentLoader: () => import('./pages/access/role-form.js') },
     ] },
     { ...page('keys', '/keys', () => import('./pages/access/keys.js'), { title: nav('apiKeys'), icon: KeyRound, order: 4 }), authz: { resource: { type: 'page', id: 'members' }, action: 'access' }, children: [
         { name: 'key-new', path: 'new', componentLoader: () => import('./pages/access/key-form.js') },
