@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Article publishing to several targets
+
+- Let administrators choose, per playbook, where new tasks publish: the default target, a specific target, or the website repository as a pull request.
+- Publish one reviewed article to up to four other targets as well. Other targets are matched by slug (updated or created), leave out languages and fields they cannot hold, and publish, retry, rebase, export and report overwrites independently; the task card lists each target's state.
+
 ## Unreleased — Article publishing
 
 - Preserve publication status when manually editing an article draft, and reject targets beyond the ten-target limit before saving configuration.

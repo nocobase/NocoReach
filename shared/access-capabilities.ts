@@ -339,6 +339,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
       'saveTarget',
       'removeTarget',
       'setDefaultTarget',
+      'savePlaybookTargets',
       'testTarget',
     ]),
   ],
