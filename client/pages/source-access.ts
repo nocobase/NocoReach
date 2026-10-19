@@ -36,6 +36,12 @@ const managementActions: Record<string, readonly string[]> = {
   'github-discussions': github,
   site: actions('nrSiteContent', ['discover', 'confirm', 'remove']),
   repo: actions('nrAgent', ['saveRepo', 'removeRepo']),
+  articles: actions('nrArticles', [
+    'saveTarget',
+    'removeTarget',
+    'setDefaultTarget',
+    'testTarget',
+  ]),
   keywords,
   'ai-visibility': keywords,
   discourse: actions('nrCommunity', [

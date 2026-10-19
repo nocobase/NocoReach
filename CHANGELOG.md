@@ -1,5 +1,16 @@
 # NocoReach Changelog
 
+## Unreleased — Article publishing
+
+- Preserve publication status when manually editing an article draft, and reject targets beyond the ten-target limit before saving configuration.
+- Create new articles as drafts unless the reviewer chooses Published in the article editor, whatever the target's own default, and show status changes as words in the review.
+- Keep an edited publishing target in its place and let administrators choose the default target new tasks publish to.
+- Tell the Agent where a malformed result goes wrong (extra content after a complete JSON value, or an unreadable position) so it can correct the submission.
+- Add publishing targets under Data sources: a NocoBase collection through its API, the new NocoReach article API protocol, or Markdown files in a GitHub repository. Each kind declares how it protects concurrent writes; credentials stay sealed on the server.
+- Blog and article tasks can publish to a target instead of opening a pull request. The Agent drafts a structured article (per-language title, summary and body), the owner reviews and edits it field by field, and the server publishes only the approved fields after rechecking the article. Conflicting edits keep both versions for a new review; retries never write twice.
+- For targets that export to Git, block publishing over Git-only edits, track the export before checking the live page, and block code changes to exported article files. Show an overwrite of a published article on its task for 14 days.
+- Preserve the approved publication status in export and overwrite comparisons so a newly saved draft does not trigger a false overwrite warning.
+
 ## Unreleased — YouTube metadata-only collection
 
 - Stop requesting and downloading YouTube captions in Collector. Keep video discovery, metadata and public metrics, with the existing bounded output and refusal handling.

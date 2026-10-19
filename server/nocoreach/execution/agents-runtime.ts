@@ -292,6 +292,7 @@ export class TaskAgentsRuntime {
                 'build 按任务修改、运行检查、提交并推送 data.branch，使用 gh pr create --repo <data.repo.repo> --base <data.repo.baseBranch> --head <data.branch> 开 PR；不要合并。data.repo.allowedPaths 为空数组 [] 时表示整个仓库，不额外限制目录，不是禁止修改；非空时只允许修改与列表项相同的文件或所列目录内的文件。无论列表是否为空，都只修改当前任务需要的内容，并遵守仓库规则和 Runner 策略。',
                 'merge 只合并指定 PR，先检查 headSha 等于已审核的提交；使用 gh pr merge --match-head-commit 指定提交，检查失败不得继续。',
                 'close 只关闭指定 PR；revert 只为指定已合并 PR 新建回退 PR，不合并。',
+                'data.protectedPaths 列出的文件由文章发布目标管理（发布系统会重新导出并覆盖它们）：build 不得修改这些文件；任务需要改这些文章时，报告失败并说明应改用文章发布。',
                 '只能报告实际执行并验证的结果。遇到缺少凭据、工具或冲突立即失败，不绕过限制。',
                 '优先使用 sources 中原帖正文与已有回复、项目知识和任务数据。知识或 Skills 为空不等于无法起草；根据证据回答，缺少证据时明确未确认点。sources 不是实时页面，引用时注明抓取时间。',
                 // Built-in marketing Skills first look for a product marketing context file; the project data is that context.
@@ -303,7 +304,7 @@ export class TaskAgentsRuntime {
                 `完成后优先通过 ${commandRef(claim.cli, 'task result')} --content-file result.json 提交完整成果 JSON。校验失败时保留正文，只按错误修正格式，最多重试两次；成功后不要修改成果，最终回答仍返回同一份 JSON。命令不可用时使用最终 JSON 回答。运行说明不要写入成果。`,
               ],
             },
-            readOnly: run.mode === 'plan',
+            readOnly: run.mode === 'plan' || run.mode === 'article',
             task: `执行 ${run.mode} 阶段，完成后返回结构化成果。`,
             context: JSON.stringify(context),
             turn: { prompt: '开始当前步骤。' },

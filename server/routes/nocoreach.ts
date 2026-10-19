@@ -88,7 +88,7 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
         throw new ApiError({ status: 'INVALID_ARGUMENT', reason: 'METHOD_NOT_ALLOWED', domain: 'nocoreach', message: 'Clearing collected data requires POST.' });
       // This is a confirmation precondition, never an identity source: compare with
       // the session authenticated for this very request, not a client-supplied user.
-      if (((params.resource === 'nrCollectors' && params.action === 'save') || (['nrXiaohongshu', 'nrBilibili'].includes(params.resource) && ['disconnect', 'clear'].includes(params.action)) ||
+      if (((params.resource === 'nrCollectors' && params.action === 'save') || (params.resource === 'nrArticles' && ['saveTarget', 'removeTarget'].includes(params.action)) || (['nrXiaohongshu', 'nrBilibili'].includes(params.resource) && ['disconnect', 'clear'].includes(params.action)) ||
            (params.resource === 'nrYouTube' && ['connect', 'disconnect', 'clear'].includes(params.action))) &&
           context.req.header('X-NocoReach-Confirmation-Session') !== session?.session.id)
         throw failure(409, 'xiaohongshu.sessionExpiredSignNocoreachAgain', 'NOCOREACH_CONFIRMATION_SESSION_CHANGED', getRequestLocale(context));

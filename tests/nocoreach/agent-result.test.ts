@@ -186,6 +186,25 @@ it.each([
     '完整 JSON',
   );
 });
+it('says where malformed JSON goes wrong without echoing the model text', () => {
+  // The 2026-10-18 article run: `article` closed early, so a complete object ends before a stray brace.
+  const early =
+    '{"ok":true,"content":"c","article":{"locales":{}},"verifyText":"secret phrase"}}';
+  expect(() => resultOf(early, 'article')).toThrow(
+    /第 79 个字符后还有多余内容/,
+  );
+  expect(() => resultOf('{"ok":true,"content":"c"', 'plan')).toThrow(
+    /第 24 个字符附近无法解析/,
+  );
+  expect(() => resultOf('Here is the result', 'plan')).toThrow(
+    '不能附加说明文字',
+  );
+  try {
+    resultOf(early, 'article');
+  } catch (e) {
+    expect((e as Error).message).not.toContain('secret phrase');
+  }
+});
 it('preserves a legitimate negative result despite the Runner footer', () => {
   expect(
     resultOf(JSON.stringify({ ok: false, error: 'checks_failed' }) + footer),

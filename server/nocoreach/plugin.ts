@@ -1,5 +1,7 @@
 // @ts-nocheck
 import { CollectorConnections } from './collector-connections.js';
+import { ArticleTargets } from './articles/targets.js';
+import { ArticleDelivery } from './articles/delivery.js';
 import { assertPristineMockDataset } from './mock-isolation.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { createHash, randomBytes } from 'node:crypto';
@@ -85,6 +87,8 @@ export class Connections{
  network: OutboundNetwork;
  proxyProfiles: ProxyProfiles;
  collectors: CollectorConnections;
+ articleTargets: ArticleTargets;
+ articles: ArticleDelivery;
  bilibili?: BilibiliSource;
  xiaohongshu?: XiaohongshuSource;
  constructor(app,variables,{basePath,publicOrigin,browserCollectors=[],mock}: {basePath:string;publicOrigin?:string;browserCollectors?:unknown;mock?:MockEngine}){this.publicOrigin=publicOrigin;this.mock=mock;this.browserCollectors=mock?.enabled?mockBrowserCollectors:browserCollectors;this.basePath=basePath;this.app=app;this.db=app.db;this.variables=variables;this.proxyProfiles=new ProxyProfiles(variables);this.network=new OutboundNetwork(this.proxyProfiles,mock);this.RETURN=`${basePath}/connections`;}
@@ -159,6 +163,9 @@ export class Connections{
   this.dataViews=new DataViews(this);this.dataViews.register();
   new KeywordDetail(this).register();
   this.searchIndex=new SearchIndex(this);this.searchIndex.register();
+  // Article publishing targets (articles/): CMS and API calls use the project's website egress, repository calls GitHub's.
+  this.articleTargets=new ArticleTargets(this.variables,(id,connection)=>(url,init)=>this.network.fetch(connection,url,init,String(id)));this.articleTargets.register(this);
+  this.articles=new ArticleDelivery(this.articleTargets);
   this.taskExecution=new (TaskService)(this);this.taskExecution.register();
   this.taskCron=this.app.cronJobManager.addJob({name:'taskCron',cronTime:'*/2 * * * * *',onTick:()=>this.taskExecution.tick().catch(e=>this.app.logger.warn('NocoReach task tick failed',{message:e?.message}))});
   this.strategy=new StrategyService(this);this.strategy.register();

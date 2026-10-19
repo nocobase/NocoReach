@@ -78,6 +78,17 @@ export function eventText(e:{action:string;note?:string;comment?:string;stageKey
   case 'setOwner':return {who:$t('common.you'),text:$t('playbook.changedOwner',{0:e.note})};
   case 'setCollaborators':return {who:$t('common.you'),text:e.note?$t('playbook.setCollaborators',{0:e.note}):$t('playbook.clearedCollaborators')};
   case 'moveWork':return {who:$t('common.you'),text:$t('playbook.movedTaskBoard')};
+  // Article delivery (article-flow.ts).
+  case 'linkArticle':return {who:$t('common.you'),text:$t('taskDetail.eventLinkArticle')};
+  case 'editArticleDraft':return {who:$t('common.you'),text:$t('taskDetail.eventEditArticleDraft')};
+  case 'retryPublish':return {who:$t('common.you'),text:$t('taskDetail.eventRetryPublish')};
+  case 'rebaseArticle':return {who:$t('common.you'),text:$t('taskDetail.eventRebaseArticle')};
+  case 'articlePublished':return {who:$t('common.system'),text:$t('taskDetail.eventArticlePublished')};
+  case 'articleConflict':return {who:$t('common.system'),text:$t('taskDetail.eventArticleConflict')};
+  case 'articlePublishFailed':return {who:$t('common.system'),text:$t('taskDetail.eventArticlePublishFailed')};
+  case 'articleExported':return {who:$t('common.system'),text:$t('taskDetail.eventArticleExported')};
+  case 'articleExportLate':return {who:$t('common.system'),text:$t('taskDetail.eventArticleExportLate')};
+  case 'articleDrift':return {who:$t('common.system'),text:$t('taskDetail.eventArticleDrift')};
   default:return null;
  }
 }
