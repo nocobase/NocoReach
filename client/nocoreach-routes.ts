@@ -13,8 +13,6 @@ import {
   Clock,
   Bookmark,
   Bot,
-  Monitor,
-  BrainCircuit,
   ChartNoAxesCombined,
   ClipboardCheck,
   Earth,
@@ -172,9 +170,10 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     { ...page('agents', '/agents', () => import('./pages/agents/index.js'), { title: nav('agent'), icon: Bot, order: 1 }), children: [
       { ...page('runner-agents', 'runner', () => import('./pages/agents/runner.js')), authz: agentsRoute.authz },
       { ...page('online-agents', 'online', () => import('./online-agent/settings.js')), children: [page('online-agent-new', 'new', () => import('./online-agent/edit.js')), page('online-agent-edit', ':onlineAgentId/edit', () => import('./online-agent/edit.js'))] },
+      // The runtimes and models pages are tabs of Agent, keeping the Agents plugin's own grants.
+      { ...runtimesRoute, path: 'runtimes', componentLoader: gated(runtimesRoute.componentLoader) },
+      { ...modelsRoute, path: 'models', componentLoader: gated(modelsRoute.componentLoader) },
     ] },
-    { ...runtimesRoute, componentLoader: gated(runtimesRoute.componentLoader), navigation: { title: nav('runners'), icon: Monitor, order: 2 } },
-    { ...modelsRoute, componentLoader: gated(modelsRoute.componentLoader), navigation: { title: nav('models'), icon: BrainCircuit, order: 7 } },
     { ...usageRoute, componentLoader: gated(usageRoute.componentLoader), navigation: { title: nav('usage'), icon: ChartNoAxesCombined, order: 8 } },
     page('playbooks', '/playbooks', () => import('./pages/playbooks.js'), { title: nav('playbooks'), icon: Workflow, order: 3 }),
     page('skills', '/skills', () => import('./pages/skills.js'), { title: nav('skills'), icon: WandSparkles, order: 4 }),

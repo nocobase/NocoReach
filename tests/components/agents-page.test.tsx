@@ -5,10 +5,18 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import AgentsPage, { AgentsPageLayout } from '../../client/pages/agents/index';
 
 const access = vi.hoisted(() => ({ can: true, isPending: false }));
+// Resource ids denied on top of `access`: `runtimes` (page) and `agents.services` (settings) guard the plugin tabs.
+const denied = vi.hoisted(() => new Set<string>());
 vi.mock('@nocobase/app-plugin-authorization/client', () => ({
-  useCan: () => access,
+  useCan: (request?: { resource: { id: string } }) =>
+    request && denied.has(request.resource.id)
+      ? { can: false, isPending: false }
+      : access,
 }));
-beforeEach(() => Object.assign(access, { can: true, isPending: false }));
+beforeEach(() => {
+  Object.assign(access, { can: true, isPending: false });
+  denied.clear();
+});
 
 function mount(path = '/agents?view=saved') {
   const router = createMemoryRouter(
@@ -35,6 +43,8 @@ function mount(path = '/agents?view=saved') {
             ),
             children: [{ path: ':id/edit', element: <p>Online editor</p> }],
           },
+          { path: 'runtimes', element: <h1>Runtimes page</h1> },
+          { path: 'models', element: <h1>Models page</h1> },
         ],
       },
     ],
@@ -94,4 +104,35 @@ test('direct online editor URLs keep the online tab and list mounted', () => {
   expect(router.state.location.pathname).toBe(
     '/agents/online/online-default/edit',
   );
+});
+
+test('shows runtimes and models as tabs of the Agent page', async () => {
+  const user = userEvent.setup();
+  const router = mount('/agents/runner');
+  expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual([
+    'Runner Agent',
+    '在线 Agent',
+    '运行环境',
+    '模型',
+  ]);
+  await user.click(screen.getByRole('link', { name: '运行环境' }));
+  expect(await screen.findByText('Runtimes page')).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe('/agents/runtimes');
+  await user.click(screen.getByRole('link', { name: '模型' }));
+  expect(await screen.findByText('Models page')).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe('/agents/models');
+  expect(screen.getByRole('link', { name: '模型' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+});
+
+test('hides the runtimes and models tabs without their grants', () => {
+  denied.add('runtimes');
+  denied.add('agents.services');
+  mount('/agents/online');
+  expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual([
+    'Runner Agent',
+    '在线 Agent',
+  ]);
 });

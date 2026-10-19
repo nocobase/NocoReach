@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Agent page tabs
+
+- Merge the Runner and Models menus into the Agent page as Runtimes and Models tabs (`/agents/runtimes`, `/agents/models`), each shown only to holders of its existing grant. The old `/runtimes` and `/models` addresses are gone.
+
 ## Unreleased — Article publishing to several targets
 
 - Let administrators choose, per playbook, where new tasks publish: the default target, a specific target, or the website repository as a pull request.
