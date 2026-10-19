@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Opportunities kept and not repeated
+
+- Keep an undecided opportunity pending for 14 days after the last analysis that raised it, instead of expiring it the first day an analysis leaves it out; the menu count follows.
+- Keep an opportunity's card, number and first-seen day when the analysis raises the same thing again in other words: the same changes cited and the same page, or the same title apart from its numbers. A card already handed off is not reused.
+
 ## Unreleased — Agent page tabs
 
 - Merge the Runner, Models and Usage menus into the Agent page as tabs (`/agents/runtimes`, `/agents/models`, `/agents/usage`), each shown only to holders of its existing grant. Tabs pair Runner agents with runtimes and online agents with models. The old `/runtimes`, `/models` and `/usage` addresses are gone.

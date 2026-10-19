@@ -88,6 +88,10 @@ export function rowsFor(state: StrategyState): Row[] {
     );
 }
 export const overviewPeriodDays = 28;
+// An undecided opportunity waits this many days after the last analysis that raised it (2026-10-19: one quiet day no
+// longer expires it). Days count from the latest analysis, not the clock, as watching does.
+export const opportunityKeepDays = 14;
+const day = (iso?: string) => Date.parse(String(iso || '').slice(0, 10));
 export function opportunityState(
   row: Row,
   state: StrategyState,
@@ -97,6 +101,10 @@ export function opportunityState(
   if (m?.status === 'ignored') return { state: 'archived', reason: 'ignored' };
   if (row.card.resultSource || row.batch === state.insights || m?.restoredAt)
     return { state: 'pending' };
+  // rowsFor keeps each card from the newest analysis that raised it.
+  const quiet =
+    (day(state.insights?.generatedAt) - day(row.batch.generatedAt)) / 86400000;
+  if (quiet < opportunityKeepDays) return { state: 'pending' };
   return { state: 'archived', reason: 'expired' };
 }
 export function todaySuggestions(state: StrategyState, limit = 5): Row[] {

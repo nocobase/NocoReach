@@ -1884,7 +1884,7 @@
   "community.dataAlreadyReadKept": "已读取的数据保留。",
   "siteAudit.noIssuesPagesRead": "已读取的页面都没问题。",
   "strategy.expired": "已过期",
-  "strategy.expiredLatestAnalysisNotSuggest": "已过期：最新的分析没有再提出",
+  "strategy.expiredLatestAnalysisNotSuggest": "已过期：{0} 天内的分析都没有再提出",
   "taskDetail.runningCurrently": "已进行 {0}，正在做的事：",
   "messages.connected": "已连上",
   "messages.connectedValue": "已连上{0}",

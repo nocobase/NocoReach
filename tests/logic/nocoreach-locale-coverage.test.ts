@@ -66,6 +66,8 @@ describe('NocoReach semantic-key translations', () => {
     );
     // A legacy alias keeps its historical source text when the visible copy changes.
     const changedLegacyCopy: Record<string, string> = {
+      // Opportunities expire 14 days after the last analysis that raised them, not at the next one.
+      '已过期：最新的分析没有再提出': '已过期：{0} 天内的分析都没有再提出',
       // Metadata-only collection no longer reads captions; historical aliases remain valid.
       '每词最多 5 条结果，合计最多 15 个视频；不代表完整搜索结果。字幕优先人工，再自动，最多保留 30,000 字符。':
         '每词最多 5 条结果，每次合计最多 15 个视频；不代表完整或最新搜索结果。仅获取视频信息和公开播放、点赞、评论数据，不读取字幕。',
