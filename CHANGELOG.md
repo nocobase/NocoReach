@@ -1,9 +1,5 @@
 # NocoReach Changelog
 
-## Unreleased — Background route loading
-
-- Warm permitted menu page code sequentially during idle time and reuse it on navigation, reducing route-loading waits. Pause on slow/data-saving connections and hidden tabs, preserve page authorization, and avoid automatic reloads after speculative import failures.
-
 ## Unreleased — Article publishing to several targets
 
 - Let administrators choose, per playbook, where new tasks publish: the default target, a specific target, or the website repository as a pull request.
