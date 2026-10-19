@@ -16,6 +16,20 @@ const backgroundErrors = new WeakSet<object>();
 const vitePreloadErrors = new WeakSet<object>();
 let unsafePreloadError: Error | undefined;
 let foregroundLoads = 0;
+// Vite marks shared CSS as seen before it settles. Never start a second uncached
+// route until the first has settled, including foreground navigation.
+let pendingImport: Promise<unknown> = Promise.resolve();
+
+function errorChain(error: unknown): object[] {
+  const chain: object[] = [];
+  const seen = new Set<object>();
+  while (error && typeof error === 'object' && !seen.has(error)) {
+    seen.add(error);
+    chain.push(error);
+    error = 'cause' in error ? error.cause : undefined;
+  }
+  return chain;
+}
 
 /** Vite retains failed dependency URLs in its private seen set until a full reload. */
 export const recordVitePreloadError = (error: object) =>
@@ -38,9 +52,14 @@ export function loadRouteModule(
     return Promise.reject(unsafePreloadError);
   }
   if (!entry) {
+    let started = false;
     entry = {
       foreground: !background,
-      promise: Promise.resolve().then(loader),
+      promise: pendingImport.then(() => {
+        if (unsafePreloadError) throw unsafePreloadError;
+        started = true;
+        return loader();
+      }),
     };
     const current = entry;
     current.promise = current.promise
@@ -53,18 +72,28 @@ export function loadRouteModule(
       })
       .catch((error: unknown) => {
         modules.delete(loader);
-        if (error && typeof error === 'object') {
-          if (vitePreloadErrors.has(error)) {
-            unsafePreloadError =
-              error instanceof Error
-                ? error
-                : new Error('Vite dependency preload failed', { cause: error });
-          }
-          if (!current.foreground) backgroundErrors.add(error);
-          else backgroundErrors.delete(error);
+        if (!started) throw error;
+        // Registered NocoBase loaders wrap the Vite payload in Error.cause.
+        const chain = errorChain(error);
+        const preloadError = chain.find((cause) =>
+          vitePreloadErrors.has(cause),
+        );
+        if (preloadError) {
+          unsafePreloadError =
+            preloadError instanceof Error
+              ? preloadError
+              : new Error('Vite dependency preload failed', {
+                  cause: preloadError,
+                });
+        }
+        for (const cause of chain) {
+          if (!current.foreground) backgroundErrors.add(cause);
+          else backgroundErrors.delete(cause);
         }
         throw error;
       });
+    // Consume the queue rejection; individual callers still receive the error.
+    pendingImport = current.promise.catch(() => undefined);
     modules.set(loader, current);
   }
   if (background) return entry.promise;

@@ -86,6 +86,21 @@ describe('route code warming', () => {
     stop();
     Reflect.deleteProperty(navigator, 'connection');
   });
+  it('limits each idle queue to three uncached pages', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    vi.spyOn(document, 'readyState', 'get').mockReturnValue('complete');
+    const loaders = Array.from({ length: 6 }, () =>
+      vi.fn(async () => ({ default: () => null })),
+    );
+    await loadRouteModule(loaders[0]);
+    const stop = scheduleRoutePrefetch(loaders.map(page));
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(loaders.map((loader) => loader.mock.calls.length)).toEqual([
+      1, 1, 1, 1, 0, 0,
+    ]);
+    stop();
+  });
   it('waits for foreground route imports', async () => {
     vi.useFakeTimers();
     vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');

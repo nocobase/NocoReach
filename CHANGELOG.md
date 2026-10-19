@@ -2,6 +2,8 @@
 
 ## Unreleased — Background route loading
 
+- Recognize Vite failures through registered route error causes, serialize uncached imports to prevent shared CSS races, and cap idle warming at three pages per navigation.
+
 - Require an explicit full-page retry after failed background Vite dependency loading, preventing navigation from silently rendering without CSS while preserving the current page.
 
 - Warm permitted menu page code sequentially during idle time and reuse it on navigation, reducing route-loading waits. Pause on slow/data-saving connections and hidden tabs, preserve page authorization, and avoid automatic reloads after speculative import failures.

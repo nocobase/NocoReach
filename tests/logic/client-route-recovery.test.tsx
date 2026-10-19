@@ -56,7 +56,7 @@ describe('client route loading recovery', () => {
     expect(screen.queryByText('Unable to load page')).not.toBeInTheDocument();
   });
 
-  it('ignores a superseded loader failure after the replacement succeeds', async () => {
+  it('waits for a superseded import and ignores its failure when loading the replacement', async () => {
     let rejectLoad!: (error: Error) => void;
     const pending = new Promise<AppClientRouteComponentModule>(
       (_resolve, reject) => {
@@ -71,15 +71,13 @@ describe('client route loading recovery', () => {
         route={{ ...route, componentLoader: async () => healthyModule }}
       />,
     );
-    expect(
-      await screen.findByText('Recovered page', {}, ROUTE_LOAD_TIMEOUT),
-    ).toBeVisible();
-
     await act(async () => {
       rejectLoad(new Error('Stale failure'));
       await pending.catch(() => undefined);
     });
-    expect(screen.getByText('Recovered page')).toBeVisible();
+    expect(
+      await screen.findByText('Recovered page', {}, ROUTE_LOAD_TIMEOUT),
+    ).toBeVisible();
     expect(screen.queryByText('Unable to load page')).not.toBeInTheDocument();
   });
 });

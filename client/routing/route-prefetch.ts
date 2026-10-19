@@ -8,6 +8,8 @@ import {
   routePreloadNeedsReload,
 } from './route-modules.js';
 
+const MAX_PREFETCH_ROUTES = 3;
+
 type Connection = { saveData?: boolean; effectiveType?: string };
 
 /** The template loads on navigation only; warm permitted menu code without mounting pages. */
@@ -25,7 +27,9 @@ export function scheduleRoutePrefetch(
         ];
       }),
     ),
-  ].filter((loader) => !cachedRouteModule(loader));
+  ]
+    .filter((loader) => !cachedRouteModule(loader))
+    .slice(0, MAX_PREFETCH_ROUTES);
   let stopped = false;
   let timer: ReturnType<typeof setTimeout>;
   let idle: number | undefined;
