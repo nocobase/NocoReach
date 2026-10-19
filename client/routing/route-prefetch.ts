@@ -5,6 +5,7 @@ import {
   cachedRouteModule,
   hasForegroundRouteLoad,
   loadRouteModule,
+  routePreloadNeedsReload,
 } from './route-modules.js';
 
 type Connection = { saveData?: boolean; effectiveType?: string };
@@ -29,7 +30,7 @@ export function scheduleRoutePrefetch(
   let timer: ReturnType<typeof setTimeout>;
   let idle: number | undefined;
   const schedule = () => {
-    if (stopped || !loaders.length) return;
+    if (stopped || !loaders.length || routePreloadNeedsReload()) return;
     timer = setTimeout(() => {
       if (window.requestIdleCallback)
         idle = window.requestIdleCallback(() => {
@@ -39,7 +40,7 @@ export function scheduleRoutePrefetch(
     }, 1500);
   };
   const next = async () => {
-    if (stopped) return;
+    if (stopped || routePreloadNeedsReload()) return;
     const connection = (navigator as Navigator & { connection?: Connection })
       .connection;
     if (
@@ -59,7 +60,7 @@ export function scheduleRoutePrefetch(
       try {
         await loadRouteModule(loader, true);
       } catch {
-        /* A later navigation can retry. */
+        /* Vite preload failures stop the queue; navigation offers a full reload. */
       }
     }
     schedule();

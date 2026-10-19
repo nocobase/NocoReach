@@ -1,4 +1,7 @@
-import { isBackgroundRouteError } from '../routing/route-modules.js';
+import {
+  isBackgroundRouteError,
+  recordVitePreloadError,
+} from '../routing/route-modules.js';
 
 // A tab opened before a deployment still holds the previous build's file names. Pages load their files on first visit,
 // and the new deployment no longer serves the old ones (404), so the page shows "Unable to load page" until it is
@@ -34,6 +37,7 @@ export function reloadOnStaleBuild(
   };
   const onPreloadError = (event: Event & { payload?: object }): void => {
     if (event.payload) {
+      recordVitePreloadError(event.payload);
       // Let the import reject first so its loader can classify speculative failures.
       setTimeout(() => {
         if (!disposed && !isBackgroundRouteError(event.payload!)) reload(event);

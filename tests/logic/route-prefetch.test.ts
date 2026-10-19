@@ -122,7 +122,7 @@ describe('route code warming', () => {
     expect(loader).toHaveBeenCalledTimes(1);
     stop();
   });
-  it('does not reload the current page when a speculative Vite import fails', async () => {
+  it('requires a full reload after speculative CSS failure, without rendering an unsafe retry', async () => {
     vi.useFakeTimers();
     const target = new EventTarget();
     const reload = vi.fn();
@@ -132,20 +132,40 @@ describe('route code warming', () => {
       sessionStorage,
       location: { reload },
     });
-    const error = new Error('chunk missing');
-    const loader = async () => {
+    const healthy = { default: () => null };
+    const cachedLoader = vi.fn(async () => healthy);
+    await loadRouteModule(cachedLoader);
+    const error = new Error('Unable to preload CSS for /assets/page.css');
+    let seen = false;
+    const loader = vi.fn(async () => {
+      // Vite marks CSS as seen before fetching: retrying would skip CSS and succeed.
+      if (seen) return healthy;
+      seen = true;
       const event = Object.assign(new Event('vite:preloadError'), {
         payload: error,
       });
       target.dispatchEvent(event);
       throw error;
-    };
+    });
     await expect(loadRouteModule(loader, true)).rejects.toThrow();
     await vi.advanceTimersByTimeAsync(1);
     expect(reload).not.toHaveBeenCalled();
     await expect(loadRouteModule(loader)).rejects.toThrow();
     await vi.advanceTimersByTimeAsync(1);
-    expect(reload).toHaveBeenCalledTimes(1);
+    expect(reload).not.toHaveBeenCalled();
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(cachedRouteModule(loader)).toBeUndefined();
+    // Shared styles may also be referenced by another route; do not load it either.
+    const otherLoader = vi.fn(async () => healthy);
+    await expect(loadRouteModule(otherLoader)).rejects.toBe(error);
+    expect(otherLoader).not.toHaveBeenCalled();
+    const stopQueue = scheduleRoutePrefetch([page(otherLoader)]);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(otherLoader).not.toHaveBeenCalled();
+    stopQueue();
+    // Pages whose dependencies were already loaded stay usable.
+    await expect(loadRouteModule(cachedLoader)).resolves.toBe(healthy);
+    expect(cachedRouteModule(cachedLoader)).toBe(healthy);
     stop();
   });
 });
