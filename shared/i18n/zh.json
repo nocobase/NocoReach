@@ -1885,6 +1885,7 @@
   "siteAudit.noIssuesPagesRead": "已读取的页面都没问题。",
   "strategy.expired": "已过期",
   "strategy.expiredLatestAnalysisNotSuggest": "已过期：{0} 天内的分析都没有再提出",
+  "strategy.expiredRaisedAgain": "已过期：后来的分析就同一件事提出了新的机会",
   "taskDetail.runningCurrently": "已进行 {0}，正在做的事：",
   "messages.connected": "已连上",
   "messages.connectedValue": "已连上{0}",

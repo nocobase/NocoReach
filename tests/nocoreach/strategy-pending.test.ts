@@ -209,3 +209,73 @@ it('matches raw home task owner fallback and state, without turning other unfini
   ).toBe('review');
   expect(taskState(undefined, '已完成')).toBe('done');
 });
+it('an earlier copy raised again later under another card never comes back, whatever was decided on the later one', () => {
+  // The Studio cases of 2026-10-20: O-1…O-6 and O-27 came back to pending beside their later copies.
+  const s = state([card('o29', { target: '/tutorials', signalIds: ['thin'] })]);
+  s.insights!.generatedAt = '2026-10-19';
+  const at = (generatedAt: string, items: Opportunity[]) => ({
+    ...batch(items),
+    generatedAt,
+  });
+  s.insightHistory = [
+    at('2026-10-16', [
+      card('o30', {
+        title: '回复 4 个无人回应的论坛主题',
+        target: '近 14 天无人回复的论坛主题',
+        signalIds: ['unanswered'],
+      }),
+    ]),
+    at('2026-10-15', [
+      card('o27', {
+        title: '回复 3 个无人回应的论坛主题',
+        target: '近 14 天 3 个无人回复主题',
+        signalIds: ['unanswered'],
+      }),
+    ]),
+    at('2026-10-13', [
+      card('o13', { target: '/docs/block', signalIds: ['block'] }),
+    ]),
+    at('2026-10-11', [
+      card('o8', {
+        title: '专题页',
+        target: '插件主题',
+        signalIds: ['digest'],
+      }),
+      card('o21', {
+        title: 'AI Portal',
+        target: 'AI Portal',
+        signalIds: ['digest'],
+      }),
+    ]),
+    at('2026-10-09', [
+      card('o1', { title: '专栏', target: '插件主题', signalIds: ['digest'] }),
+      card('o5', { target: '/docs/block', signalIds: ['block', 'bug'] }),
+      card('kept', { target: '/docs/other', signalIds: ['digest'] }),
+      card('restored', { target: '/docs/block', signalIds: ['block'] }),
+    ]),
+  ];
+  s.opportunityMeta = {
+    o13: { status: 'ignored' },
+    o21: { status: 'ignored' },
+    restored: { restoredAt: '2026-10-18' },
+  };
+  s.proposals = [8, 30].map((n) => ({
+    id: `p${n}`,
+    title: '',
+    brief: '',
+    status: '',
+    goalVersion: null,
+    evidence: evidence(),
+    taskId: n,
+    insight: card(`o${n}`),
+  }));
+  const states = Object.fromEntries(
+    rowsFor(s).map((r) => [r.card.id, opportunityState(r, s)]),
+  );
+  expect(states.o1).toEqual({ state: 'archived', reason: 'replaced' });
+  expect(states.o27).toEqual({ state: 'archived', reason: 'replaced' });
+  expect(states.o5).toEqual({ state: 'archived', reason: 'replaced' });
+  expect(states.kept.state).toBe('pending');
+  expect(states.restored.state).toBe('pending');
+  expect(states.o29.state).toBe('pending');
+});
