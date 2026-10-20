@@ -9,21 +9,34 @@ import {
 } from '@nocobase/app-plugin-agents/client/routes';
 import { cn } from 'cn';
 import { $t } from '#i18n';
-import { PageContainer, PageHeader } from '#components/reach/page';
+import {
+  PageContainer,
+  PageHeader,
+  SectionHeading,
+} from '#components/reach/page';
+import { AgentRoles } from './roles.js';
 import { buttonVariants } from '#components/ui/button';
 import { Skeleton } from '#components/ui/skeleton';
 import { routeAccess } from './access.js';
 
 const runnerAccess = routeAccess(agentsRoute);
 
-// Runner agents beside the runtimes they come from, online agents beside the models they call, then what agents
-// used, as one page. The runtimes, models and usage tabs are the Agents plugin's own pages, which bring their own
-// frame and heading, so every tab renders its own page below this tab bar.
+// One page for the AIs in NocoReach (2026-10-20 user decision): the page heading and the three roles with what each
+// does and needs come first, then the tabs in setup order (models, chat agent, runtimes, execution agent, usage). The
+// runtimes, models and usage tabs are the Agents plugin's own pages, which bring their own frame and heading, so every
+// tab renders its own page below this tab bar.
 export default function AgentsPage() {
   return useMatch('/agents') ? (
     <AgentIndex />
   ) : (
     <>
+      <PageContainer className='pb-0'>
+        <PageHeader
+          title={$t('agentsPage.title')}
+          description={$t('agentsPage.description')}
+        />
+        <AgentRoles />
+      </PageContainer>
       <AgentsTabs />
       <Outlet />
     </>
@@ -58,19 +71,20 @@ function AgentsTabs() {
     'text-muted-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground',
   );
   // A tab whose check is pending or failed stays hidden; its route still checks a URL opened directly.
+  // In the order a new installation sets them up: the model service first, then a runtime and its agent.
   const tabs = [
-    ...(runner.can
-      ? [{ path: 'runner', label: $t('common.runnerAgent') }]
-      : []),
+    ...(models.can ? [{ path: 'models', label: $t('agentsPage.models') }] : []),
+    { path: 'online', label: $t('common.onlineAgent') },
     ...(runtimes.can
       ? [{ path: 'runtimes', label: $t('agentsPage.runtimes') }]
       : []),
-    { path: 'online', label: $t('common.onlineAgent') },
-    ...(models.can ? [{ path: 'models', label: $t('agentsPage.models') }] : []),
+    ...(runner.can
+      ? [{ path: 'runner', label: $t('common.runnerAgent') }]
+      : []),
     ...(usage.can ? [{ path: 'usage', label: $t('agentsPage.usage') }] : []),
   ];
   return (
-    <div className='px-6 pt-6 md:px-8 md:pt-8'>
+    <div className='px-6 pt-4 md:px-8'>
       <nav
         aria-label={$t('agentsPage.tabs')}
         className='flex flex-wrap gap-1 border-b pb-2'
@@ -92,19 +106,25 @@ function AgentsTabs() {
   );
 }
 
+// A tab of the application's own: its name and one sentence on what it is for, as the plugin's tabs carry theirs.
 export function AgentsPageLayout({
+  title,
+  description,
   children,
   actions,
 }: {
+  title: string;
+  description: string;
   children: ReactNode;
   actions?: ReactNode;
 }) {
   return (
     <PageContainer>
-      <PageHeader
-        title={$t('agentsPage.title')}
-        description={$t('agentsPage.description')}
+      <SectionHeading
+        title={title}
+        description={description}
         actions={actions}
+        className='[&_h2]:text-base [&_h2]:font-medium'
       />
       {children}
     </PageContainer>

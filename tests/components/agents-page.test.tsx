@@ -4,6 +4,9 @@ import { createMemoryRouter, RouterProvider, Outlet } from 'react-router';
 import { beforeEach, expect, test, vi } from 'vitest';
 import AgentsPage, { AgentsPageLayout } from '../../client/pages/agents/index';
 
+// The roles overview reads the project and the Agents plugin; its own test covers it.
+vi.mock('../../client/pages/agents/roles', () => ({ AgentRoles: () => null }));
+
 const access = vi.hoisted(() => ({ can: true, isPending: false }));
 // Resource ids denied on top of `access`: `runtimes`, `usage` (pages) and `agents.services` (settings) guard the plugin tabs.
 const denied = vi.hoisted(() => new Set<string>());
@@ -28,7 +31,7 @@ function mount(path = '/agents?view=saved') {
           {
             path: 'runner',
             element: (
-              <AgentsPageLayout>
+              <AgentsPageLayout title='执行 Agent' description='Runner tab'>
                 <p>Runner content</p>
               </AgentsPageLayout>
             ),
@@ -36,7 +39,7 @@ function mount(path = '/agents?view=saved') {
           {
             path: 'online',
             element: (
-              <AgentsPageLayout>
+              <AgentsPageLayout title='对话 Agent' description='Online tab'>
                 <p>Online content</p>
                 <Outlet />
               </AgentsPageLayout>
@@ -61,10 +64,10 @@ test('opens Runner by default and keeps tab navigation and history in the URL', 
   expect(await screen.findByText('Runner content')).toBeInTheDocument();
   expect(router.state.location.pathname).toBe('/agents/runner');
   expect(router.state.historyAction).toBe('REPLACE');
-  await user.click(screen.getByRole('link', { name: '在线 Agent' }));
+  await user.click(screen.getByRole('link', { name: '对话 Agent' }));
   expect(await screen.findByText('Online content')).toBeInTheDocument();
   expect(router.state.location.search).toBe('?view=saved');
-  expect(screen.getByRole('link', { name: '在线 Agent' })).toHaveAttribute(
+  expect(screen.getByRole('link', { name: '对话 Agent' })).toHaveAttribute(
     'aria-current',
     'page',
   );
@@ -81,7 +84,7 @@ test('keeps online management accessible without the Runner page grant', async (
   expect(router.state.location.pathname).toBe('/agents/online');
   expect(router.state.location.search).toBe('?view=saved');
   expect(
-    screen.queryByRole('link', { name: 'Runner Agent' }),
+    screen.queryByRole('link', { name: '执行 Agent' }),
   ).not.toBeInTheDocument();
 });
 
@@ -97,7 +100,7 @@ test('direct online editor URLs keep the online tab and list mounted', () => {
   const router = mount('/agents/online/online-default/edit?view=saved');
   expect(screen.getByText('Online content')).toBeInTheDocument();
   expect(screen.getByText('Online editor')).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: '在线 Agent' })).toHaveAttribute(
+  expect(screen.getByRole('link', { name: '对话 Agent' })).toHaveAttribute(
     'aria-current',
     'page',
   );
@@ -110,11 +113,12 @@ test('direct online editor URLs keep the online tab and list mounted', () => {
 test('shows runtimes, models and usage as tabs of the Agent page', async () => {
   const user = userEvent.setup();
   const router = mount('/agents/runner');
+  // In setup order: the model service first, then the runtime and its agent.
   expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual([
-    'Runner Agent',
-    '运行环境',
-    '在线 Agent',
     '模型',
+    '对话 Agent',
+    '运行环境',
+    '执行 Agent',
     '用量',
   ]);
   await user.click(screen.getByRole('link', { name: '运行环境' }));
@@ -138,8 +142,8 @@ test('hides the runtimes, models and usage tabs without their grants', () => {
   denied.add('usage');
   mount('/agents/online');
   expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual([
-    'Runner Agent',
-    '在线 Agent',
+    '对话 Agent',
+    '执行 Agent',
   ]);
 });
 
@@ -151,7 +155,7 @@ test('keeps the usage filters to the usage tab', async () => {
   );
   await router.navigate('/agents/usage?groupBy=agent');
   expect(await screen.findByText('Usage page')).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'Runner Agent' })).toHaveAttribute(
+  expect(screen.getByRole('link', { name: '执行 Agent' })).toHaveAttribute(
     'href',
     '/agents/runner',
   );
