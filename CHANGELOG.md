@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Opportunity briefs
+
+- Show each pending opportunity as a full-width brief: what happened, why it is worth doing and what to do, then where, for whom and to what end, with priority, effort and confidence as tags and the limitations behind ⓘ. The same brief opens from Handled.
+- Remove the owner, executor and playbook choices from the Opportunities page: Hand off to agent uses the recommended playbook and makes you the owner, and both can still be changed on the task before it starts.
+
 ## Unreleased — The AIs in NocoReach, by role
 
 - Agent page: three cards above the tabs present daily analysis, the chat agent and the execution agent by what each does, never does and needs, with whether it works now and one action to fix it. A three-step quickest setup shows while something is missing; enabling a discovered agent and making it the project default is one action.
