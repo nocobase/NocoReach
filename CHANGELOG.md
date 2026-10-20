@@ -7,6 +7,10 @@
 - Stop giving YouTube the default proxy, which made its Collector refuse to collect; an explicit YouTube proxy from before keeps its switch in the connection so it can be turned off.
 - Reword the connection drawer's switch, link it to Settings › Network, and drop the save message's reference to an Advanced section that does not exist.
 
+## Unreleased — Skills notes in ⓘ
+
+- Move the three grey notes on Skills into ⓘ tips beside what they explain: the This project column, the Skill link field and the Skill folder field.
+
 ## Unreleased — Opportunity briefs
 
 - Show each pending opportunity as a full-width brief: what happened, why it is worth doing and what to do, then where, for whom and to what end, with priority, effort and confidence as tags and the limitations behind ⓘ. The same brief opens from Handled.
