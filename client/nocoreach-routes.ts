@@ -209,6 +209,7 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     },
     page('data-connections', '/connections', () => import('./pages/source-connections.js'), { title: nav('connections'), icon: Plug, order: 1 }),
     { ...page('proxy-profiles', '/proxy-profiles', () => import('./pages/network.js'), { title: nav('proxyProfiles'), icon: Globe2, order: 5 }), children: [
+      { name: 'network-proxy', path: 'proxy', componentLoader: () => import('./pages/proxy-profiles/proxy-form.js') },
       { name: 'proxy-profile-new', path: 'new', componentLoader: () => import('./pages/proxy-profiles/edit.js') },
       { name: 'proxy-profile-edit', path: ':profileId/edit', componentLoader: () => import('./pages/proxy-profiles/edit.js') },
     ] },

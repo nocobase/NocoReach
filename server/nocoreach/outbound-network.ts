@@ -677,16 +677,63 @@ export class OutboundNetwork {
         validation: 'configuration' as const,
       };
     }
-    const response = await this.send(profile, TEST_TARGETS[connection], {
-      method: 'HEAD',
-      signal: AbortSignal.timeout(15000),
-    });
+    const target = new URL(TEST_TARGETS[connection]).hostname;
+    let response: Response;
+    try {
+      response = await this.send(profile, TEST_TARGETS[connection], {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch (error) {
+      // A request that got no answer is the test's result. Configuration, mock and shutdown errors still fail the call.
+      const failure = error as { status?: number; code?: unknown };
+      if (failure?.status !== 502) throw error;
+      return {
+        reachable: false,
+        status: 0,
+        elapsedMs: Date.now() - started,
+        target,
+        proxied: !!profile,
+        reason: testFailureReason(failure.code),
+      };
+    }
     // Authentication-required API roots can return 401/403: connectivity is separate from API credentials.
     return {
       reachable: true,
       status: response.status,
       elapsedMs: Date.now() - started,
-      target: new URL(TEST_TARGETS[connection]).hostname,
+      target,
+      proxied: !!profile,
     };
   }
+}
+
+/** Why a connection test got no answer, in terms Settings › Network can explain. */
+export type NetworkTestReason =
+  'timeout' | 'reset' | 'refused' | 'dns' | 'certificate' | 'other';
+const CERTIFICATE_CODE =
+  /^(CERT_|ERR_TLS_CERT|UNABLE_TO_(GET|VERIFY)|SELF_SIGNED|DEPTH_ZERO)/;
+export function testFailureReason(code: unknown): NetworkTestReason {
+  if (typeof code !== 'string') return 'other';
+  if (
+    [
+      'ETIMEDOUT',
+      'UND_ERR_CONNECT_TIMEOUT',
+      'UND_ERR_HEADERS_TIMEOUT',
+    ].includes(code)
+  )
+    return 'timeout';
+  if (
+    [
+      'ECONNRESET',
+      'EPIPE',
+      'UND_ERR_SOCKET',
+      'NR_SOCKS_CONNECTION_CLOSED',
+    ].includes(code)
+  )
+    return 'reset';
+  if (code === 'ECONNREFUSED') return 'refused';
+  if (['ENOTFOUND', 'EAI_AGAIN'].includes(code)) return 'dns';
+  if (CERTIFICATE_CODE.test(code)) return 'certificate';
+  return 'other';
 }

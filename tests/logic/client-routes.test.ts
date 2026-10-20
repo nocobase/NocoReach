@@ -33,6 +33,7 @@ describe('app client routes', () => {
         '/schedules/:scheduleId',
         '/schedules/:scheduleId/edit',
         '/proxy-profiles',
+        '/proxy-profiles/proxy',
         '/proxy-profiles/new',
         '/proxy-profiles/:profileId/edit',
       ]),
@@ -89,7 +90,11 @@ describe('app client routes', () => {
         (page) =>
           page.authorizedAs !== null &&
           !REACH_PAGES.includes(page.name as never) &&
-          !['proxy-profile-new', 'proxy-profile-edit'].includes(page.name),
+          ![
+            'network-proxy',
+            'proxy-profile-new',
+            'proxy-profile-edit',
+          ].includes(page.name),
       ),
     ).toEqual([
       { name: 'result-all-detail', authorizedAs: 'result-detail' },

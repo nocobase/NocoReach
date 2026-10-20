@@ -100,6 +100,28 @@ describe('Settings › Network: one default proxy', () => {
     await expect(profiles.remove(id)).rejects.toMatchObject({ status: 409 });
   });
 
+  it('never gives YouTube the default proxy, but keeps an explicit choice so its Collector guidance still shows', async () => {
+    const { profiles } = fixture();
+    await profiles.saveNetwork(proxy);
+    expect(profiles.resolve('1', 'youtube')).toBeUndefined();
+    expect(profiles.snapshot('1').youtube).toBeUndefined();
+    const old = await profiles.save({ ...proxy, name: '旧 YouTube 代理' });
+    await profiles.select('1', { connection: 'youtube', profileId: old.id });
+    expect(profiles.resolve('1', 'youtube')?.id).toBe(old.id);
+    await profiles.select('1', { connection: 'youtube', profileId: DIRECT });
+    expect(profiles.resolve('1', 'youtube')).toBeUndefined();
+  });
+
+  it('keeps an explicit YouTube proxy through the upgrade', async () => {
+    const { profiles } = fixture();
+    const main = await profiles.save({ ...proxy, name: '公司代理' });
+    await profiles.select('1', { connection: 'youtube', profileId: main.id });
+    await profiles.select('1', { connection: 'github', profileId: main.id });
+    await profiles.migrateDefaultProxy(async () => ['1', '2']);
+    expect(profiles.resolve('1', 'youtube')?.id).toBe(main.id);
+    expect(profiles.resolve('2', 'youtube')).toBeUndefined();
+  });
+
   it('keeps mock deployments on their own profiles', async () => {
     const { profiles } = fixture();
     await profiles.saveNetwork(proxy);
@@ -129,7 +151,7 @@ describe('moving to the default proxy on upgrade', () => {
     expect(moved).toEqual([
       { projectId: '2', connection: 'github', from: '香港出口' },
     ]);
-    // Connections that were direct stay direct, in every project; collectors are left alone.
+    // Connections that were direct stay direct, in every project; connections read through collectors are left alone.
     expect(profiles.resolve('1', 'github')?.id).toBe(main.id);
     expect(profiles.resolve('1', 'site')).toBeUndefined();
     expect(profiles.resolve('2', 'github')?.id).toBe(main.id);
@@ -137,9 +159,9 @@ describe('moving to the default proxy on upgrade', () => {
     expect(profiles.resolve('3', 'github')).toBeUndefined();
     expect(profiles.selections('3')).toEqual(
       Object.fromEntries(
-        CONNECTIONS.filter((c) => !['bilibili', 'xiaohongshu'].includes(c)).map(
-          (c) => [c, DIRECT],
-        ),
+        CONNECTIONS.filter(
+          (c) => !['bilibili', 'xiaohongshu', 'youtube'].includes(c),
+        ).map((c) => [c, DIRECT]),
       ),
     );
     // A project created afterwards follows the default.
