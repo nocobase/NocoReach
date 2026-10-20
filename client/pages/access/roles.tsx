@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation, useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { ContactRound, Plus, Pencil, Trash2 } from 'lucide-react';
 import { $t, useNocoReachLocale } from '#i18n';
-import { PageContainer, PageHeader } from '#components/reach/page';
+import { PageContainer } from '#components/reach/page';
 import { EmptyState, ListSkeleton } from '#components/reach/states';
 import { confirmAction } from '#components/reach/confirm';
 import { Button } from '#components/ui/button';
@@ -29,13 +29,20 @@ import {
   accessMessage,
   type BusinessRole,
 } from './api';
-import { AccessError, Refresh, RowMenu, Pager } from './components';
+import {
+  AccessError,
+  AccessHeader,
+  Refresh,
+  RowMenu,
+  Pager,
+} from './components';
 
 export default function Roles() {
   const locale = useNocoReachLocale();
   const query = useAccessQuery<{ items: BusinessRole[]; canManage: boolean }>(
     '/roles',
   );
+  const members = useAccessQuery<{ canManage: boolean }>('/members');
   const [params, setParams] = useSearchParams();
   const location = useLocation();
   const [search, setSearch] = useState(params.get('q') || '');
@@ -95,7 +102,7 @@ export default function Roles() {
   const create = canManage ? (
     <Button
       nativeButton={false}
-      render={<Link to={{ pathname: 'new', search: location.search }} />}
+      render={<Link to={{ pathname: 'roles/new', search: location.search }} />}
     >
       <Plus />
       {$t('accessMembers.newRole')}
@@ -107,9 +114,9 @@ export default function Roles() {
   );
   return (
     <PageContainer className='nr-page'>
-      <PageHeader
-        title={$t('accessMembers.roles')}
-        description={$t('accessMembers.rolesDescription')}
+      <AccessHeader
+        tab='roles'
+        invitations={members.data?.canManage === true}
         actions={
           <>
             {query.data?.items.length ? create : null}
@@ -190,7 +197,7 @@ export default function Roles() {
                             className='block max-w-md truncate font-medium hover:underline'
                             title={roleTitle(role)}
                             to={{
-                              pathname: encodeURIComponent(role.key),
+                              pathname: `roles/${encodeURIComponent(role.key)}`,
                               search: location.search,
                             }}
                           >
@@ -216,7 +223,7 @@ export default function Roles() {
                                 render={
                                   <Link
                                     to={{
-                                      pathname: encodeURIComponent(role.key),
+                                      pathname: `roles/${encodeURIComponent(role.key)}`,
                                       search: location.search,
                                     }}
                                   />

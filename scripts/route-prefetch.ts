@@ -36,7 +36,6 @@ export const routePrefetchPages = {
   'data-connections': 'client/pages/source-connections.tsx',
   'proxy-profiles': 'client/pages/network.tsx',
   members: 'client/pages/members.tsx',
-  roles: 'client/pages/access/roles.tsx',
   keys: 'client/pages/access/keys.tsx',
   schedules: 'client/pages/schedules/index.tsx',
 };

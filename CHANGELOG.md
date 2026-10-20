@@ -30,6 +30,16 @@
 - Bound metadata and hint waits to ten seconds and dispose queued work on navigation, permission changes or unmount. Failed speculation never triggers stale-build reloads or delays actual imports.
 - Run the focused Chromium fixture in CI, covering real menu intent, JS/CSS cache reuse and same-page navigation during a stalled HTTP prefetch with browser caching enabled.
 
+## Unreleased — Opportunities kept and not repeated
+
+- Keep an undecided opportunity pending for 14 days after the last analysis that raised it, instead of expiring it the first day an analysis leaves it out; the menu count follows.
+- Keep an opportunity's card, number and first-seen day when the analysis raises the same thing again in other words: the same changes cited and the same page, or the same title apart from its numbers. A card already handed off is not reused.
+
+## Unreleased — Agent page tabs
+
+- Merge the Runner, Models and Usage menus into the Agent page as tabs (`/agents/runtimes`, `/agents/models`, `/agents/usage`), each shown only to holders of its existing grant. Tabs pair Runner agents with runtimes and online agents with models. The old `/runtimes`, `/models` and `/usage` addresses are gone.
+- Guide setup on the Agent page: the Runner tab asks to add a runtime, start one, or enable a discovered agent until an agent is enabled, and the online tab asks to add a model service while none is configured.
+
 ## Unreleased — Article publishing to several targets
 
 - Let administrators choose, per playbook, where new tasks publish: the default target, a specific target, or the website repository as a pull request.

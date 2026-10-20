@@ -132,13 +132,13 @@ try {
     });
   await page.goto(`${origin}/main/members`);
   await expect(
-    page.getByRole('heading', { name: 'Members', exact: true }),
+    page.getByRole('heading', { name: 'Members & roles', exact: true }),
   ).toBeVisible();
   await expect(
     page.getByText('Synthetic reader', { exact: true }),
   ).toBeVisible();
   await shot('members-multiple-roles-en.png');
-  for (const label of ['Members', 'Roles', 'API keys']) {
+  for (const label of ['Members & roles', 'API keys']) {
     await expect(
       applicationNavigation.getByRole('link', { name: label, exact: true }),
     ).toBeVisible();
@@ -148,10 +148,13 @@ try {
   ).toHaveCount(0);
   await expect(
     applicationNavigation.getByRole('link', {
-      name: 'Members',
+      name: 'Members & roles',
       exact: true,
     }),
   ).toHaveAttribute('aria-current', 'page');
+  await expect(
+    applicationNavigation.getByRole('link', { name: 'Roles', exact: true }),
+  ).toHaveCount(0);
   await shot('settings-flat-entries-en.png');
 
   const memberContext = await browser.newContext({
@@ -174,8 +177,8 @@ try {
   const memberErrors: string[] = [];
   memberPage.on('pageerror', (error) => memberErrors.push(error.message));
   for (const [path, label] of [
-    ['/members', 'Members'],
-    ['/roles', 'Roles'],
+    ['/members', 'Members & roles'],
+    ['/members?tab=roles', 'Members & roles'],
     ['/keys', 'API keys'],
   ]) {
     await memberPage.goto(`${origin}/main${path}`);
@@ -291,12 +294,15 @@ try {
     page.getByText('No matching records', { exact: true }),
   ).toBeVisible();
   await shot('invitations-no-results-en.png');
-  await page.goto(`${origin}/main/roles`);
+  await page.goto(`${origin}/main/members?tab=roles`);
   await expect(
-    page.getByRole('heading', { name: 'Roles', exact: true }),
-  ).toBeVisible();
+    page.getByRole('button', { name: 'Roles', exact: true }),
+  ).toHaveAttribute('aria-current', 'page');
   await expect(
-    applicationNavigation.getByRole('link', { name: 'Roles', exact: true }),
+    applicationNavigation.getByRole('link', {
+      name: 'Members & roles',
+      exact: true,
+    }),
   ).toHaveAttribute('aria-current', 'page');
   await shot('roles-list-en.png');
   await page.getByText('New role', { exact: true }).click();
@@ -319,8 +325,8 @@ try {
   ).toHaveValue('browser-reader');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(
-    page.getByRole('heading', { name: 'Roles', exact: true }),
-  ).toBeVisible();
+    page.getByRole('button', { name: 'Roles', exact: true }),
+  ).toHaveAttribute('aria-current', 'page');
   await expect(
     page.getByRole('link', { name: 'Project reader', exact: true }),
   ).toBeVisible();
@@ -527,22 +533,25 @@ try {
   });
   await page.reload();
   await expect(
-    page.getByRole('heading', { name: '成员', exact: true }),
+    page.getByRole('heading', { name: '成员与角色', exact: true }),
   ).toBeVisible();
-  for (const label of ['成员', '角色', 'API 密钥']) {
+  for (const label of ['成员与角色', 'API 密钥']) {
     await expect(
       applicationNavigation.getByRole('link', { name: label, exact: true }),
     ).toBeVisible();
   }
   await expect(page.getByText('成员与权限', { exact: true })).toHaveCount(0);
   await expect(
-    applicationNavigation.getByRole('link', { name: '成员', exact: true }),
+    applicationNavigation.getByRole('link', {
+      name: '成员与角色',
+      exact: true,
+    }),
   ).toHaveAttribute('aria-current', 'page');
   await shot('members-zh.png');
   for (const [path, label] of [
-    ['/roles', '角色'],
+    ['/members?tab=roles', '成员与角色'],
     ['/keys', 'API 密钥'],
-    ['/members', '成员'],
+    ['/members', '成员与角色'],
   ]) {
     await page.goto(`${origin}/main${path}`);
     await expect(
@@ -552,7 +561,7 @@ try {
       applicationNavigation.getByRole('link', { name: label, exact: true }),
     ).toHaveAttribute('aria-current', 'page');
   }
-  await page.goto(`${origin}/main/roles/new`);
+  await page.goto(`${origin}/main/members/roles/new?tab=roles`);
   await expect(
     page.getByRole('heading', { name: '新建角色', exact: true }),
   ).toBeVisible();

@@ -1,8 +1,9 @@
 import { ApiClientError } from '@nocobase/app-client';
-import { Link } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { RefreshCw, MoreHorizontal } from 'lucide-react';
 import { type ReactNode } from 'react';
 import { $t } from '#i18n';
+import { PageHeader } from '#components/reach/page';
 import { Button } from '#components/ui/button';
 import { Alert, AlertDescription } from '#components/ui/alert';
 import { Checkbox } from '#components/ui/checkbox';
@@ -168,5 +169,66 @@ export function Pager({
         {$t('accessMembers.next')}
       </Button>
     </div>
+  );
+}
+export type AccessTab = 'members' | 'invitations' | 'roles';
+/** Members, pending invitations and roles share one page, switched by `?tab=`. */
+export function AccessHeader({
+  tab,
+  invitations,
+  actions,
+  onChange,
+}: {
+  tab: AccessTab;
+  invitations: boolean;
+  actions: ReactNode;
+  onChange?: () => void;
+}) {
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  // Invitations is last: it appears once the member grant is known, and must not shift the other tabs.
+  const tabs: [AccessTab, string][] = [
+    ['members', 'accessMembers.members'],
+    ['roles', 'accessMembers.roles'],
+    ['invitations', 'accessMembers.pending'],
+  ];
+  return (
+    <>
+      <PageHeader
+        title={$t('accessMembers.title')}
+        description={$t(
+          tab === 'roles'
+            ? 'accessMembers.rolesDescription'
+            : 'accessMembers.membersDescription',
+        )}
+        actions={actions}
+      />
+      <nav
+        className='flex flex-wrap gap-2'
+        aria-label={$t('accessMembers.memberViews')}
+      >
+        {tabs.map(([key, label]) =>
+          key !== 'invitations' || invitations ? (
+            <Button
+              key={key}
+              variant={tab === key ? 'secondary' : 'ghost'}
+              onClick={() => {
+                if (tab === key) return;
+                const next = new URLSearchParams(params);
+                next.set('tab', key);
+                // Member and role searches match different names, so a query never follows across them.
+                if ((tab === 'roles') !== (key === 'roles')) next.delete('q');
+                // Leave any open member or role form: it belongs to the tab being left.
+                void navigate({ pathname: '.', search: `?${next}` });
+                onChange?.();
+              }}
+              aria-current={tab === key ? 'page' : undefined}
+            >
+              {$t(label)}
+            </Button>
+          ) : null,
+        )}
+      </nav>
+    </>
   );
 }
