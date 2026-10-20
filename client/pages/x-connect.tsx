@@ -1,4 +1,5 @@
 import { useBusinessAccess } from '#hooks/use-business-access';
+import {ConnectionError} from '#components/connection-error';
 import { translateSourceError, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
@@ -16,12 +17,12 @@ export function XConnect({projectId,suggested,onChange}:{projectId:number;sugges
  useEffect(()=>{void load().catch(()=>setError(() => ($t('x.notLoadXStatus'))));},[projectId]);
  useEffect(()=>{if(!status?.checking)return;const t=setInterval(()=>{void load().then(()=>onChange()).catch(()=>undefined);},4000);return()=>clearInterval(t);},[status?.checking]);
  async function run(fn:()=>Promise<XStatus|void>){setBusy(true);setError('');try{const s=await fn();if(s){setStatus(s);setEditing(false);setForm(f=>({...f,token:''}));onChange();}}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailedRetry')));}finally{setBusy(false);}}
- if(!status)return error?<p className="nr-error" role="alert">{error}</p>:<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
- if(status.connected&&(!editing||!canConnect)){const sp=status.spend!;return <div className="nr-guide-connected">{error&&<p className="nr-error" role="alert">{error}</p>}<h3>{$tj('x.search',{0:status.terms!.join('、'),1:status.handle?$t('common.excluding',{0:status.handle}):''})}</h3>
+ if(!status)return error?<ConnectionError message={error}/>:<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
+ if(status.connected&&(!editing||!canConnect)){const sp=status.spend!;return <div className="nr-guide-connected">{error&&<ConnectionError message={error}/>}<h3>{$tj('x.search',{0:status.terms!.join('、'),1:status.handle?$t('common.excluding',{0:status.handle}):''})}</h3>
   <p>{$tj('x.aboutMonthCapReadSaved',{0:sp.usd.toFixed(2),1:status.cap,2:sp.posts.toLocaleString(getCurrentLocale()),3:status.total})}</p>
   {!status.lastRun?<p role="status">{$t('x.firstSearchProgressLast7')}</p>:<p className="nr-footnote">{$tj('x.lastSearchedDailyAfter',{0:new Date(status.lastRun.at).toLocaleString(getCurrentLocale())})}{status.lastRun.capped?<span className="nr-block">{$t('x.monthCapReachedReadingPaused')}</span>:null}{status.lastRun.errors.map(e=><span key={e} className="nr-block">{$tj('common.notFullyCheckedValue',{0:translateSourceError(e)})}</span>)}</p>}
   <div className="nr-step-actions">{canCheck&&<Button size="sm" variant="outline" disabled={busy||status.checking} onClick={()=>void run(()=>call<XStatus>(projectId,'check'))}>{busy?$t('common.searching'):$t('common.searchNow')}</Button>}{canConnect&&<Button size="sm" variant="ghost" disabled={busy} onClick={()=>setEditing(true)}>{$t('common.modify')}</Button>}{canDisconnect&&<Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('x.disconnectX')),description:() => ($t('x.savedTokenDeletedPostsAlready')),action:'common.disconnect'}))void run(()=>call<XStatus>(projectId,'disconnect'));}}>{$t('common.disconnect')}</Button>}</div></div>;}
- return <>{error&&<p className="nr-error" role="alert">{error}</p>}
+ return <>{error&&<ConnectionError message={error}/>}
   {!canConnect&&<p className='nr-footnote'>{$t('messages.notConnectedYet')}</p>}
   {canConnect&&<>
   <ol className="nr-footnote list-decimal pl-5"><li>{$t('x.xDeveloperPortalDeveloperX')}</li><li>{$t('x.copyBearerTokenAppKeys')}</li></ol>

@@ -7,9 +7,12 @@ import { isIP } from 'node:net';
 import { createHash } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
 import * as __node_crypto from 'node:crypto';
-import type { OutboundNetwork } from './outbound-network.js';
+import { networkFailure, testFailureReason, type OutboundNetwork } from './outbound-network.js';
 import type { Connection, ProxyProfile } from './proxy-profiles.js';
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
+// A direct read that got no answer fails like a proxied one (outbound-network.ts): status 502, the same code, and a
+// message that names the host and the reason. Other errors, such as a cancelled read, stay as they were.
+const unreachable=(error,host)=>typeof error?.code==='string'&&testFailureReason(error.code)!=='other'?networkFailure(error.code,['TimeoutError','AbortError'].includes(error.name)?error.name:'Error',host,false):error;
 function publicAddress(ip){if(isIP(ip)!==4)return false;const [a,b]=ip.split('.').map(Number);return !(a===0||a===10||a===127||a>=224||a===169&&b===254||a===172&&b>=16&&b<=31||a===192&&[0,168].includes(b)||a===100&&b>=64&&b<=127||a===198&&[18,19,51].includes(b)||a===203&&b===0);}
 function normalize(kind,input){let u;try{u=new URL(String(input));}catch{fail(systemMessageText('publicSources.enterFullHttpsUrl'));}if(u.protocol!=='https:'||u.username||u.password||u.port||u.search||isIP(u.hostname)||u.hostname==='localhost'||!u.hostname.includes('.'))fail(systemMessageText('publicSources.publicHttpsUrlsWithoutCredentials'));u.hash='';if(kind==='github'){const m=u.pathname.match(/^\/([\w.-]+)\/([\w.-]+)\/?$/);if(u.hostname!=='github.com'||!m)fail(systemMessageText('publicSources.enterPublicGithubRepositoryUrl'));u.pathname=`/${m[1]}/${m[2].replace(/\.git$/,'')}`;}else if(kind!=='website')fail(systemMessageText('publicSources.sourceNotSupportedYet'));return u.href.replace(/\/$/,'');}
 // Resolve and pin a public IPv4 on every hop. No ambient proxy, cookies or credentials.
@@ -101,13 +104,17 @@ async function download(
     return { text: body.toString('utf8'), body, type: response.headers.get('content-type') || '', url: u.href };
   }
   let addresses;
-  if (publicDns) {
-    const resolver = new dns.Resolver({ timeout: 3000, tries: 2 });
-    resolver.setServers(publicDns.split(','));
-    addresses = (await abortable(resolver.resolve4(u.hostname), transport?.signal)).map((address) => ({
-      address,
-    }));
-  } else addresses = await abortable(dns.lookup(u.hostname, { all: true, family: 4 }), transport?.signal);
+  try {
+    if (publicDns) {
+      const resolver = new dns.Resolver({ timeout: 3000, tries: 2 });
+      resolver.setServers(publicDns.split(','));
+      addresses = (await abortable(resolver.resolve4(u.hostname), transport?.signal)).map((address) => ({
+        address,
+      }));
+    } else addresses = await abortable(dns.lookup(u.hostname, { all: true, family: 4 }), transport?.signal);
+  } catch (error) {
+    throw unreachable(error, u.hostname);
+  }
   transport?.signal?.throwIfAborted();
   if (addresses.some((x) => /^198\.1[89]\./.test(x.address)))
     fail(
@@ -174,15 +181,16 @@ async function download(
             url: u.href,
           });
         });
-        res.on('error', reject);
+        res.on('error', (error) => reject(unreachable(error, u.hostname)));
       },
     );
+    // No answer within 15 seconds is a timeout like any other: GitHub often just hangs where it is blocked.
     const timer = setTimeout(
-      () => req.destroy(new Error(systemMessageText('publicSources.readingSourceTimedOutTry'))),
+      () => req.destroy(Object.assign(new Error(systemMessageText('publicSources.readingSourceTimedOutTry')), { code: 'ETIMEDOUT' })),
       15000,
     );
     req.on('close', () => clearTimeout(timer));
-    req.on('error', reject);
+    req.on('error', (error) => reject(unreachable(error, u.hostname)));
   });
 }
 

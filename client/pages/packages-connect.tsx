@@ -1,4 +1,5 @@
 import { useBusinessAccess } from '#hooks/use-business-access';
+import {ConnectionError,NetworkSettingsLink} from '#components/connection-error';
 import { translateSourceError, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
@@ -21,13 +22,13 @@ export function PackagesConnect({projectId,onChange}:{projectId:number;onChange:
  // The first read runs in the background; poll until it has finished.
  useEffect(()=>{if(!status?.syncing&&!(status?.connected&&!status.lastSync))return;const t=setInterval(()=>{void load().then(()=>onChange()).catch(()=>undefined);},5000);return()=>clearInterval(t);},[status?.syncing,status?.lastSync,status?.connected]);
  async function run(fn:()=>Promise<PackagesStatus|void>){setBusy(true);setError('');try{const s=await fn();if(s){setStatus(s);onChange();}}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailedRetry')));}finally{setBusy(false);}}
- if(!status)return error?<p className="nr-error" role="alert">{error}</p>:<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
- return <>{error&&<p className="nr-error" role="alert">{error}</p>}
+ if(!status)return error?<ConnectionError message={error}/>:<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
+ return <>{error&&<ConnectionError message={error}/>}
   {status.connected&&<div className="nr-guide-connected">
    {status.packages.map(p=><div key={p.id} className="nr-package-row" data-package={p.id}><div><a className="nr-link" href={p.url} target="_blank" rel="noreferrer">{p.title||p.name}</a><span className="nr-footnote"> · {p.registryName}</span>
     <p className="nr-footnote">{p.registry==='docker'?$t('packages.totalPullsRecordedDailyDifference',{0:n(p.pulls)}):p.downloads28!=null?$t('packages.downloadsLast28Days',{0:n(p.downloads28)}):$t('packages.readingDownloads')}{p.since?$t('packages.since',{0:p.since}):''}</p></div>
     {canRemove&&<Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('packages.stopRecordingDownloads',{0:p.title||p.name})),description:() => ($t('packages.recordedDataDeletedToo')),action:'common.remove'}))void run(()=>call<PackagesStatus>(projectId,'remove',{id:p.id}));}}>{$t('common.remove')}</Button>}</div>)}
-   {status.lastSync?<p className="nr-footnote">{$tj('common.lastSyncedSyncsAutomaticallyEvery',{0:new Date(status.lastSync.at).toLocaleString(getCurrentLocale())})}{status.lastSync.errors.map(e=><span key={e} className="nr-block">{$tj('common.partlyNotUpdated',{0:translateSourceError(e)})}</span>)}</p>:<p role="status" className="nr-footnote">{$t('packages.readingDownloadsFirstTime')}</p>}
+   {status.lastSync?<p className="nr-footnote">{$tj('common.lastSyncedSyncsAutomaticallyEvery',{0:new Date(status.lastSync.at).toLocaleString(getCurrentLocale())})}{status.lastSync.errors.map(e=><span key={e} className="nr-block">{$tj('common.partlyNotUpdated',{0:translateSourceError(e)})}</span>)}<NetworkSettingsLink messages={status.lastSync.errors}/></p>:<p role="status" className="nr-footnote">{$t('packages.readingDownloadsFirstTime')}</p>}
    <div className="nr-step-actions">{canSync&&<Button size="sm" variant="outline" disabled={busy||status.syncing} onClick={()=>void run(()=>call<PackagesStatus>(projectId,'sync'))}>{busy?$t('common.syncing'):$t('common.syncNow')}</Button>}</div>
   </div>}
   {!status.connected&&!canPreview&&!preview&&<p className='nr-footnote'>{$t('messages.notConnectedYet')}</p>}

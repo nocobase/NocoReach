@@ -114,6 +114,8 @@ async function googleJson(url, options = {}, fetcher = fetch) {
     }
     const error = new GoogleConnectorError("Google API is currently unreachable");
     error.code = ["TimeoutError", "AbortError"].includes(cause?.name) || cause?.cause?.code === "UND_ERR_CONNECT_TIMEOUT" ? "network_timeout" : "network_unreachable";
+    // Keep why the request got no answer, so a connection panel can say it (outbound-network.ts unreachableOf).
+    error.cause = cause;
     throw error;
   }
   let payload = {};

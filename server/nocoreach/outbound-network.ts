@@ -16,6 +16,10 @@ import {
 } from './proxy-profiles.js';
 import { socksTransport } from './socks-proxy.js';
 import {
+  networkFailureKey,
+  type NetworkFailureReason,
+} from '../../shared/network-failures.js';
+import {
   requireProfileRoute,
   mockProfileSnapshot,
   NetworkProfileError,
@@ -641,6 +645,14 @@ export class OutboundNetwork {
           : name !== 'Error'
             ? 'ETIMEDOUT'
             : 'NR_NETWORK_ERROR';
+      // A request that got no answer says why and which way it went; a rejected redirect or an oversized body did get one.
+      if (!['NR_RESPONSE_TOO_LARGE', 'NR_REDIRECT_REJECTED'].includes(code))
+        throw networkFailure(
+          code,
+          name,
+          pinned?.hostname ?? target.hostname,
+          !!profile,
+        );
       throw Object.assign(
         new Error(
           code === 'NR_RESPONSE_TOO_LARGE'
@@ -709,8 +721,7 @@ export class OutboundNetwork {
 }
 
 /** Why a connection test got no answer, in terms Settings › Network can explain. */
-export type NetworkTestReason =
-  'timeout' | 'reset' | 'refused' | 'dns' | 'certificate' | 'other';
+export type NetworkTestReason = NetworkFailureReason;
 const CERTIFICATE_CODE =
   /^(CERT_|ERR_TLS_CERT|UNABLE_TO_(GET|VERIFY)|SELF_SIGNED|DEPTH_ZERO)/;
 export function testFailureReason(code: unknown): NetworkTestReason {
@@ -736,4 +747,42 @@ export function testFailureReason(code: unknown): NetworkTestReason {
   if (['ENOTFOUND', 'EAI_AGAIN'].includes(code)) return 'dns';
   if (CERTIFICATE_CODE.test(code)) return 'certificate';
   return 'other';
+}
+
+/** The error for a request that got no answer: status 502 with its diagnostic `code`, plus why (`reason`), whether it
+ * went through the proxy (`proxied`) and the `host` it was for. The message names the host and the reason. */
+export function networkFailure(
+  code: string,
+  name: string,
+  host: string,
+  proxied: boolean,
+) {
+  const reason = testFailureReason(code);
+  return Object.assign(
+    new Error(
+      systemMessageText(networkFailureKey(reason, proxied), { 0: host }),
+      { cause: { code } },
+    ),
+    { status: 502, name, code, reason, proxied, host },
+  );
+}
+
+/** The failure `networkFailure` made, if `error` is one or wraps one as its cause. */
+export function unreachableOf(
+  error: unknown,
+): ReturnType<typeof networkFailure> | undefined {
+  for (
+    let e = error as Record<string, unknown> | undefined, depth = 0;
+    e && depth < 3;
+    depth++
+  ) {
+    if (
+      e.status === 502 &&
+      typeof e.reason === 'string' &&
+      typeof e.host === 'string'
+    )
+      return e as unknown as ReturnType<typeof networkFailure>;
+    e = e.cause as Record<string, unknown> | undefined;
+  }
+  return undefined;
 }

@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Why a data source cannot be reached
+
+- When the server gets no answer from a data source, say which site, why (timed out, interrupted, refused, address not found, untrusted certificate, no response) and whether the request went through the proxy, instead of "the direct request failed". Proxy failures still never fall back to a direct connection.
+- Connection panels, Google sync and authorization errors and the Skill link dialog link to Settings › Network; an untrusted certificate explains the company root certificate in ⓘ, and the Skill link dialog also offers uploading the folder instead.
+- Direct public reads (website content, Skill links, public sources) report a refused, reset, timed-out or unresolvable site the same way as proxied ones, with status 502 and the original code.
+
 ## Unreleased — Project knowledge in two tabs
 
 - Split Project knowledge into Memory (`/project/memory`, the default) and Knowledge base (`/project/knowledge`) tabs. The Memory tab counts pending suggestions; the Knowledge base tab counts material.
