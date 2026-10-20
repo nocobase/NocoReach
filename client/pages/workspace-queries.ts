@@ -67,19 +67,6 @@ export const playbooksQuery = (projectId: number): Query<PlaybookList> => ({
       unwrap: 'data',
     }),
 });
-export type TaskMember = { id: string; name: string };
-export const taskMembersQuery = (projectId: number): Query<TaskMember[]> => ({
-  key: `task-members:${projectId}`,
-  read: async () => {
-    const members = await api.action<TaskMember[]>('nrTaskWork', 'members', {
-      method: 'POST',
-      body: { projectId: String(projectId) },
-      unwrap: 'data',
-    });
-    return Array.isArray(members) ? members : [];
-  },
-});
-
 // No page components or mutation/analysis endpoints belong in this map.
 export const navigationQueries: Record<
   string,
@@ -95,7 +82,6 @@ export const navigationQueries: Record<
     strategyQuery(id),
     tasksQuery(id),
     playbooksQuery(id),
-    taskMembersQuery(id),
   ],
   'action-center': (id) => [tasksQuery(id)],
 };

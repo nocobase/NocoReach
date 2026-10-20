@@ -3,6 +3,7 @@ import { english as businessMessages } from 'virtual:nocoreach-startup-messages'
 import systemEnUS from './system/en-US.js';
 import agentChat from '../extensions/nocobase-agent-chat/locales/en-US.js';
 import type { LocaleResource } from '@nocobase/i18n';
+import { agentsOverridesEnUS } from './overrides/agents.js';
 
 const enUS = {
   'nocoreach.nav.apiKeys': 'API keys',
@@ -113,4 +114,10 @@ const enUS = {
 
 export type AppResource = LocaleResource<typeof enUS>;
 
-export default enUS;
+// The plugin rewordings are not part of the source shape every locale must match (LocaleResource allows them apart).
+const enUSWithOverrides: AppResource = {
+  ...enUS,
+  overrides: agentsOverridesEnUS,
+};
+
+export default enUSWithOverrides;

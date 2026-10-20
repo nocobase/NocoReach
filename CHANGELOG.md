@@ -32,10 +32,22 @@
 - Run the focused Chromium fixture in CI, covering real menu intent, JS/CSS cache reuse and same-page navigation during a stalled HTTP prefetch with browser caching enabled.
 - Include application build-plugin dependencies in isolated Vite fixtures so asset-base and development-watcher checks exercise the real configuration.
 
+## Unreleased — Opportunity briefs
+
+- Show each pending opportunity as a full-width brief: what happened, why it is worth doing and what to do, then where, for whom and to what end, with priority, effort and confidence as tags and the limitations behind ⓘ. The same brief opens from Handled.
+- Remove the owner, executor and playbook choices from the Opportunities page: Hand off to agent uses the recommended playbook and makes you the owner, and both can still be changed on the task before it starts.
+
+## Unreleased — The AIs in NocoReach, by role
+
+- Agent page: three cards above the tabs present daily analysis, the chat agent and the execution agent by what each does, never does and needs, with whether it works now and one action to fix it. A three-step quickest setup shows while something is missing; enabling a discovered agent and making it the project default is one action.
+- Tabs run in setup order (Models, Chat agent, Runtimes, Execution agent, Usage), each with one sentence on what it is for. "Online agent" and "Runner agent" are renamed "Chat agent" and "Execution agent" on the page and in the chat picker, which also says what each kind can do. The Chinese copy uses one term for a runner machine throughout.
+- The separate Runner and model setup guides are replaced by the roles overview.
+
 ## Unreleased — Opportunities kept and not repeated
 
 - Keep an undecided opportunity pending for 14 days after the last analysis that raised it, instead of expiring it the first day an analysis leaves it out; the menu count follows.
 - Keep an opportunity's card, number and first-seen day when the analysis raises the same thing again in other words: the same changes cited and the same page, or the same title apart from its numbers. A card already handed off is not reused.
+- Keep an earlier copy of an opportunity out of To do once a later analysis raised the same thing, or the same page, as another card, whatever was decided on that card.
 
 ## Unreleased — Agent page tabs
 

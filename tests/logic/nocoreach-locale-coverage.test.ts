@@ -88,6 +88,9 @@ describe('NocoReach semantic-key translations', () => {
       '请选择团队可调用的 Agent': '请选择已启用且可调用的 Agent',
       'Agent 和在线 AI 按做法完成的工作，需要你确认时会停下来。':
         'Agent 按做法完成的工作，需要你确认时会停下来。',
+      // The Agent page names each AI by what it does (2026-10-20).
+      'Runner Agent': '执行 Agent',
+      '在线 Agent': '对话 Agent',
       // The task page reworded for marketers: no PR, Runner or push wording.
       'PR 审核已通过。合并并上线后点确认，之后开始观察效果。':
         '已审核通过。改动上线后点确认，之后开始观察效果。',

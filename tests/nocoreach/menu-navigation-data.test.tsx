@@ -170,6 +170,13 @@ it.each(['growth-overview', 'opportunity-library'])(
     const initial = route(name);
     const view = setup(initial.value);
     await waitFor(() => expect(listReads()).toHaveLength(1));
+    if (name === 'opportunity-library')
+      expect(
+        fixture.action.mock.calls.some(
+          ([resource, action]) =>
+            resource === 'nrTaskWork' && action === 'members',
+        ),
+      ).toBe(false);
     vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 1001);
     const pending = Promise.withResolvers<Task[]>();
     fixture.action.mockImplementationOnce(() => pending.promise);
