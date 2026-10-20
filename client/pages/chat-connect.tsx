@@ -1,4 +1,5 @@
 import { useBusinessAccess } from '#hooks/use-business-access';
+import {ConnectionError} from '#components/connection-error';
 import { translateSourceError, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
@@ -23,12 +24,12 @@ export function ChatConnect({projectId,platform,onChange}:{projectId:number;plat
  useEffect(()=>{if(!status?.syncing)return;const t=setInterval(()=>{void load().then(()=>onChange()).catch(()=>undefined);},4000);return()=>clearInterval(t);},[status?.syncing]);
  async function run<T>(fn:()=>Promise<T>,done:(r:T)=>void){setBusy(true);setError('');try{done(await fn());}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailedRetry')));}finally{setBusy(false);}}
  const inspect=(guildId=guild)=>run(()=>call<Info>(projectId,'inspect',{platform,token,guildId}),i=>{setInfo(i);setGuild(i.guildId||'');const saved=status?.[platform].channels?.map(c=>c.id)||[];setPicked(i.channels.filter(c=>saved.includes(c.id)).map(c=>c.id));});
- if(!status)return error?<p className="nr-error" role="alert">{error}</p>:<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
+ if(!status)return error?<ConnectionError message={error}/>:<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
  const side=status[platform],label=platform==='discord'?'Discord':'Slack';
- if(side.connected&&(!editing||!canInspect||!canConnect))return <><div className="nr-guide-connected">{error&&<p className="nr-error" role="alert">{error}</p>}<h3>{$tj('chat.connectionBot',{0:label,1:side.name,2:side.bot})}</h3><p>{$tj('chat.read',{0:side.channels!.map(c=>`#${c.name}`).join('、')})}</p>
+ if(side.connected&&(!editing||!canInspect||!canConnect))return <><div className="nr-guide-connected">{error&&<ConnectionError message={error}/>}<h3>{$tj('chat.connectionBot',{0:label,1:side.name,2:side.bot})}</h3><p>{$tj('chat.read',{0:side.channels!.map(c=>`#${c.name}`).join('、')})}</p>
   {(side.lastRun||status.lastRun)?<p className="nr-footnote">{$tj('chat.lastReadMessagesReadsOnce',{0:new Date((side.lastRun||status.lastRun)!.at).toLocaleString(getCurrentLocale()),1:(side.lastRun||status.lastRun)!.read})}{(side.lastRun||status.lastRun)!.errors.map(e=><span key={e} className="nr-block">{$tj('chat.notFullyRead',{0:translateSourceError(e)})}</span>)}</p>:<p role="status">{$t('chat.readingFirstTimeLast14')}</p>}
   <div className="nr-step-actions">{canSync&&<Button size="sm" variant="outline" disabled={busy||status.syncing} onClick={()=>void run(()=>call<ChatStatus>(projectId,'sync',{platform}),s=>{setStatus(s);onChange();})}>{busy?$t('common.loadingLoading'):$t('common.readNow')}</Button>}{canInspect&&canConnect&&<Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setEditing(true);void inspect();}}>{$t('chat.changeChannels')}</Button>}{canDisconnect&&<Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('chat.disconnect',{0:label})),description:() => ($t('chat.savedTokenDeletedMessagesAlready')),action:'common.disconnect'}))void run(()=>call<ChatStatus>(projectId,'disconnect',{platform}),s=>{setStatus(s);onChange();});}}>{$t('common.disconnect')}</Button>}</div></div></>;
- return <>{error&&<p className="nr-error" role="alert">{error}</p>}
+ return <>{error&&<ConnectionError message={error}/>}
   {!canInspect&&!info&&<p className='nr-footnote'>{$t('messages.notConnectedYet')}</p>}
   {!editing&&canInspect&&<ol className="nr-footnote list-decimal pl-5">{getSteps()[platform].map(s=><li key={s}>{s}</li>)}</ol>}
   {!editing&&canInspect&&<label className="nr-field">{platform==='discord'?$t('chat.botToken'):'Bot User OAuth Token'}<input aria-label={`${label} token`} type="password" autoComplete="off" value={token} disabled={busy} placeholder={side.tokenSaved?$t('common.savedLeaveEmptyKeep'):platform==='slack'?'xoxb-…':''} onChange={e=>{setToken(e.target.value);setInfo(undefined);}}/></label>}

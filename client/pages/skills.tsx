@@ -5,6 +5,7 @@ import {useBusinessAccess} from '#hooks/use-business-access';
 import {PageContainer,PageHeader} from '#components/reach/page';
 import {Tag} from '#components/reach/tag';
 import {Button} from '#components/ui/button';
+import {ConnectionError} from '#components/connection-error';
 import {Switch} from '#components/ui/switch';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter} from '#components/ui/dialog';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '#components/ui/sheet';
@@ -115,7 +116,8 @@ function NewSkill({projectId,canCreate,canImport,canImportLink,canReadLink,onClo
     {picked&&<p role="status" className="text-sm">{$tj('skills.readSkillMd',{0:others?$t('skills.additionalFiles',{0:others}):'',1:picked.skipped.length?$t('skills.skippedFilesSummary',{0:picked.skipped.length,1:picked.skipped.slice(0,3).join('、'),2:picked.skipped.length>3?'…':''}):''})}</p>}
     <p className="nr-footnote">{$t('skills.nameWhenUseReadTop')}</p>
    </>}
-   {error&&<p role="alert" className="nr-error">{error}</p>}
+   {/* A link GitHub cannot be read from: the folder can be downloaded elsewhere and uploaded here instead. */}
+   <ConnectionError message={error} hint={mode==='link'&&canImport?$t('skills.uploadFolderInstead'):undefined} alternative={mode==='link'&&canImport?<Button type="button" size="sm" variant="outline" onClick={()=>{setMode('folder');setError('');}}>{$t('skills.useUploadFolder')}</Button>:undefined}/>
   </div>
   <DialogFooter><Button variant="ghost" disabled={busy} onClick={onClose}>{$t('common.cancel')}</Button><Button disabled={busy||reading||!canSave} onClick={()=>void save()}>{busy?(mode==='link'&&link?.choices?$t('skills.importing'):$t('common.saving')):mode==='form'?$t('common.save'):mode==='link'&&link?.choices?$t('skills.importValue',{0:ticked.length}):$t('skills.import')}</Button></DialogFooter>
  </DialogContent></Dialog>;

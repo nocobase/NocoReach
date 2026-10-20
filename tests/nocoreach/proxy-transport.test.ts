@@ -83,7 +83,7 @@ it('tunnels TLS through an authenticated proxy, pins public targets, bounds bodi
     if (!(await response.json()).ok) throw Error('response missing');
     if (!(await (await n.send(p,'https://example.com/renamed')).json()).ok) throw Error('redirect missing');
     await n.send(p,'https://example.com/big',{},undefined,100).then(()=>{throw Error('size limit missing')},e=>{if(e.code!=='NR_RESPONSE_TOO_LARGE')throw e});
-    await n.send({...p,password:'wrong'},'https://example.com/').then(()=>{throw Error('fallback')},e=>{if(!e.message.includes('未切换直连')||e.message.includes('wrong'))throw e});
+    await n.send({...p,password:'wrong'},'https://example.com/').then(()=>{throw Error('fallback')},e=>{if(e.proxied!==true||!e.message.includes('没有改为直接访问')||e.message.includes('wrong'))throw e});
     const pooled = new OutboundNetwork({resolve:()=>p});
     try {
       for (let i = 1; i <= 8; i++) await pooled.fetch('github','https://example.com/pool-' + i,{},'1');
