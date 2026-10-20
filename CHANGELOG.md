@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — The AIs in NocoReach, by role
+
+- Agent page: three cards above the tabs present daily analysis, the chat agent and the execution agent by what each does, never does and needs, with whether it works now and one action to fix it. A three-step quickest setup shows while something is missing; enabling a discovered agent and making it the project default is one action.
+- Tabs run in setup order (Models, Chat agent, Runtimes, Execution agent, Usage), each with one sentence on what it is for. "Online agent" and "Runner agent" are renamed "Chat agent" and "Execution agent" on the page and in the chat picker, which also says what each kind can do. The Chinese copy uses one term for a runner machine throughout.
+- The separate Runner and model setup guides are replaced by the roles overview.
+
 ## Unreleased — Opportunities kept and not repeated
 
 - Keep an undecided opportunity pending for 14 days after the last analysis that raised it, instead of expiring it the first day an analysis leaves it out; the menu count follows.

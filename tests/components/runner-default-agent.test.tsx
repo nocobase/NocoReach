@@ -24,9 +24,6 @@ vi.mock('../../client/hooks/use-business-access', () => ({
 vi.mock('../../client/pages/agents/index', () => ({
   AgentsPageLayout: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock('../../client/pages/agents/setup-guide', () => ({
-  RunnerSetupGuide: () => null,
-}));
 vi.mock('@nocobase/app-plugin-agents/client/kit', () => ({
   RunnerAgentsSection: () => <p>Runner list</p>,
 }));
