@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { documentText } from './document-text.js';
 import { projectId, requireAccess } from './policy.js';
-import { memoryInput } from './execution/memory.js';
+import { MEMORY_SECTIONS, memoryInput, memoryOf } from './execution/memory.js';
 // 项目知识 (SPEC §6.0): the project's 记忆 (saved on the project) and its 知识库 — material the Agent looks up when it needs
 // to. Each item's text is stored on its own; the list keeps titles, categories and sizes. Files are read into text with
 // an isolated document parser; the original file is not kept. Nothing here calls a model.
@@ -55,10 +55,14 @@ class Knowledge{
   await this.put(this.key(id),{revision:d.revision+1,items:d.items},tx);return {revision:d.revision+1,item};});}
  async remove(id,v){return this.lock(id,async tx=>{const d=await this.snapshot(this.key(id),tx)||{revision:0,items:[]};if(!d.items.some(x=>x.id===v.itemId))fail(systemMessageText('knowledge.materialNotExistRefreshTry'),404);
   await this.put(this.key(id),{revision:d.revision+1,items:d.items.filter(x=>x.id!==v.itemId)},tx);await this.repo().destroy({filter:{key:this.itemKey(id,v.itemId)},transaction:tx});return {revision:d.revision+1};});}
- // 记忆 is saved on the project record next to its older fields (which stay as they were).
- async saveMemory(id,v){const memory=memoryInput(v.memory);const row=await this.p.projects.row(id);const project=row?.get('payload');if(!row||String(project?.id)!==String(id))fail(systemMessageText('settings.projectNotExist'),404);
+ // 记忆 is saved on the project record next to its older fields (which stay as they were). One item — `section` with its
+ // `text`, or only `name` — is merged into what is saved now (2026-10-20), so people editing different items at the same
+ // time keep each other's changes; `memory` still replaces every section.
+ async saveMemory(id,v){const row=await this.p.projects.row(id);const project=row?.get('payload');if(!row||String(project?.id)!==String(id))fail(systemMessageText('settings.projectNotExist'),404);
+  const section=v.section===undefined?null:MEMORY_SECTIONS.find(([k])=>k===v.section)?.[0];if(v.section!==undefined&&!section)fail(systemMessageText('memory.invalidMemoryFormat'));
+  const memory=section?memoryInput({...memoryOf(project),[section]:typeof v.text==='string'?v.text:''}):v.memory===undefined?null:memoryInput(v.memory);
   const name=v.name===undefined?project.name:str(v.name,200);if(!name)fail(systemMessageText('knowledge.projectNameCannotEmpty'));
-  await this.repo().update({filterByTk:row.id,values:{payload:{...project,name,memory}}});return {name,memory};}
+  await this.repo().update({filterByTk:row.id,values:{payload:{...project,name,...(memory?{memory}:{})}}});return {name,memory:memory||memoryOf(project)};}
  // What the Agent gets with a task: every item's text, newest first, within a size budget (the rest is listed by title).
  async forAgent(id){const {items}=await this.list(id);const out=[];let used=0;
   for(const item of items){const text=(await this.snapshot(this.itemKey(id,item.id)))?.text||'';if(!text)continue;const fits=used+text.length<=AGENT_BUDGET;used+=fits?text.length:0;out.push({id:item.id,title:item.title,category:item.category,...(fits?{text}:{omitted:true})});}
