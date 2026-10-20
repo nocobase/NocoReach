@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { setDictionary, useNocoReachLocale } from '../../client/i18n';
 import english from '../../shared/i18n/en.json';
 import { RepoConnect } from '../../client/pages/repo-connect';
-import { TaskAgentField } from '../../client/pages/task-detail/agent-field';
+import { AgentMenu } from '../../client/pages/task-detail/agent-menu';
 import type { TaskData } from '../../client/pages/task-execution-types';
 
 const { action, authorization } = vi.hoisted(() => ({
@@ -78,9 +78,9 @@ test('official repository form keeps drafts while its load and save errors chang
   );
   expect(repository).toHaveValue('team/my-draft');
 });
-test('official task agent picker preserves user names and selection while saved notice changes language', async () => {
+test("the task header's Agent menu keeps user-named Agents literal while its own copy changes language", async () => {
   const user = userEvent.setup();
-  function Field() {
+  function Menu() {
     useNocoReachLocale();
     const [agentId, setAgentId] = useState<string | null>(null);
     const data = {
@@ -88,11 +88,14 @@ test('official task agent picker preserves user names and selection while saved 
       agent: {
         agentId,
         online: true,
-        options: [{ id: 'runner', name: '分析。任务。', type: 'runner' }],
+        options: [
+          { id: 'runner', name: '分析。任务。', type: 'runner', online: true },
+          { id: 'other', name: 'Other', type: 'runner', online: false },
+        ],
       },
     } as TaskData;
     return (
-      <TaskAgentField
+      <AgentMenu
         data={data}
         busy={false}
         onChange={async (next) => {
@@ -104,19 +107,22 @@ test('official task agent picker preserves user names and selection while saved 
   }
   render(
     <MemoryRouter>
-      <Field />
+      <Menu />
     </MemoryRouter>,
   );
-  await user.click(screen.getByRole('combobox'));
-  // Select opens on an animation frame, after the trigger click has completed.
-  await user.click(await screen.findByRole('option', { name: '分析。任务。' }));
-  expect(await screen.findByRole('status')).toHaveTextContent(
-    '执行 Agent 已保存',
-  );
+  const trigger = () => screen.getByRole('button', { name: /^Agent ·/ });
+  expect(trigger()).toHaveTextContent('未选择');
+  await user.click(trigger());
+  expect(
+    await screen.findByRole('menuitemradio', { name: /Other.*不在线/ }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole('menuitem', { name: '管理 Agent' }),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole('menuitemradio', { name: /分析。任务。/ }));
+  expect(trigger()).toHaveTextContent('分析。任务。');
   switchLanguage(true);
-  expect(screen.getByRole('status')).toHaveTextContent('Execution agent saved');
-  expect(screen.getByRole('combobox')).toHaveTextContent('分析。任务。');
+  expect(trigger()).toHaveTextContent('分析。任务。');
   switchLanguage(false);
-  expect(screen.getByRole('status')).toHaveTextContent('执行 Agent 已保存');
-  expect(screen.getByRole('combobox')).toHaveTextContent('分析。任务。');
+  expect(trigger()).toHaveTextContent('分析。任务。');
 });
