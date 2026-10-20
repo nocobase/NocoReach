@@ -4,6 +4,7 @@
 
 - Keep an undecided opportunity pending for 14 days after the last analysis that raised it, instead of expiring it the first day an analysis leaves it out; the menu count follows.
 - Keep an opportunity's card, number and first-seen day when the analysis raises the same thing again in other words: the same changes cited and the same page, or the same title apart from its numbers. A card already handed off is not reused.
+- Keep an earlier copy of an opportunity out of To do once a later analysis raised the same thing, or the same page, as another card, whatever was decided on that card.
 
 ## Unreleased — Agent page tabs
 

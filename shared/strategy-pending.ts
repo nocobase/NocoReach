@@ -88,6 +88,32 @@ export function rowsFor(state: StrategyState): Row[] {
     );
 }
 export const overviewPeriodDays = 28;
+const normalize = (s?: string) =>
+  String(s || '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+const signalSet = (c: Opportunity) =>
+  (c.signalIds || []).slice().sort().join('|');
+const wording = (s?: string) => normalize(s).replace(/\d+/g, '');
+// The same opportunity raised again in other words (2026-10-19, O-2 and O-9 were one): the same changes cited, and
+// the same page, or the same title apart from its numbers ("回复 3 个…" / "回复 4 个…"). One change can back several
+// different actions (a community digest), so the changes alone never decide it. Daily analysis keeps its card.
+export function sameOpportunity(a: Opportunity, b: Opportunity) {
+  const target = normalize(a.target);
+  return (
+    Boolean(signalSet(a)) &&
+    signalSet(a) === signalSet(b) &&
+    ((Boolean(target) && target === normalize(b.target)) ||
+      wording(a.title) === wording(b.title))
+  );
+}
+// A later card about the same thing, or the same page, replaces an earlier one, whatever was decided on it.
+const replaces = (later: Opportunity, earlier: Opportunity) =>
+  sameOpportunity(later, earlier) ||
+  (Boolean(normalize(later.target)) &&
+    normalize(later.target) === normalize(earlier.target));
 // An undecided opportunity waits this many days after the last analysis that raised it (2026-10-19: one quiet day no
 // longer expires it). Days count from the latest analysis, not the clock, as watching does.
 export const opportunityKeepDays = 14;
@@ -95,12 +121,24 @@ const day = (iso?: string) => Date.parse(String(iso || '').slice(0, 10));
 export function opportunityState(
   row: Row,
   state: StrategyState,
-): { state: OpportunityState; reason?: 'ignored' | 'expired' } {
+): { state: OpportunityState; reason?: 'ignored' | 'expired' | 'replaced' } {
   if (row.taskId) return { state: 'task' };
   const m = state.opportunityMeta?.[row.card.id];
   if (m?.status === 'ignored') return { state: 'archived', reason: 'ignored' };
   if (row.card.resultSource || row.batch === state.insights || m?.restoredAt)
     return { state: 'pending' };
+  // Raised again later under another card (handed off, ignored or still pending there): this earlier copy never
+  // comes back (2026-10-20: O-1…O-6 returned beside O-8…O-14 once nothing expired the next day).
+  if (
+    rowsFor(state).some(
+      (r) =>
+        r.card.id !== row.card.id &&
+        !r.card.resultSource &&
+        r.batch.generatedAt > row.batch.generatedAt &&
+        replaces(r.card, row.card),
+    )
+  )
+    return { state: 'archived', reason: 'replaced' };
   // rowsFor keeps each card from the newest analysis that raised it.
   const quiet =
     (day(state.insights?.generatedAt) - day(row.batch.generatedAt)) / 86400000;

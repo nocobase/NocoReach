@@ -1885,6 +1885,7 @@
   "siteAudit.noIssuesPagesRead": "No issues on the pages read.",
   "strategy.expired": "Expired",
   "strategy.expiredLatestAnalysisNotSuggest": "Expired: no analysis in the last {0} days suggested it again",
+  "strategy.expiredRaisedAgain": "Expired: a later analysis raised the same thing as a new opportunity",
   "taskDetail.runningCurrently": "Running for {0}, currently:",
   "messages.connected": "Connected",
   "messages.connectedValue": "Connected{0}",
