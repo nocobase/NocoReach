@@ -15,7 +15,6 @@ import { InlineError, ListSkeleton, LoadError } from '#components/reach/states';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { useProject } from '../reach-data.js';
 import { AgentsPageLayout } from './index.js';
-import { RunnerSetupGuide } from './setup-guide.js';
 
 type Settings = {
   revision: number;
@@ -27,8 +26,10 @@ const NONE = '__none__';
 export default function RunnerAgents() {
   const { project, error } = useProject();
   return (
-    <AgentsPageLayout>
-      <RunnerSetupGuide />
+    <AgentsPageLayout
+      title={$t('common.runnerAgent')}
+      description={$t('agentsPage.runnerDescription')}
+    >
       {error && <InlineError>{error}</InlineError>}
       {project && (
         <DefaultAgent

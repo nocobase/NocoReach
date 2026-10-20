@@ -3,6 +3,7 @@ import businessMessages from '../../shared/i18n/zh.json';
 import systemZhCN from './system/zh-CN.js';
 import agentChat from '../extensions/nocobase-agent-chat/locales/zh-CN.js';
 import type { AppResource } from './en-US.js';
+import { agentsOverridesZhCN } from './overrides/agents.js';
 
 const zhCN: AppResource = {
   'nocoreach.nav.apiKeys': 'API 密钥',
@@ -101,6 +102,7 @@ const zhCN: AppResource = {
   app: {
     title: 'NocoReach',
   },
+  overrides: agentsOverridesZhCN,
 };
 
 export default zhCN;

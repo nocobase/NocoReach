@@ -126,7 +126,13 @@ export function ChatAgentChoice({
         data-testid='chat-agent-picker'
       >
         <DropdownMenuGroup>
-          <DropdownMenuLabel>{$t('common.onlineAgent')}</DropdownMenuLabel>
+          {/* Each group says what its agents can do, so the choice is made by role (2026-10-20 user decision). */}
+          <DropdownMenuLabel>
+            {$t('common.onlineAgent')}
+            <span className='block text-xs font-normal text-muted-foreground'>
+              {$t('agentChoice.onlineHint')}
+            </span>
+          </DropdownMenuLabel>
           {onlineAgents.filter((item) => item.enabled).length === 0 &&
             !onlineLoading &&
             !onlineError && (
@@ -165,7 +171,12 @@ export function ChatAgentChoice({
             <DropdownMenuItem disabled>{$t('common.loading')}</DropdownMenuItem>
           )}
           <OnlineError error={onlineError} retry={retryOnline} />
-          <DropdownMenuLabel>{$t('common.runnerAgent')}</DropdownMenuLabel>
+          <DropdownMenuLabel>
+            {$t('common.runnerAgent')}
+            <span className='block text-xs font-normal text-muted-foreground'>
+              {$t('agentChoice.runnerHint')}
+            </span>
+          </DropdownMenuLabel>
           {runners.isSuccess && runners.data.length === 0 && (
             <DropdownMenuItem disabled>{labels.empty}</DropdownMenuItem>
           )}

@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { BotMessageSquare } from 'lucide-react';
 import { toast } from '#lib/toast';
 import { AgentsPageLayout } from '../pages/agents/index.js';
-import { ModelSetupGuide } from '../pages/agents/setup-guide.js';
 import { InstructionsPreview } from './instructions-preview.js';
 import {
   Empty,
@@ -39,13 +38,6 @@ export default function OnlineAgentSettings() {
   const [revision, setRevision] = useState(0),
     { can: canManage } = useBusinessAccess('nrOnline.manage');
   const data = useOnlineResource<Agent[]>('definitions', revision);
-  // Online agents answer through a model service; with none configured, adding one comes first. A failed catalog
-  // read shows no guide, and a refresh reads it again.
-  const catalog = useOnlineResource<{ services: unknown[] }>(
-    'models',
-    revision,
-  );
-  const noModels = catalog.data?.services.length === 0;
   const refresh = () => setRevision((value) => value + 1);
   const saved = (agent: OnlineAgentDefinition) =>
     data.update((previous = []) => {
@@ -64,10 +56,11 @@ export default function OnlineAgentSettings() {
     </Button>
   );
   return (
-    <AgentsPageLayout actions={canManage && !!data.data?.length && create}>
-      <p className='text-sm text-muted-foreground'>
-        {$t('onlineAgent.settingsDescription')}
-      </p>
+    <AgentsPageLayout
+      title={$t('common.onlineAgent')}
+      description={$t('onlineAgent.settingsDescription')}
+      actions={canManage && !!data.data?.length && create}
+    >
       <OnlineError error={data?.error} retry={refresh} />
       {data.loading && !data.data && (
         <div role='status' aria-label={$t('common.loading')}>
@@ -79,7 +72,6 @@ export default function OnlineAgentSettings() {
           {$t('common.loading')}
         </p>
       )}
-      {noModels && <ModelSetupGuide />}
       {data.data?.length === 0 && (
         <Empty className='min-h-48 border border-dashed'>
           <EmptyHeader>
