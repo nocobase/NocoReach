@@ -26,6 +26,7 @@ import { Skeleton } from '#components/ui/skeleton';
 import { Switch } from '#components/ui/switch';
 import {
   DIRECT,
+  connectionLabels,
   networkKey,
   proxyKey,
   proxyRequest,
@@ -76,7 +77,8 @@ export function ConnectionNetwork({
     />
   );
 }
-// Shown only when Settings › Network has a proxy. Off keeps this connection direct in this project.
+// Shown only when Settings › Network has a proxy. Off keeps this connection direct in this project; Settings › Network
+// lists every connection's switch together.
 function ProxySwitch({
   projectId,
   connection,
@@ -104,7 +106,13 @@ function ProxySwitch({
   if (['bilibili', 'xiaohongshu'].includes(connection)) return null;
   const loadError = network.error || selections.error;
   if (!loadError && !(network.data?.proxy && selections.data)) return null;
-  const on = selections.data?.[connection] !== DIRECT;
+  const choice = selections.data?.[connection];
+  // YouTube is read through a Collector and never takes the default proxy. Only an explicit choice left from before
+  // shows here, so it can be turned off.
+  const youtube = connection === 'youtube';
+  if (youtube && !loadError && (!choice || choice === DIRECT)) return null;
+  const on = choice !== DIRECT;
+  const name = $t(connectionLabels[connection] ?? connection);
   async function toggle(next: boolean) {
     if (!canSelect) return;
     setBusy(true);
@@ -117,7 +125,7 @@ function ProxySwitch({
       });
       await client.invalidateQueries({ queryKey: proxyKey });
       toast.success(() =>
-        $t(next ? 'network.useProxyOn' : 'network.useProxyOff'),
+        $t(next ? 'network.useProxyOn' : 'network.useProxyOff', { 0: name }),
       );
     } catch (e) {
       setError(e);
@@ -145,7 +153,9 @@ function ProxySwitch({
           <div className='min-w-0'>
             <p className='text-sm font-medium'>{$t('network.useProxy')}</p>
             <p className='mt-1 text-sm text-muted-foreground'>
-              {$t('network.useProxyHelp')}
+              {$t(
+                youtube ? 'network.youtubeProxyHelp' : 'network.useProxyHelp',
+              )}
               {connection === 'google' &&
                 ` ${$t('connectionNetwork.ga4SearchConsoleShare')}`}
               {connection === 'github' &&
@@ -153,6 +163,12 @@ function ProxySwitch({
               {connection === 'dataforseo' &&
                 ` ${$t('connectionNetwork.keywordsRankingsTrendsRedditAi')}`}
             </p>
+            <Link
+              to='/proxy-profiles'
+              className='mt-1 inline-block text-sm underline'
+            >
+              {$t('network.viewAll')}
+            </Link>
           </div>
           <Switch
             aria-label={$t('network.useProxy')}

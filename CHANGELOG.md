@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Settings › Network for marketers
+
+- Show the proxy's state first (in use or not set, server, sign-in) and edit it in a dialog; turning it off asks first.
+- List every data source of the current project with its own Use the proxy switch and a Check access action that says, per data source, whether the server can reach it, and why not with what to try next. YouTube, Bilibili and Xiaohongshu are noted as read through collectors.
+- Stop giving YouTube the default proxy, which made its Collector refuse to collect; an explicit YouTube proxy from before keeps its switch in the connection so it can be turned off.
+- Reword the connection drawer's switch, link it to Settings › Network, and drop the save message's reference to an Advanced section that does not exist.
+
 ## Unreleased — Opportunity briefs
 
 - Show each pending opportunity as a full-width brief: what happened, why it is worth doing and what to do, then where, for whom and to what end, with priority, effort and confidence as tags and the limitations behind ⓘ. The same brief opens from Handled.
