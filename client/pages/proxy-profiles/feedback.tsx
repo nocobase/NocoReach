@@ -44,6 +44,13 @@ export function ProxyTestResult({ result }: { result: NetworkTest | null }) {
         {$t('networkProfiles.mockValidation')}
       </p>
     );
+  if (result && !result.reachable)
+    return (
+      <p role='status' className='text-sm text-destructive'>
+        {$t('network.unreachable')}：{result.target} ·{' '}
+        {$t(`network.reasons.${result.reason ?? 'other'}`)}
+      </p>
+    );
   return result ? (
     <p role='status' className='text-sm text-muted-foreground'>
       {$t('proxyProfiles.receivedResponseTarget')}：{result.target} · HTTP{' '}

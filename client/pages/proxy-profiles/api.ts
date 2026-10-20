@@ -1,4 +1,5 @@
 import type { MockScenario } from '../../../app-plugins/nocoreach-mock/server/types.js';
+import { $t } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 export interface MockProfileSettings {
   scenario: MockScenario;
@@ -29,6 +30,10 @@ export interface NetworkTest {
   status: number;
   elapsedMs: number;
   target: string;
+  /** Whether the test went through a proxy. */
+  proxied?: boolean;
+  /** Why an unreachable target gave no answer. */
+  reason?: 'timeout' | 'reset' | 'refused' | 'dns' | 'certificate' | 'other';
 }
 export const proxyKey = ['nocoreach', 'proxyProfiles'];
 /** Settings › Network: the deployment's one proxy, or null for direct. */
@@ -44,6 +49,47 @@ export interface NetworkSettings {
 export const networkKey = [...proxyKey, 'network'];
 /** A project's choice that keeps one connection off the default proxy. */
 export const DIRECT = 'direct';
+/** Settings › Network lists the connections the default proxy can carry, in this order, with what each one covers.
+ * YouTube, Bilibili and Xiaohongshu are read through collectors and never take it. */
+export const networkSources: readonly {
+  connection: string;
+  name: string;
+  detail?: string;
+}[] = [
+  {
+    connection: 'google',
+    name: 'Google',
+    detail: 'network.sources.googleDetail',
+  },
+  {
+    connection: 'github',
+    name: 'GitHub',
+    detail: 'network.sources.githubDetail',
+  },
+  {
+    connection: 'dataforseo',
+    name: 'DataForSEO',
+    detail: 'network.sources.dataforseoDetail',
+  },
+  {
+    connection: 'site',
+    name: 'common.websiteContent',
+    detail: 'network.sources.siteDetail',
+  },
+  { connection: 'community', name: 'common.discourseForum' },
+  {
+    connection: 'packages',
+    name: 'proxyProfiles.packageDownloads',
+    detail: 'network.sources.packagesDetail',
+  },
+  { connection: 'hackernews', name: 'common.hackerNewsMentions' },
+  { connection: 'competitors', name: 'common.competitorActivity' },
+  { connection: 'x', name: 'X' },
+  { connection: 'discord', name: 'Discord' },
+  { connection: 'slack', name: 'Slack' },
+];
+/** Checks are kept apart from `proxyKey`, so saving a setting never re-runs every check. */
+export const checkKey = ['nocoreach', 'networkCheck'];
 export const connectionLabels: Record<string, string> = {
   google: 'Google',
   youtube: 'YouTube',
@@ -89,3 +135,28 @@ export const sourceConnection: Record<string, string> = {
   discord: 'discord',
   slack: 'slack',
 };
+
+/** The proxy server as people name it: host and port, without the scheme. */
+export const proxyHost = (url: string) => {
+  try {
+    return new URL(url).host || url;
+  } catch {
+    return url;
+  }
+};
+
+/** Why a check got no answer, then what to try next. `proxySet` says whether turning the proxy on is an option. */
+export function unreachableNotes(
+  result: NetworkTest,
+  name: string,
+  proxySet: boolean,
+) {
+  return [
+    $t(`network.reasons.${result.reason ?? 'other'}`),
+    result.proxied
+      ? $t('network.hintProxied')
+      : $t(proxySet ? 'network.hintDirect' : 'network.hintNoProxy', {
+          0: name,
+        }),
+  ];
+}

@@ -6,6 +6,17 @@
 - Memory: a line with how many items are filled and the length (a Too long tag over 3,000 characters), the AI's suggestions with the reason in one line and its examples behind ⓘ, then one row per item — project name, AI content language, nine sections — each edited on its own in a dialog with its own address (`/project/memory/<item>/edit`). Saving one item merges it into the saved memory on the server, so people editing different items keep each other's changes. Long items show five lines and unfold. The whole-card edit form is gone.
 - Knowledge base: search, category and date order are kept in the address; Add material and each material's drawer have their own addresses (`/project/knowledge/new`, `/project/knowledge/<id>`); row actions sit behind "…"; Clear filters appears while a search or category is applied. On phones the list keeps the title, category and actions.
 
+## Unreleased — Settings › Network for marketers
+
+- Show the proxy's state first (in use or not set, server, sign-in) and edit it in a dialog; turning it off asks first.
+- List every data source of the current project with its own Use the proxy switch and a Check access action that says, per data source, whether the server can reach it, and why not with what to try next. YouTube, Bilibili and Xiaohongshu are noted as read through collectors.
+- Stop giving YouTube the default proxy, which made its Collector refuse to collect; an explicit YouTube proxy from before keeps its switch in the connection so it can be turned off.
+- Reword the connection drawer's switch, link it to Settings › Network, and drop the save message's reference to an Advanced section that does not exist.
+
+## Unreleased — Skills notes in ⓘ
+
+- Move the three grey notes on Skills into ⓘ tips beside what they explain: the This project column, the Skill link field and the Skill folder field.
+
 ## Unreleased — Opportunity briefs
 
 - Show each pending opportunity as a full-width brief: what happened, why it is worth doing and what to do, then where, for whom and to what end, with priority, effort and confidence as tags and the limitations behind ⓘ. The same brief opens from Handled.
