@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Opportunity briefs
+
+- Show each pending opportunity as a full-width brief: what happened, why it is worth doing and what to do, then where, for whom and to what end, with priority, effort and confidence as tags and the limitations behind ⓘ. The same brief opens from Handled.
+- Remove the owner, executor and playbook choices from the Opportunities page: Hand off to agent uses the recommended playbook and makes you the owner, and both can still be changed on the task before it starts.
+
 ## Unreleased — Opportunities kept and not repeated
 
 - Keep an undecided opportunity pending for 14 days after the last analysis that raised it, instead of expiring it the first day an analysis leaves it out; the menu count follows.
