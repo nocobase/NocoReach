@@ -9,6 +9,7 @@ import {
   within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useEffect } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
@@ -23,7 +24,10 @@ import { GOOGLE_PROGRESS_CACHE_MS } from '../../shared/google-cache';
 import StrategyPage from '../../client/pages/strategy/index';
 import DataGitHub from '../../client/pages/data-github';
 import { NocoReachHttpError } from '../../client/lib/nocoreach-api';
-import { WorkspaceCacheProvider } from '../../client/pages/workspace-cache';
+import {
+  WorkspaceCacheProvider,
+  useWorkspaceCache,
+} from '../../client/pages/workspace-cache';
 import { refreshNavBadges } from '../../client/components/app-shell/nav-badges';
 
 const { action, tasks, fixture } = vi.hoisted(() => ({
@@ -124,11 +128,20 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 let disconnect: (() => void) | undefined;
+let cache: ReturnType<typeof useWorkspaceCache>;
+function CacheProbe() {
+  const current = useWorkspaceCache();
+  useEffect(() => {
+    cache = current;
+  }, [current]);
+  return null;
+}
 beforeEach(() => {
   sessionStorage.clear();
   fixture.project = 1;
   fixture.session.session.id = 'session-a';
   fixture.revision = 0;
+  vi.mocked(refreshNavBadges).mockReset();
   tasks.mockReset().mockResolvedValue([]);
   requests.overview.mockReset().mockResolvedValue({
     state: { revision: 1, goal: null, proposals: [] },
@@ -191,6 +204,7 @@ async function setup(locale = 'en-US', report = false) {
     <I18nProvider runtime={runtime}>
       <MemoryRouter>
         <WorkspaceCacheProvider>
+          <CacheProbe />
           {visible && <Page report={report} />}
         </WorkspaceCacheProvider>
       </MemoryRouter>
@@ -805,3 +819,69 @@ it('does not start another poll when an initial status returns during a manual r
   });
   expect(analysisReads()).toHaveLength(3);
 });
+
+it.each(['invalidation', 'replacement'])(
+  'does not downgrade a refreshed overview after %s when an older analysis completion read finishes',
+  async (refresh) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const oldCompletion = deferred<unknown>();
+    const nextRefresh = deferred<unknown>();
+    const snapshot = (revision: number) => ({
+      state: { revision, goal: null, proposals: [] },
+      periodDays: 28,
+      availableThrough: null,
+    });
+    requests.overview
+      .mockReset()
+      .mockResolvedValueOnce(snapshot(1))
+      .mockResolvedValueOnce(snapshot(3))
+      .mockReturnValue(nextRefresh.promise);
+    const original = action.getMockImplementation()!;
+    let reads = 0;
+    action.mockImplementation((resource, operation, options) => {
+      if (resource === 'nrAnalysis')
+        return Promise.resolve(analysisStatus(++reads === 1));
+      if (resource === 'nrStrategy' && operation === 'state')
+        return oldCompletion.promise;
+      return original(resource, operation, options);
+    });
+    vi.mocked(refreshNavBadges).mockImplementation(() => {
+      window.dispatchEvent(new Event('nocoreach:badges'));
+    });
+    await act(async () => {
+      await setup();
+    });
+    expect(
+      action.mock.calls.some(
+        ([resource, operation]) =>
+          resource === 'nrStrategy' && operation === 'state',
+      ),
+    ).toBe(true);
+    await act(async () => {
+      if (refresh === 'invalidation')
+        window.dispatchEvent(new Event('nocoreach:badges'));
+      else {
+        cache.replace('insights-overview:1', snapshot(3));
+        requests.overview.mockReset().mockReturnValue(nextRefresh.promise);
+      }
+    });
+    expect(
+      cache.peek<{ state: { revision: number } }>('insights-overview:1')?.state
+        .revision,
+    ).toBe(3);
+    await act(async () => {
+      oldCompletion.resolve(snapshot(2).state);
+    });
+    expect(
+      cache.peek<{ state: { revision: number } }>('insights-overview:1')?.state
+        .revision,
+    ).toBe(3);
+    await act(async () => {
+      nextRefresh.reject(new Error('Refresh unavailable'));
+    });
+    expect(
+      cache.peek<{ state: { revision: number } }>('insights-overview:1')?.state
+        .revision,
+    ).toBe(3);
+  },
+);

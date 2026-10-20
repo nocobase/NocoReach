@@ -94,7 +94,8 @@ function ProjectInsights({ projectId }: { projectId: number }) {
   const setState = useCallback(
     (state: StrategyState) => {
       const current = cache.peek<InsightsOverview>(overviewKey);
-      if (current) replace({ ...current, state: insightsState(state) });
+      if (current && state.revision >= current.state.revision)
+        replace({ ...current, state: insightsState(state) });
     },
     [cache, overviewKey, replace],
   );

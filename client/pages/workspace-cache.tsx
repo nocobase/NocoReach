@@ -131,12 +131,13 @@ class WorkspaceCache {
     }
     return undefined;
   }
-  replace<T>(key: string, value: T): void {
-    if (!this.active) return;
+  replace<T>(key: string, value: T): boolean {
+    if (!this.active) return false;
     const at = Date.now();
     // Replacing the entry also fences any earlier pending read from refilling it.
     this.rows.set(key, { value, at });
     if (this.ownsStorage()) store(key, value, at);
+    return true;
   }
   revision(key: string | null): number {
     return key ? (this.revisions.get(key) ?? 0) : 0;
@@ -327,7 +328,7 @@ export function useFreshData<T>(
   error?: unknown;
   loading: boolean;
   reload: () => void;
-  replace: (data: T) => void;
+  replace: (data: T | ((current: T) => T)) => void;
 } {
   const cache = useWorkspaceCache();
   const revision = useWorkspaceCacheRevision(key);
@@ -382,11 +383,24 @@ export function useFreshData<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps, @eslint-react/exhaustive-deps
   }, [cache, key, attempt, staleTime, retryDelay, expiresAt, revision]);
   const replace = useCallback(
-    (data: T) => {
+    (update: T | ((current: T) => T)) => {
       if (!key) return;
+      const currentRevision = cache.revision(key);
+      let data: T;
+      if (typeof update === 'function') {
+        // A successful mutation may patch the latest snapshot after invalidation.
+        // Do not resurrect a snapshot cleared by an unavailable response.
+        const current = cache.peek<T>(key);
+        if (current === undefined) return;
+        data = (update as (current: T) => T)(current);
+      } else {
+        // Whole snapshots belong to the revision at which their read started.
+        if (currentRevision !== revision) return;
+        data = update;
+      }
+      if (!cache.replace(key, data)) return;
       ++sequenceRef.current;
-      cache.replace(key, data);
-      setState({ cache, key, revision, data, loading: false });
+      setState({ cache, key, revision: currentRevision, data, loading: false });
     },
     [cache, key, revision],
   );

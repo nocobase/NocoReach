@@ -15,6 +15,7 @@
 
 - Start Insights, Opportunities and Tasks reads alongside their route modules after membership, page and project checks. Share pending requests and recently completed reads without fetching business data on hover.
 - Reuse project task snapshots across the three menus and retain visible Opportunities and Tasks content during revalidation. Invalidate shared business snapshots after mutations and preserve authentication, permission and project isolation.
+- Reject late snapshot replacements after cache invalidation while allowing successful task changes to merge into the latest list without dropping concurrently added records.
 - Remove the idle pacing gap for explicit menu resource intent while retaining sequential low-priority hints and foreground navigation guards.
 
 ## Unreleased — Insights initial loading
@@ -29,6 +30,7 @@
 - Emit content-addressed manifests from final JS/CSS chunks for application-owned menu entries. Keep metadata bound to the document build, preserve unchanged build hashes and match Vite request credentials for cache reuse.
 - Bound metadata and hint waits to ten seconds and dispose queued work on navigation, permission changes or unmount. Failed speculation never triggers stale-build reloads or delays actual imports.
 - Run the focused Chromium fixture in CI, covering real menu intent, JS/CSS cache reuse and same-page navigation during a stalled HTTP prefetch with browser caching enabled.
+- Include application build-plugin dependencies in isolated Vite fixtures so asset-base and development-watcher checks exercise the real configuration.
 
 ## Unreleased — Opportunities kept and not repeated
 

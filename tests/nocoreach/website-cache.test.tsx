@@ -3,10 +3,12 @@ import {
   cleanup,
   fireEvent,
   render,
+  renderHook,
   screen,
 } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { usePolled } from '../../client/pages/data-website/use-polled';
+import { NocoReachHttpError } from '../../client/lib/nocoreach-api';
 import { isGoogleReportKey } from '../../shared/google-cache.js';
 import {
   GA4_HISTORY_CACHE_MS,
@@ -377,6 +379,68 @@ it('revalidates Insights after mutations without hiding the snapshot or acceptin
   view.rerender(tree());
   expect(screen.getByText('updated')).toBeTruthy();
   await act(async () => next.resolve('latest'));
+});
+
+it.each([false, true])(
+  'rejects an old snapshot replacement without cancelling the current refresh (completed=%s)',
+  async (completed) => {
+    const current = Promise.withResolvers<string>();
+    fetcher.mockResolvedValueOnce('cached').mockReturnValue(current.promise);
+    const key = 'data-view:website:1';
+    const { result } = renderHook(
+      () => ({
+        cache: useWorkspaceCache(),
+        view: useFreshData(key, fetcher),
+      }),
+      { wrapper: WorkspaceCacheProvider },
+    );
+    await flush();
+    const oldReplace = result.current.view.replace;
+    await act(async () =>
+      result.current.cache.invalidate((candidate) => candidate === key, {
+        keepValue: true,
+      }),
+    );
+    if (completed) await act(async () => current.resolve('updated'));
+    await act(async () => oldReplace('obsolete'));
+    expect(result.current.view.data).toBe(completed ? 'updated' : 'cached');
+    expect(result.current.view.loading).toBe(!completed);
+    if (!completed) await act(async () => current.resolve('updated'));
+    expect(result.current.view.data).toBe('updated');
+    expect(result.current.view.loading).toBe(false);
+    expect(result.current.cache.peek(key)).toBe('updated');
+    expect(
+      JSON.parse(sessionStorage.getItem(`nr-cache:${key}`) || '{}').value,
+    ).toBe('updated');
+  },
+);
+
+it('does not let a late mutation patch restore a report cleared by a forbidden refresh', async () => {
+  fetcher
+    .mockResolvedValueOnce('cached')
+    .mockRejectedValue(new NocoReachHttpError('Forbidden', 403, {}));
+  const key = 'data-view:website:1';
+  const { result } = renderHook(
+    () => ({
+      cache: useWorkspaceCache(),
+      view: useFreshData(key, fetcher),
+    }),
+    { wrapper: WorkspaceCacheProvider },
+  );
+  await flush();
+  const oldReplace = result.current.view.replace;
+  await act(async () =>
+    result.current.cache.invalidate((candidate) => candidate === key, {
+      keepValue: true,
+    }),
+  );
+  expect(result.current.view.data).toBeUndefined();
+  const patch = vi.fn(() => 'obsolete');
+  await act(async () => oldReplace(patch));
+  expect(patch).not.toHaveBeenCalled();
+  expect(result.current.view.error).toBeInstanceOf(NocoReachHttpError);
+  expect(result.current.cache.peek(key)).toBeUndefined();
+  expect(sessionStorage.getItem(`nr-cache:${key}`)).toBeNull();
 });
 
 it.each(['summary', 'details'])(

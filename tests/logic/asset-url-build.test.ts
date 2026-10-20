@@ -1,12 +1,5 @@
 // @vitest-environment node
-import {
-  copyFile,
-  mkdtemp,
-  realpath,
-  rm,
-  symlink,
-  writeFile,
-} from 'node:fs/promises';
+import { mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { runInNewContext } from 'node:vm';
@@ -20,15 +13,14 @@ import {
   it,
   vi,
 } from 'vitest';
+import { copyAppViteFixture } from '../fixtures/app-vite.js';
 
 const appRoot = path.resolve(import.meta.dirname, '../..');
 let root: string;
 
 beforeAll(async () => {
   root = await realpath(await mkdtemp(path.join(tmpdir(), 'asset-url-build-')));
-  for (const file of ['vite.config.ts', 'package.json']) {
-    await copyFile(path.join(appRoot, file), path.join(root, file));
-  }
+  await copyAppViteFixture(root);
   await symlink(
     path.join(appRoot, 'node_modules'),
     path.join(root, 'node_modules'),
@@ -59,6 +51,7 @@ describe('asset URLs in the application build', () => {
       vi.stubEnv('APP_BASE_PATH', '/build-machine');
       const result = await build({
         root,
+        cacheDir: path.join(root, 'vite-cache'),
         configFile: path.join(root, 'vite.config.ts'),
         logLevel: 'silent',
         build: {

@@ -12,7 +12,6 @@ import {PageContainer,PageHeader} from '#components/reach/page';
 import {Button} from '#components/ui/button';
 import {useProject} from './reach-data';
 import {tasksQuery,useWorkspaceQuery} from './workspace-queries';
-import {useWorkspaceCache} from './workspace-cache';
 import {getWorkColumns,workState,isClosed,closeCommand,getCloseConfirm,type BoardState,type Work,type TaskData} from './task-execution-types';
 import {legacyPlaybookFilterLabel,matchesPlaybookFilter,playbookFilterOptions,playbookFilterValue} from './task-playbook-filter';
 import {WorkBoard,TaskTable,type TaskAction} from './work-board';
@@ -32,7 +31,7 @@ const getStatusOptions = (): [string,string][] => ([['',$t('optimizationWork.sta
 export default function OptimizationWork(){
  const {project,error:projectError}=useProject(),navigate=useNavigate();
  const {searchParams:params,search:q,inputProps,updateParams}=useUrlSearch();
- const cache=useWorkspaceCache(),query=project?tasksQuery<Task>(project.id):null;
+ const query=project?tasksQuery<Task>(project.id):null;
  const taskView=useWorkspaceQuery(query);
  const tasks=taskView.data??[],loading=taskView.data===undefined&&(!project||taskView.loading);
  const [actionError,setError]=useMessageState(''),[notice,setNotice]=useState<{text:Message;undo?:Task}>(),[busy,setBusy]=useState(false);
@@ -46,7 +45,7 @@ export default function OptimizationWork(){
  const playbookOptions=playbookFilterOptions(tasks.map(t=>t.evidence?.work));
  useEffect(()=>{const task=params.get('task');if(task)navigate('/actions/'+encodeURIComponent(task),{replace:true});},[params.get('task')]);
  function param(key:string,value:string){updateParams(p=>{if(p.get('status')==='closed')p.delete('status');if(p.get('scope')==='archived')p.set('scope','closed');if(key==='playbookName')p.delete('playbook');if(key==='scope'&&value==='waiting'){p.delete('status');p.delete('owner');}value?p.set(key,value):p.delete(key);},key==='q');}
- function saved(t:Task,d:TaskData){if(!query)return;taskView.replace((cache.peek<Task[]>(query.key)??tasks).map(row=>row.id===t.id?{...row,...d.task,evidence:{...row.evidence,work:d.work}}:row));refreshNavBadges();}
+ function saved(t:Task,d:TaskData){if(!query)return;taskView.replace(current=>current.map(row=>row.id===t.id?{...row,...d.task,evidence:{...row.evidence,work:d.work}}:row));refreshNavBadges();}
  async function move(t:Task,target:BoardState,beforeId?:number){
   if(!project||pending.current||beforeId===t.id)return;
   if(target==='done'&&workState(t.evidence?.work,t.status)!=='done'&&!(await confirmAction({title:() => ($t('optimizationWork.confirmWorkDone')),description:() => ($t('optimizationWork.nothingPublishedCannotCompletedWithout')),action:'optimizationWork.markDone',destructive:false})))return;
