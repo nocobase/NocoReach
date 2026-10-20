@@ -4490,7 +4490,7 @@
   "network.whyUnreachable": "{0} 为什么连不上",
   "network.reasons.timeout": "连接超时。",
   "network.reasons.reset": "连接被中断。",
-  "network.reasons.refused": "对方拒绝了连接。",
+  "network.reasons.refused": "连接被拒绝。",
   "network.reasons.dns": "找不到这个网站的地址。",
   "network.reasons.certificate": "网站证书不受信任。公司代理会检查 HTTPS 时，需要在部署时添加公司根证书。",
   "network.reasons.other": "没有收到响应。",

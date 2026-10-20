@@ -311,8 +311,17 @@ function SourcesCard({
             <TableHeader>
               <TableRow>
                 <TableHead>{$t('network.sourceColumn')}</TableHead>
-                {proxy && <TableHead>{$t('network.useProxy')}</TableHead>}
-                {canTest && <TableHead>{$t('network.accessColumn')}</TableHead>}
+                {/* Fixed widths keep the columns still while results arrive. */}
+                {proxy && (
+                  <TableHead className='sm:w-28'>
+                    {$t('network.useProxy')}
+                  </TableHead>
+                )}
+                {canTest && (
+                  <TableHead className='sm:w-44'>
+                    {$t('network.accessColumn')}
+                  </TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>

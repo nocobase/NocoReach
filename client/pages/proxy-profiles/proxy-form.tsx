@@ -194,7 +194,12 @@ function Form({
             disabled={busy}
             onCheckedChange={(next) => {
               setLogin(next);
-              revalidate({ url, login: next, username });
+              // A username field that just appeared waits for the next submission before asking to be filled.
+              if (submitted)
+                setErrors({
+                  ...validate({ url, login: next, username }),
+                  username: undefined,
+                });
             }}
           />
           <FieldLabel htmlFor={`${id}-login`}>
