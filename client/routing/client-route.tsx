@@ -11,12 +11,20 @@ import { ErrorBoundary } from 'react-error-boundary';
 import { Loading } from '#components/loading';
 import { Button } from '#components/ui/button';
 
+import { cachedRouteModule, loadRouteModule } from './route-modules.js';
+import { NavigationData } from './navigation-data.js';
+import { pageMessageScope } from '../../shared/startup-pages.js';
+
 export interface ClientRouteProps {
   readonly route: AppClientRegisteredRoute;
 }
 
 export function ClientRoute({ route }: ClientRouteProps): ReactElement {
   const { authz, componentLoader } = route;
+  const messageScope =
+    route.source === 'application' && route.packageName === 'nocoreach'
+      ? pageMessageScope(route.name)
+      : undefined;
   const checkAccess = authz !== 'skip';
   const { can: allowed, isPending: accessLoading } = useCan(
     authz === 'skip' ? undefined : authz,
@@ -26,10 +34,10 @@ export function ClientRoute({ route }: ClientRouteProps): ReactElement {
   const [loadError, setLoadError] = useState<unknown>();
 
   useEffect(() => {
-    if (checkAccess && !allowed) return;
+    if (checkAccess && (accessLoading || !allowed)) return;
     let active = true;
 
-    componentLoader!().then(
+    loadRouteModule(componentLoader!, messageScope).then(
       (module) => {
         if (active) {
           setComponentModule(module);
@@ -46,7 +54,7 @@ export function ClientRoute({ route }: ClientRouteProps): ReactElement {
     return () => {
       active = false;
     };
-  }, [allowed, checkAccess, componentLoader]);
+  }, [allowed, accessLoading, checkAccess, componentLoader, messageScope]);
 
   if (loadError) {
     return <ClientPageError route={route} />;
@@ -55,17 +63,15 @@ export function ClientRoute({ route }: ClientRouteProps): ReactElement {
   if (checkAccess && accessLoading) return <ClientPageLoading />;
   if (checkAccess && !allowed) return <ClientPageDenied route={route} />;
 
-  if (!componentModule) {
-    return <ClientPageLoading />;
-  }
-
-  const Component = componentModule.default;
+  const readyModule = cachedRouteModule(componentLoader!) ?? componentModule;
+  const Component = readyModule?.default;
 
   return (
     <ErrorBoundary fallback={<ClientPageError route={route} />}>
+      <NavigationData route={route} />
       {/* The owning package is the page's namespace, so a plugin page translates with a bare useTranslation(). */}
       <NamespaceScope ns={route.packageName}>
-        <Component />
+        {Component ? <Component /> : <ClientPageLoading />}
       </NamespaceScope>
     </ErrorBoundary>
   );

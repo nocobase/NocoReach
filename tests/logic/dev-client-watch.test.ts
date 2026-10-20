@@ -1,7 +1,6 @@
 // @vitest-environment node
 
 import {
-  copyFile,
   mkdir,
   mkdtemp,
   realpath,
@@ -13,6 +12,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer, type ViteDevServer } from 'vite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { copyAppViteFixture } from '../fixtures/app-vite.js';
 
 const appRoot = path.resolve(import.meta.dirname, '../..');
 let workspace: string | undefined;
@@ -51,9 +51,7 @@ describe('development client file watching', () => {
       await mkdir(path.dirname(file), { recursive: true });
       await writeFile(file, 'export const value = 1;\n');
     }
-    for (const file of ['vite.config.ts', 'package.json']) {
-      await copyFile(path.join(appRoot, file), path.join(root, file));
-    }
+    await copyAppViteFixture(root);
     await symlink(
       path.join(appRoot, 'node_modules'),
       path.join(root, 'node_modules'),

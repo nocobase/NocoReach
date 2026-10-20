@@ -1,5 +1,5 @@
 import english from './en.json' with { type: 'json' };
-import { youtubeSystemErrors } from '../youtube-errors.js';
+import { recognizeSystemMessage } from './recognize.js';
 import chinese from './zh.json' with { type: 'json' };
 import legacyKeys from './legacy-keys.json' with { type: 'json' };
 
@@ -10,18 +10,10 @@ export interface SystemMessage {
   params?: MessageParams;
 }
 
-// Current service-owned YouTube errors also occur as Chinese display text in sync snapshots.
-// Recognize only this explicit error catalog; never reverse-map arbitrary UI or user text.
-const currentYouTubeErrors = new Map<string, MessageKey>(
-  youtubeSystemErrors.map((key) => [chinese[key], key]),
-);
-
 /** Compatibility is for old persisted system text, never for user-authored values. */
 export function systemMessageKey(value: string): MessageKey | undefined {
-  if (Object.hasOwn(chinese, value)) return value as MessageKey;
-  return Object.hasOwn(legacyKeys, value)
-    ? (legacyKeys[value as keyof typeof legacyKeys] as MessageKey)
-    : currentYouTubeErrors.get(value);
+  return recognizeSystemMessage(value, chinese, legacyKeys) as
+    MessageKey | undefined;
 }
 
 const stringifyParameter = (value: unknown): string => String(value);

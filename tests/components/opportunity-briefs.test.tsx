@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, expect, it, vi } from 'vitest';
 import OpportunityLibrary from '../../client/pages/strategy/library';
+import { WorkspaceCacheProvider } from '../../client/pages/workspace-cache';
 import type {
   Opportunity,
   Signal,
@@ -9,6 +10,15 @@ import type {
 } from '../../shared/strategy-model';
 
 const fixture = vi.hoisted(() => ({ action: vi.fn() }));
+vi.mock('@nocobase/app-plugin-authentication/client', () => ({
+  useAuthentication: () => ({
+    session: { user: { id: 'tester' }, session: { id: 'briefs-session' } },
+    isPending: false,
+  }),
+}));
+vi.mock('@nocobase/app-plugin-authorization/client', () => ({
+  useAuthorizationRevision: () => 0,
+}));
 vi.mock('../../client/lib/nocoreach-api', async (original) => ({
   ...(await original<typeof import('../../client/lib/nocoreach-api')>()),
   nocobaseClient: { action: fixture.action },
@@ -117,7 +127,9 @@ beforeEach(() => {
 const show = (entry = '/opportunities') =>
   render(
     <MemoryRouter initialEntries={[entry]}>
-      <OpportunityLibrary />
+      <WorkspaceCacheProvider>
+        <OpportunityLibrary />
+      </WorkspaceCacheProvider>
     </MemoryRouter>,
   );
 

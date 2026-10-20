@@ -24,6 +24,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test --maxWorkers=2 --passWithNoTests=false
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright test tests/playwright/route-prefetch-resources.test.ts
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 40

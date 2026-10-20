@@ -131,7 +131,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
-test('the chat panel starts online without type tabs and puts the picker inside the composer', () => {
+test('the chat panel starts online without type tabs and puts the picker inside the composer', async () => {
   render(
     <MemoryRouter>
       <OnlineChatProvider>
@@ -141,7 +141,7 @@ test('the chat panel starts online without type tabs and puts the picker inside 
     </MemoryRouter>,
   );
   const chat = within(screen.getByTestId('chat-panel'));
-  expect(chat.getByRole('textbox', { name: '消息' })).toBeVisible();
+  expect(await chat.findByRole('textbox', { name: '消息' })).toBeVisible();
   expect(chat.queryByRole('tablist')).not.toBeInTheDocument();
   expect(
     chat.getByTestId('chat-agent-picker').closest('[data-slot=input-group]'),

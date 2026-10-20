@@ -15,10 +15,10 @@ import type {StrategyState} from './model';
 import {rowsFor,opportunityState,opportunityKeepDays,citedSignals,priorityRank,sourcesOf,oppNo,taskNo,getSourceNames,type OpportunityState,type Row} from './board';
 import {chipOf,titleOf,statusOf,ChangeDetail,watchedLabel} from './insights-view';
 import {verdictsOf,watchDays,watchOf,recentlyEnded,daysBetween} from './watch';
-import {taskRecords} from '../reach-data';
+import {strategyQuery,tasksQuery,playbooksQuery,useWorkspaceQuery} from '../workspace-queries';
 import type {Signal,WatchRecord} from './model';
 import {handOff,handOffLabel,handOffResult,recommendedFor,HandOffNotice,type HandOffResult} from './hand-off';
-import {playbookRequest,localizePlaybookList,type PlaybookList} from '../playbook-model';
+import {localizePlaybookList} from '../playbook-model';
 import {ResultSourcePanel} from '../results/source.js';
 // The same three groups as 洞察's 今天的变化 (2026-10-08 user request): 待处理, 观察中, 已处理.
 type Tab='pending'|'watch'|'done';
@@ -42,9 +42,14 @@ export default function OpportunityLibrary(){
 }
 function Library({project,projectError}:{project?:Project;projectError:string}){
  const navigate=useNavigate();const [params,setParams]=useSearchParams();
- const [state,setState]=useState<StrategyState>(),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[error,setError]=useMessageState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState<HandOffResult>(),[tasks,setTasks]=useState<WatchTask[]>([]),[watchKey,setWatchKey]=useState<string>();
+ const view=useWorkspaceQuery(project?strategyQuery(project.id):null);
+ const {data:state,replace:setState}=view;
+ const taskView=useWorkspaceQuery(project?tasksQuery<WatchTask>(project.id):null);
+ const playbookView=useWorkspaceQuery(project?playbooksQuery(project.id):null);
+ const tasks=taskView.data??[],rawPlaybooks=playbookView.data;
+ const [actionError,setError]=useMessageState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState<HandOffResult>(),[watchKey,setWatchKey]=useState<string>();
+ const error=actionError||(view.error?$t('strategy.notLoadOpportunitiesTryAgain'):'');
  const playbooks=localizePlaybookList(rawPlaybooks);
- useEffect(()=>{if(!project)return;void request<StrategyState>(project.id,'state').then(s=>{setState(s);setError('');}).catch(()=>setError(() => ($t('strategy.notLoadOpportunitiesTryAgain'))));void playbookRequest<PlaybookList>('list',project.id).then(setRawPlaybooks).catch(()=>undefined);void taskRecords<WatchTask>(project.id).then(setTasks).catch(()=>undefined);},[project?.id]);
  const rows:Item[]=state?rowsFor(state).map(r=>({...r,...opportunityState(r,state)})):[];
  const linked=rows.find(r=>r.card.id===params.get('item'));
  const asked=params.get('tab');
@@ -81,7 +86,7 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
    {pending.map(r=>brief(r,r.card.id===params.get('item')))}
    {!pending.length&&<p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{$t('strategy.noNewOpportunitiesTodayWhen')}</p>}
   </div>}
-  {watched&&project&&state?<ChangeDetail signal={watched.s} status={watched.status} projectId={project.id} verdicts={verdictsOf(state,watched.s.key)} watch={watchOf(state,watched.s.key)} today={state.insights?.generatedAt} judging={busy} onDecide={status=>void decideWatch(watched.s.key,status)} onClose={()=>setWatchKey(undefined)} onHandOff={r=>{refreshNavBadges();setNotice(r);void request<StrategyState>(project.id,'state').then(setState).catch(()=>undefined);}}/>:null}
+  {watched&&project&&state?<ChangeDetail signal={watched.s} status={watched.status} projectId={project.id} verdicts={verdictsOf(state,watched.s.key)} watch={watchOf(state,watched.s.key)} today={state.insights?.generatedAt} judging={busy} onDecide={status=>void decideWatch(watched.s.key,status)} onClose={()=>setWatchKey(undefined)} onHandOff={r=>{refreshNavBadges();setNotice(r);view.reload();}}/>:null}
   <Sheet open={Boolean(opened)} onOpenChange={o=>{if(!o)go({item:''});}}>
    <SheetContent className="w-full overflow-y-auto sm:max-w-lg" aria-describedby={undefined}><SheetHeader className="sr-only"><SheetTitle>{$t('strategy.opportunityDetails')}</SheetTitle></SheetHeader><div className="p-4 pt-12">{opened&&brief(opened)}</div></SheetContent>
   </Sheet>

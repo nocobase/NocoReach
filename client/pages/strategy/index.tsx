@@ -1,4 +1,3 @@
-import { googleLocalFreshness } from '../../../shared/google-cache.js';
 import {
   useMessageState,
   getCurrentLocale,
@@ -20,8 +19,11 @@ import {
   type SourceCard,
   type Area,
 } from './insights-view';
-import { nocobaseClient as api } from '#lib/nocoreach-api';
-import { useFreshData } from '../workspace-cache';
+import { useFreshData, useWorkspaceCache } from '../workspace-cache';
+import {
+  insightsState,
+  type InsightsOverview,
+} from '../../../shared/insights-overview';
 import { RequestBlock } from './request-block';
 import { InfoTip } from '#components/reach/info-tip';
 import { AnalysisAlert } from './analysis-alert';
@@ -29,7 +31,15 @@ import { PageContainer, PageHeader } from '#components/reach/page';
 import { HealthAlert } from '../data-health';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '#components/ui/button';
-import { taskRecords, useProject } from '../reach-data';
+import { useProject } from '../reach-data';
+import {
+  insightsQuery,
+  tasksQuery,
+  situationQuery,
+  metricsQuery,
+  useWorkspaceQuery,
+  navigationFreshness,
+} from '../workspace-queries';
 import { PageSkeleton } from '../workspace-cache';
 import { type Work } from '../task-execution-types';
 import type { StrategyState } from './model';
@@ -51,12 +61,7 @@ import {
   stageName,
   type PlaybookList,
 } from '../playbook-model';
-import {
-  request,
-  analysisRequest,
-  type Context,
-  type AnalysisStatus,
-} from './service';
+import { request, analysisRequest, type AnalysisStatus } from './service';
 import '../reach-workspace.css';
 import './strategy.css';
 type Task = {
@@ -82,37 +87,27 @@ export default function StrategyPage() {
   return <ProjectInsights key={project.id} projectId={project.id} />;
 }
 function ProjectInsights({ projectId }: { projectId: number }) {
-  const [state, setState] = useState<StrategyState>(),
-    [context, setContext] = useState<Context>(),
-    [error, setError] = useMessageState(''),
-    [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    let active = true;
-    setError('');
-    Promise.all([
-      request<StrategyState>(projectId, 'state'),
-      request<Context>(projectId, 'context'),
-    ])
-      .then(([s, c]) => {
-        if (active) {
-          setState(s);
-          setContext(c);
-        }
-      })
-      .catch(() => {
-        if (active) setError(() => $t('strategy.notLoadInsightsTryAgain'));
-      });
-    return () => {
-      active = false;
-    };
-  }, [projectId, attempt, setError]);
-  if (!state || !context)
-    return error ? (
+  const cache = useWorkspaceCache();
+  const overviewKey = insightsQuery(projectId).key;
+  const view = useWorkspaceQuery(insightsQuery(projectId));
+  const { replace } = view;
+  const setState = useCallback(
+    (state: StrategyState) => {
+      const current = cache.peek<InsightsOverview>(overviewKey);
+      if (current && state.revision >= current.state.revision)
+        replace({ ...current, state: insightsState(state) });
+    },
+    [cache, overviewKey, replace],
+  );
+  // These blocks have no dependency on the strategy snapshot or analysis context.
+  const taskView = useWorkspaceQuery(tasksQuery<Task>(projectId));
+  const summaryView = useWorkspaceQuery(situationQuery(projectId));
+  const overview = useWorkspaceQuery(metricsQuery(projectId));
+  if (!view.data)
+    return view.error ? (
       <PageContainer className='nr-page'>
-        <p role='alert'>{error}</p>
-        <Button onClick={() => setAttempt((n) => n + 1)}>
-          {$t('common.reload')}
-        </Button>
+        <p role='alert'>{$t('strategy.notLoadInsightsTryAgain')}</p>
+        <Button onClick={view.reload}>{$t('common.reload')}</Button>
       </PageContainer>
     ) : (
       <PageSkeleton title={$t('strategy.insights')} />
@@ -120,9 +115,13 @@ function ProjectInsights({ projectId }: { projectId: number }) {
   return (
     <Insights
       projectId={projectId}
-      state={state}
+      state={view.data.state}
       setState={setState}
-      context={context}
+      summary={view.data}
+      view={view}
+      taskView={taskView}
+      summaryView={summaryView}
+      overview={overview}
     />
   );
 }
@@ -130,16 +129,22 @@ function Insights({
   projectId,
   state,
   setState,
-  context,
+  summary,
+  view,
+  taskView,
+  summaryView,
+  overview,
 }: {
   projectId: number;
   state: StrategyState;
   setState: (s: StrategyState) => void;
-  context: Context;
+  summary: InsightsOverview;
+  view: ReturnType<typeof useFreshData<InsightsOverview>>;
+  taskView: ReturnType<typeof useFreshData<Task[]>>;
+  summaryView: ReturnType<typeof useFreshData<{ areas: Area[] }>>;
+  overview: ReturnType<typeof useFreshData<{ cards: SourceCard[] }>>;
 }) {
-  const taskView = useFreshData(`insights-tasks:${projectId}`, () =>
-    taskRecords<Task>(projectId),
-  );
+  const cache = useWorkspaceCache();
   const taskDataAvailable = taskView.data !== undefined;
   const tasks = taskView.data ?? [];
   const handOffReadRef = useRef({ active: false, sequence: 0 });
@@ -157,7 +162,12 @@ function Insights({
     try {
       const [nextState, nextTasks] = await Promise.all([
         request<StrategyState>(projectId, 'state'),
-        taskRecords<Task>(projectId),
+        cache.load(
+          tasksQuery<Task>(projectId).key,
+          tasksQuery<Task>(projectId).read,
+          true,
+          navigationFreshness,
+        ),
       ]);
       if (read.active && sequence === read.sequence) {
         setState(nextState);
@@ -177,8 +187,7 @@ function Insights({
     [handed, setHanded] = useState<HandOffResult>();
   const playbooks = localizePlaybookList(rawPlaybooks);
   const pendingRef = useRef(false),
-    operationRef = useRef({ key: '', id: '' }),
-    summary = context.evidence;
+    operationRef = useRef({ key: '', id: '' });
   async function mutate(action: string, body: object) {
     const key = JSON.stringify([action, state.revision, body]);
     if (operationRef.current.key !== key)
@@ -189,58 +198,133 @@ function Insights({
       requestId: operationRef.current.id,
     });
   }
-  const followAnalysis = useCallback(async () => {
-    setGenerating(true);
-    for (let i = 0; i < 120; i++) {
-      const st = await analysisRequest(projectId, 'status').catch(() => null);
-      if (st) {
-        setAnalysis(st);
-        if (!st.running) {
-          setGenerating(false);
-          if (st.last && !st.last.ok)
-            setError(() =>
-              $t('strategy.analysisNotCompleteExistingOpportunities', {
-                0:
-                  translateSystemError(st.runs[0]?.error) ||
-                  $t('errors.unknownReason'),
-              }),
-            );
-          else {
-            setState(await request<StrategyState>(projectId, 'state'));
-            setNotice(() => $t('strategy.opportunitiesUpdated'));
-            refreshNavBadges();
+  // Cache invalidation changes setState's revision fence, not the polling lifetime.
+  const updateStateRef = useRef(setState);
+  useEffect(() => {
+    updateStateRef.current = setState;
+  }, [setState]);
+  type AnalysisRead = {
+    controller: AbortController;
+    following?: Promise<void>;
+    started: boolean;
+    starting: boolean;
+  };
+  const analysisReadRef = useRef<AnalysisRead | null>(null);
+  const followAnalysis = useCallback(
+    (read: AnalysisRead) => {
+      const { signal } = read.controller;
+      if (signal.aborted) return Promise.resolve();
+      if (read.following) return read.following;
+      const follow = async () => {
+        setGenerating(true);
+        for (let i = 0; i < 120; i++) {
+          const st = await analysisRequest(projectId, 'status', signal).catch(
+            () => null,
+          );
+          if (signal.aborted) return;
+          if (st) {
+            setAnalysis(st);
+            if (!st.running) {
+              if (st.last && !st.last.ok)
+                setError(() =>
+                  $t('strategy.analysisNotCompleteExistingOpportunities', {
+                    0:
+                      translateSystemError(st.runs[0]?.error) ||
+                      $t('errors.unknownReason'),
+                  }),
+                );
+              else {
+                // Capture the current fence before reading, so a later invalidation
+                // still rejects a stale response rather than writing through it.
+                const updateState = updateStateRef.current;
+                const next = await request<StrategyState>(
+                  projectId,
+                  'state',
+                  {},
+                  signal,
+                );
+                if (signal.aborted) return;
+                updateState(next);
+                setNotice(() => $t('strategy.opportunitiesUpdated'));
+                refreshNavBadges();
+              }
+              return;
+            }
           }
-          return;
+          await new Promise<void>((resolve) => {
+            const finish = () => {
+              clearTimeout(timeout);
+              signal.removeEventListener('abort', finish);
+              resolve();
+            };
+            const timeout = setTimeout(finish, 3000);
+            signal.addEventListener('abort', finish, { once: true });
+          });
+          if (signal.aborted) return;
         }
-      }
-      await new Promise((r) => setTimeout(r, 3000));
-    }
-    setGenerating(false);
-    setError(() => $t('strategy.analysisTakingWhileRefreshLater'));
-  }, [projectId, setError, setNotice, setState]);
+        setError(() => $t('strategy.analysisTakingWhileRefreshLater'));
+      };
+      read.following = follow()
+        .catch(() => {
+          if (!signal.aborted)
+            setError(() => $t('strategy.notLoadInsightsTryAgain'));
+        })
+        .finally(() => {
+          read.following = undefined;
+          if (!signal.aborted) setGenerating(false);
+        });
+      return read.following;
+    },
+    [projectId, setError, setNotice],
+  );
   async function generate() {
+    const read = analysisReadRef.current;
+    if (
+      !read ||
+      read.controller.signal.aborted ||
+      read.starting ||
+      read.following
+    )
+      return;
+    read.started = read.starting = true;
+    const { signal } = read.controller;
+    setGenerating(true);
     setError('');
     setNotice('');
     try {
-      const st = await analysisRequest(projectId, 'run');
+      const st = await analysisRequest(projectId, 'run', signal);
+      if (signal.aborted) return;
       setAnalysis(st);
-      await followAnalysis();
+      await followAnalysis(read);
     } catch (e) {
-      setGenerating(false);
+      if (signal.aborted) return;
       setError(() =>
         e instanceof Error
           ? $legacyText(e.message)
           : $t('strategy.notStartAnalysisTryAgain'),
       );
+    } finally {
+      read.starting = false;
+      if (!signal.aborted) setGenerating(false);
     }
   }
   useEffect(() => {
-    void analysisRequest(projectId, 'status')
+    const read: AnalysisRead = {
+      controller: new AbortController(),
+      started: false,
+      starting: false,
+    };
+    analysisReadRef.current = read;
+    void analysisRequest(projectId, 'status', read.controller.signal)
       .then((st) => {
+        if (read.controller.signal.aborted || read.started) return;
         setAnalysis(st);
-        if (st.running) void followAnalysis();
+        if (st.running) void followAnalysis(read);
       })
       .catch(() => undefined);
+    return () => {
+      read.controller.abort();
+    };
   }, [projectId, followAnalysis]);
   async function act(fn: () => Promise<void>) {
     if (pendingRef.current) return;
@@ -307,25 +391,6 @@ function Insights({
         : stageName(st)
       : $t('common.needsConfirmation');
   };
-  const summaryView = useFreshData<{ areas: Area[] }>(
-    `insights-summary:${projectId}`,
-    () =>
-      api.action<{ areas: Area[] }>('nrInsights', 'summary', {
-        method: 'POST',
-        body: { projectId },
-        unwrap: 'data',
-      }),
-  );
-  const overview = useFreshData<{ cards: SourceCard[] }>(
-    `data-view:overview:${projectId}:${JSON.stringify({ range: '28' })}`,
-    () =>
-      api.action<{ cards: SourceCard[] }>('nrDataViews', 'overview', {
-        method: 'POST',
-        body: { projectId, range: '28' },
-        unwrap: 'data',
-      }),
-    googleLocalFreshness,
-  );
   const last = generating
     ? $t('strategy.analyzing')
     : batch
@@ -363,6 +428,14 @@ function Insights({
           </Button>
         }
       />
+      {view.error != null && (
+        <p role='alert' className='nr-error'>
+          {$t('strategy.blockStale')}
+          <Button variant='link' onClick={view.reload}>
+            {$t('common.retry')}
+          </Button>
+        </p>
+      )}
       {error && (
         <p role='alert' className='nr-error'>
           {error}

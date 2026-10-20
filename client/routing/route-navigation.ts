@@ -10,6 +10,8 @@ import { matchPath, matchRoutes, type RouteObject } from 'react-router';
 import { EMPTY_ARRAY } from '#lib/constants';
 import { transformNavigation } from '#lib/navigation-transform';
 
+const EMPTY_DENIED: ReadonlySet<string> = new Set();
+
 export interface RouteNavigationItem {
   readonly section?: boolean;
   readonly route: AppClientRegisteredRoute;
@@ -132,11 +134,15 @@ export function useRouteNavigation(
       result.revision !== revision),
   );
   const denied = guards.length
-    ? (result?.denied ?? new Set<string>())
-    : new Set<string>();
+    ? (result?.denied ?? EMPTY_DENIED)
+    : EMPTY_DENIED;
+  const items = useMemo(
+    () => (loading ? [] : buildRouteNavigation(routes, denied)),
+    [loading, routes, denied],
+  );
   return {
     loading,
-    items: loading ? [] : buildRouteNavigation(routes, denied),
+    items,
     denied,
   };
 }

@@ -9,6 +9,7 @@ import {
   within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useEffect } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
@@ -23,7 +24,11 @@ import { GOOGLE_PROGRESS_CACHE_MS } from '../../shared/google-cache';
 import StrategyPage from '../../client/pages/strategy/index';
 import DataGitHub from '../../client/pages/data-github';
 import { NocoReachHttpError } from '../../client/lib/nocoreach-api';
-import { WorkspaceCacheProvider } from '../../client/pages/workspace-cache';
+import {
+  WorkspaceCacheProvider,
+  useWorkspaceCache,
+} from '../../client/pages/workspace-cache';
+import { refreshNavBadges } from '../../client/components/app-shell/nav-badges';
 
 const { action, tasks, fixture } = vi.hoisted(() => ({
   action: vi.fn(),
@@ -60,7 +65,12 @@ vi.mock('../../client/components/app-shell/nav-badges', () => ({
   refreshNavBadges: vi.fn(),
 }));
 
-const requests = { tasks, metrics: vi.fn(), summary: vi.fn() };
+const requests = {
+  tasks,
+  metrics: vi.fn(),
+  summary: vi.fn(),
+  overview: vi.fn(),
+};
 const blocks = [
   {
     kind: 'tasks',
@@ -118,12 +128,26 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 let disconnect: (() => void) | undefined;
+let cache: ReturnType<typeof useWorkspaceCache>;
+function CacheProbe() {
+  const current = useWorkspaceCache();
+  useEffect(() => {
+    cache = current;
+  }, [current]);
+  return null;
+}
 beforeEach(() => {
   sessionStorage.clear();
   fixture.project = 1;
   fixture.session.session.id = 'session-a';
   fixture.revision = 0;
+  vi.mocked(refreshNavBadges).mockReset();
   tasks.mockReset().mockResolvedValue([]);
+  requests.overview.mockReset().mockResolvedValue({
+    state: { revision: 1, goal: null, proposals: [] },
+    periodDays: 28,
+    availableThrough: null,
+  });
   requests.metrics.mockReset().mockResolvedValue({ cards: [] });
   requests.summary.mockReset().mockResolvedValue({ areas: [] });
   action
@@ -134,6 +158,8 @@ beforeEach(() => {
         operation: string,
         options: { body: { projectId: number } },
       ) => {
+        if (resource === 'nrStrategy' && operation === 'overview')
+          return requests.overview(options.body.projectId);
         if (resource === 'nrStrategy')
           return operation === 'state'
             ? { revision: 1, goal: null, proposals: [] }
@@ -155,6 +181,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   disconnect?.();
   setDictionary(null);
   vi.restoreAllMocks();
@@ -177,6 +204,7 @@ async function setup(locale = 'en-US', report = false) {
     <I18nProvider runtime={runtime}>
       <MemoryRouter>
         <WorkspaceCacheProvider>
+          <CacheProbe />
           {visible && <Page report={report} />}
         </WorkspaceCacheProvider>
       </MemoryRouter>
@@ -191,6 +219,110 @@ async function setup(locale = 'en-US', report = false) {
     },
   };
 }
+
+it('starts independent blocks before the overview returns and never requests the AI context', async () => {
+  const pending = deferred<unknown>();
+  requests.overview.mockReturnValueOnce(pending.promise);
+  await setup();
+  await waitFor(() => expect(requests.metrics).toHaveBeenCalledTimes(1));
+  expect(requests.summary).toHaveBeenCalledTimes(1);
+  expect(tasks).toHaveBeenCalledTimes(1);
+  expect(
+    action.mock.calls.some(
+      ([resource, operation]) =>
+        resource === 'nrStrategy' && ['state', 'context'].includes(operation),
+    ),
+  ).toBe(false);
+  await act(async () =>
+    pending.resolve({
+      state: { revision: 1, goal: null, proposals: [] },
+      periodDays: 28,
+      availableThrough: '2026-10-18',
+    }),
+  );
+  expect(await screen.findByText(/2026-10-18/)).toBeInTheDocument();
+});
+
+it('shows the cached overview and blocks immediately on return while revalidating', async () => {
+  requests.overview.mockResolvedValueOnce({
+    state: { revision: 1, goal: null, proposals: [] },
+    periodDays: 28,
+    availableThrough: '2026-10-18',
+  });
+  tasks.mockResolvedValueOnce(values.tasks);
+  const view = await setup();
+  await screen.findByText(/Known task/);
+  const pending = deferred<unknown>();
+  requests.overview.mockReturnValueOnce(pending.promise);
+  const pendingTasks = deferred<unknown>();
+  tasks.mockReturnValueOnce(pendingTasks.promise);
+  // A committed navigation hands its reads to the page for one second.
+  vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 1001);
+  view.show(false);
+  view.show(true);
+  expect(screen.getByText(/2026-10-18/)).toBeInTheDocument();
+  expect(screen.getByText(/Known task/)).toBeInTheDocument();
+  await waitFor(() => expect(requests.overview).toHaveBeenCalledTimes(2));
+  await act(async () => {
+    pending.resolve({
+      state: { revision: 2, goal: null, proposals: [] },
+      periodDays: 28,
+      availableThrough: '2026-10-19',
+    });
+    pendingTasks.resolve([]);
+  });
+  expect(await screen.findByText(/2026-10-19/)).toBeInTheDocument();
+  expect(screen.queryByText(/Known task/)).toBeNull();
+});
+
+it.each(['project', 'session', 'revision'])(
+  'does not expose the previous overview after changing %s',
+  async (scope) => {
+    requests.overview.mockResolvedValueOnce({
+      state: { revision: 1, goal: null, proposals: [] },
+      periodDays: 28,
+      availableThrough: '2026-10-18',
+    });
+    const view = await setup();
+    await screen.findByText(/2026-10-18/);
+    const pending = deferred<unknown>();
+    requests.overview.mockReturnValueOnce(pending.promise);
+    if (scope === 'project') fixture.project = 2;
+    if (scope === 'session') fixture.session.session.id = 'session-b';
+    if (scope === 'revision') fixture.revision++;
+    view.rerender();
+    expect(screen.queryByText(/2026-10-18/)).toBeNull();
+    await act(async () =>
+      pending.resolve({
+        state: { revision: 2, goal: null, proposals: [] },
+        periodDays: 28,
+        availableThrough: '2026-10-19',
+      }),
+    );
+    expect(await screen.findByText(/2026-10-19/)).toBeInTheDocument();
+  },
+);
+
+it('removes a cached overview after a forbidden revalidation', async () => {
+  requests.overview.mockResolvedValueOnce({
+    state: { revision: 1, goal: null, proposals: [] },
+    periodDays: 28,
+    availableThrough: '2026-10-18',
+  });
+  const view = await setup();
+  await screen.findByText(/2026-10-18/);
+  requests.overview.mockRejectedValue(
+    new NocoReachHttpError('Denied', 403, {}),
+  );
+  vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 1001);
+  view.show(false);
+  view.show(true);
+  await screen.findByText(english['strategy.notLoadInsightsTryAgain']);
+  expect(screen.queryByText(/2026-10-18/)).toBeNull();
+  view.show(false);
+  view.show(true);
+  expect(screen.queryByText(/2026-10-18/)).toBeNull();
+});
 for (const block of blocks) {
   it.each(['en-US', 'zh-CN'])(
     `${block.kind}: initial failure is independent and retry restores real empty state (%s)`,
@@ -495,5 +627,261 @@ it.each([401, 403, 404])(
     );
     expect(sessionStorage.getItem(key)).toBe(saved);
     expect(screen.getByText('12,345')).toBeInTheDocument();
+  },
+);
+
+const analysisStatus = (running: boolean) => ({
+  running,
+  last: null,
+  runs: [],
+  schedule: null,
+});
+const analysisReads = () =>
+  action.mock.calls.filter(
+    ([resource, operation]) =>
+      resource === 'nrAnalysis' && operation === 'status',
+  );
+
+it('keeps one analysis poll across badge invalidations and publishes completion once', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  vi.mocked(refreshNavBadges).mockClear();
+  let running = true;
+  const original = action.getMockImplementation()!;
+  action.mockImplementation((resource, operation, options) =>
+    resource === 'nrAnalysis'
+      ? Promise.resolve(analysisStatus(running))
+      : original(resource, operation, options),
+  );
+  await act(async () => {
+    await setup();
+  });
+  expect(analysisReads()).toHaveLength(2);
+  for (let i = 0; i < 3; i++)
+    await act(async () => {
+      window.dispatchEvent(new Event('nocoreach:badges'));
+    });
+  expect(analysisReads()).toHaveLength(2);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(3000);
+  });
+  expect(analysisReads()).toHaveLength(3);
+  running = false;
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(3000);
+  });
+  expect(analysisReads()).toHaveLength(4);
+  expect(
+    action.mock.calls.filter(
+      ([resource, operation]) =>
+        resource === 'nrStrategy' && operation === 'state',
+    ),
+  ).toHaveLength(1);
+  expect(refreshNavBadges).toHaveBeenCalledOnce();
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(9000);
+  });
+  expect(analysisReads()).toHaveLength(4);
+});
+
+it('aborts a pending initial status and ignores its late running response after leaving', async () => {
+  const pending = deferred<unknown>();
+  const original = action.getMockImplementation()!;
+  action.mockImplementation((resource, operation, options) =>
+    resource === 'nrAnalysis'
+      ? pending.promise
+      : original(resource, operation, options),
+  );
+  const view = await setup();
+  await waitFor(() => expect(analysisReads()).toHaveLength(1));
+  const signal = analysisReads()[0][2].signal as AbortSignal;
+  view.show(false);
+  expect(signal.aborted).toBe(true);
+  await act(async () => {
+    pending.resolve(analysisStatus(true));
+  });
+  expect(analysisReads()).toHaveLength(1);
+});
+
+it.each(['project', 'session', 'authorization'] as const)(
+  'cancels the old poll when the %s boundary changes',
+  async (boundary) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const original = action.getMockImplementation()!;
+    action.mockImplementation((resource, operation, options) =>
+      resource === 'nrAnalysis'
+        ? Promise.resolve(analysisStatus(true))
+        : original(resource, operation, options),
+    );
+    let view!: Awaited<ReturnType<typeof setup>>;
+    await act(async () => {
+      view = await setup();
+    });
+    const oldSignal = analysisReads()[0][2].signal as AbortSignal;
+    if (boundary === 'project') fixture.project = 2;
+    if (boundary === 'session')
+      fixture.session = { user: { id: 'other' }, session: { id: 'session-b' } };
+    if (boundary === 'authorization') fixture.revision++;
+    await act(async () => {
+      view.rerender();
+    });
+    expect(oldSignal.aborted).toBe(true);
+    const before = analysisReads().length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(analysisReads()).toHaveLength(before + 1);
+    expect(analysisReads().at(-1)?.[2].signal).not.toBe(oldSignal);
+    view.show(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(9000);
+    });
+    expect(analysisReads()).toHaveLength(before + 1);
+  },
+);
+
+it('ignores a completed analysis state read after switching projects', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  vi.mocked(refreshNavBadges).mockClear();
+  const pending = deferred<unknown>();
+  const original = action.getMockImplementation()!;
+  let reads = 0;
+  action.mockImplementation((resource, operation, options) => {
+    if (resource === 'nrAnalysis')
+      return Promise.resolve(analysisStatus(++reads === 1));
+    if (resource === 'nrStrategy' && operation === 'state')
+      return pending.promise;
+    return original(resource, operation, options);
+  });
+  let view!: Awaited<ReturnType<typeof setup>>;
+  await act(async () => {
+    view = await setup();
+  });
+  const stateRead = action.mock.calls.find(
+    ([resource, operation]) =>
+      resource === 'nrStrategy' && operation === 'state',
+  )!;
+  expect(stateRead).toBeDefined();
+  fixture.project = 2;
+  await act(async () => {
+    view.rerender();
+  });
+  expect(stateRead[2].signal.aborted).toBe(true);
+  await act(async () => {
+    pending.resolve({ revision: 99, goal: null, proposals: [] });
+  });
+  expect(refreshNavBadges).not.toHaveBeenCalled();
+  expect(
+    screen.queryByText(english['strategy.opportunitiesUpdated']),
+  ).not.toBeInTheDocument();
+});
+
+it('does not start another poll when an initial status returns during a manual run', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const initial = deferred<unknown>();
+  const run = deferred<unknown>();
+  const original = action.getMockImplementation()!;
+  let reads = 0;
+  action.mockImplementation((resource, operation, options) => {
+    if (resource === 'nrAnalysis')
+      return operation === 'run'
+        ? run.promise
+        : ++reads === 1
+          ? initial.promise
+          : Promise.resolve(analysisStatus(true));
+    return original(resource, operation, options);
+  });
+  await act(async () => {
+    await setup();
+  });
+  const button = screen.getByRole('button', {
+    name: english['strategy.updateAnalysis'],
+  });
+  await act(async () => {
+    button.click();
+    button.click();
+  });
+  expect(
+    action.mock.calls.filter(
+      ([resource, operation]) =>
+        resource === 'nrAnalysis' && operation === 'run',
+    ),
+  ).toHaveLength(1);
+  await act(async () => {
+    initial.resolve(analysisStatus(true));
+  });
+  expect(analysisReads()).toHaveLength(1);
+  await act(async () => {
+    run.resolve(analysisStatus(true));
+  });
+  expect(analysisReads()).toHaveLength(2);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(3000);
+  });
+  expect(analysisReads()).toHaveLength(3);
+});
+
+it.each(['invalidation', 'replacement'])(
+  'does not downgrade a refreshed overview after %s when an older analysis completion read finishes',
+  async (refresh) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const oldCompletion = deferred<unknown>();
+    const nextRefresh = deferred<unknown>();
+    const snapshot = (revision: number) => ({
+      state: { revision, goal: null, proposals: [] },
+      periodDays: 28,
+      availableThrough: null,
+    });
+    requests.overview
+      .mockReset()
+      .mockResolvedValueOnce(snapshot(1))
+      .mockResolvedValueOnce(snapshot(3))
+      .mockReturnValue(nextRefresh.promise);
+    const original = action.getMockImplementation()!;
+    let reads = 0;
+    action.mockImplementation((resource, operation, options) => {
+      if (resource === 'nrAnalysis')
+        return Promise.resolve(analysisStatus(++reads === 1));
+      if (resource === 'nrStrategy' && operation === 'state')
+        return oldCompletion.promise;
+      return original(resource, operation, options);
+    });
+    vi.mocked(refreshNavBadges).mockImplementation(() => {
+      window.dispatchEvent(new Event('nocoreach:badges'));
+    });
+    await act(async () => {
+      await setup();
+    });
+    expect(
+      action.mock.calls.some(
+        ([resource, operation]) =>
+          resource === 'nrStrategy' && operation === 'state',
+      ),
+    ).toBe(true);
+    await act(async () => {
+      if (refresh === 'invalidation')
+        window.dispatchEvent(new Event('nocoreach:badges'));
+      else {
+        cache.replace('insights-overview:1', snapshot(3));
+        requests.overview.mockReset().mockReturnValue(nextRefresh.promise);
+      }
+    });
+    expect(
+      cache.peek<{ state: { revision: number } }>('insights-overview:1')?.state
+        .revision,
+    ).toBe(3);
+    await act(async () => {
+      oldCompletion.resolve(snapshot(2).state);
+    });
+    expect(
+      cache.peek<{ state: { revision: number } }>('insights-overview:1')?.state
+        .revision,
+    ).toBe(3);
+    await act(async () => {
+      nextRefresh.reject(new Error('Refresh unavailable'));
+    });
+    expect(
+      cache.peek<{ state: { revision: number } }>('insights-overview:1')?.state
+        .revision,
+    ).toBe(3);
   },
 );

@@ -7,10 +7,9 @@ import {
   type ReactNode,
 } from 'react';
 import type { I18nRuntime } from '@nocobase/i18n';
-import english from '../../shared/i18n/en.json';
-import chinese from '../../shared/i18n/zh.json';
-import legacyKeys from '../../shared/i18n/legacy-keys.json';
-import { systemMessageKey } from '../../shared/i18n/messages';
+import { messages, loadBusinessMessages } from './message-catalog.js';
+import type { MessageScope } from '../../shared/startup-pages.js';
+import { recognizeSystemMessage } from '../../shared/i18n/recognize.js';
 import { readStoredLocale } from '@nocobase/app-client';
 import { nocobaseClient } from '#lib/nocoreach-api';
 
@@ -25,6 +24,52 @@ let patterns: Pattern[] | null = null;
 let shortPatterns: Pattern[] | null = null;
 const cache = new Map<string, string>();
 const CJK = /[一-鿿]/;
+let connectedRuntime: I18nRuntime | undefined;
+const preparedRuntimes = new WeakMap<I18nRuntime, number>();
+const businessLocalePromises: Partial<Record<MessageScope, Promise<void>>> = {};
+let appliedRevision = messages.revision;
+
+function attachBusinessMessages(runtime: I18nRuntime): void {
+  if (!messages.revision || preparedRuntimes.get(runtime) === messages.revision)
+    return;
+  // The official instance continues to own namespace fallback and language changes.
+  runtime.i18n.addResourceBundle(
+    'zh-CN',
+    'nocoreach',
+    messages.chinese,
+    true,
+    false,
+  );
+  runtime.i18n.addResourceBundle(
+    'en-US',
+    'nocoreach',
+    messages.english,
+    true,
+    false,
+  );
+  preparedRuntimes.set(runtime, messages.revision);
+}
+
+export function prepareBusinessLocale(
+  scope: MessageScope = 'all',
+): Promise<void> {
+  businessLocalePromises[scope] ??= loadBusinessMessages(scope)
+    .then(() => {
+      if (connectedRuntime) attachBusinessMessages(connectedRuntime);
+      if (
+        appliedRevision !== messages.revision ||
+        (dictionary !== null && dictionary !== messages.english)
+      ) {
+        appliedRevision = messages.revision;
+        setDictionary(isChinese() ? null : messages.english);
+      }
+    })
+    .catch((error: unknown) => {
+      delete businessLocalePromises[scope];
+      throw error;
+    });
+  return businessLocalePromises[scope];
+}
 
 export function isChinese(): boolean {
   return dictionary === null;
@@ -33,6 +78,7 @@ export function isChinese(): boolean {
 const listeners = new Set<() => void>();
 export const getCurrentLocale = (): string =>
   dictionary === null ? 'zh-CN' : 'en-US';
+const getLocaleSnapshot = () => `${getCurrentLocale()}:${messages.revision}`;
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
   return () => {
@@ -42,7 +88,8 @@ const subscribe = (listener: () => void) => {
 
 /** Subscribe at a NocoReach page boundary; updates preserve the page's component and form state. */
 export function useNocoReachLocale(): string {
-  return useSyncExternalStore(subscribe, getCurrentLocale, getCurrentLocale);
+  useSyncExternalStore(subscribe, getLocaleSnapshot, getLocaleSnapshot);
+  return getCurrentLocale();
 }
 
 /** Store messages as raw text or a render-time getter, never as a translated snapshot.
@@ -64,12 +111,17 @@ export function useMessageState(
 
 /** The application's existing i18n runtime owns startup defaults, persistence and language changes. */
 export function connectLocale(runtime: I18nRuntime): () => void {
+  connectedRuntime = runtime;
+  attachBusinessMessages(runtime);
   const apply = (locale: string) =>
-    setDictionary(locale.toLowerCase().startsWith('zh') ? null : english);
+    setDictionary(
+      locale.toLowerCase().startsWith('zh') ? null : messages.english,
+    );
   apply(runtime.getLocale());
   runtime.i18n.on('languageChanged', apply);
   return () => {
     runtime.i18n.off('languageChanged', apply);
+    if (connectedRuntime === runtime) connectedRuntime = undefined;
   };
 }
 
@@ -78,22 +130,22 @@ export async function prepareLocale(
     (typeof document === 'undefined' ? '' : document.documentElement.lang) ||
     'zh-CN',
 ): Promise<void> {
+  await prepareBusinessLocale();
   if (!locale || locale.toLowerCase().startsWith('zh')) {
     setDictionary(null);
     return;
   }
-  setDictionary(english);
+  setDictionary(messages.english);
 }
 
 // Synchronous form, for test pages that load the English text themselves; null means Chinese.
 export function setDictionary(next: Record<string, string> | null): void {
-  const previous = dictionary;
   cache.clear();
   patterns = null;
   shortPatterns = null;
   dictionary = next;
   translateRequestErrors();
-  if (previous !== next) listeners.forEach((listener) => listener());
+  listeners.forEach((listener) => listener());
 }
 
 let errorsTranslated = false;
@@ -115,12 +167,12 @@ function translateRequestErrors() {
         error instanceof Error &&
         (metadataKey ||
           CJK.test(error.message) ||
-          Object.hasOwn(chinese, error.message)) &&
+          Object.hasOwn(messages.chinese, error.message)) &&
         Object.getOwnPropertyDescriptor(error, 'message')?.configurable !==
           false
       ) {
         const originalMessage =
-          metadataKey && Object.hasOwn(chinese, metadataKey)
+          metadataKey && Object.hasOwn(messages.chinese, metadataKey)
             ? metadataKey
             : error.message;
         Object.defineProperty(error, 'message', {
@@ -140,7 +192,7 @@ const SLOTS: Record<string, Record<string, string>> = {
 
 function compile(minimum: number): Pattern[] {
   const out: Array<Pattern & { weight: number }> = [];
-  for (const [key, zh] of Object.entries(chinese)) {
+  for (const [key, zh] of Object.entries(messages.chinese)) {
     const en = dictionary?.[key];
     if (en === undefined) continue;
     if (!/\{\d+\}/.test(zh)) continue;
@@ -208,9 +260,9 @@ function translateDynamic(text: string, depth: number): string {
 }
 
 function resolve(text: string, depth = 0): string {
-  if (Object.hasOwn(chinese, text)) return $t(text);
-  const key = Object.hasOwn(legacyKeys, text)
-    ? (legacyKeys as Record<string, string>)[text]
+  if (Object.hasOwn(messages.chinese, text)) return $t(text);
+  const key = Object.hasOwn(messages.legacy, text)
+    ? messages.legacy[text]
     : undefined;
   if (key) return $t(key);
   if (!dictionary || !CJK.test(text)) return text;
@@ -258,7 +310,11 @@ export function translateSystemError(
   message: string | null | undefined,
 ): string {
   if (message == null) return '';
-  const key = systemMessageKey(message);
+  const key = recognizeSystemMessage(
+    message,
+    messages.chinese,
+    messages.legacy,
+  );
   return key && systemErrors.has(key) ? $t(key) : message;
 }
 
@@ -333,8 +389,8 @@ export function translateSourceError(
     const translated = translateSourceError(context[2]);
     return translated === context[2] ? message : `${context[1]}: ${translated}`;
   }
-  const key = Object.hasOwn(legacyKeys, message)
-    ? (legacyKeys as Record<string, string>)[message]
+  const key = Object.hasOwn(messages.legacy, message)
+    ? messages.legacy[message]
     : message;
   return sourceSystemErrors.has(key) ? $t(key) : translateSystemError(message);
 }
@@ -343,7 +399,7 @@ export function translateSourceError(
  * intentionally NOT resolved here, so new callers cannot depend on the retired key format. */
 export function $t(key: string | null | undefined, vars?: Vars): string {
   if (key == null) return '';
-  const values: Record<string, string> = dictionary ?? chinese;
+  const values: Record<string, string> = dictionary ?? messages.chinese;
   return fill(Object.hasOwn(values, key) ? values[key] : key, vars);
 }
 

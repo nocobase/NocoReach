@@ -30,6 +30,8 @@ import {
   selectedNavigationId,
 } from '../routing/route-navigation.js';
 
+import { useRoutePrefetch } from '../routing/route-prefetch.js';
+
 export interface AppLayoutProps {
   readonly routes: readonly AppClientRegisteredRoute[];
 }
@@ -40,6 +42,7 @@ export function AppLayout({ routes }: AppLayoutProps): ReactElement {
 
   const { t } = useTranslation();
   const { items: menuItems, denied } = useRouteNavigation(routes);
+  const prefetchRoute = useRoutePrefetch(menuItems);
   const selectedKey = selectedNavigationId(
     routes,
     useLocation().pathname,
@@ -66,6 +69,7 @@ export function AppLayout({ routes }: AppLayoutProps): ReactElement {
                   selectedKey={selectedKey}
                   sections={false}
                   badges={navigationBadges}
+                  onPrefetchIntent={prefetchRoute}
                 />
               </AppSidebar>
               <div className='app-brand-surface flex min-w-0 flex-1 flex-col'>

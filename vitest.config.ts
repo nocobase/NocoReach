@@ -1,10 +1,12 @@
 import { fileURLToPath } from 'node:url';
+import { startupMessagesPlugin } from './scripts/startup-messages.js';
 
 import { createReactVitestConfig } from '@nocobase/dev-config/vitest/react';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 
 export default createReactVitestConfig({
+  plugins: [startupMessagesPlugin()],
   test: {
     root,
     // Browser tests must use jsdom storage rather than Node 26's experimental process-global storage.

@@ -4,12 +4,15 @@ import {
 } from '../../shared/i18n/messages';
 // @vitest-environment node
 import { readFileSync } from 'node:fs';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, beforeAll, expect, it } from 'vitest';
 import { setDictionary } from '../../client/i18n';
+import { loadBusinessMessages } from '../../client/i18n/message-catalog';
 import english from '../../shared/i18n/en.json';
 import { xiaohongshuErrorMessage } from '../../client/pages/xiaohongshu-errors';
 import { XHS_MESSAGES } from '../../server/nocoreach/xiaohongshu-adapter';
 
+// This Node test invokes browser helpers without the route's locale preparation.
+beforeAll(() => loadBusinessMessages());
 afterEach(() => setDictionary(null));
 const source = readFileSync(
   new URL('../../server/nocoreach/xiaohongshu-source.ts', import.meta.url),

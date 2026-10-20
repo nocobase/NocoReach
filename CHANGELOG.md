@@ -1,5 +1,37 @@
 # NocoReach Changelog
 
+## Unreleased — Initial route resources
+
+- Prefetch the current Insights, Opportunities or Tasks URL's public code into the HTTP cache during application startup without evaluating pages or moving business reads ahead of authentication and authorization. Failed or stalled initial hints remain independent of navigation imports and stale-build recovery.
+- Remove hidden full-dictionary imports from browser playbook and collector helpers, preserve canonical snapshot identities, and reject complete dictionaries anywhere in the browser build.
+- Generate a shared workspace translation catalog from source dependencies and preserve every historical alias while removing duplicated alias text from delivered resources. Load remaining page copy on demand, with both languages and application overrides preserved.
+
+## Unreleased — Application startup
+
+- Keep shell translations in the startup entry and load workspace business copy alongside session preparation only for workspace entry URLs. Business routes await their own catalog scope; authentication, redirect, inbox and plugin pages load independently. Preserve language fallback and historical messages, and retry failed resource loads.
+- Load chat conversations, Markdown and run history when the panel first opens. Keep the panel dismissible during loading and preserve its mounted state after closing.
+
+## Unreleased — First menu navigation
+
+- Start Insights, Opportunities and Tasks reads alongside their route modules after membership, page and project checks. Share pending requests and recently completed reads without fetching business data on hover.
+- Reuse project task snapshots across the three menus and retain visible Opportunities and Tasks content during revalidation. Invalidate shared business snapshots after mutations and preserve authentication, permission and project isolation.
+- Reject late snapshot replacements after cache invalidation while allowing successful task changes to merge into the latest list without dropping concurrently added records.
+- Remove the idle pacing gap for explicit menu resource intent while retaining sequential low-priority hints and foreground navigation guards.
+
+## Unreleased — Insights initial loading
+
+- Load a compact Insights snapshot without generating the full analysis context, and start independent data blocks concurrently. Read its cutoff from current-resource overview partitions without building the full sync snapshots.
+- Reuse the last Insights snapshot within the authenticated project scope while refreshing on return. Fence older requests after mutations and clear unavailable data on permission or session changes. Keep a single analysis poll through cache invalidation, cancel it on project/session changes or unmount, and ignore late completion responses.
+
+## Unreleased — Intent-driven route resource loading
+
+- Prefetch permitted application menu resources after 120 ms of pointer hover or keyboard focus, without executing pages or fetching business data. Preserve menu navigation, nested groups and collapsed popovers; ignore touch hover and cancel short passes.
+- Prioritize the latest menu target over idle hints, deduplicate shared resources and retain network, visibility and foreground-navigation guards. Restrict idle speculation to one high-traffic page with missing resources per navigation; bound each page queue to 24 URLs and retain up to 128 successful URLs.
+- Emit content-addressed manifests from final JS/CSS chunks for application-owned menu entries. Keep metadata bound to the document build, preserve unchanged build hashes and match Vite request credentials for cache reuse.
+- Bound metadata and hint waits to ten seconds and dispose queued work on navigation, permission changes or unmount. Failed speculation never triggers stale-build reloads or delays actual imports.
+- Run the focused Chromium fixture in CI, covering real menu intent, JS/CSS cache reuse and same-page navigation during a stalled HTTP prefetch with browser caching enabled.
+- Include application build-plugin dependencies in isolated Vite fixtures so asset-base and development-watcher checks exercise the real configuration.
+
 ## Unreleased — Opportunity briefs
 
 - Show each pending opportunity as a full-width brief: what happened, why it is worth doing and what to do, then where, for whom and to what end, with priority, effort and confidence as tags and the limitations behind ⓘ. The same brief opens from Handled.

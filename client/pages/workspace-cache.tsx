@@ -131,12 +131,13 @@ class WorkspaceCache {
     }
     return undefined;
   }
-  replace<T>(key: string, value: T): void {
-    if (!this.active) return;
+  replace<T>(key: string, value: T): boolean {
+    if (!this.active) return false;
     const at = Date.now();
     // Replacing the entry also fences any earlier pending read from refilling it.
     this.rows.set(key, { value, at });
     if (this.ownsStorage()) store(key, value, at);
+    return true;
   }
   revision(key: string | null): number {
     return key ? (this.revisions.get(key) ?? 0) : 0;
@@ -151,7 +152,10 @@ class WorkspaceCache {
       if (!listeners.size) this.listeners.delete(key);
     };
   }
-  invalidate(matches: (key: string) => boolean): void {
+  invalidate(
+    matches: (key: string) => boolean,
+    { keepValue = false }: { keepValue?: boolean } = {},
+  ): void {
     if (!this.active) return;
     const keys = new Set([...this.rows.keys(), ...this.listeners.keys()]);
     if (this.ownsStorage()) {
@@ -168,8 +172,12 @@ class WorkspaceCache {
     }
     for (const key of keys) {
       if (!matches(key)) continue;
-      // Removing the entry also fences responses that began before the change.
-      this.rows.delete(key);
+      // Replace the entry to fence older reads, including background refreshes.
+      // Business mutations may retain the visible snapshot while revalidating;
+      // permission/session changes and existing invalidations still clear it.
+      const value = keepValue ? this.rows.get(key)?.value : undefined;
+      if (value !== undefined) this.rows.set(key, { value, at: 0 });
+      else this.rows.delete(key);
       this.revisions.set(key, this.revision(key) + 1);
       this.listeners.get(key)?.forEach((listener) => listener());
     }
@@ -273,7 +281,19 @@ function SessionCache({
   const [cache] = useState(() => new WorkspaceCache(owner));
   useEffect(() => {
     cache.activate();
-    return () => cache.dispose();
+    const refreshBusiness = () =>
+      cache.invalidate(
+        (key) =>
+          ['insights-overview:', 'strategy-state:', 'project-tasks:'].some(
+            (prefix) => key.startsWith(prefix),
+          ),
+        { keepValue: true },
+      );
+    window.addEventListener('nocoreach:badges', refreshBusiness);
+    return () => {
+      window.removeEventListener('nocoreach:badges', refreshBusiness);
+      cache.dispose();
+    };
   }, [cache]);
   return (
     <Context.Provider value={cache}>
@@ -308,7 +328,7 @@ export function useFreshData<T>(
   error?: unknown;
   loading: boolean;
   reload: () => void;
-  replace: (data: T) => void;
+  replace: (data: T | ((current: T) => T)) => void;
 } {
   const cache = useWorkspaceCache();
   const revision = useWorkspaceCacheRevision(key);
@@ -363,11 +383,24 @@ export function useFreshData<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps, @eslint-react/exhaustive-deps
   }, [cache, key, attempt, staleTime, retryDelay, expiresAt, revision]);
   const replace = useCallback(
-    (data: T) => {
+    (update: T | ((current: T) => T)) => {
       if (!key) return;
+      const currentRevision = cache.revision(key);
+      let data: T;
+      if (typeof update === 'function') {
+        // A successful mutation may patch the latest snapshot after invalidation.
+        // Do not resurrect a snapshot cleared by an unavailable response.
+        const current = cache.peek<T>(key);
+        if (current === undefined) return;
+        data = (update as (current: T) => T)(current);
+      } else {
+        // Whole snapshots belong to the revision at which their read started.
+        if (currentRevision !== revision) return;
+        data = update;
+      }
+      if (!cache.replace(key, data)) return;
       ++sequenceRef.current;
-      cache.replace(key, data);
-      setState({ cache, key, revision, data, loading: false });
+      setState({ cache, key, revision: currentRevision, data, loading: false });
     },
     [cache, key, revision],
   );

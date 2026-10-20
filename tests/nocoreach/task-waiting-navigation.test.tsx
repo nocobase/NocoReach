@@ -12,6 +12,7 @@ import {
 } from '../../client/i18n';
 import locales from '../../client/locales';
 import OptimizationWork from '../../client/pages/optimization-work';
+import { WorkspaceCacheProvider } from '../../client/pages/workspace-cache';
 import { WaitingStrip } from '../../client/pages/strategy/insights-view';
 import { isWaitingTask } from '../../client/pages/task-waiting';
 import type { Work } from '../../client/pages/task-execution-types';
@@ -20,6 +21,15 @@ const fixture = vi.hoisted(() => ({
   admin: false,
   projectId: 7,
   records: vi.fn(),
+}));
+vi.mock('@nocobase/app-plugin-authentication/client', () => ({
+  useAuthentication: () => ({
+    session: { user: { id: 'test' }, session: { id: 'test-session' } },
+    isPending: false,
+  }),
+}));
+vi.mock('@nocobase/app-plugin-authorization/client', () => ({
+  useAuthorizationRevision: () => 0,
 }));
 vi.mock('../../client/pages/me', async (original) => ({
   ...(await original<typeof import('../../client/pages/me')>()),
@@ -129,7 +139,9 @@ async function setup(entry = '/insights', locale = 'zh-CN') {
   const result = render(
     <I18nProvider runtime={runtime}>
       <MemoryRouter initialEntries={[entry]}>
-        <Page />
+        <WorkspaceCacheProvider>
+          <Page />
+        </WorkspaceCacheProvider>
       </MemoryRouter>
     </I18nProvider>,
   );

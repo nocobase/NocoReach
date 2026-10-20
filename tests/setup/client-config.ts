@@ -24,4 +24,12 @@ function renderClientConfig(): void {
 // Before the test file is imported, as the server renders it before the entry module runs: some modules resolve
 // URLs at the top level.
 renderClientConfig();
+// Component tests mount business pages directly, bypassing the route loader that
+// prepares their catalogs in the app. Do not import the API/React adapter here:
+// individual tests still own their service mocks and locale selection.
+if (typeof document !== 'undefined') {
+  const { loadBusinessMessages } =
+    await import('../../client/i18n/message-catalog.js');
+  await loadBusinessMessages();
+}
 beforeEach(renderClientConfig);
