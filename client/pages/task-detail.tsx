@@ -42,9 +42,9 @@ import './task-detail.css';
 import {confirmAction} from '#components/reach/confirm';
 import {useMe} from './me';
 import {parseReplies,ReplyDrafts,REPLY_PLAYBOOK} from './reply-drafts';
-// 起草社区回复: the drafts as cards with 复制回复 (reply-drafts.tsx); other documents as text.
+// Community reply drafts: the drafts as cards with Copy reply (reply-drafts.tsx); other documents as text.
 const repliesOf=(w:Work,content?:string)=>(w.playbook?.id===REPLY_PLAYBOOK||w.flow?.id===REPLY_PLAYBOOK)&&content?parseReplies(content):[];
-// Whether you can do this task's steps (2026-10-08): its owner and 管理员 can; other members read it and leave a message.
+// Whether you can do this task's steps (2026-10-08): its owner and administrators can; other members read it and leave a message.
 const TaskAccess=createContext<{allowed:boolean;self:boolean;owner:string}>({allowed:true,self:true,owner:''});
 type Update=(command:string,body?:object)=>Promise<Data|undefined>;
 type Member={id:string;name:string};
@@ -210,8 +210,8 @@ async function withUsableAgent(data:Data,update:Update,command:string,body:objec
  if(!hasTaskAgent(data)&&options.length===1){const d=await update('setAgent',{agentId:options[0].id});if(!d)return;revision=d.work.revision;}
  return update(command,{...body,revision});
 }
-// Before a task starts (2026-10-08 user decision: 交给 Agent only creates the task): what the Agent will get, the 做法
-// (the one suggested at hand-off preselected) and a note; nothing runs until 确定开始执行.
+// Before a task starts (2026-10-08 user decision: Hand off to agent only creates the task): what the Agent will get,
+// the playbook (the one suggested at hand-off preselected) and a note; nothing runs until Start.
 function StartCard({data,list,pick,setPick,update,busy,projectId,taskId}:{data:Data;list?:PlaybookList;pick:string;setPick:(id:string)=>void;update:Update;busy:boolean;projectId:number;taskId:string}){
  const [note,setNote]=useTaskDraft('note',''),[reading,setReading]=useState(false),{allowed}=useContext(TaskAccess);
  const {clear}=useTaskDraftStatus();
@@ -429,7 +429,7 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
   {accepted&&!accepted.pr&&<><Reading><Markdown content={accepted.content}/></Reading>{accepted.report&&<ReportNotes report={accepted.report}/>}</>}
  </StageCard>;
 }
-// 效果观察 (SPEC §8): day 7 and day 28 against the same number of days before going live.
+// Impact tracking (SPEC §8): day 7 and day 28 against the same number of days before going live.
 function EffectList({w}:{w:Work}){
  const items=effectItems(w),pages=effectPages(w);
  if(!pages.length)return <p className="nr-td-muted">{$t('taskDetail.noRelatedPageNothingCompare')}</p>;
