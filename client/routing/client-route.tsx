@@ -22,7 +22,9 @@ export interface ClientRouteProps {
 export function ClientRoute({ route }: ClientRouteProps): ReactElement {
   const { authz, componentLoader } = route;
   const messageScope =
-    route.packageName === 'nocoreach' ? pageMessageScope(route.name) : 'all';
+    route.source === 'application' && route.packageName === 'nocoreach'
+      ? pageMessageScope(route.name)
+      : undefined;
   const checkAccess = authz !== 'skip';
   const { can: allowed, isPending: accessLoading } = useCan(
     authz === 'skip' ? undefined : authz,

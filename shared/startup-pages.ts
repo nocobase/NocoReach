@@ -7,10 +7,21 @@ export const startupPages = {
 
 export type MessageScope = 'workspace' | 'all';
 
-export function pageMessageScope(name: string): MessageScope {
-  return name === 'home' || Object.hasOwn(startupPages, name)
-    ? 'workspace'
-    : 'all';
+export function pageMessageScope(name: string): MessageScope | undefined {
+  // These application routes use the shell/authentication catalogs, not business copy.
+  if (
+    [
+      'home',
+      'inbox',
+      'login',
+      'register',
+      'forgot-password',
+      'reset-password',
+      'device',
+    ].includes(name)
+  )
+    return;
+  return Object.hasOwn(startupPages, name) ? 'workspace' : 'all';
 }
 
 export function initialPageName(

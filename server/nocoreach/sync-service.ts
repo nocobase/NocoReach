@@ -41,6 +41,40 @@ class SyncService{
  // Only unfiltered final web overview rows belong in the durable date partitions.
  async overviewParts(id: string | number,resource: string,startDate: string,endDate: string,transaction?: LegacyTransaction){return this.repo('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',resource,grain:'overview',date:{$in:datesBetween(startDate,endDate)}},fields:['date','payload','updatedAt'],transaction});}
  async historyJobs(id: string | number,resource: string,startDate: string,endDate: string,transaction?: LegacyTransaction){return (await this.repo('nrSyncJobs').find({filter:{projectId:id,source:'gsc',resource,status:{$in:[...active,'paused','failed']}},sort:['createdAt','id'],transaction})).filter(j=>String(j.get('cursor')||j.get('startDate'))<=endDate&&String(j.get('endDate'))>=startDate);}
+ // The Insights header needs only the common final-data cutoff, not the query/page snapshots.
+ async availableThrough(id: string | number): Promise<string | null> {
+  id = String(id);
+  const link = await this.link(id);
+  const latest = await Promise.all(['ga4', 'gsc'].map(async source => {
+   for (let offset = 0; ; offset += 32) {
+    const rows = await this.repo('nrSyncPartitions').find({
+     filter: {
+      projectId: id,
+      source,
+      resource: String(link.get(source === 'ga4' ? 'ga4PropertyId' : 'gscSiteUrl')),
+      grain: 'overview',
+     },
+     fields: ['date', 'payload'],
+     sort: ['-date', '-id'],
+     offset,
+     limit: 32,
+    });
+    // Overview partitions hold one day's rows. Empty responses do not establish coverage;
+    // actual zero-valued rows do. Read their date just as buildSnapshots does.
+    for (const row of rows) {
+     const payload: unknown = row.get('payload');
+     if (!Array.isArray(payload)) continue;
+     const end = payload.flatMap((value: unknown) =>
+      value && typeof value === 'object' && 'date' in value &&
+      typeof value.date === 'string' && validDate(value.date) ? [value.date] : []
+     ).sort().at(-1);
+     if (end) return end;
+    }
+    if (rows.length < 32) return null;
+   }
+  }));
+  return latest.filter((date): date is string => date !== null).sort()[0] || null;
+ }
  async enqueueHistory(id: string | number,v: Record<string,unknown>){
   if(v.scope!=='gscOverview'||(v.mode!=='missing'&&v.mode!=='refresh')||!validDate(v.startDate)||!validDate(v.endDate)||v.startDate>v.endDate||v.type&&v.type!=='web'||v.country||v.queryFilter||v.pageFilter)throw Object.assign(new Error(systemMessageText('dataViews.invalidDate')),{status:400});
   const {earliest,cutoff}=historyBounds(this.p,id),startDate=v.startDate>earliest?v.startDate:earliest,endDate=v.endDate<cutoff?v.endDate:cutoff;

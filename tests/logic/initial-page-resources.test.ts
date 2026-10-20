@@ -56,14 +56,16 @@ it('preloads only the requested page, without importing code, applying styles or
     '/nested/assets/route-prefetch-test.json',
   );
   expect(
-    document.querySelector('link[rel="modulepreload"]')?.getAttribute('href'),
+    document
+      .querySelector('link[rel="prefetch"][href$=".js"]')
+      ?.getAttribute('href'),
   ).toContain('/nested/assets/insights.js');
   expect(
-    document.querySelector('link[rel="preload"][as="style"]'),
+    document.querySelector('link[rel="prefetch"][href$=".css"]'),
   ).not.toBeNull();
   expect(
     document.querySelector(
-      'link[rel="stylesheet"],script[src*="insights"],link[href*="tasks"]',
+      'link[rel="stylesheet"],link[rel="modulepreload"],link[rel="preload"],script[src*="insights"],link[href*="tasks"]',
     ),
   ).toBeNull();
   stop();
@@ -85,10 +87,12 @@ it('keeps completed hints, removes failures, deduplicates resources and ignores 
     expect(document.querySelectorAll('link')).toHaveLength(2),
   );
   const script = document.querySelector<HTMLLinkElement>(
-    'link[rel="modulepreload"]',
+    'link[rel="prefetch"][href$=".js"]',
   )!;
   script.dispatchEvent(new Event('load'));
-  const style = document.querySelector<HTMLLinkElement>('link[as="style"]')!;
+  const style = document.querySelector<HTMLLinkElement>(
+    'link[rel="prefetch"][href$=".css"]',
+  )!;
   style.dispatchEvent(new Event('error'));
   stop();
   expect(document.querySelectorAll('link')).toHaveLength(1);
@@ -105,5 +109,37 @@ it('does not fetch on other routes, and aborts metadata or stalled hints when le
   window.dispatchEvent(new Event('pagehide'));
   await Promise.resolve();
   await Promise.resolve();
+  expect(document.querySelectorAll('link')).toHaveLength(0);
+});
+
+it('cancels stalled initial hints before evaluating a foreground route', async () => {
+  const { preload } = await setup();
+  preload();
+  await vi.waitFor(() =>
+    expect(document.querySelectorAll('link')).toHaveLength(2),
+  );
+  const { loadRouteModule } =
+    await import('../../client/routing/route-modules.js');
+  await loadRouteModule(async () => {
+    expect(document.querySelectorAll('link')).toHaveLength(0);
+    return { default: () => null };
+  });
+});
+
+it('does not append late initial hints after navigation overtakes the manifest read', async () => {
+  const { preload, fetch } = await setup();
+  let ready!: (response: Response) => void;
+  fetch.mockReturnValue(
+    new Promise<Response>((resolve) => {
+      ready = resolve;
+    }),
+  );
+  preload();
+  const { loadRouteModule } =
+    await import('../../client/routing/route-modules.js');
+  await loadRouteModule(async () => ({ default: () => null }));
+  expect(fetch.mock.calls[0][1]?.signal?.aborted).toBe(true);
+  ready(new Response(JSON.stringify({ 'growth-overview': ['insights.js'] })));
+  await new Promise((resolve) => setTimeout(resolve, 0));
   expect(document.querySelectorAll('link')).toHaveLength(0);
 });

@@ -55,10 +55,10 @@ class StrategyService{
   // Give this read a typed boundary around the ported service's dynamic plugin facade.
   const reader = this as unknown as {
    state(id: string): Promise<StrategyState>;
-   p: {sync: {snapshots(id: string): Promise<{key: string; payload?: {end?: string}}[]>}};
+   p: {sync: {availableThrough(id: string): Promise<string | null>}};
   };
-  const [state,snapshots]=await Promise.all([reader.state(id),reader.p.sync.snapshots(id).catch(()=>[])]);
-  return {state:insightsState(state),periodDays:28,availableThrough:snapshots.find(s=>s.key==='project')?.payload?.end||null};
+  const [state,availableThrough]=await Promise.all([reader.state(id),reader.p.sync.availableThrough(id).catch(()=>null)]);
+  return {state:insightsState(state),periodDays:28,availableThrough};
  }
  async context(id,requestedDays=28){
   const days=periods.periodDays(requestedDays);

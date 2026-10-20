@@ -146,11 +146,14 @@ describe('Insights display snapshot', () => {
   });
 });
 
-it('loads only stored state and snapshot metadata, without generating an analysis context', async () => {
+it('loads only stored state and the cutoff, without building snapshots or an analysis context', async () => {
+  const availableThrough = vi.fn().mockResolvedValue('2026-10-18');
   const snapshots = vi
     .fn()
-    .mockResolvedValue([{ key: 'project', payload: { end: '2026-10-18' } }]);
-  const service = new StrategyService({ sync: { snapshots } });
+    .mockRejectedValue(new Error('Must not build snapshots'));
+  const service = new StrategyService({
+    sync: { snapshots, availableThrough },
+  });
   const original = state(3);
   vi.spyOn(service, 'state').mockResolvedValue(original);
   const context = vi
@@ -161,8 +164,9 @@ it('loads only stored state and snapshot metadata, without generating an analysi
     periodDays: 28,
     availableThrough: '2026-10-18',
   });
-  expect(snapshots).toHaveBeenCalledWith('12');
+  expect(availableThrough).toHaveBeenCalledWith('12');
+  expect(snapshots).not.toHaveBeenCalled();
   expect(context).not.toHaveBeenCalled();
-  snapshots.mockRejectedValueOnce(new Error('No Google connection'));
+  availableThrough.mockRejectedValueOnce(new Error('No Google connection'));
   expect((await service.overview('12')).availableThrough).toBeNull();
 });

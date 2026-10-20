@@ -315,26 +315,27 @@ test('opening a successfully prefetched page reuses JS and CSS without executing
   );
 });
 
-test('opening the same page while its speculative request is stalled does not wait for the hint', async ({
-  page,
-  site,
-}) => {
-  site.stall();
-  await page.goto(site.url);
-  await expect
-    .poll(
-      () =>
-        site.requests.some((url) =>
-          site.resources.some((file) => url.endsWith('/' + file)),
-        ),
-      { timeout: 15000 },
-    )
-    .toBe(true);
-  await page.getByRole('button', { name: 'Open page' }).click();
-  await expect(page.getByRole('button', { name: 'Page ready' })).toBeVisible({
-    timeout: 2000,
+for (const query of ['', '?initial'])
+  test(`opening the same page during a stalled ${query ? 'initial' : 'menu'} prefetch does not wait for the hint`, async ({
+    page,
+    site,
+  }) => {
+    site.stall();
+    await page.goto(site.url + query);
+    await expect
+      .poll(
+        () =>
+          site.requests.some((url) =>
+            site.resources.some((file) => url.endsWith('/' + file)),
+          ),
+        { timeout: 15000 },
+      )
+      .toBe(true);
+    await page.getByRole('button', { name: 'Open page' }).click();
+    await expect(page.getByRole('button', { name: 'Page ready' })).toBeVisible({
+      timeout: 2000,
+    });
   });
-});
 
 test('real menu hover and keyboard focus warm only the intended non-idle page', async ({
   page,
@@ -378,4 +379,43 @@ test('real menu hover and keyboard focus warm only the intended non-idle page', 
   expect(
     await page.evaluate(() => Reflect.get(globalThis, 'membersExecuted')),
   ).toBeUndefined();
+});
+
+test('retries a failed initial script hint on navigation without reloading or losing a draft', async ({
+  page,
+  site,
+}) => {
+  const target = site.resources.find((file) => file.endsWith('.js'))!;
+  let attempts = 0;
+  let navigations = 0;
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) navigations++;
+  });
+  await page.route(site.url + 'assets/' + target, async (route) => {
+    attempts++;
+    if (attempts === 1)
+      await route.fulfill({
+        status: 503,
+        contentType: 'text/javascript',
+        headers: { 'Cache-Control': 'no-store' },
+        body: 'Temporary failure',
+      });
+    else await route.continue();
+  });
+  await page.goto(site.url + '?initial');
+  await page.getByRole('textbox', { name: 'Draft' }).fill('unsaved draft');
+  await expect.poll(() => attempts).toBe(1);
+  await expect(page.locator(`link[href$="/${target}"]`)).toHaveCount(0);
+  await page.getByRole('button', { name: 'Open page' }).click();
+  await expect(page.getByRole('button', { name: 'Page ready' })).toBeVisible({
+    timeout: 2000,
+  });
+  expect(attempts).toBe(2);
+  expect(navigations).toBe(1);
+  expect(
+    await page.evaluate(() => Reflect.get(globalThis, 'preloadErrors')),
+  ).toBe(0);
+  await expect(page.getByRole('textbox', { name: 'Draft' })).toHaveValue(
+    'unsaved draft',
+  );
 });

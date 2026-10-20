@@ -25,7 +25,7 @@ function existingResources(): Set<string> {
   return new Set(
     Array.from(
       document.querySelectorAll<HTMLLinkElement | HTMLScriptElement>(
-        'link[rel="stylesheet"][href], link[rel="modulepreload"][href], link[rel="preload"][href], script[src]',
+        'link[rel="stylesheet"][href], link[rel="modulepreload"][href], link[rel="preload"][href], link[rel="prefetch"][href], script[src]',
       ),
       (element) => ('href' in element ? element.href : element.src),
     ),

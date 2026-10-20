@@ -149,7 +149,10 @@ describe('startup message boundary', () => {
       expect($t('strategy.insights')).toBe(chinese['strategy.insights']);
       return { default: () => null };
     });
-    await Promise.all([loadRouteModule(loader), loadRouteModule(loader)]);
+    await Promise.all([
+      loadRouteModule(loader, 'all'),
+      loadRouteModule(loader, 'all'),
+    ]);
     expect(loader).toHaveBeenCalledOnce();
   });
 
@@ -171,11 +174,13 @@ describe('startup message boundary', () => {
       const { loadRouteModule } =
         await import('../../client/routing/route-modules.js');
       const loader = vi.fn(async () => ({ default: () => null }));
-      await expect(loadRouteModule(loader)).rejects.toThrow(
+      await expect(loadRouteModule(loader, 'all')).rejects.toThrow(
         'Catalog unavailable',
       );
       expect(loader).not.toHaveBeenCalled();
-      await expect(loadRouteModule(loader)).resolves.toHaveProperty('default');
+      await expect(loadRouteModule(loader, 'all')).resolves.toHaveProperty(
+        'default',
+      );
       expect(loader).toHaveBeenCalledOnce();
     } finally {
       vi.doUnmock('../../client/i18n/message-catalog.js');

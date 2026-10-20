@@ -197,58 +197,133 @@ function Insights({
       requestId: operationRef.current.id,
     });
   }
-  const followAnalysis = useCallback(async () => {
-    setGenerating(true);
-    for (let i = 0; i < 120; i++) {
-      const st = await analysisRequest(projectId, 'status').catch(() => null);
-      if (st) {
-        setAnalysis(st);
-        if (!st.running) {
-          setGenerating(false);
-          if (st.last && !st.last.ok)
-            setError(() =>
-              $t('strategy.analysisNotCompleteExistingOpportunities', {
-                0:
-                  translateSystemError(st.runs[0]?.error) ||
-                  $t('errors.unknownReason'),
-              }),
-            );
-          else {
-            setState(await request<StrategyState>(projectId, 'state'));
-            setNotice(() => $t('strategy.opportunitiesUpdated'));
-            refreshNavBadges();
+  // Cache invalidation changes setState's revision fence, not the polling lifetime.
+  const updateStateRef = useRef(setState);
+  useEffect(() => {
+    updateStateRef.current = setState;
+  }, [setState]);
+  type AnalysisRead = {
+    controller: AbortController;
+    following?: Promise<void>;
+    started: boolean;
+    starting: boolean;
+  };
+  const analysisReadRef = useRef<AnalysisRead | null>(null);
+  const followAnalysis = useCallback(
+    (read: AnalysisRead) => {
+      const { signal } = read.controller;
+      if (signal.aborted) return Promise.resolve();
+      if (read.following) return read.following;
+      const follow = async () => {
+        setGenerating(true);
+        for (let i = 0; i < 120; i++) {
+          const st = await analysisRequest(projectId, 'status', signal).catch(
+            () => null,
+          );
+          if (signal.aborted) return;
+          if (st) {
+            setAnalysis(st);
+            if (!st.running) {
+              if (st.last && !st.last.ok)
+                setError(() =>
+                  $t('strategy.analysisNotCompleteExistingOpportunities', {
+                    0:
+                      translateSystemError(st.runs[0]?.error) ||
+                      $t('errors.unknownReason'),
+                  }),
+                );
+              else {
+                // Capture the current fence before reading, so a later invalidation
+                // still rejects a stale response rather than writing through it.
+                const updateState = updateStateRef.current;
+                const next = await request<StrategyState>(
+                  projectId,
+                  'state',
+                  {},
+                  signal,
+                );
+                if (signal.aborted) return;
+                updateState(next);
+                setNotice(() => $t('strategy.opportunitiesUpdated'));
+                refreshNavBadges();
+              }
+              return;
+            }
           }
-          return;
+          await new Promise<void>((resolve) => {
+            const finish = () => {
+              clearTimeout(timeout);
+              signal.removeEventListener('abort', finish);
+              resolve();
+            };
+            const timeout = setTimeout(finish, 3000);
+            signal.addEventListener('abort', finish, { once: true });
+          });
+          if (signal.aborted) return;
         }
-      }
-      await new Promise((r) => setTimeout(r, 3000));
-    }
-    setGenerating(false);
-    setError(() => $t('strategy.analysisTakingWhileRefreshLater'));
-  }, [projectId, setError, setNotice, setState]);
+        setError(() => $t('strategy.analysisTakingWhileRefreshLater'));
+      };
+      read.following = follow()
+        .catch(() => {
+          if (!signal.aborted)
+            setError(() => $t('strategy.notLoadInsightsTryAgain'));
+        })
+        .finally(() => {
+          read.following = undefined;
+          if (!signal.aborted) setGenerating(false);
+        });
+      return read.following;
+    },
+    [projectId, setError, setNotice],
+  );
   async function generate() {
+    const read = analysisReadRef.current;
+    if (
+      !read ||
+      read.controller.signal.aborted ||
+      read.starting ||
+      read.following
+    )
+      return;
+    read.started = read.starting = true;
+    const { signal } = read.controller;
+    setGenerating(true);
     setError('');
     setNotice('');
     try {
-      const st = await analysisRequest(projectId, 'run');
+      const st = await analysisRequest(projectId, 'run', signal);
+      if (signal.aborted) return;
       setAnalysis(st);
-      await followAnalysis();
+      await followAnalysis(read);
     } catch (e) {
-      setGenerating(false);
+      if (signal.aborted) return;
       setError(() =>
         e instanceof Error
           ? $legacyText(e.message)
           : $t('strategy.notStartAnalysisTryAgain'),
       );
+    } finally {
+      read.starting = false;
+      if (!signal.aborted) setGenerating(false);
     }
   }
   useEffect(() => {
-    void analysisRequest(projectId, 'status')
+    const read: AnalysisRead = {
+      controller: new AbortController(),
+      started: false,
+      starting: false,
+    };
+    analysisReadRef.current = read;
+    void analysisRequest(projectId, 'status', read.controller.signal)
       .then((st) => {
+        if (read.controller.signal.aborted || read.started) return;
         setAnalysis(st);
-        if (st.running) void followAnalysis();
+        if (st.running) void followAnalysis(read);
       })
       .catch(() => undefined);
+    return () => {
+      read.controller.abort();
+    };
   }, [projectId, followAnalysis]);
   async function act(fn: () => Promise<void>) {
     if (pendingRef.current) return;

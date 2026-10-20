@@ -2,13 +2,13 @@
 
 ## Unreleased — Initial route resources
 
-- Preload the current Insights, Opportunities or Tasks URL's public code during application startup without evaluating pages or moving business reads ahead of authentication and authorization.
+- Prefetch the current Insights, Opportunities or Tasks URL's public code into the HTTP cache during application startup without evaluating pages or moving business reads ahead of authentication and authorization. Failed or stalled initial hints remain independent of navigation imports and stale-build recovery.
 - Remove hidden full-dictionary imports from browser playbook and collector helpers, preserve canonical snapshot identities, and reject complete dictionaries anywhere in the browser build.
 - Generate a shared workspace translation catalog from source dependencies and preserve every historical alias while removing duplicated alias text from delivered resources. Load remaining page copy on demand, with both languages and application overrides preserved.
 
 ## Unreleased — Application startup
 
-- Keep shell translations in the startup entry and load complete business catalogs alongside session preparation. Prepare resources before evaluating pages, preserve language fallback and historical messages, and retry failed resource loads.
+- Keep shell translations in the startup entry and load workspace business copy alongside session preparation only for workspace entry URLs. Business routes await their own catalog scope; authentication, redirect, inbox and plugin pages load independently. Preserve language fallback and historical messages, and retry failed resource loads.
 - Load chat conversations, Markdown and run history when the panel first opens. Keep the panel dismissible during loading and preserve its mounted state after closing.
 
 ## Unreleased — First menu navigation
@@ -19,8 +19,8 @@
 
 ## Unreleased — Insights initial loading
 
-- Load a compact Insights snapshot without generating the full analysis context, and start independent data blocks concurrently.
-- Reuse the last Insights snapshot within the authenticated project scope while refreshing on return. Fence older requests after mutations and clear unavailable data on permission or session changes.
+- Load a compact Insights snapshot without generating the full analysis context, and start independent data blocks concurrently. Read its cutoff from current-resource overview partitions without building the full sync snapshots.
+- Reuse the last Insights snapshot within the authenticated project scope while refreshing on return. Fence older requests after mutations and clear unavailable data on permission or session changes. Keep a single analysis poll through cache invalidation, cancel it on project/session changes or unmount, and ignore late completion responses.
 
 ## Unreleased — Intent-driven route resource loading
 
