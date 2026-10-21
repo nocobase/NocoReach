@@ -10,7 +10,10 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { NocoReachHttpError } from '../../client/lib/nocoreach-api';
 import { ArticleTargetsConnect } from '../../client/pages/article-targets-connect';
-import { articleRequest } from '../../client/pages/article-targets-api';
+import {
+  articleRequest,
+  searchArticles,
+} from '../../client/pages/article-targets-api';
 import {
   ArticleEditor,
   ArticleReview,
@@ -20,7 +23,7 @@ import {
   TargetRows,
 } from '../../client/pages/task-detail/article-release';
 import {
-  ArticleStart,
+  DeliveryDialog,
   DeliverySummary,
 } from '../../client/pages/task-detail/article-start';
 import {
@@ -735,7 +738,7 @@ it('lists each target of a release with its state and a conflict with its detail
   ).toBeInTheDocument();
 });
 
-it('chooses other targets on the start card: the primary leaves them, a limit applies', async () => {
+it('chooses other targets in the Change dialog: the primary leaves them, a limit applies', async () => {
   const many = ['cms', 'a', 'b', 'c', 'd', 'e'].map((id) => ({
     ...target,
     id,
@@ -747,46 +750,136 @@ it('chooses other targets on the start card: the primary leaves them, a limit ap
     work: { article: undefined },
     agent: { repo: { repo: 'org/site', baseBranch: 'main' } },
   } as unknown as TaskData;
-  function Harness() {
-    const [choice, setChoice] = useState<DeliveryChoice>({
-      target: 'cms',
-      mode: 'new',
-      also: [],
-    });
-    return (
-      <>
-        <ArticleStart
-          data={d}
-          projectId={1}
-          choice={choice}
-          setChoice={setChoice}
-          busy={false}
-          allowed
-          link={async () => true}
-        />
-        <output>{choice.also.join(',')}</output>
-      </>
-    );
-  }
+  const onSave = vi.fn();
   const user = userEvent.setup();
-  render(<Harness />);
+  render(
+    <DeliveryDialog
+      open
+      onClose={() => undefined}
+      data={d}
+      projectId={1}
+      choice={{ target: 'cms', mode: 'new', also: [] }}
+      busy={false}
+      link={async () => true}
+      onSave={onSave}
+    />,
+  );
+  const dialog = screen.getByRole('dialog', { name: 'Choose article' });
   expect(
-    screen.getByText(
+    within(dialog).getByText(
       'Matched by address (slug): an existing article is updated, otherwise a new one is created.',
     ),
   ).toBeInTheDocument();
   for (const n of ['A', 'B', 'C', 'D'])
-    await user.click(screen.getByRole('checkbox', { name: n }));
-  expect(screen.getByRole('checkbox', { name: 'E' })).toHaveAttribute(
+    await user.click(within(dialog).getByRole('checkbox', { name: n }));
+  expect(within(dialog).getByRole('checkbox', { name: 'E' })).toHaveAttribute(
     'data-disabled',
   );
-  expect(screen.getByText('Up to 4 more targets')).toBeInTheDocument();
-  await user.selectOptions(screen.getByLabelText('Publish to'), 'a');
-  expect(document.querySelector('output')?.textContent).toBe('b,c,d');
-  expect(screen.queryByRole('checkbox', { name: 'A' })).not.toBeInTheDocument();
-  await user.selectOptions(screen.getByLabelText('Publish to'), 'repo');
-  expect(document.querySelector('output')?.textContent).toBe('');
-  expect(screen.queryByText('Also publish to')).not.toBeInTheDocument();
+  expect(within(dialog).getByText('Up to 4 more targets')).toBeInTheDocument();
+  await user.selectOptions(within(dialog).getByLabelText('Publish to'), 'a');
+  expect(
+    within(dialog).queryByRole('checkbox', { name: 'A' }),
+  ).not.toBeInTheDocument();
+  expect(within(dialog).getByRole('checkbox', { name: 'B' })).toBeChecked();
+  // Nothing reaches the card before Save.
+  expect(onSave).not.toHaveBeenCalled();
+  await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+  expect(onSave).toHaveBeenCalledWith({
+    target: 'a',
+    mode: 'new',
+    also: ['b', 'c', 'd'],
+  });
+});
+
+it('picks an existing article in the Change dialog: saved on the task at Save, nothing on Cancel', async () => {
+  const d = {
+    ...data,
+    articleTargets: [target],
+    work: { article: undefined },
+    agent: { repo: null },
+  } as unknown as TaskData;
+  const found = {
+    targetId: 'cms',
+    articleId: '9',
+    slug: 'workflow-tools',
+    title: 'Workflow tools',
+    url: 'https://www.example.com/blog/workflow-tools',
+  };
+  vi.mocked(searchArticles).mockResolvedValue([
+    { id: '9', slug: 'workflow-tools', title: 'Workflow tools' },
+    { id: '12', slug: 'open-source-crm', title: 'Open source CRM' },
+  ]);
+  const link = vi.fn(async () => true),
+    onSave = vi.fn(),
+    onClose = vi.fn();
+  const user = userEvent.setup();
+  const show = () =>
+    render(
+      <DeliveryDialog
+        open
+        onClose={onClose}
+        data={d}
+        projectId={1}
+        choice={{ target: 'cms', mode: 'existing', also: [], article: found }}
+        found={found}
+        busy={false}
+        link={link}
+        onSave={onSave}
+      />,
+    );
+  show();
+  let dialog = screen.getByRole('dialog', { name: 'Choose article' });
+  expect(
+    within(dialog).getByText('Selected: Workflow tools (workflow-tools)'),
+  ).toBeInTheDocument();
+  await user.click(
+    await within(dialog).findByRole('button', { name: /Open source CRM/ }),
+  );
+  await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+  expect(onClose).toHaveBeenCalled();
+  expect(link).not.toHaveBeenCalled();
+  expect(onSave).not.toHaveBeenCalled();
+  cleanup();
+  // Picking the article found from the page again keeps it for the start; another one is saved on the task.
+  show();
+  dialog = screen.getByRole('dialog', { name: 'Choose article' });
+  await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+  expect(link).not.toHaveBeenCalled();
+  expect(onSave).toHaveBeenLastCalledWith({
+    target: 'cms',
+    mode: 'existing',
+    also: [],
+    article: found,
+  });
+  cleanup();
+  show();
+  dialog = screen.getByRole('dialog', { name: 'Choose article' });
+  await user.click(
+    await within(dialog).findByRole('button', { name: /Open source CRM/ }),
+  );
+  await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+  expect(link).toHaveBeenCalledWith('cms', '12');
+  expect(onSave).toHaveBeenLastCalledWith({
+    target: 'cms',
+    mode: 'existing',
+    also: [],
+  });
+  cleanup();
+  // Existing article with none picked yet: Save waits for one.
+  render(
+    <DeliveryDialog
+      open
+      onClose={onClose}
+      data={d}
+      projectId={1}
+      choice={{ target: 'cms', mode: 'existing', also: [] }}
+      busy={false}
+      link={link}
+      onSave={onSave}
+    />,
+  );
+  expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  expect(screen.getByText('Pick the article to change')).toBeInTheDocument();
 });
 
 it('defaults the start card to the playbook target, the repository, or the default target', () => {
@@ -946,11 +1039,15 @@ it('shows where the change goes in one line, with Change for the exceptions', as
     article,
   });
   expect(screen.getByText('Article to change')).toBeInTheDocument();
-  expect(screen.getByText('Workflow tools')).toBeInTheDocument();
   expect(screen.getByText('Found from the page address')).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'Open page' })).toHaveAttribute(
+  // The title opens the article where readers see it.
+  expect(screen.getByRole('link', { name: 'Workflow tools' })).toHaveAttribute(
     'href',
     article.url,
+  );
+  expect(screen.getByRole('link', { name: 'Workflow tools' })).toHaveAttribute(
+    'target',
+    '_blank',
   );
   await userEvent.setup().click(screen.getByRole('button', { name: 'Change' }));
   expect(onChange).toHaveBeenCalled();
@@ -959,13 +1056,71 @@ it('shows where the change goes in one line, with Change for the exceptions', as
   show({ target: 'cms', mode: 'new', also: [] });
   expect(screen.getByText('Publishes to NocoBase CMS')).toBeInTheDocument();
   cleanup();
-  // Still to be picked: nothing here, the full choice shows instead.
-  const { container } = show({ target: 'cms', mode: 'existing', also: [] });
-  expect(container).toBeEmptyDOMElement();
+  // Still to be picked: the line says so and Choose article opens the dialog.
+  show({ target: 'cms', mode: 'existing', also: [] });
+  expect(screen.getByText('Pick the article to change')).toBeInTheDocument();
+  await userEvent
+    .setup()
+    .click(screen.getByRole('button', { name: 'Choose article' }));
+  expect(onChange).toHaveBeenCalledTimes(2);
   cleanup();
   show({ target: 'cms', mode: 'existing', also: [] }, true);
   expect(
     screen.getByText('Finding the article for this page…'),
   ).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
+});
+
+it('links a saved article through its target page patterns, preferring the task page, and lists other targets', () => {
+  const withPages = {
+    ...target,
+    pages: {
+      en: 'https://www.example.com/en/blog/{slug}',
+      zh: 'https://www.example.com/cn/blog/{slug}',
+    },
+  };
+  const d = (targets: unknown[], page?: string) =>
+    ({
+      ...data,
+      articleTargets: targets,
+      task: { id: 1, title: 'T', brief: '' },
+      work: {
+        article: {
+          targetId: 'cms',
+          articleId: '7',
+          slug: 'hello',
+          title: 'Hello',
+          sourceKey: null,
+        },
+        ...(page ? { page: { url: page, title: '' } } : {}),
+      },
+    }) as unknown as TaskData;
+  const show = (task: TaskData, also: string[] = []) =>
+    render(
+      <DeliverySummary
+        data={task}
+        choice={{ target: 'cms', mode: 'existing', also }}
+        finding={false}
+        allowed
+        busy={false}
+        onChange={() => undefined}
+      />,
+    );
+  show(d([withPages]));
+  expect(screen.getByRole('link', { name: 'Hello' })).toHaveAttribute(
+    'href',
+    'https://www.example.com/en/blog/hello',
+  );
+  cleanup();
+  show(d([withPages], 'https://example.com/cn/blog/hello/'));
+  expect(screen.getByRole('link', { name: 'Hello' })).toHaveAttribute(
+    'href',
+    'https://example.com/cn/blog/hello/',
+  );
+  cleanup();
+  // No patterns: the title stays plain text.
+  show(d([target, { ...target, id: 'news', name: 'News' }]), ['news']);
+  expect(screen.getByText('Hello')).toBeInTheDocument();
+  expect(screen.queryByRole('link')).toBeNull();
+  expect(screen.getByText('Also publishes to News')).toBeInTheDocument();
 });

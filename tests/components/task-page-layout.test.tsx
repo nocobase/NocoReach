@@ -264,6 +264,7 @@ function blogPageTask(): TaskData {
         locales: ['en'],
         capabilities: { concurrency: 'check-before-write' },
         default: true,
+        pages: { en: 'https://www.nocobase.com/en/blog/{slug}' },
       },
     ],
     agent: {
@@ -317,14 +318,18 @@ test('the start card finds the article from the task page and links it as the ta
     },
   );
   mount(data, '/actions/32');
-  expect(await screen.findByText('Top Workflow Automation Tools')).toBeTruthy();
+  expect(
+    await screen.findByRole('link', { name: 'Top Workflow Automation Tools' }),
+  ).toHaveAttribute('href', article.url);
   expect(screen.getByText('要修改的文章')).toBeTruthy();
   expect(screen.queryByLabelText('发布到')).toBeNull();
   expect(
     action.mock.calls.find(([r, c]) => r === 'nrArticles' && c === 'match')?.[2]
       .body.urls,
   ).toEqual([article.url]);
-  await userEvent.setup().click(screen.getByRole('button', { name: '确定开始执行' }));
+  await userEvent
+    .setup()
+    .click(screen.getByRole('button', { name: '确定开始执行' }));
   await vi.waitFor(() => expect(commands).toHaveLength(2));
   expect(commands[0]).toMatchObject({
     command: 'linkArticle',
@@ -338,4 +343,107 @@ test('the start card finds the article from the task page and links it as the ta
     revision: 5,
   });
   expect(commands[1].delivery).toBeUndefined();
+});
+
+// T-33 on Studio (2026-10-21): the article is saved on the task; its page is built from the target's pattern.
+function savedArticleTask(): TaskData {
+  const data = blogPageTask();
+  return {
+    ...data,
+    work: {
+      ...data.work,
+      article: {
+        targetId: 'cms',
+        articleId: '501',
+        slug: 'workflow-automation-tools',
+        title: '5 Best Tools for Building Workflow Automation',
+        sourceKey: null,
+      },
+    },
+  } as unknown as TaskData;
+}
+const OPTIMIZE = {
+  id: 'optimize-page',
+  name: '优化现有页面',
+  kind: 'build',
+  category: 'optimize',
+  description: '改进已有页面的标题、描述、结构和内容。',
+  steps: [
+    {
+      key: 'change',
+      name: '修改',
+      kind: 'change',
+      instruction: '读取当前页面，改标题和描述。',
+    },
+    {
+      key: 'review',
+      name: '看效果并发布',
+      kind: 'review',
+      checklist: [{ key: 'goal', label: '改动符合目标', required: true }],
+    },
+  ],
+};
+
+test('View steps opens the playbook over the task page, with a way to the Playbooks page', async () => {
+  const user = userEvent.setup();
+  action.mockImplementation((resource: string) =>
+    Promise.resolve(
+      resource === 'nrPlaybooks' ? { revision: 1, playbooks: [OPTIMIZE] } : [],
+    ),
+  );
+  mount(savedArticleTask(), '/actions/33');
+  await user.click(await screen.findByRole('button', { name: '查看步骤' }));
+  const drawer = await screen.findByRole('dialog', { name: '优化现有页面' });
+  const steps = within(drawer).getByRole('list', { name: '步骤' });
+  expect(steps).toHaveTextContent('Agent 修改');
+  expect(steps).toHaveTextContent('读取当前页面，改标题和描述。');
+  expect(steps).toHaveTextContent('确认：改动符合目标');
+  expect(
+    within(drawer).getByRole('link', { name: '在做法页查看或编辑' }),
+  ).toHaveAttribute('href', '/playbooks?id=optimize-page');
+  // Closing it leaves the start card as it was.
+  await user.keyboard('{Escape}');
+  await vi.waitFor(() =>
+    expect(screen.queryByRole('dialog', { name: '优化现有页面' })).toBeNull(),
+  );
+  expect(screen.getByRole('button', { name: '确定开始执行' })).toBeTruthy();
+});
+
+test('Change opens a dialog and the card keeps its one-line summary', async () => {
+  const user = userEvent.setup();
+  action.mockImplementation((resource: string, command: string) => {
+    if (resource === 'nrPlaybooks')
+      return Promise.resolve({ revision: 1, playbooks: [OPTIMIZE] });
+    if (resource === 'nrArticles' && command === 'search')
+      return Promise.resolve([]);
+    return Promise.resolve([]);
+  });
+  mount(savedArticleTask(), '/actions/33');
+  const title = '5 Best Tools for Building Workflow Automation';
+  // In the header and on the start card, both to the public page.
+  await vi.waitFor(() =>
+    expect(
+      screen
+        .getAllByRole('link', { name: new RegExp(title) })
+        .map((l) => l.getAttribute('href')),
+    ).toEqual([
+      'https://www.nocobase.com/en/blog/workflow-automation-tools',
+      'https://www.nocobase.com/en/blog/workflow-automation-tools',
+    ]),
+  );
+
+  const card = screen.getByRole('region', { name: '等你处理' });
+  await user.click(within(card).getByRole('button', { name: '更改' }));
+  const dialog = await screen.findByRole('dialog', { name: '选择文章' });
+  expect(within(dialog).getByLabelText('发布到')).toHaveValue('cms');
+  expect(within(dialog).getByRole('radio', { name: '已有文章' })).toBeChecked();
+  expect(dialog).toHaveTextContent(
+    `已选：${title}（workflow-automation-tools）`,
+  );
+  // The card itself never opens the old two-column editor.
+  expect(within(card).queryByLabelText('发布到')).toBeNull();
+  await user.click(within(dialog).getByRole('radio', { name: '新文章' }));
+  await user.click(within(dialog).getByRole('button', { name: '保存' }));
+  expect(screen.queryByRole('dialog', { name: '选择文章' })).toBeNull();
+  expect(within(card).getByText('发布到 NocoBase CMS')).toBeTruthy();
 });

@@ -7,7 +7,9 @@ import { useTechnicalDetails } from './task-detail/technical-state.js';
 import { EvidenceDialog } from './task-detail/evidence.js';
 import { taskEvidence, whyText } from './task-detail/evidence-model.js';
 import { VisibleChanges } from './task-detail/visible-changes.js';
-import { ArticleStart, DeliverySummary } from './task-detail/article-start.js';
+import { DeliveryDialog, DeliverySummary } from './task-detail/article-start.js';
+import { articlePageUrl } from './task-detail/article-page.js';
+import { PlaybookDrawer } from './task-detail/playbook-drawer.js';
 import { ArticleEditor, ArticleReview } from './task-detail/article-review.js';
 import { ConflictBody, DriftNotice, PendingButton, TargetRows } from './task-detail/article-release.js';
 import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, pageUrlsOf, publishingTitle, soleConflict, type ArticleFound, type DeliveryChoice } from './task-detail/article-model.js';
@@ -151,7 +153,7 @@ function TaskHeader({data,list,pick,busy,runActive,members,update,onEvidence,onP
     <AgentMenu data={data} busy={busy} locked={!allowed?$t('taskDetail.ownerAdminChange'):closedLabel(w)?$t('taskDetail.taskClosed'):w.stage==='done'?$t('taskDetail.taskDone'):runActive?$t('taskDetail.taskQueuedRunningWaitFinish'):undefined} onChange={async agentId=>Boolean(await update('setAgent',{agentId}))}/>
     {collab.length>0&&<span className="inline-flex items-center gap-1" title={collab.map(c=>c.name).join('、')}>{collab.slice(0,3).map(c=><ActorAvatar key={c.id} type="user" name={c.name} size="xs"/>)}{collab.length>3?`+${collab.length-3}`:''}</span>}
     {insight?.id&&<button type="button" className="nr-link" onClick={()=>navigate(`/opportunities?item=${encodeURIComponent(insight.id!)}`)}>{$tj('taskDetail.sourceAttribution',{0:insight.no?`O-${insight.no}`:$t('common.opportunity')})}</button>}
-    {w.article?.articleId&&<span className='max-w-60 truncate' title={w.article.slug}>{$t('articleTask.headerArticle',{0:w.article.title||w.article.slug})}</span>}
+    {w.article?.articleId&&<HeaderArticle data={data}/>}
     {w.page&&<a className="nr-link inline-flex items-center gap-1" href={w.page.url} target="_blank" rel="noreferrer">{pathOf(w.page.url)}<ExternalLink className="size-3" aria-hidden="true"/></a>}
     {(data.related||[]).map(r=><button key={r.id} type="button" className="nr-link max-w-60 truncate" title={r.title} onClick={()=>navigate(`/actions/${r.id}`)}>{r.relation==='prev'?$t('taskDetail.previous'):$t('taskDetail.next')}{r.title}</button>)}
    </div>
@@ -159,6 +161,11 @@ function TaskHeader({data,list,pick,busy,runActive,members,update,onEvidence,onP
  </header>;
 }
 // The playbook's steps in one row: done ones ticked, the current one outlined, the person's steps in violet.
+// The task's article in the header, linked to where it can be read when its target has page patterns.
+function HeaderArticle({data}:{data:Data}){
+ const a=data.work.article!,text=$t('articleTask.headerArticle',{0:a.title||a.slug}),url=articlePageUrl(data,a.targetId,a.slug);
+ return url?<a className="nr-link inline-flex max-w-60 items-center gap-1" href={url} target="_blank" rel="noreferrer" title={a.slug}><span className="truncate">{text}</span><ExternalLink className="size-3 shrink-0" aria-hidden="true"/></a>:<span className='max-w-60 truncate' title={a.slug}>{text}</span>;
+}
 function StepBar({name,stages,w}:{name?:string;stages:Stage[];w:Work}){
  const {self,owner}=useContext(TaskAccess),started=Boolean(w.flow),done=w.stage==='done',index=w.stageIndex||0,closed=Boolean(closedLabel(w));
  const label=(s:Stage)=>{const text=stageLabel(s);return s.kind==='review'&&!self?(text.startsWith($t('common.you'))?`${owner}${text.slice($t('common.you').length)}`:`${text} · ${owner}`):text;};
@@ -228,27 +235,28 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId}:{data:D
  // The article is found from the task's page (2026-10-21) rather than picked from hundreds; Change is for exceptions.
  const pages=pageUrlsOf(data),pagesKey=pages.join('\n'),hasTargets=Boolean(data.articleTargets?.length),savedArticle=data.work.article?.articleId||'';
  const lookupKey=hasTargets&&!savedArticle&&pagesKey?`${projectId}\n${pagesKey}`:'';
- const [lookup,setLookup]=useState<{key:string;found:ArticleFound}>(),[editing,setEditing]=useState(false);
+ const [lookup,setLookup]=useState<{key:string;found:ArticleFound}>(),[choosing,setChoosing]=useState(false),[viewing,setViewing]=useState(false);
  useEffect(()=>{if(!lookupKey)return;const c=new AbortController();
   void matchArticle(projectId,pagesKey.split('\n'),c.signal).then(r=>{if(!c.signal.aborted)setLookup({key:lookupKey,found:r});},()=>{if(!c.signal.aborted)setLookup({key:lookupKey,found:{article:null,unchecked:true}});});return()=>c.abort();},[lookupKey,projectId,pagesKey]);
  const found:ArticleFound|'finding'|undefined=!lookupKey?undefined:lookup?.key===lookupKey?lookup.found:'finding';
  const finding=found==='finding',delivery=defaultDelivery(data,pick,found==='finding'?undefined:found),current=choice||delivery,plan:{ready:boolean;unlink:boolean;link?:{targetId:string;articleId:string};delivery?:unknown}=articleChoice?deliveryPlan(data,current):{ready:true,unlink:false,delivery:undefined};
- const summary=articleChoice&&!editing&&(finding||!(current.mode==='existing'&&!plan.ready));
- const link=async(targetId:string|null,articleId?:string|null)=>Boolean(await update('linkArticle',{targetId,...(articleId!==undefined?{articleId}:{})}));
+ const notice=found&&found!=='finding'&&!found.article?$t(found.unchecked?'articleTask.matchUnavailable':'articleTask.noArticleForPage'):undefined;
+ const link=async(targetId:string,articleId:string)=>Boolean(await update('linkArticle',{targetId,articleId}));
  const start=async()=>{let revision=data.work.revision;if(!hasTaskAgent(data)&&only){const d=await update('setAgent',{agentId:only.id});if(!d)return;revision=d.work.revision;}if(plan.unlink){const d=await update('linkArticle',{targetId:null,revision});if(!d)return;revision=d.work.revision;}if(plan.link){const d=await update('linkArticle',{...plan.link,revision});if(!d)return;revision=d.work.revision;}const d=await update('startTask',{playbookId:pick,note,revision,...(plan.delivery?{delivery:plan.delivery}:{})});if(d)clear();};
  const attachments=Array.isArray(data.task.evidence?.attachmentIds)&&data.task.evidence.attachmentIds.length>0;
  return <StageCard icon={<Play/>} title={$t('taskDetail.startAfterReview')} sub={handoff?$t('taskDetail.taskHandedOverDocumentDelivered',{0:handoff.playbook}):$t('taskDetail.agentNotStartedReadBrief')}
   actions={<Button disabled={busy||!p||!ready||!plan.ready||finding} onClick={()=>void start()}>{$t('taskDetail.confirmStart')}</Button>}>
   {brief&&<div className="nr-td-start-field" data-start-brief=""><span>{briefTitle}</span><div className="nr-td-start-brief"><p>{brief.replace(/[#*>`_]/g,'').replace(/^[ \t]+/gm,'').replace(/\n{2,}/g,'\n').trim().slice(0,600)}</p></div><button type="button" className="nr-link self-start text-xs" onClick={()=>setReading(true)}>{$t('taskDetail.viewFullText')}</button><DocReader open={reading} onClose={()=>setReading(false)} title={briefTitle} content={brief}/></div>}
   <div className="nr-td-start-grid">
-   <label className="nr-td-start-field"><span>{$t('common.playbook')}</span><select aria-label={$t('common.playbook')} value={pick} disabled={busy||!list||!allowed} onChange={e=>setPick(e.target.value)}>
+   <div className="nr-td-start-field"><label className="nr-td-start-field"><span>{$t('common.playbook')}</span><select aria-label={$t('common.playbook')} value={pick} disabled={busy||!list||!allowed} onChange={e=>setPick(e.target.value)}>
     {getCategories().map(([k,label])=><optgroup key={k} label={label}>{(list?.playbooks||[]).filter(x=>x.category===k).map(x=><option key={x.id} value={x.id}>{x.name}{x.id===data.playbookDefault?$t('taskDetail.recommended'):''}</option>)}</optgroup>)}
-   </select>
-    {p&&<small>{p.description}{p.description?' ':''}{$tj('taskDetail.runAgent',{0:p.kind==='build'?$t('taskDetail.onceChangedReviewResultBefore'):$t('taskDetail.writesDocumentReview')})}</small>}
-   </label>
-   {summary?<DeliverySummary data={data} choice={current} finding={finding} allowed={allowed} busy={busy} onChange={()=>{setChoiceState({...current,article:undefined,playbook:pick});setEditing(true);}}/>
-    :articleChoice&&<ArticleStart data={data} projectId={projectId} choice={current} setChoice={c=>setChoiceState({...c,article:undefined,playbook:pick})} busy={busy} allowed={allowed} link={link}
-     notice={!editing&&found&&found!=='finding'&&!found.article?$t(found.unchecked?'articleTask.matchUnavailable':'articleTask.noArticleForPage'):undefined}/>}
+   </select></label>
+    {/* View steps opens the playbook over the page (2026-10-21), so the choices made here stay. */}
+    {p&&<small>{p.description}{p.description?' ':''}{$tj('taskDetail.runAgent',{0:p.kind==='build'?$t('taskDetail.onceChangedReviewResultBefore'):$t('taskDetail.writesDocumentReview')})} <button type="button" className="nr-link text-xs" onClick={()=>setViewing(true)}>{$t('taskDetail.viewSteps')}</button></small>}
+    <PlaybookDrawer playbook={p} open={viewing} onClose={()=>setViewing(false)}/>
+   </div>
+   {articleChoice&&<DeliverySummary data={data} choice={current} finding={finding} notice={notice} allowed={allowed} busy={busy} onChange={()=>setChoosing(true)}/>}
+   {articleChoice&&<DeliveryDialog open={choosing} onClose={()=>setChoosing(false)} data={data} projectId={projectId} choice={current} found={found&&found!=='finding'?found.article:null} notice={notice} busy={busy} link={link} onSave={c=>setChoiceState({...c,playbook:pick})}/>}
    <label className="nr-td-start-field"><span>{$t('taskDetail.notesOptional')}</span><textarea aria-label={$t('taskDetail.additionalNotes')} rows={3} value={note} disabled={busy||!allowed} placeholder={$t('taskDetail.changeEnglishVersionKeepTechnical')} onChange={e=>setNote(e.target.value)}/></label>
   </div>
   <NeedsAgent data={data}/>

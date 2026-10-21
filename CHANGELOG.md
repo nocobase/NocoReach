@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Start card: playbook steps, article link, Change dialog
+
+- The task start card's playbook line gains View steps: a drawer over the task page lists what the Agent does and what you check, with View or edit in Playbooks for the full page. The choices on the card stay as they are.
+- The article to change links to where readers see it, in a new tab: the address found from the task's page, or one built from the target's page pattern for an article saved on the task (the header's Article does the same). Without a pattern the title stays plain text. The task page now receives each target's public page patterns, never its key or API address.
+- Change opens a dialog with Publish to, Also publish to, New or Existing article and the article search; nothing changes until Save, and the card goes back to its one-line summary. When no article was found from the page, the line says why and Choose article opens the same dialog; the card no longer expands into the old two-column form.
+
 ## Unreleased — Automatic runs in plain words
 
 - Settings › Scheduled tasks is now Settings › Automatic runs. The daily analysis card says what it does, "Daily at 09:00" with the timezone by name (China Standard Time rather than `Asia/Shanghai`), how the last run went (projects analyzed, suggestions written) and when the next one is. Change time opens a dialog over the list that also says when most data sources update in the chosen timezone; Run history opens a drawer that names each project instead of its id. Run now, Pause or Turn on, and Technical details (cron, Scheduler states, target, counters) are in the card's "…" menu. Pagination shows only when there is a second page.

@@ -1,7 +1,7 @@
 import { type Message, useMessageState, $t, $tj, $legacyText } from "#i18n";
-import {useEffect,useState,type ReactElement} from 'react';
+import {useEffect,useState} from 'react';
 import {useSearchParams} from 'react-router';
-import {ArrowDownIcon,ArrowUpIcon,FileSearchIcon,GitPullRequestIcon,MoreHorizontal,PencilIcon,PlusIcon,SettingsIcon,SparklesIcon,UserCheckIcon,XIcon} from 'lucide-react';
+import {ArrowDownIcon,ArrowUpIcon,MoreHorizontal,PencilIcon,PlusIcon,SparklesIcon,XIcon} from 'lucide-react';
 import {useBusinessAccess} from '#hooks/use-business-access';
 import {PageContainer,PageHeader} from '#components/reach/page';
 import {Tag} from '#components/reach/tag';
@@ -13,11 +13,11 @@ import {useProject} from './reach-data';
 import {skillRequest,type Skill,type SkillList} from './skill-model';
 import {playbookRequest,localizePlaybookList,getCategories,categoryName,getStepKinds,type Category,type Playbook,type PlaybookList,type Step,type StepKind} from './playbook-model';
 import {confirmAction} from '#components/reach/confirm';
+import {PlaybookSteps,StepIcon} from './playbook-steps';
 type Draft=Pick<Playbook,'name'|'category'|'description'|'steps'|'next'>&{id?:string};
 type Saved=PlaybookList&{playbook?:Playbook|null};
 const NEW='new';
 const source=(p:Playbook)=>p.system?(p.edited?$t('playbooks.builtModified'):$t('playbooks.built')):$t('playbooks.own');
-const icons:Record<StepKind,ReactElement>={analyze:<FileSearchIcon className="size-3.5"/>,change:<GitPullRequestIcon className="size-3.5"/>,review:<UserCheckIcon className="size-3.5"/>};
 // 做法 (SPEC §6.0): every kind of work as a few steps the Agent does and you review, grouped by the work it is. Built-in
 // playbooks are edited in place and can be restored; new ones start from one sentence the online AI turns into a draft.
 export default function PlaybooksPage(){
@@ -51,17 +51,6 @@ export default function PlaybooksPage(){
   {project&&list&&canSave&&<NewPlaybook open={creating} projectId={project.id} onClose={()=>setCreating(false)} onDraft={startNew}/>}
  </PageContainer>;
 }
-// The steps in order, then 上线 and 观察 when a step changes the repository.
-function Steps({steps,skills}:{steps:Step[];skills:Skill[]}){
- const system=steps.some(s=>s.kind==='change')?[[$t('common.live'),$t('playbooks.mergePrConfirmChangeLive')],[$t('playbooks.trackImpact'),$t('playbooks.compareDataBeforeGoingLive')]]:[];
- return <ol className="flex flex-col divide-y" aria-label={$t('common.steps')}>{steps.map((s,i)=><li key={s.key||i} className="flex gap-3 py-2.5">
-   <span className={cn('inline-flex size-6 shrink-0 items-center justify-center rounded-md',s.kind==='review'?'bg-nr-tint-violet text-nr-ink-violet':'bg-nr-tint-blue text-nr-ink-blue')}>{icons[s.kind]}</span>
-   <div className="min-w-0 flex-1"><p className="flex flex-wrap items-center gap-2 text-sm font-medium">{i+1}. {s.kind==='review'?$t('common.yourAction',{0:s.name}):`Agent ${s.name}`}{s.kind!=='review'&&<Tag tone={s.kind==='change'?'blue':'grey'}>{getStepKinds()[s.kind].hint}</Tag>}</p>
-    {s.kind==='review'?s.checklist?.length?<p className="mt-0.5 text-xs text-muted-foreground">{$tj('playbooks.confirm',{0:s.checklist.map(c=>c.label).join(' · ')})}</p>:null:<><p className="mt-0.5 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">{s.instruction}</p><StepSkills ids={s.skills} skills={skills}/></>}</div></li>)}
-  {system.map(([n,d],i)=><li key={n} className="flex gap-3 py-2.5"><span className="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"><SettingsIcon className="size-3.5"/></span>
-   <div className="min-w-0 flex-1"><p className="flex items-center gap-2 text-sm font-medium">{steps.length+i+1}. {n}<Tag tone="grey">{$t('common.system')}</Tag></p><p className="mt-0.5 text-xs text-muted-foreground">{d}</p></div></li>)}
- </ol>;
-}
 function Detail({p,list,skills,busy,onEdit,onCopy,onRestore,onRemove}:{p:Playbook;list:PlaybookList;skills:Skill[];busy:boolean;onEdit?:()=>void;onCopy?:()=>void;onRestore?:()=>void;onRemove?:()=>void}){
  const next=p.next.map(id=>list.playbooks.find(x=>x.id===id)?.name).filter(Boolean);
  return <section className="flex flex-col gap-3 rounded-lg border bg-card p-4 text-card-foreground" aria-label={$t('playbooks.playbookDetails')}>
@@ -71,7 +60,7 @@ function Detail({p,list,skills,busy,onEdit,onCopy,onRestore,onRemove}:{p:Playboo
     {onCopy&&<DropdownMenuItem onClick={onCopy}>{$t('playbooks.duplicate')}</DropdownMenuItem>}{p.edited&&onRestore&&<DropdownMenuItem onClick={onRestore}>{$t('common.restoreDefault')}</DropdownMenuItem>}{!p.system&&onRemove&&<DropdownMenuItem variant="destructive" onClick={onRemove}>{$t('common.delete')}</DropdownMenuItem>}
    </DropdownMenuContent></DropdownMenu>}</div>
   {p.description&&<p className="text-sm text-muted-foreground">{p.description}</p>}
-  <div><h3 className="text-xs font-medium text-muted-foreground">{$t('common.steps')}</h3><Steps steps={p.steps} skills={skills}/></div>
+  <div><h3 className="text-xs font-medium text-muted-foreground">{$t('common.steps')}</h3><PlaybookSteps steps={p.steps} skills={skills}/></div>
   {next.length>0&&<p className="text-xs text-muted-foreground">{$tj('playbooks.continue',{0:next.join('、')})}</p>}
  </section>;
 }
@@ -88,7 +77,7 @@ function Editor({draft,list,skills,busy,onChange,onSave,onCancel}:{draft:Draft;l
   <label className="nr-field">{$t('playbooks.oneLineDescription')}<input value={draft.description} maxLength={200} onChange={e=>set({description:e.target.value})}/></label>
   <div className="flex flex-col gap-2"><h3 className="text-xs font-medium text-muted-foreground">{$t('common.steps')}</h3>
    <ol className="flex flex-col gap-2" aria-label={$t('playbooks.editSteps')}>{draft.steps.map((s,i)=><li key={i} className="flex gap-2 rounded-lg border p-3">
-    <span className={cn('mt-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md',s.kind==='review'?'bg-nr-tint-violet text-nr-ink-violet':'bg-nr-tint-blue text-nr-ink-blue')}>{icons[s.kind]}</span>
+    <span className={cn('mt-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md',s.kind==='review'?'bg-nr-tint-violet text-nr-ink-violet':'bg-nr-tint-blue text-nr-ink-blue')}><StepIcon kind={s.kind}/></span>
     <div className="flex min-w-0 flex-1 flex-col gap-2">
      <div className="flex items-center gap-2 text-sm font-medium">{i+1}. {getStepKinds()[s.kind].label}<input aria-label={$t('playbooks.nameStep',{0:i+1})} value={s.name} maxLength={20} onChange={e=>step(i,{name:e.target.value})} className="w-36"/></div>
      {s.kind==='review'?<label className="nr-field text-xs">{$t('playbooks.confirmDuringReviewOneItem')}<textarea rows={2} value={(s.checklist||[]).map(c=>c.label).join('\n')} onChange={e=>step(i,{checklist:e.target.value.split('\n').map(l=>({key:'',label:l,required:true}))})}/></label>
@@ -117,11 +106,6 @@ function NewPlaybook({open,projectId,onClose,onDraft}:{open:boolean;projectId:nu
   {error&&<p role="alert" className="nr-error">{error}</p>}
   <DialogFooter className="sm:justify-between"><Button variant="ghost" disabled={busy} onClick={()=>onDraft(blank)}>{$t('playbooks.createWithoutAi')}</Button>{canDraft&&<Button disabled={busy} onClick={()=>void ask()}><SparklesIcon/>{busy?$t('playbooks.drafting'):$t('playbooks.draftAi')}</Button>}</DialogFooter>
  </DialogContent></Dialog>;
-}
-// The Skills a step names, by name (Skills deleted since are left out). They always go to the Agent for this step.
-function StepSkills({ids,skills}:{ids?:string[];skills:Skill[]}){
- const named=(ids||[]).map(id=>skills.find(s=>s.id===id)).filter((s):s is Skill=>Boolean(s));
- return named.length?<p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">{$t('playbooks.useSkills')}{named.map(s=><Tag key={s.id} tone="violet" className="font-mono">{s.name}</Tag>)}</p>:null;
 }
 // Picking a step's Skills from the library: chips to remove, a list to add (at most 5).
 function PickSkills({index,ids,skills,onChange}:{index:number;ids:string[];skills:Skill[];onChange:(ids:string[])=>void}){
