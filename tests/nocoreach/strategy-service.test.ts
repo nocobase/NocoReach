@@ -175,6 +175,15 @@ test('每条变化的结论: do / watch / skip with a reason; a change an opport
  await assert.rejects(service.reviewSignal(1,{signalKey:'gone',verdict:'do'}),/不在最近一次分析/);
 });
 
+test('a change judged worth doing gets an opportunity, or is skipped when a task already covers it',async()=>{
+ const {StrategyService}=__strategy_service;const service=new StrategyService({});const state={proposals:[{id:'p',signalKey:'handed',taskId:7,taskNo:7}]};
+ const signals=[{key:'fresh',source:'gsc',title:'/en/blog/x ranks 19.8',facts:['5,790 impressions, 0 clicks'],url:'https://www.example.com/en/blog/x',actionable:true},{key:'handed',source:'gsc',title:'h',facts:[],actionable:true}];
+ service.context=async()=>({evidence:{signals:{items:signals}}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
+ await service.saveInsights(1,{insights:[],locale:'en-US',signalReviews:[{key:'fresh',verdict:'do',reason:'Rewrite the title'},{key:'handed',verdict:'do',reason:'r'}]});
+ assert.deepEqual(state.insights.items.map(c=>[c.title,c.signalIds,c.suggestion]),[['/en/blog/x ranks 19.8',['fresh'],'Rewrite the title']]);
+ assert.deepEqual(state.insights.signalReviews.fresh,{verdict:'do',reason:'Rewrite the title'});
+ assert.deepEqual(state.insights.signalReviews.handed,{verdict:'skip',reason:'Task T-7 is already on it'});
+});
 test('verdicts filled in afterwards keep the ones already there',async()=>{
  const {StrategyService}=__strategy_service;const service=new StrategyService({});
  const state={insights:{evidence:{signals:{items:[{key:'a',actionable:true},{key:'b',actionable:false}]}},signalReviews:{a:{verdict:'do',reason:'原来的'}}}};service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};

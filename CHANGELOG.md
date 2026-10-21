@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Verdicts and opportunities agree
+
+- A change the analysis judges worth doing always ends up as an opportunity, so Insights › Today's changes › To do and Opportunities list the same things. When a task, an opportunity or an ignored opportunity already covers the change or its page, the verdict becomes "No action needed" with the reason (for example "Task T-32 is already on it"); otherwise an opportunity is written from the change and its verdict, marked as needing checking. Verdicts filled in afterwards go through the same check.
+
 ## Unreleased — Settings › Network at full width
 
 - Settings › Network no longer caps its content at 48rem: the proxy card and the data source table use the page's width, as the other pages do, instead of leaving the right side empty.
