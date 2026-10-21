@@ -111,11 +111,11 @@ export function HotTab({ projectId }: { projectId: number }) {
   const notes = [...(hot.token ? [] : [$t('githubHot.noTokenNote')]), $t('githubHot.dataNote'), ...(hot.lastRun?.errors ?? [])];
   const status = hot.running ? $t('githubHot.reading') : hot.lastRun ? $t('githubHot.readAt', { 0: formatDateTime(hot.lastRun.at) }) : "";
   if (!hot.ready) return (
-    <EmptyState icon={<Flame />} title={hot.running ? $t('githubHot.firstReading') : $t('githubHot.notReadYet')} description={$t('githubHot.notReadYetHelp')} action={<Button onClick={() => void refresh()} disabled={hot.running}><RefreshCw data-icon="inline-start" />{$t('githubHot.readNow')}</Button>} />
+    <EmptyState icon={<Flame />} title={hot.running ? $t('githubHot.firstReading') : $t('githubHot.notReadYet')} description={$t('githubHot.notReadYetHelp')} action={<Button onClick={() => void refresh()} disabled={hot.running}><RefreshCw data-icon="inline-start" />{$t('common.updateNow')}</Button>} />
   );
   return (
     <div className="flex flex-col gap-4" data-github-hot="">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{status}</span><NotesTip notes={notes} /><Button className="ml-auto" variant="outline" size="sm" disabled={hot.running} onClick={() => void refresh()}><RefreshCw data-icon="inline-start" />{$t('githubHot.readNow')}</Button></div>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{status}</span><NotesTip notes={notes} /><Button className="ml-auto" variant="outline" size="sm" disabled={hot.running} onClick={() => void refresh()}><RefreshCw data-icon="inline-start" />{$t('common.updateNow')}</Button></div>
       <Frame data-hot-topics="" title={$t('githubHot.topics')} info={$t('githubHot.topicsInfo')} check={topics.length ? <AllCheck selection={topicSelection} count={topics.length} /> : undefined}
         actions={<Button variant="outline" size="sm" onClick={() => setEditing((v) => !v)}>{$t('githubHot.editTopics')}</Button>}>
         {editing ? <TopicEditor topics={topics.map((t) => t.name)} suggestions={hot.suggestions ?? []} onSave={save} onClose={() => setEditing(false)} /> : null}

@@ -3,7 +3,8 @@ import { useCallback, useMemo, useState } from 'react';
 import { Link, Outlet, useSearchParams } from 'react-router';
 import { Info } from 'lucide-react';
 import { PageContainer } from '#components/page-container';
-import { PageHeader } from '#components/page-header';
+// The NocoReach header, as on every other page: actions centred on the title block rather than on its last line.
+import { PageHeader } from '#components/reach/page';
 import { Button } from '#components/ui/button';
 import { ScheduleCard } from './card.js';
 import { useScheduleResource, type ScheduleList } from './data.js';

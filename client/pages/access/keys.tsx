@@ -131,8 +131,8 @@ export default function Keys() {
         description={$t('accessKeys.description')}
         actions={
           <>
-            <Refresh busy={query.isFetching || busy} onClick={reload} />
             {query.data?.items.length ? create : null}
+            <Refresh busy={query.isFetching || busy} onClick={reload} />
           </>
         }
       />
