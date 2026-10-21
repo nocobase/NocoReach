@@ -187,7 +187,7 @@ function DeliveryForm({
   };
   return (
     <>
-      <div className='-mx-4 flex min-h-0 flex-col gap-4 overflow-y-auto px-4'>
+      <div className='-mx-4 flex min-h-0 flex-col gap-4 overflow-y-auto px-4 pb-2'>
         <label className='nr-td-start-field'>
           <span>{$t('articleTask.publishTo')}</span>
           <select
