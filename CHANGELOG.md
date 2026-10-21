@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Connection drawers in plain words
+
+- Describe how each data source connects at the top of the drawer, in product voice instead of an AI's first person, followed by a What you need list; only the title stays pinned while the drawer scrolls. The Agent avatar and grey message box are gone from the top of the drawer: no AI is answering there.
+- Head the question buttons at the bottom of the drawer, which open the AI chat, with the Agent avatar and "Ask AI".
+
 ## Unreleased — Why a data source cannot be reached
 
 - When the server gets no answer from a data source, say which site, why (timed out, interrupted, refused, address not found, untrusted certificate, no response) and whether the request went through the proxy, instead of "the direct request failed". Proxy failures still never fall back to a direct connection.
