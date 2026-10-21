@@ -552,7 +552,7 @@
   "messages.searchClicksDown": "Les clics issus de la recherche pour {0} ont baissé de {1}",
   "messages.empty": "{0} est vide",
   "messages.getsManyImpressionsFewClicks": "{0} enregistre de nombreuses impressions mais peu de clics",
-  "common.moreActions": "{0} actions supplémentaires",
+  "common.moreActions": "Plus d’actions pour {0}",
   "messages.answersMentionNotCiteWebsite": "{1} réponses de {0} vous mentionnent sans citer votre site web",
   "messages.readingFailedTimeOtherAvailable": "La lecture de {0} a échoué cette fois-ci ; les autres données disponibles sont conservées.",
   "domainOverview.itemCount": "{0}",

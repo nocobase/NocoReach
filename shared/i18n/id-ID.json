@@ -552,7 +552,7 @@
   "messages.searchClicksDown": "Klik penelusuran {0} turun {1}",
   "messages.empty": "{0} kosong",
   "messages.getsManyImpressionsFewClicks": "{0} mendapatkan banyak tayangan tetapi sedikit klik",
-  "common.moreActions": "{0} tindakan lainnya",
+  "common.moreActions": "Tindakan lainnya untuk {0}",
   "messages.answersMentionNotCiteWebsite": "{1} jawaban dari {0} menyebut Anda tetapi tidak mengutip situs web Anda",
   "messages.readingFailedTimeOtherAvailable": "Pembacaan {0} kali ini gagal; data lain yang tersedia tetap disimpan.",
   "domainOverview.itemCount": "{0}",

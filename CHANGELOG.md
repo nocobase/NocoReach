@@ -2,6 +2,8 @@
 
 ## Unreleased — Ten interface languages
 
+- Clarify that more-action menu labels refer to a task or keyword, and that the Japanese chat timestamp reports data collection rather than user browsing.
+
 - Phrase tracked-keyword ranking objectives as requested improvements in Brazilian Portuguese, Spanish, French, German, and Indonesian, including when a keyword is currently outside the top 100.
 
 - State query-ranking, search-click and indexing hand-off objectives as requested outcomes across all ten languages; synchronize new Website & product and source-discovery copy when merging main.

@@ -552,7 +552,7 @@
   "messages.searchClicksDown": "Lượt nhấp từ tìm kiếm của {0} giảm {1}",
   "messages.empty": "{0} trống",
   "messages.getsManyImpressionsFewClicks": "{0} có nhiều lượt hiển thị nhưng ít lượt nhấp",
-  "common.moreActions": "{0} thao tác khác",
+  "common.moreActions": "Thao tác khác cho {0}",
   "messages.answersMentionNotCiteWebsite": "{1} câu trả lời từ {0} nhắc đến bạn nhưng không trích dẫn trang web của bạn",
   "messages.readingFailedTimeOtherAvailable": "Lần này không đọc được {0}; các dữ liệu khả dụng khác vẫn được giữ lại.",
   "domainOverview.itemCount": "{0}",

@@ -552,7 +552,7 @@
   "messages.searchClicksDown": "{0} search clicks down {1}",
   "messages.empty": "{0} is empty",
   "messages.getsManyImpressionsFewClicks": "{0} gets many impressions but few clicks",
-  "common.moreActions": "{0} more actions",
+  "common.moreActions": "More actions for {0}",
   "messages.answersMentionNotCiteWebsite": "{1} answers from {0} mention you but don't cite your website",
   "messages.readingFailedTimeOtherAvailable": "Reading {0} failed this time; other available data is kept.",
   "domainOverview.itemCount": "{0}",
