@@ -16,6 +16,7 @@ import {
 } from '#components/ui/dropdown-menu';
 
 import { AgentSetupDialog } from '#components/agent-setup-dialog';
+import { usePendingInvitationCount } from '#pages/access/api';
 
 import { LanguageSwitcher } from './language-switcher.js';
 
@@ -41,6 +42,7 @@ export function UserMenu(): ReactElement {
   const { t } = useTranslation();
   const toaster = useToaster();
   const resolveError = useAuthenticationErrorResolver();
+  const invitations = usePendingInvitationCount(!!identity && !isLoading);
 
   const name =
     identity?.fullName ||
@@ -87,13 +89,18 @@ export function UserMenu(): ReactElement {
             ) : null}
           </div>
           <DropdownMenuSeparator />
-          {identity && !isLoading ? (
+          {/* Only an invitation still waiting for this account makes the page worth a menu entry; the emailed link
+              opens it directly either way. */}
+          {identity && !isLoading && invitations > 0 ? (
             <DropdownMenuItem
               className='gap-2'
               render={<Link to='/member-invitations' />}
             >
               <Mail className='size-4' />
               {$t('accessMembers.yourInvitations')}
+              <span className='ml-auto rounded-full bg-attention px-1.5 text-xs leading-4 text-attention-foreground tabular-nums'>
+                {invitations > 99 ? '99+' : invitations}
+              </span>
             </DropdownMenuItem>
           ) : null}
           {identity && !isLoading ? (
