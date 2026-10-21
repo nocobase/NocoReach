@@ -3612,7 +3612,7 @@
   "messages.runBackground": "Jalankan di latar belakang",
   "lighthouseCard.device": "Perangkat",
   "audit.settings": "Pengaturan",
-  "audit.setNoindex": "Atur menjadi noindex",
+  "audit.setNoindex": "Halaman disetel ke noindex",
   "dataTrends.setUpComparison": "Atur perbandingan",
   "agent.settingsUpdatedAnotherWindowRefresh": "Pengaturan diperbarui di jendela lain. Muat ulang sebelum menyimpan",
   "dataWebsite.visitors": "Pengunjung",

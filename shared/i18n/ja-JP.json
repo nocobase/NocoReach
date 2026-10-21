@@ -5015,7 +5015,7 @@
   "taskDetail.publishLive": "公開",
   "taskDetail.publishHint": "変更を本番サイトに公開し、ページが更新されたことを確認します。",
   "taskDetail.editReleaseNotes": "リリースノートを編集",
-  "taskDetail.publishing": "公開中",
+  "taskDetail.publishing": "公開処理中",
   "taskDetail.publishingHint": "確認済みのバージョンのみを公開し、その後ページを自動で確認します。",
   "taskDetail.agentComputerOfflinePublish": "エージェントを実行するコンピューターがオフラインです。接続されると公開を開始します。",
   "taskDetail.publishedManually": "手動で公開済み",
