@@ -161,7 +161,7 @@ it.each(['2026-02-30', '2026-13-01', '2026-1-01', 'not-a-date'])(
   },
 );
 
-it('reads other search types, breakdowns and one row directly from Search Console', async () => {
+it('reads details, breakdowns and one row directly from Search Console, for web search only', async () => {
   const { views } = await fixture();
   const asked: Record<string, unknown>[] = [];
   views.gscQuery = async (_id: string, _site: string, body: any) => {
@@ -193,34 +193,23 @@ it('reads other search types, breakdowns and one row directly from Search Consol
     if (dims[0] === 'searchAppearance') throw new Error('not for this type');
     return [{ keys: ['crm', url], clicks: 7, impressions: 70, position: 9 }];
   };
-  const discover = await views.search(projectId, {
+  // A search type in the request is ignored: the page reads web search only (2026-10-22).
+  const live = await views.search(projectId, {
     range: '7',
     type: 'discover',
     details: true,
-  });
-  expect(discover).toMatchObject({
-    type: 'discover',
-    noQueries: true,
-    noPosition: true,
-    live: true,
-    queries: null,
-    striking: [],
-  });
-  expect(discover.totals.clicks).toBe(35);
-  expect(discover.pages.rows[0].key).toBe(url);
-  expect(
-    discover.movers.page.rising.map((r: any) => [r.key, r.change]),
-  ).toEqual([[url, 15]]);
-  expect(discover.movers.query).toBeNull();
-  expect(asked.every((b) => b.type === 'discover')).toBe(true);
+  } as never);
+  expect(live).toMatchObject({ live: true });
+  expect(live).not.toHaveProperty('type');
+  expect(live.totals.clicks).toBe(35);
+  expect(live.queries.rows[0].key).toBe('crm');
+  expect(live.pages.rows[0].key).toBe(url);
+  expect(asked.every((b) => !('type' in b))).toBe(true);
   expect(asked.some((b) => (b.dimensions as string[]).includes('query'))).toBe(
-    false,
+    true,
   );
-  const w = discover.window;
-  const breakdown = await views.searchBreakdown(projectId, {
-    ...w,
-    type: 'web',
-  });
+  const w = live.window;
+  const breakdown = await views.searchBreakdown(projectId, { ...w });
   expect(breakdown.countries[0]).toEqual({
     key: 'usa',
     clicks: 9,
@@ -241,14 +230,6 @@ it('reads other search types, breakdowns and one row directly from Search Consol
   expect(row.related).toEqual([
     { key: url, clicks: 7, impressions: 70, ctr: 0.1, position: 9 },
   ]);
-  await expect(
-    views.searchRow(projectId, {
-      ...w,
-      dimension: 'query',
-      key: 'crm',
-      type: 'googleNews',
-    }),
-  ).rejects.toMatchObject({ status: 400 });
   await expect(
     views.searchBreakdown(projectId, { start: 'x', end }),
   ).rejects.toThrow();

@@ -361,31 +361,27 @@ it('retries from the failed cursor without fetching previously committed batches
   ).toEqual(['2026-10-01', '2026-10-08', '2026-10-08']);
 });
 
-it('queries alternate types and filters across their actual range independently of local coverage, without storing them as web totals', async () => {
+it('queries filters across their actual range independently of local coverage, without storing them as web totals', async () => {
   const f = await fixture();
   await f.save('2026-10-13');
   const views = f.views();
-  const image = await views.search(id, { range: '12m', type: 'image' });
-  expect(image.totals.clicks).toBe(3650);
-  expect(image.complete).toBe(true);
-  expect(image.trend[0].clicks).toBe(10);
   const filtered = await views.search(id, {
     range: '12m',
     country: 'usa',
     queryFilter: { operator: 'equals', expression: 'query' },
   });
   expect(filtered.totals.clicks).toBe(3650);
-  expect(f.upstream).toHaveBeenCalledTimes(2);
-  const requests = f.upstream.mock.calls.map(([, init]) =>
+  expect(filtered.complete).toBe(true);
+  expect(filtered.trend[0].clicks).toBe(10);
+  expect(f.upstream).toHaveBeenCalledTimes(1);
+  const [request] = f.upstream.mock.calls.map(([, init]) =>
     JSON.parse(String(init?.body)),
   );
-  expect(
-    requests.every(
-      (b) => b.startDate >= '2025-06-16' && b.dimensions.join() === 'date',
-    ),
-  ).toBe(true);
-  expect(requests[0].type).toBe('image');
-  expect(requests[1].dimensionFilterGroups[0].filters).toEqual([
+  expect(request.startDate >= '2025-06-16').toBe(true);
+  expect(request.dimensions.join()).toBe('date');
+  // Web search only (2026-10-22).
+  expect(request.type).toBe('web');
+  expect(request.dimensionFilterGroups[0].filters).toEqual([
     { dimension: 'country', operator: 'equals', expression: 'usa' },
     { dimension: 'query', operator: 'equals', expression: 'query' },
   ]);

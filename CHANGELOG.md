@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Search performance: web search only, gaps said plainly
+
+- Search performance › Performance reads web search only. The search type choice (Web, Image, Video, News, Discover, Google News) is gone, with the server's handling of other types in the search views: they were read live from Search Console for this choice alone, while the scheduled sync, the daily analysis and Insights use web search only.
+- The coverage line shows only when days are missing: which days, why (fetching, failed, paused, waiting for an administrator, or older than the 16 months Search Console keeps) and the one action that fixes it. A complete range shows nothing; when the data was last saved, blank days, missing comparisons, the backfill limit and scheduled sync being off are in the page's ⓘ. "Re-fetch selected totals" is removed: the scheduled sync re-reads recent days, and gaps are filled automatically when an administrator opens the range.
+
 ## Unreleased — Search & market pages, fixed and in plain words
 
 - Search performance › Sitemaps names each sitemap with its host: a domain property lists every subdomain's sitemap, all called /sitemap.xml, and the rows could not be told apart.

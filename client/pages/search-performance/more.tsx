@@ -1,9 +1,9 @@
 import { googleHistoryFreshness } from '../../../shared/google-cache.js';
 import { $t } from "#i18n";
-// 搜索表现 · what the page gained on 2026-10-14 (user request: everything Search Console's 效果 has, in NocoReach's own
-// style): the search types, 国家/地区 · 设备 · 搜索结果呈现 (read from Search Console when the page asks), 上升最快 ·
-// 下降最快 · 新出现 (Search Console Insights' trending queries and pages), 细分 tables, and one query's or page's
-// detail: its days against the period before and the pages it shows with (or the queries a page shows for).
+// Search performance › Performance, the parts beyond the totals: Country / region, Device and Search appearance (read
+// from Search Console when the page asks), Rising, Falling and New (Search Console Insights' trending queries and pages),
+// the breakdown tables, and one query's or page's detail: its days against the period before and the pages it shows
+// with (or the queries a page shows for). Web search only (2026-10-22): the other search types were dropped.
 import { useMemo, useState } from "react";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { ArrowUpRight } from "lucide-react";
@@ -25,11 +25,6 @@ import { Segmented } from "../data-github/segmented";
 import { formatCount, formatDate, formatPercent, formatSigned } from '#lib/format';
 import { Delta } from '#components/reach/delta';
 
-export type SearchType = "web" | "image" | "video" | "news" | "discover" | "googleNews";
-export const SEARCH_TYPES: { id: SearchType; label: () => string }[] = [
-  { id: "web", label: () => $t('searchPerformance.typeWeb') }, { id: "image", label: () => $t('searchPerformance.typeImage') }, { id: "video", label: () => $t('searchPerformance.typeVideo') },
-  { id: "news", label: () => $t('searchPerformance.typeNews') }, { id: "discover", label: () => "Discover" }, { id: "googleNews", label: () => $t('searchPerformance.typeGoogleNews') },
-];
 export type Metric = "clicks" | "impressions" | "ctr" | "position";
 export type Window = { all?: boolean; start: string; end: string; previousStart: string; previousEnd: string };
 export type BreakdownRow = { key: string; clicks: number; impressions: number; ctr: number; position: number; previousClicks: number | null; previousImpressions: number | null };
@@ -39,7 +34,7 @@ export type Movers = { rising: MoverRow[]; falling: MoverRow[]; fresh: MoverRow[
 type TrendPoint = { date: string; clicks: number | null; impressions: number | null; ctr: number | null; position: number | null; previousDate: string; previousClicks: number | null; previousImpressions: number | null; previousCtr: number | null; previousPosition: number | null };
 type RowDetail = { connected: boolean; trend: TrendPoint[]; related: { key: string; clicks: number; impressions: number; ctr: number; position: number }[] };
 // What the page knows about the report it shows, for the requests it makes on its own.
-export type Scope = { projectId: number; property?: string; compare?: boolean; type: SearchType; window: Window; country?: string; filters: Record<string, unknown> };
+export type Scope = { projectId: number; property?: string; compare?: boolean; window: Window; country?: string; filters: Record<string, unknown> };
 
 export const count = (v: number | null | undefined) => formatCount(v == null ? v : Math.round(v));
 export const ctr = (v: number | null | undefined) => formatPercent(v);
@@ -58,7 +53,7 @@ const APPEARANCE: Record<string, () => string> = {
 };
 export const breakdownName = (kind: "country" | "device" | "appearance", key: string) => (kind === "country" ? countryName(key) : kind === "device" ? (DEVICE[key] ?? (() => key))() : (APPEARANCE[key.toUpperCase()] ?? (() => $t('searchPerformance.appearanceOther', { 0: key.replaceAll("_", " ").toLowerCase() })))());
 const changeText = (now: number, before: number | null) => (before == null || !before ? (now && before === 0 ? $t('searchPerformance.newRow') : "—") : <Delta value={(now - before) / before} />);
-const scopeBody = (s: Scope) => ({ projectId: s.projectId, type: s.type, compare: s.compare, ...s.window, ...(s.country ? { country: s.country } : {}), ...s.filters });
+const scopeBody = (s: Scope) => ({ projectId: s.projectId, compare: s.compare, ...s.window, ...(s.country ? { country: s.country } : {}), ...s.filters });
 
 export function useBreakdown(scope: Scope | null) {
   return useFreshData<Breakdown>(scope ? `data-view:search-breakdown:${scope.projectId}:${JSON.stringify([scope.property,scopeBody(scope)])}` : null, () => api.action<Breakdown>("nrDataViews", "searchBreakdown", { method: "POST", body: scopeBody(scope!), unwrap: "data" }), googleHistoryFreshness);
@@ -153,7 +148,7 @@ export const slices = (kind: "country" | "device" | "appearance", rows: Breakdow
 export function RowDrawer({ scope, dimension, rowKey, figures, metric, onClose }: { scope: Scope; dimension: "query" | "page"; rowKey: string; figures?: { clicks: number; impressions: number; ctr: number; position: number | null }; metric: Metric; onClose: () => void }) {
   const body = { ...scopeBody(scope), dimension, key: rowKey };
   const { data, error } = useFreshData<RowDetail>(`data-view:search-row:${scope.projectId}:${JSON.stringify([scope.property,body])}`, () => api.action<RowDetail>("nrDataViews", "searchRow", { method: "POST", body, unwrap: "data" }), googleHistoryFreshness);
-  const m: Metric = metric === "position" && scope.type === "discover" ? "clicks" : metric;
+  const m: Metric = metric;
   const prevKey = `previous${m[0].toUpperCase()}${m.slice(1)}` as keyof TrendPoint;
   const points = (data?.trend ?? []).map((p) => ({ date: p.date, value: p[m], previous: p[prevKey] }));
   const page = dimension === "page" && safeLink(rowKey) ? safeLink(rowKey)! : null;
@@ -180,7 +175,7 @@ export function RowDrawer({ scope, dimension, rowKey, figures, metric, onClose }
           </ResponsiveContainer>
         </div>
       )}
-      {data && !(dimension === "page" && (scope.type === "discover" || scope.type === "googleNews")) ? (
+      {data ? (
         <>
           <h3 className="mt-5 mb-1 text-sm font-semibold">{dimension === "query" ? $t('searchPerformance.pagesForQuery') : $t('searchPerformance.queriesForPage')}</h3>
           {data.related.length ? (
