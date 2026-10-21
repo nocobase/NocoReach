@@ -184,11 +184,11 @@ it('shows the overview, the related keywords, the site pages and the top 10 with
   expect(within(overview).getByText('同比 ↑ 50% · 3 个月 ↑ 26%')).toBeVisible();
   expect(within(overview).getByText('上位主题：crm')).toBeVisible();
   expect(within(overview).getByText('AI 概览')).toBeVisible();
-  expect(screen.getByRole('tab', { name: '相关搜索 (1)' })).toHaveAttribute(
+  expect(screen.getByRole('tab', { name: '相关搜索 1' })).toHaveAttribute(
     'aria-selected',
     'true',
   );
-  expect(screen.getByRole('tab', { name: '问题 (1)' })).toBeVisible();
+  expect(screen.getByRole('tab', { name: '问题 1' })).toBeVisible();
   expect(screen.getByRole('link', { name: '/en/blog/crm' })).toHaveAttribute(
     'href',
     'https://www.nocobase.com/en/blog/crm',

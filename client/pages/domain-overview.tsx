@@ -121,7 +121,7 @@ export default function DomainOverview({ embedded = false }: { embedded?: boolea
             <Card className="gap-0 py-0">
               <DataTableTabs value={tab} onValueChange={setTab}>
                 <TabsTrigger value="keywords">{$tj('domainOverview.keywords',{0:shown.result?.items.length ?? 0})}</TabsTrigger>
-                <TabsTrigger value="pages">{$tj('domainOverview.pages',{0:runs.pages?.result ? ` (${runs.pages.result.items.length})` : ""})}</TabsTrigger>
+                <TabsTrigger value="pages">{$tj('domainOverview.pages',{0:runs.pages?.result ? ` ${runs.pages.result.items.length}` : ""})}</TabsTrigger>
               </DataTableTabs>
               {tab === "keywords" ? <KeywordsTable run={shown} own={isOwn} /> : runs.pages && runs.pages.spec.target === shown.spec.target ? <PagesTable own={isOwn} run={runs.pages} /> : (
                 <div className="space-y-2 p-6 text-sm">

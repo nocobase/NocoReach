@@ -18,8 +18,9 @@ import { safeLink } from "../analytics";
 import type { TaskDraft } from "../keyword-hand-off";
 import { Segmented } from "./segmented";
 import { num } from "./model";
-import { formatDate, formatDateTime } from '#lib/format';
+import { formatDate, formatDateTime } from "#lib/format";
 import { Delta } from '#components/reach/delta';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#components/ui/select';
 
 type Repo = { repo: string; url: string; description?: string; language?: string | null; topics?: string[]; stars: number | null; rival: boolean; own: boolean; matched: string[]; gained?: number | null; forks?: number | null; createdAt?: string | null };
 type Topic = { name: string; total: number | null; new7: number | null; lastWeek: number | null; priorAverage: number | null; weeks: { week: string; count: number | null }[]; leaders: Repo[]; fresh: Repo[] };
@@ -137,15 +138,21 @@ export function HotTab({ projectId }: { projectId: number }) {
       <Frame data-hot-gainers="" title={$t('githubHot.gainers')} info={$t('githubHot.gainersInfo', { 0: hot.recordedSince ?? "—" })} check={gainers.length ? <AllCheck selection={repoSelection} count={gainers.length} /> : undefined}
         actions={<>
           <Segmented label={$t('githubHot.gainers')} options={[{ id: "day", label: $t('githubHot.today') }, { id: "week", label: $t('githubHot.thisWeek') }, { id: "month", label: $t('githubHot.thisMonth') }]} value={period} onChange={(v) => setPeriod(v as typeof period)} />
-          <select aria-label={$t('githubHot.topic')} className="h-8 rounded-md border border-border bg-background px-2 text-sm" value={topic} onChange={(e) => setTopic(e.target.value)}><option value="all">{$t('githubHot.allTopics')}</option>{topics.map((t) => <option key={t.name} value={t.name}>{t.name}</option>)}</select>
-          <select aria-label={$t('githubHot.language')} className="h-8 rounded-md border border-border bg-background px-2 text-sm" value={language} onChange={(e) => setLanguage(e.target.value)}><option value="all">{$t('githubHot.allLanguages')}</option>{languages.map((l) => <option key={l} value={l}>{l}</option>)}</select>
+          <Select value={topic} onValueChange={(v) => setTopic(String(v))}>
+            <SelectTrigger size="sm" className="w-full sm:w-36" aria-label={$t('githubHot.topic')}><SelectValue>{(v: string) => (v === "all" ? $t('githubHot.allTopics') : v)}</SelectValue></SelectTrigger>
+            <SelectContent align="end" className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal"><SelectItem value="all">{$t('githubHot.allTopics')}</SelectItem>{topics.map((t) => <SelectItem key={t.name} value={t.name}>{t.name}</SelectItem>)}</SelectContent>
+          </Select>
+          <Select value={language} onValueChange={(v) => setLanguage(String(v))}>
+            <SelectTrigger size="sm" className="w-full sm:w-36" aria-label={$t('githubHot.language')}><SelectValue>{(v: string) => (v === "all" ? $t('githubHot.allLanguages') : v)}</SelectValue></SelectTrigger>
+            <SelectContent align="end" className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal"><SelectItem value="all">{$t('githubHot.allLanguages')}</SelectItem>{languages.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+          </Select>
         </>}>
         {gainers.length ? (
           <table className="w-full table-fixed text-sm">
             <thead><tr className="border-b border-border text-left text-xs text-muted-foreground"><th className="w-10 py-2 pl-4" /><th className="py-2 font-medium">{$t('githubHot.repository')}</th><th className="w-28 py-2 font-medium">{$t('githubHot.language')}</th><th className="w-28 py-2 text-right font-medium">{$t('githubHot.totalStars')}</th><th className="w-28 py-2 pr-4 text-right font-medium">{$t('githubHot.gainedIn', { 0: periodLabel })}</th></tr></thead>
             <tbody>{gainers.map((r) => <tr key={r.repo} className="border-b border-border last:border-0" data-gainer={r.repo}><td className="py-2 pl-4 align-top"><RowCheck selection={repoSelection} k={r.repo} label={r.repo} /></td><td className="py-2"><RepoName r={r} /></td><td className="py-2 text-muted-foreground">{r.language || "—"}</td><td className="py-2 text-right tabular-nums">{num(r.stars)}</td><td className="py-2 pr-4 text-right tabular-nums nr-up">+{num(r.gained)}</td></tr>)}</tbody>
           </table>
-        ) : <Empty>{$t('githubHot.gainersCollecting', { 0: hot.recordedSince ?? hot.day ?? "—", 1: periodLabel })}</Empty>}
+        ) : <Empty>{$t('githubHot.gainersCollecting', { 0: formatDate(hot.recordedSince ?? hot.day), 1: periodLabel })}</Empty>}
       </Frame>
       <div className="grid gap-4 xl:grid-cols-2">
         <Frame data-hot-trending="" title="GitHub Trending" info={$t('githubHot.trendingInfo', { 0: formatDate(hot.trending?.date) })}

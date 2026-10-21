@@ -28,6 +28,7 @@ import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { WithInfo, InfoTip } from "#components/reach/info-tip";
 import { help } from "./glossary";
 import { formatDate } from '#lib/format';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#components/ui/select';
 
 type Metrics = { volume: number | null; difficulty: number | null; cpc: number | null; intent: string | null };
 type Suggestion = { id: string; keyword: string; group: string; intent: string | null; reason: string; page: string | null; site: { position: number; clicks: number; impressions: number; page: string } | null; metrics: Metrics | null };
@@ -100,9 +101,10 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
       <div className="flex flex-wrap items-center justify-between gap-2" data-suggest-basis>
         <p className="nr-footnote flex items-center">{b ? $t('keywordSuggestions.generatedProjectMemory',{0:b.pages ? $t('keywordSuggestions.websitePages',{0:b.pages}) : $t('keywordSuggestions.homepage'),1:b.queries ? $t('keywordSuggestions.searchConsoleQueries',{0:b.queries}) : "",2:b.competitors ? $t('keywordSuggestions.competitors',{0:b.competitors}) : ""}) : ""}{view.at ? ` · ${formatDate(view.at)}` : ""}<InfoTip label={$t('keywordSuggestions.whereAiSuggestionsCome')} className="ml-1">{$tj('keywordSuggestions.aiSuggestionsStartingPointSearch',{0:view.metricsAt ? `（${new Date(view.metricsAt).toLocaleDateString(getCurrentLocale())}）` : ""})}</InfoTip></p>
         <div className="flex flex-wrap items-center gap-2">
-          <select aria-label={$t('keywordSuggestions.targetMarket')} className="h-8 rounded-md border bg-background px-2 text-sm" value={`${view.market.locationCode}|${view.market.language}`} disabled={Boolean(busy)} onChange={(e) => { const [loc, lang] = e.target.value.split("|"); void run("suggest", { market: { locationCode: Number(loc), language: lang } }); }}>
-            {getMarkets().map((m) => <option key={`${m.locationCode}|${m.language}`} value={`${m.locationCode}|${m.language}`}>{$t(m.label)}</option>)}
-          </select>
+          <Select value={`${view.market.locationCode}|${view.market.language}`} disabled={Boolean(busy)} onValueChange={(v) => { const [loc, lang] = String(v).split("|"); void run("suggest", { market: { locationCode: Number(loc), language: lang } }); }}>
+            <SelectTrigger size="sm" className="w-full sm:w-40" aria-label={$t('keywordSuggestions.targetMarket')}><SelectValue>{(v: string) => $t(getMarkets().find((m) => `${m.locationCode}|${m.language}` === v)?.label ?? "")}</SelectValue></SelectTrigger>
+            <SelectContent align="end" className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{getMarkets().map((m) => <SelectItem key={`${m.locationCode}|${m.language}`} value={`${m.locationCode}|${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
+          </Select>
           {view.dataforseo && !view.metricsAt ? <Button size="sm" variant="outline" disabled={Boolean(busy)} onClick={() => void run("lookup")}>{busy === "lookup" ? $t('common.lookingUp') : $t('keywordSuggestions.checkVolume')}</Button> : null}
           <Button size="sm" variant="outline" disabled={Boolean(busy)} onClick={() => void run("suggest", { force: true })}><RefreshCw data-icon="inline-start" />{busy === "suggest" ? $t('keywordSuggestions.suggestingAgain') : $t('common.suggestAgain')}</Button>
         </div>
@@ -112,7 +114,7 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
       <Card className="gap-0 py-0">
         <DataTableTabs value={group} onValueChange={(v) => { setGroup(v); setRowSelection({}); }}>
           <TabsTrigger value="all">{$tj('common.allCount',{0:view.items.length})}</TabsTrigger>
-          {GROUPS.map((g) => { const n = view.items.filter((s) => s.group === g).length; return n ? <TabsTrigger key={g} value={g}>{$t(GROUP_KEYS[g] ?? g)} ({n})</TabsTrigger> : null; })}
+          {GROUPS.map((g) => { const n = view.items.filter((s) => s.group === g).length; return n ? <TabsTrigger key={g} value={g}>{$t(GROUP_KEYS[g] ?? g)} {n}</TabsTrigger> : null; })}
         </DataTableTabs>
         <DataTable table={table} empty={{ title: $t('keywordSuggestions.noSuggestionsGroup') }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,[role=checkbox],a")) return; openKeyword(row.original.keyword, view.market); }} />
       </Card>

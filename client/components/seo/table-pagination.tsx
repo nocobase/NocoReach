@@ -31,6 +31,8 @@ export function TablePagination<TSize extends number>({
     if (isOutOfRange) onPageChange(currentPage);
   }, [currentPage, isOutOfRange, onPageChange]);
 
+  // Nothing to page through: no footer while every row fits on one page at the smallest size offered.
+  if (totalCount <= Math.min(pageSize, ...(pageSizes ?? []))) return null;
   const start = totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const end = Math.min(totalCount, currentPage * pageSize);
   return (

@@ -89,7 +89,7 @@ export default function DataTrends() {
         <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
           <TabsList variant="line" className="h-auto! justify-start">
             <TabsTrigger value="brand">{$t('dataTrends.productCompetitors')}</TabsTrigger>
-            <TabsTrigger value="keywords">{$tj('dataTrends.keywordsFollow',{0:view.keywords?.length ? ` (${view.keywords.length})` : ""})}</TabsTrigger>
+            <TabsTrigger value="keywords">{$tj('dataTrends.keywordsFollow',{0:view.keywords?.length ? ` ${view.keywords.length}` : ""})}</TabsTrigger>
           </TabsList>
         </Tabs>
       ) : null}
