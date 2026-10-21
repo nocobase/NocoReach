@@ -1,5 +1,5 @@
 import { useBusinessAccess } from '#hooks/use-business-access';
-import { type Message, useMessageState, $t, $tj, $legacyText } from "#i18n";
+import { type Message, useMessageState, $t, $tj, $legacyText, isChinese } from "#i18n";
 // 竞品动态 (竞品 › 动态, and its panel in 数据接入): up to five competitors looked at once a week for free — new pages in their
 // sitemaps, GitHub releases and stars. Picked updates go to the Agent as one 竞品对比 task. AI 识别 names candidates
 // (websites and repositories checked) to tick; it runs by itself while the list is empty.
@@ -18,6 +18,7 @@ import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { competitorEventsDraft } from "./seo-hand-off";
 import {confirmAction} from "#components/reach/confirm";
 import { formatCount, formatDate, formatDateTime, formatSigned } from '#lib/format';
+import { ConnectionError } from '#components/connection-error';
 
 export type Competitor = { id: string; name: string; site: string; repo: string; addedAt: string; checkedAt: string | null; pages: number | null; stars: number | null; week: number | null; latestRelease: { name: string; tag: string; url: string; publishedAt: string } | null; errors: string[] };
 export type CompetitorStatus = { connected: boolean; checking?: boolean; max: number; suggestions: string[]; lastRun: { at: string; ok: boolean; errors: string[] } | null; nextCheckAt: string | null; list: Competitor[] };
@@ -26,6 +27,8 @@ type View = CompetitorStatus & { events: Event[]; notes: string[] };
 const call = <T,>(projectId: number, action: string, body: object = {}) => api.action<T>("nrCompetitors", action, { method: "POST", body: { projectId, ...body }, unwrap: "data" });
 const getType = (): Record<Event["type"], string> => ({ page: $t('common.newPages'), release: $t('common.newRelease'), site: $t('common.websiteChanges') });
 const k = (n: number) => formatCount(n);
+// Titles and descriptions saved before the server decoded numeric character references still carry them ("that&#x27;s").
+const unescapeHtml = (v: string) => v.replace(/&#x([0-9a-f]+);/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_, d: string) => String.fromCodePoint(Number(d))).replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 const host = (u: string) => u.replace(/^https:\/\//, "");
 
 type Candidate = { name: string; site: string; repo: string; reason: string; exists: boolean };
@@ -102,7 +105,7 @@ function CompetitorCard({ c, projectId, onRemove, onSaved }: { c: Competitor; pr
       <div className="flex items-center gap-1"><h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{c.name}</h3>{canEdit&&<Button size="icon-xs" variant="ghost" aria-label={$t('competitorWatch.editItem',{0:c.name})} onClick={() => setEditing(true)}><Pencil className="text-muted-foreground" /></Button>}{canRemove&&<Button size="icon-xs" variant="ghost" aria-label={$t('competitorWatch.stopWatchingValue',{0:c.name})} onClick={onRemove}><Trash2 className="text-muted-foreground" /></Button>}</div>
       <p className="flex flex-wrap gap-x-3 text-xs">{!c.site && canEdit ? <button type="button" className="nr-link inline-flex items-center gap-1" onClick={() => setEditing(true)}><Globe className="size-3" />{$t('competitorWatch.addWebsite')}</button> : null}{c.site ? <a className="nr-link inline-flex items-center gap-1" href={c.site} target="_blank" rel="noreferrer"><Globe className="size-3" />{host(c.site)}</a> : null}{c.repo ? <a className="nr-link inline-flex items-center gap-1" href={`https://github.com/${c.repo}`} target="_blank" rel="noreferrer"><Github className="size-3" />{c.repo}</a> : null}</p>
       <p className="text-xs text-muted-foreground">{[c.pages != null ? $t('competitorWatch.pages',{0:formatCount(c.pages)}) : "", c.stars != null ? `Star ${k(c.stars)}${c.week != null ? $t('competitorWatch.lastWeek',{0:formatSigned(c.week)}) : ""}` : "", c.latestRelease ? $t('competitorWatch.latestRelease',{0:c.latestRelease.name}) : ""].filter(Boolean).join(" · ") || (c.checkedAt ? $t('competitorWatch.noDataRead') : $t('competitorWatch.checkingFirstTime'))}</p>
-      {c.errors.map((e) => <p key={e} className="flex items-center gap-1 text-xs text-destructive"><AlertCircle className="size-3.5 shrink-0" aria-hidden="true" />{$tj('competitorWatch.notRead',{0:e})}</p>)}
+      {c.errors.length ? <p className="flex items-center gap-1 text-xs text-destructive"><AlertCircle className="size-3.5 shrink-0" aria-hidden="true" />{$t('competitorWatch.notReadShort')}</p> : null}
     </Card>
   );
 }
@@ -178,6 +181,8 @@ export function CompetitorWatchTab({ projectId, onListChange }: { projectId: num
         <p className="nr-footnote flex items-center gap-1">{view.lastRun ? $t('competitorWatch.lastCheckedWeeklyAfterValue',{0:formatDateTime(view.lastRun.at)}) : $t('competitorWatch.checkingFirstTime')}<NotesTip notes={view.notes} label={$t('competitorWatch.howReadCompetitorActivity')} /></p>
         <div className="flex flex-wrap gap-2">{view.list.length < view.max ? <>{canSuggest&&<Button size="sm" variant="outline" onClick={() => setSuggesting(true)}><Sparkles data-icon="inline-start" />{$t('competitorWatch.aiDetect')}</Button>}{canAdd&&<Button size="sm" variant="outline" onClick={() => setAdding(true)}><Plus data-icon="inline-start" />{$t('common.addCompetitor')}</Button>}</> : null}{canCheck&&<Button size="sm" variant="outline" disabled={busy || view.checking} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t('competitorWatch.checking') : $t('common.updateNow')}</Button>}</div>
       </div>
+      {/* The same reason on several cards is said once, above them, with the way to fix it (UI review 2026-10-21). */}
+      {[...new Set(view.list.flatMap((c) => c.errors))].map((e) => <ConnectionError key={e} message={$t('competitorWatch.notReadFor', { 0: view.list.filter((c) => c.errors.includes(e)).map((c) => c.name).join(isChinese() ? "、" : ", "), 1: $legacyText(e) })} />)}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{view.list.map((c) => <CompetitorCard key={c.id} c={c} projectId={projectId} onRemove={() => void remove(c)} onSaved={() => void load()} />)}</div>
       <Card className="gap-0 py-0">
         <div className="flex items-center gap-3 border-b border-border px-4 py-2"><Checkbox checked={view.events.length > 0 && chosen.length === view.events.length} indeterminate={chosen.length > 0 && chosen.length < view.events.length} disabled={!view.events.length} onCheckedChange={(on) => setPicked(on ? Object.fromEntries(view.events.map((e) => [e.id, true])) : {})} aria-label={$t('common.select')} data-all-check="" /><h2 className="text-sm font-semibold">{$tj('competitorWatch.activityLast90Days',{0:chosen.length ? $t('competitorWatch.selected',{0:chosen.length}) : ""})}</h2></div>
@@ -185,8 +190,8 @@ export function CompetitorWatchTab({ projectId, onListChange }: { projectId: num
           <label key={e.id} className="flex items-start gap-3 border-b border-border px-4 py-2.5 text-sm last:border-0 hover:bg-muted/50" data-event={e.type}>
             <Checkbox className="mt-0.5" checked={Boolean(picked[e.id])} onCheckedChange={(on) => setPicked((p) => ({ ...p, [e.id]: on === true }))} />
             <span className="min-w-0 flex-1">
-              <span className="text-muted-foreground">{e.competitor} · {getType()[e.type]} · </span><a className="nr-link" href={e.url} target="_blank" rel="noreferrer" onClick={(ev) => ev.stopPropagation()}>{e.title}<ExternalLink className="ml-0.5 inline size-3" /></a>
-              {e.detail ? <span className="block truncate text-xs text-muted-foreground">{e.detail}</span> : null}
+              <span className="text-muted-foreground">{e.competitor} · {getType()[e.type]} · </span><a className="nr-link" href={e.url} target="_blank" rel="noreferrer" onClick={(ev) => ev.stopPropagation()}>{unescapeHtml(e.title)}<ExternalLink className="ml-0.5 inline size-3" /></a>
+              {e.detail ? <span className="block truncate text-xs text-muted-foreground">{unescapeHtml(e.detail)}</span> : null}
             </span>
             <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{formatDate(e.at.slice(0, 10))}</span>
           </label>

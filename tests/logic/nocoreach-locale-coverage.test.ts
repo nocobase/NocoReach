@@ -173,6 +173,19 @@ describe('NocoReach semantic-key translations', () => {
         '讨论最多的讨论帖合成一个任务，由 Agent 归类问题、找出可以用文档回答的部分，确认后立即开始。',
       '讨论最多的 Issues 合成一个任务，让 Agent 分出哪些能用文档回答、哪些要改产品，确认后立即开始。':
         '讨论最多的 Issue 合成一个任务，由 Agent 区分哪些可以用文档回答、哪些需要改产品，确认后立即开始。',
+      // Search & market pages in plain words, one sentence each (2026-10-21).
+      '竞品的官网新页面和 GitHub 新版本，每周看一次，免费。':
+        '竞品官网的新页面和 GitHub 新版本，每周检查一次。',
+      '查任何网站（包括竞品）在 Google 里排名的关键词和热门页面。DataForSEO 的市场估算，点了查询才收费。':
+        '查询任意网站（包括竞品）在 Google 上排名的关键词和热门页面。',
+      '输入一个域名（默认是本站），看看它在 Google 里排名的关键词。':
+        '输入域名（默认为本站），查看它在 Google 上排名的关键词。',
+      '产品、竞品和你关注的关键词在 Google 的关注度，每周用 Google Trends 查一次。':
+        '产品、竞品和关注的关键词在 Google 上的关注度变化。',
+      'AI 根据官网先建议一批关键词；也可以自己找新词。保存后对照本站在 Google 里的排名，想看准确名次的可以每周跟踪。':
+        '查找、保存并跟踪关键词，对照本站在 Google 上的排名。',
+      '用户在 ChatGPT、Google AI 概览里问什么，哪些回答提到了我们、哪些是机会，以及 AI 引用了谁。数据来自 DataForSEO，按查询收费。':
+        '用户在 ChatGPT 和 Google AI 概览中问什么、哪些回答提到了我们，以及 AI 引用了哪些网站。',
       // Tab counts follow the tab name without brackets, as Opportunities' tabs do (2026-10-21).
       '全部 ({0})': '全部 {0}',
       '关键词 ({0})': '关键词 {0}',
