@@ -1,4 +1,5 @@
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import {ConnectionError,NetworkSettingsLink} from "#components/connection-error";
 import {useEffect,useState} from 'react';
 import {useBusinessAccess} from '#hooks/use-business-access';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
@@ -21,12 +22,13 @@ export function GitHubConnect({projectId,focus,suggestedUrl,onChange}:{projectId
  useEffect(()=>{void call<GitHubStatus>(projectId,'status').then(setStatus).catch(()=>setError(() => ($t('github.notLoadGithubStatus'))));},[projectId, setError]);
  useEffect(()=>{if(!status?.history?.running)return;const t=setInterval(()=>{void call<GitHubStatus>(projectId,'status').then(setStatus).catch(()=>undefined);},5000);return()=>clearInterval(t);},[status?.history?.running]);
  async function run(fn:()=>Promise<GitHubStatus|void>){setBusy(true);setError('');try{const s=await fn();if(s){setStatus(s);onChange();}}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailedRetry')));}finally{setBusy(false);}}
- if(!status)return error?<p className="nr-error" role="alert">{error}</p>:<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
+ if(!status)return error?<ConnectionError message={error}/>:<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
  // Star and Fork history (from each star's and fork's date, with the token); Traffic cannot be read back further than 14 days.
  const historyLine=(h:History,total?:number)=>h?.complete?<>{$tj('github.rebuilt',{0:h.from||'—',1:h.total?.toLocaleString(getCurrentLocale()),2:total&&h.total!==null&&total-h.total>0?$t('github.fewerNowStarsRemovedDeleted',{0:(total-h.total).toLocaleString(getCurrentLocale())}):''})}</>:h?.error?<span className="text-destructive">{$tj('github.notRebuilt',{0:$legacyText(h.error)})}</span>:status.token?$t('github.waitingRebuildStartsFewMinutes'):$t('github.rebuiltOnceTokenBelowConnected');
  const historySection=status.connected?<section className="nr-guide-step" data-history><h3>{$t('github.history')}</h3>
   <p className="nr-footnote">{$tj('github.starHistory',{0:status.history?.running&&!status.history.stars?.complete?$t('github.rebuilding'):historyLine(status.history?.stars??null,status.latest?.stars)})}</p>
   <p className="nr-footnote">{$tj('github.forkHistory',{0:status.history?.running&&status.history.stars?.complete&&!status.history.forks?.complete?$t('github.rebuilding'):historyLine(status.history?.forks??null,status.latest?.forks)})}</p>
+  <NetworkSettingsLink messages={[status.history?.stars?.error,status.history?.forks?.error]}/>
   <p className="nr-footnote">{$t('github.historyCoverageHelp')}</p>
   {status.token&&canBackfill?<div className="nr-step-actions"><Button size="sm" variant="outline" disabled={busy||status.history?.running} onClick={async()=>{if(await confirmAction({title:() => ($t('github.readTimesStarsForksAgain')),description:() => ($t('github.takesFewMinutesNotAffect')),action:'github.rebuildHistory',destructive:false}))void run(()=>call<GitHubStatus>(projectId,'backfill'));}}>{status.history?.running?$t('github.rebuilding'):$t('github.rebuildHistory')}</Button></div>:null}
  </section>:null;
@@ -38,7 +40,7 @@ export function GitHubConnect({projectId,focus,suggestedUrl,onChange}:{projectId
   <p>{$tj('github.last7DaysForksIssues',{0:status.latest?.stars.toLocaleString(getCurrentLocale())??'—',1:status.starDelta7===null||status.starDelta7===undefined?$t('github.needs7DaysData'):(status.starDelta7>=0?'+':'')+status.starDelta7,2:status.latest?.forks.toLocaleString(getCurrentLocale())??'—',3:status.issues?.total??'—'})}</p>
   {status.releases?.[0]&&<p className="nr-footnote">{$t('github.latestRelease')} <a className="nr-link" href={status.releases[0].url} target="_blank" rel="noreferrer">{status.releases[0].tag}</a> · {date(status.releases[0].publishedAt)}</p>}
   {!!status.issues?.top.length&&<div><p className="nr-guide-subtitle">{$t('github.mostDiscussedIssues')}</p>{status.issues.top.slice(0,3).map(i=><p key={i.url} className="nr-footnote"><a className="nr-link" href={i.url} target="_blank" rel="noreferrer">{i.title}</a>  {$tj('github.comments',{0:i.comments})}</p>)}</div>}
-  <p className="nr-footnote">{$tj('github.lastSyncedSyncsAutomaticallyOnce',{0:status.lastSync?new Date(status.lastSync.at).toLocaleString(getCurrentLocale()):'—'})}{status.lastSync?.errors.map(e=><span key={e} className="nr-block">{$tj('common.partlyNotUpdated',{0:$legacyText(e)})}</span>)}</p>
+  <p className="nr-footnote">{$tj('github.lastSyncedSyncsAutomaticallyOnce',{0:status.lastSync?new Date(status.lastSync.at).toLocaleString(getCurrentLocale()):'—'})}{status.lastSync?.errors.map(e=><span key={e} className="nr-block">{$tj('common.partlyNotUpdated',{0:$legacyText(e)})}</span>)}<NetworkSettingsLink messages={status.lastSync?.errors}/></p>
   <div className="nr-step-actions">{canSync&&<Button size="sm" variant="outline" disabled={busy} onClick={()=>void run(()=>call<GitHubStatus>(projectId,'sync'))}>{$t('common.syncNow')}</Button>}{canDisconnect&&<Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('github.stopSyncingRepository')),description:() => ($t('github.archivedDataKeptTokenDeleted')),action:'common.disconnect'}))void run(()=>call<GitHubStatus>(projectId,'disconnect'));}}>{$t('common.disconnect')}</Button>}</div></section>;
  const tokenForm=<><ol className="nr-guide-steps">
    <li>{$t('github.openGithub')} <a className="nr-link" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">{$t('github.newFineGrainedTokenPage')}</a>{$t('github.needLeastWriteAccessRepository')}</li>
@@ -56,5 +58,5 @@ export function GitHubConnect({projectId,focus,suggestedUrl,onChange}:{projectId
    <p className="nr-footnote">{$t('github.githubKeepsLast14Days')}</p>
    <div className="nr-step-actions">{canSetToken&&<Button size="sm" variant="outline" disabled={busy} onClick={()=>setReplacing(true)}>{$t('github.replaceToken')}</Button>}{canRemoveToken&&<Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('github.removeGithubToken')),description:() => ($t('github.trafficCannotArchivedAnymoreArchived')),action:'common.remove'}))void run(()=>call<GitHubStatus>(projectId,'removeToken'));}}>{$t('github.removeToken')}</Button>}</div></div>
   :canSetToken?tokenForm:null}</section>;
- return <>{error&&<p className="nr-error" role="alert">{error}</p>}{focus==='traffic'&&status.connected?<>{trafficSection}{repoSection}</>:<>{repoSection}{trafficSection}</>}{historySection}</>;
+ return <>{error&&<ConnectionError message={error}/>}{focus==='traffic'&&status.connected?<>{trafficSection}{repoSection}</>:<>{repoSection}{trafficSection}</>}{historySection}</>;
 }

@@ -1,4 +1,5 @@
 import { useBusinessAccess } from '#hooks/use-business-access';
+import {ConnectionError,NetworkSettingsLink} from '#components/connection-error';
 import { useMessageState, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
@@ -18,13 +19,13 @@ export function RedditConnect({projectId,suggested,onChange}:{projectId:number;s
  useEffect(()=>{void load().catch(()=>setError(() => ($t('reddit.notLoadRedditStatus'))));},[projectId]);
  useEffect(()=>{if(!status?.checking&&!(status?.connected&&!status.lastRun))return;const t=setInterval(()=>{void load().then(()=>onChange()).catch(()=>undefined);},4000);return()=>clearInterval(t);},[status?.checking,status?.lastRun,status?.connected]);
  async function run(fn:()=>Promise<RedditStatus|void>){setBusy(true);setError('');try{const s=await fn();if(s){setStatus(s);onChange();}}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailedRetry')));}finally{setBusy(false);}}
- if(!status)return error?<p className="nr-error" role="alert">{error}</p>:<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
- if(status.connected)return <div className="nr-guide-connected">{error&&<p className="nr-error" role="alert">{error}</p>}<h3>{$tj('common.search',{0:status.terms!.join('、')})}</h3>
+ if(!status)return error?<ConnectionError message={error}/>:<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
+ if(status.connected)return <div className="nr-guide-connected">{error&&<ConnectionError message={error}/>}<h3>{$tj('common.search',{0:status.terms!.join('、')})}</h3>
   {!status.lastRun?<p role="status">{$t('reddit.firstSearchProgressUsuallyFew')}</p>:<><p>{$tj('reddit.postsRecorded',{0:status.total,1:status.retainedFrom?$t('common.recordingSince',{0:status.retainedFrom}):'',2:status.lastRun.added?$t('reddit.newFoundLastTime',{0:status.lastRun.added}):''})}</p>
   {!!status.recent?.length&&<div><p className="nr-guide-subtitle">{$t('reddit.recentlyFoundPosts')}</p>{status.recent.slice(0,3).map(p=><p key={p.url} className="nr-footnote"><a className="nr-link" href={p.url} target="_blank" rel="noreferrer">{p.title}</a> · r/{p.subreddit}</p>)}</div>}
-  <RedditTiming state={status}/>{!status.diagnostics?.length&&!!status.lastRun.errors.length&&<div className="nr-error" role="alert">{status.lastRun.errors.map(e=><p key={e}>{$tj('reddit.searchIncomplete',{0:$legacyText(e)})}</p>)}</div>}</>}
+  <RedditTiming state={status}/>{!status.diagnostics?.length&&!!status.lastRun.errors.length&&<div className="nr-error" role="alert">{status.lastRun.errors.map(e=><p key={e}>{$tj('reddit.searchIncomplete',{0:$legacyText(e)})}</p>)}<NetworkSettingsLink messages={status.lastRun.errors}/></div>}</>}
   <div className="nr-step-actions">{canCheck&&<Button size="sm" variant="outline" disabled={busy||status.checking} onClick={()=>void run(()=>call<RedditStatus>(projectId,'check'))}>{busy?$t('common.searching'):$t('common.searchNow')}</Button>}{canDisconnect&&<Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('reddit.stopSearchingRedditDiscussions')),description:() => ($t('reddit.recordedPostsKept')),action:'common.stop'}))void run(()=>call<RedditStatus>(projectId,'disconnect'));}}>{$t('common.stop')}</Button>}</div></div>;
- return <>{error&&<p className="nr-error" role="alert">{error}</p>}
+ return <>{error&&<ConnectionError message={error}/>}
   {!canConnect&&status.dataforseo&&<p className='nr-footnote'>{$t('messages.notConnectedYet')}</p>}
   {!status.dataforseo?<p className="nr-footnote">{$t('reddit.redditDiscussionsSearchedGoogleThrough')}</p>:canConnect?<>
   <label className="nr-field">{$t('common.productName')}<input aria-label={$t('common.productName')} value={terms} disabled={busy} placeholder="NocoBase" onChange={e=>setTerms(e.target.value)}/></label>

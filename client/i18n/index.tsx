@@ -13,6 +13,8 @@ import legacyKeys from '../../shared/i18n/legacy-keys.json';
 import { systemMessageKey } from '../../shared/i18n/messages';
 import { readStoredLocale } from '@nocobase/app-client';
 import { nocobaseClient } from '#lib/nocoreach-api';
+import { findNetworkFailure, HOST_PATTERN } from '#lib/network-failure';
+import { networkFailureEntries } from '../../shared/network-failures';
 
 // Business copy uses semantic keys and explicit bilingual resources. The application runtime
 // owns the resolved locale; this synchronous adapter also supports deferred messages and JSX slots.
@@ -136,6 +138,10 @@ function translateRequestErrors() {
 // Where two placeholders touch, what the second one can be (otherwise "全站搜索曝光上升" splits after one character).
 const SLOTS: Record<string, Record<string, string>> = {
   'analysis.siteMetricChange': { '1': '上升|下降' },
+  // A network failure's {0} is a host, so the part that failed in front of it ("仓库：") is not taken for the host.
+  ...Object.fromEntries(
+    networkFailureEntries.map(({ key }) => [key, { '0': HOST_PATTERN }]),
+  ),
 };
 
 function compile(minimum: number): Pattern[] {
@@ -195,6 +201,16 @@ function translateDynamic(text: string, depth: number): string {
         return INLINE[part] ?? resolve(part, depth + 1);
       });
   }
+  // A network failure behind the part that failed ("仓库：…"): the sentence, and the text around it, translated apart.
+  const failure = findNetworkFailure(text);
+  if (failure?.chinese)
+    return [
+      resolve(failure.before.trim(), depth + 1).replace(/：$/, ':'),
+      $t(failure.key, { 0: failure.host }),
+      resolve(failure.after.trim(), depth + 1),
+    ]
+      .filter(Boolean)
+      .join(' ');
   for (const [zh, en] of SEPARATORS) {
     const parts = text.split(zh);
     if (parts.length < 2) continue;
@@ -292,6 +308,16 @@ export function translateSourceError(
   message: string | null | undefined,
 ): string {
   if (!message || !dictionary) return message ?? '';
+  // A request that got no answer is the server's own sentence; what stands in front of it stays as it was.
+  const failure = findNetworkFailure(message);
+  if (failure?.chinese)
+    return [
+      failure.before.trim().replace(/：$/, ':'),
+      $t(failure.key, { 0: failure.host }),
+      failure.after.trim(),
+    ]
+      .filter(Boolean)
+      .join(' ');
   const missingScope = message.match(
     /^Slack 应用缺少权限：([\s\S]*)，请在 OAuth & Permissions 里加上后重新安装$/,
   );
