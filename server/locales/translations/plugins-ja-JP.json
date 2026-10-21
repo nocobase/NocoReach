@@ -1,0 +1,217 @@
+{
+  "@nocobase/app-plugin-agents": {
+    "access": {
+      "section": "エージェントチーム",
+      "businessSection": "エージェントチーム",
+      "businesses": {
+        "agents": {
+          "title": "エージェントとスキル",
+          "description": "チームのエージェントと、エージェントが使用するスキルです。",
+          "actions": {
+            "edit": {
+              "title": "エージェントとスキルの変更",
+              "description": "エージェントの設定・スキル・変数の変更、アーカイブ・復元・削除、およびスキルの編集を行います。編集者自身の権限を超える権限はエージェントに付与されません",
+              "related": "エージェントとスキルの変更（自分が所有するエージェントと作成したスキル）",
+              "relatedLabel": "自分が所有するエージェントと作成したスキル",
+              "relatedHint": "自分が所有者のエージェントと、自分が作成したスキル",
+              "all": "エージェントとスキルの変更（すべて）"
+            }
+          }
+        }
+      },
+      "settings": {
+        "agents": {
+          "agents": "エージェント",
+          "runners": "ランタイム",
+          "prices": "モデル料金",
+          "services": "モデルサービス"
+        }
+      },
+      "actions": {
+        "read": "閲覧",
+        "manage": "管理"
+      },
+      "keyScopes": {
+        "agents": {
+          "title": "エージェント",
+          "description": "エージェント・スキル・実行履歴の閲覧、エージェントとスキルの変更、実行のキャンセルと再試行を行います。"
+        },
+        "runners": {
+          "title": "ランタイム",
+          "description": "ランナーと登録トークンの閲覧、およびランナーの管理を行います。"
+        },
+        "prices": {
+          "title": "モデル料金",
+          "description": "コストの見積もりに使用するモデル料金の閲覧と変更を行います。"
+        },
+        "services": {
+          "title": "モデルサービス",
+          "description": "モデルサービスと提供モデルを閲覧できます。APIキーは閲覧できません。"
+        }
+      }
+    }
+  },
+  "@nocobase/app-plugin-authorization": {
+    "sections": {
+      "pages": "ページ権限",
+      "page": "ページ",
+      "business": "業務権限",
+      "administration": "管理",
+      "other": "その他"
+    },
+    "options": {
+      "defaultAndSharing": "既定のデータ範囲を使用",
+      "actions": {
+        "assign": "割り当てを管理",
+        "configure": "設定",
+        "inspect": "権限を確認",
+        "read": "閲覧",
+        "create": "作成",
+        "update": "更新",
+        "delete": "削除",
+        "access": "アクセス"
+      },
+      "settingsModules": {
+        "authorization": "権限管理"
+      },
+      "pages": {
+        "all": "すべてのページ",
+        "allDescription": "今後追加されるページを含め、すべてのページへのアクセスを許可します。"
+      },
+      "settings": {
+        "inspector": "権限確認",
+        "permission-sets": "権限セット"
+      },
+      "subjectTypes": {
+        "authenticated": "ログイン済みのすべてのユーザー",
+        "authenticatedDescription": "有効なログインセッションを持つすべてのユーザーに適用されます。",
+        "user": "ユーザー"
+      },
+      "recordAccessPolicies": {
+        "allRecords": "すべてのレコード",
+        "recordsIOwn": "自分が所有するレコード",
+        "recordsICreated": "自分が作成したレコード",
+        "customFilter": "カスタムフィルター",
+        "customFilterHint": "カスタムのフィルター条件でレコードを選択します。"
+      }
+    }
+  },
+  "@nocobase/app-plugin-authz-default-access": {
+    "resourceTitle": "既定のデータ範囲"
+  },
+  "@nocobase/app-plugin-authz-restriction-rules": {
+    "resourceTitle": "制限ルール"
+  },
+  "@nocobase/app-plugin-authz-sharing-rules": {
+    "resourceTitle": "共有ルール"
+  },
+  "@nocobase/app-plugin-notification": {
+    "errors": {
+      "logsForbidden": "通知ログへのアクセス権限が必要です。",
+      "logNotFound": "通知ログが見つかりません。",
+      "testHeaderRequired": "通知テスト用のリクエストヘッダーが必要です。",
+      "testForbidden": "通知のテスト送信権限が必要です。",
+      "testInvalidRequest": "リクエスト本文にはテスト対象とフィールドの値が必要です。",
+      "testTargetUnavailable": "通知のテスト対象を利用できません。",
+      "testUnknownField": "不明な通知テストフィールド「{{name}}」です。",
+      "testRequiredField": "通知テストフィールド「{{name}}」は必須です。",
+      "testFieldTooLong": "通知テストフィールド「{{name}}」は {{maxLength}} 文字以内で入力してください。",
+      "testFailed": "通知テストに失敗しました。",
+      "testNotFound": "通知テストが見つかりません。"
+    }
+  },
+  "@nocobase/app-plugin-notification-in-app": {
+    "errors": {
+      "authenticationRequired": "認証が必要です。",
+      "invalidPageToken": "pageToken は、この一覧が返したトークンではありません。",
+      "notFound": "通知メッセージが見つかりません。"
+    },
+    "test": {
+      "channels": {
+        "inApp": "アプリ内"
+      },
+      "providers": {
+        "builtIn": "組み込み"
+      },
+      "fields": {
+        "route": "内部ルート（デプロイ先のプレフィックスを除く）",
+        "url": "完全な HTTP(S) URL",
+        "recipientUserId": "受信者のユーザー ID",
+        "title": "タイトル",
+        "message": "メッセージ"
+      },
+      "placeholders": {
+        "currentUser": "アプリケーションのユーザー ID"
+      },
+      "defaults": {
+        "title": "NocoBase 通知テスト",
+        "body": "NocoBase からのテスト通知です。"
+      }
+    }
+  },
+  "@nocobase/app-plugin-notification-providers": {
+    "test": {
+      "channels": {
+        "email": "メール",
+        "im": "IM"
+      },
+      "providers": {
+        "smtp": "SMTP",
+        "resend": "Resend",
+        "feishuWebhook": "Feishu Webhook",
+        "dingtalkWebhook": "DingTalk Webhook"
+      },
+      "fields": {
+        "subject": "件名",
+        "text": "テキスト",
+        "html": "HTML",
+        "url": "完全な HTTP(S) URL",
+        "recipient": "受信者",
+        "title": "タイトル",
+        "message": "メッセージ"
+      },
+      "placeholders": {
+        "email": "name@example.com"
+      },
+      "defaults": {
+        "title": "NocoBase 通知テスト",
+        "body": "NocoBase からのテスト通知です。"
+      }
+    }
+  },
+  "@nocobase/app-plugin-scheduler": {
+    "nav": {
+      "automation": "自動化"
+    },
+    "authorization": {
+      "title": "スケジュール",
+      "read": "閲覧"
+    }
+  },
+  "@nocobase/app-plugin-users": {
+    "invitationEmail": {
+      "subject": "{{inviter}} さんから {{app}} への招待が届きました",
+      "intro": "{{inviter}} さんから {{app}} に招待されています。",
+      "summary": "次にも参加します: {{items}}。",
+      "separator": "、",
+      "action": "招待を承諾",
+      "validity": "リンクを開き、名前とパスワードを設定してください。{{date}} までに 1 回だけ使用できます。",
+      "fallback": "リンクが開かない場合は、以下の URL をブラウザーにコピーしてください:"
+    }
+  },
+  "@nocobase/app-plugin-mail": {
+    "errors": {
+      "accessDenied": "メールへのアクセス権限が必要です。",
+      "idempotencyConflict": "この冪等キーは、すでに別のリクエストに関連付けられています。",
+      "invalidRequest": "メールリクエストが無効です。",
+      "accountCredentialsInvalid": "メールボックスの認証に失敗しました。ログイン名とパスワードまたは認証コードを確認し、IMAP/SMTP が有効になっていることを確認してください。Gmail などのサービスではアプリパスワードが必要な場合があります。",
+      "requestFailed": "メールリクエストを完了できませんでした。",
+      "providerRateLimited": "メールサービスへのリクエストが多すぎます。しばらくしてから再試行してください。",
+      "providerUnavailable": "メールサービスに接続できませんでした。しばらくしてから再試行してください。",
+      "reauthorizationRequired": "このメールアカウントを使用するには、再接続が必要です。",
+      "syncRunNotFound": "メールの同期実行が見つかりません。",
+      "messageNotFound": "メールメッセージが見つかりません。",
+      "authorizationStateRequired": "メール認可の状態が必要です。"
+    }
+  }
+}

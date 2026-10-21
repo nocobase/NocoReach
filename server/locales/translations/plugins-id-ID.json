@@ -1,0 +1,217 @@
+{
+  "@nocobase/app-plugin-agents": {
+    "access": {
+      "section": "Tim agen",
+      "businessSection": "Tim agen",
+      "businesses": {
+        "agents": {
+          "title": "Agen dan skill",
+          "description": "Agen tim dan skill yang mereka gunakan.",
+          "actions": {
+            "edit": {
+              "title": "Ubah agen dan skill",
+              "description": "Ubah pengaturan, skill, dan variabel agen, arsipkan, pulihkan, dan hapus agen, serta edit skill. Kemampuan yang diberikan kepada agen tidak boleh melebihi kemampuan pengeditnya",
+              "related": "Ubah agen dan skill (agen yang dimiliki dan skill yang dibuat)",
+              "relatedLabel": "Agen milik saya dan skill yang saya buat",
+              "relatedHint": "Agen yang saya miliki dan skill yang saya buat",
+              "all": "Ubah agen dan skill (semua)"
+            }
+          }
+        }
+      },
+      "settings": {
+        "agents": {
+          "agents": "Agen",
+          "runners": "Lingkungan eksekusi",
+          "prices": "Harga model",
+          "services": "Layanan model"
+        }
+      },
+      "actions": {
+        "read": "Lihat",
+        "manage": "Kelola"
+      },
+      "keyScopes": {
+        "agents": {
+          "title": "Agen",
+          "description": "Lihat agen, skill, dan eksekusi; ubah agen dan skill, batalkan dan ulangi eksekusi."
+        },
+        "runners": {
+          "title": "Lingkungan eksekusi",
+          "description": "Lihat pelaksana dan token pendaftaran; kelola pelaksana."
+        },
+        "prices": {
+          "title": "Harga model",
+          "description": "Lihat dan ubah harga model yang digunakan untuk memperkirakan biaya."
+        },
+        "services": {
+          "title": "Layanan model",
+          "description": "Lihat layanan model dan model yang ditawarkan, tanpa akses ke kuncinya."
+        }
+      }
+    }
+  },
+  "@nocobase/app-plugin-authorization": {
+    "sections": {
+      "pages": "Izin halaman",
+      "page": "Halaman",
+      "business": "Izin bisnis",
+      "administration": "Administrasi",
+      "other": "Lainnya"
+    },
+    "options": {
+      "defaultAndSharing": "Gunakan cakupan data bawaan",
+      "actions": {
+        "assign": "Kelola penetapan",
+        "configure": "Konfigurasikan",
+        "inspect": "Periksa izin",
+        "read": "Baca",
+        "create": "Buat",
+        "update": "Perbarui",
+        "delete": "Hapus",
+        "access": "Akses"
+      },
+      "settingsModules": {
+        "authorization": "Otorisasi"
+      },
+      "pages": {
+        "all": "Semua halaman",
+        "allDescription": "Izinkan akses ke semua halaman, termasuk halaman yang ditambahkan nanti."
+      },
+      "settings": {
+        "inspector": "Pemeriksa izin",
+        "permission-sets": "Kumpulan izin"
+      },
+      "subjectTypes": {
+        "authenticated": "Semua pengguna yang masuk",
+        "authenticatedDescription": "Berlaku untuk setiap pengguna dengan sesi masuk yang valid.",
+        "user": "Pengguna"
+      },
+      "recordAccessPolicies": {
+        "allRecords": "Semua rekaman",
+        "recordsIOwn": "Rekaman milik saya",
+        "recordsICreated": "Rekaman yang saya buat",
+        "customFilter": "Filter khusus",
+        "customFilterHint": "Pilih rekaman dengan kondisi filter khusus."
+      }
+    }
+  },
+  "@nocobase/app-plugin-authz-default-access": {
+    "resourceTitle": "Cakupan data bawaan"
+  },
+  "@nocobase/app-plugin-authz-restriction-rules": {
+    "resourceTitle": "Aturan pembatasan"
+  },
+  "@nocobase/app-plugin-authz-sharing-rules": {
+    "resourceTitle": "Aturan berbagi"
+  },
+  "@nocobase/app-plugin-notification": {
+    "errors": {
+      "logsForbidden": "Diperlukan akses ke log notifikasi.",
+      "logNotFound": "Log notifikasi tidak ditemukan.",
+      "testHeaderRequired": "Header permintaan uji notifikasi wajib disertakan.",
+      "testForbidden": "Diperlukan izin untuk mengirim notifikasi uji.",
+      "testInvalidRequest": "Isi permintaan harus memuat target pengujian dan nilai kolom.",
+      "testTargetUnavailable": "Target uji notifikasi tidak tersedia.",
+      "testUnknownField": "Kolom uji notifikasi \"{{name}}\" tidak dikenal.",
+      "testRequiredField": "Kolom uji notifikasi \"{{name}}\" wajib diisi.",
+      "testFieldTooLong": "Kolom uji notifikasi \"{{name}}\" tidak boleh melebihi {{maxLength}} karakter.",
+      "testFailed": "Uji notifikasi gagal.",
+      "testNotFound": "Uji notifikasi tidak ditemukan."
+    }
+  },
+  "@nocobase/app-plugin-notification-in-app": {
+    "errors": {
+      "authenticationRequired": "Autentikasi diperlukan.",
+      "invalidPageToken": "pageToken bukan token yang dikembalikan oleh daftar ini.",
+      "notFound": "Pesan notifikasi tidak ditemukan."
+    },
+    "test": {
+      "channels": {
+        "inApp": "Dalam aplikasi"
+      },
+      "providers": {
+        "builtIn": "Bawaan"
+      },
+      "fields": {
+        "route": "Rute internal (tanpa prefiks penerapan)",
+        "url": "URL HTTP(S) lengkap",
+        "recipientUserId": "ID pengguna penerima",
+        "title": "Judul",
+        "message": "Pesan"
+      },
+      "placeholders": {
+        "currentUser": "ID pengguna aplikasi"
+      },
+      "defaults": {
+        "title": "Uji notifikasi NocoBase",
+        "body": "Ini adalah notifikasi uji dari NocoBase."
+      }
+    }
+  },
+  "@nocobase/app-plugin-notification-providers": {
+    "test": {
+      "channels": {
+        "email": "Email",
+        "im": "IM"
+      },
+      "providers": {
+        "smtp": "SMTP",
+        "resend": "Resend",
+        "feishuWebhook": "Webhook Feishu",
+        "dingtalkWebhook": "Webhook DingTalk"
+      },
+      "fields": {
+        "subject": "Subjek",
+        "text": "Teks",
+        "html": "HTML",
+        "url": "URL HTTP(S) lengkap",
+        "recipient": "Penerima",
+        "title": "Judul",
+        "message": "Pesan"
+      },
+      "placeholders": {
+        "email": "name@example.com"
+      },
+      "defaults": {
+        "title": "Uji notifikasi NocoBase",
+        "body": "Ini adalah notifikasi uji dari NocoBase."
+      }
+    }
+  },
+  "@nocobase/app-plugin-scheduler": {
+    "nav": {
+      "automation": "Otomatisasi"
+    },
+    "authorization": {
+      "title": "Jadwal",
+      "read": "Baca"
+    }
+  },
+  "@nocobase/app-plugin-users": {
+    "invitationEmail": {
+      "subject": "{{inviter}} mengundang Anda ke {{app}}",
+      "intro": "{{inviter}} mengundang Anda ke {{app}}.",
+      "summary": "Anda juga akan bergabung dengan: {{items}}.",
+      "separator": ", ",
+      "action": "Terima undangan",
+      "validity": "Buka tautan untuk mengatur nama dan kata sandi Anda. Tautan ini hanya dapat digunakan sekali dan berlaku hingga {{date}}.",
+      "fallback": "Jika tautan tidak dapat dibuka, salin ke peramban Anda:"
+    }
+  },
+  "@nocobase/app-plugin-mail": {
+    "errors": {
+      "accessDenied": "Diperlukan akses ke email.",
+      "idempotencyConflict": "Kunci idempotensi sudah dikaitkan dengan permintaan lain.",
+      "invalidRequest": "Permintaan email tidak valid.",
+      "accountCredentialsInvalid": "Autentikasi kotak email gagal. Periksa nama pengguna dan kata sandi atau kode otorisasi Anda, lalu pastikan IMAP/SMTP diaktifkan. Gmail dan layanan lainnya mungkin memerlukan kata sandi aplikasi.",
+      "requestFailed": "Permintaan email tidak dapat diselesaikan.",
+      "providerRateLimited": "Layanan email menerima terlalu banyak permintaan. Silakan coba lagi nanti.",
+      "providerUnavailable": "Layanan email tidak dapat dihubungi. Silakan coba lagi nanti.",
+      "reauthorizationRequired": "Akun email ini harus dihubungkan kembali sebelum dapat digunakan.",
+      "syncRunNotFound": "Proses sinkronisasi email tidak ditemukan.",
+      "messageNotFound": "Pesan email tidak ditemukan.",
+      "authorizationStateRequired": "Status otorisasi email diperlukan."
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { $t } from '#i18n';
+import { $t, getCurrentLocale } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { Button } from '#components/ui/button';
 import { useMe } from '../me';
@@ -142,7 +142,9 @@ export function SearchHistory({
           <p className='text-muted-foreground'>
             {$t('searchHistory.updated', {
               0: coverage.current.updatedAt
-                ? new Date(coverage.current.updatedAt).toLocaleString()
+                ? new Date(coverage.current.updatedAt).toLocaleString(
+                    getCurrentLocale(),
+                  )
                 : '—',
             })}
           </p>

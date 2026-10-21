@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Bot, Clock3 } from 'lucide-react';
-import { $t, isChinese, $legacyText } from '#i18n';
+import { $t, getCurrentLocale, $legacyText } from '#i18n';
 import { materialNoticeText } from './material-notices.js';
 import { nocobaseClient as api, NocoReachHttpError } from '#lib/nocoreach-api';
 import {
@@ -183,7 +183,7 @@ export function TaskExecutionPanel({
       : undefined;
   const items = official.map((item) => ({
     value: item.id,
-    label: `${new Date(item.createdAt).toLocaleString(isChinese() ? 'zh-CN' : 'en-US')} · ${item.agentName || $t('common.localAgent')} · ${historyLabels().status[item.status === 'succeeded' ? 'completed' : item.status === 'failed' ? 'failed' : item.status === 'running' ? 'running' : 'queued']}`,
+    label: `${new Date(item.createdAt).toLocaleString(getCurrentLocale())} · ${item.agentName || $t('common.localAgent')} · ${historyLabels().status[item.status === 'succeeded' ? 'completed' : item.status === 'failed' ? 'failed' : item.status === 'running' ? 'running' : 'queued']}`,
   }));
   return (
     // Shown on the Runs tab of Technical details, which supplies the frame; the heading stays for screen readers and
@@ -297,17 +297,15 @@ export function TaskExecutionPanel({
               <p className='flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
                 <Clock3 className='size-4' />
                 {run.startedAt
-                  ? new Date(run.startedAt).toLocaleString(
-                      isChinese() ? 'zh-CN' : 'en-US',
-                    )
+                  ? new Date(run.startedAt).toLocaleString(getCurrentLocale())
                   : '—'}
                 {run.finishedAt
-                  ? ` → ${new Date(run.finishedAt).toLocaleString(isChinese() ? 'zh-CN' : 'en-US')}`
+                  ? ` → ${new Date(run.finishedAt).toLocaleString(getCurrentLocale())}`
                   : ''}
               </p>
               {execution.canInspect ? (
                 <RunTranscript
-                  locale={isChinese() ? 'zh-CN' : 'en-US'}
+                  locale={getCurrentLocale()}
                   events={readableEvents(execution.events)}
                   open={['queued', 'running'].includes(current?.status || '')}
                   failed={error !== null}
@@ -342,7 +340,7 @@ export function TaskExecutionPanel({
                 <p className='text-muted-foreground'>
                   {$t('taskDetail.sourcesPrepared', {
                     0: new Date(detail.sources.capturedAt).toLocaleString(
-                      isChinese() ? 'zh-CN' : 'en-US',
+                      getCurrentLocale(),
                     ),
                   })}
                 </p>

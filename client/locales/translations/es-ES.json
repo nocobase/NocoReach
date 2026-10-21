@@ -1,0 +1,820 @@
+{
+  "nocoreach.nav.apiKeys": "Claves de API",
+  "schedules": {
+    "title": "Ejecuciones automáticas",
+    "description": "El trabajo que NocoReach realiza de forma autónoma. Aquí puedes cambiar la hora del análisis diario.",
+    "analysisTitle": "Análisis diario",
+    "analysisDescription": "Lee los datos más recientes de todos los proyectos y utiliza la IA para redactar las observaciones y sugerencias del periodo en Hallazgos y Oportunidades. Si un día no se ejecuta, se vuelve a intentar automáticamente.",
+    "otherWork": "Las sincronizaciones, el seguimiento de posiciones, las tendencias, la actividad de los competidores y el resto del trabajo automático se muestran por proyecto en Estado de los datos.",
+    "otherWorkLink": "Abrir Fuentes de datos",
+    "dailyAt": "Todos los días a las {{time}}",
+    "last": "Última",
+    "nextLabel": "Próxima",
+    "notRunYet": "Aún no se ha ejecutado",
+    "pausedNext": "En pausa, sin ejecuciones automáticas",
+    "today": "Hoy a las {{time}}",
+    "tomorrow": "Mañana a las {{time}}",
+    "yesterday": "Ayer a las {{time}}",
+    "shownIn": "Horas indicadas en {{zone}}",
+    "analyzed": "{{projects}}, {{items}}",
+    "projectCount_one": "{{count}} proyecto",
+    "projectCount_other": "{{count}} proyectos",
+    "allSkipped": "Omitidos: ya se han analizado hoy",
+    "moreActions": "Más acciones",
+    "details": "Detalles técnicos",
+    "detailsHelp": "Información para resolver problemas: cómo ve esta tarea el complemento de programación. No es necesaria para el uso diario.",
+    "scheduleKey": "Clave interna",
+    "editTime": "Cambiar hora",
+    "editTitle": "Cambiar la hora de «{{name}}»",
+    "editHelp": "Se ejecuta todos los días a esta hora. El cambio se aplica a partir de la próxima ejecución.",
+    "runNow": "Ejecutar ahora",
+    "dailyTime": "Todos los días a las",
+    "saveTime": "Guardar",
+    "invalidTime": "Introduce una hora válida (HH:mm).",
+    "dataReadyHint": "La mayoría de las fuentes de datos se actualizan cada día alrededor de las {{time}} en esta zona horaria. Programa el análisis después de esa hora para que utilice los datos más recientes.",
+    "searchTimezone": "Buscar zonas horarias, p. ej., Shanghái",
+    "noTimezone": "No hay zonas horarias que coincidan.",
+    "dstHelp": "Con los cambios de horario de verano, las horas que no existen se desplazan hacia adelante y las que se repiten suelen dar lugar a una sola ejecución. Al recuperarse de una interrupción, la tarea puede volver a activarse; se omiten los proyectos ya analizados correctamente ese día según la fecha local de la tarea.",
+    "timeSaved": "Hora guardada",
+    "triggered": "Análisis iniciado. El resultado aparecerá en Historial de ejecuciones.",
+    "runNowHelp": "Analizar ahora todos los proyectos. Se omiten los proyectos ya analizados hoy y se utiliza el servicio de IA. La hora del análisis diario no cambia.",
+    "submitting": "Iniciando…",
+    "confirmRun": "Ejecutar ahora",
+    "signIn": "Volver a iniciar sesión",
+    "back": "Volver a Ejecuciones automáticas",
+    "emptyTitle": "No hay ejecuciones automáticas",
+    "noRunsTitle": "Aún no hay ejecuciones",
+    "history": "Historial de ejecuciones",
+    "historyTitle": "{{name}} · Historial de ejecuciones",
+    "historyDescription": "El resultado de cada ejecución automática, de la más reciente a la más antigua.",
+    "noDescription": "Sin descripción.",
+    "refresh": "Actualizar",
+    "loading": "Cargando…",
+    "saving": "Guardando…",
+    "retry": "Reintentar",
+    "errorTitle": "No se ha podido completar la solicitud",
+    "failed": "La solicitud ha fallado. Vuelve a intentarlo.",
+    "signedOut": "Tu sesión ha caducado. Vuelve a iniciar sesión para continuar.",
+    "forbidden": "No tienes permiso para gestionar ejecuciones automáticas. Contacta con tu administrador.",
+    "notFound": "Esta ejecución automática ya no está disponible.",
+    "empty": "No hay ejecuciones automáticas en esta página. Actualiza o vuelve a la página anterior.",
+    "noRuns": "Aún no se ha ejecutado. La primera ejecución tendrá lugar a la próxima hora programada.",
+    "plan": "Programación",
+    "customSchedule": "Programación personalizada",
+    "timezone": "Zona horaria",
+    "scheduling": "Estado de la programación",
+    "lifecycle": "Estado de la definición",
+    "target": "Destino de ejecución",
+    "lastRun": "Última activación automática",
+    "nextRun": "Próxima ejecución",
+    "enable": "Activar",
+    "disable": "Pausar",
+    "cancel": "Cancelar",
+    "disableTitle": "¿Pausar «{{name}}»?",
+    "disableHelp": "Dejará de ejecutarse automáticamente hasta que vuelvas a activarla. Las ejecuciones ya iniciadas terminarán.",
+    "inactiveHelp": "La aplicación ya no define esta tarea y no se puede activar aquí.",
+    "enabledNotice": "«{{name}}» está activada.",
+    "disabledNotice": "«{{name}}» está en pausa.",
+    "pagination": "Páginas de ejecuciones automáticas",
+    "page": "Página {{page}} · {{total}} elementos",
+    "previous": "Anterior",
+    "next": "Siguiente",
+    "more": "Cargar más",
+    "runCount": "Activaciones automáticas",
+    "completedCount": "Ejecuciones correctas",
+    "project": "Proyecto {{id}}",
+    "items_one": "{{count}} sugerencia",
+    "items_other": "{{count}} sugerencias",
+    "states": {
+      "enabled": "Activada",
+      "disabled": "En pausa",
+      "active": "Vigente",
+      "inactive": "Sin vigencia",
+      "paused": "En pausa",
+      "ready": "Lista",
+      "missing": "No existe",
+      "invalid": "Configuración no válida",
+      "pending": "En espera",
+      "running": "En ejecución",
+      "waiting": "En ejecución",
+      "succeeded": "Completada",
+      "failed": "Fallida",
+      "skipped": "Omitida",
+      "cancelled": "Cancelada",
+      "timed_out": "Tiempo de espera agotado",
+      "triggered": "Iniciada, resultado desconocido",
+      "unknown": "Desconocido"
+    }
+  },
+  "auth.preparingSession": "Preparando tu sesión…",
+  "auth.connectionFailed": "No se pudo conectar",
+  "auth.connectionFailedDescription": "No se ha podido establecer la conexión. Vuelve a intentarlo para acceder a la aplicación o cierra sesión.",
+  "auth.passwordResetSuccess": "Se ha restablecido tu contraseña. Inicia sesión con la nueva contraseña.",
+  "auth.requestNewResetLink": "Solicitar un nuevo enlace de restablecimiento",
+  "deviceApproval.title": "Autorizar un dispositivo",
+  "deviceApproval.description": "Una línea de comandos u otro dispositivo ha solicitado iniciar sesión en tu nombre. Apruébalo solo si has iniciado tú mismo el inicio de sesión.",
+  "deviceApproval.enterCode": "Introduce el código que muestra tu dispositivo.",
+  "deviceApproval.codeLabel": "Código",
+  "deviceApproval.continue": "Continuar",
+  "deviceApproval.checking": "Comprobando el código…",
+  "deviceApproval.confirm": "Comprueba que este código coincide con el que muestra tu dispositivo.",
+  "deviceApproval.client": "Solicitado por {{client}}",
+  "deviceApproval.approve": "Aprobar",
+  "deviceApproval.approving": "Aprobando…",
+  "deviceApproval.deny": "Denegar",
+  "deviceApproval.denying": "Denegando…",
+  "deviceApproval.approved": "Dispositivo aprobado. Vuelve al terminal para continuar; puedes cerrar esta página.",
+  "deviceApproval.denied": "Solicitud denegada. El dispositivo no ha iniciado sesión; puedes cerrar esta página.",
+  "deviceApproval.expired": "Este código ha caducado. Vuelve a iniciar sesión desde tu dispositivo.",
+  "deviceApproval.invalid": "Este código no es válido. Compáralo con el de tu dispositivo y vuelve a intentarlo.",
+  "deviceApproval.notYours": "Otra cuenta ya está aprobando este código.",
+  "deviceApproval.error": "Se ha producido un error. Vuelve a intentarlo.",
+  "deviceApproval.retry": "Volver a intentarlo",
+  "deviceApproval.otherCode": "Introducir otro código",
+  "inbox.title": "Bandeja de entrada",
+  "inbox.description": "Notificaciones y solicitudes que te han enviado.",
+  "inbox.views.all": "Todo",
+  "inbox.views.todo": "Pendiente",
+  "inbox.kinds.label": "Tipo",
+  "inbox.kinds.all": "Todos los tipos",
+  "inbox.kinds.decision": "Decisiones",
+  "inbox.kinds.info": "Notificaciones",
+  "inbox.tabs.decision": "Pendiente de mi decisión",
+  "inbox.tabs.info": "Notificaciones",
+  "inbox.clearFilter": "Borrar filtro",
+  "inbox.noMatchDescription": "Borra el filtro para ver todos los tipos.",
+  "inbox.readAll": "Marcar todo como leído",
+  "inbox.allRead": "Todo marcado como leído.",
+  "inbox.loading": "Cargando",
+  "inbox.loadFailed": "No se puede cargar la bandeja de entrada",
+  "inbox.loadFailedDescription": "Comprueba tu conexión y vuelve a intentarlo.",
+  "inbox.retry": "Reintentar",
+  "inbox.loadMore": "Cargar más",
+  "inbox.emptyAll": "No hay nada aquí",
+  "inbox.empty.todo": "No tienes nada pendiente",
+  "inbox.empty.decision": "No tienes decisiones pendientes",
+  "inbox.empty.info": "No hay notificaciones",
+  "inbox.emptyDescription": "Aquí aparecen las notificaciones y solicitudes que te envían.",
+  "inbox.unread": "No leídas",
+  "inbox.unreadCount": "{{count}} sin leer",
+  "inbox.pendingDecisions": "{{count}} pendientes",
+  "inbox.resolved": "Gestionado",
+  "inbox.outcomes.approved": "Aprobada",
+  "inbox.outcomes.rejected": "Rechazada",
+  "inbox.outcomes.withdrawn": "Retirada",
+  "inbox.count": "×{{count}}",
+  "inbox.actionsFor": "Acciones de {{title}}",
+  "inbox.actions.read": "Marcar como leída",
+  "inbox.actions.unread": "Marcar como no leída",
+  "inbox.actions.delete": "Eliminar",
+  "inbox.deleted": "Eliminada.",
+  "inbox.requestFailed": "La solicitud ha fallado. Vuelve a intentarlo.",
+  "inbox.forbidden": "No tienes permiso para hacer esto.",
+  "inbox.nothingSelected": "Selecciona un elemento para verlo",
+  "inbox.back": "Volver a la lista",
+  "inbox.open": "Abrir",
+  "inbox.keyMove": "Mover",
+  "inbox.keyOpen": "Abrir",
+  "inbox.cancel": "Cancelar",
+  "inbox.request.approve": "Aprobar",
+  "inbox.request.reject": "Rechazar",
+  "inbox.request.commentPlaceholder": "Escribe algo…",
+  "inbox.request.commentFor": "{{action}}: {{title}}",
+  "inbox.request.quickSend": "para enviar",
+  "inbox.request.newLine": "para nueva línea",
+  "inboxButton.title": "Bandeja de entrada",
+  "inboxButton.pending": "Bandeja de entrada, {{count}} pendientes",
+  "inboxButton.unread": "Bandeja de entrada, {{count}} sin leer",
+  "inboxButton.pendingHint": "{{count}} pendientes de tu gestión; el número baja a medida que los gestionas.",
+  "inboxButton.unreadHint": "{{count}} sin leer; el número baja a medida que los lees.",
+  "auth.welcome": "Te damos la bienvenida",
+  "auth.loginDescription": "Inicia sesión con tu nombre de usuario o correo electrónico y tu contraseña.",
+  "auth.registerTitle": "Crear una cuenta",
+  "auth.registerDescription": "Crea una cuenta para empezar.",
+  "auth.forgotTitle": "He olvidado la contraseña",
+  "auth.forgotDescription": "Introduce tu correo electrónico y, si la cuenta existe, te enviaremos un enlace de restablecimiento.",
+  "auth.passwordResetUnavailable": "El restablecimiento de contraseña por autoservicio no está activado. Ponte en contacto con un administrador para restablecer tu contraseña.",
+  "auth.capabilityLoadFailed": "No se ha podido comprobar si el restablecimiento de contraseña está disponible.",
+  "auth.retry": "Reintentar",
+  "auth.loading": "Cargando",
+  "auth.resetDescription": "Elige una nueva contraseña para tu cuenta.",
+  "auth.resetTitle": "Restablecer contraseña",
+  "auth.identifier": "Nombre de usuario o correo electrónico",
+  "auth.password": "Contraseña",
+  "auth.signIn": "Iniciar sesión",
+  "auth.signingIn": "Iniciando sesión…",
+  "auth.hidePassword": "Ocultar contraseña",
+  "auth.showPassword": "Mostrar contraseña",
+  "auth.forgotLink": "¿Has olvidado la contraseña?",
+  "auth.noAccount": "¿No tienes una cuenta?",
+  "auth.signUp": "Registrarse",
+  "auth.createAccount": "Crear cuenta",
+  "auth.creatingAccount": "Creando cuenta…",
+  "auth.name": "Nombre",
+  "auth.username": "Nombre de usuario",
+  "auth.email": "Correo electrónico",
+  "auth.confirmPassword": "Confirmar contraseña",
+  "auth.existingAccount": "¿Ya tienes una cuenta?",
+  "auth.passwordMismatch": "Las contraseñas no coinciden.",
+  "auth.resetting": "Restableciendo…",
+  "auth.newPassword": "Nueva contraseña",
+  "auth.confirmNewPassword": "Confirmar nueva contraseña",
+  "auth.invalidResetLink": "Este enlace de restablecimiento de contraseña no es válido o ha caducado.",
+  "auth.backToSignIn": "Volver a iniciar sesión",
+  "auth.sendResetLink": "Enviar enlace de restablecimiento",
+  "auth.sending": "Enviando…",
+  "auth.resetSent": "Si la cuenta existe, se ha enviado un enlace de restablecimiento.",
+  "auth.rememberPassword": "¿Recuerdas tu contraseña?",
+  "auth.methods": "Métodos de inicio de sesión",
+  "auth.or": "O continúa con",
+  "auth.continueWith": "Continuar con {provider}",
+  "auth.about": "Acerca de esta aplicación",
+  "auth.platform": "Equipo de crecimiento con IA",
+  "auth.marketingTitleFirst": "Descubre qué hacer,",
+  "auth.marketingTitleSecond": "encárgaselo a un agente",
+  "auth.marketingTitleThird": "y lánzalo.",
+  "auth.marketingDescription": "NocoReach analiza cada día tus datos de búsquedas, tráfico, comunidad y GitHub para identificar lo que merece la pena hacer. Cuando das el visto bueno, tu agente realiza el cambio en tu repositorio y abre una solicitud de cambios.",
+  "auth.frontend": "Análisis diario",
+  "auth.frontendDescription": "La IA en línea analiza los datos cada día y propone oportunidades respaldadas por datos.",
+  "auth.foundation": "Integrado en tu repositorio",
+  "auth.foundationDescription": "Tu agente modifica el repositorio y abre una solicitud de cambios para que la revises.",
+  "auth.marketingFooter": "Descubre oportunidades, ponlas en marcha y mide los resultados.",
+  "status.loading": "Cargando",
+  "status.loadingPage": "Cargando la página",
+  "status.denied": "Acceso denegado",
+  "status.pageFailed": "No se puede cargar la página",
+  "status.retry": "Reintentar",
+  "navigation.brandHome": "Inicio de NocoReach",
+  "navigation.brandApps": "Aplicaciones de NocoReach",
+  "routeOverlay.close": "Cerrar",
+  "status.deniedDescription": "No tienes permiso para acceder a {{label}}.",
+  "status.routeFailedDescription": "No se ha podido cargar la ruta {{label}} de {{packageName}}.",
+  "shell": {
+    "templateVersionUnknown": "Versión desconocida",
+    "buildFreely": "Descubre las oportunidades que hay en tus datos.",
+    "reliability": "<brand>NocoReach</brand> las hace realidad."
+  },
+  "home": {
+    "platform": "NocoBase · Plataforma de aplicaciones nativa de IA",
+    "title": "Descríbelo y tu Agent lo construye",
+    "description": "Esta aplicación se desarrolla conversando con tu Coding Agent. Cuéntale con palabras sencillas lo que necesita el negocio y escribirá las páginas, los modelos de datos, las API y los procesos de negocio en este proyecto.",
+    "steps": {
+      "describe": {
+        "title": "Describe la necesidad",
+        "description": "Indica quién la usa, qué datos guarda y qué debe ocurrir."
+      },
+      "build": {
+        "title": "Deja que el Agent construya",
+        "description": "Lee este proyecto y sus capacidades integradas y, después, escribe el código."
+      },
+      "review": {
+        "title": "Revisa y ajusta",
+        "description": "Actualiza la página para probarlo y pide cambios de la misma forma."
+      }
+    },
+    "example": {
+      "title": "Prueba con una petición como esta",
+      "text": "Crea una aplicación de pedidos de compra.\n\nUn pedido tiene un número, un artículo, un solicitante, un importe y un estado de aprobación. Los solicitantes crean pedidos y solo ven los suyos; los revisores ven todos los pedidos pendientes y los aprueban o rechazan.\nTras una decisión, notifica al solicitante en la bandeja de entrada con un enlace al pedido.",
+      "hint": "Pégala en Claude Code, Codex, Cursor o cualquier Coding Agent abierto en este proyecto."
+    },
+    "capabilitiesTitle": "Capacidades integradas",
+    "capabilitiesDescription": "Tu Agent las usa directamente en lugar de crearlas desde cero. Abre una para obtener un prompt que puedes editar y copiar.",
+    "viewPrompts": "Ver prompts ({{count}})",
+    "prompt": {
+      "label": "Prompt",
+      "hint": "Edita el prompt para adaptarlo a tu negocio antes de copiarlo. Los cambios no se guardan al cerrar el cuadro de diálogo.",
+      "copy": "Copiar",
+      "copiedShort": "Copiado",
+      "copied": "Prompt copiado",
+      "copyFailed": "No se puede copiar. Selecciona el texto y cópialo manualmente.",
+      "reset": "Restaurar predeterminado"
+    },
+    "capabilities": {
+      "auth": {
+        "title": "Autenticación",
+        "description": "Inicio de sesión, registro, restablecimiento de contraseña e inicio de sesión único corporativo.",
+        "prompts": {
+          "disableSignUp": {
+            "label": "Cerrar el registro",
+            "text": "Esta aplicación es solo para empleados de la empresa. Los administradores crean todas las cuentas.\nDesactiva el autorregistro y quita el enlace de registro de la página de inicio de sesión.\nLos empleados existentes deben poder seguir iniciando sesión con sus cuentas y contraseñas.\nMantén el enlace de contraseña olvidada."
+          },
+          "companySso": {
+            "label": "SSO corporativo",
+            "text": "Permite que los empleados inicien sesión con la plataforma de identidad de la empresa mediante OIDC.\n\nMantén el inicio de sesión con cuenta y contraseña y añade un botón Cuenta corporativa.\nEl botón abre la plataforma de identidad de la empresa. Tras iniciar sesión correctamente, vuelve a la página de inicio de la aplicación.\n\nPermite que el primer inicio de sesión cree una cuenta en la aplicación, identificada por el identificador de usuario estable de la plataforma.\nNo vincules cuentas automáticamente por coincidencia de nombre o correo electrónico. Las cuentas nuevas usan los permisos predeterminados de la aplicación.\n\nEnumera la información que debe proporcionar el administrador de la plataforma de identidad y la URL de retorno que debe registrar."
+          },
+          "apiKeys": {
+            "label": "Claves de API",
+            "text": "Añade una entrada Claves de integración al menú de usuario, usando la capacidad de claves de API integrada en la aplicación.\nLos empleados gestionan solo las claves que han creado, indicando una finalidad y un periodo de validez en días.\nMuestra la clave completa una sola vez tras crearla, con un aviso para copiarla y guardarla de inmediato.\nMuestra en la lista el nombre de cada clave, un fragmento identificable, el estado, la caducidad y el último uso, y permite revocarla tras una confirmación.\nNo muestres nunca la clave completa en la lista, los registros ni los detalles."
+          }
+        }
+      },
+      "dataSources": {
+        "title": "Fuentes de datos",
+        "description": "Elige la base de datos de la aplicación y usa datos de negocio de bases de datos externas existentes.",
+        "prompts": {
+          "postgres": {
+            "label": "Cambiar de base de datos",
+            "text": "Cambia la base de datos de la aplicación de SQLite a PostgreSQL.\nLee los datos de conexión de la configuración de ejecución del servidor, no del código fuente.\nExplica qué controlador de base de datos hay que instalar y qué ajustes hay que rellenar, y recuérdame que los datos existentes no se migran automáticamente."
+          },
+          "externalDatabase": {
+            "label": "Base de datos externa",
+            "text": "Conecta la base de datos financiera existente de la empresa como fuente de datos externa de solo lectura; no modifiques sus tablas.\nRelaciona los registros por número de proveedor y añade una sección Liquidación a los detalles del proveedor que muestre el ciclo de liquidación, el límite de crédito y el estado de liquidación, indicando su origen.\nSigue leyendo los datos de contacto del proveedor de la base de datos de la aplicación y lee los datos de liquidación directamente de la base de datos externa sin importarlos.\nLee las credenciales de conexión de la configuración de ejecución del servidor."
+          }
+        }
+      },
+      "authorization": {
+        "title": "Permisos",
+        "description": "Controla quién puede abrir qué páginas, ejecutar qué acciones y ver qué registros.",
+        "prompts": {
+          "jobs": {
+            "label": "Puestos",
+            "text": "Crea los puestos Solicitante de compras y Revisor de pedidos para la aplicación.\nLos solicitantes de compras pueden entrar en la página de pedidos y ver los pedidos que han solicitado.\nLos revisores de pedidos pueden entrar en la página de pedidos, ver pedidos y aprobar o rechazar los pedidos pendientes.\nSolo los administradores de la aplicación pueden cambiar los permisos y las asignaciones.\nUsa la capacidad de autorización existente de la aplicación para que los administradores puedan ajustar los permisos y asignar personas más adelante."
+          },
+          "dataScopes": {
+            "label": "Ámbitos de datos",
+            "text": "Haz que los solicitantes de compras vean solo sus propios pedidos, usando el campo de solicitante del pedido para determinar a quién pertenece.\nLos revisores de pedidos pueden ver todos los pedidos y tramitar las aprobaciones pendientes.\nLos administradores pueden ajustar el ámbito de visualización de pedidos de cada puesto en su conjunto de permisos."
+          },
+          "restrictions": {
+            "label": "Restricciones",
+            "text": "Bob está ayudando temporalmente a revisar pedidos de compra y solo puede ver pedidos de 2.000 o menos.\nAñade un límite de importe a su acción Ver pedidos, manteniendo su puesto y sus ámbitos de datos actuales.\nAplica el límite a sus propios pedidos y a los pedidos compartidos con él.\nLos administradores pueden cambiar el importe o quitar la regla; antes de quitarla, explica que su ámbito visible puede ampliarse."
+          }
+        }
+      },
+      "workflow": {
+        "title": "Flujos de trabajo",
+        "description": "Haz avanzar los registros de negocio por etapas, con esperas, tiempos de espera agotados, reintentos y un historial de quién hizo qué.",
+        "prompts": {
+          "stages": {
+            "label": "Etapas",
+            "text": "Añade un proceso a los pedidos de compra: Pendiente de aprobación → Pendiente de compra → Recibido → Completado.\nLos revisores aprueban o rechazan; un rechazo exige un motivo y devuelve el pedido al solicitante para que lo corrija y lo vuelva a enviar.\nCuando el comprador realiza la compra, el pedido queda pendiente de compra; confirmar la entrega con un albarán firmado lo pasa a Recibido, y la confirmación del solicitante lo completa.\nLos detalles del pedido ofrecen solo las acciones de la etapa actual, y las ediciones normales no pueden cambiar la etapa.\nComprueba las etapas y la información obligatoria en el servidor, y no sobrescribas nunca un resultado que otra persona ya haya enviado."
+          },
+          "backgroundExport": {
+            "label": "Exportación en segundo plano",
+            "text": "Añade una página de informe de pedidos que exporte los pedidos existentes a CSV.\nTras el envío, la exportación queda a la espera de procesarse, se genera en segundo plano y termina con un enlace de descarga.\nMuestra la etapa actual, el nombre del archivo, el número de pedidos exportados y los registros de envío y de procesamiento del sistema.\nReintenta según las reglas las generaciones fallidas y conserva el fallo definitivo para que lo gestione el responsable; volver a ejecutarla no debe crear archivos de informe duplicados.\nMantén visibles el progreso y el resultado tras actualizar la página, y permite exportar pedidos solo a las personas autorizadas."
+          },
+          "history": {
+            "label": "Historial",
+            "text": "Muestra la etapa actual y el historial de procesamiento en los detalles del pedido.\nCada entrada muestra quién actuó, cuándo, la acción, la etapa anterior y la posterior, y el motivo del rechazo o el albarán firmado, si los hay.\nMarca las acciones realizadas automáticamente como hechas por el sistema.\nConserva el progreso y el historial tras actualizar la página, para poder revisar todo el proceso una vez completado."
+          }
+        }
+      },
+      "scheduler": {
+        "title": "Tareas programadas",
+        "description": "Ejecuta trabajo de negocio a horas fijas y consulta la próxima ejecución y sus resultados.",
+        "prompts": {
+          "reminder": {
+            "label": "Recordatorio diario",
+            "text": "Añade un recordatorio de pedidos pendientes a la aplicación de pedidos existente.\n\nA las 09:00, hora de Pekín, cada día laborable, busca los pedidos pendientes de aprobación, agrúpalos por revisor y envía a cada revisor una notificación en la aplicación.\nIncluye el número de pedidos pendientes y un enlace a la lista de pedidos pendientes. No envíes nada si no hay pedidos pendientes.\nLos administradores pueden ver la programación y los registros de ejecución, y pausar o reanudar los recordatorios."
+          },
+          "weeklyReport": {
+            "label": "Informe semanal",
+            "text": "A las 08:00, hora de Pekín, cada lunes, genera el resumen de ventas de la semana anterior y avisa al responsable de ventas.\nIncluye los ingresos por ventas, el número de pedidos y los totales por región. Los administradores pueden ver la tarea y los registros de ejecución."
+          }
+        }
+      },
+      "notification": {
+        "title": "Notificaciones",
+        "description": "Envía mensajes en la aplicación, correos electrónicos o mensajes de bots de grupo cuando ocurre algo.",
+        "prompts": {
+          "inApp": {
+            "label": "Mensaje en la aplicación",
+            "text": "Añade la aprobación de pedidos a la aplicación actual y notifica los resultados a los solicitantes mediante mensajes en la aplicación.\n\nLos pedidos incluyen un número, un nombre, un solicitante, un importe y un estado de aprobación.\nLos solicitantes pueden ver sus propios pedidos. Los revisores pueden ver los pedidos pendientes y aprobarlos o rechazarlos. Reutiliza las funciones de pedidos y aprobación existentes, si las hay.\n\nTras la aprobación o el rechazo, envía un único mensaje en la aplicación solo al solicitante del pedido.\nEl título indica si el pedido se ha aprobado o rechazado. El cuerpo incluye el número del pedido, el nombre y el resultado de la aprobación.\nAl hacer clic en el mensaje se abren los detalles del pedido correspondiente.\nNo envíes nada mientras la aprobación esté pendiente. Notifica solo una vez el mismo resultado de aprobación.\nUn fallo en la notificación no afecta al resultado de aprobación guardado."
+          },
+          "email": {
+            "label": "Correo electrónico",
+            "text": "Añade el correo electrónico a las notificaciones de aprobación de pedidos existentes, usando el canal de correo electrónico configurado en la aplicación.\n\nCuando un pedido se apruebe o se rechace, envía el resultado al correo electrónico de la cuenta del solicitante.\nIncluye el número del pedido en el asunto y el nombre del pedido y el resultado en el cuerpo.\nMantén los mensajes en la aplicación existentes. Si el solicitante no tiene dirección de correo electrónico, envía solo el mensaje en la aplicación.\nUn fallo en el correo electrónico no debe afectar al resultado de la aprobación ni al mensaje en la aplicación."
+          }
+        }
+      },
+      "mail": {
+        "title": "Correo",
+        "description": "Conecta buzones personales y lee, responde y envía correo de negocio.",
+        "prompts": {
+          "providers": {
+            "label": "Proveedor de correo",
+            "text": "Configura mailbox.org para la aplicación en mail.providers de la configuración del servidor:\n- Servidor de entrada IMAP: imap.mailbox.org, puerto 993, SSL/TLS.\n- Servidor de salida SMTP: smtp.mailbox.org, puerto 465, SSL/TLS.\nLos usuarios introducen su propia dirección de correo, nombre de usuario y contraseña en la página de cuentas de buzón y eligen la fecha desde la que se hará la primera sincronización; no escribas nunca las contraseñas de los buzones en la configuración ni en el código fuente."
+          },
+          "mailCenter": {
+            "label": "Centro de correo",
+            "text": "El correo está integrado en esta aplicación; reutilízalo en lugar de volver a crearlo o de instalar otro plugin.\nAñade a la navegación las páginas Centro de correo y Cuentas de buzón, usando el espacio de trabajo de correo y las páginas de cuentas de buzón que proporciona la capacidad de correo.\nLos usuarios pueden conectar sus propios buzones, sincronizar los mensajes entrantes, leer los mensajes y sus adjuntos y responder, conservando el asunto original y el contexto de la conversación y dirigiendo la respuesta al remitente original.\nCada usuario trabaja con sus propios buzones conectados."
+          },
+          "correspondence": {
+            "label": "Correos de clientes",
+            "text": "Añade una sección de correspondencia a los detalles del cliente, reutilizando los componentes de lectura y redacción de correo integrados en la aplicación.\nMuestra los mensajes cuyo remitente o destinatario coincida con las direcciones de correo de los contactos del cliente actual. Los comerciales pueden leer los mensajes, ver los adjuntos y responder usando sus propios buzones conectados."
+          }
+        }
+      },
+      "file": {
+        "title": "Archivos",
+        "description": "Sube archivos, adjúntalos a registros y previsualízalos o descárgalos.",
+        "prompts": {
+          "attachments": {
+            "label": "Adjuntos",
+            "text": "Añade adjuntos de compra a mi aplicación de gestión de pedidos existente.\n\nAñade una zona de adjuntos a los detalles del pedido. Cada pedido puede tener varios archivos, incluidos PDF, imágenes y DOCX.\nMuestra los nombres y tamaños de archivo, con acciones para previsualizar, descargar y quitar adjuntos.\nTras subirlos, permite a los usuarios guardar los adjuntos en el pedido actual. Mantenlos disponibles cuando se vuelva a abrir el pedido.\nCualquier persona con acceso a un pedido puede ver y descargar sus adjuntos. Los solicitantes y los revisores pueden añadir o quitar adjuntos.\nQuitar un adjunto solo lo desvincula del pedido actual; conserva el archivo."
+          },
+          "avatar": {
+            "label": "Avatar",
+            "text": "Añade un avatar a cada empleado, con una imagen por empleado.\nPermite subir y sustituir el avatar, y muéstralo en las listas y los detalles de empleados.\nUsa el nuevo avatar tras sustituirlo y mantenlo visible después de actualizar la página."
+          }
+        }
+      },
+      "i18n": {
+        "title": "Idiomas",
+        "description": "Cambia el idioma de la interfaz, añade idiomas y define el predeterminado.",
+        "prompts": {
+          "addLanguage": {
+            "label": "Añadir un idioma",
+            "text": "Añade el español a mi aplicación. Traduce la interfaz y los mensajes del servidor, y añade el español al menú de idiomas."
+          },
+          "defaultLanguage": {
+            "label": "Idioma predeterminado",
+            "text": "Haz que el chino simplificado sea el idioma predeterminado de la aplicación para quienes no hayan elegido ninguno. Mantén el inglés disponible en el menú de idiomas."
+          }
+        }
+      },
+      "theme": {
+        "title": "Temas",
+        "description": "Ajusta los colores, las fuentes y la densidad, y cambia entre claro y oscuro.",
+        "prompts": {
+          "changeTheme": {
+            "label": "Cambiar un tema",
+            "text": "Actualiza el tema Compacto: usa el azul como color principal y aumenta ligeramente el radio de las esquinas. Mantén las fuentes, los tamaños de texto y el espaciado compacto actuales."
+          },
+          "newTheme": {
+            "label": "Nuevo tema",
+            "text": "Crea un tema Bosque con el verde como color principal, fondos suaves, esquinas moderadamente redondeadas y sombras sutiles."
+          }
+        }
+      }
+    }
+  },
+  "appearance": {
+    "title": "Apariencia",
+    "mode": "Modo de color",
+    "preset": "Tema",
+    "light": "Claro",
+    "dark": "Oscuro",
+    "system": "Sistema",
+    "themes": {
+      "default": "Amplio",
+      "compact": "Compacto"
+    }
+  },
+  "app": {
+    "title": "NocoReach"
+  },
+  "actions": {
+    "close": "Cerrar",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "language": "Idioma"
+  },
+  "notices": {
+    "serverLocaleFallback": "El servidor no admite este idioma, así que los mensajes del servidor aparecerán en inglés.",
+    "languageChangeFailed": "No se ha podido cambiar el idioma. Vuelve a intentarlo."
+  },
+  "account": {
+    "signOutFailed": "No se ha podido cerrar la sesión. Vuelve a intentarlo.",
+    "openMenu": "Abrir el menú de la cuenta",
+    "fallback": "Cuenta",
+    "signOut": "Cerrar sesión",
+    "signingOut": "Cerrando sesión…"
+  },
+  "navigation": {
+    "home": "Inicio",
+    "open": "Abrir navegación",
+    "close": "Cerrar navegación",
+    "expand": "Expandir navegación",
+    "collapse": "Contraer navegación",
+    "toggle": "Expandir o contraer navegación",
+    "label": "Navegación de la aplicación",
+    "description": "Ir a una página de esta aplicación.",
+    "breadcrumb": "Ruta de navegación",
+    "breadcrumbMore": "Mostrar niveles intermedios",
+    "back": "Volver",
+    "backTo": "Volver a {{label}}"
+  },
+  "dataTable": {
+    "noResults": "No hay resultados.",
+    "sortAscending": "Ascendente",
+    "sortDescending": "Descendente",
+    "hideColumn": "Ocultar",
+    "view": "Vista",
+    "toggleColumns": "Mostrar u ocultar columnas",
+    "selectedCount": "{{selected}} de {{total}} fila(s) seleccionada(s).",
+    "rowsPerPage": "Filas por página",
+    "pageOf": "Página {{page}} de {{pageCount}}",
+    "firstPage": "Ir a la primera página",
+    "previousPage": "Ir a la página anterior",
+    "nextPage": "Ir a la página siguiente",
+    "lastPage": "Ir a la última página"
+  },
+  "datePicker": {
+    "placeholder": "Elige una fecha",
+    "rangePlaceholder": "Elige un intervalo de fechas"
+  },
+  "chat": {
+    "title": "Chat con el agente",
+    "ask": "Preguntar al agente",
+    "close": "Cerrar",
+    "expand": "Ampliar al ancho completo",
+    "restoreSize": "Volver al panel lateral",
+    "openPage": "Abrir a pantalla completa",
+    "openInPanel": "Abrir en el panel lateral",
+    "more": "Más",
+    "newConversation": "Nueva conversación",
+    "untitled": "Conversación sin título",
+    "rename": "Cambiar título",
+    "renameHint": "{{title}} (haz clic para cambiar el título)",
+    "archive": "Archivar",
+    "unarchive": "Desarchivar",
+    "you": "Tú",
+    "agentGone": "Agente eliminado",
+    "anyAgent": "Agente",
+    "loadFailed": "No se ha podido cargar la conversación",
+    "notFound": "No se puede abrir esta conversación",
+    "notFoundDescription": "Puede que se haya eliminado o que pertenezca a otra persona.",
+    "emptyTitle": "¿Qué puede hacer {{name}} por ti?",
+    "emptyDescription": "Pregunta lo que quieras o describe el trabajo que quieres organizar. El contenido de esta página se enviará como contexto.",
+    "noAgent": "No tienes ningún agente disponible para conversar. Pide a un administrador que cree uno o te dé acceso.",
+    "chooseAgent": "Elige abajo con quién quieres conversar. Para empezar siempre con el mismo agente, configúralo como predeterminado en tu perfil.",
+    "messages": "Mensajes",
+    "olderMessages": "Mensajes anteriores",
+    "sources": {
+      "panel": "Panel de chat"
+    },
+    "availability": {
+      "online": "En línea",
+      "agentMissing": "Eliminado",
+      "agentArchived": "Archivado",
+      "forbidden": "Sin acceso",
+      "noRunner": "No hay ningún Runner en línea",
+      "othersPersonal": "Solo disponible en los Runner personales de otras personas"
+    },
+    "mode": {
+      "online": "En línea",
+      "runner": "Runner",
+      "onlineHint": "Responde en segundos desde el servidor",
+      "runnerHint": "Un agente de programación en un entorno de ejecución"
+    },
+    "reply": {
+      "writing": "Escribiendo…",
+      "interrupted": "La respuesta se ha interrumpido aquí."
+    },
+    "offline": {
+      "agentMissing": "{{name}} ya no existe",
+      "agentArchived": "{{name}} está archivado",
+      "forbidden": "Ya no tienes permiso para usar {{name}}",
+      "noRunner": "{{name}} no tiene ningún Runner en línea en este momento",
+      "othersPersonal": "{{name}} solo está disponible en los Runner personales de otras personas",
+      "kept": "Tus mensajes se guardan y el agente responderá cuando pueda.",
+      "fallback": "Usar otro agente en esta conversación",
+      "usingDefault": "Esta conversación usa temporalmente {{name}} en lugar de {{own}}.",
+      "restore": "Volver a {{own}}"
+    },
+    "notice": {
+      "switchedToDefault": "Se ha cambiado a {{name}}, el agente predeterminado del sistema, hasta que {{own}} vuelva a estar disponible.",
+      "switchedToOnline": "{{own}} no tiene ningún Runner disponible para ti en este momento, así que {{name}} responderá hasta que {{own}} vuelva a estar disponible.",
+      "onlineFallbackUnavailable": "El agente alternativo en línea no puede responder ({{reason}}). La conversación sigue con {{own}} a la espera de un Runner.",
+      "switchedBack": "Has vuelto a {{name}}.",
+      "runFailed": "El agente se ha detenido antes de responder.",
+      "runFailedReason": "El agente se ha detenido antes de responder: {{reason}}",
+      "runCancelled": "Se ha detenido."
+    },
+    "consultation": {
+      "title": "Se ha consultado a {{name}}",
+      "question": "Pregunta",
+      "answer": "Respuesta",
+      "steps": "Pasos realizados",
+      "plans_one": "Ha propuesto un plan para que lo confirmes.",
+      "plans_other": "Ha propuesto {{count}} planes para que los confirmes.",
+      "usage": "Ha utilizado {{input}} tokens de entrada y {{output}} de salida.",
+      "state": {
+        "running": "Respondiendo…",
+        "completed": "Respondida",
+        "failed": "Fallida",
+        "refused": "Rechazada"
+      }
+    },
+    "steps": {
+      "title": "Pasos",
+      "waiting": "Esperando a que un Runner se haga cargo…",
+      "starting": "Iniciando…",
+      "thinking": "Pensando…",
+      "reading": "Consultando {{subject}}",
+      "working": "Trabajando en {{subject}}",
+      "count_one": "{{count}} paso",
+      "count_other": "{{count}} pasos",
+      "started": "El agente está respondiendo.",
+      "finished": "El agente ha terminado de responder."
+    },
+    "pending": {
+      "sending": "Enviando…",
+      "failed": "No enviado",
+      "retry": "Volver a enviar",
+      "discard": "Descartar"
+    },
+    "composer": {
+      "label": "Mensaje para el agente",
+      "placeholder": "Pregunta o describe el trabajo que quieres organizar…",
+      "hint": "Intro para enviar, Mayús+Intro para un salto de línea",
+      "runningHint": "Los mensajes que envíes ahora se incorporarán al trabajo en curso",
+      "tooLong": "Máximo {{max}} caracteres.",
+      "send": "Enviar",
+      "stop": "Detener",
+      "stopping": "Deteniendo…"
+    },
+    "attachments": {
+      "attach": "Adjuntar archivos",
+      "label": "Archivos adjuntos al próximo mensaje",
+      "sent": "Archivos enviados con este mensaje",
+      "images": "Imágenes",
+      "files": "Archivos",
+      "remove": "Quitar {{name}}",
+      "uploading": "Subiendo…",
+      "tooLarge": "Supera {{max}}",
+      "failed": "No se ha podido subir",
+      "tooMany": "Máximo {{max}} archivos por mensaje.",
+      "blocked": "Quita los archivos que no se hayan podido subir para enviar el mensaje.",
+      "waiting": "El mensaje se enviará cuando se hayan subido los archivos…",
+      "drop": "Suelta los archivos para adjuntarlos",
+      "preview": "Vista previa de {{name}}",
+      "download": "Descargar {{name}}",
+      "previous": "Imagen anterior",
+      "next": "Imagen siguiente"
+    },
+    "context": {
+      "label": "Contexto incluido en el próximo mensaje",
+      "sent": "Contexto incluido en este mensaje",
+      "filter": "Filtro: {{filter}}",
+      "selection": "Texto seleccionado: «{{text}}»",
+      "remove": "Quitar contexto: {{label}}"
+    },
+    "agents": {
+      "switch": "Agente: {{name}}; elegir otro",
+      "withStatus": "{{name}}, {{status}}",
+      "chooseFor": "Conversar con",
+      "startWith": "Iniciar una nueva conversación con",
+      "boundHint": "Cada conversación permanece vinculada a su agente; al elegir otro, se inicia una nueva conversación.",
+      "empty": "No tienes ningún agente disponible para conversar",
+      "none": "Sin agente",
+      "field": "Agente: {{name}}",
+      "unknown": "Agente desconocido",
+      "placeholder": "Elegir un agente",
+      "myDefault": "Mi agente predeterminado",
+      "systemDefault": "Predeterminado del sistema",
+      "personal": "Solo Runner personales",
+      "temporary": "Temporal",
+      "modeHint": "Conecta un Runner y activa los agentes que detecte para iniciar una conversación."
+    },
+    "history": {
+      "title": "Conversaciones",
+      "search": "Buscar conversaciones",
+      "show": "Mostrar",
+      "active": "Abiertas",
+      "archived": "Archivadas",
+      "agent": "Agente",
+      "allAgents": "Todos los agentes",
+      "source": "Origen",
+      "allSources": "Todos los orígenes",
+      "loadFailed": "No se han podido cargar las conversaciones",
+      "noMatch": "No hay conversaciones que coincidan",
+      "noArchived": "No hay conversaciones archivadas",
+      "empty": "Aún no hay conversaciones",
+      "more": "Cargar más",
+      "unread": "Nueva respuesta",
+      "actions": "Acciones para {{title}}"
+    },
+    "loading": "Cargando",
+    "retry": "Reintentar",
+    "errors": {
+      "forbidden": "No tienes permiso para realizar esta acción.",
+      "notFound": "Ya no existe.",
+      "requestFailed": "La solicitud ha fallado. Inténtalo de nuevo."
+    },
+    "transcript": {
+      "waiting": "Esperando a que se inicie el agente…",
+      "empty": "No se ha registrado ningún evento en esta ejecución.",
+      "fetchFailed": "No se han podido obtener nuevos eventos. Reintentando…",
+      "expand": "Mostrar todo",
+      "truncated": "Contenido recortado: el texto completo era demasiado largo para conservarlo.",
+      "events": "Registro de ejecución",
+      "inputDelivered": "Entradas entregadas al agente: {{count}}",
+      "tokens": "{{input}} tokens de entrada, {{output}} de salida",
+      "kinds": {
+        "text": "Agente",
+        "thinking": "Razonamiento",
+        "toolUse": "Herramienta",
+        "toolResult": "Resultado",
+        "allowed": "Permitido",
+        "denied": "Denegado",
+        "input": "Entrada",
+        "checkout": "Extracción del código",
+        "status": "Estado",
+        "error": "Error",
+        "usage": "Consumo"
+      }
+    }
+  },
+  "agentSetup.title": "Usar NocoReach en tu agente",
+  "agentSetup.description": "Copia estas instrucciones en Claude Code, Codex u otro agente de programación para conectarlo a NocoReach.",
+  "agentSetup.prompt": "Ayúdame a usar NocoReach desde este agente de programación.\n\n1. Instala la CLI de NocoReach:\n{{install}}\n\n2. Inicia el proceso de acceso desde el navegador:\n{{login}}\nMuéstrame la URL de verificación y el código. Espera a que compruebe y apruebe el código en mi navegador; no lo apruebes por mí.\n\n3. Cuando lo apruebe, ejecuta `nocoreach whoami` para verificar la cuenta con la que he iniciado sesión y después `nocoreach docs` para conocer los comandos disponibles. Usa esos comandos para atender mis solicitudes dentro de los permisos que ya tengo. No me pidas la contraseña ni uses el token de descarga como clave de API.",
+  "agentSetup.identity": "El token de descarga solo sirve para instalar la CLI. Cuando apruebes el inicio de sesión en el navegador, el agente actuará con tu cuenta y los permisos que ya tienes.",
+  "agentSetup.expiry": "El token de instalación es válido durante 30 minutos y permite hasta 3 descargas. Mantén estas instrucciones en privado. Genera un nuevo token si caduca.",
+  "agentSetup.runtime": "Requiere Node.js 24 o superior en macOS o Linux; en Windows, usa WSL. Solo se instala la CLI.",
+  "agentSetup.preparing": "Preparando las instrucciones de instalación…",
+  "agentSetup.promptLabel": "Instrucciones de configuración del agente",
+  "agentSetup.failed": "No se han podido preparar las instrucciones de instalación. Inténtalo de nuevo.",
+  "agentSetup.signedOut": "Tu sesión ha caducado. Vuelve a iniciar sesión para continuar.",
+  "agentSetup.forbidden": "No tienes permiso para generar instrucciones de instalación. Contacta con tu administrador.",
+  "agentSetup.expired": "Este token de instalación ha caducado. Genera uno nuevo para continuar.",
+  "agentSetup.regenerate": "Generar nuevo token",
+  "agentSetup.copy": "Copiar instrucciones",
+  "agentSetup.copied": "Copiado",
+  "agentSetup.copyFailed": "No se han podido copiar las instrucciones. Selecciónalas y cópialas manualmente.",
+  "agentSetup.signIn": "Volver a iniciar sesión",
+  "agentSetup.signInFailed": "No se ha podido renovar tu sesión. Inténtalo de nuevo.",
+  "nocoreach.agentCapabilities.group": "Tareas de NocoReach",
+  "nocoreach.agentCapabilities.read": "Leer los datos de la tarea actual",
+  "nocoreach.agentCapabilities.readDescription": "Leer las instantáneas de la tarea: métricas, palabras clave, páginas, auditoría, conocimientos, habilidades y publicaciones del foro.",
+  "nocoreach.agentCapabilities.draft": "Guardar un borrador propuesto",
+  "nocoreach.agentCapabilities.draftDescription": "Guardar un borrador para la ejecución actual sin aprobarlo ni publicarlo.",
+  "nocoreach.agentCapabilities.research": "Investigación de NocoReach",
+  "nocoreach.agentCapabilities.community": "Comunidad de NocoReach",
+  "nocoreach.agentCapabilities.presetDescription": "Trabajar a partir de la información contrastada del proyecto y enviar un borrador para revisión humana.",
+  "nocoreach.nav.insights": "Hallazgos",
+  "nocoreach.nav.opportunities": "Oportunidades",
+  "nocoreach.nav.tasks": "Tareas",
+  "nocoreach.nav.results": "Resultados",
+  "nocoreach.nav.site": "Sitio web y producto",
+  "nocoreach.nav.pages": "Páginas",
+  "nocoreach.nav.traffic": "Tráfico",
+  "nocoreach.nav.audit": "Auditoría del sitio web",
+  "nocoreach.nav.github": "GitHub",
+  "nocoreach.nav.downloads": "Descargas",
+  "nocoreach.nav.search": "Búsquedas y mercado",
+  "nocoreach.nav.searchPerformance": "Rendimiento",
+  "nocoreach.nav.keywords": "Palabras clave",
+  "nocoreach.nav.trends": "Tendencias",
+  "nocoreach.nav.competitors": "Competidores",
+  "nocoreach.nav.aiSearch": "Búsqueda con IA",
+  "nocoreach.nav.community": "Comunidad",
+  "nocoreach.nav.forum": "Foro",
+  "nocoreach.nav.hackerNews": "Hacker News",
+  "nocoreach.nav.reddit": "Reddit",
+  "nocoreach.nav.x": "X",
+  "nocoreach.nav.discord": "Discord",
+  "nocoreach.nav.slack": "Slack",
+  "nocoreach.nav.xiaohongshu": "Xiaohongshu",
+  "nocoreach.nav.bilibili": "Bilibili",
+  "nocoreach.nav.youtube": "YouTube",
+  "nocoreach.nav.aiTeam": "Equipo de IA",
+  "nocoreach.nav.agent": "Agente",
+  "nocoreach.nav.playbooks": "Guías de acción",
+  "nocoreach.nav.skills": "Habilidades",
+  "nocoreach.nav.projectKnowledge": "Conocimientos",
+  "nocoreach.nav.analysisRules": "Reglas de análisis",
+  "nocoreach.nav.settings": "Configuración",
+  "nocoreach.nav.connections": "Fuentes de datos",
+  "nocoreach.nav.proxyProfiles": "Red",
+  "nocoreach.nav.members": "Miembros y roles",
+  "overrides": {
+    "@nocobase/app-plugin-agents": {
+      "agentSkills": {
+        "onlineScripts": "Los agentes de chat pueden leer los scripts, pero no ejecutarlos."
+      },
+      "models": {
+        "description": "Servicios de modelos y los modelos que ofrecen. Los modelos de chat se utilizan para el análisis diario y el agente de chat; los modelos de vectorización y reordenación se utilizan para las búsquedas."
+      },
+      "defaultModel": {
+        "description": "Los agentes de chat que no tienen modelos asignados responden con este modelo, como los agentes nuevos o los incluidos en la aplicación."
+      },
+      "services": {
+        "empty": {
+          "description": "Cuando añadas un servicio de modelos, los agentes de chat podrán responder a través de él."
+        },
+        "service": {
+          "enabledHint": "Los agentes de chat solo pueden usar sus modelos mientras el servicio esté activado."
+        }
+      },
+      "skills": {
+        "scriptsNote": "Contiene scripts: los agentes de chat pueden leerlos, pero nunca ejecutarlos",
+        "entry": {
+          "conventional": {
+            "scripts": "Código que los agentes pueden ejecutar. Los agentes de chat solo lo leen."
+          }
+        }
+      },
+      "runtimes": {
+        "description": "Ordenadores o servidores donde se ejecuta Runner. Runner informa de las herramientas de programación disponibles en ese equipo (como Claude Code o Codex), donde los agentes de ejecución realizan las tareas."
+      },
+      "usage": {
+        "description": "Tokens consumidos por cada agente y modelo, con costes estimados según los precios actuales."
+      }
+    }
+  },
+  "agentSetup.connectionsTitle": "Conectar fuentes de datos con tu agente",
+  "agentSetup.connectionsDescription": "Copia estas instrucciones en Claude Code, Codex u otro agente de programación. Instalará la CLI de NocoReach, iniciará sesión con tu cuenta y conectará las fuentes de datos de este proyecto cuando confirmes su plan.",
+  "agentSetup.connectionsPrompt": "Ayúdame a conectar las fuentes de datos del proyecto de NocoReach «{{project}}» (ID {{projectId}}).\n\n1. Instala la CLI de NocoReach:\n{{install}}\n\n2. Inicia el proceso de acceso desde el navegador:\n{{login}}\nMuéstrame la URL de verificación y el código. Espera a que compruebe y apruebe el código en mi navegador; no lo apruebes por mí.\n\n3. Cuando lo apruebe, ejecuta `nocoreach whoami` para verificar la cuenta con la que he iniciado sesión. Después, ejecuta `nocoreach connect guide --json` y sigue sus pasos para el proyecto {{projectId}}. Muéstrame tu plan y espera mi confirmación antes de conectar nada. No me pidas contraseñas, tokens ni claves de API, ni uses el token de descarga como clave de API. Si una fuente necesita credenciales, dame el enlace para que yo las introduzca en el navegador."
+}

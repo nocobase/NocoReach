@@ -1,0 +1,217 @@
+{
+  "@nocobase/app-plugin-agents": {
+    "access": {
+      "section": "Agententeam",
+      "businessSection": "Agententeam",
+      "businesses": {
+        "agents": {
+          "title": "Agenten und Skills",
+          "description": "Die Agenten des Teams und die von ihnen verwendeten Skills.",
+          "actions": {
+            "edit": {
+              "title": "Agenten und Skills ändern",
+              "description": "Einstellungen, Skills und Variablen eines Agenten ändern, ihn archivieren, wiederherstellen und löschen sowie Skills bearbeiten. Ein Agent erhält keine Befugnisse, die über die der bearbeitenden Person hinausgehen",
+              "related": "Agenten und Skills ändern (eigene Agenten und selbst erstellte Skills)",
+              "relatedLabel": "Meine Agenten und von mir erstellte Skills",
+              "relatedHint": "Agenten, deren Eigentümer ich bin, und Skills, die ich erstellt habe",
+              "all": "Agenten und Skills ändern (alle)"
+            }
+          }
+        }
+      },
+      "settings": {
+        "agents": {
+          "agents": "Agenten",
+          "runners": "Laufzeitumgebungen",
+          "prices": "Modellpreise",
+          "services": "Modelldienste"
+        }
+      },
+      "actions": {
+        "read": "Anzeigen",
+        "manage": "Verwalten"
+      },
+      "keyScopes": {
+        "agents": {
+          "title": "Agenten",
+          "description": "Agenten, Skills und Ausführungen anzeigen; Agenten und Skills ändern sowie Ausführungen abbrechen und erneut starten."
+        },
+        "runners": {
+          "title": "Laufzeitumgebungen",
+          "description": "Runner und Registrierungstoken anzeigen; Runner verwalten."
+        },
+        "prices": {
+          "title": "Modellpreise",
+          "description": "Modellpreise anzeigen und ändern, auf deren Grundlage die Kosten geschätzt werden."
+        },
+        "services": {
+          "title": "Modelldienste",
+          "description": "Modelldienste und ihre angebotenen Modelle anzeigen, jedoch niemals ihre Schlüssel."
+        }
+      }
+    }
+  },
+  "@nocobase/app-plugin-authorization": {
+    "sections": {
+      "pages": "Seitenberechtigungen",
+      "page": "Seiten",
+      "business": "Fachliche Berechtigungen",
+      "administration": "Administration",
+      "other": "Sonstige"
+    },
+    "options": {
+      "defaultAndSharing": "Standard-Datenzugriff verwenden",
+      "actions": {
+        "assign": "Zuweisungen verwalten",
+        "configure": "Konfigurieren",
+        "inspect": "Berechtigungen prüfen",
+        "read": "Lesen",
+        "create": "Erstellen",
+        "update": "Aktualisieren",
+        "delete": "Löschen",
+        "access": "Zugreifen"
+      },
+      "settingsModules": {
+        "authorization": "Berechtigungsverwaltung"
+      },
+      "pages": {
+        "all": "Alle Seiten",
+        "allDescription": "Zugriff auf alle Seiten erlauben, einschließlich später hinzugefügter Seiten."
+      },
+      "settings": {
+        "inspector": "Berechtigungsprüfung",
+        "permission-sets": "Berechtigungssätze"
+      },
+      "subjectTypes": {
+        "authenticated": "Alle angemeldeten Benutzer",
+        "authenticatedDescription": "Gilt für alle Benutzer mit einer gültigen angemeldeten Sitzung.",
+        "user": "Benutzer"
+      },
+      "recordAccessPolicies": {
+        "allRecords": "Alle Datensätze",
+        "recordsIOwn": "Datensätze in meinem Besitz",
+        "recordsICreated": "Von mir erstellte Datensätze",
+        "customFilter": "Benutzerdefinierter Filter",
+        "customFilterHint": "Wählen Sie Datensätze anhand einer benutzerdefinierten Filterbedingung aus."
+      }
+    }
+  },
+  "@nocobase/app-plugin-authz-default-access": {
+    "resourceTitle": "Standard-Datenzugriff"
+  },
+  "@nocobase/app-plugin-authz-restriction-rules": {
+    "resourceTitle": "Einschränkungsregeln"
+  },
+  "@nocobase/app-plugin-authz-sharing-rules": {
+    "resourceTitle": "Freigaberegeln"
+  },
+  "@nocobase/app-plugin-notification": {
+    "errors": {
+      "logsForbidden": "Eine Zugriffsberechtigung für Benachrichtigungsprotokolle ist erforderlich.",
+      "logNotFound": "Benachrichtigungsprotokoll nicht gefunden.",
+      "testHeaderRequired": "Der Anfrage-Header für den Benachrichtigungstest ist erforderlich.",
+      "testForbidden": "Eine Berechtigung zum Senden von Testbenachrichtigungen ist erforderlich.",
+      "testInvalidRequest": "Der Anfragetext muss ein Testziel und Feldwerte enthalten.",
+      "testTargetUnavailable": "Das Ziel für den Benachrichtigungstest ist nicht verfügbar.",
+      "testUnknownField": "Unbekanntes Feld \"{{name}}\" im Benachrichtigungstest.",
+      "testRequiredField": "Das Feld \"{{name}}\" im Benachrichtigungstest ist erforderlich.",
+      "testFieldTooLong": "Das Feld \"{{name}}\" im Benachrichtigungstest darf höchstens {{maxLength}} Zeichen enthalten.",
+      "testFailed": "Benachrichtigungstest fehlgeschlagen.",
+      "testNotFound": "Benachrichtigungstest nicht gefunden."
+    }
+  },
+  "@nocobase/app-plugin-notification-in-app": {
+    "errors": {
+      "authenticationRequired": "Authentifizierung erforderlich.",
+      "invalidPageToken": "pageToken ist kein Token, das von dieser Liste zurückgegeben wurde.",
+      "notFound": "Benachrichtigung nicht gefunden."
+    },
+    "test": {
+      "channels": {
+        "inApp": "In der App"
+      },
+      "providers": {
+        "builtIn": "Integriert"
+      },
+      "fields": {
+        "route": "Interne Route (ohne Bereitstellungspräfix)",
+        "url": "Vollständige HTTP(S)-URL",
+        "recipientUserId": "Benutzer-ID des Empfängers",
+        "title": "Titel",
+        "message": "Nachricht"
+      },
+      "placeholders": {
+        "currentUser": "Benutzer-ID in der Anwendung"
+      },
+      "defaults": {
+        "title": "NocoBase-Benachrichtigungstest",
+        "body": "Dies ist eine Testbenachrichtigung von NocoBase."
+      }
+    }
+  },
+  "@nocobase/app-plugin-notification-providers": {
+    "test": {
+      "channels": {
+        "email": "E-Mail",
+        "im": "IM"
+      },
+      "providers": {
+        "smtp": "SMTP",
+        "resend": "Resend",
+        "feishuWebhook": "Feishu-Webhook",
+        "dingtalkWebhook": "DingTalk-Webhook"
+      },
+      "fields": {
+        "subject": "Betreff",
+        "text": "Text",
+        "html": "HTML",
+        "url": "Vollständige HTTP(S)-URL",
+        "recipient": "Empfänger",
+        "title": "Titel",
+        "message": "Nachricht"
+      },
+      "placeholders": {
+        "email": "name@example.com"
+      },
+      "defaults": {
+        "title": "NocoBase-Benachrichtigungstest",
+        "body": "Dies ist eine Testbenachrichtigung von NocoBase."
+      }
+    }
+  },
+  "@nocobase/app-plugin-scheduler": {
+    "nav": {
+      "automation": "Automatisierung"
+    },
+    "authorization": {
+      "title": "Zeitpläne",
+      "read": "Lesen"
+    }
+  },
+  "@nocobase/app-plugin-users": {
+    "invitationEmail": {
+      "subject": "{{inviter}} hat Sie zu {{app}} eingeladen",
+      "intro": "{{inviter}} hat Sie zu {{app}} eingeladen.",
+      "summary": "Sie treten außerdem Folgendem bei: {{items}}.",
+      "separator": ", ",
+      "action": "Einladung annehmen",
+      "validity": "Öffnen Sie den Link, um Ihren Namen und Ihr Passwort festzulegen. Er ist einmalig verwendbar und bis {{date}} gültig.",
+      "fallback": "Falls sich der Link nicht öffnen lässt, kopieren Sie ihn in die Adressleiste Ihres Browsers:"
+    }
+  },
+  "@nocobase/app-plugin-mail": {
+    "errors": {
+      "accessDenied": "Eine Zugriffsberechtigung für E-Mails ist erforderlich.",
+      "idempotencyConflict": "Der Idempotenzschlüssel ist bereits einer anderen Anfrage zugeordnet.",
+      "invalidRequest": "Die E-Mail-Anfrage ist ungültig.",
+      "accountCredentialsInvalid": "Die Authentifizierung beim Postfach ist fehlgeschlagen. Überprüfen Sie Ihren Anmeldenamen und Ihr Passwort oder Ihren Autorisierungscode und stellen Sie sicher, dass IMAP/SMTP aktiviert ist. Gmail und andere Dienste erfordern möglicherweise ein App-Passwort.",
+      "requestFailed": "Die E-Mail-Anfrage konnte nicht abgeschlossen werden.",
+      "providerRateLimited": "Der E-Mail-Dienst erhält zu viele Anfragen. Versuchen Sie es später erneut.",
+      "providerUnavailable": "Der E-Mail-Dienst ist nicht erreichbar. Versuchen Sie es später erneut.",
+      "reauthorizationRequired": "Dieses E-Mail-Konto muss erneut verbunden werden, bevor es verwendet werden kann.",
+      "syncRunNotFound": "E-Mail-Synchronisierungslauf nicht gefunden.",
+      "messageNotFound": "E-Mail nicht gefunden.",
+      "authorizationStateRequired": "Der Autorisierungsstatus für E-Mail ist erforderlich."
+    }
+  }
+}

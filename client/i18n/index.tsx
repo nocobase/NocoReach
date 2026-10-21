@@ -8,6 +8,7 @@ import {
 } from 'react';
 import type { I18nRuntime } from '@nocobase/i18n';
 import english from '../../shared/i18n/en.json';
+import { resolveLocale, type SupportedLocale } from '../../shared/i18n/locales';
 import chinese from '../../shared/i18n/zh.json';
 import legacyKeys from '../../shared/i18n/legacy-keys.json';
 import { systemMessageKey } from '../../shared/i18n/messages';
@@ -16,25 +17,25 @@ import { nocobaseClient } from '#lib/nocoreach-api';
 import { findNetworkFailure, HOST_PATTERN } from '#lib/network-failure';
 import { networkFailureEntries } from '../../shared/network-failures';
 
-// Business copy uses semantic keys and explicit bilingual resources. The application runtime
+// Business copy uses semantic keys and explicit language resources. The application runtime
 // owns the resolved locale; this synchronous adapter also supports deferred messages and JSX slots.
 // Legacy text recognition is confined to the explicitly named compatibility readers below.
 import { youtubeSystemErrors } from '#lib/youtube-errors';
 type Vars = Record<string | number, unknown>;
 type Pattern = { re: RegExp; en: string };
 let dictionary: Record<string, string> | null = null;
+let currentLocale: SupportedLocale = 'zh-CN';
 let patterns: Pattern[] | null = null;
 let shortPatterns: Pattern[] | null = null;
 const cache = new Map<string, string>();
 const CJK = /[一-鿿]/;
 
 export function isChinese(): boolean {
-  return dictionary === null;
+  return currentLocale.startsWith('zh');
 }
 
 const listeners = new Set<() => void>();
-export const getCurrentLocale = (): string =>
-  dictionary === null ? 'zh-CN' : 'en-US';
+export const getCurrentLocale = (): SupportedLocale => currentLocale;
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
   return () => {
@@ -66,8 +67,23 @@ export function useMessageState(
 
 /** The application's existing i18n runtime owns startup defaults, persistence and language changes. */
 export function connectLocale(runtime: I18nRuntime): () => void {
-  const apply = (locale: string) =>
-    setDictionary(locale.toLowerCase().startsWith('zh') ? null : english);
+  const apply = (locale: string) => {
+    const resolved = resolveLocale(locale);
+    const resource: unknown = runtime.i18n.getResourceBundle(
+      resolved,
+      'nocoreach',
+    );
+    const values =
+      resource && typeof resource === 'object'
+        ? Object.fromEntries(
+            Object.entries(resource).filter(
+              (entry): entry is [string, string] =>
+                typeof entry[1] === 'string',
+            ),
+          )
+        : english;
+    setDictionary(resolved === 'zh-CN' ? null : values, resolved);
+  };
   apply(runtime.getLocale());
   runtime.i18n.on('languageChanged', apply);
   return () => {
@@ -80,22 +96,29 @@ export async function prepareLocale(
     (typeof document === 'undefined' ? '' : document.documentElement.lang) ||
     'zh-CN',
 ): Promise<void> {
-  if (!locale || locale.toLowerCase().startsWith('zh')) {
-    setDictionary(null);
-    return;
-  }
-  setDictionary(english);
+  const resolved = resolveLocale(locale || 'zh-CN');
+  const { default: loaders } = await import('../locales/index');
+  const resource = await loaders[resolved]();
+  const values = 'default' in resource ? resource.default : resource;
+  setDictionary(
+    resolved === 'zh-CN' ? null : (values as Record<string, string>),
+    resolved,
+  );
 }
 
-// Synchronous form, for test pages that load the English text themselves; null means Chinese.
-export function setDictionary(next: Record<string, string> | null): void {
-  const previous = dictionary;
+// Kept for isolated compatibility tests; production receives the runtime's resolved locale.
+export function setDictionary(
+  next: Record<string, string> | null,
+  locale: SupportedLocale = next === null ? 'zh-CN' : 'en-US',
+): void {
+  const changed = dictionary !== next || currentLocale !== locale;
   cache.clear();
   patterns = null;
   shortPatterns = null;
   dictionary = next;
+  currentLocale = locale;
   translateRequestErrors();
-  if (previous !== next) listeners.forEach((listener) => listener());
+  if (changed) listeners.forEach((listener) => listener());
 }
 
 let errorsTranslated = false;
@@ -198,7 +221,10 @@ function translateDynamic(text: string, depth: number): string {
     if (m)
       return p.en.replace(/\{(\d+)\}/g, (_, i: string) => {
         const part = (m[Number(i) + 1] ?? '').trim();
-        return INLINE[part] ?? resolve(part, depth + 1);
+        return (
+          (currentLocale === 'en-US' ? INLINE[part] : undefined) ??
+          resolve(part, depth + 1)
+        );
       });
   }
   // A network failure behind the part that failed ("仓库：…"): the sentence, and the text around it, translated apart.

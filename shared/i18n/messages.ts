@@ -1,4 +1,5 @@
 import english from './en.json' with { type: 'json' };
+import { resolveLocale, type SupportedLocale } from './locales.js';
 import { youtubeSystemErrors } from '../youtube-errors.js';
 import chinese from './zh.json' with { type: 'json' };
 import legacyKeys from './legacy-keys.json' with { type: 'json' };
@@ -24,6 +25,19 @@ export function systemMessageKey(value: string): MessageKey | undefined {
     : currentYouTubeErrors.get(value);
 }
 
+const loadedResources = new Map<SupportedLocale, Record<string, string>>([
+  ['en-US', english],
+  ['zh-CN', chinese],
+]);
+
+/** Locale modules register their own dictionary as the framework loads them. */
+export function registerBusinessLocale(
+  locale: SupportedLocale,
+  values: Record<string, string>,
+): void {
+  loadedResources.set(locale, values);
+}
+
 const stringifyParameter = (value: unknown): string => String(value);
 
 /** Keep the legacy Chinese display fields while emitting semantic presentation metadata. */
@@ -33,8 +47,8 @@ export function systemMessageText(
   locale = 'zh-CN',
 ): string {
   const resolved = systemMessageKey(key);
-  const values = locale.toLowerCase().startsWith('zh') ? chinese : english;
-  const template = resolved ? values[resolved] : key;
+  const values = loadedResources.get(resolveLocale(locale)) ?? english;
+  const template = resolved ? (values[resolved] ?? english[resolved]) : key;
   return template.replace(/\{(\d+)\}/g, (slot, id: string) => {
     const value = params[id];
     if (value === undefined) return slot;

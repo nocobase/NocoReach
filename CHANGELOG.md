@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Ten interface languages
+
+- Add Traditional Chinese, Japanese, Spanish, Brazilian Portuguese, French, German, Vietnamese, and Indonesian alongside English and Simplified Chinese.
+- Translate business messages, application navigation, authentication, Agent conversations, schedules, and installed plugin interfaces; load each additional language on demand.
+- Keep the selected locale through business-page updates, deferred errors, server presentation messages, calendars, timestamps, and schedule descriptions. Distinguish Simplified and Traditional Chinese in the language menu.
+- Validate language registration, translation keys, interpolation, and live language switching without losing in-progress input. Project content-generation language remains a separate setting.
+
 ## Unreleased — Insights as a conversation with the daily analysis
 
 - Insights now reads as the daily analysis speaking, so it no longer looks like Opportunities or opens on a wall of text. The key numbers stay on top as tiles with their trend (at most five, only those with data), with Status (the standing facts, in a drawer) and All data (every data page, grouped) below them.
