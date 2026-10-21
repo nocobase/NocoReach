@@ -2,6 +2,7 @@ import type enUS from './en-US.js';
 const schedules: typeof enUS = {
   title: '自动运行',
   description: 'NocoReach 自动完成的工作。每日分析的时间可以在这里调整。',
+  analysisTitle: '每日分析',
   analysisDescription:
     '读取所有项目的最新数据，由 AI 写出本期观察和建议，更新到“洞察”和“机会”。当天没跑成会自动重试。',
   otherWork:

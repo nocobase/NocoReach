@@ -2,6 +2,7 @@ const schedules = {
   title: 'Automatic runs',
   description:
     'Work NocoReach does on its own. The daily analysis time can be changed here.',
+  analysisTitle: 'Daily analysis',
   analysisDescription:
     'Reads the latest data of every project and has the AI write this period’s observations and suggestions for Insights and Opportunities. A day that did not run is retried automatically.',
   otherWork:

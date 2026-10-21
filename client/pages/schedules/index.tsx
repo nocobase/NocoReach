@@ -71,9 +71,12 @@ export default function SchedulesPage() {
           />
         ))}
         {data ? (
-          <p className='flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground'>
-            <Info aria-hidden='true' className='size-4 shrink-0' />
-            {t('schedules.otherWork')}
+          <p className='text-sm text-muted-foreground'>
+            <Info
+              aria-hidden='true'
+              className='mr-1.5 inline size-4 align-[-3px]'
+            />
+            {t('schedules.otherWork')}{' '}
             <Link
               to='/connections'
               className='text-foreground underline underline-offset-4'

@@ -48,7 +48,9 @@ export default function ScheduleHistoryDrawer() {
     schedule.reload();
     history.reload();
   }
-  const name = !accessError ? schedule.data?.data.title : undefined;
+  const format = useScheduleFormatting();
+  const name =
+    !accessError && schedule.data ? format.name(schedule.data.data) : undefined;
   return (
     <RouteDrawer
       title={

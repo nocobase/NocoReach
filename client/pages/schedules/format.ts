@@ -2,6 +2,7 @@ import { useTranslation } from '@nocobase/i18n/client';
 import cronstrue from 'cronstrue';
 import 'cronstrue/locales/zh_CN';
 import { timeZoneName } from '#lib/time-zone-name';
+import { ANALYSIS_SCHEDULE, type Schedule } from './data.js';
 
 export function useScheduleFormatting() {
   const { t, i18n } = useTranslation();
@@ -44,6 +45,11 @@ export function useScheduleFormatting() {
       }).format(at);
     },
     zone: (value: string) => timeZoneName(value, locale),
+    /** The daily analysis by its name in this language; the Scheduler keeps the title it was defined with. */
+    name: (schedule: Pick<Schedule, 'key' | 'title'>) =>
+      schedule.key === ANALYSIS_SCHEDULE
+        ? t('schedules.analysisTitle')
+        : schedule.title,
     cron: (value: string) => {
       try {
         return cronstrue.toString(value, {

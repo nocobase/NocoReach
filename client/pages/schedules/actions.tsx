@@ -47,6 +47,7 @@ export function ScheduleMenu({
 }) {
   const { t } = useTranslation();
   const api = useApiClient();
+  const format = useScheduleFormatting();
   const [open, setOpen] = useState<'run' | 'disable' | 'details' | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>();
@@ -96,7 +97,7 @@ export function ScheduleMenu({
           response.data.enabled
             ? 'schedules.enabledNotice'
             : 'schedules.disabledNotice',
-          { name: response.data.title },
+          { name: format.name(response.data) },
         ),
       });
       setOpen(null);
@@ -139,7 +140,7 @@ export function ScheduleMenu({
         >
           <MoreHorizontal />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align='end'>
+        <DropdownMenuContent align='end' className='min-w-40'>
           {schedule.key === ANALYSIS_SCHEDULE ? (
             <DropdownMenuItem disabled={!runnable} onClick={() => show('run')}>
               {t('schedules.runNow')}
@@ -182,7 +183,7 @@ export function ScheduleMenu({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {t('schedules.disableTitle', { name: schedule.title })}
+              {t('schedules.disableTitle', { name: format.name(schedule) })}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {t('schedules.disableHelp')}

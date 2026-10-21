@@ -17,6 +17,7 @@ import {
   type Schedule,
 } from './data.js';
 import type { SchedulesOutletContext } from './index.js';
+import { useScheduleFormatting } from './format.js';
 import { Failure, Loading } from './shared.js';
 import { TimezoneSelect } from './timezone-select.js';
 
@@ -26,6 +27,7 @@ const FORM_ID = 'schedule-time-form';
 // read fresh, so the form starts from what the server has now rather than from an older list.
 export default function ScheduleEditDialog() {
   const { t } = useTranslation();
+  const format = useScheduleFormatting();
   const { scheduleId = '' } = useParams();
   const parent = useOutletContext<SchedulesOutletContext | undefined>();
   const { data, error, reload } = useScheduleResource<{ data: Schedule }>(
@@ -40,7 +42,7 @@ export default function ScheduleEditDialog() {
     <RouteDialog
       title={
         schedule
-          ? t('schedules.editTitle', { name: schedule.title })
+          ? t('schedules.editTitle', { name: format.name(schedule) })
           : t('schedules.editTime')
       }
       description={t('schedules.editHelp')}

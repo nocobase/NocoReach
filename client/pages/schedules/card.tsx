@@ -52,7 +52,7 @@ export function ScheduleCard({
     <Card>
       <CardHeader>
         <CardTitle className='flex flex-wrap items-center gap-2'>
-          {schedule.title}
+          {format.name(schedule)}
           <StateBadge value={schedule.enabled ? 'enabled' : 'disabled'} />
         </CardTitle>
         <CardAction className='flex flex-wrap justify-end gap-2'>
