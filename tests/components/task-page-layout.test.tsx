@@ -214,3 +214,128 @@ test('an older ?run= link opens Technical details on its runs', async () => {
     'true',
   );
 });
+
+// T-32 on Studio (2026-10-21): an opportunity about one blog post; the article is found from its page, not picked.
+function blogPageTask(): TaskData {
+  const page = 'https://www.nocobase.com/en/blog/workflow-automation-tools';
+  return {
+    task: {
+      id: 32,
+      title: '给工作流自动化博客页改标题',
+      brief: '行动目标：把曝光转成点击',
+      evidence: {
+        no: 32,
+        insight: { id: 'o-40', no: 40, target: page, signalIds: ['gsc:wf'] },
+        context: {
+          signals: {
+            items: [
+              {
+                key: 'gsc:wf',
+                source: 'gsc',
+                title: '/en/blog/workflow-automation-tools 平均排名 19.8',
+                facts: ['近 28 天曝光 5,790，点击 0'],
+                url: page,
+              },
+            ],
+          },
+        },
+      },
+    },
+    work: {
+      revision: 4,
+      stage: 'plan',
+      plan: null,
+      planVersion: 0,
+      step: 0,
+      results: [],
+      history: [],
+      humanOwnerId: '1',
+      humanOwnerName: 'Super Admin',
+    },
+    runs: [],
+    artifacts: [],
+    reviews: [],
+    playbookDefault: 'optimize-page',
+    articleTargets: [
+      {
+        id: 'cms',
+        name: 'NocoBase CMS',
+        kind: 'nocobase-api',
+        locales: ['en'],
+        capabilities: { concurrency: 'check-before-write' },
+        default: true,
+      },
+    ],
+    agent: {
+      repo: { repo: 'nocobase/website', baseBranch: 'main' },
+      online: true,
+      agentId: 'codex',
+      options: [{ id: 'codex', name: 'codex' }],
+    },
+  } as unknown as TaskData;
+}
+
+test('the start card finds the article from the task page and links it as the task starts', async () => {
+  const data = blogPageTask();
+  const article = {
+    targetId: 'cms',
+    articleId: '501',
+    slug: 'workflow-automation-tools',
+    title: 'Top Workflow Automation Tools',
+    url: 'https://www.nocobase.com/en/blog/workflow-automation-tools',
+  };
+  const commands: Record<string, unknown>[] = [];
+  action.mockImplementation(
+    (
+      resource: string,
+      command: string,
+      init?: { body?: Record<string, unknown> },
+    ) => {
+      if (resource === 'nrPlaybooks')
+        return Promise.resolve({
+          playbooks: [
+            {
+              id: 'optimize-page',
+              name: '优化现有页面',
+              kind: 'build',
+              category: 'optimize',
+              steps: [{ key: 'change', name: '修改', kind: 'change' }],
+            },
+          ],
+        });
+      if (resource === 'nrArticles' && command === 'match')
+        return Promise.resolve({ article, unchecked: false });
+      if (resource === 'nrTaskWork' && command === 'advance') {
+        commands.push(init!.body!);
+        const revision = Number(init!.body!.revision) + 1;
+        return Promise.resolve({
+          ...data,
+          work: { ...data.work, revision },
+        });
+      }
+      return Promise.resolve([]);
+    },
+  );
+  mount(data, '/actions/32');
+  expect(await screen.findByText('Top Workflow Automation Tools')).toBeTruthy();
+  expect(screen.getByText('要修改的文章')).toBeTruthy();
+  expect(screen.queryByLabelText('发布到')).toBeNull();
+  expect(
+    action.mock.calls.find(([r, c]) => r === 'nrArticles' && c === 'match')?.[2]
+      .body.urls,
+  ).toEqual([article.url]);
+  await userEvent.setup().click(screen.getByRole('button', { name: '确定开始执行' }));
+  await vi.waitFor(() => expect(commands).toHaveLength(2));
+  expect(commands[0]).toMatchObject({
+    command: 'linkArticle',
+    targetId: 'cms',
+    articleId: '501',
+    revision: 4,
+  });
+  expect(commands[1]).toMatchObject({
+    command: 'startTask',
+    playbookId: 'optimize-page',
+    revision: 5,
+  });
+  expect(commands[1].delivery).toBeUndefined();
+});

@@ -273,6 +273,53 @@ export const fill = (value: string, slug: string) =>
   value.split('{slug}').join(slug);
 
 /** Starting points for the settings form; administrators adjust them to their own system. */
+// A page address read back through a target's `pages` patterns (2026-10-21): the slug a task's page is published
+// under, so the article it changes is found instead of picked from hundreds. Hosts compare without `www.`, paths
+// without a trailing slash; the query and fragment are ignored.
+const pageKey = (url: string) => {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+    return `${u.host.toLowerCase().replace(/^www\./, '')}${u.pathname.replace(/\/+$/, '')}`;
+  } catch {
+    return null;
+  }
+};
+export function slugFromPage(
+  pages: Record<string, string> | undefined,
+  url: string,
+): { locale: string; slug: string } | null {
+  const page = pageKey(url);
+  if (!page) return null;
+  for (const [locale, pattern] of Object.entries(pages || {})) {
+    const key = pattern.includes('{slug}')
+      ? pageKey(pattern.replace('{slug}', 'nr-slug-marker'))
+      : null;
+    if (!key || !key.includes('nr-slug-marker')) continue;
+    const [before, after] = key.split('nr-slug-marker');
+    if (!page.startsWith(before) || !page.endsWith(after)) continue;
+    const middle = page.slice(before.length, page.length - after.length);
+    if (!middle || middle.includes('/')) continue;
+    let slug = middle;
+    try {
+      slug = decodeURIComponent(middle);
+    } catch {
+      continue;
+    }
+    // Existing CMS slugs may hold dots (v2.2.29), which new drafts' SLUG does not allow.
+    if (/^[^\s/?#]{1,200}$/.test(slug)) return { locale, slug };
+  }
+  return null;
+}
+/** The article found for a task's page: where it lives and what to show. */
+export type ArticleMatch = {
+  targetId: string;
+  articleId: string;
+  slug: string;
+  title: string;
+  url: string;
+};
+
 export const ARTICLE_TARGET_PRESETS: {
   [K in ArticleTargetKind]: Omit<
     Extract<ArticleTarget, { kind: K }>,
