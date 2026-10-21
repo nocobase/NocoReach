@@ -46,6 +46,7 @@ import {
 } from './xiaohongshu-errors';
 import type { XiaohongshuNote, XiaohongshuView } from './xiaohongshu-connect';
 import './data-views.css';
+import { formatDate, formatDateTime } from '#lib/format';
 
 type Report = XiaohongshuView & CollectorReport & { notes: XiaohongshuNote[] };
 
@@ -59,7 +60,7 @@ const summary = (note: XiaohongshuNote) =>
   `${$t('xiaohongshu.displayedLikes', { 0: likes(note) })} · ${
     note.estimatedPublishedAt
       ? $t('xiaohongshu.estimatedPublicationDate', {
-          0: note.estimatedPublishedAt,
+          0: formatDate(note.estimatedPublishedAt),
         })
       : $t('xiaohongshu.publicationTimeUnknown')
   }`;
@@ -68,7 +69,7 @@ const SORTS = ['likes'] as const;
 export default function DataXiaohongshu() {
   const { project } = useProject();
   const navigate = useNavigate();
-  const locale = useNocoReachLocale();
+  useNocoReachLocale();
   const [range, setRange] = useRange();
   const [busy, setBusy] = useState(false);
   const [shown, setShown] = useState(20);
@@ -95,7 +96,7 @@ export default function DataXiaohongshu() {
       countColumn<XiaohongshuNote>('likes', $t('collectorView.likes'), likes),
       dateColumn<XiaohongshuNote>(
         $t('collectorPage.estimatedPublished'),
-        (note) => note.estimatedPublishedAt ?? '—',
+        (note) => formatDate(note.estimatedPublishedAt),
         (note) =>
           $t('collectorPage.collectedShort', { 0: shortDate(note.lastSeenAt) }),
       ),
@@ -198,7 +199,7 @@ export default function DataXiaohongshu() {
             {data.query ? ' · ' : null}
             {data.verifiedAt
               ? $t('xiaohongshu.lastSuccessfulCollection', {
-                  0: new Date(data.verifiedAt).toLocaleString(locale),
+                  0: formatDateTime(data.verifiedAt),
                 })
               : $t('xiaohongshu.browserXiaohongshuLoginNotYet')}
           </p>

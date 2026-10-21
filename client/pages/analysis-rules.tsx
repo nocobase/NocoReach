@@ -26,6 +26,7 @@ import {
 } from './analysis-rules/schemes';
 import { RulesAssistant } from './analysis-rules/assistant';
 import type { Rule, Settings, View, Proposal } from './analysis-rules/types';
+import { formatDateTime } from '#lib/format';
 
 const call = <T,>(action: string, projectId: number, body: object = {}) =>
   api.action<T>('nrAnalysisRules', action, {
@@ -70,7 +71,7 @@ const SOURCE_ORDER = [
   'competitors',
   'ai-search',
 ];
-const day = (iso: string) => new Date(iso).toLocaleString(getCurrentLocale());
+const day = (iso: string) => formatDateTime(iso);
 const statusOf = (e: unknown) =>
   e && typeof e === 'object' && 'status' in e ? Number(e.status) : undefined;
 const errorText = (e: unknown, fallback: string) =>

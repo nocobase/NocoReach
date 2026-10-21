@@ -44,6 +44,8 @@ import { useHandOffSource } from '#components/reach/hand-off-slot';
 import { WithInfo } from '#components/reach/info-tip';
 import { ListSkeleton, InlineError } from '#components/reach/states';
 import { Tag } from '#components/reach/tag';
+import { Delta } from '#components/reach/delta';
+import { formatDate, formatPercent } from '#lib/format';
 import { cn } from '#lib/utils';
 import { safeLink } from '../analytics';
 import { DetailDrawer } from '../detail-drawer';
@@ -304,8 +306,7 @@ const right = {
 const helper = createColumnHelper<Row>();
 const linkClass =
   'block max-w-md truncate text-left text-primary underline-offset-4 hover:underline';
-const pct = (v: number | null) =>
-  v == null ? '—' : `${(v * 100).toFixed(1)}%`;
+const pct = (v: number | null) => formatPercent(v);
 
 export function ReportCard({
   report,
@@ -352,7 +353,10 @@ export function ReportCard({
     [all, view, query],
   );
   const w = report.window!;
-  const period = $t('common.range', { 0: w.start, 1: w.end });
+  const period = $t('common.range', {
+    0: formatDate(w.start),
+    1: formatDate(w.end),
+  });
   return (
     <Card className='gap-0 py-0'>
       <DataTableTabs value={tab.id} onValueChange={(v) => set({ tab: v })}>
@@ -694,7 +698,10 @@ function RowDrawer({
       open
       onClose={onClose}
       title={`${$t(view.label)} · ${view.text(row)}`}
-      description={$t('dataWebsite.ga4', { 0: w.start, 1: w.end })}
+      description={$t('dataWebsite.ga4', {
+        0: formatDate(w.start),
+        1: formatDate(w.end),
+      })}
       actions={
         isPage && projectId ? (
           <SectionHandOff
@@ -761,15 +768,8 @@ function RowDrawer({
                 <td className='py-1.5 text-right tabular-nums text-muted-foreground'>
                   {data ? show(b, m.format) : '…'}
                 </td>
-                <td
-                  className={cn(
-                    'py-1.5 text-right tabular-nums',
-                    c !== null && (c >= 0 ? 'nr-up' : 'nr-down'),
-                  )}
-                >
-                  {c === null
-                    ? '—'
-                    : `${c > 0 ? '+' : ''}${(c * 100).toFixed(1)}%`}
+                <td className='py-1.5 text-right'>
+                  {c === null ? '—' : <Delta value={c} />}
                 </td>
               </tr>
             );

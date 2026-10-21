@@ -55,6 +55,7 @@ import {
   Pager,
 } from './access/components';
 import { InvitationLink } from './access/invitation-link';
+import { formatDateTime } from '#lib/format';
 const Roles = lazy(() => import('./access/roles'));
 
 export default function MembersAndRoles() {
@@ -425,9 +426,7 @@ function Members() {
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  {new Date(row.expiresAt).toLocaleString(
-                                    locale,
-                                  )}
+                                  {formatDateTime(row.expiresAt)}
                                 </TableCell>
                                 <TableCell>
                                   <RowMenu name={row.email}>

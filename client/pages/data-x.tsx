@@ -22,6 +22,7 @@ import { AllCheck, RowCheck, useTickedList, type Selection } from "#components/r
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
 import { NotesTip } from "#components/reach/info-tip";
+import { formatDate, formatDateTime } from '#lib/format';
 
 type Post = { id: string; text: string; createdAt: string; url: string; metrics: { likes: number; reposts: number; replies: number; quotes: number; views: number | null } };
 type View = { connected: boolean; terms?: string[]; handle?: string; window?: { start: string; end: string; days: number }; lastRun?: { at: string; ok: boolean; errors: string[]; capped: boolean } | null; spend?: { usd: number; posts: number; cap: number }; kpis?: Metric[]; series?: { date: string; value: number | null }[]; notes?: string[]; top?: Post[]; latest?: Post[] };
@@ -52,7 +53,7 @@ export default function DataX() {
         <div key={p.id} className="flex items-start gap-3 border-b border-border px-4 py-2.5 last:border-0" data-x-post={p.id}>
           <span className="pt-0.5"><RowCheck selection={selection} k={String(p.id)} label={p.text.slice(0, 60)} /></span><div className="min-w-0 flex-1">
           <p className="line-clamp-3 whitespace-pre-wrap text-sm">{p.text}</p>
-          <p className="text-xs text-muted-foreground">{p.createdAt.slice(0, 10)} · {stats(p.metrics)} · <a className="nr-link" href={safeLink(p.url)} target="_blank" rel="noreferrer">{$t('dataX.openX')}</a></p>
+          <p className="text-xs text-muted-foreground">{formatDate(p.createdAt)} · {stats(p.metrics)} · <a className="nr-link" href={safeLink(p.url)} target="_blank" rel="noreferrer">{$t('dataX.openX')}</a></p>
         </div></div>
       )) : <p className="px-4 py-3 text-sm text-muted-foreground">{empty}</p>}
     </Card>
@@ -60,13 +61,13 @@ export default function DataX() {
   return (
     <PageContainer className="nr-data-page">
       <PageHeader info={<NotesTip notes={view?.notes} />} title="X" description={$t('dataX.postsXMentioningProductChecked')} actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t('common.searching') : $t('common.searchNow')}</Button> : undefined} />
-      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:w.start,1:w.end}) : $t('common.comparedPreviousDays',{0:w.start,1:w.end,2:w.days})) : undefined} />
+      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:formatDate(w.start),1:formatDate(w.end)}) : $t('common.comparedPreviousDays',{0:formatDate(w.start),1:formatDate(w.end),2:w.days})) : undefined} />
       {error ? <LoadError title={$t('dataX.notLoadXMentions')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
       {view && !view.connected ? <EmptyState icon={<AtSign />} title={$t('dataX.onceXConnectedPostsMentioning')} description={$t('dataX.needsOwnXApiPaid')} action={<Button onClick={() => navigate("/connections?source=social")}>{$t('dataX.connectX')}</Button>} /> : null}
       {view?.connected ? (
         <>
-          <p className="nr-footnote">{$tj('dataX.searchTerm',{0:view.terms!.join("、"),1:view.handle ? $t('common.excluding',{0:view.handle}) : "",2:view.lastRun ? $t('common.lastSearched',{0:new Date(view.lastRun.at).toLocaleString(getCurrentLocale())}) : ""})}</p>
+          <p className="nr-footnote">{$tj('dataX.searchTerm',{0:view.terms!.join("、"),1:view.handle ? $t('common.excluding',{0:view.handle}) : "",2:view.lastRun ? $t('common.lastSearched',{0:formatDateTime(view.lastRun.at)}) : ""})}</p>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}
             <Card className="gap-1 p-4" data-metric={$t('dataX.spentMonth')}><p className="text-xs text-muted-foreground">{$t('dataX.spentMonthEstimated')}</p><p className="text-2xl font-semibold tabular-nums">${sp!.usd.toFixed(2)}<span className="text-sm font-normal text-muted-foreground"> / ${sp!.cap}</span></p><p className="text-xs text-muted-foreground">{$tj('dataX.read',{0:sp!.posts.toLocaleString(getCurrentLocale())})}</p></Card>

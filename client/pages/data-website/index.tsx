@@ -61,6 +61,7 @@ import {
   type Row,
 } from './model';
 import '../data-views.css';
+import { formatDate } from '#lib/format';
 
 const RANGES = defaultRanges;
 
@@ -136,12 +137,15 @@ export default function DataWebsite() {
         summary={
           w
             ? 'all' in w && w.all
-              ? $t('rangePicker.availableRange', { 0: w.start, 1: w.end })
+              ? $t('rangePicker.availableRange', {
+                  0: formatDate(w.start),
+                  1: formatDate(w.end),
+                })
               : $t('common.comparedPreviousDaysDataThrough', {
-                  0: w.start,
-                  1: w.end,
+                  0: formatDate(w.start),
+                  1: formatDate(w.end),
                   2: w.days,
-                  3: report?.cutoff,
+                  3: formatDate(report?.cutoff),
                 })
             : undefined
         }

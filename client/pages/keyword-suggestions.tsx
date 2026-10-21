@@ -27,6 +27,7 @@ import { KeywordHandOffDialog } from "./keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { WithInfo, InfoTip } from "#components/reach/info-tip";
 import { help } from "./glossary";
+import { formatDate } from '#lib/format';
 
 type Metrics = { volume: number | null; difficulty: number | null; cpc: number | null; intent: string | null };
 type Suggestion = { id: string; keyword: string; group: string; intent: string | null; reason: string; page: string | null; site: { position: number; clicks: number; impressions: number; page: string } | null; metrics: Metrics | null };
@@ -97,7 +98,7 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
     <>
       <HandOffNotice result={handOff} />
       <div className="flex flex-wrap items-center justify-between gap-2" data-suggest-basis>
-        <p className="nr-footnote flex items-center">{b ? $t('keywordSuggestions.generatedProjectMemory',{0:b.pages ? $t('keywordSuggestions.websitePages',{0:b.pages}) : $t('keywordSuggestions.homepage'),1:b.queries ? $t('keywordSuggestions.searchConsoleQueries',{0:b.queries}) : "",2:b.competitors ? $t('keywordSuggestions.competitors',{0:b.competitors}) : ""}) : ""}{view.at ? ` · ${new Date(view.at).toLocaleDateString(getCurrentLocale())}` : ""}<InfoTip label={$t('keywordSuggestions.whereAiSuggestionsCome')} className="ml-1">{$tj('keywordSuggestions.aiSuggestionsStartingPointSearch',{0:view.metricsAt ? `（${new Date(view.metricsAt).toLocaleDateString(getCurrentLocale())}）` : ""})}</InfoTip></p>
+        <p className="nr-footnote flex items-center">{b ? $t('keywordSuggestions.generatedProjectMemory',{0:b.pages ? $t('keywordSuggestions.websitePages',{0:b.pages}) : $t('keywordSuggestions.homepage'),1:b.queries ? $t('keywordSuggestions.searchConsoleQueries',{0:b.queries}) : "",2:b.competitors ? $t('keywordSuggestions.competitors',{0:b.competitors}) : ""}) : ""}{view.at ? ` · ${formatDate(view.at)}` : ""}<InfoTip label={$t('keywordSuggestions.whereAiSuggestionsCome')} className="ml-1">{$tj('keywordSuggestions.aiSuggestionsStartingPointSearch',{0:view.metricsAt ? `（${new Date(view.metricsAt).toLocaleDateString(getCurrentLocale())}）` : ""})}</InfoTip></p>
         <div className="flex flex-wrap items-center gap-2">
           <select aria-label={$t('keywordSuggestions.targetMarket')} className="h-8 rounded-md border bg-background px-2 text-sm" value={`${view.market.locationCode}|${view.market.language}`} disabled={Boolean(busy)} onChange={(e) => { const [loc, lang] = e.target.value.split("|"); void run("suggest", { market: { locationCode: Number(loc), language: lang } }); }}>
             {getMarkets().map((m) => <option key={`${m.locationCode}|${m.language}`} value={`${m.locationCode}|${m.language}`}>{$t(m.label)}</option>)}
