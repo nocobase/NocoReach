@@ -19,7 +19,7 @@
 
 ## Unreleased — Opportunity briefs
 
-- Show each pending opportunity as a full-width brief: what happened, why it is worth doing and what to do, then where, for whom and to what end, with priority, effort and confidence as tags and the limitations behind ⓘ. The same brief opens from Handled.
+- Keep the list of pending opportunities on the left and read the selected one on the right: what happened, why it is worth doing, what to do and where, with priority, effort and confidence as tags and the limitations behind ⓘ. Handled opportunities open the same detail. The audience and goal are not shown.
 - Remove the owner, executor and playbook choices from the Opportunities page: Hand off to agent uses the recommended playbook and makes you the owner, and both can still be changed on the task before it starts.
 
 ## Unreleased — The AIs in NocoReach, by role
