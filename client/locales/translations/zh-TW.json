@@ -33,7 +33,7 @@
     "invalidTime": "請輸入有效的時間（HH:mm）。",
     "dataReadyHint": "按這個時區，多數資料來源每天約 {{time}} 更新。分析放在這之後，才能用上當天的新資料。",
     "searchTimezone": "搜尋時區，例如 Shanghai",
-    "noTimezone": "沒有匹配的時區。",
+    "noTimezone": "沒有符合條件的時區。",
     "dstHelp": "日光節約時間切換時，不存在的時刻向後順延，重複時刻通常觸發一次。停機恢復可能再次觸發；按任務當地日期，當天已分析成功的專案會略過。",
     "timeSaved": "時間已儲存",
     "triggered": "已開始分析，結果會出現在執行紀錄裡。",
@@ -59,8 +59,8 @@
     "notFound": "這項自動執行已不存在。",
     "empty": "本頁沒有內容，請重新整理或返回上一頁。",
     "noRuns": "還沒有執行過，到了設定的時間會自動執行。",
-    "plan": "執行計劃",
-    "customSchedule": "自定義計劃",
+    "plan": "執行計畫",
+    "customSchedule": "自訂計畫",
     "timezone": "時區",
     "scheduling": "排程狀態",
     "lifecycle": "定義狀態",
@@ -72,7 +72,7 @@
     "cancel": "取消",
     "disableTitle": "暫停「{{name}}」？",
     "disableHelp": "暫停後不再自動執行，直到重新開啟。已經開始的這次會繼續執行直到完成。",
-    "inactiveHelp": "應用已不再定義這項工作，無法在這裡開啟。",
+    "inactiveHelp": "應用程式已不再定義這項工作，無法在這裡開啟。",
     "enabledNotice": "已開啟「{{name}}」。",
     "disabledNotice": "已暫停「{{name}}」。",
     "pagination": "自動執行分頁",
@@ -101,29 +101,29 @@
       "failed": "失敗",
       "skipped": "已略過",
       "cancelled": "已取消",
-      "timed_out": "已超時",
+      "timed_out": "已逾時",
       "triggered": "已開始，結果未知",
       "unknown": "未知"
     }
   },
   "auth.preparingSession": "正在準備登入工作階段…",
   "auth.connectionFailed": "連線失敗",
-  "auth.connectionFailedDescription": "暫時無法連線。請再試一次後進入應用，或登出。",
+  "auth.connectionFailedDescription": "暫時無法連線。請再試一次後進入應用程式，或登出。",
   "auth.passwordResetSuccess": "密碼已重設，請用新密碼登入。",
   "auth.requestNewResetLink": "重新申請重設連結",
   "deviceApproval.title": "授權裝置",
-  "deviceApproval.description": "一個命令列或其他裝置要求以你的身分登入。只有在登入是你自己發起的時候才批准。",
+  "deviceApproval.description": "一個命令列或其他裝置要求以你的身分登入。只有在登入是你自己發起的時候才核准。",
   "deviceApproval.enterCode": "輸入裝置上顯示的代碼。",
   "deviceApproval.codeLabel": "代碼",
   "deviceApproval.continue": "繼續",
   "deviceApproval.checking": "正在檢查代碼…",
   "deviceApproval.confirm": "確認此代碼與裝置上顯示的一致。",
   "deviceApproval.client": "由 {{client}} 發起",
-  "deviceApproval.approve": "批准",
-  "deviceApproval.approving": "正在批准…",
+  "deviceApproval.approve": "核准",
+  "deviceApproval.approving": "正在核准…",
   "deviceApproval.deny": "拒絕",
   "deviceApproval.denying": "正在拒絕…",
-  "deviceApproval.approved": "裝置已批准。回到終端機繼續操作，可以關閉此頁面。",
+  "deviceApproval.approved": "裝置已核准。回到終端機繼續操作，可以關閉此頁面。",
   "deviceApproval.denied": "已拒絕要求，裝置沒有登入。可以關閉此頁面。",
   "deviceApproval.expired": "此代碼已過期。請在裝置上重新發起登入。",
   "deviceApproval.invalid": "此代碼無效。請對照裝置上的代碼再試一次。",
@@ -159,7 +159,7 @@
   "inbox.unreadCount": "{{count}} 則未讀",
   "inbox.pendingDecisions": "{{count}} 項待處理",
   "inbox.resolved": "已處理",
-  "inbox.outcomes.approved": "已批准",
+  "inbox.outcomes.approved": "已核准",
   "inbox.outcomes.rejected": "已駁回",
   "inbox.outcomes.withdrawn": "已撤回",
   "inbox.count": "×{{count}}",
@@ -176,7 +176,7 @@
   "inbox.keyMove": "移動",
   "inbox.keyOpen": "開啟",
   "inbox.cancel": "取消",
-  "inbox.request.approve": "批准",
+  "inbox.request.approve": "核准",
   "inbox.request.reject": "駁回",
   "inbox.request.commentPlaceholder": "寫點什麼…",
   "inbox.request.commentFor": "{{action}}：{{title}}",
@@ -229,7 +229,7 @@
   "auth.or": "或使用以下方式繼續",
   "auth.continueWith": "使用 {provider} 繼續",
   "auth.about": "關於此應用程式",
-  "auth.platform": "AI 增長團隊",
+  "auth.platform": "AI 成長團隊",
   "auth.marketingTitleFirst": "從資料裡找機會，",
   "auth.marketingTitleSecond": "交給 Agent",
   "auth.marketingTitleThird": "改到上線。",
@@ -245,7 +245,7 @@
   "status.pageFailed": "無法載入頁面",
   "status.retry": "再試一次",
   "navigation.brandHome": "NocoReach 首頁",
-  "navigation.brandApps": "NocoReach 應用",
+  "navigation.brandApps": "NocoReach 應用程式",
   "routeOverlay.close": "關閉",
   "status.deniedDescription": "你沒有存取 {{label}} 的權限。",
   "status.routeFailedDescription": "無法載入 {{packageName}} 的路由 {{label}}。",
@@ -257,7 +257,7 @@
   "home": {
     "platform": "NocoBase · AI 原生應用程式平台",
     "title": "說出需求，由 Agent 來建構",
-    "description": "這個應用程式透過和 Coding Agent 對話來開發。用平常的話說明業務需要什麼，它會在這個專案裡撰寫頁面、資料模型、介面和業務流程。",
+    "description": "這個應用程式透過和 Coding Agent 對話來開發。用平常的話說明業務需要什麼，它會在這個專案裡撰寫頁面、資料模型、API 和業務流程。",
     "steps": {
       "describe": {
         "title": "描述需求",
@@ -274,7 +274,7 @@
     },
     "example": {
       "title": "可以這樣提需求",
-      "text": "幫我做一個採購訂單應用程式。\n\n訂單包含編號、採購事項、申請人、金額和審批狀態。申請人可以建立訂單，只能檢視自己的訂單；審批人可以檢視所有待審批訂單，並通過或駁回。\n審批完成後，用站內信通知申請人，點擊可以開啟對應訂單。",
+      "text": "幫我做一個採購訂單應用程式。\n\n訂單包含編號、採購事項、申請人、金額和審核狀態。申請人可以建立訂單，只能檢視自己的訂單；審核人可以檢視所有待審核訂單，並通過或駁回。\n審核完成後，用站內信通知申請人，點擊可以開啟對應訂單。",
       "hint": "貼到在這個專案中開啟的 Claude Code、Codex、Cursor 或其他 Coding Agent 中即可。"
     },
     "capabilitiesTitle": "內建能力",
@@ -328,11 +328,11 @@
         "prompts": {
           "jobs": {
             "label": "職位權限",
-            "text": "請為應用程式設定「採購申請人」和「訂單審批人」兩個職位。\n採購申請人可以進入訂單頁面，檢視本人申請的訂單。\n訂單審批人可以進入訂單頁面，檢視訂單，並批准或駁回待審批訂單。\n只有應用程式管理員可以調整職位權限和人員分配。\n請串接應用程式現有的權限能力，讓管理員以後可以調整權限和分配人員。"
+            "text": "請為應用程式設定「採購申請人」和「訂單審核人」兩個職位。\n採購申請人可以進入訂單頁面，檢視本人申請的訂單。\n訂單審核人可以進入訂單頁面，檢視訂單，並核准或駁回待審核訂單。\n只有應用程式管理員可以調整職位權限和人員分配。\n請串接應用程式現有的權限能力，讓管理員以後可以調整權限和分配人員。"
           },
           "dataScopes": {
             "label": "資料範圍",
-            "text": "採購申請人只檢視自己申請的訂單，以訂單的申請人欄位判斷歸屬。\n訂單審批人可以檢視所有訂單，處理待審批訂單。\n管理員可以在權限集中分別調整兩個職位的訂單檢視範圍。"
+            "text": "採購申請人只檢視自己申請的訂單，以訂單的申請人欄位判斷歸屬。\n訂單審核人可以檢視所有訂單，處理待審核訂單。\n管理員可以在權限集中分別調整兩個職位的訂單檢視範圍。"
           },
           "restrictions": {
             "label": "限制規則",
@@ -346,7 +346,7 @@
         "prompts": {
           "stages": {
             "label": "流程階段",
-            "text": "為採購訂單增加處理流程：待審批→待採購→已到貨→已完成。\n審批人可以批准或駁回，駁回必須填寫原因，訂單退回申請人修改後重新提交。\n採購員下單後進入待採購，確認到貨並上傳簽收單後進入已到貨，申請人確認後完成。\n訂單詳情只提供目前階段的操作，一般編輯不能直接修改流程階段。\n在伺服器端檢查階段和必填資訊，多人同時處理時不要覆蓋別人已提交的結果。"
+            "text": "為採購訂單增加處理流程：待審核→待採購→已到貨→已完成。\n審核人可以核准或駁回，駁回必須填寫原因，訂單退回申請人修改後重新提交。\n採購員下單後進入待採購，確認到貨並上傳簽收單後進入已到貨，申請人確認後完成。\n訂單詳情只提供目前階段的操作，一般編輯不能直接修改流程階段。\n在伺服器端檢查階段和必填資訊，多人同時處理時不要覆蓋別人已提交的結果。"
           },
           "backgroundExport": {
             "label": "背景匯出",
@@ -364,7 +364,7 @@
         "prompts": {
           "reminder": {
             "label": "每日提醒",
-            "text": "為現有訂單應用程式新增「待審批訂單提醒」。\n\n每個工作日北京時間上午 9 點，查找仍待審批的訂單，依審批人彙總，並向對應審批人傳送一則站內通知。\n通知顯示待審批訂單數量，點擊後開啟待審批訂單清單；沒有待審批訂單時不傳送。\n管理員可以檢視任務的執行時間和執行記錄，並暫停或恢復提醒。"
+            "text": "為現有訂單應用程式新增「待審核訂單提醒」。\n\n每個工作日北京時間上午 9 點，查找仍待審核的訂單，依審核人彙總，並向對應審核人傳送一則站內通知。\n通知顯示待審核訂單數量，點擊後開啟待審核訂單清單；沒有待審核訂單時不傳送。\n管理員可以檢視任務的執行時間和執行記錄，並暫停或恢復提醒。"
           },
           "weeklyReport": {
             "label": "每週報表",
@@ -378,11 +378,11 @@
         "prompts": {
           "inApp": {
             "label": "站內信",
-            "text": "我要在目前應用程式中做訂單審批，並用站內信通知申請人審批結果。\n\n訂單包含編號、名稱、申請人、金額和審批狀態。\n申請人可以檢視自己的訂單，審批人可以檢視待審批訂單並通過或駁回。如果已有訂單和審批功能，請直接沿用。\n\n審批完成後，只給該訂單的申請人傳送一則站內信。\n訊息標題說明通過或駁回，內文包含訂單編號、名稱和審批結果。\n點擊訊息可以開啟對應訂單詳情。\n待審批時不傳送，同一次審批結果只通知一次。\n通知傳送失敗不影響已儲存的審批結果。"
+            "text": "我要在目前應用程式中做訂單審核，並用站內信通知申請人審核結果。\n\n訂單包含編號、名稱、申請人、金額和審核狀態。\n申請人可以檢視自己的訂單，審核人可以檢視待審核訂單並通過或駁回。如果已有訂單和審核功能，請直接沿用。\n\n審核完成後，只給該訂單的申請人傳送一則站內信。\n訊息標題說明通過或駁回，內文包含訂單編號、名稱和審核結果。\n點擊訊息可以開啟對應訂單詳情。\n待審核時不傳送，同一次審核結果只通知一次。\n通知傳送失敗不影響已儲存的審核結果。"
           },
           "email": {
             "label": "電子郵件通知",
-            "text": "請在現有訂單審批通知中增加電子郵件，使用應用程式已設定的郵件管道。\n\n訂單審批通過或駁回後，向申請人帳號中的電子郵件位址傳送審批結果。\n主旨包含訂單編號，內文包含訂單名稱和審批結果。\n保留現有站內信；申請人未填寫電子郵件時，只傳送站內信。\n郵件傳送失敗不影響審批結果和站內信。"
+            "text": "請在現有訂單審核通知中增加電子郵件，使用應用程式已設定的郵件管道。\n\n訂單審核通過或駁回後，向申請人帳號中的電子郵件位址傳送審核結果。\n主旨包含訂單編號，內文包含訂單名稱和審核結果。\n保留現有站內信；申請人未填寫電子郵件時，只傳送站內信。\n郵件傳送失敗不影響審核結果和站內信。"
           }
         }
       },
@@ -410,7 +410,7 @@
         "prompts": {
           "attachments": {
             "label": "訂單附件",
-            "text": "給現有訂單管理應用程式增加採購附件功能。\n\n在訂單詳情中新增附件區域，每個訂單可以上傳多個檔案，支援 PDF、圖片和 DOCX。\n顯示附件的檔名和大小，支援預覽、下載和移除。\n上傳後點擊儲存，將附件關聯到目前訂單；重新開啟訂單時仍能看到這些附件。\n有權檢視訂單的人員可以檢視和下載附件，申請人和審批人員可以新增或移除附件。\n移除附件只解除它與目前訂單的關聯，保留檔案。"
+            "text": "給現有訂單管理應用程式增加採購附件功能。\n\n在訂單詳情中新增附件區域，每個訂單可以上傳多個檔案，支援 PDF、圖片和 DOCX。\n顯示附件的檔名和大小，支援預覽、下載和移除。\n上傳後點擊儲存，將附件關聯到目前訂單；重新開啟訂單時仍能看到這些附件。\n有權檢視訂單的人員可以檢視和下載附件，申請人和審核人員可以新增或移除附件。\n移除附件只解除它與目前訂單的關聯，保留檔案。"
           },
           "avatar": {
             "label": "員工頭像",
@@ -483,13 +483,13 @@
   },
   "navigation": {
     "home": "首頁",
-    "open": "開啟導航",
-    "close": "關閉導航",
-    "expand": "展開導航",
-    "collapse": "收起導航",
-    "toggle": "展開或收起導航",
-    "label": "應用導航",
-    "description": "前往本應用的頁面。",
+    "open": "開啟導覽",
+    "close": "關閉導覽",
+    "expand": "展開導覽",
+    "collapse": "收起導覽",
+    "toggle": "展開或收起導覽",
+    "label": "應用程式導覽",
+    "description": "前往本應用程式的頁面。",
     "breadcrumb": "麵包屑",
     "breadcrumbMore": "顯示中間層級",
     "back": "返回",
@@ -518,22 +518,22 @@
     "title": "Agent 對話",
     "ask": "問 Agent",
     "close": "關閉",
-    "expand": "全屏",
+    "expand": "展開至全寬",
     "restoreSize": "恢復為側欄",
-    "openPage": "全屏開啟",
+    "openPage": "以全螢幕開啟",
     "openInPanel": "在側欄中開啟",
     "more": "更多",
     "newConversation": "新對話",
     "untitled": "未命名對話",
     "rename": "改標題",
     "renameHint": "{{title}}（點擊改標題）",
-    "archive": "歸檔",
-    "unarchive": "取消歸檔",
+    "archive": "封存",
+    "unarchive": "取消封存",
     "you": "我",
     "agentGone": "已刪除的 Agent",
     "anyAgent": "Agent",
-    "loadFailed": "無法載入這條對話",
-    "notFound": "這條對話無法開啟",
+    "loadFailed": "無法載入這段對話",
+    "notFound": "這段對話無法開啟",
     "notFoundDescription": "它可能已不存在，或者屬於別人。",
     "emptyTitle": "{{name}} 能幫你做什麼？",
     "emptyDescription": "可以問任何問題，也可以直接描述要安排的工作。目前頁面會作為上下文一起傳送。",
@@ -547,7 +547,7 @@
     "availability": {
       "online": "線上",
       "agentMissing": "已刪除",
-      "agentArchived": "已歸檔",
+      "agentArchived": "已封存",
       "forbidden": "你無權使用",
       "noRunner": "沒有線上的執行環境",
       "othersPersonal": "僅其他人的個人 Runner 可用"
@@ -564,19 +564,19 @@
     },
     "offline": {
       "agentMissing": "{{name}} 已不存在",
-      "agentArchived": "{{name}} 已歸檔",
+      "agentArchived": "{{name}} 已封存",
       "forbidden": "你已無權使用 {{name}}",
       "noRunner": "{{name}} 暫時沒有線上的執行環境",
       "othersPersonal": "{{name}} 僅在其他人的個人 Runner 上可用",
       "kept": "訊息已儲存，它能回覆時會處理。",
-      "fallback": "這條對話改用其他 Agent",
-      "usingDefault": "這條對話暫時由 {{name}} 代替 {{own}} 回答。",
+      "fallback": "這段對話改用其他 Agent",
+      "usingDefault": "這段對話暫時由 {{name}} 代替 {{own}} 回答。",
       "restore": "切回 {{own}}"
     },
     "notice": {
       "switchedToDefault": "已臨時改用系統預設的 {{name}}，等 {{own}} 恢復後可以切回。",
       "switchedToOnline": "{{own}} 現在沒有你能用的執行環境，先由 {{name}} 回答，等 {{own}} 恢復後可以切回。",
-      "onlineFallbackUnavailable": "線上兜底 Agent 暫時無法回答（{{reason}}），這條對話仍由 {{own}} 等待可用的執行環境。",
+      "onlineFallbackUnavailable": "線上備援 Agent 暫時無法回答（{{reason}}），這段對話仍由 {{own}} 等待可用的執行環境。",
       "switchedBack": "已切回 {{name}}。",
       "runFailed": "Agent 沒有回覆就停止了。",
       "runFailedReason": "Agent 沒有回覆就停止了：{{reason}}",
@@ -587,8 +587,8 @@
       "question": "問題",
       "answer": "回答",
       "steps": "它的步驟",
-      "plans_one": "提出了一個計劃，等你確認。",
-      "plans_other": "提出了 {{count}} 個計劃，等你確認。",
+      "plans_one": "提出了一個計畫，等你確認。",
+      "plans_other": "提出了 {{count}} 個計畫，等你確認。",
       "usage": "用了 {{input}} 個輸入 token 和 {{output}} 個輸出 token。",
       "state": {
         "running": "回答中…",
@@ -627,15 +627,15 @@
     },
     "attachments": {
       "attach": "新增檔案",
-      "label": "下一條訊息帶上的檔案",
-      "sent": "這條訊息帶上的檔案",
+      "label": "下一則訊息帶上的檔案",
+      "sent": "這則訊息帶上的檔案",
       "images": "圖片",
       "files": "檔案",
       "remove": "移除 {{name}}",
       "uploading": "正在上傳…",
       "tooLarge": "超過 {{max}}",
       "failed": "上傳失敗",
-      "tooMany": "每條訊息最多 {{max}} 個檔案。",
+      "tooMany": "每則訊息最多 {{max}} 個檔案。",
       "blocked": "移除上傳失敗的檔案後才能傳送。",
       "waiting": "檔案上傳完後傳送…",
       "drop": "鬆開即可新增檔案",
@@ -645,8 +645,8 @@
       "next": "下一張"
     },
     "context": {
-      "label": "下一條訊息帶上的上下文",
-      "sent": "這條訊息帶上的上下文",
+      "label": "下一則訊息帶上的上下文",
+      "sent": "這則訊息帶上的上下文",
       "filter": "篩選：{{filter}}",
       "selection": "選中文字：「{{text}}」",
       "remove": "移除上下文：{{label}}"
@@ -656,7 +656,7 @@
       "withStatus": "{{name}}，{{status}}",
       "chooseFor": "和誰對話",
       "startWith": "換一個 Agent 開新對話",
-      "boundHint": "對話會一直跟著它的 Agent；換 Agent 會開一條新對話。",
+      "boundHint": "對話會一直跟著它的 Agent；換 Agent 會開一段新對話。",
       "empty": "沒有你可以對話的 Agent",
       "none": "沒有 Agent",
       "field": "Agent：{{name}}",
@@ -673,14 +673,14 @@
       "search": "搜尋對話",
       "show": "顯示",
       "active": "進行中",
-      "archived": "已歸檔",
+      "archived": "已封存",
       "agent": "Agent",
       "allAgents": "全部 Agent",
       "source": "來源",
       "allSources": "全部來源",
       "loadFailed": "無法載入對話",
-      "noMatch": "沒有匹配的對話",
-      "noArchived": "沒有已歸檔的對話",
+      "noMatch": "沒有符合條件的對話",
+      "noArchived": "沒有已封存的對話",
       "empty": "還沒有對話",
       "more": "載入更多",
       "unread": "有新回覆",
@@ -696,11 +696,11 @@
     "transcript": {
       "waiting": "等待 Agent 開始…",
       "empty": "這次執行沒有記錄任何事件。",
-      "fetchFailed": "無法獲取新事件，正在重試…",
+      "fetchFailed": "無法取得新事件，正在重試…",
       "expand": "展開全部",
       "truncated": "已截斷：完整內容過長，未能保留。",
       "events": "執行記錄",
-      "inputDelivered": "{{count}} 條輸入已送達 Agent",
+      "inputDelivered": "{{count}} 則輸入已送達 Agent",
       "tokens": "輸入 {{input}} token，輸出 {{output}} token",
       "kinds": {
         "text": "Agent",
@@ -719,17 +719,17 @@
   },
   "agentSetup.title": "在 agent 中使用 NocoReach",
   "agentSetup.description": "將下面的指引複製到 Claude Code、Codex 或其他程式設計 agent，連線 NocoReach。",
-  "agentSetup.prompt": "請幫助我在目前程式設計 agent 中使用 NocoReach。\n\n1. 安裝 NocoReach CLI：\n{{install}}\n\n2. 發起瀏覽器登入：\n{{login}}\n向我展示驗證位址和驗證碼，等待我在瀏覽器中核對並批准，不要替我批准。\n\n3. 我批准後，執行 `nocoreach whoami` 核對登入帳號，再執行 `nocoreach docs` 瞭解可用命令。使用這些命令，在我現有的權限範圍內完成我的請求。不要索要我的密碼，也不要將下載權杖用作 API Key。",
-  "agentSetup.identity": "下載權杖僅用於安裝 CLI。瀏覽器登入經你批准後，agent 將以你的帳號身份操作，沿用現有權限。",
-  "agentSetup.expiry": "安裝權杖有效期為 30 分鐘，最多可下載 3 次。請勿公開這些指引；過期後可重新生成。",
+  "agentSetup.prompt": "請幫助我在目前程式設計 agent 中使用 NocoReach。\n\n1. 安裝 NocoReach CLI：\n{{install}}\n\n2. 發起瀏覽器登入：\n{{login}}\n向我展示驗證位址和驗證碼，等待我在瀏覽器中核對並核准，不要替我核准。\n\n3. 我核准後，執行 `nocoreach whoami` 核對登入帳號，再執行 `nocoreach docs` 瞭解可用命令。使用這些命令，在我現有的權限範圍內完成我的請求。不要索要我的密碼，也不要將下載權杖用作 API Key。",
+  "agentSetup.identity": "下載權杖僅用於安裝 CLI。瀏覽器登入經你核准後，agent 將以你的帳號身分操作，沿用現有權限。",
+  "agentSetup.expiry": "安裝權杖有效期為 30 分鐘，最多可下載 3 次。請勿公開這些指引；過期後可重新產生。",
   "agentSetup.runtime": "需要 macOS 或 Linux 及 Node.js 24+；Windows 請使用 WSL。僅安裝 CLI。",
   "agentSetup.preparing": "正在準備安裝指引…",
   "agentSetup.promptLabel": "Agent 設定指引",
   "agentSetup.failed": "無法準備安裝指引，請再試一次。",
   "agentSetup.signedOut": "登入已過期，請重新登入後繼續。",
-  "agentSetup.forbidden": "你沒有生成安裝指引的權限，請聯絡管理員。",
-  "agentSetup.expired": "此安裝權杖已過期，請重新生成後繼續。",
-  "agentSetup.regenerate": "重新生成權杖",
+  "agentSetup.forbidden": "你沒有產生安裝指引的權限，請聯絡管理員。",
+  "agentSetup.expired": "此安裝權杖已過期，請重新產生後繼續。",
+  "agentSetup.regenerate": "重新產生權杖",
   "agentSetup.copy": "複製指引",
   "agentSetup.copied": "已複製",
   "agentSetup.copyFailed": "複製失敗，請選中指引後手動複製。",
@@ -737,7 +737,7 @@
   "agentSetup.signInFailed": "無法重新整理登入狀態，請再試一次。",
   "nocoreach.agentCapabilities.group": "NocoReach 任務",
   "nocoreach.agentCapabilities.read": "讀取目前任務資料",
-  "nocoreach.agentCapabilities.readDescription": "讀取目前任務快照：指標、關鍵字、頁面、稽核、知識、Skills 和論壇正文。",
+  "nocoreach.agentCapabilities.readDescription": "讀取目前任務快照：指標、關鍵字、頁面、稽核、知識、Skills 和論壇內文。",
   "nocoreach.agentCapabilities.draft": "暫存候選草稿",
   "nocoreach.agentCapabilities.draftDescription": "儲存目前執行的草稿，不執行審核或發布。",
   "nocoreach.agentCapabilities.research": "NocoReach 研究",
@@ -788,7 +788,7 @@
         "description": "模型服務及其提供的模型。對話模型用於每日分析和對話 Agent，向量模型和重排序模型用於搜尋。"
       },
       "defaultModel": {
-        "description": "沒有指定模型的對話 Agent 使用它回答，例如新增的 Agent 或應用自帶的 Agent。"
+        "description": "沒有指定模型的對話 Agent 使用它回答，例如新增的 Agent 或應用程式自帶的 Agent。"
       },
       "services": {
         "empty": {

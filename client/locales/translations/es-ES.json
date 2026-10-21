@@ -76,7 +76,7 @@
     "enabledNotice": "«{{name}}» está activada.",
     "disabledNotice": "«{{name}}» está en pausa.",
     "pagination": "Páginas de ejecuciones automáticas",
-    "page": "Página {{page}} · {{total}} elementos",
+    "page": "Página {{page}} · Total de elementos: {{total}}",
     "previous": "Anterior",
     "next": "Siguiente",
     "more": "Cargar más",
@@ -156,8 +156,8 @@
   "inbox.empty.info": "No hay notificaciones",
   "inbox.emptyDescription": "Aquí aparecen las notificaciones y solicitudes que te envían.",
   "inbox.unread": "No leídas",
-  "inbox.unreadCount": "{{count}} sin leer",
-  "inbox.pendingDecisions": "{{count}} pendientes",
+  "inbox.unreadCount": "Sin leer: {{count}}",
+  "inbox.pendingDecisions": "Pendientes: {{count}}",
   "inbox.resolved": "Gestionado",
   "inbox.outcomes.approved": "Aprobada",
   "inbox.outcomes.rejected": "Rechazada",
@@ -183,10 +183,10 @@
   "inbox.request.quickSend": "para enviar",
   "inbox.request.newLine": "para nueva línea",
   "inboxButton.title": "Bandeja de entrada",
-  "inboxButton.pending": "Bandeja de entrada, {{count}} pendientes",
-  "inboxButton.unread": "Bandeja de entrada, {{count}} sin leer",
-  "inboxButton.pendingHint": "{{count}} pendientes de tu gestión; el número baja a medida que los gestionas.",
-  "inboxButton.unreadHint": "{{count}} sin leer; el número baja a medida que los lees.",
+  "inboxButton.pending": "Bandeja de entrada; pendientes: {{count}}",
+  "inboxButton.unread": "Bandeja de entrada; sin leer: {{count}}",
+  "inboxButton.pendingHint": "Elementos pendientes de tu gestión: {{count}}. El número baja a medida que completas la gestión.",
+  "inboxButton.unreadHint": "Sin leer: {{count}}. El número baja conforme lees las notificaciones.",
   "auth.welcome": "Te damos la bienvenida",
   "auth.loginDescription": "Inicia sesión con tu nombre de usuario o correo electrónico y tu contraseña.",
   "auth.registerTitle": "Crear una cuenta",
@@ -256,15 +256,15 @@
   },
   "home": {
     "platform": "NocoBase · Plataforma de aplicaciones nativa de IA",
-    "title": "Descríbelo y tu Agent lo construye",
-    "description": "Esta aplicación se desarrolla conversando con tu Coding Agent. Cuéntale con palabras sencillas lo que necesita el negocio y escribirá las páginas, los modelos de datos, las API y los procesos de negocio en este proyecto.",
+    "title": "Descríbelo y tu agente lo construye",
+    "description": "Esta aplicación se desarrolla conversando con tu agente de programación. Cuéntale con palabras sencillas lo que necesita el negocio y escribirá las páginas, los modelos de datos, las API y los procesos de negocio en este proyecto.",
     "steps": {
       "describe": {
         "title": "Describe la necesidad",
         "description": "Indica quién la usa, qué datos guarda y qué debe ocurrir."
       },
       "build": {
-        "title": "Deja que el Agent construya",
+        "title": "Deja que el agente construya",
         "description": "Lee este proyecto y sus capacidades integradas y, después, escribe el código."
       },
       "review": {
@@ -275,10 +275,10 @@
     "example": {
       "title": "Prueba con una petición como esta",
       "text": "Crea una aplicación de pedidos de compra.\n\nUn pedido tiene un número, un artículo, un solicitante, un importe y un estado de aprobación. Los solicitantes crean pedidos y solo ven los suyos; los revisores ven todos los pedidos pendientes y los aprueban o rechazan.\nTras una decisión, notifica al solicitante en la bandeja de entrada con un enlace al pedido.",
-      "hint": "Pégala en Claude Code, Codex, Cursor o cualquier Coding Agent abierto en este proyecto."
+      "hint": "Pégala en Claude Code, Codex, Cursor o cualquier agente de programación abierto en este proyecto."
     },
     "capabilitiesTitle": "Capacidades integradas",
-    "capabilitiesDescription": "Tu Agent las usa directamente en lugar de crearlas desde cero. Abre una para obtener un prompt que puedes editar y copiar.",
+    "capabilitiesDescription": "Tu agente las usa directamente en lugar de crearlas desde cero. Abre una para obtener un prompt que puedes editar y copiar.",
     "viewPrompts": "Ver prompts ({{count}})",
     "prompt": {
       "label": "Prompt",
@@ -502,7 +502,7 @@
     "hideColumn": "Ocultar",
     "view": "Vista",
     "toggleColumns": "Mostrar u ocultar columnas",
-    "selectedCount": "{{selected}} de {{total}} fila(s) seleccionada(s).",
+    "selectedCount": "Filas seleccionadas: {{selected}} de un total de {{total}}.",
     "rowsPerPage": "Filas por página",
     "pageOf": "Página {{page}} de {{pageCount}}",
     "firstPage": "Ir a la primera página",
@@ -589,7 +589,7 @@
       "steps": "Pasos realizados",
       "plans_one": "Ha propuesto un plan para que lo confirmes.",
       "plans_other": "Ha propuesto {{count}} planes para que los confirmes.",
-      "usage": "Ha utilizado {{input}} tokens de entrada y {{output}} de salida.",
+      "usage": "Tokens utilizados: entrada: {{input}}; salida: {{output}}.",
       "state": {
         "running": "Respondiendo…",
         "completed": "Respondida",
@@ -620,7 +620,7 @@
       "placeholder": "Pregunta o describe el trabajo que quieres organizar…",
       "hint": "Intro para enviar, Mayús+Intro para un salto de línea",
       "runningHint": "Los mensajes que envíes ahora se incorporarán al trabajo en curso",
-      "tooLong": "Máximo {{max}} caracteres.",
+      "tooLong": "Límite de caracteres: {{max}}.",
       "send": "Enviar",
       "stop": "Detener",
       "stopping": "Deteniendo…"
@@ -635,7 +635,7 @@
       "uploading": "Subiendo…",
       "tooLarge": "Supera {{max}}",
       "failed": "No se ha podido subir",
-      "tooMany": "Máximo {{max}} archivos por mensaje.",
+      "tooMany": "Límite de archivos por mensaje: {{max}}.",
       "blocked": "Quita los archivos que no se hayan podido subir para enviar el mensaje.",
       "waiting": "El mensaje se enviará cuando se hayan subido los archivos…",
       "drop": "Suelta los archivos para adjuntarlos",
@@ -701,7 +701,7 @@
       "truncated": "Contenido recortado: el texto completo era demasiado largo para conservarlo.",
       "events": "Registro de ejecución",
       "inputDelivered": "Entradas entregadas al agente: {{count}}",
-      "tokens": "{{input}} tokens de entrada, {{output}} de salida",
+      "tokens": "Tokens de entrada: {{input}}; de salida: {{output}}",
       "kinds": {
         "text": "Agente",
         "thinking": "Razonamiento",

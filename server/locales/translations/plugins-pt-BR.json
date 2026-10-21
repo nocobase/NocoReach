@@ -115,7 +115,7 @@
       "testTargetUnavailable": "O destino do teste de notificação está indisponível.",
       "testUnknownField": "Campo \"{{name}}\" desconhecido no teste de notificação.",
       "testRequiredField": "O campo \"{{name}}\" é obrigatório no teste de notificação.",
-      "testFieldTooLong": "O campo \"{{name}}\" do teste de notificação deve ter no máximo {{maxLength}} caracteres.",
+      "testFieldTooLong": "O campo \"{{name}}\" excede o limite de caracteres ({{maxLength}}).",
       "testFailed": "Falha no teste de notificação.",
       "testNotFound": "Teste de notificação não encontrado."
     }

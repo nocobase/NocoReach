@@ -515,8 +515,8 @@
           "inUse": "Giữ lại: thư mục đang được sử dụng",
           "changed": "Giữ lại: thư mục đã được sử dụng lại",
           "trackedChanges": "Giữ lại: các tệp được theo dõi có thay đổi chưa ghi nhận",
-          "unpushed": "Giữ lại: có bản ghi thay đổi chưa đẩy lên hoặc thiếu đối tượng bản ghi thay đổi cục bộ",
-          "missingEvidence": "Giữ lại: chưa đủ bằng chứng về các bản ghi thay đổi",
+          "unpushed": "Giữ lại: có commit chưa đẩy lên hoặc thiếu đối tượng commit cục bộ",
+          "missingEvidence": "Giữ lại: chưa đủ bằng chứng về các commit",
           "gitFailed": "Giữ lại: kiểm tra Git thất bại"
         }
       },
@@ -648,16 +648,16 @@
         "saved": "Đã lưu {{name}}"
       },
       "upgrade": {
-        "show": "Phiên bản {{version}}: có phiên bản môi trường thực thi mới hơn",
+        "show": "Phiên bản {{version}}: có phiên bản Runner mới hơn",
         "available": "Có bản cập nhật",
         "badge": "Có thể nâng cấp",
-        "title": "Có môi trường thực thi mới hơn cho {{name}}",
+        "title": "Có Runner mới hơn cho {{name}}",
         "description": "Đã cài {{version}}, ứng dụng này cung cấp {{latest}}.",
-        "hint": "Môi trường sẽ tự cập nhật khi không còn tác nhân AI nào đang chạy. Để cập nhật ngay, hãy chạy lệnh này trên máy chủ của môi trường."
+        "hint": "Runner sẽ tự cập nhật khi không còn tác nhân AI nào đang chạy. Để cập nhật ngay, hãy chạy lệnh này trên máy cài Runner."
       },
       "revoke": {
         "title": "Thu hồi thông tin xác thực của {{name}}?",
-        "description": "Môi trường thực thi sẽ dừng ở yêu cầu tiếp theo và các lượt chạy sẽ trở lại hàng đợi. Để kết nối lại, hãy thêm lại môi trường thực thi.",
+        "description": "Runner sẽ dừng ở yêu cầu tiếp theo và các lượt chạy sẽ trở lại hàng đợi. Để kết nối lại, hãy thêm lại môi trường thực thi.",
         "confirm": "Thu hồi",
         "done": "Đã thu hồi thông tin xác thực của {{name}}"
       },
@@ -670,13 +670,13 @@
     },
     "connect": {
       "title": "Thêm môi trường thực thi",
-      "description": "Chạy lệnh bên dưới trên máy đã cài công cụ lập trình: máy chủ, máy ảo hoặc thiết bị của bạn. Tác nhân AI chạy tại đó với toàn quyền của người dùng chạy môi trường thực thi, và có thể đọc, thay đổi mọi thứ mà người dùng đó có quyền, bao gồm khóa SSH và các thông tin xác thực khác. Môi trường thực thi không cung cấp lớp cách ly bảo mật: hãy chạy bằng tài khoản người dùng riêng, trong vùng chứa hoặc máy ảo.",
+      "description": "Chạy lệnh bên dưới trên máy đã cài công cụ lập trình: máy chủ, máy ảo hoặc thiết bị của bạn. Tác nhân AI chạy tại đó với toàn quyền của người dùng chạy Runner, và có thể đọc, thay đổi mọi thứ mà người dùng đó có quyền, bao gồm khóa SSH và các thông tin xác thực khác. Runner không cung cấp lớp cách ly bảo mật: hãy chạy bằng tài khoản người dùng riêng, trong vùng chứa hoặc máy ảo.",
       "createCredential": "Tạo lệnh cài đặt",
       "advanced": "Nâng cao: giới hạn theo công cụ lập trình",
-      "run": "Chạy lệnh này trên máy đó. Lệnh sẽ tải môi trường thực thi (nocobase-runner) và CLI của ứng dụng từ ứng dụng này, đăng ký môi trường thực thi và khởi động khi đăng nhập:",
+      "run": "Chạy lệnh này trên máy đó. Lệnh sẽ tải Runner (nocobase-runner) và CLI của ứng dụng từ ứng dụng này, đăng ký Runner và khởi động khi đăng nhập:",
       "nodeRequired": "Máy cần có Node.js 24 trở lên (kiểm tra bằng node --version). Nếu chưa có, lệnh sẽ dừng và hướng dẫn cách cài đặt.",
       "installed": "Đã cài nocobase-runner? Hãy đăng ký bằng lệnh sau:",
-      "unsupported": "Môi trường thực thi chưa chạy được trên Windows. Vui lòng dùng macOS, Linux hoặc WSL.",
+      "unsupported": "Runner chưa chạy được trên Windows. Vui lòng dùng macOS, Linux hoặc WSL.",
       "tokenOnce": "Lệnh chứa thông tin xác thực dùng một lần cho môi trường thực thi \"{{trust}}\". Thông tin này chỉ dùng được một lần, có hiệu lực đến {{time}}.",
       "after": "Sau vài giây, môi trường thực thi sẽ xuất hiện trong danh sách cùng các công cụ lập trình tìm thấy…",
       "tokenTools": "Công cụ lập trình: {{tools}}.",

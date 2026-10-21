@@ -22,7 +22,7 @@
       "settings": {
         "agents": {
           "agents": "エージェント",
-          "runners": "ランタイム",
+          "runners": "実行環境",
           "prices": "モデル料金",
           "services": "モデルサービス"
         }
@@ -37,7 +37,7 @@
           "description": "エージェント・スキル・実行履歴の閲覧、エージェントとスキルの変更、実行のキャンセルと再試行を行います。"
         },
         "runners": {
-          "title": "ランタイム",
+          "title": "実行環境",
           "description": "ランナーと登録トークンの閲覧、およびランナーの管理を行います。"
         },
         "prices": {
@@ -202,7 +202,7 @@
   "@nocobase/app-plugin-mail": {
     "errors": {
       "accessDenied": "メールへのアクセス権限が必要です。",
-      "idempotencyConflict": "この冪等キーは、すでに別のリクエストに関連付けられています。",
+      "idempotencyConflict": "この冪等性キーは、すでに別のリクエストに関連付けられています。",
       "invalidRequest": "メールリクエストが無効です。",
       "accountCredentialsInvalid": "メールボックスの認証に失敗しました。ログイン名とパスワードまたは認証コードを確認し、IMAP/SMTP が有効になっていることを確認してください。Gmail などのサービスではアプリパスワードが必要な場合があります。",
       "requestFailed": "メールリクエストを完了できませんでした。",

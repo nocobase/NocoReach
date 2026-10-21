@@ -38,7 +38,7 @@
         },
         "runners": {
           "title": "Lingkungan eksekusi",
-          "description": "Lihat pelaksana dan token pendaftaran; kelola pelaksana."
+          "description": "Lihat lingkungan eksekusi dan token pendaftaran; kelola lingkungan eksekusi."
         },
         "prices": {
           "title": "Harga model",

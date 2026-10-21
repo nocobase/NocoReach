@@ -648,16 +648,16 @@
         "saved": "{{name}} disimpan"
       },
       "upgrade": {
-        "show": "Versi {{version}}: pelaksana versi lebih baru tersedia",
+        "show": "Versi {{version}}: tersedia Runner versi lebih baru",
         "available": "Pembaruan tersedia",
         "badge": "Dapat diperbarui",
-        "title": "Pelaksana versi lebih baru untuk {{name}}",
+        "title": "Runner versi lebih baru untuk {{name}}",
         "description": "Versi terpasang {{version}}, aplikasi ini menyediakan {{latest}}.",
         "hint": "Pembaruan otomatis dilakukan saat tidak ada agen yang berjalan. Untuk memperbaruinya sekarang, jalankan ini di mesin host-nya."
       },
       "revoke": {
         "title": "Cabut kredensial {{name}}?",
-        "description": "Pelaksananya berhenti pada permintaan berikutnya dan semua eksekusinya kembali ke antrean. Untuk menghubungkannya lagi, tambahkan kembali lingkungan eksekusi ini.",
+        "description": "Runner di lingkungan ini berhenti pada permintaan berikutnya, dan eksekusinya kembali ke antrean. Untuk menghubungkannya lagi, tambahkan kembali lingkungan eksekusi ini.",
         "confirm": "Cabut",
         "done": "Kredensial {{name}} dicabut"
       },
@@ -670,13 +670,13 @@
     },
     "connect": {
       "title": "Tambah lingkungan eksekusi",
-      "description": "Jalankan perintah di bawah pada mesin host yang telah dipasangi alat pemrograman: server, VM, atau perangkat Anda sendiri. Agen berjalan di sana dengan akses penuh sebagai pengguna yang menjalankan pelaksana, dan dapat membaca serta mengubah apa pun yang dapat diakses pengguna tersebut, termasuk kunci SSH dan kredensial lainnya. Pelaksana bukan pembatas keamanan: jalankan sebagai pengguna khusus, di dalam kontainer, atau di dalam VM.",
+      "description": "Jalankan perintah di bawah pada mesin host yang telah dipasangi alat pemrograman: server, VM, atau perangkat Anda sendiri. Agen berjalan di sana dengan akses penuh sebagai pengguna yang menjalankan Runner, dan dapat membaca serta mengubah apa pun yang dapat diakses pengguna tersebut, termasuk kunci SSH dan kredensial lainnya. Runner bukan pembatas keamanan: jalankan sebagai pengguna khusus, di dalam kontainer, atau di dalam VM.",
       "createCredential": "Buat perintah instalasi",
       "advanced": "Lanjutan: batas per alat pemrograman",
-      "run": "Jalankan ini di mesin host tersebut. Perintah ini mengunduh pelaksana (nocobase-runner) dan CLI aplikasi ini dari aplikasi ini, mendaftarkan pelaksana, dan menjalankannya saat masuk:",
+      "run": "Jalankan ini di mesin host tersebut. Perintah ini mengunduh Runner (nocobase-runner) dan CLI aplikasi ini dari aplikasi ini, mendaftarkan Runner, dan menjalankannya saat masuk:",
       "nodeRequired": "Mesin host memerlukan Node.js 24 atau lebih baru (periksa dengan node --version). Jika belum tersedia, perintah akan berhenti dan menampilkan cara memasangnya.",
       "installed": "Sudah memasang nocobase-runner? Cukup daftarkan:",
-      "unsupported": "Pelaksana belum dapat berjalan di Windows. Gunakan macOS, Linux, atau WSL.",
+      "unsupported": "Runner belum dapat berjalan di Windows. Gunakan macOS, Linux, atau WSL.",
       "tokenOnce": "Perintah ini memuat kredensial sekali pakai untuk lingkungan eksekusi \"{{trust}}\". Kredensial dapat digunakan satu kali, hingga {{time}}.",
       "after": "Dalam beberapa detik, lingkungan eksekusi muncul dalam daftar beserta semua alat pemrograman yang ditemukan…",
       "tokenTools": "Alat pemrograman: {{tools}}.",
@@ -707,8 +707,8 @@
         "agentMissing": "Dihapus",
         "agentArchived": "Belum diaktifkan",
         "forbidden": "Tidak tersedia untuk Anda",
-        "noRunner": "Tidak ada pelaksana daring, tidak dapat dipilih",
-        "othersPersonal": "Hanya tersedia di pelaksana pribadi milik orang lain",
+        "noRunner": "Tidak ada lingkungan eksekusi daring, sehingga agen ini tidak dapat dipilih",
+        "othersPersonal": "Hanya tersedia di lingkungan eksekusi pribadi milik orang lain",
         "modelUnavailable": "Model tidak tersedia"
       },
       "offline": {
@@ -718,8 +718,8 @@
       },
       "notice": {
         "switchedToDefault": "Beralih ke {{name}}, agen bawaan sistem, hingga {{own}} kembali tersedia.",
-        "switchedToOnline": "{{own}} saat ini tidak memiliki pelaksana untuk Anda, jadi {{name}} akan menjawab hingga {{own}} kembali tersedia.",
-        "onlineFallbackUnavailable": "Agen pengganti daring tidak dapat menjawab ({{reason}}). Percakapan ini tetap menggunakan {{own}} sambil menunggu pelaksana.",
+        "switchedToOnline": "{{own}} saat ini tidak memiliki lingkungan eksekusi yang tersedia untuk Anda, jadi {{name}} akan menjawab hingga {{own}} kembali tersedia.",
+        "onlineFallbackUnavailable": "Agen pengganti daring tidak dapat menjawab ({{reason}}). Percakapan ini tetap menggunakan {{own}} sambil menunggu lingkungan eksekusi.",
         "switchedBack": "Kembali bersama {{name}}.",
         "runFailed": "Agen berhenti sebelum menjawab.",
         "runFailedReason": "Agen berhenti sebelum menjawab: {{reason}}",
@@ -736,8 +736,8 @@
         "working": "Mengerjakan {{subject}}"
       },
       "agents": {
-        "personalOnly": "Hanya pelaksana pribadi",
-        "hint": "Menampilkan agen yang aktif dan alasan agen tertentu belum dapat menjawab Anda. Jawaban diproses oleh pelaksana: balasan pertama menunggu pelaksana mengambilnya, biasanya beberapa detik.",
+        "personalOnly": "Hanya lingkungan eksekusi pribadi",
+        "hint": "Menampilkan agen yang aktif dan alasan agen tertentu belum dapat menjawab Anda. Jawaban diproses di lingkungan eksekusi: balasan pertama menunggu Runner mengambil tugasnya, biasanya beberapa detik.",
         "chooseFor": "Pilih agen",
         "empty": "Tidak ada agen yang dapat Anda pilih",
         "none": "Tidak ada agen",
@@ -868,7 +868,7 @@
         "description": "Per juta token, masukan / keluaran. Laporan menghitung biaya berdasarkan harga ini.",
         "online": "Daring (layanan model)",
         "noOnline": "Belum ada model yang dapat diberi harga. Aktifkan layanan model beserta modelnya terlebih dahulu.",
-        "runner": "Pelaksana (alat pemrograman)"
+        "runner": "Runner (alat pemrograman)"
       },
       "price": {
         "model": "Model",
@@ -1052,23 +1052,23 @@
     "runWait": {
       "capacity": "Slot terpakai di sini {{used}}/{{limit}}; {{detail}}; slot kosong yang dilaporkan di seluruh aplikasi {{reportedFree}}",
       "reasons": {
-        "updatePending": "Pelaksana menunggu pembaruan; pekerjaan baru dijeda",
-        "pruning": "Pelaksana membersihkan penyimpanan bersama; pekerjaan baru dijeda",
-        "toolNotInstalled": "Tidak ada pelaksana terhubung yang telah memasang alat ini",
-        "incompatible": "Pelaksana yang terhubung tidak mendukung beban kerja ini; perlu diperbarui",
-        "restricted": "Pembatasan kebijakan pelaksana, direktori, atau variabel",
+        "updatePending": "Runner menunggu pembaruan; pekerjaan baru dijeda",
+        "pruning": "Runner membersihkan penyimpanan bersama; pekerjaan baru dijeda",
+        "toolNotInstalled": "Alat ini belum terpasang di lingkungan eksekusi mana pun yang terhubung",
+        "incompatible": "Runner yang terhubung tidak mendukung beban kerja ini; perlu diperbarui",
+        "restricted": "Pembatasan kebijakan Runner, direktori, atau variabel",
         "unknown": "Kelayakan beban kerja belum ditentukan",
         "agentArchived": "Agen diarsipkan",
         "delayed": "Dijadwalkan untuk {{until}}",
         "noRunnerOnline": "Tidak ada lingkungan eksekusi daring",
         "runnersOffline": "Lingkungan eksekusinya luring",
         "toolUnavailable": "Alat belum masuk, dinonaktifkan, atau model yang diminta tidak tersedia ({{tool}})",
-        "noSharedRunner": "Hanya pelaksana pribadi milik orang lain yang daring",
+        "noSharedRunner": "Hanya lingkungan eksekusi pribadi milik orang lain yang daring",
         "missingFeatures": "Tidak ada lingkungan eksekusi yang mendukung {{features}}",
         "secretsNotAllowed": "Memerlukan lingkungan eksekusi tim: {{variables}} hanya untuk lingkungan eksekusi tim",
         "sameWorkActive": "Menunggu eksekusi yang sedang berjalan selesai",
         "concurrencyFull": "Batas eksekusi bersamaan tercapai ({{active}}/{{limit}})",
-        "runnersBusy": "Pelaksana yang kompatibel sudah penuh",
+        "runnersBusy": "Lingkungan eksekusi yang kompatibel sudah penuh",
         "toolSlotsFull": "Slot {{tool}} penuh ({{used}}/{{limit}})",
         "setupRetrying": "Persiapan gagal; mencoba lagi: {{detail}}",
         "next": "Berikutnya saat lingkungan eksekusi tersedia"
@@ -1114,7 +1114,7 @@
         },
         "runners": {
           "title": "Lingkungan eksekusi",
-          "description": "Lihat pelaksana dan token pendaftaran; kelola pelaksana."
+          "description": "Lihat lingkungan eksekusi dan token pendaftaran; kelola lingkungan eksekusi."
         },
         "prices": {
           "title": "Harga model",

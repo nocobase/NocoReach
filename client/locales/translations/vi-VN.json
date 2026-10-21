@@ -807,7 +807,7 @@
         }
       },
       "runtimes": {
-        "description": "Máy tính hoặc máy chủ đang chạy môi trường thực thi. Môi trường thực thi báo cáo các công cụ lập trình trên máy đó (như Claude Code hoặc Codex), và tác nhân AI thực thi chạy tác vụ tại đó."
+        "description": "Máy tính hoặc máy chủ chạy Runner. Runner báo cáo các công cụ lập trình trên máy đó (như Claude Code hoặc Codex), và tác nhân AI thực thi chạy tác vụ tại đó."
       },
       "usage": {
         "description": "Số token từng tác nhân AI và mô hình đã sử dụng, cùng chi phí ước tính theo giá hiện tại."

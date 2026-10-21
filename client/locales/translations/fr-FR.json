@@ -287,7 +287,7 @@
       "copiedShort": "Copié",
       "copied": "Prompt copié",
       "copyFailed": "Copie impossible. Sélectionnez le texte et copiez-le manuellement.",
-      "reset": "Rétablir par défaut"
+      "reset": "Rétablir le texte par défaut"
     },
     "capabilities": {
       "auth": {

@@ -257,14 +257,14 @@
   "home": {
     "platform": "NocoBase · KI-native Anwendungsplattform",
     "title": "Beschreiben Sie es, und Ihr Agent baut es",
-    "description": "Diese Anwendung wird im Gespräch mit Ihrem Coding-Agent entwickelt. Beschreiben Sie in einfachen Worten, was das Geschäft braucht, und er schreibt die Seiten, Datenmodelle, APIs und Geschäftsprozesse in diesem Projekt.",
+    "description": "Diese Anwendung wird im Gespräch mit Ihrem Coding-Agenten entwickelt. Beschreiben Sie in einfachen Worten, was das Geschäft braucht, und er schreibt die Seiten, Datenmodelle, APIs und Geschäftsprozesse in diesem Projekt.",
     "steps": {
       "describe": {
         "title": "Bedarf beschreiben",
         "description": "Sagen Sie, wer es nutzt, welche Daten es speichert und was passieren soll."
       },
       "build": {
-        "title": "Den Agent bauen lassen",
+        "title": "Den Agenten bauen lassen",
         "description": "Er liest dieses Projekt und seine integrierten Funktionen und schreibt dann den Code."
       },
       "review": {
@@ -275,7 +275,7 @@
     "example": {
       "title": "Probieren Sie eine Anfrage wie diese",
       "text": "Erstellen Sie eine Anwendung für Bestellungen.\n\nEine Bestellung hat eine Nummer, einen Artikel, einen Antragsteller, einen Betrag und einen Genehmigungsstatus. Antragsteller erstellen Bestellungen und sehen nur ihre eigenen; Prüfer sehen alle offenen Bestellungen und genehmigen oder lehnen sie ab.\nBenachrichtigen Sie den Antragsteller nach einer Entscheidung im Posteingang, mit einem Link zur Bestellung.",
-      "hint": "Fügen Sie sie in Claude Code, Codex, Cursor oder einen anderen Coding-Agent ein, der in diesem Projekt geöffnet ist."
+      "hint": "Fügen Sie sie in Claude Code, Codex, Cursor oder einen anderen Coding-Agenten ein, der in diesem Projekt geöffnet ist."
     },
     "capabilitiesTitle": "Integrierte Funktionen",
     "capabilitiesDescription": "Ihr Agent nutzt diese direkt, statt sie von Grund auf neu zu bauen. Öffnen Sie eine davon, um einen Prompt zu erhalten, den Sie bearbeiten und kopieren können.",

@@ -5,7 +5,7 @@
     "description": "Tarefas que o NocoReach realiza automaticamente. Você pode ajustar aqui o horário da análise diária.",
     "analysisTitle": "Análise diária",
     "analysisDescription": "Lê os dados mais recentes de todos os projetos e usa IA para gerar observações e sugestões sobre o período em Insights e Oportunidades. Se a análise do dia não for concluída, uma nova tentativa será feita automaticamente.",
-    "otherWork": "Sincronizações de dados, monitoramento de posições, tendências, atividades da concorrência e outras tarefas automáticas estão listadas por projeto em Integridade dos dados.",
+    "otherWork": "Sincronizações de dados, monitoramento de posições, tendências, atividades da concorrência e outras tarefas automáticas estão listadas por projeto em Saúde dos dados.",
     "otherWorkLink": "Abrir fontes de dados",
     "dailyAt": "Todos os dias às {{time}}",
     "last": "Última execução",
@@ -76,7 +76,7 @@
     "enabledNotice": "“{{name}}” está ativo.",
     "disabledNotice": "“{{name}}” está pausado.",
     "pagination": "Páginas de execuções automáticas",
-    "page": "Página {{page}} · {{total}} itens",
+    "page": "Página {{page}} · Total de itens: {{total}}",
     "previous": "Anterior",
     "next": "Próxima",
     "more": "Carregar mais",
@@ -156,8 +156,8 @@
   "inbox.empty.info": "Nenhuma notificação",
   "inbox.emptyDescription": "As notificações e solicitações enviadas a você aparecem aqui.",
   "inbox.unread": "Não lidas",
-  "inbox.unreadCount": "{{count}} não lidas",
-  "inbox.pendingDecisions": "{{count}} pendentes",
+  "inbox.unreadCount": "Não lidas: {{count}}",
+  "inbox.pendingDecisions": "Pendentes: {{count}}",
   "inbox.resolved": "Resolvido",
   "inbox.outcomes.approved": "Aprovado",
   "inbox.outcomes.rejected": "Rejeitado",
@@ -183,10 +183,10 @@
   "inbox.request.quickSend": "para enviar",
   "inbox.request.newLine": "para nova linha",
   "inboxButton.title": "Caixa de entrada",
-  "inboxButton.pending": "Caixa de entrada, {{count}} pendentes",
-  "inboxButton.unread": "Caixa de entrada, {{count}} não lidas",
-  "inboxButton.pendingHint": "{{count}} aguardando você; o número diminui à medida que forem tratados.",
-  "inboxButton.unreadHint": "{{count}} não lidas; o número diminui conforme você as lê.",
+  "inboxButton.pending": "Caixa de entrada; pendentes: {{count}}",
+  "inboxButton.unread": "Caixa de entrada; não lidas: {{count}}",
+  "inboxButton.pendingHint": "Itens que aguardam sua atenção: {{count}}. O número diminui à medida que você conclui o atendimento.",
+  "inboxButton.unreadHint": "Não lidas: {{count}}. O número diminui conforme você lê as notificações.",
   "auth.welcome": "Bem-vindo de volta",
   "auth.loginDescription": "Entre com seu nome de usuário ou e-mail e sua senha.",
   "auth.registerTitle": "Criar uma conta",
@@ -256,15 +256,15 @@
   },
   "home": {
     "platform": "NocoBase · Plataforma de aplicativos nativa de IA",
-    "title": "Descreva, e o seu Agent constrói",
-    "description": "Este aplicativo é desenvolvido conversando com o seu Coding Agent. Diga em palavras simples o que o negócio precisa, e ele escreve as páginas, os modelos de dados, as APIs e os processos de negócio neste projeto.",
+    "title": "Descreva e o seu agente constrói",
+    "description": "Este aplicativo é desenvolvido conversando com o seu agente de programação. Diga em palavras simples o que o negócio precisa, e ele escreve as páginas, os modelos de dados, as APIs e os processos de negócio neste projeto.",
     "steps": {
       "describe": {
         "title": "Descreva a necessidade",
         "description": "Diga quem vai usar, quais dados serão guardados e o que deve acontecer."
       },
       "build": {
-        "title": "Deixe o Agent construir",
+        "title": "Deixe o agente construir",
         "description": "Ele lê este projeto e os recursos integrados, e então escreve o código."
       },
       "review": {
@@ -275,10 +275,10 @@
     "example": {
       "title": "Experimente um pedido como este",
       "text": "Crie um aplicativo de pedidos de compra.\n\nUm pedido tem número, item, solicitante, valor e status de aprovação. Os solicitantes criam pedidos e veem apenas os seus; os revisores veem todos os pedidos pendentes e os aprovam ou rejeitam.\nApós a decisão, notifique o solicitante na caixa de entrada com um link para o pedido.",
-      "hint": "Cole no Claude Code, Codex, Cursor ou em qualquer Coding Agent aberto neste projeto."
+      "hint": "Cole no Claude Code, Codex, Cursor ou em qualquer agente de programação aberto neste projeto."
     },
     "capabilitiesTitle": "Recursos integrados",
-    "capabilitiesDescription": "O seu Agent usa estes recursos diretamente, em vez de construí-los do zero. Abra um para obter um prompt que você pode editar e copiar.",
+    "capabilitiesDescription": "O seu agente usa estes recursos diretamente, em vez de construí-los do zero. Abra um para obter um prompt que você pode editar e copiar.",
     "viewPrompts": "Ver prompts ({{count}})",
     "prompt": {
       "label": "Prompt",
@@ -502,7 +502,7 @@
     "hideColumn": "Ocultar",
     "view": "Exibir",
     "toggleColumns": "Alternar colunas",
-    "selectedCount": "{{selected}} de {{total}} linha(s) selecionada(s).",
+    "selectedCount": "Linhas selecionadas: {{selected}} de um total de {{total}}.",
     "rowsPerPage": "Linhas por página",
     "pageOf": "Página {{page}} de {{pageCount}}",
     "firstPage": "Ir para a primeira página",
@@ -589,7 +589,7 @@
       "steps": "Etapas realizadas",
       "plans_one": "Propôs um plano para você confirmar.",
       "plans_other": "Propôs {{count}} planos para você confirmar.",
-      "usage": "Usou {{input}} tokens de entrada e {{output}} tokens de saída.",
+      "usage": "Tokens usados: entrada: {{input}}; saída: {{output}}.",
       "state": {
         "running": "Respondendo…",
         "completed": "Respondido",
@@ -620,7 +620,7 @@
       "placeholder": "Faça uma pergunta ou descreva o trabalho que deseja organizar…",
       "hint": "Enter para enviar, Shift+Enter para uma nova linha",
       "runningHint": "As mensagens enviadas agora serão incorporadas ao trabalho em andamento",
-      "tooLong": "No máximo {{max}} caracteres.",
+      "tooLong": "Limite de caracteres: {{max}}.",
       "send": "Enviar",
       "stop": "Parar",
       "stopping": "Parando…"
@@ -635,7 +635,7 @@
       "uploading": "Enviando arquivo…",
       "tooLarge": "Maior que {{max}}",
       "failed": "Não foi possível enviar o arquivo",
-      "tooMany": "No máximo {{max}} arquivos por mensagem.",
+      "tooMany": "Limite de arquivos por mensagem: {{max}}.",
       "blocked": "Remova os arquivos que não puderam ser carregados para enviar a mensagem.",
       "waiting": "A mensagem será enviada assim que os arquivos terminarem de carregar…",
       "drop": "Solte os arquivos para anexá-los",
@@ -700,8 +700,8 @@
       "expand": "Mostrar tudo",
       "truncated": "Conteúdo truncado: o texto completo era longo demais para ser mantido.",
       "events": "Registro da execução",
-      "inputDelivered": "{{count}} entrada(s) entregue(s) ao agente",
-      "tokens": "{{input}} tokens de entrada, {{output}} de saída",
+      "inputDelivered": "Entradas entregues ao agente: {{count}}",
+      "tokens": "Tokens de entrada: {{input}}; de saída: {{output}}",
       "kinds": {
         "text": "Agente",
         "thinking": "Raciocínio",

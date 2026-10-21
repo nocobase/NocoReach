@@ -69,7 +69,7 @@
       "discovery": {
         "selectAll": "Alle Ergebnisse auswählen",
         "selectFirst": "Die ersten {{limit}} Ergebnisse auswählen",
-        "selectionCount": "{{count}} / {{limit}} Gruppen ausgewählt",
+        "selectionCount": "Ausgewählte Gruppen: {{count}} / {{limit}}",
         "clearSelection": "Auswahl aufheben",
         "new": "Neu erkannt ({{count}})",
         "ignored": "Ignoriert ({{count}})",
@@ -1422,7 +1422,7 @@
     "pagination": {
       "label": "Seitennavigation",
       "page": "Seite {{page}} · {{pageSize}} pro Seite",
-      "total": "{{count}} Datensätze",
+      "total": "Anzahl der Datensätze: {{count}}",
       "pageSize": "Zeilen pro Seite",
       "perPage": "{{count}} pro Seite",
       "selectPage": "Seite {{page}}",
@@ -1436,7 +1436,7 @@
     "nav": {
       "myAccounts": "Meine Postfächer",
       "mail": "E-Mail",
-      "unread": "{{count}} ungelesene Nachrichten",
+      "unread": "Ungelesene Nachrichten: {{count}}",
       "syncLogs": "Synchronisierungsprotokolle",
       "sendLogs": "Versandprotokolle",
       "devAccounts": "E-Mail-Konten",
@@ -1523,9 +1523,9 @@
       "noAccounts": "Verbinden Sie auf der Seite E-Mail-Konten ein E-Mail-Konto, um synchronisierte Nachrichten anzuzeigen.",
       "empty": "Keine Nachrichten entsprechen dieser Postfachansicht.",
       "selectMessage": "Wählen Sie eine Nachricht aus, um sie zu lesen.",
-      "conversation": "{{count}} Nachrichten in dieser Unterhaltung",
+      "conversation": "Nachrichten in dieser Unterhaltung: {{count}}",
       "subjectCount": "{{count}} Nachrichten in dieser Unterhaltung",
-      "attachmentCount": "{{count}} Anhänge",
+      "attachmentCount": "Anhänge: {{count}}",
       "unknownSender": "Unbekannter Absender",
       "noSubject": "(kein Betreff)",
       "loadMore": "Mehr laden",
@@ -1611,7 +1611,7 @@
         "title": "Der Entwurf auf dem Server wurde während Ihrer Bearbeitung geändert.",
         "remoteSummary": "Serverversion: {{subject}}",
         "viewRemote": "Serverversion anzeigen",
-        "attachments": "{{count}} Anhänge auf dem Server",
+        "attachments": "Anhänge auf dem Server: {{count}}",
         "useRemote": "Lokale Änderungen verwerfen und Serverversion verwenden"
       },
       "unsavedChangesConfirm": "Diese Nachricht enthält ungespeicherte Änderungen. Trotzdem schließen?",
@@ -1735,7 +1735,7 @@
       "accounts": {
         "emptyTitle": "Keine Konten verbunden",
         "sync": "Synchronisieren",
-        "syncProgress": "{{messages}} Nachrichten in {{pages}} Stapeln",
+        "syncProgress": "Nachrichten: {{messages}} · Stapel: {{pages}}",
         "deactivate": "Deaktivieren",
         "deactivateTitle": "E-Mail-Konto deaktivieren?",
         "deactivateDescription": "Dieses Konto synchronisiert und sendet keine E-Mails mehr und wird in der E-Mail-Zentrale ausgeblendet. Synchronisierte E-Mails bleiben in der E-Mail-Verwaltung verfügbar. Sie können das Konto später wieder aktivieren.",

@@ -10,7 +10,7 @@
           "actions": {
             "edit": {
               "title": "修改 Agent 和技能",
-              "description": "修改 Agent 的設定、技能和環境變數，歸檔、恢復和刪除 Agent，編輯技能。授予 Agent 的能力不能超出自己的權限",
+              "description": "修改 Agent 的設定、技能和環境變數，封存、恢復和刪除 Agent，編輯技能。授予 Agent 的能力不能超出編輯者本身的權限",
               "related": "修改 Agent 和技能（自己負責的 Agent 和自己建立的技能）",
               "relatedLabel": "我負責的 Agent 和我建立的技能",
               "relatedHint": "我是負責人的 Agent，以及我建立的技能",
@@ -91,8 +91,8 @@
         "allRecords": "全部記錄",
         "recordsIOwn": "本人擁有的記錄",
         "recordsICreated": "本人建立的記錄",
-        "customFilter": "自定義篩選",
-        "customFilterHint": "使用自定義篩選條件選擇記錄。"
+        "customFilter": "自訂篩選",
+        "customFilterHint": "使用自訂篩選條件選擇記錄。"
       }
     }
   },
@@ -109,9 +109,9 @@
     "errors": {
       "logsForbidden": "需要通知記錄存取權限。",
       "logNotFound": "未找到通知記錄。",
-      "testHeaderRequired": "缺少通知測試請求頭。",
+      "testHeaderRequired": "缺少通知測試的請求標頭。",
       "testForbidden": "需要傳送通知測試的權限。",
-      "testInvalidRequest": "請求體必須包含測試目標和欄位值。",
+      "testInvalidRequest": "請求本文必須包含測試目標和欄位值。",
       "testTargetUnavailable": "通知測試目標不可用。",
       "testUnknownField": "未知的通知測試欄位「{{name}}」。",
       "testRequiredField": "通知測試欄位「{{name}}」為必填項。",
@@ -141,11 +141,11 @@
         "message": "訊息"
       },
       "placeholders": {
-        "currentUser": "應用使用者 ID"
+        "currentUser": "應用程式使用者 ID"
       },
       "defaults": {
         "title": "NocoBase 通知測試",
-        "body": "這是一條來自 NocoBase 的測試通知。"
+        "body": "這是一則來自 NocoBase 的測試通知。"
       }
     }
   },
@@ -162,8 +162,8 @@
         "dingtalkWebhook": "釘釘 Webhook"
       },
       "fields": {
-        "subject": "郵件主題",
-        "text": "文字正文",
+        "subject": "郵件主旨",
+        "text": "文字內文",
         "html": "HTML",
         "url": "完整 HTTP(S) URL",
         "recipient": "收件人",
@@ -175,7 +175,7 @@
       },
       "defaults": {
         "title": "NocoBase 通知測試",
-        "body": "這是一條來自 NocoBase 的測試通知。"
+        "body": "這是一則來自 NocoBase 的測試通知。"
       }
     }
   },
@@ -184,7 +184,7 @@
       "automation": "自動化"
     },
     "authorization": {
-      "title": "定時任務",
+      "title": "排程任務",
       "read": "檢視"
     }
   },
@@ -204,7 +204,7 @@
       "accessDenied": "需要郵件存取權限。",
       "idempotencyConflict": "該冪等鍵已關聯到另一個請求。",
       "invalidRequest": "郵件請求無效。",
-      "accountCredentialsInvalid": "郵箱認證失敗。請檢查登入名和密碼或授權碼，並確認已開啟 IMAP/SMTP。Gmail 等郵箱可能需要使用應用專用密碼。",
+      "accountCredentialsInvalid": "信箱認證失敗。請檢查登入名和密碼或授權碼，並確認已開啟 IMAP/SMTP。Gmail 等信箱可能需要使用應用程式專用密碼。",
       "requestFailed": "無法完成郵件請求。",
       "providerRateLimited": "郵件服務請求過於頻繁，請稍後再試一次。",
       "providerUnavailable": "無法連線郵件服務，請稍後再試一次。",
