@@ -1,18 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApiClient } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
-import { Link, useLocation, useNavigate } from 'react-router';
+import { MoreHorizontal } from 'lucide-react';
 import { Button } from '#components/ui/button';
-import { Input } from '#components/ui/input';
-import { Label } from '#components/ui/label';
 import { toast } from '#components/ui/toast';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '#components/ui/dropdown-menu';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from '#components/ui/dialog';
 import {
   AlertDialog,
@@ -23,11 +27,16 @@ import {
   AlertDialogFooter,
   AlertDialogCancel,
 } from '#components/ui/alert-dialog';
-import { errorKind, type Schedule } from './data.js';
-import { Failure } from './shared.js';
-import { TimezoneSelect } from './timezone-select.js';
+import { ANALYSIS_SCHEDULE, errorKind, type Schedule } from './data.js';
+import { useScheduleFormatting } from './format.js';
+import { Failure, Field, StateBadge } from './shared.js';
 
-export function ScheduleActions({
+/**
+ * The card's "…" menu: run now (daily analysis only), pause or turn on, and the technical details the Scheduler
+ * plugin reports. Pausing asks first; turning on does not. Each dialog keeps a failed request open with its reason,
+ * and a request that lost access or found the task gone closes it and refreshes the list instead.
+ */
+export function ScheduleMenu({
   schedule,
   changed,
   invalidated,
@@ -38,192 +47,120 @@ export function ScheduleActions({
 }) {
   const { t } = useTranslation();
   const api = useApiClient();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const edit = location.pathname.endsWith('/edit');
-  const base = `/schedules/${encodeURIComponent(schedule.id)}`;
-  const [confirm, setConfirm] = useState(false);
-  const [time, setTime] = useState(() => {
-    const [minute, hour] = schedule.cron.split(' ');
-    return `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
-  });
+  const format = useScheduleFormatting();
+  const [open, setOpen] = useState<'run' | 'disable' | 'details' | null>(null);
   const [busy, setBusy] = useState(false);
-  const [timezone, setTimezone] = useState(schedule.timezone);
   const [error, setError] = useState<unknown>();
-  const [invalid, setInvalid] = useState(false);
-  const pendingRef = useRef(false);
   const aliveRef = useRef(false);
-  // Keep an uncertain request's identity even when its confirmation is closed.
+  const pendingRef = useRef(false);
+  // A manual run that may have reached the server keeps its id, so trying again cannot start a second run.
   const requestIdRef = useRef<string | undefined>(undefined);
-  const timeInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     aliveRef.current = true;
     return () => {
       aliveRef.current = false;
     };
   }, []);
-  function resetTiming() {
-    const [minute, hour] = schedule.cron.split(' ');
-    setTime(`${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`);
-    setTimezone(schedule.timezone);
-    setInvalid(false);
-    setError(undefined);
-  }
-  function closeEdit() {
-    resetTiming();
-    void navigate(`${base}${location.search}`, { replace: true });
-  }
-  async function submit(action: 'timing' | 'trigger') {
+  const active = schedule.lifecycleState === 'active';
+  const runnable =
+    schedule.key === ANALYSIS_SCHEDULE &&
+    active &&
+    schedule.targetState === 'ready';
+  async function request(action: 'enable' | 'disable' | 'trigger') {
     if (pendingRef.current) return;
-    if (action === 'timing' && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) {
-      setInvalid(true);
-      timeInputRef.current?.focus();
-      return;
-    }
     pendingRef.current = true;
     setBusy(true);
     setError(undefined);
     try {
-      if (action === 'trigger') requestIdRef.current ??= newRequestId();
+      if (action === 'trigger') {
+        requestIdRef.current ??= newRequestId();
+        await api.request({
+          method: 'POST',
+          path: `nocoreach/schedules/${encodeURIComponent(schedule.id)}/trigger`,
+          json: { requestId: requestIdRef.current },
+        });
+        if (!aliveRef.current) return;
+        requestIdRef.current = undefined;
+        toast.add({ type: 'success', title: t('schedules.triggered') });
+        setOpen(null);
+        changed();
+        return;
+      }
       const response = await api.request<{ data: Schedule }>({
-        method: action === 'timing' ? 'PUT' : 'POST',
-        path: `nocoreach/schedules/${encodeURIComponent(schedule.id)}/${action}`,
-        json:
-          action === 'timing'
-            ? { time, timezone }
-            : { requestId: requestIdRef.current },
+        method: 'POST',
+        path: `scheduler/schedules/${encodeURIComponent(schedule.id)}/${action}`,
       });
       if (!aliveRef.current) return;
       toast.add({
         type: 'success',
         title: t(
-          action === 'timing' ? 'schedules.timeSaved' : 'schedules.triggered',
+          response.data.enabled
+            ? 'schedules.enabledNotice'
+            : 'schedules.disabledNotice',
+          { name: format.name(response.data) },
         ),
       });
-      if (action === 'trigger') {
-        requestIdRef.current = undefined;
-        setConfirm(false);
-      }
-      changed(action === 'timing' ? response.data : undefined);
-      if (action === 'timing') closeEdit();
+      setOpen(null);
+      changed(response.data);
     } catch (failure) {
       if (!aliveRef.current) return;
+      const kind = errorKind(failure);
       setError(failure);
-      if (errorKind(failure) !== 'failed') {
-        setConfirm(false);
-        if (edit) closeEdit();
+      if (kind !== 'failed') {
+        setOpen(null);
         invalidated();
-        toast.add({
-          type: 'error',
-          title: t(`schedules.${errorKind(failure)}`),
-        });
       }
+      // Turning on has no dialog to hold the reason.
+      if (kind !== 'failed' || action === 'enable')
+        toast.add({ type: 'error', title: t(`schedules.${kind}`) });
     } finally {
       pendingRef.current = false;
       if (aliveRef.current) setBusy(false);
     }
   }
-  const unavailable =
-    busy ||
-    schedule.lifecycleState !== 'active' ||
-    Boolean(error && errorKind(error) !== 'failed');
+  const show = (dialog: 'run' | 'disable' | 'details') => {
+    setError(undefined);
+    setOpen(dialog);
+  };
+  const keep = (next: boolean) => {
+    if (!next && !pendingRef.current) setOpen(null);
+  };
   return (
     <>
-      <Button
-        variant='outline'
-        disabled={unavailable}
-        onClick={resetTiming}
-        render={<Link to={`${base}/edit${location.search}`} />}
-      >
-        {t('schedules.editTime')}
-      </Button>
-      <Button
-        variant='outline'
-        disabled={unavailable || schedule.targetState !== 'ready'}
-        onClick={() => {
-          setError(undefined);
-          setConfirm(true);
-        }}
-      >
-        {t('schedules.runNow')}
-      </Button>
-      <Dialog
-        open={edit}
-        onOpenChange={(open) => {
-          if (!open && !pendingRef.current) closeEdit();
-        }}
-      >
-        <DialogContent showCloseButton={!busy} initialFocus={timeInputRef}>
-          <DialogHeader>
-            <DialogTitle>{t('schedules.editTime')}</DialogTitle>
-            <DialogDescription>
-              {t('schedules.timeHelp', { timezone })}
-            </DialogDescription>
-          </DialogHeader>
-          <form
-            className='flex flex-col gap-4'
-            onSubmit={(event) => {
-              event.preventDefault();
-              void submit('timing');
-            }}
-          >
-            <div className='flex flex-col gap-2'>
-              <Label htmlFor='schedule-time'>{t('schedules.dailyTime')}</Label>
-              <Input
-                ref={timeInputRef}
-                id='schedule-time'
-                type='time'
-                aria-required='true'
-                value={time}
-                disabled={busy}
-                aria-invalid={invalid}
-                aria-describedby={invalid ? 'schedule-time-error' : undefined}
-                onChange={(event) => {
-                  setTime(event.target.value);
-                  setInvalid(false);
-                }}
-              />
-              {invalid ? (
-                <p
-                  id='schedule-time-error'
-                  role='alert'
-                  className='text-sm text-destructive'
-                >
-                  {t('schedules.invalidTime')}
-                </p>
-              ) : null}
-            </div>
-            <TimezoneSelect
-              value={timezone}
-              onChange={setTimezone}
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant='outline'
+              size='icon'
+              aria-label={t('schedules.moreActions')}
               disabled={busy}
             />
-            <p className='text-sm text-muted-foreground'>
-              {t('schedules.dstHelp')}
-            </p>
-            {error ? <Failure error={error} /> : null}
-            <DialogFooter>
-              <Button
-                type='button'
-                variant='outline'
-                disabled={busy}
-                onClick={closeEdit}
-              >
-                {t('schedules.cancel')}
-              </Button>
-              <Button type='submit' disabled={busy}>
-                {t(busy ? 'schedules.saving' : 'schedules.saveTime')}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-      <AlertDialog
-        open={confirm}
-        onOpenChange={(open) => {
-          if (!pendingRef.current) setConfirm(open);
-        }}
-      >
+          }
+        >
+          <MoreHorizontal />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align='end' className='min-w-40'>
+          {schedule.key === ANALYSIS_SCHEDULE ? (
+            <DropdownMenuItem disabled={!runnable} onClick={() => show('run')}>
+              {t('schedules.runNow')}
+            </DropdownMenuItem>
+          ) : null}
+          <DropdownMenuItem
+            disabled={!active}
+            onClick={() =>
+              schedule.enabled ? show('disable') : void request('enable')
+            }
+          >
+            {t(schedule.enabled ? 'schedules.disable' : 'schedules.enable')}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => show('details')}>
+            {t('schedules.details')}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <AlertDialog open={open === 'run'} onOpenChange={keep}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('schedules.runNow')}</AlertDialogTitle>
@@ -236,13 +173,94 @@ export function ScheduleActions({
             <AlertDialogCancel disabled={busy}>
               {t('schedules.cancel')}
             </AlertDialogCancel>
-            <Button disabled={busy} onClick={() => void submit('trigger')}>
+            <Button disabled={busy} onClick={() => void request('trigger')}>
               {t(busy ? 'schedules.submitting' : 'schedules.confirmRun')}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <AlertDialog open={open === 'disable'} onOpenChange={keep}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('schedules.disableTitle', { name: format.name(schedule) })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('schedules.disableHelp')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {error ? <Failure error={error} /> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>
+              {t('schedules.cancel')}
+            </AlertDialogCancel>
+            <Button
+              variant='destructive'
+              disabled={busy}
+              onClick={() => void request('disable')}
+            >
+              {t(busy ? 'schedules.saving' : 'schedules.disable')}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <Dialog open={open === 'details'} onOpenChange={keep}>
+        <DialogContent className='sm:max-w-2xl'>
+          <DialogHeader>
+            <DialogTitle>{t('schedules.details')}</DialogTitle>
+            <DialogDescription>{t('schedules.detailsHelp')}</DialogDescription>
+          </DialogHeader>
+          <TechnicalDetails schedule={schedule} />
+        </DialogContent>
+      </Dialog>
     </>
+  );
+}
+
+function TechnicalDetails({ schedule }: { schedule: Schedule }) {
+  const { t } = useTranslation();
+  const format = useScheduleFormatting();
+  return (
+    <div className='flex flex-col gap-4'>
+      <dl className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
+        <Field label={t('schedules.plan')}>
+          {format.cron(schedule.cron)}
+          <div className='font-mono text-xs text-muted-foreground'>
+            {schedule.cron}
+          </div>
+        </Field>
+        <Field label={t('schedules.timezone')}>{schedule.timezone}</Field>
+        <Field label={t('schedules.scheduleKey')}>
+          <span className='font-mono text-xs'>{schedule.key}</span>
+        </Field>
+        <Field label={t('schedules.scheduling')}>
+          <StateBadge value={schedule.scheduleStatus} />
+        </Field>
+        <Field label={t('schedules.lifecycle')}>
+          <StateBadge value={schedule.lifecycleState} />
+        </Field>
+        <Field label={t('schedules.target')}>
+          <StateBadge value={schedule.targetState} />
+        </Field>
+        <Field label={t('schedules.lastRun')}>
+          {format.date(schedule.lastRunAt)}
+        </Field>
+        <Field label={t('schedules.nextRun')}>
+          {format.date(schedule.nextRunAt)}
+        </Field>
+        <Field label={t('schedules.runCount')}>
+          {format.number(schedule.runCount)}
+        </Field>
+        <Field label={t('schedules.completedCount')}>
+          {format.number(schedule.completedCount)}
+        </Field>
+      </dl>
+      {schedule.key === ANALYSIS_SCHEDULE ? (
+        <p className='text-sm text-muted-foreground'>
+          {t('schedules.dstHelp')}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
