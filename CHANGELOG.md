@@ -11,11 +11,27 @@
 - Questions asked with Ask AI at the bottom of Insights show after the day's message, as your question and the AI answer, while it is being answered too. Earlier days count their questions ("2 questions") and show them when opened, including days that raised no opportunity.
 - Only your own conversations show; they are read from the chat's records, which now note the analysis day and opportunity a conversation was asked from (`subject`), through `GET /onlineAgents/threads`. Continue asking with an unsent draft in the chat asks before discarding it.
 
+## Unreleased — Search & market pages, fixed and in plain words
+
+- Search performance › Sitemaps names each sitemap with its host: a domain property lists every subdomain's sitemap, all called /sitemap.xml, and the rows could not be told apart.
+- Search performance › Performance shows whether the range is complete as a tag, with the record and save dates in its ⓘ and only what needs doing as text, instead of a block of sync details above the figures. The query, page and breakdown details load with the page instead of behind a button, and search appearances Search Console names `FORUMS` and `TPF_QA` are translated.
+- Indexing and Sitemaps describe themselves in full sentences; the daily quota, the Search Console property and the details' scope move into the ⓘ; the reason column stays empty for indexed pages, whose status already says so.
+- Keywords › Saved shows only a market in the Market column (AI suggestions is a source, not a market), its page columns are narrower so the table fits at 1440 px, and Competitors uses the same Taiwan market name as Keywords.
+- Competitors › Activity says a read error shared by several competitors once, above the cards, with a way to Settings › Network when it is about reaching a site, and decodes character references such as `&#x27;` in page titles and descriptions (pages read before are decoded on display). Overview hides the AI share column until a brand check has measured one and cuts long recent activity with an ellipsis.
+- Trends keeps the comparison notes in the ⓘ beside Compare and gives related searches a heading with its instruction in an ⓘ. AI search writes "24 (100%)" and keeps billing and platform notes in ⓘ.
+- Keywords, Trends, Competitors and AI search describe themselves in one sentence without colloquial or billing asides.
+
 ## Unreleased — Ask AI reads the daily analysis
 
 - The online assistant can read the daily analysis behind Insights through a new read-only `daily_analysis` tool: a day's notes and limitations, the opportunities it raised with where each stands now (awaiting decision, handed off to agent with its task, dismissed, expired), its verdict on every change (do, watch, skip) with the reason, the opportunities awaiting a decision now, and the watches still open or ended. It reads the latest analysis or any earlier day, checks on every call that the conversation owner may still see Insights, and links opportunities to Opportunities. Asked about "the daily analysis of 10/21", it used to search the tasks and find nothing.
 - The metrics it reads (`project_data`, metrics) now include totals: each key metric of the last 28 days with the 28 days before and the change, as the Insights tiles show them, with the daily series. The snapshot of keywords, pages and audit issues had no previous period to compare with.
 - Opportunity links in chat answers open inside the application, like task links.
+
+## Unreleased — Tasks by Agent
+
+- Tasks gains a By agent view next to List and Board, after Studio's Agent view: a column per Agent the project runs tasks with (the project default first), then Unassigned. Each column says whether the Agent is running, queued, waiting or idle, and when no runtime is online; inside it are Working on, Up next (numbered, oldest first) and Waiting, where each card says what a person has to do (Confirm start, the review step, Confirm publish, confirm going live, Run failed) and who: "You" on a highlighted card listed first, otherwise the owner's name. Finished and closed tasks are left out.
+- Cards on the board and the Executor column of the list name the task's Agent (its own, else the project default, as the task page header shows it) with an online dot, or Unassigned, instead of a bare "Agent". A new Any agent filter narrows every view.
+- A line above the tasks counts runs under way, queued and failed, and the runtimes online. What waits for you stays counted on Waiting for me.
 
 ## Unreleased — Website & product pages, fixed and in plain words
 

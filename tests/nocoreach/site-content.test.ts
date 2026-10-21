@@ -28,6 +28,10 @@ test('discover follows robots and sitemap index, drops foreign URLs, and fails c
  await assert.rejects(new SiteContent({},async()=>{throw new Error('404');}).discover('https://ex.com'),e=>e.status===422&&/sitemap/.test(e.message));
  await assert.rejects(new SiteContent({},read).discover('http://ex.com'),e=>e.status===400);
 });
+test('page metadata decodes numeric character references',()=>{
+ const m=pageMeta('<title>It&#x27;s new</title><meta name="description" content="What&#x27;s on by default &#39;now&#39; &amp; later"><body></body>','https://ex.com/');
+ assert.equal(m.title,"It's new");assert.equal(m.description,"What's on by default 'now' & later");
+});
 test('page metadata counts words and internal links only',()=>{
  const m=pageMeta('<title>Install &amp; run</title><meta name="description" content="Fast start"><body><p>安装 NocoBase in 5 minutes</p><a href="/docs/a">a</a><a href="https://ex.com/b">b</a><a href="https://other.com/c">c</a><a href="#top">t</a></body>','https://ex.com/docs/install');
  assert.equal(m.title,'Install & run');assert.equal(m.description,'Fast start');assert.equal(m.internalLinks,2);assert.ok(m.words>=5);
