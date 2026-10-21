@@ -60,7 +60,7 @@ export default function DataX() {
   );
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title="X" description={$t('dataX.postsXMentioningProductChecked')} actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t('common.searching') : $t('common.searchNow')}</Button> : undefined} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title="X" description={$t('dataX.postsXMentioningProductChecked')} actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t('common.searching') : $t('common.updateNow')}</Button> : undefined} />
       <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:formatDate(w.start),1:formatDate(w.end)}) : $t('common.comparedPreviousDays',{0:formatDate(w.start),1:formatDate(w.end),2:w.days})) : undefined} />
       {error ? <LoadError title={$t('dataX.notLoadXMentions')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}

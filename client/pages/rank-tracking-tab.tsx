@@ -129,7 +129,7 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
     <>
       <Card className="gap-0 py-0">
         <DataTable table={table} empty={{ title: $t('rankTracking.noTrackedKeywordsYet') }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,[role=checkbox],a")) return; openKeyword(row.original.keyword, row.original); }}
-          toolbar={<DataTableToolbar actions={<Button variant="outline" size="sm" disabled={busy} onClick={() => void checkNow()}><RefreshCw data-icon="inline-start" className={busy ? "animate-spin" : ""} />{busy ? $t('common.checking') : $t('common.checkNow')}</Button>}>
+          toolbar={<DataTableToolbar actions={<Button variant="outline" size="sm" disabled={busy} onClick={() => void checkNow()}><RefreshCw data-icon="inline-start" className={busy ? "animate-spin" : ""} />{busy ? $t('common.checking') : $t('common.updateNow')}</Button>}>
             <span className="text-xs text-muted-foreground">{$tj('rankTracking.checkedWeeklyGoogleDesktopTop',{0:status.keywords.length,1:status.lastRun ? $t('rankTracking.last',{0:day(status.lastRun.at)}) : ""})}<InfoTip label={$t('rankTracking.howRankTrackingWorks')} className="ml-1">{$t('rankTracking.checkNowReusesResultLast')}</InfoTip></span>
           </DataTableToolbar>} />
       </Card>

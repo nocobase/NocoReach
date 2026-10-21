@@ -134,8 +134,8 @@ export default function ContentPage() {
           <Card className="gap-0 py-0">
             <DataTableTabs value={type} onValueChange={(v) => choose({ type: v })}>
               <TabsTrigger value="all">{$tj('common.allCount',{0:counts.all})}</TabsTrigger>
-              {types.map((t) => <TabsTrigger key={t} value={t}>{getTypeLabels()[t] || t} ({counts.by[t] || 0})</TabsTrigger>)}
-              {counts.outside ? <TabsTrigger value={OUTSIDE}>{$t('contentIndex.outsideSitemapTab')} ({counts.outside})</TabsTrigger> : null}
+              {types.map((t) => <TabsTrigger key={t} value={t}>{getTypeLabels()[t] || t} {counts.by[t] || 0}</TabsTrigger>)}
+              {counts.outside ? <TabsTrigger value={OUTSIDE}>{$t('contentIndex.outsideSitemapTab')} {counts.outside}</TabsTrigger> : null}
             </DataTableTabs>
             <DataTableToolbar>
               <label className="relative flex items-center"><Search className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" /><Input aria-label={$t('common.searchPages')} className="h-8 w-64 pl-8" placeholder={$t('contentIndex.searchTitleUrl')} value={query} onChange={(e) => choose({ query: e.target.value })} /></label>

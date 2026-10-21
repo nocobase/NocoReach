@@ -155,7 +155,7 @@ it('lists Xiaohongshu notes of the period literally and searches with the curren
   ).toHaveTextContent('NocoBase1');
   expect(screen.getByText(/推算发布日：10-01/)).toBeVisible();
   expect(screen.getByText('期间发布')).toBeVisible();
-  await userEvent.click(screen.getByRole('button', { name: '立即搜索' }));
+  await userEvent.click(screen.getByRole('button', { name: '立即更新' }));
   await waitFor(() => expect(calls('search')).toHaveLength(1));
   expect(calls('search')[0][2]).toMatchObject({
     body: { projectId: 1, revision: 3 },
@@ -239,7 +239,7 @@ it('keeps saved Bilibili videos readable after disconnecting, without turning un
   ).toBeVisible();
   // A disconnected platform cannot collect.
   expect(
-    screen.queryByRole('button', { name: 'Read now' }),
+    screen.queryByRole('button', { name: 'Update now' }),
   ).not.toBeInTheDocument();
 });
 
@@ -301,7 +301,7 @@ it('shows YouTube provenance without captions, and offers reading only with the 
     ),
   );
   expect(
-    screen.queryByRole('button', { name: '立即读取' }),
+    screen.queryByRole('button', { name: '立即更新' }),
   ).not.toBeInTheDocument();
 });
 
@@ -338,7 +338,7 @@ it('asks the server for more records instead of slicing a full report', async ()
   }));
   show(DataXiaohongshu, '/data/xiaohongshu');
   expect(await screen.findByRole('link', { name: 'Note 19' })).toBeVisible();
-  expect(screen.getByText('笔记（25）')).toBeVisible();
+  expect(screen.getByText('笔记 25')).toBeVisible();
   expect(calls('report')[0][2]).toMatchObject({ body: { limit: 20 } });
   await userEvent.click(screen.getByRole('button', { name: '显示更多' }));
   expect(await screen.findByRole('link', { name: 'Note 24' })).toBeVisible();
@@ -415,7 +415,7 @@ it('reuses the report read today when the page opens again, and reads it again o
 
   expect(await visit()).toBeVisible();
   expect(calls('report')).toHaveLength(1);
-  await userEvent.click(screen.getByRole('button', { name: '立即读取' }));
+  await userEvent.click(screen.getByRole('button', { name: '立即更新' }));
   await waitFor(() => expect(calls('report')).toHaveLength(2));
 
   vi.setSystemTime(new Date(2026, 9, 19, 0, 1));

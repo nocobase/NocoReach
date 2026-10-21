@@ -1,11 +1,20 @@
 # NocoReach Changelog
 
+## Unreleased — One look for refresh buttons, drop-downs, tabs and pagination
+
+- The data pages call the action that reads new data "Update now" everywhere, instead of seven names (Read now, Search now, Check now, Query now, the competitor and Site audit wordings). The connection drawers keep their own steps.
+- A page's Refresh is the same outline icon button, last in the header: API keys moves it after Create key, Analysis rules uses it instead of a text button, and Settings › Automatic runs uses the header every other page uses, so the button lines up with the title instead of dropping below it.
+- The browser's own drop-downs on Competitors (market), Keywords › AI suggestions (market), GitHub › Hot (topic, language), Skills, Opportunities › Handled, Project knowledge (category, AI content language) and the knowledge forms are replaced by the application's drop-down. Tasks, Results and Playbooks follow with their own pages.
+- Members & roles, API keys and Agent use the same line tabs as the data pages instead of pill buttons, and tab counts follow the name without brackets ("All 658"), as on Opportunities.
+- Table footers disappear while every row fits on one page, and Members & roles and API keys use the same footer as the data tables when they do page.
+
 ## Unreleased — One way to write dates, numbers and changes
 
 - Dates read the same on every page: in Chinese "2026-10-21", without the year in the current year ("10-21"), and times without seconds or a time zone ("10-21 14:03"); in English "Oct 21", "Oct 21, 2025", "Oct 21, 2:03 PM". This replaces eight styles in use, among them "2026/10/21", "21/10/2026, 16:40:18" (Search performance), "2026/10/19 GMT+8 9:34:24" (Reddit) and "2027/1/16" (API keys). Date ranges use the same days.
 - Changes are written one way: an arrow, a space and the size ("↑ 12%", "↓ 9.8%"), one decimal under 10% and whole numbers above, green for good news and red for bad; differences in a column keep their sign with a true minus ("+253", "−2,578"). This replaces "▲ 9.8%", "▼86.4%", "↓23%", "-24%" and "+50.0%". Competitors no longer shows "+-7/week" for a fall in stars.
 - Shares keep one decimal ("7.0%") so a column lines up, durations read "2 min 37 s" or "1 h 14 min", and numbers are no longer shortened to "19K" or "65.3k" next to full ones.
 - Dates, numbers and changes come from `client/lib/format.ts` and the `Delta` component; the Insights, Data sources, Opportunities and Tasks pages, which other changes are reworking, follow later.
+
 ## Unreleased — Insights: Current situation beside the day, decisions kept
 
 - Current situation is back as a column beside the day's conversation, as before the redesign, with its explanation and Refresh. The Status link, its drawer and the All data menu are gone; each tile still opens its data page.

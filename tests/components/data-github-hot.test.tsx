@@ -256,13 +256,15 @@ describe('GitHub 热点', () => {
         x.getAttribute('data-gainer'),
       ),
     ).toEqual(['fresh/mcp-kit', 'mcp-org/server']);
-    await userEvent.selectOptions(
+    await userEvent.click(
       within(gainers).getByRole('combobox', { name: '话题' }),
-      'low-code',
+    );
+    await userEvent.click(
+      await screen.findByRole('option', { name: 'low-code' }),
     );
     expect(
       within(gainers).getByText(
-        '从 2026-10-07 起记录，今天的涨幅要记满天数后才有。',
+        /^从 (2026-)?10-07 起记录，今天的涨幅要记满天数后才有。$/,
       ),
     ).toBeTruthy();
     const trending = document.querySelector(
@@ -285,6 +287,6 @@ describe('GitHub 热点', () => {
     t = trends(null);
     renderPage();
     expect(await screen.findByText('还没有读取过 GitHub 热点')).toBeTruthy();
-    expect(screen.getByRole('button', { name: '立即读取' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '立即更新' })).toBeTruthy();
   });
 });

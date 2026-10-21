@@ -26,6 +26,7 @@ import { help } from "./glossary";
 import { CompetitorWatchTab } from "./competitor-watch";
 import { formatCount, formatDate, formatSigned } from '#lib/format';
 import { Delta } from '#components/reach/delta';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#components/ui/select';
 
 type Gap = { keyword: string; volume: number | null; difficulty: number | null; intent: string | null; position: number | null; url: string | null; traffic: number | null };
 type Row = { id: string; name: string; domain: string | null; own: boolean; searched: boolean; checkedAt: string | null; errors: string[]; traffic: number | null; trafficChange: number | null; keywords: number | null; top10: number | null; months: { date: string; etv: number | null; count: number | null }[]; interest: number | null; interestChange: number | null; stars: number | null; starsWeek: number | null; aiShare: number | null; pages30: number; release: string | null; gap: Gap[]; topPages: { url: string; traffic: number | null; keywords: number | null }[]; events: { type: string; title: string; url: string; at: string }[] };
@@ -84,9 +85,10 @@ export function CompetitorOverview({ projectId, onManage }: { projectId: number;
           <NotesTip notes={view.notes} label={$t('competitorOverview.whereOverviewDataComes')} side="bottom" />
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          {view.dataforseo ? <select aria-label={$t('competitorOverview.searchDataMarket')} className="h-8 rounded-md border bg-background px-2 text-sm" value={`${view.market.locationCode}|${view.market.language}`} disabled={view.refreshing} onChange={(e) => void changeMarket(e.target.value)}>
-            {view.markets.map((m) => <option key={`${m.locationCode}|${m.language}`} value={`${m.locationCode}|${m.language}`}>{$t(m.label)}</option>)}
-          </select> : null}
+          {view.dataforseo ? <Select value={`${view.market.locationCode}|${view.market.language}`} disabled={view.refreshing} onValueChange={(v) => void changeMarket(String(v))}>
+            <SelectTrigger size="sm" className="w-full sm:w-40" aria-label={$t('competitorOverview.searchDataMarket')}><SelectValue>{(v: string) => $t(view.markets.find((m) => `${m.locationCode}|${m.language}` === v)?.label ?? "")}</SelectValue></SelectTrigger>
+            <SelectContent align="end" className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{view.markets.map((m) => <SelectItem key={`${m.locationCode}|${m.language}`} value={`${m.locationCode}|${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
+          </Select> : null}
           <Button size="sm" variant="outline" onClick={onManage}>{$t('competitorOverview.addRemoveCompetitors')}</Button>
         </div>
       </div>

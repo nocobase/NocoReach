@@ -176,7 +176,7 @@ export default function DataBilibili() {
               onClick={() => void sync()}
             >
               <RefreshCw data-icon='inline-start' />
-              {running ? $t('common.loadingLoading') : $t('common.readNow')}
+              {running ? $t('common.loadingLoading') : $t('common.updateNow')}
             </Button>
           ) : undefined
         }

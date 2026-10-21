@@ -1076,7 +1076,7 @@ function RelatedSection({
         <TabsList variant='line' className='h-auto! flex-wrap justify-start'>
           {tabs.map((t) => (
             <TabsTrigger key={t.key} value={t.key}>
-              {t.label} ({t.count})
+              {t.label} {t.count}
             </TabsTrigger>
           ))}
         </TabsList>

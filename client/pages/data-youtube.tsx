@@ -168,7 +168,7 @@ export default function DataYouTube() {
               onClick={() => void sync()}
             >
               <RefreshCw data-icon='inline-start' />
-              {running ? $t('youtube.reading') : $t('common.readNow')}
+              {running ? $t('youtube.reading') : $t('common.updateNow')}
             </Button>
           ) : undefined
         }
