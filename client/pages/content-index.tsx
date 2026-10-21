@@ -1,5 +1,5 @@
 import { googleLocalFreshness } from '../../shared/google-cache.js';
-import { getCurrentLocale, $t, $tj } from "#i18n";
+import { $t, $tj } from "#i18n";
 // 页面 (网站与产品): every page 网站内容 lists, with visits and search for the chosen period and the tasks working on it;
 // a row opens its details (chart, tasks, 交给 Agent). Same table, tabs and toolbar as the other data pages (2026-10-04).
 import { useMemo, useState } from "react";
@@ -25,6 +25,7 @@ import { RangePicker } from './range-picker';
 import { validRange, useRange, getRanges, defaultRanges } from './range-state';
 import { ContentDetail, activeTasks, tasksForPage, type ContentTask } from "./content-detail";
 import "./data-views.css";
+import { formatChange, formatCount, formatDate, formatSigned } from '#lib/format';
 export type ContentEntry = { id: string; title: string; url: string; repository: string; paths: string[]; revision: number };
 
 type SitePage = { url: string; type: string; outsideSitemap?: boolean; lastmod?: string | null; title?: string; words?: number; internalLinks?: number; fetchError?: string; views: number | null; clicks: number | null; impressions: number | null; previousViews?: number | null; previousClicks?: number | null; ga4Untracked?: boolean };
@@ -32,7 +33,7 @@ type SiteList = { window?: {start:string;end:string;all?:boolean}; range?: strin
 type Row = SitePage & { path: string; tasks: ContentTask[] };
 const CONTENT_RANGES = defaultRanges;
 const PAGE_SIZES = [25, 50, 100] as const;
-const fmt = (v: number | null) => (v === null ? "—" : v.toLocaleString(getCurrentLocale()));
+const fmt = (v: number | null) => formatCount(v);
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 const pathOf = (u: string) => { try { return new URL(u).pathname; } catch { return u; } };
 const helper = createColumnHelper<Row>();
@@ -46,8 +47,8 @@ function Change({ now, before }: { now?: number | null; before?: number | null }
   if (d === undefined) return <span className='text-muted-foreground'>—</span>;
   if (!d) return <span className='tabular-nums text-muted-foreground'>0</span>;
   // The percentage is in the tooltip, so the column stays narrow.
-  const pct = before ? `${d > 0 ? '+' : '−'}${Math.round((Math.abs(d) / before) * 100)}%` : undefined;
-  return <span className={`tabular-nums ${d > 0 ? 'text-nr-ink-green' : 'text-nr-ink-red'}`} title={pct}>{d > 0 ? '+' : '−'}{Math.abs(d).toLocaleString(getCurrentLocale())}</span>;
+  const pct = before ? formatChange(d / before) : undefined;
+  return <span className={`tabular-nums ${d > 0 ? 'text-nr-ink-green' : 'text-nr-ink-red'}`} title={pct}>{formatSigned(d)}</span>;
 }
 
 // The tab of pages people reach that the sitemap does not list.
@@ -83,7 +84,7 @@ export default function ContentPage() {
         </div>
       ),
     }) as ColumnDef<Row>,
-    helper.accessor((r) => r.lastmod?.slice(0, 10) || undefined, { id: "lastmod", ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.updated')} />, cell: ({ getValue }) => <span className="tabular-nums">{getValue() || "—"}</span> }) as ColumnDef<Row>,
+    helper.accessor((r) => r.lastmod?.slice(0, 10) || undefined, { id: "lastmod", ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.updated')} />, cell: ({ getValue }) => <span className="tabular-nums">{formatDate(getValue())}</span> }) as ColumnDef<Row>,
     helper.accessor((r) => r.views ?? undefined, { id: "views", ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.visits')} align="right" help={sampleHelp($t('contentIndex.pageViewsInRange', { 0: rangeLabel }))} />, cell: ({ row, getValue }) => row.original.ga4Untracked ? <span className='text-muted-foreground' title={$t('contentIndex.ga4UntrackedHelp')}>{$t('contentIndex.ga4Untracked')}</span> : fmt(getValue() ?? null), meta: right }) as ColumnDef<Row>,
     helper.accessor((r) => change(r.views, r.previousViews), { id: 'viewsChange', ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.viewsChange')} align='right' help={$t('contentIndex.changeHelp')} />, cell: ({ row }) => <Change now={row.original.views} before={row.original.previousViews} />, meta: right }) as ColumnDef<Row>,
     helper.accessor((r) => r.clicks ?? undefined, { id: "clicks", ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('common.searchClicks')} align="right" help={sampleHelp($t('contentIndex.clicksPageGotGoogleSearch'))} />, cell: ({ getValue }) => fmt(getValue() ?? null), meta: right }) as ColumnDef<Row>,
@@ -124,7 +125,7 @@ export default function ContentPage() {
   return (
     <PageContainer className="nr-data-page">
       <PageHeader title={$t('common.page')} description={data?.summary.pages ? $t('contentIndex.pagesDetailsReadPages',{0:data.summary.origin,1:data.summary.pages,2:data.summary.enriched || 0}) : $t('contentIndex.pagesListedWebsiteContentSource')} />
-      <RangePicker value={{ ...rangeValue, range }} onChange={setRange} options={CONTENT_RANGES} summary={data?.window ? $t(data.window.all ? 'rangePicker.availableRange' : 'common.range', {0:data.window.start,1:data.window.end}) : data?.cutoff ? $t('contentIndex.pageDataThrough',{0:data.cutoff}) : undefined} />
+      <RangePicker value={{ ...rangeValue, range }} onChange={setRange} options={CONTENT_RANGES} summary={data?.window ? $t(data.window.all ? 'rangePicker.availableRange' : 'common.range', {0:formatDate(data.window.start),1:formatDate(data.window.end)}) : data?.cutoff ? $t('contentIndex.pageDataThrough',{0:formatDate(data.cutoff)}) : undefined} />
       {projectError || loadError ? <LoadError title={$t('contentIndex.notLoadWebsiteContent')} message={projectError || $t('contentIndex.notLoadWebsiteContentTry')} /> : null}
       {!data && !loadError ? <ListSkeleton rows={6} /> : null}
       {data && !data.summary.pages ? <EmptyState icon={<Files />} title={$t('contentIndex.onceWebsiteContentConnectedPages')} description={$t('contentIndex.giveAiWebsiteAddressReads')} action={<Button onClick={() => navigate("/connections?source=site")}>{$t('common.connectWebsiteContent')}</Button>} /> : null}

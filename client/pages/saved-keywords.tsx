@@ -1,4 +1,4 @@
-import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { useMessageState, $t, $tj, $legacyText } from "#i18n";
 // 关键词 (已保存): ported from every-app/open-seo db8bde1 src/routes/_app/p/$projectId/saved.tsx and
 // src/client/features/saved-keywords/ (table, filters, tag filter, tag chips, bulk tags modal, manage tags; MIT).
 // Changes: 本站排名 and 本站页面 from the synced Search Console data, 交给 Agent (one task for the chosen keywords),
@@ -40,6 +40,7 @@ import "./data-views.css";
 import {confirmAction} from "#components/reach/confirm";
 import { WithInfo } from "#components/reach/info-tip";
 import { help } from "./glossary";
+import { formatDate } from '#lib/format';
 
 type Saved = { tags: Tag[]; items: SavedKeyword[] };
 type Filters = { include: string; exclude: string; minVol: string; maxVol: string; minKd: string; maxKd: string; tagIds: string[] };
@@ -47,7 +48,7 @@ const EMPTY: Filters = { include: "", exclude: "", minVol: "", maxVol: "", minKd
 const PAGE_SIZES = [50, 100] as const;
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 const activeCount = (f: Filters) => [f.include, f.exclude, f.minVol || f.maxVol, f.minKd || f.maxKd, f.tagIds.length ? "x" : ""].filter(Boolean).length;
-const day = (v?: string | null) => (v ? new Date(v).toLocaleDateString(getCurrentLocale()) : "—");
+const day = (v?: string | null) => formatDate(v);
 function applyFilters(rows: SavedKeyword[], f: Filters) {
   const terms = (s: string) => s.split(/[,，]/).map((t) => t.trim().toLowerCase()).filter(Boolean);
   const inc = terms(f.include), exc = terms(f.exclude), num = (s: string) => (s.trim() === "" ? null : Number(s));

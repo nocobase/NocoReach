@@ -1,5 +1,5 @@
 import { $t, getCurrentLocale } from '#i18n';
-import { duration } from '../data-parts';
+import { formatCount, formatDuration, formatPercent } from '#lib/format';
 import type { ChangeTables } from './drivers';
 // 访问 (GA4): the shapes the server answers with (server/nocoreach/website-report.ts), the metrics as GA4 names and
 // computes them, and how dimension values read in the page's language.
@@ -229,11 +229,11 @@ export const KPI_KEYS: MetricKey[] = [
 ];
 
 export const count = (v: number | null | undefined) =>
-  v == null ? '—' : Math.round(v).toLocaleString(getCurrentLocale());
+  formatCount(v == null ? v : Math.round(v));
 export function show(v: number | null | undefined, format: Format): string {
   if (v == null || !Number.isFinite(v)) return '—';
-  if (format === 'percent') return `${(v * 100).toFixed(1)}%`;
-  if (format === 'duration') return duration(v);
+  if (format === 'percent') return formatPercent(v);
+  if (format === 'duration') return formatDuration(v);
   if (format === 'decimal') return v.toFixed(2);
   return count(v);
 }

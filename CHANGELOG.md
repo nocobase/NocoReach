@@ -3,6 +3,8 @@
 ## Unreleased — Ten interface languages
 
 - Add Traditional Chinese, Japanese, Spanish, Brazilian Portuguese, French, German, Vietnamese, and Indonesian alongside English and Simplified Chinese.
+- Correct Japanese and Indonesian completion confirmations to state that no content will be published; label Japanese and Spanish revert PR links as existing pull requests.
+- Preserve shared date formatting when merging main and synchronize duration and signed-change translations across all languages.
 - Synchronize the latest Insights navigation and Agent failure guidance across all ten languages when merging main.
 - Translate business messages, application navigation, authentication, Agent conversations, schedules, and installed plugin interfaces; load each additional language on demand.
 - Keep the selected locale through business-page updates, deferred errors, server presentation messages, calendars, timestamps, and schedule descriptions. Distinguish Simplified and Traditional Chinese in the language menu.
@@ -10,6 +12,13 @@
 - Distinguish Indonesian noindex findings from instructions and Japanese publishing progress from live status; correct Traditional Chinese online/offline wording.
 - Correct Traditional Chinese approval and read-limit wording, and state the four-week average explicitly in GitHub topic hand-off summaries.
 - Validate language registration, translation keys, interpolation, and live language switching without losing in-progress input. Project content-generation language remains a separate setting.
+
+## Unreleased — One way to write dates, numbers and changes
+
+- Dates read the same on every page: in Chinese "2026-10-21", without the year in the current year ("10-21"), and times without seconds or a time zone ("10-21 14:03"); in English "Oct 21", "Oct 21, 2025", "Oct 21, 2:03 PM". This replaces eight styles in use, among them "2026/10/21", "21/10/2026, 16:40:18" (Search performance), "2026/10/19 GMT+8 9:34:24" (Reddit) and "2027/1/16" (API keys). Date ranges use the same days.
+- Changes are written one way: an arrow, a space and the size ("↑ 12%", "↓ 9.8%"), one decimal under 10% and whole numbers above, green for good news and red for bad; differences in a column keep their sign with a true minus ("+253", "−2,578"). This replaces "▲ 9.8%", "▼86.4%", "↓23%", "-24%" and "+50.0%". Competitors no longer shows "+-7/week" for a fall in stars.
+- Shares keep one decimal ("7.0%") so a column lines up, durations read "2 min 37 s" or "1 h 14 min", and numbers are no longer shortened to "19K" or "65.3k" next to full ones.
+- Dates, numbers and changes come from `client/lib/format.ts` and the `Delta` component; the Insights, Data sources, Opportunities and Tasks pages, which other changes are reworking, follow later.
 
 ## Unreleased — Insights: Current situation beside the day, decisions kept
 

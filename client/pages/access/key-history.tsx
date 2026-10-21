@@ -5,8 +5,9 @@ import { ListSkeleton } from '#components/reach/states';
 import { useAccessQuery } from './api';
 import { AccessError } from './components';
 import type { KeyEvent, ManagedKey } from '../../../shared/key-access';
+import { formatDateTime } from '#lib/format';
 export default function KeyHistory() {
-  const locale = useNocoReachLocale();
+  useNocoReachLocale();
   const { ownerId, keyId } = useParams();
   const items = useOutletContext<ManagedKey[]>();
   const item = items?.find(
@@ -56,7 +57,7 @@ export default function KeyHistory() {
                 {$t('accessKeys.actor', { 0: event.actorId })}
               </p>
               <time className='text-sm text-muted-foreground'>
-                {new Date(event.createdAt).toLocaleString(locale)}
+                {formatDateTime(event.createdAt)}
               </time>
             </li>
           ))}

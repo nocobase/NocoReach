@@ -27,6 +27,7 @@ import type {
 import { useAccessApi, useAccessQuery, accessMessage } from './api';
 import { AccessError, Refresh, RowMenu, Pager } from './components';
 import { KeySecret } from './key-secret';
+import { formatDate, formatDateTime } from '#lib/format';
 
 const keyState = (key: ManagedKey) =>
   key.expiresAt && Date.parse(key.expiresAt) <= Date.now()
@@ -261,16 +262,10 @@ export default function Keys() {
                           <ScopeSummary item={item} />
                         </TableCell>
                         <TableCell className='hidden sm:table-cell'>
-                          {item.expiresAt
-                            ? new Date(item.expiresAt).toLocaleDateString(
-                                locale,
-                              )
-                            : '—'}
+                          {formatDate(item.expiresAt, { withYear: true })}
                         </TableCell>
                         <TableCell className='hidden lg:table-cell'>
-                          {item.lastUsedAt
-                            ? new Date(item.lastUsedAt).toLocaleString(locale)
-                            : '—'}
+                          {formatDateTime(item.lastUsedAt)}
                         </TableCell>
                         <TableCell>
                           <RowMenu name={item.name || item.id}>

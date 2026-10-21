@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { $t, getCurrentLocale } from '#i18n';
+import { $t } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { Button } from '#components/ui/button';
 import { useMe } from '../me';
 import type { SearchReport } from './index';
+import { formatDate, formatDateTime } from '#lib/format';
 
 export type CoveragePeriod = {
   start: string;
@@ -111,8 +112,8 @@ export function SearchHistory({
         <>
           <p>
             {$t('searchHistory.coverage', {
-              0: coverage.current.start,
-              1: coverage.current.end,
+              0: formatDate(coverage.current.start),
+              1: formatDate(coverage.current.end),
               2: coverage.current.recordedDays,
               3: coverage.current.noRecordDays,
               4: coverage.current.missingDays,
@@ -122,7 +123,12 @@ export function SearchHistory({
             <p className='text-muted-foreground'>
               {$t('searchHistory.recordedRanges', {
                 0: coverage.current.records
-                  .map((r) => `${r.start} – ${r.end}`)
+                  .map((r) =>
+                    $t('common.range', {
+                      0: formatDate(r.start),
+                      1: formatDate(r.end),
+                    }),
+                  )
                   .join(', '),
               })}
             </p>
@@ -137,15 +143,13 @@ export function SearchHistory({
           {coverage.earliest &&
           (w.start < coverage.earliest ||
             (!w.all && w.previousStart < coverage.earliest)) ? (
-            <p>{$t('searchHistory.limit', { 0: coverage.earliest })}</p>
+            <p>
+              {$t('searchHistory.limit', { 0: formatDate(coverage.earliest) })}
+            </p>
           ) : null}
           <p className='text-muted-foreground'>
             {$t('searchHistory.updated', {
-              0: coverage.current.updatedAt
-                ? new Date(coverage.current.updatedAt).toLocaleString(
-                    getCurrentLocale(),
-                  )
-                : '—',
+              0: formatDateTime(coverage.current.updatedAt),
             })}
           </p>
         </>

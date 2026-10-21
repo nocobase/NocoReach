@@ -1,4 +1,4 @@
-import { useMessageState, getCurrentLocale, $t } from "#i18n";
+import { useMessageState, $t } from "#i18n";
 // GitHub page · GitHub 热点 (2026-10-14, user request): what developers across GitHub look at, beside the project's own
 // repository (server/nocoreach/github-trends.ts, read once a day). 关注的话题 with their weeks, 涨星榜 from the stars
 // NocoReach records each day, the official GitHub Trending page, and the newest repositories with the most stars.
@@ -17,7 +17,9 @@ import { Tag } from "#components/reach/tag";
 import { safeLink } from "../analytics";
 import type { TaskDraft } from "../keyword-hand-off";
 import { Segmented } from "./segmented";
-import { num, pct } from "./model";
+import { num } from "./model";
+import { formatDate, formatDateTime } from '#lib/format';
+import { Delta } from '#components/reach/delta';
 
 type Repo = { repo: string; url: string; description?: string; language?: string | null; topics?: string[]; stars: number | null; rival: boolean; own: boolean; matched: string[]; gained?: number | null; forks?: number | null; createdAt?: string | null };
 type Topic = { name: string; total: number | null; new7: number | null; lastWeek: number | null; priorAverage: number | null; weeks: { week: string; count: number | null }[]; leaders: Repo[]; fresh: Repo[] };
@@ -107,7 +109,7 @@ export function HotTab({ projectId }: { projectId: number }) {
   if (error && !hot) return <LoadError title={$t('githubHot.notLoaded')} message={error} onRetry={() => void load()} />;
   if (!hot) return <ListSkeleton rows={5} />;
   const notes = [...(hot.token ? [] : [$t('githubHot.noTokenNote')]), $t('githubHot.dataNote'), ...(hot.lastRun?.errors ?? [])];
-  const status = hot.running ? $t('githubHot.reading') : hot.lastRun ? $t('githubHot.readAt', { 0: new Date(hot.lastRun.at).toLocaleString(getCurrentLocale()) }) : "";
+  const status = hot.running ? $t('githubHot.reading') : hot.lastRun ? $t('githubHot.readAt', { 0: formatDateTime(hot.lastRun.at) }) : "";
   if (!hot.ready) return (
     <EmptyState icon={<Flame />} title={hot.running ? $t('githubHot.firstReading') : $t('githubHot.notReadYet')} description={$t('githubHot.notReadYetHelp')} action={<Button onClick={() => void refresh()} disabled={hot.running}><RefreshCw data-icon="inline-start" />{$t('githubHot.readNow')}</Button>} />
   );
@@ -125,7 +127,7 @@ export function HotTab({ projectId }: { projectId: number }) {
                 <td className="py-2 pl-4"><RowCheck selection={topicSelection} k={t.name} label={t.name} /></td>
                 <td className="py-2"><a className="nr-link" href={`https://github.com/topics/${t.name}`} target="_blank" rel="noreferrer">{t.name}</a></td>
                 <td className="py-2 text-right tabular-nums">{num(t.total)}</td><td className="py-2 text-right tabular-nums">{num(t.new7)}</td>
-                <td className="py-2 text-right tabular-nums">{num(t.lastWeek)}{c != null ? <span className={`ml-1.5 text-xs ${c >= 0 ? "nr-up" : "nr-down"}`}>{c >= 0 ? "+" : ""}{pct(c)}</span> : null}</td>
+                <td className="py-2 text-right tabular-nums">{num(t.lastWeek)}{c != null ? <Delta value={c} className="ml-1.5 text-xs" /> : null}</td>
                 <td className="py-2 pl-4"><Spark weeks={t.weeks} /></td>
                 <td className="max-w-xs py-2 pr-4 text-xs text-muted-foreground"><span className="block truncate">{t.leaders.slice(0, 3).map((r) => r.repo).join("、") || "—"}</span></td>
               </tr>); })}</tbody>
@@ -146,11 +148,11 @@ export function HotTab({ projectId }: { projectId: number }) {
         ) : <Empty>{$t('githubHot.gainersCollecting', { 0: hot.recordedSince ?? hot.day ?? "—", 1: periodLabel })}</Empty>}
       </Frame>
       <div className="grid gap-4 xl:grid-cols-2">
-        <Frame data-hot-trending="" title="GitHub Trending" info={$t('githubHot.trendingInfo', { 0: hot.trending?.date ?? "—" })}
+        <Frame data-hot-trending="" title="GitHub Trending" info={$t('githubHot.trendingInfo', { 0: formatDate(hot.trending?.date) })}
           actions={<Segmented label="GitHub Trending" options={[{ id: "daily", label: $t('githubHot.today') }, { id: "weekly", label: $t('githubHot.thisWeek') }, { id: "monthly", label: $t('githubHot.thisMonth') }]} value={trendingSince} onChange={(v) => setTrendingSince(v as typeof trendingSince)} />}>
           {hot.trending?.[trendingSince]?.length ? <ol className="divide-y divide-border">{hot.trending[trendingSince].map((r, i) => <li key={r.repo} className="flex items-start gap-3 px-4 py-2 text-sm" data-trending={r.repo}><span className="w-5 shrink-0 pt-0.5 text-right text-xs tabular-nums text-muted-foreground">{i + 1}</span><span className="min-w-0 flex-1"><RepoName r={r} /></span><span className="shrink-0 text-right text-xs tabular-nums"><span className="block nr-up">+{num(r.gained)}</span><span className="text-muted-foreground">★ {num(r.stars)}</span></span></li>)}</ol> : <Empty>{$t('githubHot.trendingEmpty')}</Empty>}
         </Frame>
-        <Frame data-hot-fresh="" title={$t('githubHot.newHot')} info={$t('githubHot.newHotInfo', { 0: hot.newHot?.date ?? "—" })}
+        <Frame data-hot-fresh="" title={$t('githubHot.newHot')} info={$t('githubHot.newHotInfo', { 0: formatDate(hot.newHot?.date) })}
           actions={<Segmented label={$t('githubHot.newHot')} options={[{ id: "all", label: $t('githubHot.allGithub') }, { id: "topics", label: $t('githubHot.followedTopics') }]} value={freshScope} onChange={setFreshScope} />}>
           {fresh.length ? <ol className="divide-y divide-border">{fresh.slice(0, 15).map((r) => <li key={r.repo} className="flex items-start gap-3 px-4 py-2 text-sm" data-fresh={r.repo}><span className="min-w-0 flex-1"><RepoName r={r} /></span><span className="shrink-0 text-xs tabular-nums text-muted-foreground">★ {num(r.stars)}</span></li>)}</ol> : <Empty>{$t('githubHot.newHotEmpty')}</Empty>}
         </Frame>

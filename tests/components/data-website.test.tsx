@@ -680,7 +680,7 @@ describe('访问', () => {
       ),
     );
     expect(within(drawer).getByText('前一期')).toBeTruthy();
-    expect(within(drawer).getAllByText('+25.0%').length).toBeGreaterThan(0);
+    expect(within(drawer).getAllByText('↑ 25%').length).toBeGreaterThan(0);
     await userEvent.click(
       within(drawer).getByRole('button', { name: '关闭详情' }),
     );

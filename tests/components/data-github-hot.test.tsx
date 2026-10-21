@@ -203,7 +203,7 @@ describe('GitHub 热点', () => {
     const topics = document.querySelector('[data-hot-topics]') as HTMLElement;
     const mcp = topics.querySelector('[data-topic="mcp"]') as HTMLElement;
     expect(within(mcp).getByText('94,810')).toBeTruthy();
-    expect(within(mcp).getByText('+50.0%')).toBeTruthy();
+    expect(within(mcp).getByText('↑ 50%')).toBeTruthy();
     expect(within(mcp).getByText('mcp-org/server')).toBeTruthy();
   });
 
