@@ -1,218 +1,95 @@
 import { $t, $tj, $legacyText, getCurrentLocale } from '#i18n';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { useTranslation } from '@nocobase/i18n/client';
-import { ChevronDown, ChevronRight, MessageSquare } from 'lucide-react';
+import { ChevronDown, MessageSquare } from 'lucide-react';
 import { cn } from '#lib/utils';
 import { Tag, type Tone } from '#components/reach/tag';
 import { ActorAvatar, AiMark } from '#components/reach/actor';
 import { Button } from '#components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '#components/ui/dropdown-menu';
 import { useOptionalOnlineChat } from '../../online-agent/context';
-import { DetailDrawer } from '../detail-drawer';
 import { healthText, loadHealth, type HealthItem } from '../data-health';
 import { WAITING_TASKS_URL } from '../task-waiting';
 import type { Work } from '../task-execution-types';
 import { RequestBlock, type RequestState } from './request-block';
-import {
-  AreaList,
-  Sparkline,
-  chipOf,
-  percent,
-  type Area,
-  type MetricItem,
-} from './insights-view';
-import {
-  citedSignals,
-  oppNo,
-  opportunityState,
-  taskNo,
-  type Row,
-} from './board';
+import { Sparkline, chipOf, percent, type MetricItem } from './insights-view';
+import { citedSignals, oppNo, taskNo, type Row } from './board';
+import { dayOf, type Day, type Feed, type Line, type Standing } from './feed';
 import { handOffLabel } from './hand-off';
 import { recentlyEnded } from './watch';
 import type { InsightBatch, StrategyState, WatchRecord } from './model';
-type Standing = ReturnType<typeof opportunityState>;
 
 // Insights as a conversation with the daily analysis (2026-10-21 user decision: the brief of sections read like
 // Opportunities and was all text). The numbers stay as tiles with their trend; below, the analysis speaks once a day:
 // what matters, the opportunities to decide on as one line each, watches that ended, tasks and data that need you.
 // Earlier days fold into one line each, and Ask AI continues in the chat.
 
-// The data pages, by the menu group they live in.
-const DATA_PAGES: [string, [string, string][]][] = [
-  [
-    'site',
-    [
-      ['traffic', '/website'],
-      ['pages', '/content'],
-      ['audit', '/audit'],
-      ['github', '/data/github'],
-      ['downloads', '/data/downloads'],
-    ],
-  ],
-  [
-    'search',
-    [
-      ['searchPerformance', '/seo-opportunities'],
-      ['keywords', '/keywords'],
-      ['trends', '/trends'],
-      ['competitors', '/research/domain'],
-      ['aiSearch', '/ai-search'],
-    ],
-  ],
-  [
-    'community',
-    [
-      ['forum', '/data/community'],
-      ['hackerNews', '/data/hackernews'],
-      ['reddit', '/data/reddit'],
-      ['x', '/data/x'],
-      ['discord', '/data/discord'],
-      ['slack', '/data/slack'],
-    ],
-  ],
-];
-function AllDataMenu() {
-  const { t } = useTranslation(),
-    navigate = useNavigate();
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <button
-            type='button'
-            className='nr-link inline-flex items-center gap-0.5'
-          />
-        }
-      >
-        {$t('strategy.allData')}
-        <ChevronDown className='size-3' aria-hidden='true' />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align='end'>
-        {DATA_PAGES.map(([group, pages], i) => (
-          <DropdownMenuGroup key={group}>
-            {i > 0 && <DropdownMenuSeparator />}
-            <DropdownMenuLabel>{t(`nocoreach.nav.${group}`)}</DropdownMenuLabel>
-            {pages.map(([name, to]) => (
-              <DropdownMenuItem key={to} onClick={() => void navigate(to)}>
-                {t(`nocoreach.nav.${name}`)}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuGroup>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 const number = (i: MetricItem) =>
   `${i.signed && i.value! > 0 ? '+' : ''}${i.value!.toLocaleString(getCurrentLocale())}`;
 const arrow = (change: number) =>
   `${change >= 0 ? '↑' : '↓'} ${percent(change)}`;
+/** The fold marker of a toggle: down when closed, up when open. */
+const Chevron = ({ open }: { open: boolean }) => (
+  <ChevronDown
+    aria-hidden='true'
+    className={cn(
+      'size-3.5 shrink-0 transition-transform',
+      open && 'rotate-180',
+    )}
+  />
+);
 
 /**
- * The numbers as tiles (at most five, only those with a value), each with its trend and opening its data page; then
- * the standing facts (Status, a drawer) and every data page (All data). The numbers and the facts are separate reads,
- * each with its own loading, failure and retry.
+ * The numbers as tiles (at most five, only those with a value), each with its trend and opening its data page. The
+ * read has its own loading, failure and retry.
  */
 export function MetricTiles({
   metrics,
   overview,
-  summary,
-  projectId,
 }: {
   metrics: MetricItem[];
   overview: RequestState;
-  summary: RequestState & { data?: { areas?: Area[] } };
-  projectId: number;
 }) {
-  const [open, setOpen] = useState(false);
-  const items = metrics.filter((i) => i.value != null).slice(0, 5),
-    areas = summary.data?.areas || [],
-    facts = areas.reduce((n, a) => n + a.items.length, 0);
+  const items = metrics.filter((i) => i.value != null).slice(0, 5);
   return (
-    <div className='flex flex-col gap-1.5'>
-      <RequestBlock
-        compact
-        corner
-        title={$t('strategy.keyMetrics')}
-        request={overview}
-        empty={!items.length}
-        emptyText={$t('strategy.noDataYet')}
-      >
-        <div className='grid min-w-0 flex-1 grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3'>
-          {items.map((i) => (
-            <Link
-              key={i.label}
-              to={i.to}
-              className='flex flex-col gap-0.5 rounded-lg bg-muted/50 px-3 py-2 transition-colors hover:bg-muted'
-            >
-              <span className='text-xs text-muted-foreground'>{i.label}</span>
-              <span className='text-lg font-semibold tabular-nums'>
-                {number(i)}
-              </span>
-              <span className='flex items-center gap-2'>
-                {i.change == null ? (
-                  <span className='text-xs text-muted-foreground'>
-                    {$t('strategy.noComparisonYet')}
-                  </span>
-                ) : (
-                  <Tag tone={i.change >= 0 ? 'green' : 'red'}>
-                    {arrow(i.change)}
-                  </Tag>
-                )}
-                <span className='min-w-0 flex-1'>
-                  {i.series && (
-                    <Sparkline points={i.series} change={i.change} />
-                  )}
-                </span>
-              </span>
-            </Link>
-          ))}
-        </div>
-      </RequestBlock>
-      <div className='flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-xs'>
-        <RequestBlock
-          compact
-          title={$t('strategy.currentSituation')}
-          request={summary}
-          empty={!facts}
-          emptyText={$t('strategy.noCurrentSituation')}
-        >
-          <button
-            type='button'
-            className='nr-link'
-            onClick={() => setOpen(true)}
+    <RequestBlock
+      compact
+      title={$t('strategy.keyMetrics')}
+      request={overview}
+      empty={!items.length}
+      emptyText={$t('strategy.noDataYet')}
+    >
+      <div className='grid min-w-0 flex-1 grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3'>
+        {items.map((i) => (
+          <Link
+            key={i.label}
+            to={i.to}
+            className='flex flex-col gap-0.5 rounded-lg bg-muted/50 px-3 py-2 transition-colors hover:bg-muted'
           >
-            {$t('strategy.situationCount', { 0: facts })}
-            <ChevronRight className='inline size-3' aria-hidden='true' />
-          </button>
-        </RequestBlock>
-        <AllDataMenu />
+            <span className='text-xs text-muted-foreground'>{i.label}</span>
+            <span className='text-lg font-semibold tabular-nums'>
+              {number(i)}
+            </span>
+            <span className='flex items-center gap-2'>
+              {i.change == null ? (
+                <span className='text-xs text-muted-foreground'>
+                  {$t('strategy.noComparisonYet')}
+                </span>
+              ) : (
+                <Tag tone={i.change >= 0 ? 'green' : 'red'}>
+                  {arrow(i.change)}
+                </Tag>
+              )}
+              <span className='min-w-0 flex-1'>
+                {i.series && <Sparkline points={i.series} change={i.change} />}
+              </span>
+            </span>
+          </Link>
+        ))}
       </div>
-      <DetailDrawer
-        open={open && facts > 0}
-        onClose={() => setOpen(false)}
-        title={$t('strategy.situation')}
-        description={$t('strategy.situationHelp')}
-      >
-        <AreaList areas={areas} projectId={projectId} />
-      </DetailDrawer>
-    </div>
+    </RequestBlock>
   );
 }
 
-// Days as yyyy-mm-dd, the way the analysis and the watch records date them.
-const dayOf = (iso?: string) => String(iso || '').slice(0, 10);
 const localDay = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 function dayLabel(day: string, now: Date) {
@@ -339,11 +216,11 @@ function Summary({
           <button
             type='button'
             aria-expanded={open}
-            className='mt-1.5 text-xs text-muted-foreground hover:text-foreground'
+            className='mt-1.5 inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground'
             onClick={() => setOpen((o) => !o)}
           >
-            {$t('strategy.analysisNotes', { 0: notes.length })}{' '}
-            {open ? '▴' : '▾'}
+            {$t('strategy.analysisNotes', { 0: notes.length })}
+            <Chevron open={open} />
           </button>
           {open && (
             <ul className='mt-1 flex list-disc flex-col gap-0.5 pl-4 text-muted-foreground'>
@@ -377,21 +254,92 @@ type Decide = {
   onIgnore: (r: Row) => void;
 };
 
+/** Where a day's opportunities stand: awaiting decision, handed off, dismissed, expired (only those with any). */
+function StandingTags({ lines }: { lines: Line[] }) {
+  const count = (f: (x: Line) => boolean) => lines.filter(f).length,
+    tags: [Tone, string, number][] = [
+      [
+        'amber',
+        'strategy.pendingCount',
+        count((x) => x.st.state === 'pending'),
+      ],
+      ['blue', 'strategy.handedCount', count((x) => x.st.state === 'task')],
+      [
+        'grey',
+        'strategy.dismissedCount',
+        count((x) => x.st.reason === 'ignored'),
+      ],
+      [
+        'grey',
+        'strategy.expiredCount',
+        count((x) => x.st.reason === 'expired'),
+      ],
+    ];
+  return (
+    <>
+      {tags
+        .filter(([, , n]) => n > 0)
+        .map(([tone, key, n]) => (
+          <Tag key={key} tone={tone}>
+            {$t(key, { 0: n })}
+          </Tag>
+        ))}
+    </>
+  );
+}
+/** An opportunity already decided: its title and where it went. */
+function DecidedLine({ row, st }: Line) {
+  return (
+    <li
+      data-opportunity-id={row.card.id}
+      className='flex items-center gap-2 py-1.5'
+    >
+      <Link
+        to={itemLink(row)}
+        title={row.card.title}
+        className='min-w-0 flex-1 truncate text-muted-foreground hover:underline'
+      >
+        <No row={row} />
+        {row.card.title}
+      </Link>
+      <StatusTag row={row} st={st} />
+    </li>
+  );
+}
+
 /**
- * The opportunities waiting for a decision, the same ones as Opportunities' To do, most important first: one line
- * each with the number behind it, five shown and the rest folded; the evidence stays on Opportunities.
+ * The opportunities of the day: those waiting for a decision (the same ones as Opportunities' To do, most important
+ * first) with Hand off to agent and Ignore, then those decided today with where they went, one line each; five shown
+ * and the rest folded. The evidence stays on Opportunities.
  */
-function Decisions({ rows, busy, onGive, onIgnore }: { rows: Row[] } & Decide) {
+function Decisions({
+  pending,
+  decided,
+  busy,
+  onGive,
+  onIgnore,
+}: { pending: Row[]; decided: Line[] } & Decide) {
   const [more, setMore] = useState(false),
-    shown = more ? rows : rows.slice(0, 5),
-    rest = rows.length - 5;
+    lines: Line[] = [
+      ...pending.map((row): Line => ({ row, st: { state: 'pending' } })),
+      ...decided,
+    ],
+    shown = more ? lines : lines.slice(0, 5),
+    rest = lines.length - 5;
   return (
     <Bubble
-      label={$t('strategy.decideCount', { 0: rows.length })}
+      label={$t('strategy.decideCount', { 0: pending.length })}
       className='py-1'
     >
+      {decided.length > 0 && (
+        <div className='flex flex-wrap items-center gap-1.5 border-b border-border/70 py-1.5'>
+          <StandingTags lines={lines} />
+        </div>
+      )}
       <ul className='divide-y divide-border/70'>
-        {shown.map((r, i) => {
+        {shown.map(({ row: r, st }, i) => {
+          if (st.state !== 'pending')
+            return <DecidedLine key={r.card.id} row={r} st={st} />;
           const c = lead(r);
           return (
             <li
@@ -434,12 +382,13 @@ function Decisions({ rows, busy, onGive, onIgnore }: { rows: Row[] } & Decide) {
           <button
             type='button'
             aria-expanded={more}
-            className='nr-link'
+            className='nr-link inline-flex items-center gap-0.5'
             onClick={() => setMore((m) => !m)}
           >
             {more
-              ? `${$t('common.collapse')} ▴`
-              : `${$t('strategy.moreToDecide', { 0: rest })} ▾`}
+              ? $t('common.collapse')
+              : $t('strategy.moreToDecide', { 0: rest })}
+            <Chevron open={more} />
           </button>
         ) : (
           <span />
@@ -573,7 +522,7 @@ function HealthNote({ projectId }: { projectId: number }) {
 export function Today({
   state,
   rows,
-  pending,
+  feed,
   metrics,
   generating,
   projectId,
@@ -582,7 +531,7 @@ export function Today({
 }: {
   state: StrategyState;
   rows: Row[];
-  pending: Row[];
+  feed: Feed;
   metrics: MetricItem[];
   generating: boolean;
   projectId: number;
@@ -607,11 +556,17 @@ export function Today({
       >
         <Summary
           batch={batch}
-          pending={pending.length}
+          pending={feed.pending.length}
           metrics={metrics}
           watching={watching}
         />
-        {pending.length > 0 && <Decisions rows={pending} {...decide} />}
+        {(feed.pending.length > 0 || feed.decided.length > 0) && (
+          <Decisions
+            pending={feed.pending}
+            decided={feed.decided}
+            {...decide}
+          />
+        )}
         {recentlyEnded(state, 1).map((w) => (
           <Ended key={w.key} w={w} rows={rows} />
         ))}
@@ -642,34 +597,9 @@ function StatusTag({ row, st }: { row: Row; st: Standing }) {
     </Tag>
   );
 }
-type Day = {
-  day: string;
-  items: { row: Row; st: Standing }[];
-  ended: WatchRecord[];
-};
 /** An earlier day, folded to one line: what was suggested and where each went; opens to the list. */
 function PastDay({ day, rows, now }: { day: Day; rows: Row[]; now: Date }) {
-  const [open, setOpen] = useState(false),
-    count = (f: (x: Day['items'][number]) => boolean) =>
-      day.items.filter(f).length,
-    tags: [Tone, string, number][] = [
-      ['blue', 'strategy.handedCount', count((x) => x.st.state === 'task')],
-      [
-        'amber',
-        'strategy.pendingCount',
-        count((x) => x.st.state === 'pending'),
-      ],
-      [
-        'grey',
-        'strategy.dismissedCount',
-        count((x) => x.st.reason === 'ignored'),
-      ],
-      [
-        'grey',
-        'strategy.expiredCount',
-        count((x) => x.st.reason === 'expired'),
-      ],
-    ];
+  const [open, setOpen] = useState(false);
   return (
     <section
       aria-label={dayLabel(day.day, now)}
@@ -697,17 +627,10 @@ function PastDay({ day, rows, now }: { day: Day; rows: Row[]; now: Date }) {
                 .filter(Boolean)
                 .join(' · ')}
             </span>
-            {tags
-              .filter(([, , n]) => n > 0)
-              .map(([tone, key, n]) => (
-                <Tag key={key} tone={tone}>
-                  {$t(key, { 0: n })}
-                </Tag>
-              ))}
-            <span className='nr-link ml-auto text-xs'>
-              {open
-                ? `${$t('common.collapse')} ▴`
-                : `${$t('strategy.expandDay')} ▾`}
+            <StandingTags lines={day.items} />
+            <span className='nr-link ml-auto inline-flex items-center gap-0.5 text-xs'>
+              {open ? $t('common.collapse') : $t('strategy.expandDay')}
+              <Chevron open={open} />
             </span>
           </button>
           {open && (
@@ -715,22 +638,8 @@ function PastDay({ day, rows, now }: { day: Day; rows: Row[]; now: Date }) {
               {day.items.length > 0 && (
                 <Bubble className='py-1'>
                   <ul className='divide-y divide-border/70'>
-                    {day.items.map(({ row, st }) => (
-                      <li
-                        key={row.card.id}
-                        data-opportunity-id={row.card.id}
-                        className='flex items-center gap-2 py-1.5'
-                      >
-                        <Link
-                          to={itemLink(row)}
-                          title={row.card.title}
-                          className='min-w-0 flex-1 truncate hover:underline'
-                        >
-                          <No row={row} />
-                          {row.card.title}
-                        </Link>
-                        <StatusTag row={row} st={st} />
-                      </li>
+                    {day.items.map((line) => (
+                      <DecidedLine key={line.row.card.id} {...line} />
                     ))}
                   </ul>
                 </Bubble>
@@ -745,49 +654,24 @@ function PastDay({ day, rows, now }: { day: Day; rows: Row[]; now: Date }) {
     </section>
   );
 }
-/**
- * The days before the latest analysis, newest first: each opportunity on the day it was first raised (merged
- * duplicates left out) and each watch on the day it ended. A week at a time.
- */
-export function History({
-  state,
-  rows,
-}: {
-  state: StrategyState;
-  rows: Row[];
-}) {
-  const [limit, setLimit] = useState(7);
-  const [now] = useState(() => new Date());
-  const today = dayOf(state.insights?.generatedAt) || localDay(now),
-    days = new Map<string, Day>(),
-    at = (day: string) => {
-      if (!days.has(day)) days.set(day, { day, items: [], ended: [] });
-      return days.get(day)!;
-    };
-  for (const row of rows) {
-    const st = opportunityState(row, state),
-      day = dayOf(row.firstSeenAt);
-    if (st.reason === 'replaced' || !day || day >= today) continue;
-    at(day).items.push({ row, st });
-  }
-  for (const w of Object.values(state.watch || {})) {
-    const day = dayOf(w.ended?.at);
-    if (day && day < today) at(day).ended.push(w);
-  }
-  const list = [...days.values()].sort((a, b) => b.day.localeCompare(a.day));
-  if (!list.length) return null;
+/** The days before the latest analysis, newest first, a week at a time. */
+export function History({ days, rows }: { days: Day[]; rows: Row[] }) {
+  const [limit, setLimit] = useState(7),
+    [now] = useState(() => new Date());
+  if (!days.length) return null;
   return (
     <>
-      {list.slice(0, limit).map((d) => (
+      {days.slice(0, limit).map((d) => (
         <PastDay key={d.day} day={d} rows={rows} now={now} />
       ))}
-      {list.length > limit && (
+      {days.length > limit && (
         <button
           type='button'
-          className='nr-link self-center text-xs'
+          className='nr-link inline-flex items-center gap-0.5 self-center text-xs'
           onClick={() => setLimit((n) => n + 7)}
         >
-          {$t('strategy.earlierDays')} ▾
+          {$t('strategy.earlierDays')}
+          <Chevron open={false} />
         </button>
       )}
     </>

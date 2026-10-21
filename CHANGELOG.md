@@ -3,12 +3,26 @@
 ## Unreleased — Ten interface languages
 
 - Add Traditional Chinese, Japanese, Spanish, Brazilian Portuguese, French, German, Vietnamese, and Indonesian alongside English and Simplified Chinese.
+- Synchronize the latest Insights navigation and Agent failure guidance across all ten languages when merging main.
 - Translate business messages, application navigation, authentication, Agent conversations, schedules, and installed plugin interfaces; load each additional language on demand.
 - Keep the selected locale through business-page updates, deferred errors, server presentation messages, calendars, timestamps, and schedule descriptions. Distinguish Simplified and Traditional Chinese in the language menu.
 - Clarify weekly-average baselines in GitHub analysis rule descriptions, Japanese article publishing progress, and Indonesian skill-file read success.
 - Distinguish Indonesian noindex findings from instructions and Japanese publishing progress from live status; correct Traditional Chinese online/offline wording.
 - Correct Traditional Chinese approval and read-limit wording, and state the four-week average explicitly in GitHub topic hand-off summaries.
 - Validate language registration, translation keys, interpolation, and live language switching without losing in-progress input. Project content-generation language remains a separate setting.
+
+## Unreleased — Insights: Current situation beside the day, decisions kept
+
+- Current situation is back as a column beside the day's conversation, as before the redesign, with its explanation and Refresh. The Status link, its drawer and the All data menu are gone; each tile still opens its data page.
+- Opportunities decided today stay in today's message after those still waiting, marked Handed off to agent (with the task) or Dismissed, and the message counts them (Awaiting, Handed off, Dismissed), as the earlier days do. Each opportunity shows once: today while it waits or when today's analysis raised it, otherwise on the day it was first raised.
+- The metric tiles and the waiting tasks no longer show a Refresh icon on hover; they are read again on each visit, and Retry appears only after a failure.
+- "(daily, automatic)" after the last analysis links to Settings › Automatic runs for those who may open it. The fold markers are chevrons instead of ▾ and ▴.
+
+## Unreleased — Agent failures name the computer and the tool
+
+- When a task's Agent stops because its coding tool is not signed in, the card names the computer and the tool ("Claude Code on Office-Mac isn't signed in") and asks whoever manages that computer to sign in, or to change the Agent. A second line explains that an Agent shown as online only means its computer is connected. Connection, network and quota failures name the computer or the tool the same way when the run reports them; readers who may not see the computer get the general wording.
+- Try again is no longer the main button when trying again cannot help (the tool is not signed in, the run could not be set up, the model is unavailable); it stays available beside I'll do it myself. The setup failure now asks an engineer to check Technical details before trying again.
+- Technical details › Runs shows what the tool itself reported when the run stopped (for example "Not logged in · Please run /login"), to those who may read the run's transcript.
 
 ## Unreleased — Insights as a conversation with the daily analysis
 
