@@ -7,6 +7,17 @@
 - Earlier days fold into one line each, with how many opportunities were raised that day and where each went (handed off, awaiting decision, dismissed, expired), opening to the list and the watches that ended. Ask AI at the bottom opens the chat with the day's analysis named.
 - The numbers, Status and the waiting tasks keep their own loading, failure and Retry. A change no analysis judged yet is still judged once in the background. Today's changes, with its standalone changes and their own hand-off, is gone: since #178 every change worth doing has an opportunity.
 
+## Unreleased — Start card: playbook steps, article link, Change dialog
+
+- The task start card's playbook line gains View steps: a drawer over the task page lists what the Agent does and what you check, with View or edit in Playbooks for the full page. The choices on the card stay as they are.
+- The article to change links to where readers see it, in a new tab: the address found from the task's page, or one built from the target's page pattern for an article saved on the task (the header's Article does the same). Without a pattern the title stays plain text. The task page now receives each target's public page patterns, never its key or API address.
+- Change opens a dialog with Publish to, Also publish to, New or Existing article and the article search; nothing changes until Save, and the card goes back to its one-line summary. When no article was found from the page, the line says why and Choose article opens the same dialog; the card no longer expands into the old two-column form.
+
+## Unreleased — Full-width pages and Your invitations on demand
+
+- Your invitations appears in the account menu, with a count, only when an invitation is waiting for the signed-in account. Inviting someone who already has an account adds them at once, so the entry was nearly always an empty page; the emailed invitation link still opens it.
+- Your invitations and the role form (Members & roles › a role, New role) use the page's full width instead of leaving the right side empty; the role's name and identifier inputs keep a readable width. docs/DEVELOPMENT.md records full-width pages as a NocoReach rule.
+
 ## Unreleased — Verdicts and opportunities agree
 
 - A change the analysis judges worth doing always ends up as an opportunity, so Insights › Today's changes › To do and Opportunities list the same things. When a task, an opportunity or an ignored opportunity already covers the change or its page, the verdict becomes "No action needed" with the reason (for example "Task T-32 is already on it"); otherwise an opportunity is written from the change and its verdict, marked as needing checking. Verdicts filled in afterwards go through the same check.

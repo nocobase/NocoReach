@@ -17,6 +17,10 @@ vi.mock('@nocobase/app-plugin-authentication/client', () => ({
 vi.mock('../../client/layouts/components/language-switcher.js', () => ({
   LanguageSwitcher: () => null,
 }));
+// Pending invitations are read through the application's API client, which these panels do not need.
+vi.mock('../../client/pages/access/api.js', () => ({
+  usePendingInvitationCount: () => 0,
+}));
 
 beforeEach(() => {
   // jsdom does not implement the media queries used by the real theme provider.

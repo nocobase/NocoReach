@@ -41,6 +41,11 @@ vi.mock('../../client/components/inbox-header-button', () => ({
 vi.mock('../../client/pages/project-switcher', () => ({
   ProjectSwitcher: () => <div data-testid='project-switcher' />,
 }));
+// The account menu's Your invitations count reads NocoReach's access API through the request cache, neither of which
+// these tests serve; it is covered by tests/components/agent-setup.test.tsx and member-access.test.tsx.
+vi.mock('../../client/pages/access/api', () => ({
+  usePendingInvitationCount: () => 0,
+}));
 
 afterEach(() => vi.unstubAllGlobals());
 
