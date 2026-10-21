@@ -61,11 +61,12 @@ vi.mock('../../client/components/app-shell/nav-badges', () => ({
 }));
 
 const requests = { tasks, metrics: vi.fn(), summary: vi.fn() };
+// Waiting tasks sit in the day's conversation: with none waiting the block says nothing.
 const blocks = [
   {
     kind: 'tasks',
     title: 'strategy.taskStatus',
-    empty: 'strategy.noWaitingTasks',
+    empty: null,
   },
   {
     kind: 'metrics',
@@ -103,10 +104,11 @@ const values = {
     ],
   },
 };
+// The situation itself opens in a drawer; on the page it shows as its count.
 const known = {
   tasks: 'Known task',
   metrics: '12,345',
-  summary: 'Known situation',
+  summary: 'Status 1',
 };
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -206,9 +208,13 @@ for (const block of blocks) {
       expect(await within(section).findByRole('alert')).toHaveTextContent(
         copy['strategy.blockFailed'],
       );
-      expect(within(section).queryByText(copy[block.empty])).toBeNull();
+      if (block.empty)
+        expect(within(section).queryByText(copy[block.empty])).toBeNull();
       expect(screen.queryByText('private failure details')).toBeNull();
-      for (const other of blocks.filter((b) => b.kind !== block.kind)) {
+      // The other blocks finished loading (the waiting tasks, empty here, take no room).
+      for (const other of blocks.filter(
+        (b) => b.kind !== block.kind && b.empty,
+      )) {
         expect(
           (
             await screen.findAllByRole('region', { name: copy[other.title] })
@@ -221,9 +227,14 @@ for (const block of blocks) {
       await waitFor(() =>
         expect(within(section).queryByRole('alert')).toBeNull(),
       );
-      expect(
-        within(section).getAllByText(copy[block.empty]).length,
-      ).toBeGreaterThan(0);
+      if (block.empty)
+        expect(
+          within(section).getAllByText(copy[block.empty]).length,
+        ).toBeGreaterThan(0);
+      else
+        expect(
+          screen.queryByRole('region', { name: copy[block.title] }),
+        ).toBeNull();
       expect(requests[block.kind]).toHaveBeenCalledTimes(2);
       for (const other of blocks.filter((b) => b.kind !== block.kind))
         expect(requests[other.kind]).toHaveBeenCalledTimes(1);
@@ -242,7 +253,8 @@ for (const block of blocks) {
     expect(within(section).getByRole('status')).toHaveTextContent(
       english['common.loadingLoading'],
     );
-    expect(within(section).queryByText(english[block.empty])).toBeNull();
+    if (block.empty)
+      expect(within(section).queryByText(english[block.empty])).toBeNull();
     expect(
       within(section).getByRole('button', { name: 'Refresh' }),
     ).toBeDisabled();
@@ -275,7 +287,7 @@ it.each(['project', 'session', 'revision'])(
   async (scope) => {
     for (const b of blocks) requests[b.kind].mockResolvedValue(values[b.kind]);
     const view = await setup();
-    await screen.findByText('Known situation');
+    await screen.findByText(known.summary);
     const late = deferred<unknown>();
     tasks
       .mockReturnValueOnce(late.promise)
@@ -384,14 +396,14 @@ it.each([401, 403, 404])(
     const section = await screen.findByRole('region', {
       name: english['strategy.currentSituation'],
     });
-    await within(section).findByText('Known situation');
+    await within(section).findByText(known.summary);
     await userEvent.click(
       within(section).getByRole('button', { name: 'Refresh' }),
     );
     expect(await within(section).findByRole('alert')).not.toHaveTextContent(
       'private error',
     );
-    expect(within(section).queryByText('Known situation')).toBeNull();
+    expect(within(section).queryByText(known.summary)).toBeNull();
     expect(within(section).queryByRole('button', { name: 'Retry' })).toBeNull();
     if (status === 401)
       expect(
