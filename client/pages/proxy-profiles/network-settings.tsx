@@ -14,7 +14,6 @@ import {
   CardAction,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from '#components/ui/card';
@@ -78,7 +77,11 @@ export function NetworkSettingsForm() {
         info={
           <NotesTip
             label={$t('network.title')}
-            notes={[$t('network.notAffected'), $t('network.certificateHelp')]}
+            notes={[
+              $t('network.notAffected'),
+              $t('network.viaCollector'),
+              $t('network.certificateHelp'),
+            ]}
           />
         }
       />
@@ -341,11 +344,6 @@ function SourcesCard({
           </Table>
         ) : null}
       </CardContent>
-      <CardFooter>
-        <p className='text-sm text-muted-foreground'>
-          {$t('network.viaCollector')}
-        </p>
-      </CardFooter>
     </Card>
   );
 }

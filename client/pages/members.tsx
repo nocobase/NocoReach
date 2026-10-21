@@ -486,7 +486,7 @@ function Members() {
                                 <TableCell>
                                   <div className='flex flex-wrap gap-1'>
                                     {row.locked ? (
-                                      <Badge>
+                                      <Badge variant='secondary'>
                                         {$t(
                                           'accessMembers.systemAdministrator',
                                         )}
