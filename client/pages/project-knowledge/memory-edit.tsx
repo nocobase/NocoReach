@@ -7,86 +7,67 @@ import {
   useNocoReachLocale,
 } from '#i18n';
 import { useRef, useState, type ReactElement } from 'react';
-import { useOutletContext, useParams } from 'react-router';
+import { useOutletContext } from 'react-router';
 import { confirmAction } from '#components/reach/confirm';
 import { ListSkeleton } from '#components/reach/states';
 import { RouteDialog } from '#components/route-dialog';
 import { Button } from '#components/ui/button';
 import { useRouteOverlay } from '#components/use-route-overlay';
 import { useBusinessAccess } from '#hooks/use-business-access';
+import { cn } from '#lib/utils';
 import {
   getMemorySections,
   memoryOf,
+  MEMORY_MAX,
   request,
   SECTION_MAX,
-  type MemoryKey,
+  SUGGESTED,
+  type Memory,
   type ProjectKnowledgeContext,
 } from './model';
 
-// One 记忆 item edited on its own (user decision 2026-10-20), at /project/memory/<item>/edit over the 记忆 tab: the
-// project name or one of the nine sections. Only that item is sent; the server merges it into what is saved now, so an
-// item someone else changed meanwhile is kept.
-const FORM_ID = 'memory-item-form';
+// Edit memory (user decision 2026-10-21: one Edit for every item instead of a pencil per row), at /project/memory/edit over
+// the Memory tab: the project name and the nine sections. Only the items changed here are sent; the server merges them
+// into what is saved now, so an item someone else changed meanwhile is kept.
+const FORM_ID = 'memory-edit-form';
 export default function MemoryEditDialog(): ReactElement {
   useNocoReachLocale();
-  const { section = '' } = useParams();
-  // Another item's address starts over with that item's text.
-  return <ItemDialog key={section} section={section} />;
-}
-
-function ItemDialog({ section }: { section: string }): ReactElement {
   const context = useOutletContext<ProjectKnowledgeContext>();
   const { project } = context;
-  const entry =
-    section === 'name'
-      ? ([section, $t('common.projectName'), ''] as const)
-      : getMemorySections().find(([k]) => k === section);
-  const current = entry
-    ? section === 'name'
-      ? project.name
-      : memoryOf(project)[section as MemoryKey]
-    : '';
   const { can: canSave, isPending } = useBusinessAccess(
     'nrKnowledge.saveMemory',
     project.id,
   );
-  const [text, setText] = useState(current),
+  // What the dialog opened with; the edits are compared against it.
+  const [initial] = useState(() => ({
+    name: project.name,
+    memory: memoryOf(project),
+  }));
+  const [name, setName] = useState(initial.name),
+    [memory, setMemory] = useState<Memory>(initial.memory),
     [busy, setBusy] = useState(false);
-  // What beforeClose reads besides the text: a state would lag one render behind a save that closes right away.
+  // What beforeClose reads besides the fields: a state would lag one render behind a save that closes right away.
   const busyRef = useRef(false),
     savedRef = useRef(false);
-  if (entry && isPending)
+  const changed = getMemorySections()
+    .map(([k]) => k)
+    .filter((k) => memory[k].trim() !== initial.memory[k].trim());
+  const nameChanged = name.trim() !== initial.name.trim();
+  const dirty = nameChanged || changed.length > 0;
+  if (isPending)
     return (
-      <RouteDialog title={entry[1]} className='sm:max-w-xl'>
-        <ListSkeleton rows={3} />
-      </RouteDialog>
-    );
-  if (!entry)
-    return (
-      <RouteDialog
-        title={$t('projectKnowledge.itemNotFound')}
-        className='sm:max-w-md'
-        footer={<CloseButton />}
-      >
-        <p className='text-sm text-muted-foreground'>
-          {$t('projectKnowledge.itemNotFoundHelp')}
-        </p>
+      <RouteDialog title={$t('projectKnowledge.editMemory')}>
+        <ListSkeleton rows={4} />
       </RouteDialog>
     );
   return (
     <RouteDialog
-      title={
-        !canSave
-          ? entry[1]
-          : current
-            ? $t('projectKnowledge.editValue', { 0: entry[1] })
-            : $t('projectKnowledge.fillValue', { 0: entry[1] })
-      }
-      description={entry[2] || undefined}
-      className='sm:max-w-xl'
+      title={$t('projectKnowledge.editMemory')}
+      description={$t('projectKnowledge.editMemoryHelp')}
+      className='sm:max-w-2xl'
       beforeClose={async () => {
         if (busyRef.current) return false;
-        if (savedRef.current || text === current) return true;
+        if (savedRef.current || !dirty) return true;
         return confirmAction({
           title: () => $t('common.discardUnsavedChanges'),
           description: () => $t('projectKnowledge.discardItemChanges'),
@@ -95,9 +76,10 @@ function ItemDialog({ section }: { section: string }): ReactElement {
       }}
       footer={
         canSave ? (
-          <SaveFooter
+          <EditFooter
             busy={busy}
-            disabled={section === 'name' && !text.trim()}
+            canSubmit={dirty && Boolean(name.trim())}
+            memory={memory}
           />
         ) : (
           <CloseButton />
@@ -106,26 +88,27 @@ function ItemDialog({ section }: { section: string }): ReactElement {
     >
       {canSave ? (
         <EditForm
-          section={section}
-          title={entry[1]}
-          text={text}
-          onText={setText}
+          name={name}
+          onName={setName}
+          memory={memory}
+          onMemory={setMemory}
           busy={busy}
           save={async () => {
             busyRef.current = true;
             setBusy(true);
             try {
-              await request(
-                'saveMemory',
-                project.id,
-                section === 'name'
-                  ? { name: text.trim() }
-                  : { section, text: text.trim() },
-              );
+              await request('saveMemory', project.id, {
+                ...(nameChanged ? { name: name.trim() } : {}),
+                ...(changed.length
+                  ? {
+                      sections: Object.fromEntries(
+                        changed.map((k) => [k, memory[k].trim()]),
+                      ),
+                    }
+                  : {}),
+              });
               savedRef.current = true;
-              context.projectSaved(() =>
-                $t('projectKnowledge.itemSaved', { 0: entry[1] }),
-              );
+              context.projectSaved(() => $t('projectKnowledge.memorySaved'));
             } finally {
               busyRef.current = false;
               setBusy(false);
@@ -133,27 +116,27 @@ function ItemDialog({ section }: { section: string }): ReactElement {
           }}
         />
       ) : (
-        <p className='text-sm whitespace-pre-wrap'>
-          {current || $t('projectKnowledge.notFilledTag')}
+        <p role='alert' className='nr-error'>
+          {$t('projectKnowledge.editDenied')}
         </p>
       )}
     </RouteDialog>
   );
 }
 
-// The field, its length and any error; submitting saves and closes the dialog.
+// Every field with its hint; submitting saves and closes the dialog.
 function EditForm({
-  section,
-  title,
-  text,
-  onText,
+  name,
+  onName,
+  memory,
+  onMemory,
   busy,
   save,
 }: {
-  section: string;
-  title: string;
-  text: string;
-  onText: (t: string) => void;
+  name: string;
+  onName: (name: string) => void;
+  memory: Memory;
+  onMemory: (memory: Memory) => void;
   busy: boolean;
   save: () => Promise<void>;
 }): ReactElement {
@@ -162,10 +145,10 @@ function EditForm({
   return (
     <form
       id={FORM_ID}
-      className='flex flex-col gap-2'
+      className='flex flex-col gap-4'
       onSubmit={(e) => {
         e.preventDefault();
-        if (busy || (section === 'name' && !text.trim())) return;
+        if (busy || !name.trim()) return;
         setError('');
         save().then(
           () => void close(),
@@ -178,53 +161,71 @@ function EditForm({
         );
       }}
     >
-      <label className='nr-field'>
-        <span className='sr-only'>{title}</span>
-        {section === 'name' ? (
-          <input
-            value={text}
-            maxLength={200}
-            disabled={busy}
-            autoFocus
-            onChange={(e) => onText(e.target.value)}
-          />
-        ) : (
-          <textarea
-            rows={10}
-            maxLength={SECTION_MAX}
-            value={text}
-            disabled={busy}
-            autoFocus
-            onChange={(e) => onText(e.target.value)}
-          />
-        )}
-      </label>
-      {section === 'name' ? null : (
-        <p className='text-xs text-muted-foreground tabular-nums'>
-          {$tj('projectKnowledge.itemLength', {
-            0: text.trim().length.toLocaleString(getCurrentLocale()),
-            1: SECTION_MAX.toLocaleString(getCurrentLocale()),
-          })}
-        </p>
-      )}
+      {/* At the top, so a failed save is seen however far the form was scrolled. */}
       {error ? (
         <p role='alert' className='nr-error'>
           {error}
         </p>
       ) : null}
+      <label className='nr-field'>
+        <span>
+          {$t('common.projectName')} <span aria-hidden='true'>*</span>
+        </span>
+        <input
+          value={name}
+          maxLength={200}
+          required
+          disabled={busy}
+          onChange={(e) => onName(e.target.value)}
+        />
+      </label>
+      {getMemorySections().map(([k, title, hint]) => (
+        <label key={k} className='nr-field' data-memory-field={k}>
+          <span>
+            {title}
+            <span className='font-normal text-muted-foreground'>
+              {' · '}
+              {hint}
+            </span>
+          </span>
+          <textarea
+            rows={k === 'brand' || k === 'product' ? 5 : 3}
+            maxLength={SECTION_MAX}
+            value={memory[k]}
+            disabled={busy}
+            onChange={(e) => onMemory({ ...memory, [k]: e.target.value })}
+          />
+        </label>
+      ))}
     </form>
   );
 }
-function SaveFooter({
+
+function EditFooter({
   busy,
-  disabled,
+  canSubmit,
+  memory,
 }: {
   busy: boolean;
-  disabled: boolean;
+  canSubmit: boolean;
+  memory: Memory;
 }): ReactElement {
   const { close, isClosing } = useRouteOverlay();
+  const total = Object.values(memory).reduce((n, t) => n + t.trim().length, 0);
   return (
     <>
+      {/* A hint, not a status: it turns red only past what the server accepts. */}
+      <span
+        className={cn(
+          'mr-auto self-center text-xs tabular-nums',
+          total > MEMORY_MAX ? 'text-destructive' : 'text-muted-foreground',
+        )}
+      >
+        {$tj('projectKnowledge.memoryTotal', {
+          0: total.toLocaleString(getCurrentLocale()),
+          1: SUGGESTED.toLocaleString(getCurrentLocale()),
+        })}
+      </span>
       <Button
         variant='outline'
         disabled={busy || isClosing}
@@ -232,7 +233,7 @@ function SaveFooter({
       >
         {$t('common.cancel')}
       </Button>
-      <Button type='submit' form={FORM_ID} disabled={busy || disabled}>
+      <Button type='submit' form={FORM_ID} disabled={busy || !canSubmit}>
         {busy ? $t('common.saving') : $t('common.save')}
       </Button>
     </>

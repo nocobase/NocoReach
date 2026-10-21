@@ -138,6 +138,19 @@ export type MemorySuggestion = {
   source: 'reviews' | 'results' | 'site' | 'draft';
   at: string;
 };
+// What Generate from the website and materials offers before it runs (nrMemory:sources): the pages and materials it will read, the person's
+// earlier choice when `custom`, and the automatic choice to go back to.
+export type MemorySources = {
+  urls: string[];
+  custom: boolean;
+  auto: string[];
+  items: { id: string; title: string; category: string; addedAt: string }[];
+  itemIds: string[];
+  itemsCustom: boolean;
+  autoItemIds: string[];
+};
+export const SOURCE_PAGES = 8,
+  SOURCE_ITEMS = 6;
 export type MemoryStatus = {
   running: 'draft' | 'check' | null;
   aiReady: boolean;

@@ -71,3 +71,35 @@ test('hourly tick checks projects a week after the last check or first draft; ne
  for(const path of ['/pricing','/en/about','/products/crm','/zh-cn/features/']) assert.ok(KEY_PATH.test(path),path);
  for(const path of ['/blog/2026/post','/docs/a/b','/pricing/a/b','/']) assert.ok(!KEY_PATH.test(path),path);
 });
+
+test('pages and materials chosen before generating (2026-10-21): offered from the automatic choice, kept, and read by the draft and the weekly check',async()=>{
+ const reply='```json\n{"memory":{"brand":"NocoBase：开源无代码平台"}}\n```';
+ const {s,calls}=service({replies:[reply,JSON.stringify({memory:[]})]});
+ let src=await s.sources('1');
+ assert.deepEqual(src.urls,['https://nocobase.com/','https://nocobase.com/pricing','https://www.nocobase.com/en/about'],'the automatic choice is offered');
+ assert.equal(src.custom,false);assert.deepEqual(src.itemIds,['k1']);assert.equal(src.itemsCustom,false);assert.deepEqual(src.items.map(i=>i.title),['2026 竞品对比']);
+ await assert.rejects(s.setSources('1',{urls:['http://docs.example.com/']}),e=>e.status===400,'https only');
+ await assert.rejects(s.setSources('1',{urls:['https://127.0.0.1/']}),e=>e.status===400,'no addresses');
+ await assert.rejects(s.setSources('1',{urls:Array.from({length:9},(_,i)=>`https://a.example.com/${i}`)}),/8/,'eight pages at most');
+ await s.setSources('1',{urls:['https://docs.example.com/pricing#plans','https://docs.example.com/pricing'],itemIds:[]});
+ src=await s.sources('1');assert.deepEqual(src.urls,['https://docs.example.com/pricing']);assert.equal(src.custom,true);assert.deepEqual(src.itemIds,[]);assert.equal(src.itemsCustom,true);
+ calls.downloads.length=0;await s.draft('1');
+ assert.deepEqual(calls.downloads,['https://docs.example.com/pricing'],'only the chosen page is read');
+ const user=calls.prompts[0].user;assert.equal(user.website.length,1);assert.deepEqual(user.material,[],'no material was chosen');
+ assert.deepEqual((await s.status('1')).draft.pages.map(p=>p.url),['https://docs.example.com/pricing']);
+ calls.downloads.length=0;await s.check('1');assert.deepEqual(calls.downloads,['https://docs.example.com/pricing'],'the weekly check watches the same pages');
+ // null goes back to the automatic choice; a field left out stays
+ await s.setSources('1',{urls:null});src=await s.sources('1');assert.equal(src.custom,false);assert.equal(src.urls[0],'https://nocobase.com/');assert.equal(src.itemsCustom,true);
+});
+
+test('generating while a run is going keeps the choice and says so instead of ignoring it',async()=>{
+ const {s}=service({replies:[]});
+ s.running.set('1','check');
+ await assert.rejects(s.requestDraft('1',{urls:['https://nocobase.com/about'],itemIds:['k1']}),e=>e.status===409);
+ assert.deepEqual((await s.sources('1')).urls,['https://nocobase.com/about'],'the choice was kept');
+ await assert.rejects(s.setSources('1',{urls:'https://nocobase.com/'}),e=>e.status===400,'a list, not a string');
+ await assert.rejects(s.setSources('1',{itemIds:[1]}),e=>e.status===400,'ids are strings');
+ await assert.rejects(s.setSources('1',{itemIds:['a','b','c','d','e','f','g']}),/6/,'six materials at most');
+ await s.setSources('1',{urls:[]});const empty=await s.sources('1');assert.deepEqual(empty.urls,[]);assert.equal(empty.custom,true,'no pages is a choice, not the automatic one');
+ s.running.delete('1');
+});

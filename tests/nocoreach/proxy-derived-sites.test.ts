@@ -430,7 +430,11 @@ it('retains explicitly injected readers instead of replacing them with proxy tra
     read,
   );
   await keywords.inputs('1');
-  const memory = new MemoryUpdate({ network }, read);
+  // No pages were chosen before generating, so the automatic choice reads the home page.
+  const memory = new MemoryUpdate(
+    { network, db: { getRepository: () => ({ findOne: async () => null }) } },
+    read,
+  );
   await memory.website('1', { domains: ['one.example'] });
   expect(read).toHaveBeenCalledTimes(3);
   expect(send).not.toHaveBeenCalled();

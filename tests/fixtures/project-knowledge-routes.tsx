@@ -9,6 +9,7 @@ import KnowledgeTab from '../../client/pages/project-knowledge/knowledge-base';
 import KnowledgeItemDrawer from '../../client/pages/project-knowledge/knowledge-item';
 import MemoryTab from '../../client/pages/project-knowledge/memory';
 import MemoryEditDialog from '../../client/pages/project-knowledge/memory-edit';
+import MemoryGenerateDialog from '../../client/pages/project-knowledge/memory-generate';
 
 // The 项目知识 routes as client/nocoreach-routes.ts declares them, without the lazy loading and the page gates.
 export async function mountProjectKnowledge(path = '/project') {
@@ -28,7 +29,10 @@ export async function mountProjectKnowledge(path = '/project') {
           {
             path: 'memory',
             Component: MemoryTab,
-            children: [{ path: ':section/edit', Component: MemoryEditDialog }],
+            children: [
+              { path: 'edit', Component: MemoryEditDialog },
+              { path: 'generate', Component: MemoryGenerateDialog },
+            ],
           },
           {
             path: 'knowledge',
