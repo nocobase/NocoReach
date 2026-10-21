@@ -3,11 +3,11 @@ import { ChatProvider } from '@nocobase/app-plugin-agents/client/chat';
 import { ChatPanel } from '#extensions/nocobase-agent-chat/chat-panel';
 import { ChatHeaderButton } from '#extensions/nocobase-agent-chat/launchers';
 import { useSyncServerLocale } from '@nocobase/app-plugin-i18n/client';
-import { type ReactElement } from 'react';
+import { useRef, type ReactElement } from 'react';
 import type { AppClientRegisteredRoute } from '@nocobase/app-client/plugins';
 import { Outlet, useLocation } from 'react-router';
 
-import { Breadcrumbs } from '#components/breadcrumbs';
+import { BreadcrumbParentLink, Breadcrumbs } from '#components/breadcrumbs';
 
 import { RouteTreeProvider } from '../routing/route-context.js';
 
@@ -46,6 +46,8 @@ export function AppLayout({ routes }: AppLayoutProps): ReactElement {
     denied,
   );
   const navigationBadges = usePendingNavigationBadges();
+  // The element pages scroll in: the trail of a top-level page waits for the page's heading to leave it.
+  const contentRef = useRef<HTMLDivElement>(null);
   const navigationLabel = t('navigation.label', {
     defaultValue: 'Application navigation',
   });
@@ -72,12 +74,17 @@ export function AppLayout({ routes }: AppLayoutProps): ReactElement {
                 <LayoutHeader className='sticky top-0 z-40 justify-between gap-1 sm:gap-2'>
                   <div className='flex min-w-0 shrink-0 items-center gap-1 sm:shrink sm:gap-3'>
                     <AppSidebarToggle />
-                    <div className='md:hidden'>
-                      <AppBrand compact />
-                    </div>
-                    <div className='hidden h-5 w-px shrink-0 bg-border sm:block' />
-                    {/* The current page's trail: the route tree's, or the one the page declares (`usePageBreadcrumb`). */}
-                    <Breadcrumbs className='hidden sm:block' denied={denied} />
+                    {/* NocoReach: below md the header has no room for the trail, so a page below another one puts its
+                    way back where the compact brand would be; its page has no BackButton of its own (L6). */}
+                    <BreadcrumbParentLink
+                      className='max-w-40 md:hidden'
+                      denied={denied}
+                      fallback={<AppBrand compact />}
+                    />
+                    {/* The current page's trail, from md up: the route tree's, or the one the page declares
+                    (`usePageBreadcrumb`). NocoReach: on a top-level page it is the page's own title, so it waits until
+                    the page's heading has scrolled away instead of repeating it (see Breadcrumbs). */}
+                    <Breadcrumbs denied={denied} scroller={contentRef} />
                   </div>
                   {/* NocoReach: which project every page works on (classic portal header). The shell has no slot for an
                   application control, so it sits here, before the template's own actions. */}
@@ -92,7 +99,7 @@ export function AppLayout({ routes }: AppLayoutProps): ReactElement {
                   <main className='relative min-w-0 flex-1 overflow-hidden'>
                     {/* main only positions; the page scrolls in here, so a child page layer laid over main is neither
             moved by the page's scrolling nor stretched by its height. */}
-                    <div className='h-full overflow-y-auto'>
+                    <div ref={contentRef} className='h-full overflow-y-auto'>
                       <Outlet />
                     </div>
                   </main>

@@ -1,9 +1,13 @@
-// 关键词 详情 (client/pages/keyword-detail.tsx): a page over the 关键词 tab it was opened from. It shows the overview,
+// Keyword details (client/pages/keyword-detail.tsx): a page over the Keywords tab it was opened from. It shows the overview,
 // the 12 months, related keywords (a click opens that keyword), the site's pages Google showed for it, the top 10 with
-// the site marked, and goes back to the same tab without its own parameters.
+// the site marked, and its header trail leads back to the same tab without its own parameters.
+import {
+  PageBreadcrumbProvider,
+  usePageBreadcrumbLevels,
+} from '@nocobase/app-client';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createMemoryRouter, Outlet, RouterProvider } from 'react-router';
+import { createMemoryRouter, Link, Outlet, RouterProvider } from 'react-router';
 import { beforeEach, expect, it, vi } from 'vitest';
 
 import KeywordDetailPage from '#pages/keyword-detail';
@@ -113,6 +117,20 @@ function answer(market: unknown) {
     throw new Error(`unexpected ${resource}/${act}`);
   });
 }
+// What the layout's header would show: the trail the page declares.
+function Trail() {
+  const levels = usePageBreadcrumbLevels();
+  return (
+    <ol aria-label='trail'>
+      {levels?.map((level) => (
+        <li key={level.label}>
+          {level.to ? <Link to={level.to}>{level.label}</Link> : level.label}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function open(
   url = '/keywords/detail?tab=saved&kw=open%20source%20crm&kwLoc=2840&kwLang=en',
 ) {
@@ -122,8 +140,11 @@ function open(
         path: '/keywords',
         element: (
           <WorkspaceCacheProvider>
-            <p>keywords list</p>
-            <Outlet />
+            <PageBreadcrumbProvider>
+              <Trail />
+              <p>keywords list</p>
+              <Outlet />
+            </PageBreadcrumbProvider>
           </WorkspaceCacheProvider>
         ),
         children: [{ path: 'detail', element: <KeywordDetailPage /> }],
@@ -177,7 +198,7 @@ it('shows the overview, the related keywords, the site pages and the top 10 with
   expect(within(top.closest('li')!).getByText('本站')).toBeVisible();
 });
 
-it('opens a related keyword in place and goes back to the tab it came from', async () => {
+it('opens a related keyword in place, and its trail goes back to the tab it came from', async () => {
   answer({
     connected: true,
     overview: { status: 'ready', at: 't', item: item('open source crm', 1600) },
@@ -200,8 +221,15 @@ it('opens a related keyword in place and goes back to the tab it came from', asy
   expect(
     await screen.findByRole('heading', { level: 1, name: 'crm open source' }),
   ).toBeVisible();
-  const back = screen.getByRole('link', { name: '返回关键词' });
-  expect(back).toHaveAttribute('href', '/keywords?tab=saved');
+  // The header's trail is the only way back (L6): Keywords › crm open source, without the detail's own parameters.
+  const trail = screen.getByRole('list', { name: 'trail' });
+  const [keywords, current] = within(trail).getAllByRole('listitem');
+  expect(within(keywords!).getByRole('link')).toHaveAttribute(
+    'href',
+    '/keywords?tab=saved',
+  );
+  expect(current).toHaveTextContent('crm open source');
+  expect(screen.queryByRole('link', { name: /返回/ })).toBeNull();
 });
 
 it('says what to do when DataForSEO is not connected, and what a keyword without market data means', async () => {

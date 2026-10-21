@@ -5,6 +5,12 @@
 - Find the article a task changes from its page instead of picking it from hundreds: the page address is read back through each publishing target's page pattern to a slug and looked up there. The start card shows the article found with Change; it is linked as the task starts.
 - Decide where a change goes from where the page lives: a page no target holds goes to the website repository as a pull request (unless the playbook names a target), a blog post stays a new article in the playbook's target. Publish to, also-publish and the new/existing choice appear only after Change, when nothing was found, or when the targets could not be asked.
 
+## Unreleased — Page names shown once
+
+- Top-level pages no longer repeat their name in the header beside the sidebar toggle: the name fades in there only once the page's large title has scrolled out of view.
+- Pages below another one show their full path in the header, with the earlier levels as links back: Keywords › the keyword, Members & roles › the role, Scheduled tasks › Execution history (without the Settings group). Keyword details and the role form drop their own Back link.
+- Below 768px the header shows the brand on top-level pages and "‹ the parent page" on pages below another one.
+
 ## Unreleased — Connection drawers in plain words
 
 - Describe how each data source connects at the top of the drawer, in product voice instead of an AI's first person, followed by a What you need list; only the title stays pinned while the drawer scrolls. The Agent avatar and grey message box are gone from the top of the drawer: no AI is answering there.
