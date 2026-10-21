@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Insights as a conversation with the daily analysis
+
+- Insights now reads as the daily analysis speaking, so it no longer looks like Opportunities or opens on a wall of text. The key numbers stay on top as tiles with their trend (at most five, only those with data), with Status (the standing facts, in a drawer) and All data (every data page, grouped) below them.
+- Under the date, the daily analysis says how many decisions wait and which key numbers moved by 5% or more, with its notes folded. The opportunities waiting for a decision, the same ones as Opportunities › To do, follow as one line each with Hand off to agent and Ignore (five shown, the rest folded; the evidence stays on Opportunities), then the watches that ended that day, the tasks waiting for you and data that failed to sync.
+- Earlier days fold into one line each, with how many opportunities were raised that day and where each went (handed off, awaiting decision, dismissed, expired), opening to the list and the watches that ended. Ask AI at the bottom opens the chat with the day's analysis named.
+- The numbers, Status and the waiting tasks keep their own loading, failure and Retry. A change no analysis judged yet is still judged once in the background. Today's changes, with its standalone changes and their own hand-off, is gone: since #178 every change worth doing has an opportunity.
+
 ## Unreleased — Verdicts and opportunities agree
 
 - A change the analysis judges worth doing always ends up as an opportunity, so Insights › Today's changes › To do and Opportunities list the same things. When a task, an opportunity or an ignored opportunity already covers the change or its page, the verdict becomes "No action needed" with the reason (for example "Task T-32 is already on it"); otherwise an opportunity is written from the change and its verdict, marked as needing checking. Verdicts filled in afterwards go through the same check.

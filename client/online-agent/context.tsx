@@ -92,3 +92,7 @@ export function useOnlineChat() {
   if (!context) throw new Error('OnlineChatProvider is required');
   return context;
 }
+/** The chat when the page sits inside the app layout, else null (pages rendered on their own, as in tests). */
+export function useOptionalOnlineChat() {
+  return useContext(Context);
+}
