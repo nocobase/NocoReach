@@ -5,6 +5,14 @@ import { RouteDialog } from '#components/route-dialog';
 import { useRouteOverlay } from '#components/use-route-overlay';
 import { Button } from '#components/ui/button';
 import { Input } from '#components/ui/input';
+import { Textarea } from '#components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '#components/ui/select';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { refreshNavBadges } from '#components/app-shell/nav-badges';
 import { useUnsavedWarning } from '../reach-data.js';
@@ -170,30 +178,43 @@ function Form({
           {node ? $t('results.day', { 0: node }) : $t('results.noSnapshot')}
         </b>
         {result ? (
-          <details>
-            <summary>{$t('results.evidence')}</summary>
+          <div className='mt-3 flex flex-col gap-2'>
+            <p className='text-xs font-medium text-muted-foreground'>
+              {$t('results.evidence')}
+            </p>
             <Comparison result={result} observeFrom={data.observeFrom} />
-          </details>
+          </div>
         ) : (
           <p>{$t('results.noSnapshot')}</p>
         )}
       </div>
       <label className='flex flex-col gap-1 text-sm'>
         {$t('results.kind')}
-        <select
-          aria-label={$t('results.kind')}
-          className='h-9 rounded-md border bg-background px-2'
+        <Select
           value={kind}
           disabled={busy}
-          onChange={(e) => {
-            setKind(e.target.value as typeof kind);
+          onValueChange={(value) => {
+            setKind(value as typeof kind);
             dirtyRef.current = true;
             setIsDirty(true);
           }}
         >
-          <option value='opportunity'>{$t('results.opportunity')}</option>
-          <option value='task'>{$t('results.taskKind')}</option>
-        </select>
+          <SelectTrigger className='w-full' aria-label={$t('results.kind')}>
+            <SelectValue>
+              {(value: string) =>
+                $t(
+                  value === 'task' ? 'results.taskKind' : 'results.opportunity',
+                )
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent className='w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal'>
+            <SelectItem value='opportunity'>
+              {$t('results.opportunity')}
+            </SelectItem>
+            <SelectItem value='task'>{$t('results.taskKind')}</SelectItem>
+          </SelectContent>
+        </Select>
       </label>
       {keys.map((key) => (
         <label key={key} className='flex flex-col gap-1 text-sm'>
@@ -207,8 +228,7 @@ function Form({
               onChange={(e) => edit(key, e.target.value)}
             />
           ) : (
-            <textarea
-              className='rounded-md border bg-background p-2'
+            <Textarea
               rows={3}
               required
               maxLength={limits[key]}
@@ -222,19 +242,27 @@ function Form({
       {kind === 'opportunity' && (
         <label className='flex flex-col gap-1 text-sm'>
           {$t('results.priority')}
-          <select
-            aria-label={$t('results.priority')}
-            className='h-9 rounded-md border bg-background px-2'
+          <Select
             value={values.priority}
             disabled={busy}
-            onChange={(e) => edit('priority', e.target.value)}
+            onValueChange={(value) => edit('priority', String(value))}
           >
-            {['high', 'medium', 'low', 'unrated'].map((p) => (
-              <option key={p} value={p}>
-                {$t(`results.priority.${p}`)}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              className='w-full'
+              aria-label={$t('results.priority')}
+            >
+              <SelectValue>
+                {(value: string) => $t(`results.priority.${value}`)}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent className='w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal'>
+              {['high', 'medium', 'low', 'unrated'].map((p) => (
+                <SelectItem key={p} value={p}>
+                  {$t(`results.priority.${p}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </label>
       )}
       {error && (
