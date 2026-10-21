@@ -1,7 +1,7 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import ProjectKnowledgePage from '../../client/pages/project-knowledge';
+import { mountProjectKnowledge } from '../fixtures/project-knowledge-routes';
 
 const { action, access } = vi.hoisted(() => ({
   action: vi.fn(),
@@ -44,7 +44,7 @@ afterEach(cleanup);
 test('seen permission can acknowledge a failed draft without granting draft or check', async () => {
   access.actions = ['nrMemory.seen'];
   const user = userEvent.setup();
-  render(<ProjectKnowledgePage />);
+  await mountProjectKnowledge('/project/memory');
   const seen = await screen.findByRole('button', { name: '知道了' });
   expect(
     screen.queryByRole('button', { name: '重试' }),
@@ -77,7 +77,7 @@ test.each([
   async (label, operation) => {
     access.actions = [`nrMemory.${operation}`];
     const user = userEvent.setup();
-    render(<ProjectKnowledgePage />);
+    await mountProjectKnowledge('/project/memory');
     const button = await screen.findByRole('button', { name: label });
     expect(button).toBeEnabled();
     await user.click(button);

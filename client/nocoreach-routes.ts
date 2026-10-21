@@ -176,7 +176,16 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     ] },
     page('playbooks', '/playbooks', () => import('./pages/playbooks.js'), { title: nav('playbooks'), icon: Workflow, order: 3 }),
     page('skills', '/skills', () => import('./pages/skills.js'), { title: nav('skills'), icon: WandSparkles, order: 4 }),
-    page('project-settings', '/project', () => import('./pages/project-knowledge.js'), { title: nav('projectKnowledge'), icon: NotebookPen, order: 5 }),
+    // 项目知识 has two tabs, 记忆 and 知识库; each opens its dialogs and drawer over itself.
+    { ...page('project-settings', '/project', () => import('./pages/project-knowledge/index.js'), { title: nav('projectKnowledge'), icon: NotebookPen, order: 5 }), children: [
+      { name: 'project-memory', path: 'memory', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/project-knowledge/memory.js'), children: [
+        { name: 'project-memory-edit', path: ':section/edit', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/project-knowledge/memory-edit.js') },
+      ] },
+      { name: 'project-knowledge-base', path: 'knowledge', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/project-knowledge/knowledge-base.js'), children: [
+        { name: 'project-knowledge-new', path: 'new', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/project-knowledge/knowledge-add.js') },
+        { name: 'project-knowledge-item', path: ':itemId', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/project-knowledge/knowledge-item.js') },
+      ] },
+    ] },
     page('analysis-rules', '/rules', () => import('./pages/analysis-rules.js'), { title: nav('analysisRules'), icon: SlidersHorizontal, order: 6 }),
   ]),
   group('nav-settings', nav('settings'), Settings2, 8, [

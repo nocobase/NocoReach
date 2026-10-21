@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Project knowledge in two tabs
+
+- Split Project knowledge into Memory (`/project/memory`, the default) and Knowledge base (`/project/knowledge`) tabs. The Memory tab counts pending suggestions; the Knowledge base tab counts material.
+- Memory: a line with how many items are filled and the length (a Too long tag over 3,000 characters), the AI's suggestions with the reason in one line and its examples behind ⓘ, then one row per item — project name, AI content language, nine sections — each edited on its own in a dialog with its own address (`/project/memory/<item>/edit`). Saving one item merges it into the saved memory on the server, so people editing different items keep each other's changes. Long items show five lines and unfold. The whole-card edit form is gone.
+- Knowledge base: search, category and date order are kept in the address; Add material and each material's drawer have their own addresses (`/project/knowledge/new`, `/project/knowledge/<id>`); row actions sit behind "…"; Clear filters appears while a search or category is applied. On phones the list keeps the title, category and actions.
+
 ## Unreleased — Settings › Network for marketers
 
 - Show the proxy's state first (in use or not set, server, sign-in) and edit it in a dialog; turning it off asks first.
