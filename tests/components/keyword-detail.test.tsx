@@ -1,4 +1,4 @@
-// 关键词 详情 (client/pages/keyword-detail.tsx): a page over the 关键词 tab it was opened from. It shows the overview,
+// Keyword details (client/pages/keyword-detail.tsx): a page over the Keywords tab it was opened from. It shows the overview,
 // the 12 months, related keywords (a click opens that keyword), the site's pages Google showed for it, the top 10 with
 // the site marked, and its header trail leads back to the same tab without its own parameters.
 import {
@@ -221,7 +221,7 @@ it('opens a related keyword in place, and its trail goes back to the tab it came
   expect(
     await screen.findByRole('heading', { level: 1, name: 'crm open source' }),
   ).toBeVisible();
-  // The header's trail is the only way back (L6): 关键词 › crm open source, without the detail's own parameters.
+  // The header's trail is the only way back (L6): Keywords › crm open source, without the detail's own parameters.
   const trail = screen.getByRole('list', { name: 'trail' });
   const [keywords, current] = within(trail).getAllByRole('listitem');
   expect(within(keywords!).getByRole('link')).toHaveAttribute(
