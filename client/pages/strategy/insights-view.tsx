@@ -190,7 +190,7 @@ export function TodayChanges({state,tasks,rows,projectId,busy,labelOf,convert,ig
     :<Button size="sm" variant="ghost" className="mt-2" onClick={()=>setMore(m=>({...m,done:true}))}>{$t('strategy.handledValue',{0:done.length})}<ChevronRightIcon/></Button>):null}
   </div>:<p className="text-sm text-muted-foreground">{empty}</p>}
   {open&&st?<ChangeDetail signal={open} status={st} projectId={projectId} verdicts={verdictsOf(state,open.key)} watch={watchOf(state,open.key)} today={state.insights?.generatedAt} judging={judging||deciding} error={error} onJudge={()=>void judge(open)} onDecide={status=>void decide(open,status).then(()=>setOpenKey(undefined))} onClose={()=>setOpenKey(undefined)} onHandOff={onHandOff}/>:null}
-  {handing?<DraftHandOffDialog projectId={projectId} draft={changeDraft(handing.s,handing.reason)} playbookId={PLAYBOOK[handing.s.action||'']||'optimize-page'} page={handing.s.url&&handing.s.source==='site'?handing.s.url:undefined} description={$t('strategy.changeDataGoTaskBrief')} onClose={()=>setHanding(undefined)} onDone={r=>{setHanding(undefined);onHandOff(r);}}/>:null}
+  {handing?<DraftHandOffDialog projectId={projectId} draft={changeDraft(handing.s,handing.reason)} playbookId={PLAYBOOK[handing.s.action||'']||'optimize-page'} page={handing.s.url||undefined} description={$t('strategy.changeDataGoTaskBrief')} onClose={()=>setHanding(undefined)} onDone={r=>{setHanding(undefined);onHandOff(r);}}/>:null}
  </Section>;
 }
 // One change in a panel (洞察's 今天的变化, 机会's 观察中): its data, the AI's verdict and one next step, and the verdicts of
@@ -221,7 +221,7 @@ export function ChangeDetail({signal:open,status:st,projectId,verdicts,watch,tod
     {error?<p role="alert" className="nr-error">{error}</p>:null}
    </div>
   </DetailDrawer>}
-  {handing?<DraftHandOffDialog projectId={projectId} draft={changeDraft(open,st.reason)} playbookId={PLAYBOOK[open.action||'']||'optimize-page'} page={open.url&&open.source==='site'?open.url:undefined} description={$t('strategy.changeDataGoTaskBrief')} onClose={onClose} onDone={r=>{onClose();onHandOff(r);}}/>:null}
+  {handing?<DraftHandOffDialog projectId={projectId} draft={changeDraft(open,st.reason)} playbookId={PLAYBOOK[open.action||'']||'optimize-page'} page={open.url||undefined} description={$t('strategy.changeDataGoTaskBrief')} onClose={onClose} onDone={r=>{onClose();onHandOff(r);}}/>:null}
  </>;
 }
 // Needs-you (§5.4 attention): one line, only when something waits.

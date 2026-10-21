@@ -1007,6 +1007,39 @@ it("reads a task's pages from the page linked on it and the opportunity it came 
   );
 });
 
+it('reads the page of a change handed off on its own, which has no opportunity', () => {
+  // T-33: handed off from Insights › Today's changes; no opportunity, the change and its page kept on the task.
+  const task = (evidence: Record<string, unknown>) =>
+    ({
+      ...data,
+      task: { id: 33, title: '', brief: '', evidence },
+      work: {},
+    }) as unknown as TaskData;
+  const context = {
+    signals: {
+      items: [
+        { key: 'other', url: 'https://www.example.com/blog/other' },
+        { key: 'gsc:x', url: 'https://www.example.com/blog/x' },
+      ],
+    },
+  };
+  expect(
+    pageUrlsOf(task({ insight: null, signalKey: 'gsc:x', context })),
+  ).toEqual(['https://www.example.com/blog/x']);
+  expect(
+    pageUrlsOf(
+      task({
+        insight: null,
+        page: 'https://www.example.com/blog/x',
+        signalKey: 'gsc:x',
+        context,
+      }),
+    ),
+  ).toEqual(['https://www.example.com/blog/x']);
+  // Without either, nothing names a page: the article is picked by hand, as before.
+  expect(pageUrlsOf(task({ insight: null, context }))).toEqual([]);
+});
+
 it('shows where the change goes in one line, with Change for the exceptions', async () => {
   const d = {
     ...data,
