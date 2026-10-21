@@ -81,6 +81,8 @@ export class Connections{
  knowledge: Knowledge;
  skills: Skills;
  taskData: TaskData;
+ strategy: StrategyService;
+ dataViews: DataViews;
  siteContent: SiteContent;
  members: Members;
  projects: Projects;

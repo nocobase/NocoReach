@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Ask AI reads the daily analysis
+
+- The online assistant can read the daily analysis behind Insights through a new read-only `daily_analysis` tool: a day's notes and limitations, the opportunities it raised with where each stands now (awaiting decision, handed off to agent with its task, dismissed, expired), its verdict on every change (do, watch, skip) with the reason, the opportunities awaiting a decision now, and the watches still open or ended. It reads the latest analysis or any earlier day, checks on every call that the conversation owner may still see Insights, and links opportunities to Opportunities. Asked about "the daily analysis of 10/21", it used to search the tasks and find nothing.
+- The metrics it reads (`project_data`, metrics) now include totals: each key metric of the last 28 days with the 28 days before and the change, as the Insights tiles show them, with the daily series. The snapshot of keywords, pages and audit issues had no previous period to compare with.
+- Opportunity links in chat answers open inside the application, like task links.
+
 ## Unreleased — One look for refresh buttons, drop-downs, tabs and pagination
 
 - The data pages call the action that reads new data "Update now" everywhere, instead of seven names (Read now, Search now, Check now, Query now, the competitor and Site audit wordings). The connection drawers keep their own steps.
