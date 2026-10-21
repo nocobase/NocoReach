@@ -422,7 +422,7 @@
       "notFound": "該執行不存在。",
       "waiting": "等待 Agent 開始…",
       "empty": "這次執行沒有記錄任何事件。",
-      "fetchFailed": "無法獲取新事件，正在再試一次…",
+      "fetchFailed": "無法獲取新事件，正在重試…",
       "expand": "展開全部",
       "truncated": "已截斷：完整內容過長，未能保留。",
       "summary_one": "建立於 {{created}} · {{count}} 條事件",
@@ -726,7 +726,7 @@
         "runCancelled": "已停止。"
       },
       "consultation": {
-        "unavailableTitle": "諮詢物件不可見",
+        "unavailableTitle": "諮詢對象不可見",
         "snapshotTitle": "當時請求的物件：{{name}}",
         "title": "諮詢了 {{name}}"
       },
@@ -1005,7 +1005,7 @@
       "frontMatter": {
         "title": "請修正 SKILL.md 的檔案頭",
         "reasons": {
-          "missing": "SKILL.md 需以兩行「---」之間的檔案頭開始，幷包含 name 和 description。",
+          "missing": "SKILL.md 需以兩行「---」之間的檔案頭開始，並包含 name 和 description。",
           "yaml": "檔案頭不是有效的 YAML。",
           "notMapping": "檔案頭必須是鍵值對，例如「name: my-skill」。",
           "required": "請新增 {{field}}。",
@@ -1070,7 +1070,7 @@
         "concurrencyFull": "併發已滿（{{active}}/{{limit}}）",
         "runnersBusy": "可承接的執行環境滿載",
         "toolSlotsFull": "{{tool}} 的槽位已滿（{{used}}/{{limit}}）",
-        "setupRetrying": "準備失敗，正在再試一次：{{detail}}",
+        "setupRetrying": "準備失敗，正在重試：{{detail}}",
         "next": "下一個，等空閒的執行環境"
       },
       "unknown": "排隊中（{{reason}}）",
@@ -1110,7 +1110,7 @@
       "keyScopes": {
         "agents": {
           "title": "Agent",
-          "description": "檢視 Agent、技能和執行；修改 Agent 和技能，取消和再試一次執行。"
+          "description": "檢視 Agent、技能和執行；修改 Agent 和技能，取消和重試執行。"
         },
         "runners": {
           "title": "執行環境",
@@ -1326,7 +1326,7 @@
       "unknown": "狀態未知",
       "preparing": "準備中",
       "submitting": "提交中",
-      "retrying": "再試一次中",
+      "retrying": "重試中",
       "accepted": "已受理"
     },
     "errors": {
@@ -1417,7 +1417,7 @@
       "size": "郵件大小：{{size}} MiB",
       "retry": "載入正文",
       "loading": "載入中…",
-      "retryFailed": "內容載入失敗，可再次再試一次。"
+      "retryFailed": "內容載入失敗，可重試。"
     },
     "pagination": {
       "label": "分頁",
@@ -1476,7 +1476,7 @@
       "noResults": "0 條",
       "submissionUnknown": "暫時無法確認傳送結果，請先在郵箱服務商處核實，避免重複傳送。",
       "submissionPartial": "郵件服務商拒絕向以下收件人傳送：{{recipients}}。其餘收件人的傳送請求已受理，請僅向被拒絕的位址重新傳送。",
-      "submissionFailed": "部分或全部郵件傳送失敗，請核實傳送結果後再再試一次。",
+      "submissionFailed": "部分或全部郵件傳送失敗，請核實傳送結果後再重試。",
       "keepEditing": "繼續編輯",
       "closeDraftTitle": "關閉這封郵件？",
       "discardChanges": "放棄未儲存的修改",
@@ -1493,7 +1493,7 @@
       "allAccounts": "全部帳戶",
       "allMail": "全部郵件",
       "search": "搜尋郵件",
-      "participant": "往來物件",
+      "participant": "往來對象",
       "participantHint": "完整郵箱位址或 @域名，僅匹配發件人、收件人和抄送位址。",
       "participantInvalid": "請輸入有效的完整郵箱位址或 @域名。",
       "unreadOnly": "未讀",
@@ -1523,8 +1523,8 @@
       "noAccounts": "請先在郵件帳戶頁面連線郵箱，再檢視已同步郵件。",
       "empty": "未找到符合目前篩選條件的郵件。",
       "selectMessage": "請選擇一封郵件檢視內容。",
-      "conversation": "此工作階段共 {{count}} 封郵件",
-      "subjectCount": "此工作階段共 {{count}} 封郵件",
+      "conversation": "此對話串共 {{count}} 封郵件",
+      "subjectCount": "此對話串共 {{count}} 封郵件",
       "attachmentCount": "{{count}} 個附件",
       "unknownSender": "未知發件人",
       "noSubject": "（無主題）",
@@ -1744,7 +1744,7 @@
         "deactivating": "正在停用…",
         "activate": "啟用",
         "remove": "移除帳戶",
-        "removalFailed": "移除失敗，正在自動再試一次",
+        "removalFailed": "移除失敗，正在自動重試",
         "removing": "正在移除…",
         "removeTitle": "移除郵件帳戶？",
         "removeDescription": "此操作將刪除本地同步郵件、資料夾、簽名、同步記錄和授權資訊，但不會刪除服務商郵箱中的郵件。",
@@ -1853,7 +1853,7 @@
         "attachments": "附件",
         "sendNow": "立即傳送",
         "back": "返回編輯",
-        "confirm": "確認併傳送",
+        "confirm": "確認並傳送",
         "sending": "提交中…",
         "resultsTitle": "投遞結果",
         "recipient": "收件人"
@@ -1913,7 +1913,7 @@
         "reauthorizationRequired": "需要重新授權",
         "suspended": "已停用",
         "revoked": "授權已撤銷",
-        "removalFailed": "移除失敗，正在自動再試一次",
+        "removalFailed": "移除失敗，正在自動重試",
         "removing": "正在移除"
       },
       "sync": {

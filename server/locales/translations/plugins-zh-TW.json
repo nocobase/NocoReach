@@ -34,7 +34,7 @@
       "keyScopes": {
         "agents": {
           "title": "Agent",
-          "description": "檢視 Agent、技能和執行；修改 Agent 和技能，取消和再試一次執行。"
+          "description": "檢視 Agent、技能和執行；修改 Agent 和技能，取消和重試執行。"
         },
         "runners": {
           "title": "執行環境",

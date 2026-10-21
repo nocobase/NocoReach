@@ -274,7 +274,7 @@
     },
     "example": {
       "title": "Coba permintaan seperti ini",
-      "text": "Buat aplikasi pesanan pembelian.\n\nSebuah pesanan memiliki nomor, barang, pemohon, jumlah, dan status persetujuan. Pemohon membuat pesanan dan hanya melihat pesanan miliknya; peninjau melihat semua pesanan yang menunggu dan menyetujui atau menolaknya.\nSetelah ada keputusan, beri tahu pemohon di kotak masuk dengan tautan ke pesanan tersebut.",
+      "text": "Buat aplikasi pesanan pembelian.\n\nSebuah pesanan memiliki nomor, barang, pemohon, nilai pesanan, dan status persetujuan. Pemohon membuat pesanan dan hanya melihat pesanan miliknya; peninjau melihat semua pesanan yang menunggu dan menyetujui atau menolaknya.\nSetelah ada keputusan, beri tahu pemohon di kotak masuk dengan tautan ke pesanan tersebut.",
       "hint": "Tempelkan ke Claude Code, Codex, Cursor, atau agen coding apa pun yang dibuka di proyek ini."
     },
     "capabilitiesTitle": "Kapabilitas bawaan",
@@ -378,7 +378,7 @@
         "prompts": {
           "inApp": {
             "label": "Pesan dalam aplikasi",
-            "text": "Tambahkan persetujuan pesanan ke aplikasi saat ini dan beri tahu pemohon hasilnya melalui pesan dalam aplikasi.\n\nPesanan mencakup nomor, nama, pemohon, jumlah, dan status persetujuan.\nPemohon dapat melihat pesanan mereka sendiri. Peninjau dapat melihat pesanan yang menunggu serta menyetujui atau menolaknya. Gunakan kembali fitur pesanan dan persetujuan yang ada jika tersedia.\n\nSetelah disetujui atau ditolak, kirim satu pesan dalam aplikasi hanya kepada pemohon pesanan.\nJudulnya menunjukkan apakah pesanan disetujui atau ditolak. Isinya mencakup nomor pesanan, nama, dan hasil persetujuan.\nMengklik pesan membuka detail pesanan yang bersangkutan.\nJangan kirim selama persetujuan masih menunggu. Beri tahu hanya sekali untuk hasil persetujuan yang sama.\nKegagalan notifikasi tidak memengaruhi hasil persetujuan yang telah disimpan."
+            "text": "Tambahkan persetujuan pesanan ke aplikasi saat ini dan beri tahu pemohon hasilnya melalui pesan dalam aplikasi.\n\nPesanan mencakup nomor, nama, pemohon, nilai pesanan, dan status persetujuan.\nPemohon dapat melihat pesanan mereka sendiri. Peninjau dapat melihat pesanan yang menunggu serta menyetujui atau menolaknya. Gunakan kembali fitur pesanan dan persetujuan yang ada jika tersedia.\n\nSetelah disetujui atau ditolak, kirim satu pesan dalam aplikasi hanya kepada pemohon pesanan.\nJudulnya menunjukkan apakah pesanan disetujui atau ditolak. Isinya mencakup nomor pesanan, nama, dan hasil persetujuan.\nMengklik pesan membuka detail pesanan yang bersangkutan.\nJangan kirim selama persetujuan masih menunggu. Beri tahu hanya sekali untuk hasil persetujuan yang sama.\nKegagalan notifikasi tidak memengaruhi hasil persetujuan yang telah disimpan."
           },
           "email": {
             "label": "Email",

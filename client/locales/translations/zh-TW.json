@@ -696,7 +696,7 @@
     "transcript": {
       "waiting": "等待 Agent 開始…",
       "empty": "這次執行沒有記錄任何事件。",
-      "fetchFailed": "無法獲取新事件，正在再試一次…",
+      "fetchFailed": "無法獲取新事件，正在重試…",
       "expand": "展開全部",
       "truncated": "已截斷：完整內容過長，未能保留。",
       "events": "執行記錄",

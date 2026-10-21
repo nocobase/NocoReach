@@ -905,7 +905,7 @@
       }
     },
     "skills": {
-      "attachments": "Archivos adjuntos",
+      "attachments": "Vinculaciones",
       "title": "Habilidades",
       "description": "Instrucciones reutilizables con archivos de apoyo. Asigna las habilidades predeterminadas del equipo a nivel global, a un proyecto o a un directorio de trabajo.",
       "new": "Nueva habilidad",

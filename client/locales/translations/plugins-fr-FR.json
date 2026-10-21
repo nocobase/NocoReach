@@ -905,7 +905,7 @@
       }
     },
     "skills": {
-      "attachments": "Pièces jointes",
+      "attachments": "Associations",
       "title": "Compétences",
       "description": "Instructions réutilisables accompagnées de fichiers complémentaires. Associez les compétences par défaut de l’équipe à l’ensemble de l’application, à un projet ou à un répertoire de travail.",
       "new": "Nouvelle compétence",

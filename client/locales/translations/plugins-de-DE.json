@@ -905,7 +905,7 @@
       }
     },
     "skills": {
-      "attachments": "Anhänge",
+      "attachments": "Zuordnungen",
       "title": "Skills",
       "description": "Wiederverwendbare Anweisungen mit ergänzenden Dateien. Hinterlegen Sie Standard-Skills für das Team global oder für ein Projekt bzw. Arbeitsverzeichnis.",
       "new": "Neuer Skill",

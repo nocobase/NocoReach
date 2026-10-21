@@ -905,7 +905,7 @@
       }
     },
     "skills": {
-      "attachments": "Anexos",
+      "attachments": "Vínculos",
       "title": "Habilidades",
       "description": "Instruções reutilizáveis com arquivos de apoio. Vincule as habilidades padrão da equipe globalmente, a um projeto ou a um diretório de trabalho.",
       "new": "Nova habilidade",

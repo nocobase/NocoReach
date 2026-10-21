@@ -2,6 +2,9 @@
 
 ## Unreleased — Ten interface languages
 
+- Correct reviewed translation errors across all eight added languages, including named placeholders, total selection counts, task objectives, mention/citation meaning, skill associations, and Traditional Chinese wording.
+- Use complete localized sentences for AI mention/citation evidence and synchronize the latest main-branch update actions and tab counts.
+
 - Add Traditional Chinese, Japanese, Spanish, Brazilian Portuguese, French, German, Vietnamese, and Indonesian alongside English and Simplified Chinese.
 - Correct Japanese and Indonesian completion confirmations to state that no content will be published; label Japanese and Spanish revert PR links as existing pull requests.
 - Preserve shared date formatting when merging main and synchronize duration and signed-change translations across all languages.

@@ -6905,5 +6905,8 @@
   "articlePublishing.byPlaybookDescription": "每个做法的新任务默认发布到哪里；任务开始前仍可改选。",
   "articlePublishing.followDefault": "跟随默认目标（{0}）",
   "articlePublishing.byPlaybookSaved": "已保存各做法的发布目标",
-  "articlePublishing.playbooksFailed": "无法读取做法列表。"
+  "articlePublishing.playbooksFailed": "无法读取做法列表。",
+  "aiQuestions.alreadyMentionedUs": "已经提到我们",
+  "aiQuestions.alreadyCitedUs": "已经引用我们",
+  "aiQuestions.alreadyMentionedAndCitedUs": "已经提到并引用我们"
 }

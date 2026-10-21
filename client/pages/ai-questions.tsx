@@ -1,3 +1,4 @@
+import { questionBrandEvidence } from './ai-question-evidence.js';
 import { type Message, useMessageState, $t, $tj, $legacyText } from "#i18n";
 // AI 搜索 › 问题 (2026-10-05): what people ask ChatGPT and Google AI Overviews about our topics, which answers name or cite
 // us, which name competitors or other brands instead (the chances), and which name nobody. Topics are suggested by the
@@ -185,7 +186,7 @@ function QuestionDetail({ q, onClose, onHand }: { q: Question; onClose: () => vo
 // The questions picked become one task: how AI answers now, who it names and cites, and what to do.
 function questionsDraft(rows: Question[]): TaskDraft {
   const head = rows[0].question;
-  const lines = rows.slice(0, 30).map((q) => $t('aiQuestions.questionEvidence',{0:q.question,1:getPlatform()[q.platform],2:n(q.volume),3:q.status === "ours" ? $t('aiQuestions.alreadyUs',{0:q.weNamed ? $t('aiQuestions.mentioned') : "",1:q.weCited ? $t('aiQuestions.cited') : ""}) : $t('aiQuestions.notMentionUs'),4:q.rivals.length || q.brands.length ? $t('aiQuestions.mentions',{0:[...q.rivals, ...q.brands].slice(0, 6).join("、")}) : "",5:q.sources.length ? $t('aiQuestions.cites',{0:[...new Set(q.sources.map((s) => s.domain))].slice(0, 5).join("、")}) : "",6:q.answer ? $t('aiQuestions.answerBegins',{0:q.answer.slice(0, 240).replace(/\s+/g, " ")}) : ""}));
+  const lines = rows.slice(0, 30).map((q) => $t('aiQuestions.questionEvidence',{0:q.question,1:getPlatform()[q.platform],2:n(q.volume),3:q.status === "ours" ? questionBrandEvidence(q.weNamed, q.weCited) : $t('aiQuestions.notMentionUs'),4:q.rivals.length || q.brands.length ? $t('aiQuestions.mentions',{0:[...q.rivals, ...q.brands].slice(0, 6).join("、")}) : "",5:q.sources.length ? $t('aiQuestions.cites',{0:[...new Set(q.sources.map((s) => s.domain))].slice(0, 5).join("、")}) : "",6:q.answer ? $t('aiQuestions.answerBegins',{0:q.answer.slice(0, 240).replace(/\s+/g, " ")}) : ""}));
   return {
     title: (rows.length === 1 ? $t('common.getAiMentionUsWhen',{0:head}) : $t('aiQuestions.getAiMentionUsWhen',{0:head,1:rows.length})).slice(0, 200),
     objective: $t('aiQuestions.aiChatgptGoogleAiOverviews').slice(0, 1000),
