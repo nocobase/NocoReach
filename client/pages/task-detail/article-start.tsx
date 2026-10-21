@@ -260,7 +260,7 @@ export function ArticleStart({
 }
 
 // Where the change goes when it was decided without asking (2026-10-21): the article found from the task's page, the
-// one saved on the task, a new article in the playbook's target, or the website repository. 更改 opens ArticleStart
+// one saved on the task, a new article in the playbook's target, or the website repository. Change opens ArticleStart
 // for the exceptions. Returns null when an article still has to be picked, so the full choice shows instead.
 export function DeliverySummary({
   data,

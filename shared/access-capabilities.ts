@@ -304,6 +304,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     ...list('nrContentIndex', ['createWork', 'save']),
     'nrOnline.read',
     'nrArticles.search',
+    'nrArticles.match',
   ],
   knowledge: [
     ...list('nrKnowledge', ['add', 'edit', 'remove', 'saveMemory']),

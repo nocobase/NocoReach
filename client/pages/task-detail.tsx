@@ -225,7 +225,7 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId}:{data:D
  const [choiceState,setChoiceState]=useState<DeliveryChoice&{playbook:string}>();
  const targetIds=(data.articleTargets||[]).map(t=>t.id);
  const choice=choiceState&&choiceState.playbook===pick&&(choiceState.target==='repo'||targetIds.includes(choiceState.target))?{...choiceState,also:choiceState.also.filter(x=>targetIds.includes(x))}:undefined;
- // The article is found from the task's page (2026-10-21) rather than picked from hundreds; 更改 is for exceptions.
+ // The article is found from the task's page (2026-10-21) rather than picked from hundreds; Change is for exceptions.
  const pages=pageUrlsOf(data),pagesKey=pages.join('\n'),hasTargets=Boolean(data.articleTargets?.length),savedArticle=data.work.article?.articleId||'';
  const lookupKey=hasTargets&&!savedArticle&&pagesKey?`${projectId}\n${pagesKey}`:'';
  const [lookup,setLookup]=useState<{key:string;found:ArticleFound}>(),[editing,setEditing]=useState(false);
