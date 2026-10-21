@@ -66,13 +66,22 @@ const card: Opportunity = {
   signalIds: ['gsc-drop'],
   change: 'new',
 };
+const other: Opportunity = {
+  ...card,
+  id: 'o37',
+  no: 37,
+  title: 'Add AI and self-hosting to the home page',
+  observation: 'The home page ranks 12.3 on average.',
+  priority: 'medium',
+  change: 'unchanged',
+};
 const state: StrategyState = {
   revision: 3,
   goal: null,
   proposals: [],
   insights: {
     generatedAt: '2026-10-20T01:00:00Z',
-    items: [card],
+    items: [card, other],
     evidence: {
       analysisVersion: 3,
       capturedAt: '',
@@ -121,7 +130,7 @@ const show = (entry = '/opportunities') =>
     </MemoryRouter>,
   );
 
-it('reads each pending opportunity as a brief with no owner or playbook form', async () => {
+it('reads the selected opportunity in a detail with no owner or playbook form', async () => {
   show();
   const brief = await screen.findByRole('article', { name: card.title });
   for (const label of [
@@ -137,9 +146,11 @@ it('reads each pending opportunity as a brief with no owner or playbook form', a
   expect(brief.textContent).toContain(card.meaning);
   expect(brief.textContent).toContain(card.priorityReason);
   expect(brief.textContent).toContain(card.suggestion);
+  expect(brief.textContent).toContain('strategy.briefWhere');
   expect(brief.textContent).toContain(card.target);
-  expect(brief.textContent).toContain(card.audience);
-  expect(brief.textContent).toContain(card.objective);
+  // The audience and goal are not shown: the Agent reads the audience from Memory, the goal goes in its brief.
+  expect(brief.textContent).not.toContain(card.audience);
+  expect(brief.textContent).not.toContain(card.objective);
   expect(screen.queryByRole('combobox')).toBeNull();
   expect(
     fixture.action.mock.calls.some(([resource]) => resource === 'nrTaskWork'),
@@ -174,8 +185,15 @@ it('hands off with the recommended playbook and leaves the owner to the task', a
   ).toBe(false);
 });
 
-it('marks the opportunity a link points to', async () => {
-  show('/opportunities?item=o36');
-  const brief = await screen.findByRole('article', { name: card.title });
-  expect(brief.getAttribute('data-marked')).toBe('true');
+it('lists every pending opportunity and opens the one a link points to', async () => {
+  show('/opportunities?item=o37');
+  const detail = await screen.findByRole('article', { name: other.title });
+  expect(detail.textContent).toContain(other.observation);
+  expect(screen.queryByRole('article', { name: card.title })).toBeNull();
+  const listed = screen.getAllByRole('button', { current: true });
+  expect(listed).toHaveLength(1);
+  expect(listed[0].textContent).toContain(other.title);
+  expect(
+    screen.getByRole('button', { name: new RegExp(card.title) }),
+  ).toBeTruthy();
 });
