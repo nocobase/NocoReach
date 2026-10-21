@@ -3,6 +3,7 @@
 ## Unreleased — English code comments
 
 - AGENTS.md now asks for code comments in English, with interface elements named by their English labels. `tests/logic/comment-language.test.ts` parses every source file and fails when a file has more comments containing Chinese than `tests/logic/comment-language-baseline.json` allows (198 files, 607 older comments today); `COMMENT_LANGUAGE_BASELINE=lower` lowers the baseline after a cleanup and never raises it.
+- `.github/workflows/pr-language.yml` fails a pull request whose title, description or commit messages contain Chinese, and runs again when the description is edited, without rerunning the tests.
 
 ## Unreleased — Why a data source cannot be reached
 
