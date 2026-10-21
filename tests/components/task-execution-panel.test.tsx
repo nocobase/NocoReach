@@ -187,3 +187,22 @@ test.each([401, 403, 404])(
     }
   },
 );
+
+test("shows the tool's own message when the run stopped without a business error", async () => {
+  action.mockResolvedValue({
+    ...data,
+    execution: {
+      ...data.execution,
+      run: {
+        executions: [],
+        failureReason: 'toolAuth',
+        failureDetail: 'Not logged in · Please run /login',
+      },
+      events: [],
+    },
+  });
+  mount();
+  expect(
+    await screen.findByText('Not logged in · Please run /login'),
+  ).toBeInTheDocument();
+});
