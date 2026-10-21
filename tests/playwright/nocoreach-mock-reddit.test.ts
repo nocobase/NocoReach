@@ -172,7 +172,7 @@ test('Reddit failures stay visible, preserve successful history, and recover wit
   // The first run searches all indexed posts; the next run uses a distinct recent-month query and cannot hit its cache.
   await settings(page, 'error');
   await page.goto(`${base}/data/reddit`);
-  await page.getByRole('button', { name: 'Search now', exact: true }).click();
+  await page.getByRole('button', { name: 'Update now', exact: true }).click();
   await expect(
     page.locator('[data-slot="toast"][data-type="error"]'),
   ).toContainText('Reddit search did not complete');
@@ -219,10 +219,10 @@ test('Reddit failures stay visible, preserve successful history, and recover wit
   expect((await read('nrReddit', 'status')).lastRun.ok).toBe(true);
   await page.goto(`${base}/data/reddit`);
   await expect(
-    page.getByRole('button', { name: 'Search now', exact: true }),
+    page.getByRole('button', { name: 'Update now', exact: true }),
   ).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Search now', exact: true }).click();
+  await page.getByRole('button', { name: 'Update now', exact: true }).click();
   await expect(
     page.locator('[data-slot="toast"][data-type="success"]'),
   ).toContainText('No new posts');

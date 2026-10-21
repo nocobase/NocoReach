@@ -18,7 +18,6 @@ import {
 import { PageContainer, PageHeader } from '#components/reach/page';
 import { ListSkeleton } from '#components/reach/states';
 import { toast } from '#lib/toast';
-import { cn } from '#lib/utils';
 import { useProject } from '../reach-data';
 import {
   KNOWLEDGE_PARAMS,
@@ -29,6 +28,7 @@ import {
   type MemoryUpdates,
   type ProjectKnowledgeContext,
 } from './model';
+import { lineTabClass, lineTabListClass } from '#components/reach/line-tabs';
 
 // 项目知识 in two tabs (user decision 2026-10-20): 记忆, what every analysis and task reads, and 知识库, the material the
 // Agent looks up. The page loads what both tabs and the tab bar need (the project, the material list and the memory
@@ -87,11 +87,8 @@ function ProjectKnowledge(): ReactElement {
   );
 }
 
-// Tabs look like the other pages' line tabs (审计, 搜索表现) but are links: each tab is a route of its own.
-const tabClass = cn(
-  'relative inline-flex h-8 items-center gap-1.5 rounded-md px-1.5 text-sm font-medium whitespace-nowrap text-foreground/60 transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none dark:text-muted-foreground dark:hover:text-foreground',
-  'after:absolute after:inset-x-0 after:bottom-[-5px] after:h-0.5 after:bg-foreground after:opacity-0 after:transition-opacity aria-[current=page]:text-foreground aria-[current=page]:after:opacity-100',
-);
+// Tabs look like the other pages' line tabs (Site audit, Search performance) but are links: each tab is a route of its own.
+const tabClass = lineTabClass;
 function KnowledgeTabs({
   suggestions,
   items,
@@ -110,10 +107,7 @@ function KnowledgeTabs({
       location.pathname,
     ) !== null;
   return (
-    <nav
-      aria-label={$t('projectKnowledge.tabs')}
-      className='flex flex-wrap gap-1 pb-1.5'
-    >
+    <nav aria-label={$t('projectKnowledge.tabs')} className={lineTabListClass}>
       <NavLink className={tabClass} to={{ pathname: 'memory', search }}>
         {$t('projectKnowledge.memory')}
         {suggestions ? (

@@ -150,7 +150,7 @@ export default function SavedKeywords() {
         <TabsList variant="line" className="h-auto! justify-start">
           <TabsTrigger value="suggest">{$t('common.aiSuggestions')}</TabsTrigger>
           <TabsTrigger value="research">{$t('common.findKeywords')}</TabsTrigger>
-          <TabsTrigger value="saved">{$tj('savedKeywords.savedValue',{0:data ? ` (${data.items.length})` : ""})}</TabsTrigger>
+          <TabsTrigger value="saved">{$tj('savedKeywords.savedValue',{0:data ? ` ${data.items.length}` : ""})}</TabsTrigger>
           <TabsTrigger value="tracking">{$t('common.rankTracking')}</TabsTrigger>
         </TabsList>
       </Tabs>
