@@ -5,13 +5,21 @@ import {
   useMessageState,
   useNocoReachLocale,
 } from '#i18n';
-import { useEffect, useRef, useState, type ReactElement } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+  type RefObject,
+} from 'react';
 import { useOutletContext } from 'react-router';
 import { XIcon } from 'lucide-react';
 import { InfoTip } from '#components/reach/info-tip';
 import { InlineError, ListSkeleton } from '#components/reach/states';
 import { RouteDialog } from '#components/route-dialog';
+import { Tag } from '#components/reach/tag';
 import { Button } from '#components/ui/button';
+import { Input } from '#components/ui/input';
 import { useRouteOverlay } from '#components/use-route-overlay';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { toast } from '#lib/toast';
@@ -29,8 +37,9 @@ import {
 // change before it runs. A changed list is kept and also read by the weekly check; an untouched automatic choice stays
 // automatic, so new main pages and materials are picked up later.
 const FORM_ID = 'memory-generate-form';
+// The same pages or materials, in any order.
 const same = (a: readonly string[], b: readonly string[]) =>
-  a.length === b.length && a.every((x, i) => x === b[i]);
+  a.length === b.length && a.every((x) => b.includes(x));
 export default function MemoryGenerateDialog(): ReactElement {
   useNocoReachLocale();
   const context = useOutletContext<ProjectKnowledgeContext>();
@@ -44,6 +53,7 @@ export default function MemoryGenerateDialog(): ReactElement {
     [urls, setUrls] = useState<string[]>([]),
     [custom, setCustom] = useState(false),
     [itemIds, setItemIds] = useState<string[]>([]),
+    [itemsCustom, setItemsCustom] = useState(false),
     [loadError, setLoadError] = useMessageState(''),
     [attempt, setAttempt] = useState(0),
     [busy, setBusy] = useState(false);
@@ -58,6 +68,7 @@ export default function MemoryGenerateDialog(): ReactElement {
         setUrls(r.urls);
         setCustom(r.custom);
         setItemIds(r.itemIds);
+        setItemsCustom(r.itemsCustom);
       })
       .catch((e: unknown) => {
         if (active)
@@ -113,6 +124,8 @@ export default function MemoryGenerateDialog(): ReactElement {
           setCustom={setCustom}
           itemIds={itemIds}
           setItemIds={setItemIds}
+          itemsCustom={itemsCustom}
+          setItemsCustom={setItemsCustom}
           busy={busy}
           disabled={busy || running || empty}
           start={async () => {
@@ -120,7 +133,7 @@ export default function MemoryGenerateDialog(): ReactElement {
             const pagesChoice =
               custom || !same(urls, sources.auto) ? urls : null;
             const itemsChoice =
-              sources.itemsCustom || !same(itemIds, sources.autoItemIds)
+              itemsCustom || !same(itemIds, sources.autoItemIds)
                 ? itemIds
                 : null;
             busyRef.current = true;
@@ -172,6 +185,8 @@ function SourcesBody({
   setCustom,
   itemIds,
   setItemIds,
+  itemsCustom,
+  setItemsCustom,
   busy,
   disabled,
   start,
@@ -183,10 +198,15 @@ function SourcesBody({
   setCustom: (custom: boolean) => void;
   itemIds: string[];
   setItemIds: (ids: string[]) => void;
+  itemsCustom: boolean;
+  setItemsCustom: (custom: boolean) => void;
   busy: boolean;
   disabled: boolean;
   start: () => Promise<void>;
 }): ReactElement {
+  const addRef = useRef<HTMLInputElement>(null);
+  const autoPages = !custom && same(urls, sources.auto),
+    autoItems = !itemsCustom && same(itemIds, sources.autoItemIds);
   return (
     <GenerateForm start={start} disabled={disabled}>
       <section className='flex flex-col gap-2' aria-labelledby='memory-pages'>
@@ -200,7 +220,11 @@ function SourcesBody({
           <InfoTip label={$t('common.info')}>
             {$t('projectKnowledge.pagesToReadHelp')}
           </InfoTip>
-          {custom || !same(urls, sources.auto) ? (
+          {autoPages ? (
+            <Tag tone='grey' className='ml-auto'>
+              {$t('projectKnowledge.autoPicked')}
+            </Tag>
+          ) : (
             <Button
               type='button'
               size='xs'
@@ -214,10 +238,6 @@ function SourcesBody({
             >
               {$t('projectKnowledge.useAutoPages')}
             </Button>
-          ) : (
-            <span className='ml-auto text-xs text-muted-foreground'>
-              {$t('projectKnowledge.autoPicked')}
-            </span>
           )}
         </div>
         {urls.length ? (
@@ -242,7 +262,12 @@ function SourcesBody({
                   variant='ghost'
                   disabled={busy}
                   aria-label={$t('projectKnowledge.removePage', { 0: u })}
-                  onClick={() => setUrls(urls.filter((x) => x !== u))}
+                  title={$t('projectKnowledge.remove')}
+                  onClick={() => {
+                    setUrls(urls.filter((x) => x !== u));
+                    // The button is gone with its row: focus goes to adding a page (guideline A6).
+                    requestAnimationFrame(() => addRef.current?.focus());
+                  }}
                 >
                   <XIcon />
                 </Button>
@@ -254,7 +279,12 @@ function SourcesBody({
             {$t('projectKnowledge.noPages')}
           </p>
         )}
-        <AddPage urls={urls} busy={busy} onAdd={(u) => setUrls([...urls, u])} />
+        <AddPage
+          urls={urls}
+          busy={busy}
+          inputRef={addRef}
+          onAdd={(u) => setUrls([...urls, u])}
+        />
       </section>
       <section
         className='flex flex-col gap-2'
@@ -264,9 +294,28 @@ function SourcesBody({
           <h3 id='memory-materials' className='text-sm font-medium'>
             {$t('projectKnowledge.materialsToUse')}
           </h3>
-          <span className='text-xs text-muted-foreground'>
+          <InfoTip label={$t('common.info')}>
             {$tj('projectKnowledge.materialsToUseHelp', { 0: SOURCE_ITEMS })}
-          </span>
+          </InfoTip>
+          {autoItems ? (
+            <Tag tone='grey' className='ml-auto'>
+              {$t('projectKnowledge.newestPicked')}
+            </Tag>
+          ) : (
+            <Button
+              type='button'
+              size='xs'
+              variant='link'
+              className='ml-auto h-auto px-0'
+              disabled={busy}
+              onClick={() => {
+                setItemIds(sources.autoItemIds);
+                setItemsCustom(false);
+              }}
+            >
+              {$t('projectKnowledge.useAutoPages')}
+            </Button>
+          )}
         </div>
         {sources.items.length ? (
           <ul className='flex flex-col gap-1.5 text-sm' data-memory-items>
@@ -310,10 +359,12 @@ function SourcesBody({
 function AddPage({
   urls,
   busy,
+  inputRef,
   onAdd,
 }: {
   urls: string[];
   busy: boolean;
+  inputRef: RefObject<HTMLInputElement | null>;
   onAdd: (url: string) => void;
 }): ReactElement {
   const [value, setValue] = useState(''),
@@ -326,7 +377,17 @@ function AddPage({
     } catch {
       return setError(() => $t('projectKnowledge.pageInvalid'));
     }
-    if (u.protocol !== 'https:' || !u.hostname.includes('.'))
+    // The same rule as the server: public https pages, no sign-in, port or bare address.
+    if (
+      u.protocol !== 'https:' ||
+      u.username ||
+      u.password ||
+      u.port ||
+      u.hostname === 'localhost' ||
+      !u.hostname.includes('.') ||
+      /^[\d.]+$/.test(u.hostname) ||
+      u.hostname.startsWith('[')
+    )
       return setError(() => $t('projectKnowledge.pageInvalid'));
     u.hash = '';
     if (urls.includes(u.href))
@@ -338,10 +399,12 @@ function AddPage({
   return (
     <div className='flex flex-col gap-1'>
       <div className='flex gap-2'>
-        <input
+        <Input
+          ref={inputRef}
           className='min-w-0 flex-1'
-          aria-label={$t('projectKnowledge.addPageUrl')}
-          placeholder={$t('projectKnowledge.addPageUrl')}
+          type='url'
+          aria-label={$t('projectKnowledge.addPageLabel')}
+          placeholder='https://example.com/about'
           value={value}
           disabled={busy || full}
           onChange={(e) => {
@@ -409,12 +472,13 @@ function GenerateForm({
         );
       }}
     >
-      {children}
+      {/* At the top, so a refused start is seen however far the form was scrolled. */}
       {error ? (
         <p role='alert' className='nr-error'>
           {error}
         </p>
       ) : null}
+      {children}
     </form>
   );
 }

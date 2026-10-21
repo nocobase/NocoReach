@@ -220,7 +220,8 @@ test('generating shows the pages and materials to read; an untouched choice stay
       name: 'https://example.com/pricing',
     }),
   ).toBeInTheDocument();
-  expect(within(dialog).getByText('自动选的')).toBeInTheDocument();
+  expect(within(dialog).getByText('自动选择')).toBeInTheDocument();
+  expect(within(dialog).getByText('最新的资料')).toBeInTheDocument();
   expect(
     within(dialog).getByRole('checkbox', { name: 'Competitor pricing' }),
   ).toBeChecked();
@@ -250,7 +251,7 @@ test('pages and materials can be changed before generating, and the change is se
     }),
   );
   const input = within(dialog).getByRole('textbox', {
-    name: 'https://… 添加网页',
+    name: '添加网页',
   });
   await user.type(input, 'http://docs.example.com/');
   await user.click(within(dialog).getByRole('button', { name: '添加' }));
@@ -379,4 +380,39 @@ test('the tabs and their dialogs follow a language change in place', async () =>
   expect(
     screen.getByRole('dialog', { name: 'Edit memory' }),
   ).toBeInTheDocument();
+});
+
+test('ticking a material away and back keeps the automatic choice; a refused start keeps the dialog open', async () => {
+  withSources(sources);
+  const base = action.getMockImplementation()!;
+  action.mockImplementation(async (resource: string, command: string, o) => {
+    if (resource === 'nrMemory' && command === 'draft')
+      throw new Error('正在生成或检查记忆，请等它结束后再试');
+    return base(resource, command, o);
+  });
+  const user = userEvent.setup();
+  const router = await mountProjectKnowledge('/project/memory/generate');
+  const material = await screen.findByRole('checkbox', {
+    name: 'Customer interview',
+  });
+  await user.click(material);
+  expect(screen.getAllByRole('button', { name: '恢复自动选择' })).toHaveLength(
+    1,
+  );
+  await user.click(material);
+  expect(
+    screen.queryByRole('button', { name: '恢复自动选择' }),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: '开始生成' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    '正在生成或检查记忆，请等它结束后再试',
+  );
+  expect(router.state.location.pathname).toBe('/project/memory/generate');
+  expect(action).toHaveBeenCalledWith(
+    'nrMemory',
+    'draft',
+    expect.objectContaining({
+      body: { projectId: '1', urls: null, itemIds: null },
+    }),
+  );
 });

@@ -91,3 +91,15 @@ test('pages and materials chosen before generating (2026-10-21): offered from th
  // null goes back to the automatic choice; a field left out stays
  await s.setSources('1',{urls:null});src=await s.sources('1');assert.equal(src.custom,false);assert.equal(src.urls[0],'https://nocobase.com/');assert.equal(src.itemsCustom,true);
 });
+
+test('generating while a run is going keeps the choice and says so instead of ignoring it',async()=>{
+ const {s}=service({replies:[]});
+ s.running.set('1','check');
+ await assert.rejects(s.requestDraft('1',{urls:['https://nocobase.com/about'],itemIds:['k1']}),e=>e.status===409);
+ assert.deepEqual((await s.sources('1')).urls,['https://nocobase.com/about'],'the choice was kept');
+ await assert.rejects(s.setSources('1',{urls:'https://nocobase.com/'}),e=>e.status===400,'a list, not a string');
+ await assert.rejects(s.setSources('1',{itemIds:[1]}),e=>e.status===400,'ids are strings');
+ await assert.rejects(s.setSources('1',{itemIds:['a','b','c','d','e','f','g']}),/6/,'six materials at most');
+ await s.setSources('1',{urls:[]});const empty=await s.sources('1');assert.deepEqual(empty.urls,[]);assert.equal(empty.custom,true,'no pages is a choice, not the automatic one');
+ s.running.delete('1');
+});

@@ -233,15 +233,21 @@ function useMemoryUpdates(projectId?: number): MemoryUpdates {
     );
     return () => clearTimeout(timer);
   }, [projectId, status, currentRef]);
-  // A draft or a check that finished since the last look may have written 记忆: read the project again. This also
-  // covers a run that ends before the first poll, as a quick one does.
-  const finishedRef = useRef<string>(undefined);
+  // A draft or a check that finished since the last look may have written 记忆: read the project again — when a run
+  // seen going has stopped, or the last draft or check changed (a run that ended before the first poll). The first
+  // look at a project only sets the baseline.
+  const finishedRef = useRef<{ key: string; running: boolean }>(undefined);
   useEffect(() => {
-    if (!status || status.running) return;
+    if (!status) return;
     const key = `${projectId}:${status.draft?.at ?? ''}:${status.lastCheck?.at ?? ''}`;
+    const running = Boolean(status.running);
     const before = finishedRef.current;
-    finishedRef.current = key;
-    if (before?.startsWith(`${projectId}:`) && before !== key)
+    finishedRef.current = { key, running };
+    if (
+      !running &&
+      before?.key.startsWith(`${projectId}:`) &&
+      (before.running || before.key !== key)
+    )
       window.dispatchEvent(new Event('reach-project-saved'));
   }, [projectId, status]);
   const act = useCallback(

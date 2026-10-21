@@ -161,11 +161,20 @@ function EditForm({
         );
       }}
     >
+      {/* At the top, so a failed save is seen however far the form was scrolled. */}
+      {error ? (
+        <p role='alert' className='nr-error'>
+          {error}
+        </p>
+      ) : null}
       <label className='nr-field'>
-        {$t('common.projectName')}
+        <span>
+          {$t('common.projectName')} <span aria-hidden='true'>*</span>
+        </span>
         <input
           value={name}
           maxLength={200}
+          required
           disabled={busy}
           onChange={(e) => onName(e.target.value)}
         />
@@ -188,11 +197,6 @@ function EditForm({
           />
         </label>
       ))}
-      {error ? (
-        <p role='alert' className='nr-error'>
-          {error}
-        </p>
-      ) : null}
     </form>
   );
 }

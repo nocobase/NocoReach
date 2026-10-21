@@ -36,7 +36,7 @@ const CHECK=`你在帮一个营销团队维护项目“记忆”（AI 团队每�
 source 填 reviews、results 或 site。
 只输出一个 json 代码块：{"memory":[{"section":"","text":"一两句话","replace":"","reason":"为什么值得改，修改意见出现了几次","source":"","examples":["原话摘录"]}]}`;
 class MemoryUpdate{
- constructor(p,read=download){this.p=p;this.p.network?.bind(this,['draft', 'check', 'website']);this.download=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;this.running=new Map();this.busy=false;}
+ constructor(p,read=download){this.p=p;this.p.network?.bind(this,['draft', 'check', 'website', 'sources']);this.download=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;this.running=new Map();this.busy=false;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `memory-updates:${id}`;}
  async lock(id,fn){const s=this.p.db.sequelize;if(!s)return fn();return s.transaction(async transaction=>{await s.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:`nocoreach-memory:${id}`},transaction});return fn(transaction);});}
@@ -69,12 +69,12 @@ class MemoryUpdate{
  // Keeps what the person chose: `urls` and `itemIds` replace the choice, null goes back to the automatic one, and a
  // field left out stays as it was. Only public https pages are read, at most eight pages and six materials.
  async setSources(id,v){const next={};
-  if(v.urls!==undefined){if(v.urls!==null&&!Array.isArray(v.urls))fail(systemMessageText('memoryUpdate.invalidSources'));
+  if(v.urls!==undefined){if(v.urls!==null&&(!Array.isArray(v.urls)||v.urls.length>PAGES*4||v.urls.some(x=>typeof x!=='string'||x.length>2000)))fail(systemMessageText('memoryUpdate.invalidSources'));
    const urls=[];for(const raw of v.urls||[]){let u;try{u=new URL(String(raw).trim());}catch{fail(systemMessageText('memoryUpdate.invalidPage',{0:String(raw).slice(0,200)}));}
     if(u.protocol!=='https:'||u.username||u.password||u.port||isIP(u.hostname)||u.hostname==='localhost'||!u.hostname.includes('.'))fail(systemMessageText('memoryUpdate.invalidPage',{0:String(raw).slice(0,200)}));
     u.hash='';if(!urls.includes(u.href))urls.push(u.href);}
    if(urls.length>PAGES)fail(systemMessageText('memoryUpdate.tooManyPages',{0:PAGES}));next.urls=v.urls===null?null:urls;}
-  if(v.itemIds!==undefined){if(v.itemIds!==null&&!Array.isArray(v.itemIds))fail(systemMessageText('memoryUpdate.invalidSources'));
+  if(v.itemIds!==undefined){if(v.itemIds!==null&&(!Array.isArray(v.itemIds)||v.itemIds.some(x=>typeof x!=='string'||x.length>100)))fail(systemMessageText('memoryUpdate.invalidSources'));
    const ids=[...new Set((v.itemIds||[]).map(String))];if(ids.length>ITEMS)fail(systemMessageText('memoryUpdate.tooManyItems',{0:ITEMS}));next.itemIds=v.itemIds===null?null:ids;}
   return this.mutate(id,s=>{const sources={...(s.sources||{})};for(const [k,x] of Object.entries(next)){if(x===null)delete sources[k];else sources[k]=x;}
    const rest={...s};delete rest.sources;return Object.keys(sources).length?{...rest,sources}:rest;});}
@@ -132,12 +132,16 @@ class MemoryUpdate{
  async dismiss(id,v){const ids=new Set(Array.isArray(v.ids)?v.ids.map(String):[]);
   await this.mutate(id,x=>{const gone=(x.suggestions||[]).filter(y=>ids.has(y.id));return {...x,suggestions:(x.suggestions||[]).filter(y=>!ids.has(y.id)),dismissed:[...gone.map(y=>hash(y.section+y.text)),...(x.dismissed||[])].slice(0,DISMISSED)};});return this.status(id);}
  async seen(id){await this.mutate(id,x=>x.draft?{...x,draft:{...x.draft,seen:true}}:x);return this.status(id);}
+ // 生成 asked from the page: the chosen pages and materials are kept first, so they are not lost when a run is already
+ // going, which is refused rather than silently ignored.
+ async requestDraft(id,v={}){if(!this.p.taskExecution?.provider)fail(systemMessageText('aiQuestions.onlineAiNotConnectedYet'),409);
+  if(v.urls!==undefined||v.itemIds!==undefined)await this.setSources(id,v);if(!this.start(id,'draft'))fail(systemMessageText('memoryUpdate.alreadyRunning'),409);return this.status(id);}
  async status(id){const s=await this.state(id);return {running:this.running.get(id)||null,aiReady:Boolean(this.p.taskExecution?.provider),draft:s.draft||null,lastCheck:s.lastCheck||null,suggestions:s.suggestions||[]};}
  // Hourly: projects whose last check (or first draft) is a week old are checked again.
  async tick(){if(this.busy||!this.p.taskExecution?.provider)return;this.busy=true;try{for(const id of await this.p.projectIds()){const s=await this.state(String(id));const last=Date.parse(s.lastCheck?.at||s.draft?.at||0);
    if(Date.now()-last<WEEK||this.running.has(String(id)))continue;this.running.set(String(id),'check');try{await this.check(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach memory check failed',{projectId:id,message:e.message});}finally{this.running.delete(String(id));}}}finally{this.busy=false;}}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('audit.notCompleteTryAgainLater'));}};
-  const actions={status:wrap(id=>this.status(id)),sources:wrap(id=>this.sources(id)),draft:wrap(async (id,v)=>{if(!this.p.taskExecution?.provider)fail(systemMessageText('aiQuestions.onlineAiNotConnectedYet'),409);if(!this.running.has(id)&&(v.urls!==undefined||v.itemIds!==undefined))await this.setSources(id,v);this.start(id,'draft');return this.status(id);}),check:wrap(async id=>{if(!this.p.taskExecution?.provider)fail(systemMessageText('aiQuestions.onlineAiNotConnectedYet'),409);this.start(id,'check');return this.status(id);}),
+  const actions={status:wrap(id=>this.status(id)),sources:wrap(id=>this.sources(id)),draft:wrap((id,v)=>this.requestDraft(id,v)),check:wrap(async id=>{if(!this.p.taskExecution?.provider)fail(systemMessageText('aiQuestions.onlineAiNotConnectedYet'),409);this.start(id,'check');return this.status(id);}),
    accept:wrap((id,v)=>this.accept(id,v)),dismiss:wrap((id,v)=>this.dismiss(id,v)),seen:wrap(id=>this.seen(id))};
   this.p.app.resourceManager.define({name:'nrMemory',actions});this.p.app.acl.allow('nrMemory',Object.keys(actions),'loggedIn');}
 }
