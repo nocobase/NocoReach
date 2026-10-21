@@ -37,10 +37,6 @@ const cliPlugins: AppCliPlugins = defineCliPlugins([
       ],
       afterServerBuild: [
         {
-          label: 'Include demo data plugin',
-          command: ['node', 'cli/build-demo-mode-plugin.mjs'],
-        },
-        {
           label: 'Include NocoReach simulated-data plugin package',
           command: ['node', 'cli/build-mock-plugin.mjs'],
         },

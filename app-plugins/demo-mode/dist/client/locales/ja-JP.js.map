@@ -1,1 +1,0 @@
-{"version":3,"file":"ja-JP.js","sourceRoot":"","sources":["../../../client/locales/ja-JP.ts"],"names":[],"mappings":"AACA,MAAM,QAAQ,GAAqB;IACjC,aAAa,EAAE;QACb,KAAK,EAAE,OAAO;QACd,IAAI,EAAE,IAAI;QACV,MAAM,EAAE,UAAU;QAClB,aAAa,EAAE,MAAM;QACrB,SAAS,EAAE,IAAI;KAChB;IACD,OAAO,EAAE;QACP,KAAK,EAAE,kBAAkB;QACzB,WAAW,EAAE,qBAAqB;KACnC;CACF,CAAC;AACF,eAAe,QAAQ,CAAC"}

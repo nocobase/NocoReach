@@ -153,8 +153,6 @@
     "app-plugins/nocoreach-mock/tsconfig.json",
     "app-plugins/nocoreach-mock/tsconfig.build.json",
     "docs/MOCK-DATA.md",
-    "app-plugins/demo-mode",
-    "scripts/sync-demo-mode-plugin.mjs",
     "docs/DEMO-DATA.md",
     "pnpm-workspace.yaml",
     "patches"
@@ -215,7 +213,7 @@
     "@nocobase/app-plugin-mail": "^1.0.0-beta.13",
     "@nocobase/app-plugin-template-print": "0.0.2-beta.2",
     "@nocoreach/app-plugin-mock": "file:app-plugins/nocoreach-mock",
-    "@nocobase/app-plugin-demo-mode": "link:app-plugins/demo-mode"
+    "@nocobase/app-plugin-demo-mode": "0.0.1"
   },
   "scripts": {
     "postinstall": "nocobase skills sync",

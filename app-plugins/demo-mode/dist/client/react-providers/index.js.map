@@ -1,1 +1,0 @@
-{"version":3,"file":"index.js","sourceRoot":"","sources":["../../../client/react-providers/index.ts"],"names":[],"mappings":"AAAA,OAAO,EACL,0BAA0B,GAE3B,MAAM,8BAA8B,CAAC;AAEtC,OAAO,EAAE,cAAc,EAAE,MAAM,mCAAmC,CAAC;AAEnE,MAAM,CAAC,MAAM,cAAc,GACzB,0BAA0B,CAAC;IACzB;QACE,IAAI,EAAE,WAAW;QACjB,SAAS,EAAE,cAAc;KAC1B;CACF,CAAC,CAAC;AAEL,eAAe,cAAc,CAAC"}

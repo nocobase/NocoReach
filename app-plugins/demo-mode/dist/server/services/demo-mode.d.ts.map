@@ -1,1 +1,0 @@
-{"version":3,"file":"demo-mode.d.ts","sourceRoot":"","sources":["../../../server/services/demo-mode.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,QAAQ,EAAE,gBAAgB,EAAE,MAAM,cAAc,CAAC;AAC/D,OAAO,KAAK,EAAE,eAAe,EAAE,MAAM,cAAc,CAAC;AAEpD,qBAAa,sBAAuB,YAAW,eAAe;IAC5D,SAAgB,IAAI,EAAE,QAAQ,CAAC;IAC/B,SAAgB,WAAW,EAAE,SAAS,MAAM,EAAE,CAAC;gBAE5B,QAAQ,EAAE,gBAAgB;CAI9C"}
