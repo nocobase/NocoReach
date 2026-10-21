@@ -163,6 +163,16 @@ describe('NocoReach semantic-key translations', () => {
         '集中管理网络 Profile，在各接入点选择真实代理或模拟响应。',
       // The daily analysis runs on the Scheduler now; pausing it is under Settings › Automatic runs.
       每日分析工作流已停用: '每日分析已暂停',
+      // A weekly change carries its own sign, so a fall reads "−7/week" rather than "+-7/week" (2026-10-21).
+      '+{0}/周': '{0}/周',
+      '（近一周 {0}{1}）': '（近一周 {0}）',
+      // Tab counts follow the tab name without brackets, as Opportunities' tabs do (2026-10-21).
+      '全部 ({0})': '全部 {0}',
+      '关键词 ({0})': '关键词 {0}',
+      '已出现 ({0})': '已出现 {0}',
+      '接近首页 ({0})': '接近首页 {0}',
+      '机会 ({0})': '机会 {0}',
+      '没有品牌 ({0})': '没有品牌 {0}',
     };
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(

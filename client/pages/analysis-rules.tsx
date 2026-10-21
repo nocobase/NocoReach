@@ -5,11 +5,12 @@ import {
   useState,
   type ReactElement,
 } from 'react';
-import { Loader2, ListFilter, ChevronDown, RefreshCw } from 'lucide-react';
+import { Loader2, ListFilter, ChevronDown } from 'lucide-react';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { toast } from '#lib/toast';
 import { PageContainer, PageHeader, Section } from '#components/reach/page';
+import { RefreshButton } from '#components/reach/refresh-button';
 import { ListSkeleton, LoadError, EmptyState } from '#components/reach/states';
 import { Tag } from '#components/reach/tag';
 import { Button } from '#components/ui/button';
@@ -26,6 +27,7 @@ import {
 } from './analysis-rules/schemes';
 import { RulesAssistant } from './analysis-rules/assistant';
 import type { Rule, Settings, View, Proposal } from './analysis-rules/types';
+import { formatDateTime } from '#lib/format';
 
 const call = <T,>(action: string, projectId: number, body: object = {}) =>
   api.action<T>('nrAnalysisRules', action, {
@@ -70,7 +72,7 @@ const SOURCE_ORDER = [
   'competitors',
   'ai-search',
 ];
-const day = (iso: string) => new Date(iso).toLocaleString(getCurrentLocale());
+const day = (iso: string) => formatDateTime(iso);
 const statusOf = (e: unknown) =>
   e && typeof e === 'object' && 'status' in e ? Number(e.status) : undefined;
 const errorText = (e: unknown, fallback: string) =>
@@ -314,10 +316,9 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
         title={$t('analysisRules.analysisRules')}
         description={$t('analysisRules.pageHelp')}
         actions={
-          <Button
-            variant='outline'
-            size='sm'
-            disabled={busy || Boolean(editing)}
+          <RefreshButton
+            busy={busy}
+            disabled={Boolean(editing)}
             onClick={() => {
               setBusy(true);
               setManualRevision((v) => v + 1);
@@ -325,10 +326,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                 if (aliveRef.current) setBusy(false);
               });
             }}
-          >
-            <RefreshCw className={`size-4 ${busy ? 'animate-spin' : ''}`} />
-            {$t('strategy.refreshBlock')}
-          </Button>
+          />
         }
       />
       {error ? (

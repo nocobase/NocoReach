@@ -1,4 +1,4 @@
-import { translateSourceError, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { translateSourceError, $t, $tj, $legacyText } from "#i18n";
 // Discord or Slack (社区; one page each since 2026-10-04): the chosen channels read once a day — messages and questions in
 // the range, per channel, the questions that may be unanswered and the threads with the most replies.
 import { useState } from "react";
@@ -22,6 +22,7 @@ import { AllCheck, RowCheck, useTickedList, type Selection } from "#components/r
 import { discussionsDraft, replyDraft } from "./seo-hand-off";
 import "./data-views.css";
 import { NotesTip } from "#components/reach/info-tip";
+import { formatDate, formatDateTime } from '#lib/format';
 
 type Message = { platform: "discord" | "slack"; channel: string; text: string; createdAt: string; replies: number; url: string };
 type Side = { connected: boolean; name?: string };
@@ -61,14 +62,14 @@ export function DataChat({ platform }: { platform: "discord" | "slack" }) {
   );
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title={name} description={$t('dataChat.messagesQuestionsSelectedChannelsRead',{0:name})} actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void sync()}><RefreshCw data-icon="inline-start" />{busy ? $t('common.loadingLoading') : $t('common.readNow')}</Button> : undefined} />
-      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:w.start,1:w.end}) : $t('common.comparedPreviousDays',{0:w.start,1:w.end,2:w.days})) : undefined} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title={name} description={$t('dataChat.messagesQuestionsSelectedChannelsRead',{0:name})} actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void sync()}><RefreshCw data-icon="inline-start" />{busy ? $t('common.loadingLoading') : $t('common.updateNow')}</Button> : undefined} />
+      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:formatDate(w.start),1:formatDate(w.end)}) : $t('common.comparedPreviousDays',{0:formatDate(w.start),1:formatDate(w.end),2:w.days})) : undefined} />
       {error ? <LoadError title={$t('dataChat.notLoad',{0:name})} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
       {view && !view.connected ? <EmptyState icon={<MessagesSquare />} title={$t('dataChat.onceConnectedQuestionsChannelsUnanswered',{0:name})} description={platform === "discord" ? $t('dataChat.usesOwnDiscordBotPaste') : $t('dataChat.usesInternalAppWorkspacePaste')} action={<Button onClick={() => navigate(`/connections?source=${platform}`)}>{$tj('common.connectValue',{0:name})}</Button>} /> : null}
       {view?.connected ? (
         <>
-          <p className="nr-footnote">{where}{view.lastRun ? $t('dataChat.lastRead',{0:new Date(view.lastRun.at).toLocaleString(getCurrentLocale())}) : ""}</p>
+          <p className="nr-footnote">{where}{view.lastRun ? $t('dataChat.lastRead',{0:formatDateTime(view.lastRun.at)}) : ""}</p>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
           
           {view.series!.filter((p) => p.value !== null).length > 1 ? (

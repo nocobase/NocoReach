@@ -23,6 +23,7 @@ import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
 import { NotesTip } from "#components/reach/info-tip";
 import { RedditTiming, type RedditTimingState } from './reddit-timing';
+import { formatDate } from '#lib/format';
 
 type Post = { id: string; title: string; url: string; subreddit: string; snippet: string; postedAt: string | null; firstSeenAt: string; term: string };
 type View = RedditTimingState & { connected: boolean; terms?: string[]; window?: { start: string; end: string; days: number }; retainedFrom?: string | null; lastRun?: { at: string; ok: boolean; errors: string[] } | null; total?: number; visits?: { sessions: number; views: number; conversions: number; previous: number } | null; kpis?: Metric[]; notes?: string[]; subreddits?: { name: string; count: number }[]; posts?: Post[] };
@@ -45,8 +46,8 @@ export default function DataReddit() {
   const posts = useTickedList("reddit-posts", view?.connected ? view.posts : undefined, (p) => String(p.id), (ticked) => ({ playbookId: "community-summary", description: $t('dataReddit.postsBecomeOneTaskAgent'), draft: () => discussionsDraft("Reddit", $t('common.posts'), ticked.map((p) => ({ title: p.title, url: p.url, meta: `r/${p.subreddit} · ${p.postedAt || p.firstSeenAt.slice(0, 10)}`, excerpt: p.snippet }))) }));
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title="Reddit" description={$t('dataReddit.redditPostsMentioningProductSearched')} actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t('common.searching') : $t('common.searchNow')}</Button> : undefined} />
-      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:w.start,1:w.end}) : $t('common.comparedPreviousDays',{0:w.start,1:w.end,2:w.days})) : undefined} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title="Reddit" description={$t('dataReddit.redditPostsMentioningProductSearched')} actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t('common.searching') : $t('common.updateNow')}</Button> : undefined} />
+      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:formatDate(w.start),1:formatDate(w.end)}) : $t('common.comparedPreviousDays',{0:formatDate(w.start),1:formatDate(w.end),2:w.days})) : undefined} />
       {error ? <LoadError title={$t('dataReddit.notLoadRedditDiscussions')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
       {view && !view.connected ? <EmptyState icon={<MessageCircle />} title={$t('dataReddit.onceRedditDiscussionsConnectedPosts')} description={$t('dataReddit.searchedGoogleOnceWeekThrough')} action={<Button onClick={() => navigate("/connections?source=reddit")}>{$t('dataReddit.connectRedditDiscussions')}</Button>} /> : null}

@@ -1,11 +1,12 @@
 import { number, resultStatus, signed, signedPercent } from './format.js';
-import { $t, $legacyText, getCurrentLocale } from '#i18n';
+import { $t, $legacyText } from '#i18n';
 import {
   metricValues,
   safeConclusion,
   matchesObservation,
 } from '../../../shared/result-comparison.js';
 import type { EffectResult } from '../effect-model.js';
+import { formatDateTime } from '#lib/format';
 const metrics = [
   ['gsc', 'clicks', 'common.searchClicks'],
   ['gsc', 'impressions', 'common.searchImpressions'],
@@ -117,7 +118,7 @@ export function Comparison({
       ))}
       <p className='text-xs text-muted-foreground'>
         {$t('results.computed', {
-          0: new Date(result.computedAt).toLocaleString(getCurrentLocale()),
+          0: formatDateTime(result.computedAt),
         })}
       </p>
       {[...new Set(result.notes)].map((note) => (

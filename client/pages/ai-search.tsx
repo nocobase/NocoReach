@@ -1,4 +1,4 @@
-import { type Message, renderMessage, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { type Message, renderMessage, useMessageState, $t, $tj, $legacyText } from "#i18n";
 // AI 搜索: after every-app/open-seo db8bde1 src/client/features/ai-search/ (BrandLookupPage, PromptExplorerPage and their
 // components; MIT). Changes: the brand defaults to the project and our pages are marked from its domains; ChatGPT and
 // Google AI 概览 are looked up together and shown side by side; 问 AI asks the chosen models at once and shows each
@@ -35,6 +35,7 @@ import "./data-views.css";
 import {InfoTip,WithInfo} from "#components/reach/info-tip";
 import { help } from "./glossary";
 import { AiQuestions } from "./ai-questions";
+import { formatDate, formatDateTime } from '#lib/format';
 
 type Platform = "chat_gpt" | "google";
 type Model = "chat_gpt" | "claude" | "gemini" | "perplexity";
@@ -56,7 +57,7 @@ const MODEL: Record<Model, string> = { chat_gpt: "ChatGPT", claude: "Claude", ge
 const ai = <T,>(action: string, body: object = {}) => api.action<T>("nrAiSearch", action, { method: "POST", body: { projectId: String(currentProjectId()), ...body }, unwrap: "data" });
 const requestKey = () => crypto.randomUUID().replace(/-/g, "");
 const message = (e: unknown) => (e instanceof Error ? $legacyText(e.message) : $t('aiSearch.notCompleteTryAgainLater'));
-const when = (v?: string | null) => (v ? new Date(v).toLocaleString(getCurrentLocale(), { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
+const when = (v?: string | null) => (v ? formatDateTime(v) : "");
 // A run that did not complete: uncertain ones may be billed and are never asked again by themselves.
 const runProblem = (r: { status: string; errorCode?: string | null }) => (r.status === "unknown" ? r.errorCode || $t('common.resultUncertainMayChargedRepeat') : r.status === "failed" ? $t('aiSearch.dataforseoReturnedNoResults',{0:r.errorCode || $t('errors.unknownReason')}) : r.status === "running" ? $t('aiSearch.stillChecking') : "");
 
@@ -232,7 +233,7 @@ function GapBlock({ spec, competitor, runs, projectId, onRuns }: { spec: BrandSp
     <section className="flex flex-col gap-2 border-t pt-3 first-of-type:border-0 first-of-type:pt-0" data-gap={competitor}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium">{$t('aiSearch.mentionedNot', { 0: competitor })}</span>
-        {done.length ? <span className="text-xs text-muted-foreground">{$t('aiSearch.questionsChecked', { 0: rows.length, 1: new Date(done[0].createdAt).toLocaleDateString(getCurrentLocale()) })}</span> : null}
+        {done.length ? <span className="text-xs text-muted-foreground">{$t('aiSearch.questionsChecked', { 0: rows.length, 1: formatDate(done[0].createdAt) })}</span> : null}
         <Button size="sm" variant="outline" className="ml-auto" disabled={busy} onClick={() => void ask()}>{busy ? $t('common.lookingUp') : done.length ? $t('aiSearch.checkAgainAbout03') : $t('aiSearch.checkAbout03')}</Button>
       </div>
       {error || failed.length ? <p role="alert" className="nr-error">{error || failed.join("；")}</p> : null}

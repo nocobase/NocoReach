@@ -205,16 +205,16 @@ it('shows the work of the period: counts, page totals, each change and what need
     unwrap: 'data',
   });
   expect(await screen.findByText('+60')).toBeInTheDocument();
-  expect(screen.getByText('300 → 360 · +20%')).toBeInTheDocument();
+  expect(screen.getByText('300 → 360 · ↑ 20%')).toBeInTheDocument();
   expect(
     screen.getByText(english['results.board.noTotals']),
   ).toBeInTheDocument();
   expect(
-    screen.getByText('Up · +100% · Search clicks 100 → 200 · day 28'),
+    screen.getByText('Up · ↑ 100% · Search clicks 100 → 200 · day 28'),
   ).toBeInTheDocument();
   expect(
     screen.getByText(
-      'Down · −20% · Search clicks 200 → 160 · day 7 · Day 28 result around 11/1',
+      /^Down · ↓ 20% · Search clicks 200 → 160 · day 7 · Day 28 result around Nov 1(, \d{4})?$/,
     ),
   ).toBeInTheDocument();
   // A result opens its drawer over the dashboard, keeping the period.

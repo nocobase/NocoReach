@@ -39,6 +39,8 @@ import {
   type Realtime,
   type Today,
 } from './model';
+import { Delta as ChangeText } from '#components/reach/delta';
+import { formatTime } from '#lib/format';
 
 const message = (e: unknown) =>
   e instanceof Error ? e.message : $t('common.tryAgainLater');
@@ -57,12 +59,7 @@ function Delta({
       <span>{label}</span>
       <span className='tabular-nums'>
         {count(before)}
-        {c !== null ? (
-          <span className={cn('ml-1.5', c >= 0 ? 'nr-up' : 'nr-down')}>
-            {c > 0 ? '▲ ' : c < 0 ? '▼ ' : ''}
-            {Math.abs(Math.round(c * 1000) / 10)}%
-          </span>
-        ) : null}
+        {c !== null ? <ChangeText value={c} className='ml-1.5' /> : null}
       </span>
     </p>
   );
@@ -406,10 +403,7 @@ function RealtimeDrawer({
       i === 29 ? $t('dataWebsite.now') : $t('common.minAgo', { 0: 29 - i }),
     users,
   }));
-  const at = new Date(live.fetchedAt).toLocaleTimeString(getCurrentLocale(), {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const at = formatTime(live.fetchedAt);
   const figures = [
     ['dataWebsite.activeUsers', live.users],
     ['common.viewCount', live.views],
