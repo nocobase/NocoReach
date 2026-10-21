@@ -2,14 +2,25 @@
 
 ## Unreleased — English code comments
 
-- AGENTS.md now asks for code comments in English, with interface elements named by their English labels. `tests/logic/comment-language.test.ts` parses every source file and fails when a file has more comments containing Chinese than `tests/logic/comment-language-baseline.json` allows (198 files, 607 older comments today); `COMMENT_LANGUAGE_BASELINE=lower` lowers the baseline after a cleanup and never raises it.
+- AGENTS.md now asks for code comments in English, with interface elements named by their English labels. `tests/logic/comment-language.test.ts` parses every source file and fails when a file has more comments containing Chinese than `tests/logic/comment-language-baseline.json` allows (197 files, 601 older comments today); `COMMENT_LANGUAGE_BASELINE=lower` lowers the baseline after a cleanup and never raises it.
 - `.github/workflows/pr-language.yml` fails a pull request whose title, description or commit messages contain Chinese, and runs again when the description is edited, without rerunning the tests.
+
+## Unreleased — Connection drawers in plain words
+
+- Describe how each data source connects at the top of the drawer, in product voice instead of an AI's first person, followed by a What you need list; only the title stays pinned while the drawer scrolls. The Agent avatar and grey message box are gone from the top of the drawer: no AI is answering there.
+- Head the question buttons at the bottom of the drawer, which open the AI chat, with the Agent avatar and "Ask AI".
 
 ## Unreleased — Why a data source cannot be reached
 
 - When the server gets no answer from a data source, say which site, why (timed out, interrupted, refused, address not found, untrusted certificate, no response) and whether the request went through the proxy, instead of "the direct request failed". Proxy failures still never fall back to a direct connection.
 - Connection panels, Google sync and authorization errors and the Skill link dialog link to Settings › Network; an untrusted certificate explains the company root certificate in ⓘ, and the Skill link dialog also offers uploading the folder instead.
 - Direct public reads (website content, Skill links, public sources) report a refused, reset, timed-out or unresolvable site the same way as proxied ones, with status 502 and the original code.
+
+## Unreleased — Memory: one Edit, and choose what generating reads
+
+- Memory has one Edit (`/project/memory/edit`) that opens every item in a dialog instead of a pencil on each row; only the items changed there are saved, merged into the saved memory.
+- Generate from the website and materials (`/project/memory/generate`) first lists the pages and knowledge base materials the AI will read — by default the home page and main pages, and the newest six materials — to remove, add (up to eight public https pages) or tick before generating. A changed list is kept for later drafts and for the weekly check; Use the automatic choice goes back.
+- The memory list reloads when a draft or a check finishes, also when it finishes before the first status poll.
 
 ## Unreleased — Project knowledge in two tabs
 
