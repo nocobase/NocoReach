@@ -27,6 +27,7 @@ import { SectionHandOff } from "./section-hand-off";
 import { safeLink } from "./analytics";
 import { help } from "./glossary";
 import { formatDateTime } from '#lib/format';
+import { Segmented } from './data-github/segmented';
 
 type Issue = { category: string; key: string; title: string; description: string; value: string; score: number; savingsMs: number | null; savingsBytes: number | null; severity: "high" | "medium" };
 type Result = { url: string; finalUrl: string; strategy: "mobile" | "desktop"; version: string | null; scores: Record<string, number | null>; metrics: { key: string; label: string; value: string; score: number | null }[]; issues: Issue[] };
@@ -121,7 +122,7 @@ export function PerformanceTab({ projectId, initialUrl }: { projectId: number; i
         ) : (
           <form className="flex flex-col gap-2 lg:flex-row lg:items-center" onSubmit={(e) => { e.preventDefault(); void check(); }}>
             <Input className="lg:max-w-xl" aria-label={$t('lighthouseCard.urlCheck')} value={url} placeholder="https://www.example.com/pricing" onChange={(e) => setUrl(e.target.value)} />
-            <div className="nr-range !m-0" role="group" aria-label={$t('lighthouseCard.device')}>{(["mobile", "desktop"] as const).map((s) => <button key={s} type="button" aria-pressed={strategy === s} onClick={() => setStrategy(s)}>{deviceName(s)}</button>)}</div>
+            <Segmented label={$t('lighthouseCard.device')} options={(["mobile", "desktop"] as const).map((s) => ({ id: s, label: deviceName(s) }))} value={strategy} onChange={(v) => setStrategy(v as typeof strategy)} />
             <div className="flex items-center gap-2"><Button type="submit" disabled={busy || !url.trim()}>{busy ? $t('lighthouseCard.checkingAboutHalfMinute') : $t('common.check')}</Button><InfoTip label={$t('auditPerformance.aboutCheck')}>{$t('lighthouseCard.checksOnePageTimeWhen')}</InfoTip></div>
           </form>
         )}
@@ -162,9 +163,7 @@ function RunsTable({ records, onOpen }: { records: Record_[]; onOpen: (id: strin
     <Card className="gap-0 py-0" data-lighthouse-runs="">
       <DataTableToolbar>
         <label className="relative flex items-center"><Search className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" /><Input aria-label={$t('common.searchPages')} className="h-8 w-64 pl-8" placeholder={$t('auditPerformance.searchUrl')} value={query} onChange={(e) => choose(() => setQuery(e.target.value))} /></label>
-        <div className="inline-flex overflow-hidden rounded-md border" role="group" aria-label={$t('auditPerformance.filterDevice')}>
-          {(["all", "mobile", "desktop"] as const).map((s) => <button key={s} type="button" aria-pressed={only === s} onClick={() => choose(() => setOnly(s))} className={cn("inline-flex h-8 items-center px-3 text-sm text-muted-foreground transition-colors hover:text-foreground", only === s && "bg-muted font-medium text-foreground")}>{s === "all" ? $t('auditPerformance.bothDevices') : deviceName(s)}</button>)}
-        </div>
+        <Segmented label={$t('auditPerformance.filterDevice')} options={(["all", "mobile", "desktop"] as const).map((s) => ({ id: s, label: s === "all" ? $t('auditPerformance.bothDevices') : deviceName(s) }))} value={only} onChange={(v) => choose(() => setOnly(v as typeof only))} />
         <span className="ml-auto text-sm text-muted-foreground tabular-nums">{$t('auditPerformance.runCount', { 0: records.length })}</span>
       </DataTableToolbar>
       <DataTable table={table} isFiltered={Boolean(query) || only !== "all"} onClearFilters={() => choose(() => { setQuery(""); setOnly("all"); })} empty={{ title: $t('auditPerformance.noRuns'), description: $t('auditPerformance.noRunsHelp') }}
