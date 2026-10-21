@@ -475,7 +475,7 @@ label:has(> .sr-only:focus-visible),
   padding-inline: calc(var(--spacing) * 3);
 }
 [data-slot='table-head'][aria-sort]:not([aria-sort='none']) {
-  color: var(--primary);
+  color: var(--foreground);
 }
 [data-slot='table-head'] button {
   font-weight: inherit;

@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — AI team pages without side panels or fold-outs
+
+- Playbooks lists every playbook as a card by category across the full width; a card opens the playbook in a drawer to read or edit, instead of a list with a detail panel always beside it. A link to `?id=` opens that drawer, and nothing opens by default. Its category and Skill pickers use the shared drop-down.
+- Analysis rules shows rules by area as tabs (Search performance, Traffic and conversions, …), each source a heading with its rules shown, instead of fold-out source groups; the area with an open editor cannot be left until it is saved or cancelled. The last-analysis line leaves out "passed to the AI" when there is no count instead of showing a dash, and percentages read "2%".
+- Skills asks before discarding an edit with the app's own dialog instead of the browser's, and its drawer is as wide as the Playbooks drawer.
+- Sorted table headers use the text colour instead of the primary colour, as on tables that do not mark their sort; Project knowledge's summaries drop Markdown heading and emphasis marks.
+
 ## Unreleased — Search & market pages, fixed and in plain words
 
 - Search performance › Sitemaps names each sitemap with its host: a domain property lists every subdomain's sitemap, all called /sitemap.xml, and the rows could not be told apart.

@@ -301,24 +301,25 @@ test('keeps observation period visible below the grouped rules', async () => {
   expect(data.focus).toBe('团队重点');
 });
 
-test('groups collapse independently without changing rules or hiding an open editor', async () => {
+test('rules are tabbed by area; the area with an open editor cannot be left', async () => {
   const { container } = await start();
+  const tab = screen.getByRole('tab', { name: '搜索表现' });
+  expect(tab).toHaveAttribute('aria-selected', 'true');
   const group = within(
     container.querySelector('[data-source="gsc"]') as HTMLElement,
   );
-  const toggle = group.getByRole('button', { name: /Search Console/ });
-  expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  await userEvent.click(toggle);
-  expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  expect(group.queryByRole('switch')).toBeNull();
-  await userEvent.click(toggle);
+  expect(group.getAllByRole('switch').length).toBeGreaterThan(0);
   await userEvent.click(
     within(
       container.querySelector('[data-rule="gsc-click-drop"]') as HTMLElement,
     ).getByRole('button', { name: '调整参数' }),
   );
   await group.findByRole('spinbutton', { name: '下降至少 %' });
-  expect(toggle).toBeDisabled();
+  const others = screen
+    .getAllByRole('tab')
+    .filter((other) => other !== tab);
+  expect(others.length).toBeGreaterThan(0);
+  for (const other of others) expect(other).toBeDisabled();
   expect(container.querySelectorAll('[data-rule]')).toHaveLength(RULES.length);
   expect(calls('save')).toHaveLength(0);
 });
@@ -379,13 +380,13 @@ test('rule groups omit connection health and collection times while retaining co
   const section = container.querySelector<HTMLElement>(
     '[data-source="youtube"]',
   )!;
-  const button = section.querySelector('h3 button')!;
-  expect(button).toHaveAttribute('aria-expanded', 'false');
-  await userEvent.click(button);
-  expect(button).toHaveAttribute('aria-expanded', 'true');
+  expect(section).not.toBeVisible();
+  const tab = screen.getByRole('tab', { name: '内容表现' });
+  expect(tab).toHaveAttribute('aria-selected', 'false');
+  await userEvent.click(tab);
+  expect(tab).toHaveAttribute('aria-selected', 'true');
+  expect(section).toBeVisible();
   expect(within(section).getAllByRole('switch')).toHaveLength(3);
-  await userEvent.click(button);
-  expect(button).toHaveAttribute('aria-expanded', 'false');
   expect(calls('save')).toHaveLength(0);
 });
 
