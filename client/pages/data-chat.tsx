@@ -15,7 +15,7 @@ import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
 import { RangePicker } from './range-picker';
 import { validRange, useRange } from './range-state';
-import { MetricTile, type Metric } from "./data-parts";
+import { MetricTile, metricGrid, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
 import { HandOffBar } from "./hand-off-bar";
 import { AllCheck, RowCheck, useTickedList, type Selection } from "#components/reach/hand-off-slot";
@@ -45,7 +45,7 @@ export function DataChat({ platform }: { platform: "discord" | "slack" }) {
     finally { setBusy(false); }
   };
   const w = view?.window, where = view?.side?.name ? `${platform === "discord" ? $t('common.server') : $t('dataChat.workspace')}：${view.side.name}` : "";
-  const asItem = (m: Message) => ({ title: m.text.replace(/\s+/g, " ").slice(0, 120), url: m.url, meta: `#${m.channel} · ${m.createdAt.slice(0, 10)}` });
+  const asItem = (m: Message) => ({ title: m.text.replace(/\s+/g, " ").slice(0, 120), url: m.url, meta: `#${m.channel} · ${formatDate(m.createdAt)}` });
   const open = useTickedList(`${platform}-open`, view?.connected ? view.open : undefined, (m) => m.url, (ticked) => ({ playbookId: "community-reply", description: $t('dataChat.questionsBecomeOneTaskAgent'), draft: () => replyDraft(name, $t('dataChat.unansweredQuestions'), ticked.map(asItem)) }));
   const busiest = useTickedList(`${platform}-busiest`, view?.connected ? view.busiest : undefined, (m) => m.url, (ticked) => ({ playbookId: "community-summary", description: $t('dataChat.messagesBecomeOneTaskAgent'), draft: () => discussionsDraft(name, $t('dataChat.messages'), ticked.map(asItem)) }));
   const list = (title: string, rows: Message[], empty: string, selection: Selection) => (
@@ -55,7 +55,7 @@ export function DataChat({ platform }: { platform: "discord" | "slack" }) {
         <div key={m.url} className="flex items-start gap-3 border-b border-border px-4 py-2.5 last:border-0" data-chat-message>
           <span className="pt-0.5"><RowCheck selection={selection} k={m.url} label={m.text.slice(0, 60)} /></span><div className="min-w-0 flex-1">
           <p className="line-clamp-2 text-sm">{m.text}</p>
-          <p className="text-xs text-muted-foreground">#{m.channel} · {m.createdAt.slice(0, 10)}{m.replies ? $t('dataChat.replies',{0:m.replies}) : ""} · <a className="nr-link" href={safeLink(m.url)} target="_blank" rel="noreferrer">{$t('dataChat.open')}</a></p>
+          <p className="text-xs text-muted-foreground">#{m.channel} · {formatDate(m.createdAt)}{m.replies ? $t('dataChat.replies',{0:m.replies}) : ""} · <a className="nr-link" href={safeLink(m.url)} target="_blank" rel="noreferrer">{$t('dataChat.open')}</a></p>
         </div></div>
       )) : <p className="px-4 py-3 text-sm text-muted-foreground">{empty}</p>}
     </Card>
@@ -63,14 +63,14 @@ export function DataChat({ platform }: { platform: "discord" | "slack" }) {
   return (
     <PageContainer className="nr-data-page">
       <PageHeader info={<NotesTip notes={view?.notes} />} title={name} description={$t('dataChat.messagesQuestionsSelectedChannelsRead',{0:name})} actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void sync()}><RefreshCw data-icon="inline-start" />{busy ? $t('common.loadingLoading') : $t('common.updateNow')}</Button> : undefined} />
-      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:formatDate(w.start),1:formatDate(w.end)}) : $t('common.comparedPreviousDays',{0:formatDate(w.start),1:formatDate(w.end),2:w.days})) : undefined} />
+      {view && !view.connected ? null : <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:formatDate(w.start),1:formatDate(w.end)}) : $t('common.comparedPreviousDays',{0:formatDate(w.start),1:formatDate(w.end),2:w.days})) : undefined} />}
       {error ? <LoadError title={$t('dataChat.notLoad',{0:name})} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
       {view && !view.connected ? <EmptyState icon={<MessagesSquare />} title={$t('dataChat.onceConnectedQuestionsChannelsUnanswered',{0:name})} description={platform === "discord" ? $t('dataChat.usesOwnDiscordBotPaste') : $t('dataChat.usesInternalAppWorkspacePaste')} action={<Button onClick={() => navigate(`/connections?source=${platform}`)}>{$tj('common.connectValue',{0:name})}</Button>} /> : null}
       {view?.connected ? (
         <>
           <p className="nr-footnote">{where}{view.lastRun ? $t('dataChat.lastRead',{0:formatDateTime(view.lastRun.at)}) : ""}</p>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
+          <div className={metricGrid(view.kpis!.length)}>{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
           
           {view.series!.filter((p) => p.value !== null).length > 1 ? (
             <Card className="gap-3 px-4">

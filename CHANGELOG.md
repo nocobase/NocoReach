@@ -1,5 +1,14 @@
 # NocoReach Changelog
 
+## Unreleased — Community pages, fixed and in plain words
+
+- Reddit shows one line under the search terms: when the last search succeeded and when the next may run, with the last attempt and the hourly scan in its ⓘ. A search that did not complete names the term and the reason in plain words (for example, that automatic retries are paused because it is unclear whether the search was charged); the provider's codes and task id move into a Diagnostics ⓘ. The subreddit card's empty state is a full sentence.
+- Metric rows fill their width: two, three or five tiles take the whole row instead of leaving empty columns (Hacker News, X with its monthly spend, Reddit with its visits).
+- Hacker News says there were no mentions in the period instead of drawing an empty axis.
+- X, Discord, Slack and Forum hide the date range until the source is connected. On X a post that is only a shortened link reads "(Link only)" beside its Open on X link.
+- Descriptions are one formal sentence: X, Discord and Slack no longer say "your own" or "just paste the token", the forum is named by its link without the platform name, and Xiaohongshu, Bilibili and YouTube end with a full stop and no longer mention the collector browser. YouTube writes "Retrieved …" without the tool's name, Bilibili lists tracked videos only when there are some, and dates in Discord, Slack and Reddit rows use the shared format.
+- One name per idea: "estimated publication date" and "selected period" replace their variants on the Xiaohongshu, Bilibili and YouTube pages.
+
 ## Unreleased — Search & market pages, fixed and in plain words
 
 - Search performance › Sitemaps names each sitemap with its host: a domain property lists every subdomain's sitemap, all called /sitemap.xml, and the rows could not be told apart.

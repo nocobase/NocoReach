@@ -193,7 +193,12 @@ test.each(connectedCases)(
     const user = userEvent.setup();
     const { container } = render(element);
     const allowed = await screen.findByRole('button', { name: label });
-    expect(screen.getAllByRole('button')).toEqual([allowed]);
+    // Info tips only explain; every other control stays hidden.
+    expect(
+      screen
+        .getAllByRole('button')
+        .filter((button) => !button.hasAttribute('data-info-tip')),
+    ).toEqual([allowed]);
     expect(container.querySelector('input, select')).toBeNull();
     await user.click(allowed);
     await waitFor(() => expect(onChange).toHaveBeenCalledOnce());
