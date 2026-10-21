@@ -1,7 +1,7 @@
 # NocoReach Agent Guide
 
 - Reply in Chinese and write end-user documentation in Chinese.
-- Write developer guidance, changelogs, PR titles and descriptions, and commit messages in English.
+- Write developer guidance, changelogs, PR titles and descriptions, commit messages and code comments in English. In comments, name interface elements by their English labels (Settings › Network, Keywords › Saved, Hand off to agent); older comments that still use Chinese names are not a pattern to copy. `tests/logic/comment-language.test.ts` fails when a file gains comments containing Chinese.
 - This is a NocoBase 3 application. Use this repository's Skills, not globally installed NocoBase 2 Skills.
 - Implement business features in application source. Create a plugin only when explicitly asked for a reusable, independently published package. Prefer registered plugins and existing mechanisms.
 
