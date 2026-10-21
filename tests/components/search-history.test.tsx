@@ -36,16 +36,21 @@ const report: SearchReport = {
   },
   history: { scheduleEnabled: false, jobs: [] },
 };
-it('shows partial coverage, no records and the administrator requirement without a member write', () => {
+it('shows partial coverage, no records and the administrator requirement without a member write', async () => {
   render(<SearchHistory projectId={1} report={report} reload={vi.fn()} />);
-  expect(screen.getByText(/已取得数据合计/)).toBeTruthy();
-  expect(
-    screen.getByText(/有记录 2 天.*无记录 1 天.*尚未获取 4 天/),
-  ).toBeTruthy();
-  expect(screen.getByText(/不视为零流量/)).toBeTruthy();
+  expect(screen.getByText('数据不完整')).toBeTruthy();
   expect(screen.getByText(/请管理员打开此范围/)).toBeTruthy();
   expect(screen.getByText(/定时同步已关闭/)).toBeTruthy();
-  expect(screen.queryByRole('button')).toBeNull();
+  // The record and save dates are in the info tip, not on the page.
+  expect(screen.queryByText(/有记录 2 天/)).toBeNull();
+  await userEvent.click(screen.getByRole('button', { name: '数据范围详情' }));
+  expect(
+    await screen.findByText(/有记录 2 天.*无记录 1 天.*尚未获取 4 天/),
+  ).toBeTruthy();
+  expect(screen.getByText(/不视为零流量/)).toBeTruthy();
+  expect(
+    screen.queryByRole('button', { name: /重新获取|重试|继续/ }),
+  ).toBeNull();
   expect(state.action).not.toHaveBeenCalled();
 });
 it('automatically fills current before previous, and polling reads without enqueueing again', async () => {

@@ -37,7 +37,7 @@ import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { competitorKeywordsDraft, competitorPagesDraft, ownPagesDraft } from "./seo-hand-off";
 import "./reach-workspace.css";
 import "./data-views.css";
-import { WithInfo } from "#components/reach/info-tip";
+import { InfoTip, WithInfo } from "#components/reach/info-tip";
 import { help } from "./glossary";
 import { formatCount, formatDateTime } from '#lib/format';
 
@@ -106,11 +106,11 @@ export default function DomainOverview({ embedded = false }: { embedded?: boolea
             </div>
             <Select value={`${form.market.locationCode}:${form.market.language}`} onValueChange={(v) => { const m = getMarkets().find((x) => `${x.locationCode}:${x.language}` === v); if (m) setForm((f) => ({ ...f, market: m })); }}>
               <SelectTrigger className="w-full lg:w-44" aria-label={$t('common.market')}><SelectValue>{(v: string) => $t(getMarkets().find((x) => `${x.locationCode}:${x.language}` === v)?.label ?? "")}</SelectValue></SelectTrigger>
-              <SelectContent>{getMarkets().map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
+              <SelectContent className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{getMarkets().map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
             </Select>
             <Button type="submit" disabled={Boolean(busy) || !form.target.trim()} className="lg:px-6">{busy === "keywords" ? $t('common.querying') : $t('common.query')}</Button>
+            <InfoTip label={$t('common.info')}><p>{$t('domainOverview.organicRankingsDomainIncludingSubdomains')}</p><p>{$t('competitorsPage.lookupBilling')}</p></InfoTip>
           </form>
-          <p className="text-xs text-muted-foreground">{$t('domainOverview.organicRankingsDomainIncludingSubdomains')}</p>
           {error ? <p role="alert" className="nr-error">{error}</p> : null}
         </Card>
       )}

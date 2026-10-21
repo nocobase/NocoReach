@@ -34,7 +34,8 @@ type SitemapsView = { connected: boolean; site?: string; readAt?: string; sitema
 const TABS = ["all", "problems", "unsubmitted"] as const;
 const num = (v: number) => formatCount(v);
 const dateOf = (v?: string | null) => formatDate(v?.slice(0, 10));
-const pathOf = (u: string) => { try { return new URL(u).pathname || "/"; } catch { return u; } };
+// The host stays: a domain property lists the sitemaps of every subdomain, all called /sitemap.xml (UI review 2026-10-21).
+const pathOf = (u: string) => { try { const x = new URL(u); return `${x.host}${x.pathname}`; } catch { return u; } };
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 const stateOf = (s: Entry): Exclude<State, "unsubmitted"> => (s.errors ? "error" : s.warnings ? "warning" : s.isPending ? "pending" : "success");
 const STATE: Record<State, { tone: Tone; label: () => string }> = {
@@ -65,7 +66,7 @@ export function SitemapsView({ projectId, property, tab, onTab }: { projectId: n
   for (const s of submitted) for (const c of s.contents) byType.set(c.type, (byType.get(c.type) ?? 0) + c.submitted);
   const tiles = [
     { key: "count", label: $t('searchSitemaps.submittedSitemaps'), value: num(submitted.length), hint: submitted.some((s) => s.isIndex) ? $t('searchSitemaps.indexFiles', { 0: submitted.filter((s) => s.isIndex).length }) : "", help: $t('searchSitemaps.submittedSitemapsHelp') },
-    { key: "urls", label: $t('searchSitemaps.submittedUrls'), value: num(submitted.reduce((n, s) => n + urls(s), 0)), hint: [...byType].filter(([, n]) => n).map(([t, n]) => $t('searchSitemaps.contentCount', { 0: contentName(t), 1: num(n) })).join(" · "), help: $t('searchSitemaps.submittedUrlsHelp') },
+    { key: "urls", label: $t('searchSitemaps.submittedUrls'), value: num(submitted.reduce((n, s) => n + urls(s), 0)), hint: [...byType].filter(([, n]) => n).length > 1 ? [...byType].filter(([, n]) => n).map(([t, n]) => $t('searchSitemaps.contentCount', { 0: contentName(t), 1: num(n) })).join(" · ") : "", help: $t('searchSitemaps.submittedUrlsHelp') },
     { key: "errors", label: $t('searchSitemaps.errors'), value: num(submitted.reduce((n, s) => n + s.errors, 0)), hint: $t('searchSitemaps.errorsHint'), help: $t('searchSitemaps.errorsHelp') },
     { key: "warnings", label: $t('searchSitemaps.warnings'), value: num(submitted.reduce((n, s) => n + s.warnings, 0)), hint: $t('searchSitemaps.warningsHint'), help: $t('searchSitemaps.warningsHelp') },
   ];
@@ -74,7 +75,7 @@ export function SitemapsView({ projectId, property, tab, onTab }: { projectId: n
     <>
       <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground" data-sitemaps-status="">
         <span>{$t('searchSitemaps.statusLine', { 0: view.site, 1: formatDateTime(view.readAt) })}</span>
-        <NotesTip notes={[$t('searchSitemaps.noteSource'), $t('searchSitemaps.noteUnsubmitted'), $t('searchSitemaps.noteIndexed')]} />
+        <NotesTip notes={[...(view.site ? [$t('searchSitemaps.noteProperty', { 0: view.site })] : []), $t('searchSitemaps.noteSource'), $t('searchSitemaps.noteUnsubmitted'), $t('searchSitemaps.noteIndexed')]} />
       </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" role="group" aria-label={$t('searchPerformance.figures')}>
         {tiles.map((t) => <Card key={t.key} className="gap-0 p-4" data-sitemaps-tile={t.key}><StatTile label={t.label} value={t.value} hint={t.hint || undefined} help={t.help} tone={t.key === "errors" && t.value !== "0" ? "destructive" : undefined} /></Card>)}

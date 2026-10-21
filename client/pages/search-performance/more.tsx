@@ -54,8 +54,9 @@ const APPEARANCE: Record<string, () => string> = {
   WEB_LIGHT_RESULT: () => $t('searchPerformance.appearanceWebLight'), VIDEO: () => $t('searchPerformance.appearanceVideo'), AMP_BLUE_LINK: () => "AMP", AMP_TOP_STORIES: () => $t('searchPerformance.appearanceTopStories'),
   RICHCARD: () => $t('searchPerformance.appearanceRichResult'), FAQ_RICH_RESULT: () => "FAQ", HOWTO_RICH_RESULT: () => "How-to", REVIEW_SNIPPET: () => $t('searchPerformance.appearanceReview'), PRODUCT_SNIPPETS: () => $t('searchPerformance.appearanceProduct'),
   MERCHANT_LISTINGS: () => $t('searchPerformance.appearanceMerchant'), TRANSLATED_RESULT: () => $t('searchPerformance.appearanceTranslated'), JOB_LISTING: () => $t('searchPerformance.appearanceJob'), EVENT: () => $t('searchPerformance.appearanceEvent'),
+  FORUMS: () => $t('searchPerformance.appearanceForums'), TPF_QA: () => $t('searchPerformance.appearanceQa'),
 };
-export const breakdownName = (kind: "country" | "device" | "appearance", key: string) => (kind === "country" ? countryName(key) : kind === "device" ? (DEVICE[key] ?? (() => key))() : (APPEARANCE[key] ?? (() => key.replaceAll("_", " ").toLowerCase()))());
+export const breakdownName = (kind: "country" | "device" | "appearance", key: string) => (kind === "country" ? countryName(key) : kind === "device" ? (DEVICE[key] ?? (() => key))() : (APPEARANCE[key.toUpperCase()] ?? (() => $t('searchPerformance.appearanceOther', { 0: key.replaceAll("_", " ").toLowerCase() })))());
 const changeText = (now: number, before: number | null) => (before == null || !before ? (now && before === 0 ? $t('searchPerformance.newRow') : "—") : <Delta value={(now - before) / before} />);
 const scopeBody = (s: Scope) => ({ projectId: s.projectId, type: s.type, compare: s.compare, ...s.window, ...(s.country ? { country: s.country } : {}), ...s.filters });
 

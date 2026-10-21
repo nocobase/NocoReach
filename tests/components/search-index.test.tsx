@@ -315,9 +315,11 @@ describe('搜索表现 · 索引 and 站点地图', () => {
       within(table()).getByRole('tab', { name: '未提交 1' }),
     );
     expect(router.state.location.search).toContain('list=unsubmitted');
-    expect(within(table()).queryByText('/sitemap.xml')).toBeNull();
+    expect(within(table()).queryByText('example.com/sitemap.xml')).toBeNull();
     await userEvent.click(
-      within(table()).getByRole('button', { name: '/blog/sitemap.xml' }),
+      within(table()).getByRole('button', {
+        name: 'example.com/blog/sitemap.xml',
+      }),
     );
     const drawer = await screen.findByRole('dialog');
     expect(
@@ -326,10 +328,12 @@ describe('搜索表现 · 索引 and 站点地图', () => {
     await userEvent.click(within(drawer).getByRole('button', { name: /关闭/ }));
     await userEvent.click(within(table()).getByRole('tab', { name: '全部 2' }));
     await userEvent.click(
-      within(table()).getByRole('button', { name: '/sitemap.xml' }),
+      within(table()).getByRole('button', { name: 'example.com/sitemap.xml' }),
     );
     const detail = await screen.findByRole('dialog');
-    expect(within(detail).getByText('/sitemap-docs.xml')).toBeTruthy();
+    expect(
+      within(detail).getByText('example.com/sitemap-docs.xml'),
+    ).toBeTruthy();
     expect(
       within(detail).getByText('已检查的 4 个页面里，2 个已编入索引。'),
     ).toBeTruthy();
