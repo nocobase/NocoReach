@@ -1,5 +1,6 @@
-import { getCurrentLocale, $t } from "#i18n";
+import { $t } from "#i18n";
 import type { Tone } from "#components/reach/tag";
+import { formatCount, formatDate, formatPercent } from '#lib/format';
 // 下载量: what server/nocoreach/downloads-view.ts answers, and how its names and numbers read.
 
 export type Registry = "npm" | "pypi" | "docker" | "github";
@@ -37,11 +38,11 @@ export const CHANNEL: Record<Channel, { label: () => string; tone: Tone }> = {
   alpha: { label: () => "alpha", tone: "violet" }, beta: { label: () => "beta", tone: "amber" }, rc: { label: () => "rc", tone: "orange" }, pre: { label: () => $t('dataDownloads.channelPre'), tone: "grey" }, other: { label: () => $t('dataDownloads.channelOther'), tone: "grey" },
 };
 
-export const num = (v: number | null | undefined, digits = 0) => (v == null || !Number.isFinite(v) ? "—" : v.toLocaleString(getCurrentLocale(), { maximumFractionDigits: digits }));
-export const pct = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? "—" : `${(v * 100).toFixed(1)}%`);
+export const num = (v: number | null | undefined, digits = 0) => formatCount(v, digits);
+export const pct = (v: number | null | undefined) => formatPercent(v);
 export const change = (now: number | null | undefined, before: number | null | undefined) => (now == null || before == null || !before ? null : (now - before) / before);
 export const bytes = (b: number | null | undefined) => (b == null ? "—" : b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : b >= 1e3 ? `${(b / 1e3).toFixed(1)} KB` : `${b} B`);
-export const dateOf = (t: string | null | undefined) => (t ? new Date(t.length === 10 ? `${t}T00:00:00Z` : t).toLocaleDateString(getCurrentLocale(), { timeZone: "UTC" }) : "—");
+export const dateOf = (t: string | null | undefined) => formatDate(t && t.length > 10 ? t.slice(0, 10) : t);
 // Days before the day after the window's end (the business clock's today), as 3 天前 / 今天.
 export const ago = (t: string | null | undefined, end: string | undefined) => {
   if (!t || !end) return "";

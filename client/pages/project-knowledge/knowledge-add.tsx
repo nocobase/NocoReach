@@ -17,6 +17,13 @@ import { useRouteOverlay } from '#components/use-route-overlay';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import type { KnowledgeTabContext } from './knowledge-base';
 import { addRequest, getCategories, type MemoryKey } from './model';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '#components/ui/select';
 
 // 添加资料 (项目知识 step 3), at /project/knowledge/new over the list: a link, text or a file. The online AI suggests the
 // 知识库 title and category and new 记忆 lines; a SKILL.md or a Skill link goes to Skills. Nothing is saved until 确认.
@@ -354,17 +361,29 @@ export default function AddKnowledgeDialog(): ReactElement {
                 </label>
                 <label className='nr-field'>
                   {$t('common.category')}
-                  <select
+                  <Select
                     value={category}
                     disabled={busy}
-                    onChange={(e) => setCategory(e.target.value)}
+                    onValueChange={(v) => setCategory(String(v))}
                   >
-                    {getCategories().map(([k, v]) => (
-                      <option key={k} value={k}>
-                        {v}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger
+                      className='w-full'
+                      aria-label={$t('common.category')}
+                    >
+                      <SelectValue>
+                        {(v: string) =>
+                          getCategories().find(([k]) => k === v)?.[1] ?? v
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className='w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal'>
+                      {getCategories().map(([k, v]) => (
+                        <SelectItem key={k} value={k}>
+                          {v}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </label>
               </div>
             ) : null}

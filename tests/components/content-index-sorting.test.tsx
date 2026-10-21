@@ -3,7 +3,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 import ContentPage from '#pages/content-index';
 import { WorkspaceCacheProvider } from '#pages/workspace-cache';
@@ -43,6 +43,14 @@ const page = (
   impressions,
 });
 
+beforeEach(() => {
+  // Dates in the current year are written without the year: fix the year the fixtures are in.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(2026, 9, 21, 12));
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 it('sorts the four figures descending first, then flips, with missing values last', async () => {
   action.mockResolvedValue({
     range: '28',
@@ -89,7 +97,7 @@ it('sorts the four figures descending first, then flips, with missing values las
   expect(sortButton(2).querySelector('[data-unsorted]')).toBeNull();
   for (const i of [1, 3, 4, 5, 6])
     expect(sortButton(i).querySelector('[data-unsorted]')).not.toBeNull();
-  expect(screen.getByText('2026-01-01')).toBeTruthy();
+  expect(screen.getByText('01-01')).toBeTruthy();
 
   for (const [i, desc, asc] of [
     [1, 'ACB', 'CAB'],
@@ -155,12 +163,12 @@ it('counts its tabs from the pages listed, with pages outside the sitemap counte
   render(<RouterProvider router={router} />);
   await screen.findByText('Home');
   expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
-    '全部 (4)',
-    '其他页面 (2)',
-    '博客 (2)',
-    '站点地图外 (2)',
+    '全部 4',
+    '其他页面 2',
+    '博客 2',
+    '站点地图外 2',
   ]);
-  await userEvent.click(screen.getByRole('tab', { name: '站点地图外 (2)' }));
+  await userEvent.click(screen.getByRole('tab', { name: '站点地图外 2' }));
   expect(
     screen
       .getAllByRole('row')
@@ -290,7 +298,7 @@ it('shows how each page moved against the period before, sorts by it, and says w
   expect(cells('Down').slice(2, 6)).toEqual(['400', '−600', '5', '−5']);
   expect(cells('Docs').slice(2, 4)).toEqual(['未统计', '—']);
   // The percentage is in the change's tooltip; the type sits under the page.
-  expect(screen.getByText('−600').getAttribute('title')).toBe('−60%');
+  expect(screen.getByText('−600').getAttribute('title')).toBe('↓ 60%');
   expect(cells('Up')[0]).toContain('其他页面');
   const order = () =>
     screen
@@ -349,7 +357,7 @@ it('says beside the search when only the busiest pages outside the sitemap are l
   await screen.findByText('Home');
   expect(document.querySelector('[data-outside-cap]')).toBeNull();
   // The tab counts the pages it lists, like the others; the note beside the search gives how many there are in all.
-  await userEvent.click(screen.getByRole('tab', { name: '站点地图外 (1)' }));
+  await userEvent.click(screen.getByRole('tab', { name: '站点地图外 1' }));
   const note = screen.getByText(
     '只显示流量最高的 1 个，站点地图外一共有 340 个页面。',
   );

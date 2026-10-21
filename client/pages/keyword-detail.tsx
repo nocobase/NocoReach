@@ -77,6 +77,7 @@ import {
   useOpenKeyword,
   type SiteRank,
 } from './keyword-api';
+import { formatChange, formatDate } from '#lib/format';
 
 type Market = { locationCode: number; language: string };
 type Item = {
@@ -174,8 +175,7 @@ type RowDetail = { connected: boolean; trend: TrendPoint[] };
 const DAY = 86400000;
 const addDays = (d: string, n: number) =>
   new Date(Date.parse(`${d}T00:00:00Z`) + n * DAY).toISOString().slice(0, 10);
-const day = (v?: string | null) =>
-  v ? new Date(v).toLocaleDateString(getCurrentLocale()) : '—';
+const day = (v?: string | null) => formatDate(v);
 const pathOf = (u: string) => {
   try {
     const x = new URL(u);
@@ -185,7 +185,7 @@ const pathOf = (u: string) => {
   }
 };
 const pct = (v: number | null | undefined) =>
-  v == null ? null : `${v > 0 ? '+' : ''}${Math.round(v)}%`;
+  v == null ? null : formatChange(v / 100);
 const position = (v: number | null | undefined) =>
   v == null || !v ? '—' : v.toFixed(1);
 const monthLabel = (m: { year: number; month: number }) =>
@@ -1076,7 +1076,7 @@ function RelatedSection({
         <TabsList variant='line' className='h-auto! flex-wrap justify-start'>
           {tabs.map((t) => (
             <TabsTrigger key={t.key} value={t.key}>
-              {t.label} ({t.count})
+              {t.label} {t.count}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -1174,8 +1174,8 @@ function ContentSection({
         description={
           gsc?.window
             ? $t('keywordDetail.siteContentDescription', {
-                0: gsc.window.start,
-                1: gsc.window.end,
+                0: formatDate(gsc.window.start),
+                1: formatDate(gsc.window.end),
               })
             : $t('keywordDetail.siteContentShort')
         }

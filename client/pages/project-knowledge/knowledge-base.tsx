@@ -57,6 +57,13 @@ import {
   type Item,
   type ProjectKnowledgeContext,
 } from './model';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '#components/ui/select';
 
 // What the knowledge tab gives the drawer and the add dialog opened over it.
 export type KnowledgeTabContext = ProjectKnowledgeContext & {
@@ -179,19 +186,35 @@ export default function KnowledgeTab(): ReactElement {
             className='w-full pl-8!'
           />
         </label>
-        <select
-          aria-label={$t('projectKnowledge.filterCategory')}
-          value={category}
-          onChange={(e) => setParam('category', e.target.value)}
-          className='min-w-28'
+        <Select
+          value={category || 'all'}
+          onValueChange={(v) =>
+            setParam('category', v === 'all' ? '' : String(v))
+          }
         >
-          <option value=''>{$t('projectKnowledge.categories')}</option>
-          {getCategories().map(([k, v]) => (
-            <option key={k} value={k}>
-              {v}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger
+            className='w-full sm:w-40'
+            aria-label={$t('projectKnowledge.filterCategory')}
+          >
+            <SelectValue>
+              {(v: string) =>
+                v === 'all'
+                  ? $t('projectKnowledge.categories')
+                  : (getCategories().find(([k]) => k === v)?.[1] ?? v)
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent className='w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal'>
+            <SelectItem value='all'>
+              {$t('projectKnowledge.categories')}
+            </SelectItem>
+            {getCategories().map(([k, v]) => (
+              <SelectItem key={k} value={k}>
+                {v}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {filtered ? (
           <Button size='sm' variant='ghost' onClick={clearFilters}>
             {$t('projectKnowledge.clearFilters')}

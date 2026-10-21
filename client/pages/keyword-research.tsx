@@ -39,6 +39,7 @@ import "./reach-workspace.css";
 import "./data-views.css";
 import { InfoTip, WithInfo } from "#components/reach/info-tip";
 import { help } from "./glossary";
+import { formatDateTime } from '#lib/format';
 
 type View = keyof ReturnType<typeof getResearchViews>;
 const VIEWS = Object.keys(getResearchViews()) as View[];
@@ -46,7 +47,7 @@ const PAGE_SIZES = [50, 100] as const;
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 const getStatusText = (): Record<string, string> => ({ running: $t('keywordResearch.queryingRefreshMoment'), unknown: $t('common.resultUncertainMayChargedRepeat'), failed: $t('keywordResearch.queryFailed') });
 export const getMonths = () => ([$t('keywordResearch.jan'), $t('keywordResearch.feb'), $t('keywordResearch.mar'), $t('keywordResearch.apr'), $t('keywordResearch.may'), $t('keywordResearch.jun'), $t('keywordResearch.jul'), $t('keywordResearch.aug'), $t('keywordResearch.sep'), $t('keywordResearch.oct'), $t('keywordResearch.nov'), $t('keywordResearch.dec')]);
-const fmtTime = (v?: string | null) => (v ? new Date(v).toLocaleString(getCurrentLocale(), { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
+const fmtTime = (v?: string | null) => formatDateTime(v);
 const requestKey = () => crypto.randomUUID().replace(/-/g, "");
 
 /** The last 12 months of search volume, oldest first. */

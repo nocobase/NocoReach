@@ -1,4 +1,5 @@
-import { getCurrentLocale, $t } from "#i18n";
+import { $t } from "#i18n";
+import { formatCount, formatDate, formatPercent } from '#lib/format';
 // GitHub page · 我们的仓库: what server/nocoreach/github-view.ts answers, and the eight figures at the top (as on 访问,
 // a figure picks the daily line below it).
 
@@ -36,12 +37,12 @@ export type View = {
   };
 };
 
-export const num = (v: number | null | undefined, digits = 0) => (v == null || !Number.isFinite(v) ? "—" : v.toLocaleString(getCurrentLocale(), { maximumFractionDigits: digits }));
-export const pct = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? "—" : `${(v * 100).toFixed(1)}%`);
+export const num = (v: number | null | undefined, digits = 0) => formatCount(v, digits);
+export const pct = (v: number | null | undefined) => formatPercent(v);
 export const ratio = (a: number | null | undefined, b: number | null | undefined) => (a != null && b ? a / b : null);
 export const change = (now: number | null | undefined, before: number | null | undefined) => (now == null || before == null || !before ? null : (now - before) / before);
 export const hours = (h: number | null | undefined) => (h == null ? "—" : h < 48 ? $t('dataGithub.hoursValue', { 0: h.toFixed(1) }) : $t('dataGithub.daysValue', { 0: (h / 24).toFixed(1) }));
-export const dateOf = (d: string | null | undefined) => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString(getCurrentLocale(), { timeZone: "UTC" }) : "—");
+export const dateOf = (d: string | null | undefined) => formatDate(d);
 
 // The eight figures: what each counts, its daily line, whether it needs the full history (token) or saved Traffic,
 // and the small line under it.

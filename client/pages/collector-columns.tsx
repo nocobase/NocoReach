@@ -3,6 +3,7 @@ import { getCurrentLocale } from '#i18n';
 import type { ReactNode } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { SortableHeader } from '#components/seo/sortable-header';
+import { formatDate } from '#lib/format';
 
 /** A failed load offers Retry unless retrying cannot help: signed out, no access, or no such project. */
 export const retryable = (error: unknown) =>
@@ -17,12 +18,7 @@ export const retryable = (error: unknown) =>
 export const countText = (value: number | null | undefined) =>
   typeof value === 'number' ? value.toLocaleString(getCurrentLocale()) : '—';
 export const shortDate = (value: string | null | undefined) =>
-  value
-    ? new Date(value).toLocaleDateString(getCurrentLocale(), {
-        month: 'numeric',
-        day: 'numeric',
-      })
-    : '—';
+  formatDate(value);
 
 const right = {
   headerClassName: 'hidden text-right md:table-cell',

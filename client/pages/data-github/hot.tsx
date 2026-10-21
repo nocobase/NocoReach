@@ -1,4 +1,4 @@
-import { useMessageState, getCurrentLocale, $t } from "#i18n";
+import { useMessageState, $t } from "#i18n";
 // GitHub page · GitHub 热点 (2026-10-14, user request): what developers across GitHub look at, beside the project's own
 // repository (server/nocoreach/github-trends.ts, read once a day). 关注的话题 with their weeks, 涨星榜 from the stars
 // NocoReach records each day, the official GitHub Trending page, and the newest repositories with the most stars.
@@ -17,7 +17,10 @@ import { Tag } from "#components/reach/tag";
 import { safeLink } from "../analytics";
 import type { TaskDraft } from "../keyword-hand-off";
 import { Segmented } from "./segmented";
-import { num, pct } from "./model";
+import { num } from "./model";
+import { formatDate, formatDateTime } from "#lib/format";
+import { Delta } from '#components/reach/delta';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#components/ui/select';
 
 type Repo = { repo: string; url: string; description?: string; language?: string | null; topics?: string[]; stars: number | null; rival: boolean; own: boolean; matched: string[]; gained?: number | null; forks?: number | null; createdAt?: string | null };
 type Topic = { name: string; total: number | null; new7: number | null; lastWeek: number | null; priorAverage: number | null; weeks: { week: string; count: number | null }[]; leaders: Repo[]; fresh: Repo[] };
@@ -107,13 +110,13 @@ export function HotTab({ projectId }: { projectId: number }) {
   if (error && !hot) return <LoadError title={$t('githubHot.notLoaded')} message={error} onRetry={() => void load()} />;
   if (!hot) return <ListSkeleton rows={5} />;
   const notes = [...(hot.token ? [] : [$t('githubHot.noTokenNote')]), $t('githubHot.dataNote'), ...(hot.lastRun?.errors ?? [])];
-  const status = hot.running ? $t('githubHot.reading') : hot.lastRun ? $t('githubHot.readAt', { 0: new Date(hot.lastRun.at).toLocaleString(getCurrentLocale()) }) : "";
+  const status = hot.running ? $t('githubHot.reading') : hot.lastRun ? $t('githubHot.readAt', { 0: formatDateTime(hot.lastRun.at) }) : "";
   if (!hot.ready) return (
-    <EmptyState icon={<Flame />} title={hot.running ? $t('githubHot.firstReading') : $t('githubHot.notReadYet')} description={$t('githubHot.notReadYetHelp')} action={<Button onClick={() => void refresh()} disabled={hot.running}><RefreshCw data-icon="inline-start" />{$t('githubHot.readNow')}</Button>} />
+    <EmptyState icon={<Flame />} title={hot.running ? $t('githubHot.firstReading') : $t('githubHot.notReadYet')} description={$t('githubHot.notReadYetHelp')} action={<Button onClick={() => void refresh()} disabled={hot.running}><RefreshCw data-icon="inline-start" />{$t('common.updateNow')}</Button>} />
   );
   return (
     <div className="flex flex-col gap-4" data-github-hot="">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{status}</span><NotesTip notes={notes} /><Button className="ml-auto" variant="outline" size="sm" disabled={hot.running} onClick={() => void refresh()}><RefreshCw data-icon="inline-start" />{$t('githubHot.readNow')}</Button></div>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{status}</span><NotesTip notes={notes} /><Button className="ml-auto" variant="outline" size="sm" disabled={hot.running} onClick={() => void refresh()}><RefreshCw data-icon="inline-start" />{$t('common.updateNow')}</Button></div>
       <Frame data-hot-topics="" title={$t('githubHot.topics')} info={$t('githubHot.topicsInfo')} check={topics.length ? <AllCheck selection={topicSelection} count={topics.length} /> : undefined}
         actions={<Button variant="outline" size="sm" onClick={() => setEditing((v) => !v)}>{$t('githubHot.editTopics')}</Button>}>
         {editing ? <TopicEditor topics={topics.map((t) => t.name)} suggestions={hot.suggestions ?? []} onSave={save} onClose={() => setEditing(false)} /> : null}
@@ -125,7 +128,7 @@ export function HotTab({ projectId }: { projectId: number }) {
                 <td className="py-2 pl-4"><RowCheck selection={topicSelection} k={t.name} label={t.name} /></td>
                 <td className="py-2"><a className="nr-link" href={`https://github.com/topics/${t.name}`} target="_blank" rel="noreferrer">{t.name}</a></td>
                 <td className="py-2 text-right tabular-nums">{num(t.total)}</td><td className="py-2 text-right tabular-nums">{num(t.new7)}</td>
-                <td className="py-2 text-right tabular-nums">{num(t.lastWeek)}{c != null ? <span className={`ml-1.5 text-xs ${c >= 0 ? "nr-up" : "nr-down"}`}>{c >= 0 ? "+" : ""}{pct(c)}</span> : null}</td>
+                <td className="py-2 text-right tabular-nums">{num(t.lastWeek)}{c != null ? <Delta value={c} className="ml-1.5 text-xs" /> : null}</td>
                 <td className="py-2 pl-4"><Spark weeks={t.weeks} /></td>
                 <td className="max-w-xs py-2 pr-4 text-xs text-muted-foreground"><span className="block truncate">{t.leaders.slice(0, 3).map((r) => r.repo).join("、") || "—"}</span></td>
               </tr>); })}</tbody>
@@ -135,22 +138,28 @@ export function HotTab({ projectId }: { projectId: number }) {
       <Frame data-hot-gainers="" title={$t('githubHot.gainers')} info={$t('githubHot.gainersInfo', { 0: hot.recordedSince ?? "—" })} check={gainers.length ? <AllCheck selection={repoSelection} count={gainers.length} /> : undefined}
         actions={<>
           <Segmented label={$t('githubHot.gainers')} options={[{ id: "day", label: $t('githubHot.today') }, { id: "week", label: $t('githubHot.thisWeek') }, { id: "month", label: $t('githubHot.thisMonth') }]} value={period} onChange={(v) => setPeriod(v as typeof period)} />
-          <select aria-label={$t('githubHot.topic')} className="h-8 rounded-md border border-border bg-background px-2 text-sm" value={topic} onChange={(e) => setTopic(e.target.value)}><option value="all">{$t('githubHot.allTopics')}</option>{topics.map((t) => <option key={t.name} value={t.name}>{t.name}</option>)}</select>
-          <select aria-label={$t('githubHot.language')} className="h-8 rounded-md border border-border bg-background px-2 text-sm" value={language} onChange={(e) => setLanguage(e.target.value)}><option value="all">{$t('githubHot.allLanguages')}</option>{languages.map((l) => <option key={l} value={l}>{l}</option>)}</select>
+          <Select value={topic} onValueChange={(v) => setTopic(String(v))}>
+            <SelectTrigger size="sm" className="w-full sm:w-36" aria-label={$t('githubHot.topic')}><SelectValue>{(v: string) => (v === "all" ? $t('githubHot.allTopics') : v)}</SelectValue></SelectTrigger>
+            <SelectContent align="end" className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal"><SelectItem value="all">{$t('githubHot.allTopics')}</SelectItem>{topics.map((t) => <SelectItem key={t.name} value={t.name}>{t.name}</SelectItem>)}</SelectContent>
+          </Select>
+          <Select value={language} onValueChange={(v) => setLanguage(String(v))}>
+            <SelectTrigger size="sm" className="w-full sm:w-36" aria-label={$t('githubHot.language')}><SelectValue>{(v: string) => (v === "all" ? $t('githubHot.allLanguages') : v)}</SelectValue></SelectTrigger>
+            <SelectContent align="end" className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal"><SelectItem value="all">{$t('githubHot.allLanguages')}</SelectItem>{languages.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+          </Select>
         </>}>
         {gainers.length ? (
           <table className="w-full table-fixed text-sm">
             <thead><tr className="border-b border-border text-left text-xs text-muted-foreground"><th className="w-10 py-2 pl-4" /><th className="py-2 font-medium">{$t('githubHot.repository')}</th><th className="w-28 py-2 font-medium">{$t('githubHot.language')}</th><th className="w-28 py-2 text-right font-medium">{$t('githubHot.totalStars')}</th><th className="w-28 py-2 pr-4 text-right font-medium">{$t('githubHot.gainedIn', { 0: periodLabel })}</th></tr></thead>
             <tbody>{gainers.map((r) => <tr key={r.repo} className="border-b border-border last:border-0" data-gainer={r.repo}><td className="py-2 pl-4 align-top"><RowCheck selection={repoSelection} k={r.repo} label={r.repo} /></td><td className="py-2"><RepoName r={r} /></td><td className="py-2 text-muted-foreground">{r.language || "—"}</td><td className="py-2 text-right tabular-nums">{num(r.stars)}</td><td className="py-2 pr-4 text-right tabular-nums nr-up">+{num(r.gained)}</td></tr>)}</tbody>
           </table>
-        ) : <Empty>{$t('githubHot.gainersCollecting', { 0: hot.recordedSince ?? hot.day ?? "—", 1: periodLabel })}</Empty>}
+        ) : <Empty>{$t('githubHot.gainersCollecting', { 0: formatDate(hot.recordedSince ?? hot.day), 1: periodLabel })}</Empty>}
       </Frame>
       <div className="grid gap-4 xl:grid-cols-2">
-        <Frame data-hot-trending="" title="GitHub Trending" info={$t('githubHot.trendingInfo', { 0: hot.trending?.date ?? "—" })}
+        <Frame data-hot-trending="" title="GitHub Trending" info={$t('githubHot.trendingInfo', { 0: formatDate(hot.trending?.date) })}
           actions={<Segmented label="GitHub Trending" options={[{ id: "daily", label: $t('githubHot.today') }, { id: "weekly", label: $t('githubHot.thisWeek') }, { id: "monthly", label: $t('githubHot.thisMonth') }]} value={trendingSince} onChange={(v) => setTrendingSince(v as typeof trendingSince)} />}>
           {hot.trending?.[trendingSince]?.length ? <ol className="divide-y divide-border">{hot.trending[trendingSince].map((r, i) => <li key={r.repo} className="flex items-start gap-3 px-4 py-2 text-sm" data-trending={r.repo}><span className="w-5 shrink-0 pt-0.5 text-right text-xs tabular-nums text-muted-foreground">{i + 1}</span><span className="min-w-0 flex-1"><RepoName r={r} /></span><span className="shrink-0 text-right text-xs tabular-nums"><span className="block nr-up">+{num(r.gained)}</span><span className="text-muted-foreground">★ {num(r.stars)}</span></span></li>)}</ol> : <Empty>{$t('githubHot.trendingEmpty')}</Empty>}
         </Frame>
-        <Frame data-hot-fresh="" title={$t('githubHot.newHot')} info={$t('githubHot.newHotInfo', { 0: hot.newHot?.date ?? "—" })}
+        <Frame data-hot-fresh="" title={$t('githubHot.newHot')} info={$t('githubHot.newHotInfo', { 0: formatDate(hot.newHot?.date) })}
           actions={<Segmented label={$t('githubHot.newHot')} options={[{ id: "all", label: $t('githubHot.allGithub') }, { id: "topics", label: $t('githubHot.followedTopics') }]} value={freshScope} onChange={setFreshScope} />}>
           {fresh.length ? <ol className="divide-y divide-border">{fresh.slice(0, 15).map((r) => <li key={r.repo} className="flex items-start gap-3 px-4 py-2 text-sm" data-fresh={r.repo}><span className="min-w-0 flex-1"><RepoName r={r} /></span><span className="shrink-0 text-xs tabular-nums text-muted-foreground">★ {num(r.stars)}</span></li>)}</ol> : <Empty>{$t('githubHot.newHotEmpty')}</Empty>}
         </Frame>
