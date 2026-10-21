@@ -27,6 +27,8 @@ import { getWorkColumns } from '../../client/pages/task-execution-types';
 import { countryName } from '../../client/pages/countries';
 import { help } from '../../client/pages/glossary';
 import SourceConnections from '../../client/pages/source-connections';
+import { CONNECT_SOURCES } from '../../shared/connect-sources';
+import { systemMessageText } from '../../shared/i18n/messages';
 
 const { viewer, collector } = vi.hoisted(() => ({
   viewer: { can: true, networkOnly: false },
@@ -308,6 +310,24 @@ describe('NocoReach language integration', () => {
       screen.queryByRole('heading', { name: 'Ask AI' }),
     ).not.toBeInTheDocument();
   });
+
+  it.each(['en-US', 'zh-CN'] as const)(
+    'names every source and what it needs the same way as the connect commands in %s',
+    async (locale) => {
+      await runtime(locale);
+      const catalog = getCatalog();
+      expect(catalog.map((source) => source.id)).toEqual(
+        CONNECT_SOURCES.map((source) => source.id),
+      );
+      for (const source of CONNECT_SOURCES) {
+        const card = catalog.find((entry) => entry.id === source.id)!;
+        expect(card.name).toBe(systemMessageText(source.name, {}, locale));
+        expect(card.guide?.needs ?? []).toEqual(
+          source.needs.map((key) => systemMessageText(key, {}, locale)),
+        );
+      }
+    },
+  );
 
   it('recomputes imported labels, country names, glossary and status without reimporting modules', async () => {
     const i18n = await runtime('zh-CN');

@@ -97,7 +97,7 @@ export default function SourceConnections(){const {project,error:projectError}=u
 
  return <PageContainer className='nr-page nr-discovery nr-sources'><PageHeader title={$t('sourceConnections.dataSources')} description={$t('sourceConnections.moreConnectMoreSignalsFind')}/>
  {(projectError||error)&&!open&&<p className='nr-error' role='alert'>{projectError||error} <Button variant='outline' onClick={()=>run(load)}>{$t('common.retry')}</Button></p>}
- {project&&canDiscover&&<DiscoveryBox key={project.id} projectId={project.id} refreshKey={healthKey} defaultUrl={project.domains?.[0]?`https://${project.domains[0]}`:undefined} open={id=>{const s=getCatalog().find(x=>x.id===id);if(s)show(s);}} onDone={()=>void load().catch(()=>undefined)}/>}
+ {project&&canDiscover&&<DiscoveryBox key={project.id} projectId={project.id} projectName={project.name} refreshKey={healthKey} defaultUrl={project.domains?.[0]?`https://${project.domains[0]}`:undefined} open={id=>{const s=getCatalog().find(x=>x.id===id);if(s)show(s);}} onDone={()=>void load().catch(()=>undefined)}/>}
  {project&&<HealthPanel projectId={project.id} reloadKey={healthKey} onChange={()=>void load().catch(()=>undefined)}/>}
  {!loaded&&!error&&<p role='status'>{$t('sourceConnections.checkingDataSources')}</p>}
  {categories.map(cat=><section key={cat.id} className='nr-source-group'><h2>{$t(cat.label)}</h2><div className='nr-source-catalog'>{getCatalog().filter(s=>s.category===cat.id).map(s=>{const st=sourceState(s,status);const actionable=s.availability==='available';return <article key={s.id} className='nr-catalog-card' data-source-id={s.id} data-state={st}>

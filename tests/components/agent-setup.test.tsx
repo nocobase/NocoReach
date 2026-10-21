@@ -254,6 +254,44 @@ test('supports Chinese copy and prompt without English fallback', async () => {
   expect(screen.getByRole('button', { name: '复制指引' })).toBeVisible();
 });
 
+test.each([
+  [
+    'en-US',
+    'Connect data with your agent',
+    'Agent setup instructions',
+    'Show me your plan',
+  ],
+  [
+    'zh-CN',
+    '用电脑上的 Agent 接入数据',
+    'Agent 配置指引',
+    '接入前先把计划给我确认',
+  ],
+] as const)(
+  'opened from Data sources, asks the agent to connect that project after the same installation and sign-in (%s)',
+  async (locale, title, label, plan) => {
+    await runtime.changeLanguage(locale);
+    render(
+      <I18nProvider runtime={runtime}>
+        <AgentSetupDialog
+          open
+          onOpenChange={() => {}}
+          connections={{ projectId: '7', projectName: 'Example site' }}
+        />
+      </I18nProvider>,
+    );
+    const instructions = await screen.findByLabelText(label);
+    expect(screen.getByRole('dialog')).toHaveAccessibleName(title);
+    expect(instructions).toHaveTextContent('/api/agents/dist/installScript');
+    expect(instructions).toHaveTextContent('nocoreach login --server');
+    expect(instructions).toHaveTextContent('nocoreach connect guide');
+    expect(instructions).toHaveTextContent('Example site');
+    expect(instructions).toHaveTextContent(/ID 7\b/u);
+    expect(instructions).toHaveTextContent(plan);
+    expect(instructions).not.toHaveTextContent('nocoreach docs');
+  },
+);
+
 const accountMenu = () =>
   render(
     <I18nProvider runtime={runtime}>

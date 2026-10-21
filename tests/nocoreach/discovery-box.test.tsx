@@ -15,6 +15,20 @@ const { action } = vi.hoisted(() => ({ action: vi.fn() }));
 vi.mock('../../client/lib/nocoreach-api', () => ({
   nocobaseClient: { action, wrapRequests: vi.fn() },
 }));
+vi.mock('../../client/components/agent-setup-dialog', () => ({
+  AgentSetupDialog: ({
+    open,
+    connections,
+  }: {
+    open: boolean;
+    connections?: { projectId: string; projectName: string };
+  }) =>
+    open ? (
+      <div role='dialog' aria-label='Agent setup'>
+        {connections?.projectId} {connections?.projectName}
+      </div>
+    ) : null,
+}));
 let disconnect: (() => void) | undefined;
 afterEach(() => {
   cleanup();
@@ -30,7 +44,14 @@ function Page({
   onDone: () => void;
 }) {
   useNocoReachLocale();
-  return <DiscoveryBox projectId={42} open={open} onDone={onDone} />;
+  return (
+    <DiscoveryBox
+      projectId={42}
+      projectName='Acme'
+      open={open}
+      onDone={onDone}
+    />
+  );
 }
 const finding = (
   source: string,
@@ -271,6 +292,7 @@ function Prefilled({
     <DiscoveryBox
       key={projectId}
       projectId={projectId}
+      projectName='Acme'
       defaultUrl={defaultUrl}
       open={() => {}}
       onDone={() => {}}
@@ -313,6 +335,7 @@ function Refreshing({ refreshKey }: { refreshKey: number }) {
   return (
     <DiscoveryBox
       projectId={42}
+      projectName='Acme'
       refreshKey={refreshKey}
       open={() => {}}
       onDone={() => {}}
@@ -394,4 +417,33 @@ test('after the page reloads saved connections, listed findings show their new s
     body: { projectId: 42, items },
     unwrap: 'data',
   });
+});
+
+test('offers the website rules and the person’s own agent side by side, without presenting the rules as AI', async () => {
+  const runtime = new I18nRuntime({
+    defaultLocale: 'en-US',
+    locales: ['en-US', 'zh-CN'],
+    applicationNamespace: 'nocoreach',
+  });
+  runtime.registerApplicationNamespace('nocoreach', locales);
+  await runtime.init();
+  disconnect = connectLocale(runtime);
+  const user = userEvent.setup();
+  render(
+    <I18nProvider runtime={runtime}>
+      <Page open={() => {}} onDone={() => {}} />
+    </I18nProvider>,
+  );
+  expect(
+    screen.getByRole('heading', { name: /Find data sources on your website/u }),
+  ).toBeVisible();
+  expect(document.querySelector('[data-actor]')).toBeNull();
+  expect(document.body).not.toHaveTextContent(/\bAI\b/u);
+  await user.click(
+    screen.getByRole('button', { name: 'Use an agent on your computer' }),
+  );
+  expect(screen.getByRole('dialog', { name: 'Agent setup' })).toHaveTextContent(
+    '42 Acme',
+  );
+  expect(action).not.toHaveBeenCalled();
 });

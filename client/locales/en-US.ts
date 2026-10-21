@@ -16,6 +16,11 @@ const enUS = {
     'Copy these instructions into Claude Code, Codex, or another coding agent to connect to NocoReach.',
   'agentSetup.prompt':
     'Help me use NocoReach from this coding agent.\n\n1. Install the NocoReach CLI:\n{{install}}\n\n2. Start browser sign-in:\n{{login}}\nShow me the verification URL and code. Wait for me to check and approve the code in my browser; do not approve it for me.\n\n3. After I approve, run `nocoreach whoami` to verify the signed-in account, then `nocoreach docs` to learn the available commands. Use those commands for my requests, within my existing permissions. Do not ask for my password or use the download token as an API key.',
+  'agentSetup.connectionsTitle': 'Connect data with your agent',
+  'agentSetup.connectionsDescription':
+    'Copy these instructions into Claude Code, Codex, or another coding agent. It installs the NocoReach CLI, signs in as you, and connects this project’s data sources after you confirm its plan.',
+  'agentSetup.connectionsPrompt':
+    'Help me connect the data sources of the NocoReach project "{{project}}" (ID {{projectId}}).\n\n1. Install the NocoReach CLI:\n{{install}}\n\n2. Start browser sign-in:\n{{login}}\nShow me the verification URL and code. Wait for me to check and approve the code in my browser; do not approve it for me.\n\n3. After I approve, run `nocoreach whoami` to verify the signed-in account, then `nocoreach connect guide --json` and follow its steps for project {{projectId}}. Show me your plan and wait for my confirmation before connecting anything. Do not ask for my password, tokens or API keys, and do not use the download token as an API key; for a source that needs a credential, give me its link and I will enter it in the browser.',
   'agentSetup.identity':
     'The download token only installs the CLI. After you approve browser sign-in, the agent acts as your account with your existing permissions.',
   'agentSetup.expiry':

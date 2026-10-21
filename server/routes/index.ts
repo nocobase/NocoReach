@@ -9,6 +9,7 @@ import { nocoReachRoutes } from './nocoreach.js';
 import { chatBusinessRoutes } from './chat-business.js';
 import { taskAgentRoutes } from './task-agent.js';
 import { manualTaskRoutes, taskMediaContentRoutes } from './manual-tasks.js';
+import { connectRoutes } from './connect.js';
 
 const routes: readonly AppRouteContribution<Application>[] = [
   accessKeyRoutes,
@@ -20,6 +21,7 @@ const routes: readonly AppRouteContribution<Application>[] = [
   chatBusinessRoutes,
   manualTaskRoutes,
   taskMediaContentRoutes,
+  connectRoutes,
 ];
 
 export default routes;
