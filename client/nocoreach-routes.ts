@@ -179,7 +179,8 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     // 项目知识 has two tabs, 记忆 and 知识库; each opens its dialogs and drawer over itself.
     { ...page('project-settings', '/project', () => import('./pages/project-knowledge/index.js'), { title: nav('projectKnowledge'), icon: NotebookPen, order: 5 }), children: [
       { name: 'project-memory', path: 'memory', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/project-knowledge/memory.js'), children: [
-        { name: 'project-memory-edit', path: ':section/edit', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/project-knowledge/memory-edit.js') },
+        { name: 'project-memory-edit', path: 'edit', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/project-knowledge/memory-edit.js') },
+        { name: 'project-memory-generate', path: 'generate', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/project-knowledge/memory-generate.js') },
       ] },
       { name: 'project-knowledge-base', path: 'knowledge', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/project-knowledge/knowledge-base.js'), children: [
         { name: 'project-knowledge-new', path: 'new', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/project-knowledge/knowledge-add.js') },

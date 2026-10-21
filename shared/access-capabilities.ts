@@ -309,7 +309,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
   knowledge: [
     ...list('nrKnowledge', ['add', 'edit', 'remove', 'saveMemory']),
     ...list('nrKnowledgeAdd', ['suggest', 'confirm']),
-    ...list('nrMemory', ['draft', 'check', 'accept', 'dismiss']),
+    ...list('nrMemory', ['sources', 'draft', 'check', 'accept', 'dismiss']),
     ...list('nrPlaybooks', ['save', 'copy', 'remove', 'restore', 'draft']),
     ...list('nrAnalysisRules', [
       'create',
