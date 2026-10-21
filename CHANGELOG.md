@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Questions to AI stay with the day and the opportunity
+
+- Each opportunity line on Insights gains Ask AI: the chat opens on a new conversation about that opportunity. The questions asked stay under the line, with the start of the latest answer, Show all and Continue asking, which reopens the same conversation.
+- Questions asked with Ask AI at the bottom of Insights show after the day's message, as your question and the AI answer, while it is being answered too. Earlier days count their questions ("2 questions") and show them when opened, including days that raised no opportunity.
+- Only your own conversations show; they are read from the chat's records, which now note the analysis day and opportunity a conversation was asked from (`subject`), through `GET /onlineAgents/threads`. Continue asking with an unsent draft in the chat asks before discarding it.
+
 ## Unreleased — Website & product pages, fixed and in plain words
 
 - Traffic's daily chart draws the previous period over the same days of the current one again. GA4 answers each of the two date ranges on every day of both, at zero outside it; those zero days drew the comparison line over the wrong days and dropped both lines to zero where the periods met. The server keeps each range's own days, and the page ignores the extra days in reports cached before.
@@ -8,6 +14,7 @@
 - Site audit and its performance check describe themselves in one sentence each (no cost moves into the ⓘ), and the device choice and the device filter use the same segmented control.
 - GitHub labels that were English in every language (Commits, Watchers, Issues, Pull requests, Releases, Discussions) are translated, and its copy uses those names.
 - Downloads describes what is connected rather than every registry it supports, says "Latest" instead of `latest`, and picks a package from a drop-down instead of buttons that ran past the card.
+
 ## Unreleased — Data sources: two ways to connect, findings in a dialog
 
 - The top of Data sources shows two cards side by side: Find data sources on your website, with what it reads, and Use an agent on your computer, saying why: the agent researches the website and repositories, lists a plan and connects everything once you confirm, while authorizations and tokens stay in the browser.

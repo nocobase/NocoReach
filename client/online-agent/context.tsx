@@ -2,9 +2,17 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { useChatPanel } from '@nocobase/app-plugin-agents/client/chat';
 import { $t } from '#i18n';
-import { DEFAULT_ONLINE_AGENT } from '../../shared/online-agent.js';
+import {
+  DEFAULT_ONLINE_AGENT,
+  type OnlineSubject,
+} from '../../shared/online-agent.js';
 import { OnlineConfirm } from './controls.js';
-type Entry = { draft: string; projectId: string };
+type Entry = {
+  draft: string;
+  projectId: string;
+  /** What the next new conversation is about, when opened from Insights. */
+  subject?: OnlineSubject | null;
+};
 type Request = { path: string; body: unknown };
 interface OnlineChatState {
   mode: 'online' | 'runner';
@@ -22,7 +30,13 @@ interface OnlineChatState {
   draft: string;
   setDraft(text: string): void;
   projectId: string | null;
+  subject: OnlineSubject | null;
   open(input: Entry): void;
+  /** Opens the panel on an existing conversation (Continue asking on Insights). */
+  resume(id: string): void;
+  /** Counts the messages sent here, so a page showing conversations knows to read them again. */
+  activity: number;
+  touch(): void;
 }
 const Context = createContext<OnlineChatState | null>(null);
 export function OnlineChatProvider({ children }: { children: ReactNode }) {
@@ -35,11 +49,22 @@ export function OnlineChatProvider({ children }: { children: ReactNode }) {
   const [draft, setDraft] = useState('');
   const [projectId, setProjectId] = useState<string | null>(null);
   const [agentId, setAgentId] = useState(DEFAULT_ONLINE_AGENT);
-  const [entry, setEntry] = useState<Entry | null>(null);
-  function applyEntry(input: Entry) {
-    setConversationId(null);
-    setDraft(input.draft);
-    setProjectId(input.projectId);
+  // What waits for the unsent draft to be discarded: a new conversation, or one to continue.
+  const [entry, setEntry] = useState<Entry | { resume: string } | null>(null);
+  const [subject, setSubject] = useState<OnlineSubject | null>(null);
+  const [activity, setActivity] = useState(0);
+  function applyEntry(input: Entry | { resume: string }) {
+    if ('resume' in input) {
+      setConversationId(input.resume);
+      setDraft('');
+      setProjectId(null);
+      setSubject(null);
+    } else {
+      setConversationId(null);
+      setDraft(input.draft);
+      setProjectId(input.projectId);
+      setSubject(input.subject ?? null);
+    }
     setEntry(null);
   }
   return (
@@ -59,16 +84,29 @@ export function OnlineChatProvider({ children }: { children: ReactNode }) {
         select(id) {
           setConversationId(id);
           setProjectId(null);
+          setSubject(null);
         },
         draft,
         setDraft,
         projectId,
+        subject,
         open(input) {
           panel.openChat();
           setMode('online');
           if (request) return;
           if (draft.trim()) setEntry(input);
           else applyEntry(input);
+        },
+        resume(id) {
+          panel.openChat();
+          setMode('online');
+          if (request || id === conversationId) return;
+          if (draft.trim()) setEntry({ resume: id });
+          else applyEntry({ resume: id });
+        },
+        activity,
+        touch() {
+          setActivity((n) => n + 1);
         },
       }}
     >

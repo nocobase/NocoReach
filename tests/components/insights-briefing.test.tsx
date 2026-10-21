@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
@@ -18,6 +24,8 @@ import { WorkspaceCacheProvider } from '../../client/pages/workspace-cache';
 const fixture = vi.hoisted(() => ({
   action: vi.fn(),
   openChat: vi.fn(),
+  resume: vi.fn(),
+  threads: [] as unknown[],
   state: undefined as unknown as StrategyState,
   tasks: [] as unknown[],
   cards: [] as unknown[],
@@ -74,7 +82,18 @@ vi.mock('../../client/pages/data-health', () => ({
   healthText: (name: string) => name,
 }));
 vi.mock('../../client/online-agent/context', () => ({
-  useOptionalOnlineChat: () => ({ open: fixture.openChat }),
+  useOptionalOnlineChat: () => ({
+    open: fixture.openChat,
+    resume: fixture.resume,
+    activity: 0,
+  }),
+}));
+// The chat's records: the owner's questions asked from Insights in project 1.
+vi.mock('../../client/online-agent/api', () => ({
+  useOnlineApi: () => async (path: string) => {
+    if (path !== 'threads?projectId=1') throw new Error(`Unexpected ${path}`);
+    return fixture.threads;
+  },
 }));
 vi.mock('../../client/pages/playbook-snapshot', () => ({
   localizeWorkSnapshots: (value: unknown) => value,
@@ -205,6 +224,8 @@ beforeEach(() => {
   fixture.runs = [];
   fixture.action.mockReset();
   fixture.openChat.mockReset();
+  fixture.resume.mockReset();
+  fixture.threads = [];
   fixture.action.mockImplementation(
     (resource: string, action: string, options: { body?: object }) => {
       const body = (options?.body || {}) as Record<string, unknown>;
@@ -321,7 +342,11 @@ it('lists every waiting opportunity in the message of the day, most important fi
   ]);
   const handed = group.querySelector('[data-opportunity-id=handed]')!;
   expect(handed.textContent).toContain('strategy.handedOffAgent');
-  expect(within(handed as HTMLElement).queryByRole('button')).toBeNull();
+  expect(
+    within(handed as HTMLElement).queryByRole('button', {
+      name: 'common.handOffAgent',
+    }),
+  ).toBeNull();
 });
 
 it('Ignore records the decision and the line leaves, with the count and the menu badge', async () => {
@@ -527,5 +552,82 @@ it('Ask AI opens the chat with the analysis day named', async () => {
   expect(fixture.openChat).toHaveBeenCalledWith({
     draft: expect.stringMatching(/^strategy.askDraft:10\/21/),
     projectId: '1',
+    subject: { kind: 'insights', day: '2026-10-21' },
   });
+});
+
+const thread = (id: string, subject: object, extra: object = {}) => ({
+  id,
+  subject: { kind: 'insights', ...subject },
+  question: `question ${id}`,
+  answer: `**answer** of ${id}, see [Search](/seo-opportunities)`,
+  status: 'completed',
+  turns: 1,
+  updatedAt: '2026-10-21T10:12:00Z',
+  ...extra,
+});
+
+it('an opportunity line asks AI about it, and the questions asked stay under the line and the day', async () => {
+  fixture.threads = [
+    thread('t-b', { day: '2026-10-21', opportunityId: 'b' }, { turns: 3 }),
+    thread('t-day', { day: '2026-10-21' }),
+    thread(
+      't-running',
+      { day: '2026-10-21' },
+      { status: 'running', answer: '' },
+    ),
+    thread('t-old', { day: '2026-10-18' }),
+  ];
+  setup();
+  await decisionGroup(7);
+  const b = screen.getByRole('listitem', { name: 'Opportunity b' });
+  expect(await within(b).findByText('question t-b')).toBeTruthy();
+  // The preview is plain text; Show all renders the answer.
+  expect(within(b).getByText('answer of t-b, see Search')).toBeTruthy();
+  expect(within(b).getByText(/strategy.threadTurns:3/)).toBeTruthy();
+  fireEvent.click(
+    within(b).getByRole('button', { name: 'strategy.expandAnswer' }),
+  );
+  expect(within(b).getByRole('link', { name: 'Search' })).toBeTruthy();
+  fireEvent.click(
+    within(b).getByRole('button', { name: 'strategy.continueAsking' }),
+  );
+  expect(fixture.resume).toHaveBeenCalledWith('t-b');
+  // Asked about the day as a whole: shown after the day's message, one still being answered.
+  const day = screen.getByText('question t-day').closest('[data-thread-id]')!;
+  expect(day.textContent).toContain('answer of t-day');
+  expect(
+    screen.getByText('question t-running').closest('[data-thread-id]')!
+      .textContent,
+  ).toContain('strategy.threadAnswering');
+  // Asking about a line opens a new conversation about that opportunity.
+  fireEvent.click(
+    within(b).getAllByRole('button', { name: 'strategy.askAi' })[0],
+  );
+  expect(fixture.openChat).toHaveBeenCalledWith({
+    draft: 'strategy.askAboutOpportunity:Opportunity b',
+    projectId: '1',
+    subject: { kind: 'insights', day: '2026-10-21', opportunityId: 'b' },
+  });
+});
+
+it('an earlier day counts its questions and shows them when opened, even with nothing raised that day', async () => {
+  fixture.threads = [thread('t-old', { day: '2026-10-18' })];
+  setup();
+  await decisionGroup(7);
+  const old = await waitFor(() => {
+    const found = screen
+      .getAllByRole('region')
+      .find(
+        (r) =>
+          r.firstElementChild?.tagName === 'H3' &&
+          r.getAttribute('aria-label') !== 'strategy.analysisFeed' &&
+          r.textContent?.includes('strategy.dayThreads:1'),
+      );
+    expect(found).toBeTruthy();
+    return found!;
+  });
+  expect(within(old).queryByText('question t-old')).toBeNull();
+  fireEvent.click(within(old).getByRole('button', { expanded: false }));
+  expect(within(old).getByText('question t-old')).toBeTruthy();
 });
