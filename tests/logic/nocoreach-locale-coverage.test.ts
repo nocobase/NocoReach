@@ -163,6 +163,13 @@ describe('NocoReach semantic-key translations', () => {
       // A weekly change carries its own sign, so a fall reads "−7/week" rather than "+-7/week" (2026-10-21).
       '+{0}/周': '{0}/周',
       '（近一周 {0}{1}）': '（近一周 {0}）',
+      // Website & product pages in plain words, GitHub's terms in Chinese where it has them (2026-10-21).
+      '这个仓库没有开启 Discussions。':
+        '这个仓库没有开启讨论区（Discussions）。',
+      '讨论最多的 Discussions 合成一个任务，让 Agent 归类问题、看哪些能用文档回答，确认后立即开始。':
+        '讨论最多的讨论帖合成一个任务，由 Agent 归类问题、找出可以用文档回答的部分，确认后立即开始。',
+      '讨论最多的 Issues 合成一个任务，让 Agent 分出哪些能用文档回答、哪些要改产品，确认后立即开始。':
+        '讨论最多的 Issue 合成一个任务，由 Agent 区分哪些可以用文档回答、哪些需要改产品，确认后立即开始。',
       // Tab counts follow the tab name without brackets, as Opportunities' tabs do (2026-10-21).
       '全部 ({0})': '全部 {0}',
       '关键词 ({0})': '关键词 {0}',

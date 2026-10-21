@@ -65,6 +65,7 @@ import {
   deviceName,
   languageName,
   METRICS,
+  ownDays,
   regionName,
   show,
   special,
@@ -685,13 +686,12 @@ function RowDrawer({
   const w = report.window!;
   const now = data?.totals?.current ?? row,
     before = data?.totals?.previous ?? null;
-  const points = (data?.daily ?? []).map((d, i) => ({
+  const days = ownDays(data?.window ?? w, data?.daily, data?.previousDaily);
+  const points = days.current.map((d, i) => ({
     date: d.date,
     value: METRICS[main].of(d),
-    previous: data?.previousDaily?.[i]
-      ? METRICS[main].of(data.previousDaily[i])
-      : null,
-    previousDate: data?.previousDaily?.[i]?.date ?? '',
+    previous: days.previous[i] ? METRICS[main].of(days.previous[i]) : null,
+    previousDate: days.previous[i]?.date ?? '',
   }));
   return (
     <DetailDrawer

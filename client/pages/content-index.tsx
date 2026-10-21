@@ -8,7 +8,8 @@ import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { Files, Search } from "lucide-react";
 import { PageContainer, PageHeader } from "#components/reach/page";
-import { InfoTip } from '#components/reach/info-tip';
+import { InfoTip, NotesTip } from '#components/reach/info-tip';
+import { Tag } from '#components/reach/tag';
 import { EmptyState, ListSkeleton, LoadError } from "#components/reach/states";
 import { Button } from "#components/ui/button";
 import { Card } from "#components/ui/card";
@@ -80,7 +81,7 @@ export default function ContentPage() {
           <button type="button" className="block max-w-full truncate text-left text-primary underline-offset-4 hover:underline" title={row.original.url} onClick={() => setDetail(row.original)}>{row.original.title || row.original.path}</button>
           {/* The type sits with the path, so the table needs no column for it. */}
           <span className='block truncate text-xs text-muted-foreground'>{[getTypeLabels()[row.original.type] || row.original.type, row.original.title ? row.original.path : null].filter(Boolean).join(' · ')}</span>
-          {row.original.outsideSitemap ? <span className='mt-0.5 inline-flex items-center gap-1 text-xs text-nr-ink-amber' data-outside-sitemap=''>{$t('contentIndex.outsideSitemap')}<InfoTip label={$t('contentIndex.outsideSitemap')}>{$t('contentIndex.outsideSitemapHelp')}</InfoTip></span> : null}
+          {row.original.outsideSitemap ? <span className='mt-0.5 inline-flex items-center gap-1' data-outside-sitemap=''><Tag tone="amber">{$t('contentIndex.outsideSitemap')}</Tag><InfoTip label={$t('contentIndex.outsideSitemap')}>{$t('contentIndex.outsideSitemapHelp')}</InfoTip></span> : null}
         </div>
       ),
     }) as ColumnDef<Row>,
@@ -124,7 +125,9 @@ export default function ContentPage() {
 
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader title={$t('common.page')} description={data?.summary.pages ? $t('contentIndex.pagesDetailsReadPages',{0:data.summary.origin,1:data.summary.pages,2:data.summary.enriched || 0}) : $t('contentIndex.pagesListedWebsiteContentSource')} />
+      {/* One sentence under the title; the site, how many pages were read and why the tabs count more pages than the
+          sitemap lists go in the ⓘ (UI review 2026-10-21). */}
+      <PageHeader title={$t('common.page')} description={$t('contentIndex.description')} info={data?.summary.pages ? <NotesTip notes={[$t('contentIndex.pagesDetailsReadPages',{0:data.summary.origin,1:data.summary.pages,2:data.summary.enriched || 0}), ...(counts.outside ? [$t('contentIndex.sitemapAndOutside',{0:formatCount(data.summary.pages),1:formatCount(counts.outside)})] : [])]} /> : null} />
       <RangePicker value={{ ...rangeValue, range }} onChange={setRange} options={CONTENT_RANGES} summary={data?.window ? $t(data.window.all ? 'rangePicker.availableRange' : 'common.range', {0:formatDate(data.window.start),1:formatDate(data.window.end)}) : data?.cutoff ? $t('contentIndex.pageDataThrough',{0:formatDate(data.cutoff)}) : undefined} />
       {projectError || loadError ? <LoadError title={$t('contentIndex.notLoadWebsiteContent')} message={projectError || $t('contentIndex.notLoadWebsiteContentTry')} /> : null}
       {!data && !loadError ? <ListSkeleton rows={6} /> : null}

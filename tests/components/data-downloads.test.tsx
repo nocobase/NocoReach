@@ -178,13 +178,11 @@ describe('下载量', () => {
     renderPage();
     await ready();
     expect(
-      screen.getByText(
-        'npm、PyPI 下载，Docker 拉取和 GitHub Release 安装包下载，以及各个包的版本发布情况。',
-      ),
+      screen.getByText('已接入的软件包下载量，以及各个包的版本发布情况。'),
     ).toBeTruthy();
     expect(within(tile('npm:app')).getByText('5,600')).toBeTruthy();
     expect(
-      within(tile('npm:app')).getByText('日均 200 · latest 2.1.0'),
+      within(tile('npm:app')).getByText('日均 200 · 最新版本 2.1.0'),
     ).toBeTruthy();
     expect(within(tile('docker:o/app')).getByText('+1,400')).toBeTruthy();
     expect(within(tile('docker:o/app')).getByText('累计 10,000')).toBeTruthy();
