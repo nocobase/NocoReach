@@ -250,10 +250,10 @@
       "runner": "Laufzeitumgebung {{id}}",
       "auditsEmpty": "Noch keine Einträge.",
       "auditAction": {
-        "reveal": "angezeigt",
-        "set": "festgelegt",
-        "delete": "gelöscht",
-        "deliver": "für einen Lauf erhalten"
+        "reveal": "zeigte",
+        "set": "setzte",
+        "delete": "löschte",
+        "deliver": "erhielt für einen Lauf"
       },
       "nameProblems": {
         "required": "Geben Sie einen Namen ein.",
@@ -307,7 +307,7 @@
         "total": "Gesamt",
         "other": "Sonstige"
       },
-      "pricedNote": "Die Kosten umfassen {{priced}} von {{total}} Läufen; für diese Modelle ist noch kein Preis hinterlegt: {{models}}.",
+      "pricedNote": "Bei den Kosten berücksichtigte Läufe: {{priced}} von {{total}}. Modelle ohne hinterlegten Preis: {{models}}.",
       "filters": {
         "allGroups": "Alle: {{group}}",
         "agent": "Agent",
@@ -432,7 +432,7 @@
       "pendingInputs_other": "{{count}} Kommentare warten auf den Agenten",
       "inputDelivered_one": "An den Agenten übermittelt",
       "inputDelivered_other": "{{count}} Eingaben an den Agenten übermittelt",
-      "tokens": "{{input}} Eingabe-Tokens, {{output}} Ausgabe-Tokens",
+      "tokens": "Eingabetokens: {{input}} · Ausgabetokens: {{output}}",
       "kinds": {
         "text": "Agent",
         "thinking": "Denkprozess",
@@ -547,7 +547,7 @@
         "none": "Kein Limit",
         "invalid": "Geben Sie ganze Zahlen von 1 bis 64 ein oder lassen Sie die Felder leer.",
         "inputLabel": "Gleichzeitige Läufe von {{tool}}",
-        "overTotal": "Das Limit für {{tools}} liegt über der maximalen Anzahl gleichzeitiger Läufe ({{slots}}): Es werden höchstens {{slots}} Läufe gleichzeitig ausgeführt.",
+        "overTotal": "Das Limit für {{tools}} liegt über der maximalen Anzahl gleichzeitiger Läufe ({{slots}}). Die tatsächliche Obergrenze für gleichzeitige Läufe bleibt bei {{slots}}.",
         "noneChecked": "Wählen Sie oben ein Programmierwerkzeug aus, um dessen Limit festzulegen."
       },
       "toolTable": {
@@ -1065,7 +1065,7 @@
         "toolUnavailable": "Werkzeug nicht angemeldet, deaktiviert oder angefordertes Modell nicht verfügbar ({{tool}})",
         "noSharedRunner": "Nur persönliche Runner anderer Personen sind online",
         "missingFeatures": "Keine Laufzeitumgebung unterstützt {{features}}",
-        "secretsNotAllowed": "Team-Laufzeitumgebung erforderlich: {{variables}} ist nur für Team-Laufzeitumgebungen freigegeben",
+        "secretsNotAllowed": "Eine Team-Laufzeitumgebung ist erforderlich. Nur für Team-Laufzeitumgebungen zugelassene Variablen: {{variables}}.",
         "sameWorkActive": "Nach der bereits laufenden Ausführung",
         "concurrencyFull": "Limit gleichzeitiger Ausführungen erreicht ({{active}}/{{limit}})",
         "runnersBusy": "Kompatible Runner sind ausgelastet",

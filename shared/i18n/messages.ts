@@ -11,10 +11,15 @@ export interface SystemMessage {
   params?: MessageParams;
 }
 
-// Current service-owned YouTube errors also occur as Chinese display text in sync snapshots.
-// Recognize only this explicit error catalog; never reverse-map arbitrary UI or user text.
-const currentYouTubeErrors = new Map<string, MessageKey>(
-  youtubeSystemErrors.map((key) => [chinese[key], key]),
+// Current server-owned copy also occurs as Chinese display text at compatibility boundaries.
+// Recognize only these explicit messages; never reverse-map arbitrary UI or user text.
+const currentSystemText = new Map<string, MessageKey>(
+  [
+    ...youtubeSystemErrors,
+    // These server-owned strings changed while their historical aliases stayed fixed.
+    'playbooks.communityReplyInstruction',
+    'publicSources.issuesIncludeNonPrItems',
+  ].map((key) => [chinese[key as MessageKey], key as MessageKey]),
 );
 
 /** Compatibility is for old persisted system text, never for user-authored values. */
@@ -22,7 +27,7 @@ export function systemMessageKey(value: string): MessageKey | undefined {
   if (Object.hasOwn(chinese, value)) return value as MessageKey;
   return Object.hasOwn(legacyKeys, value)
     ? (legacyKeys[value as keyof typeof legacyKeys] as MessageKey)
-    : currentYouTubeErrors.get(value);
+    : currentSystemText.get(value);
 }
 
 const loadedResources = new Map<SupportedLocale, Record<string, string>>([

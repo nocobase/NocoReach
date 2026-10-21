@@ -32,7 +32,7 @@
     "saveTime": "Lưu",
     "invalidTime": "Vui lòng nhập giờ hợp lệ (HH:mm).",
     "dataReadyHint": "Hầu hết nguồn dữ liệu cập nhật vào khoảng {{time}} mỗi ngày theo múi giờ này. Hãy lên lịch phân tích sau thời điểm đó để đọc được dữ liệu mới nhất.",
-    "searchTimezone": "Tìm múi giờ, ví dụ: Thượng Hải",
+    "searchTimezone": "Tìm múi giờ, ví dụ: Shanghai",
     "noTimezone": "Không có múi giờ phù hợp.",
     "dstHelp": "Khi chuyển đổi giờ mùa hè, các giờ không tồn tại sẽ được dời lên và các giờ lặp lại thường chỉ chạy một lần. Quá trình khôi phục có thể kích hoạt lại; các dự án đã phân tích thành công trong ngày đó theo giờ địa phương sẽ được bỏ qua.",
     "timeSaved": "Đã lưu giờ chạy",

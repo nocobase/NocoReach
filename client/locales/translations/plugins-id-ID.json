@@ -250,10 +250,10 @@
       "runner": "Lingkungan eksekusi {{id}}",
       "auditsEmpty": "Belum ada catatan.",
       "auditAction": {
-        "reveal": "ditampilkan",
-        "set": "diatur",
-        "delete": "dihapus",
-        "deliver": "diterima untuk eksekusi"
+        "reveal": "menampilkan",
+        "set": "mengatur",
+        "delete": "menghapus",
+        "deliver": "menerima (untuk eksekusi)"
       },
       "nameProblems": {
         "required": "Masukkan nama.",

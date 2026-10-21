@@ -18,6 +18,7 @@ import { Input } from '#components/ui/input';
 import { Switch } from '#components/ui/switch';
 import { Textarea } from '#components/ui/textarea';
 import { useProject } from './reach-data';
+import { ruleUnitLabel } from './analysis-rules/labels';
 import { getSourceNames } from './strategy/board';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import {
@@ -544,7 +545,9 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                                 </span>
                                 <span className='font-medium tabular-nums'>
                                   {p.value}
-                                  {p.unit ? ` ${$legacyText(p.unit)}` : ''}
+                                  {p.unit
+                                    ? ` ${ruleUnitLabel(p.unit, p.value)}`
+                                    : ''}
                                 </span>
                               </span>
                             ))}

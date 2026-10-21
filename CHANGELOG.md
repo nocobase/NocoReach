@@ -8,7 +8,7 @@
 
 - State query-ranking, search-click and indexing hand-off objectives as requested outcomes across all ten languages; synchronize new Website & product and source-discovery copy when merging main.
 
-- Correct semantic, grammar and terminology errors across all eight added languages, including pending-live states, data coverage dates, Agent completion messages, pre-release labels, search metrics, task objectives and Traditional Chinese wording. Use complete count-neutral expressions so variable quantities remain grammatical for one or multiple items, while preserving all interpolation values.
+- Correct semantic, grammar and terminology errors across all eight added languages, including live states, data coverage dates, Agent activity, pre-release labels, search metrics, task objectives and Traditional Chinese wording. Keep variable quantities grammatical, render selection labels before counts, and select singular units for rule thresholds of one. Preserve machine-readable community reply markers, searchable timezone examples and supported question-detection examples. Align source navigation and GA4 instructions with their destinations, format expected result dates with the active locale, and label unknown activity actors as members.
 - Express audit and search-performance task objectives as requested changes in English, German, Brazilian Portuguese, Vietnamese, and Indonesian; preserve GitHub’s Insights → Traffic navigation labels in Spanish and Brazilian Portuguese.
 - Use complete localized sentences for AI mention/citation evidence and synchronize the latest main-branch update actions and tab counts.
 

@@ -110,7 +110,7 @@
         "team_other": "{{count}} Runner de equipo",
         "personal_one": "{{count}} Runner personal conectado",
         "personal_other": "{{count}} Runner personales conectados",
-        "both": "{{team}} de equipo · {{personal}} personales",
+        "both": "De equipo: {{team}} · Personales: {{personal}}",
         "names": "{{names}}",
         "noneOnline": "No hay ningún Runner conectado ahora",
         "personalOnly": "Solo Runner personales",
@@ -250,10 +250,10 @@
       "runner": "Runner {{id}}",
       "auditsEmpty": "Aún no hay registros.",
       "auditAction": {
-        "reveal": "ha consultado los valores",
-        "set": "ha establecido el valor",
-        "delete": "ha eliminado la variable",
-        "deliver": "ha recibido los valores para una ejecución"
+        "reveal": "ha consultado",
+        "set": "ha establecido",
+        "delete": "ha eliminado",
+        "deliver": "ha recibido (para una ejecución)"
       },
       "nameProblems": {
         "required": "Introduce un nombre.",
@@ -947,7 +947,7 @@
       "uploadInvalidName": "No se puede añadir {{name}} aquí; cámbiale el nombre primero.",
       "skillTooLarge": "Una habilidad puede ocupar como máximo {{max}} en total.",
       "tooManyFiles": "Límite de archivos por habilidad: {{max}}.",
-      "filesTooLarge": "Superan el límite de {{max}}: {{paths}}.",
+      "filesTooLarge": "Por encima del límite de {{max}}: {{paths}}.",
       "binaryFile": "Archivo binario, {{size}}. No se puede editar aquí.",
       "executable": "Ejecutable",
       "scriptBadge": "Script",

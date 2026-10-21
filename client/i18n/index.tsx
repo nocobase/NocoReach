@@ -250,10 +250,7 @@ function translateDynamic(text: string, depth: number): string {
 }
 
 function resolve(text: string, depth = 0): string {
-  if (Object.hasOwn(chinese, text)) return $t(text);
-  const key = Object.hasOwn(legacyKeys, text)
-    ? (legacyKeys as Record<string, string>)[text]
-    : undefined;
+  const key = systemMessageKey(text);
   if (key) return $t(key);
   if (!dictionary || !CJK.test(text)) return text;
   // An entry may be empty on purpose: a Chinese measure word like " 位" has no English counterpart.

@@ -110,7 +110,7 @@
         "team_other": "{{count}} moteurs d’exécution d’équipe",
         "personal_one": "{{count}} moteur d’exécution personnel en ligne",
         "personal_other": "{{count}} moteurs d’exécution personnels en ligne",
-        "both": "{{team}} d’équipe · {{personal}} personnels",
+        "both": "Environnements d’équipe : {{team}} · environnements personnels : {{personal}}",
         "names": "{{names}}",
         "noneOnline": "Aucun moteur d’exécution en ligne actuellement",
         "personalOnly": "Moteurs d’exécution personnels uniquement",
@@ -250,10 +250,10 @@
       "runner": "Environnement d’exécution {{id}}",
       "auditsEmpty": "Rien n’a encore été consigné.",
       "auditAction": {
-        "reveal": "affichée",
-        "set": "définie",
-        "delete": "supprimée",
-        "deliver": "reçue pour une exécution"
+        "reveal": "a affiché",
+        "set": "a défini",
+        "delete": "a supprimé",
+        "deliver": "a reçu (pour une exécution)"
       },
       "nameProblems": {
         "required": "Saisissez un nom.",
@@ -307,7 +307,7 @@
         "total": "Total",
         "other": "Autres"
       },
-      "pricedNote": "Le coût couvre {{priced}} exécutions sur {{total}} ; aucun tarif n’est encore défini pour ces modèles : {{models}}.",
+      "pricedNote": "Exécutions prises en compte dans le coût : {{priced}} sur {{total}}. Modèles sans tarif défini : {{models}}.",
       "filters": {
         "allGroups": "Tous : {{group}}",
         "agent": "Agent",
@@ -547,7 +547,7 @@
         "none": "Aucune limite",
         "invalid": "Saisissez des nombres entiers de 1 à 64 ou laissez les champs vides.",
         "inputLabel": "Exécutions simultanées de {{tool}}",
-        "overTotal": "La limite de {{tools}} dépasse le maximum d’exécutions simultanées ({{slots}}) : au plus {{slots}} exécutions peuvent avoir lieu en même temps.",
+        "overTotal": "La limite de {{tools}} dépasse le maximum d’exécutions simultanées ({{slots}}). Le nombre d’exécutions simultanées reste limité à {{slots}}.",
         "noneChecked": "Cochez un outil de programmation ci-dessus pour définir sa limite."
       },
       "toolTable": {
@@ -947,7 +947,7 @@
       "uploadInvalidName": "{{name}} ne peut pas être ajouté ici ; renommez-le d’abord.",
       "skillTooLarge": "La taille totale d’une compétence ne peut pas dépasser {{max}}.",
       "tooManyFiles": "Une compétence peut contenir au maximum {{max}} fichiers.",
-      "filesTooLarge": "Dépassent {{max}} : {{paths}}.",
+      "filesTooLarge": "Fichiers dépassant {{max}} : {{paths}}.",
       "binaryFile": "Fichier binaire, {{size}}. Il ne peut pas être modifié ici.",
       "executable": "Exécutable",
       "scriptBadge": "Script",
@@ -1065,7 +1065,7 @@
         "toolUnavailable": "Outil non authentifié, désactivé ou modèle demandé indisponible ({{tool}})",
         "noSharedRunner": "Seuls les moteurs d’exécution personnels d’autres utilisateurs sont en ligne",
         "missingFeatures": "Aucun environnement d’exécution ne prend en charge {{features}}",
-        "secretsNotAllowed": "Nécessite un environnement d’exécution d’équipe : {{variables}} est réservé aux environnements d’équipe",
+        "secretsNotAllowed": "Un environnement d’exécution d’équipe est requis. Variables réservées aux environnements d’équipe : {{variables}}.",
         "sameWorkActive": "Après l’exécution déjà en cours",
         "concurrencyFull": "Limite d’exécutions simultanées atteinte ({{active}}/{{limit}})",
         "runnersBusy": "Les moteurs d’exécution compatibles sont saturés",

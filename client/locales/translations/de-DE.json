@@ -589,7 +589,7 @@
       "steps": "Schritte des Agenten",
       "plans_one": "Ein Plan wurde zur Bestätigung vorgeschlagen.",
       "plans_other": "{{count}} Pläne wurden zur Bestätigung vorgeschlagen.",
-      "usage": "{{input}} Eingabe- und {{output}} Ausgabe-Tokens verwendet.",
+      "usage": "Verwendete Eingabetokens: {{input}} · Ausgabetokens: {{output}}.",
       "state": {
         "running": "Antwortet…",
         "completed": "Beantwortet",
@@ -701,7 +701,7 @@
       "truncated": "Gekürzt: Der vollständige Text war zu lang zum Speichern.",
       "events": "Ausführungsprotokoll",
       "inputDelivered": "{{count}} Eingabe(n) an den Agenten übermittelt",
-      "tokens": "{{input}} Eingabe-Tokens, {{output}} Ausgabe-Tokens",
+      "tokens": "Eingabetokens: {{input}} · Ausgabetokens: {{output}}",
       "kinds": {
         "text": "Agent",
         "thinking": "Nachdenken",

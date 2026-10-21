@@ -110,7 +110,7 @@
         "team_other": "{{count}} Runners de equipe",
         "personal_one": "{{count}} Runner pessoal conectado",
         "personal_other": "{{count}} Runners pessoais conectados",
-        "both": "{{team}} de equipe · {{personal}} pessoais",
+        "both": "De equipe: {{team}} · Pessoais: {{personal}}",
         "names": "{{names}}",
         "noneOnline": "Nenhum Runner conectado no momento",
         "personalOnly": "Apenas Runners pessoais",
@@ -250,10 +250,10 @@
       "runner": "Runner {{id}}",
       "auditsEmpty": "Nenhum registro ainda.",
       "auditAction": {
-        "reveal": "revelou",
+        "reveal": "consultou",
         "set": "definiu",
         "delete": "excluiu",
-        "deliver": "recebeu para uma execução"
+        "deliver": "recebeu (para uma execução)"
       },
       "nameProblems": {
         "required": "Insira um nome.",
@@ -1065,7 +1065,7 @@
         "toolUnavailable": "Ferramenta sem autenticação, desativada ou com o modelo solicitado indisponível ({{tool}})",
         "noSharedRunner": "Apenas Runners pessoais de outras pessoas estão online",
         "missingFeatures": "Nenhum ambiente de execução oferece suporte a {{features}}",
-        "secretsNotAllowed": "É necessário um ambiente de execução da equipe: {{variables}} só pode ser usado nesses ambientes",
+        "secretsNotAllowed": "É necessário um ambiente de execução da equipe. Uso restrito a esses ambientes: {{variables}}",
         "sameWorkActive": "Aguardando a execução atual desta tarefa terminar",
         "concurrencyFull": "Limite de execuções simultâneas atingido ({{active}}/{{limit}})",
         "runnersBusy": "Os Runners compatíveis estão sem vagas",

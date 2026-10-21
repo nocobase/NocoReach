@@ -32,7 +32,7 @@
     "saveTime": "Guardar",
     "invalidTime": "Introduce una hora válida (HH:mm).",
     "dataReadyHint": "La mayoría de las fuentes de datos se actualizan cada día alrededor de las {{time}} en esta zona horaria. Programa el análisis después de esa hora para que utilice los datos más recientes.",
-    "searchTimezone": "Buscar zonas horarias, p. ej., Shanghái",
+    "searchTimezone": "Buscar zonas horarias, p. ej., Shanghai",
     "noTimezone": "No hay zonas horarias que coincidan.",
     "dstHelp": "Con los cambios de horario de verano, las horas que no existen se desplazan hacia adelante y las que se repiten suelen dar lugar a una sola ejecución. Al recuperarse de una interrupción, la tarea puede volver a activarse; se omiten los proyectos ya analizados correctamente ese día según la fecha local de la tarea.",
     "timeSaved": "Hora guardada",

@@ -253,7 +253,7 @@
         "reveal": "đã hiện",
         "set": "đã đặt",
         "delete": "đã xóa",
-        "deliver": "đã nhận cho một lần chạy"
+        "deliver": "đã nhận (để dùng cho lần chạy)"
       },
       "nameProblems": {
         "required": "Vui lòng nhập tên.",
