@@ -23,15 +23,24 @@ import { Skeleton } from '#components/ui/skeleton';
 import { Spinner } from '#components/ui/spinner';
 import { agentSetupCommands } from './agent-setup-prompt.js';
 
+/** The project whose data sources the agent connects, when the panel is opened from Data sources. */
+export interface ConnectionsSetup {
+  readonly projectId: string;
+  readonly projectName: string;
+}
+
 /** A temporary setup panel, not a record: closing it discards its download token. */
 export function AgentSetupDialog({
   open,
   onOpenChange,
   returnFocus,
+  connections,
 }: {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly returnFocus?: RefObject<HTMLButtonElement | null>;
+  /** Opened from Data sources: the same installation and sign-in, then `nocoreach connect guide` for this project. */
+  readonly connections?: ConnectionsSetup;
 }) {
   const { t } = useTranslation();
   const [generation, setGeneration] = useState(0);
@@ -43,12 +52,23 @@ export function AgentSetupDialog({
         className='flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-xl'
       >
         <DialogHeader className='shrink-0 pr-6'>
-          <DialogTitle>{t('agentSetup.title')}</DialogTitle>
-          <DialogDescription>{t('agentSetup.description')}</DialogDescription>
+          <DialogTitle>
+            {t(
+              connections ? 'agentSetup.connectionsTitle' : 'agentSetup.title',
+            )}
+          </DialogTitle>
+          <DialogDescription>
+            {t(
+              connections
+                ? 'agentSetup.connectionsDescription'
+                : 'agentSetup.description',
+            )}
+          </DialogDescription>
         </DialogHeader>
         {open ? (
           <SetupPrompt
             key={generation}
+            connections={connections}
             onRegenerate={() => setGeneration((value) => value + 1)}
           />
         ) : null}
@@ -57,7 +77,13 @@ export function AgentSetupDialog({
   );
 }
 
-function SetupPrompt({ onRegenerate }: { readonly onRegenerate: () => void }) {
+function SetupPrompt({
+  onRegenerate,
+  connections,
+}: {
+  readonly onRegenerate: () => void;
+  readonly connections?: ConnectionsSetup;
+}) {
   const api = useApiClient();
   const { refresh } = useAuthentication();
   const { t } = useTranslation();
@@ -133,8 +159,14 @@ function SetupPrompt({ onRegenerate }: { readonly onRegenerate: () => void }) {
   const prompt =
     token === null || expired
       ? null
-      : t('agentSetup.prompt', {
+      : t(connections ? 'agentSetup.connectionsPrompt' : 'agentSetup.prompt', {
           ...agentSetupCommands(server, token.token),
+          ...(connections
+            ? {
+                project: connections.projectName,
+                projectId: connections.projectId,
+              }
+            : {}),
           interpolation: { escapeValue: false },
         });
 

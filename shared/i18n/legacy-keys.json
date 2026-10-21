@@ -3711,7 +3711,6 @@
   "输入一个关键词，例如 open source crm": "keywordResearch.enterKeywordExampleOpenSource",
   "输入一个域名（默认是本站），看看它在 Google 里排名的关键词。": "domainOverview.enterDomainSiteDefaultSee",
   "输入一个用户会问 AI 的问题，例如 What is the best open source no-code platform?": "aiSearch.enterQuestionPeopleAskAi",
-  "输入网站地址，AI 帮你找出所有可接入的数据": "discoveryBox.enterWebsiteAddressAiFinds",
   "达到预期": "messages.metExpectations",
   "运行不存在": "taskExecution.runNotFound",
   "运行中断，结果未知": "taskDetail.runInterruptedResultUnknown",

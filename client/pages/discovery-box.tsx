@@ -1,8 +1,9 @@
 import { useMessageState, $t, $legacyText } from '#i18n';
 import { useEffect, useRef, useState } from 'react';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
-import { Check, X } from 'lucide-react';
-import { ActorAvatar } from '#components/reach/actor';
+import { Check, TerminalSquare, X } from 'lucide-react';
+import { AgentSetupDialog } from '#components/agent-setup-dialog';
+import { InfoTip } from '#components/reach/info-tip';
 import { Button } from '#components/ui/button';
 import { Tag } from '#components/reach/tag';
 export type Finding = {
@@ -122,19 +123,25 @@ const kindOf = (source: string) => SOURCE_KINDS[source] ?? source;
 // refreshKey changes whenever the page reloads its saved connection state (after a connection panel
 // saved, or after this box connected sources): the listed findings then get their connection status
 // recomputed from saved state, without reading the homepage again.
+// Two ways to start: the homepage's links, read by rules here, or the person's own agent, which installs the NocoReach
+// CLI and connects sources with `nocoreach connect` after they confirm its plan.
 export function DiscoveryBox({
   projectId,
+  projectName,
   defaultUrl,
   refreshKey,
   open,
   onDone,
 }: {
   projectId: number;
+  projectName: string;
   defaultUrl?: string;
   refreshKey?: number;
   open: (source: string) => void;
   onDone: () => void;
 }) {
+  const [agentOpen, setAgentOpen] = useState(false);
+  const agentRef = useRef<HTMLButtonElement>(null);
   const [url, setUrl] = useState(defaultUrl ?? ''),
     [found, setFound] = useState<Discovery>(),
     [picked, setPicked] = useState<Set<number>>(() => new Set()),
@@ -252,16 +259,13 @@ export function DiscoveryBox({
   const finished = found && Object.keys(outcomes).length > 0 && !busy;
   return (
     <section className='nr-discovery-box'>
-      <div className='nr-discovery-head'>
-        <ActorAvatar type='agent' size='default' />
-        <div>
-          <h2>{$t('discoveryBox.enterWebsiteAddressAiFinds')}</h2>
-          <p className='nr-muted'>
-            {$t('discoveryBox.readsHomepageLinksFindWebsite')}
-          </p>
-        </div>
-      </div>
       <div className='nr-discovery-input'>
+        <h2>
+          {$t('discoveryBox.findOnWebsite')}
+          <InfoTip label={$t('discoveryBox.findOnWebsiteHelp')}>
+            {$t('discoveryBox.readsHomepageLinksFindWebsite')}
+          </InfoTip>
+        </h2>
         <input
           aria-label={$t('discoveryBox.websiteAddress')}
           value={url}
@@ -272,12 +276,27 @@ export function DiscoveryBox({
             if (e.key === 'Enter' && url.trim() && !busy) void discover();
           }}
         />
-        <Button disabled={busy || !url.trim()} onClick={() => void discover()}>
+        <Button
+          variant='outline'
+          disabled={busy || !url.trim()}
+          onClick={() => void discover()}
+        >
           {busy && !found
             ? $t('discoveryBox.discovering')
             : $t('discoveryBox.discoverData')}
         </Button>
+        <span className='nr-footnote'>{$t('discoveryBox.or')}</span>
+        <Button ref={agentRef} onClick={() => setAgentOpen(true)}>
+          <TerminalSquare aria-hidden='true' />
+          {$t('discoveryBox.useAgent')}
+        </Button>
       </div>
+      <AgentSetupDialog
+        open={agentOpen}
+        onOpenChange={setAgentOpen}
+        returnFocus={agentRef}
+        connections={{ projectId: String(projectId), projectName }}
+      />
       {error && (
         <p className='nr-error' role='alert'>
           {error}

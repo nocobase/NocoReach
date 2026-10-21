@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Connect data sources with your own agent
+
+- New `nocoreach connect` commands for a signed-in person: `guide` (the steps an agent follows), `list` (every data source of a project with its state, whether a command can connect it, and what it needs), `discover` (the sources a website links to), `preview` and `add` (website content, GitHub repository, forum, package downloads, Hacker News, competitors, and Google Trends and Reddit once DataForSEO is connected). Commands use the person's own grants; sources that need a credential, a Google authorization or a Collector answer with their panel address and are never connected from the command line.
+- Data sources: the discovery box becomes one row, Find data sources on your website, no longer presented as AI, with Use an agent on your computer beside it. That opens the account menu's agent setup with instructions to connect this project through `nocoreach connect guide`, confirming the plan first.
+
 ## Unreleased — Start card: playbook steps, article link, Change dialog
 
 - The task start card's playbook line gains View steps: a drawer over the task page lists what the Agent does and what you check, with View or edit in Playbooks for the full page. The choices on the card stay as they are.
