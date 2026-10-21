@@ -54,6 +54,10 @@ vi.mock('@nocobase/app-plugin-authentication/client', () => ({
 vi.mock('../../client/layouts/components/language-switcher.js', () => ({
   LanguageSwitcher: () => null,
 }));
+// Your invitations is covered by tests/components/agent-setup.test.tsx and member-access.test.tsx.
+vi.mock('../../client/pages/access/api.js', () => ({
+  usePendingInvitationCount: () => 0,
+}));
 
 /**
  * Opens the account menu from the keyboard. A pointer opens it on hover and again on the press, one frame later, which

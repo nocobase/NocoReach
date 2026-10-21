@@ -43,6 +43,7 @@ const authentication = vi.hoisted(() => ({
   refresh: vi.fn(),
 }));
 const api = vi.hoisted(() => ({ action: vi.fn(), wrapRequests: vi.fn() }));
+const invitations = vi.hoisted(() => ({ pending: 0 }));
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => authentication,
   RequiredAuthentication: ({ children }: { children: ReactNode }) =>
@@ -56,6 +57,9 @@ vi.mock('@nocobase/app-plugin-authentication/client', () => ({
 vi.mock('../../client/lib/nocoreach-api', async (original) => ({
   ...(await original<typeof import('../../client/lib/nocoreach-api')>()),
   nocobaseClient: api,
+}));
+vi.mock('../../client/pages/access/api', () => ({
+  usePendingInvitationCount: () => invitations.pending,
 }));
 vi.mock('../../client/layouts/app-layout', () => ({
   AppLayout: () => (
@@ -186,6 +190,7 @@ beforeEach(() => {
   localStorage.clear();
   setDictionary(null);
   session('admin');
+  invitations.pending = 0;
   authentication.isPending = false;
   api.action
     .mockReset()
@@ -361,12 +366,27 @@ describe('NocoReach identity in the real authenticated route tree', () => {
     await screen.findByText('你还没有加入 NocoReach');
     expect(screen.queryByText('无法读取成员权限')).not.toBeInTheDocument();
     expect(screen.getByTestId('can')).toHaveTextContent('false');
+    expect(screen.queryByRole('button', { name: /我的邀请/ })).toBeNull();
     api.action.mockImplementation((resource: string) =>
       Promise.resolve(result(resource)),
     );
     fireEvent.click(screen.getByRole('button', { name: '重新检查' }));
     await screen.findByText('Protected page');
     await expectRole(true);
+  });
+  it('offers the pending invitations on the not-joined card', async () => {
+    invitations.pending = 1;
+    api.action.mockImplementation((resource: string) =>
+      Promise.resolve(
+        resource === 'nrMembers'
+          ? { id: 'admin', role: null }
+          : result(resource),
+      ),
+    );
+    setup();
+    const link = await screen.findByRole('button', { name: /我的邀请/ });
+    expect(link).toHaveAttribute('href', '/member-invitations');
+    expect(link).toHaveTextContent('1');
   });
   it('revalidates on the official permission revision, hiding old data and ignoring a superseded lookup', async () => {
     const view = setup();
