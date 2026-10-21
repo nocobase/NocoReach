@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Notification diagnostics
+
+- Remove reliance on the generic notification test API from mock-isolation tests and operator guidance. Keep notification mutation blocking, authentication, inbox access and log reads covered.
+
 ## Unreleased — Page names shown once
 
 - Top-level pages no longer repeat their name in the header beside the sidebar toggle: the name fades in there only once the page's large title has scrolled out of view.
