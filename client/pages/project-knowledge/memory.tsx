@@ -28,7 +28,8 @@ import {
 } from './model';
 
 // 记忆 tab: how full it is, the AI's update suggestions to accept or ignore, and one row per item — the project name,
-// the language the AI writes in, and the nine handbook sections — each edited on its own in a dialog over this tab.
+// the language the AI writes in, and the nine handbook sections. One Edit opens every item in a dialog over this tab
+// (user decision 2026-10-21, instead of a pencil per row); Generate from the website and materials first shows what the AI will read.
 export default function MemoryTab(): ReactElement {
   // Tabs and overlays are not gated routes: follow a language change here.
   useNocoReachLocale();
@@ -38,8 +39,9 @@ export default function MemoryTab(): ReactElement {
     sections = getMemorySections();
   const filled = sections.filter(([k]) => memory[k]).length,
     total = Object.values(memory).reduce((n, t) => n + t.length, 0);
-  const { can: canDraft } = useBusinessAccess('nrMemory.draft', project.id);
-  const running = Boolean(updates.status?.running);
+  const { can: canDraft } = useBusinessAccess('nrMemory.draft', project.id),
+    { can: canSave } = useBusinessAccess('nrKnowledge.saveMemory', project.id);
+  const location = useLocation();
   return (
     <div className='flex flex-col gap-4' data-memory-tab>
       <div className='flex flex-wrap items-center gap-2'>
@@ -66,12 +68,26 @@ export default function MemoryTab(): ReactElement {
             size='sm'
             variant='outline'
             className='ml-auto'
-            disabled={running || updates.busy}
-            onClick={() => void updates.run('draft')}
+            nativeButton={false}
+            render={
+              <Link to={{ pathname: 'generate', search: location.search }} />
+            }
           >
             {updates.status?.draft?.status === 'done'
               ? $t('projectKnowledge.regenerate')
               : $t('projectKnowledge.generateWebsiteMaterials')}
+          </Button>
+        ) : null}
+        {canSave ? (
+          <Button
+            size='sm'
+            variant='outline'
+            className={canDraft ? undefined : 'ml-auto'}
+            nativeButton={false}
+            render={<Link to={{ pathname: 'edit', search: location.search }} />}
+          >
+            <PencilIcon />
+            {$t('common.edit')}
           </Button>
         ) : null}
       </div>
@@ -395,64 +411,25 @@ function Suggestion({
   );
 }
 
-// Every item on its own row: the name, its content (five lines, then 展开), and the way to change it.
+// Every item on its own row: the name and its content (five lines, then unfolds); Edit above changes them.
 function MemoryList({
   context,
 }: {
   context: ProjectKnowledgeContext;
 }): ReactElement {
   const { project } = context;
-  const location = useLocation();
   const memory = memoryOf(project);
-  const { can: canSave } = useBusinessAccess(
-    'nrKnowledge.saveMemory',
-    project.id,
-  );
-  const edit = (key: string, title: string, empty: boolean) =>
-    canSave ? (
-      empty ? (
-        <Button
-          size='sm'
-          variant='outline'
-          nativeButton={false}
-          render={
-            <Link to={{ pathname: `${key}/edit`, search: location.search }} />
-          }
-          aria-label={$t('projectKnowledge.fillValue', { 0: title })}
-        >
-          {$t('projectKnowledge.fill')}
-        </Button>
-      ) : (
-        <Button
-          size='icon-sm'
-          variant='ghost'
-          nativeButton={false}
-          render={
-            <Link to={{ pathname: `${key}/edit`, search: location.search }} />
-          }
-          aria-label={$t('projectKnowledge.editValue', { 0: title })}
-          title={$t('common.edit')}
-        >
-          <PencilIcon />
-        </Button>
-      )
-    ) : null;
   return (
     <dl
       className='rounded-lg border bg-card text-sm'
       aria-label={$t('projectKnowledge.memory')}
     >
-      <Row
-        label={$t('common.projectName')}
-        action={edit('name', $t('common.projectName'), false)}
-      >
-        {project.name}
-      </Row>
+      <Row label={$t('common.projectName')}>{project.name}</Row>
       <Row label={$t('common.languageAiWrittenContent')}>
         <LanguageSetting context={context} />
       </Row>
       {getMemorySections().map(([k, title, hint]) => (
-        <Row key={k} label={title} action={edit(k, title, !memory[k])} item={k}>
+        <Row key={k} label={title} item={k}>
           {memory[k] ? (
             // Five lines, the last fading out; a click unfolds the rest in place (guideline I14).
             <LongText>{memory[k]}</LongText>
@@ -469,12 +446,10 @@ function MemoryList({
 }
 function Row({
   label,
-  action,
   item,
   children,
 }: {
   label: string;
-  action?: ReactNode;
   item?: string;
   children: ReactNode;
 }): ReactElement {
@@ -486,10 +461,7 @@ function Row({
       <dt className='shrink-0 text-muted-foreground sm:w-36 sm:pt-0.5'>
         {label}
       </dt>
-      <dd className='m-0 flex min-w-0 flex-1 items-start gap-3'>
-        <div className='min-w-0 flex-1 sm:pt-0.5'>{children}</div>
-        {action ? <div className='-my-1 shrink-0'>{action}</div> : null}
-      </dd>
+      <dd className='m-0 min-w-0 flex-1 sm:pt-0.5'>{children}</dd>
     </div>
   );
 }

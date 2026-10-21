@@ -303,6 +303,48 @@ describe('NocoReach language integration', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it('describes the connection under the drawer title and marks only the Ask AI section as the AI', async () => {
+    const i18n = await runtime('zh-CN');
+    const user = userEvent.setup();
+    render(
+      <I18nProvider runtime={i18n}>
+        <MemoryRouter initialEntries={['/?source=site']}>
+          <Page />
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+    const dialog = await screen.findByRole('dialog');
+    const guide = getCatalog().find((source) => source.id === 'site')!.guide!;
+    expect(dialog).toHaveAccessibleDescription(guide.intro);
+    expect(guide.intro).not.toMatch(/我/u);
+    const needs = screen.getByRole('heading', { name: '需要准备' });
+    expect(
+      [...needs.parentElement!.querySelectorAll('li')].map(
+        (item) => item.textContent,
+      ),
+    ).toEqual(guide.needs);
+    const ask = screen.getByRole('heading', { name: '问 AI' });
+    const avatars = dialog.querySelectorAll('[data-actor="agent"]');
+    expect(avatars).toHaveLength(1);
+    expect(ask).toContainElement(avatars[0] as HTMLElement);
+    await act(() => i18n.changeLanguage('en-US'));
+    const english = getCatalog().find((source) => source.id === 'site')!.guide!;
+    expect(dialog).toHaveAccessibleDescription(english.intro);
+    expect(
+      screen.getByRole('heading', { name: 'What you need' }),
+    ).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Ask AI' })).toContainElement(
+      avatars[0] as HTMLElement,
+    );
+    await user.click(
+      screen.getByRole('button', { name: english.questions[0] }),
+    );
+    expect(openChat).toHaveBeenCalledWith({
+      draft: english.questions[0],
+      projectId: '1',
+    });
+  });
+
   it('recomputes imported labels, country names, glossary and status without reimporting modules', async () => {
     const i18n = await runtime('zh-CN');
     expect(getRanges()[0]).toEqual(['7', '近 7 天']);
