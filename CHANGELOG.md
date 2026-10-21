@@ -9,6 +9,18 @@
 - Competitors › Activity says a read error shared by several competitors once, above the cards, with a way to Settings › Network when it is about reaching a site, and decodes character references such as `&#x27;` in page titles and descriptions (pages read before are decoded on display). Overview hides the AI share column until a brand check has measured one and cuts long recent activity with an ellipsis.
 - Trends keeps the comparison notes in the ⓘ beside Compare and gives related searches a heading with its instruction in an ⓘ. AI search writes "24 (100%)" and keeps billing and platform notes in ⓘ.
 - Keywords, Trends, Competitors and AI search describe themselves in one sentence without colloquial or billing asides.
+## Unreleased — Ask AI reads the daily analysis
+
+- The online assistant can read the daily analysis behind Insights through a new read-only `daily_analysis` tool: a day's notes and limitations, the opportunities it raised with where each stands now (awaiting decision, handed off to agent with its task, dismissed, expired), its verdict on every change (do, watch, skip) with the reason, the opportunities awaiting a decision now, and the watches still open or ended. It reads the latest analysis or any earlier day, checks on every call that the conversation owner may still see Insights, and links opportunities to Opportunities. Asked about "the daily analysis of 10/21", it used to search the tasks and find nothing.
+- The metrics it reads (`project_data`, metrics) now include totals: each key metric of the last 28 days with the 28 days before and the change, as the Insights tiles show them, with the daily series. The snapshot of keywords, pages and audit issues had no previous period to compare with.
+- Opportunity links in chat answers open inside the application, like task links.
+
+
+## Unreleased — Tasks by Agent
+
+- Tasks gains a By agent view next to List and Board, after Studio's Agent view: a column per Agent the project runs tasks with (the project default first), then Unassigned. Each column says whether the Agent is running, queued, waiting or idle, and when no runtime is online; inside it are Working on, Up next (numbered, oldest first) and Waiting, where each card says what a person has to do (Confirm start, the review step, Confirm publish, confirm going live, Run failed) and who: "You" on a highlighted card listed first, otherwise the owner's name. Finished and closed tasks are left out.
+- Cards on the board and the Executor column of the list name the task's Agent (its own, else the project default, as the task page header shows it) with an online dot, or Unassigned, instead of a bare "Agent". A new Any agent filter narrows every view.
+- A line above the tasks counts runs under way, queued and failed, and the runtimes online. What waits for you stays counted on Waiting for me.
 
 ## Unreleased — Website & product pages, fixed and in plain words
 
@@ -97,6 +109,10 @@
 
 - Find the article a task changes from its page instead of picking it from hundreds: the page address is read back through each publishing target's page pattern to a slug and looked up there. The start card shows the article found with Change; it is linked as the task starts.
 - Decide where a change goes from where the page lives: a page no target holds goes to the website repository as a pull request (unless the playbook names a target), a blog post stays a new article in the playbook's target. Publish to, also-publish and the new/existing choice appear only after Change, when nothing was found, or when the targets could not be asked.
+
+## Unreleased — Notification diagnostics
+
+- Remove reliance on the generic notification test API from mock-isolation tests and operator guidance. Keep notification mutation blocking, authentication, inbox access and log reads covered.
 
 ## Unreleased — English code comments
 
