@@ -38,12 +38,14 @@ export const REACH_PAGES = [
   'analysis-rules',
   'data-connections',
   'proxy-profiles',
+  'demo-data',
   'members',
   'search-overview-legacy',
   'search-performance-legacy',
 ] as const;
 export const ADMIN_PAGES = new Set([
   'proxy-profiles',
+  'demo-data',
   'online-agent-new',
   'online-agent-edit',
 ]);

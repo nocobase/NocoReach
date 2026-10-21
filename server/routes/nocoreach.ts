@@ -56,6 +56,35 @@ const declaration = (method: 'get' | 'post') =>
     },
   });
 
+/**
+ * The writes a read-only demo may let through for an action, by demo capability (`demo-data/adapters.ts`), once the
+ * action's own authorization passed. Only listed actions can ever write in a read-only demo.
+ */
+const DEMO_WRITES: Record<string, readonly (readonly [string, 'insert' | 'update' | 'delete'])[]> = {
+  'nrTaskWork.advance': [
+    ['nocoreach.tasks', 'update'],
+    ['nocoreach.taskWork', 'insert'],
+    ['nocoreach.taskWork', 'update'],
+    ['nocoreach.taskWork', 'delete'],
+  ],
+  'nrStrategy.confirmDirection': [
+    ['nocoreach.taskCreation', 'insert'],
+    ['nocoreach.opportunities', 'insert'],
+    ['nocoreach.opportunities', 'update'],
+    ['nocoreach.opportunities', 'delete'],
+  ],
+  ...Object.fromEntries(
+    ['add', 'edit', 'remove'].map((action) => [
+      `nrKnowledge.${action}`,
+      [
+        ['nocoreach.knowledge', 'insert'],
+        ['nocoreach.knowledge', 'update'],
+        ['nocoreach.knowledge', 'delete'],
+      ] as const,
+    ]),
+  ),
+};
+
 export const nocoReachRoutes: AppApiRouteContribution<Application> =
   defineApiRoutes((app) => {
     const router = new Hono();
@@ -126,7 +155,10 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
           const keyScope = await keys.resolve(session, context.req.raw);
           await runtime.legacy.db.access!.run({ userId: session.user.id, http: context.req.raw, context: context.get('authz'), ...(keyScope ? { keyScope } : {}) }, async () => {
             await runtime.legacy.db.access!.require(params.resource, params.action, projectSelector(body?.projectId || query.projectId));
-            await invoke();
+            const demoWrites = DEMO_WRITES[`${params.resource}.${params.action}`];
+            if (demoWrites && runtime.plugin.demoConfiguration)
+              await runtime.plugin.demoConfiguration.runWrites(demoWrites, ctx.action.params.values, invoke);
+            else await invoke();
           });
         } else await invoke();
       } catch (error) {

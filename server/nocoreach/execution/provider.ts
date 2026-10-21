@@ -1,4 +1,5 @@
 import { systemMessageText } from '../../../shared/i18n/messages.js';
+import type { DemoDataService, DemoModels } from '@nocobase/app-plugin-demo-mode/server/tokens';
 import type { Agents } from '@nocobase/app-plugin-agents/server/tokens';
 import type { DatabaseConnection } from '@nocobase/db';
 import {
@@ -36,7 +37,9 @@ export class ModelPreparationError extends Error {
 
 /** Application text generation goes through Agents: model credentials and usage have one owner. */
 export class OnlineProvider {
-  constructor(private readonly p: { agents: Agents; mock?: MockEngine }) {}
+  constructor(
+    private readonly p: { agents: Agents; mock?: MockEngine; demoModels?: DemoModels; demoData?: DemoDataService; network?: { inDemoProject(): Promise<boolean> } },
+  ) {}
   async prepare(connection?: DatabaseConnection) {
     if (this.p.mock?.enabled) {
       this.p.mock.context();
@@ -60,7 +63,16 @@ export class OnlineProvider {
   ): Promise<string> {
     if (this.p.mock?.enabled)
       return simulateAi(this.p.mock, operation, prompt, signal);
+    // A demo project must not reach a real model even if an administrator changed the default model.
+    if (await this.p.network?.inDemoProject()) {
+      if (!this.p.demoModels) throw new ModelPreparationError('precondition', 'Demo model adapter unavailable');
+      return this.p.demoModels.complete({ system, prompt, tag: operation });
+    }
     const chosen = await this.prepare();
+    await this.p.demoData?.load();
+    // The demo's simulated model answers in process, where it can tell which operation asks.
+    if (this.p.demoModels?.isDemoModel({ modelService: chosen.llmService }))
+      return this.p.demoModels.complete({ system, prompt, tag: operation });
     const model = { modelService: chosen.llmService, model: chosen.model };
     // Validate locally before the gateway can send anything. Keep this outside
     // prepare(connection): connectionFor cannot join a caller's transaction.

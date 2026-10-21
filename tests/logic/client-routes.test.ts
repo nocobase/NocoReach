@@ -30,6 +30,7 @@ describe('app client routes', () => {
         '/agents/online/new',
         '/agents/online/:onlineAgentId/edit',
         '/schedules',
+        '/demo-data',
         '/schedules/:scheduleId',
         '/schedules/:scheduleId/edit',
         '/proxy-profiles',

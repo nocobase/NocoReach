@@ -87,9 +87,9 @@ async function download(
   const u = new URL(input);
   if (u.protocol !== 'https:' || u.username || u.password || u.port)
     fail(systemMessageText('publicSources.urlNotSupported'));
-  // Simulation is an explicit in-process upstream, not a proxy or an exception to
+  // Simulation and demo projects are explicit in-process upstreams, not a proxy or an exception to
   // public-address validation. Production still resolves and pins every hop below.
-  if (transport?.network.simulation?.enabled) {
+  if (transport?.network.simulation?.enabled || await transport?.network.inDemoProject()) {
     const response = await transport.network.fetch(transport.connection, u, {
       signal: transport.signal || AbortSignal.timeout(15000),
       headers: { Accept: 'application/json,text/html,text/plain,application/xml,text/xml' },

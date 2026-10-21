@@ -28,6 +28,7 @@ import {
   Newspaper,
   NotebookPen,
   Package,
+  DatabaseZap,
   Plug,
   Search,
   Slack,
@@ -99,7 +100,7 @@ const page = (
   path,
   auth: 'required',
   authz: { resource: { type: 'page', id: name }, action: 'access' },
-  componentLoader: gated(load, false, !['members', 'keys'].includes(name)),
+  componentLoader: gated(load, false, !['members', 'keys', 'demo-data'].includes(name)),
   ...(navigation ? { navigation } : {}),
 });
 
@@ -208,6 +209,7 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
       ],
     },
     page('data-connections', '/connections', () => import('./pages/source-connections.js'), { title: nav('connections'), icon: Plug, order: 1 }),
+    page('demo-data', '/demo-data', () => import('./pages/demo-management/index.js'), { title: nav('demoData'), icon: DatabaseZap, order: 7 }),
     { ...page('proxy-profiles', '/proxy-profiles', () => import('./pages/network.js'), { title: nav('proxyProfiles'), icon: Globe2, order: 5 }), children: [
       { name: 'proxy-profile-new', path: 'new', componentLoader: () => import('./pages/proxy-profiles/edit.js') },
       { name: 'proxy-profile-edit', path: ':profileId/edit', componentLoader: () => import('./pages/proxy-profiles/edit.js') },

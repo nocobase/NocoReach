@@ -293,7 +293,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    // A target removed after the draft was written cannot receive it: say so instead of offering a publish that fails.
    const articleTarget=out.article.targetId,targetGone=!(data.articleTargets||[]).some(t=>t.id===articleTarget);
    return <StageCard icon={<Eye/>} title={$t('articleTask.reviewTitle')} at={out.createdAt}
-    actions={editing||!allowed?undefined:<>{!targetGone&&<Button disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote}})}><Rocket/>{$t(mockSettingsAvailable() ? 'taskDetail.simulatePublish' : 'taskDetail.publishLive')}</Button>}{requestButton}<Button ref={editButtonRef} variant='ghost' disabled={busy} onClick={()=>setEditing(true)}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
+    actions={editing||!allowed?undefined:<>{!targetGone&&<Button disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote}})}><Rocket/>{$t((mockSettingsAvailable() || data.task.evidence?.simulated) ? 'taskDetail.simulatePublish' : 'taskDetail.publishLive')}</Button>}{requestButton}<Button ref={editButtonRef} variant='ghost' disabled={busy} onClick={()=>setEditing(true)}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
     {!editing&&request(getStageExecutor().agent)}
     {targetGone&&<p role='alert' className='text-sm text-destructive'>{$t('articles.targetMissing')}</p>}
     <p className="text-sm text-muted-foreground">{$t('taskDetail.artifactVersion',{0:getStageExecutor()[producer.kind],1:out.createdBy==='agent'?'':$t('taskDetail.recordedAside'),2:out.version})}</p>
@@ -306,15 +306,15 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    </StageCard>;
   }
   const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(pr?.outOfScope?.length&&!scopeOk);
-  return <StageCard icon={<Eye/>} title={pr?$t('taskDetail.pageChangeReady'):$t('taskDetail.madeChangeYourselfAfterConfirm')} at={out.createdAt}
-   actions={<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote},...(pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}><Rocket/>{$t(mockSettingsAvailable() ? 'taskDetail.simulatePublish' : 'taskDetail.publishLive')}</Button>{requestButton}</>}>
+  return <StageCard icon={<Eye/>} title={(pr||data.task.evidence?.simulated)?$t('taskDetail.pageChangeReady'):$t('taskDetail.madeChangeYourselfAfterConfirm')} at={out.createdAt}
+   actions={<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote},...(pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}><Rocket/>{$t((mockSettingsAvailable() || data.task.evidence?.simulated) ? 'taskDetail.simulatePublish' : 'taskDetail.publishLive')}</Button>{requestButton}</>}>
    {request(getStageExecutor().agent)}
    <LastFeedback w={w} stage={stage} out={out}/>
    <PageChange pr={pr} content={out.content}/>
    <ScopeConfirm pr={pr} ok={scopeOk} setOk={setScopeOk} busy={busy}/>
    <Checklist stage={stage} checked={checked} setChecked={setChecked} busy={busy}/>
    <Reveal label={$t('taskDetail.editReleaseNotes')} defaultOpen={relNote!==(pr?.release||'')}><label className="nr-field">{$t('taskDetail.releaseNotesGoPublishRecord')}<textarea aria-label={$t('taskDetail.releaseNotes')} rows={3} value={relNote} disabled={busy} placeholder={$t('taskDetail.oneTwoSentencesWhatChanged')} onChange={e=>{setRelNote(e.target.value);}}/></label></Reveal>
-   <p className="text-xs text-muted-foreground">{mockSettingsAvailable()?$t('taskDetail.simulatedReleaseDescription'):$t('taskDetail.publishHint')}</p>
+   <p className="text-xs text-muted-foreground">{(mockSettingsAvailable()||data.task.evidence?.simulated)?$t('taskDetail.simulatedReleaseDescription'):$t('taskDetail.publishHint')}</p>
   </StageCard>;
  }
  if(stage.kind==='release'){
@@ -360,7 +360,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  }
  if(stage.kind==='agent'){
   const approved=[...w.results.slice(0,index)].reverse().find(r=>r?.approvedAt&&!r.rejectedAt),source=approved?stages[w.results.indexOf(approved)]:undefined;
-  const agent=data.agent,isActive=cur&&active(cur),canRun=Boolean(agent?.repo)||withoutRepo(stage,stages)||w.delivery?.kind==='article';
+  const agent=data.agent,isActive=cur&&active(cur),canRun=Boolean(agent?.options?.some(a=>a.id===agent.agentId&&a.type==='demo'))||Boolean(agent?.repo)||withoutRepo(stage,stages)||w.delivery?.kind==='article';
   const actions=!manual?<>
    {cur?.status!=='running'&&cur?.status!=='queued'&&canRun&&<Button disabled={busy||(!hasTaskAgent(data)&&(agent?.options||[]).length!==1)} onClick={()=>void withUsableAgent(data,update,'retryStage',{stageKey:stage.key})}>{cur?$t('taskDetail.tryAgain'):$t('taskDetail.handOffAgent')}</Button>}
    {cur?.status==='failed'&&cur.error==='invalid_agent_result'&&cur.mode==='plan'&&!cur.artifactId&&<Button variant='outline' disabled={busy} title={$t('agentResult.recoverHint')} onClick={()=>void act('recoverResult',{runId:cur.id})}>{$t('agentResult.recover')}</Button>}

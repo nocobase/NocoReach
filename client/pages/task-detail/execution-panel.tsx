@@ -100,8 +100,9 @@ export function TaskExecutionPanel({
   runs: Run[];
 }) {
   const [query, setQuery] = useSearchParams();
+  // Runner runs, and the demo Agent's simulated runs with their recorded transcript.
   const official = runs
-    .filter((run) => run.pluginRunId)
+    .filter((run) => run.pluginRunId || run.simulated)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const selectedId = query.get('run') || official[0]?.id;
   const selected = official.find((run) => run.id === selectedId);

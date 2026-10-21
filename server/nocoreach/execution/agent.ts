@@ -37,6 +37,13 @@ export class AgentStore {
   }
   async status(project: string, taskAgentId?: string, actor?: string) {
     const d = await this.doc(project), agents = this.s.p.agents;
+    const proxy = this.s.p.demoAgent;
+    if (proxy && await proxy.matches({ projectId: project })) {
+      let online = false;
+      try { online = await proxy.prepare({ projectId: project }); } catch { /* Disabled simulations never expose real runners. */ }
+      return { ...d, agentId: proxy.id, defaultAgentId: proxy.id, online,
+        options: online ? [{ id: proxy.id, name: proxy.title, type: 'demo', online: true, busy: 0 }] : [] };
+    }
     const conn = agents.tx.read();
     const options = await agents.agents.listActive(conn);
     const agentId = taskAgentId || d.agentId;
@@ -46,7 +53,10 @@ export class AgentStore {
     const choices = options.map(a => ({ id: a.id, name: a.name, type: 'runner', online: Boolean(availability.get(a.id)?.online), busy: availability.get(a.id)?.busy || 0 }));
     return { ...d, agentId, defaultAgentId: d.agentId, options: choices, online: Boolean(choices.find(a => a.id === agentId)?.online) };
   }
-  async taskAgent(agentId: unknown, actor: string, tx: LegacyTransaction) {
+  async taskAgent(agentId: unknown, actor: string, tx: LegacyTransaction, project?: string) {
+    const proxy = this.s.p.demoAgent;
+    if (project && proxy && agentId === proxy.id && await proxy.prepare({ projectId: project }))
+      return { id: proxy.id, name: proxy.title, type: 'demo' as const };
     if (typeof agentId !== 'string' || !agentId.trim() || agentId.length > 100) return fail(systemMessageText('projectAi.selectTaskAgent'));
     const agents = this.s.p.agents;
     const agent = await agents.agents.findWorkable(tx.connection, agentId);

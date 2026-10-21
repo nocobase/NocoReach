@@ -1,4 +1,5 @@
 import agents from '@nocobase/app-plugin-agents/cli';
+import demoMode from '@nocobase/app-plugin-demo-mode/cli';
 import {
   defineCliPlugin,
   defineCliPlugins,
@@ -11,6 +12,7 @@ import scheduler from '@nocobase/app-plugin-scheduler/cli';
 const cliPlugins: AppCliPlugins = defineCliPlugins([
   scheduler,
   agents,
+  demoMode,
   defineCliPlugin({
     // Application-owned build hooks: an archive deployment cannot use the developer's storage/runners directory.
     packageName: '@nocoreach/build-artifacts',
@@ -34,6 +36,10 @@ const cliPlugins: AppCliPlugins = defineCliPlugins([
         },
       ],
       afterServerBuild: [
+        {
+          label: 'Include demo data plugin',
+          command: ['node', 'cli/build-demo-mode-plugin.mjs'],
+        },
         {
           label: 'Include NocoReach simulated-data plugin package',
           command: ['node', 'cli/build-mock-plugin.mjs'],

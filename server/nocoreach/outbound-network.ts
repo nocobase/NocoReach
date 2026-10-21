@@ -42,6 +42,20 @@ export interface SimulatedUpstream {
   ): Promise<Response>;
 }
 
+/**
+ * Projects the demo data created. Every request made for one is answered here, in process, and never reaches a
+ * dispatcher, whatever the deployment's proxy or simulation settings say.
+ */
+export interface DemoUpstream {
+  has(projectId: string): boolean;
+  recognize(projectId: string): Promise<boolean>;
+  request(
+    projectId: string,
+    url: string | URL,
+    init?: RequestInit,
+  ): Promise<Response>;
+}
+
 const MAX_API_DISPATCHERS = 32;
 interface Transport {
   dispatcher: Agent | ProxyAgent;
@@ -110,11 +124,27 @@ export class OutboundNetwork {
   private apiDispatchers = new Map<string, Transport>();
   private transports = new Set<Transport>();
   private closed = false;
+  private demo?: DemoUpstream;
+  private readonly demoChecked = new AsyncLocalStorage<ReadonlySet<string>>();
   constructor(
     readonly profiles: ProxyProfiles,
     readonly simulation?: SimulatedUpstream,
   ) {
     profiles.enableMockProfiles?.(simulation?.enabled === true);
+  }
+  /** Answers the demo projects' requests from now on; see `DemoUpstream`. */
+  useDemoUpstream(demo: DemoUpstream) {
+    this.demo = demo;
+  }
+  /** Whether the current (or given) project is a demo project, whose requests never leave the process. */
+  async inDemoProject(project?: string): Promise<boolean> {
+    const id = project || this.projects.getStore();
+    if (id && this.demo) await this.demo.recognize(String(id));
+    return this.demoProject(project) !== undefined;
+  }
+  private demoProject(project?: string): string | undefined {
+    const id = project || this.projects.getStore();
+    return id && this.demo?.has(String(id)) ? String(id) : undefined;
   }
   private assertOpen() {
     if (this.closed)
@@ -248,6 +278,13 @@ export class OutboundNetwork {
   /** Async target preparation is opt-in; synchronous/live routing keeps its original contract. */
   async runProject<T>(id: string, fn: () => T): Promise<Awaited<T>> {
     const project = String(id);
+    if (this.demo && !this.demoChecked.getStore()?.has(project)) {
+      await this.demo.recognize(project);
+      return this.demoChecked.run(
+        new Set([...(this.demoChecked.getStore() ?? []), project]),
+        () => this.runProject(project, fn),
+      );
+    }
     const run = () => this.run(project, fn);
     return this.simulation?.enabled &&
       this.simulation.runProject &&
@@ -264,7 +301,7 @@ export class OutboundNetwork {
         throw new Error(`Unknown collector method: ${name}`);
       const method = original as (id: string, ...args: unknown[]) => unknown;
       Reflect.set(service, name, (id: string, ...args: unknown[]) =>
-        (this.simulation?.enabled
+        (this.simulation?.enabled || this.demo
           ? this.runProject.bind(this)
           : this.run.bind(this))(id, () =>
           connection
@@ -448,6 +485,10 @@ export class OutboundNetwork {
         ),
       );
     const id = project || this.projects.getStore();
+    if (id && this.demo && !this.demoChecked.getStore()?.has(id))
+      return this.runProject(id, () => this.fetch(connection, url, init, id));
+    const demo = this.demoProject(id);
+    if (demo) return this.demo!.request(demo, url, init);
     // Reject malformed mock scopes before run() can re-enter fetch() without a selection snapshot.
     if (this.simulation?.enabled && (!id || !/^[1-9]\d{0,15}$/.test(id)))
       return Promise.reject(
@@ -487,8 +528,14 @@ export class OutboundNetwork {
     url: string | URL,
     init: RequestInit,
     connection?: 'bilibili' | 'xiaohongshu',
-  ) {
+  ): Promise<Response> {
     this.assertOpen();
+    if (this.demo && !this.demoChecked.getStore()?.has(projectId))
+      return this.runProject(projectId, () =>
+        this.fetchCollector(projectId, url, init, connection),
+      );
+    const demo = this.demoProject(projectId);
+    if (demo) return this.demo!.request(demo, url, init);
     if (!/^[1-9]\d{0,15}$/.test(projectId))
       throw Object.assign(
         new Error(
@@ -545,6 +592,13 @@ export class OutboundNetwork {
     allowLoopback = false,
   ): Promise<Response> {
     this.assertOpen();
+    const project = this.projects.getStore();
+    if (project && this.demo && !this.demoChecked.getStore()?.has(project))
+      return this.runProject(project, () =>
+        this.send(profile, url, init, pinned, limit, reuse, allowLoopback),
+      );
+    const demo = this.demoProject();
+    if (demo) return this.demo!.request(demo, url, init);
     requireProfileRoute(profile, this.simulation?.enabled === true);
     if (profile?.kind === 'mock') {
       const project = this.projects.getStore();

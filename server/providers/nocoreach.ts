@@ -16,6 +16,7 @@ import type {
 } from '@nocobase/app-plugin-scheduler/server';
 import { schedulerServiceToken } from '@nocobase/app-plugin-scheduler/server/tokens';
 import type { Application } from '@nocobase/app-server/application';
+import { driveManagerToken } from '@nocobase/app-server/drive';
 import type { AppIdentityConfig } from '@nocobase/app-server/config';
 import { idGeneratorToken } from '@nocobase/app-server/id-generator';
 import { jobExecutorServiceToken } from '@nocobase/app-server/jobs';
@@ -70,6 +71,9 @@ import type { NocoReachConfig } from '../config/nocoreach.js';
 import { userManagementServiceToken } from '@nocobase/app-plugin-users/server';
 import { ReachManagement } from '../access/management.js';
 import { ReachInvitations } from '../access/invitations.js';
+import { registerDemoAdapters } from '../nocoreach/demo-data/adapters.js';
+import { demoDataToken, demoConfigurationToken } from '@nocobase/app-plugin-demo-mode/server/tokens';
+import { createNocoReachDemo, DemoProjects, demoProjectsOf } from '../nocoreach/demo-data/index.js';
 
 export interface NocoReachRuntime {
   keys?: ReachKeys;
@@ -280,6 +284,11 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
   public override async start(): Promise<void> {
     const runtime = this.app.container.resolve(nocoReachToken);
     await runtime.variables.load();
+    // Demo projects are answered in process from the first request any service makes, timers included.
+    const demoProjects = new DemoProjects(async (id) => (await demoProjectsOf(runtime.plugin, id))[0]);
+    runtime.plugin.demoProjects = demoProjects;
+    runtime.plugin.network.useDemoUpstream(demoProjects);
+    demoProjects.replace(await demoProjectsOf(runtime.plugin));
     await runtime.plugin.load();
     registerClassicImport(runtime);
     const access = new ReachAccess(this.app.container.resolve(databaseManagerToken), this.app.container.resolve(authorizationToken), () => String(this.app.container.resolve(idGeneratorToken).generate()), async connection => {
@@ -355,6 +364,16 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     runtime.keys = new ReachKeys(access, this.app.container.resolve(authenticationToken), scopes, this.app.container.resolve(userAdministrationServiceToken));
     this.app.container.resolve(scopedApiKeysToken).setOwnKeyPolicy(async () => false);
     await runtime.plugin.agents.agents.applyDefaults();
+    if (this.app.container.has(demoDataToken)) {
+      const demoData = this.app.container.resolve(demoDataToken);
+      demoData.register(createNocoReachDemo(runtime.plugin, this.app.container.resolve(driveManagerToken), () => runtime.cache.clear()));
+      const configuration = this.app.container.resolve(demoConfigurationToken);
+      registerDemoAdapters(runtime.plugin, configuration);
+      runtime.plugin.demoConfiguration = configuration;
+      demoProjects.configuration = configuration;
+      runtime.plugin.demoData = demoData;
+      runtime.plugin.demoModels = demoData.models;
+    }
     if (this.app.config.get<NocoReachMockConfig>('nocoreachMock')?.initializeData !== false)
       await initializeMockDemo(runtime.plugin);
     const agents = this.app.container.resolve(agentsToken);

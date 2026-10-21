@@ -85,6 +85,7 @@ const enUS = {
   'nocoreach.nav.settings': 'Settings',
   'nocoreach.nav.connections': 'Data sources',
   'nocoreach.nav.proxyProfiles': 'Network',
+  'nocoreach.nav.demoData': 'Demo management',
   'nocoreach.nav.members': 'Members & roles',
   'auth.platform': 'AI growth team',
   'auth.marketingTitleFirst': 'Find what to do,',

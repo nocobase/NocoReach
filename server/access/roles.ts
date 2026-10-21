@@ -34,9 +34,24 @@ export function pageGrants(capabilities: readonly string[]): PermissionGrant[] {
     ...REACH_PAGES.filter(
       (id) =>
         !ADMIN_PAGES.has(id) ||
-        (id === 'proxy-profiles' ? has('app.settings') : has('app.agents')),
+        (id === 'proxy-profiles' || id === 'demo-data'
+          ? has('app.settings')
+          : has('app.agents')),
     ).map(page),
     page('runtimes'),
+    // The demo data plugin's own settings item, which its routes check.
+    ...(has('app.settings')
+      ? [
+          {
+            resource: { type: 'settings', id: 'demoMode.configuration' },
+            actions: [{ action: 'read' }, { action: 'configure' }],
+          },
+          {
+            resource: { type: 'settings', id: 'demoMode.data' },
+            actions: [{ action: 'read' }, { action: 'manage' }],
+          },
+        ]
+      : []),
     ...(has('app.agents')
       ? [
           page('usage'),

@@ -495,3 +495,40 @@ test('a conflict reloads the task so the page offers what the server holds now',
   expect(await screen.findByText('由 Research Claude 来做')).toBeVisible();
   expect(screen.getByText(/原来选的 Agent 已不可用/)).toBeVisible();
 });
+
+test('a scoped Demo Agent can start without selecting or changing a real Runner', async () => {
+  const data = initial();
+  data.agent = {
+    repo: null,
+    online: true,
+    agentId: 'nocoreach.runner',
+    defaultAgentId: 'nocoreach.runner',
+    options: [
+      {
+        id: 'nocoreach.runner',
+        name: 'NocoReach Demo Agent',
+        type: 'demo',
+        online: true,
+      },
+    ],
+  };
+  advance.mockResolvedValue(data);
+  mount(data);
+  const start = await screen.findByRole('button', { name: '确定开始执行' });
+  expect(start).toBeEnabled();
+  expect(screen.getByText('由 NocoReach Demo Agent 来做')).toBeVisible();
+  await userEvent.click(start);
+  expect(action).toHaveBeenCalledWith(
+    'nrTaskWork',
+    'advance',
+    expect.objectContaining({
+      body: expect.objectContaining({ command: 'startTask' }),
+    }),
+  );
+  expect(
+    action.mock.calls.filter(
+      ([, command, options]) =>
+        command === 'advance' && options?.body?.command === 'setAgent',
+    ),
+  ).toHaveLength(0);
+});
