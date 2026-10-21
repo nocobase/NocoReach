@@ -36,7 +36,7 @@ type Pop = Snapshot<PopularPath>["items"][number];
 type TabId = "referrers" | "paths" | "contributors" | "issues" | "pulls" | "releases" | "discussions";
 const TABS: { id: TabId; label: () => string }[] = [
   { id: "referrers", label: () => $t('dataGithub.referringSites') }, { id: "paths", label: () => $t('dataGithub.popularPages') }, { id: "contributors", label: () => $t('dataGithub.contributors') },
-  { id: "issues", label: () => "Issues" }, { id: "pulls", label: () => "Pull requests" }, { id: "releases", label: () => "Releases" }, { id: "discussions", label: () => "Discussions" },
+  { id: "issues", label: () => $t('dataGithub.tabIssues') }, { id: "pulls", label: () => $t('dataGithub.tabPulls') }, { id: "releases", label: () => $t('dataGithub.tabReleases') }, { id: "discussions", label: () => $t('dataGithub.tabDiscussions') },
 ];
 const PAGE_SIZES = [25, 50, 100] as const;
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;

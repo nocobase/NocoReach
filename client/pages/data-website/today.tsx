@@ -38,9 +38,12 @@ import {
   regionName,
   type Realtime,
   type Today,
+  special,
 } from './model';
 import { Delta as ChangeText } from '#components/reach/delta';
 import { formatTime } from '#lib/format';
+import { Skeleton } from '#components/ui/skeleton';
+import { timeZoneName } from '#lib/time-zone-name';
 
 const message = (e: unknown) =>
   e instanceof Error ? e.message : $t('common.tryAgainLater');
@@ -105,10 +108,12 @@ export function TodayCard({
       )
     : '';
   const through = t ? `${String(t.through).padStart(2, '0')}:00` : '';
+  // The property's time zone by name ("China Standard Time"), as Settings › Automatic runs writes it.
+  const zoneName = t ? timeZoneName(t.timeZone, getCurrentLocale()) : '';
   const zone =
     t && t.timeZoneConfirmed === false
-      ? $t('dataWebsite.timeZoneUnconfirmed', { 0: t.timeZone })
-      : t?.timeZone;
+      ? $t('dataWebsite.timeZoneUnconfirmed', { 0: zoneName })
+      : zoneName;
   return (
     <Card className='gap-3 px-4' data-today-card=''>
       <div className='flex flex-wrap items-center gap-x-3 gap-y-1'>
@@ -150,7 +155,13 @@ export function TodayCard({
               className='text-2xl leading-tight font-semibold tabular-nums'
               data-realtime-users=''
             >
-              {r ? count(r.users) : live.error ? '—' : '…'}
+              {r ? (
+                count(r.users)
+              ) : live.error ? (
+                '—'
+              ) : (
+                <Skeleton className='my-1 h-6 w-14' />
+              )}
             </p>
             {r ? <MinuteBars values={r.perMinute} /> : null}
             {live.error && !r ? (
@@ -179,7 +190,11 @@ export function TodayCard({
               className='text-2xl leading-tight font-semibold tabular-nums'
               data-today-views=''
             >
-              {t ? count(t.totals.today?.views ?? 0) : '…'}
+              {t ? (
+                count(t.totals.today?.views ?? 0)
+              ) : (
+                <Skeleton className='my-1 h-6 w-14' />
+              )}
             </p>
             {t?.through ? (
               <div className='mt-1 flex flex-col gap-0.5'>
@@ -217,7 +232,7 @@ export function TodayCard({
           {t ? (
             <HourChart today={t} weekday={weekday} />
           ) : (
-            <div className='h-44' />
+            <Skeleton className='h-44 w-full' />
           )}
         </div>
         <div className='min-w-0'>
@@ -234,12 +249,12 @@ export function TodayCard({
                   <span className='flex min-w-0 items-center gap-1.5'>
                     <span
                       className='truncate'
-                      title={`${s.source} / ${s.medium}`}
+                      title={`${special(s.source)} / ${special(s.medium)}`}
                     >
-                      {s.source}
+                      {special(s.source)}
                       <span className='text-muted-foreground'>
                         {' '}
-                        / {s.medium || '—'}
+                        / {special(s.medium)}
                       </span>
                     </span>
                     {s.ai ? <Tag tone='violet'>{s.ai}</Tag> : null}
@@ -248,10 +263,16 @@ export function TodayCard({
                 </li>
               ))}
             </ul>
-          ) : (
+          ) : t ? (
             <p className='text-sm text-muted-foreground'>
-              {t ? $t('dataWebsite.todaySourcesNotReady') : '…'}
+              {$t('dataWebsite.todaySourcesNotReady')}
             </p>
+          ) : (
+            <div className='flex flex-col gap-1.5'>
+              {[0, 1, 2, 3].map((i) => (
+                <Skeleton key={i} className='h-4 w-full' />
+              ))}
+            </div>
           )}
         </div>
       </div>

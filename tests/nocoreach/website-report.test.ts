@@ -18,7 +18,8 @@ test('period: deduplicated totals for both periods, the daily line, every table;
   if(dims==='pagePath'&&r.dateRanges.length===2)return report(['pagePath','dateRange'],m,[[['/docs','current'],[300,2]],[['/docs/','current'],[10,0]],[['/docs','previous'],[200,1]]]);
   if(dims==='landingPagePlusQueryString'&&r.dateRanges.length===2)return report(['landingPagePlusQueryString','dateRange'],m,[[['/?utm_source=x','current'],[5,1]],[['/','current'],[20,4]],[['/','previous'],[30,6]]]);
   if(!dims)return report(['dateRange'],m,[[['current'],[100,60,150,90,9000,400,900,12,0.08]],[['previous'],[80,50,120,60,6000,300,700,6,0.05]]]);
-  if(dims==='date')return report(['date','dateRange'],m,[[['20261005','current'],[10,6,15,9,900,40,90,1,0.06]],[['20261004','current'],[12,6,15,9,900,40,90,1,0.06]],[['20260928','previous'],[8,5,12,6,600,30,70,1,0.05]]]);
+  // GA4 also answers each range on the other range's days, at zero.
+  if(dims==='date')return report(['date','dateRange'],m,[[['20261005','current'],[10,6,15,9,900,40,90,1,0.06]],[['20261004','current'],[12,6,15,9,900,40,90,1,0.06]],[['20260928','previous'],[8,5,12,6,600,30,70,1,0.05]],[['20260928','current'],[0,0,0,0,0,0,0,0,0]],[['20261004','previous'],[0,0,0,0,0,0,0,0,0]]]);
   if(dims==='pagePath,pageTitle')return report(['pagePath','pageTitle'],m,[[['/docs','Docs'],[300,50,4000,600,3]],[['/docs','Docs (old)'],[20,5,100,30,0]],[['/','Home'],[100,40,2000,200,1]]]);
   if(dims==='sessionSource,sessionMedium')return report(['sessionSource','sessionMedium'],m,[[['google','organic'],[50,30,80,50,4000,200,500,6,0.07]],[['chatgpt.com','referral'],[9,8,11,9,1500,30,60,2,0.18]],[['perplexity.ai','referral'],[3,3,4,3,300,8,20,0,0]]]);
   return report(r.dimensions.map(d=>d.name),m,[]);};

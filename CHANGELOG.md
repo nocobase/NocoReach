@@ -2,6 +2,8 @@
 
 ## Unreleased — Ten interface languages
 
+- State query-ranking, search-click and indexing hand-off objectives as requested outcomes across all ten languages; synchronize new Website & product and source-discovery copy when merging main.
+
 - Correct reviewed translation errors across all eight added languages, including named placeholders, total selection counts, task objectives, mention/citation meaning, skill associations, and Traditional Chinese wording.
 - Express audit and search-performance task objectives as requested changes in English, German, Brazilian Portuguese, Vietnamese, and Indonesian; preserve GitHub’s Insights → Traffic navigation labels in Spanish and Brazilian Portuguese.
 - Use complete localized sentences for AI mention/citation evidence and synchronize the latest main-branch update actions and tab counts.
@@ -16,6 +18,20 @@
 - Distinguish Indonesian noindex findings from instructions and Japanese publishing progress from live status; correct Traditional Chinese online/offline wording.
 - Correct Traditional Chinese approval and read-limit wording, and state the four-week average explicitly in GitHub topic hand-off summaries.
 - Validate language registration, translation keys, interpolation, and live language switching without losing in-progress input. Project content-generation language remains a separate setting.
+
+## Unreleased — Website & product pages, fixed and in plain words
+
+- Traffic's daily chart draws the previous period over the same days of the current one again. GA4 answers each of the two date ranges on every day of both, at zero outside it; those zero days drew the comparison line over the wrong days and dropped both lines to zero where the periods met. The server keeps each range's own days, and the page ignores the extra days in reports cached before.
+- Traffic: Today shows skeletons while it loads, names the property's time zone ("China Standard Time" rather than `Asia/Shanghai`) and writes its sources the way the channel table does (Direct rather than `(direct) / (none)`). What moved the figure is plain text, and data that may be off is one line with a "Check data" tag and the explanation and GA4 steps in its ⓘ, instead of two amber blocks.
+- Pages describes itself in one sentence; the site, the pages read and how the sitemap's count relates to the tabs' are in the ⓘ. Not in sitemap is a tag.
+- Site audit and its performance check describe themselves in one sentence each (no cost moves into the ⓘ), and the device choice and the device filter use the same segmented control.
+- GitHub labels that were English in every language (Commits, Watchers, Issues, Pull requests, Releases, Discussions) are translated, and its copy uses those names.
+- Downloads describes what is connected rather than every registry it supports, says "Latest" instead of `latest`, and picks a package from a drop-down instead of buttons that ran past the card.
+
+## Unreleased — Data sources: two ways to connect, findings in a dialog
+
+- The top of Data sources shows two cards side by side: Find data sources on your website, with what it reads, and Use an agent on your computer, saying why: the agent researches the website and repositories, lists a plan and connects everything once you confirm, while authorizations and tokens stay in the browser.
+- Discover data opens its findings in a dialog that can be closed, instead of a long list on the page. The website's own title and description are no longer shown above the findings. Authorize closes the dialog and opens that source's panel.
 
 ## Unreleased — One look for refresh buttons, drop-downs, tabs and pagination
 
