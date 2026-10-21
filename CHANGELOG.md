@@ -23,7 +23,8 @@
 ## Unreleased — Connection drawers in plain words
 
 - Describe how each data source connects at the top of the drawer, in product voice instead of an AI's first person, followed by a What you need list; only the title stays pinned while the drawer scrolls. The Agent avatar and grey message box are gone from the top of the drawer: no AI is answering there.
-- Head the question buttons at the bottom of the drawer, which open the AI chat, with the Agent avatar and "Ask AI".
+- Remove the question buttons at the bottom of the drawer. They opened the online chat with the question alone, which knows neither the data source nor how NocoReach connects it, so it could not answer; help with connecting will come through the user's own agent and the NocoReach CLI.
+- Correct the GA4 intro: choosing the Google resources does not start a sync; Sync now pulls the last 56 days by default.
 
 ## Unreleased — Why a data source cannot be reached
 
