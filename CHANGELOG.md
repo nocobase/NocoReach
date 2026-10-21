@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Automatic runs in plain words
+
+- Settings › Scheduled tasks is now Settings › Automatic runs. The daily analysis card says what it does, "Daily at 09:00" with the timezone by name (China Standard Time rather than `Asia/Shanghai`), how the last run went (projects analyzed, suggestions written) and when the next one is. Change time opens a dialog over the list that also says when most data sources update in the chosen timezone; Run history opens a drawer that names each project instead of its id. Run now, Pause or Turn on, and Technical details (cron, Scheduler states, target, counters) are in the card's "…" menu. Pagination shows only when there is a second page.
+- Data sources › Data health › View sync status gains a Frequency column (daily, weekly or manual). The daily analysis row says "Runs daily at 09:00 (China Standard Time)" with a Change time link to Settings › Automatic runs for those who may open it, and gives its next run; it no longer shows the cron expression or speaks of a workflow. The other automatic work is listed there per project rather than repeated on Settings › Automatic runs.
+
 ## Unreleased — Settings › Network at full width
 
 - Settings › Network no longer caps its content at 48rem: the proxy card and the data source table use the page's width, as the other pages do, instead of leaving the right side empty.

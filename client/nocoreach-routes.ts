@@ -200,20 +200,18 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
         action: 'access',
       },
       navigation: { title: 'schedules.title', icon: Clock, order: 6 },
-      // Anchor the history layer to the available content height, not the list's height.
       componentLoader: gated(() => import('./pages/schedules/index.js'), true),
+      // The time dialog and the run history drawer open over the list.
       children: [
         {
           name: 'schedule-edit',
           path: ':scheduleId/edit',
-          breadcrumb: { title: 'schedules.editTime' },
-          componentLoader: () => import('./pages/schedules/detail.js'),
+          componentLoader: () => import('./pages/schedules/edit.js'),
         },
         {
           name: 'schedule-detail',
           path: ':scheduleId',
-          breadcrumb: { title: 'schedules.history' },
-          componentLoader: () => import('./pages/schedules/detail.js'),
+          componentLoader: () => import('./pages/schedules/history.js'),
         },
       ],
     },
