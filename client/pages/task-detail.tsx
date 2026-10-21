@@ -7,10 +7,11 @@ import { useTechnicalDetails } from './task-detail/technical-state.js';
 import { EvidenceDialog } from './task-detail/evidence.js';
 import { taskEvidence, whyText } from './task-detail/evidence-model.js';
 import { VisibleChanges } from './task-detail/visible-changes.js';
-import { ArticleStart } from './task-detail/article-start.js';
+import { ArticleStart, DeliverySummary } from './task-detail/article-start.js';
 import { ArticleEditor, ArticleReview } from './task-detail/article-review.js';
 import { ConflictBody, DriftNotice, PendingButton, TargetRows } from './task-detail/article-release.js';
-import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, publishingTitle, soleConflict, type DeliveryChoice } from './task-detail/article-model.js';
+import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, pageUrlsOf, publishingTitle, soleConflict, type ArticleFound, type DeliveryChoice } from './task-detail/article-model.js';
+import { matchArticle } from './article-targets-api';
 import { TaskMedia } from './task-detail/media.js';
 import { AgentMenu } from './task-detail/agent-menu.js';
 import { hasTaskAgent } from './task-execution-types';
@@ -224,12 +225,20 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId}:{data:D
  const [choiceState,setChoiceState]=useState<DeliveryChoice&{playbook:string}>();
  const targetIds=(data.articleTargets||[]).map(t=>t.id);
  const choice=choiceState&&choiceState.playbook===pick&&(choiceState.target==='repo'||targetIds.includes(choiceState.target))?{...choiceState,also:choiceState.also.filter(x=>targetIds.includes(x))}:undefined;
- const delivery=defaultDelivery(data,pick),current=choice||delivery,plan=articleChoice?deliveryPlan(data,current):{ready:true,unlink:false,delivery:undefined};
+ // The article is found from the task's page (2026-10-21) rather than picked from hundreds; 更改 is for exceptions.
+ const pages=pageUrlsOf(data),pagesKey=pages.join('\n'),hasTargets=Boolean(data.articleTargets?.length),savedArticle=data.work.article?.articleId||'';
+ const lookupKey=hasTargets&&!savedArticle&&pagesKey?`${projectId}\n${pagesKey}`:'';
+ const [lookup,setLookup]=useState<{key:string;found:ArticleFound}>(),[editing,setEditing]=useState(false);
+ useEffect(()=>{if(!lookupKey)return;const c=new AbortController();
+  void matchArticle(projectId,pagesKey.split('\n'),c.signal).then(r=>{if(!c.signal.aborted)setLookup({key:lookupKey,found:r});},()=>{if(!c.signal.aborted)setLookup({key:lookupKey,found:{article:null,unchecked:true}});});return()=>c.abort();},[lookupKey,projectId,pagesKey]);
+ const found:ArticleFound|'finding'|undefined=!lookupKey?undefined:lookup?.key===lookupKey?lookup.found:'finding';
+ const finding=found==='finding',delivery=defaultDelivery(data,pick,found==='finding'?undefined:found),current=choice||delivery,plan:{ready:boolean;unlink:boolean;link?:{targetId:string;articleId:string};delivery?:unknown}=articleChoice?deliveryPlan(data,current):{ready:true,unlink:false,delivery:undefined};
+ const summary=articleChoice&&!editing&&(finding||!(current.mode==='existing'&&!plan.ready));
  const link=async(targetId:string|null,articleId?:string|null)=>Boolean(await update('linkArticle',{targetId,...(articleId!==undefined?{articleId}:{})}));
- const start=async()=>{let revision=data.work.revision;if(!hasTaskAgent(data)&&only){const d=await update('setAgent',{agentId:only.id});if(!d)return;revision=d.work.revision;}if(plan.unlink){const d=await update('linkArticle',{targetId:null,revision});if(!d)return;revision=d.work.revision;}const d=await update('startTask',{playbookId:pick,note,revision,...(plan.delivery?{delivery:plan.delivery}:{})});if(d)clear();};
+ const start=async()=>{let revision=data.work.revision;if(!hasTaskAgent(data)&&only){const d=await update('setAgent',{agentId:only.id});if(!d)return;revision=d.work.revision;}if(plan.unlink){const d=await update('linkArticle',{targetId:null,revision});if(!d)return;revision=d.work.revision;}if(plan.link){const d=await update('linkArticle',{...plan.link,revision});if(!d)return;revision=d.work.revision;}const d=await update('startTask',{playbookId:pick,note,revision,...(plan.delivery?{delivery:plan.delivery}:{})});if(d)clear();};
  const attachments=Array.isArray(data.task.evidence?.attachmentIds)&&data.task.evidence.attachmentIds.length>0;
  return <StageCard icon={<Play/>} title={$t('taskDetail.startAfterReview')} sub={handoff?$t('taskDetail.taskHandedOverDocumentDelivered',{0:handoff.playbook}):$t('taskDetail.agentNotStartedReadBrief')}
-  actions={<Button disabled={busy||!p||!ready||!plan.ready} onClick={()=>void start()}>{$t('taskDetail.confirmStart')}</Button>}>
+  actions={<Button disabled={busy||!p||!ready||!plan.ready||finding} onClick={()=>void start()}>{$t('taskDetail.confirmStart')}</Button>}>
   {brief&&<div className="nr-td-start-field" data-start-brief=""><span>{briefTitle}</span><div className="nr-td-start-brief"><p>{brief.replace(/[#*>`_]/g,'').replace(/^[ \t]+/gm,'').replace(/\n{2,}/g,'\n').trim().slice(0,600)}</p></div><button type="button" className="nr-link self-start text-xs" onClick={()=>setReading(true)}>{$t('taskDetail.viewFullText')}</button><DocReader open={reading} onClose={()=>setReading(false)} title={briefTitle} content={brief}/></div>}
   <div className="nr-td-start-grid">
    <label className="nr-td-start-field"><span>{$t('common.playbook')}</span><select aria-label={$t('common.playbook')} value={pick} disabled={busy||!list||!allowed} onChange={e=>setPick(e.target.value)}>
@@ -237,7 +246,9 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId}:{data:D
    </select>
     {p&&<small>{p.description}{p.description?' ':''}{$tj('taskDetail.runAgent',{0:p.kind==='build'?$t('taskDetail.onceChangedReviewResultBefore'):$t('taskDetail.writesDocumentReview')})}</small>}
    </label>
-   {articleChoice&&<ArticleStart data={data} projectId={projectId} choice={current} setChoice={c=>setChoiceState({...c,playbook:pick})} busy={busy} allowed={allowed} link={link}/>}
+   {summary?<DeliverySummary data={data} choice={current} finding={finding} allowed={allowed} busy={busy} onChange={()=>{setChoiceState({...current,article:undefined,playbook:pick});setEditing(true);}}/>
+    :articleChoice&&<ArticleStart data={data} projectId={projectId} choice={current} setChoice={c=>setChoiceState({...c,article:undefined,playbook:pick})} busy={busy} allowed={allowed} link={link}
+     notice={!editing&&found&&found!=='finding'&&!found.article?$t(found.unchecked?'articleTask.matchUnavailable':'articleTask.noArticleForPage'):undefined}/>}
    <label className="nr-td-start-field"><span>{$t('taskDetail.notesOptional')}</span><textarea aria-label={$t('taskDetail.additionalNotes')} rows={3} value={note} disabled={busy||!allowed} placeholder={$t('taskDetail.changeEnglishVersionKeepTechnical')} onChange={e=>setNote(e.target.value)}/></label>
   </div>
   <NeedsAgent data={data}/>

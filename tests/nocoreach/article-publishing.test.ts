@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   ARTICLE_TARGET_PRESETS,
+  slugFromPage,
   type ArticleTarget,
 } from '../../shared/article-publishing.js';
 import { ArticleDelivery } from '../../server/nocoreach/articles/delivery.js';
@@ -669,4 +670,77 @@ test('rejects an eleventh target before writing and permits editing or removing 
   });
   expect(added.targets).toHaveLength(10);
   expect(added.revision).toBe(13);
+});
+
+test('reads a page address back to the slug it is published under', () => {
+  const pages = {
+    en: 'https://www.example.com/en/blog/{slug}',
+    zh: 'https://www.example.com/cn/blog/{slug}/',
+  };
+  expect(
+    slugFromPage(pages, 'https://www.example.com/en/blog/workflow-tools'),
+  ).toEqual({ locale: 'en', slug: 'workflow-tools' });
+  // No www, a trailing slash, a query and a fragment change nothing; existing slugs may hold dots.
+  expect(
+    slugFromPage(pages, 'https://example.com/cn/blog/v2.2.29/?utm=x#top'),
+  ).toEqual({ locale: 'zh', slug: 'v2.2.29' });
+  for (const other of [
+    'https://www.example.com/en/blog/',
+    'https://www.example.com/en/blog/a/b',
+    'https://www.example.com/en/docs/workflow-tools',
+    'https://other.example/en/blog/workflow-tools',
+    'not a url',
+    'ftp://www.example.com/en/blog/x',
+  ])
+    expect(slugFromPage(pages, other)).toBeNull();
+  expect(
+    slugFromPage(undefined, 'https://www.example.com/en/blog/x'),
+  ).toBeNull();
+});
+
+test('finds the article a task page belongs to, and says when a target could not be asked', async () => {
+  const cms = fakeNocoBase([row()]);
+  const { targets } = await setup(
+    cmsTarget(),
+    { site: cms.fetcher },
+    { secret: 'cms-key' },
+  );
+  expect(
+    await targets.match('1', [
+      'https://www.example.com/en/docs/hello',
+      'https://example.com/cn/blog/hello/',
+    ]),
+  ).toEqual({
+    article: {
+      targetId: 'cms',
+      articleId: '7',
+      slug: 'hello',
+      title: '你好',
+      url: 'https://example.com/cn/blog/hello/',
+    },
+    unchecked: false,
+  });
+  // A page of the site that no target publishes, or a slug no article has: not found, and known to be so.
+  expect(
+    await targets.match('1', [
+      'https://www.example.com/pricing',
+      'https://www.example.com/en/blog/missing',
+    ]),
+  ).toEqual({ article: null, unchecked: false });
+  expect(
+    await targets.match('1', 'https://www.example.com/en/blog/hello'),
+  ).toEqual({ article: null, unchecked: false });
+  // A target that cannot be reached: not found is not known for sure.
+  const offline = await setup(
+    cmsTarget(),
+    {
+      site: async () => {
+        throw new Error('offline');
+      },
+    },
+    { secret: 'cms-key' },
+  );
+  expect(
+    await offline.targets.match('1', ['https://www.example.com/en/blog/hello']),
+  ).toEqual({ article: null, unchecked: true });
 });

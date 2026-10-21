@@ -2,7 +2,7 @@
 
 Blog and article tasks can publish a structured article to a configured **publishing target** instead of opening a pull request. The writing steps (outline, draft, rewrite, review) are unchanged; only the change step's deliverable and the release differ. Code and page-layout tasks keep the pull-request flow.
 
-Administrators configure targets under Data sources › Article publishing, choose the default one and, per playbook, where its tasks publish (a target or the repository). A new task starts from that choice; its owner can pick another target before starting, and also publish the same article to up to four other targets. Operator instructions in Chinese: [ARTICLE-PUBLISHING.zh-CN.md](ARTICLE-PUBLISHING.zh-CN.md). The HTTP protocol a site implements for the `http` kind: [ARTICLE-API.md](ARTICLE-API.md).
+Administrators configure targets under Data sources › Article publishing, choose the default one and, per playbook, where its tasks publish (a target or the repository). A new task starts from where its page lives: the article found from the task's page in the target that publishes it, a page no target holds through the repository, a blog post as a new article in the playbook's target. Its owner can change this before starting, and also publish the same article to up to four other targets. Operator instructions in Chinese: [ARTICLE-PUBLISHING.zh-CN.md](ARTICLE-PUBLISHING.zh-CN.md). The HTTP protocol a site implements for the `http` kind: [ARTICLE-API.md](ARTICLE-API.md).
 
 ## Model
 
@@ -15,6 +15,12 @@ Administrators configure targets under Data sources › Article publishing, choo
 | `nocobase-api` | check before write (compare `version` field, by default `updatedAt`) | lookup by slug    | NocoBase has no conditional update. Action-bound workflows only run when listed in `triggerWorkflows`. |
 | `http`         | conditional (`baseVersion`, 409)                                     | `Idempotency-Key` | See [ARTICLE-API.md](ARTICLE-API.md).                                                                  |
 | `git-files`    | conditional (file blob SHAs; fast-forward-only ref update)           | lookup by slug    | Front matter or a JSON metadata file for title and description.                                        |
+
+## Finding the article
+
+- `slugFromPage` (`shared/article-publishing.ts`) reads a page address back through a target's `pages` patterns to a locale and slug. Hosts compare without `www.`, paths without a trailing slash; the query and fragment are ignored. Existing slugs may contain dots.
+- `nrArticles:match { urls }` (`targets.ts` `match`, read-only, members) tries each address against every target, the default first, and returns the first article `findBySlug` finds as `{ targetId, articleId, slug, title, url }`. `unchecked` is true when a target that could hold the page could not be asked (no key, offline), so "not found" is not certain.
+- The start card (`task-detail.tsx`, `article-model.ts`) sends `pageUrlsOf(data)`: the task's linked page, the opportunity's target when it is an address, then the pages of the changes it cites. `defaultDelivery` then chooses: the linked article; a playbook set to the repository; a blog post as a new article; the article found (linked by `linkArticle` as the task starts); the repository when the page is known, no target holds it, the playbook names no target and a repository is connected; otherwise a pick. `DeliverySummary` shows the decided destination in one line with Change, which opens `ArticleStart`.
 
 ## Task flow
 

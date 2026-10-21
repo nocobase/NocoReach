@@ -1,5 +1,6 @@
 import { nocobaseClient as api, NocoReachHttpError } from '#lib/nocoreach-api';
 import type {
+  ArticleMatch,
   ArticleSummary,
   ArticleTargetView,
 } from '../../shared/article-publishing.js';
@@ -44,6 +45,23 @@ export const searchArticles = (
     unwrap: 'data',
     signal,
   });
+
+/** The article a task's pages belong to, read back through every target's page patterns (targets.ts match). */
+export const matchArticle = (
+  projectId: number,
+  urls: string[],
+  signal?: AbortSignal,
+) =>
+  api.action<{ article: ArticleMatch | null; unchecked: boolean }>(
+    'nrArticles',
+    'match',
+    {
+      method: 'POST',
+      body: { projectId: String(projectId), urls },
+      unwrap: 'data',
+      signal,
+    },
+  );
 
 /** The semantic key the server attached to an error (`articles.stale`), if any. */
 export function errorKey(e: unknown) {
