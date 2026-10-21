@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Agent failures name the computer and the tool
+
+- When a task's Agent stops because its coding tool is not signed in, the card names the computer and the tool ("Claude Code on Office-Mac isn't signed in") and asks whoever manages that computer to sign in, or to change the Agent. A second line explains that an Agent shown as online only means its computer is connected. Connection, network and quota failures name the computer or the tool the same way when the run reports them; readers who may not see the computer get the general wording.
+- Try again is no longer the main button when trying again cannot help (the tool is not signed in, the run could not be set up, the model is unavailable); it stays available beside I'll do it myself. The setup failure now asks an engineer to check Technical details before trying again.
+- Technical details › Runs shows what the tool itself reported when the run stopped (for example "Not logged in · Please run /login"), to those who may read the run's transcript.
+
 ## Unreleased — Insights as a conversation with the daily analysis
 
 - Insights now reads as the daily analysis speaking, so it no longer looks like Opportunities or opens on a wall of text. The key numbers stay on top as tiles with their trend (at most five, only those with data), with Status (the standing facts, in a drawer) and All data (every data page, grouped) below them.
