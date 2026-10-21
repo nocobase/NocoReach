@@ -1,5 +1,13 @@
 # NocoReach Changelog
 
+## Unreleased — Agent: who does which work, and whether it works
+
+- The Agent page has no tabs. One table says which work cloud models do (Daily analysis and the Chat panel, with the model each uses) and which local agents do (Tasks, with the agent, the computer it runs on and whether that computer is shared with the team or owner only), each with a status and the one action that fixes it. The local agents and the project default follow below it.
+- A status follows how the work last ended, not only whether it is set up. An agent whose computer is online but whose latest tasks failed because the coding tool is not signed in, out of quota, cannot use the model or could not set up shows Needs attention, with how many tasks in a row, the computer and the tool, and what to do. A daily analysis whose last run did not finish shows the same.
+- Model services, Runtimes and Usage are pages of Settings at `/models`, `/runtimes` and `/usage`; the old addresses under `/agents` redirect. Runtimes opens with one sentence on what a runtime is and why it must stay on and signed in, and ends with what Shared with the team and Owner only mean, which are also the names in its list.
+- The chat agent's name, model and instructions open as a dialog from the Chat panel row; the separate chat agent list, and turning a chat agent off, are gone. A chat agent that is off can be turned on from the row.
+- Agents on a runtime are called local agents everywhere ("Execution agent" and "Task agent" before).
+
 ## Unreleased — One look for refresh buttons, drop-downs, tabs and pagination
 
 - The data pages call the action that reads new data "Update now" everywhere, instead of seven names (Read now, Search now, Check now, Query now, the competitor and Site audit wordings). The connection drawers keep their own steps.

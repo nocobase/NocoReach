@@ -1,54 +1,69 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createMemoryRouter, RouterProvider, Outlet } from 'react-router';
+import {
+  createMemoryRouter,
+  RouterProvider,
+  useOutletContext,
+} from 'react-router';
 import { beforeEach, expect, test, vi } from 'vitest';
-import AgentsPage, { AgentsPageLayout } from '../../client/pages/agents/index';
+import AgentsPage from '../../client/pages/agents/index';
+import type { AgentSettingsContext } from '../../client/online-agent/edit';
 
-// The roles overview reads the project and the Agents plugin; its own test covers it.
-vi.mock('../../client/pages/agents/roles', () => ({ AgentRoles: () => null }));
+// The overview and the local agents section read the project and the Agents plugin; their own tests cover them.
+const seen = vi.hoisted(() => ({
+  refresh: [] as number[],
+  localAgentsId: [] as (string | undefined)[],
+}));
+vi.mock('../../client/pages/agents/roles', () => ({
+  AgentRoles: ({
+    refresh,
+    localAgentsId,
+  }: {
+    refresh: number;
+    localAgentsId?: string;
+  }) => {
+    seen.refresh.push(refresh);
+    seen.localAgentsId.push(localAgentsId);
+    return <p>Who does the work</p>;
+  },
+}));
+vi.mock('../../client/pages/agents/runner', () => ({
+  LocalAgents: ({ id }: { id: string }) => (
+    <section id={id}>Local agents</section>
+  ),
+}));
 
 const access = vi.hoisted(() => ({ can: true, isPending: false }));
-// Resource ids denied on top of `access`: `runtimes`, `usage` (pages) and `agents.services` (settings) guard the plugin tabs.
-const denied = vi.hoisted(() => new Set<string>());
 vi.mock('@nocobase/app-plugin-authorization/client', () => ({
-  useCan: (request?: { resource: { id: string } }) =>
-    request && denied.has(request.resource.id)
-      ? { can: false, isPending: false }
-      : access,
+  useCan: () => access,
 }));
 beforeEach(() => {
   Object.assign(access, { can: true, isPending: false });
-  denied.clear();
+  seen.refresh = [];
+  seen.localAgentsId = [];
 });
 
-function mount(path = '/agents?view=saved') {
+function ChatDialog() {
+  const context = useOutletContext<AgentSettingsContext>();
+  return (
+    <div role='dialog'>
+      <p>Back to {context.back}</p>
+      <button type='button' onClick={context.refresh}>
+        Save
+      </button>
+    </div>
+  );
+}
+
+function mount(path = '/agents') {
   const router = createMemoryRouter(
     [
       {
         path: '/agents',
         Component: AgentsPage,
         children: [
-          {
-            path: 'runner',
-            element: (
-              <AgentsPageLayout title='执行 Agent' description='Runner tab'>
-                <p>Runner content</p>
-              </AgentsPageLayout>
-            ),
-          },
-          {
-            path: 'online',
-            element: (
-              <AgentsPageLayout title='对话 Agent' description='Online tab'>
-                <p>Online content</p>
-                <Outlet />
-              </AgentsPageLayout>
-            ),
-            children: [{ path: ':id/edit', element: <p>Online editor</p> }],
-          },
-          { path: 'runtimes', element: <h1>Runtimes page</h1> },
-          { path: 'models', element: <h1>Models page</h1> },
-          { path: 'usage', element: <h1>Usage page</h1> },
+          { path: 'chat/new', Component: ChatDialog },
+          { path: 'chat/:onlineAgentId', Component: ChatDialog },
         ],
       },
     ],
@@ -58,105 +73,35 @@ function mount(path = '/agents?view=saved') {
   return router;
 }
 
-test('opens Runner by default and keeps tab navigation and history in the URL', async () => {
-  const user = userEvent.setup();
-  const router = mount();
-  expect(await screen.findByText('Runner content')).toBeInTheDocument();
-  expect(router.state.location.pathname).toBe('/agents/runner');
-  expect(router.state.historyAction).toBe('REPLACE');
-  await user.click(screen.getByRole('link', { name: '对话 Agent' }));
-  expect(await screen.findByText('Online content')).toBeInTheDocument();
-  expect(router.state.location.search).toBe('?view=saved');
-  expect(screen.getByRole('link', { name: '对话 Agent' })).toHaveAttribute(
-    'aria-current',
-    'page',
-  );
-  await router.navigate(-1);
-  expect(await screen.findByText('Runner content')).toBeInTheDocument();
-  await router.navigate(1);
-  expect(await screen.findByText('Online content')).toBeInTheDocument();
-});
-
-test('keeps online management accessible without the Runner page grant', async () => {
-  access.can = false;
-  const router = mount();
-  expect(await screen.findByText('Online content')).toBeInTheDocument();
-  expect(router.state.location.pathname).toBe('/agents/online');
-  expect(router.state.location.search).toBe('?view=saved');
+test('shows who does the work and the local agents on one page without tabs', () => {
+  mount();
   expect(
-    screen.queryByRole('link', { name: '执行 Agent' }),
-  ).not.toBeInTheDocument();
+    screen.getByRole('heading', { level: 1, name: 'Agent' }),
+  ).toBeInTheDocument();
+  expect(screen.getByText('Who does the work')).toBeInTheDocument();
+  expect(screen.getByText('Local agents')).toHaveAttribute(
+    'id',
+    'local-agents',
+  );
+  expect(seen.localAgentsId.at(-1)).toBe('local-agents');
+  expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
+  expect(screen.queryAllByRole('link')).toEqual([]);
 });
 
-test('does not redirect before the Runner permission resolves', () => {
+test('leaves out the local agents without the Agents page grant', () => {
   access.can = false;
-  access.isPending = true;
-  const router = mount();
-  expect(screen.getByRole('status')).toBeInTheDocument();
-  expect(router.state.location.pathname).toBe('/agents');
+  mount();
+  expect(screen.getByText('Who does the work')).toBeInTheDocument();
+  expect(screen.queryByText('Local agents')).not.toBeInTheDocument();
+  expect(seen.localAgentsId.at(-1)).toBeUndefined();
 });
 
-test('direct online editor URLs keep the online tab and list mounted', () => {
-  const router = mount('/agents/online/online-default/edit?view=saved');
-  expect(screen.getByText('Online content')).toBeInTheDocument();
-  expect(screen.getByText('Online editor')).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: '对话 Agent' })).toHaveAttribute(
-    'aria-current',
-    'page',
-  );
-  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-  expect(router.state.location.pathname).toBe(
-    '/agents/online/online-default/edit',
-  );
-});
-
-test('shows runtimes, models and usage as tabs of the Agent page', async () => {
+test('opens the chat agent settings over the page and reads the overview again after a save', async () => {
   const user = userEvent.setup();
-  const router = mount('/agents/runner');
-  // In setup order: the model service first, then the runtime and its agent.
-  expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual([
-    '模型',
-    '对话 Agent',
-    '运行环境',
-    '执行 Agent',
-    '用量',
-  ]);
-  await user.click(screen.getByRole('link', { name: '运行环境' }));
-  expect(await screen.findByText('Runtimes page')).toBeInTheDocument();
-  expect(router.state.location.pathname).toBe('/agents/runtimes');
-  await user.click(screen.getByRole('link', { name: '模型' }));
-  expect(await screen.findByText('Models page')).toBeInTheDocument();
-  expect(router.state.location.pathname).toBe('/agents/models');
-  expect(screen.getByRole('link', { name: '模型' })).toHaveAttribute(
-    'aria-current',
-    'page',
-  );
-  await user.click(screen.getByRole('link', { name: '用量' }));
-  expect(await screen.findByText('Usage page')).toBeInTheDocument();
-  expect(router.state.location.pathname).toBe('/agents/usage');
-});
-
-test('hides the runtimes, models and usage tabs without their grants', () => {
-  denied.add('runtimes');
-  denied.add('agents.services');
-  denied.add('usage');
-  mount('/agents/online');
-  expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual([
-    '对话 Agent',
-    '执行 Agent',
-  ]);
-});
-
-test('keeps the usage filters to the usage tab', async () => {
-  const router = mount('/agents/runner?view=saved');
-  expect(screen.getByRole('link', { name: '用量' })).toHaveAttribute(
-    'href',
-    '/agents/usage',
-  );
-  await router.navigate('/agents/usage?groupBy=agent');
-  expect(await screen.findByText('Usage page')).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: '执行 Agent' })).toHaveAttribute(
-    'href',
-    '/agents/runner',
-  );
+  mount('/agents/chat/online-default');
+  expect(screen.getByText('Who does the work')).toBeInTheDocument();
+  expect(screen.getByRole('dialog')).toHaveTextContent('Back to /agents');
+  expect(seen.refresh.at(-1)).toBe(0);
+  await user.click(screen.getByRole('button', { name: 'Save' }));
+  expect(seen.refresh.at(-1)).toBe(1);
 });

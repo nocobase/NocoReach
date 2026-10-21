@@ -93,7 +93,7 @@ export function AnalysisAlert({
           <Button
             variant='outline'
             size='sm'
-            render={<Link to='/agents/models' />}
+            render={<Link to='/models' />}
             nativeButton={false}
           >
             {$t('strategy.configureAnalysisModel')}

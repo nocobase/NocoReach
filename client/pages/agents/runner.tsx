@@ -11,10 +11,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '#components/ui/select';
+import { SectionHeading } from '#components/reach/page';
 import { InlineError, ListSkeleton, LoadError } from '#components/reach/states';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { useProject } from '../reach-data.js';
-import { AgentsPageLayout } from './index.js';
 
 type Settings = {
   revision: number;
@@ -23,32 +23,45 @@ type Settings = {
 };
 const NONE = '__none__';
 
-export default function RunnerAgents() {
+// The agents that run on a runtime's computer: the project default first, then the Agents plugin's list, where people
+// enable a reported agent and say what it is good at. The Agent page's Change action scrolls here (`id`).
+export function LocalAgents({
+  id,
+  onSaved,
+}: {
+  id?: string;
+  onSaved?: () => void;
+}) {
   const { project, error } = useProject();
   return (
-    <AgentsPageLayout
-      title={$t('common.runnerAgent')}
-      description={$t('agentsPage.runnerDescription')}
-    >
+    <section id={id} className='flex scroll-mt-4 flex-col gap-4'>
+      <SectionHeading
+        title={$t('common.runnerAgent')}
+        description={$t('agentsPage.runnerDescription')}
+        className='[&_h2]:text-base [&_h2]:font-medium'
+      />
       {error && <InlineError>{error}</InlineError>}
       {project && (
         <DefaultAgent
           key={project.id}
           projectId={project.id}
           projectName={project.name}
+          onSaved={onSaved}
         />
       )}
       <RunnerAgentsSection />
-    </AgentsPageLayout>
+    </section>
   );
 }
 
 function DefaultAgent({
   projectId,
   projectName,
+  onSaved,
 }: {
   projectId: number;
   projectName: string;
+  onSaved?: () => void;
 }) {
   const { can: canSave } = useBusinessAccess('nrAgent.saveDefault', projectId);
   const id = useId();
@@ -99,6 +112,7 @@ function DefaultAgent({
       );
       setData({ ...data, ...saved });
       setNotice(() => $t('runnerDefault.saved'));
+      onSaved?.();
     } catch (e) {
       setError(() =>
         e instanceof Error
