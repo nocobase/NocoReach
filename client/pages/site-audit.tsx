@@ -1,4 +1,4 @@
-import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { useMessageState, $t, $tj, $legacyText } from "#i18n";
 // 审计, two tabs since 2026-10-14 (user request): 网站审计 — after every-app/open-seo db8bde1 src/client/features/audit/
 // (results grouped by severity, affected pages per issue; MIT). Changes: checks the pages of 网站内容 as last read
 // (re-read weekly, free) instead of a separate crawl, issues can be ticked and handed to the Agent from the page's button
@@ -26,12 +26,13 @@ import { PerformanceTab } from "./audit-performance";
 import "./reach-workspace.css";
 import "./data-views.css";
 import { InfoTip } from "#components/reach/info-tip";
+import { formatDate } from '#lib/format';
 
 type AuditPage = { url: string; title: string; detail: string };
 type Issue = { type: string; severity: "critical" | "warning" | "notice"; title: string; description: string; job: "tech" | "content"; count: number; pages: AuditPage[] };
 type Report = { connected: boolean; total?: number; read?: number; pending?: number; oldestRead?: string | null; newestRead?: string | null; counts?: { critical: number; warning: number; notice: number }; issues?: Issue[] };
 const getSeverity = (): Record<Issue["severity"], { label: string; tone: Tone }> => ({ critical: { label: $t('siteAudit.critical'), tone: "red" }, warning: { label: $t('siteAudit.warning'), tone: "amber" }, notice: { label: $t('siteAudit.notice'), tone: "grey" } });
-const day = (v?: string | null) => (v ? new Date(v).toLocaleDateString(getCurrentLocale()) : "—");
+const day = (v?: string | null) => formatDate(v);
 const pathOf = (u: string) => { try { return new URL(u).pathname || "/"; } catch { return u; } };
 
 export default function SiteAudit() {

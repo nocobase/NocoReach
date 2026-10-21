@@ -17,6 +17,7 @@ import {Button} from '#components/ui/button';
 import {DraftHandOffDialog} from './keyword-hand-off';
 import {HandOffNotice,type HandOffResult} from './strategy/hand-off';
 import {contentPageDraft} from './seo-hand-off';
+import { formatDate } from '#lib/format';
 // 内容 详情 (SPEC §5): the page's daily views and search clicks with each change's go-live day marked, and the tasks
 // that worked on it with their effect checks.
 export type ContentTask={id:number;title:string;status:string;evidence?:{no?:number;work?:Work}};
@@ -39,7 +40,7 @@ export function ContentDetail({projectId,googleScope,page,tasks,range,from,to,ra
    <div className="flex flex-wrap items-center justify-between gap-2"><a className="nr-link block min-w-0 break-all" href={page.url} target="_blank" rel="noreferrer">{page.url}</a><Button size="sm" variant="ghost" onClick={()=>navigate(`/audit?lighthouse=${encodeURIComponent(page.url)}`)}>{$t('contentDetail.performanceCheck')}</Button></div>
    <HandOffNotice result={handed}/>
    {handing&&<DraftHandOffDialog projectId={projectId} draft={contentPageDraft(page,rangeLabel)} playbookId="optimize-page" page={page.url} description={$t('contentDetail.pageRecentTrafficSearchData')} onClose={()=>setHanding(false)} onDone={r=>{setHanding(false);setHanded(r);}}/>}
-   <section className="space-y-2"><div className="flex items-center gap-1"><h3 className="text-sm font-semibold">{$t('contentDetail.dailyTrafficSearchClicks')}</h3>{data?.window&&<InfoTip label={$t('common.howReadChart')}>{$tj('contentDetail.dashedLinesMarkDaysChanges',{0:data.window.start,1:data.window.end,2:data.ga4Cutoff||'—',3:data.gscCutoff||'—'})}</InfoTip>}</div>
+   <section className="space-y-2"><div className="flex items-center gap-1"><h3 className="text-sm font-semibold">{$t('contentDetail.dailyTrafficSearchClicks')}</h3>{data?.window&&<InfoTip label={$t('common.howReadChart')}>{$tj('contentDetail.dashedLinesMarkDaysChanges',{0:formatDate(data.window.start),1:formatDate(data.window.end),2:formatDate(data.ga4Cutoff),3:formatDate(data.gscCutoff)})}</InfoTip>}</div>
     {error?<p className="nr-error" role="alert">{$t('contentDetail.notLoadPageData')}</p>:!data?<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>:!hasData?<p className="text-muted-foreground">{$t('contentDetail.noTrafficSearchDataPage')}</p>:
      <div className="nr-chart-box" data-content-chart><ResponsiveContainer width="100%" height={220}><LineChart data={data.daily} margin={{top:16,right:8,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="date" tickFormatter={(d:string)=>d.slice(5)} minTickGap={24} fontSize={11}/><YAxis yAxisId="v" fontSize={11} width={40} allowDecimals={false}/><YAxis yAxisId="c" orientation="right" fontSize={11} width={32} allowDecimals={false}/><Tooltip/><Legend/>
       {releases.filter(r=>data.window&&r.date>=data.window.start&&r.date<=data.window.end).map(r=><ReferenceLine key={r.id} yAxisId="v" x={r.date} stroke="var(--chart-1)" strokeDasharray="4 3" label={{value:r.no?$t('contentDetail.tLive',{0:r.no}):$t('common.live'),position:'top',fontSize:10,fill:'var(--muted-foreground)'}}/>)}
@@ -49,7 +50,7 @@ export function ContentDetail({projectId,googleScope,page,tasks,range,from,to,ra
    <section className="space-y-2"><div className="flex items-center gap-1"><h3 className="text-sm font-semibold">{$t('contentDetail.tasksImpact')}</h3>{releases.length?<InfoTip label={$t('contentDetail.howImpactMeasured')}>{$tj('contentDetail.impactComparesEqualPeriodsBefore',{0:monthDay(releases[0].date)})}</InfoTip>:null}</div>
     {!linked.length?<p className="text-muted-foreground">{$t('contentDetail.noTaskChangedPageYet')}</p>:linked.map(t=>{const w=t.evidence!.work!,state=w.cancelledAt?null:workState(w,t.status),items=effectItems(w);return <div key={t.id} className="space-y-1 rounded-lg border border-border p-3" data-content-task={t.id}>
      <div className="flex flex-wrap items-center gap-2"><Link className="nr-link font-medium" to={`/actions/${t.id}`}>{t.evidence?.no?`T-${t.evidence.no} `:''}{t.title}</Link>{state?<Tag tone={stateTone[state]}>{getStateNames()[state]}</Tag>:<Tag tone="slate">{$t('contentDetail.cancelled')}</Tag>}</div>
-     {w.observeFrom?<p className="nr-footnote">{$tj('contentDetail.live',{0:new Date(w.observeFrom).toISOString().slice(0,10)})}</p>:null}
+     {w.observeFrom?<p className="nr-footnote">{$tj('contentDetail.live',{0:formatDate(new Date(w.observeFrom).toISOString().slice(0,10))})}</p>:null}
      {items.map(i=><p key={i.day} className="text-xs">{i.result?effectLine(i.result):$t('contentDetail.dayResultsExpected',{0:i.day,1:i.expected})}</p>)}
     </div>;})}
     

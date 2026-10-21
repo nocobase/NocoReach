@@ -1,5 +1,5 @@
 import { googleLocalFreshness, googleCacheExpiry } from '../../../shared/google-cache.js';
-import { getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { $t, $tj, $legacyText } from "#i18n";
 // 搜索表现: ported from every-app/open-seo db8bde1 src/client/features/search-performance/ (SearchPerformancePage,
 // SearchPerformanceParts, SearchPerformanceColumns, SearchPerformanceTextFilters; MIT). Changes: data from the daily
 // sync (nrDataViews:search) instead of live Search Console calls, NocoReach's time range picker, a daily trend chart,
@@ -52,6 +52,7 @@ import { SitemapsView } from "./sitemaps";
 import { BreakdownCards, METRIC_LABEL, MoversTable, RowDrawer, SEARCH_TYPES, Segmented, SliceTable, showMetric, slices, useBreakdown, type Metric, type MoverRow, type Movers, type Scope, type SearchType } from "./more";
 import "../reach-workspace.css";
 import "../data-views.css";
+import { formatCount, formatDate, formatPercent } from '#lib/format';
 
 type Totals = { clicks: number; impressions: number; ctr: number; position: number };
 type Filter = { operator: "contains" | "equals"; expression: string };
@@ -91,8 +92,8 @@ const MOVER_TABS = ["rising", "falling", "fresh"] as const;
 const METRICS: Metric[] = ["clicks", "impressions", "ctr", "position"];
 const SLICES = ["country", "device", "appearance", "date"] as const;
 const PAGE_SIZES = [25, 50, 100] as const;
-const count = (v: number) => Math.round(v).toLocaleString(getCurrentLocale());
-const ctr = (v: number) => `${(v * 100).toFixed(1)}%`;
+const count = (v: number) => formatCount(Math.round(v));
+const ctr = (v: number) => formatPercent(v);
 const position = (v: number) => v.toFixed(1);
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 
@@ -163,7 +164,7 @@ export default function SearchPerformancePage() {
 
   const exportTab = () => {
     if (!report?.connected || !w) return;
-    const stamp = $t('searchPerformance.dateRange',{0:w.start,1:w.end});
+    const stamp = $t('searchPerformance.dateRange',{0:formatDate(w.start),1:formatDate(w.end)});
     const metricsHead = [$t('common.clicks'), $t('common.impressions'), $t('common.ctr'), $t('common.position')];
     const ok =
       tab === "striking"
@@ -203,7 +204,7 @@ export default function SearchPerformancePage() {
       {view === "index" ? (project ? <IndexingView property={project.searchConsoleProperty} projectId={project.id} tab={params.get("list")} reason={params.get("reason")} onPick={(v) => update({ list: v.list, reason: v.reason })} /> : null)
         : view === "sitemaps" ? (project ? <SitemapsView property={project.searchConsoleProperty} projectId={project.id} tab={params.get("list")} onTab={(t) => update({ list: t })} /> : null)
         : <>
-      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:w.start,1:w.end}) : report?.complete && report.previousComplete ? $t('common.comparedPreviousDaysDataThrough',{0:w.start,1:w.end,2:w.days,3:report?.cutoff}) : $t('searchHistory.rangeSummary',{0:w.start,1:w.end,2:report?.cutoff})) : undefined} />
+      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:formatDate(w.start),1:formatDate(w.end)}) : report?.complete && report.previousComplete ? $t('common.comparedPreviousDaysDataThrough',{0:formatDate(w.start),1:formatDate(w.end),2:w.days,3:formatDate(report?.cutoff)}) : $t('searchHistory.rangeSummary',{0:formatDate(w.start),1:formatDate(w.end),2:formatDate(report?.cutoff)})) : undefined} />
       {report?.connected ? <div className="-mt-2 mb-1"><Segmented label={$t('searchPerformance.searchType')} options={SEARCH_TYPES.map((t) => ({ id: t.id, label: t.label() }))} value={type} onChange={(v) => update({ type: v === "web" ? undefined : v, tab: undefined, by: undefined })} /></div> : null}
       {loadError ? <LoadError title={$t('searchPerformance.notLoadSearchData')} message={loadError} onRetry={() => window.location.reload()} /> : null}
       {!report && !loadError ? <ListSkeleton rows={6} /> : null}
@@ -225,7 +226,7 @@ export default function SearchPerformancePage() {
           {showDetails && !tableReport && !detailsError ? <ListSkeleton rows={4} /> : null}
           {showDetails && detailsError ? <LoadError title={$t('searchHistory.detailsFailed')} message={$t('searchHistory.detailsFailed')} onRetry={() => window.location.reload()} /> : null}
           {showDetails && tableReport ? <>
-          <p className="text-sm text-muted-foreground">{$t('searchHistory.detailsScope', { 0: w.start, 1: w.end })}</p>
+          <p className="text-sm text-muted-foreground">{$t('searchHistory.detailsScope', { 0: formatDate(w.start), 1: formatDate(w.end) })}</p>
           <BreakdownCards data={breakdown} error={breakdownError} onCountry={(c) => update({ country: c })} />
           <Card className="gap-0 py-0" data-report="">
             <DataTableTabs
@@ -309,7 +310,7 @@ function CountrySelect({ value, countries, onChange }: { value?: string; countri
         {items.map((c) => (
           <SelectItem key={c.key} value={c.key}>
             {countryName(c.key)}
-            <span className="ml-2 text-xs text-muted-foreground tabular-nums">{$tj('searchPerformance.clicks',{0:c.clicks.toLocaleString(getCurrentLocale())})}</span>
+            <span className="ml-2 text-xs text-muted-foreground tabular-nums">{$tj('searchPerformance.clicks',{0:formatCount(c.clicks)})}</span>
           </SelectItem>
         ))}
       </SelectContent>
@@ -361,7 +362,7 @@ function TrendCard({ report, metric }: { report: SearchReport; metric: Metric })
     : trend;
   return (
     <Card className="gap-3 px-4" data-trend={metric}>
-      <div className="flex items-center gap-1"><h2 className="text-sm font-semibold">{$tj('searchPerformance.daily',{0:label})}</h2><InfoTip label={$t('common.howReadChart')}>{$tj('searchPerformance.solidLineSelectedPeriodDashed',{0:fresh.length ? $t('searchPerformance.preliminaryDataDottedLineGoogle',{0:fresh[0].date.slice(5),1:fresh.length > 1 ? $t('searchPerformance.rangeEnd',{0:fresh.at(-1)!.date.slice(5)}) : ""}) : ""})}{" "}{$t('searchPerformance.clickFigureToSwitch')}</InfoTip></div>
+      <div className="flex items-center gap-1"><h2 className="text-sm font-semibold">{$tj('searchPerformance.daily',{0:label})}</h2><InfoTip label={$t('common.howReadChart')}>{$tj('searchPerformance.solidLineSelectedPeriodDashed',{0:fresh.length ? $t('searchPerformance.preliminaryDataDottedLineGoogle',{0:formatDate(fresh[0].date),1:fresh.length > 1 ? $t('searchPerformance.rangeEnd',{0:formatDate(fresh.at(-1)!.date)}) : ""}) : ""})}{" "}{$t('searchPerformance.clickFigureToSwitch')}</InfoTip></div>
       <div className="nr-chart-box">
         <ResponsiveContainer width="100%" height={240}>
           <AreaChart data={data} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
@@ -574,7 +575,7 @@ function DimensionTable({ projectId, period, data, dimension, noPosition, isFilt
     <>
       {data.total > data.rows.length ? (
         <p className="px-4 pt-3 text-sm text-muted-foreground">
-          {$tj('searchPerformance.totalMostClicksListedHere',{0:data.total.toLocaleString(getCurrentLocale()),1:keyLabel,2:data.rows.length.toLocaleString(getCurrentLocale())})}</p>
+          {$tj('searchPerformance.totalMostClicksListedHere',{0:formatCount(data.total),1:keyLabel,2:formatCount(data.rows.length)})}</p>
       ) : null}
       <DataTable
         table={table}
@@ -604,7 +605,7 @@ function DimensionTable({ projectId, period, data, dimension, noPosition, isFilt
 function notesOf(report: SearchReport): string[] {
   const w = report.window!;
   return [
-    $t('searchPerformance.searchConsoleWebSearchSynced',{0:report.cutoff}),
+    $t('searchPerformance.searchConsoleWebSearchSynced',{0:formatDate(report.cutoff)}),
     ...(report.pairDays !== undefined && report.pairDays < w.days ? [$t('searchPerformance.queryPageDetailsCoverDays',{0:report.pairDays})] : []),
     ...(report.country ? [$t('searchPerformance.readDirectlySearchConsoleSame',{0:countryName(report.country)})] : report.filtered ? [$t('searchPerformance.filteredMetricsAddUpQuery')] : []),
     ...(report.type && report.type !== "web" ? [$t('searchPerformance.otherTypeReadLive')] : []),

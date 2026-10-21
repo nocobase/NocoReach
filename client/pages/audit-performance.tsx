@@ -1,4 +1,4 @@
-import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { useMessageState, $t, $tj, $legacyText } from "#i18n";
 // 审计 · 性能检查 (Lighthouse): after every-app/open-seo db8bde1 src/client/features/lighthouse/ (scores, metrics, failing
 // checks by category; MIT). One page at a time and only when asked (DataForSEO, about $0.005); Chinese names for the common
 // checks. Its own tab since 2026-10-14 (user request): the check form, every check made so far in a table, and a row's
@@ -26,6 +26,7 @@ import { DetailDrawer } from "./detail-drawer";
 import { SectionHandOff } from "./section-hand-off";
 import { safeLink } from "./analytics";
 import { help } from "./glossary";
+import { formatDateTime } from '#lib/format';
 
 type Issue = { category: string; key: string; title: string; description: string; value: string; score: number; savingsMs: number | null; savingsBytes: number | null; severity: "high" | "medium" };
 type Result = { url: string; finalUrl: string; strategy: "mobile" | "desktop"; version: string | null; scores: Record<string, number | null>; metrics: { key: string; label: string; value: string; score: number | null }[]; issues: Issue[] };
@@ -60,7 +61,7 @@ function draft(r: Result): TaskDraft {
 
 
 const deviceName = (s: string) => (s === "desktop" ? $t('lighthouseCard.computer') : $t('lighthouseCard.mobile'));
-const when = (v: string) => new Date(v).toLocaleString(getCurrentLocale(), { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+const when = (v: string) => formatDateTime(v);
 // "3.8 s" or "890 ms" as seconds, so LCP sorts by time.
 const seconds = (v?: string | null) => { const m = String(v ?? "").replace(/,/g, "").match(/([\d.]+)\s*(ms|s)?/); return m ? Number(m[1]) / (m[2] === "ms" ? 1000 : 1) : undefined; };
 const lcpOf = (r: Record_) => r.metrics.find((m) => m.key === "largest-contentful-paint");

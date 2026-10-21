@@ -1,4 +1,4 @@
-import { $t, getCurrentLocale } from '#i18n';
+import { $t } from '#i18n';
 // YouTube (社区): public videos found by the project's terms and links, counted by publication date,
 // with the same parts as the other 社区 pages (collector-content.tsx).
 import { useMemo, useState } from 'react';
@@ -46,11 +46,11 @@ import {
   type YouTubeVideo,
 } from './youtube-api';
 import './data-views.css';
+import { formatDate, formatDateTime } from '#lib/format';
 
 type Report = Omit<YouTubeStatus, 'page' | 'pageSize'> & CollectorReport;
 
-const time = (value: string | null | undefined) =>
-  value ? new Date(value).toLocaleString(getCurrentLocale()) : '—';
+const time = (value: string | null | undefined) => formatDateTime(value);
 const summary = (v: YouTubeVideo) =>
   $t('bilibili.viewsLikesComments', {
     0: countText(v.views),
@@ -110,16 +110,15 @@ export default function DataYouTube() {
       titleColumn<YouTubeVideo>(
         $t('collectorPage.title'),
         (v) => <VideoCell v={v} />,
-        (v) => `${summary(v)} · ${v.publishedAt || '—'}`,
+        (v) => `${summary(v)} · ${formatDate(v.publishedAt)}`,
       ),
       ...SORTS.map((key) =>
         countColumn<YouTubeVideo>(key, $t(`collectorView.${key}`), (v) =>
           countText(v[key]),
         ),
       ),
-      dateColumn<YouTubeVideo>(
-        $t('collectorPage.publishedDate'),
-        (v) => v.publishedAt || '—',
+      dateColumn<YouTubeVideo>($t('collectorPage.publishedDate'), (v) =>
+        formatDate(v.publishedAt),
       ),
     ],
     [],
@@ -269,7 +268,7 @@ export default function DataYouTube() {
                       ticked.map((v) => ({
                         title: v.title,
                         url: v.url,
-                        meta: `${v.channel} · ${summary(v)} · ${v.publishedAt || '—'}`,
+                        meta: `${v.channel} · ${summary(v)} · ${formatDate(v.publishedAt)}`,
                         excerpt: v.description.slice(0, 300),
                       })),
                     ),

@@ -123,6 +123,9 @@ const xiaohongshu = {
 };
 
 it('lists Xiaohongshu notes of the period literally and searches with the current revision', async () => {
+  // Dates in the current year are written without the year: fix the year the fixtures are in.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(2026, 9, 21, 12));
   action.mockImplementation(async (_resource, name) =>
     name === 'search' ? {} : xiaohongshu,
   );
@@ -150,7 +153,7 @@ it('lists Xiaohongshu notes of the period literally and searches with the curren
   expect(
     screen.getByRole('heading', { name: '搜索词' }).closest('[data-groups]'),
   ).toHaveTextContent('NocoBase1');
-  expect(screen.getByText(/推算发布日：2026-10-01/)).toBeVisible();
+  expect(screen.getByText(/推算发布日：10-01/)).toBeVisible();
   expect(screen.getByText('期间发布')).toBeVisible();
   await userEvent.click(screen.getByRole('button', { name: '立即搜索' }));
   await waitFor(() => expect(calls('search')).toHaveLength(1));

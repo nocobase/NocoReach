@@ -24,12 +24,14 @@ import { DetailDrawer } from "./detail-drawer";
 import { SectionHandOff } from "./section-hand-off";
 import { trendsDraft, type TrendQuery } from "./seo-hand-off";
 import { keywordRequest, type SavedKeyword } from "./keyword-api";
+import { formatDateTime } from '#lib/format';
+import { Delta } from '#components/reach/delta';
 
 type Query = { query: string; value: number; isNew?: boolean };
 export type WatchedKeyword = { id: string; keyword: string; addedAt: string; checking: boolean; lastRun: { at: string; ok: boolean; errors: string[] } | null; checkedAt: string | null; checkUrl: string | null; points: { date: string; value: number | null }[]; recent: number | null; change: number | null; average: number | null; top: Query[]; rising: Query[] };
 export type KeywordWatch = { dataforseo?: boolean; keywords?: WatchedKeyword[]; maxKeywords?: number; keywordPlace?: string };
 const call = <T,>(projectId: number, action: string, body: object = {}) => api.action<T>("nrTrends", action, { method: "POST", body: { projectId, ...body }, unwrap: "data" });
-const change = (v: number | null) => (v === null ? "—" : `${v >= 0 ? "↑" : "↓"} ${Math.abs(Math.round(v * 100))}%`);
+const change = (v: number | null) => (v === null ? "—" : <Delta value={v} />);
 const getOwn = () => ($t('trendsKeywords.keywordRelativeInterestGoogleTrends'));
 const helper = createColumnHelper<WatchedKeyword>();
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
@@ -72,7 +74,7 @@ export function TrendKeywords({ projectId, view, onView, onRetry }: { projectId:
       cell: ({ row }) => { const k = row.original; return <span className="flex min-w-0 items-center gap-2"><span className="truncate font-medium" title={k.keyword}>{k.keyword}</span>{k.checking || !k.lastRun ? <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><LoaderCircle className="size-3 animate-spin" />{$t('trendsKeywords.checking')}</span> : !k.lastRun.ok ? <Tag tone="red">{$t('common.notFullyChecked')}</Tag> : null}</span>; },
     }) as ColumnDef<WatchedKeyword>,
     helper.accessor((k) => k.recent ?? undefined, { id: "recent", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.last4Weeks')} align="right" help={getOwn()} />, cell: ({ row }) => row.original.recent ?? "—", meta: right }) as ColumnDef<WatchedKeyword>,
-    helper.accessor((k) => k.change ?? undefined, { id: "change", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.change')} align="right" help={$t('trendsKeywords.last4WeeksAverageCompared')} />, cell: ({ row }) => { const c = row.original.change; return <span className={c === null ? "text-muted-foreground" : c >= 0 ? "text-nr-ink-green" : "text-nr-ink-red"}>{change(c)}</span>; }, meta: right }) as ColumnDef<WatchedKeyword>,
+    helper.accessor((k) => k.change ?? undefined, { id: "change", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.change')} align="right" help={$t('trendsKeywords.last4WeeksAverageCompared')} />, cell: ({ row }) => { const c = row.original.change; return <span className={c === null ? "text-muted-foreground" : undefined}>{change(c)}</span>; }, meta: right }) as ColumnDef<WatchedKeyword>,
     helper.display({ id: "spark", header: () => $t('trendsKeywords.value12MonthTrend'), cell: ({ row }) => <Spark points={row.original.points} /> }) as ColumnDef<WatchedKeyword>,
     helper.display({ id: "rising", header: () => $t('trendsKeywords.risingRelatedSearches'), cell: ({ row }) => { const r = row.original.rising, fresh = r.filter((q) => q.isNew).length; return r.length ? <span className="flex min-w-0 items-center gap-2 text-sm"><span className="truncate" title={r[0].query}>{r[0].query} <span className="text-nr-ink-green tabular-nums">+{r[0].value.toLocaleString(getCurrentLocale())}%</span></span>{r.length > 1 ? <span className="shrink-0 text-xs text-muted-foreground">{$tj('common.moreValue',{0:r.length})}</span> : null}{fresh ? <Tag tone="blue">{$tj('trendsKeywords.newWeek',{0:fresh})}</Tag> : null}</span> : <span className="text-muted-foreground">—</span>; } }) as ColumnDef<WatchedKeyword>,
     // The menu cell stops clicks: events from the menu's portal would reach the row and open the detail.
@@ -113,13 +115,13 @@ function KeywordDetail({ projectId, k, place, onClose, onRemove, onRetry }: { pr
           <Checkbox checked={Boolean(picked[kind + q.query])} onCheckedChange={(on) => toggle(q, kind, on === true)} />
           <span className="min-w-0 flex-1 truncate">{q.query}</span>
           {q.isNew ? <Tag tone="blue">{$t('common.newWeek')}</Tag> : null}
-          <span className={kind === "rising" ? "tabular-nums text-nr-ink-green" : "tabular-nums text-muted-foreground"}>{kind === "rising" ? `+${q.value.toLocaleString(getCurrentLocale())}%` : q.value}</span>
+          {kind === "rising" ? <Delta value={q.value / 100} /> : <span className="tabular-nums text-muted-foreground">{q.value}</span>}
         </label>
       )) : <p className="text-sm text-muted-foreground">{empty}</p>}
     </section>
   );
   return (
-    <DetailDrawer open onClose={onClose} title={k.keyword} description={$t('common.past12Months',{0:$legacyText(place),1:k.checkedAt ? $t('common.checked',{0:new Date(k.checkedAt).toLocaleString(getCurrentLocale())}) : ""})}
+    <DetailDrawer open onClose={onClose} title={k.keyword} description={$t('common.past12Months',{0:$legacyText(place),1:k.checkedAt ? $t('common.checked',{0:formatDateTime(k.checkedAt)}) : ""})}
       footer={<Button variant="ghost" className="text-destructive" onClick={onRemove}>{$t('common.remove')}</Button>}
       actions={<SectionHandOff projectId={projectId} disabled={!chosen.length} playbookId="content-outline" label={chosen.length ? $t('common.handOffAgentValue',{0:chosen.length}) : $t('common.handOffAgent')} description={$t('common.selectedRelatedSearchesBecomeOne')} draft={() => trendsDraft(k.keyword, place, chosen)} />}>
       <div className="space-y-4">
@@ -128,7 +130,7 @@ function KeywordDetail({ projectId, k, place, onClose, onRemove, onRetry }: { pr
           <>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
               <span className="flex items-center gap-1">{$t('common.last4Weeks')} <b className="text-lg tabular-nums">{k.recent ?? "—"}</b><InfoTip label={$t('trendsKeywords.whatNumbersMean')}>{getOwn()}</InfoTip></span>
-              <span>{$t('common.change')} <span className={k.change === null ? "" : k.change >= 0 ? "text-nr-ink-green" : "text-nr-ink-red"}>{change(k.change)}</span></span>
+              <span>{$t('common.change')} {change(k.change)}</span>
               <span className="text-muted-foreground">{$tj('trendsKeywords.value12MonthAverage',{0:k.average ?? "—"})}</span>
               {k.checkUrl ? <a className="nr-link inline-flex items-center gap-0.5" href={k.checkUrl} target="_blank" rel="noreferrer">{$t('common.openGoogleTrends')}<ExternalLink className="size-3" /></a> : null}
             </div>

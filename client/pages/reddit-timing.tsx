@@ -1,4 +1,5 @@
-import { $t, getCurrentLocale } from '#i18n';
+import { $t } from '#i18n';
+import { formatDateTime } from '#lib/format';
 
 export type RedditTimingState = {
   lastRun?: { at: string; ok: boolean; lastSuccessAt?: string | null } | null;
@@ -14,11 +15,7 @@ export type RedditTimingState = {
 
 export function RedditTiming({ state }: { state: RedditTimingState }) {
   const date = (value?: string | null) =>
-    value
-      ? new Date(value).toLocaleString(getCurrentLocale(), {
-          timeZoneName: 'short',
-        })
-      : $t('redditTiming.never');
+    value ? formatDateTime(value) : $t('redditTiming.never');
   const success =
     state.lastRun?.lastSuccessAt ||
     (state.lastRun?.ok ? state.lastRun.at : null);

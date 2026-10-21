@@ -39,6 +39,7 @@ import "./reach-workspace.css";
 import "./data-views.css";
 import { WithInfo } from "#components/reach/info-tip";
 import { help } from "./glossary";
+import { formatCount, formatDateTime } from '#lib/format';
 
 type Item = { id: string; keyword: string; url: string; volume: number | null; difficulty: number | null; intent: string | null; position: number | null; traffic: number | null; keywords: number | null; cpc: number | null };
 type Spec = { kind: "domain"; view: "keywords" | "pages"; target: string; locationCode: number; language: string };
@@ -47,7 +48,7 @@ type Recent = { id: string; status: string; spec: Spec; createdAt: string; compl
 const call = <T,>(action: string, body: object = {}) => api.action<T>("nrDomains", action, { method: "POST", body: { projectId: String(currentProjectId()), ...body }, unwrap: "data" });
 const requestKey = () => crypto.randomUUID().replace(/-/g, "");
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
-const fmtTime = (v?: string | null) => (v ? new Date(v).toLocaleString(getCurrentLocale(), { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
+const fmtTime = (v?: string | null) => formatDateTime(v);
 const pathOf = (u: string) => { try { return new URL(u).pathname || "/"; } catch { return u; } };
 const bare = (d?: string) => String(d || "").toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "");
 
@@ -157,7 +158,7 @@ function Summary({ run }: { run: Run }) {
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[[$t('domainOverview.estimatedOrganicTrafficMonth'), s?.traffic], [$t('common.rankingKeywords'), s?.keywords], [$t('domainOverview.top3'), s?.top3], [$t('domainOverview.top10'), s?.top10]].map(([label, v]) => (
-          <Card key={String(label)} className="gap-0 p-4" data-metric={label}><StatTile label={String(label)} help={help(String(label))} value={v == null ? "—" : Math.round(Number(v)).toLocaleString(getCurrentLocale())} /></Card>
+          <Card key={String(label)} className="gap-0 p-4" data-metric={label}><StatTile label={String(label)} help={help(String(label))} value={v == null ? "—" : formatCount(Math.round(Number(v)))} /></Card>
         ))}
       </div>
       <p className="nr-footnote">{run.spec.target} · {marketLabel(run.spec)} · {fmtTime(run.completedAt || run.createdAt)}</p>
