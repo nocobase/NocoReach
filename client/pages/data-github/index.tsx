@@ -186,7 +186,7 @@ function HealthCard({ view }: { view: View }) {
           );
         })}
         <li className="flex items-baseline gap-2 border-b border-border py-1.5"><span className="flex-1">{$t('dataGithub.openIssuesPrs')}</span><span className="tabular-nums">{num(t.openIssues)} / {num(t.openPrs)}</span><span className="w-24 shrink-0" /></li>
-        <li className="flex items-baseline gap-2 py-1.5"><span className="flex-1">Watchers</span><span className="tabular-nums">{num(t.watchers)}</span><span className="w-24 shrink-0" /></li>
+        <li className="flex items-baseline gap-2 py-1.5"><span className="flex-1">{$t('dataGithub.watchers')}</span><span className="tabular-nums">{num(t.watchers)}</span><span className="w-24 shrink-0" /></li>
       </ul>
     </Card>
   );

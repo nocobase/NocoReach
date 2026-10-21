@@ -66,6 +66,8 @@ function changeRows(name,report){const c=CHANGES[name],by=new Map();
  for(const r of rowsOf(report)){const k=name==='channel'?r[c.dim]:pathKey(r[c.dim]);if(!by.has(k))by.set(k,{key:k,current:{},previous:{}});const o=by.get(k)[r.dateRange==='previous'?'previous':'current'];for(const [f,v] of Object.entries(values(r)))o[f]=(o[f]||0)+v;}
  const size=r=>Math.max(...Object.values(r.current),...Object.values(r.previous),0);
  return [...by.values()].sort((a,b)=>size(b)-size(a)).slice(0,CHANGE_KEEP);}
+// A day (YYYY-MM-DD) within a range; no end means up to now.
+const inWindow=(date:string,from:string,to?:string)=>date>=from&&(!to||date<=to);
 const range=(startDate,endDate,name)=>({startDate,endDate,...(name?{name}:{})});
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0;};
 function rowsOf(report){const dims=(report?.dimensionHeaders||[]).map(h=>h.name),mets=(report?.metricHeaders||[]).map(h=>h.name);
@@ -135,8 +137,10 @@ class WebsiteReport{
   const [totalsReport,dailyReport,...rest]=reports,tables=rest.slice(0,names.length),changeReports=rest.slice(names.length);if(!totalsReport)fail(systemMessageText('dataViews.ga4ReadFailed'),502);
   const totals=Object.fromEntries(rowsOf(totalsReport).map(r=>[r.dateRange,values(r)]));
   const daily=rowsOf(dailyReport).map(r=>({period:r.dateRange,date:`${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)}`,...values(r)}));
-  const out={totals:{current:totals.current||null,previous:totals.previous||null},daily:daily.filter(r=>r.period==='current').map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),
-   previousDaily:daily.filter(r=>r.period==='previous').map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),tables:{},missing:[],complete:reports.every(Boolean)};
+  // With two date ranges and the date dimension GA4 answers every day of both ranges for each range, zeros outside
+  // it: keep each range's own days, or the line runs over the other period's days at zero (UI review 2026-10-21).
+  const out={totals:{current:totals.current||null,previous:totals.previous||null},daily:daily.filter(r=>r.period==='current'&&inWindow(r.date,w.start)).map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),
+   previousDaily:daily.filter(r=>r.period==='previous'&&inWindow(r.date,w.previousStart,w.previousEnd)).map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),tables:{},missing:[],complete:reports.every(Boolean)};
   names.forEach((n,i)=>{if(tables[i])out.tables[n]=tableRows(n,tables[i]);else out.missing.push(n);});
   // A change report GA4 refuses only leaves that part out of the explanation.
   out.changes={};changeNames.forEach((n,i)=>{if(changeReports[i])out.changes[n]=changeRows(n,changeReports[i]);});
@@ -154,8 +158,8 @@ class WebsiteReport{
   const [daysReport,totalsReport]=await this.batch(id,property,[request(['date'],metrics,both,null,Math.max(1000,(w.days||Math.ceil((Date.parse(w.end)-Date.parse(w.start))/86400000)+1)*2),filter),request([],metrics,both,null,null,filter)]);
   if(!daysReport||!totalsReport)fail(systemMessageText('dataViews.ga4ReadFailed'),502);
   const day=d=>`${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}`,days=rowsOf(daysReport),totals=Object.fromEntries(rowsOf(totalsReport).map(r=>[r.dateRange,values(r)]));
-  const value={daily:days.filter(r=>r.dateRange==='current').map(r=>({date:day(r.date),...values(r)})).sort((a,b)=>a.date.localeCompare(b.date)),
-   previousDaily:days.filter(r=>r.dateRange==='previous').map(r=>({date:day(r.date),...values(r)})).sort((a,b)=>a.date.localeCompare(b.date)),
+  const value={daily:days.filter(r=>r.dateRange==='current'&&inWindow(day(r.date),w.start,w.end)).map(r=>({date:day(r.date),...values(r)})).sort((a,b)=>a.date.localeCompare(b.date)),
+   previousDaily:days.filter(r=>r.dateRange==='previous'&&inWindow(day(r.date),w.previousStart,w.previousEnd)).map(r=>({date:day(r.date),...values(r)})).sort((a,b)=>a.date.localeCompare(b.date)),
    totals:{current:totals.current||null,previous:totals.previous||null}};
   if(w.all){value.totals.previous=null;value.previousDaily=[];}
   return value;}

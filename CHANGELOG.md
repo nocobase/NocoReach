@@ -1,5 +1,13 @@
 # NocoReach Changelog
 
+## Unreleased — Website & product pages, fixed and in plain words
+
+- Traffic's daily chart draws the previous period over the same days of the current one again. GA4 answers each of the two date ranges on every day of both, at zero outside it; those zero days drew the comparison line over the wrong days and dropped both lines to zero where the periods met. The server keeps each range's own days, and the page ignores the extra days in reports cached before.
+- Traffic: Today shows skeletons while it loads, names the property's time zone ("China Standard Time" rather than `Asia/Shanghai`) and writes its sources the way the channel table does (Direct rather than `(direct) / (none)`). What moved the figure is plain text, and data that may be off is one line with a "Check data" tag and the explanation and GA4 steps in its ⓘ, instead of two amber blocks.
+- Pages describes itself in one sentence; the site, the pages read and how the sitemap's count relates to the tabs' are in the ⓘ. Not in sitemap is a tag.
+- Site audit and its performance check describe themselves in one sentence each (no cost moves into the ⓘ), and the device choice and the device filter use the same segmented control.
+- GitHub labels that were English in every language (Commits, Watchers, Issues, Pull requests, Releases, Discussions) are translated, and its copy uses those names.
+- Downloads describes what is connected rather than every registry it supports, says "Latest" instead of `latest`, and picks a package from a drop-down instead of buttons that ran past the card.
 ## Unreleased — Data sources: two ways to connect, findings in a dialog
 
 - The top of Data sources shows two cards side by side: Find data sources on your website, with what it reads, and Use an agent on your computer, saying why: the agent researches the website and repositories, lists a plan and connects everything once you confirm, while authorizations and tokens stay in the browser.
