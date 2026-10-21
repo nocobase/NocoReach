@@ -138,7 +138,7 @@ export function OpportunityThreads({
         <li
           key={t.id}
           data-thread-id={t.id}
-          className='rounded-lg bg-background px-3 py-1.5 text-xs leading-relaxed'
+          className='rounded-lg bg-muted/50 px-3 py-1.5 text-xs leading-relaxed'
         >
           <p>
             <span className='text-muted-foreground'>
@@ -181,12 +181,12 @@ export function DayThreads({ day }: { day: string }) {
             </p>
           </div>
           <div className='flex gap-2.5'>
-            <ActorAvatar type='agent' size='sm' className='mt-0.5' />
+            <ActorAvatar type='agent' size='default' />
             <div className='flex min-w-0 flex-1 flex-col gap-1.5'>
               <p className='text-xs text-muted-foreground'>
                 {$t('strategy.threadAiAnswer')} · {clock(t.updatedAt)}
               </p>
-              <div className='rounded-xl rounded-tl-sm bg-muted/60 px-3 py-2 text-sm leading-relaxed'>
+              <div className='rounded-xl rounded-tl-sm border bg-card px-3.5 py-2.5 text-sm leading-relaxed text-card-foreground'>
                 <Answer thread={t} lines={3} />
               </div>
             </div>

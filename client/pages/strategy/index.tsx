@@ -422,8 +422,8 @@ function Insights({
       />
       <div className='flex flex-col gap-6'>
         <MetricTiles metrics={metrics} overview={overview} />
-        {/* The day's conversation, with the standing facts beside it as before the redesign (2026-10-21 user). */}
-        <div className='grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]'>
+        {/* The day's conversation, with the standing facts in a narrow quiet column beside it (2026-10-21 user). */}
+        <div className='grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_16rem]'>
           {/* Questions asked from Insights read the chat's records, so only where the chat is mounted. */}
           {chat ? (
             <ThreadsProvider projectId={projectId} day={analysisDay}>
@@ -433,6 +433,7 @@ function Insights({
             column
           )}
           <RequestBlock
+            quiet
             title={$t('strategy.currentSituation')}
             info={
               <InfoTip label={$t('strategy.statusExplanation')}>
@@ -443,7 +444,11 @@ function Insights({
             empty={!summaryView.data?.areas.some((area) => area.items.length)}
             emptyText={$t('strategy.noCurrentSituation')}
           >
-            <AreaList areas={summaryView.data?.areas} projectId={projectId} />
+            <AreaList
+              quiet
+              areas={summaryView.data?.areas}
+              projectId={projectId}
+            />
           </RequestBlock>
         </div>
       </div>
