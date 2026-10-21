@@ -19,11 +19,15 @@ import {
   DriftNotice,
   TargetRows,
 } from '../../client/pages/task-detail/article-release';
-import { ArticleStart } from '../../client/pages/task-detail/article-start';
+import {
+  ArticleStart,
+  DeliverySummary,
+} from '../../client/pages/task-detail/article-start';
 import {
   conflictHeading,
   defaultDelivery,
   deliveryPlan,
+  pageUrlsOf,
   type DeliveryChoice,
 } from '../../client/pages/task-detail/article-model';
 import { playbookRequest } from '../../client/pages/playbook-model';
@@ -813,4 +817,155 @@ it('defaults the start card to the playbook target, the repository, or the defau
     deliveryPlan(d({}), { target: 'cms', mode: 'new', also: ['news', 'cms'] })
       .delivery,
   ).toEqual({ targetId: 'cms', also: ['news'] });
+});
+
+it('decides where the change goes from the page: the article found, the repository, or a pick', () => {
+  const d = (entries: Record<string, string> = {}, repo = true) =>
+    ({
+      ...data,
+      articleTargets: [
+        { ...target, default: true },
+        { ...target, id: 'news', name: 'News' },
+      ],
+      articlePlaybookTargets: entries,
+      work: {},
+      agent: { repo: repo ? { repo: 'org/site', baseBranch: 'main' } : null },
+    }) as unknown as TaskData;
+  const article = {
+    targetId: 'news',
+    articleId: '9',
+    slug: 'workflow-tools',
+    title: 'Workflow tools',
+    url: 'https://www.example.com/blog/workflow-tools',
+  };
+  // Found from the page: that article, in the target holding it, saved on the task as it starts.
+  const found = defaultDelivery(d(), 'optimize-page', {
+    article,
+    unchecked: false,
+  });
+  expect(found).toEqual({
+    target: 'news',
+    mode: 'existing',
+    also: [],
+    article,
+  });
+  expect(deliveryPlan(d(), found)).toMatchObject({
+    ready: true,
+    link: { targetId: 'news', articleId: '9' },
+  });
+  // The page is known and no target holds it: a page of the site itself, changed by a pull request.
+  const none = { article: null, unchecked: false };
+  expect(defaultDelivery(d(), 'optimize-page', none)).toEqual({
+    target: 'repo',
+    mode: 'new',
+    also: [],
+  });
+  // Unless the playbook names a target, there is no repository, or the targets could not be asked: pick by hand.
+  for (const [data2, f] of [
+    [d({ 'optimize-page': 'news' }), none],
+    [d({}, false), none],
+    [d(), { article: null, unchecked: true }],
+    [d(), undefined],
+  ] as const)
+    expect(defaultDelivery(data2, 'optimize-page', f)).toMatchObject({
+      mode: 'existing',
+    });
+  // A blog post is a new article whatever page the task names.
+  expect(
+    defaultDelivery(d(), 'blog-post', { article, unchecked: false }),
+  ).toEqual({ target: 'cms', mode: 'new', also: [] });
+});
+
+it("reads a task's pages from the page linked on it and the opportunity it came from", () => {
+  const task = (evidence: Record<string, unknown>, page?: string) =>
+    ({
+      ...data,
+      task: { id: 1, title: '', brief: '', evidence },
+      work: page ? { page: { url: page, title: '' } } : {},
+    }) as unknown as TaskData;
+  expect(
+    pageUrlsOf(
+      task(
+        {
+          insight: {
+            target: 'https://www.example.com/blog/a',
+            signalIds: ['s1', 's3'],
+          },
+          context: {
+            signals: {
+              items: [
+                { key: 's1', url: 'https://www.example.com/blog/a' },
+                { key: 's2', url: 'https://www.example.com/blog/b' },
+                { key: 's3', url: 'https://www.example.com/blog/c' },
+              ],
+            },
+          },
+        },
+        'https://www.example.com/blog/linked',
+      ),
+    ),
+  ).toEqual([
+    'https://www.example.com/blog/linked',
+    'https://www.example.com/blog/a',
+    'https://www.example.com/blog/c',
+  ]);
+  expect(pageUrlsOf(task({ insight: { target: 'the docs site' } }))).toEqual(
+    [],
+  );
+});
+
+it('shows where the change goes in one line, with Change for the exceptions', async () => {
+  const d = {
+    ...data,
+    articleTargets: [target],
+    work: {},
+  } as unknown as TaskData;
+  const onChange = vi.fn();
+  const article = {
+    targetId: 'cms',
+    articleId: '9',
+    slug: 'workflow-tools',
+    title: 'Workflow tools',
+    url: 'https://www.example.com/blog/workflow-tools',
+  };
+  const show = (choice: DeliveryChoice, finding = false) =>
+    render(
+      <DeliverySummary
+        data={d}
+        choice={choice}
+        finding={finding}
+        allowed
+        busy={false}
+        onChange={onChange}
+      />,
+    );
+  const { unmount } = show({
+    target: 'cms',
+    mode: 'existing',
+    also: [],
+    article,
+  });
+  expect(screen.getByText('Article to change')).toBeInTheDocument();
+  expect(screen.getByText('Workflow tools')).toBeInTheDocument();
+  expect(screen.getByText('Found from the page address')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Open page' })).toHaveAttribute(
+    'href',
+    article.url,
+  );
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Change' }));
+  expect(onChange).toHaveBeenCalled();
+  unmount();
+  show({ target: 'repo', mode: 'new', also: [] }).unmount();
+  show({ target: 'cms', mode: 'new', also: [] });
+  expect(screen.getByText('Publishes to NocoBase CMS')).toBeInTheDocument();
+  cleanup();
+  // Still to be picked: nothing here, the full choice shows instead.
+  const { container } = show({ target: 'cms', mode: 'existing', also: [] });
+  expect(container).toBeEmptyDOMElement();
+  cleanup();
+  show({ target: 'cms', mode: 'existing', also: [] }, true);
+  expect(
+    screen.getByText('Finding the article for this page…'),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
 });

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { $t } from '#i18n';
 import { Button } from '#components/ui/button';
 import { Checkbox } from '#components/ui/checkbox';
@@ -8,6 +8,8 @@ import { RadioGroup, RadioGroupItem } from '#components/ui/radio-group';
 import type { ArticleSummary } from '../../../shared/article-publishing.js';
 import { errorStatus, searchArticles } from '../article-targets-api';
 import type { TaskData } from '../task-execution-types';
+import { ExternalLink } from 'lucide-react';
+import { Tag } from '#components/reach/tag';
 import { MAX_ALSO, REPO, type DeliveryChoice } from './article-model';
 
 // Where a task's change goes, chosen before it starts (docs/ARTICLE-PUBLISHING.md): a publishing target (an existing
@@ -21,9 +23,12 @@ export function ArticleStart({
   busy,
   allowed,
   link,
+  notice,
 }: {
   data: TaskData;
   projectId: number;
+  /** Why the article has to be picked here (not found from the page, or the lookup failed). */
+  notice?: string;
   choice: DeliveryChoice;
   setChoice: (c: DeliveryChoice) => void;
   busy: boolean;
@@ -146,6 +151,7 @@ export function ArticleStart({
       {target && (
         <div className='nr-td-start-field'>
           <span id={`${id}-article`}>{$t('articleTask.article')}</span>
+          {notice && <small data-article-not-found=''>{notice}</small>}
           <RadioGroup
             aria-labelledby={`${id}-article`}
             className='flex flex-wrap gap-4'
@@ -250,5 +256,88 @@ export function ArticleStart({
         </div>
       )}
     </>
+  );
+}
+
+// Where the change goes when it was decided without asking (2026-10-21): the article found from the task's page, the
+// one saved on the task, a new article in the playbook's target, or the website repository. Change opens ArticleStart
+// for the exceptions. Returns null when an article still has to be picked, so the full choice shows instead.
+export function DeliverySummary({
+  data,
+  choice,
+  finding,
+  allowed,
+  busy,
+  onChange,
+}: {
+  data: TaskData;
+  choice: DeliveryChoice;
+  finding: boolean;
+  allowed: boolean;
+  busy: boolean;
+  onChange: () => void;
+}) {
+  const targets = data.articleTargets || [],
+    linked = data.work.article,
+    name = (id: string) => targets.find((t) => t.id === id)?.name || id;
+  const change = allowed && !finding && (
+    <Button
+      variant='link'
+      size='sm'
+      className='h-auto p-0'
+      disabled={busy}
+      onClick={onChange}
+    >
+      {$t('articleTask.changeDelivery')}
+    </Button>
+  );
+  const row = (label: string, body: ReactNode) => (
+    <div className='nr-td-start-field' data-delivery-summary=''>
+      <span>{label}</span>
+      <p className='flex flex-wrap items-center gap-x-2 gap-y-1 text-sm'>
+        {body}
+        {change}
+      </p>
+    </div>
+  );
+  if (finding)
+    return row(
+      $t('articleTask.articleToChange'),
+      <span className='nr-td-muted'>{$t('articleTask.findingArticle')}</span>,
+    );
+  if (choice.target === REPO)
+    return row($t('articleTask.changeVia'), $t('articleTask.repository'));
+  if (choice.mode === 'new')
+    return row(
+      $t('articleTask.newArticle'),
+      $t('articleTask.publishesTo', { 0: name(choice.target) }),
+    );
+  const article =
+    choice.article?.targetId === choice.target
+      ? choice.article
+      : linked?.articleId && linked.targetId === choice.target
+        ? { title: linked.title || linked.slug, url: '' }
+        : null;
+  if (!article) return null;
+  return row(
+    $t('articleTask.articleToChange'),
+    <>
+      <span className='font-medium'>{article.title}</span>
+      <Tag tone='grey'>{name(choice.target)}</Tag>
+      {choice.article && (
+        <Tag tone='green'>{$t('articleTask.foundByPage')}</Tag>
+      )}
+      {article.url && (
+        <a
+          className='inline-flex items-center text-muted-foreground hover:text-foreground'
+          href={article.url}
+          target='_blank'
+          rel='noreferrer'
+          aria-label={$t('articleTask.openPage')}
+        >
+          <ExternalLink className='size-3.5' />
+        </a>
+      )}
+    </>,
   );
 }
