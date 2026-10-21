@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Ignored opportunities stay off Insights
+
+- Keep the changes behind an ignored opportunity out of Insights › Today's changes › To do, whichever analysis raised the opportunity. Opportunities ignored from an earlier analysis used to come back there as changes to act on with Hand off to agent and Ignore.
+
 ## Unreleased — English code comments
 
 - AGENTS.md now asks for code comments in English, with interface elements named by their English labels. `tests/logic/comment-language.test.ts` parses every source file and fails when a file has more comments containing Chinese than `tests/logic/comment-language-baseline.json` allows (195 files, 595 older comments today); `COMMENT_LANGUAGE_BASELINE=lower` lowers the baseline after a cleanup and never raises it.
