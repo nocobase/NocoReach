@@ -6943,7 +6943,7 @@
   "demoData.password": "Password",
   "demoData.notesTitle": "Notes",
   "demoData.noteOffline": "Demo projects connect to no outside service: website, Google, GitHub and community data are answered by the application’s built-in fixtures, and refreshes and syncs run locally.",
-  "demoData.noteModel": "The import makes \"Demo model\" the application default, so every project using that default receives simulated answers. Clearing restores the earlier default unless an administrator has since chosen another model.",
+  "demoData.noteModel": "The Demo model remains available for scripted responses and survives clear/reset. Online chat can independently use a configured live model, which consumes tokens; business tools still follow the demo policy.",
   "demoData.noteRunner": "Tasks in the demo projects are written in advance and are not sent to a Runner.",
   "demoData.noteClear": "Clear deletes all projects and business data, including existing projects and content added later. Reset then imports fresh demo data. Both actions require demo mode; administrator accounts and system settings are preserved.",
   "demoData.noteSchedule": "Scheduled reset: {0}",
