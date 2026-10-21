@@ -135,9 +135,9 @@ function AgentMessage({
 }) {
   return (
     <div className='flex gap-2.5'>
-      <ActorAvatar type='agent' size='sm' className='mt-0.5' />
-      <div className='flex min-w-0 flex-1 flex-col gap-1.5'>
-        <p className='flex items-center gap-1.5 text-xs text-muted-foreground'>
+      <ActorAvatar type='agent' size='default' />
+      <div className='flex min-w-0 flex-1 flex-col gap-2'>
+        <p className='flex h-8 items-center gap-1.5 text-xs text-muted-foreground'>
           {meta}
         </p>
         {children}
@@ -160,7 +160,7 @@ function Bubble({
       role={label ? 'group' : undefined}
       aria-label={label}
       className={cn(
-        'w-full rounded-xl rounded-tl-sm bg-muted/60 px-3 py-2 text-sm leading-relaxed',
+        'w-full rounded-xl rounded-tl-sm border bg-card px-3.5 py-2.5 text-sm leading-relaxed text-card-foreground',
         className,
       )}
       {...data}
@@ -193,7 +193,7 @@ function Summary({
       .slice(0, 2);
   return (
     <Bubble label={$t('strategy.todayBrief')}>
-      <p className='font-medium'>
+      <p className='text-base font-semibold'>
         {!batch
           ? $t('strategy.noAnalysisYetClickUpdate')
           : pending

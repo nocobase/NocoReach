@@ -39,6 +39,7 @@
   "strategy.noWaitingTasks": "No tasks currently need your attention.",
   "strategy.currentSituation": "Current situation",
   "strategy.noCurrentSituation": "No current situation data yet.",
+  "strategy.situationMore": "{0} more",
   "strategy.refreshBlock": "Refresh",
   "strategy.blockFailed": "Could not load this section. Please retry.",
   "strategy.blockStale": "Refresh failed. Showing previous results; they may be out of date.",

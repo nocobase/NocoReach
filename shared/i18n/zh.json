@@ -39,6 +39,7 @@
   "strategy.noWaitingTasks": "当前没有需要你处理的任务。",
   "strategy.currentSituation": "当前状况",
   "strategy.noCurrentSituation": "暂无当前状况数据。",
+  "strategy.situationMore": "其余 {0} 项",
   "strategy.refreshBlock": "刷新",
   "strategy.blockFailed": "此区块读取失败，请重试。",
   "strategy.blockStale": "刷新失败，正在显示上次结果，数据可能已过期。",

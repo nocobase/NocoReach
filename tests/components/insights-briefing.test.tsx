@@ -631,3 +631,43 @@ it('an earlier day counts its questions and shows them when opened, even with no
   fireEvent.click(within(old).getByRole('button', { expanded: false }));
   expect(within(old).getByText('question t-old')).toBeTruthy();
 });
+
+it('the current situation beside the day shows what needs attention and folds the rest', async () => {
+  const item = (key: string, text: string, tone?: string) => ({
+    key,
+    text,
+    values: [],
+    source: 'site',
+    to: '/website',
+    ...(tone ? { tone } : {}),
+  });
+  fixture.areas = [
+    {
+      id: 'site',
+      title: 'Site',
+      items: [
+        item('a', 'Pages indexed: 120'),
+        item('b', '54 pages not updated for a year', 'amber'),
+        item('c', 'Sitemap found'),
+        item('d', 'No critical audit issues'),
+      ],
+    },
+  ];
+  setup();
+  const situation = await screen.findByRole('region', {
+    name: 'strategy.currentSituation',
+  });
+  expect(
+    await within(situation).findByText('54 pages not updated for a year'),
+  ).toBeTruthy();
+  expect(within(situation).queryByText('Pages indexed: 120')).toBeNull();
+  // Refresh is a quiet icon that keeps its name.
+  expect(
+    within(situation).getByRole('button', { name: 'strategy.refreshBlock' }),
+  ).toBeTruthy();
+  fireEvent.click(
+    within(situation).getByRole('button', { name: /strategy.situationMore:3/ }),
+  );
+  expect(within(situation).getByText('Pages indexed: 120')).toBeTruthy();
+  expect(within(situation).getByText('No critical audit issues')).toBeTruthy();
+});

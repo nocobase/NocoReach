@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Insights puts the conversation first
+
+- The daily analysis's messages on Insights are white cards with a border, its headline one size larger and its avatar a little bigger, so the day's conversation is what the eye meets first.
+- Current situation becomes a narrow, quiet column: no card, a small grey heading, Refresh as an icon, one plain line per item with where it comes from on hover. Only the lines that need attention show; the others fold under "N more" (when none needs attention, the first three show).
+
 ## Unreleased — Questions to AI stay with the day and the opportunity
 
 - Each opportunity line on Insights gains Ask AI: the chat opens on a new conversation about that opportunity. The questions asked stay under the line, with the start of the latest answer, Show all and Continue asking, which reopens the same conversation.
