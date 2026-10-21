@@ -16,6 +16,7 @@ import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { Button } from '#components/ui/button';
 import { Link } from 'react-router';
 import { ListSkeleton, LoadError } from '#components/reach/states';
+import { usePendingInvitationCount } from './access/api';
 
 // NocoReach membership remains an application policy; the official provider owns session invalidation.
 export type Role = 'admin' | 'member';
@@ -172,14 +173,7 @@ export function MemberGate({ children }: { children: ReactNode }): ReactNode {
             <Button variant='outline' onClick={reload}>
               {$t('common.checkAgain')}
             </Button>
-            <Button
-              nativeButton={false}
-              className='ml-2'
-              variant='outline'
-              render={<Link to='/member-invitations' />}
-            >
-              {$t('accessMembers.yourInvitations')}
-            </Button>
+            <InvitationsButton />
           </>
         )}
         <Button
@@ -197,5 +191,24 @@ export function MemberGate({ children }: { children: ReactNode }): ReactNode {
         ) : null}
       </div>
     </div>
+  );
+}
+
+/** Your invitations on the Not joined card, shown only while an invitation waits for this account. */
+function InvitationsButton(): ReactNode {
+  const invitations = usePendingInvitationCount();
+  if (!invitations) return null;
+  return (
+    <Button
+      nativeButton={false}
+      className='ml-2'
+      variant='outline'
+      render={<Link to='/member-invitations' />}
+    >
+      {$t('accessMembers.yourInvitations')}
+      <span className='rounded-full bg-attention px-1.5 text-xs leading-4 text-attention-foreground tabular-nums'>
+        {invitations > 99 ? '99+' : invitations}
+      </span>
+    </Button>
   );
 }

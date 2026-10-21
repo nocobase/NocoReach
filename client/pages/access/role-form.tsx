@@ -74,7 +74,7 @@ export default function RoleForm() {
   ]);
   return (
     <RouteChildPage>
-      <PageContainer className='max-w-4xl'>
+      <PageContainer>
         {access.isPending || access.error || (roleKey && !detail.data) ? (
           access.error || detail.error ? (
             <AccessError
@@ -236,6 +236,7 @@ function Form({
         </FieldLabel>
         <Input
           id='role-title'
+          className='max-w-md'
           name='title'
           value={name}
           disabled={readOnly || busy}
@@ -253,6 +254,7 @@ function Form({
           </FieldLabel>
           <Input
             id='role-key'
+            className='max-w-md'
             name='key'
             value={key}
             disabled={readOnly || busy}

@@ -43,7 +43,7 @@ export default function AcceptInvitation() {
     }
   };
   return (
-    <PageContainer className='max-w-3xl'>
+    <PageContainer>
       <PageHeader
         title={$t('accessMembers.yourInvitations')}
         description={$t('accessMembers.acceptHelp')}
