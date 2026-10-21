@@ -115,25 +115,28 @@ test('opens 记忆 from /project, keeps the query and moves between tabs through
   ).toBeInTheDocument();
 });
 
-test('edits one memory item in a dialog and sends only that item', async () => {
+test('one Edit opens every item in a dialog and sends only what changed', async () => {
   const user = userEvent.setup();
   const router = await mountProjectKnowledge('/project/memory');
-  // An empty item says so and offers to fill it in.
+  // Rows carry no edit buttons of their own; an empty item says so.
   await screen.findByText('受众');
   const audience = document.querySelector<HTMLElement>(
     '[data-memory-item="audience"]',
   )!;
   expect(within(audience).getByText('未填写')).toBeInTheDocument();
-  expect(
-    within(audience).getByRole('button', { name: '填写：受众' }),
-  ).toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: '编辑：产品' }));
-  expect(router.state.location.pathname).toBe('/project/memory/product/edit');
-  const dialog = await screen.findByRole('dialog', { name: '编辑：产品' });
-  const field = within(dialog).getByRole('textbox');
-  expect(field).toHaveValue('Core and Studio.');
-  await user.clear(field);
-  await user.type(field, 'Core, Studio and the CLI.');
+  expect(within(audience).queryByRole('button')).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: '编辑' }));
+  expect(router.state.location.pathname).toBe('/project/memory/edit');
+  const dialog = await screen.findByRole('dialog', { name: '编辑记忆' });
+  const product = within(dialog).getByRole('textbox', { name: /^产品/ });
+  expect(product).toHaveValue('Core and Studio.');
+  expect(within(dialog).getByRole('button', { name: '保存' })).toBeDisabled();
+  await user.clear(product);
+  await user.type(product, 'Core, Studio and the CLI.');
+  await user.type(
+    within(dialog).getByRole('textbox', { name: /^受众/ }),
+    'Business teams',
+  );
   await user.click(within(dialog).getByRole('button', { name: '保存' }));
   await waitFor(() =>
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
@@ -141,35 +144,146 @@ test('edits one memory item in a dialog and sends only that item', async () => {
   expect(router.state.location.pathname).toBe('/project/memory');
   expect(action).toHaveBeenCalledWith('nrKnowledge', 'saveMemory', {
     method: 'POST',
-    // Only the edited item: the server merges it into what is saved now.
+    // Only the changed items: the server merges them into what is saved now.
     body: {
       projectId: '1',
-      section: 'product',
-      text: 'Core, Studio and the CLI.',
+      sections: {
+        product: 'Core, Studio and the CLI.',
+        audience: 'Business teams',
+      },
     },
     unwrap: 'data',
   });
 });
 
-test('asks before closing an edited item and keeps it open on cancel', async () => {
+test('asks before closing edited memory and keeps it open on cancel', async () => {
   const user = userEvent.setup();
-  const router = await mountProjectKnowledge('/project/memory/brand/edit');
-  const dialog = await screen.findByRole('dialog', { name: '编辑：品牌基础' });
-  await user.type(within(dialog).getByRole('textbox'), ' More.');
+  const router = await mountProjectKnowledge('/project/memory/edit');
+  const dialog = await screen.findByRole('dialog', { name: '编辑记忆' });
+  await user.type(
+    within(dialog).getByRole('textbox', { name: /^品牌基础/ }),
+    ' More.',
+  );
   await user.click(within(dialog).getByRole('button', { name: '取消' }));
   const ask = await screen.findByRole('alertdialog');
   await user.click(within(ask).getByRole('button', { name: '取消' }));
-  expect(router.state.location.pathname).toBe('/project/memory/brand/edit');
+  expect(router.state.location.pathname).toBe('/project/memory/edit');
   expect(
     action.mock.calls.filter(([, command]) => command === 'saveMemory'),
   ).toHaveLength(0);
 });
 
-test('an unknown memory item says it does not exist', async () => {
-  await mountProjectKnowledge('/project/memory/unknown/edit');
+const sources = {
+  urls: ['https://example.com/', 'https://example.com/pricing'],
+  custom: false,
+  auto: ['https://example.com/', 'https://example.com/pricing'],
+  items: [
+    {
+      id: 'a1',
+      title: 'Competitor pricing',
+      category: 'competitor',
+      addedAt: '',
+    },
+    {
+      id: 'b2',
+      title: 'Customer interview',
+      category: 'customer',
+      addedAt: '',
+    },
+  ],
+  itemIds: ['a1', 'b2'],
+  itemsCustom: false,
+  autoItemIds: ['a1', 'b2'],
+};
+function withSources(value: typeof sources) {
+  const base = action.getMockImplementation()!;
+  action.mockImplementation(async (resource: string, command: string, o) =>
+    resource === 'nrMemory' && command === 'sources'
+      ? value
+      : base(resource, command, o),
+  );
+}
+
+test('generating shows the pages and materials to read; an untouched choice stays automatic', async () => {
+  withSources(sources);
+  const user = userEvent.setup();
+  const router = await mountProjectKnowledge('/project/memory');
+  await user.click(
+    await screen.findByRole('button', { name: '根据官网和资料生成' }),
+  );
+  expect(router.state.location.pathname).toBe('/project/memory/generate');
+  const dialog = await screen.findByRole('dialog', {
+    name: '根据官网和资料生成记忆',
+  });
   expect(
-    await screen.findByRole('dialog', { name: '没有这一项' }),
+    await within(dialog).findByRole('link', {
+      name: 'https://example.com/pricing',
+    }),
   ).toBeInTheDocument();
+  expect(within(dialog).getByText('自动选的')).toBeInTheDocument();
+  expect(
+    within(dialog).getByRole('checkbox', { name: 'Competitor pricing' }),
+  ).toBeChecked();
+  await user.click(within(dialog).getByRole('button', { name: '开始生成' }));
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+  );
+  expect(action).toHaveBeenCalledWith(
+    'nrMemory',
+    'draft',
+    expect.objectContaining({
+      body: { projectId: '1', urls: null, itemIds: null },
+    }),
+  );
+});
+
+test('pages and materials can be changed before generating, and the change is sent', async () => {
+  withSources(sources);
+  const user = userEvent.setup();
+  await mountProjectKnowledge('/project/memory/generate');
+  const dialog = await screen.findByRole('dialog', {
+    name: '根据官网和资料生成记忆',
+  });
+  await user.click(
+    await within(dialog).findByRole('button', {
+      name: '移除 https://example.com/pricing',
+    }),
+  );
+  const input = within(dialog).getByRole('textbox', {
+    name: 'https://… 添加网页',
+  });
+  await user.type(input, 'http://docs.example.com/');
+  await user.click(within(dialog).getByRole('button', { name: '添加' }));
+  expect(within(dialog).getByRole('alert')).toHaveTextContent(
+    '请填一个完整的 https 网址',
+  );
+  await user.clear(input);
+  await user.type(input, 'https://docs.example.com/guide{Enter}');
+  expect(
+    within(dialog).getByRole('link', {
+      name: 'https://docs.example.com/guide',
+    }),
+  ).toBeInTheDocument();
+  expect(
+    within(dialog).getByRole('button', { name: '恢复自动选择' }),
+  ).toBeInTheDocument();
+  await user.click(
+    within(dialog).getByRole('checkbox', { name: 'Customer interview' }),
+  );
+  await user.click(within(dialog).getByRole('button', { name: '开始生成' }));
+  await waitFor(() =>
+    expect(action).toHaveBeenCalledWith(
+      'nrMemory',
+      'draft',
+      expect.objectContaining({
+        body: {
+          projectId: '1',
+          urls: ['https://example.com/', 'https://docs.example.com/guide'],
+          itemIds: ['a1'],
+        },
+      }),
+    ),
+  );
 });
 
 test('opens a material in a drawer by its URL and deletes it from there', async () => {
@@ -255,14 +369,14 @@ test('accepts a suggestion and shows its examples behind the ⓘ', async () => {
 });
 
 test('the tabs and their dialogs follow a language change in place', async () => {
-  await mountProjectKnowledge('/project/memory/brand/edit');
+  await mountProjectKnowledge('/project/memory/edit');
   expect(await screen.findByText(/已填 2 \/ 9 项/)).toBeInTheDocument();
   expect(
-    await screen.findByRole('dialog', { name: '编辑：品牌基础' }),
+    await screen.findByRole('dialog', { name: '编辑记忆' }),
   ).toBeInTheDocument();
   act(() => setDictionary(english));
   expect(await screen.findByText(/2 of 9 filled/)).toBeInTheDocument();
   expect(
-    screen.getByRole('dialog', { name: 'Edit: Brand basics' }),
+    screen.getByRole('dialog', { name: 'Edit memory' }),
   ).toBeInTheDocument();
 });

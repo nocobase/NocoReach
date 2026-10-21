@@ -2,6 +2,7 @@
 import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { createHash, randomUUID } from 'node:crypto';
+import { isIP } from 'node:net';
 import { projectId, requireAccess } from './policy.js';
 import { languageOf, forLanguage } from './language.js';
 import { download, plain } from './public-sources.js';
@@ -44,16 +45,40 @@ class MemoryUpdate{
   if(row)await this.repo().update({filterByTk:row.id,values:{payload:next},transaction});else await this.repo().create({values:{key:this.key(id),payload:next},transaction});return next;});}
  async project(id){const row=await this.p.projects.row(id);const p=row?.get('payload');if(!p)fail(systemMessageText('settings.projectNotExist'),404);return p;}
  async complete(system,user,operation){const provider=this.p.taskExecution?.provider;if(!provider)fail(systemMessageText('aiQuestions.onlineAiNotConnectedYet'),409);return provider.complete(system,user,operation);}
- // The home page and up to seven main pages, found among 网站内容's pages and the home page's links.
- async website(id,project){const domain=String(project.domains?.[0]||'').trim();if(!domain)return [];const origin=`https://${domain}`,out=[],urls=[`${origin}/`];
-  const read=async url=>{try{const r=await this.download(url);const html=String(r.text||'');if(!/html|text/i.test(r.type||'html'))return null;return {url,html,title:plain(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]||'').slice(0,200),text:plain(html).slice(0,PAGE_TEXT)};}catch{return null;}};
-  const home=await read(urls[0]);if(home)out.push(home);
+ // One page as the AI reads it: its title and the start of its text; null when it cannot be read as a web page.
+ async read(url){try{const r=await this.download(url);const html=String(r.text||'');if(!/html|text/i.test(r.type||'html'))return null;return {url,html,title:plain(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]||'').slice(0,200),text:plain(html).slice(0,PAGE_TEXT)};}catch{return null;}}
+ // Chosen automatically: the home page and up to seven main pages, found among 网站内容's pages and the home page's links.
+ async autoPages(id,project){const domain=String(project.domains?.[0]||'').trim();if(!domain)return {urls:[],home:null};const homeUrl=`https://${domain}/`;
+  const home=await this.read(homeUrl);
   const host=u=>{try{return new URL(u).hostname.replace(/^www\./,'');}catch{return '';}};
-  const candidates=[...((await this.p.siteContent?.state(id).catch(()=>null))?.pages||[]).map(p=>p.url),...(home?[...home.html.matchAll(/<a\b[^>]*href=["']([^"'#]+)["']/gi)].map(m=>{try{return new URL(m[1],urls[0]).href;}catch{return '';}}):[])];
+  const candidates=[...((await this.p.siteContent?.state(id).catch(()=>null))?.pages||[]).map(p=>p.url),...(home?[...home.html.matchAll(/<a\b[^>]*href=["']([^"'#]+)["']/gi)].map(m=>{try{return new URL(m[1],homeUrl).href;}catch{return '';}}):[])];
   const picked=[...new Set(candidates.filter(u=>host(u)===domain.replace(/^www\./,'')&&KEY_PATH.test(new URL(u).pathname)).map(u=>u.replace(/[?#].*$/,'')))].sort((a,b)=>a.length-b.length).slice(0,PAGES-1);
-  for(const u of picked){const page=await read(u);if(page&&page.text.length>80)out.push(page);}
+  return {urls:[homeUrl,...picked],home};}
+ // What the draft and the weekly check read about the website: the pages the person chose before generating
+ // (2026-10-21), or the automatic choice.
+ async website(id,project){const chosen=(await this.state(id)).sources?.urls,out=[];
+  if(chosen){for(const u of chosen.slice(0,PAGES)){const page=await this.read(u);if(page?.text)out.push(page);}}
+  else{const {urls,home}=await this.autoPages(id,project);if(home)out.push(home);for(const u of urls.slice(1)){const page=await this.read(u);if(page&&page.text.length>80)out.push(page);}}
   return out.map(({url,title,text})=>({url,title,text}));}
- async items(id){const {items}=await this.p.knowledge.list(id);const out=[];for(const item of items.slice(0,ITEMS)){const {text}=await this.p.knowledge.get(id,{itemId:item.id}).catch(()=>({text:''}));out.push({title:item.title,text:String(text||'').slice(0,ITEM_TEXT)});}return out;}
+ // The pages and materials the next draft reads, for the person to look over and change before it runs: the chosen
+ // ones if any (`custom`), else the automatic choice; `auto` is the automatic choice either way, to go back to.
+ async sources(id){const project=await this.project(id),s=await this.state(id),auto=(await this.autoPages(id,project)).urls;
+  const {items}=await this.p.knowledge.list(id),newest=items.slice(0,ITEMS).map(i=>i.id),chosen=(s.sources?.itemIds||[]).filter(x=>items.some(i=>i.id===x));
+  return {urls:s.sources?.urls||auto,custom:Boolean(s.sources?.urls),auto,
+   items:items.map(({id,title,category,addedAt})=>({id,title,category,addedAt})),itemIds:s.sources?.itemIds?chosen:newest,itemsCustom:Boolean(s.sources?.itemIds),autoItemIds:newest};}
+ // Keeps what the person chose: `urls` and `itemIds` replace the choice, null goes back to the automatic one, and a
+ // field left out stays as it was. Only public https pages are read, at most eight pages and six materials.
+ async setSources(id,v){const next={};
+  if(v.urls!==undefined){if(v.urls!==null&&!Array.isArray(v.urls))fail(systemMessageText('memoryUpdate.invalidSources'));
+   const urls=[];for(const raw of v.urls||[]){let u;try{u=new URL(String(raw).trim());}catch{fail(systemMessageText('memoryUpdate.invalidPage',{0:String(raw).slice(0,200)}));}
+    if(u.protocol!=='https:'||u.username||u.password||u.port||isIP(u.hostname)||u.hostname==='localhost'||!u.hostname.includes('.'))fail(systemMessageText('memoryUpdate.invalidPage',{0:String(raw).slice(0,200)}));
+    u.hash='';if(!urls.includes(u.href))urls.push(u.href);}
+   if(urls.length>PAGES)fail(systemMessageText('memoryUpdate.tooManyPages',{0:PAGES}));next.urls=v.urls===null?null:urls;}
+  if(v.itemIds!==undefined){if(v.itemIds!==null&&!Array.isArray(v.itemIds))fail(systemMessageText('memoryUpdate.invalidSources'));
+   const ids=[...new Set((v.itemIds||[]).map(String))];if(ids.length>ITEMS)fail(systemMessageText('memoryUpdate.tooManyItems',{0:ITEMS}));next.itemIds=v.itemIds===null?null:ids;}
+  return this.mutate(id,s=>{const sources={...(s.sources||{})};for(const [k,x] of Object.entries(next)){if(x===null)delete sources[k];else sources[k]=x;}
+   const rest={...s};delete rest.sources;return Object.keys(sources).length?{...rest,sources}:rest;});}
+ async items(id){const {items}=await this.p.knowledge.list(id),chosen=(await this.state(id)).sources?.itemIds,out=[];for(const item of (chosen?items.filter(i=>chosen.includes(i.id)):items).slice(0,ITEMS)){const {text}=await this.p.knowledge.get(id,{itemId:item.id}).catch(()=>({text:''}));out.push({title:item.title,text:String(text||'').slice(0,ITEM_TEXT)});}return out;}
  // Runs one job per project in the background; the page asks status until it is done.
  start(id,kind){if(this.running.has(id))return false;const job=kind==='draft'?this.draft(id):this.check(id);this.running.set(id,kind);
   job.catch(e=>this.p.app?.logger?.warn?.('NocoReach memory update failed',{projectId:id,kind,message:e.message})).finally(()=>this.running.delete(id));return true;}
@@ -112,7 +137,7 @@ class MemoryUpdate{
  async tick(){if(this.busy||!this.p.taskExecution?.provider)return;this.busy=true;try{for(const id of await this.p.projectIds()){const s=await this.state(String(id));const last=Date.parse(s.lastCheck?.at||s.draft?.at||0);
    if(Date.now()-last<WEEK||this.running.has(String(id)))continue;this.running.set(String(id),'check');try{await this.check(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach memory check failed',{projectId:id,message:e.message});}finally{this.running.delete(String(id));}}}finally{this.busy=false;}}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('audit.notCompleteTryAgainLater'));}};
-  const actions={status:wrap(id=>this.status(id)),draft:wrap(async id=>{if(!this.p.taskExecution?.provider)fail(systemMessageText('aiQuestions.onlineAiNotConnectedYet'),409);this.start(id,'draft');return this.status(id);}),check:wrap(async id=>{if(!this.p.taskExecution?.provider)fail(systemMessageText('aiQuestions.onlineAiNotConnectedYet'),409);this.start(id,'check');return this.status(id);}),
+  const actions={status:wrap(id=>this.status(id)),sources:wrap(id=>this.sources(id)),draft:wrap(async (id,v)=>{if(!this.p.taskExecution?.provider)fail(systemMessageText('aiQuestions.onlineAiNotConnectedYet'),409);if(!this.running.has(id)&&(v.urls!==undefined||v.itemIds!==undefined))await this.setSources(id,v);this.start(id,'draft');return this.status(id);}),check:wrap(async id=>{if(!this.p.taskExecution?.provider)fail(systemMessageText('aiQuestions.onlineAiNotConnectedYet'),409);this.start(id,'check');return this.status(id);}),
    accept:wrap((id,v)=>this.accept(id,v)),dismiss:wrap((id,v)=>this.dismiss(id,v)),seen:wrap(id=>this.seen(id))};
   this.p.app.resourceManager.define({name:'nrMemory',actions});this.p.app.acl.allow('nrMemory',Object.keys(actions),'loggedIn');}
 }

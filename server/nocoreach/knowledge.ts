@@ -55,12 +55,14 @@ class Knowledge{
   await this.put(this.key(id),{revision:d.revision+1,items:d.items},tx);return {revision:d.revision+1,item};});}
  async remove(id,v){return this.lock(id,async tx=>{const d=await this.snapshot(this.key(id),tx)||{revision:0,items:[]};if(!d.items.some(x=>x.id===v.itemId))fail(systemMessageText('knowledge.materialNotExistRefreshTry'),404);
   await this.put(this.key(id),{revision:d.revision+1,items:d.items.filter(x=>x.id!==v.itemId)},tx);await this.repo().destroy({filter:{key:this.itemKey(id,v.itemId)},transaction:tx});return {revision:d.revision+1};});}
- // 记忆 is saved on the project record next to its older fields (which stay as they were). One item — `section` with its
- // `text`, or only `name` — is merged into what is saved now (2026-10-20), so people editing different items at the same
- // time keep each other's changes; `memory` still replaces every section.
+ // 记忆 is saved on the project record next to its older fields (which stay as they were). The changed items —
+ // `sections`, or one `section` with its `text`, and/or `name` — are merged into what is saved now (2026-10-20), so
+ // people editing different items at the same time keep each other's changes; `memory` still replaces every section.
  async saveMemory(id,v){const row=await this.p.projects.row(id);const project=row?.get('payload');if(!row||String(project?.id)!==String(id))fail(systemMessageText('settings.projectNotExist'),404);
-  const section=v.section===undefined?null:MEMORY_SECTIONS.find(([k])=>k===v.section)?.[0];if(v.section!==undefined&&!section)fail(systemMessageText('memory.invalidMemoryFormat'));
-  const memory=section?memoryInput({...memoryOf(project),[section]:typeof v.text==='string'?v.text:''}):v.memory===undefined?null:memoryInput(v.memory);
+  // `sections` carries only the items changed in the edit dialog (2026-10-21); `section` and `text` are one of them.
+  const changes=v.sections!==undefined?v.sections:v.section!==undefined?{[v.section]:v.text}:null;
+  if(changes!==null&&(!changes||typeof changes!=='object'||Array.isArray(changes)||Object.keys(changes).some(k=>!MEMORY_SECTIONS.some(([x])=>x===k))))fail(systemMessageText('memory.invalidMemoryFormat'));
+  const memory=changes?memoryInput({...memoryOf(project),...Object.fromEntries(Object.entries(changes).map(([k,t])=>[k,typeof t==='string'?t:'']))}):v.memory===undefined?null:memoryInput(v.memory);
   const name=v.name===undefined?project.name:str(v.name,200);if(!name)fail(systemMessageText('knowledge.projectNameCannotEmpty'));
   await this.repo().update({filterByTk:row.id,values:{payload:{...project,name,...(memory?{memory}:{})}}});return {name,memory:memory||memoryOf(project)};}
  // What the Agent gets with a task: every item's text, newest first, within a size budget (the rest is listed by title).

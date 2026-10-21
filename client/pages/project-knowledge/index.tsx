@@ -219,8 +219,6 @@ function useMemoryUpdates(projectId?: number): MemoryUpdates {
           .then((next) => {
             if (currentRef.current !== projectId) return;
             setState({ projectId, status: next });
-            if (!next.running)
-              window.dispatchEvent(new Event('reach-project-saved'));
           })
           .catch(() => {
             // A failed look tries again after the same wait instead of leaving the spinner on.
@@ -235,6 +233,17 @@ function useMemoryUpdates(projectId?: number): MemoryUpdates {
     );
     return () => clearTimeout(timer);
   }, [projectId, status, currentRef]);
+  // A draft or a check that finished since the last look may have written 记忆: read the project again. This also
+  // covers a run that ends before the first poll, as a quick one does.
+  const finishedRef = useRef<string>(undefined);
+  useEffect(() => {
+    if (!status || status.running) return;
+    const key = `${projectId}:${status.draft?.at ?? ''}:${status.lastCheck?.at ?? ''}`;
+    const before = finishedRef.current;
+    finishedRef.current = key;
+    if (before?.startsWith(`${projectId}:`) && before !== key)
+      window.dispatchEvent(new Event('reach-project-saved'));
+  }, [projectId, status]);
   const act = useCallback(
     async (
       action: string,

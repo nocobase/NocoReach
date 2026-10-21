@@ -6,6 +6,12 @@
 - Connection panels, Google sync and authorization errors and the Skill link dialog link to Settings › Network; an untrusted certificate explains the company root certificate in ⓘ, and the Skill link dialog also offers uploading the folder instead.
 - Direct public reads (website content, Skill links, public sources) report a refused, reset, timed-out or unresolvable site the same way as proxied ones, with status 502 and the original code.
 
+## Unreleased — Memory: one Edit, and choose what generating reads
+
+- Memory has one Edit (`/project/memory/edit`) that opens every item in a dialog instead of a pencil on each row; only the items changed there are saved, merged into the saved memory.
+- Generate from the website and materials (`/project/memory/generate`) first lists the pages and knowledge base materials the AI will read — by default the home page and main pages, and the newest six materials — to remove, add (up to eight public https pages) or tick before generating. A changed list is kept for later drafts and for the weekly check; Use the automatic choice goes back.
+- The memory list reloads when a draft or a check finishes, also when it finishes before the first status poll.
+
 ## Unreleased — Project knowledge in two tabs
 
 - Split Project knowledge into Memory (`/project/memory`, the default) and Knowledge base (`/project/knowledge`) tabs. The Memory tab counts pending suggestions; the Knowledge base tab counts material.

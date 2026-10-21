@@ -35,6 +35,8 @@ test('记忆 is saved on the project next to its older fields; the Agent gets th
  const one=await k.saveMemory('1',{section:'voice',text:' 不用感叹号，少用形容词 '});assert.equal(one.name,'NocoBase');
  const m=rows.find(r=>r.key==='project').payload.memory;assert.deepEqual([m.brand,m.audience,m.voice],['开源无代码平台','中小团队','不用感叹号，少用形容词']);
  await k.saveMemory('1',{name:'NocoBase 3'});assert.equal(rows.find(r=>r.key==='project').payload.name,'NocoBase 3');assert.equal(rows.find(r=>r.key==='project').payload.memory.voice,'不用感叹号，少用形容词','a name alone keeps the memory');
+ await k.saveMemory('1',{sections:{brand:'开源平台',rules:'不提价格'}});const m2=rows.find(r=>r.key==='project').payload.memory;assert.deepEqual([m2.brand,m2.rules,m2.voice,m2.audience],['开源平台','不提价格','不用感叹号，少用形容词','中小团队'],'several items at once, the rest kept');
+ await assert.rejects(k.saveMemory('1',{sections:{nope:'x'}}),e=>e.status===400);
  await assert.rejects(k.saveMemory('1',{section:'nope',text:'x'}),e=>e.status===400);await assert.rejects(k.saveMemory('1',{section:'brand',text:'x'.repeat(4001)}),/太长/);
  await assert.rejects(k.saveMemory('1',{memory:{brand:'x'.repeat(4001)}}),/太长/);await assert.rejects(k.saveMemory('2',{memory:{}}),e=>e.status===404);
  const wait=()=>new Promise(r=>setTimeout(r,5));await k.add('1',{text:'a'.repeat(AGENT_BUDGET/2),title:'旧报告'});await wait();await k.add('1',{text:'c'.repeat(AGENT_BUDGET/2),title:'新报告'});await wait();await k.add('1',{text:'b'.repeat(100),title:'小资料'});
