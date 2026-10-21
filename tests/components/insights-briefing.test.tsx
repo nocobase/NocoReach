@@ -22,6 +22,7 @@ const fixture = vi.hoisted(() => ({
   tasks: [] as unknown[],
   cards: [] as unknown[],
   areas: [] as unknown[],
+  runs: [] as unknown[],
 }));
 vi.mock('../../client/lib/nocoreach-api', async (original) => ({
   ...(await original<typeof import('../../client/lib/nocoreach-api')>()),
@@ -90,7 +91,9 @@ vi.mock('../../client/components/reach/page', () => ({
   PageContainer: ({ children }: { children: ReactNode }) => (
     <main>{children}</main>
   ),
-  PageHeader: () => null,
+  PageHeader: ({ description }: { description?: ReactNode }) => (
+    <header>{description}</header>
+  ),
   Section: ({ children, ...rest }: { children: ReactNode }) => (
     <section {...rest}>{children}</section>
   ),
@@ -199,6 +202,7 @@ beforeEach(() => {
   fixture.tasks = [];
   fixture.cards = [];
   fixture.areas = [];
+  fixture.runs = [];
   fixture.action.mockReset();
   fixture.openChat.mockReset();
   fixture.action.mockImplementation(
@@ -255,7 +259,7 @@ beforeEach(() => {
       if (resource === 'nrInsights')
         return Promise.resolve({ areas: fixture.areas });
       if (resource === 'nrAnalysis')
-        return Promise.resolve({ running: false, runs: [] });
+        return Promise.resolve({ running: false, runs: fixture.runs });
       if (resource === 'nrPlaybooks') return Promise.resolve({ playbooks: [] });
       throw new Error(`Unexpected request ${resource}/${action}`);
     },
@@ -290,13 +294,34 @@ it('lists every waiting opportunity in the message of the day, most important fi
     screen.getByRole('button', { name: /strategy.analysisNotes:1/ }),
   );
   expect(screen.getByText('Search clicks held steady this week.')).toBeTruthy();
-  // High first (the newer of the two ahead), unrated last; ignored and handed-off ones never show.
+  // High first (the newer of the two ahead), unrated last.
   expect(decisions()).toEqual(['b', 'e', 'd', 'a', 'g']);
-  const more = screen.getByRole('button', { name: /strategy.moreToDecide:2/ });
+  // Those of today's analysis already decided stay in the day, after the rest, with where they went.
+  const group = screen.getByRole('group', { name: 'strategy.decideCount:7' });
+  for (const tag of [
+    'strategy.pendingCount:7',
+    'strategy.handedCount:1',
+    'strategy.dismissedCount:1',
+  ])
+    expect(within(group).getByText(tag)).toBeTruthy();
+  const more = screen.getByRole('button', { name: /strategy.moreToDecide:4/ });
   expect(more.getAttribute('aria-expanded')).toBe('false');
   fireEvent.click(more);
   expect(more.getAttribute('aria-expanded')).toBe('true');
-  expect(decisions()).toEqual(['b', 'e', 'd', 'a', 'g', 'c', 'f']);
+  expect(decisions()).toEqual([
+    'b',
+    'e',
+    'd',
+    'a',
+    'g',
+    'c',
+    'f',
+    'handed',
+    'ignored',
+  ]);
+  const handed = group.querySelector('[data-opportunity-id=handed]')!;
+  expect(handed.textContent).toContain('strategy.handedOffAgent');
+  expect(within(handed as HTMLElement).queryByRole('button')).toBeNull();
 });
 
 it('Ignore records the decision and the line leaves, with the count and the menu badge', async () => {
@@ -318,6 +343,8 @@ it('Ignore records the decision and the line leaves, with the count and the menu
     }),
   );
   expect(decisions()).toEqual(['e', 'd', 'a', 'g', 'c']);
+  // It stays in the day as dismissed.
+  expect(screen.getByText('strategy.dismissedCount:2')).toBeTruthy();
   await screen.findByText('badge:6');
 });
 
@@ -339,9 +366,10 @@ it('Hand off to agent turns the opportunity into a task and takes it off the lis
     }),
   );
   expect(decisions()).not.toContain('e');
+  expect(screen.getByText('strategy.handedCount:2')).toBeTruthy();
 });
 
-it('the tiles show at most five numbers that have data, the summary names the ones that moved, and Status opens in a drawer', async () => {
+it('the tiles show at most five numbers that have data, the summary names the ones that moved, and the current situation sits beside the day', async () => {
   fixture.cards = [
     {
       id: 'gsc',
@@ -401,10 +429,22 @@ it('the tiles show at most five numbers that have data, the summary names the on
     'strategy.sessions ↑ 12%',
     'strategy.watchingChip:1',
   ]);
-  expect(screen.queryByText('Pages indexed: 120')).toBeNull();
-  fireEvent.click(await screen.findByText('strategy.situationCount:2'));
-  expect(await screen.findByText('Pages indexed: 120')).toBeTruthy();
-  expect(screen.getByText('strategy.situationHelp')).toBeTruthy();
+  const situation = screen.getByRole('region', {
+    name: 'strategy.currentSituation',
+  });
+  expect(await within(situation).findByText('Pages indexed: 120')).toBeTruthy();
+  // No Refresh beside the tiles; All data is gone.
+  expect(within(tiles).queryByRole('button')).toBeNull();
+  expect(screen.queryByText('strategy.allData')).toBeNull();
+});
+
+it('a run of the daily workflow links to Settings › Automatic runs', async () => {
+  fixture.runs = [{ ok: true, trigger: 'workflow' }];
+  setup();
+  const link = await screen.findByRole('link', {
+    name: 'strategy.dailyAutomatic',
+  });
+  expect(link.getAttribute('href')).toBe('/schedules');
 });
 
 it('the day also says which watches ended and which tasks wait for you', async () => {
@@ -462,10 +502,9 @@ it('earlier days fold into one line each, with where every opportunity went', as
         r.firstElementChild?.tagName === 'H3' &&
         r.getAttribute('aria-label') !== 'strategy.analysisFeed',
     );
-  // Newest first: 10/19, when e was raised (still waiting), then 10/18 with two raised and a watch that ended.
-  expect(days).toHaveLength(2);
-  expect(within(days[0]).getByText('strategy.pendingCount:1')).toBeTruthy();
-  const day = days[1];
+  // Only 10/18: e, raised 10/19, still waits and so stands in today's message.
+  expect(days).toHaveLength(1);
+  const day = days[0];
   const toggle = within(day).getByRole('button', { expanded: false });
   expect(toggle.textContent).toContain('strategy.daySuggested:2');
   expect(toggle.textContent).toContain('strategy.dayWatchesEnded:1');

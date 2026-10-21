@@ -6,17 +6,19 @@ import {
   $t,
   $legacyText,
 } from '#i18n';
-import {
-  latestBatch,
-  opportunityState,
-  overviewPeriodDays,
-  priorityRank,
-  rowsFor,
-  type Row,
-} from './board';
+import { latestBatch, overviewPeriodDays, rowsFor, type Row } from './board';
 import { signalDisposition } from '../../../shared/strategy-pending.js';
-import { metricItems, type SourceCard, type Area } from './insights-view';
+import {
+  AreaList,
+  metricItems,
+  type SourceCard,
+  type Area,
+} from './insights-view';
 import { AskBar, History, MetricTiles, Today, WaitingNote } from './briefing';
+import { feedOf } from './feed';
+import { Link } from 'react-router';
+import { useCan } from '@nocobase/app-plugin-authorization/client';
+import { InfoTip } from '#components/reach/info-tip';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { useFreshData } from '../workspace-cache';
 import { RequestBlock } from './request-block';
@@ -303,22 +305,22 @@ function Insights({
             hour: '2-digit',
             minute: '2-digit',
           }),
-          1:
-            analysis?.runs[0]?.ok && analysis.runs[0].trigger === 'workflow'
-              ? $t('strategy.dailyAutomatic')
-              : '',
+          1: '',
         })
       : $t('strategy.notAnalyzedYet');
-  // The decisions waiting: every opportunity still pending, ordered as on Opportunities' To do.
+  // A run of the daily workflow says so, linking to Settings › Automatic runs for those who may open it.
+  const automatic =
+      !generating &&
+      !!batch &&
+      !!analysis?.runs[0]?.ok &&
+      analysis.runs[0].trigger === 'workflow',
+    { can: canSchedules } = useCan({
+      resource: { type: 'page', id: 'scheduler.schedules' },
+      action: 'access',
+    });
   const rows = rowsFor(state),
-    metrics = metricItems(overview.data?.cards);
-  const pending = rows
-    .filter((r) => opportunityState(r, state).state === 'pending')
-    .sort(
-      (a, b) =>
-        (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3) ||
-        String(b.firstSeenAt).localeCompare(String(a.firstSeenAt)),
-    );
+    metrics = metricItems(overview.data?.cards),
+    feed = feedOf(state, rows);
   // A change no analysis judged yet (an analysis from before every change got a verdict) is judged once in the
   // background, as the server does after each analysis; the state is read again afterwards.
   const unjudged = (state.insights?.evidence.signals?.items || []).filter(
@@ -344,11 +346,16 @@ function Insights({
     <PageContainer className='nr-page'>
       <PageHeader
         title={$t('strategy.insights')}
-        description={$t('strategy.lastDaysDataThrough', {
-          0: summary.periodDays,
-          1: summary.availableThrough || $t('common.unknown'),
-          2: last,
-        })}
+        description={
+          <>
+            {$t('strategy.lastDaysDataThrough', {
+              0: summary.periodDays,
+              1: summary.availableThrough || $t('common.unknown'),
+              2: last,
+            })}
+            {automatic && <DailyAutomatic link={canSchedules} />}
+          </>
+        }
         actions={
           <Button
             variant='outline'
@@ -378,52 +385,88 @@ function Insights({
         onRun={() => void generate()}
       />
       <div className='flex flex-col gap-6'>
-        <MetricTiles
-          metrics={metrics}
-          overview={overview}
-          summary={summaryView}
-          projectId={projectId}
-        />
-        <section
-          aria-label={$t('strategy.analysisFeed')}
-          className='flex flex-col gap-4'
-        >
-          <Today
-            state={state}
-            rows={rows}
-            pending={pending}
-            metrics={metrics}
-            generating={generating}
-            projectId={projectId}
-            busy={busy || generating}
-            onGive={(row) => void convert(row)}
-            onIgnore={(row) => void review(row.card.id, { status: 'ignored' })}
-            tasks={
-              <RequestBlock
-                compact
-                corner
-                title={$t('strategy.taskStatus')}
-                request={taskView}
-                empty={waiting.length === 0}
-              >
-                <WaitingNote tasks={waiting} label={waitingFor} />
-              </RequestBlock>
+        <MetricTiles metrics={metrics} overview={overview} />
+        {/* The day's conversation, with the standing facts beside it as before the redesign (2026-10-21 user). */}
+        <div className='grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]'>
+          <div className='flex min-w-0 flex-col gap-4'>
+            <section
+              aria-label={$t('strategy.analysisFeed')}
+              className='flex flex-col gap-4'
+            >
+              <Today
+                state={state}
+                rows={rows}
+                feed={feed}
+                metrics={metrics}
+                generating={generating}
+                projectId={projectId}
+                busy={busy || generating}
+                onGive={(row) => void convert(row)}
+                onIgnore={(row) =>
+                  void review(row.card.id, { status: 'ignored' })
+                }
+                tasks={
+                  <RequestBlock
+                    compact
+                    title={$t('strategy.taskStatus')}
+                    request={taskView}
+                    empty={waiting.length === 0}
+                  >
+                    <WaitingNote tasks={waiting} label={waitingFor} />
+                  </RequestBlock>
+                }
+              />
+              <History days={feed.days} rows={rows} />
+            </section>
+            <AskBar
+              projectId={projectId}
+              day={
+                state.insights
+                  ? new Date(state.insights.generatedAt).toLocaleDateString(
+                      getCurrentLocale(),
+                      { month: 'numeric', day: 'numeric' },
+                    )
+                  : ''
+              }
+            />
+          </div>
+          <RequestBlock
+            title={$t('strategy.currentSituation')}
+            info={
+              <InfoTip label={$t('strategy.statusExplanation')}>
+                {$t('strategy.notWhatChangedHowThings')}
+              </InfoTip>
             }
-          />
-          <History state={state} rows={rows} />
-        </section>
-        <AskBar
-          projectId={projectId}
-          day={
-            state.insights
-              ? new Date(state.insights.generatedAt).toLocaleDateString(
-                  getCurrentLocale(),
-                  { month: 'numeric', day: 'numeric' },
-                )
-              : ''
-          }
-        />
+            request={summaryView}
+            empty={!summaryView.data?.areas.some((area) => area.items.length)}
+            emptyText={$t('strategy.noCurrentSituation')}
+          >
+            <AreaList areas={summaryView.data?.areas} projectId={projectId} />
+          </RequestBlock>
+        </div>
       </div>
     </PageContainer>
+  );
+}
+/** “(daily, automatic)” after the last analysis, its words a link to Settings › Automatic runs when allowed. */
+function DailyAutomatic({ link }: { link: boolean }) {
+  const text = $t('strategy.dailyAutomatic'),
+    label = $t('strategy.dailyAutomaticLink'),
+    at = text.indexOf(label);
+  if (!link) return <>{text}</>;
+  if (at < 0)
+    return (
+      <Link className='underline underline-offset-4' to='/schedules'>
+        {text}
+      </Link>
+    );
+  return (
+    <>
+      {text.slice(0, at)}
+      <Link className='underline underline-offset-4' to='/schedules'>
+        {label}
+      </Link>
+      {text.slice(at + label.length)}
+    </>
   );
 }

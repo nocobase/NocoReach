@@ -1,10 +1,8 @@
 import type { ReactNode } from 'react';
-import { RefreshCw } from 'lucide-react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { NocoReachHttpError } from '#lib/nocoreach-api';
 import { $t } from '#i18n';
 import { Button } from '#components/ui/button';
-import { cn } from '#lib/utils';
 
 export type RequestState = {
   data?: unknown;
@@ -22,19 +20,16 @@ export function RequestBlock({
   emptyText,
   info,
   compact = false,
-  corner = false,
   children,
 }: {
   title: string;
   /** Shown after the heading, such as an InfoTip explaining the block. */
   info?: ReactNode;
   /**
-   * Inline, without a visible heading: the title only names the region, and Refresh is an icon shown on hover or
-   * focus (the metric tiles, Status and the waiting tasks on Insights).
+   * Inline, without a heading or Refresh (the metric tiles and the waiting tasks on Insights, read again on every
+   * visit): the title only names the region, and Retry shows only after a failure.
    */
   compact?: boolean;
-  /** Compact only: Refresh sits over the top-right corner instead of after the content, for content as wide as the row. */
-  corner?: boolean;
   request: RequestState;
   empty?: boolean;
   emptyText?: string;
@@ -79,7 +74,7 @@ export function RequestBlock({
       <section
         aria-label={title}
         aria-busy={request.loading}
-        className='group/request relative flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1'
+        className='flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1'
       >
         {body}
         {!hasData && loading}
@@ -88,30 +83,18 @@ export function RequestBlock({
           <Button variant='ghost' size='xs' onClick={() => void refresh()}>
             {$t('common.signAgain')}
           </Button>
-        ) : unavailable ? null : failed ? (
-          <Button
-            variant='ghost'
-            size='xs'
-            disabled={request.loading}
-            onClick={request.reload}
-          >
-            {$t('common.retry')}
-          </Button>
         ) : (
-          <Button
-            variant='ghost'
-            size='icon-xs'
-            aria-label={$t('strategy.refreshBlock')}
-            title={$t('strategy.refreshBlock')}
-            disabled={request.loading}
-            onClick={request.reload}
-            className={cn(
-              'opacity-0 group-hover/request:opacity-100 focus-visible:opacity-100',
-              corner && 'absolute top-1 right-1 bg-background/80',
-            )}
-          >
-            <RefreshCw aria-hidden='true' />
-          </Button>
+          failed &&
+          !unavailable && (
+            <Button
+              variant='ghost'
+              size='xs'
+              disabled={request.loading}
+              onClick={request.reload}
+            >
+              {$t('common.retry')}
+            </Button>
+          )
         )}
       </section>
     );

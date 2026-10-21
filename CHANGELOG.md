@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Insights: Current situation beside the day, decisions kept
+
+- Current situation is back as a column beside the day's conversation, as before the redesign, with its explanation and Refresh. The Status link, its drawer and the All data menu are gone; each tile still opens its data page.
+- Opportunities decided today stay in today's message after those still waiting, marked Handed off to agent (with the task) or Dismissed, and the message counts them (Awaiting, Handed off, Dismissed), as the earlier days do. Each opportunity shows once: today while it waits or when today's analysis raised it, otherwise on the day it was first raised.
+- The metric tiles and the waiting tasks no longer show a Refresh icon on hover; they are read again on each visit, and Retry appears only after a failure.
+- "(daily, automatic)" after the last analysis links to Settings › Automatic runs for those who may open it. The fold markers are chevrons instead of ▾ and ▴.
+
 ## Unreleased — Agent failures name the computer and the tool
 
 - When a task's Agent stops because its coding tool is not signed in, the card names the computer and the tool ("Claude Code on Office-Mac isn't signed in") and asks whoever manages that computer to sign in, or to change the Agent. A second line explains that an Agent shown as online only means its computer is connected. Connection, network and quota failures name the computer or the tool the same way when the run reports them; readers who may not see the computer get the general wording.
