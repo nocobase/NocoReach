@@ -1,5 +1,5 @@
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText, $legacyFragment } from "#i18n";
-import {useEffect,useRef,useState,type ReactNode} from 'react';
+import {useEffect,useState,type ReactNode} from 'react';
 import {Link,useNavigate,useSearchParams} from 'react-router';
 import {ArrowRightIcon,ExternalLinkIcon,SearchIcon} from 'lucide-react';
 import {PageContainer,PageHeader} from '#components/reach/page';
@@ -12,7 +12,7 @@ import {cn} from '#lib/utils';
 import {useProject,type Project} from '../reach-data';
 import {request} from './service';
 import type {StrategyState} from './model';
-import {rowsFor,opportunityState,opportunityKeepDays,citedSignals,priorityRank,sourcesOf,oppNo,taskNo,getSourceNames,type OpportunityState,type Row} from './board';
+import {rowsFor,opportunityState,opportunityKeepDays,citedSignals,reasonLine,priorityRank,sourcesOf,oppNo,taskNo,getSourceNames,type OpportunityState,type Row} from './board';
 import {chipOf,titleOf,statusOf,ChangeDetail,watchedLabel} from './insights-view';
 import {verdictsOf,watchDays,watchOf,recentlyEnded,daysBetween} from './watch';
 import {taskRecords} from '../reach-data';
@@ -31,12 +31,11 @@ const destOf=(r:Item):Dest=>r.state==='task'?'task':r.state==='archived'?(r.reas
 // The coloured fact of an opportunity: its strongest cited signal's tag (as on 洞察).
 const leadChip=(r:Row)=>{const s=[...citedSignals(r)].sort((a,b)=>b.strength-a.strength).map(chipOf).find(Boolean);return s||null;};
 const No=({row}:{row:Row})=>row.card.no?<span className="font-mono text-xs text-muted-foreground tabular-nums">{oppNo(row.card)}</span>:null;
-// 机会 (SPEC §5): 待处理 — the undecided ones, one brief each across the page (2026-10-20); 观察中 — the changes the AI advised watching
+// 机会 (SPEC §5): 待处理 — the undecided ones, list left and a read-only detail right (2026-10-21); 观察中 — the changes the AI advised watching
 // (2026-10-08), with the days watched; 已处理 — the opportunities decided (handed off, ignored, expired) and the latest
 // analysis's changes that need nothing (无需处理, ignored, or handed off on their own), as one table. A search there finds
 // every opportunity, the pending ones too. A row goes where it is now: a pending one opens in 待处理, a handed-off one
-// opens its task, an archived one or a change slides in its detail. A link to one item (?item=) opens it the same way; a
-// pending one is scrolled to and marked.
+// opens its task, an archived one or a change slides in its detail. A link to one item (?item=) opens it the same way.
 export default function OpportunityLibrary(){
  const {project,error:projectError}=useProject();return <Library key={project?.id||'loading'} project={project} projectError={projectError}/>;
 }
@@ -50,6 +49,7 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
  const asked=params.get('tab');
  const tab:Tab=asked==='pending'||asked==='done'||asked==='watch'?asked:asked==='all'||asked==='task'||asked==='archived'?'done':linked&&linked.state!=='pending'?'done':'pending';
  const pending=rows.filter(r=>r.state==='pending').sort((a,b)=>(priorityRank[a.priority]??3)-(priorityRank[b.priority]??3)||String(b.firstSeenAt).localeCompare(String(a.firstSeenAt)));
+ const selected=pending.find(r=>r.card.id===params.get('item'))||pending[0];
  const opened=tab==='done'?linked:undefined;
  // 观察中: the latest analysis's changes the AI advised watching (not already an opportunity or a task), biggest first, as on 洞察.
  const judged=state?[...(state.insights?.evidence.signals?.items||[])].sort((a,b)=>b.strength-a.strength).map(s=>({s,status:statusOf(s,state,tasks)})):[];
@@ -70,20 +70,28 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
    setNotice(handOffResult(row,r,pb?.kind));}
   catch{setError(() => ($t('strategy.notHandOffOpportunityKept')));}finally{setBusy(false);}}
  function openRow(r:Item){if(r.state==='pending')go({tab:'pending',item:r.card.id});else if(r.state==='task'&&r.taskId)navigate(`/actions/${r.taskId}`);else go({item:r.card.id});}
- const brief=(r:Item,marked=false)=><Brief key={r.card.id} row={r} busy={busy} marked={marked} onGive={()=>void give(r)} onIgnore={()=>void decide(r,'ignored')} onRestore={()=>void decide(r,'pending')} onOpen={()=>navigate(`/actions/${r.taskId}`)}/>;
+ const detail=(r:Item)=><Detail key={r.card.id} row={r} busy={busy} onGive={()=>void give(r)} onIgnore={()=>void decide(r,'ignored')} onRestore={()=>void decide(r,'pending')} onOpen={()=>navigate(`/actions/${r.taskId}`)}/>;
  return <PageContainer className="nr-page"><PageHeader title={$t('strategy.opportunitiesTitle',undefined)} description={$t('strategy.thingsWorthDoingWhatChanged')}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}
   <HandOffNotice result={notice}/>
   <nav className="nr-tabs" aria-label={$t('strategy.opportunityCategory')}>{getTabs().map(([k,v])=><button key={k} aria-pressed={tab===k} onClick={()=>go({tab:k,item:''})}>{v}{state?` ${k==='pending'?pending.length:k==='watch'?watching.length:rows.length-pending.length+settled.length}`:''}</button>)}</nav>
   {!state?<p role="status" className="text-sm text-muted-foreground">{$t('strategy.loadingOpportunities')}</p>:tab==='done'?<DoneTable rows={rows} changes={settled} busy={busy} onOpen={openRow} onOpenChange={setWatchKey} onRestore={r=>void decide(r,'pending')} onRestoreChange={k=>void decideWatch(k,'pending')}/>
   :tab==='watch'?<WatchList items={watching} ended={ended} rows={rows} busy={busy} onOpen={setWatchKey} onIgnore={k=>void decideWatch(k,'ignored')} onRestore={k=>void decideWatch(k,'pending')} onOpportunity={id=>go({tab:'pending',item:id})}/>
-  :<div className="flex flex-col gap-3">
-   {pending.map(r=>brief(r,r.card.id===params.get('item')))}
-   {!pending.length&&<p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{$t('strategy.noNewOpportunitiesTodayWhen')}</p>}
+  :<div className="grid items-start gap-4 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
+   <div className="flex flex-col gap-2">
+    {pending.map(r=>{const c=leadChip(r);return <button key={r.card.id} type="button" aria-current={selected?.card.id===r.card.id} onClick={()=>go({item:r.card.id})}
+     className="flex flex-col gap-1.5 rounded-lg border bg-card p-3 text-left text-card-foreground transition-colors hover:border-ring aria-[current=true]:border-primary aria-[current=true]:ring-1 aria-[current=true]:ring-primary">
+     <span className="line-clamp-2 text-sm font-medium"><No row={r}/>{r.card.no?' ':''}{r.card.title}</span>
+     <span className="line-clamp-2 text-xs text-muted-foreground">{reasonLine(r)}</span>
+     <span className="flex flex-wrap items-center gap-1">{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(r).map(s=><Tag key={s} tone="grey">{s}</Tag>)}{r.card.change==='new'&&<Tag tone="blue">{$t('strategy.new')}</Tag>}</span>
+    </button>;})}
+    {!pending.length&&<p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{$t('strategy.noNewOpportunitiesTodayWhen')}</p>}
+   </div>
+   {selected&&detail(selected)}
   </div>}
   {watched&&project&&state?<ChangeDetail signal={watched.s} status={watched.status} projectId={project.id} verdicts={verdictsOf(state,watched.s.key)} watch={watchOf(state,watched.s.key)} today={state.insights?.generatedAt} judging={busy} onDecide={status=>void decideWatch(watched.s.key,status)} onClose={()=>setWatchKey(undefined)} onHandOff={r=>{refreshNavBadges();setNotice(r);void request<StrategyState>(project.id,'state').then(setState).catch(()=>undefined);}}/>:null}
   <Sheet open={Boolean(opened)} onOpenChange={o=>{if(!o)go({item:''});}}>
-   <SheetContent className="w-full overflow-y-auto sm:max-w-lg" aria-describedby={undefined}><SheetHeader className="sr-only"><SheetTitle>{$t('strategy.opportunityDetails')}</SheetTitle></SheetHeader><div className="p-4 pt-12">{opened&&brief(opened)}</div></SheetContent>
+   <SheetContent className="w-full overflow-y-auto sm:max-w-lg" aria-describedby={undefined}><SheetHeader className="sr-only"><SheetTitle>{$t('strategy.opportunityDetails')}</SheetTitle></SheetHeader><div className="p-4 pt-12">{opened&&detail(opened)}</div></SheetContent>
   </Sheet>
  </PageContainer>;
 }
@@ -163,38 +171,34 @@ function DoneTable({rows,changes,busy,onOpen,onOpenChange,onRestore,onRestoreCha
   :<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{key||dest?$t('strategy.nothingMatches'):$t('strategy.nothingHandledYetOpportunitiesHanded')}</p>}
  </div>;
 }
-// One opportunity read as a brief (2026-10-20 user decision: this page says what it is and what to do; who does it
-// and with which 做法 is settled on the task after 交给 Agent): what happened, why it is worth doing, what to do, then
-// where, for whom and to what end, with the AI's priority, effort and confidence as tags and its limits behind ⓘ.
-// A pending one is handed off or ignored, a handed-off one opens its task, an archived one is restored.
+// One opportunity, read-only (2026-10-20/21 user decisions: this page says what it is and what to do; who does it and
+// with which 做法 is settled on the task after 交给 Agent; the list stays on the left so every opportunity is in sight):
+// what happened, why it is worth doing, what to do and where, with the AI's priority, effort and confidence as tags and
+// its limits behind ⓘ. A pending one is handed off or ignored, a handed-off one opens its task, an archived one is restored.
 const PRIORITY:Record<string,[Tone,()=>string]>={high:['red',()=>$t('strategy.priorityHigh')],medium:['amber',()=>$t('strategy.priorityMedium')],low:['grey',()=>$t('strategy.priorityLow')]};
 const EFFORT:Record<string,()=>string>={small:()=>$t('strategy.effortSmall'),medium:()=>$t('strategy.effortMedium'),large:()=>$t('strategy.effortLarge')};
 const CONFIDENCE:Record<string,[Tone,()=>string]>={supported:['green',()=>$t('strategy.confidenceSupported')],verify:['amber',()=>$t('strategy.confidenceVerify')]};
-function Brief({row,busy,marked,onGive,onIgnore,onRestore,onOpen}:{row:Item;busy:boolean;marked:boolean;onGive:()=>void;onIgnore:()=>void;onRestore:()=>void;onOpen:()=>void}){
+function Block({title,children}:{title:string;children:ReactNode}){return <div className="flex flex-col gap-1.5"><h3 className="text-xs font-medium text-muted-foreground">{title}</h3><div className="text-sm leading-relaxed">{children}</div></div>;}
+function Detail({row,busy,onGive,onIgnore,onRestore,onOpen}:{row:Item;busy:boolean;onGive:()=>void;onIgnore:()=>void;onRestore:()=>void;onOpen:()=>void}){
  const card=row.card,c=leadChip(row),link=[...citedSignals(row)].sort((a,b)=>b.strength-a.strength).find(s=>s.url);
  const priority=PRIORITY[row.priority],effort=EFFORT[card.effort||''],confidence=CONFIDENCE[card.confidence||''];
- const happened=card.observation||card.reason||card.evidenceText,sources=sourcesOf(row);
- const facts=[[$t('strategy.briefWhere'),card.target],[$t('strategy.briefAudience'),card.audience],[$t('strategy.briefGoal'),card.objective]].filter(([,v])=>v?.trim());
- const ref=useRef<HTMLElement>(null);
- useEffect(()=>{if(marked)ref.current?.scrollIntoView?.({block:'center'});},[marked]);
- const lines:[string,ReactNode][]=[];
- if(happened)lines.push([$t('strategy.briefWhatHappened'),<>{c&&<Tag tone={c.tone} className="mr-1.5 align-middle">{c.text}</Tag>}{happened}{sources.length>0&&<span className="ml-1.5 text-xs text-muted-foreground">{sources.join(' · ')}</span>}{link?.url&&<a className="ml-1 inline-flex align-middle text-muted-foreground hover:text-foreground" href={link.url} target="_blank" rel="noreferrer" aria-label={$t('strategy.openPage',{0:titleOf(link)})}><ExternalLinkIcon className="size-3.5"/></a>}</>]);
- if(card.meaning)lines.push([$t('strategy.briefWhyWorthDoing'),<>{card.meaning}{card.priorityReason&&<span className="block text-xs text-muted-foreground">{card.priorityReason}</span>}</>]);
- if(card.suggestion)lines.push([$t('strategy.briefWhatToDo'),card.suggestion]);
- return <article ref={ref} data-opportunity-id={card.id} data-marked={marked||undefined} aria-label={card.title} className={cn('flex flex-col gap-3 rounded-lg border bg-card p-4 text-card-foreground',marked&&'border-primary ring-1 ring-primary')}>
-  {card.resultSource&&<ResultSourcePanel source={card.resultSource}/>}
-  <header className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
-   <h2 className="flex flex-wrap items-baseline gap-2 text-base font-semibold leading-snug"><No row={row}/><span>{card.title}</span>{row.state==='pending'&&card.change==='new'&&<Tag tone="blue">{$t('strategy.new')}</Tag>}</h2>
-   <span className="flex flex-wrap gap-1">{priority&&<Tag tone={priority[0]}>{priority[1]()}</Tag>}{effort&&<Tag tone="grey">{effort()}</Tag>}{confidence&&<Tag tone={confidence[0]}>{confidence[1]()}</Tag>}</span>
-  </header>
-  {lines.length>0&&<dl className="grid gap-x-4 gap-y-2 text-sm leading-relaxed sm:grid-cols-[6rem_minmax(0,1fr)]">{lines.map(([k,v])=><div key={k} className="contents"><dt className="text-xs text-muted-foreground sm:pt-0.5">{k}</dt><dd>{v}</dd></div>)}</dl>}
-  {facts.length>0&&<p className="text-xs text-muted-foreground">{facts.map(([k,v])=>$t('strategy.briefFact',{0:k,1:v})).join(' · ')}</p>}
-  <footer className="flex flex-wrap items-center gap-2 border-t pt-3">
+ const happened=card.observation||card.reason||card.evidenceText;
+ return <article data-opportunity-id={card.id} aria-label={card.title} className="flex flex-col gap-4 rounded-lg border bg-card p-4 text-card-foreground">
+  <div className="flex flex-col gap-1.5">
+   {card.resultSource&&<ResultSourcePanel source={card.resultSource}/>}
+   <div className="flex flex-wrap items-center gap-1">{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(row).map(s=><Tag key={s} tone="grey">{s}</Tag>)}{priority&&<Tag tone={priority[0]}>{priority[1]()}</Tag>}{effort&&<Tag tone="grey">{effort()}</Tag>}{confidence&&<Tag tone={confidence[0]}>{confidence[1]()}</Tag>}</div>
+   <h2 className="flex flex-wrap items-baseline gap-2 text-lg font-semibold leading-snug"><No row={row}/><span>{card.title}</span></h2>
+   <p className="nr-footnote">{card.resultSource?$t('results.manualConfirmed',{0:day(row.firstSeenAt)}):$tj('strategy.firstFoundValue',{0:day(row.firstSeenAt),1:row.state==='pending'?$t('strategy.analysis',{0:day(row.batch.generatedAt)}):row.state==='task'?$t('strategy.handedOffAgentValue',{0:row.taskNo?$t('strategy.task',{0:taskNo(row.taskNo)}):''}):row.reason==='ignored'?$t('strategy.dismissedLaterAnalysesCannotSuggest'):row.reason==='replaced'?$t('strategy.expiredRaisedAgain'):$t('strategy.expiredLatestAnalysisNotSuggest',{0:opportunityKeepDays})})}</p>
+  </div>
+  {happened&&<Block title={$t('strategy.briefWhatHappened')}>{happened}{link?.url&&<a className="ml-1 inline-flex align-middle text-muted-foreground hover:text-foreground" href={link.url} target="_blank" rel="noreferrer" aria-label={$t('strategy.openPage',{0:titleOf(link)})}><ExternalLinkIcon className="size-3.5"/></a>}</Block>}
+  {card.meaning&&<Block title={$t('strategy.briefWhyWorthDoing')}>{card.meaning}{card.priorityReason&&<span className="mt-1 block text-xs text-muted-foreground">{card.priorityReason}</span>}</Block>}
+  {card.suggestion&&<Block title={$t('strategy.briefWhatToDo')}>{card.suggestion}</Block>}
+  {card.target?.trim()&&<Block title={$t('strategy.briefWhere')}><span className="break-words">{card.target}</span></Block>}
+  <div className="flex flex-wrap items-center gap-2 border-t pt-3">
    {row.state==='pending'&&<><Button disabled={busy} onClick={onGive}>{handOffLabel()}</Button><Button variant="ghost" disabled={busy} onClick={onIgnore}>{$t('common.ignore')}</Button></>}
    {row.state==='task'&&<Button variant="outline" onClick={onOpen}>{$tj('strategy.openTask',{0:row.taskNo?` ${taskNo(row.taskNo)}`:''})}<ArrowRightIcon/></Button>}
    {row.state==='archived'&&<Button variant="outline" disabled={busy} onClick={onRestore}>{$t('strategy.restorePending')}</Button>}
-   <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">{card.resultSource?$t('results.manualConfirmed',{0:day(row.firstSeenAt)}):$tj('strategy.firstFoundValue',{0:day(row.firstSeenAt),1:row.state==='pending'?$t('strategy.analysis',{0:day(row.batch.generatedAt)}):row.state==='task'?$t('strategy.handedOffAgentValue',{0:row.taskNo?$t('strategy.task',{0:taskNo(row.taskNo)}):''}):row.reason==='ignored'?$t('strategy.dismissedLaterAnalysesCannotSuggest'):row.reason==='replaced'?$t('strategy.expiredRaisedAgain'):$t('strategy.expiredLatestAnalysisNotSuggest',{0:opportunityKeepDays})})}
-    {card.limitation&&<InfoTip label={$t('strategy.briefLimitation')} side="left"><p>{card.limitation}</p></InfoTip>}</span>
-  </footer>
+   {card.limitation&&<span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">{$t('strategy.briefLimitation')}<InfoTip label={$t('strategy.briefLimitation')} side="left"><p>{card.limitation}</p></InfoTip></span>}
+  </div>
  </article>;
 }
