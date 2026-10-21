@@ -31,10 +31,7 @@ async function fixture(enabled = true, signedIn = true) {
   );
   router.onError((error, context) =>
     error instanceof ApiError
-      ? context.json(
-          { error: error.message, reason: (error as any).reason },
-          409,
-        )
+      ? context.json({ error: error.message, reason: error.reason }, 409)
       : context.json({ error: error.message }, 500),
   );
   const external = vi.fn((context) => context.json({ live: true }));
@@ -54,7 +51,6 @@ describe('dedicated mock deployment external execution guard', () => {
     '/mail/accounts',
     '/mail/drafts/1/send',
     '/mail/accounts/1/sync',
-    '/notifications/testSends',
     '/notifications/deliveries/1/retry',
   ])(
     'blocks %s before plugin code can perform an external action',
@@ -104,8 +100,11 @@ describe('dedicated mock deployment external execution guard', () => {
   it('requires authentication before disclosing mock execution policy', async () => {
     const f = await fixture(true, false);
     expect(
-      (await f.router.request('/notifications/testSends', { method: 'POST' }))
-        .status,
+      (
+        await f.router.request('/notifications/deliveries/1/retry', {
+          method: 'POST',
+        })
+      ).status,
     ).toBe(401);
     expect(f.external).not.toHaveBeenCalled();
   });
@@ -138,7 +137,7 @@ describe('dedicated mock deployment external execution guard', () => {
     const real = await fixture(false);
     expect(
       (
-        await real.router.request('/notifications/testSends', {
+        await real.router.request('/notifications/deliveries/1/retry', {
           method: 'POST',
         })
       ).status,
@@ -153,17 +152,12 @@ describe('dedicated mock deployment external execution guard', () => {
       ).status,
     ).toBe(200);
   });
-  it('blocks notification test sends even with a valid test header, while preserving inbox actions and read-only logs', async () => {
+  it('blocks notification mutations while preserving inbox actions and read-only logs', async () => {
     const mock = await fixture();
     expect(
       (
-        await mock.router.request('/notifications/testSends', {
+        await mock.router.request('/notifications/deliveries/1/retry', {
           method: 'POST',
-          headers: { 'x-nocobase-notification-test': '1' },
-          body: JSON.stringify({
-            channel: 'smtp',
-            values: { to: 'someone@example.com' },
-          }),
         })
       ).status,
     ).toBe(409);
@@ -179,7 +173,7 @@ describe('dedicated mock deployment external execution guard', () => {
     const anonymous = await fixture(true, false);
     expect(
       (
-        await anonymous.router.request('/notifications/testSends', {
+        await anonymous.router.request('/notifications/deliveries/1/retry', {
           method: 'POST',
         })
       ).status,
@@ -187,7 +181,7 @@ describe('dedicated mock deployment external execution guard', () => {
     const real = await fixture(false);
     expect(
       (
-        await real.router.request('/notifications/testSends', {
+        await real.router.request('/notifications/deliveries/1/retry', {
           method: 'POST',
         })
       ).status,
