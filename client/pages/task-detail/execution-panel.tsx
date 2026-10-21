@@ -280,13 +280,20 @@ export function TaskExecutionPanel({
               <Skeleton className='h-40 w-full' />
             </div>
           )}
-          {current?.errorDetail && (
+          {current?.errorDetail ? (
             <Alert variant='destructive'>
               <AlertDescription className='whitespace-pre-wrap break-words'>
                 {$legacyText(current.errorDetail)}
               </AlertDescription>
             </Alert>
-          )}
+          ) : execution?.run.failureDetail ? (
+            // What the tool itself said when the run stopped ("Not logged in · Please run /login"), as it said it.
+            <Alert variant='destructive'>
+              <AlertDescription className='whitespace-pre-wrap break-words'>
+                {execution.run.failureDetail}
+              </AlertDescription>
+            </Alert>
+          ) : null}
           {run && execution && (
             <>
               <RunHeader
