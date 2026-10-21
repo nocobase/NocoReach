@@ -91,3 +91,18 @@ it('does not reach the network if reading the project marker fails', async () =>
   ).rejects.toThrow('Database unavailable');
   expect(liveFetch).not.toHaveBeenCalled();
 });
+
+it('keeps unmarked visitor projects offline in a dedicated demo environment', async () => {
+  const { network, projects } = setup();
+  projects.configuration = {
+    enabled: true,
+    invokeMock: async () => {
+      throw new Error('No fixture');
+    },
+  } as never;
+  await expect(
+    network.fetch('site', 'https://own.example/', {}, '2'),
+  ).rejects.toThrow();
+  expect(liveFetch).not.toHaveBeenCalled();
+  expect(liveRequest).not.toHaveBeenCalled();
+});

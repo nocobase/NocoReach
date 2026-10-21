@@ -42,7 +42,10 @@ function fixture(enabled = true) {
   const tasks = {
     p: {
       demoProjects: { recognize: async () => true },
-      demoConfiguration: { withFreshPolicy: (fn: () => Promise<void>) => fn() },
+      demoConfiguration: {
+        enabled: true,
+        withFreshPolicy: (fn: () => Promise<void>) => fn(),
+      },
       demoAgent: {
         id: 'nocoreach.runner',
         title: 'Demo Agent',

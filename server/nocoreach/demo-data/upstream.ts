@@ -31,10 +31,11 @@ export class DemoProjects implements DemoUpstream {
 
   /** Unknown projects are checked in storage before any I/O, including imports made by another process. */
   async recognize(id: string): Promise<boolean> {
-    if (this.has(id)) return true;
+    if (this.projects.has(String(id)) || this.retired.has(String(id)))
+      return true;
     const project = await this.lookup?.(String(id));
     if (project) this.add(project);
-    return this.has(id);
+    return this.has(id) || this.configuration?.enabled === true;
   }
 
   replace(projects: readonly DemoProject[]): void {
@@ -63,7 +64,11 @@ export class DemoProjects implements DemoUpstream {
   }
 
   has(id: string): boolean {
-    return this.projects.has(String(id)) || this.retired.has(String(id));
+    return (
+      this.configuration?.enabled === true ||
+      this.projects.has(String(id)) ||
+      this.retired.has(String(id))
+    );
   }
 
   ids(): string[] {

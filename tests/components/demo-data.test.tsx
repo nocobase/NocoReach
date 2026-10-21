@@ -90,7 +90,6 @@ const base = (): DemoDataStatus => ({
   failure: null,
   mode: 'off',
   model: { enabled: true, service: null },
-  reset: null,
 });
 const view = () => (
   <MemoryRouter>

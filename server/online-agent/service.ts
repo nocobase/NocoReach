@@ -43,6 +43,8 @@ export class OnlineAgentService {
       signal: AbortSignal,
     ) => Promise<ChatContext>,
     private readonly onError: (error: unknown) => void = () => {},
+    private readonly environmentModel: () => OnlineModel | undefined = () =>
+      undefined,
   ) {
     this.records = new OnlineRecords(database);
   }
@@ -52,7 +54,9 @@ export class OnlineAgentService {
     context?: DatabaseConnection,
   ): Promise<OnlineModel> {
     const selected =
-      model ?? (await this.models.services.defaults(context)).effectiveChat;
+      this.environmentModel() ??
+      model ??
+      (await this.models.services.defaults(context)).effectiveChat;
     if (!selected) throw new OnlineAgentError('modelRequired');
     // Creation reads defaults in its transaction; provider validation happens before worker I/O.
     if (!context) {
@@ -355,7 +359,7 @@ export class OnlineAgentService {
     try {
       const agent = await this.definition(run.agentId);
       if (!agent.enabled) throw new OnlineAgentError('agentDisabled');
-      await this.resolveModel(run.model);
+      const model = await this.resolveModel(run.model);
       const context = await abortable(
         this.prepare(run, abort.signal),
         abort.signal,
@@ -370,7 +374,7 @@ export class OnlineAgentService {
       authorize = context.authorize;
       output = await abortable(
         executeChat(this.models.gateway, {
-          model: run.model,
+          model,
           messages: await this.messages(run),
           context,
           signal: abort.signal,

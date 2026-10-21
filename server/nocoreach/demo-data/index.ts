@@ -6,7 +6,6 @@ import type { NocoBaseDriveManager } from '@nocobase/drive';
 
 import { demoAnswers } from './answers.js';
 import { clearAllBusinessData } from './clear-all.js';
-import { clearProjects } from './clear.js';
 import { DEMO_LANGUAGES, demoContent } from './content.js';
 import type { Connections } from '../plugin.js';
 import type { DemoHost } from './host.js';
@@ -76,8 +75,7 @@ export function createNocoReachDemo(
       language === 'en-US' ? 'America/Los_Angeles' : 'Asia/Shanghai',
     accounts: demoAccounts,
     steps: (language) => demoSteps(host, language),
-    clear: async (context) => clearProjects(host, await ids(context)),
-    clearAll: async () => clearAllBusinessData(host, drive, clearCache),
+    clear: async () => clearAllBusinessData(host, drive, clearCache),
     counts: async (context) => {
       const projects = await ids(context);
       const content = demoContent(context.language ?? 'zh-CN');

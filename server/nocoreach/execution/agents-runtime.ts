@@ -376,10 +376,10 @@ export class TaskAgentsRuntime {
       return fail('Agent 已领取这一步，请等待结果或先停止', 409);
   }
   async enqueue(run: Run, tx: LegacyTransaction, taskAgentId?: string) {
-    if (await this.tasks.p.demoProjects?.recognize(String(run.projectId))) {
+    if (this.tasks.p.demoConfiguration?.enabled) {
       if (!['plan', 'build', 'article'].includes(run.mode || '') || !this.tasks.p.demoAgent)
         throw new TaskAgentUnavailableError(systemMessageText('demoData.runnerUnavailable'));
-      if (!(await this.tasks.p.demoAgent.prepare(run))) throw new TaskAgentUnavailableError(systemMessageText('demoData.runnerUnavailable'));
+      if (!(await this.tasks.p.demoAgent.prepare())) throw new TaskAgentUnavailableError(systemMessageText('demoData.runnerUnavailable'));
       run.demoAgentId = this.tasks.p.demoAgent.id;
       run.agentName = this.tasks.p.demoAgent.title;
       run.simulated = true;

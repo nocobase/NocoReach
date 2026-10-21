@@ -38,7 +38,7 @@ export class ModelPreparationError extends Error {
 /** Application text generation goes through Agents: model credentials and usage have one owner. */
 export class OnlineProvider {
   constructor(
-    private readonly p: { agents: Agents; mock?: MockEngine; demoModels?: DemoModels; demoData?: DemoDataService; network?: { inDemoProject(): Promise<boolean> } },
+    private readonly p: { agents: Agents; mock?: MockEngine; demoModels?: DemoModels; demoData?: DemoDataService; demoConfiguration?: { readonly enabled: boolean }; network?: { inDemoProject(): Promise<boolean> } },
   ) {}
   async prepare(connection?: DatabaseConnection) {
     if (this.p.mock?.enabled) {
@@ -64,7 +64,7 @@ export class OnlineProvider {
     if (this.p.mock?.enabled)
       return simulateAi(this.p.mock, operation, prompt, signal);
     // A demo project must not reach a real model even if an administrator changed the default model.
-    if (await this.p.network?.inDemoProject()) {
+    if (this.p.demoConfiguration?.enabled || await this.p.network?.inDemoProject()) {
       if (!this.p.demoModels) throw new ModelPreparationError('precondition', 'Demo model adapter unavailable');
       return this.p.demoModels.complete({ system, prompt, tag: operation });
     }

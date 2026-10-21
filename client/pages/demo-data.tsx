@@ -579,9 +579,6 @@ export default function DemoDataPage({
               ) : null}
               <li>{$t('demoData.noteRunner')}</li>
               <li>{$t('demoData.noteClear')}</li>
-              {status.reset ? (
-                <li>{$t('demoData.noteSchedule', { 0: status.reset.cron })}</li>
-              ) : null}
             </ul>
           </Section>
         </div>

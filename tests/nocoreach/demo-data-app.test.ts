@@ -12,6 +12,7 @@ import { demoDataToken } from '@nocobase/app-plugin-demo-mode/server/tokens';
 import { userManagementServiceToken } from '@nocobase/app-plugin-users/server/tokens';
 import { driveManagerToken } from '@nocobase/app-server/drive';
 import { createStandaloneServer } from '../../server/standalone';
+import { onlineAgentsToken } from '../../server/providers/online-agents';
 import { nocoReachToken } from '../../server/providers/nocoreach';
 import { PROJECT_VARIABLES } from '../../server/nocoreach/demo-data/clear';
 import { projectWork } from '../../server/nocoreach/execution/model';
@@ -62,6 +63,13 @@ describe('read-only demo conversations', () => {
     const runtime = testApp.application.container.resolve(nocoReachToken);
     await runtime.ready;
     const demo = testApp.application.container.resolve(demoDataToken);
+    const online = testApp.application.container.resolve(onlineAgentsToken);
+    expect(
+      await online.resolveModel({
+        modelService: 'real-service',
+        model: 'real-model',
+      }),
+    ).toEqual({ modelService: demo.models.serviceName, model: 'demo-chat' });
     const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
     expect(
       (
@@ -550,17 +558,8 @@ test('imports the demo through the API and clears all business data while preser
     key: 'test-signal',
     verdict: 'skip',
   });
-  const chosen = await runtime.plugin.agents.models.services.create({
-    title: 'An administrator’s later choice',
-    provider: 'openai-compatible',
-    baseUrl: 'https://never-called.example/v1',
-    apiKey: 'test-only',
-    models: [{ value: 'own', label: 'Own model' }],
-  });
-  await runtime.plugin.agents.models.services.setDefaultChat(
-    { modelService: chosen.name, model: 'own' },
-    null,
-  );
+  const environmentModel = (await demo.status()).model.service;
+  expect(environmentModel).toBeTruthy();
 
   // Visitor-created project content must go too; a global snapshot whose skill ID matches the project must stay.
   const visitorKey = `nr-task-op:${main}:visitor-task:request`;
@@ -810,13 +809,13 @@ test('imports the demo through the API and clears all business data while preser
   expect(people.every((person) => person.disabledAt)).toBe(true);
   expect(
     (await runtime.plugin.agents.models.services.list()).map((s) => s.title),
-  ).not.toContain('Demo model');
+  ).toContain('Demo model');
   expect((await demo.status()).present).toBe(false);
   expect(
     (await runtime.plugin.agents.models.services.defaults()).chat,
   ).toMatchObject({
-    modelService: chosen.name,
-    model: 'own',
+    modelService: environmentModel,
+    model: 'demo-chat',
   });
 
   // Imported again, in English: the disabled accounts come back, under the English story's names.
@@ -860,6 +859,7 @@ test('imports the demo through the API and clears all business data while preser
     language: 'zh-CN',
     failure: null,
   });
+  expect(reset.model.service).toBe(environmentModel);
   await demo.clear(adminId);
   expect(((await runtime.plugin.projects.all()) as unknown[]).length).toBe(0);
 });
@@ -911,9 +911,7 @@ describe('existing account conflicts', () => {
       email: 'xulan@nocobase.example',
       password: 'original-password-123',
     });
-    expect(await runtime.plugin.projects.all()).toMatchObject([
-      { id: 41, name: 'Existing project' },
-    ]);
+    expect(await runtime.plugin.projects.all()).toEqual([]);
   });
 });
 

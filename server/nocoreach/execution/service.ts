@@ -202,7 +202,7 @@ export class TaskService {
     w.stageIndex = index; w.boardState = undefined;
     if (index >= stages.length) { w.stage = 'done'; return; }
     if (stages[index].kind === 'observe') { w.observeFrom = at; w.stage = 'done'; return; }
-    if (stages[index].kind === 'agent' && (await this.p.demoAgent?.matches({ projectId: project }) || ((await this.agents.doc(project, tx)).repo || withoutRepo(w, stages[index]) || articleTask(w)))) await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
+    if (stages[index].kind === 'agent' && (this.p.demoConfiguration?.enabled || ((await this.agents.doc(project, tx)).repo || withoutRepo(w, stages[index]) || articleTask(w)))) await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
     // A change you made yourself has no PR to merge: it waits for you to say it is live.
     if (stages[index].kind === 'release' && (this.simulated || task.evidence?.simulated)) {
       this.simulateRelease(w, actor, at);
@@ -216,7 +216,7 @@ export class TaskService {
   // the repository runs without one (repo null): the Agent works from the material and public pages only.
   private async queueAgentRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
     const index = w.stageIndex ?? 0, stage = w.flow!.stages[index], repo = (await this.agents.doc(project, tx)).repo || null;
-    if (!repo && !withoutRepo(w, stage) && !articleTask(w) && !(await this.p.demoAgent?.matches({ projectId: project }))) return fail(systemMessageText('taskExecution.connectRepositoryUnderDataSources'), 409);
+    if (!repo && !withoutRepo(w, stage) && !articleTask(w) && !(this.p.demoConfiguration?.enabled)) return fail(systemMessageText('taskExecution.connectRepositoryUnderDataSources'), 409);
     if (!w.humanOwnerId) return fail(systemMessageText('taskExecution.assignOwnerFirst'), 409);
     if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail(systemMessageText('taskExecution.runInProgress'), 409);
     const context = await this.p.project(project);

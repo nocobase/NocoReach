@@ -38,9 +38,9 @@ export class AgentStore {
   async status(project: string, taskAgentId?: string, actor?: string) {
     const d = await this.doc(project), agents = this.s.p.agents;
     const proxy = this.s.p.demoAgent;
-    if (proxy && await proxy.matches({ projectId: project })) {
+    if (proxy && this.s.p.demoConfiguration?.enabled) {
       let online = false;
-      try { online = await proxy.prepare({ projectId: project }); } catch { /* Disabled simulations never expose real runners. */ }
+      try { online = await proxy.prepare(); } catch { /* Disabled simulations never expose real runners. */ }
       return { ...d, agentId: proxy.id, defaultAgentId: proxy.id, online,
         options: online ? [{ id: proxy.id, name: proxy.title, type: 'demo', online: true, busy: 0 }] : [] };
     }
@@ -55,7 +55,7 @@ export class AgentStore {
   }
   async taskAgent(agentId: unknown, actor: string, tx: LegacyTransaction, project?: string) {
     const proxy = this.s.p.demoAgent;
-    if (project && proxy && agentId === proxy.id && await proxy.prepare({ projectId: project }))
+    if (project && proxy && agentId === proxy.id && await proxy.prepare())
       return { id: proxy.id, name: proxy.title, type: 'demo' as const };
     if (typeof agentId !== 'string' || !agentId.trim() || agentId.length > 100) return fail(systemMessageText('projectAi.selectTaskAgent'));
     const agents = this.s.p.agents;

@@ -4,12 +4,14 @@
 
 ## Unreleased — Demo data
 
+- Adopt the simplified Demo Mode plugin: environment-owned models, one business cleanup contract, environment-wide Demo Agent routing and one managed reset schedule. Preserve the existing model binding through an upgrade migration and force online chat to the environment model.
+
 - Add permission-aware demo management with revision-safe daily scheduling, explicit table/operation/scope exceptions, and independent model/tool/Runner adapter switches.
 - Make demo freshness reproducible by date and route demo analysis through local simulation without real Runner dispatch or publication.
 
 - Deliver the demo plugin's published Skill through local package synchronization, including application dataset adaptation, reproducible freshness, cleanup boundaries, and model/tool/Runner simulation guidance.
 - Allow administrator imports, resets and clears in read-only demo mode while preserving authorization and concurrent request write protection.
-- Restrict full-instance clear/reset to enabled demo mode across HTTP, CLI and scheduled operations. Clear all project business data, including existing projects, orphan records, attachments and conversations, while preserving accounts and system configuration. Keep failed-import rollback scoped to its own writes.
+- Restrict full-instance clear/reset to enabled demo mode across HTTP, CLI and scheduled operations. Clear all project business data, including existing projects, orphan records, attachments and conversations, while preserving accounts and system configuration. Use the same business cleanup contract after failed imports.
 
 - Add Settings › Demo data for administrators: import a fictional demo (the NocoBase marketing team's two projects with connected sources, tasks in every state, results, opportunities and knowledge, plus five sign-ins with different roles and projects) in Chinese or English, then reset or clear it. Clearing removes all project business data and disables the imported demo accounts; administrator accounts and system configuration are retained.
 - Built on the merged `@nocobase/app-plugin-demo-mode` (demo data and read-only mode), vendored in `app-plugins/demo-mode` until it is published. The same plugin is meant to carry NocoCRM's and NocoITAM's demos.

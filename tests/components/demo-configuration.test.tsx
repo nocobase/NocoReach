@@ -38,7 +38,6 @@ const state = vi.hoisted(() => ({
         defaultEnabled: true,
       },
     ],
-    legacySchedule: null,
     nextRun: null,
   },
   api: { request: vi.fn() },

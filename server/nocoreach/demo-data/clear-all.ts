@@ -32,7 +32,7 @@ const EXECUTION_TABLES = [
 
 /**
  * Explicit demo-only instance cleanup. The lifecycle service checks demo mode and owns its durable lease.
- * Failed imports use clearProjects instead; they must never enter this function.
+ * The same cleanup handles failed/interrupted imports; model and system configuration are retained.
  */
 export async function clearAllBusinessData(
   host: DemoHost,

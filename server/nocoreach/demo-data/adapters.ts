@@ -141,10 +141,7 @@ export function registerDemoAdapters(
   connections.demoAgent = configuration.registerAgent({
     id: 'nocoreach.runner',
     title: 'NocoReach Demo Agent',
-    scope: 'demo-projects',
     defaultEnabled: true,
-    matches: async (input: DemoAgentInput) =>
-      Boolean((await demoProjectsOf(host, String(input.projectId))).length),
     execute: (input: DemoAgentInput) =>
       executeDemoAgent(input, async (projectId, url) => {
         // The demo site's own page, from the fixtures the demo projects' requests are answered with.

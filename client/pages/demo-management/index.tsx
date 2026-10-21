@@ -311,7 +311,6 @@ function Editor<S extends Section>({
         json: {
           expectedRevision: baseline.revision,
           value,
-          ...(section === 'schedule' ? { replaceLegacy: true } : {}),
         },
       });
       if (!mountedRef.current) return;
@@ -668,12 +667,6 @@ export default function DemoManagementPage() {
                 >
                   {(value, change, disabled, fieldError) => (
                     <>
-                      {view.legacySchedule ? (
-                        <p className='break-words text-sm text-muted-foreground'>
-                          {t('legacy')}: {view.legacySchedule.cron} (
-                          {view.legacySchedule.timezone ?? 'UTC'})
-                        </p>
-                      ) : null}
                       <Label>
                         <Checkbox
                           checked={value.enabled}
