@@ -2,7 +2,7 @@ import { resolveAppBase } from '@nocobase/app-client';
 import type { ComponentProps, ReactElement } from 'react';
 import { Link, useInRouterContext } from 'react-router';
 
-/** Only task detail URLs inside this deployment use application navigation. */
+/** Only task details and opportunities inside this deployment use application navigation. */
 function applicationPath(href: string | undefined): string | null {
   if (!href || typeof window === 'undefined') return null;
   try {
@@ -13,7 +13,8 @@ function applicationPath(href: string | undefined): string | null {
     if (url.pathname !== base && !url.pathname.startsWith(`${base}/`))
       return null;
     const path = url.pathname.slice(base.length) || '/';
-    if (!/^\/actions\/[1-9]\d{0,15}\/?$/.test(path)) return null;
+    if (!/^\/(actions\/[1-9]\d{0,15}|opportunities)\/?$/.test(path))
+      return null;
     return `${path}${url.search}${url.hash}`;
   } catch {
     return null;
