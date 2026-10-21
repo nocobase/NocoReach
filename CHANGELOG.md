@@ -2,6 +2,8 @@
 
 ## Unreleased — Ten interface languages
 
+- Compose keyword hand-off titles as complete localized sentences in all ten languages and clarify that Japanese sync coverage reports the latest collected day. Update stale CI assertions for schedule copy and the fixed community reply protocol.
+
 - Keep the indexing status grammatical for a single-page site, and preserve invalid external numeric character references instead of throwing while collecting or displaying text.
 
 - Clarify that more-action menu labels refer to a task or keyword, and that the Japanese chat timestamp reports data collection rather than user browsing.
