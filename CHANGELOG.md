@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Settings › Network at full width
+
+- Settings › Network no longer caps its content at 48rem: the proxy card and the data source table use the page's width, as the other pages do, instead of leaving the right side empty.
+
 ## Unreleased — Ignored opportunities stay off Insights
 
 - Keep the changes behind an ignored opportunity out of Insights › Today's changes › To do, whichever analysis raised the opportunity. Opportunities ignored from an earlier analysis used to come back there as changes to act on with Hand off to agent and Ignore.

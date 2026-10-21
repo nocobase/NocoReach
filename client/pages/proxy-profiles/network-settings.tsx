@@ -88,7 +88,7 @@ export function NetworkSettingsForm() {
       />
       {access.isPending || (access.can && query.isPending) ? (
         <div
-          className='flex max-w-3xl flex-col gap-6'
+          className='flex flex-col gap-6'
           role='status'
           aria-label={$t('common.loading')}
         >
@@ -98,7 +98,8 @@ export function NetworkSettingsForm() {
       ) : !access.can ? (
         <p>{$t('accessMembers.errors.denied')}</p>
       ) : query.data ? (
-        <div className='flex max-w-3xl flex-col gap-6'>
+        // Full width like the other pages: the data source table is the page's main content (UI guideline L4).
+        <div className='flex flex-col gap-6'>
           <ProxyCard proxy={query.data.proxy} />
           <SourcesCard
             proxy={query.data.proxy}
