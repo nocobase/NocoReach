@@ -1,38 +1,39 @@
 import { useTranslation } from '@nocobase/i18n/client';
-import { Link, Outlet, useLocation, useSearchParams } from 'react-router';
+import { useCallback, useMemo, useState } from 'react';
+import { Link, Outlet, useSearchParams } from 'react-router';
+import { Info } from 'lucide-react';
 import { PageContainer } from '#components/page-container';
 import { PageHeader } from '#components/page-header';
 import { Button } from '#components/ui/button';
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-  CardFooter,
-} from '#components/ui/card';
+import { ScheduleCard } from './card.js';
 import { useScheduleResource, type ScheduleList } from './data.js';
-import {
-  RefreshButton,
-  Description,
-  Failure,
-  Loading,
-  EmptyState,
-  StateBadge,
-  ScheduleFields,
-  ScheduleToggle,
-} from './shared.js';
+import { RefreshButton, Failure, Loading, EmptyState } from './shared.js';
 
+/** What the time dialog and the run history read from the page they open over. */
+export interface SchedulesOutletContext {
+  reload: () => void;
+}
+
+// Settings › Automatic runs lists the work on the Scheduler plugin: today only the daily analysis, which runs once for
+// every project. The per-project data syncs and weekly checks run on NocoReach's own timers and are shown, with their
+// frequency, in Data sources › Data health; they are not repeated here.
 export default function SchedulesPage() {
   const { t } = useTranslation();
   const [params, setParams] = useSearchParams();
-  const location = useLocation();
   const rawPage = Number(params.get('page') || 1);
   const page = Number.isSafeInteger(rawPage) && rawPage > 0 ? rawPage : 1;
-  const { data, error, reload, refreshing, replace } =
+  const [stamp, setStamp] = useState(0);
+  const { data, error, refreshing, replace } =
     useScheduleResource<ScheduleList>(
       `scheduler/schedules?page=${page}&pageSize=20`,
+      stamp,
     );
+  // Reads the list and each card's last run again; stable, so the overlays' context does not change.
+  const refresh = useCallback(() => setStamp((current) => current + 1), []);
+  const outletContext = useMemo<SchedulesOutletContext>(
+    () => ({ reload: refresh }),
+    [refresh],
+  );
   function go(next: number) {
     setParams((current) => {
       const value = new URLSearchParams(current);
@@ -46,86 +47,45 @@ export default function SchedulesPage() {
         <PageHeader
           title={t('schedules.title')}
           description={t('schedules.description')}
-          actions={<RefreshButton busy={refreshing} refresh={reload} />}
+          actions={<RefreshButton busy={refreshing} refresh={refresh} />}
         />
-        {error ? <Failure error={error} retry={reload} /> : null}
+        {error ? <Failure error={error} retry={refresh} /> : null}
         {!data && !error ? <Loading /> : null}
         {data?.data.length === 0 ? <EmptyState /> : null}
         {data?.data.map((schedule) => (
-          <Card key={schedule.id}>
-            <CardHeader>
-              <CardTitle>
-                <Link
-                  className='hover:underline'
-                  to={{
-                    pathname: encodeURIComponent(schedule.id),
-                    search: location.search,
-                  }}
-                >
-                  {schedule.title}
-                </Link>
-              </CardTitle>
-              <CardDescription>
-                <Description text={schedule.description} />
-              </CardDescription>
-            </CardHeader>
-            <CardContent className='flex flex-col gap-4'>
-              <div>
-                <StateBadge value={schedule.enabled ? 'enabled' : 'disabled'} />
-              </div>
-              <ScheduleFields schedule={schedule} />
-            </CardContent>
-            <CardFooter className='flex-wrap justify-between gap-3'>
-              <Button
-                variant='ghost'
-                nativeButton={false}
-                render={
-                  <Link
-                    to={{
-                      pathname: encodeURIComponent(schedule.id),
-                      search: location.search,
-                    }}
-                  />
-                }
-              >
-                {t('schedules.history')}
-              </Button>
-              <div className='flex flex-wrap gap-2'>
-                {schedule.key === 'nocoreach.daily-analysis' &&
-                schedule.lifecycleState === 'active' ? (
-                  <Button
-                    variant='outline'
-                    nativeButton={false}
-                    render={
-                      <Link
-                        to={{
-                          pathname: `${encodeURIComponent(schedule.id)}/edit`,
-                          search: location.search,
-                        }}
-                      />
-                    }
-                  >
-                    {t('schedules.editTime')}
-                  </Button>
-                ) : null}
-                <ScheduleToggle
-                  schedule={schedule}
-                  invalidated={reload}
-                  changed={(next) => {
-                    replace({
-                      ...data,
-                      data: data.data.map((item) =>
-                        item.id === next.id ? next : item,
-                      ),
-                    });
-                    reload();
-                  }}
-                />
-              </div>
-            </CardFooter>
-          </Card>
+          <ScheduleCard
+            key={schedule.id}
+            schedule={schedule}
+            stamp={stamp}
+            invalidated={refresh}
+            changed={(next) => {
+              if (next)
+                replace({
+                  ...data,
+                  data: data.data.map((item) =>
+                    item.id === next.id ? next : item,
+                  ),
+                });
+              refresh();
+            }}
+          />
         ))}
         {data ? (
+          <p className='text-sm text-muted-foreground'>
+            <Info
+              aria-hidden='true'
+              className='mr-1.5 inline size-4 align-[-3px]'
+            />
+            {t('schedules.otherWork')}{' '}
+            <Link
+              to='/connections'
+              className='text-foreground underline underline-offset-4'
+            >
+              {t('schedules.otherWorkLink')}
+            </Link>
+          </p>
+        ) : null}
+        {data && (page > 1 || data.meta.total > data.meta.pageSize) ? (
           <nav
             aria-label={t('schedules.pagination')}
             className='flex flex-wrap items-center justify-end gap-3'
@@ -152,7 +112,7 @@ export default function SchedulesPage() {
           </nav>
         ) : null}
       </PageContainer>
-      <Outlet context={{ reload }} />
+      <Outlet context={outletContext} />
     </>
   );
 }

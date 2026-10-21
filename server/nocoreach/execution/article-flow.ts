@@ -51,11 +51,11 @@ export class ArticleFlow {
     if (!this.delivery) return fail(systemMessageText('articles.notConfigured'), 409);
     return this.delivery;
   }
-  /** The project's targets for the task page, without credentials. */
+  /** The project's targets for the task page, without credentials; `pages` are the public address patterns. */
   targets(project: string) {
     try {
       const list = (this.s.p.articleTargets as ArticleTargets | undefined)?.list(project);
-      return (list?.targets || []).map((t) => ({ id: t.id, name: t.name, kind: t.kind, locales: t.locales, capabilities: t.capabilities, status: supportsStatus(t), default: t.id === list?.defaultTargetId }));
+      return (list?.targets || []).map((t) => ({ id: t.id, name: t.name, kind: t.kind, locales: t.locales, capabilities: t.capabilities, status: supportsStatus(t), default: t.id === list?.defaultTargetId, ...(t.pages ? { pages: t.pages } : {}) }));
     } catch {
       return [];
     }

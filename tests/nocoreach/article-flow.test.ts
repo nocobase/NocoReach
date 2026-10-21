@@ -263,8 +263,16 @@ test('an article task reads the CMS source, drafts without a repository and publ
       id: 'cms',
       name: 'NocoBase CMS',
       kind: 'nocobase-api',
+      // The public page patterns, so the task page can link the article; never the key or the API address.
+      pages: {
+        en: 'https://www.example.com/en/blog/{slug}',
+        zh: 'https://www.example.com/cn/blog/{slug}',
+      },
     }),
   ]);
+  expect(JSON.stringify(d.articleTargets)).not.toMatch(
+    /cms-key|cms\.example\.com/,
+  );
   d = await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
   expect(d.work.article).toMatchObject({
     targetId: 'cms',

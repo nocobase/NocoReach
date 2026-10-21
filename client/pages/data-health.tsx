@@ -1,7 +1,9 @@
 import { useMessageState, getCurrentLocale, translateSourceError, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useState} from 'react';
 import {useBusinessAccess} from '#hooks/use-business-access';
-import {useNavigate} from 'react-router';
+import {Link,useNavigate} from 'react-router';
+import {useCan} from '@nocobase/app-plugin-authorization/client';
+import {timeZoneName} from '#lib/time-zone-name';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {Button} from '#components/ui/button';
 import {Reveal} from '#components/reach/reveal';
@@ -14,7 +16,7 @@ export function healthText(original:string|undefined,text?:HealthText):string{
  const params=Object.fromEntries(Object.entries(text.params||{}).map(([key,value])=>[key,typeof value==='object'?('systemError' in value?translateSourceError(value.systemError):healthText('',value)):value]));
  return $legacyText(text.key,params);
 }
-export type HealthItem={nameText?:HealthText;noteText?:HealthText;messageText?:HealthText;id:string;name:string;state:'healthy'|'warning'|'failing'|'pending';message:string;lastSuccessAt:string|null;dataThrough:string|null;nextSyncAt:string|null;note?:string;retry:{resource:string;action:string;body:object}|null};
+export type HealthItem={nameText?:HealthText;noteText?:HealthText;messageText?:HealthText;id:string;name:string;state:'healthy'|'warning'|'failing'|'pending';message:string;lastSuccessAt:string|null;dataThrough:string|null;nextSyncAt:string|null;note?:string;cadence?:'daily'|'weekly'|'manual';schedule?:{time:string;timezone:string;enabled:boolean};retry:{resource:string;action:string;body:object}|null};
 export type Health={checkedAt:string;items:HealthItem[]};
 export const getStateText = (): Record<HealthItem['state'],string> => ({healthy:$t('dataHealth.ok'),warning:$t('dataHealth.needsAttention'),failing:$t('dataHealth.needsFixing'),pending:$t('dataHealth.waitingSync')});
 export function ago(v:string|null,now=Date.now()){if(!v)return $t('dataHealth.never');const m=Math.round((now-Date.parse(v))/60000);if(m<1)return $t('common.now');if(m<60)return $t('common.minAgo',{0:m});const h=Math.round(m/60);if(h<48)return $t('common.hAgo',{0:h});return $t('dataHealth.daysAgo',{0:Math.round(h/24)});}
@@ -30,8 +32,15 @@ export function HealthPanel({projectId,reloadKey,onChange}:{projectId:number;rel
  return <section className="nr-health" aria-label={$t('dataHealth.dataHealth')}><div className="nr-health-head"><h2>{$t('dataHealth.dataHealth')}</h2><InfoTip label={$t('dataHealth.whatDataHealthMeans')} className="self-center">{help($t('dataHealth.dataHealth'))}</InfoTip><span className="nr-footnote">{$tj('dataHealth.dataSourcesOk',{0:health.items.length,1:ok,2:attention.length?$t('dataHealth.needAttention',{0:attention.length}):''})}</span></div>
   {error&&<p className="nr-error" role="alert">{error}</p>}
   {attention.map(i=><div key={i.id} className={'nr-health-row nr-health-'+i.state}><span className="nr-health-dot" aria-hidden="true"/><div><strong>{healthText(i.name,i.nameText)}</strong><span className="nr-footnote">{$tj('dataHealth.lastSuccessValue',{0:healthText(i.message,i.messageText),1:ago(i.lastSuccessAt)})}</span></div>{i.retry&&<HealthRetry projectId={projectId} item={i} busy={busy} onRetry={()=>void retry(i)}/>}</div>)}
-  <Reveal label={$t('dataHealth.viewSyncStatus')} className="nr-health-all"><table><thead><tr><th>{$t('dataHealth.dataSource')}</th><th>{$t('common.status')}</th><th>{$t('dataHealth.lastSuccess')}</th><th>{$t('dataHealth.dataThrough')}</th><th>{$t('dataHealth.nextSync')}</th></tr></thead><tbody>{health.items.map(i=><tr key={i.id}><td>{healthText(i.name,i.nameText)}{i.note&&<span className="nr-block nr-footnote">{healthText(i.note,i.noteText)}</span>}</td><td>{getStateText()[i.state]}</td><td>{ago(i.lastSuccessAt)}</td><td>{i.dataThrough||'—'}</td><td>{i.nextSyncAt?new Date(i.nextSyncAt).toLocaleString(getCurrentLocale()):'—'}</td></tr>)}</tbody></table></Reveal>
+  <Reveal label={$t('dataHealth.viewSyncStatus')} className="nr-health-all"><div className='overflow-x-auto'><table><thead><tr><th>{$t('dataHealth.dataSource')}</th><th>{$t('dataHealth.frequency')}</th><th>{$t('common.status')}</th><th>{$t('dataHealth.lastSuccess')}</th><th>{$t('dataHealth.dataThrough')}</th><th>{$t('dataHealth.nextSync')}</th></tr></thead><tbody>{health.items.map(i=><tr key={i.id}><td>{healthText(i.name,i.nameText)}{i.schedule?<ScheduleNote schedule={i.schedule}/>:i.note&&<span className="nr-block nr-footnote">{healthText(i.note,i.noteText)}</span>}</td><td>{i.cadence?getCadenceText()[i.cadence]:'—'}</td><td>{getStateText()[i.state]}</td><td>{ago(i.lastSuccessAt)}</td><td>{i.dataThrough||'—'}</td><td>{i.nextSyncAt?new Date(i.nextSyncAt).toLocaleString(getCurrentLocale()):'—'}</td></tr>)}</tbody></table></div></Reveal>
  </section>;
+}
+export const getCadenceText = (): Record<NonNullable<HealthItem['cadence']>,string> => ({daily:$t('dataHealth.cadenceDaily'),weekly:$t('dataHealth.cadenceWeekly'),manual:$t('dataHealth.cadenceManual')});
+// The daily analysis runs at one time for the whole application, set under Settings › Automatic runs: say it plainly
+// and link there for whoever may open that page.
+function ScheduleNote({schedule}:{schedule:NonNullable<HealthItem['schedule']>}){
+ const {can}=useCan({resource:{type:'page',id:'scheduler.schedules'},action:'access'});
+ return <span className='nr-block nr-footnote'>{$t('dataHealth.dailyAnalysisAt',{0:schedule.time,1:timeZoneName(schedule.timezone,getCurrentLocale())})}{can?<> · <Link className='underline underline-offset-4' to='/schedules'>{$t('dataHealth.changeTime')}</Link></>:null}</span>;
 }
 function HealthRetry({projectId,item,busy,onRetry}:{projectId:number;item:HealthItem;busy:string;onRetry:()=>void}){
  const {can}=useBusinessAccess(item.retry?`${item.retry.resource}.${item.retry.action}`:'',projectId);

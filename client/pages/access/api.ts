@@ -4,6 +4,7 @@ import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/cli
 import { useQuery } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { $t } from '#i18n';
+import type { MemberInvitation } from '../../../shared/member-access.js';
 
 export type {
   AccessMember,
@@ -57,6 +58,16 @@ export function useAccessQuery<T>(
     refetchOnMount: 'always',
     refetchOnWindowFocus: false,
   });
+}
+/**
+ * How many pending, unexpired invitations wait for the signed-in account: 0 while loading or when the read fails. An
+ * address that already has an account joins at once, so this is usually 0 and Your invitations stays hidden.
+ */
+export function usePendingInvitationCount(enabled = true): number {
+  const query = useAccessQuery<MemberInvitation[]>('/mine', enabled);
+  return Array.isArray(query.data)
+    ? query.data.filter((row) => row.status === 'pending').length
+    : 0;
 }
 const REASONS = [
   'invalidScope',

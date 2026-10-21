@@ -27,6 +27,7 @@ import { Segmented } from "../data-github/segmented";
 import { ReportCard } from "./tables";
 import { ago, bytes, change, CHANNEL, dateOf, kindLabel, num, otherName, pct, REGISTRY, type Item, type Row, type Share, type View } from "./model";
 import "../data-views.css";
+import { formatDate } from '#lib/format';
 
 const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "#7F77DD", "#D4537E", "#1D9E75", "#BA7517", "#888780", "#378ADD"];
 const COLS: Record<number, string> = { 1: "lg:grid-cols-1", 2: "lg:grid-cols-2", 3: "lg:grid-cols-3" };
@@ -44,7 +45,7 @@ export default function DataDownloads() {
   return (
     <PageContainer className="nr-data-page">
       <PageHeader info={view?.notes?.length ? <NotesTip notes={view.notes} /> : undefined} title={$t('common.downloads')} description={$t('dataDownloads.pageDescription')} />
-      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:w.start,1:w.end}) : $t('dataDownloads.comparedPreviousDays', { 0: w.start, 1: w.end, 2: w.days, 3: view?.cutoff ? $t('dataDownloads.downloadsThrough', { 0: view.cutoff }) : "" })) : undefined} />
+      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:formatDate(w.start),1:formatDate(w.end)}) : $t('dataDownloads.comparedPreviousDays', { 0: formatDate(w.start), 1: formatDate(w.end), 2: w.days, 3: view?.cutoff ? $t('dataDownloads.downloadsThrough', { 0: formatDate(view.cutoff) }) : "" })) : undefined} />
       {error ? <LoadError title={$t('dataDownloads.notLoadDownloads')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={6} /> : null}
       {view && !view.connected ? <EmptyState icon={<Package />} title={$t('dataDownloads.oncePackagesConnectedDailyDownloads')} description={$t('dataDownloads.enterNpmPypiPackageNames')} action={<Button onClick={() => navigate("/connections?source=packages")}>{$t('dataDownloads.connectPackages')}</Button>} /> : null}
@@ -70,7 +71,7 @@ function Tile({ item: it, active, onPick }: { item: Item; active: boolean; onPic
   const label = `${it.kind === "assets" ? REGISTRY.github : it.title} · ${kindLabel(it)}`;
   const hint = it.kind === "downloads"
     ? [it.average != null ? $t('dataDownloads.dailyAverage', { 0: num(it.average) }) : null, it.latest ? `latest ${it.latest.version}` : null].filter(Boolean).join(" · ")
-    : it.value == null && it.since ? $t('dataDownloads.recordedSince', { 0: it.since }) : $t('dataDownloads.totalValue', { 0: num(it.total) });
+    : it.value == null && it.since ? $t('dataDownloads.recordedSince', { 0: dateOf(it.since) }) : $t('dataDownloads.totalValue', { 0: num(it.total) });
   const value = it.value == null ? "—" : `${it.kind === "downloads" ? "" : "+"}${num(it.value)}`;
   return (
     <div data-metric={it.id} className={cn("relative rounded-xl", active && "ring-2 ring-primary")}>
@@ -113,7 +114,7 @@ function TrendCard({ view, item }: { view: View; item: Item }) {
             </ComposedChart>
           </ResponsiveContainer>
         </div>
-      ) : <p className="px-4 py-6 text-sm text-muted-foreground">{item.since ? $t('dataDownloads.noDaysInRange', { 0: item.since }) : $t('dataDownloads.shownAfterNextSync')}</p>}
+      ) : <p className="px-4 py-6 text-sm text-muted-foreground">{item.since ? $t('dataDownloads.noDaysInRange', { 0: dateOf(item.since) }) : $t('dataDownloads.shownAfterNextSync')}</p>}
     </Card>
   );
 }
@@ -178,7 +179,7 @@ function VersionsCard({ view }: { view: View }) {
         {list.length > 1 ? <Segmented label={$t('dataDownloads.versionShare')} options={list.map((x) => ({ id: x.id, label: x.package }))} value={v.id} onChange={pick} /> : null}
       </Head>
       <Bars rows={v.rows} />
-      <p className="border-t border-border pt-2 text-xs text-muted-foreground">{$t('dataDownloads.versionShareFoot', { 0: v.package, 1: v.at, 2: num(v.total) })}</p>
+      <p className="border-t border-border pt-2 text-xs text-muted-foreground">{$t('dataDownloads.versionShareFoot', { 0: v.package, 1: dateOf(v.at), 2: num(v.total) })}</p>
     </Card>
   );
 }

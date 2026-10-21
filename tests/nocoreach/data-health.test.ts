@@ -88,3 +88,22 @@ test('Reddit health never infers a missing business cutoff from operation time',
   assert.equal(health.items[0].dataThrough,null);
  }
 });
+
+test('each item says how often it runs, and the daily analysis gives its time, timezone and next run',async()=>{
+ const t=new Date(Date.now()-H).toISOString();
+ const plugin={env:()=>'',link:async()=>null,
+  siteContent:{state:async()=>({sites:[{origin:'https://ex.com',confirmedAt:t}],pages:[]})},
+  reddit:{state:async()=>({terms:['NocoBloom'],status:'active',posts:{},lastRun:{at:t,ok:true,errors:[]}})},
+  analysis:{status:async()=>({running:false,last:{at:t,ok:true,errors:[]},schedule:{enabled:true,cron:'30 7 * * *',timezone:'Asia/Shanghai'}})}};
+ const {items}=await new DataHealth(plugin).list('1');
+ const by=Object.fromEntries(items.map(i=>[i.id,i]));
+ assert.equal(by.site.cadence,'daily');assert.equal(by.reddit.cadence,'weekly');assert.equal(by['daily-analysis'].cadence,'daily');
+ assert.deepEqual(by['daily-analysis'].schedule,{time:'07:30',timezone:'Asia/Shanghai',enabled:true});
+ assert.equal(by['daily-analysis'].note,'每天 07:30 运行（Asia/Shanghai）');
+ // 07:30 in Shanghai is 23:30 UTC the day before.
+ const next=new Date(by['daily-analysis'].nextSyncAt);
+ assert.equal(next.getUTCHours(),23);assert.equal(next.getUTCMinutes(),30);assert.ok(next.getTime()>Date.now());
+ plugin.analysis.status=async()=>({running:false,last:{at:t,ok:true,errors:[]},schedule:{enabled:false,cron:'30 7 * * *',timezone:'Asia/Shanghai'}});
+ const paused=(await new DataHealth(plugin).list('1')).items.find(i=>i.id==='daily-analysis');
+ assert.equal(paused.state,'warning');assert.equal(paused.nextSyncAt,null);assert.equal(paused.message,'每日分析已暂停');
+});

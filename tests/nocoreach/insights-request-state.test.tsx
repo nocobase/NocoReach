@@ -19,7 +19,10 @@ import {
 import locales from '../../client/locales';
 import english from '../../shared/i18n/en.json';
 import chinese from '../../shared/i18n/zh.json';
-import { GOOGLE_PROGRESS_CACHE_MS } from '../../shared/google-cache';
+import {
+  GOOGLE_LOCAL_CACHE_MS,
+  GOOGLE_PROGRESS_CACHE_MS,
+} from '../../shared/google-cache';
 import StrategyPage from '../../client/pages/strategy/index';
 import DataGitHub from '../../client/pages/data-github';
 import { NocoReachHttpError } from '../../client/lib/nocoreach-api';
@@ -61,11 +64,12 @@ vi.mock('../../client/components/app-shell/nav-badges', () => ({
 }));
 
 const requests = { tasks, metrics: vi.fn(), summary: vi.fn() };
+// Waiting tasks sit in the day's conversation: with none waiting the block says nothing.
 const blocks = [
   {
     kind: 'tasks',
     title: 'strategy.taskStatus',
-    empty: 'strategy.noWaitingTasks',
+    empty: null,
   },
   {
     kind: 'metrics',
@@ -191,6 +195,31 @@ async function setup(locale = 'en-US', report = false) {
     },
   };
 }
+type View = Awaited<ReturnType<typeof setup>>;
+// The current situation has Refresh; the metric tiles and the waiting tasks have none and are read again on the next
+// visit (the metrics once their local cache has expired).
+async function refresh(
+  block: (typeof blocks)[number],
+  view: View,
+  section: HTMLElement,
+) {
+  if (block.kind === 'summary') {
+    await userEvent.click(
+      within(section).getByRole('button', { name: 'Refresh' }),
+    );
+    return section;
+  }
+  expect(within(section).queryByRole('button', { name: 'Refresh' })).toBeNull();
+  if (block.kind === 'metrics') {
+    const later = Date.now() + GOOGLE_LOCAL_CACHE_MS;
+    vi.spyOn(Date, 'now').mockReturnValue(later);
+  }
+  view.show(false);
+  view.show(true);
+  return (
+    await screen.findAllByRole('region', { name: english[block.title] })
+  )[0];
+}
 for (const block of blocks) {
   it.each(['en-US', 'zh-CN'])(
     `${block.kind}: initial failure is independent and retry restores real empty state (%s)`,
@@ -206,9 +235,13 @@ for (const block of blocks) {
       expect(await within(section).findByRole('alert')).toHaveTextContent(
         copy['strategy.blockFailed'],
       );
-      expect(within(section).queryByText(copy[block.empty])).toBeNull();
+      if (block.empty)
+        expect(within(section).queryByText(copy[block.empty])).toBeNull();
       expect(screen.queryByText('private failure details')).toBeNull();
-      for (const other of blocks.filter((b) => b.kind !== block.kind)) {
+      // The other blocks finished loading (the waiting tasks, empty here, take no room).
+      for (const other of blocks.filter(
+        (b) => b.kind !== block.kind && b.empty,
+      )) {
         expect(
           (
             await screen.findAllByRole('region', { name: copy[other.title] })
@@ -221,9 +254,14 @@ for (const block of blocks) {
       await waitFor(() =>
         expect(within(section).queryByRole('alert')).toBeNull(),
       );
-      expect(
-        within(section).getAllByText(copy[block.empty]).length,
-      ).toBeGreaterThan(0);
+      if (block.empty)
+        expect(
+          within(section).getAllByText(copy[block.empty]).length,
+        ).toBeGreaterThan(0);
+      else
+        expect(
+          screen.queryByRole('region', { name: copy[block.title] }),
+        ).toBeNull();
       expect(requests[block.kind]).toHaveBeenCalledTimes(2);
       for (const other of blocks.filter((b) => b.kind !== block.kind))
         expect(requests[other.kind]).toHaveBeenCalledTimes(1);
@@ -235,24 +273,24 @@ for (const block of blocks) {
       .mockReturnValueOnce(pending.promise)
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValue(values[block.kind]);
-    await setup();
-    const section = (
+    const view = await setup();
+    let section = (
       await screen.findAllByRole('region', { name: english[block.title] })
     )[0];
     expect(within(section).getByRole('status')).toHaveTextContent(
       english['common.loadingLoading'],
     );
-    expect(within(section).queryByText(english[block.empty])).toBeNull();
-    expect(
-      within(section).getByRole('button', { name: 'Refresh' }),
-    ).toBeDisabled();
+    if (block.empty)
+      expect(within(section).queryByText(english[block.empty])).toBeNull();
+    if (block.kind === 'summary')
+      expect(
+        within(section).getByRole('button', { name: 'Refresh' }),
+      ).toBeDisabled();
     await act(async () => pending.resolve(values[block.kind]));
     expect(
       within(section).getByText(known[block.kind], { exact: false }),
     ).toBeInTheDocument();
-    await userEvent.click(
-      within(section).getByRole('button', { name: 'Refresh' }),
-    );
+    section = await refresh(block, view, section);
     expect(await within(section).findByRole('alert')).toHaveTextContent(
       english['strategy.blockStale'],
     );
@@ -275,16 +313,15 @@ it.each(['project', 'session', 'revision'])(
   async (scope) => {
     for (const b of blocks) requests[b.kind].mockResolvedValue(values[b.kind]);
     const view = await setup();
-    await screen.findByText('Known situation');
+    await screen.findByText(known.summary);
     const late = deferred<unknown>();
     tasks
       .mockReturnValueOnce(late.promise)
       .mockRejectedValue(new Error('new scope unavailable'));
-    await userEvent.click(
-      within(
-        screen.getByRole('region', { name: english['strategy.taskStatus'] }),
-      ).getByRole('button', { name: 'Refresh' }),
-    );
+    // Visit the page again: the waiting tasks are read again and that read stays pending.
+    view.show(false);
+    view.show(true);
+    await waitFor(() => expect(tasks).toHaveBeenCalledTimes(2));
     requests.metrics.mockRejectedValue(new Error('new scope unavailable'));
     requests.summary.mockRejectedValue(new Error('new scope unavailable'));
     if (scope === 'project') fixture.project = 2;
@@ -384,14 +421,14 @@ it.each([401, 403, 404])(
     const section = await screen.findByRole('region', {
       name: english['strategy.currentSituation'],
     });
-    await within(section).findByText('Known situation');
+    await within(section).findByText(known.summary);
     await userEvent.click(
       within(section).getByRole('button', { name: 'Refresh' }),
     );
     expect(await within(section).findByRole('alert')).not.toHaveTextContent(
       'private error',
     );
-    expect(within(section).queryByText('Known situation')).toBeNull();
+    expect(within(section).queryByText(known.summary)).toBeNull();
     expect(within(section).queryByRole('button', { name: 'Retry' })).toBeNull();
     if (status === 401)
       expect(
@@ -418,9 +455,7 @@ for (const block of blocks) {
         await screen.findAllByRole('region', { name: english[block.title] })
       )[0];
       await within(section).findByText(known[block.kind], { exact: false });
-      await userEvent.click(
-        within(section).getByRole('button', { name: 'Refresh' }),
-      );
+      section = await refresh(block, view, section);
       await within(section).findByRole('alert');
       expect(
         within(section).queryByText(known[block.kind], { exact: false }),

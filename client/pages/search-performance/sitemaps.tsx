@@ -1,5 +1,5 @@
 import { googleLocalFreshness } from '../../../shared/google-cache.js';
-import { getCurrentLocale, $t, $tj } from "#i18n";
+import { $t, $tj } from "#i18n";
 // 搜索表现 · 站点地图 (?view=sitemaps, 2026-10-14, user request: everything Search Console's API offers, in NocoReach's
 // own style): the sitemaps submitted to Search Console (Sitemaps API, read when the page asks and kept six hours) with
 // the files under an index, and the sitemaps NocoReach read from robots.txt that Search Console does not list (未提交).
@@ -22,6 +22,7 @@ import { Tag, type Tone } from "#components/reach/tag";
 import { safeLink } from "../analytics";
 import { DetailDrawer } from "../detail-drawer";
 import { useFreshData } from "../workspace-cache";
+import { formatCount, formatDate, formatDateTime } from '#lib/format';
 
 type Content = { type: string; submitted: number };
 type Entry = { path: string; type: string | null; isIndex: boolean; isPending: boolean; lastSubmitted: string | null; lastDownloaded: string | null; warnings: number; errors: number; contents: Content[]; checked: number; indexed: number };
@@ -31,8 +32,8 @@ type State = "success" | "error" | "warning" | "pending" | "unsubmitted";
 type SitemapsView = { connected: boolean; site?: string; readAt?: string; sitemaps?: Sitemap[]; unsubmitted?: { path: string; checked: number; indexed: number }[] };
 
 const TABS = ["all", "problems", "unsubmitted"] as const;
-const num = (v: number) => v.toLocaleString(getCurrentLocale());
-const dateOf = (v?: string | null) => (v ? v.slice(0, 10) : "—");
+const num = (v: number) => formatCount(v);
+const dateOf = (v?: string | null) => formatDate(v?.slice(0, 10));
 const pathOf = (u: string) => { try { return new URL(u).pathname || "/"; } catch { return u; } };
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 const stateOf = (s: Entry): Exclude<State, "unsubmitted"> => (s.errors ? "error" : s.warnings ? "warning" : s.isPending ? "pending" : "success");
@@ -72,7 +73,7 @@ export function SitemapsView({ projectId, property, tab, onTab }: { projectId: n
   return (
     <>
       <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground" data-sitemaps-status="">
-        <span>{$t('searchSitemaps.statusLine', { 0: view.site, 1: view.readAt ? new Date(view.readAt).toLocaleString(getCurrentLocale()) : "—" })}</span>
+        <span>{$t('searchSitemaps.statusLine', { 0: view.site, 1: formatDateTime(view.readAt) })}</span>
         <NotesTip notes={[$t('searchSitemaps.noteSource'), $t('searchSitemaps.noteUnsubmitted'), $t('searchSitemaps.noteIndexed')]} />
       </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" role="group" aria-label={$t('searchPerformance.figures')}>
@@ -119,8 +120,8 @@ function SitemapDrawer({ row, site, onClose }: { row: Row; site: string; onClose
       {row.status === "unsubmitted" ? <p className="text-sm text-muted-foreground">{$t('searchSitemaps.unsubmittedHelp')}</p> : (
         <table className="w-full text-sm" data-sitemap-facts="">
           <tbody>{([
-            [$t('searchSitemaps.kind'), row.isIndex ? $t('searchSitemaps.index') : (KIND[row.type ?? ""] ?? (() => row.type ?? "—"))()], [$t('searchSitemaps.lastSubmitted'), row.lastSubmitted ? new Date(row.lastSubmitted).toLocaleString(getCurrentLocale()) : "—"],
-            [$t('searchSitemaps.lastDownloaded'), row.lastDownloaded ? new Date(row.lastDownloaded).toLocaleString(getCurrentLocale()) : "—"], [$t('searchSitemaps.errors'), num(row.errors)], [$t('searchSitemaps.warnings'), num(row.warnings)],
+            [$t('searchSitemaps.kind'), row.isIndex ? $t('searchSitemaps.index') : (KIND[row.type ?? ""] ?? (() => row.type ?? "—"))()], [$t('searchSitemaps.lastSubmitted'), formatDateTime(row.lastSubmitted)],
+            [$t('searchSitemaps.lastDownloaded'), formatDateTime(row.lastDownloaded)], [$t('searchSitemaps.errors'), num(row.errors)], [$t('searchSitemaps.warnings'), num(row.warnings)],
             [$t('searchSitemaps.submittedUrls'), contentText(row) || "0"],
           ] as [string, string][]).map(([k, v]) => <tr key={k} className="border-t border-border first:border-0"><td className="w-32 py-1.5 pr-2 text-muted-foreground">{k}</td><td className="py-1.5">{v}</td></tr>)}</tbody>
         </table>

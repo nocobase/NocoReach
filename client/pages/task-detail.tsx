@@ -7,10 +7,13 @@ import { useTechnicalDetails } from './task-detail/technical-state.js';
 import { EvidenceDialog } from './task-detail/evidence.js';
 import { taskEvidence, whyText } from './task-detail/evidence-model.js';
 import { VisibleChanges } from './task-detail/visible-changes.js';
-import { ArticleStart } from './task-detail/article-start.js';
+import { DeliveryDialog, DeliverySummary } from './task-detail/article-start.js';
+import { articlePageUrl } from './task-detail/article-page.js';
+import { PlaybookDrawer } from './task-detail/playbook-drawer.js';
 import { ArticleEditor, ArticleReview } from './task-detail/article-review.js';
 import { ConflictBody, DriftNotice, PendingButton, TargetRows } from './task-detail/article-release.js';
-import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, publishingTitle, soleConflict, type DeliveryChoice } from './task-detail/article-model.js';
+import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, pageUrlsOf, publishingTitle, soleConflict, type ArticleFound, type DeliveryChoice } from './task-detail/article-model.js';
+import { matchArticle } from './article-targets-api';
 import { TaskMedia } from './task-detail/media.js';
 import { AgentMenu } from './task-detail/agent-menu.js';
 import { hasTaskAgent } from './task-execution-types';
@@ -55,15 +58,32 @@ const getRunErrors = (): Record<string,string> => ({interrupted_or_unknown:$t('t
 // failing as "agent_failed" with no reason, so retrying was all they could do).
 const FAILURE_GROUP:Record<string,string>={runnerOffline:'disconnected',leaseExpired:'disconnected',startTimeout:'disconnected',runnerUpgrade:'disconnected',toolAuth:'toolLogin',toolQuota:'quota',toolRateLimit:'quota',toolNetwork:'network',prepareNetwork:'network',idleTimeout:'stuck',stepLimit:'stuck',toolProcess:'stuck',contextOverflow:'tooLong',modelUnavailable:'model',queuedExpired:'notPicked',policyRefused:'notPicked',setupFailed:'setup',cliUnavailable:'setup',checkoutFailed:'setup',repoAccessDenied:'setup',repoAccessUnavailable:'setup',workspaceBusy:'setup',runnerDiskFull:'setup'};
 const getFailureCopy=():Record<string,[string,string]>=>({disconnected:[$t('taskDetail.failureDisconnected'),$t('taskDetail.failureDisconnectedNext')],toolLogin:[$t('taskDetail.failureToolLogin'),$t('taskDetail.failureToolLoginNext')],quota:[$t('taskDetail.failureQuota'),$t('taskDetail.failureQuotaNext')],network:[$t('taskDetail.failureNetwork'),$t('taskDetail.failureNetworkNext')],stuck:[$t('taskDetail.failureStuck'),$t('taskDetail.failureStuckNext')],tooLong:[$t('taskDetail.failureTooLong'),$t('taskDetail.failureTooLongNext')],model:[$t('taskDetail.failureModel'),$t('taskDetail.failureModelNext')],notPicked:[$t('taskDetail.failureNotPicked'),$t('taskDetail.failureNotPickedNext')],setup:[$t('taskDetail.failureSetup'),$t('taskDetail.failureSetupNext')],invalid:[$t('taskDetail.failureInvalidResult'),$t('taskDetail.failureInvalidResultNext')]});
+// Trying again cannot help these until someone signs in, fixes the setup or picks another Agent (2026-10-21 user
+// report: the card pushed Try again for a tool that was not signed in), so it stays available but not as the main action.
+const NO_RETRY=new Set(['toolLogin','setup','model']);
+const TOOL_NAMES:Record<string,string>={claude:'Claude Code',codex:'Codex',opencode:'OpenCode',pi:'Pi'};
+// The computer (unless this reader may not see it) and the coding tool of the run's latest attempt.
+function failedOn(run:Run,data:Data){
+ const x=data.execution?.runId===run.id?data.execution.run.executions?.at(-1):undefined;
+ return {machine:x&&!x.machineHidden?x.runnerName||'':'',tool:x?.tool?TOOL_NAMES[x.tool]||x.tool:''};
+}
+// The groups whose copy names the computer or the tool when the run says which; otherwise the general wording.
+function namedFailure(group:string,{machine,tool}:{machine:string;tool:string}):[string,string]|undefined{
+ if(group==='toolLogin'&&(machine||tool))return [machine&&tool?$t('taskDetail.failureToolLoginOn',{0:machine,1:tool}):tool?$t('taskDetail.failureToolLoginTool',{0:tool}):$t('taskDetail.failureToolLoginMachine',{0:machine}),tool?$t('taskDetail.failureToolLoginToolNext',{0:tool}):$t('taskDetail.failureToolLoginNext')];
+ if(group==='disconnected'&&machine)return [$t('taskDetail.failureDisconnectedOn',{0:machine}),$t('taskDetail.failureDisconnectedNext')];
+ if(group==='network'&&machine)return [$t('taskDetail.failureNetworkOn',{0:machine}),$t('taskDetail.failureNetworkNext')];
+ if(group==='quota'&&tool)return [$t('taskDetail.failureQuotaTool',{0:tool}),$t('taskDetail.failureQuotaNext')];
+}
+type Failure={why:string;next:string;group?:string};
 // What went wrong with `run` and what to do: the official reason (the task's latest run arrives with its execution),
 // then NocoReach's own codes, then whatever the Agent itself said; never a bare code.
-function failureOf(run:Run,data:Data):[string,string]{
+function failureOf(run:Run,data:Data):Failure{
  const copy=getFailureCopy(),reason=data.execution?.runId===run.id?data.execution.run.failureReason:undefined,group=reason?FAILURE_GROUP[reason]:undefined;
- if(group)return copy[group];
- if(run.error==='invalid_agent_result')return copy.invalid;
- const known=getRunErrors()[run.error||''];if(known)return [known,$t('taskDetail.failureUnknownNext')];
+ if(group){const [why,next]=namedFailure(group,failedOn(run,data))||copy[group];return {why,next,group};}
+ if(run.error==='invalid_agent_result'){const [why,next]=copy.invalid;return {why,next};}
+ const known=getRunErrors()[run.error||''];if(known)return {why:known,next:$t('taskDetail.failureUnknownNext')};
  const said=run.errorDetail&&run.errorDetail!==run.error&&!/^[a-z_]+$/.test(run.errorDetail)?$legacyText(run.errorDetail):'';
- return said?[$t('taskDetail.failureAgentSaid',{0:said}),$t('taskDetail.failureUnknownNext')]:[$t('taskDetail.failureUnknown'),$t('taskDetail.failureUnknownNext')];
+ return {why:said?$t('taskDetail.failureAgentSaid',{0:said}):$t('taskDetail.failureUnknown'),next:$t('taskDetail.failureUnknownNext')};
 }
 const call=<T,>(projectId:number,taskId:string,action:string,body:object={})=>api.action<T>('nrTaskWork',action,{method:'POST',body:{projectId:String(projectId),taskId,...body},unwrap:'data'});
 // Tasks run by a playbook (new tasks, and tasks started with a flow) use this page; older step-plan tasks keep theirs.
@@ -150,7 +170,7 @@ function TaskHeader({data,list,pick,busy,runActive,members,update,onEvidence,onP
     <AgentMenu data={data} busy={busy} locked={!allowed?$t('taskDetail.ownerAdminChange'):closedLabel(w)?$t('taskDetail.taskClosed'):w.stage==='done'?$t('taskDetail.taskDone'):runActive?$t('taskDetail.taskQueuedRunningWaitFinish'):undefined} onChange={async agentId=>Boolean(await update('setAgent',{agentId}))}/>
     {collab.length>0&&<span className="inline-flex items-center gap-1" title={collab.map(c=>c.name).join('、')}>{collab.slice(0,3).map(c=><ActorAvatar key={c.id} type="user" name={c.name} size="xs"/>)}{collab.length>3?`+${collab.length-3}`:''}</span>}
     {insight?.id&&<button type="button" className="nr-link" onClick={()=>navigate(`/opportunities?item=${encodeURIComponent(insight.id!)}`)}>{$tj('taskDetail.sourceAttribution',{0:insight.no?`O-${insight.no}`:$t('common.opportunity')})}</button>}
-    {w.article?.articleId&&<span className='max-w-60 truncate' title={w.article.slug}>{$t('articleTask.headerArticle',{0:w.article.title||w.article.slug})}</span>}
+    {w.article?.articleId&&<HeaderArticle data={data}/>}
     {w.page&&<a className="nr-link inline-flex items-center gap-1" href={w.page.url} target="_blank" rel="noreferrer">{pathOf(w.page.url)}<ExternalLink className="size-3" aria-hidden="true"/></a>}
     {(data.related||[]).map(r=><button key={r.id} type="button" className="nr-link max-w-60 truncate" title={r.title} onClick={()=>navigate(`/actions/${r.id}`)}>{r.relation==='prev'?$t('taskDetail.previous'):$t('taskDetail.next')}{r.title}</button>)}
    </div>
@@ -158,6 +178,11 @@ function TaskHeader({data,list,pick,busy,runActive,members,update,onEvidence,onP
  </header>;
 }
 // The playbook's steps in one row: done ones ticked, the current one outlined, the person's steps in violet.
+// The task's article in the header, linked to where it can be read when its target has page patterns.
+function HeaderArticle({data}:{data:Data}){
+ const a=data.work.article!,text=$t('articleTask.headerArticle',{0:a.title||a.slug}),url=articlePageUrl(data,a.targetId,a.slug);
+ return url?<a className="nr-link inline-flex max-w-60 items-center gap-1" href={url} target="_blank" rel="noreferrer" title={a.slug}><span className="truncate">{text}</span><ExternalLink className="size-3 shrink-0" aria-hidden="true"/></a>:<span className='max-w-60 truncate' title={a.slug}>{text}</span>;
+}
 function StepBar({name,stages,w}:{name?:string;stages:Stage[];w:Work}){
  const {self,owner}=useContext(TaskAccess),started=Boolean(w.flow),done=w.stage==='done',index=w.stageIndex||0,closed=Boolean(closedLabel(w));
  const label=(s:Stage)=>{const text=stageLabel(s);return s.kind==='review'&&!self?(text.startsWith($t('common.you'))?`${owner}${text.slice($t('common.you').length)}`:`${text} · ${owner}`):text;};
@@ -224,20 +249,31 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId}:{data:D
  const [choiceState,setChoiceState]=useState<DeliveryChoice&{playbook:string}>();
  const targetIds=(data.articleTargets||[]).map(t=>t.id);
  const choice=choiceState&&choiceState.playbook===pick&&(choiceState.target==='repo'||targetIds.includes(choiceState.target))?{...choiceState,also:choiceState.also.filter(x=>targetIds.includes(x))}:undefined;
- const delivery=defaultDelivery(data,pick),current=choice||delivery,plan=articleChoice?deliveryPlan(data,current):{ready:true,unlink:false,delivery:undefined};
- const link=async(targetId:string|null,articleId?:string|null)=>Boolean(await update('linkArticle',{targetId,...(articleId!==undefined?{articleId}:{})}));
- const start=async()=>{let revision=data.work.revision;if(!hasTaskAgent(data)&&only){const d=await update('setAgent',{agentId:only.id});if(!d)return;revision=d.work.revision;}if(plan.unlink){const d=await update('linkArticle',{targetId:null,revision});if(!d)return;revision=d.work.revision;}const d=await update('startTask',{playbookId:pick,note,revision,...(plan.delivery?{delivery:plan.delivery}:{})});if(d)clear();};
+ // The article is found from the task's page (2026-10-21) rather than picked from hundreds; Change is for exceptions.
+ const pages=pageUrlsOf(data),pagesKey=pages.join('\n'),hasTargets=Boolean(data.articleTargets?.length),savedArticle=data.work.article?.articleId||'';
+ const lookupKey=hasTargets&&!savedArticle&&pagesKey?`${projectId}\n${pagesKey}`:'';
+ const [lookup,setLookup]=useState<{key:string;found:ArticleFound}>(),[choosing,setChoosing]=useState(false),[viewing,setViewing]=useState(false);
+ useEffect(()=>{if(!lookupKey)return;const c=new AbortController();
+  void matchArticle(projectId,pagesKey.split('\n'),c.signal).then(r=>{if(!c.signal.aborted)setLookup({key:lookupKey,found:r});},()=>{if(!c.signal.aborted)setLookup({key:lookupKey,found:{article:null,unchecked:true}});});return()=>c.abort();},[lookupKey,projectId,pagesKey]);
+ const found:ArticleFound|'finding'|undefined=!lookupKey?undefined:lookup?.key===lookupKey?lookup.found:'finding';
+ const finding=found==='finding',delivery=defaultDelivery(data,pick,found==='finding'?undefined:found),current=choice||delivery,plan:{ready:boolean;unlink:boolean;link?:{targetId:string;articleId:string};delivery?:unknown}=articleChoice?deliveryPlan(data,current):{ready:true,unlink:false,delivery:undefined};
+ const notice=found&&found!=='finding'&&!found.article?$t(found.unchecked?'articleTask.matchUnavailable':'articleTask.noArticleForPage'):undefined;
+ const link=async(targetId:string,articleId:string)=>Boolean(await update('linkArticle',{targetId,articleId}));
+ const start=async()=>{let revision=data.work.revision;if(!hasTaskAgent(data)&&only){const d=await update('setAgent',{agentId:only.id});if(!d)return;revision=d.work.revision;}if(plan.unlink){const d=await update('linkArticle',{targetId:null,revision});if(!d)return;revision=d.work.revision;}if(plan.link){const d=await update('linkArticle',{...plan.link,revision});if(!d)return;revision=d.work.revision;}const d=await update('startTask',{playbookId:pick,note,revision,...(plan.delivery?{delivery:plan.delivery}:{})});if(d)clear();};
  const attachments=Array.isArray(data.task.evidence?.attachmentIds)&&data.task.evidence.attachmentIds.length>0;
  return <StageCard icon={<Play/>} title={$t('taskDetail.startAfterReview')} sub={handoff?$t('taskDetail.taskHandedOverDocumentDelivered',{0:handoff.playbook}):$t('taskDetail.agentNotStartedReadBrief')}
-  actions={<Button disabled={busy||!p||!ready||!plan.ready} onClick={()=>void start()}>{$t('taskDetail.confirmStart')}</Button>}>
+  actions={<Button disabled={busy||!p||!ready||!plan.ready||finding} onClick={()=>void start()}>{$t('taskDetail.confirmStart')}</Button>}>
   {brief&&<div className="nr-td-start-field" data-start-brief=""><span>{briefTitle}</span><div className="nr-td-start-brief"><p>{brief.replace(/[#*>`_]/g,'').replace(/^[ \t]+/gm,'').replace(/\n{2,}/g,'\n').trim().slice(0,600)}</p></div><button type="button" className="nr-link self-start text-xs" onClick={()=>setReading(true)}>{$t('taskDetail.viewFullText')}</button><DocReader open={reading} onClose={()=>setReading(false)} title={briefTitle} content={brief}/></div>}
   <div className="nr-td-start-grid">
-   <label className="nr-td-start-field"><span>{$t('common.playbook')}</span><select aria-label={$t('common.playbook')} value={pick} disabled={busy||!list||!allowed} onChange={e=>setPick(e.target.value)}>
+   <div className="nr-td-start-field"><label className="nr-td-start-field"><span>{$t('common.playbook')}</span><select aria-label={$t('common.playbook')} value={pick} disabled={busy||!list||!allowed} onChange={e=>setPick(e.target.value)}>
     {getCategories().map(([k,label])=><optgroup key={k} label={label}>{(list?.playbooks||[]).filter(x=>x.category===k).map(x=><option key={x.id} value={x.id}>{x.name}{x.id===data.playbookDefault?$t('taskDetail.recommended'):''}</option>)}</optgroup>)}
-   </select>
-    {p&&<small>{p.description}{p.description?' ':''}{$tj('taskDetail.runAgent',{0:p.kind==='build'?$t('taskDetail.onceChangedReviewResultBefore'):$t('taskDetail.writesDocumentReview')})}</small>}
-   </label>
-   {articleChoice&&<ArticleStart data={data} projectId={projectId} choice={current} setChoice={c=>setChoiceState({...c,playbook:pick})} busy={busy} allowed={allowed} link={link}/>}
+   </select></label>
+    {/* View steps opens the playbook over the page (2026-10-21), so the choices made here stay. */}
+    {p&&<small>{p.description}{p.description?' ':''}{$tj('taskDetail.runAgent',{0:p.kind==='build'?$t('taskDetail.onceChangedReviewResultBefore'):$t('taskDetail.writesDocumentReview')})} <button type="button" className="nr-link text-xs" onClick={()=>setViewing(true)}>{$t('taskDetail.viewSteps')}</button></small>}
+    <PlaybookDrawer playbook={p} open={viewing} onClose={()=>setViewing(false)}/>
+   </div>
+   {articleChoice&&<DeliverySummary data={data} choice={current} finding={finding} notice={notice} allowed={allowed} busy={busy} onChange={()=>setChoosing(true)}/>}
+   {articleChoice&&<DeliveryDialog open={choosing} onClose={()=>setChoosing(false)} data={data} projectId={projectId} choice={current} found={found&&found!=='finding'?found.article:null} notice={notice} busy={busy} link={link} onSave={c=>setChoiceState({...c,playbook:pick})}/>}
    <label className="nr-td-start-field"><span>{$t('taskDetail.notesOptional')}</span><textarea aria-label={$t('taskDetail.additionalNotes')} rows={3} value={note} disabled={busy||!allowed} placeholder={$t('taskDetail.changeEnglishVersionKeepTechnical')} onChange={e=>setNote(e.target.value)}/></label>
   </div>
   <NeedsAgent data={data}/>
@@ -371,8 +407,9 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  if(stage.kind==='agent'){
   const approved=[...w.results.slice(0,index)].reverse().find(r=>r?.approvedAt&&!r.rejectedAt),source=approved?stages[w.results.indexOf(approved)]:undefined;
   const agent=data.agent,isActive=cur&&active(cur),canRun=Boolean(agent?.repo)||withoutRepo(stage,stages)||w.delivery?.kind==='article';
+  const failure=cur?.status==='failed'?failureOf(cur,data):undefined;
   const actions=!manual?<>
-   {cur?.status!=='running'&&cur?.status!=='queued'&&canRun&&<Button disabled={busy||(!hasTaskAgent(data)&&(agent?.options||[]).length!==1)} onClick={()=>void withUsableAgent(data,update,'retryStage',{stageKey:stage.key})}>{cur?$t('taskDetail.tryAgain'):$t('taskDetail.handOffAgent')}</Button>}
+   {cur?.status!=='running'&&cur?.status!=='queued'&&canRun&&<Button variant={failure?.group&&NO_RETRY.has(failure.group)?'outline':'default'} disabled={busy||(!hasTaskAgent(data)&&(agent?.options||[]).length!==1)} onClick={()=>void withUsableAgent(data,update,'retryStage',{stageKey:stage.key})}>{cur?$t('taskDetail.tryAgain'):$t('taskDetail.handOffAgent')}</Button>}
    {cur?.status==='failed'&&cur.error==='invalid_agent_result'&&cur.mode==='plan'&&!cur.artifactId&&<Button variant='outline' disabled={busy} title={$t('agentResult.recoverHint')} onClick={()=>void act('recoverResult',{runId:cur.id})}>{$t('agentResult.recover')}</Button>}
    {isActive&&<Button variant="outline" disabled={busy||Boolean(cur.cancelRequested)} onClick={async()=>{if(await confirmAction({title:() => ($t('taskDetail.stopCurrentRun',{0:data.task.title})),description:() => ($t('taskDetail.stoppingNotUndoPushedChanges')),action:'common.stop'}))void update('cancelRun',{runId:cur.id});}}><Square/>{$t('common.stop')}</Button>}
    {cur?.status!=='running'&&<Button variant="ghost" disabled={busy} onClick={()=>setManual(true)}>{$t('taskDetail.iLlMyself')}</Button>}
@@ -384,11 +421,11 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   if(!canRun)return <StageCard tone="error" icon={<AlertCircle/>} title={displayStageName(stage)} sub={<>{$t('taskDetail.noWebsiteSourceRepositoryConnectedMessage')}<Button variant="link" onClick={()=>navigate('/connections?source=repo')}>{$t('common.goDataSources')}</Button></>} actions={actions}>{body}</StageCard>;
   if(cur?.status==='queued')return <StageCard tone="live" label={$t('taskDetail.currentProgress')} icon={<Bot/>} title={$t('taskDetail.agentWorking',{0:stage.name})} sub={agent?.online?$t('taskDetail.handedOffAgentStartingNow'):<>{$t('taskDetail.agentComputerOffline')}<Button variant="link" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>} actions={actions}>{body}</StageCard>;
   if(cur?.status==='running')return <StageCard tone="live" label={$t('taskDetail.currentProgress')} icon={<Loader2 className="animate-spin motion-reduce:animate-none"/>} title={<>{$t('taskDetail.agentWorking',{0:stage.name})}{cur.cancelRequested?$t('taskDetail.stoppingAside'):''}</>} sub={$t('taskDetail.agentWorkingFor',{0:since(cur.createdAt)})} actions={actions}>{body}</StageCard>;
-  if(cur?.status==='failed'){
-   const [why,next]=failureOf(cur,data),stageRuns=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
+  if(cur?.status==='failed'&&failure){
+   const {why,next,group}=failure,stageRuns=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
    const streak=stageRuns.findIndex(r=>r.status!=='failed'),failures=streak<0?stageRuns.length:streak;
    return <StageCard tone="error" icon={<AlertCircle/>} title={$t('taskDetail.agentDidNotFinish')} actions={actions}>
-    <dl className="grid gap-x-2 gap-y-1 text-sm sm:grid-cols-[auto_1fr]"><dt className="text-muted-foreground">{$t('taskDetail.failureWhy')}</dt><dd>{why}</dd><dt className="text-muted-foreground">{$t('taskDetail.failureNext')}</dt><dd>{next}</dd></dl>
+    <dl className="grid gap-x-2 gap-y-1 text-sm sm:grid-cols-[auto_1fr]"><dt className="text-muted-foreground">{$t('taskDetail.failureWhy')}</dt><dd>{why}{group==='toolLogin'&&agent?.online&&<span className='block'>{$t('taskDetail.failureOnlineMeans')}</span>}</dd><dt className="text-muted-foreground">{$t('taskDetail.failureNext')}</dt><dd>{next}</dd></dl>
     {failures>=2&&<p className="text-sm text-nr-ink-red">{$t('taskDetail.failureStreak',{0:failures})}</p>}
     {body}{techLink}</StageCard>;
   }

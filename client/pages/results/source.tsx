@@ -1,7 +1,8 @@
 import { Link } from 'react-router';
-import { $t, getCurrentLocale } from '#i18n';
+import { $t } from '#i18n';
 import type { ResultSource } from './types.js';
 import { Comparison } from './comparison.js';
+import { formatDateTime } from '#lib/format';
 export function ResultSourcePanel({ source }: { source: ResultSource }) {
   return (
     <section className='flex flex-col gap-2 rounded-md border p-3 text-sm'>
@@ -20,7 +21,7 @@ export function ResultSourcePanel({ source }: { source: ResultSource }) {
       </div>
       <p className='text-xs text-muted-foreground'>
         {$t('results.sourceCaptured', {
-          0: new Date(source.capturedAt).toLocaleString(getCurrentLocale()),
+          0: formatDateTime(source.capturedAt),
         })}
       </p>
       {source.pages.map((page) => (

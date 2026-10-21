@@ -3,7 +3,6 @@ import { CollectorConnection } from '#components/collector-connection';
 import { isCollectorPlatform } from '#lib/collector-platforms';
 import {BilibiliConnect} from './bilibili-connect';
 import {bilibiliRequest,type BilibiliStatus} from './bilibili-api';
-import { useOnlineChat } from '../online-agent/context.js';
 import { ConnectionNetwork } from '#components/connection-network';
 import { ConnectionError } from '#components/connection-error';
 import { useMessageState, $t, $tj } from '#i18n';
@@ -16,7 +15,6 @@ import {useNavigate,useSearchParams} from 'react-router';
 import {nocobaseClient as api} from '#lib/nocoreach-api';
 import {Button} from '#components/ui/button';
 import {Sheet,SheetContent,SheetDescription,SheetHeader,SheetTitle} from '#components/ui/sheet';
-import {ActorAvatar} from '#components/reach/actor';
 import {Tag,stateToneOf} from '#components/reach/tag';
 import {GoogleConnection} from './google-connection';
 import {KeywordConnection} from './keyword-connection';
@@ -51,7 +49,7 @@ type Item={type:string;title:string;url:string;text:string};
 type Source={id:string;kind:string;url:string;title:string;capturedAt:string;items:Item[];warnings:string[];status:string;error?:string;previewId?:string};
 const collectorActions = ['nrCollectors.status','nrCollectors.save'] as const;
 const call=<T,>(id:number,action:string,body:object={})=>api.action<T>('nrSources',action,{method:'POST',body:{projectId:id,...body},unwrap:'data'});
-export default function SourceConnections(){const {project,error:projectError}=useProject(),navigate=useNavigate();const [sources,setSources]=useState<Source[]>([]),[status,setStatus]=useState<StatusInput>({}),[error,setError]=useMessageState(''),[loaded,setLoaded]=useState(false),[health,setHealth]=useState<HealthItem[]>([]),[healthKey,setHealthKey]=useState(0);const [collectorVersion,setCollectorVersion]=useState(0);const chatPanel=useOnlineChat();const [params,setParams]=useSearchParams();const open=getCatalog().find(source=>source.id===params.get('source')&&source.availability==='available')||null;const collectorPlatform=open&&isCollectorPlatform(open.id)?open.id:null;
+export default function SourceConnections(){const {project,error:projectError}=useProject(),navigate=useNavigate();const [sources,setSources]=useState<Source[]>([]),[status,setStatus]=useState<StatusInput>({}),[error,setError]=useMessageState(''),[loaded,setLoaded]=useState(false),[health,setHealth]=useState<HealthItem[]>([]),[healthKey,setHealthKey]=useState(0);const [collectorVersion,setCollectorVersion]=useState(0);const [params,setParams]=useSearchParams();const open=getCatalog().find(source=>source.id===params.get('source')&&source.availability==='available')||null;const collectorPlatform=open&&isCollectorPlatform(open.id)?open.id:null;
  const projectId=project?.id;
  const {can:canManageOpen}=useSourceAccess(open?.id,projectId);
  const {can:canDiscover}=useBusinessAccess('nrDiscovery.discover',projectId??null);
@@ -99,7 +97,7 @@ export default function SourceConnections(){const {project,error:projectError}=u
 
  return <PageContainer className='nr-page nr-discovery nr-sources'><PageHeader title={$t('sourceConnections.dataSources')} description={$t('sourceConnections.moreConnectMoreSignalsFind')}/>
  {(projectError||error)&&!open&&<p className='nr-error' role='alert'>{projectError||error} <Button variant='outline' onClick={()=>run(load)}>{$t('common.retry')}</Button></p>}
- {project&&canDiscover&&<DiscoveryBox key={project.id} projectId={project.id} refreshKey={healthKey} defaultUrl={project.domains?.[0]?`https://${project.domains[0]}`:undefined} open={id=>{const s=getCatalog().find(x=>x.id===id);if(s)show(s);}} onDone={()=>void load().catch(()=>undefined)}/>}
+ {project&&canDiscover&&<DiscoveryBox key={project.id} projectId={project.id} projectName={project.name} refreshKey={healthKey} defaultUrl={project.domains?.[0]?`https://${project.domains[0]}`:undefined} open={id=>{const s=getCatalog().find(x=>x.id===id);if(s)show(s);}} onDone={()=>void load().catch(()=>undefined)}/>}
  {project&&<HealthPanel projectId={project.id} reloadKey={healthKey} onChange={()=>void load().catch(()=>undefined)}/>}
  {!loaded&&!error&&<p role='status'>{$t('sourceConnections.checkingDataSources')}</p>}
  {categories.map(cat=><section key={cat.id} className='nr-source-group'><h2>{$t(cat.label)}</h2><div className='nr-source-catalog'>{getCatalog().filter(s=>s.category===cat.id).map(s=>{const st=sourceState(s,status);const actionable=s.availability==='available';return <article key={s.id} className='nr-catalog-card' data-source-id={s.id} data-state={st}>
@@ -118,8 +116,6 @@ export default function SourceConnections(){const {project,error:projectError}=u
   </fieldset>
   {/* The connection's network sits under its form: a live deployment shows one switch here. */}
   {project&&canOpenNetwork&&<ConnectionNetwork projectId={project.id} source={open.id}/>}
-  {/* The questions open the AI chat, so the Agent avatar marks this section. */}
-  {open.guide&&<section className='nr-guide-ask'><h3 className='flex items-center gap-2'><ActorAvatar type='agent'/>{$t('sourceConnections.questions')}</h3>{project&&<div className='flex flex-wrap gap-2'>{open.guide.questions.map(question=><Button key={question} variant='outline' disabled={connectionSaving} onClick={()=>{chatPanel.open({draft:question,projectId:String(project.id)});const p=new URLSearchParams(params);p.delete('source');setParams(p);}}>{question}</Button>)}</div>}</section>}
  </div></>}</SheetContent></Sheet>
  </PageContainer>;
 }

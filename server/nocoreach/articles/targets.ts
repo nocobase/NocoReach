@@ -5,6 +5,8 @@ import {
   TARGET_ID,
   type ArticleTarget,
   type ArticleTargetView,
+  slugFromPage,
+  type ArticleMatch,
 } from '../../../shared/article-publishing.js';
 import { projectId, requireAccess } from '../policy.js';
 import type { LegacyVariables } from '../legacy/variables.js';
@@ -296,6 +298,52 @@ export class ArticleTargets {
       throw error;
     }
   }
+  /**
+   * The article a task's page belongs to (2026-10-21): each page address read back through every target's `pages`
+   * patterns gives a slug, looked up with findBySlug; the default target is asked first. Read-only. `unchecked` says a
+   * target that could hold the page could not be asked (no secret, offline), so "not found" is not known for sure.
+   */
+  async match(
+    id: string,
+    urls: unknown,
+  ): Promise<{ article: ArticleMatch | null; unchecked: boolean }> {
+    const pages = (Array.isArray(urls) ? urls : [])
+      .filter((u): u is string => typeof u === 'string' && u.length <= 2000)
+      .slice(0, 10);
+    const settings = this.stored(id),
+      first = this.defaultOf(settings);
+    const targets = [...settings.targets]
+      .map((e) => e.target)
+      .sort((a, b) => Number(b.id === first) - Number(a.id === first));
+    let unchecked = false;
+    for (const url of pages)
+      for (const target of targets) {
+        const hit = slugFromPage(target.pages, url);
+        if (!hit) continue;
+        try {
+          const found = await this.provider(id, target.id).findBySlug(hit.slug);
+          if (!found) continue;
+          const title =
+            found.locales[hit.locale]?.title ||
+            Object.values(found.locales).find((f) => f?.title)?.title ||
+            found.slug ||
+            hit.slug;
+          return {
+            article: {
+              targetId: target.id,
+              articleId: found.id,
+              slug: found.slug || hit.slug,
+              title,
+              url,
+            },
+            unchecked: false,
+          };
+        } catch {
+          unchecked = true;
+        }
+      }
+    return { article: null, unchecked };
+  }
   async search(id: string, targetId: string, q: unknown) {
     const provider = this.provider(id, targetId);
     if (!provider.capabilities.search) return [];
@@ -335,6 +383,7 @@ export class ArticleTargets {
       actions: {
         targets: wrap((id) => this.list(id)),
         search: wrap((id, v) => this.search(id, scalar(v.targetId), v.q)),
+        match: wrap((id, v) => this.match(id, v.urls)),
         saveTarget: wrap((id, v) => this.save(id, v), true),
         removeTarget: wrap((id, v) => this.remove(id, v), true),
         setDefaultTarget: wrap((id, v) => this.setDefault(id, v), true),
@@ -347,6 +396,7 @@ export class ArticleTargets {
       [
         'targets',
         'search',
+        'match',
         'saveTarget',
         'removeTarget',
         'setDefaultTarget',

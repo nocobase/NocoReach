@@ -24,6 +24,7 @@ const fixture = vi.hoisted(() => ({
     id: string;
     name: string;
   } | null,
+  invitations: 0,
 }));
 vi.mock('@nocobase/app-client', async (original) => ({
   ...(await original<typeof import('@nocobase/app-client')>()),
@@ -39,6 +40,9 @@ vi.mock('@nocobase/app-plugin-authentication/client', () => ({
 }));
 vi.mock('../../client/layouts/components/language-switcher.js', () => ({
   LanguageSwitcher: () => <div role='menuitem'>Language</div>,
+}));
+vi.mock('../../client/pages/access/api.js', () => ({
+  usePendingInvitationCount: () => fixture.invitations,
 }));
 const token = (
   name = 'fixture-download-token',
@@ -58,6 +62,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   fixture.request.mockResolvedValue(token());
   fixture.user = { id: 'test-person', name: 'Test person' };
+  fixture.invitations = 0;
   runtime = new I18nRuntime({
     defaultLocale: 'en-US',
     locales: ['en-US', 'zh-CN'],
@@ -249,7 +254,45 @@ test('supports Chinese copy and prompt without English fallback', async () => {
   expect(screen.getByRole('button', { name: '复制指引' })).toBeVisible();
 });
 
-test('account menu offers invitations without membership and opens the sibling agent dialog', async () => {
+test.each([
+  [
+    'en-US',
+    'Connect data with your agent',
+    'Agent setup instructions',
+    'Show me your plan',
+  ],
+  [
+    'zh-CN',
+    '用电脑上的 Agent 接入数据',
+    'Agent 配置指引',
+    '接入前先把计划给我确认',
+  ],
+] as const)(
+  'opened from Data sources, asks the agent to connect that project after the same installation and sign-in (%s)',
+  async (locale, title, label, plan) => {
+    await runtime.changeLanguage(locale);
+    render(
+      <I18nProvider runtime={runtime}>
+        <AgentSetupDialog
+          open
+          onOpenChange={() => {}}
+          connections={{ projectId: '7', projectName: 'Example site' }}
+        />
+      </I18nProvider>,
+    );
+    const instructions = await screen.findByLabelText(label);
+    expect(screen.getByRole('dialog')).toHaveAccessibleName(title);
+    expect(instructions).toHaveTextContent('/api/agents/dist/installScript');
+    expect(instructions).toHaveTextContent('nocoreach login --server');
+    expect(instructions).toHaveTextContent('nocoreach connect guide');
+    expect(instructions).toHaveTextContent('Example site');
+    expect(instructions).toHaveTextContent(/ID 7\b/u);
+    expect(instructions).toHaveTextContent(plan);
+    expect(instructions).not.toHaveTextContent('nocoreach docs');
+  },
+);
+
+const accountMenu = () =>
   render(
     <I18nProvider runtime={runtime}>
       <MemoryRouter>
@@ -257,13 +300,30 @@ test('account menu offers invitations without membership and opens the sibling a
       </MemoryRouter>
     </I18nProvider>,
   );
+
+test('account menu offers invitations with their count only while one is pending', async () => {
+  fixture.invitations = 2;
+  accountMenu();
   fireEvent.click(screen.getByRole('button', { name: 'Open account menu' }));
   const items = screen.getAllByRole('menuitem');
   expect(items[0]).toHaveAttribute('href', '/member-invitations');
+  expect(items[0]).toHaveTextContent('2');
   expect(items[1]).toHaveTextContent('Use NocoReach in your agent');
   expect(items[2]).toHaveTextContent('Language');
   fireEvent.click(items[1]);
   expect(await prompt()).toBeVisible();
+});
+
+test('account menu leaves out invitations when none is pending', () => {
+  accountMenu();
+  fireEvent.click(screen.getByRole('button', { name: 'Open account menu' }));
+  const items = screen.getAllByRole('menuitem');
+  expect(items[0]).toHaveTextContent('Use NocoReach in your agent');
+  expect(
+    screen
+      .getAllByRole('menuitem')
+      .some((item) => item.getAttribute('href') === '/member-invitations'),
+  ).toBe(false);
 });
 
 test.each([

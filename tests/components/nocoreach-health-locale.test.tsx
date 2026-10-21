@@ -19,6 +19,13 @@ import {
 } from '../../client/pages/data-health';
 
 const { action } = vi.hoisted(() => ({ action: vi.fn() }));
+// The daily analysis row links to Settings › Automatic runs only for people who may open it.
+vi.mock('@nocobase/app-plugin-authorization/client', async (original) => ({
+  ...(await original<
+    typeof import('@nocobase/app-plugin-authorization/client')
+  >()),
+  useCan: () => ({ can: true, isPending: false, retry: () => {} }),
+}));
 vi.mock('../../client/lib/nocoreach-api', () => ({
   nocobaseClient: { action, wrapRequests: vi.fn() },
 }));
@@ -151,4 +158,55 @@ test('health panel, expanded table, alert and card preserve user content while s
   expect(action.mock.calls.length).toBe(requestCount);
   expect(items[0].name).toBe('社区论坛');
   expect(items[0].note).toBe(raw);
+});
+
+test('the sync table says how often each source runs and links the daily analysis time to its setting', async () => {
+  const analysis = item('daily-analysis', '每日分析', {
+    nameText: { key: 'dailyAnalysis.dailyAnalysis' },
+    state: 'healthy',
+    cadence: 'daily',
+    note: '每天 07:30 运行（Asia/Shanghai）',
+    schedule: { time: '07:30', timezone: 'Asia/Shanghai', enabled: true },
+  });
+  action.mockResolvedValue({
+    checkedAt: new Date().toISOString(),
+    items: [
+      analysis,
+      item('reddit', 'Reddit', { state: 'healthy', cadence: 'weekly' }),
+      item('youtube', 'YouTube', { state: 'healthy', cadence: 'manual' }),
+    ],
+  });
+  const runtime = new I18nRuntime({
+    defaultLocale: 'zh-CN',
+    locales: ['en-US', 'zh-CN'],
+    applicationNamespace: 'nocoreach',
+  });
+  runtime.registerApplicationNamespace('nocoreach', locales);
+  await runtime.init();
+  disconnect = connectLocale(runtime);
+  render(
+    <I18nProvider runtime={runtime}>
+      <MemoryRouter>
+        <Page />
+      </MemoryRouter>
+    </I18nProvider>,
+  );
+  await userEvent.setup().click(
+    await screen.findByRole('button', {
+      name: $t('dataHealth.viewSyncStatus'),
+    }),
+  );
+  const table = screen.getByRole('table');
+  expect(
+    within(table).getByRole('columnheader', { name: '频率' }),
+  ).toBeInTheDocument();
+  const row = (name: string) => within(table).getByText(name).closest('tr')!;
+  expect(row('每日分析')).toHaveTextContent('每天 07:30 运行（中国标准时间）');
+  expect(row('每日分析')).not.toHaveTextContent('Asia/Shanghai');
+  expect(row('每日分析')).toHaveTextContent('每天');
+  expect(row('Reddit')).toHaveTextContent('每周');
+  expect(row('YouTube')).toHaveTextContent('手动');
+  expect(
+    await within(row('每日分析')).findByRole('link', { name: '修改时间' }),
+  ).toHaveAttribute('href', '/schedules');
 });

@@ -3,6 +3,7 @@ import {
   insightPending,
   opportunityState,
   rowsFor,
+  signalDisposition,
   todaySuggestions,
 } from '../../shared/strategy-pending';
 import { taskOwner, taskState } from '../../shared/task-pending';
@@ -278,4 +279,48 @@ it('an earlier copy raised again later under another card never comes back, what
   expect(states.kept.state).toBe('pending');
   expect(states.restored.state).toBe('pending');
   expect(states.o29.state).toBe('pending');
+});
+
+it('an opportunity ignored from an earlier analysis keeps its changes off Insights', () => {
+  // Studio, 2026-10-21: every opportunity was ignored on Opportunities, yet Insights still listed three changes to act
+  // on. O-19 and O-20 came from the analysis of 10/11; the analysis no longer raises them, so their changes in the
+  // latest analysis had no opportunity of the day and read as standalone changes the AI advises acting on.
+  const changes = ['commercial', 'all-in-one', 'timeline', 'fresh'].map(signal);
+  const s = state([]);
+  s.insights = { ...batch([], 3, changes), generatedAt: '2026-10-21' };
+  s.insights.signalReviews = Object.fromEntries(
+    changes.map((c) => [c.key, { verdict: 'do' as const, reason: '' }]),
+  );
+  s.insightHistory = [
+    {
+      ...batch(
+        [
+          card('o19', { signalIds: ['commercial'] }),
+          card('o20', { signalIds: ['timeline', 'all-in-one'] }),
+        ],
+        3,
+        changes,
+      ),
+      generatedAt: '2026-10-11',
+    },
+  ];
+  s.opportunityMeta = {
+    o19: { status: 'ignored' },
+    o20: { status: 'ignored' },
+  };
+  for (const key of ['commercial', 'all-in-one', 'timeline'])
+    expect(signalDisposition({ key }, s, [])).toMatchObject({
+      next: 'hand',
+      dismissed: true,
+    });
+  // A change no ignored opportunity rests on still asks for a decision; restoring the opportunity brings it back.
+  expect(signalDisposition({ key: 'fresh' }, s, [])).toMatchObject({
+    next: 'hand',
+    verdict: 'do',
+  });
+  expect(insightPending(s, [])).toBe(1);
+  s.opportunityMeta.o19 = { status: 'pending', restoredAt: '2026-10-21' };
+  expect(signalDisposition({ key: 'commercial' }, s, [])).toMatchObject({
+    next: 'opportunity',
+  });
 });

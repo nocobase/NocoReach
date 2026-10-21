@@ -16,6 +16,7 @@ import {
   CommandItem,
   CommandList,
 } from '#components/ui/command';
+import { useScheduleFormatting } from './format.js';
 
 export function TimezoneSelect({
   value,
@@ -27,6 +28,7 @@ export function TimezoneSelect({
   disabled: boolean;
 }) {
   const { t } = useTranslation();
+  const { zone } = useScheduleFormatting();
   const id = useId();
   const [open, setOpen] = useState(false);
   // Include stored aliases even if the browser lists only canonical names.
@@ -58,7 +60,12 @@ export function TimezoneSelect({
               disabled={disabled}
               className='w-full justify-between'
             >
-              {value}
+              <span className='min-w-0 truncate'>
+                {zone(value)}
+                {zone(value) !== value ? (
+                  <span className='text-muted-foreground'> · {value}</span>
+                ) : null}
+              </span>
               <ChevronsUpDownIcon data-icon='inline-end' />
             </Button>
           }

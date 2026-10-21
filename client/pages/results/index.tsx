@@ -53,6 +53,7 @@ import type {
   ResultBoard,
   ResultSummary,
 } from './types.js';
+import { formatDate } from '#lib/format';
 
 // 成果 (2026-10-16, user-confirmed sketch): a dashboard of the project's own work only — what went live in the period,
 // whether the pages it changed moved, and the results that need a look. Site-wide figures stay on 洞察 and the data
@@ -185,8 +186,8 @@ function ResultsBoard({ projectId }: { projectId: string }) {
             </span>
           ) : board?.window.start ? (
             $t('results.board.window', {
-              0: board.window.start,
-              1: board.window.end,
+              0: formatDate(board.window.start),
+              1: formatDate(board.window.end),
             })
           ) : undefined
         }
