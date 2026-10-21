@@ -2,8 +2,14 @@
 
 ## Unreleased — English code comments
 
-- AGENTS.md now asks for code comments in English, with interface elements named by their English labels. `tests/logic/comment-language.test.ts` parses every source file and fails when a file has more comments containing Chinese than `tests/logic/comment-language-baseline.json` allows (197 files, 601 older comments today); `COMMENT_LANGUAGE_BASELINE=lower` lowers the baseline after a cleanup and never raises it.
+- AGENTS.md now asks for code comments in English, with interface elements named by their English labels. `tests/logic/comment-language.test.ts` parses every source file and fails when a file has more comments containing Chinese than `tests/logic/comment-language-baseline.json` allows (195 files, 595 older comments today); `COMMENT_LANGUAGE_BASELINE=lower` lowers the baseline after a cleanup and never raises it.
 - `.github/workflows/pr-language.yml` fails a pull request whose title, description or commit messages contain Chinese, and runs again when the description is edited, without rerunning the tests.
+
+## Unreleased — Page names shown once
+
+- Top-level pages no longer repeat their name in the header beside the sidebar toggle: the name fades in there only once the page's large title has scrolled out of view.
+- Pages below another one show their full path in the header, with the earlier levels as links back: Keywords › the keyword, Members & roles › the role, Scheduled tasks › Execution history (without the Settings group). Keyword details and the role form drop their own Back link.
+- Below 768px the header shows the brand on top-level pages and "‹ the parent page" on pages below another one.
 
 ## Unreleased — Connection drawers in plain words
 

@@ -5,10 +5,13 @@ import {
   $legacyText,
   useNocoReachLocale,
 } from '#i18n';
-// 关键词 详情 (2026-10-15 user choice, after Ahrefs' Keywords Explorer): one keyword in one market, a page over the 关键词
-// tab it was opened from (/keywords/detail?kw=…&kwLoc=…&kwLang=…, that tab's own query kept, so 返回 restores it).
-// 概览, 历史趋势, 上下关联, 已收录内容 and 排名历史 load on their own: the free part (Search Console, the weekly rank
+// Keyword details (2026-10-15 user choice, after Ahrefs' Keywords Explorer): one keyword in one market, a page over the
+// Keywords tab it was opened from (/keywords/detail?kw=…&kwLoc=…&kwLang=…, that tab's own query kept, so the header's
+// Keywords › <keyword> trail restores it).
+// Overview, Trends, Related keywords, Your indexed content and Rank history load on their own: the free part (Search Console, the weekly rank
 // checks, the site's pages) at once, the DataForSEO part beside it, each lookup reused for 30 days by the server.
+import { usePageBreadcrumb } from '@nocobase/app-client';
+import { useTranslation } from '@nocobase/i18n/client';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
@@ -27,7 +30,6 @@ import { Bot, Bookmark, BookmarkCheck, TrendingUp } from 'lucide-react';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { toast } from '#lib/toast';
 import { cn } from '#lib/utils';
-import { BackButton } from '#components/back-button';
 import { RouteChildPage } from '#components/route-child-page';
 import { PageContainer, PageHeader, Section } from '#components/reach/page';
 import { InlineError, LoadError } from '#components/reach/states';
@@ -237,17 +239,22 @@ export default function KeywordDetailPage() {
         m.locationCode === Number(params.get('kwLoc')) &&
         m.language === params.get('kwLang'),
     ) ?? fallback;
-  // 返回 goes to the tab it came from with that tab's query, without the detail's own parameters.
+  const { t } = useTranslation();
+  // The trail's Keywords goes to the tab it came from with that tab's query, without the detail's own parameters; the
+  // header carries the only way back (L6), so the page has no BackButton.
   const back = useMemo(() => {
     const p = new URLSearchParams(params);
     DETAIL_PARAMS.forEach((k) => p.delete(k));
     const s = p.toString();
-    return { pathname: '..', search: s ? `?${s}` : '' };
+    return { pathname: '/keywords', search: s ? `?${s}` : '' };
   }, [params]);
+  usePageBreadcrumb([
+    { label: t('nocoreach.nav.keywords'), to: back },
+    { label: keyword || $t('keywordDetail.noKeyword') },
+  ]);
   return (
     <RouteChildPage>
       <PageContainer className='nr-data-page'>
-        <BackButton to={back}>{$t('keywordDetail.backToKeywords')}</BackButton>
         {keyword && project ? (
           <Detail
             key={`${project.id}:${keyword}:${market.locationCode}:${market.language}`}
@@ -316,7 +323,7 @@ function Detail({
       ? data.data.overview.item
       : null;
   const gsc = site.data?.gsc;
-  // The site's figures for the keyword over its pages, as 交给 Agent and 本站排名 take them.
+  // The site's figures for the keyword over its pages, as Hand off to agent and Our position take them.
   const rank = useMemo<SiteRank | undefined>(() => {
     const pages = gsc?.pages ?? [];
     const impressions = pages.reduce((n, p) => n + p.impressions, 0);

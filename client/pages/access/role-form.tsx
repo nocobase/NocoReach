@@ -17,13 +17,17 @@ import {
 } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { ApiClientError, useNavigationGuard } from '@nocobase/app-client';
+import {
+  ApiClientError,
+  useNavigationGuard,
+  usePageBreadcrumb,
+} from '@nocobase/app-client';
+import { useTranslation } from '@nocobase/i18n/client';
 import { $t, useNocoReachLocale } from '#i18n';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { PageContainer, PageHeader } from '#components/reach/page';
 import { ListSkeleton } from '#components/reach/states';
 import { RouteChildPage } from '#components/route-child-page';
-import { BackButton } from '#components/back-button';
 import { Button } from '#components/ui/button';
 import { Checkbox } from '#components/ui/checkbox';
 import { Input } from '#components/ui/input';
@@ -53,10 +57,24 @@ export default function RoleForm() {
     `/roles/${encodeURIComponent(roleKey || '')}`,
     !!roleKey,
   );
+  const { t } = useTranslation();
+  const location = useLocation();
+  // The header's trail is the way back to the roles tab with its search (L6), so the page has no BackButton. Built-in
+  // roles are named before they load; a custom role shows its key until its title arrives.
+  usePageBreadcrumb([
+    {
+      label: t('nocoreach.nav.members'),
+      to: { pathname: '/members', search: location.search },
+    },
+    {
+      label: roleKey
+        ? roleTitle(detail.data ?? { key: roleKey })
+        : $t('accessMembers.newRole'),
+    },
+  ]);
   return (
     <RouteChildPage>
       <PageContainer className='max-w-4xl'>
-        <BackButton />
         {access.isPending || access.error || (roleKey && !detail.data) ? (
           access.error || detail.error ? (
             <AccessError
