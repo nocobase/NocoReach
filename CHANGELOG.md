@@ -7,6 +7,12 @@
 - Opportunity links in chat answers open inside the application, like task links.
 
 
+## Unreleased — Tasks by Agent
+
+- Tasks gains a By agent view next to List and Board, after Studio's Agent view: a column per Agent the project runs tasks with (the project default first), then Unassigned. Each column says whether the Agent is running, queued, waiting or idle, and when no runtime is online; inside it are Working on, Up next (numbered, oldest first) and Waiting, where each card says what a person has to do (Confirm start, the review step, Confirm publish, confirm going live, Run failed) and who: "You" on a highlighted card listed first, otherwise the owner's name. Finished and closed tasks are left out.
+- Cards on the board and the Executor column of the list name the task's Agent (its own, else the project default, as the task page header shows it) with an online dot, or Unassigned, instead of a bare "Agent". A new Any agent filter narrows every view.
+- A line above the tasks counts runs under way, queued and failed, and the runtimes online. What waits for you stays counted on Waiting for me.
+
 ## Unreleased — Website & product pages, fixed and in plain words
 
 - Traffic's daily chart draws the previous period over the same days of the current one again. GA4 answers each of the two date ranges on every day of both, at zero outside it; those zero days drew the comparison line over the wrong days and dropped both lines to zero where the periods met. The server keeps each range's own days, and the page ignores the extra days in reports cached before.
