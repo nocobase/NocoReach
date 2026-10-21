@@ -8,6 +8,26 @@
 - The chat agent's name, model and instructions open as a dialog from the Chat panel row; the separate chat agent list, and turning a chat agent off, are gone. A chat agent that is off can be turned on from the row.
 - Agents on a runtime are called local agents everywhere ("Execution agent" and "Task agent" before).
 
+## Unreleased — Ask AI reads the daily analysis
+
+- The online assistant can read the daily analysis behind Insights through a new read-only `daily_analysis` tool: a day's notes and limitations, the opportunities it raised with where each stands now (awaiting decision, handed off to agent with its task, dismissed, expired), its verdict on every change (do, watch, skip) with the reason, the opportunities awaiting a decision now, and the watches still open or ended. It reads the latest analysis or any earlier day, checks on every call that the conversation owner may still see Insights, and links opportunities to Opportunities. Asked about "the daily analysis of 10/21", it used to search the tasks and find nothing.
+- The metrics it reads (`project_data`, metrics) now include totals: each key metric of the last 28 days with the 28 days before and the change, as the Insights tiles show them, with the daily series. The snapshot of keywords, pages and audit issues had no previous period to compare with.
+- Opportunity links in chat answers open inside the application, like task links.
+
+## Unreleased — Website & product pages, fixed and in plain words
+
+- Traffic's daily chart draws the previous period over the same days of the current one again. GA4 answers each of the two date ranges on every day of both, at zero outside it; those zero days drew the comparison line over the wrong days and dropped both lines to zero where the periods met. The server keeps each range's own days, and the page ignores the extra days in reports cached before.
+- Traffic: Today shows skeletons while it loads, names the property's time zone ("China Standard Time" rather than `Asia/Shanghai`) and writes its sources the way the channel table does (Direct rather than `(direct) / (none)`). What moved the figure is plain text, and data that may be off is one line with a "Check data" tag and the explanation and GA4 steps in its ⓘ, instead of two amber blocks.
+- Pages describes itself in one sentence; the site, the pages read and how the sitemap's count relates to the tabs' are in the ⓘ. Not in sitemap is a tag.
+- Site audit and its performance check describe themselves in one sentence each (no cost moves into the ⓘ), and the device choice and the device filter use the same segmented control.
+- GitHub labels that were English in every language (Commits, Watchers, Issues, Pull requests, Releases, Discussions) are translated, and its copy uses those names.
+- Downloads describes what is connected rather than every registry it supports, says "Latest" instead of `latest`, and picks a package from a drop-down instead of buttons that ran past the card.
+
+## Unreleased — Data sources: two ways to connect, findings in a dialog
+
+- The top of Data sources shows two cards side by side: Find data sources on your website, with what it reads, and Use an agent on your computer, saying why: the agent researches the website and repositories, lists a plan and connects everything once you confirm, while authorizations and tokens stay in the browser.
+- Discover data opens its findings in a dialog that can be closed, instead of a long list on the page. The website's own title and description are no longer shown above the findings. Authorize closes the dialog and opens that source's panel.
+
 ## Unreleased — One look for refresh buttons, drop-downs, tabs and pagination
 
 - The data pages call the action that reads new data "Update now" everywhere, instead of seven names (Read now, Search now, Check now, Query now, the competitor and Site audit wordings). The connection drawers keep their own steps.
@@ -81,6 +101,10 @@
 
 - Find the article a task changes from its page instead of picking it from hundreds: the page address is read back through each publishing target's page pattern to a slug and looked up there. The start card shows the article found with Change; it is linked as the task starts.
 - Decide where a change goes from where the page lives: a page no target holds goes to the website repository as a pull request (unless the playbook names a target), a blog post stays a new article in the playbook's target. Publish to, also-publish and the new/existing choice appear only after Change, when nothing was found, or when the targets could not be asked.
+
+## Unreleased — Notification diagnostics
+
+- Remove reliance on the generic notification test API from mock-isolation tests and operator guidance. Keep notification mutation blocking, authentication, inbox access and log reads covered.
 
 ## Unreleased — English code comments
 

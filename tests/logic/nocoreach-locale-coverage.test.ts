@@ -66,6 +66,9 @@ describe('NocoReach semantic-key translations', () => {
     );
     // A legacy alias keeps its historical source text when the visible copy changes.
     const changedLegacyCopy: Record<string, string> = {
+      // The discovery findings open in a dialog (2026-10-21).
+      '完成。需要授权的项目可以随时点“去授权”，也可以在下方目录中管理。':
+        '完成。需要授权的来源可以点“去授权”，也可以关闭后在目录中管理。',
       // Connection drawers describe each source plainly (2026-10-21).
       'AI 搜索用已接入的 DataForSEO 查，不用另外接：在“搜索 → AI 搜索”里查品牌提及或问 AI，点了才查，花费算进 DataForSEO 的月度预算。':
         'AI 搜索使用已接入的 DataForSEO，不需要另外接入：在“搜索 → AI 搜索”中查询品牌提及或向 AI 提问，点击后才查询，费用计入 DataForSEO 的月度预算。',
@@ -175,6 +178,13 @@ describe('NocoReach semantic-key translations', () => {
       // A weekly change carries its own sign, so a fall reads "−7/week" rather than "+-7/week" (2026-10-21).
       '+{0}/周': '{0}/周',
       '（近一周 {0}{1}）': '（近一周 {0}）',
+      // Website & product pages in plain words, GitHub's terms in Chinese where it has them (2026-10-21).
+      '这个仓库没有开启 Discussions。':
+        '这个仓库没有开启讨论区（Discussions）。',
+      '讨论最多的 Discussions 合成一个任务，让 Agent 归类问题、看哪些能用文档回答，确认后立即开始。':
+        '讨论最多的讨论帖合成一个任务，由 Agent 归类问题、找出可以用文档回答的部分，确认后立即开始。',
+      '讨论最多的 Issues 合成一个任务，让 Agent 分出哪些能用文档回答、哪些要改产品，确认后立即开始。':
+        '讨论最多的 Issue 合成一个任务，由 Agent 区分哪些可以用文档回答、哪些需要改产品，确认后立即开始。',
       // Tab counts follow the tab name without brackets, as Opportunities' tabs do (2026-10-21).
       '全部 ({0})': '全部 {0}',
       '关键词 ({0})': '关键词 {0}',

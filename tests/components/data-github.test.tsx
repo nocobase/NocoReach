@@ -235,7 +235,7 @@ describe('GitHub', () => {
     renderPage();
     await ready();
     expect(
-      screen.getByText('仓库的 Star、贡献、Issues、PR 与访问来源。'),
+      screen.getByText('仓库的 Star、贡献、Issue、PR 和访问来源。'),
     ).toBeTruthy();
     expect(screen.queryByText('An open-source app builder')).toBeNull();
     const summary = document.querySelector('.nr-range-summary') as HTMLElement;
@@ -269,13 +269,13 @@ describe('GitHub', () => {
     expect(document.querySelector('[data-trend="stars"]')).toBeTruthy();
     expect(screen.getByText('新增 Star · 按天')).toBeTruthy();
     await userEvent.click(
-      within(tile('commits')).getByRole('button', { name: 'Commits' }),
+      within(tile('commits')).getByRole('button', { name: '提交' }),
     );
     expect(tile('commits').querySelector('[aria-pressed="true"]')).toBeTruthy();
     const trend = document.querySelector(
       '[data-trend="commits"]',
     ) as HTMLElement;
-    expect(within(trend).getByText('Commits · 按天')).toBeTruthy();
+    expect(within(trend).getByText('提交 · 按天')).toBeTruthy();
     // No strip of daily average, peak and last 7 days under the chart (removed 2026-10-14).
     expect(trend.querySelector('[data-stats]')).toBeNull();
     expect(screen.getByRole('button', { name: '全部时间' })).toBeTruthy();
@@ -359,20 +359,18 @@ describe('GitHub', () => {
     await userEvent.click(within(report).getByRole('tab', { name: '贡献者' }));
     expect(within(report).getAllByText('外部').length).toBeGreaterThan(0);
     expect(within(report).getByText('bob')).toBeTruthy();
-    await userEvent.click(within(report).getByRole('tab', { name: 'Issues' }));
+    await userEvent.click(within(report).getByRole('tab', { name: 'Issue' }));
     expect(
       within(report).getByRole('link', { name: 'Docs for linkage' }),
     ).toBeTruthy();
-    await userEvent.click(
-      within(report).getByRole('tab', { name: 'Pull requests' }),
-    );
+    await userEvent.click(within(report).getByRole('tab', { name: 'PR' }));
     expect(within(report).getByText('Fix the chart')).toBeTruthy();
     expect(within(report).getByText('已合并')).toBeTruthy();
     await userEvent.type(within(report).getByRole('textbox'), 'sidebar');
     expect(within(report).queryByText('Fix the chart')).toBeNull();
     expect(within(report).getByText('New sidebar')).toBeTruthy();
     await userEvent.click(
-      within(report).getByRole('tab', { name: 'Releases' }),
+      within(report).getByRole('tab', { name: '版本发布' }),
     );
     expect(within(report).getByText('Version 2')).toBeTruthy();
   });
@@ -386,11 +384,11 @@ describe('GitHub', () => {
     await ready();
     expect(within(tile('commits')).getByText('需要 token')).toBeTruthy();
     await userEvent.click(
-      within(tile('commits')).getByRole('button', { name: 'Commits' }),
+      within(tile('commits')).getByRole('button', { name: '提交' }),
     );
     expect(
       screen.getByText(
-        '贡献者、Commits、Issues、PR 和 Releases 的历史要在数据接入里接入 token 后补全。',
+        '贡献者、提交、Issue、PR 和版本发布的历史，需要在数据接入中填写 token 后补全。',
       ),
     ).toBeTruthy();
   });

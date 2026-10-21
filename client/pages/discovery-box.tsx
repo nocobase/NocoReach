@@ -3,8 +3,15 @@ import { useEffect, useRef, useState } from 'react';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { Check, TerminalSquare, X } from 'lucide-react';
 import { AgentSetupDialog } from '#components/agent-setup-dialog';
-import { InfoTip } from '#components/reach/info-tip';
 import { Button } from '#components/ui/button';
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '#components/ui/dialog';
 import { Tag } from '#components/reach/tag';
 export type Finding = {
   source: string;
@@ -123,8 +130,9 @@ const kindOf = (source: string) => SOURCE_KINDS[source] ?? source;
 // refreshKey changes whenever the page reloads its saved connection state (after a connection panel
 // saved, or after this box connected sources): the listed findings then get their connection status
 // recomputed from saved state, without reading the homepage again.
-// Two ways to start: the homepage's links, read by rules here, or the person's own agent, which installs the NocoReach
-// CLI and connects sources with `nocoreach connect` after they confirm its plan.
+// Two ways to start, side by side: the homepage's links, read by rules here, or the person's own agent, which installs
+// the NocoReach CLI and connects sources with `nocoreach connect` after they confirm its plan. The findings open in a
+// dialog held in component state: they come from one homepage read and stand for no record, so reopening reads again.
 export function DiscoveryBox({
   projectId,
   projectName,
@@ -141,6 +149,7 @@ export function DiscoveryBox({
   onDone: () => void;
 }) {
   const [agentOpen, setAgentOpen] = useState(false);
+  const [resultsOpen, setResultsOpen] = useState(false);
   const agentRef = useRef<HTMLButtonElement>(null);
   const [url, setUrl] = useState(defaultUrl ?? ''),
     [found, setFound] = useState<Discovery>(),
@@ -187,6 +196,7 @@ export function DiscoveryBox({
     };
   }, [refreshKey, projectId]);
   async function discover() {
+    setResultsOpen(true);
     setBusy(true);
     setError('');
     setFound(undefined);
@@ -257,39 +267,47 @@ export function DiscoveryBox({
     [$t('discoveryBox.notSupportedYet'), ['unsupported']],
   ];
   const finished = found && Object.keys(outcomes).length > 0 && !busy;
+  // Connecting writes one source after another; the dialog stays open until the last answer is in.
+  const connecting = busy && Boolean(found);
+  const host = found ? new URL(found.origin).hostname : '';
   return (
     <section className='nr-discovery-box'>
-      <div className='nr-discovery-input'>
+      <div className='nr-discovery-way'>
+        <h2>{$t('discoveryBox.findOnWebsite')}</h2>
+        <p className='nr-muted'>
+          {$t('discoveryBox.readsHomepageLinksFindWebsite')}
+        </p>
+        <div className='nr-discovery-input'>
+          <input
+            aria-label={$t('discoveryBox.websiteAddress')}
+            value={url}
+            disabled={busy}
+            placeholder='https://example.com'
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && url.trim() && !busy) void discover();
+            }}
+          />
+          <Button
+            variant='outline'
+            disabled={busy || !url.trim()}
+            onClick={() => void discover()}
+          >
+            {$t('discoveryBox.discoverData')}
+          </Button>
+        </div>
+      </div>
+      <div className='nr-discovery-way'>
         <h2>
-          {$t('discoveryBox.findOnWebsite')}
-          <InfoTip label={$t('discoveryBox.findOnWebsiteHelp')}>
-            {$t('discoveryBox.readsHomepageLinksFindWebsite')}
-          </InfoTip>
-        </h2>
-        <input
-          aria-label={$t('discoveryBox.websiteAddress')}
-          value={url}
-          disabled={busy}
-          placeholder='https://example.com'
-          onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && url.trim() && !busy) void discover();
-          }}
-        />
-        <Button
-          variant='outline'
-          disabled={busy || !url.trim()}
-          onClick={() => void discover()}
-        >
-          {busy && !found
-            ? $t('discoveryBox.discovering')
-            : $t('discoveryBox.discoverData')}
-        </Button>
-        <span className='nr-footnote'>{$t('discoveryBox.or')}</span>
-        <Button ref={agentRef} onClick={() => setAgentOpen(true)}>
           <TerminalSquare aria-hidden='true' />
           {$t('discoveryBox.useAgent')}
-        </Button>
+        </h2>
+        <p className='nr-muted'>{$t('discoveryBox.useAgentHint')}</p>
+        <div>
+          <Button ref={agentRef} onClick={() => setAgentOpen(true)}>
+            {$t('discoveryBox.copyAgentInstructions')}
+          </Button>
+        </div>
       </div>
       <AgentSetupDialog
         open={agentOpen}
@@ -297,154 +315,211 @@ export function DiscoveryBox({
         returnFocus={agentRef}
         connections={{ projectId: String(projectId), projectName }}
       />
-      {error && (
-        <p className='nr-error' role='alert'>
-          {error}
-        </p>
-      )}
-      {found && (
-        <div className='nr-discovery-result'>
-          <p className='nr-footnote'>
-            {found.title}
-            {found.description ? ` — ${found.description}` : ''}
-          </p>
-          {groups.map(([title, states]) => {
-            const rows = found.items
-              .map((f, i) => [f, i] as const)
-              .filter(([f]) => states.includes(f.status));
-            // Findings of one kind form one block headed by the kind's name and rule, in first-seen order.
-            const blocks: { kind: string; rows: (typeof rows)[number][] }[] =
-              [];
-            for (const row of rows) {
-              const kind = kindOf(row[0].source);
-              const block = blocks.find((b) => b.kind === kind);
-              if (block) block.rows.push(row);
-              else blocks.push({ kind, rows: [row] });
-            }
-            return rows.length ? (
-              <div key={title} className='nr-discovery-group'>
-                <h3>
-                  {title}
-                  <span className='nr-discovery-count'>{rows.length}</span>
-                </h3>
-                {blocks.map(({ kind, rows: kindRows }) => (
-                  <section
-                    key={kindRows[0][1]}
-                    className='nr-discovery-kind'
-                    aria-label={KINDS[kind] ? $t(KINDS[kind].name) : undefined}
-                  >
-                    {KINDS[kind] && (
-                      <header className='nr-discovery-kind-head'>
-                        <strong>{$t(KINDS[kind].name)}</strong>
-                        <span>{$t(KINDS[kind].note)}</span>
-                      </header>
-                    )}
-                    {kindRows.map(([f, i]) => {
-                      const o = outcomes[i];
-                      const github = f.source === 'github';
-                      return (
-                        <div
-                          key={i}
-                          className='nr-discovery-row'
-                          data-status={f.status}
-                        >
-                          {states[0] === 'direct' ? (
-                            // Repositories are radios (single choice); clicking the picked one clears it.
-                            <input
-                              type={github ? 'radio' : 'checkbox'}
-                              name={github ? 'discovery-github' : undefined}
-                              aria-label={$t('common.connectValue', {
-                                0: f.label,
-                              })}
-                              checked={picked.has(i)}
-                              disabled={
-                                busy ||
-                                Boolean(o) ||
-                                f.connection.status === 'connected'
-                              }
-                              // A radio never reports being unchecked, so repositories toggle on click; no
-                              // preventDefault, which leaves a controlled radio's DOM state out of sync.
-                              onChange={(e) => {
-                                if (!github) pick(i, e.target.checked);
-                              }}
-                              onClick={() => {
-                                if (github) pick(i, !picked.has(i));
-                              }}
-                            />
-                          ) : null}
-                          <div>
-                            <strong>{f.label}</strong>
-                            <span className='nr-footnote'>
-                              {o?.message || f.note}
-                            </span>
-                            {f.connection.status === 'replaces' && (
-                              <span className='nr-footnote nr-discovery-warning'>
-                                {$t('discoveryBox.replacementWarning', {
-                                  0: f.connection.current,
-                                })}
-                              </span>
-                            )}
-                          </div>
-                          {f.connection.status === 'connected' && (
-                            <Tag tone='green'>
-                              {$t('discoveryBox.alreadyConnected')}
-                            </Tag>
-                          )}
-                          {o?.state === 'done' && (
-                            <Check
-                              className='nr-ok'
-                              aria-label={$t('common.connected')}
-                            />
-                          )}
-                          {o?.state === 'failed' && (
-                            <X
-                              className='nr-fail'
-                              aria-label={$t('discoveryBox.notConnect')}
-                            />
-                          )}
-                          {o?.state === 'running' && (
-                            <span className='nr-footnote'>
-                              {$t('discoveryBox.connecting')}
-                            </span>
-                          )}
-                          {f.status === 'auth' &&
-                            f.connection.status !== 'connected' && (
-                              <Button
-                                size='sm'
-                                variant='outline'
-                                onClick={() => open(f.source)}
-                              >
-                                {$t('discoveryBox.authorize')}
-                              </Button>
-                            )}
-                        </div>
-                      );
-                    })}
-                  </section>
-                ))}
-              </div>
-            ) : null;
-          })}
-          <div className='nr-step-actions'>
-            {finished ? (
-              <p className='nr-footnote'>
-                {$t('discoveryBox.doneSourcesNeedAuthorizationAuthorized')}
+      <Dialog
+        open={resultsOpen}
+        onOpenChange={(next, details) => {
+          if (!next && connecting) {
+            details.cancel();
+            return;
+          }
+          setResultsOpen(next);
+        }}
+      >
+        <DialogContent
+          showCloseButton={!connecting}
+          className='flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-2xl'
+        >
+          <DialogHeader className='shrink-0 pr-6'>
+            <DialogTitle>
+              {found
+                ? $t('discoveryBox.foundSources', {
+                    0: host,
+                    1: found.items.length,
+                  })
+                : error
+                  ? $t('discoveryBox.findOnWebsite')
+                  : $t('discoveryBox.discovering')}
+            </DialogTitle>
+          </DialogHeader>
+          <div className='nr-discovery-result min-h-0 overflow-y-auto'>
+            {error && (
+              <p className='nr-error' role='alert'>
+                {error}
               </p>
-            ) : (
-              <Button
-                disabled={busy || !picked.size}
-                onClick={() => void connectAll()}
-              >
-                {busy
-                  ? $t('common.connecting')
-                  : $t('discoveryBox.connectSelectedSources', {
-                      0: picked.size,
-                    })}
-              </Button>
+            )}
+            {!found && !error && (
+              <p role='status' className='nr-footnote'>
+                {$t('discoveryBox.discovering')}
+              </p>
+            )}
+            {found && (
+              <>
+                {groups.map(([title, states]) => {
+                  const rows = found.items
+                    .map((f, i) => [f, i] as const)
+                    .filter(([f]) => states.includes(f.status));
+                  // Findings of one kind form one block headed by the kind's name and rule, in first-seen order.
+                  const blocks: {
+                    kind: string;
+                    rows: (typeof rows)[number][];
+                  }[] = [];
+                  for (const row of rows) {
+                    const kind = kindOf(row[0].source);
+                    const block = blocks.find((b) => b.kind === kind);
+                    if (block) block.rows.push(row);
+                    else blocks.push({ kind, rows: [row] });
+                  }
+                  return rows.length ? (
+                    <div key={title} className='nr-discovery-group'>
+                      <h3>
+                        {title}
+                        <span className='nr-discovery-count'>
+                          {rows.length}
+                        </span>
+                      </h3>
+                      {blocks.map(({ kind, rows: kindRows }) => (
+                        <section
+                          key={kindRows[0][1]}
+                          className='nr-discovery-kind'
+                          aria-label={
+                            KINDS[kind] ? $t(KINDS[kind].name) : undefined
+                          }
+                        >
+                          {KINDS[kind] && (
+                            <header className='nr-discovery-kind-head'>
+                              <strong>{$t(KINDS[kind].name)}</strong>
+                              <span>{$t(KINDS[kind].note)}</span>
+                            </header>
+                          )}
+                          {kindRows.map(([f, i]) => {
+                            const o = outcomes[i];
+                            const github = f.source === 'github';
+                            return (
+                              <div
+                                key={i}
+                                className='nr-discovery-row'
+                                data-status={f.status}
+                              >
+                                {states[0] === 'direct' ? (
+                                  // Repositories are radios (single choice); clicking the picked one clears it.
+                                  <input
+                                    type={github ? 'radio' : 'checkbox'}
+                                    name={
+                                      github ? 'discovery-github' : undefined
+                                    }
+                                    aria-label={$t('common.connectValue', {
+                                      0: f.label,
+                                    })}
+                                    checked={picked.has(i)}
+                                    disabled={
+                                      busy ||
+                                      Boolean(o) ||
+                                      f.connection.status === 'connected'
+                                    }
+                                    // A radio never reports being unchecked, so repositories toggle on click; no
+                                    // preventDefault, which leaves a controlled radio's DOM state out of sync.
+                                    onChange={(e) => {
+                                      if (!github) pick(i, e.target.checked);
+                                    }}
+                                    onClick={() => {
+                                      if (github) pick(i, !picked.has(i));
+                                    }}
+                                  />
+                                ) : null}
+                                <div>
+                                  <strong>{f.label}</strong>
+                                  <span className='nr-footnote'>
+                                    {o?.message || f.note}
+                                  </span>
+                                  {f.connection.status === 'replaces' && (
+                                    <span className='nr-footnote nr-discovery-warning'>
+                                      {$t('discoveryBox.replacementWarning', {
+                                        0: f.connection.current,
+                                      })}
+                                    </span>
+                                  )}
+                                </div>
+                                {f.connection.status === 'connected' && (
+                                  <Tag tone='green'>
+                                    {$t('discoveryBox.alreadyConnected')}
+                                  </Tag>
+                                )}
+                                {o?.state === 'done' && (
+                                  <Check
+                                    className='nr-ok'
+                                    aria-label={$t('common.connected')}
+                                  />
+                                )}
+                                {o?.state === 'failed' && (
+                                  <X
+                                    className='nr-fail'
+                                    aria-label={$t('discoveryBox.notConnect')}
+                                  />
+                                )}
+                                {o?.state === 'running' && (
+                                  <span className='nr-footnote'>
+                                    {$t('discoveryBox.connecting')}
+                                  </span>
+                                )}
+                                {f.status === 'auth' &&
+                                  f.connection.status !== 'connected' && (
+                                    <Button
+                                      size='sm'
+                                      variant='outline'
+                                      onClick={() => {
+                                        setResultsOpen(false);
+                                        open(f.source);
+                                      }}
+                                    >
+                                      {$t('discoveryBox.authorize')}
+                                    </Button>
+                                  )}
+                              </div>
+                            );
+                          })}
+                        </section>
+                      ))}
+                    </div>
+                  ) : null;
+                })}
+              </>
             )}
           </div>
-        </div>
-      )}
+          <DialogFooter className='shrink-0 items-center'>
+            {finished ? (
+              <>
+                <p className='nr-footnote mr-auto'>
+                  {$t('discoveryBox.doneSourcesNeedAuthorizationAuthorized')}
+                </p>
+                <DialogClose render={<Button />}>
+                  {$t('common.complete')}
+                </DialogClose>
+              </>
+            ) : (
+              <>
+                <DialogClose
+                  disabled={connecting}
+                  render={<Button variant='outline' />}
+                >
+                  {$t('discoveryBox.close')}
+                </DialogClose>
+                {found && (
+                  <Button
+                    disabled={busy || !picked.size}
+                    onClick={() => void connectAll()}
+                  >
+                    {busy
+                      ? $t('common.connecting')
+                      : $t('discoveryBox.connectSelectedSources', {
+                          0: picked.size,
+                        })}
+                  </Button>
+                )}
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
