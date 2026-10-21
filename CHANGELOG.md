@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Insights: Current situation beside the day, decisions kept
+
+- Current situation is back as a column beside the day's conversation, as before the redesign, with its explanation and Refresh. The Status link, its drawer and the All data menu are gone; each tile still opens its data page.
+- Opportunities decided today stay in today's message after those still waiting, marked Handed off to agent (with the task) or Dismissed, and the message counts them (Awaiting, Handed off, Dismissed), as the earlier days do. Each opportunity shows once: today while it waits or when today's analysis raised it, otherwise on the day it was first raised.
+- The metric tiles and the waiting tasks no longer show a Refresh icon on hover; they are read again on each visit, and Retry appears only after a failure.
+- "(daily, automatic)" after the last analysis links to Settings › Automatic runs for those who may open it. The fold markers are chevrons instead of ▾ and ▴.
+
 ## Unreleased — Insights as a conversation with the daily analysis
 
 - Insights now reads as the daily analysis speaking, so it no longer looks like Opportunities or opens on a wall of text. The key numbers stay on top as tiles with their trend (at most five, only those with data), with Status (the standing facts, in a drawer) and All data (every data page, grouped) below them.
