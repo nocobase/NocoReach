@@ -4074,7 +4074,7 @@
   "seoHandOff.queriesRankGoogleTop5": "Colocar estas consultas entre os 5 primeiros resultados do Google: {0}",
   "dataChat.messagesBecomeOneTaskAgent": "Estas mensagens serão reunidas em uma única tarefa: o agente as agrupará, buscará respostas na documentação e listará o que precisa ser acrescentado. A tarefa começará assim que você confirmar.",
   "dataHackernews.commentsBecomeOneTaskAgent": "Estes comentários serão reunidos em uma única tarefa: o agente resumirá o que as pessoas estão dizendo e o que precisa ser acrescentado. A tarefa começará assim que você confirmar.",
-  "seoHandOff.trackedKeywordsReachTopResults": "Estas palavras-chave monitoradas aparecem nas primeiras posições do Google: {0}",
+  "seoHandOff.trackedKeywordsReachTopResults": "Colocar estas palavras-chave monitoradas entre os primeiros resultados do Google: {0}",
   "aiSearch.questionsBecomeOneTaskAgent": "Estas perguntas serão reunidas em uma única tarefa: o agente comparará nosso conteúdo com o do concorrente e identificará o que precisa ser acrescentado.",
   "seoHandOff.pagesGetMoreClicksGoogle": "Aumentar os cliques destas páginas nas buscas do Google: {0}",
   "knowledge.materialNotExistRefreshTry": "Este material não existe. Atualize a página e tente novamente",

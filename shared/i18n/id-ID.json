@@ -4074,7 +4074,7 @@
   "seoHandOff.queriesRankGoogleTop5": "Bawa kueri ini ke 5 hasil teratas Google: {0}",
   "dataChat.messagesBecomeOneTaskAgent": "Pesan ini menjadi satu tugas: agen mengelompokkannya, mencari jawaban di dokumentasi, dan mencatat apa yang perlu ditambahkan. Tugas langsung dimulai setelah Anda mengonfirmasi.",
   "dataHackernews.commentsBecomeOneTaskAgent": "Komentar ini menjadi satu tugas: agen merangkum apa yang dibicarakan orang dan apa yang perlu ditambahkan. Tugas langsung dimulai setelah Anda mengonfirmasi.",
-  "seoHandOff.trackedKeywordsReachTopResults": "Kata kunci yang dilacak ini mencapai hasil teratas di Google: {0}",
+  "seoHandOff.trackedKeywordsReachTopResults": "Bawa kata kunci yang dilacak ini ke hasil teratas Google: {0}",
   "aiSearch.questionsBecomeOneTaskAgent": "Pertanyaan ini menjadi satu tugas: Agen membandingkan konten kita dengan konten pesaing dan mencari apa yang perlu ditambahkan.",
   "seoHandOff.pagesGetMoreClicksGoogle": "Tingkatkan klik dari pencarian Google untuk halaman berikut: {0}",
   "knowledge.materialNotExistRefreshTry": "Materi ini tidak ada. Muat ulang dan coba lagi",

@@ -2,6 +2,8 @@
 
 ## Unreleased — Ten interface languages
 
+- Phrase tracked-keyword ranking objectives as requested improvements in Brazilian Portuguese, Spanish, French, German, and Indonesian, including when a keyword is currently outside the top 100.
+
 - State query-ranking, search-click and indexing hand-off objectives as requested outcomes across all ten languages; synchronize new Website & product and source-discovery copy when merging main.
 
 - Correct reviewed translation errors across all eight added languages, including named placeholders, total selection counts, task objectives, mention/citation meaning, skill associations, and Traditional Chinese wording.
