@@ -233,3 +233,40 @@ it('a change worth doing that nothing covers gets an opportunity, reusing an exp
       .sort(),
   ).toEqual(['expired', first.id].sort());
 });
+
+it('a task handed off from a change on its own covers that change and its page', () => {
+  const change = signal('gsc:x', 'https://www.nocobase.com/en/blog/x'),
+    same = signal('rank:x', 'https://nocobase.com/en/blog/x/');
+  const state: StrategyState = {
+    revision: 1,
+    goal: null,
+    proposals: [],
+    insights: batch('2026-10-21', [], [change, same]),
+  };
+  state.insights!.signalReviews = {
+    'gsc:x': { verdict: 'do', reason: 'r' },
+    'rank:x': { verdict: 'do', reason: 'r' },
+  };
+  settleVerdicts(
+    state,
+    [
+      {
+        id: 33,
+        evidence: {
+          no: 33,
+          work: { stage: 'plan' },
+          insight: null,
+          signalKey: 'gsc:x',
+          page: 'https://www.nocobase.com/en/blog/x',
+        },
+      },
+    ],
+    '2026-10-21T09:00:00Z',
+    uuid,
+  );
+  expect(state.insights!.signalReviews).toEqual({
+    'gsc:x': { verdict: 'skip', reason: '已有任务 T-33 在处理' },
+    'rank:x': { verdict: 'skip', reason: '已有任务 T-33 在处理' },
+  });
+  expect(state.insights!.items).toEqual([]);
+});

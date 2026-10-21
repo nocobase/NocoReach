@@ -29,23 +29,29 @@ export type DeliveryChoice = {
 export type ArticleFound = { article: ArticleMatch | null; unchecked: boolean };
 
 /**
- * The pages a task is about, most specific first: the page linked on the task, the opportunity's target when it is an
- * address, then the pages of the changes it cites.
+ * The pages a task is about, most specific first: the page linked on the task, the page it was handed off with, the
+ * opportunity's target when it is an address, then the pages of the changes it cites or was handed off from.
  */
 export function pageUrlsOf(data: TaskData): string[] {
   const e = (data.task.evidence || {}) as {
-    insight?: { target?: unknown; signalIds?: unknown };
+    page?: unknown;
+    signalKey?: unknown;
+    insight?: { target?: unknown; signalIds?: unknown } | null;
     context?: { signals?: { items?: { key?: unknown; url?: unknown }[] } };
   };
-  const ids = new Set(
-    Array.isArray(e.insight?.signalIds) ? e.insight.signalIds : [],
-  );
+  // A change handed off on its own (Insights › Today's changes) names its page and change instead of an opportunity.
+  const ids = new Set([
+    ...(Array.isArray(e.insight?.signalIds)
+      ? (e.insight.signalIds as unknown[])
+      : []),
+    ...(typeof e.signalKey === 'string' ? [e.signalKey] : []),
+  ]);
   const cited = (e.context?.signals?.items || [])
     .filter((s) => ids.has(s.key))
     .map((s) => s.url);
   return [
     ...new Set(
-      [data.work.page?.url, e.insight?.target, ...cited]
+      [data.work.page?.url, e.page, e.insight?.target, ...cited]
         .filter((u): u is string => typeof u === 'string')
         .map((u) => u.trim())
         .filter((u) => /^https?:\/\//i.test(u)),

@@ -23,6 +23,8 @@ export type CoverTask = {
   evidence?: {
     no?: number;
     work?: (TaskWork & { page?: { url?: string } | null }) | null;
+    page?: unknown;
+    signalKey?: unknown;
     insight?: { target?: unknown; signalIds?: unknown } | null;
     context?: { signals?: { items?: { key?: unknown; url?: unknown }[] } };
   } | null;
@@ -45,11 +47,15 @@ function pageOf(url: unknown) {
 }
 function taskPages(t: CoverTask) {
   const e = t.evidence || {},
-    ids = new Set(
-      Array.isArray(e.insight?.signalIds) ? e.insight.signalIds : [],
-    );
+    ids = new Set([
+      ...(Array.isArray(e.insight?.signalIds)
+        ? (e.insight.signalIds as unknown[])
+        : []),
+      ...(typeof e.signalKey === 'string' ? [e.signalKey] : []),
+    ]);
   return [
     e.work?.page?.url,
+    e.page,
     e.insight?.target,
     ...(e.context?.signals?.items || [])
       .filter((s) => ids.has(s.key))
