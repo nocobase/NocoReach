@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Page names shown once
+
+- Top-level pages no longer repeat their name in the header beside the sidebar toggle: the name fades in there only once the page's large title has scrolled out of view.
+- Pages below another one show their full path in the header, with the earlier levels as links back: Keywords › the keyword, Members & roles › the role, Scheduled tasks › Execution history (without the Settings group). Keyword details and the role form drop their own Back link.
+- Below 768px the header shows the brand on top-level pages and "‹ the parent page" on pages below another one.
+
 ## Unreleased — Why a data source cannot be reached
 
 - When the server gets no answer from a data source, say which site, why (timed out, interrupted, refused, address not found, untrusted certificate, no response) and whether the request went through the proxy, instead of "the direct request failed". Proxy failures still never fall back to a direct connection.

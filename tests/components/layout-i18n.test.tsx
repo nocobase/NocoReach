@@ -109,15 +109,18 @@ async function setup(children: ReactNode, path = '/') {
 describe('shell translations', () => {
   it('updates header, footer, tooltips and accessible labels without remounting', async () => {
     const runtime = await setup(<AppLayout routes={[overview]} />);
-    // The header's trail, where a tagline used to be.
+    // The header's trail, where a tagline used to be. On a top-level page it is the page's own title and waits,
+    // hidden, until the page's heading scrolls away (app-layout-routes.test.tsx); its labels still follow the language.
     expect(
-      screen.getByRole('navigation', { name: 'Breadcrumb' }),
+      screen.getByRole('navigation', { name: 'Breadcrumb', hidden: true }),
     ).toHaveTextContent('Overview');
     expect(
       screen.getByText('Find the opportunities in your data.'),
     ).toBeVisible();
     await act(() => runtime.changeLanguage('zh-CN'));
-    expect(screen.getByRole('navigation', { name: '面包屑' })).toBeVisible();
+    expect(
+      screen.getByRole('navigation', { name: '面包屑', hidden: true }),
+    ).toBeInTheDocument();
     expect(screen.getByText('从数据里找机会。')).toBeVisible();
     // NocoReach's slogan; its name is emphasised, not a link to a site.
     expect(
@@ -131,8 +134,8 @@ describe('shell translations', () => {
     ).not.toBeInTheDocument();
     await act(() => runtime.changeLanguage('en-US'));
     expect(
-      screen.getByRole('navigation', { name: 'Breadcrumb' }),
-    ).toBeVisible();
+      screen.getByRole('navigation', { name: 'Breadcrumb', hidden: true }),
+    ).toBeInTheDocument();
   });
 });
 

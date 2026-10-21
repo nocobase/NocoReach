@@ -4,7 +4,13 @@ import {
   TestI18nProvider,
   createTestI18nRuntime,
 } from '@nocobase/i18n/testing';
-import { render, screen, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -100,12 +106,16 @@ function OrderPage(): ReactElement {
   return <h1>Order #42</h1>;
 }
 
-function renderLayout(page: ReactElement): HTMLElement {
+function renderLayout(
+  page: ReactElement,
+  url = '/orders/42',
+  path = '/orders/:id',
+): HTMLElement {
   render(
-    <MemoryRouter initialEntries={['/orders/42']}>
+    <MemoryRouter initialEntries={[url]}>
       <Routes>
         <Route element={<AppLayout routes={routes} />}>
-          <Route path='/orders/:id' element={page} />
+          <Route path={path} element={page} />
         </Route>
       </Routes>
     </MemoryRouter>,
@@ -143,6 +153,60 @@ it('shows the trail a page declares, with its record names, in place of the rout
     'page',
   );
   expect(within(trail).queryByText('Detail')).toBeNull();
+});
+
+// jsdom lays nothing out: place the page's heading relative to the top of the element the page scrolls in.
+function placeHeading(bottom: number): void {
+  const scroller = screen.getByRole('main').firstElementChild as HTMLElement;
+  vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(
+    DOMRect.fromRect({ y: 64, height: 600 }),
+  );
+  vi.spyOn(
+    screen.getByRole('heading', { level: 1 }),
+    'getBoundingClientRect',
+  ).mockReturnValue(DOMRect.fromRect({ y: bottom - 32, height: 32 }));
+  fireEvent.scroll(scroller);
+}
+
+it("keeps a top-level page's own title out of the header until the page's heading scrolls away", async () => {
+  const header = renderLayout(<h1>Orders</h1>, '/orders', '/orders');
+  // The trail would only repeat the heading right below it.
+  expect(
+    within(header).queryByRole('navigation', { name: 'Breadcrumb' }),
+  ).toBeNull();
+  expect(
+    within(header).getByRole('navigation', {
+      name: 'Breadcrumb',
+      hidden: true,
+    }),
+  ).toHaveTextContent('Orders');
+  // A top-level page has no level to go back to: the compact header keeps the brand.
+  expect(within(header).queryByRole('link', { name: /^Back to/ })).toBeNull();
+
+  placeHeading(40);
+  await waitFor(() =>
+    expect(
+      within(header).getByRole('navigation', { name: 'Breadcrumb' }),
+    ).toHaveTextContent('Orders'),
+  );
+
+  placeHeading(120);
+  await waitFor(() =>
+    expect(
+      within(header).queryByRole('navigation', { name: 'Breadcrumb' }),
+    ).toBeNull(),
+  );
+});
+
+it('leads back to the parent level from the compact header of a page below another one', () => {
+  const header = renderLayout(<OrderPage />);
+  // Where the compact brand would be: the trail does not fit there, and the page has no BackButton of its own.
+  expect(
+    within(header).getByRole('link', { name: 'Back to Orders' }),
+  ).toHaveAttribute('href', '/orders?status=open');
+  expect(
+    within(header).queryByRole('link', { name: 'NocoReach home' }),
+  ).toBeNull();
 });
 
 // Chat's network and realtime behavior is checked separately; these tests only exercise layout and locale.

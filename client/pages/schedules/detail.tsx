@@ -47,8 +47,8 @@ function Detail({ id }: { id: string }) {
   const format = useScheduleFormatting();
   const location = useLocation();
   const parent = useOutletContext<{ reload: () => void } | undefined>();
+  // Navigation groups stay out of the trail: the sidebar already shows them, and they lead nowhere.
   usePageBreadcrumb([
-    { label: t('nocoreach.nav.settings') },
     { label: t('schedules.title'), to: `/schedules${location.search}` },
     { label: t('schedules.history') },
   ]);
