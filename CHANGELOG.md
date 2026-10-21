@@ -5,6 +5,11 @@
 - Your invitations appears in the account menu, with a count, only when an invitation is waiting for the signed-in account. Inviting someone who already has an account adds them at once, so the entry was nearly always an empty page; the emailed invitation link still opens it.
 - Your invitations and the role form (Members & roles › a role, New role) use the page's full width instead of leaving the right side empty; the role's name and identifier inputs keep a readable width. docs/DEVELOPMENT.md records full-width pages as a NocoReach rule.
 
+## Unreleased — Verdicts and opportunities agree
+
+- A change the analysis judges worth doing always ends up as an opportunity, so Insights › Today's changes › To do and Opportunities list the same things. When a task, an opportunity or an ignored opportunity already covers the change or its page, the verdict becomes "No action needed" with the reason (for example "Task T-32 is already on it"); otherwise an opportunity is written from the change and its verdict, marked as needing checking. Verdicts filled in afterwards go through the same check.
+- Keep the page and the change on a task handed off on its own (Insights › Today's changes, data pages), so its start card finds the article to change instead of asking for one. Pages outside Site content are kept too.
+
 ## Unreleased — Automatic runs in plain words
 
 - Settings › Scheduled tasks is now Settings › Automatic runs. The daily analysis card says what it does, "Daily at 09:00" with the timezone by name (China Standard Time rather than `Asia/Shanghai`), how the last run went (projects analyzed, suggestions written) and when the next one is. Change time opens a dialog over the list that also says when most data sources update in the chosen timezone; Run history opens a drawer that names each project instead of its id. Run now, Pause or Turn on, and Technical details (cron, Scheduler states, target, counters) are in the card's "…" menu. Pagination shows only when there is a second page.
