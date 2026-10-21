@@ -7,7 +7,6 @@ import { setDictionary } from '../../client/i18n';
 import en from '../../shared/i18n/en.json';
 import { TaskDraftProvider } from '../../client/pages/task-detail/drafts';
 import { TaskDetail } from '../../client/pages/task-detail';
-import { TaskAgentField } from '../../client/pages/task-detail/agent-field';
 import { NocoReachHttpError } from '../../client/lib/nocoreach-api';
 import type { TaskData } from '../../client/pages/task-execution-types';
 import type { Playbook } from '../../client/pages/playbook-model';
@@ -104,21 +103,27 @@ function mount(data = initial()) {
   );
 }
 
-test('task confirmation exposes the agent picker and persists selection before enabling start', async () => {
+// The header's Agent menu, beside the owner (2026-10-20 user decision): the stage cards carry no picker.
+const agentMenu = () => screen.getByRole('button', { name: /^Agent ·/ });
+
+test('the Agent is chosen in the header, and Start waits for one', async () => {
   const user = userEvent.setup();
   const data = initial();
   mount(data);
   const start = await screen.findByRole('button', { name: '确定开始执行' });
   expect(start).toBeDisabled();
+  expect(agentMenu()).toHaveTextContent('Agent · 未选择');
+  expect(screen.getByText('先在上方选一个 Agent。')).toBeVisible();
+  expect(screen.queryByRole('combobox', { name: '执行 Agent' })).toBeNull();
   const selected = structuredClone(data);
   selected.work.agentId = 'codex';
   selected.work.agentName = 'NocoReach Codex';
   selected.work.revision++;
   selected.agent!.agentId = 'codex';
   advance.mockResolvedValueOnce(selected);
-  await user.click(screen.getByRole('combobox', { name: '执行 Agent' }));
+  await user.click(agentMenu());
   await user.click(
-    await screen.findByRole('option', { name: 'NocoReach Codex' }),
+    await screen.findByRole('menuitemradio', { name: /NocoReach Codex/ }),
   );
   await waitFor(() => expect(start).toBeEnabled());
   expect(action).toHaveBeenCalledWith(
@@ -133,11 +138,8 @@ test('task confirmation exposes the agent picker and persists selection before e
       }),
     }),
   );
-  // Once chosen, the picker folds into one line that names the Agent.
-  expect(await screen.findByText('由 NocoReach Codex 来做')).toBeVisible();
-  expect(
-    screen.queryByRole('combobox', { name: '执行 Agent' }),
-  ).not.toBeInTheDocument();
+  expect(agentMenu()).toHaveTextContent('NocoReach Codex');
+  expect(screen.queryByText('先在上方选一个 Agent。')).toBeNull();
 });
 
 test('with exactly one Agent available, starting saves it on the task first', async () => {
@@ -150,7 +152,7 @@ test('with exactly one Agent available, starting saves it on the task first', as
   saved.agent!.agentId = 'codex';
   advance.mockResolvedValueOnce(saved).mockResolvedValueOnce(saved);
   mount(data);
-  expect(await screen.findByText('由 NocoReach Codex 来做')).toBeVisible();
+  expect(agentMenu()).toHaveTextContent('NocoReach Codex');
   await screen.findByRole('option', { name: /调研/ });
   await user.click(screen.getByRole('button', { name: '确定开始执行' }));
   await waitFor(() =>
@@ -179,21 +181,16 @@ test('failed reassignment retains the saved agent and shows the server error', a
   mount(data);
   await screen.findByRole('option', { name: /调研/ });
   advance.mockRejectedValueOnce(new Error('任务已更新，请刷新后再保存'));
-  await user.click(screen.getByRole('button', { name: '换一个' }));
-  // A selected popup can reopen under the pointer in jsdom; use its keyboard interaction.
-  screen.getByRole('combobox', { name: '执行 Agent' }).focus();
-  await user.keyboard('[ArrowDown]');
+  await user.click(agentMenu());
   await user.click(
-    await screen.findByRole('option', { name: 'Research Claude' }),
+    await screen.findByRole('menuitemradio', { name: /Research Claude/ }),
   );
   expect(await screen.findByRole('alert')).toHaveTextContent('任务已更新');
-  expect(
-    screen.getByRole('combobox', { name: '执行 Agent' }),
-  ).toHaveTextContent('NocoReach Codex');
+  expect(agentMenu()).toHaveTextContent('NocoReach Codex');
 });
 
 test.each(['queued', 'running'])(
-  'started tasks offer no reassignment while %s',
+  'the Agent cannot be changed while %s, and says why',
   (status) => {
     const data = initial();
     data.work.stage = 'flow';
@@ -222,58 +219,47 @@ test.each(['queued', 'running'])(
     expect(
       screen.getByRole('heading', { name: /Agent 正在分析/ }),
     ).toBeVisible();
-    expect(
-      screen.queryByRole('combobox', { name: '执行 Agent' }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: '换一个' }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Agent ·/ })).toBeNull();
+    expect(document.querySelector('[data-agent-locked]')).toHaveAttribute(
+      'title',
+      expect.stringContaining('任务正在排队或执行，结束后再更换 Agent'),
+    );
   },
 );
 
 test('a task reader cannot reassign its agent', () => {
   access.allowed = false;
   mount();
-  expect(screen.getByRole('combobox', { name: '执行 Agent' })).toBeDisabled();
-  expect(screen.getByText('只有负责人和管理员能更换')).toBeVisible();
+  expect(screen.queryByRole('button', { name: /^Agent ·/ })).toBeNull();
+  expect(document.querySelector('[data-agent-locked]')).toHaveAttribute(
+    'title',
+    expect.stringContaining('只有负责人和管理员能更换'),
+  );
 });
 
-test('default, unavailable and empty agent states are translated with the real dictionary', () => {
+test('unavailable and empty Agent states are translated with the real dictionary', async () => {
+  const user = userEvent.setup();
   setDictionary(en);
   const data = initial();
-  data.agent!.defaultAgentId = 'codex';
-  data.agent!.agentId = 'codex';
-  const props = { busy: false, onChange: vi.fn(async () => true) };
-  const view = render(
-    <MemoryRouter>
-      <TaskAgentField data={data} {...props} />
-    </MemoryRouter>,
-  );
-  expect(
-    screen.getByRole('combobox', { name: 'Execution agent' }),
-  ).toHaveTextContent('Project default: NocoReach Codex');
   data.work.agentId = 'removed';
   data.work.agentName = 'Old agent';
   data.agent!.agentId = 'removed';
-  view.rerender(
-    <MemoryRouter>
-      <TaskAgentField data={data} {...props} />
-    </MemoryRouter>,
-  );
-  expect(screen.getByRole('combobox')).toHaveTextContent(
-    'Unavailable: Old agent',
-  );
-  expect(screen.getByRole('combobox')).toHaveAttribute('aria-invalid', 'true');
+  const view = mount(data);
+  expect(agentMenu()).toHaveTextContent('Old agent');
+  expect(agentMenu()).toHaveTextContent('Unavailable');
+  expect(screen.getByText('Choose an Agent above first.')).toBeVisible();
+  view.unmount();
   data.agent!.options = [];
-  view.rerender(
-    <MemoryRouter>
-      <TaskAgentField data={data} {...props} />
-    </MemoryRouter>,
-  );
+  mount(data);
+  // The card says it too; the menu adds the way to the Agent page.
   expect(
     screen.getByText(
       'No Agent is available yet. Ask an administrator to connect one under AI team.',
     ),
+  ).toBeVisible();
+  await user.click(agentMenu());
+  expect(
+    await screen.findByRole('menuitem', { name: 'Manage agents' }),
   ).toBeVisible();
 });
 
@@ -424,8 +410,11 @@ test('a removed task Agent is replaced by the only available one when retrying',
   saved.agent!.agentId = 'codex';
   advance.mockResolvedValueOnce(saved).mockResolvedValueOnce(saved);
   mount(data);
-  expect(screen.getByText('由 NocoReach Codex 来做')).toBeVisible();
-  expect(screen.getByText(/原来选的 Agent 已不可用/)).toBeVisible();
+  expect(agentMenu()).toHaveTextContent('NocoReach Codex');
+  expect(agentMenu()).toHaveAttribute(
+    'title',
+    expect.stringContaining('原来选的 Agent 已不可用'),
+  );
   await user.click(screen.getByRole('button', { name: '再试一次' }));
   await waitFor(() =>
     expect(action).toHaveBeenCalledWith(
@@ -455,9 +444,11 @@ test('the Agent can be changed even when only one is available', async () => {
   data.work.agentId = 'codex';
   data.agent!.agentId = 'codex';
   mount(data);
-  await user.click(screen.getByRole('button', { name: '换一个' }));
-  expect(screen.getByRole('combobox', { name: '执行 Agent' })).toBeVisible();
-  expect(screen.getByRole('link', { name: '管理 Agent' })).toBeVisible();
+  await user.click(agentMenu());
+  expect(
+    await screen.findByRole('menuitemradio', { name: /NocoReach Codex/ }),
+  ).toBeVisible();
+  expect(screen.getByRole('menuitem', { name: '管理 Agent' })).toBeVisible();
 });
 
 test('a conflict reloads the task so the page offers what the server holds now', async () => {
@@ -492,8 +483,52 @@ test('a conflict reloads the task so the page offers what the server holds now',
     '任务 Agent 已失效，请重新选择',
   );
   // Reloaded: the removed Agent is no longer offered, and the remaining one is used.
-  expect(await screen.findByText('由 Research Claude 来做')).toBeVisible();
-  expect(screen.getByText(/原来选的 Agent 已不可用/)).toBeVisible();
+  await waitFor(() => expect(agentMenu()).toHaveTextContent('Research Claude'));
+  expect(agentMenu()).toHaveAttribute(
+    'title',
+    expect.stringContaining('原来选的 Agent 已不可用'),
+  );
+});
+
+test('a failed run says why in plain words and what to do, from the official reason', () => {
+  const data = failedWithRemovedAgent();
+  data.work.agentId = 'codex';
+  data.agent!.agentId = 'codex';
+  data.runs = [
+    { ...data.runs[0], id: 'run-2', createdAt: '2026-10-19T08:49:00Z' },
+    { ...data.runs[0], id: 'run-1', createdAt: '2026-10-18T08:49:00Z' },
+  ];
+  data.execution = {
+    runId: 'run-2',
+    run: { failureReason: 'leaseExpired' },
+    events: [],
+    truncated: false,
+    canInspect: true,
+  };
+  mount(data);
+  expect(screen.getByText(/运行 Agent 的电脑中途断开了连接/)).toBeVisible();
+  expect(screen.getByText(/确认那台电脑开着、联网/)).toBeVisible();
+  expect(screen.getByText(/已经连续 2 次没做完/)).toBeVisible();
+  expect(document.body).not.toHaveTextContent('agent_failed');
+  expect(document.body).not.toHaveTextContent('leaseExpired');
+});
+
+test("without an official reason, the Agent's own message or a plain fallback is shown", () => {
+  const data = failedWithRemovedAgent();
+  data.work.agentId = 'codex';
+  data.agent!.agentId = 'codex';
+  data.runs[0].errorDetail = '仓库里找不到要改的页面';
+  data.runs[0].error = 'page_missing';
+  const view = mount(data);
+  expect(screen.getByText('Agent 说：仓库里找不到要改的页面')).toBeVisible();
+  view.unmount();
+  data.runs[0].errorDetail = 'agent_failed';
+  data.runs[0].error = 'agent_failed';
+  mount(data);
+  expect(
+    screen.getByText('这次运行没有完成，也没有留下具体原因。'),
+  ).toBeVisible();
+  expect(screen.queryByText(/已经连续/)).toBeNull();
 });
 
 test('a scoped Demo Agent can start without selecting or changing a real Runner', async () => {

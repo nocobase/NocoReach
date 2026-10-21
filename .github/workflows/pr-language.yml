@@ -1,0 +1,47 @@
+name: PR language
+# Pull request titles, descriptions and commit messages are written in English (AGENTS.md); interface text is quoted
+# by its English label. Code comments are checked by tests/logic/comment-language.test.ts. This runs on its own, in a
+# few seconds, so editing a description checks it again without rerunning the tests.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+permissions:
+  contents: read
+  pull-requests: read
+concurrency:
+  group: pr-language-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  english:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Find Chinese in the title, description and commit messages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          gh api "repos/$REPO/pulls/$NUMBER/commits" --paginate --jq '.[] | .sha[0:8] + " " + .commit.message' > "$RUNNER_TEMP/commits.txt"
+          python3 - "$RUNNER_TEMP/commits.txt" <<'PY'
+          import os, re, sys
+          chinese = re.compile('[\u3000-\u303f\u3400-\u9fff\uf900-\ufaff\uff00-\uffef]')
+          parts = {
+              'title': os.environ.get('TITLE') or '',
+              'description': os.environ.get('BODY') or '',
+              'commit messages': open(sys.argv[1], encoding='utf-8').read(),
+          }
+          found = False
+          for name, text in parts.items():
+              hits = [f'{n}: {line}' for n, line in enumerate(text.splitlines(), 1) if chinese.search(line)]
+              if hits:
+                  found = True
+                  print(f'::error::Chinese in the {name}:')
+                  print('\n'.join(hits))
+          if found:
+              print('Write them in English, quoting interface text by its English label in shared/i18n/en.json.')
+              sys.exit(1)
+          print('Title, description and commit messages are in English.')
+          PY

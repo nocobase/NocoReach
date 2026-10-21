@@ -163,7 +163,7 @@ it('serves HTTPS over both SOCKS DNS modes, authenticates, pins IPs, verifies TL
       await check(await n.send({ ...p, username: '', password: '' }, 'https://proxy-only.invalid/no-auth'));
       await check(await n.send(p, 'https://proxy-only.invalid/redirect'));
       await assert.rejects(n.send(p, 'https://proxy-only.invalid/big', {}, undefined, 100), { code: 'NR_RESPONSE_TOO_LARGE' });
-      await assert.rejects(n.send({ ...p, password: 'wrong-secret' }, 'https://proxy-only.invalid/'), (e) => e.message.includes('未切换直连') && !JSON.stringify(e).includes('wrong-secret'));
+      await assert.rejects(n.send({ ...p, password: 'wrong-secret' }, 'https://proxy-only.invalid/'), (e) => e.proxied === true && e.message.includes('没有改为直接访问') && !JSON.stringify(e).includes('wrong-secret'));
       await assert.rejects(n.send(p, 'https://wrong.invalid/'), { code: 'ERR_TLS_CERT_ALTNAME_INVALID' });
       for (let i = 0; i < 10; i++) await check(await n.fetch('github', 'https://proxy-only.invalid/pool-' + i, {}, '1'));
       const started = Date.now();

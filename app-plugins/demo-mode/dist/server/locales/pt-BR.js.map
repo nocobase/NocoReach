@@ -1,0 +1,1 @@
+{"version":3,"file":"pt-BR.js","sourceRoot":"","sources":["../../../server/locales/pt-BR.ts"],"names":[],"mappings":"AACA,MAAM,QAAQ,GAAqB;IACjC,aAAa,EAAE;QACb,KAAK,EAAE,uBAAuB;QAC9B,IAAI,EAAE,YAAY;QAClB,MAAM,EAAE,mBAAmB;QAC3B,aAAa,EAAE,8BAA8B;QAC7C,SAAS,EAAE,YAAY;KACxB;IACD,MAAM,EAAE;QACN,QAAQ,EAAE,8DAA8D;KACzE;CACF,CAAC;AACF,eAAe,QAAQ,CAAC"}

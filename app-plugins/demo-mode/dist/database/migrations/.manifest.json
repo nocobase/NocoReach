@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "files": {
+    "202610200001_demo_mode_create_data_tables.js": {
+      "sourceChecksum": "a757a32e719f3f1f4259063f73025273b0592f76d075216a1315a59109fc37b4",
+      "artifactChecksum": "ba3af70365fa6161722fb70fdc0bb9bda685272e761f63ae6141692aae845636"
+    },
+    "202610200002_demo_mode_account_ownership.js": {
+      "sourceChecksum": "e37e2d152d36f6e17e73451cd2fc671a419b59c9b96d965b7cff69305010bb8c",
+      "artifactChecksum": "55ebeaa408b1ffb4b10cc01032d53cbda3da0e794250cda96a5803fac7e09700"
+    },
+    "202610210001_demo_mode_configuration.js": {
+      "sourceChecksum": "9f706488406f9319ce496673a49b24242e3af76fef8029e48c317bba1c5abcba",
+      "artifactChecksum": "21028bdec377b5966ea22101dd254940d25bf6afcc794b034b42c8ca19e917bc"
+    },
+    "202610210002_demo_mode_environment_model.js": {
+      "sourceChecksum": "2387ddb8c63dfa4e720cde0cdde6d49e7ad2cead881bfd99b6e683f25bf86544",
+      "artifactChecksum": "4ca12a7505c37576254bac45aa531be21792eef2cfcb36abeb9f2ab80b782e58"
+    },
+    "202610210003_demo_mode_adopt_environment_model.js": {
+      "sourceChecksum": "bba95ef7fac455fb368df9f51cea51413f747657d20ea884bd6cbdd08679d0ba",
+      "artifactChecksum": "92d7cc01a469229a677155da5a497452a015327b12c30e23e4e74f7342a4254c"
+    }
+  }
+}

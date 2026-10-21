@@ -14,11 +14,67 @@
 - Restrict full-instance clear/reset to enabled demo mode across HTTP, CLI and scheduled operations. Clear all project business data, including existing projects, orphan records, attachments and conversations, while preserving accounts and system configuration. Use the same business cleanup contract after failed imports.
 
 - Add Settings › Demo data for administrators: import a fictional demo (the NocoBase marketing team's two projects with connected sources, tasks in every state, results, opportunities and knowledge, plus five sign-ins with different roles and projects) in Chinese or English, then reset or clear it. Clearing removes all project business data and disables the imported demo accounts; administrator accounts and system configuration are retained.
-- Built on the merged `@nocobase/app-plugin-demo-mode` (demo data and read-only mode), vendored in `app-plugins/demo-mode` until it is published. The same plugin is meant to carry NocoCRM's and NocoITAM's demos.
+- Built on `@nocobase/app-plugin-demo-mode` (demo data and read-only mode), vendored in `app-plugins/demo-mode` until it is published. The same plugin is meant to carry NocoCRM's and NocoITAM's demos.
 - Demo projects never reach outside services: their requests, public page reads included, are answered in process by the simulated deployment's fixtures and refused otherwise, Google, GitHub, community and search flows run through the production code, and their tasks are never sent to a Runner. The import adds a simulated `Demo model` as the default chat model, so online agents and business analysis answer from scripts.
 - Mark demo projects in the project switcher. Preserve the selected dataset language on reset, confirm imports that change the default model, and refresh workspace caches after completion.
-- Restrict demo accounts to demo projects, reject collisions with existing accounts, and resolve persisted demo markers before outbound requests in other processes. Keep an administrator’s later model choice when clearing the demo.
+- Restrict demo accounts to demo projects, reject collisions with existing accounts, and resolve persisted demo markers before outbound requests in other processes. Retain the environment model when clearing the demo.
 - Add `demo-mode data status|import|clear|reset` commands with explicit change confirmation, an operation preview, and standalone package support.
+
+## Unreleased — English code comments
+
+- AGENTS.md now asks for code comments in English, with interface elements named by their English labels. `tests/logic/comment-language.test.ts` parses every source file and fails when a file has more comments containing Chinese than `tests/logic/comment-language-baseline.json` allows (195 files, 595 older comments today); `COMMENT_LANGUAGE_BASELINE=lower` lowers the baseline after a cleanup and never raises it.
+- `.github/workflows/pr-language.yml` fails a pull request whose title, description or commit messages contain Chinese, and runs again when the description is edited, without rerunning the tests.
+
+## Unreleased — Page names shown once
+
+- Top-level pages no longer repeat their name in the header beside the sidebar toggle: the name fades in there only once the page's large title has scrolled out of view.
+- Pages below another one show their full path in the header, with the earlier levels as links back: Keywords › the keyword, Members & roles › the role, Scheduled tasks › Execution history (without the Settings group). Keyword details and the role form drop their own Back link.
+- Below 768px the header shows the brand on top-level pages and "‹ the parent page" on pages below another one.
+
+## Unreleased — Connection drawers in plain words
+
+- Describe how each data source connects at the top of the drawer, in product voice instead of an AI's first person, followed by a What you need list; only the title stays pinned while the drawer scrolls. The Agent avatar and grey message box are gone from the top of the drawer: no AI is answering there.
+- Head the question buttons at the bottom of the drawer, which open the AI chat, with the Agent avatar and "Ask AI".
+
+## Unreleased — Why a data source cannot be reached
+
+- When the server gets no answer from a data source, say which site, why (timed out, interrupted, refused, address not found, untrusted certificate, no response) and whether the request went through the proxy, instead of "the direct request failed". Proxy failures still never fall back to a direct connection.
+- Connection panels, Google sync and authorization errors and the Skill link dialog link to Settings › Network; an untrusted certificate explains the company root certificate in ⓘ, and the Skill link dialog also offers uploading the folder instead.
+- Direct public reads (website content, Skill links, public sources) report a refused, reset, timed-out or unresolvable site the same way as proxied ones, with status 502 and the original code.
+
+## Unreleased — Memory: one Edit, and choose what generating reads
+
+- Memory has one Edit (`/project/memory/edit`) that opens every item in a dialog instead of a pencil on each row; only the items changed there are saved, merged into the saved memory.
+- Generate from the website and materials (`/project/memory/generate`) first lists the pages and knowledge base materials the AI will read — by default the home page and main pages, and the newest six materials — to remove, add (up to eight public https pages) or tick before generating. A changed list is kept for later drafts and for the weekly check; Use the automatic choice goes back.
+- The memory list reloads when a draft or a check finishes, also when it finishes before the first status poll.
+
+## Unreleased — Project knowledge in two tabs
+
+- Split Project knowledge into Memory (`/project/memory`, the default) and Knowledge base (`/project/knowledge`) tabs. The Memory tab counts pending suggestions; the Knowledge base tab counts material.
+- Memory: a line with how many items are filled and the length (a Too long tag over 3,000 characters), the AI's suggestions with the reason in one line and its examples behind ⓘ, then one row per item — project name, AI content language, nine sections — each edited on its own in a dialog with its own address (`/project/memory/<item>/edit`). Saving one item merges it into the saved memory on the server, so people editing different items keep each other's changes. Long items show five lines and unfold. The whole-card edit form is gone.
+- Knowledge base: search, category and date order are kept in the address; Add material and each material's drawer have their own addresses (`/project/knowledge/new`, `/project/knowledge/<id>`); row actions sit behind "…"; Clear filters appears while a search or category is applied. On phones the list keeps the title, category and actions.
+
+## Unreleased — Settings › Network for marketers
+
+- Show the proxy's state first (in use or not set, server, sign-in) and edit it in a dialog; turning it off asks first.
+- List every data source of the current project with its own Use the proxy switch and a Check access action that says, per data source, whether the server can reach it, and why not with what to try next. YouTube, Bilibili and Xiaohongshu are noted as read through collectors.
+- Stop giving YouTube the default proxy, which made its Collector refuse to collect; an explicit YouTube proxy from before keeps its switch in the connection so it can be turned off.
+- Reword the connection drawer's switch, link it to Settings › Network, and drop the save message's reference to an Advanced section that does not exist.
+
+## Unreleased — Skills notes in ⓘ
+
+- Move the three grey notes on Skills into ⓘ tips beside what they explain: the This project column, the Skill link field and the Skill folder field.
+
+## Unreleased — Opportunity briefs
+
+- Keep the list of pending opportunities on the left and read the selected one on the right: what happened, why it is worth doing, what to do and where, with priority, effort and confidence as tags and the limitations behind ⓘ. Handled opportunities open the same detail. The audience and goal are not shown.
+- Remove the owner, executor and playbook choices from the Opportunities page: Hand off to agent uses the recommended playbook and makes you the owner, and both can still be changed on the task before it starts.
+
+## Unreleased — The AIs in NocoReach, by role
+
+- Agent page: three cards above the tabs present daily analysis, the chat agent and the execution agent by what each does, never does and needs, with whether it works now and one action to fix it. A three-step quickest setup shows while something is missing; enabling a discovered agent and making it the project default is one action.
+- Tabs run in setup order (Models, Chat agent, Runtimes, Execution agent, Usage), each with one sentence on what it is for. "Online agent" and "Runner agent" are renamed "Chat agent" and "Execution agent" on the page and in the chat picker, which also says what each kind can do. The Chinese copy uses one term for a runner machine throughout.
+- The separate Runner and model setup guides are replaced by the roles overview.
 
 ## Unreleased — Opportunities kept and not repeated
 

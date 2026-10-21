@@ -25,9 +25,6 @@ vi.mock('../../client/hooks/use-business-access', () => ({
 vi.mock('../../client/pages/agents/index', () => ({
   AgentsPageLayout: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock('../../client/pages/agents/setup-guide', () => ({
-  ModelSetupGuide: () => <p>Model guide</p>,
-}));
 beforeEach(() => {
   state.resources = { definitions: { data: [] } };
   state.revisions = [];
@@ -41,28 +38,10 @@ function mount() {
   render(<RouterProvider router={router} />);
 }
 
-test('asks for a model service first and still offers to create an agent', () => {
+// The model service step lives in the Agent page's roles overview now; the tab only lists chat agents.
+test('offers to create a chat agent while there is none', () => {
   state.resources.models = { data: { services: [] } };
   mount();
-  expect(screen.getByText('Model guide')).toBeInTheDocument();
-  expect(screen.getByText('还没有在线 Agent')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '添加在线 Agent' })).toBeVisible();
-});
-
-test('shows no model guide once a service exists', () => {
-  state.resources.models = { data: { services: [{ name: 'openai' }] } };
-  mount();
-  expect(screen.queryByText('Model guide')).not.toBeInTheDocument();
-});
-
-test('shows no model guide when the catalog cannot be read', () => {
-  state.resources.models = { error: new Error('offline') };
-  mount();
-  expect(screen.queryByText('Model guide')).not.toBeInTheDocument();
-});
-
-test('reads the catalog again on every refresh', () => {
-  state.resources.models = { data: { services: [] } };
-  mount();
-  expect(state.revisions).toContainEqual(['models', 0]);
+  expect(screen.getByText('还没有对话 Agent')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '添加对话 Agent' })).toBeVisible();
 });

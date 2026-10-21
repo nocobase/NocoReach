@@ -66,6 +66,46 @@ describe('NocoReach semantic-key translations', () => {
     );
     // A legacy alias keeps its historical source text when the visible copy changes.
     const changedLegacyCopy: Record<string, string> = {
+      // Connection drawers describe each source plainly (2026-10-21).
+      'AI 搜索用已接入的 DataForSEO 查，不用另外接：在“搜索 → AI 搜索”里查品牌提及或问 AI，点了才查，花费算进 DataForSEO 的月度预算。':
+        'AI 搜索使用已接入的 DataForSEO，不需要另外接入：在“搜索 → AI 搜索”中查询品牌提及或向 AI 提问，点击后才查询，费用计入 DataForSEO 的月度预算。',
+      'DataForSEO 按查询次数收费。我会带你填写 API 账号并设置每月预算上限；之后在关键词、竞品、AI 搜索里点查询就查，不再逐次弹出费用，花了多少在这里看，花到预算就停；30 天内同样的查询不重复收费。':
+        'DataForSEO 按查询次数收费。填写 API 账号并设置每月预算上限后，关键词、竞品和 AI 搜索中的查询会直接执行，不再逐次提示费用；花费在此查看，达到预算即停止。30 天内相同的查询不重复收费。',
+      'Discussions 和 GitHub Traffic 用同一个只读 token：接入仓库并填好 token 后，我每天读取近 90 天的讨论，整理讨论最多和还没解决的问题。不需要另外的权限。':
+        'Discussions 与 GitHub Traffic 使用同一个只读 token。接入仓库并填写 token 后，每天读取近 90 天的讨论，整理讨论最多和尚未解决的问题，不需要额外权限。',
+      'GA4 与 Search Console 使用同一次 Google 授权。授权后选择对应网站的 GA4 属性，我会开始首次同步。':
+        'GA4 与 Search Console 共用一次 Google 授权。授权后选择网站对应的 GA4 属性，随即开始首次同步。',
+      'Traffic 需要仓库的只读管理权限。我会一步步教你创建一个只授权这个仓库、只读的细粒度 token。GitHub 只保留最近 14 天的数据，接入后我每天归档，越早接入历史越完整。':
+        'Traffic 需要仓库的只读管理权限，通过一个只授权此仓库的只读细粒度 token 获取，创建步骤见下方。GitHub 只保留最近 14 天的数据，接入后每天归档，越早接入，历史越完整。',
+      'X 的接口现在只按条付费（每读一条约 $0.005），所以要用你们自己的 X API Bearer Token。我每天查一次：近一天提到产品的帖子数，以及新帖子的内容和点赞、转发；不含转发，也可以排除官方账号自己发的。你设一个每月上限（默认 $5，约 1,000 条），到了就停，下个月继续。':
+        'X 的接口按读取条数收费（每条约 $0.005），因此需要使用自己的 X API Bearer Token。每天查询一次：近一天提到产品的帖子数，以及新帖子的内容、点赞和转发；不计转发，也可以排除官方账号发布的帖子。设置每月上限（默认 $5，约 1,000 条），达到后停止，下个月继续。',
+      '只读细粒度 token（我会教你创建）': '只读细粒度 token（创建步骤见下方）',
+      '告诉我产品名或网站域名（最多 5 个词），我在 Hacker News 上找提到它们的帖子和评论。这是公开数据，不需要账号，也不保存作者；先读最近 30 天给你看，确认后补读一年，之后每天更新。':
+        '按产品名或网站域名（最多 5 个词）查找 Hacker News 上提到它们的帖子和评论。这是公开数据，不需要账号，也不保存作者。先读取最近 30 天供你查看，确认后补读一年，之后每天更新。',
+      '告诉我产品名（最多 5 个词），我每周在 Google 里搜一次 Reddit 上提到它的帖子，记下标题、版块和链接。Reddit 官方接口用于品牌监测要签付费的商业协议，所以走 Google；这样只看得到 Google 收录了的帖子，也看不到点赞和评论数。需要先接入 DataForSEO，每次搜索约 $0.002。':
+        '按产品名（最多 5 个词）每周在 Google 中搜索一次 Reddit 上提到它的帖子，记录标题、版块和链接。Reddit 官方接口用于品牌监测需要签订付费商业协议，因此通过 Google 搜索；只能看到 Google 已收录的帖子，也看不到点赞和评论数。需要先接入 DataForSEO，每次搜索约 $0.002。',
+      '告诉我产品名，竞品自动用“竞品”页的列表（最多 4 个），我每周查一次 Google Trends：过去 12 个月大家对它们的关注度，以及和产品相关、正在上升的搜索。Google 官方的 Trends 接口还在内测、要申请，所以通过已接入的 DataForSEO 查，每次约 $0.022，算进月度预算。':
+        '填写产品名，竞品取自“竞品”页的列表（最多 4 个）。每周查询一次 Google Trends：过去 12 个月的关注度，以及与产品相关、正在上升的搜索。Google 官方的 Trends 接口仍在内测且需要申请，因此通过已接入的 DataForSEO 查询，每次约 $0.022，计入月度预算。',
+      '告诉我你的包叫什么（npm、PyPI 或 Docker Hub，可以贴包的页面地址）。这些都是公开数据，不需要账号；我先读出来给你确认，之后每天记录下载量。':
+        '支持 npm、PyPI 和 Docker Hub，填写包名或粘贴包的页面地址。这些是公开数据，不需要账号；先读取一次供你确认，之后每天记录下载量。',
+      '告诉我最多 5 个竞品的官网和 GitHub 仓库，我每周看一次：官网 sitemap 里新出现的页面（读几页的标题）、GitHub 的新版本和 Star 变化。全部用公开数据，不花钱；第一次只记下现状。关键词和流量估算在“竞品 › 查域名”里查。':
+        '填写最多 5 个竞品的官网和 GitHub 仓库，每周检查一次：官网 sitemap 中新出现的页面（读取部分页面的标题）、GitHub 的新版本和 Star 变化。全部使用公开数据，不产生费用；首次检查只记录现状。关键词和流量估算在“竞品 › 查域名”中查询。',
+      '告诉我网站源码放在哪个 GitHub 仓库。任务由Agent 在这个仓库里分析和修改，改动开 PR 给你审核；PR 只会开在这个仓库里，不会开到上游。':
+        '填写网站源码所在的 GitHub 仓库。Agent 在这个仓库中分析和修改，改动以 PR 提交给你审核；PR 只开在这个仓库，不会提交到上游。',
+      '在你们的 Slack 工作区建一个内部应用（读取不限速），加上 channels:read、channels:history、channels:join 权限后安装。把 Bot User OAuth Token（xoxb- 开头）粘贴过来，我先检查、列出公开频道，你选好后每天读一次：消息数、提问，以及超过一天没人回的问题。消息内容只保存 30 天，不保存作者。':
+        '在 Slack 工作区创建一个内部应用（读取不限速），添加 channels:read、channels:history、channels:join 权限后安装。粘贴 Bot User OAuth Token（以 xoxb- 开头）后，先检查并列出公开频道；选好频道后每天读取一次：消息数、提问，以及超过一天无人回复的问题。消息内容只保存 30 天，不保存作者。',
+      '我会带你完成 Google 授权，并选择要分析的 Search Console 站点。授权只读取数据，不会修改你的网站或 Google 账号设置。':
+        '完成 Google 授权后，选择要分析的 Search Console 站点。授权只读取数据，不会修改网站或 Google 账号设置。',
+      '把 GitHub 仓库链接发给我。公开仓库不需要任何凭据，我会先读取预览，你确认后接入；之后每天记录 Star、Fork、Release，并整理近 90 天讨论最多的 Issues。':
+        '每天记录仓库的 Star、Fork 和 Release，并整理近 90 天讨论最多的 Issues。公开仓库不需要凭据；填写地址后先显示预览，确认后接入。',
+      '把官网地址发给我。我会读取网站的 sitemap，识别博客、文档、落地页各有多少页，列给你确认后开始采集。文档站在单独的域名时（如 docs.example.com），可以再添加一个网址。不需要仓库或密钥。':
+        '读取网站的 sitemap，统计博客、文档和落地页各有多少页，确认后开始采集。文档站使用单独的域名时（如 docs.example.com），可以再添加一个网址。不需要仓库或密钥。',
+      '把社区论坛地址发给我。目前支持 Discourse 论坛的公开分类，不需要账号；我只读取帖子内容与互动数据，不保存用户名。首次同步需要一两分钟，会在后台完成。':
+        '支持 Discourse 论坛的公开分类，不需要账号。只读取帖子内容和互动数据，不保存用户名。首次同步约需一两分钟，在后台完成。',
+      '用你们自己建的 Discord 机器人：在开发者后台建一个应用和机器人、打开 Message Content Intent，邀请进服务器（只要“查看频道”和“读取消息历史”）。把机器人 token 粘贴过来，我先检查、列出它能读的频道，你选好后每天读一次：消息数、提问，以及超过一天没人回的问题。消息内容只保存 30 天，不保存作者。':
+        '使用自己创建的 Discord 机器人：在开发者后台创建应用和机器人，开启 Message Content Intent，并邀请进服务器（只需要“查看频道”和“读取消息历史”权限）。粘贴机器人 token 后，先检查并列出它能读取的频道；选好频道后每天读取一次：消息数、提问，以及超过一天无人回复的问题。消息内容只保存 30 天，不保存作者。',
+      '还有疑问？': '问 AI',
+      '需要你提供：': '需要准备',
       // Opportunities expire 14 days after the last analysis that raised them, not at the next one.
       '已过期：最新的分析没有再提出': '已过期：{0} 天内的分析都没有再提出',
       // Metadata-only collection no longer reads captions; historical aliases remain valid.
@@ -88,6 +128,9 @@ describe('NocoReach semantic-key translations', () => {
       '请选择团队可调用的 Agent': '请选择已启用且可调用的 Agent',
       'Agent 和在线 AI 按做法完成的工作，需要你确认时会停下来。':
         'Agent 按做法完成的工作，需要你确认时会停下来。',
+      // The Agent page names each AI by what it does (2026-10-20).
+      'Runner Agent': '执行 Agent',
+      '在线 Agent': '对话 Agent',
       // The task page reworded for marketers: no PR, Runner or push wording.
       'PR 审核已通过。合并并上线后点确认，之后开始观察效果。':
         '已审核通过。改动上线后点确认，之后开始观察效果。',

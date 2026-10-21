@@ -1,0 +1,1 @@
+{"version":3,"file":"id-ID.js","sourceRoot":"","sources":["../../../client/locales/id-ID.ts"],"names":[],"mappings":"AACA,MAAM,QAAQ,GAAqB;IACjC,aAAa,EAAE;QACb,KAAK,EAAE,WAAW;QAClB,IAAI,EAAE,OAAO;QACb,MAAM,EAAE,iBAAiB;QACzB,aAAa,EAAE,kBAAkB;QACjC,SAAS,EAAE,aAAa;KACzB;IACD,OAAO,EAAE;QACP,KAAK,EAAE,kDAAkD;QACzD,WAAW,EAAE,wCAAwC;KACtD;CACF,CAAC;AACF,eAAe,QAAQ,CAAC"}

@@ -7,7 +7,7 @@ import { systemMessageText } from '../../shared/i18n/messages.js';
 import { createHash, randomBytes } from 'node:crypto';
 import * as g from './google-client.js';
 import { ProxyProfiles } from './proxy-profiles.js';
-import { OutboundNetwork } from './outbound-network.js';
+import { OutboundNetwork, unreachableOf } from './outbound-network.js';
 import type { MockHost } from '../../app-plugins/nocoreach-mock/server/types.js';
 import type { LegacyDatabase } from './legacy/database.js';
 import type { MockEngine } from '../../app-plugins/nocoreach-mock/server/engine.js';
@@ -177,7 +177,7 @@ export class Connections{
   this.taskExecution=new (TaskService)(this);this.taskExecution.register();
   this.taskCron=this.app.cronJobManager.addJob({name:'taskCron',cronTime:'*/2 * * * * *',onTick:()=>this.taskExecution.tick().catch(e=>this.app.logger.warn('NocoReach task tick failed',{message:e?.message}))});
   this.strategy=new StrategyService(this);this.strategy.register();
-  const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const values=ctx.action.params.values||{},id=projectId(values.projectId||ctx.action.params.projectId||ctx.request.query.projectId);await this.project(id);ctx.body=await fn.call(this,ctx,id,values);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,systemMessageText('application.connectionRequestNotCompleteCheck'));}};
+  const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const values=ctx.action.params.values||{},id=projectId(values.projectId||ctx.action.params.projectId||ctx.request.query.projectId);await this.project(id);ctx.body=await fn.call(this,ctx,id,values);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,unreachableOf(e)?.message||systemMessageText('application.connectionRequestNotCompleteCheck'));}};
   this.app.resourceManager.define({name:'nrGoogle',actions:{
    status:wrap(async function(this: Connections,ctx,id){const link=await this.link(id);const base=this.env(CONFIG+'BASE_URL');return {configured:Boolean(this.mock?.enabled||(this.env(CONFIG+'CLIENT_ID')&&this.env(CONFIG+'CLIENT_SECRET')&&base)),redirectUri:this.mock?.enabled?CALLBACK_PATH():base?callbackUri(base):null,simulated:Boolean(this.mock?.enabled),authorized:Boolean(this.env(secretKey(id))),connection:link?.toJSON()||null,ga4PropertyName:(await this.project(id)).analyticsPropertyName||null,syncEnabled:Boolean(link?.get('scheduleEnabled'))};}),
    configure:wrap(async function(ctx,id,v){const clientId=String(v.clientId||'').trim(),secret=ctx.request.headers['x-noreach-google-secret'];const redirectUri=callbackUri(String(v.baseUrl||''));if(!clientId.endsWith('.apps.googleusercontent.com')||!secret)ctx.throw(400,systemMessageText('application.provideValidClientIdClient'));if(this.env(CONFIG+'CLIENT_ID')&&this.env(CONFIG+'CLIENT_ID')!==clientId)ctx.throw(409,systemMessageText('application.migratingExistingConnectionsReviewedBefore'));await this.variable(CONFIG+'CLIENT_ID',clientId);await this.variable(CONFIG+'CLIENT_SECRET',String(secret),true);await this.variable(CONFIG+'BASE_URL',new URL(redirectUri).origin);return {configured:true,redirectUri};}),

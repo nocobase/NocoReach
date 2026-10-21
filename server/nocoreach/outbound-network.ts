@@ -16,6 +16,10 @@ import {
 } from './proxy-profiles.js';
 import { socksTransport } from './socks-proxy.js';
 import {
+  networkFailureKey,
+  type NetworkFailureReason,
+} from '../../shared/network-failures.js';
+import {
   requireProfileRoute,
   mockProfileSnapshot,
   NetworkProfileError,
@@ -695,6 +699,14 @@ export class OutboundNetwork {
           : name !== 'Error'
             ? 'ETIMEDOUT'
             : 'NR_NETWORK_ERROR';
+      // A request that got no answer says why and which way it went; a rejected redirect or an oversized body did get one.
+      if (!['NR_RESPONSE_TOO_LARGE', 'NR_REDIRECT_REJECTED'].includes(code))
+        throw networkFailure(
+          code,
+          name,
+          pinned?.hostname ?? target.hostname,
+          !!profile,
+        );
       throw Object.assign(
         new Error(
           code === 'NR_RESPONSE_TOO_LARGE'
@@ -731,16 +743,100 @@ export class OutboundNetwork {
         validation: 'configuration' as const,
       };
     }
-    const response = await this.send(profile, TEST_TARGETS[connection], {
-      method: 'HEAD',
-      signal: AbortSignal.timeout(15000),
-    });
+    const target = new URL(TEST_TARGETS[connection]).hostname;
+    let response: Response;
+    try {
+      response = await this.send(profile, TEST_TARGETS[connection], {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch (error) {
+      // A request that got no answer is the test's result. Configuration, mock and shutdown errors still fail the call.
+      const failure = error as { status?: number; code?: unknown };
+      if (failure?.status !== 502) throw error;
+      return {
+        reachable: false,
+        status: 0,
+        elapsedMs: Date.now() - started,
+        target,
+        proxied: !!profile,
+        reason: testFailureReason(failure.code),
+      };
+    }
     // Authentication-required API roots can return 401/403: connectivity is separate from API credentials.
     return {
       reachable: true,
       status: response.status,
       elapsedMs: Date.now() - started,
-      target: new URL(TEST_TARGETS[connection]).hostname,
+      target,
+      proxied: !!profile,
     };
   }
+}
+
+/** Why a connection test got no answer, in terms Settings › Network can explain. */
+export type NetworkTestReason = NetworkFailureReason;
+const CERTIFICATE_CODE =
+  /^(CERT_|ERR_TLS_CERT|UNABLE_TO_(GET|VERIFY)|SELF_SIGNED|DEPTH_ZERO)/;
+export function testFailureReason(code: unknown): NetworkTestReason {
+  if (typeof code !== 'string') return 'other';
+  if (
+    [
+      'ETIMEDOUT',
+      'UND_ERR_CONNECT_TIMEOUT',
+      'UND_ERR_HEADERS_TIMEOUT',
+    ].includes(code)
+  )
+    return 'timeout';
+  if (
+    [
+      'ECONNRESET',
+      'EPIPE',
+      'UND_ERR_SOCKET',
+      'NR_SOCKS_CONNECTION_CLOSED',
+    ].includes(code)
+  )
+    return 'reset';
+  if (code === 'ECONNREFUSED') return 'refused';
+  if (['ENOTFOUND', 'EAI_AGAIN'].includes(code)) return 'dns';
+  if (CERTIFICATE_CODE.test(code)) return 'certificate';
+  return 'other';
+}
+
+/** The error for a request that got no answer: status 502 with its diagnostic `code`, plus why (`reason`), whether it
+ * went through the proxy (`proxied`) and the `host` it was for. The message names the host and the reason. */
+export function networkFailure(
+  code: string,
+  name: string,
+  host: string,
+  proxied: boolean,
+) {
+  const reason = testFailureReason(code);
+  return Object.assign(
+    new Error(
+      systemMessageText(networkFailureKey(reason, proxied), { 0: host }),
+      { cause: { code } },
+    ),
+    { status: 502, name, code, reason, proxied, host },
+  );
+}
+
+/** The failure `networkFailure` made, if `error` is one or wraps one as its cause. */
+export function unreachableOf(
+  error: unknown,
+): ReturnType<typeof networkFailure> | undefined {
+  for (
+    let e = error as Record<string, unknown> | undefined, depth = 0;
+    e && depth < 3;
+    depth++
+  ) {
+    if (
+      e.status === 502 &&
+      typeof e.reason === 'string' &&
+      typeof e.host === 'string'
+    )
+      return e as unknown as ReturnType<typeof networkFailure>;
+    e = e.cause as Record<string, unknown> | undefined;
+  }
+  return undefined;
 }

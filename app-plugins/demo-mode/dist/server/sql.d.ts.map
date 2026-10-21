@@ -1,0 +1,1 @@
+{"version":3,"file":"sql.d.ts","sourceRoot":"","sources":["../../server/sql.ts"],"names":[],"mappings":"AAAA;;;GAGG;AACH,MAAM,WAAW,QAAQ;IACvB,wEAAwE;IACxE,QAAQ,CAAC,SAAS,EAAE,MAAM,CAAC;IAC3B,oHAAoH;IACpH,QAAQ,CAAC,KAAK,CAAC,EAAE,MAAM,CAAC;CACzB;AA+BD;;;GAGG;AACH,wBAAgB,WAAW,CAAC,GAAG,EAAE,MAAM,GAAG,SAAS,QAAQ,EAAE,CAe5D"}

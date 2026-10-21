@@ -12,7 +12,7 @@ import { ArticleEditor, ArticleReview } from './task-detail/article-review.js';
 import { ConflictBody, DriftNotice, PendingButton, TargetRows } from './task-detail/article-release.js';
 import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, publishingTitle, soleConflict, type DeliveryChoice } from './task-detail/article-model.js';
 import { TaskMedia } from './task-detail/media.js';
-import { TaskAgentField } from './task-detail/agent-field';
+import { AgentMenu } from './task-detail/agent-menu.js';
 import { hasTaskAgent } from './task-execution-types';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {createContext,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
@@ -42,15 +42,29 @@ import './task-detail.css';
 import {confirmAction} from '#components/reach/confirm';
 import {useMe} from './me';
 import {parseReplies,ReplyDrafts,REPLY_PLAYBOOK} from './reply-drafts';
-// 起草社区回复: the drafts as cards with 复制回复 (reply-drafts.tsx); other documents as text.
+// Community reply drafts: the drafts as cards with Copy reply (reply-drafts.tsx); other documents as text.
 const repliesOf=(w:Work,content?:string)=>(w.playbook?.id===REPLY_PLAYBOOK||w.flow?.id===REPLY_PLAYBOOK)&&content?parseReplies(content):[];
-// Whether you can do this task's steps (2026-10-08): its owner and 管理员 can; other members read it and leave a message.
+// Whether you can do this task's steps (2026-10-08): its owner and administrators can; other members read it and leave a message.
 const TaskAccess=createContext<{allowed:boolean;self:boolean;owner:string}>({allowed:true,self:true,owner:''});
 type Update=(command:string,body?:object)=>Promise<Data|undefined>;
 type Member={id:string;name:string};
 type Run=Data['runs'][number];
 // Why a run stopped, in the owner's words; the raw error and the transcript stay in Technical details.
-const getRunErrors = (): Record<string,string> => ({interrupted_or_unknown:$t('taskDetail.runInterruptedResultUnknown'),context_changed:$t('taskDetail.taskChangedBeforeRun'),cancelled:$t('taskDetail.stoppedCheckChangesAlreadyPushed'),no_changes:$t('taskDetail.agentNotChangeFiles'),no_repo:$t('taskDetail.noWebsiteSourceRepositoryConnected'),revert_failed:$t('taskDetail.revertPrNotOpened'),agent_failed:$t('taskDetail.noUsableResult'),invalid_agent_result:$t('taskDetail.noUsableResult'),replaced_by_manual:$t('taskDetail.switchedDoing')});
+const getRunErrors = (): Record<string,string> => ({interrupted_or_unknown:$t('taskDetail.runInterruptedResultUnknown'),context_changed:$t('taskDetail.taskChangedBeforeRun'),cancelled:$t('taskDetail.stoppedCheckChangesAlreadyPushed'),no_changes:$t('taskDetail.agentNotChangeFiles'),no_repo:$t('taskDetail.noWebsiteSourceRepositoryConnected'),revert_failed:$t('taskDetail.revertPrNotOpened'),replaced_by_manual:$t('taskDetail.switchedDoing')});
+// The official run's failure reasons, grouped by what the owner can do about each (2026-10-19 user report: runs kept
+// failing as "agent_failed" with no reason, so retrying was all they could do).
+const FAILURE_GROUP:Record<string,string>={runnerOffline:'disconnected',leaseExpired:'disconnected',startTimeout:'disconnected',runnerUpgrade:'disconnected',toolAuth:'toolLogin',toolQuota:'quota',toolRateLimit:'quota',toolNetwork:'network',prepareNetwork:'network',idleTimeout:'stuck',stepLimit:'stuck',toolProcess:'stuck',contextOverflow:'tooLong',modelUnavailable:'model',queuedExpired:'notPicked',policyRefused:'notPicked',setupFailed:'setup',cliUnavailable:'setup',checkoutFailed:'setup',repoAccessDenied:'setup',repoAccessUnavailable:'setup',workspaceBusy:'setup',runnerDiskFull:'setup'};
+const getFailureCopy=():Record<string,[string,string]>=>({disconnected:[$t('taskDetail.failureDisconnected'),$t('taskDetail.failureDisconnectedNext')],toolLogin:[$t('taskDetail.failureToolLogin'),$t('taskDetail.failureToolLoginNext')],quota:[$t('taskDetail.failureQuota'),$t('taskDetail.failureQuotaNext')],network:[$t('taskDetail.failureNetwork'),$t('taskDetail.failureNetworkNext')],stuck:[$t('taskDetail.failureStuck'),$t('taskDetail.failureStuckNext')],tooLong:[$t('taskDetail.failureTooLong'),$t('taskDetail.failureTooLongNext')],model:[$t('taskDetail.failureModel'),$t('taskDetail.failureModelNext')],notPicked:[$t('taskDetail.failureNotPicked'),$t('taskDetail.failureNotPickedNext')],setup:[$t('taskDetail.failureSetup'),$t('taskDetail.failureSetupNext')],invalid:[$t('taskDetail.failureInvalidResult'),$t('taskDetail.failureInvalidResultNext')]});
+// What went wrong with `run` and what to do: the official reason (the task's latest run arrives with its execution),
+// then NocoReach's own codes, then whatever the Agent itself said; never a bare code.
+function failureOf(run:Run,data:Data):[string,string]{
+ const copy=getFailureCopy(),reason=data.execution?.runId===run.id?data.execution.run.failureReason:undefined,group=reason?FAILURE_GROUP[reason]:undefined;
+ if(group)return copy[group];
+ if(run.error==='invalid_agent_result')return copy.invalid;
+ const known=getRunErrors()[run.error||''];if(known)return [known,$t('taskDetail.failureUnknownNext')];
+ const said=run.errorDetail&&run.errorDetail!==run.error&&!/^[a-z_]+$/.test(run.errorDetail)?$legacyText(run.errorDetail):'';
+ return said?[$t('taskDetail.failureAgentSaid',{0:said}),$t('taskDetail.failureUnknownNext')]:[$t('taskDetail.failureUnknown'),$t('taskDetail.failureUnknownNext')];
+}
 const call=<T,>(projectId:number,taskId:string,action:string,body:object={})=>api.action<T>('nrTaskWork',action,{method:'POST',body:{projectId:String(projectId),taskId,...body},unwrap:'data'});
 // Tasks run by a playbook (new tasks, and tasks started with a flow) use this page; older step-plan tasks keep theirs.
 export function isPlaybookTask(d:Data){const w=d.work;return Boolean(w.playbook||w.flow)||(w.stage==='plan'&&!w.plan&&!w.simple);}
@@ -133,6 +147,7 @@ function TaskHeader({data,list,pick,busy,runActive,members,update,onEvidence,onP
     {allowed&&members.length?<DropdownMenu><DropdownMenuTrigger render={<Button size="sm" variant="ghost" className="h-7 px-2 text-muted-foreground" disabled={busy||runActive} title={runActive?$t('taskDetail.executorRunningChangeAfterFinishes'):undefined}>{$t('common.owner')} · <span className="text-foreground">{ownerName}</span><ChevronDown/></Button>}/>
      <DropdownMenuContent align="end"><DropdownMenuRadioGroup value={w.humanOwnerId||''} onValueChange={v=>{if(v&&v!==w.humanOwnerId)void update('setOwner',{userId:v});}}>{owners.map(m=><DropdownMenuRadioItem key={m.id} value={m.id}>{m.name}</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup></DropdownMenuContent></DropdownMenu>
      :<span>{$t('common.owner')} · <span className="text-foreground">{ownerName}</span></span>}
+    <AgentMenu data={data} busy={busy} locked={!allowed?$t('taskDetail.ownerAdminChange'):closedLabel(w)?$t('taskDetail.taskClosed'):w.stage==='done'?$t('taskDetail.taskDone'):runActive?$t('taskDetail.taskQueuedRunningWaitFinish'):undefined} onChange={async agentId=>Boolean(await update('setAgent',{agentId}))}/>
     {collab.length>0&&<span className="inline-flex items-center gap-1" title={collab.map(c=>c.name).join('、')}>{collab.slice(0,3).map(c=><ActorAvatar key={c.id} type="user" name={c.name} size="xs"/>)}{collab.length>3?`+${collab.length-3}`:''}</span>}
     {insight?.id&&<button type="button" className="nr-link" onClick={()=>navigate(`/opportunities?item=${encodeURIComponent(insight.id!)}`)}>{$tj('taskDetail.sourceAttribution',{0:insight.no?`O-${insight.no}`:$t('common.opportunity')})}</button>}
     {w.article?.articleId&&<span className='max-w-60 truncate' title={w.article.slug}>{$t('articleTask.headerArticle',{0:w.article.title||w.article.slug})}</span>}
@@ -186,13 +201,8 @@ function StageCard({icon,title,sub,at,children,actions,tone='attention',label=$t
   </div>
  </section>;
 }
-// Who does the next Agent step: one line when it is settled, the full picker only when a choice is needed. Change is
-// always offered, so an Agent that turns out to be unusable can be replaced from here (2026-10-17 user report).
-function AgentLine({data,busy,lockedReason,onChange}:{data:Data;busy:boolean;lockedReason?:string;onChange:(agentId:string|null)=>Promise<boolean>}){
- const [open,setOpen]=useState(false),options=data.agent?.options||[],chosen=hasTaskAgent(data)?options.find(a=>a.id===data.agent?.agentId):undefined,only=options.length===1?options[0]:undefined,shown=chosen||only;
- if(!shown||open)return <TaskAgentField data={data} busy={busy} lockedReason={lockedReason} onChange={async id=>{const saved=await onChange(id);if(saved)setOpen(false);return saved;}}/>;
- return <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground"><Bot className="size-4" aria-hidden="true"/>{$t('taskDetail.doneBy',{0:shown.name})}{!chosen&&data.work.agentId&&<span>· {$t('taskDetail.previousAgentUnavailable')}</span>}{shown.online===false&&<span>· {$t('taskDetail.agentOfflineStartingTaskQueue')}</span>}{!lockedReason&&<Button variant="link" size="sm" className="h-auto p-0" onClick={()=>setOpen(true)}>{$t('taskDetail.changeAgent')}</Button>}</p>;
-}
+// Shown in a card whose action needs an Agent when none can be used: the choice itself is in the header.
+const NeedsAgent=({data}:{data:Data})=>hasTaskAgent(data)||(data.agent?.options||[]).length===1?null:<p className="text-sm text-nr-ink-red">{(data.agent?.options||[]).length?$t('taskDetail.chooseAgentAbove'):$t('taskDetail.noTeamAccessibleRunnerAgents')}</p>;
 // With no usable Agent saved on the task and exactly one available, that one is saved first, then `command` runs on
 // the revision the save returned (the same rule as Start).
 async function withUsableAgent(data:Data,update:Update,command:string,body:object={}){
@@ -200,8 +210,8 @@ async function withUsableAgent(data:Data,update:Update,command:string,body:objec
  if(!hasTaskAgent(data)&&options.length===1){const d=await update('setAgent',{agentId:options[0].id});if(!d)return;revision=d.work.revision;}
  return update(command,{...body,revision});
 }
-// Before a task starts (2026-10-08 user decision: 交给 Agent only creates the task): what the Agent will get, the 做法
-// (the one suggested at hand-off preselected) and a note; nothing runs until 确定开始执行.
+// Before a task starts (2026-10-08 user decision: Hand off to agent only creates the task): what the Agent will get,
+// the playbook (the one suggested at hand-off preselected) and a note; nothing runs until Start.
 function StartCard({data,list,pick,setPick,update,busy,projectId,taskId}:{data:Data;list?:PlaybookList;pick:string;setPick:(id:string)=>void;update:Update;busy:boolean;projectId:number;taskId:string}){
  const [note,setNote]=useTaskDraft('note',''),[reading,setReading]=useState(false),{allowed}=useContext(TaskAccess);
  const {clear}=useTaskDraftStatus();
@@ -230,7 +240,7 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId}:{data:D
    {articleChoice&&<ArticleStart data={data} projectId={projectId} choice={current} setChoice={c=>setChoiceState({...c,playbook:pick})} busy={busy} allowed={allowed} link={link}/>}
    <label className="nr-td-start-field"><span>{$t('taskDetail.notesOptional')}</span><textarea aria-label={$t('taskDetail.additionalNotes')} rows={3} value={note} disabled={busy||!allowed} placeholder={$t('taskDetail.changeEnglishVersionKeepTechnical')} onChange={e=>setNote(e.target.value)}/></label>
   </div>
-  <AgentLine data={data} busy={busy} lockedReason={!allowed?$t('taskDetail.ownerAdminChange'):undefined} onChange={async agentId=>Boolean(await update('setAgent',{agentId}))}/>
+  <NeedsAgent data={data}/>
   {attachments&&<div className="flex flex-col gap-2"><p className="text-sm text-muted-foreground">{$t('taskDetail.attachmentsDelivered')}</p><TaskMedia projectId={projectId} taskId={taskId}/></div>}
  </StageCard>;
 }
@@ -368,14 +378,20 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    {cur?.status!=='running'&&<Button variant="ghost" disabled={busy} onClick={()=>setManual(true)}>{$t('taskDetail.iLlMyself')}</Button>}
   </>:<><Button disabled={busy||!record.trim()} onClick={()=>void act('recordManual',{content:record})}>{$t('taskDetail.recordContinue')}</Button><Button variant="ghost" onClick={()=>{setManual(false);setRecord('');}}>{$t('common.cancel')}</Button></>;
   const recordLabel=readsOnly(stage)?(stage.mode==='analyze'?$t('taskDetail.analysisResult'):$t('taskDetail.plan')):$t('taskDetail.changeHistory');
-  const locked=!allowed?$t('taskDetail.ownerAdminChange'):isActive?$t('taskDetail.taskQueuedRunningWaitFinish'):undefined;
   const body=<>{manual&&<label className="nr-field">{recordLabel}<textarea aria-label={recordLabel} rows={4} value={record} disabled={busy} placeholder={readsOnly(stage)?(stage.mode==='analyze'?$t('taskDetail.writeAnalysisResult'):$t('taskDetail.whichFilesSectionsChangeWhat')):$t('taskDetail.prLinkWhichFilesContent')} onChange={e=>{setRecord(e.target.value);}}/></label>}
-   {!isActive&&!manual&&<AgentLine data={data} busy={busy} lockedReason={locked} onChange={async agentId=>Boolean(await update('setAgent',{agentId}))}/>}
+   {!isActive&&!manual&&canRun&&<NeedsAgent data={data}/>}
    {approved&&source&&<Reveal label={$t('taskDetail.viewApprovedInput',{0:source.name})}><Reading><Markdown content={approved.content}/></Reading></Reveal>}</>;
   if(!canRun)return <StageCard tone="error" icon={<AlertCircle/>} title={displayStageName(stage)} sub={<>{$t('taskDetail.noWebsiteSourceRepositoryConnectedMessage')}<Button variant="link" onClick={()=>navigate('/connections?source=repo')}>{$t('common.goDataSources')}</Button></>} actions={actions}>{body}</StageCard>;
   if(cur?.status==='queued')return <StageCard tone="live" label={$t('taskDetail.currentProgress')} icon={<Bot/>} title={$t('taskDetail.agentWorking',{0:stage.name})} sub={agent?.online?$t('taskDetail.handedOffAgentStartingNow'):<>{$t('taskDetail.agentComputerOffline')}<Button variant="link" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>} actions={actions}>{body}</StageCard>;
   if(cur?.status==='running')return <StageCard tone="live" label={$t('taskDetail.currentProgress')} icon={<Loader2 className="animate-spin motion-reduce:animate-none"/>} title={<>{$t('taskDetail.agentWorking',{0:stage.name})}{cur.cancelRequested?$t('taskDetail.stoppingAside'):''}</>} sub={$t('taskDetail.agentWorkingFor',{0:since(cur.createdAt)})} actions={actions}>{body}</StageCard>;
-  if(cur?.status==='failed')return <StageCard tone="error" icon={<AlertCircle/>} title={$t('taskDetail.agentDidNotFinish')} sub={$t('taskDetail.agentDidNotFinishHint',{0:getRunErrors()[cur.error||'']||$t('taskDetail.noUsableResult')})} actions={actions}>{body}{techLink}</StageCard>;
+  if(cur?.status==='failed'){
+   const [why,next]=failureOf(cur,data),stageRuns=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
+   const streak=stageRuns.findIndex(r=>r.status!=='failed'),failures=streak<0?stageRuns.length:streak;
+   return <StageCard tone="error" icon={<AlertCircle/>} title={$t('taskDetail.agentDidNotFinish')} actions={actions}>
+    <dl className="grid gap-x-2 gap-y-1 text-sm sm:grid-cols-[auto_1fr]"><dt className="text-muted-foreground">{$t('taskDetail.failureWhy')}</dt><dd>{why}</dd><dt className="text-muted-foreground">{$t('taskDetail.failureNext')}</dt><dd>{next}</dd></dl>
+    {failures>=2&&<p className="text-sm text-nr-ink-red">{$t('taskDetail.failureStreak',{0:failures})}</p>}
+    {body}{techLink}</StageCard>;
+  }
   return <StageCard icon={<Bot/>} title={displayStageName(stage)} sub={$t('taskDetail.stepDoneAgent',{0:stage.instruction})} actions={actions}>{body}</StageCard>;
  }
  return <StageCard icon={<Rocket/>} title={$t('common.confirmPublish')} sub={$t('taskDetail.prReviewApprovedConfirmAfter')}
@@ -413,7 +429,7 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
   {accepted&&!accepted.pr&&<><Reading><Markdown content={accepted.content}/></Reading>{accepted.report&&<ReportNotes report={accepted.report}/>}</>}
  </StageCard>;
 }
-// 效果观察 (SPEC §8): day 7 and day 28 against the same number of days before going live.
+// Impact tracking (SPEC §8): day 7 and day 28 against the same number of days before going live.
 function EffectList({w}:{w:Work}){
  const items=effectItems(w),pages=effectPages(w);
  if(!pages.length)return <p className="nr-td-muted">{$t('taskDetail.noRelatedPageNothingCompare')}</p>;

@@ -1,0 +1,1 @@
+{"version":3,"file":"de-DE.js","sourceRoot":"","sources":["../../../client/locales/de-DE.ts"],"names":[],"mappings":"AACA,MAAM,QAAQ,GAAqB;IACjC,aAAa,EAAE;QACb,KAAK,EAAE,WAAW;QAClB,IAAI,EAAE,UAAU;QAChB,MAAM,EAAE,yBAAyB;QACjC,aAAa,EAAE,mBAAmB;QAClC,SAAS,EAAE,eAAe;KAC3B;IACD,OAAO,EAAE;QACP,KAAK,EAAE,iEAAiE;QACxE,WAAW,EAAE,qDAAqD;KACnE;CACF,CAAC;AACF,eAAe,QAAQ,CAAC"}

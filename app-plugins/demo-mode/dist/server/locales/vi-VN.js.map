@@ -1,0 +1,1 @@
+{"version":3,"file":"vi-VN.js","sourceRoot":"","sources":["../../../server/locales/vi-VN.ts"],"names":[],"mappings":"AACA,MAAM,QAAQ,GAAqB;IACjC,aAAa,EAAE;QACb,KAAK,EAAE,cAAc;QACrB,IAAI,EAAE,KAAK;QACX,MAAM,EAAE,aAAa;QACrB,aAAa,EAAE,eAAe;QAC9B,SAAS,EAAE,UAAU;KACtB;IACD,MAAM,EAAE;QACN,QAAQ,EAAE,0CAA0C;KACrD;CACF,CAAC;AACF,eAAe,QAAQ,CAAC"}

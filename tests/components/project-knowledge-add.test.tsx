@@ -1,18 +1,8 @@
 import '@testing-library/jest-dom/vitest';
-import { I18nRuntime } from '@nocobase/i18n';
-import { I18nProvider } from '@nocobase/i18n/client';
-import {
-  cleanup,
-  render,
-  screen,
-  within,
-  waitFor,
-} from '@testing-library/react';
+import { cleanup, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
 import { afterEach, expect, it, vi } from 'vitest';
-import locales from '../../client/locales';
-import ProjectKnowledgePage from '../../client/pages/project-knowledge';
+import { mountProjectKnowledge } from '../fixtures/project-knowledge-routes';
 
 const { action, memory } = vi.hoisted(() => ({
   action: vi.fn(),
@@ -58,22 +48,16 @@ async function setup() {
       return { item: { title: '长资料' }, memory: ['产品'] };
     throw new Error(`Unexpected request ${resource}/${command}`);
   });
-  const runtime = new I18nRuntime({
-    defaultLocale: 'zh-CN',
-    locales: ['zh-CN', 'en-US'],
-    applicationNamespace: 'nocoreach',
-  });
-  runtime.registerApplicationNamespace('nocoreach', locales);
-  await runtime.init();
-  render(
-    <I18nProvider runtime={runtime}>
-      <MemoryRouter>
-        <ProjectKnowledgePage />
-      </MemoryRouter>
-    </I18nProvider>,
-  );
+  const router = await mountProjectKnowledge('/project/knowledge?q=');
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '添加', exact: true }));
+  // An empty list offers adding once, in its empty state.
+  expect(
+    await screen.findAllByRole('button', { name: '添加资料' }),
+  ).toHaveLength(1);
+  await user.click(
+    (await screen.findAllByRole('button', { name: '添加资料' }))[0],
+  );
+  expect(router.state.location.pathname).toBe('/project/knowledge/new');
   await user.click(screen.getByRole('button', { name: '填网址' }));
   await user.type(
     screen.getByRole('textbox', { name: '网址' }),
@@ -81,13 +65,15 @@ async function setup() {
   );
   await user.click(screen.getByRole('button', { name: '下一步' }));
   await screen.findByRole('button', { name: '确认' });
-  return user;
+  return { user, router };
 }
 
 it('keeps long link suggestions in a bounded scrolling body with accessible actions and submits selected lines', async () => {
-  const user = await setup();
-  const dialog = screen.getByRole('dialog', { name: '添加', exact: true });
-  const body = dialog.querySelector('[data-knowledge-add-body]')!;
+  const { user, router } = await setup();
+  const dialog = screen.getByRole('dialog', { name: '添加资料' });
+  const body = dialog.querySelector<HTMLElement>(
+    '[data-slot="route-overlay-body"]',
+  )!;
   expect(dialog).toHaveClass('flex', 'max-h-[calc(100dvh-2rem)]', 'flex-col');
   expect(body).toHaveClass('min-h-0', 'overflow-y-auto');
   expect(body.querySelectorAll('[data-memory-line]')).toHaveLength(20);
@@ -97,15 +83,14 @@ it('keeps long link suggestions in a bounded scrolling body with accessible acti
   expect(body).not.toContainElement(
     within(dialog).getByRole('button', { name: '关闭' }),
   );
-  const last = within(body as HTMLElement)
-    .getAllByRole('checkbox')
-    .at(-1)!;
+  const last = within(body).getAllByRole('checkbox').at(-1)!;
   await user.click(last);
   expect(last).not.toBeChecked();
   await user.click(within(dialog).getByRole('button', { name: '确认' }));
   await waitFor(() =>
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
   );
+  expect(router.state.location.pathname).toBe('/project/knowledge');
   expect(action).toHaveBeenCalledWith(
     'nrKnowledgeAdd',
     'confirm',
@@ -119,15 +104,21 @@ it('keeps long link suggestions in a bounded scrolling body with accessible acti
       }),
     }),
   );
-  await user.click(screen.getByRole('button', { name: '添加', exact: true }));
-  expect(screen.getByRole('button', { name: '下一步' })).toBeEnabled();
+  // The list is read again after saving.
+  expect(
+    action.mock.calls.filter(
+      ([resource, command]) => resource === 'nrKnowledge' && command === 'list',
+    ),
+  ).toHaveLength(2);
+  await user.click(screen.getAllByRole('button', { name: '添加资料' })[0]);
+  expect(await screen.findByRole('button', { name: '下一步' })).toBeEnabled();
   expect(
     screen.queryByRole('button', { name: '确认' }),
   ).not.toBeInTheDocument();
 });
 
-it('can go back and close a long suggestion without saving', async () => {
-  const user = await setup();
+it('can go back, and asks before closing a suggestion without saving', async () => {
+  const { user, router } = await setup();
   await user.click(screen.getByRole('button', { name: '返回' }));
   expect(screen.getByRole('textbox', { name: '网址' })).toHaveValue(
     'https://example.com/docs',
@@ -135,13 +126,16 @@ it('can go back and close a long suggestion without saving', async () => {
   await user.click(screen.getByRole('button', { name: '下一步' }));
   await screen.findByRole('button', { name: '确认' });
   await user.click(screen.getByRole('button', { name: '关闭' }));
+  const ask = await screen.findByRole('alertdialog');
+  await user.click(within(ask).getByRole('button', { name: '放弃' }));
   await waitFor(() =>
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
   );
+  expect(router.state.location.pathname).toBe('/project/knowledge');
   expect(
     action.mock.calls.filter(([, command]) => command === 'confirm'),
   ).toHaveLength(0);
   expect(
-    screen.getByRole('button', { name: '添加', exact: true }),
-  ).toBeEnabled();
+    screen.getAllByRole('button', { name: '添加资料' })[0],
+  ).toBeInTheDocument();
 });

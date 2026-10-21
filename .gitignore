@@ -18,3 +18,7 @@ coverage/
 /.agents/
 /.claude/skills/
 *.log
+
+# Temporary vendored plugin: compiled exports must work in clean checkouts.
+!/app-plugins/demo-mode/dist/
+!/app-plugins/demo-mode/dist/**

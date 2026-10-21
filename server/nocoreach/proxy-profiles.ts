@@ -38,6 +38,9 @@ const connectionSchema = z.enum(CONNECTIONS);
 export const DIRECT = 'direct';
 /** Browser collectors use their own host's network and never take a live proxy. */
 const COLLECTORS: readonly Connection[] = ['bilibili', 'xiaohongshu'];
+/** Read through a Collector host, so the default proxy never applies. An explicit YouTube choice is kept: it still
+ * raises the Collector migration guidance until an administrator turns it off. */
+const VIA_COLLECTOR: readonly Connection[] = [...COLLECTORS, 'youtube'];
 const KEY = 'NOREACH_PROXY_PROFILES';
 const invalid = (message: string, status = 400): never => {
   throw Object.assign(new Error(message), { status });
@@ -508,14 +511,14 @@ export class ProxyProfiles {
     return this.route(this.read(), project, connection);
   }
   // The project's choice for the connection; without one, the default proxy. Mock deployments never take the
-  // default (an empty choice pauses there), and collectors never take a live proxy.
+  // default (an empty choice pauses there), and connections read through a Collector never take it either.
   private route(s: Settings, project: string, connection: Connection) {
     const choice = s.selections[projectId(project)]?.[connection];
     const id =
       choice === DIRECT
         ? undefined
         : (choice ??
-          (this.mockEnabled || COLLECTORS.includes(connection)
+          (this.mockEnabled || VIA_COLLECTOR.includes(connection)
             ? undefined
             : s.defaultProfileId));
     return id
@@ -623,7 +626,7 @@ export class ProxyProfiles {
       for (const project of new Set([...ids, ...Object.keys(s.selections)])) {
         const choices = (s.selections[project] ??= {});
         for (const connection of CONNECTIONS) {
-          if (COLLECTORS.includes(connection)) continue;
+          if (VIA_COLLECTOR.includes(connection)) continue;
           const id = choices[connection];
           if (!id) choices[connection] = DIRECT;
           else if (id === best) delete choices[connection];

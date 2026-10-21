@@ -4,7 +4,9 @@ import {ExternalLinkIcon,FileIcon,PencilIcon,PlusIcon,SearchIcon,Trash2Icon,XIco
 import {useBusinessAccess} from '#hooks/use-business-access';
 import {PageContainer,PageHeader} from '#components/reach/page';
 import {Tag} from '#components/reach/tag';
+import {WithInfo} from '#components/reach/info-tip';
 import {Button} from '#components/ui/button';
+import {ConnectionError} from '#components/connection-error';
 import {Switch} from '#components/ui/switch';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter} from '#components/ui/dialog';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '#components/ui/sheet';
@@ -47,7 +49,7 @@ export default function SkillsPage(){
     {canRemove&&ticked.length>0&&<span className="ml-auto flex items-center gap-2 text-sm" role="group" aria-label={$t('skills.selectedSkills')}><span className="text-muted-foreground">{$tj('skills.selected',{0:ticked.length})}</span><Button size="sm" variant="ghost" disabled={busy} onClick={()=>setPicked([])}>{$t('common.clearSelection')}</Button><Button size="sm" variant="outline" className="text-destructive" disabled={busy} onClick={()=>void removeTicked()}><Trash2Icon/>{$t('skills.deleteSelected')}</Button></span>}</div>
    {!list?<p role="status" className="text-sm text-muted-foreground">{$t('common.loadingLoading')}</p>:visible.length?<div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[40rem] table-fixed border-collapse text-sm" aria-label="Skills">
     <colgroup>{canRemove&&<col className="w-10"/>}<col/><col className="w-56"/><col className="w-20"/><col className="w-20"/></colgroup>
-    <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>{canRemove&&<th className="py-2 pr-0 pl-3"><input type="checkbox" aria-label={$t('common.select')} checked={allTicked} onChange={e=>setPicked(e.target.checked?visible.map(s=>s.id):[])}/></th>}{[$t('skills.nameWhenUse'),$t('skills.usedPlaybooks'),$t('skills.attachedFiles'),$t('skills.currentProject')].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}</tr></thead>
+    <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>{canRemove&&<th className="py-2 pr-0 pl-3"><input type="checkbox" aria-label={$t('common.select')} checked={allTicked} onChange={e=>setPicked(e.target.checked?visible.map(s=>s.id):[])}/></th>}{[$t('skills.nameWhenUse'),$t('skills.usedPlaybooks'),$t('skills.attachedFiles')].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}<th className="px-3 py-2 text-left font-medium"><WithInfo help={$t('skills.projectEnablementHelp')}>{$t('skills.currentProject')}</WithInfo></th></tr></thead>
     <tbody>{visible.map(s=><tr key={s.id} data-skill-id={s.id} className="cursor-pointer border-t transition-colors hover:bg-muted/40" onClick={()=>setOpen(s.id)}>
      {canRemove&&<td className="py-2.5 pr-0 pl-3" onClick={e=>e.stopPropagation()}><input type="checkbox" aria-label={$t('common.selectValue',{0:s.name})} checked={picked.includes(s.id)} onChange={e=>setPicked(e.target.checked?[...picked,s.id]:picked.filter(x=>x!==s.id))}/></td>}
      <td className="px-3 py-2.5"><button type="button" className="block w-full truncate text-left font-mono font-medium hover:underline" onClick={e=>{e.stopPropagation();setOpen(s.id);}}>{s.name}</button><p className="truncate text-xs text-muted-foreground">{s.builtIn&&s.createdAt&&s.createdAt===s.updatedAt?$legacyText(s.description):s.description}</p></td>
@@ -55,7 +57,6 @@ export default function SkillsPage(){
      <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">{s.files.length}</td>
      <td className="px-3 py-2.5" onClick={e=>e.stopPropagation()}><Switch aria-label={$t('skills.enableProjectValue',{0:s.name})} checked={s.enabled} disabled={!canEnable} onCheckedChange={v=>void toggle(s,v)}/></td></tr>)}</tbody></table></div>
    :<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{list.skills.length?$t('skills.noMatchingSkillsMessage'):$t('skills.noSkillsYetClickNew')}</p>}
-   <p className="nr-footnote">{$t('skills.projectEnablementHelp')}</p>
   </section>
   {project&&creating&&canAdd&&<NewSkill projectId={project.id} canCreate={canCreate} canImport={canImport} canImportLink={canImportLink} canReadLink={canReadLink} onClose={()=>setCreating(false)} onCreated={s=>{setCreating(false);setNotice(() => ($t('skills.createdTasksUseOnceEnabled',{0:s.name})));load();setOpen(s.id);}}
    onImported={r=>{setCreating(false);setNotice(() => ([r.imported.length?$t('skills.skillsImportedTasksUseThem',{0:r.imported.length,1:r.imported.join('、')}):$t('skills.noSkillsImported'),r.skipped.length?$t('skills.skippedValueMessage',{0:r.skipped.length,1:r.skipped.map(x=>`${x.name}（${$legacyText(x.reason)}）`).join('、')}):''].join('')));load();}}/>}
@@ -96,7 +97,7 @@ function NewSkill({projectId,canCreate,canImport,canImportLink,canReadLink,onClo
     <label className="nr-field">{$t('skills.whenUse')}<textarea rows={2} maxLength={1024} disabled={busy} value={description} onChange={e=>setDescription(e.target.value)} placeholder={$t('skills.useWhenWritingChangingPage')}/><span className="text-xs text-muted-foreground">{$t('skills.agentUsesLineDecideWhen')}</span></label>
     <label className="nr-field">{$t('skills.how')}<textarea rows={10} disabled={busy} value={body} onChange={e=>setBody(e.target.value)} className="font-mono text-xs" placeholder={$t('skills.title3060CharactersMain')}/></label>
    </>:mode==='link'?<>
-    <div className="flex flex-col gap-1"><label className="nr-field">{$t('skills.skillLink')}<span className="flex gap-2"><input value={url} disabled={busy||reading} onChange={e=>{setUrl(e.target.value);setLink(null);}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void readLink();}}} placeholder="https://github.com/owner/repo/tree/main/skills/brand-voice" className="min-w-0 flex-1"/>
+    <div className="flex flex-col gap-1"><label className="nr-field"><WithInfo help={$t('skills.sourceRecordedSkillAttachedScripts')}>{$t('skills.skillLink')}</WithInfo><span className="flex gap-2"><input value={url} disabled={busy||reading} onChange={e=>{setUrl(e.target.value);setLink(null);}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void readLink();}}} placeholder="https://github.com/owner/repo/tree/main/skills/brand-voice" className="min-w-0 flex-1"/>
      <Button type="button" variant="outline" disabled={busy||reading} onClick={()=>void readLink()}>{reading?$t('common.loadingLoading'):$t('common.read')}</Button></span></label>
      <span className="text-xs text-muted-foreground">{$t('skills.linkSkillFolderSkillMd')}</span></div>
     {link?.choices&&<fieldset className="flex flex-col gap-1.5" disabled={busy}><legend className="mb-1 flex w-full flex-wrap items-center gap-2 text-sm"><span className="flex-1">{$tj('skills.linkSkillsSelectOnesImport',{0:choices.length,1:choices.some(c=>c.exists)?$t('skills.existingOnesCannotImportedAgain'):''})}</span>
@@ -108,14 +109,13 @@ function NewSkill({projectId,canCreate,canImport,canImportLink,canReadLink,onClo
       {!shown.length&&<li className="px-3 py-4 text-center text-xs text-muted-foreground">{$t('skills.noMatchingSkills')}</li>}</ul></fieldset>}
     {busy&&link?.choices&&<p role="status" className="text-sm text-muted-foreground">{$tj('skills.readingImportingSkillsTakeMoment',{0:ticked.length})}</p>}
     {link?.files&&<div role="status" className="flex flex-col gap-0.5 rounded-lg border p-3 text-sm"><p><span className="font-mono font-medium">{link.name}</span><span className="text-muted-foreground"> · {link.files.length-1?$t('skills.attachedFileCount',{0:link.files.length-1}):$t('skills.noAttachedFiles')}{link.skipped?.length?$t('skills.skippedFilesSuffix',{0:link.skipped.length,1:link.skipped.slice(0,3).join('、'),2:link.skipped.length>3?'…':''}):''}</span></p><p className="line-clamp-3 text-xs text-muted-foreground">{link.description}</p></div>}
-    <p className="nr-footnote">{$t('skills.sourceRecordedSkillAttachedScripts')}</p>
    </>:<>
-    <label className="nr-field">{$t('skills.skillFolderContainingSkillMd')}<input type="file" multiple disabled={busy} {...{webkitdirectory:''}} onChange={e=>void pick(e.target.files,true)}/></label>
+    <label className="nr-field"><WithInfo help={$t('skills.nameWhenUseReadTop')}>{$t('skills.skillFolderContainingSkillMd')}</WithInfo><input type="file" multiple disabled={busy} {...{webkitdirectory:''}} onChange={e=>void pick(e.target.files,true)}/></label>
     <label className="nr-field">{$t('skills.pickSingleSkillMdFile')}<input type="file" accept=".md,.markdown" disabled={busy} onChange={e=>void pick(e.target.files,false)}/></label>
     {picked&&<p role="status" className="text-sm">{$tj('skills.readSkillMd',{0:others?$t('skills.additionalFiles',{0:others}):'',1:picked.skipped.length?$t('skills.skippedFilesSummary',{0:picked.skipped.length,1:picked.skipped.slice(0,3).join('、'),2:picked.skipped.length>3?'…':''}):''})}</p>}
-    <p className="nr-footnote">{$t('skills.nameWhenUseReadTop')}</p>
    </>}
-   {error&&<p role="alert" className="nr-error">{error}</p>}
+   {/* A link GitHub cannot be read from: the folder can be downloaded elsewhere and uploaded here instead. */}
+   <ConnectionError message={error} hint={mode==='link'&&canImport?$t('skills.uploadFolderInstead'):undefined} alternative={mode==='link'&&canImport?<Button type="button" size="sm" variant="outline" onClick={()=>{setMode('folder');setError('');}}>{$t('skills.useUploadFolder')}</Button>:undefined}/>
   </div>
   <DialogFooter><Button variant="ghost" disabled={busy} onClick={onClose}>{$t('common.cancel')}</Button><Button disabled={busy||reading||!canSave} onClick={()=>void save()}>{busy?(mode==='link'&&link?.choices?$t('skills.importing'):$t('common.saving')):mode==='form'?$t('common.save'):mode==='link'&&link?.choices?$t('skills.importValue',{0:ticked.length}):$t('skills.import')}</Button></DialogFooter>
  </DialogContent></Dialog>;

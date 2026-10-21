@@ -1,0 +1,55 @@
+import { z } from 'zod';
+const operation = z.enum(['insert', 'update', 'delete']);
+export const WriteRule = z.strictObject({
+    capability: z.string().min(1).max(128),
+    operation,
+    scope: z.string().min(1).max(128),
+});
+export const DailySchedule = z.strictObject({
+    enabled: z.boolean(),
+    hour: z.number().int().min(0).max(23),
+    minute: z.number().int().min(0).max(59),
+    timezone: z.string().min(1).max(128),
+    language: z.string().min(1).max(16),
+});
+export const ConfigurationInput = {
+    rules: z.strictObject({
+        expectedRevision: z.number().int().nonnegative(),
+        value: z.array(WriteRule).max(200),
+    }),
+    mocks: z.strictObject({
+        expectedRevision: z.number().int().nonnegative(),
+        value: z.record(z.string().max(128), z.boolean()),
+    }),
+    schedule: z.strictObject({
+        expectedRevision: z.number().int().nonnegative(),
+        value: DailySchedule,
+    }),
+};
+export const ConfigurationView = z
+    .object({
+    busy: z.boolean(),
+    revision: z.number(),
+    rules: z.array(WriteRule),
+    mocks: z.record(z.string(), z.boolean()),
+    schedule: DailySchedule.nullable(),
+    mode: z.enum(['off', 'read-only', 'observe']),
+    fixedTables: z.array(z.string()),
+    capabilities: z.array(z.object({
+        id: z.string(),
+        title: z.string(),
+        table: z.string(),
+        operations: z.array(operation),
+        scopes: z.array(z.object({ id: z.string(), title: z.string() })),
+    })),
+    adapters: z.array(z.object({
+        id: z.string(),
+        title: z.string(),
+        kind: z.enum(['model', 'tool', 'runner']),
+        scope: z.string(),
+        defaultEnabled: z.boolean().optional(),
+    })),
+    nextRun: z.string().nullable(),
+})
+    .meta({ ref: 'DemoModeConfiguration' });
+//# sourceMappingURL=schemas.js.map

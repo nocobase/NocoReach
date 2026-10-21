@@ -19,9 +19,8 @@ export async function handOff(projectId:number,state:StrategyState,row:Row,playb
 }
 // The 做法 the server would pick for this opportunity (same rule as defaultPlaybookId).
 export const recommendedFor=(row:Row,playbooks?:Playbook[])=>playbooks?.find(p=>p.id===recommendedPlaybookId(citedSignals(row).map(s=>s.action)));
-// Every task goes to the Agent (SPEC §6.0); what you check depends on whether it changes the site or writes a document.
+// Every task goes to the Agent (SPEC §6.0).
 export const handOffLabel=(_kind?:PlaybookKind)=>$t('common.handOffAgent');
-export const handOffNote=(kind?:PlaybookKind)=>kind==='plan'?$t('strategy.agentWritesReview'):$t('strategy.agentMakesChangeFirstNothing');
 export type HandOffResult={text:Message;taskId?:number;ok:boolean};
 export function handOffResult(row:Row,r:{taskId?:number;started:boolean},_kind?:PlaybookKind):HandOffResult{return r.taskId?{ok:true,text:() => $t('common.taskCreatedReadClickStart',{0:row.card.title}),taskId:r.taskId}:{ok:false,text:() => $t('strategy.notCreateTaskTryAgain',{0:row.card.title})};}
 // After handing off, the task page opens at once (2026-10-03 user feedback: a banner on the same page is not enough),
