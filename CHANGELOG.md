@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Data sources: two ways to connect, findings in a dialog
+
+- The top of Data sources shows two cards side by side: Find data sources on your website, with what it reads, and Use an agent on your computer, saying why: the agent researches the website and repositories, lists a plan and connects everything once you confirm, while authorizations and tokens stay in the browser.
+- Discover data opens its findings in a dialog that can be closed, instead of a long list on the page. The website's own title and description are no longer shown above the findings. Authorize closes the dialog and opens that source's panel.
+
 ## Unreleased — Insights: Current situation beside the day, decisions kept
 
 - Current situation is back as a column beside the day's conversation, as before the redesign, with its explanation and Refresh. The Status link, its drawer and the All data menu are gone; each tile still opens its data page.

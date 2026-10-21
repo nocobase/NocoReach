@@ -66,6 +66,9 @@ describe('NocoReach semantic-key translations', () => {
     );
     // A legacy alias keeps its historical source text when the visible copy changes.
     const changedLegacyCopy: Record<string, string> = {
+      // The discovery findings open in a dialog (2026-10-21).
+      '完成。需要授权的项目可以随时点“去授权”，也可以在下方目录中管理。':
+        '完成。需要授权的来源可以点“去授权”，也可以关闭后在目录中管理。',
       // Connection drawers describe each source plainly (2026-10-21).
       'AI 搜索用已接入的 DataForSEO 查，不用另外接：在“搜索 → AI 搜索”里查品牌提及或问 AI，点了才查，花费算进 DataForSEO 的月度预算。':
         'AI 搜索使用已接入的 DataForSEO，不需要另外接入：在“搜索 → AI 搜索”中查询品牌提及或向 AI 提问，点击后才查询，费用计入 DataForSEO 的月度预算。',
