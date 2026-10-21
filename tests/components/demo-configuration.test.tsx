@@ -26,6 +26,7 @@ const state = vi.hoisted(() => ({
     rules: [],
     mocks: { 'fixture.runner': true },
     schedule: null,
+    chat: { enabled: false, model: null, tools: {} },
     mode: 'read-only',
     fixedTables: ['session', 'verification'],
     capabilities: [],
@@ -93,7 +94,7 @@ it('supports configuration administrators without data access', async () => {
       screen.getByRole('checkbox', { name: 'Fixture Runner' }),
     ).toBeEnabled(),
   );
-  expect(screen.getAllByRole('button', { name: '保存' })).toHaveLength(3);
+  expect(screen.getAllByRole('button', { name: '保存' })).toHaveLength(4);
   expect(screen.queryByText('Dataset panel')).not.toBeInTheDocument();
 });
 it('supports data-only access without exposing configuration', async () => {

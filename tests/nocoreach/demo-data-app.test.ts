@@ -64,13 +64,29 @@ describe('read-only demo conversations', () => {
     await runtime.ready;
     const demo = testApp.application.container.resolve(demoDataToken);
     const online = testApp.application.container.resolve(onlineAgentsToken);
+    await expect(online.resolveModel()).rejects.toMatchObject({
+      reason: 'DEMO_CHAT_DISABLED',
+    });
+    const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+    const initial = await (await admin.fetch('/demoMode/configuration')).json();
+    expect(
+      (
+        await admin.fetch('/demoMode/configuration/chat', {
+          method: 'PUT',
+          headers: json,
+          body: JSON.stringify({
+            expectedRevision: initial.data.revision,
+            value: { enabled: true, model: null, tools: {} },
+          }),
+        })
+      ).status,
+    ).toBe(200);
     expect(
       await online.resolveModel({
         modelService: 'real-service',
         model: 'real-model',
       }),
     ).toEqual({ modelService: demo.models.serviceName, model: 'demo-chat' });
-    const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
     expect(
       (
         await admin.fetch('/demoMode/data/import', {
@@ -127,8 +143,29 @@ describe('read-only demo conversations', () => {
         model: { modelService: 'demo-model' },
       },
     });
-    // A conversation outside any project is not a demo project's, so it stays read-only.
-    expect((await ask(null)).status).toBe(400);
+    // General chat retains the same ownership checks and explicit persistence permission.
+    const general = await ask(null);
+    expect(general.status).toBe(200);
+    const created = (await general.json()).data;
+    const member = await signIn(testApp, {
+      email: 'chencheng@nocobase.example',
+      password: 'chencheng123',
+    });
+    expect(
+      (await member.fetch(`/onlineAgents/conversations/${created.id}`)).status,
+    ).toBe(404);
+    expect(
+      (
+        await member.fetch('/demoMode/configuration/chat', {
+          method: 'PUT',
+          headers: json,
+          body: JSON.stringify({
+            expectedRevision: 2,
+            value: { enabled: false, model: null, tools: {} },
+          }),
+        })
+      ).status,
+    ).toBe(403);
   });
 });
 

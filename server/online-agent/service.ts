@@ -43,7 +43,8 @@ export class OnlineAgentService {
       signal: AbortSignal,
     ) => Promise<ChatContext>,
     private readonly onError: (error: unknown) => void = () => {},
-    private readonly environmentModel: () => OnlineModel | undefined = () =>
+    private readonly environmentModel: () =>
+      OnlineModel | undefined | Promise<OnlineModel | undefined> = () =>
       undefined,
   ) {
     this.records = new OnlineRecords(database);
@@ -52,9 +53,10 @@ export class OnlineAgentService {
   async resolveModel(
     model?: OnlineModel | null,
     context?: DatabaseConnection,
+    environment?: OnlineModel,
   ): Promise<OnlineModel> {
     const selected =
-      this.environmentModel() ??
+      (context ? environment : await this.environmentModel()) ??
       model ??
       (await this.models.services.defaults(context)).effectiveChat;
     if (!selected) throw new OnlineAgentError('modelRequired');
@@ -135,6 +137,7 @@ export class OnlineAgentService {
   }
   /** Initial messages and follow-ups share one transaction and one idempotency check. */
   async send(ownerId: string, input: MessageInput) {
+    const environment = await this.environmentModel();
     const target =
       'conversationId' in input
         ? [input.conversationId, input.revision]
@@ -171,6 +174,7 @@ export class OnlineAgentService {
       const model = await this.resolveModel(
         selection.model ?? agent.model,
         context,
+        environment,
       );
       const run: OnlineRun = {
         id,
@@ -369,6 +373,12 @@ export class OnlineAgentService {
         abort.signal.throwIfAborted();
         if (!(await this.definition(run.agentId)).enabled)
           throw new OnlineAgentError('agentDisabled', 403);
+        const currentModel = await this.resolveModel(run.model);
+        if (
+          currentModel.modelService !== model.modelService ||
+          currentModel.model !== model.model
+        )
+          throw new OnlineAgentError('modelUnavailable', 403);
         await check();
       };
       authorize = context.authorize;

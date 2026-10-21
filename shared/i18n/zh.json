@@ -7033,5 +7033,22 @@
   "demoConfig.capabilityTaskWorkflow": "任务工作流",
   "demoConfig.taskCreation": "演示任务创建",
   "demoConfig.opportunityHandoff": "演示机会交接",
-  "demoConfig.capabilityOnlineConversations": "在线 Agent 对话"
+  "demoConfig.capabilityOnlineConversations": "在线 Agent 对话",
+  "demoConfig.chat": "在线聊天",
+  "demoConfig.chatHelp": "选择回复模型和允许使用的工具。还需在下方开启会话写入权限。",
+  "demoConfig.chatEnabled": "启用演示聊天",
+  "demoConfig.chatModel": "回复模型",
+  "demoConfig.chatSimulated": "模拟模型（无模型费用）",
+  "demoConfig.chatLive": "已配置的真实模型",
+  "demoConfig.chatPaid": "真实模型会消耗 token 并可能产生费用。使用“模型”页面已配置的服务，凭据仍由该服务管理。",
+  "demoConfig.chatService": "模型服务名称",
+  "demoConfig.chatModelId": "模型 ID",
+  "demoConfig.chatDeny": "禁用",
+  "demoConfig.chatRead": "查询演示数据",
+  "demoConfig.chatMock": "使用演示适配器",
+  "demoConfig.chatTool_task_list": "查询任务列表",
+  "demoConfig.chatTool_task_get": "查询任务详情",
+  "demoConfig.chatTool_project_data": "查询项目上下文",
+  "demoConfig.chatTool_read_page": "读取模拟网页",
+  "demoConfig.chatTool_task_execute": "执行模拟任务"
 }

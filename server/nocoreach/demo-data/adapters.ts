@@ -99,21 +99,24 @@ export function registerDemoAdapters(
         );
       },
     });
-  // Online conversations a visitor starts in a demo project, answered by the simulated model.
+  // Authorized personal conversations, with optional demo project context.
   configuration.registerWrite({
     id: 'nocoreach.onlineConversations',
     title: 'Online Agent conversations',
     table: 'nr_online_agent_records',
     operations: ['insert', 'update'],
     scopes: [
-      { id: 'demo-projects', title: 'Demo projects: own conversations' },
+      {
+        id: 'demo-projects',
+        title: 'Own conversations, including general chat',
+      },
     ],
     async checkScope(scope, input) {
       const value = input as { projectId?: string | null };
       return (
         scope === 'demo-projects' &&
-        Boolean(value.projectId) &&
-        (await demoProjectsOf(host, String(value.projectId))).length > 0
+        (!value.projectId ||
+          (await demoProjectsOf(host, String(value.projectId))).length > 0)
       );
     },
   });

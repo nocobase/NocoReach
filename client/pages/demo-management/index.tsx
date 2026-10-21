@@ -2,6 +2,7 @@ import { useApiClient, useNavigationGuard } from '@nocobase/app-client';
 import { nextDemoReset } from '@nocobase/app-plugin-demo-mode/client/demo-configuration';
 import type {
   DemoConfigurationView,
+  DemoChatConfiguration,
   DemoDailySchedule,
   DemoWriteRule,
 } from '@nocobase/app-plugin-demo-mode/client/demo-configuration';
@@ -87,8 +88,9 @@ function preview(schedule: DemoDailySchedule): string | null {
 }
 const same = (a: unknown, b: unknown) =>
   JSON.stringify(a) === JSON.stringify(b);
-type Section = 'rules' | 'mocks' | 'schedule';
+type Section = 'rules' | 'mocks' | 'schedule' | 'chat';
 type Values = {
+  chat: DemoChatConfiguration;
   rules: DemoWriteRule[];
   mocks: Record<string, boolean>;
   schedule: DemoDailySchedule;
@@ -260,13 +262,23 @@ function Editor<S extends Section>({
               (adapter) =>
                 `${title(adapter)}: ${t((value as Values['mocks'])[adapter.id] ? 'enable' : 'disable')}`,
             )
-        : [
-            (value as DemoDailySchedule).enabled
-              ? `${String((value as DemoDailySchedule).hour).padStart(2, '0')}:${String((value as DemoDailySchedule).minute).padStart(2, '0')} · ${(value as DemoDailySchedule).timezone} · ${(value as DemoDailySchedule).language}`
-              : t('notScheduled'),
-          ];
+        : section === 'chat'
+          ? [
+              t(
+                (value as DemoChatConfiguration).enabled ? 'enable' : 'disable',
+              ),
+              (value as DemoChatConfiguration).model
+                ? t('chatPaid')
+                : t('chatSimulated'),
+            ]
+          : [
+              (value as DemoDailySchedule).enabled
+                ? `${String((value as DemoDailySchedule).hour).padStart(2, '0')}:${String((value as DemoDailySchedule).minute).padStart(2, '0')} · ${(value as DemoDailySchedule).timezone} · ${(value as DemoDailySchedule).language}`
+                : t('notScheduled'),
+            ];
   const destructive =
     section === 'schedule' ||
+    section === 'chat' ||
     (section === 'mocks'
       ? view.adapters.some(
           (adapter) =>
@@ -660,6 +672,117 @@ export default function DemoManagementPage() {
             {/* eslint-disable-next-line react-hooks/refs -- onReload is an async event callback, not render-time ref access. */}
             {view && common ? (
               <>
+                <Editor key={`chat:${refreshKey}`} section='chat' {...common}>
+                  {(value, change, disabled) => (
+                    <>
+                      <Label>
+                        <Checkbox
+                          checked={value.enabled}
+                          disabled={disabled}
+                          onCheckedChange={(enabled) =>
+                            change({ ...value, enabled })
+                          }
+                        />
+                        {t('chatEnabled')}
+                      </Label>
+                      <Choice
+                        label={t('chatModel')}
+                        value={value.model ? 'live' : 'simulated'}
+                        values={[
+                          ['simulated', t('chatSimulated')],
+                          ['live', t('chatLive')],
+                        ]}
+                        disabled={disabled}
+                        onChange={(mode) =>
+                          change({
+                            ...value,
+                            model:
+                              mode === 'live'
+                                ? { modelService: '', model: '' }
+                                : null,
+                          })
+                        }
+                      />
+                      {value.model ? (
+                        <>
+                          <p className='text-sm text-muted-foreground'>
+                            {t('chatPaid')}
+                          </p>
+                          <Label className='grid gap-2'>
+                            {t('chatService')}
+                            <Input
+                              required
+                              disabled={disabled}
+                              value={value.model.modelService}
+                              onChange={(event) =>
+                                change({
+                                  ...value,
+                                  model: {
+                                    ...value.model!,
+                                    modelService: event.target.value,
+                                  },
+                                })
+                              }
+                            />
+                          </Label>
+                          <Label className='grid gap-2'>
+                            {t('chatModelId')}
+                            <Input
+                              required
+                              disabled={disabled}
+                              value={value.model.model}
+                              onChange={(event) =>
+                                change({
+                                  ...value,
+                                  model: {
+                                    ...value.model!,
+                                    model: event.target.value,
+                                  },
+                                })
+                              }
+                            />
+                          </Label>
+                        </>
+                      ) : null}
+                      {[
+                        'task_list',
+                        'task_get',
+                        'project_data',
+                        'read_page',
+                        'task_execute',
+                      ].map((tool) => (
+                        <Label className='grid gap-2' key={tool}>
+                          {t(`chatTool_${tool}`)}
+                          <Choice
+                            label={t(`chatTool_${tool}`)}
+                            value={value.tools[tool] ?? 'deny'}
+                            disabled={disabled}
+                            values={
+                              ['read_page', 'task_execute'].includes(tool)
+                                ? [
+                                    ['deny', t('chatDeny')],
+                                    ['mock', t('chatMock')],
+                                  ]
+                                : [
+                                    ['deny', t('chatDeny')],
+                                    ['read', t('chatRead')],
+                                  ]
+                            }
+                            onChange={(policy) =>
+                              change({
+                                ...value,
+                                tools: {
+                                  ...value.tools,
+                                  [tool]: policy as 'read' | 'mock' | 'deny',
+                                },
+                              })
+                            }
+                          />
+                        </Label>
+                      ))}
+                    </>
+                  )}
+                </Editor>
                 <Editor
                   key={`schedule:${refreshKey}`}
                   section='schedule'

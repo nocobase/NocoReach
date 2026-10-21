@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased
+
+- Add configurable online demo chat with existing live models, explicit tool policies, owned general conversations, and execution-time policy checks.
+
 - Add an application-configured Demo Agent proxy for analysis and change drafts, scoped opportunity handoff in read-only mode, and simulated release after human review.
 
 ## Unreleased — Demo data

@@ -41,7 +41,10 @@ export default class OnlineAgentsProvider extends ServiceProvider<Application> {
           if (!plugin.demoConfiguration?.enabled) return undefined;
           const modelService = plugin.demoModels?.serviceName;
           if (!modelService) throw new OnlineAgentError('modelUnavailable');
-          return { modelService, model: 'demo-chat' };
+          return plugin.demoConfiguration.chatModel({
+            modelService,
+            model: 'demo-chat',
+          });
         },
       );
     });

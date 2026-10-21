@@ -7033,5 +7033,22 @@
   "demoConfig.capabilityTaskWorkflow": "Task workflow",
   "demoConfig.taskCreation": "Demo task creation",
   "demoConfig.opportunityHandoff": "Demo opportunity handoff",
-  "demoConfig.capabilityOnlineConversations": "Online Agent conversations"
+  "demoConfig.capabilityOnlineConversations": "Online Agent conversations",
+  "demoConfig.chat": "Online chat",
+  "demoConfig.chatHelp": "Choose the reply model and allowed tools. Conversation writes must also be enabled below.",
+  "demoConfig.chatEnabled": "Enable demo chat",
+  "demoConfig.chatModel": "Reply model",
+  "demoConfig.chatSimulated": "Simulated model (no model fees)",
+  "demoConfig.chatLive": "Configured live model",
+  "demoConfig.chatPaid": "Live models consume tokens and may incur charges. Use a service configured in Models; credentials stay there.",
+  "demoConfig.chatService": "Model service name",
+  "demoConfig.chatModelId": "Model ID",
+  "demoConfig.chatDeny": "Disabled",
+  "demoConfig.chatRead": "Read demo data",
+  "demoConfig.chatMock": "Use demo adapter",
+  "demoConfig.chatTool_task_list": "List tasks",
+  "demoConfig.chatTool_task_get": "Read a task",
+  "demoConfig.chatTool_project_data": "Read project context",
+  "demoConfig.chatTool_read_page": "Read a simulated webpage",
+  "demoConfig.chatTool_task_execute": "Run a simulated task"
 }
