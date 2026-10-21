@@ -74,7 +74,7 @@ describe('NocoReach semantic-key translations', () => {
       'Discussions 和 GitHub Traffic 用同一个只读 token：接入仓库并填好 token 后，我每天读取近 90 天的讨论，整理讨论最多和还没解决的问题。不需要另外的权限。':
         'Discussions 与 GitHub Traffic 使用同一个只读 token。接入仓库并填写 token 后，每天读取近 90 天的讨论，整理讨论最多和尚未解决的问题，不需要额外权限。',
       'GA4 与 Search Console 使用同一次 Google 授权。授权后选择对应网站的 GA4 属性，我会开始首次同步。':
-        'GA4 与 Search Console 共用一次 Google 授权。授权后选择网站对应的 GA4 属性，随即开始首次同步。',
+        'GA4 与 Search Console 共用一次 Google 授权。授权后选择网站对应的 GA4 属性和 Search Console 站点，再点“立即同步”拉取数据，默认拉取最近 56 天。',
       'Traffic 需要仓库的只读管理权限。我会一步步教你创建一个只授权这个仓库、只读的细粒度 token。GitHub 只保留最近 14 天的数据，接入后我每天归档，越早接入历史越完整。':
         'Traffic 需要仓库的只读管理权限，通过一个只授权此仓库的只读细粒度 token 获取，创建步骤见下方。GitHub 只保留最近 14 天的数据，接入后每天归档，越早接入，历史越完整。',
       'X 的接口现在只按条付费（每读一条约 $0.005），所以要用你们自己的 X API Bearer Token。我每天查一次：近一天提到产品的帖子数，以及新帖子的内容和点赞、转发；不含转发，也可以排除官方账号自己发的。你设一个每月上限（默认 $5，约 1,000 条），到了就停，下个月继续。':
@@ -104,7 +104,6 @@ describe('NocoReach semantic-key translations', () => {
         '支持 Discourse 论坛的公开分类，不需要账号。只读取帖子内容和互动数据，不保存用户名。首次同步约需一两分钟，在后台完成。',
       '用你们自己建的 Discord 机器人：在开发者后台建一个应用和机器人、打开 Message Content Intent，邀请进服务器（只要“查看频道”和“读取消息历史”）。把机器人 token 粘贴过来，我先检查、列出它能读的频道，你选好后每天读一次：消息数、提问，以及超过一天没人回的问题。消息内容只保存 30 天，不保存作者。':
         '使用自己创建的 Discord 机器人：在开发者后台创建应用和机器人，开启 Message Content Intent，并邀请进服务器（只需要“查看频道”和“读取消息历史”权限）。粘贴机器人 token 后，先检查并列出它能读取的频道；选好频道后每天读取一次：消息数、提问，以及超过一天无人回复的问题。消息内容只保存 30 天，不保存作者。',
-      '还有疑问？': '问 AI',
       '需要你提供：': '需要准备',
       // Opportunities expire 14 days after the last analysis that raised them, not at the next one.
       '已过期：最新的分析没有再提出': '已过期：{0} 天内的分析都没有再提出',
