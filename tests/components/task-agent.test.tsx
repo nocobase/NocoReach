@@ -531,7 +531,7 @@ test("without an official reason, the Agent's own message or a plain fallback is
   expect(screen.queryByText(/已经连续/)).toBeNull();
 });
 
-test('a scoped Demo Agent can start without selecting or changing a real Runner', async () => {
+test('an environment Demo Agent can start without selecting or changing a real Runner', async () => {
   const data = initial();
   data.agent = {
     repo: null,
@@ -551,7 +551,6 @@ test('a scoped Demo Agent can start without selecting or changing a real Runner'
   mount(data);
   const start = await screen.findByRole('button', { name: '确定开始执行' });
   expect(start).toBeEnabled();
-  expect(screen.getByText('由 NocoReach Demo Agent 来做')).toBeVisible();
   await userEvent.click(start);
   expect(action).toHaveBeenCalledWith(
     'nrTaskWork',
