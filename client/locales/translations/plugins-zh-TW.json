@@ -982,7 +982,7 @@
         "name": "名稱",
         "renameTitle": "重新命名「{{name}}」",
         "conventional": {
-          "scripts": "Agent 可以執行的程式碼；對話 Agent 唯讀取。",
+          "scripts": "Agent 可以執行的程式碼；對話 Agent 僅讀取。",
           "references": "Agent 需要時讀取的文件。",
           "assets": "模板、圖片等資源。"
         },

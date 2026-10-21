@@ -5,6 +5,7 @@
 - Add Traditional Chinese, Japanese, Spanish, Brazilian Portuguese, French, German, Vietnamese, and Indonesian alongside English and Simplified Chinese.
 - Translate business messages, application navigation, authentication, Agent conversations, schedules, and installed plugin interfaces; load each additional language on demand.
 - Keep the selected locale through business-page updates, deferred errors, server presentation messages, calendars, timestamps, and schedule descriptions. Distinguish Simplified and Traditional Chinese in the language menu.
+- Correct Traditional Chinese approval and read-limit wording, and state the four-week average explicitly in GitHub topic hand-off summaries.
 - Validate language registration, translation keys, interpolation, and live language switching without losing in-progress input. Project content-generation language remains a separate setting.
 
 ## Unreleased — Insights as a conversation with the daily analysis

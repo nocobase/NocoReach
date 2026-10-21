@@ -5531,7 +5531,7 @@
   "githubHot.thisWeek": "Minggu ini",
   "githubHot.today": "Hari ini",
   "githubHot.topic": "Topik",
-  "githubHot.topicLine": "- {0}: {1} repositori, {2} baru dalam 7 hari, {3} baru minggu lalu ({4} seminggu sebelumnya); teratas: {5}",
+  "githubHot.topicLine": "- {0}: {1} repositori, {2} baru dalam 7 hari, {3} baru minggu lalu (rata-rata {4} per minggu selama empat minggu sebelumnya); teratas: {5}",
   "githubHot.topicTaskTitle": "Tulis tentang topik GitHub {0}",
   "githubHot.topics": "Topik yang diikuti",
   "githubHot.topicsBrief": "Topik GitHub yang dicentang di Topik populer GitHub:",

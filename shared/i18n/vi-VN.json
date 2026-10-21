@@ -5531,7 +5531,7 @@
   "githubHot.thisWeek": "Tuần này",
   "githubHot.today": "Hôm nay",
   "githubHot.topic": "Chủ đề",
-  "githubHot.topicLine": "- {0}: {1} kho mã nguồn, {2} mới trong 7 ngày, {3} mới tuần trước ({4} mỗi tuần trước đó); dẫn đầu: {5}",
+  "githubHot.topicLine": "- {0}: {1} kho mã nguồn, {2} mới trong 7 ngày, {3} mới tuần trước (trung bình {4} mỗi tuần trong bốn tuần trước đó); dẫn đầu: {5}",
   "githubHot.topicTaskTitle": "Viết về chủ đề GitHub {0}",
   "githubHot.topics": "Chủ đề đang theo dõi",
   "githubHot.topicsBrief": "Các chủ đề GitHub đã chọn trong mục chủ đề nổi bật trên GitHub:",

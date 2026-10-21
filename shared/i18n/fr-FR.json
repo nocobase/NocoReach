@@ -5531,7 +5531,7 @@
   "githubHot.thisWeek": "Cette semaine",
   "githubHot.today": "Aujourd’hui",
   "githubHot.topic": "Sujet",
-  "githubHot.topicLine": "- {0}: {1} dépôts, {2} nouveaux sur 7 jours, {3} nouveaux la semaine dernière ({4} par semaine auparavant); en tête : {5}",
+  "githubHot.topicLine": "- {0}: {1} dépôts, {2} nouveaux sur 7 jours, {3} nouveaux la semaine dernière (en moyenne {4} par semaine sur les quatre semaines précédentes); en tête : {5}",
   "githubHot.topicTaskTitle": "Rédiger du contenu sur le sujet GitHub {0}",
   "githubHot.topics": "Sujets suivis",
   "githubHot.topicsBrief": "Sujets GitHub cochés dans les sujets populaires GitHub :",

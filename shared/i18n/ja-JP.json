@@ -5531,7 +5531,7 @@
   "githubHot.thisWeek": "今週",
   "githubHot.today": "今日",
   "githubHot.topic": "トピック",
-  "githubHot.topicLine": "- {0}: リポジトリ{1}件, 過去7日間の新規{2}件, 先週の新規{3}件 (それ以前の週平均{4}件); 上位: {5}",
+  "githubHot.topicLine": "- {0}: リポジトリ{1}件, 過去7日間の新規{2}件, 先週の新規{3}件 (その前4週間の週平均{4}件); 上位: {5}",
   "githubHot.topicTaskTitle": "GitHubトピック{0}について執筆する",
   "githubHot.topics": "フォロー中のトピック",
   "githubHot.topicsBrief": "「GitHubの注目トピック」で選択したGitHubトピック:",

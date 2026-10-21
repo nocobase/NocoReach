@@ -5531,7 +5531,7 @@
   "githubHot.thisWeek": "Diese Woche",
   "githubHot.today": "Heute",
   "githubHot.topic": "Thema",
-  "githubHot.topicLine": "- {0}: {1} Repositorys, {2} neu in 7 Tagen, {3} neu letzte Woche ({4} pro Woche zuvor); führend: {5}",
+  "githubHot.topicLine": "- {0}: {1} Repositorys, {2} neu in 7 Tagen, {3} neu letzte Woche (durchschnittlich {4} pro Woche in den vier Wochen davor); führend: {5}",
   "githubHot.topicTaskTitle": "Über das GitHub-Thema {0} schreiben",
   "githubHot.topics": "Verfolgte Themen",
   "githubHot.topicsBrief": "Unter GitHub-Trendthemen ausgewählte GitHub-Themen:",
