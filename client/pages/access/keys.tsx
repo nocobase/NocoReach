@@ -28,6 +28,7 @@ import { useAccessApi, useAccessQuery, accessMessage } from './api';
 import { AccessError, Refresh, RowMenu, Pager } from './components';
 import { KeySecret } from './key-secret';
 import { formatDate, formatDateTime } from '#lib/format';
+import { lineTabClass, lineTabListClass } from '#components/reach/line-tabs';
 
 const keyState = (key: ManagedKey) =>
   key.expiresAt && Date.parse(key.expiresAt) <= Date.now()
@@ -131,33 +132,35 @@ export default function Keys() {
         description={$t('accessKeys.description')}
         actions={
           <>
-            <Refresh busy={query.isFetching || busy} onClick={reload} />
             {query.data?.items.length ? create : null}
+            <Refresh busy={query.isFetching || busy} onClick={reload} />
           </>
         }
       />
       <div
         role='tablist'
         aria-label={$t('accessKeys.type')}
-        className='flex gap-2'
+        className={lineTabListClass}
       >
-        <Button
+        <button
+          type='button'
           role='tab'
           aria-selected={type === 'personal'}
-          variant={type === 'personal' ? 'secondary' : 'ghost'}
+          className={lineTabClass}
           onClick={() => change('type', 'personal')}
         >
           {$t('accessKeys.personal')}
-        </Button>
+        </button>
         {query.data?.canManage || type === 'organization' ? (
-          <Button
+          <button
+            type='button'
             role='tab'
             aria-selected={type === 'organization'}
-            variant={type === 'organization' ? 'secondary' : 'ghost'}
+            className={lineTabClass}
             onClick={() => change('type', 'organization')}
           >
             {$t('accessKeys.organization')}
-          </Button>
+          </button>
         ) : null}
       </div>
       <p className='text-sm text-muted-foreground'>

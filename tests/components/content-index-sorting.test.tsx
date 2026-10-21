@@ -163,12 +163,12 @@ it('counts its tabs from the pages listed, with pages outside the sitemap counte
   render(<RouterProvider router={router} />);
   await screen.findByText('Home');
   expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
-    '全部 (4)',
-    '其他页面 (2)',
-    '博客 (2)',
-    '站点地图外 (2)',
+    '全部 4',
+    '其他页面 2',
+    '博客 2',
+    '站点地图外 2',
   ]);
-  await userEvent.click(screen.getByRole('tab', { name: '站点地图外 (2)' }));
+  await userEvent.click(screen.getByRole('tab', { name: '站点地图外 2' }));
   expect(
     screen
       .getAllByRole('row')
@@ -357,7 +357,7 @@ it('says beside the search when only the busiest pages outside the sitemap are l
   await screen.findByText('Home');
   expect(document.querySelector('[data-outside-cap]')).toBeNull();
   // The tab counts the pages it lists, like the others; the note beside the search gives how many there are in all.
-  await userEvent.click(screen.getByRole('tab', { name: '站点地图外 (1)' }));
+  await userEvent.click(screen.getByRole('tab', { name: '站点地图外 1' }));
   const note = screen.getByText(
     '只显示流量最高的 1 个，站点地图外一共有 340 个页面。',
   );

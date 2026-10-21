@@ -82,14 +82,14 @@ export default function DataTrends() {
   useHandOffSource("trends-related", tab === "brand" && view?.connected && terms.length ? { count: chosen.length, playbookId: "content-outline", description: $t('common.selectedRelatedSearchesBecomeOne'), draft: () => trendsDraft(terms[0], view!.place || $t('common.worldwide'), chosen), clear: () => setPicked({}) } : null);
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={tab === "brand" ? <NotesTip notes={view?.notes} /> : undefined} title={$t('dataTrends.trends')} description={$t('dataTrends.googleInterestProductCompetitorsKeywords')} actions={view?.connected || view?.keywords?.length ? <Button variant="outline" size="sm" disabled={busy || view.checking} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t('common.querying') : $t('common.queryNow')}</Button> : undefined} />
+      <PageHeader info={tab === "brand" ? <NotesTip notes={view?.notes} /> : undefined} title={$t('dataTrends.trends')} description={$t('dataTrends.googleInterestProductCompetitorsKeywords')} actions={view?.connected || view?.keywords?.length ? <Button variant="outline" size="sm" disabled={busy || view.checking} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t('common.querying') : $t('common.updateNow')}</Button> : undefined} />
       {error ? <LoadError title={$t('dataTrends.notLoadTrends')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
       {view ? (
         <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
           <TabsList variant="line" className="h-auto! justify-start">
             <TabsTrigger value="brand">{$t('dataTrends.productCompetitors')}</TabsTrigger>
-            <TabsTrigger value="keywords">{$tj('dataTrends.keywordsFollow',{0:view.keywords?.length ? ` (${view.keywords.length})` : ""})}</TabsTrigger>
+            <TabsTrigger value="keywords">{$tj('dataTrends.keywordsFollow',{0:view.keywords?.length ? ` ${view.keywords.length}` : ""})}</TabsTrigger>
           </TabsList>
         </Tabs>
       ) : null}

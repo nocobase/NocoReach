@@ -149,9 +149,7 @@ export default function DataXiaohongshu() {
               onClick={() => void search()}
             >
               <RefreshCw data-icon='inline-start' />
-              {running
-                ? $t('xiaohongshu.collecting')
-                : $t('xiaohongshu.searchNow')}
+              {running ? $t('xiaohongshu.collecting') : $t('common.updateNow')}
             </Button>
           ) : undefined
         }

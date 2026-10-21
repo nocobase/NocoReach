@@ -7,7 +7,6 @@ import {
   runtimesRoute,
   usageRoute,
 } from '@nocobase/app-plugin-agents/client/routes';
-import { cn } from 'cn';
 import { $t } from '#i18n';
 import {
   PageContainer,
@@ -15,9 +14,9 @@ import {
   SectionHeading,
 } from '#components/reach/page';
 import { AgentRoles } from './roles.js';
-import { buttonVariants } from '#components/ui/button';
 import { Skeleton } from '#components/ui/skeleton';
 import { routeAccess } from './access.js';
+import { lineTabClass, lineTabListClass } from '#components/reach/line-tabs';
 
 const runnerAccess = routeAccess(agentsRoute);
 
@@ -66,10 +65,7 @@ function AgentsTabs() {
   const { search } = useLocation();
   // The usage filters (range, grouping, the prices sheet) belong to the usage tab: neither carried into it nor out of it.
   const inUsage = useMatch('/agents/usage/*') !== null;
-  const tabClass = cn(
-    buttonVariants({ variant: 'ghost', size: 'sm' }),
-    'text-muted-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground',
-  );
+  const tabClass = lineTabClass;
   // A tab whose check is pending or failed stays hidden; its route still checks a URL opened directly.
   // In the order a new installation sets them up: the model service first, then a runtime and its agent.
   const tabs = [
@@ -85,10 +81,7 @@ function AgentsTabs() {
   ];
   return (
     <div className='px-6 pt-4 md:px-8'>
-      <nav
-        aria-label={$t('agentsPage.tabs')}
-        className='flex flex-wrap gap-1 border-b pb-2'
-      >
+      <nav aria-label={$t('agentsPage.tabs')} className={lineTabListClass}>
         {tabs.map((tab) => (
           <NavLink
             key={tab.path}

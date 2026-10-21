@@ -13,6 +13,14 @@
 - Correct Traditional Chinese approval and read-limit wording, and state the four-week average explicitly in GitHub topic hand-off summaries.
 - Validate language registration, translation keys, interpolation, and live language switching without losing in-progress input. Project content-generation language remains a separate setting.
 
+## Unreleased — One look for refresh buttons, drop-downs, tabs and pagination
+
+- The data pages call the action that reads new data "Update now" everywhere, instead of seven names (Read now, Search now, Check now, Query now, the competitor and Site audit wordings). The connection drawers keep their own steps.
+- A page's Refresh is the same outline icon button, last in the header: API keys moves it after Create key, Analysis rules uses it instead of a text button, and Settings › Automatic runs uses the header every other page uses, so the button lines up with the title instead of dropping below it.
+- The browser's own drop-downs on Competitors (market), Keywords › AI suggestions (market), GitHub › Hot (topic, language), Skills, Opportunities › Handled, Project knowledge (category, AI content language) and the knowledge forms are replaced by the application's drop-down. Tasks, Results and Playbooks follow with their own pages.
+- Members & roles, API keys and Agent use the same line tabs as the data pages instead of pill buttons, and tab counts follow the name without brackets ("All 658"), as on Opportunities.
+- Table footers disappear while every row fits on one page, and Members & roles and API keys use the same footer as the data tables when they do page.
+
 ## Unreleased — One way to write dates, numbers and changes
 
 - Dates read the same on every page: in Chinese "2026-10-21", without the year in the current year ("10-21"), and times without seconds or a time zone ("10-21 14:03"); in English "Oct 21", "Oct 21, 2025", "Oct 21, 2:03 PM". This replaces eight styles in use, among them "2026/10/21", "21/10/2026, 16:40:18" (Search performance), "2026/10/19 GMT+8 9:34:24" (Reddit) and "2027/1/16" (API keys). Date ranges use the same days.

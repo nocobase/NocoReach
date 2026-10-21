@@ -312,7 +312,7 @@ describe('搜索表现 · 索引 and 站点地图', () => {
     expect(within(table()).getByText('2 / 4')).toBeTruthy();
     expect(within(table()).getByText('未提交')).toBeTruthy();
     await userEvent.click(
-      within(table()).getByRole('tab', { name: '未提交 (1)' }),
+      within(table()).getByRole('tab', { name: '未提交 1' }),
     );
     expect(router.state.location.search).toContain('list=unsubmitted');
     expect(within(table()).queryByText('/sitemap.xml')).toBeNull();
@@ -324,9 +324,7 @@ describe('搜索表现 · 索引 and 站点地图', () => {
       within(drawer).getByText(/Search Console 里没有它的提交记录/),
     ).toBeTruthy();
     await userEvent.click(within(drawer).getByRole('button', { name: /关闭/ }));
-    await userEvent.click(
-      within(table()).getByRole('tab', { name: '全部 (2)' }),
-    );
+    await userEvent.click(within(table()).getByRole('tab', { name: '全部 2' }));
     await userEvent.click(
       within(table()).getByRole('button', { name: '/sitemap.xml' }),
     );

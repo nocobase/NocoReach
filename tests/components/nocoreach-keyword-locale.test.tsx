@@ -99,7 +99,7 @@ describe('keyword grouping and stored business copy', () => {
       const user = userEvent.setup();
       await user.click(
         screen.getByRole('tab', {
-          name: `${$t('keywordSuggestions.groups.comparison')} (1)`,
+          name: `${$t('keywordSuggestions.groups.comparison')} 1`,
         }),
       );
       expect(screen.getByText('comparison keyword')).toBeVisible();
@@ -115,21 +115,22 @@ describe('keyword grouping and stored business copy', () => {
     const user = userEvent.setup();
     await user.click(
       screen.getByRole('tab', {
-        name: `${$t('keywordSuggestions.groups.comparison')} (1)`,
+        name: `${$t('keywordSuggestions.groups.comparison')} 1`,
       }),
     );
     const row = screen.getByText('comparison keyword').closest('tr')!;
     await user.click(within(row).getByRole('checkbox'));
     await act(() => runtime.changeLanguage('zh-CN'));
-    expect(
-      screen.getByRole('tab', { name: '对比与替代词 (1)' }),
-    ).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: '对比与替代词 1' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     expect(within(row).getByRole('checkbox')).toBeChecked();
     expect(screen.queryByText('product keyword')).not.toBeInTheDocument();
     await act(() => runtime.changeLanguage('en-US'));
     expect(
       screen.getByRole('tab', {
-        name: `${$t('keywordSuggestions.groups.comparison')} (1)`,
+        name: `${$t('keywordSuggestions.groups.comparison')} 1`,
       }),
     ).toHaveAttribute('aria-selected', 'true');
     expect(within(row).getByRole('checkbox')).toBeChecked();
