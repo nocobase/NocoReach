@@ -26,6 +26,13 @@ import {
   type MemorySuggestion,
   type ProjectKnowledgeContext,
 } from './model';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '#components/ui/select';
 
 // 记忆 tab: how full it is, the AI's update suggestions to accept or ignore, and one row per item — the project name,
 // the language the AI writes in, and the nine handbook sections. One Edit opens every item in a dialog over this tab
@@ -504,19 +511,29 @@ function LanguageSetting({
   }
   return (
     <span className='flex flex-wrap items-center gap-2' data-project-language>
-      <select
-        aria-label={$t('common.languageAiWrittenContent')}
+      <Select
         value={value}
         disabled={busy || !canEdit}
-        onChange={(e) => void change(e.target.value as 'zh-CN' | 'en-US')}
-        className='min-w-28'
+        onValueChange={(v) => void change(v as 'zh-CN' | 'en-US')}
       >
-        {(Object.keys(getLanguageNames()) as ('zh-CN' | 'en-US')[]).map((k) => (
-          <option key={k} value={k}>
-            {getLanguageNames()[k]}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger
+          className='w-full sm:w-40'
+          aria-label={$t('common.languageAiWrittenContent')}
+        >
+          <SelectValue>
+            {(v: string) => getLanguageNames()[v as 'zh-CN' | 'en-US'] ?? v}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent className='w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal'>
+          {(Object.keys(getLanguageNames()) as ('zh-CN' | 'en-US')[]).map(
+            (k) => (
+              <SelectItem key={k} value={k}>
+                {getLanguageNames()[k]}
+              </SelectItem>
+            ),
+          )}
+        </SelectContent>
+      </Select>
       <InfoTip label={$t('common.info')}>
         {$t('projectKnowledge.dailyAnalysisOpportunitiesTaskDocuments')}
       </InfoTip>

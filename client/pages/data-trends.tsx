@@ -1,4 +1,4 @@
-import { getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { $t, $tj, $legacyText } from "#i18n";
 // 趋势 (搜索): Google Trends once a week through DataForSEO. 产品与竞品: the product and its competitors over the past 12
 // months, each term's last four weeks against the four before, and the searches related to the product (rising ones new
 // this week marked); picked searches go to the Agent as one content task. 关注的关键词 (2026-10-04): keywords added on
@@ -25,12 +25,14 @@ import "./data-views.css";
 import { Tag } from "#components/reach/tag";
 import { InfoTip, NotesTip } from "#components/reach/info-tip";
 import { TrendKeywords, type KeywordWatch } from "./trends-keywords";
+import { formatDateTime } from '#lib/format';
+import { Delta } from '#components/reach/delta';
 
 type Query = { query: string; value: number; isNew?: boolean };
 type Rival = { id: string; name: string; included: boolean };
 type View = KeywordWatch & { connected: boolean; product?: string; competitors?: Rival[]; maxRivals?: number; terms?: string[]; place?: string; checking?: boolean; lastRun?: { at: string; ok: boolean; errors: string[] } | null; checkedAt?: string | null; checkUrl?: string | null; points?: { date: string; values: (number | null)[] }[]; summary?: { term: string; average: number | null; recent: number | null; change: number | null }[]; top?: Query[]; rising?: Query[]; notes?: string[] };
 const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
-const change = (v: number | null) => (v === null ? "—" : `${v >= 0 ? "↑" : "↓"} ${Math.abs(Math.round(v * 100))}%`);
+const change = (v: number | null) => (v === null ? "—" : <Delta value={v} />);
 
 export default function DataTrends() {
   const { project } = useProject();
@@ -71,7 +73,7 @@ export default function DataTrends() {
           <Checkbox checked={Boolean(picked[kind + q.query])} onCheckedChange={(on) => toggle(q, kind, on === true)} />
           <span className="min-w-0 flex-1 truncate">{q.query}</span>
           {q.isNew ? <Tag tone="blue">{$t('common.newWeek')}</Tag> : null}
-          <span className={kind === "rising" ? "tabular-nums text-nr-ink-green" : "tabular-nums text-muted-foreground"}>{kind === "rising" ? `+${q.value.toLocaleString(getCurrentLocale())}%` : q.value}</span>
+          {kind === "rising" ? <Delta value={q.value / 100} /> : <span className="tabular-nums text-muted-foreground">{q.value}</span>}
         </label>
       )) : <p className="px-4 py-3 text-sm text-muted-foreground">{empty}</p>}
     </Card>
@@ -80,14 +82,14 @@ export default function DataTrends() {
   useHandOffSource("trends-related", tab === "brand" && view?.connected && terms.length ? { count: chosen.length, playbookId: "content-outline", description: $t('common.selectedRelatedSearchesBecomeOne'), draft: () => trendsDraft(terms[0], view!.place || $t('common.worldwide'), chosen), clear: () => setPicked({}) } : null);
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={tab === "brand" ? <NotesTip notes={view?.notes} /> : undefined} title={$t('dataTrends.trends')} description={$t('dataTrends.googleInterestProductCompetitorsKeywords')} actions={view?.connected || view?.keywords?.length ? <Button variant="outline" size="sm" disabled={busy || view.checking} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t('common.querying') : $t('common.queryNow')}</Button> : undefined} />
+      <PageHeader info={tab === "brand" ? <NotesTip notes={view?.notes} /> : undefined} title={$t('dataTrends.trends')} description={$t('dataTrends.googleInterestProductCompetitorsKeywords')} actions={view?.connected || view?.keywords?.length ? <Button variant="outline" size="sm" disabled={busy || view.checking} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t('common.querying') : $t('common.updateNow')}</Button> : undefined} />
       {error ? <LoadError title={$t('dataTrends.notLoadTrends')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
       {view ? (
         <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
           <TabsList variant="line" className="h-auto! justify-start">
             <TabsTrigger value="brand">{$t('dataTrends.productCompetitors')}</TabsTrigger>
-            <TabsTrigger value="keywords">{$tj('dataTrends.keywordsFollow',{0:view.keywords?.length ? ` (${view.keywords.length})` : ""})}</TabsTrigger>
+            <TabsTrigger value="keywords">{$tj('dataTrends.keywordsFollow',{0:view.keywords?.length ? ` ${view.keywords.length}` : ""})}</TabsTrigger>
           </TabsList>
         </Tabs>
       ) : null}
@@ -96,7 +98,7 @@ export default function DataTrends() {
       {view?.connected && tab === "brand" ? (
         <>
           <Rivals projectId={project!.id} view={view} onView={setLive} />
-          <p className="nr-footnote">{$tj('common.past12Months',{0:$legacyText(view.place),1:view.checkedAt ? $t('common.checked',{0:new Date(view.checkedAt).toLocaleString(getCurrentLocale())}) : ""})}{view.checkUrl ? <> · <a className="nr-link" href={view.checkUrl} target="_blank" rel="noreferrer">{$t('common.openGoogleTrends')}<ExternalLink className="ml-0.5 inline size-3" /></a></> : null}</p>
+          <p className="nr-footnote">{$tj('common.past12Months',{0:$legacyText(view.place),1:view.checkedAt ? $t('common.checked',{0:formatDateTime(view.checkedAt)}) : ""})}{view.checkUrl ? <> · <a className="nr-link" href={view.checkUrl} target="_blank" rel="noreferrer">{$t('common.openGoogleTrends')}<ExternalLink className="ml-0.5 inline size-3" /></a></> : null}</p>
           {view.lastRun && !view.lastRun.ok && !view.checking ? <InlineError action={view.lastRun.errors[0]?.includes("不确定") ? <Button size="sm" variant="outline" onClick={() => void retry()}>{$t('common.queryAgain')}</Button> : undefined}>{$tj('common.lastCheckNotComplete',{0:$legacyText(view.lastRun.errors[0])})}</InlineError> : null}
           {view.checking ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />{$t('dataTrends.checkingGoogleTrendsUsuallyMinute')}</p> : null}
           {!view.checkedAt ? (view.checking ? null : <p role="status" className="text-sm text-muted-foreground">{!view.lastRun ? $t('dataTrends.firstCheckProgressUsuallyMinute') : $t('common.noDataYet')}</p>) : (
@@ -106,7 +108,7 @@ export default function DataTrends() {
                   <Card key={s.term} className="gap-1 p-4" data-metric={s.term}>
                     <p className="flex items-center gap-1.5 truncate text-xs text-muted-foreground"><span className="inline-block size-2 shrink-0 rounded-full" style={{ background: COLORS[i] }} />{s.term}</p>
                     <p className="text-2xl font-semibold tabular-nums">{s.recent ?? "—"}</p>
-                    <p className="text-xs text-muted-foreground">{$t('common.last4Weeks')} <span className={s.change === null ? "" : s.change >= 0 ? "text-nr-ink-green" : "text-nr-ink-red"}>{change(s.change)}</span>  {$tj('dataTrends.value12MonthAverage',{0:s.average ?? "—"})}</p>
+                    <p className="text-xs text-muted-foreground">{$t('common.last4Weeks')} {change(s.change)}  {$tj('dataTrends.value12MonthAverage',{0:s.average ?? "—"})}</p>
                   </Card>
                 ))}
               </div>

@@ -1,4 +1,4 @@
-import { type Message, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { type Message, useMessageState, $t, $tj, $legacyText } from "#i18n";
 // AI 搜索 › 问题 (2026-10-05): what people ask ChatGPT and Google AI Overviews about our topics, which answers name or cite
 // us, which name competitors or other brands instead (the chances), and which name nobody. Topics are suggested by the
 // online AI and confirmed before anything is paid; then monthly. A question opens with the AI's answer, the brands and
@@ -24,6 +24,7 @@ import { DetailDrawer } from "./detail-drawer";
 import { DraftHandOffDialog, type TaskDraft } from "./keyword-hand-off";
 import type { HandOffResult } from "./strategy/hand-off";
 import { safeLink } from "./analytics";
+import { formatCount, formatDate } from '#lib/format';
 
 type Source = { url: string; title: string; domain: string; own: boolean; rival: string | null };
 type Question = { key: string; question: string; platform: "chat_gpt" | "google"; topics: string[]; volume: number | null; status: "ours" | "gap" | "open"; weNamed: boolean; weCited: boolean; rivals: string[]; brands: string[]; sources: Source[]; answer: string; at: string | null };
@@ -32,7 +33,7 @@ type View = { dataforseo: boolean; aiReady: boolean; refreshing: boolean; topics
 const call = <T,>(projectId: number, action: string, body: object = {}) => api.action<T>("nrAiQuestions", action, { method: "POST", body: { projectId, ...body }, unwrap: "data" });
 const getPlatform = () => ({ chat_gpt: "ChatGPT", google: $t('common.googleAiOverviews') } as const);
 const getStatus = () => ({ ours: { tone: "green", label: $t('aiQuestions.appears') }, gap: { tone: "amber", label: $t('aiQuestions.notAppearing') }, open: { tone: "grey", label: $t('aiQuestions.noBrands') } } as const);
-const n = (v: number | null) => (v === null ? "—" : v.toLocaleString(getCurrentLocale()));
+const n = (v: number | null) => formatCount(v);
 const COST = 0.2;
 const helper = createColumnHelper<Question>();
 
@@ -168,7 +169,7 @@ function Topics({ projectId, view, onView }: { projectId: number; view: View; on
 // One question: the AI's answer, who it names, what it cites.
 function QuestionDetail({ q, onClose, onHand }: { q: Question; onClose: () => void; onHand: () => void }) {
   return (
-    <DetailDrawer open onClose={onClose} title={q.question} description={$t('aiQuestions.questionVolume',{0:getPlatform()[q.platform],1:n(q.volume),2:q.at ? $t('aiQuestions.answered',{0:q.at.slice(0, 10)}) : ""})}
+    <DetailDrawer open onClose={onClose} title={q.question} description={$t('aiQuestions.questionVolume',{0:getPlatform()[q.platform],1:n(q.volume),2:q.at ? $t('aiQuestions.answered',{0:formatDate(q.at.slice(0, 10))}) : ""})}
       actions={<Button size="sm" onClick={onHand}><Bot data-icon="inline-start" />{$t('common.handOffAgent')}</Button>}>
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2"><Tag tone={getStatus()[q.status].tone} dot>{q.status === "ours" ? [q.weNamed ? $t('aiQuestions.mentionsUs') : "", q.weCited ? $t('common.citesSite') : ""].filter(Boolean).join("、") : getStatus()[q.status].label}</Tag>{q.rivals.map((r) => <Tag key={r} tone="grey">{r}</Tag>)}{q.brands.map((b) => <span key={b} className="text-xs text-muted-foreground">{b}</span>)}</div>

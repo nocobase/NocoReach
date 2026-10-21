@@ -3,7 +3,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import DataGitHub from '#pages/data-github/index';
 import { WorkspaceCacheProvider } from '#pages/workspace-cache';
@@ -214,7 +214,13 @@ const ready = () =>
   );
 
 describe('GitHub', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
   beforeEach(() => {
+    // Dates in the current year are written without the year: fix the year the fixtures are in.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 21, 12));
     sessionStorage.clear();
     action.mockReset();
     action.mockImplementation(
@@ -236,9 +242,7 @@ describe('GitHub', () => {
     expect(
       within(summary).getByRole('link', { name: 'o/r' }).getAttribute('href'),
     ).toBe('https://github.com/o/r');
-    expect(summary.textContent).toBe(
-      'o/r · 2026-09-12 至 2026-10-09 · 对比前 28 天',
-    );
+    expect(summary.textContent).toBe('o/r · 09-12 至 10-09 · 对比前 28 天');
     for (const key of [
       'stars',
       'forks',
@@ -289,7 +293,7 @@ describe('GitHub', () => {
     );
     expect(
       (document.querySelector('.nr-range-summary') as HTMLElement).textContent,
-    ).toBe('o/r · 2026-09-01 至 2026-10-09 · 全部记录');
+    ).toBe('o/r · 09-01 至 10-09 · 全部记录');
     expect(tile('stars').textContent).not.toMatch(/[▲▼]/);
   });
 

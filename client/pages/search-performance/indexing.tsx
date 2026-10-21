@@ -1,5 +1,5 @@
 import { GOOGLE_PROGRESS_CACHE_MS } from '../../../shared/google-cache.js';
-import { getCurrentLocale, $t, $tj } from "#i18n";
+import { $t, $tj } from "#i18n";
 // 搜索表现 · 索引 (?view=index, 2026-10-14, user request: everything Search Console's API offers, in NocoReach's own
 // style). Search Console's page-indexing report is not in its API, so this is built from the URL Inspection API: the
 // pages of 内容 inside the property are inspected a few at a time on the server (search-index.ts, at most 500 a day,
@@ -34,6 +34,7 @@ import { useFreshData } from "../workspace-cache";
 import { DraftHandOffDialog, type TaskDraft } from "../keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "../strategy/hand-off";
 import { indexDraft } from "../seo-hand-off";
+import { formatCount, formatDate, formatDateTime } from '#lib/format';
 
 type Status = "indexed" | "notIndexed" | "unchecked" | "error";
 export type IndexRow = { url: string; type: string; status: Status; checkedAt?: string; coverageState?: string | null; verdict?: string | null; lastCrawlTime?: string | null; crawledAs?: string | null; canonicalMismatch?: boolean; rich?: { type: string; errors: number; warnings: number }[]; error?: string | null };
@@ -45,9 +46,9 @@ const TABS = ["all", "indexed", "notIndexed", "canonical", "rich"] as const;
 type Tab = (typeof TABS)[number];
 const PAGE_SIZES = [25, 50, 100] as const;
 const DAY = 86400000;
-const num = (v: number) => v.toLocaleString(getCurrentLocale());
+const num = (v: number) => formatCount(v);
 const pct = (v: number) => `${Math.round(v * 100)}%`;
-const dateOf = (v?: string | null) => (v ? v.slice(0, 10) : "—");
+const dateOf = (v?: string | null) => formatDate(v?.slice(0, 10));
 const pathOf = (u: string) => { try { const x = new URL(u); return x.pathname + x.search || "/"; } catch { return u; } };
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 
@@ -110,7 +111,7 @@ export function IndexingView({ projectId, property, tab, reason, onPick }: { pro
   return (
     <>
       <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground" data-index-status="">
-        <span>{$tj('searchIndex.statusLine', { 0: num(checked.length), 1: num(view.total), 2: num(view.quota?.daily ?? 500), 3: view.lastRunAt ? new Date(view.lastRunAt).toLocaleString(getCurrentLocale()) : "—" })}</span>
+        <span>{$tj('searchIndex.statusLine', { 0: num(checked.length), 1: num(view.total), 2: num(view.quota?.daily ?? 500), 3: formatDateTime(view.lastRunAt) })}</span>
         {view.running ? <span>· {$t('searchIndex.checking')}</span> : null}
         <NotesTip notes={notes} />
       </div>
@@ -172,7 +173,7 @@ function HistoryCard({ history }: { history: NonNullable<IndexView["history"]> }
             </LineChart>
           </ResponsiveContainer>
         </div>
-      ) : <p className="text-sm text-muted-foreground">{$t('searchIndex.historyStarts', { 0: history[0]?.date ?? "—" })}</p>}
+      ) : <p className="text-sm text-muted-foreground">{$t('searchIndex.historyStarts', { 0: formatDate(history[0]?.date) })}</p>}
     </Card>
   );
 }
@@ -296,9 +297,9 @@ function PageDrawer({ projectId, property, row, onClose, onHandOff }: { projectI
   const { data, error } = useFreshData<{ connected: boolean; result: PageResult | null }>(`data-view:search-index-page:${projectId}:${property || ''}:${row.url}:${row.checkedAt || ''}`, () => api.action("nrSearchIndex", "page", { method: "POST", body: { projectId, url: row.url }, unwrap: "data" }), { staleTime: GOOGLE_PROGRESS_CACHE_MS });
   const r = data?.result, href = safeLink(row.url), link = r?.link ? safeLink(r.link) : null;
   const facts: [string, ReactNode][] = r && !r.error ? [
-    [$t('searchIndex.verdict'), enumName(r.verdict)], [$t('searchIndex.reason'), coverageName(r.coverageState)], [$t('searchIndex.lastCrawl'), r.lastCrawlTime ? new Date(r.lastCrawlTime).toLocaleString(getCurrentLocale()) : "—"],
+    [$t('searchIndex.verdict'), enumName(r.verdict)], [$t('searchIndex.reason'), coverageName(r.coverageState)], [$t('searchIndex.lastCrawl'), formatDateTime(r.lastCrawlTime)],
     [$t('searchIndex.crawledAs'), enumName(r.crawledAs)], [$t('searchIndex.robotsTxt'), enumName(r.robotsTxtState)], [$t('searchIndex.indexing'), enumName(r.indexingState)], [$t('searchIndex.pageFetch'), enumName(r.pageFetchState)],
-    [$t('searchIndex.googleCanonical'), r.googleCanonical ?? "—"], [$t('searchIndex.userCanonical'), r.userCanonical ?? "—"], [$t('searchIndex.checkedAt'), new Date(r.checkedAt).toLocaleString(getCurrentLocale())],
+    [$t('searchIndex.googleCanonical'), r.googleCanonical ?? "—"], [$t('searchIndex.userCanonical'), r.userCanonical ?? "—"], [$t('searchIndex.checkedAt'), formatDateTime(r.checkedAt)],
   ] : [];
   return (
     <DetailDrawer open onClose={onClose} title={`${$t('common.page')} · ${pathOf(row.url)}`} description={STATUS[row.status].label()} actions={<Button size="sm" variant="outline" onClick={onHandOff}>{$t('searchIndex.handOff')}</Button>}>

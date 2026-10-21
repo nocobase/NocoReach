@@ -49,9 +49,9 @@ test('Reddit timing distinguishes attempts, cached success and retry timing in b
         <Timing />
       </I18nProvider>,
     );
-    expect(screen.getByText(/Last attempt:/)).toHaveTextContent(/10\/15\/2026/);
+    expect(screen.getByText(/Last attempt:/)).toHaveTextContent(/Oct 15/);
     expect(screen.getByText(/Last successful query:/)).toHaveTextContent(
-      /10\/12\/2026/,
+      /Oct 12/,
     );
     expect(screen.getByText(/Next retry eligible from:/)).toHaveTextContent(
       /hourly scan/,
