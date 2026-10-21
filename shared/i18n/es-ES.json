@@ -4338,7 +4338,7 @@
   "hackernews.comment": " (comentario)",
   "competitorWatch.lastWeek": " (última semana {0})",
   "competitorWatch.moreAllowed": " (puedes añadir {0} más)",
-  "github.needLeastWriteAccessRepository": " (necesitas al menos permisos de escritura en el repositorio: si puedes ver los gráficos en Hallazgos → Tráfico, tienes los permisos necesarios).",
+  "github.needLeastWriteAccessRepository": " (necesitas al menos permisos de escritura en el repositorio: si puedes ver los gráficos en Insights → Traffic, tienes los permisos necesarios).",
   "playbooks.select": "+ Seleccionar",
   "common.alreadySaved": ", {0} ya estaban guardados",
   "keywordSuggestions.alreadyThere": ", {0} ya existían",

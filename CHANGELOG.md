@@ -3,6 +3,7 @@
 ## Unreleased — Ten interface languages
 
 - Correct reviewed translation errors across all eight added languages, including named placeholders, total selection counts, task objectives, mention/citation meaning, skill associations, and Traditional Chinese wording.
+- Express audit and search-performance task objectives as requested changes in English, German, Brazilian Portuguese, Vietnamese, and Indonesian; preserve GitHub’s Insights → Traffic navigation labels in Spanish and Brazilian Portuguese.
 - Use complete localized sentences for AI mention/citation evidence and synchronize the latest main-branch update actions and tab counts.
 
 - Add Traditional Chinese, Japanese, Spanish, Brazilian Portuguese, French, German, Vietnamese, and Indonesian alongside English and Simplified Chinese.

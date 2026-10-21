@@ -3577,7 +3577,7 @@
   "lighthouseCard.getLighthousePerformanceScore90": "Đưa điểm hiệu suất Lighthouse của {0} lên 90 trở lên và khắc phục tất cả vấn đề",
   "seoHandOff.getMoreTrafficSearchClicks": "Tăng lưu lượng truy cập và lượt nhấp từ tìm kiếm cho {0}",
   "keywordHandOff.getSiteTopSearchResults": "Đưa trang web của chúng ta vào nhóm kết quả tìm kiếm hàng đầu cho các từ khóa: {0}",
-  "siteAudit.pagesNoLongerIssue": "Các trang này không còn gặp vấn đề \"{0}\"",
+  "siteAudit.pagesNoLongerIssue": "Khắc phục vấn đề \"{0}\" trên các trang này",
   "siteAudit.clearIssuesPages": "Khắc phục các vấn đề sau trên các trang này: {0}",
   "seoHandOff.pagesRankBetterGoogleBring": "Giúp các trang này xếp hạng cao hơn trên Google và mang lại nhiều lượt nhấp hơn",
   "seoHandOff.getMoreKeyActionsSign": "Tăng hành động quan trọng (đăng ký, tải xuống, liên hệ) trên các trang này và lượt nhấp từ tìm kiếm",
