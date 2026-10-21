@@ -28,11 +28,18 @@ test('selects a scheduling timezone, recalculates the next run, and retains it o
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.waitForURL((url) => !url.pathname.endsWith('/login'));
   await page.goto(`${base}/schedules`);
-  await page.getByRole('button', { name: 'Edit time', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Edit time' });
-  await expect(dialog.getByLabel('Daily run time')).toHaveValue('09:00');
-  await dialog.getByRole('combobox', { name: 'Schedule timezone' }).click();
-  await page.getByPlaceholder('Search IANA timezones…').fill('Shanghai');
+  const card = page.locator('[data-slot="card"]').filter({
+    has: page.getByText('Daily analysis', { exact: true }),
+  });
+  await card.getByRole('button', { name: 'Change time', exact: true }).click();
+  const dialog = page.getByRole('dialog', {
+    name: 'Change the time of “Daily analysis”',
+  });
+  await expect(dialog.getByLabel('Every day at')).toHaveValue('09:00');
+  await dialog.getByRole('combobox', { name: 'Timezone' }).click();
+  await page
+    .getByPlaceholder('Search timezones, e.g. Shanghai')
+    .fill('Shanghai');
   await expect(
     page.getByRole('option', { name: 'Asia/Shanghai' }),
   ).toBeVisible();
@@ -46,7 +53,7 @@ test('selects a scheduling timezone, recalculates the next run, and retains it o
       response.url().endsWith('/timing') &&
       response.request().method() === 'PUT',
   );
-  await dialog.getByRole('button', { name: 'Save schedule' }).click();
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   const response = await saved;
   expect(response.ok()).toBe(true);
   const result = (await response.json()).data;
@@ -55,39 +62,30 @@ test('selects a scheduling timezone, recalculates the next run, and retains it o
   expect(new Date(result.nextRunAt).getUTCHours()).toBe(1);
   await expect(dialog).toHaveCount(0);
   await page.reload();
-  const configuration = page.locator('[data-slot="card"]').filter({
-    has: page.getByText(/^(Task configuration|任务配置)$/),
-  });
-  await expect(
-    configuration.getByText('Asia/Shanghai', { exact: true }),
-  ).toBeVisible();
-  await expect(
-    configuration.getByText('Next run', { exact: true }),
-  ).toBeVisible();
-  await expect(
-    configuration
-      .getByText('Next run', { exact: true })
-      .locator('..')
-      .locator('dd'),
-  ).toHaveText(
-    new Intl.DateTimeFormat('en-US', {
-      dateStyle: 'medium',
-      timeStyle: 'medium',
-      timeZone: 'America/New_York',
-    }).format(new Date(result.nextRunAt)),
-  );
+  // The card names the timezone plainly; the IANA id is under Technical details.
+  await expect(card.getByText('Daily at 09:00')).toBeVisible();
+  await expect(card.getByText('China Standard Time')).toBeVisible();
+  await expect(card.getByText(/Times shown in Eastern Time/)).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath('timezone-saved-en.png'),
     animations: 'disabled',
   });
+  await card.getByRole('button', { name: 'More actions' }).click();
+  await page.getByRole('menuitem', { name: 'Technical details' }).click();
+  const details = page.getByRole('dialog', { name: 'Technical details' });
+  await expect(
+    details.getByText('Asia/Shanghai', { exact: true }),
+  ).toBeVisible();
+  await expect(details.getByText('0 9 * * *')).toBeVisible();
+  await details.getByRole('button', { name: 'Close' }).click();
   await page.setViewportSize({ width: 375, height: 812 });
   await page.emulateMedia({ colorScheme: 'dark' });
-  await configuration.getByText('Edit time', { exact: true }).click();
+  await card.getByRole('button', { name: 'Change time', exact: true }).click();
+  await expect(dialog.getByRole('combobox', { name: 'Timezone' })).toHaveText(
+    'China Standard Time · Asia/Shanghai',
+  );
   await expect(
-    dialog.getByRole('combobox', { name: 'Schedule timezone' }),
-  ).toHaveText('Asia/Shanghai');
-  await expect(
-    dialog.getByRole('button', { name: 'Save schedule' }),
+    dialog.getByRole('button', { name: 'Save', exact: true }),
   ).toBeInViewport();
   await page.screenshot({
     path: testInfo.outputPath('timezone-mobile-dark-en.png'),
@@ -98,14 +96,14 @@ test('selects a scheduling timezone, recalculates the next run, and retains it o
   await page.getByRole('button', { name: 'Open account menu' }).click();
   await page.getByRole('menuitem', { name: /Language/ }).hover();
   await page.getByRole('menuitemradio', { name: /中文|Chinese/ }).click();
-  await configuration.getByText('编辑时间', { exact: true }).click();
-  const chinese = page.getByRole('dialog', { name: '编辑时间' });
-  await expect(chinese.getByRole('combobox', { name: '调度时区' })).toHaveText(
-    'Asia/Shanghai',
+  await card.getByRole('button', { name: '修改时间', exact: true }).click();
+  const chinese = page.getByRole('dialog', { name: '修改“每日分析”的时间' });
+  await expect(chinese.getByRole('combobox', { name: '时区' })).toHaveText(
+    '中国标准时间 · Asia/Shanghai',
   );
-  await expect(chinese.getByText(/夏令时切换时/)).toBeVisible();
-  await chinese.getByRole('combobox', { name: '调度时区' }).click();
-  await page.getByPlaceholder('搜索 IANA 时区…').fill('UTC');
+  await expect(chinese.getByText(/多数数据源每天约 08:00 更新/)).toBeVisible();
+  await chinese.getByRole('combobox', { name: '时区' }).click();
+  await page.getByPlaceholder('搜索时区，例如 Shanghai').fill('UTC');
   await expect(
     page.getByRole('option', { name: 'UTC', exact: true }),
   ).toBeVisible();
