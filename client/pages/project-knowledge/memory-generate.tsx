@@ -32,7 +32,7 @@ import {
   type ProjectKnowledgeContext,
 } from './model';
 
-// 根据官网和资料生成 (user decision 2026-10-21), at /project/memory/generate over the 记忆 tab: the pages and materials the
+// Generate from the website and materials (user decision 2026-10-21), at /project/memory/generate over the Memory tab: the pages and materials the
 // AI will read, offered from the earlier choice or the automatic one (home page and main pages, newest materials), to
 // change before it runs. A changed list is kept and also read by the weekly check; an untouched automatic choice stays
 // automatic, so new main pages and materials are picked up later.
@@ -441,7 +441,7 @@ function AddPage({
   );
 }
 
-// Submitting starts the draft and closes the dialog; the 记忆 tab shows it running.
+// Submitting starts the draft and closes the dialog; the Memory tab shows it running.
 function GenerateForm({
   start,
   disabled,

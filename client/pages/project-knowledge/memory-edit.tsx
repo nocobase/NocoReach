@@ -26,8 +26,8 @@ import {
   type ProjectKnowledgeContext,
 } from './model';
 
-// 编辑记忆 (user decision 2026-10-21: one 编辑 for every item instead of a pencil per row), at /project/memory/edit over
-// the 记忆 tab: the project name and the nine sections. Only the items changed here are sent; the server merges them
+// Edit memory (user decision 2026-10-21: one Edit for every item instead of a pencil per row), at /project/memory/edit over
+// the Memory tab: the project name and the nine sections. Only the items changed here are sent; the server merges them
 // into what is saved now, so an item someone else changed meanwhile is kept.
 const FORM_ID = 'memory-edit-form';
 export default function MemoryEditDialog(): ReactElement {

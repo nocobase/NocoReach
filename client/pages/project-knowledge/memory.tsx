@@ -28,8 +28,8 @@ import {
 } from './model';
 
 // 记忆 tab: how full it is, the AI's update suggestions to accept or ignore, and one row per item — the project name,
-// the language the AI writes in, and the nine handbook sections. One 编辑 opens every item in a dialog over this tab
-// (user decision 2026-10-21, instead of a pencil per row); 根据官网和资料生成 first shows what the AI will read.
+// the language the AI writes in, and the nine handbook sections. One Edit opens every item in a dialog over this tab
+// (user decision 2026-10-21, instead of a pencil per row); Generate from the website and materials first shows what the AI will read.
 export default function MemoryTab(): ReactElement {
   // Tabs and overlays are not gated routes: follow a language change here.
   useNocoReachLocale();
@@ -411,7 +411,7 @@ function Suggestion({
   );
 }
 
-// Every item on its own row: the name and its content (five lines, then unfolds); 编辑 above changes them.
+// Every item on its own row: the name and its content (five lines, then unfolds); Edit above changes them.
 function MemoryList({
   context,
 }: {

@@ -55,7 +55,7 @@ class Knowledge{
   await this.put(this.key(id),{revision:d.revision+1,items:d.items},tx);return {revision:d.revision+1,item};});}
  async remove(id,v){return this.lock(id,async tx=>{const d=await this.snapshot(this.key(id),tx)||{revision:0,items:[]};if(!d.items.some(x=>x.id===v.itemId))fail(systemMessageText('knowledge.materialNotExistRefreshTry'),404);
   await this.put(this.key(id),{revision:d.revision+1,items:d.items.filter(x=>x.id!==v.itemId)},tx);await this.repo().destroy({filter:{key:this.itemKey(id,v.itemId)},transaction:tx});return {revision:d.revision+1};});}
- // 记忆 is saved on the project record next to its older fields (which stay as they were). The changed items —
+ // Memory is saved on the project record next to its older fields (which stay as they were). The changed items —
  // `sections`, or one `section` with its `text`, and/or `name` — are merged into what is saved now (2026-10-20), so
  // people editing different items at the same time keep each other's changes; `memory` still replaces every section.
  async saveMemory(id,v){const row=await this.p.projects.row(id);const project=row?.get('payload');if(!row||String(project?.id)!==String(id))fail(systemMessageText('settings.projectNotExist'),404);

@@ -233,7 +233,7 @@ function useMemoryUpdates(projectId?: number): MemoryUpdates {
     );
     return () => clearTimeout(timer);
   }, [projectId, status, currentRef]);
-  // A draft or a check that finished since the last look may have written 记忆: read the project again — when a run
+  // A draft or a check that finished since the last look may have written Memory: read the project again — when a run
   // seen going has stopped, or the last draft or check changed (a run that ended before the first poll). The first
   // look at a project only sets the baseline.
   const finishedRef = useRef<{ key: string; running: boolean }>(undefined);

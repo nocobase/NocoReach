@@ -47,7 +47,7 @@ class MemoryUpdate{
  async complete(system,user,operation){const provider=this.p.taskExecution?.provider;if(!provider)fail(systemMessageText('aiQuestions.onlineAiNotConnectedYet'),409);return provider.complete(system,user,operation);}
  // One page as the AI reads it: its title and the start of its text; null when it cannot be read as a web page.
  async read(url){try{const r=await this.download(url);const html=String(r.text||'');if(!/html|text/i.test(r.type||'html'))return null;return {url,html,title:plain(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]||'').slice(0,200),text:plain(html).slice(0,PAGE_TEXT)};}catch{return null;}}
- // Chosen automatically: the home page and up to seven main pages, found among 网站内容's pages and the home page's links.
+ // Chosen automatically: the home page and up to seven main pages, found among Website content's pages and the home page's links.
  async autoPages(id,project){const domain=String(project.domains?.[0]||'').trim();if(!domain)return {urls:[],home:null};const homeUrl=`https://${domain}/`;
   const home=await this.read(homeUrl);
   const host=u=>{try{return new URL(u).hostname.replace(/^www\./,'');}catch{return '';}};
@@ -132,7 +132,7 @@ class MemoryUpdate{
  async dismiss(id,v){const ids=new Set(Array.isArray(v.ids)?v.ids.map(String):[]);
   await this.mutate(id,x=>{const gone=(x.suggestions||[]).filter(y=>ids.has(y.id));return {...x,suggestions:(x.suggestions||[]).filter(y=>!ids.has(y.id)),dismissed:[...gone.map(y=>hash(y.section+y.text)),...(x.dismissed||[])].slice(0,DISMISSED)};});return this.status(id);}
  async seen(id){await this.mutate(id,x=>x.draft?{...x,draft:{...x.draft,seen:true}}:x);return this.status(id);}
- // 生成 asked from the page: the chosen pages and materials are kept first, so they are not lost when a run is already
+ // Generate asked from the page: the chosen pages and materials are kept first, so they are not lost when a run is already
  // going, which is refused rather than silently ignored.
  async requestDraft(id,v={}){if(!this.p.taskExecution?.provider)fail(systemMessageText('aiQuestions.onlineAiNotConnectedYet'),409);
   if(v.urls!==undefined||v.itemIds!==undefined)await this.setSources(id,v);if(!this.start(id,'draft'))fail(systemMessageText('memoryUpdate.alreadyRunning'),409);return this.status(id);}

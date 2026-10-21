@@ -138,7 +138,7 @@ export type MemorySuggestion = {
   source: 'reviews' | 'results' | 'site' | 'draft';
   at: string;
 };
-// What 根据官网和资料生成 offers before it runs (nrMemory:sources): the pages and materials it will read, the person's
+// What Generate from the website and materials offers before it runs (nrMemory:sources): the pages and materials it will read, the person's
 // earlier choice when `custom`, and the automatic choice to go back to.
 export type MemorySources = {
   urls: string[];
