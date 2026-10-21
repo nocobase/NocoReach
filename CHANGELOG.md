@@ -8,7 +8,7 @@
 
 - State query-ranking, search-click and indexing hand-off objectives as requested outcomes across all ten languages; synchronize new Website & product and source-discovery copy when merging main.
 
-- Correct semantic, grammar and terminology errors across all eight added languages, including live states, data coverage dates, Agent activity, pre-release labels, search metrics, task objectives and Traditional Chinese wording. Keep variable quantities grammatical, render selection labels before counts, and select singular units for rule thresholds of one. Preserve machine-readable community reply markers, searchable timezone examples and supported question-detection examples. Align source navigation and GA4 instructions with their destinations, format expected result dates with the active locale, and label unknown activity actors as members.
+- Correct semantic, grammar and terminology errors across all eight added languages, including live states, data coverage dates, Agent activity, pre-release labels, search metrics, task objectives and Traditional Chinese wording. Keep variable quantities grammatical, render selection labels before counts, and select singular units for rule thresholds of one. Preserve machine-readable community reply markers, searchable timezone examples and supported question-detection examples. Align source navigation and GA4 instructions with their destinations, format expected result dates with the active locale, and label unknown activity actors as members. Clarify password handling, stale YouTube runs, retry actions and Agent assignment states; synchronize the latest Search, Market and Tasks copy across all ten languages.
 - Express audit and search-performance task objectives as requested changes in English, German, Brazilian Portuguese, Vietnamese, and Indonesian; preserve GitHub’s Insights → Traffic navigation labels in Spanish and Brazilian Portuguese.
 - Use complete localized sentences for AI mention/citation evidence and synchronize the latest main-branch update actions and tab counts.
 
@@ -22,6 +22,28 @@
 - Distinguish Indonesian noindex findings from instructions and Japanese publishing progress from live status; correct Traditional Chinese online/offline wording.
 - Correct Traditional Chinese approval and read-limit wording, and state the four-week average explicitly in GitHub topic hand-off summaries.
 - Validate language registration, translation keys, interpolation, and live language switching without losing in-progress input. Project content-generation language remains a separate setting.
+
+## Unreleased — Search & market pages, fixed and in plain words
+
+- Search performance › Sitemaps names each sitemap with its host: a domain property lists every subdomain's sitemap, all called /sitemap.xml, and the rows could not be told apart.
+- Search performance › Performance shows whether the range is complete as a tag, with the record and save dates in its ⓘ and only what needs doing as text, instead of a block of sync details above the figures. The query, page and breakdown details load with the page instead of behind a button, and search appearances Search Console names `FORUMS` and `TPF_QA` are translated.
+- Indexing and Sitemaps describe themselves in full sentences; the daily quota, the Search Console property and the details' scope move into the ⓘ; the reason column stays empty for indexed pages, whose status already says so.
+- Keywords › Saved shows only a market in the Market column (AI suggestions is a source, not a market), its page columns are narrower so the table fits at 1440 px, and Competitors uses the same Taiwan market name as Keywords.
+- Competitors › Activity says a read error shared by several competitors once, above the cards, with a way to Settings › Network when it is about reaching a site, and decodes character references such as `&#x27;` in page titles and descriptions (pages read before are decoded on display). Overview hides the AI share column until a brand check has measured one and cuts long recent activity with an ellipsis.
+- Trends keeps the comparison notes in the ⓘ beside Compare and gives related searches a heading with its instruction in an ⓘ. AI search writes "24 (100%)" and keeps billing and platform notes in ⓘ.
+- Keywords, Trends, Competitors and AI search describe themselves in one sentence without colloquial or billing asides.
+
+## Unreleased — Ask AI reads the daily analysis
+
+- The online assistant can read the daily analysis behind Insights through a new read-only `daily_analysis` tool: a day's notes and limitations, the opportunities it raised with where each stands now (awaiting decision, handed off to agent with its task, dismissed, expired), its verdict on every change (do, watch, skip) with the reason, the opportunities awaiting a decision now, and the watches still open or ended. It reads the latest analysis or any earlier day, checks on every call that the conversation owner may still see Insights, and links opportunities to Opportunities. Asked about "the daily analysis of 10/21", it used to search the tasks and find nothing.
+- The metrics it reads (`project_data`, metrics) now include totals: each key metric of the last 28 days with the 28 days before and the change, as the Insights tiles show them, with the daily series. The snapshot of keywords, pages and audit issues had no previous period to compare with.
+- Opportunity links in chat answers open inside the application, like task links.
+
+## Unreleased — Tasks by Agent
+
+- Tasks gains a By agent view next to List and Board, after Studio's Agent view: a column per Agent the project runs tasks with (the project default first), then Unassigned. Each column says whether the Agent is running, queued, waiting or idle, and when no runtime is online; inside it are Working on, Up next (numbered, oldest first) and Waiting, where each card says what a person has to do (Confirm start, the review step, Confirm publish, confirm going live, Run failed) and who: "You" on a highlighted card listed first, otherwise the owner's name. Finished and closed tasks are left out.
+- Cards on the board and the Executor column of the list name the task's Agent (its own, else the project default, as the task page header shows it) with an online dot, or Unassigned, instead of a bare "Agent". A new Any agent filter narrows every view.
+- A line above the tasks counts runs under way, queued and failed, and the runtimes online. What waits for you stays counted on Waiting for me.
 
 ## Unreleased — Website & product pages, fixed and in plain words
 

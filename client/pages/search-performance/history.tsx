@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { $t } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { Button } from '#components/ui/button';
+import { InfoTip } from '#components/reach/info-tip';
+import { Tag } from '#components/reach/tag';
 import { useMe } from '../me';
 import type { SearchReport } from './index';
 import { formatDate, formatDateTime } from '#lib/format';
@@ -97,31 +99,20 @@ export function SearchHistory({
       setBusy(false);
     }
   };
-  return (
-    <div
-      role='status'
-      className='flex flex-col gap-2 rounded-lg border bg-muted/40 p-4 text-sm'
-      data-search-coverage=''
-    >
-      <p className='font-medium'>
-        {$t(
-          report.complete ? 'searchHistory.complete' : 'searchHistory.partial',
-        )}
-      </p>
-      {coverage ? (
-        <>
-          <p>
-            {$t('searchHistory.coverage', {
-              0: formatDate(coverage.current.start),
-              1: formatDate(coverage.current.end),
-              2: coverage.current.recordedDays,
-              3: coverage.current.noRecordDays,
-              4: coverage.current.missingDays,
-            })}
-          </p>
-          {coverage.current.records.length ? (
-            <p className='text-muted-foreground'>
-              {$t('searchHistory.recordedRanges', {
+  // One line above the figures (UI review 2026-10-21): whether the range is complete as a tag, the record and save dates
+  // in the ⓘ, and only what needs doing (fetching, failed, paused, ask an administrator) as text with its buttons.
+  const details = coverage
+    ? [
+        $t('searchHistory.coverage', {
+          0: formatDate(coverage.current.start),
+          1: formatDate(coverage.current.end),
+          2: coverage.current.recordedDays,
+          3: coverage.current.noRecordDays,
+          4: coverage.current.missingDays,
+        }),
+        ...(coverage.current.records.length
+          ? [
+              $t('searchHistory.recordedRanges', {
                 0: coverage.current.records
                   .map((r) =>
                     $t('common.range', {
@@ -130,50 +121,69 @@ export function SearchHistory({
                     }),
                   )
                   .join(', '),
-              })}
-            </p>
-          ) : null}
-          {coverage.current.noRecordDays ? (
-            <p>{$t('searchHistory.noRecords')}</p>
-          ) : null}
-          {coverage.previous &&
-          coverage.previous.recordedDays < coverage.previous.days ? (
-            <p>{$t('searchHistory.noComparison')}</p>
-          ) : null}
-          {coverage.earliest &&
-          (w.start < coverage.earliest ||
-            (!w.all && w.previousStart < coverage.earliest)) ? (
-            <p>
-              {$t('searchHistory.limit', { 0: formatDate(coverage.earliest) })}
-            </p>
-          ) : null}
-          <p className='text-muted-foreground'>
-            {$t('searchHistory.updated', {
-              0: formatDateTime(coverage.current.updatedAt),
-            })}
-          </p>
-        </>
+              }),
+            ]
+          : []),
+        ...(coverage.current.noRecordDays
+          ? [$t('searchHistory.noRecords')]
+          : []),
+        ...(coverage.previous &&
+        coverage.previous.recordedDays < coverage.previous.days
+          ? [$t('searchHistory.noComparison')]
+          : []),
+        ...(coverage.earliest &&
+        (w.start < coverage.earliest ||
+          (!w.all && w.previousStart < coverage.earliest))
+          ? [$t('searchHistory.limit', { 0: formatDate(coverage.earliest) })]
+          : []),
+        $t('searchHistory.updated', {
+          0: formatDateTime(coverage.current.updatedAt),
+        }),
+      ]
+    : [];
+  const states = [
+    running || busy
+      ? $t('searchHistory.running')
+      : failed
+        ? $t('searchHistory.failed')
+        : paused
+          ? $t('searchHistory.paused')
+          : null,
+    durable && !report.history?.scheduleEnabled
+      ? $t('searchHistory.scheduleOff')
+      : null,
+    durable && missing && !admin ? $t('searchHistory.askAdmin') : null,
+  ].filter(Boolean);
+  return (
+    <div
+      role='status'
+      className='flex flex-wrap items-center gap-2 text-sm'
+      data-search-coverage=''
+    >
+      <Tag tone={report.complete ? 'green' : 'amber'}>
+        {$t(
+          report.complete ? 'searchHistory.complete' : 'searchHistory.partial',
+        )}
+      </Tag>
+      {details.length ? (
+        <InfoTip label={$t('searchHistory.details')}>
+          <span className='flex flex-col gap-1'>
+            {details.map((d) => (
+              <span key={d}>{d}</span>
+            ))}
+          </span>
+        </InfoTip>
       ) : null}
-      {running || busy ? (
-        <p>{$t('searchHistory.running')}</p>
-      ) : failed ? (
-        <p>{$t('searchHistory.failed')}</p>
-      ) : paused ? (
-        <p>{$t('searchHistory.paused')}</p>
-      ) : null}
-      {durable && !report.history?.scheduleEnabled ? (
-        <p>{$t('searchHistory.scheduleOff')}</p>
-      ) : null}
-      {durable && missing && !admin ? (
-        <p>{$t('searchHistory.askAdmin')}</p>
-      ) : null}
+      {states.map((x) => (
+        <span key={x}>{x}</span>
+      ))}
       {error ? (
-        <p role='alert' className='text-destructive'>
+        <span role='alert' className='text-destructive'>
           {$t('searchHistory.requestFailed')}
-        </p>
+        </span>
       ) : null}
       {admin && durable ? (
-        <div className='flex flex-wrap gap-2'>
+        <span className='ml-auto flex flex-wrap gap-2'>
           <Button
             variant='outline'
             size='sm'
@@ -212,7 +222,7 @@ export function SearchHistory({
               {$t('common.retry')}
             </Button>
           ) : null}
-        </div>
+        </span>
       ) : null}
     </div>
   );

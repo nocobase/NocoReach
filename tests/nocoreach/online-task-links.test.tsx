@@ -8,6 +8,11 @@ const projects = [
   { id: 1, name: 'First' },
   { id: 2, name: 'Second' },
 ];
+// The deployment's base path, which a served page carries in its client configuration.
+vi.mock('@nocobase/app-client', async (original) => ({
+  ...(await original<typeof import('@nocobase/app-client')>()),
+  resolveAppBase: () => '/',
+}));
 vi.mock('../../client/pages/workspace-cache', () => ({
   useWorkspaceCache: () => ({
     peek: () => projects,
@@ -56,3 +61,18 @@ test.each(['3', 'invalid'])(
     expect(screen.queryByText('Second')).not.toBeInTheDocument();
   },
 );
+
+test('opportunity links from the daily analysis stay in the application', () => {
+  render(
+    <MemoryRouter>
+      <ChatMarkdown content='[O-7 Fix indexing](/opportunities?item=o1) [Docs](https://example.com/docs)' />
+    </MemoryRouter>,
+  );
+  const opportunity = screen.getByRole('link', { name: 'O-7 Fix indexing' });
+  expect(opportunity).toHaveAttribute('href', '/opportunities?item=o1');
+  expect(opportunity).not.toHaveAttribute('target');
+  expect(screen.getByRole('link', { name: 'Docs' })).toHaveAttribute(
+    'target',
+    '_blank',
+  );
+});

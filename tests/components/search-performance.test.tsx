@@ -166,8 +166,8 @@ function renderPage(path = '/search') {
 }
 const tile = (key: string) =>
   document.querySelector(`[data-metric="${key}"]`) as HTMLElement;
+// The details load with the page; wait for their table.
 const loadDetails = async () => {
-  await userEvent.click(screen.getByRole('button', { name: '加载查询词、页面及细分明细' }));
   await waitFor(() => expect(document.querySelector('[data-report]')).toBeTruthy());
 };
 const ready = () =>

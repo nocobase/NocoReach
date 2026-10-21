@@ -432,7 +432,7 @@
       "pendingInputs_other": "{{count}} commentaires en attente de l’agent",
       "inputDelivered_one": "Transmis à l’agent",
       "inputDelivered_other": "{{count}} entrées transmises à l’agent",
-      "tokens": "{{input}} jetons en entrée, {{output}} en sortie",
+      "tokens": "Jetons en entrée : {{input}} · jetons en sortie : {{output}}",
       "kinds": {
         "text": "Agent",
         "thinking": "Réflexion",

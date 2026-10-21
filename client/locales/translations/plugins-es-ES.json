@@ -1065,7 +1065,7 @@
         "toolUnavailable": "No se ha iniciado sesión en la herramienta, está desactivada o el modelo solicitado no está disponible ({{tool}})",
         "noSharedRunner": "Solo están conectados los Runner personales de otras personas",
         "missingFeatures": "Ningún entorno de ejecución admite {{features}}",
-        "secretsNotAllowed": "Se necesita un entorno de ejecución de equipo: {{variables}} solo se permite en estos entornos",
+        "secretsNotAllowed": "Se necesita un entorno de ejecución de equipo. Uso restringido a estos entornos: {{variables}}",
         "sameWorkActive": "En espera de que termine la ejecución en curso",
         "concurrencyFull": "Límite de ejecuciones simultáneas alcanzado ({{active}}/{{limit}})",
         "runnersBusy": "Los Runner compatibles están al máximo de su capacidad",

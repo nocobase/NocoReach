@@ -248,3 +248,95 @@ test('online start enqueues the selected Runner exactly once and never becomes t
     }),
   ).rejects.toBeDefined();
 });
+
+test('daily_analysis reads the saved analysis for a project member and stops once access is revoked', async ({
+  testApp,
+}) => {
+  await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const container = testApp.application.container;
+  const host = container.resolve(nocoReachToken);
+  await host.ready;
+  const user = await container.resolve(userAdministrationServiceToken).create({
+    email: 'online-analysis@example.test',
+    password: 'test-password-123',
+    name: 'Analysis reader',
+  });
+  const assignment = await container
+    .resolve(authorizationToken)
+    .permissionSets.assign({
+      permissionSet: 'nr.member',
+      subject: { type: 'user', id: user.id },
+    });
+  const project = await host.plugin.projects.create({
+    name: 'Analysis',
+    domain: 'analysis.example.test',
+  });
+  const projectId = String(project.id);
+  await host.legacy.db.access!.joinCreatedProject(user.id, projectId);
+  await host.plugin.db.getRepository('nrSnapshots').create({
+    values: {
+      key: `strategy:${projectId}`,
+      payload: {
+        revision: 1,
+        goal: null,
+        proposals: [],
+        insights: {
+          generatedAt: '2026-10-21T01:00:00Z',
+          observations: ['Search impressions fell 27%'],
+          items: [
+            {
+              id: 'o1',
+              no: 7,
+              title: 'Fix indexing',
+              observation: '',
+              meaning: '',
+              evidenceText: '',
+              limitation: '',
+              suggestion: 'Check Search Console coverage',
+              objective: '',
+              source: 'search',
+            },
+          ],
+          evidence: {
+            analysisVersion: 3,
+            capturedAt: '',
+            availableThrough: '2026-10-17',
+            periodDays: 28,
+            searchQueries: [],
+            pages: [],
+            industryCandidates: [],
+            limitations: [],
+          },
+        },
+      },
+    },
+  });
+  const signal = new AbortController().signal;
+  const context = await createNocoReachOnlineHost(() => host, '/main')(
+    {
+      id: randomUUID(),
+      ownerId: user.id,
+      projectId,
+      instructions: '',
+    } as OnlineRun,
+    signal,
+  );
+  const tool = context.tools.find((t) => t.name === 'daily_analysis')!;
+  const page = (await tool.execute({}, signal)) as { text: string };
+  const view = JSON.parse(page.text);
+  expect(view.analysis).toMatchObject({
+    day: '2026-10-21',
+    notes: ['Search impressions fell 27%'],
+  });
+  expect(view.analysis.opportunities[0]).toMatchObject({
+    no: 'O-7',
+    status: 'awaiting_decision',
+    url: '/main/opportunities?item=o1',
+  });
+  await container
+    .resolve(authorizationToken)
+    .permissionSets.revoke(assignment.id);
+  await expect(tool.execute({}, signal)).rejects.toMatchObject({
+    status: 403,
+  });
+});

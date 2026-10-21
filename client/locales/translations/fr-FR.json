@@ -589,7 +589,7 @@
       "steps": "Ses étapes",
       "plans_one": "A proposé un plan à confirmer.",
       "plans_other": "A proposé {{count}} plans à confirmer.",
-      "usage": "A utilisé {{input}} jetons en entrée et {{output}} en sortie.",
+      "usage": "Jetons en entrée : {{input}} · jetons en sortie : {{output}}.",
       "state": {
         "running": "Réponse en cours…",
         "completed": "Réponse fournie",
@@ -701,7 +701,7 @@
       "truncated": "Texte tronqué : le texte complet était trop long pour être conservé.",
       "events": "Journal d’exécution",
       "inputDelivered": "{{count}} entrée(s) transmise(s) à l’agent",
-      "tokens": "{{input}} jetons en entrée, {{output}} en sortie",
+      "tokens": "Jetons en entrée : {{input}} · jetons en sortie : {{output}}",
       "kinds": {
         "text": "Agent",
         "thinking": "Réflexion",

@@ -39,6 +39,9 @@ vi.mock('../../client/lib/nocoreach-api', () => ({
   resolvePortalUrl: (p: string) => p,
   getPortalBase: () => '/',
 }));
+vi.mock('@nocobase/app-plugin-agents/client/kit', () => ({
+  useRunnerOptions: () => ({ options: [], loading: false, online: 0 }),
+}));
 vi.mock('../../client/components/app-shell/nav-badges', () => ({
   refreshNavBadges: vi.fn(),
 }));
