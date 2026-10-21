@@ -130,7 +130,7 @@ export default function DataTrends() {
                 </div>
               </Card>
               <div>
-                <p className="text-sm text-muted-foreground">{$tj('dataTrends.relatedSearches',{0:terms[0],1:chosen.length ? $t('dataTrends.selected',{0:chosen.length}) : $t('dataTrends.selectSomeHandThemAgent')})}</p>
+                <h2 className="flex items-center gap-1 text-sm font-semibold">{$tj('dataTrends.relatedSearches',{0:terms[0],1:chosen.length ? $t('dataTrends.selected',{0:chosen.length}) : ""})}<InfoTip label={$t('common.info')}>{$t('dataTrends.relatedSearchesHelp')}</InfoTip></h2>
               </div>
               <div className="grid gap-4 lg:grid-cols-2">
                 {list($t('common.rising'), "rising", view.rising || [], $t('common.noClearlyRisingRelatedSearches'))}
@@ -173,14 +173,13 @@ function Rivals({ projectId, view, onView }: { projectId: number; view: View; on
   return (
     <div className="space-y-1.5" data-rivals>
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-sm text-muted-foreground">{$t('dataTrends.compare')}</span>
+        <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">{$t('dataTrends.compare')}<InfoTip label={$t('dataTrends.howComparisonSet')}><p>{$t('dataTrends.competitorsComeCompetitorsPageComparison')}</p><p>{$t('dataTrends.competitorSelectionHelp')}</p></InfoTip></span>
         {chip(view.product || terms[0] || "", COLORS[0])}
         {list.map((c) => chip(c.name, terms.includes(c.name) ? COLORS[terms.indexOf(c.name)] : "var(--muted-foreground)", c.id))}
         {!list.length ? <span className="text-sm text-muted-foreground">{$t('common.noCompetitorsYet')}</span> : null}
         {changed ? <Button size="sm" disabled={busy || !draft.length} onClick={() => void apply()}>{busy ? $t('common.saving') : $t('dataTrends.compareAgain',{0:draft.length})}</Button> : null}
         <Button size="sm" variant="outline" className="ml-auto" onClick={() => navigate("/competitors")}>{list.length ? $t('dataTrends.manageCompetitors') : $t('dataTrends.addCompetitors')}</Button>
       </div>
-      <p className="flex items-center gap-1 text-xs text-muted-foreground">{$t('dataTrends.competitorsComeCompetitorsPageComparison')}<InfoTip label={$t('dataTrends.howComparisonSet')}>{$t('dataTrends.competitorSelectionHelp')}</InfoTip></p>
     </div>
   );
 }

@@ -141,9 +141,10 @@ export default function SearchPerformancePage() {
     () => api.action<SearchReport>("nrDataViews", "search", { method: "POST", body: { projectId: project!.id, ...range, ...filters, ...(country ? { country } : {}), type }, unwrap: "data" }),
     { ...googleLocalFreshness, expiresAt: googleCacheExpiry },
   );
-  const [detailsKey, setDetailsKey] = useState<string>();
+  // The query, page and breakdown details load with the page (UI review 2026-10-21) instead of behind a button; they are
+  // still their own request, so the figures and chart show first.
   const selectedDetailsKey = JSON.stringify([project?.id, project?.searchConsoleProperty, range, filters, country, type]);
-  const showDetails = detailsKey === selectedDetailsKey;
+  const showDetails = true;
   const { data: details, error: detailsError } = useFreshData<SearchReport>(
     project && !custom && view === 'performance' && showDetails ? `data-view:search-details:${selectedDetailsKey}` : null,
     () => api.action<SearchReport>('nrDataViews', 'search', { method: 'POST', body: { projectId: project!.id, ...range, ...filters, country, type, details: true }, unwrap: 'data' }),
@@ -195,7 +196,7 @@ export default function SearchPerformancePage() {
   // No nr-page class: its legacy table and input rules are unlayered and would override the ported table.
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={view === "performance" && report?.totals ? <NotesTip notes={notesOf(report)} /> : undefined} title={$t('common.searchPerformance')} description={view === "index" ? $t('searchIndex.pageDescription') : view === "sitemaps" ? $t('searchSitemaps.pageDescription') : $t('searchPerformance.clicksImpressionsCtrPositionGoogle')} />
+      <PageHeader info={view === "performance" && report?.totals ? <NotesTip notes={[...notesOf(report), ...(w ? [$t('searchHistory.detailsScope', { 0: formatDate(w.start), 1: formatDate(w.end) })] : [])]} /> : undefined} title={$t('common.searchPerformance')} description={view === "index" ? $t('searchIndex.pageDescription') : view === "sitemaps" ? $t('searchSitemaps.pageDescription') : $t('searchPerformance.clicksImpressionsCtrPositionGoogle')} />
       <Tabs value={view} onValueChange={(v) => chooseView(String(v))}>
         <TabsList variant="line" className="h-auto! justify-start">
           <TabsTrigger value="performance">{$t('searchPerformance.viewPerformance')}</TabsTrigger>
@@ -224,11 +225,9 @@ export default function SearchPerformancePage() {
           {project ? <SearchHistory key={String(project.id)} projectId={project.id} property={project.searchConsoleProperty} report={report} reload={reload} /> : null}
           <TotalsCards report={report} metric={metric} onMetric={(m) => update({ metric: m === "clicks" ? undefined : m })} />
           <TrendCard report={report} metric={report.noPosition && metric === "position" ? "clicks" : metric} />
-          {!showDetails ? <Button variant="outline" className='h-auto w-fit max-w-full whitespace-normal text-left' onClick={() => setDetailsKey(selectedDetailsKey)}>{$t('searchHistory.loadDetails')}</Button> : null}
           {showDetails && !tableReport && !detailsError ? <ListSkeleton rows={4} /> : null}
           {showDetails && detailsError ? <LoadError title={$t('searchHistory.detailsFailed')} message={$t('searchHistory.detailsFailed')} onRetry={() => window.location.reload()} /> : null}
           {showDetails && tableReport ? <>
-          <p className="text-sm text-muted-foreground">{$t('searchHistory.detailsScope', { 0: formatDate(w.start), 1: formatDate(w.end) })}</p>
           <BreakdownCards data={breakdown} error={breakdownError} onCountry={(c) => update({ country: c })} />
           <Card className="gap-0 py-0" data-report="">
             <DataTableTabs

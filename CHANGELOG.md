@@ -4,6 +4,15 @@
 
 - On a top-level page with tabs, the name that fades into the header after scrolling now includes the selected tab: GitHub › GitHub hot topics, Performance › Indexing, Keywords › Rank tracking, Agent › Execution agent, and likewise on Opportunities, Site audit, Trends, Competitors, AI search, Project knowledge, Members & roles and API keys. Clicking the page name opens its default tab at the top.
 
+## Unreleased — Search & market pages, fixed and in plain words
+
+- Search performance › Sitemaps names each sitemap with its host: a domain property lists every subdomain's sitemap, all called /sitemap.xml, and the rows could not be told apart.
+- Search performance › Performance shows whether the range is complete as a tag, with the record and save dates in its ⓘ and only what needs doing as text, instead of a block of sync details above the figures. The query, page and breakdown details load with the page instead of behind a button, and search appearances Search Console names `FORUMS` and `TPF_QA` are translated.
+- Indexing and Sitemaps describe themselves in full sentences; the daily quota, the Search Console property and the details' scope move into the ⓘ; the reason column stays empty for indexed pages, whose status already says so.
+- Keywords › Saved shows only a market in the Market column (AI suggestions is a source, not a market), its page columns are narrower so the table fits at 1440 px, and Competitors uses the same Taiwan market name as Keywords.
+- Competitors › Activity says a read error shared by several competitors once, above the cards, with a way to Settings › Network when it is about reaching a site, and decodes character references such as `&#x27;` in page titles and descriptions (pages read before are decoded on display). Overview hides the AI share column until a brand check has measured one and cuts long recent activity with an ellipsis.
+- Trends keeps the comparison notes in the ⓘ beside Compare and gives related searches a heading with its instruction in an ⓘ. AI search writes "24 (100%)" and keeps billing and platform notes in ⓘ.
+- Keywords, Trends, Competitors and AI search describe themselves in one sentence without colloquial or billing asides.
 ## Unreleased — Ask AI reads the daily analysis
 
 - The online assistant can read the daily analysis behind Insights through a new read-only `daily_analysis` tool: a day's notes and limitations, the opportunities it raised with where each stands now (awaiting decision, handed off to agent with its task, dismissed, expired), its verdict on every change (do, watch, skip) with the reason, the opportunities awaiting a decision now, and the watches still open or ended. It reads the latest analysis or any earlier day, checks on every call that the conversation owner may still see Insights, and links opportunities to Opportunities. Asked about "the daily analysis of 10/21", it used to search the tasks and find nothing.
@@ -25,6 +34,7 @@
 - Site audit and its performance check describe themselves in one sentence each (no cost moves into the ⓘ), and the device choice and the device filter use the same segmented control.
 - GitHub labels that were English in every language (Commits, Watchers, Issues, Pull requests, Releases, Discussions) are translated, and its copy uses those names.
 - Downloads describes what is connected rather than every registry it supports, says "Latest" instead of `latest`, and picks a package from a drop-down instead of buttons that ran past the card.
+
 ## Unreleased — Data sources: two ways to connect, findings in a dialog
 
 - The top of Data sources shows two cards side by side: Find data sources on your website, with what it reads, and Use an agent on your computer, saying why: the agent researches the website and repositories, lists a plan and connects everything once you confirm, while authorizations and tokens stay in the browser.

@@ -87,7 +87,7 @@ export default function AiSearch() {
   const notConnected = connection && !connection.verifiedAt;
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<InfoTip label={$t('common.aboutData')} side="bottom">{$t('aiSearch.questionsAiAnswerSamplesDataforseo')}</InfoTip>} title={$t('common.aiSearch')} description={$t('aiSearch.whatPeopleAskChatgptGoogle')} />
+      <PageHeader info={<InfoTip label={$t('common.aboutData')} side="bottom"><p>{$t('aiSearch.questionsAiAnswerSamplesDataforseo')}</p><p>{$t('aiSearch.billingNote')}</p></InfoTip>} title={$t('common.aiSearch')} description={$t('aiSearch.whatPeopleAskChatgptGoogle')} />
       <HandOffNotice result={handOff} />
       <Tabs value={tab} onValueChange={(v) => go({ tab: v === "ask" ? "ask" : v === "brand" ? "brand" : "questions", g: null })}>
         <TabsList variant="line" className="h-auto! justify-start">
@@ -166,11 +166,11 @@ function BrandTab({ group, brand, projectId, recent, onOpen, onRan, onHandOff }:
             </div>
             <Select value={`${form.market.locationCode}:${form.market.language}`} onValueChange={(v) => { const m = getMarkets().find((x) => `${x.locationCode}:${x.language}` === v); if (m) setForm((f) => ({ ...f, market: m })); }}>
               <SelectTrigger className="w-full lg:w-44" aria-label={$t('aiSearch.googleAiOverviewsMarket')}><SelectValue>{(v: string) => $t(getMarkets().find((x) => `${x.locationCode}:${x.language}` === v)?.label ?? "")}</SelectValue></SelectTrigger>
-              <SelectContent>{getMarkets().map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
+              <SelectContent className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{getMarkets().map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
             </Select>
             <Button type="submit" disabled={busy} className="lg:px-6">{busy ? $t('common.querying') : $t('common.query')}</Button>
+            <InfoTip label={$t('common.info')}>{$t('aiSearch.platformCoverageHelp')}</InfoTip>
           </div>
-          <p className="text-xs text-muted-foreground">{$t('aiSearch.platformCoverageHelp')}</p>
           {error ? <p role="alert" className="nr-error">{error}</p> : null}
         </form>
       </Card>
