@@ -1,5 +1,6 @@
 import { googleLocalFreshness, googleCacheExpiry } from '../../../shared/google-cache.js';
 import { $t, $tj, $legacyText } from "#i18n";
+import { usePageTab } from '#hooks/use-page-tab';
 // 搜索表现: ported from every-app/open-seo db8bde1 src/client/features/search-performance/ (SearchPerformancePage,
 // SearchPerformanceParts, SearchPerformanceColumns, SearchPerformanceTextFilters; MIT). Changes: data from the daily
 // sync (nrDataViews:search) instead of live Search Console calls, NocoReach's time range picker, a daily trend chart,
@@ -108,6 +109,7 @@ export default function SearchPerformancePage() {
   const [range, setRange] = useRange();
   const [params, setParams] = useSearchParams();
   const view: View = VIEWS.find((v) => v === params.get("view")) ?? "performance";
+  usePageTab($t(view === 'index' ? 'searchPerformance.viewIndex' : view === 'sitemaps' ? 'searchPerformance.viewSitemaps' : 'searchPerformance.viewPerformance'));
   // A sub-page keeps only the time range; each one's own choices start over.
   const chooseView = (v: string) => {
     const next = new URLSearchParams();

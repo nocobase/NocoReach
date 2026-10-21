@@ -27,6 +27,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '#components/ui/dropdown-menu';
+import { usePageTabLabel } from '#hooks/use-page-tab';
 import { cn } from 'cn';
 
 import {
@@ -62,6 +63,9 @@ export interface BreadcrumbsProps {
  * below `md`, where the sidebar becomes a sheet, the header is compact and shows no trail at all: the layout puts the
  * brand there, or `BreadcrumbParentLink` on a page below another one. From `md` to `lg` a trail of three or more
  * levels keeps its first and last and folds the middle into a menu.
+ *
+ * A top-level page with tabs names the selected one after itself once it shows (`usePageTab`): "GitHub › GitHub hot
+ * topics". The page's own level then links to the page's default tab, scrolled to the top.
  */
 export function Breadcrumbs({
   className,
@@ -72,10 +76,19 @@ export function Breadcrumbs({
   const { t } = useTranslation();
   const ownTitleOnly = scroller !== undefined && trailLevels.length === 1;
   const headingAway = useHeadingScrolledAway(scroller, ownTitleOnly);
+  const tab = usePageTabLabel();
 
   if (trailLevels.length === 0) return null;
+  // The tab is the page itself, not a level below it, so it joins only a top-level page's trail. The page's level then
+  // leads to its default tab from the top: the content keeps its scroll position across navigation, and clicking the
+  // page you are on (already on the default tab) would otherwise do nothing visible.
+  const shownLevels: readonly (PageBreadcrumbLevel & { toTop?: boolean })[] =
+    ownTitleOnly && tab
+      ? [{ ...trailLevels[0], toTop: true }, { label: tab }]
+      : trailLevels;
+  const scrollToTop = (): void => scroller?.current?.scrollTo({ top: 0 });
   // A level is told apart by its depth and label; two levels may share either alone.
-  const levels = trailLevels.map((level, depth) => ({
+  const levels = shownLevels.map((level, depth) => ({
     ...level,
     key: `${depth}:${level.label}`,
   }));
@@ -151,7 +164,12 @@ export function Breadcrumbs({
                 ) : level.to ? (
                   <BreadcrumbLink
                     className='max-w-48 truncate'
-                    render={<Link to={level.to} />}
+                    render={
+                      <Link
+                        to={level.to}
+                        onClick={level.toTop ? scrollToTop : undefined}
+                      />
+                    }
                   >
                     {level.label}
                   </BreadcrumbLink>

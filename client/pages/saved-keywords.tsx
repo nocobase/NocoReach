@@ -1,4 +1,5 @@
 import { useMessageState, $t, $tj, $legacyText } from "#i18n";
+import { usePageTab } from '#hooks/use-page-tab';
 // 关键词 (已保存): ported from every-app/open-seo db8bde1 src/routes/_app/p/$projectId/saved.tsx and
 // src/client/features/saved-keywords/ (table, filters, tag filter, tag chips, bulk tags modal, manage tags; MIT).
 // Changes: 本站排名 and 本站页面 from the synced Search Console data, 交给 Agent (one task for the chosen keywords),
@@ -85,6 +86,7 @@ export default function SavedKeywords() {
   // AI 建议 opens first while nothing is saved (2026-10-04); a tab in the address wins.
   const explicit = (["suggest", "saved", "tracking", "research"] as const).find((t) => t === params.get("tab"));
   const tab = explicit ?? (data && !data.items.length ? "suggest" : "saved");
+  usePageTab(tab === 'suggest' ? $t('common.aiSuggestions') : tab === 'research' ? $t('common.findKeywords') : tab === 'tracking' ? $t('common.rankTracking') : $t('savedKeywords.savedValue', { 0: '' }));
   // Each tab keeps only its own query: 找新词 owns q, view, loc, lang and run.
   const setTab = (v: string) => { const p = new URLSearchParams(v === "research" ? params : undefined); p.set("tab", v); setParams(p, { replace: true }); };
   const [handOff, setHandOff] = useState<HandOffResult>();

@@ -1,4 +1,5 @@
 import { $t, $tj, $legacyText } from "#i18n";
+import { usePageTab } from '#hooks/use-page-tab';
 // 趋势 (搜索): Google Trends once a week through DataForSEO. 产品与竞品: the product and its competitors over the past 12
 // months, each term's last four weeks against the four before, and the searches related to the product (rising ones new
 // this week marked); picked searches go to the Agent as one content task. 关注的关键词 (2026-10-04): keywords added on
@@ -56,6 +57,7 @@ export default function DataTrends() {
   useEffect(() => { if (!pending || !project) return; const t = setInterval(() => void load().then(setLive).catch(() => undefined), 4000); return () => clearInterval(t); }, [pending, project?.id]);
   const explicit = params.get("tab");
   const tab = explicit === "brand" || explicit === "keywords" ? explicit : view && !view.connected ? "keywords" : "brand";
+  usePageTab(tab === 'keywords' ? $t('dataTrends.keywordsFollow', { 0: '' }) : $t('dataTrends.productCompetitors'));
   const setTab = (t: string) => { const next = new URLSearchParams(params); next.set("tab", t); setParams(next, { replace: true }); };
   const check = async () => {
     setBusy(true);

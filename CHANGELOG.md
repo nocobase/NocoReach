@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — The selected tab in the header
+
+- On a top-level page with tabs, the name that fades into the header after scrolling now includes the selected tab: GitHub › GitHub hot topics, Performance › Indexing, Keywords › Rank tracking, Agent › Execution agent, and likewise on Opportunities, Site audit, Trends, Competitors, AI search, Project knowledge, Members & roles and API keys. Clicking the page name opens its default tab at the top.
+
 ## Unreleased — Ask AI reads the daily analysis
 
 - The online assistant can read the daily analysis behind Insights through a new read-only `daily_analysis` tool: a day's notes and limitations, the opportunities it raised with where each stands now (awaiting decision, handed off to agent with its task, dismissed, expired), its verdict on every change (do, watch, skip) with the reason, the opportunities awaiting a decision now, and the watches still open or ended. It reads the latest analysis or any earlier day, checks on every call that the conversation owner may still see Insights, and links opportunities to Opportunities. Asked about "the daily analysis of 10/21", it used to search the tasks and find nothing.

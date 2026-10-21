@@ -8,6 +8,7 @@ import {
   usageRoute,
 } from '@nocobase/app-plugin-agents/client/routes';
 import { $t } from '#i18n';
+import { usePageTab } from '#hooks/use-page-tab';
 import {
   PageContainer,
   PageHeader,
@@ -62,7 +63,7 @@ function AgentsTabs() {
   const runtimes = useCan(routeAccess(runtimesRoute));
   const models = useCan(routeAccess(modelsRoute));
   const usage = useCan(routeAccess(usageRoute));
-  const { search } = useLocation();
+  const { pathname, search } = useLocation();
   // The usage filters (range, grouping, the prices sheet) belong to the usage tab: neither carried into it nor out of it.
   const inUsage = useMatch('/agents/usage/*') !== null;
   const tabClass = lineTabClass;
@@ -79,6 +80,13 @@ function AgentsTabs() {
       : []),
     ...(usage.can ? [{ path: 'usage', label: $t('agentsPage.usage') }] : []),
   ];
+  usePageTab(
+    tabs.find(
+      (tab) =>
+        pathname === `/agents/${tab.path}` ||
+        pathname.startsWith(`/agents/${tab.path}/`),
+    )?.label,
+  );
   return (
     <div className='px-6 pt-4 md:px-8'>
       <nav aria-label={$t('agentsPage.tabs')} className={lineTabListClass}>
