@@ -247,6 +247,21 @@ export function dayLabel(
   )?.previousDate;
   return `${typeof day === 'string' ? day : ''}${previous ? $t('common.previousPeriod', { 0: previous }) : ''}`;
 }
+// Each period's own days. A report cached before the server kept them apart carries the other period's days at zero,
+// which drew the comparison line over the wrong days and dropped both lines to zero where the periods meet.
+export function ownDays(
+  window: Window | undefined,
+  daily: Day[] | undefined,
+  previousDaily: Day[] | undefined,
+): { current: Day[]; previous: Day[] } {
+  if (!window) return { current: daily ?? [], previous: previousDaily ?? [] };
+  return {
+    current: (daily ?? []).filter((d) => d.date >= window.start),
+    previous: (previousDaily ?? []).filter(
+      (d) => d.date >= window.previousStart && d.date <= window.previousEnd,
+    ),
+  };
+}
 export const change = (now: number | null, before: number | null) =>
   now == null || before == null || before === 0
     ? null
