@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Ignored opportunities stay off Insights
+
+- Keep the changes behind an ignored opportunity out of Insights › Today's changes › To do, whichever analysis raised the opportunity. Opportunities ignored from an earlier analysis used to come back there as changes to act on with Hand off to agent and Ignore.
+
 ## Unreleased — Article found from the task's page
 
 - Find the article a task changes from its page instead of picking it from hundreds: the page address is read back through each publishing target's page pattern to a slug and looked up there. The start card shows the article found with Change; it is linked as the task starts.

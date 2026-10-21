@@ -225,13 +225,10 @@ export function signalDisposition(
     (r) => opportunityState(r, state).state === 'pending',
   );
   if (pending) return { next: 'opportunity' as const, row: pending, earlier };
-  if (
-    rows.some(
-      (r) =>
-        opportunityState(r, state).reason === 'ignored' &&
-        r.batch === state.insights,
-    )
-  )
+  // An opportunity you ignored keeps the changes it rests on quiet, whichever analysis raised it. Ignoring one from an
+  // earlier analysis (kept pending for 14 days) used to bring its changes back on Insights as changes to act on,
+  // since the analysis never raises an ignored opportunity again (withoutIgnored) and so never in the latest batch.
+  if (rows.some((r) => opportunityState(r, state).reason === 'ignored'))
     return { next: 'hand' as const, dismissed: true, earlier };
   if (state.signalMeta?.[s.key]?.status === 'ignored')
     return { next: 'hand' as const, dismissed: true, ignored: true, earlier };
