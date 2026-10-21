@@ -2,6 +2,8 @@
 
 ## Unreleased — Ten interface languages
 
+- Keep the indexing status grammatical for a single-page site, and preserve invalid external numeric character references instead of throwing while collecting or displaying text.
+
 - Clarify that more-action menu labels refer to a task or keyword, and that the Japanese chat timestamp reports data collection rather than user browsing.
 
 - Phrase tracked-keyword ranking objectives as requested improvements in Brazilian Portuguese, Spanish, French, German, and Indonesian, including when a keyword is currently outside the top 100.

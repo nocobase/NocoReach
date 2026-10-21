@@ -5789,7 +5789,7 @@
   "searchIndex.notCheckedYet": "No results yet",
   "searchIndex.notCheckedYetHelp": "NocoReach checks a batch of pages every 10 minutes, up to {0} a day, least recently checked first.",
   "searchIndex.lastErrorDetail": "The last check stopped: {0}",
-  "searchIndex.statusLine": "{0} of {1} pages checked · last checked {3}",
+  "searchIndex.statusLine": "Pages checked: {0}/{1} · last checked {3}",
   "searchIndex.noteQuota": "Up to {0} pages are checked a day, the least recently checked first.",
   "searchIndex.checking": "Checking",
   "searchIndex.noteSource": "The data comes from Search Console's URL Inspection API. Its page indexing report has no API, so the pages are inspected one by one and added up here.",
