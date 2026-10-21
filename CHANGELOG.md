@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Settings › Network at full width
+
+- Settings › Network no longer caps its content at 48rem: the proxy card and the data source table use the page's width, as the other pages do, instead of leaving the right side empty.
+
 ## Unreleased — English code comments
 
 - AGENTS.md now asks for code comments in English, with interface elements named by their English labels. `tests/logic/comment-language.test.ts` parses every source file and fails when a file has more comments containing Chinese than `tests/logic/comment-language-baseline.json` allows (195 files, 595 older comments today); `COMMENT_LANGUAGE_BASELINE=lower` lowers the baseline after a cleanup and never raises it.
