@@ -239,6 +239,6 @@ describe('task list step', () => {
     );
     setDictionary(null);
     expect(stepOf(work('修改'))?.text).toBe('Agent 正在修改');
-    expect(stepOf(work('修改', 'queued'))?.text).toBe('等Agent 接手');
+    expect(stepOf(work('修改', 'queued'))?.text).toBe('等 Agent 接手');
   });
 });
