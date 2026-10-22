@@ -5,6 +5,11 @@
 - `tests/logic/additional-locales.test.ts` compares each of the eight additional languages with English: `shared/i18n/<locale>.json` with `en.json`, and `client/locales/translations/<locale>.json` with the shell copy of `client/locales/en-US.ts`. It names every missing key, extra key and key whose `{0}` or `{{name}}` placeholders differ. The `build` check's client type check already failed on a missing key, but stopped at the first language and missed extra keys and changed placeholders.
 - docs/DEVELOPMENT.md says new or changed copy needs all ten languages in the same pull request, and that a pull request updated from `main` is merged only after CI passes on that update: eight pull requests merged after the ten-language change (#183) were short 81 translations once `main` was merged into them, and were merged seconds after that push, before CI had run.
 
+## Unreleased — Playbook step names in formal Chinese
+
+- Built-in playbook steps and step kinds read formally in Chinese and Traditional Chinese: Write plan, Review plan and Review and publish, and the step-kind notes (your review, review then approve or request changes, confirm then the system runs, changes the repository and opens a PR, no repository change). English is unchanged.
+- Tasks created before keep their stored step names; they display the new wording, because a stored name is matched to its system message through the alias manifest rather than by exact text. Stored data is not rewritten.
+
 ## Unreleased — Leaving unsaved work asks in the application's dialog
 
 - Leaving New task, a role form or Create from a result with unsaved input, following a link out of Skills, the Google or keyword connection forms with unsaved input, and leaving a task page with drafts now ask in the application's own dialog instead of the browser's confirm box. Unsaved forms ask "Discard unsaved changes?" with Discard; a task page with drafts asks "Leave this page?" with Leave anyway, since its drafts are kept.
