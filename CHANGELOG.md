@@ -1,5 +1,17 @@
 # NocoReach Changelog
 
+## Unreleased — Data cards: one empty look, one tile, one chart colour, one name for each thing
+
+- An empty table says so in one muted sentence, as an empty card does, instead of an icon over a title: Bilibili and YouTube showed both on one page.
+- AI search's and Results' metric tiles are the data pages' tile: AI search's "Appears" share is the line under the number ("10% of all questions"), not brackets beside it; Results' numbers lose the "items" unit and the larger size.
+- Single-series charts and sparklines use the main chart colour: Forum's new topics, X's posts, Discord / Slack messages, Trends › Watched keywords and Competitors' search traffic were teal, violet or orange.
+- One name for each thing: Competitors' "Add or remove competitors" is "Manage competitors" as on Trends; the Competitors table marks our site "Our site" as keyword details do (was "Us"); Bilibili's and Downloads' Published column says "Published" like YouTube's and GitHub's; Downloads shows npm's latest and beta tags as "Latest version" and "Beta".
+- Dates go through `formatDate` / `formatDateTime` everywhere they were written by hand: a task's activity and stage cards ("10/22 20:16"), the task list's update time and Knowledge's last check ("10/19"), Skills, and the connection panels' last-synced lines, which showed the browser's full date and time.
+- Rank tracking's keyword column is narrower so the table fits 1,440px without scrolling sideways.
+- Traffic's date range sits right under the header, as on every data page, with Today below it; a report's breakdown (by channel, source, city…) is a dropdown in its toolbar instead of a second row of buttons under the tabs.
+- Forum categories show their change as ↑/↓ like every other list, not "previous period 44".
+- A page's Performance check in its detail panel is an outline button; as a ghost button it read as a heading.
+
 ## Unreleased — Notes in ⓘ, one status line, one description per page
 
 - Every note under a card or chart title is an ⓘ beside the title (2026-10-22 decision D5): a `Section`'s description, Keywords › keyword details (History, Related keywords, Our indexed pages, Top 10, Rank history), Results (Changes, Latest results), Settings › Network (Proxy, How data sources connect), a task's Performance before its first checkpoint, Bilibili / YouTube / Xiaohongshu's Publishing trend and Sources, AI search's topic setup and Competitors › Activity's first setup. Titles no longer carry notes in brackets: X's chart is "Posts mentioning the product per day" with "Reposts are not counted" in its ⓘ, Trends' chart is "Weekly interest" with how 100 is set in its ⓘ.

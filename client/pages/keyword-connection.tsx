@@ -1,3 +1,4 @@
+import { formatDateTime } from '#lib/format';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {ConnectionError} from "#components/connection-error";
 import {useEffect,useState} from 'react';
@@ -29,7 +30,7 @@ export function KeywordConnection({projectId}:{projectId:number}){
 
  {spend&&state?.configured&&<div className="nr-spend" data-spend><div><span className="inline-flex items-center gap-1">{$t('keyword.spentMonth')}<InfoTip label={$t('keyword.whatMonthlyBudget')}>{$tj('keyword.queriesNoLongerShowCost',{0:help($t('keyword.monthlyBudget'))})}</InfoTip></span><strong>${spend.monthUsd.toFixed(2)}</strong><small>{$tj('keyword.budgetQueries',{0:spend.budgetUsd,1:spend.monthRuns})}</small></div><div><span>{$t('keyword.total')}</span><strong>${spend.totalUsd.toFixed(2)}</strong><small>{$tj('keyword.queries',{0:spend.totalRuns})}</small></div>{spend.uncertain>0&&<p className="flex items-center gap-1 text-xs text-muted-foreground" data-uncertain>{$tj('keyword.uncertainResultsMayCharged',{0:spend.uncertain})}<InfoTip label={$t('keyword.whatResultUncertainMeans')}>{help($t('common.resultUncertain'))}</InfoTip></p>}</div>}
  {canSetBudget&&budgetOpen&&state?<BudgetDialog current={state.monthlyBudgetUsd} onClose={()=>setBudgetOpen(false)} onDone={()=>{setBudgetOpen(false);void load();}}/>:null}
- {state?.verifiedAt&&<p className="nr-footnote">{$tj('keyword.verifiedMonthlyBudgetProject',{0:new Date(state.verifiedAt).toLocaleString(getCurrentLocale()),1:state.monthlyBudgetUsd})}</p>}</section>;
+ {state?.verifiedAt&&<p className="nr-footnote">{$tj('keyword.verifiedMonthlyBudgetProject',{0:formatDateTime(state.verifiedAt),1:state.monthlyBudgetUsd})}</p>}</section>;
 }
 // 修改预算 (2026-10-15): the monthly budget on its own, so raising it does not mean typing the API credentials again.
 function BudgetDialog({current,onClose,onDone}:{current:number;onClose:()=>void;onDone:()=>void}){

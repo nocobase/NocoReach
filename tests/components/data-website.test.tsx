@@ -663,9 +663,13 @@ describe('访问', () => {
 
   it('switches reports and dimensions, and opens a row with its days against the period before', async () => {
     const { router } = renderPage();
-    const by = await screen.findByRole('group', { name: '按什么看' });
+    // How a report is broken down is a dropdown in its toolbar.
+    const by = await screen.findByRole('combobox', { name: '按什么看' });
     expect(screen.getAllByText('引荐').length).toBeGreaterThan(0);
-    await userEvent.click(within(by).getByRole('button', { name: 'AI 助手' }));
+    await userEvent.click(by);
+    await userEvent.click(
+      await screen.findByRole('option', { name: 'AI 助手' }),
+    );
     expect(router.state.location.search).toBe('?by=ai');
     const table = screen.getByRole('table');
     expect(within(table).queryByText('google')).toBeNull();
@@ -692,7 +696,8 @@ describe('访问', () => {
     await userEvent.click(
       within(drawer).getByRole('button', { name: '关闭详情' }),
     );
-    await userEvent.click(screen.getByRole('button', { name: '城市' }));
+    await userEvent.click(screen.getByRole('combobox', { name: '按什么看' }));
+    await userEvent.click(await screen.findByRole('option', { name: '城市' }));
     expect(
       screen.getByText('GA4 这次没有返回这张表，稍后刷新再看'),
     ).toBeTruthy();
@@ -753,7 +758,7 @@ describe('访问', () => {
   });
   it('passes restored custom dates to the report and its row detail', async () => {
     renderPage('/website?days=custom&from=2026-09-01&to=2026-09-07');
-    await screen.findByRole('group', { name: '按什么看' });
+    await screen.findByRole('combobox', { name: '按什么看' });
     expect(action).toHaveBeenCalledWith(
       'nrDataViews',
       'website',

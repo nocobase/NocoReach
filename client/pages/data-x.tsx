@@ -87,7 +87,7 @@ export default function DataX() {
                     <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} minTickGap={32} fontSize={11} />
                     <YAxis allowDecimals={false} fontSize={11} width={40} />
                     <Tooltip />
-                    <Area isAnimationActive={false} type="linear" dataKey="value" name={$t('common.posts')} stroke="var(--chart-2)" fill="var(--chart-2)" fillOpacity={0.1} />
+                    <Area isAnimationActive={false} type="linear" dataKey="value" name={$t('common.posts')} stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.1} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>

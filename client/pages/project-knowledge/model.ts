@@ -1,3 +1,4 @@
+import { formatDate } from '#lib/format';
 import { $t, type Message } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import type { Project } from '../reach-data';
@@ -223,7 +224,4 @@ export const addRequest = <T>(
     body: { projectId: String(projectId), ...body },
     unwrap: 'data',
   });
-export const day = (iso: string) => {
-  const d = new Date(iso);
-  return `${d.getMonth() + 1}/${d.getDate()}`;
-};
+export const day = (iso: string) => formatDate(iso);
