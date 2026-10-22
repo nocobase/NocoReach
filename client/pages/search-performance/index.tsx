@@ -190,7 +190,7 @@ export default function SearchPerformancePage() {
   // No nr-page class: its legacy table and input rules are unlayered and would override the ported table.
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={view === "performance" && report?.totals ? <NotesTip notes={[...notesOf(report), ...coverageNotes(report), ...(w ? [$t('searchHistory.detailsScope', { 0: formatDate(w.start), 1: formatDate(w.end) })] : [])]} /> : undefined} title={$t('common.searchPerformance')} description={view === "index" ? $t('searchIndex.pageDescription') : view === "sitemaps" ? $t('searchSitemaps.pageDescription') : $t('searchPerformance.clicksImpressionsCtrPositionGoogle')} />
+      <PageHeader info={view === "performance" && report?.totals ? <NotesTip notes={[...notesOf(report), ...coverageNotes(report), ...(w ? [$t('searchHistory.detailsScope', { 0: formatDate(w.start), 1: formatDate(w.end) })] : [])]} /> : undefined} title={$t('common.searchPerformance')} description={$t('searchPerformance.pageSummary')} />
       <Tabs value={view} onValueChange={(v) => chooseView(String(v))}>
         <TabsList variant="line" className="h-auto! justify-start">
           <TabsTrigger value="performance">{$t('searchPerformance.viewPerformance')}</TabsTrigger>

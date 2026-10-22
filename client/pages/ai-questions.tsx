@@ -121,7 +121,7 @@ function TopicSetup({ projectId, view, onView }: { projectId: number; view: View
   if (!view.dataforseo) return <InlineError>{$t('aiQuestions.aiQuestionsComeDataforseoConnectMessage')}</InlineError>;
   return (
     <Card className="gap-3 px-4" data-topic-setup>
-      <div><h2 className="flex items-center gap-1.5 text-sm font-semibold"><AiMark label={$t('common.aiSuggestions')} />{$t('aiQuestions.pickFewTopicsFirst')}</h2><p className="text-xs text-muted-foreground">{$t('aiQuestions.topicsUsedFindWhatPeople')}</p></div>
+      <h2 className="flex items-center gap-1.5 text-sm font-semibold"><AiMark label={$t('common.aiSuggestions')} />{$t('aiQuestions.pickFewTopicsFirst')}<InfoTip label={$t('common.info')}>{$t('aiQuestions.topicsUsedFindWhatPeople')}</InfoTip></h2>
       {busy === "suggest" ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />{$t('aiQuestions.aiComingUpTopicsWebsite')}</p> : null}
       <div className="flex flex-wrap gap-1.5">{topics.map((t) => <span key={t} className="inline-flex items-center gap-1 rounded-full border bg-card px-2.5 py-0.5 text-sm" title={reasons[t] || undefined}>{t}<button type="button" aria-label={$t('common.removeValue',{0:t})} onClick={() => setTopics(topics.filter((x) => x !== t))}><X className="size-3" /></button></span>)}</div>
       <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); add(); }}>

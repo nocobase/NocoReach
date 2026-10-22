@@ -30,6 +30,7 @@ import { AccessError, Refresh, RowMenu, Pager } from './components';
 import { KeySecret } from './key-secret';
 import { formatDate, formatDateTime } from '#lib/format';
 import { lineTabClass, lineTabListClass } from '#components/reach/line-tabs';
+import { InfoTip } from '#components/reach/info-tip';
 
 const keyState = (key: ManagedKey) =>
   key.expiresAt && Date.parse(key.expiresAt) <= Date.now()
@@ -138,6 +139,15 @@ export default function Keys() {
       <PageHeader
         title={$t('accessKeys.title')}
         description={$t('accessKeys.description')}
+        info={
+          <InfoTip label={$t('common.info')}>
+            {$t(
+              type === 'organization'
+                ? 'accessKeys.organizationHelp'
+                : 'accessKeys.personalHelp',
+            )}
+          </InfoTip>
+        }
         actions={
           <>
             {query.data?.items.length ? create : null}
@@ -171,13 +181,6 @@ export default function Keys() {
           </button>
         ) : null}
       </div>
-      <p className='text-sm text-muted-foreground'>
-        {$t(
-          type === 'organization'
-            ? 'accessKeys.organizationHelp'
-            : 'accessKeys.personalHelp',
-        )}
-      </p>
       <AccessError error={query.error} retry={reload} />
       {!query.data ? (
         !query.error && <ListSkeleton />
