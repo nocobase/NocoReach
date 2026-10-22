@@ -34,6 +34,7 @@ const fixture = vi.hoisted(() => ({
   cards: [] as unknown[],
   areas: [] as unknown[],
   runs: [] as unknown[],
+  schedule: null as unknown,
 }));
 vi.mock('../../client/lib/nocoreach-api', async (original) => ({
   ...(await original<typeof import('../../client/lib/nocoreach-api')>()),
@@ -54,10 +55,21 @@ vi.mock('../../client/pages/me', async () => ({
 vi.mock('../../client/i18n', async () => {
   const text = (key: string, values?: Record<string, unknown>) =>
     values ? `${key}:${Object.values(values).join(',')}` : key;
+  const { createElement, Fragment, useState } = await import('react');
   return {
-    useMessageState: (await import('react')).useState,
+    useMessageState: useState,
     $t: text,
-    $tj: text,
+    // Elements among the values (links) are rendered, each after a comma.
+    $tj: (key: string, values?: Record<string, unknown>) =>
+      createElement(
+        Fragment,
+        null,
+        key,
+        ...Object.values(values || {}).flatMap((v, i) => [
+          i ? ',' : ':',
+          v as never,
+        ]),
+      ),
     $legacyText: (value: string) => value,
     $legacyJsx: (value: string) => value,
     $legacyFragment: (value: string) => value,
@@ -248,6 +260,7 @@ beforeEach(() => {
   fixture.cards = [];
   fixture.areas = [];
   fixture.runs = [];
+  fixture.schedule = null;
   fixture.action.mockReset();
   fixture.openChat.mockReset();
   fixture.resume.mockReset();
@@ -319,7 +332,11 @@ beforeEach(() => {
       if (resource === 'nrInsights')
         return Promise.resolve({ areas: fixture.areas });
       if (resource === 'nrAnalysis')
-        return Promise.resolve({ running: false, runs: fixture.runs });
+        return Promise.resolve({
+          running: false,
+          runs: fixture.runs,
+          schedule: fixture.schedule,
+        });
       if (resource === 'nrPlaybooks') return Promise.resolve({ playbooks: [] });
       throw new Error(`Unexpected request ${resource}/${action}`);
     },
@@ -478,6 +495,14 @@ it('the tiles show at most five numbers that have data, the summary names the on
           source: 'site',
           to: '/website',
         },
+        {
+          key: 'c',
+          text: 'Google interest {0}',
+          values: ['↓ 36%'],
+          source: 'trends',
+          to: '/trends',
+          tone: 'amber',
+        },
       ],
     },
   ];
@@ -487,6 +512,8 @@ it('the tiles show at most five numbers that have data, the summary names the on
   });
   await within(tiles).findByText('1,200');
   expect(within(tiles).getAllByRole('link')).toHaveLength(5);
+  // The cards say what their numbers and changes cover.
+  expect(within(tiles).getByText('strategy.metricWindow:28')).toBeTruthy();
   // Downloads is the sixth number: it waits under All data, and is not named in the summary either.
   expect(within(tiles).queryByText('4,000')).toBeNull();
   expect(within(tiles).getByText('+30')).toBeTruthy();
@@ -504,18 +531,70 @@ it('the tiles show at most five numbers that have data, the summary names the on
     name: 'strategy.currentSituation',
   });
   expect(await within(situation).findByText('Pages indexed: 120')).toBeTruthy();
+  // Two groups, the lines to deal with first.
+  const attention = within(situation).getByRole('region', {
+      name: 'strategy.situationGroupAttention',
+    }),
+    normal = within(situation).getByRole('region', {
+      name: 'strategy.situationGroupNormal',
+    });
+  expect(
+    attention.compareDocumentPosition(normal) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(within(attention).getByText(/Google interest/)).toBeTruthy();
+  expect(within(normal).getByText('Pages indexed: 120')).toBeTruthy();
   // No Refresh beside the tiles; All data is gone.
   expect(within(tiles).queryByRole('button')).toBeNull();
   expect(screen.queryByText('strategy.allData')).toBeNull();
 });
 
-it('a run of the daily workflow links to Settings › Automatic runs', async () => {
+it('the subtitle says how the insights are analyzed, linking the rules and the schedule', async () => {
   fixture.runs = [{ ok: true, trigger: 'workflow' }];
+  fixture.schedule = { workflowId: 1, enabled: true, cron: '0 9 * * *' };
   setup();
   const link = await screen.findByRole('link', {
-    name: 'strategy.dailyAutomatic',
+    name: 'strategy.everyDayAt:09:00',
   });
   expect(link.getAttribute('href')).toBe('/schedules');
+  const sentence = link.parentElement!;
+  expect(sentence.textContent).toBe(
+    'strategy.howAnalyzedDaily:strategy.analysisRulesLink,strategy.everyDayAt:09:00',
+  );
+  expect(
+    within(sentence)
+      .getByRole('link', { name: 'strategy.analysisRulesLink' })
+      .getAttribute('href'),
+  ).toBe('/rules');
+  // No data date, no last-run time and no period: the period is the metric cards'.
+  expect(
+    screen.queryByText(/strategy.lastDaysDataThrough|strategy.lastAnalyzed/),
+  ).toBeNull();
+});
+
+it('a paused daily analysis says so, still linking Settings › Automatic runs', async () => {
+  fixture.schedule = { workflowId: 1, enabled: false, cron: '0 9 * * *' };
+  setup();
+  const link = await screen.findByRole('link', {
+    name: 'strategy.dailyAnalysisPaused',
+  });
+  expect(link.getAttribute('href')).toBe('/schedules');
+  expect(link.parentElement!.textContent).toContain(
+    'strategy.howAnalyzedPaused:',
+  );
+});
+
+it('without a daily schedule the subtitle names the rules only', async () => {
+  setup();
+  const rules = await screen.findByRole('link', {
+    name: 'strategy.analysisRulesLink',
+  });
+  expect(rules.parentElement!.textContent).toBe(
+    'strategy.howAnalyzedManual:strategy.analysisRulesLink',
+  );
+  expect(
+    screen.queryByRole('link', { name: /strategy.everyDayAt/ }),
+  ).toBeNull();
 });
 
 it('the day also says which watches ended and which tasks wait for you', async () => {
@@ -880,7 +959,7 @@ it('the current situation beside the day lists every line, those needing attenti
       title: 'Site',
       items: [
         item('a', 'Pages indexed: 120'),
-        item('b', '54 pages not updated for a year', 'amber'),
+        item('stale', '54 pages not updated for a year', 'amber'),
         item('c', 'Sitemap found'),
         item('d', 'No critical audit issues'),
       ],
@@ -902,6 +981,17 @@ it('the current situation beside the day lists every line, those needing attenti
     'Sitemap found',
     'No critical audit issues',
   ]);
+  // Each line leads with its source's logo; a line with no known source has none.
+  expect(
+    within(situation)
+      .getAllByRole('listitem')
+      .map(
+        (l) =>
+          l
+            .querySelector('[data-slot="source-logo"]')
+            ?.getAttribute('data-source') ?? null,
+      ),
+  ).toEqual(['site', null, null, null]);
   expect(
     within(situation).queryByRole('button', { name: 'strategy.refreshBlock' }),
   ).toBeNull();

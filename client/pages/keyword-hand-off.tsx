@@ -33,7 +33,8 @@ export type TaskDraft={title:string;objective:string;brief:string;signalKey?:str
 // it is in 网站内容. Shared by every 交给 Agent on the data pages.
 export async function createDraftTask(projectId:number,draft:TaskDraft,playbookId:string,page?:string,requestId:string=crypto.randomUUID()):Promise<{taskId?:number;started:boolean}>{
  const state=await request<StrategyState>(projectId,'state');
- const next=await request<StrategyState>(projectId,'confirmDirection',{...draft,playbookId,...(page?{page}:{}),revision:state.revision,requestId});
+ // `entry`: the page it is handed off from, shown on the task as where it was found (2026-10-22).
+ const next=await request<StrategyState>(projectId,'confirmDirection',{...draft,playbookId,...(page?{page}:{}),entry:typeof window==='undefined'?undefined:window.location.pathname.slice(0,200),revision:state.revision,requestId});
  const taskId=next.proposals.find(p=>!p.insight&&p.taskId&&!state.proposals.some(o=>o.id===p.id))?.taskId;
  if(!taskId)return {started:false};
  refreshNavBadges();

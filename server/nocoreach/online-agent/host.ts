@@ -7,6 +7,7 @@ import { requireOnlineMember } from './access.js';
 import {
   dailyAnalysisTool,
   totalsOf,
+  type AgentTask,
   type OverviewCard,
 } from './analysis-tool.js';
 import { OnlineAgentError } from '../../online-agent/errors.js';
@@ -111,6 +112,12 @@ export function createNocoReachOnlineHost(
           },
           authorize,
           (id) => `${basePath}/opportunities?item=${encodeURIComponent(id)}`,
+          async () =>
+            (await allowed('nrTaskWork', 'list'))
+              ? ((await plugin.taskExecution.tasks(
+                  String(projectId),
+                )) as AgentTask[])
+              : [],
         ),
       );
     }

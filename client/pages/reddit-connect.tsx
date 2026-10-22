@@ -5,6 +5,7 @@ import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {Button} from '#components/ui/button';
 import {confirmAction} from '#components/reach/confirm';
+import {WithInfo} from '#components/reach/info-tip';
 import { RedditTiming, type RedditTimingState } from './reddit-timing';
 // Reddit 讨论 (SPEC §11 外部讨论): Reddit threads found through a weekly Google search on DataForSEO, since Reddit's own API
 // needs an approved, paid commercial agreement for brand monitoring.
@@ -28,7 +29,6 @@ export function RedditConnect({projectId,suggested,onChange}:{projectId:number;s
  return <>{error&&<ConnectionError message={error}/>}
   {!canConnect&&status.dataforseo&&<p className='nr-footnote'>{$t('messages.notConnectedYet')}</p>}
   {!status.dataforseo?<p className="nr-footnote">{$t('reddit.redditDiscussionsSearchedGoogleThrough')}</p>:canConnect?<>
-  <label className="nr-field">{$t('common.productName')}<input aria-label={$t('common.productName')} value={terms} disabled={busy} placeholder="NocoBase" onChange={e=>setTerms(e.target.value)}/></label>
-  <p className="nr-footnote">{$t('reddit.searchTermsHelp')}</p>
+  <label className="nr-field"><WithInfo help={$t('reddit.searchTermsHelp')}>{$t('common.productName')}</WithInfo><input aria-label={$t('common.productName')} value={terms} disabled={busy} placeholder="NocoBase" onChange={e=>setTerms(e.target.value)}/></label>
   <div className="nr-step-actions"><Button disabled={busy||!terms.trim()} onClick={()=>void run(()=>call<RedditStatus>(projectId,'connect',{terms}))}>{busy?$t('common.connecting'):$t('common.connectStartSearching')}</Button></div></>:null}</>;
 }

@@ -97,8 +97,35 @@ export class OnlineAI {
           ctx.body = await this.status(value ? projectId(value) : undefined);
           await next();
         },
+        // The model the daily analysis uses: the Agents plugin's system default chat model, which its pages no longer
+        // let anyone change (2026-10-22: lost with the plugin upgrade of 2026-10-16). Administrators only (policy.ts).
+        setModel: async (
+          ctx: ReturnType<typeof legacyContext>,
+          next: () => Promise<void>,
+        ) => {
+          await requireAccess(ctx);
+          const values = (ctx.action.params.values ?? {}) as Record<
+            string,
+            unknown
+          >;
+          const modelService =
+            typeof values.modelService === 'string' ? values.modelService : '';
+          const model = typeof values.model === 'string' ? values.model : '';
+          if (!modelService || !model)
+            ctx.throw(400, systemMessageText('agentRoles.chooseModel'));
+          await this.p.agents.models.services.setDefaultChat(
+            { modelService, model },
+            String(ctx.auth?.user?.id ?? ''),
+          );
+          ctx.body = await this.status(
+            'projectId' in values && values.projectId
+              ? projectId(values.projectId)
+              : undefined,
+          );
+          await next();
+        },
       },
     });
-    this.p.app.acl.allow('nrOnlineAI', ['status'], 'loggedIn');
+    this.p.app.acl.allow('nrOnlineAI', ['status', 'setModel'], 'loggedIn');
   }
 }

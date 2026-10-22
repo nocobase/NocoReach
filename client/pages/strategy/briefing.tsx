@@ -12,13 +12,8 @@ import type { Work } from '../task-execution-types';
 import { RequestBlock, type RequestState } from './request-block';
 import { Sparkline, chipOf, percent, type MetricItem } from './insights-view';
 import { citedSignals, oppNo, taskNo, type Row } from './board';
-import {
-  dayOf,
-  type Day,
-  type Feed,
-  type Line,
-  type TaskStanding,
-} from './feed';
+import { dayOf, type Day, type Feed, type Line } from './feed';
+import { TASK_TAG } from './task-standing';
 import { handOffLabel } from './hand-off';
 import {
   DayConversation,
@@ -52,14 +47,17 @@ const Chevron = ({ open }: { open: boolean }) => (
 
 /**
  * The numbers as tiles (at most five, only those with a value), each with its trend and opening its data page. The
- * read has its own loading, failure and retry.
+ * read has its own loading, failure and retry. Cards on the page surface like the messages below, the number large
+ * with its change right after it (2026-10-22 visual polish).
  */
 export function MetricTiles({
   metrics,
   overview,
+  days,
 }: {
   metrics: MetricItem[];
   overview: RequestState;
+  days: number;
 }) {
   const items = metrics.filter((i) => i.value != null).slice(0, 5);
   return (
@@ -70,33 +68,42 @@ export function MetricTiles({
       empty={!items.length}
       emptyText={$t('strategy.noDataYet')}
     >
-      <div className='grid min-w-0 flex-1 grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3'>
-        {items.map((i) => (
-          <Link
-            key={i.label}
-            to={i.to}
-            className='flex flex-col gap-0.5 rounded-lg bg-muted/50 px-3 py-2 transition-colors hover:bg-muted'
-          >
-            <span className='text-xs text-muted-foreground'>{i.label}</span>
-            <span className='text-lg font-semibold tabular-nums'>
-              {number(i)}
-            </span>
-            <span className='flex items-center gap-2'>
-              {i.change == null ? (
-                <span className='text-xs text-muted-foreground'>
-                  {$t('strategy.noComparisonYet')}
+      {/* What the numbers and their changes cover, quietly above them (2026-10-22: the period left the subtitle). */}
+      <div className='flex min-w-0 flex-1 flex-col gap-1.5'>
+        <p className='text-xs text-muted-foreground'>
+          {$t('strategy.metricWindow', { 0: days })}
+        </p>
+        <div className='grid min-w-0 grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3'>
+          {items.map((i) => (
+            <Link
+              key={i.label}
+              to={i.to}
+              className='flex flex-col gap-1 rounded-lg border bg-card px-3 pt-2.5 pb-2 text-card-foreground transition-colors hover:border-ring/60'
+            >
+              <span className='text-xs text-muted-foreground'>{i.label}</span>
+              <span className='flex flex-wrap items-baseline gap-x-2'>
+                <span className='text-xl leading-7 font-medium tabular-nums sm:text-[1.375rem]'>
+                  {number(i)}
                 </span>
-              ) : (
-                <Tag tone={i.change >= 0 ? 'green' : 'red'}>
-                  {arrow(i.change)}
-                </Tag>
-              )}
-              <span className='min-w-0 flex-1'>
-                {i.series && <Sparkline points={i.series} change={i.change} />}
+                {i.change == null ? (
+                  <span className='text-xs text-muted-foreground'>
+                    {$t('strategy.noComparisonYet')}
+                  </span>
+                ) : (
+                  <span
+                    className={cn(
+                      'text-xs font-medium tabular-nums',
+                      i.change >= 0 ? 'text-nr-ink-green' : 'text-nr-ink-red',
+                    )}
+                  >
+                    {arrow(i.change)}
+                  </span>
+                )}
               </span>
-            </span>
-          </Link>
-        ))}
+              {i.series && <Sparkline points={i.series} change={i.change} />}
+            </Link>
+          ))}
+        </div>
       </div>
     </RequestBlock>
   );
@@ -198,7 +205,7 @@ function Summary({
       .slice(0, 2);
   return (
     <Bubble label={$t('strategy.todayBrief')}>
-      <p className='text-base font-semibold'>
+      <p className='text-lg leading-snug font-semibold'>
         {!batch
           ? $t('strategy.noAnalysisYetClickUpdate')
           : pending
@@ -256,7 +263,7 @@ const itemLink = (row: Row) =>
   `/opportunities?item=${encodeURIComponent(row.card.id)}`;
 const No = ({ row }: { row: Row }) =>
   row.card.no ? (
-    <span className='mr-1.5 font-mono text-xs text-muted-foreground tabular-nums'>
+    <span className='mr-1.5 font-mono text-xs font-normal text-muted-foreground tabular-nums'>
       {oppNo(row.card)}
     </span>
   ) : null;
@@ -299,21 +306,34 @@ function StandingTags({ lines }: { lines: Line[] }) {
     </>
   );
 }
-/** An opportunity already decided: its title and where it went. */
+/** The right-hand column of a line: its status or its actions, right-aligned so they read as one column. */
+const END_SLOT = 'flex shrink-0 items-center justify-end gap-1 sm:min-w-36';
+/**
+ * An opportunity already decided: its title and where it went. One dismissed or expired is dimmed as a whole, so the
+ * handed-off ones and their tasks stand out (2026-10-22 visual polish).
+ */
 function DecidedLine({ row, st, task }: Line) {
   return (
-    <li data-opportunity-id={row.card.id} className='py-1.5'>
+    <li
+      data-opportunity-id={row.card.id}
+      className={cn('py-1.5', st.state !== 'task' && 'opacity-60')}
+    >
       <div className='flex items-center gap-2'>
         <Link
           to={itemLink(row)}
           title={row.card.title}
-          className='min-w-0 flex-1 truncate text-muted-foreground hover:underline'
+          className={cn(
+            'min-w-0 flex-1 truncate hover:underline',
+            st.state === 'task' ? 'font-medium' : 'text-muted-foreground',
+          )}
         >
           <No row={row} />
           {row.card.title}
         </Link>
         <QuoteOpportunity row={row} />
-        <StatusTag row={row} st={st} task={task} />
+        <span className={END_SLOT}>
+          <StatusTag row={row} st={st} task={task} />
+        </span>
       </div>
     </li>
   );
@@ -366,28 +386,30 @@ function Decisions({
                 <Link
                   to={itemLink(r)}
                   title={r.card.title}
-                  className='min-w-0 flex-1 truncate hover:underline'
+                  className='min-w-0 flex-1 truncate font-medium hover:underline'
                 >
                   <No row={r} />
                   {r.card.title}
                 </Link>
                 <QuoteOpportunity row={r} />
-                <Button
-                  size='xs'
-                  variant='outline'
-                  disabled={busy}
-                  onClick={() => onGive(r)}
-                >
-                  {handOffLabel()}
-                </Button>
-                <Button
-                  size='xs'
-                  variant='ghost'
-                  disabled={busy}
-                  onClick={() => onIgnore(r)}
-                >
-                  {$t('common.ignore')}
-                </Button>
+                <span className={END_SLOT}>
+                  <Button
+                    size='xs'
+                    variant='outline'
+                    disabled={busy}
+                    onClick={() => onGive(r)}
+                  >
+                    {handOffLabel()}
+                  </Button>
+                  <Button
+                    size='xs'
+                    variant='ghost'
+                    disabled={busy}
+                    onClick={() => onIgnore(r)}
+                  >
+                    {$t('common.ignore')}
+                  </Button>
+                </span>
               </div>
             </li>
           );
@@ -524,7 +546,7 @@ function HealthNote({ projectId }: { projectId: number }) {
       {$tj('dataHealth.failedSyncOverDayOpportunities', {
         0: items.map((i) => healthText(i.name, i.nameText)).join('、'),
       })}
-      <Link className='nr-link ml-1.5 text-xs' to='/connections'>
+      <Link className='nr-link ml-1.5 text-xs' to='/connections?tab=health'>
         {$t('dataHealth.fix')} →
       </Link>
     </Bubble>
@@ -603,15 +625,7 @@ export function Today({
   );
 }
 
-// Where a decided opportunity went; once handed off, where its task stands now (2026-10-22 user feedback: a finished
-// task still read "Handed off to agent").
-const TASK_TAG: Record<TaskStanding, [Tone, () => string]> = {
-  todo: ['blue', () => $t('strategy.handedOffAgent')],
-  doing: ['blue', () => $t('results.taskState.doing')],
-  review: ['violet', () => $t('results.taskState.review')],
-  done: ['green', () => $t('common.completed')],
-  closed: ['slate', () => $t('common.closed')],
-};
+// Where a decided opportunity went; once handed off, where its task stands now (task-standing.ts).
 function StatusTag({ row, st, task }: Line) {
   if (st.state === 'task') {
     const [tone, text] = TASK_TAG[task ?? 'todo'];
