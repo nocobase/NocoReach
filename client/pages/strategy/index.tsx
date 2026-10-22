@@ -4,9 +4,11 @@ import {
   getCurrentLocale,
   translateSystemError,
   $t,
+  $tj,
   $legacyText,
 } from '#i18n';
-import { latestBatch, overviewPeriodDays, rowsFor, type Row } from './board';
+import { timeZoneName } from '#lib/time-zone-name';
+import { rowsFor, type Row } from './board';
 import { signalDisposition } from '../../../shared/strategy-pending.js';
 import {
   AreaList,
@@ -272,8 +274,7 @@ function Insights({
         setError(() => $t('strategy.notSaveRefreshTryAgain'));
       }
     });
-  const batch = latestBatch(state, overviewPeriodDays),
-    { mine } = useMe();
+  const { mine } = useMe();
   // Waiting for you: a step to review, or a handed-off task to start (2026-10-08) — only the tasks you own.
   const waiting = tasks
     .filter((t) => isWaitingTask(t, mine))
@@ -322,27 +323,12 @@ function Insights({
     if (wasGeneratingRef.current && !generating) reloadAllRef.current();
     wasGeneratingRef.current = generating;
   }, [generating]);
-  const last = generating
-    ? $t('strategy.analyzing')
-    : batch
-      ? $t('strategy.lastAnalyzed', {
-          0: new Date(batch.generatedAt).toLocaleString(getCurrentLocale(), {
-            month: 'numeric',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
-          1: '',
-        })
-      : $t('strategy.notAnalyzedYet');
-  // A run of the daily workflow says so, linking to Settings › Automatic runs for those who may open it.
-  const automatic =
-      !generating &&
-      !!batch &&
-      !!analysis?.runs[0]?.ok &&
-      analysis.runs[0].trigger === 'workflow',
-    { can: canSchedules } = useCan({
+  const { can: canSchedules } = useCan({
       resource: { type: 'page', id: 'scheduler.schedules' },
+      action: 'access',
+    }),
+    { can: canRules } = useCan({
+      resource: { type: 'page', id: 'analysis-rules' },
       action: 'access',
     });
   const rows = rowsFor(state),
@@ -451,14 +437,12 @@ function Insights({
       <PageHeader
         title={$t('strategy.insights')}
         description={
-          <>
-            {$t('strategy.lastDaysDataThrough', {
-              0: summary.periodDays,
-              1: summary.availableThrough || $t('common.unknown'),
-              2: last,
-            })}
-            {automatic && <DailyAutomatic link={canSchedules} />}
-          </>
+          <HowAnalyzed
+            days={summary.periodDays}
+            schedule={analysis?.schedule}
+            rulesLink={canRules}
+            schedulesLink={canSchedules}
+          />
         }
         // One refresh, as on Results (2026-10-22 user decision): it runs the analysis again, and every block is read
         // again when it ends.
@@ -520,25 +504,67 @@ function Insights({
     </PageContainer>
   );
 }
-/** “(daily, automatic)” after the last analysis, its words a link to Settings › Automatic runs when allowed. */
-function DailyAutomatic({ link }: { link: boolean }) {
-  const text = $t('strategy.dailyAutomatic'),
-    label = $t('strategy.dailyAutomaticLink'),
-    at = text.indexOf(label);
-  if (!link) return <>{text}</>;
-  if (at < 0)
-    return (
-      <Link className='underline underline-offset-4' to='/schedules'>
+// The subtitle says how the insights are made, not how fresh each source is (2026-10-22 user decision: "data through
+// 10/18" beside today's analysis read as analysing stale data; freshness lives under Data sources › Data health): which
+// rules, and when the daily analysis runs, each a link to where it is set for those who may open it.
+const subtleLink = 'underline underline-offset-4 hover:text-foreground';
+function HowAnalyzed({
+  days,
+  schedule,
+  rulesLink,
+  schedulesLink,
+}: {
+  days: number;
+  schedule?: AnalysisStatus['schedule'];
+  rulesLink: boolean;
+  schedulesLink: boolean;
+}) {
+  const rules = rulesLink ? (
+    <Link className={subtleLink} to='/rules'>
+      {$t('strategy.analysisRulesLink')}
+    </Link>
+  ) : (
+    $t('strategy.analysisRulesLink')
+  );
+  const toSchedules = (text: string) =>
+    schedulesLink ? (
+      <Link className={subtleLink} to='/schedules'>
         {text}
       </Link>
+    ) : (
+      text
     );
-  return (
-    <>
-      {text.slice(0, at)}
-      <Link className='underline underline-offset-4' to='/schedules'>
-        {label}
-      </Link>
-      {text.slice(at + label.length)}
-    </>
-  );
+  // The daily time from the workflow's cron ("0 9 * * *"), in its time zone, named only when it is not the browser's.
+  const [minute, hour] = String(schedule?.cron || '')
+      .trim()
+      .split(/\s+/),
+    time =
+      /^\d+$/.test(minute || '') && /^\d+$/.test(hour || '')
+        ? `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`
+        : null,
+    zone = schedule?.timezone,
+    local = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (schedule && !schedule.enabled)
+    return $tj('strategy.howAnalyzedPaused', {
+      0: rules,
+      1: toSchedules($t('strategy.dailyAnalysisPaused')),
+      2: days,
+    });
+  if (schedule && time)
+    return $tj('strategy.howAnalyzedDaily', {
+      0: rules,
+      1: toSchedules(
+        $t('strategy.everyDayAt', {
+          0:
+            zone && zone !== local
+              ? $t('strategy.timeInZone', {
+                  0: time,
+                  1: timeZoneName(zone, getCurrentLocale()),
+                })
+              : time,
+        }),
+      ),
+      2: days,
+    });
+  return $tj('strategy.howAnalyzedManual', { 0: rules, 1: days });
 }

@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Insights says how it analyzes, not how old the data is
+
+- The line under the Insights title no longer shows the data date and the last analysis time ("Last 28 days · Data through … · Last analyzed … (daily, automatic)"): the data could end days before today's analysis, which read as analyzing old data. It says how the insights are made instead, in one sentence with two links: "Analyzes the last 28 days every day at 09:00, using your analysis rules." The analysis rules link to AI team › Analysis rules and the time to Settings › Automatic runs; each is plain text for someone who cannot open that page.
+- The time is the daily workflow's configured time, with its time zone when it differs from the browser's. A paused daily analysis says it is paused; without a daily workflow the sentence names the rules and the 28 days only. Data dates stay on Data sources and Data health.
+
 ## Unreleased — One look for every refresh and update button
 
 - Every refresh or update control is the same icon-only ↻ button with its explanation on hover, last in the page header or at the right of the toolbar it updates. The "↻ Update now" buttons with text on Trends, X, Reddit, Discord, Slack, Xiaohongshu, Bilibili, YouTube, Site audit, Rank tracking, GitHub hot topics and Competitors › Activity, Keywords › AI suggestions' Suggest again and Settings › Network's Check connectivity now look like Insights' and Results' buttons. The tooltip and accessible name say what happens and change while it runs ("Searching…").
