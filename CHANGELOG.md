@@ -4,6 +4,18 @@
 
 - The chat panel's assistant has a read-only `query_data` tool covering every source a data page shows: Search Console (queries, pages, striking distance, rising and falling, countries and devices, one query or page in detail), GA4 traffic tables, site pages, the site audit and indexing, GitHub and GitHub trends, downloads, saved keywords with the site's rank, rank tracking, keyword suggestions, Trends, competitor activity, saved AI search lookups, Forum, Hacker News, Reddit, X, Discord, Slack, YouTube, Bilibili, Xiaohongshu and public web sources. It takes a period (or from/to), filters for keyword, page and country, a sort, a limit and an offset, and answers bounded rows with the page they come from, the data cutoff, the period and the one before it, the total and the next offset. Each source goes through the service method its page calls, so the numbers match the page, and is read only after the asking user's own permission for that page's action; a source they may not open answers accessDenied without stopping the others. Nothing is synced, inspected or bought: Trends reads the saved check instead of the page's view, indexing waits until its page has run the first inspection, and AI search lists saved lookups only.
 
+## Unreleased — One look for tabs, choices, refresh buttons and table headers
+
+- Every tab bar looks the same: a thin rule under the row, the tabs flush with the page title, the open one in black over a 2px line. Opportunities used a blue line; Members & roles, API keys, Agent, Analysis rules and Knowledge indented their tabs and had no rule.
+- Tasks' Waiting for me / Current / Done / Closed stay in the toolbar as the shared `Segmented`: they filter one list, and line tabs only switch a page's sections (decision D1).
+- Every "pick one of a few" control is one square, grey-ground group (`Segmented`, now in `components/reach`): the date ranges of the 13 data pages (no longer blue pills), GitHub hot topics' periods, Downloads, Site performance, and the 7-day / 28-day checkpoints in a result and in a task's Performance.
+- A refresh for a whole tab sits top right in the page header, as a page's does: Keywords › AI suggestions and Rank tracking, GitHub hot topics and Competitors › Activity drew it on their status line or table toolbar. A tab puts its actions there with `HeaderActions`. A result's Refresh is the icon button too.
+- Tables drawn by hand take the shared header ground: Opportunities › Watching (Handled had it), GitHub hot topics, Downloads' versions, Skills, the task board's list and Knowledge.
+- GitHub hot topics' select-all boxes sit in the table header's first column, as every table's do, not before the card titles.
+- The chips listing terms are one size and shape: Trends' compared products, AI search's topics and the keywords offered on Trends › Watched keywords.
+- Playbook and Skill details open like every other detail panel: the title and its actions in a header row beside the close button, the content below without a card around it. The playbook panel drew its content in a bordered card under a separate close button; the Skill panel left an empty band above the title.
+- A row with one action shows it as a text button: Opportunities › Handled's Restore (was an icon) and Trends › Watched keywords' Remove (was a ⋯ menu with one item). The actions column of API keys has no visible name, as Members' has none.
+
 ## Unreleased — Insights looks sharper, with the same content
 
 - The metric cards sit on the same white surface as the messages below, with a hairline border; the number is larger and its change follows it in green or red; the sparkline has a light wash under it and a dot on the latest day.
@@ -27,7 +39,6 @@
 - Data health lists the sources needing attention, each with the action that fits its failure: Retry; Change, which opens the source's settings, when a setting must change first (an expired Google authorization, a refused GitHub token, X's spending cap, a paused daily analysis, a competitor without a sitemap); or Check, then retry for an uncertain DataForSEO result that may be billed, which asks before querying again. Retry all retries the rows a plain retry can help and the person may retry, one after another, each row showing its progress and result. The full sync status table is shown directly.
 - Google Search Console and GA4 rows that are only late offer Retry, which asks for a sync as Update now does. Rank tracking and Trends record an uncertain DataForSEO result, and competitor activity a refusal only a changed setting cures, so Data health can tell them apart.
 - Agent edits and publishing (Website source and Blog CMS) is the first group of sources: every change the Agent makes lands in one of them. Group headings use the shared section heading at the size of the page's other headings, with the same space above every group and a small gap to its cards; the old plain heading took a page-wide rule that left it grey and touching its cards.
-
 ## Unreleased — Agent: one Settings per row, tidy tabs
 
 - Who does the work reads as a table: column headings, Cloud models and Local agents as light group rows with their explanation in an ⓘ, and what each work does under its name.

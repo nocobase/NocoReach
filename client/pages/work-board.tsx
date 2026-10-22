@@ -105,7 +105,7 @@ export function TaskTable({
           <col className='w-24' />
           <col className='w-10' />
         </colgroup>
-        <thead className='bg-muted/50 text-xs text-muted-foreground'>
+        <thead data-slot='table-header' className='text-xs text-muted-foreground'>
           <tr>
             {[
               $t('common.identifier'),
