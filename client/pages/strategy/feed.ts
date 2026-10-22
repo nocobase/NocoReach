@@ -1,12 +1,26 @@
 import { opportunityState, priorityRank, type Row } from './board';
 import type { StrategyState, WatchRecord } from './model';
+import {
+  taskClosed,
+  taskState,
+  type TaskState,
+  type TaskWork,
+} from '../../../shared/task-pending.js';
 
 // Where each opportunity of Insights shows: in today's message or on an earlier day (briefing.tsx renders both).
 
 /** Days as yyyy-mm-dd, the way the analysis and the watch records date them. */
 export const dayOf = (iso?: string) => String(iso || '').slice(0, 10);
 export type Standing = ReturnType<typeof opportunityState>;
-export type Line = { row: Row; st: Standing };
+/** Where the task an opportunity became stands now. */
+export type TaskStanding = TaskState | 'closed';
+export type Line = { row: Row; st: Standing; task?: TaskStanding };
+/** What Insights knows of a task: when it was created and its work. */
+export type TaskInfo = {
+  createdAt?: string;
+  work?: TaskWork | null;
+  status?: string;
+};
 export type Day = { day: string; items: Line[]; ended: WatchRecord[] };
 export type Feed = { pending: Row[]; decided: Line[]; days: Day[] };
 /**
@@ -17,8 +31,8 @@ export type Feed = { pending: Row[]; decided: Line[]; days: Day[] };
 export function feedOf(
   state: StrategyState,
   rows: Row[],
-  /** When each task was created, by task id: a hand-off counts on the day it happened. */
-  taskCreated: ReadonlyMap<string, string> = new Map(),
+  /** The project's tasks by id: a hand-off counts on the day its task was created, and shows where the task stands. */
+  tasks: ReadonlyMap<string, TaskInfo> = new Map(),
 ): Feed {
   const today = dayOf(state.insights?.generatedAt),
     pending: Row[] = [],
@@ -38,17 +52,29 @@ export function feedOf(
     // Decided today: raised today, dismissed today or handed off today. One decided earlier stays on the day it was
     // raised, even when today's analysis lists it again (2026-10-22: T-27 and T-30 read as today's hand-offs beside
     // the three opportunities dismissed today).
-    const raised = dayOf(row.firstSeenAt),
+    const task = row.taskId ? tasks.get(String(row.taskId)) : undefined,
+      line: Line = {
+        row,
+        st,
+        ...(task && st.state === 'task'
+          ? {
+              task: taskClosed(task.work)
+                ? 'closed'
+                : taskState(task.work, task.status),
+            }
+          : {}),
+      },
+      raised = dayOf(row.firstSeenAt),
       ignored = dayOf(state.opportunityMeta?.[row.card.id]?.ignoredAt),
-      handed = dayOf(row.taskId ? taskCreated.get(String(row.taskId)) : '');
+      handed = dayOf(task?.createdAt);
     if (
       today &&
       (raised >= today ||
         (st.reason === 'ignored' && ignored >= today) ||
         (st.state === 'task' && handed >= today))
     )
-      decided.push({ row, st });
-    else if (raised) at(raised).items.push({ row, st });
+      decided.push(line);
+    else if (raised) at(raised).items.push(line);
   }
   for (const w of Object.values(state.watch || {})) {
     const day = dayOf(w.ended?.at);
