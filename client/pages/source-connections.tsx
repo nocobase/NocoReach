@@ -10,7 +10,7 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import {useBusinessAccess} from '#hooks/use-business-access';
 import {useSourceAccess} from './source-access';
 import {sourceConnection} from './proxy-profiles/api';
-import {PageContainer,PageHeader} from '#components/reach/page';
+import {PageContainer,PageHeader,SectionHeading} from '#components/reach/page';
 import {useNavigate,useSearchParams} from 'react-router';
 import {nocobaseClient as api} from '#lib/nocoreach-api';
 import {Button} from '#components/ui/button';
@@ -100,11 +100,13 @@ export default function SourceConnections(){const {project,error:projectError}=u
  {project&&canDiscover&&<DiscoveryBox key={project.id} projectId={project.id} projectName={project.name} refreshKey={healthKey} defaultUrl={project.domains?.[0]?`https://${project.domains[0]}`:undefined} open={id=>{const s=getCatalog().find(x=>x.id===id);if(s)show(s);}} onDone={()=>void load().catch(()=>undefined)}/>}
  {project&&<HealthPanel projectId={project.id} reloadKey={healthKey} onChange={()=>void load().catch(()=>undefined)}/>}
  {!loaded&&!error&&<p role='status'>{$t('sourceConnections.checkingDataSources')}</p>}
- {categories.map(cat=><section key={cat.id} className='nr-source-group'><h2>{$t(cat.label)}</h2><div className='nr-source-catalog'>{getCatalog().filter(s=>s.category===cat.id).map(s=>{const st=sourceState(s,status),problem=needsAttention(s.id,health),shown=problem?'attention':st;const actionable=s.availability==='available';return <article key={s.id} className='nr-catalog-card' data-source-id={s.id} data-state={shown}>
+ {/* Groups use the shared section heading: a plain h2 here took the page-wide `.nr-page h2:not([class])` style, which
+     left it grey and touching its cards. Groups sit further apart than a heading from its own cards. */}
+ <div className='mt-8 flex flex-col gap-8'>{categories.map(cat=><section key={cat.id} className='nr-source-group flex flex-col gap-3' aria-labelledby={`source-group-${cat.id}`}><SectionHeading id={`source-group-${cat.id}`} title={$t(cat.label)} className='[&_h2]:text-base [&_h2]:font-medium'/><div className='nr-source-catalog'>{getCatalog().filter(s=>s.category===cat.id).map(s=>{const st=sourceState(s,status),problem=needsAttention(s.id,health),shown=problem?'attention':st;const actionable=s.availability==='available';return <article key={s.id} className='nr-catalog-card' data-source-id={s.id} data-state={shown}>
   <div className='nr-catalog-top'><h3>{s.name}</h3><Tag tone={stateToneOf(shown)} dot>{getStateLabels()[shown]}</Tag></div>
   <p>{s.detects}</p>{problem&&<HealthLine item={problem}/>}
   <div className='nr-catalog-bottom'>{actionable?<SourceAction source={s} projectId={projectId} canOpenNetwork={canOpenNetwork&&Boolean(sourceConnection[s.id])} outlined={st==='connected'||st==='done'} connected={st==='connected'||st==='partial'||(s.id==='xiaohongshu'&&Boolean(status.xiaohongshu?.connected))} onOpen={()=>show(s)}/>:<span className='nr-footnote'>{s.availability==='soon'?$t('sourceConnections.development'):s.priority}</span>}</div>
- </article>;})}</div></section>)}
+ </article>;})}</div></section>)}</div>
  <Sheet open={Boolean(open)} onOpenChange={(o,details)=>{if(!o&&savingOwnersRef.current.size){details.cancel();return;}if(!o)closePanel();}}><SheetContent side='right' className='nr-guide-sheet' showCloseButton={!connectionSaving}>{open&&<><SheetHeader><SheetTitle>{$tj('common.connectValue',{0:open.name})}</SheetTitle></SheetHeader><div className='nr-guide-body'>
   {/* The intro describes how the connection works; no AI speaks here, so it carries no Agent avatar. It scrolls with
       the body: only the title stays pinned, since some intros run to several lines. */}

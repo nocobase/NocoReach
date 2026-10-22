@@ -154,7 +154,7 @@ describe('NocoReach language integration', () => {
             getCatalog().filter((source) => source.category === category.id)
               .length,
         ),
-      ).toEqual([6, 5, 9, 2]);
+      ).toEqual([2, 6, 5, 9]);
       expect(
         new Set([...cards].map((card) => card.getAttribute('data-source-id')))
           .size,

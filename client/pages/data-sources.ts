@@ -5,15 +5,16 @@ export type {SourceState,StatusInput};
 export type Availability='available'|'soon'|'planned';
 export type CatalogSource={id:string;category:SourceCategory;name:string;detects:string;priority:'P0'|'P1'|'P2';availability:Availability;guide?:{intro:string;needs:string[]}};
 // Same groups as the data menu (2026-10-04): each source sits where its data is viewed (GitHub Discussions on the GitHub
-// page, Search Console on Search performance). The last group holds what the Agent writes to rather than reads from:
-// the website repository it opens PRs against and the blog CMS it publishes approved articles to.
+// page, Search Console on Search performance). The first group holds what the Agent writes to rather than reads from:
+// the website repository it opens PRs against and the blog CMS it publishes approved articles to. It comes first
+// (2026-10-22): every change the Agent makes lands in one of them.
 // Stable IDs are shared by the catalog and filters; only the visible labels are translated.
 export type SourceCategory = 'site' | 'search' | 'community' | 'agent';
 export const categories: { id: SourceCategory; label: string }[] = [
+ { id: 'agent', label: 'dataSources.categories.agent' },
  { id: 'site', label: 'dataSources.categories.website' },
  { id: 'search', label: 'dataSources.categories.search' },
  { id: 'community', label: 'dataSources.categories.community' },
- { id: 'agent', label: 'dataSources.categories.agent' },
 ];
 // What to prepare comes from the shared table, so the page and `connect list` say the same.
 const needsOf=(id:string)=>(connectSource(id)?.needs??[]).map(key=>$t(key));
