@@ -13,7 +13,7 @@
 ## Unreleased — One look for tabs, choices, refresh buttons and table headers
 
 - Every tab bar looks the same: a thin rule under the row, the tabs flush with the page title, the open one in black over a 2px line. Opportunities used a blue line; Members & roles, API keys, Agent, Analysis rules and Knowledge indented their tabs and had no rule.
-- Tasks' Waiting for me / Current / Done / Closed are tabs above the toolbar, as Opportunities' categories are, instead of a button group in it.
+- Tasks' Waiting for me / Current / Done / Closed stay in the toolbar as the shared `Segmented`: they filter one list, and line tabs only switch a page's sections (decision D1).
 - Every "pick one of a few" control is one square, grey-ground group (`Segmented`, now in `components/reach`): the date ranges of the 13 data pages (no longer blue pills), GitHub hot topics' periods, Downloads, Site performance, and the 7-day / 28-day checkpoints in a result and in a task's Performance.
 - A refresh for a whole tab sits top right in the page header, as a page's does: Keywords › AI suggestions and Rank tracking, GitHub hot topics and Competitors › Activity drew it on their status line or table toolbar. A tab puts its actions there with `HeaderActions`. A result's Refresh is the icon button too.
 - Tables drawn by hand take the shared header ground: Opportunities › Watching (Handled had it), GitHub hot topics, Downloads' versions, Skills, the task board's list and Knowledge.
