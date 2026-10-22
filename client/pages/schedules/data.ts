@@ -1,5 +1,6 @@
 import { ApiClientError, useApiClient } from '@nocobase/app-client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useProjects } from '../reach-data.js';
 
 export interface Schedule {
   id: string;
@@ -77,6 +78,37 @@ export function projectOutcomes(summary: unknown): ProjectOutcome[] {
       },
     ];
   });
+}
+
+/** Statuses of a run that ended without doing its work; a run still going is neither these nor done. */
+const UNFINISHED = ['failed', 'timed_out', 'cancelled'];
+
+/** Project names by id, for the per-project outcomes a run reports. */
+export function useProjectNames() {
+  const { projects } = useProjects();
+  return useMemo(
+    () =>
+      new Map(
+        (projects ?? []).map((project) => [String(project.id), project.name]),
+      ),
+    [projects],
+  );
+}
+
+/** What a run produced: the suggestions of the projects it analyzed, and whether anything went wrong. */
+export function runTotals(run: Occurrence) {
+  const outcomes = projectOutcomes(run.resultSummary);
+  const analyzed = outcomes.filter((item) => item.ok && !item.skipped);
+  return {
+    outcomes,
+    items: analyzed.length
+      ? analyzed.reduce((sum, item) => sum + (item.items ?? 0), 0)
+      : undefined,
+    skipped: outcomes.length > 0 && outcomes.every((item) => item.skipped),
+    problem:
+      UNFINISHED.includes(run.status) ||
+      outcomes.some((item) => item.ok === false),
+  };
 }
 
 /**
