@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useSearchParams } from 'react-router';
 import { KeyRound, Plus, History, RotateCw, Ban } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { $t, useNocoReachLocale } from '#i18n';
+import { usePageTab } from '#hooks/use-page-tab';
 import { PageContainer, PageHeader } from '#components/reach/page';
 import { EmptyState, ListSkeleton } from '#components/reach/states';
 import { Button } from '#components/ui/button';
@@ -58,6 +59,13 @@ export default function Keys() {
   const [params, setParams] = useSearchParams();
   const type =
     params.get('type') === 'organization' ? 'organization' : 'personal';
+  usePageTab(
+    $t(
+      type === 'organization'
+        ? 'accessKeys.organization'
+        : 'accessKeys.personal',
+    ),
+  );
   const query = useAccessQuery<KeyList>(
     `/list?type=${type}`,
     true,

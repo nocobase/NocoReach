@@ -12,6 +12,7 @@ import { BreadcrumbParentLink, Breadcrumbs } from '#components/breadcrumbs';
 import { RouteTreeProvider } from '../routing/route-context.js';
 
 import { PageBreadcrumbProvider } from '@nocobase/app-client';
+import { PageTabProvider } from '#hooks/use-page-tab';
 import { useTranslation } from '@nocobase/i18n/client';
 import { LayoutHeader } from './components/layout-header.js';
 import {
@@ -58,55 +59,61 @@ export function AppLayout({ routes }: AppLayoutProps): ReactElement {
       <ChatProvider>
         <OnlineChatProvider>
           <PageBreadcrumbProvider>
-            <AppSidebarProvider>
-              <AppSidebar label={navigationLabel} footer={<AppSidebarFooter />}>
-                {/* NocoReach keeps its top-level groups collapsible rather than the template's always-open sections,
-                and shows its pending counts through the template's entry badges. */}
-                <NavigationMenu
-                  items={menuItems}
+            {/* NocoReach: the selected tab a top-level page names after itself in the header (Breadcrumbs). */}
+            <PageTabProvider>
+              <AppSidebarProvider>
+                <AppSidebar
                   label={navigationLabel}
-                  selectedKey={selectedKey}
-                  sections={false}
-                  badges={navigationBadges}
-                />
-              </AppSidebar>
-              <div className='app-brand-surface flex min-w-0 flex-1 flex-col'>
-                <LayoutHeader className='sticky top-0 z-40 justify-between gap-1 sm:gap-2'>
-                  <div className='flex min-w-0 shrink-0 items-center gap-1 sm:shrink sm:gap-3'>
-                    <AppSidebarToggle />
-                    {/* NocoReach: below md the header has no room for the trail, so a page below another one puts its
+                  footer={<AppSidebarFooter />}
+                >
+                  {/* NocoReach keeps its top-level groups collapsible rather than the template's always-open sections,
+                and shows its pending counts through the template's entry badges. */}
+                  <NavigationMenu
+                    items={menuItems}
+                    label={navigationLabel}
+                    selectedKey={selectedKey}
+                    sections={false}
+                    badges={navigationBadges}
+                  />
+                </AppSidebar>
+                <div className='app-brand-surface flex min-w-0 flex-1 flex-col'>
+                  <LayoutHeader className='sticky top-0 z-40 justify-between gap-1 sm:gap-2'>
+                    <div className='flex min-w-0 shrink-0 items-center gap-1 sm:shrink sm:gap-3'>
+                      <AppSidebarToggle />
+                      {/* NocoReach: below md the header has no room for the trail, so a page below another one puts its
                     way back where the compact brand would be; its page has no BackButton of its own (L6). */}
-                    <BreadcrumbParentLink
-                      className='max-w-40 md:hidden'
-                      denied={denied}
-                      fallback={<AppBrand compact />}
-                    />
-                    {/* The current page's trail, from md up: the route tree's, or the one the page declares
+                      <BreadcrumbParentLink
+                        className='max-w-40 md:hidden'
+                        denied={denied}
+                        fallback={<AppBrand compact />}
+                      />
+                      {/* The current page's trail, from md up: the route tree's, or the one the page declares
                     (`usePageBreadcrumb`). NocoReach: on a top-level page it is the page's own title, so it waits until
                     the page's heading has scrolled away instead of repeating it (see Breadcrumbs). */}
-                    <Breadcrumbs denied={denied} scroller={contentRef} />
-                  </div>
-                  {/* NocoReach: which project every page works on (classic portal header). The shell has no slot for an
-                  application control, so it sits here, before the template's own actions. */}
-                  {/* Compact brand/project marks keep all header actions reachable on phones. */}
-                  <div className='ml-auto flex min-w-0 items-center gap-1 sm:gap-2'>
-                    <ProjectSwitcher />
-                    <ChatHeaderButton />
-                  </div>
-                  <HeaderActions />
-                </LayoutHeader>
-                <div className='relative flex min-h-0 flex-1'>
-                  <main className='relative min-w-0 flex-1 overflow-hidden'>
-                    {/* main only positions; the page scrolls in here, so a child page layer laid over main is neither
-            moved by the page's scrolling nor stretched by its height. */}
-                    <div ref={contentRef} className='h-full overflow-y-auto'>
-                      <Outlet />
+                      <Breadcrumbs denied={denied} scroller={contentRef} />
                     </div>
-                  </main>
-                  <ChatPanel />
+                    {/* NocoReach: which project every page works on (classic portal header). The shell has no slot for an
+                  application control, so it sits here, before the template's own actions. */}
+                    {/* Compact brand/project marks keep all header actions reachable on phones. */}
+                    <div className='ml-auto flex min-w-0 items-center gap-1 sm:gap-2'>
+                      <ProjectSwitcher />
+                      <ChatHeaderButton />
+                    </div>
+                    <HeaderActions />
+                  </LayoutHeader>
+                  <div className='relative flex min-h-0 flex-1'>
+                    <main className='relative min-w-0 flex-1 overflow-hidden'>
+                      {/* main only positions; the page scrolls in here, so a child page layer laid over main is neither
+            moved by the page's scrolling nor stretched by its height. */}
+                      <div ref={contentRef} className='h-full overflow-y-auto'>
+                        <Outlet />
+                      </div>
+                    </main>
+                    <ChatPanel />
+                  </div>
                 </div>
-              </div>
-            </AppSidebarProvider>
+              </AppSidebarProvider>
+            </PageTabProvider>
           </PageBreadcrumbProvider>
         </OnlineChatProvider>
       </ChatProvider>

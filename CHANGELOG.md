@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — The selected tab in the header
+
+- On a top-level page with tabs, the name that fades into the header after scrolling now includes the selected tab: GitHub › GitHub hot topics, Performance › Indexing, Keywords › Rank tracking, Agent › Execution agent, and likewise on Opportunities, Site audit, Trends, Competitors, AI search, Project knowledge, Members & roles and API keys. Clicking the page name opens its default tab at the top.
+
 ## Unreleased — Agent: who does which work, and whether it works
 
 - The Agent page has no tabs. One table says which work cloud models do (Daily analysis and the Chat panel, with the model each uses) and which local agents do (Tasks, with the agent, the computer it runs on and whether that computer is shared with the team or owner only), each with a status and the one action that fixes it. The local agents and the project default follow below it.

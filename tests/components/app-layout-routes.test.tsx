@@ -15,6 +15,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
+import { usePageTab } from '../../client/hooks/use-page-tab.js';
 import { AppLayout } from '../../client/layouts/app-layout.js';
 import enUS from '../../client/locales/en-US.js';
 
@@ -196,6 +197,48 @@ it("keeps a top-level page's own title out of the header until the page's headin
       within(header).queryByRole('navigation', { name: 'Breadcrumb' }),
     ).toBeNull(),
   );
+});
+
+function TabbedOrders(): ReactElement {
+  usePageTab('Open');
+  return <h1>Orders</h1>;
+}
+
+it("names a top-level page's selected tab after it once the heading scrolls away", async () => {
+  const header = renderLayout(
+    <TabbedOrders />,
+    '/orders?status=open',
+    '/orders',
+  );
+  const scroller = screen.getByRole('main').firstElementChild as HTMLElement;
+  const scrollTo = vi.fn();
+  scroller.scrollTo = scrollTo;
+  placeHeading(40);
+  const trail = await waitFor(() =>
+    within(header).getByRole('navigation', { name: 'Breadcrumb' }),
+  );
+  expect(within(trail).getByText('Open')).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  // The page's own level leads to its default tab, from the top.
+  const page = within(trail).getByRole('link', { name: 'Orders' });
+  expect(page).toHaveAttribute('href', '/orders');
+  fireEvent.click(page);
+  expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
+  // A tab is the page itself, not a level below it: the compact header keeps the brand.
+  expect(within(header).queryByRole('link', { name: /^Back to/ })).toBeNull();
+});
+
+it('leaves the tab out of the trail of a page below another one', () => {
+  function TabbedOrder(): ReactElement {
+    usePageTab('Open');
+    return <OrderPage />;
+  }
+  const header = renderLayout(<TabbedOrder />);
+  const trail = within(header).getByRole('navigation', { name: 'Breadcrumb' });
+  expect(trail).toHaveTextContent('OrdersOrder #42');
+  expect(within(trail).queryByText('Open')).toBeNull();
 });
 
 it('leads back to the parent level from the compact header of a page below another one', () => {
