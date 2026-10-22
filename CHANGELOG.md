@@ -7,6 +7,11 @@
 - Google Search Console and GA4 rows that are only late offer Retry, which asks for a sync as Update now does. Rank tracking and Trends record an uncertain DataForSEO result, and competitor activity a refusal only a changed setting cures, so Data health can tell them apart.
 - Agent edits and publishing (Website source and Blog CMS) is the first group of sources: every change the Agent makes lands in one of them. Group headings use the shared section heading at the size of the page's other headings, with the same space above every group and a small gap to its cards; the old plain heading took a page-wide rule that left it grey and touching its cards.
 
+## Unreleased — See what a live task changed
+
+- Once a task is live, its card names what changed in one line ("Changes (2): English · Summary, English · Title") with View changes, which opens the change that went live: an article field by field, before and after, or a page change as readers see it before and after. Nothing else is added to the card.
+- In the activity, View on a delivered article version now shows the same field-by-field comparison under the Agent's notes, instead of the notes alone.
+
 ## Unreleased — One look for every refresh and update button
 
 - Every refresh or update control is the same icon-only ↻ button with its explanation on hover, last in the page header or at the right of the toolbar it updates. The "↻ Update now" buttons with text on Trends, X, Reddit, Discord, Slack, Xiaohongshu, Bilibili, YouTube, Site audit, Rank tracking, GitHub hot topics and Competitors › Activity, Keywords › AI suggestions' Suggest again and Settings › Network's Check connectivity now look like Insights' and Results' buttons. The tooltip and accessible name say what happens and change while it runs ("Searching…").
