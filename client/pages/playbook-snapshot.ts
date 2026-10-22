@@ -1,4 +1,5 @@
 import { $legacyText } from '#i18n';
+import { systemMessageKey } from '../../shared/i18n/messages';
 import { SYSTEM_PLAYBOOKS, stagesFor } from '../../shared/playbook-catalog';
 import type { FlowSnapshot, PlaybookSnapshot } from './playbook-model';
 
@@ -9,8 +10,26 @@ const isSystemCopy = (snapshot: Origin) =>
   SYSTEM_PLAYBOOKS.some((p) => p.id === snapshot.id);
 const hasOrigin = (snapshot: Origin) =>
   'system' in snapshot || 'edited' in snapshot;
-const names = new Set(SYSTEM_PLAYBOOKS.map((p) => p.name));
-const stageNames = new Set(
+// System copy is recognized by its message key, so a step stored under its older wording (Review and publish was
+// renamed in Chinese on 2026-10-22) still matches through the alias manifest. User-authored text has no key and must
+// match exactly.
+const sameText = (a: string, b: string) => {
+  if (a === b) return true;
+  const key = systemMessageKey(a);
+  return key !== undefined && key === systemMessageKey(b);
+};
+const knownText = (list: string[]) => {
+  const exact = new Set(list),
+    keys = new Set(list.map(systemMessageKey).filter(Boolean));
+  return {
+    has: (value: string) =>
+      exact.has(value) ||
+      (systemMessageKey(value) !== undefined &&
+        keys.has(systemMessageKey(value))),
+  };
+};
+const names = knownText(SYSTEM_PLAYBOOKS.map((p) => p.name));
+const stageNames = knownText(
   SYSTEM_PLAYBOOKS.flatMap((p) => stagesFor(p).map((s) => s.name)),
 );
 
@@ -18,6 +37,7 @@ const stageNames = new Set(
 // property order. A version or an ID by itself is not evidence of canonical text.
 function sameSnapshot(a: unknown, b: unknown): boolean {
   if (a === b) return true;
+  if (typeof a === 'string' && typeof b === 'string') return sameText(a, b);
   if (Array.isArray(a) || Array.isArray(b)) {
     return (
       Array.isArray(a) &&

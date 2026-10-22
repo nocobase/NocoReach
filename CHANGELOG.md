@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Playbook step names in formal Chinese
+
+- Built-in playbook steps and step kinds read formally in Chinese and Traditional Chinese: Write plan, Review plan and Review and publish, and the step-kind notes (your review, review then approve or request changes, confirm then the system runs, changes the repository and opens a PR, no repository change). English is unchanged.
+- Tasks created before keep their stored step names; they display the new wording, because a stored name is matched to its system message through the alias manifest rather than by exact text. Stored data is not rewritten.
+
 ## Unreleased — One conversation a day on Insights
 
 - What you ask from Insights joins the day's conversation, shown right under the day's analysis with its own input at the bottom: type and press Enter, and the answer appears there (what it read folds under "Sources checked"). Each day keeps one conversation, so the AI remembers what was asked before.
