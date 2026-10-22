@@ -39,7 +39,6 @@
   "strategy.noWaitingTasks": "現在、対応が必要なタスクはありません。",
   "strategy.currentSituation": "現在の状況",
   "strategy.noCurrentSituation": "現在の状況を示すデータはまだありません。",
-  "strategy.situationMore": "ほか {0} 件",
   "strategy.refreshBlock": "再読み込み",
   "strategy.blockFailed": "このセクションを読み込めませんでした。再試行してください。",
   "strategy.blockStale": "更新に失敗しました。前回の結果を表示しています。情報が古い可能性があります。",

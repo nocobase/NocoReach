@@ -39,7 +39,6 @@
   "strategy.noWaitingTasks": "Hiện không có tác vụ nào cần bạn xử lý.",
   "strategy.currentSituation": "Tình hình hiện tại",
   "strategy.noCurrentSituation": "Chưa có dữ liệu về tình hình hiện tại.",
-  "strategy.situationMore": "Thêm {0} mục",
   "strategy.refreshBlock": "Làm mới",
   "strategy.blockFailed": "Không thể tải phần này. Vui lòng thử lại.",
   "strategy.blockStale": "Làm mới không thành công. Đang hiển thị kết quả trước đó; dữ liệu có thể đã cũ.",

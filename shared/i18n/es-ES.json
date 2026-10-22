@@ -39,7 +39,6 @@
   "strategy.noWaitingTasks": "No hay tareas que requieran tu atención en este momento.",
   "strategy.currentSituation": "Situación actual",
   "strategy.noCurrentSituation": "Aún no hay datos sobre la situación actual.",
-  "strategy.situationMore": "{0} más",
   "strategy.refreshBlock": "Actualizar",
   "strategy.blockFailed": "No se ha podido cargar esta sección. Vuelve a intentarlo.",
   "strategy.blockStale": "No se ha podido actualizar. Se muestran los resultados anteriores, que podrían estar desactualizados.",
