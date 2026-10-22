@@ -70,6 +70,7 @@ type Task = {
   id: number;
   title: string;
   status: string;
+  createdAt?: string;
   updatedAt?: string;
   evidence?: { work?: Work; createdBy?: { id?: string } };
 };
@@ -254,6 +255,8 @@ function Insights({
         setState(r.state);
         setHanded(handOffResult(row, r, kindOf(row)));
         refreshNavBadges();
+        // The new task, so today's message counts the hand-off.
+        taskView.reload();
       } catch {
         setError(() => $t('strategy.notHandOffOpportunityKept'));
       }
@@ -344,7 +347,11 @@ function Insights({
     });
   const rows = rowsFor(state),
     metrics = metricItems(overview.data?.cards),
-    feed = feedOf(state, rows),
+    feed = feedOf(
+      state,
+      rows,
+      new Map(tasks.map((t) => [String(t.id), t.createdAt || ''])),
+    ),
     analysisDay = dayOf(state.insights?.generatedAt),
     chat = useOptionalOnlineChat(),
     // With the side panel open the day's conversation is there; the page gives it the room.
