@@ -1,5 +1,14 @@
 # NocoReach Changelog
 
+## Unreleased — Agents 1.0.0-beta.18 and the NocoBase framework it requires
+
+- Upgrade Agents to `1.0.0-beta.18`, Runner to `0.1.0-beta.15` and CLI Client to `0.1.0-beta.13`, with the framework versions of Default Template `1.0.0-beta.76`: App Server `3.0.0-beta.2`, App Client `4.0.0-beta.1`, i18n `2.0.0-beta.1`, Notification `2.0.0-beta.0` and the matching plugins. The template source is not merged; its marker stays `1.0.0-beta.68`. The application CLI release moves to `1.0.0-beta.69` so installed CLIs and runners fetch the new archives.
+- Deploy the application before updating runners: protocol 12 runners are refused by an older server. Drain active runs and back up the database first. Three Agents migrations only add columns (runner quota, conversation metadata and chat-list visibility); rolling them back is refused once a conversation has metadata, so restore the backup instead.
+- The Runner chat panel follows the Registry `agent-chat` block at `1.0.0-beta.18`: replies render as ordered AI SDK message parts with collapsible reasoning, tool approvals and clearer sending, waiting and failure feedback. The composer is disabled while a run is open (Stop ends it), and "Use another agent here" / "Switch back" are gone with the plugin's fallback and restore operations. Conversations started before the upgrade can be read but not continued.
+- The plugin's built-in online agent, listed when a default chat model exists, is kept out of the Runner panel; online chat still goes through NocoReach's own service.
+- Refine is gone from the client runtime: the unused Refine data table and the five `@refinedev/*` packages are removed, and the app title is no longer set through `app.refine`.
+- The Scheduler patch moves unchanged to `1.0.0-beta.19`, whose patched files are identical to `1.0.0-beta.17`.
+
 ## Unreleased — Agent: tabs back, no duplicate local agents
 
 - Runtimes, Model services and Usage are tabs of the Agent page again, after Local agents, instead of pages of Settings; Settings no longer lists them, and `/runtimes`, `/models` and `/usage` open the tabs.

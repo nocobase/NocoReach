@@ -550,7 +550,9 @@
       "agentArchived": "Archivado",
       "forbidden": "Sin acceso",
       "noRunner": "No hay ningún Runner en línea",
-      "othersPersonal": "Solo disponible en los Runner personales de otras personas"
+      "othersPersonal": "Solo disponible en los Runner personales de otras personas",
+      "noModel": "Configura primero un modelo de chat",
+      "modelUnavailable": "Modelo no disponible"
     },
     "mode": {
       "online": "En línea",
@@ -571,7 +573,9 @@
       "kept": "Tus mensajes se guardan y el agente responderá cuando pueda.",
       "fallback": "Usar otro agente en esta conversación",
       "usingDefault": "Esta conversación usa temporalmente {{name}} en lugar de {{own}}.",
-      "restore": "Volver a {{own}}"
+      "restore": "Volver a {{own}}",
+      "noModel": "Configura primero un modelo de chat",
+      "modelUnavailable": "El modelo de {{name}} no está disponible; contacta con un administrador"
     },
     "notice": {
       "switchedToDefault": "Se ha cambiado a {{name}}, el agente predeterminado del sistema, hasta que {{own}} vuelva a estar disponible.",
@@ -580,15 +584,13 @@
       "switchedBack": "Has vuelto a {{name}}.",
       "runFailed": "El agente se ha detenido antes de responder.",
       "runFailedReason": "El agente se ha detenido antes de responder: {{reason}}",
-      "runCancelled": "Se ha detenido."
+      "runCancelled": "Cancelación solicitada."
     },
     "consultation": {
       "title": "Se ha consultado a {{name}}",
       "question": "Pregunta",
       "answer": "Respuesta",
       "steps": "Pasos realizados",
-      "plans_one": "Ha propuesto un plan para que lo confirmes.",
-      "plans_other": "Ha propuesto {{count}} planes para que los confirmes.",
       "usage": "Tokens utilizados: entrada: {{input}}; salida: {{output}}.",
       "state": {
         "running": "Respondiendo…",
@@ -619,7 +621,7 @@
       "label": "Mensaje para el agente",
       "placeholder": "Pregunta o describe el trabajo que quieres organizar…",
       "hint": "Intro para enviar, Mayús+Intro para un salto de línea",
-      "runningHint": "Los mensajes que envíes ahora se incorporarán al trabajo en curso",
+      "runningHint": "En curso. Puedes detener esta ejecución.",
       "tooLong": "Límite de caracteres: {{max}}.",
       "send": "Enviar",
       "stop": "Detener",
@@ -715,6 +717,35 @@
         "error": "Error",
         "usage": "Consumo"
       }
+    },
+    "retrySaving": "Reintentar guardado",
+    "contextFailed": "No se pudo leer el contexto seleccionado ni enviar el mensaje. Revisa la página actual y vuelve a intentarlo.",
+    "approval": {
+      "request": "Esta herramienta necesita tu aprobación antes de ejecutarse.",
+      "approve": "Aprobar",
+      "deny": "Rechazar",
+      "denied": "Se rechazó la ejecución de la herramienta.",
+      "failed": "La aprobación no se confirmó. Actualiza el mensaje guardado antes de volver a intentarlo."
+    },
+    "feedback": {
+      "sending": "Enviando…",
+      "waiting": "Esperando al agente…",
+      "thinking": "Pensando…",
+      "stopping": "Detención solicitada. Esperando a que el agente termine…",
+      "completed": "Completado.",
+      "cancelled": "Cancelado. Revisa las acciones que quizá ya se completaron antes de repetirlas.",
+      "failed": "La respuesta falló. Revisa el historial antes de decidir si vuelves a enviar.",
+      "unknown": "El resultado o su historial guardado no está confirmado. Actualiza el historial antes de decidir si vuelves a enviar.",
+      "effectReview": "Puede que algunas acciones se hayan completado. Revisa sus resultados antes de repetirlas."
+    },
+    "executionFailed": "La ejecución falló. Revisa el historial guardado y las acciones que quizá ya se completaron antes de repetirlas.",
+    "historicalReadOnly": "Esta conversación anterior es de solo lectura. Inicia un chat nuevo para continuar.",
+    "connectionUnknown": "Conexión interrumpida. El resultado es desconocido. Actualiza el historial guardado antes de volver a enviar.",
+    "allowAnother": "Permitir otro envío (puede duplicarse)",
+    "refreshHistory": "Actualizar historial",
+    "reasoning": {
+      "title": "Razonamiento",
+      "thinking": "Pensando…"
     }
   },
   "agentSetup.title": "Usar NocoReach en tu agente",

@@ -550,7 +550,9 @@
       "agentArchived": "Archiviert",
       "forbidden": "Für Sie nicht verfügbar",
       "noRunner": "Kein Runner online",
-      "othersPersonal": "Nur auf persönlichen Runnern anderer Personen verfügbar"
+      "othersPersonal": "Nur auf persönlichen Runnern anderer Personen verfügbar",
+      "noModel": "Zuerst ein Chat-Modell einrichten",
+      "modelUnavailable": "Modell nicht verfügbar"
     },
     "mode": {
       "online": "Online",
@@ -571,7 +573,9 @@
       "kept": "Ihre Nachrichten werden gespeichert und beantwortet, sobald der Agent wieder antworten kann.",
       "fallback": "Hier einen anderen Agenten verwenden",
       "usingDefault": "Diese Unterhaltung verwendet vorübergehend {{name}} anstelle von {{own}}.",
-      "restore": "Zurück zu {{own}} wechseln"
+      "restore": "Zurück zu {{own}} wechseln",
+      "noModel": "Zuerst ein Chat-Modell einrichten",
+      "modelUnavailable": "Das Modell von {{name}} ist nicht verfügbar; wenden Sie sich an einen Administrator"
     },
     "notice": {
       "switchedToDefault": "Zum Systemstandard {{name}} gewechselt, bis {{own}} wieder verfügbar ist.",
@@ -580,15 +584,13 @@
       "switchedBack": "Wieder bei {{name}}.",
       "runFailed": "Der Agent wurde vor der Antwort gestoppt.",
       "runFailedReason": "Der Agent wurde vor der Antwort gestoppt: {{reason}}",
-      "runCancelled": "Gestoppt."
+      "runCancelled": "Abbruch angefordert."
     },
     "consultation": {
       "title": "{{name}} konsultiert",
       "question": "Frage",
       "answer": "Antwort",
       "steps": "Schritte des Agenten",
-      "plans_one": "Ein Plan wurde zur Bestätigung vorgeschlagen.",
-      "plans_other": "{{count}} Pläne wurden zur Bestätigung vorgeschlagen.",
       "usage": "Verwendete Eingabetokens: {{input}} · Ausgabetokens: {{output}}.",
       "state": {
         "running": "Antwortet…",
@@ -619,7 +621,7 @@
       "label": "Nachricht an den Agenten",
       "placeholder": "Stellen Sie eine Frage oder beschreiben Sie die zu organisierenden Aufgaben…",
       "hint": "Enter zum Senden, Shift+Enter für einen Zeilenumbruch",
-      "runningHint": "Nachrichten, die Sie jetzt senden, werden in die laufende Bearbeitung einbezogen",
+      "runningHint": "Läuft. Sie können diese Ausführung stoppen.",
       "tooLong": "Höchstens {{max}} Zeichen.",
       "send": "Senden",
       "stop": "Stoppen",
@@ -715,6 +717,35 @@
         "error": "Fehler",
         "usage": "Verbrauch"
       }
+    },
+    "retrySaving": "Speichern wiederholen",
+    "contextFailed": "Der ausgewählte Kontext konnte nicht gelesen oder die Nachricht nicht gesendet werden. Prüfen Sie die aktuelle Seite und versuchen Sie es erneut.",
+    "approval": {
+      "request": "Dieses Werkzeug braucht Ihre Freigabe, bevor es ausgeführt wird.",
+      "approve": "Freigeben",
+      "deny": "Ablehnen",
+      "denied": "Die Ausführung des Werkzeugs wurde abgelehnt.",
+      "failed": "Die Freigabe ist nicht bestätigt. Laden Sie die gespeicherte Nachricht neu, bevor Sie es erneut versuchen."
+    },
+    "feedback": {
+      "sending": "Wird gesendet…",
+      "waiting": "Warte auf den Agent…",
+      "thinking": "Denkt nach…",
+      "stopping": "Stopp angefordert. Warte, bis der Agent fertig ist…",
+      "completed": "Abgeschlossen.",
+      "cancelled": "Abgebrochen. Prüfen Sie möglicherweise bereits ausgeführte Aktionen, bevor Sie sie wiederholen.",
+      "failed": "Die Antwort ist fehlgeschlagen. Sehen Sie sich den Verlauf an, bevor Sie erneut senden.",
+      "unknown": "Das Ergebnis oder sein gespeicherter Verlauf ist nicht bestätigt. Laden Sie den Verlauf neu, bevor Sie erneut senden.",
+      "effectReview": "Einige Aktionen wurden möglicherweise ausgeführt. Prüfen Sie ihre Ergebnisse, bevor Sie sie wiederholen."
+    },
+    "executionFailed": "Die Ausführung ist fehlgeschlagen. Prüfen Sie den gespeicherten Verlauf und möglicherweise ausgeführte Aktionen, bevor Sie sie wiederholen.",
+    "historicalReadOnly": "Diese ältere Unterhaltung ist schreibgeschützt. Starten Sie einen neuen Chat, um fortzufahren.",
+    "connectionUnknown": "Verbindung unterbrochen. Das Ergebnis ist unbekannt. Laden Sie den gespeicherten Verlauf neu, bevor Sie erneut senden.",
+    "allowAnother": "Erneutes Senden erlauben (evtl. doppelt)",
+    "refreshHistory": "Verlauf neu laden",
+    "reasoning": {
+      "title": "Gedankengang",
+      "thinking": "Denkt nach…"
     }
   },
   "agentSetup.title": "NocoReach in Ihrem Agenten verwenden",
