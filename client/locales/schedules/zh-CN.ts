@@ -4,7 +4,7 @@ const schedules: typeof enUS = {
   description: 'NocoReach 自动完成的工作。每日分析的时间可以在这里调整。',
   analysisTitle: '每日分析',
   analysisDescription:
-    '读取所有项目的最新数据，由 AI 写出本期观察和建议，更新到“洞察”和“机会”。当天没跑成会自动重试。',
+    '读取所有项目的最新数据，由 AI 写出本期观察和建议，更新到“洞察”和“机会”。当天运行失败会自动重试。',
   otherWork:
     '数据同步、排名跟踪、趋势、竞品动态等其他自动工作，按项目列在“数据健康”里。',
   otherWorkLink: '去数据接入查看',

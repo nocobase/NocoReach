@@ -150,9 +150,8 @@ it('shows the proxy in plain words and how each data source of the project is re
     screen.getByRole('switch', { name: '网站内容 经过代理' }),
   ).not.toBeChecked();
   expect(screen.getAllByRole('switch')).toHaveLength(11);
-  expect(
-    screen.getByText(/YouTube、Bilibili、小红书通过采集器读取/),
-  ).toBeVisible();
+  // The collector note is in the page's info tip, not under the table.
+  expect(screen.queryByText(/YouTube、Bilibili、小红书由采集器/)).toBeNull();
   // Nothing is checked until asked.
   expect(screen.getAllByText('未检查')).toHaveLength(11);
   expect(calls('testConnection')).toHaveLength(0);

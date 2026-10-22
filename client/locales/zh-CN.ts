@@ -86,8 +86,11 @@ const zhCN: AppResource = {
   'nocoreach.nav.connections': '数据接入',
   'nocoreach.nav.proxyProfiles': '网络',
   'nocoreach.nav.members': '成员与角色',
+  'nocoreach.nav.runtimes': '运行环境',
+  'nocoreach.nav.models': '模型服务',
+  'nocoreach.nav.usage': '用量',
   'auth.platform': 'AI 增长团队',
-  'auth.marketingTitleFirst': '从数据里找机会，',
+  'auth.marketingTitleFirst': '从数据中发现机会，',
   'auth.marketingTitleSecond': '交给 Agent',
   'auth.marketingTitleThird': '改到上线。',
   'auth.marketingDescription':
@@ -101,8 +104,8 @@ const zhCN: AppResource = {
   'navigation.brandApps': 'NocoReach 应用',
   shell: {
     templateVersionUnknown: '版本未知',
-    buildFreely: '从数据里找机会。',
-    reliability: '<brand>NocoReach</brand> 帮你做出来。',
+    buildFreely: '从数据中发现机会，',
+    reliability: '<brand>NocoReach</brand> 帮你落地',
   },
   app: {
     title: 'NocoReach',

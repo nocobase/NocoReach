@@ -459,7 +459,7 @@ it('changes the time from a deep link, starting from the server, and shows the n
   });
   await mount('/schedules/schedule-1/edit?page=2', 'zh-CN');
   const dialog = await screen.findByRole('dialog');
-  expect(dialog).toHaveTextContent('修改“每日分析”的时间');
+  await waitFor(() => expect(dialog).toHaveTextContent('修改“每日分析”的时间'));
   const input = await within(dialog).findByLabelText('每天');
   expect(input).toHaveValue('09:00');
   // UTC midnight in UTC: when most sources update.

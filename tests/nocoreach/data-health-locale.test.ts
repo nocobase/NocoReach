@@ -112,7 +112,13 @@ describe('live health presentation metadata', () => {
     expect(byId('daily-analysis').messageText.params[0]).toEqual({
       systemError: modelError,
     });
-    expect(byId('daily-analysis').note).toBe('由 NocoBase 工作流按 计划 运行');
+    expect(byId('daily-analysis').noteText).toEqual({
+      key: 'dataHealth.runNocobaseWorkflow',
+      params: { 0: { key: 'dataHealth.schedule' } },
+    });
+    expect(byId('daily-analysis').note).toBe(
+      '由 NocoBase 工作流按以下调度运行：计划',
+    );
   });
 
   it('has English entries for every Chinese system template, including nested suffixes', async () => {

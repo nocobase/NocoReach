@@ -73,6 +73,13 @@ export type KnowledgeTabContext = ProjectKnowledgeContext & {
 
 // 知识库 tab: material the Agent looks up when it needs to. Search, category and date order live in the URL, so the
 // drawer and the add dialog open over the same list and closing returns to it.
+// Summaries are the first characters of the text; Markdown heading and emphasis marks are dropped for display.
+const plainSummary = (text: string) =>
+  text
+    .replace(/(^|\s)#{1,6}\s+/g, '$1')
+    .replace(/\*\*|__|`/g, '')
+    .trim();
+
 export default function KnowledgeTab(): ReactElement {
   useNocoReachLocale();
   const context = useOutletContext<ProjectKnowledgeContext>();
@@ -341,9 +348,9 @@ export default function KnowledgeTab(): ReactElement {
                     </Link>
                     <p
                       className='truncate text-xs text-muted-foreground'
-                      title={i.summary}
+                      title={plainSummary(i.summary)}
                     >
-                      {i.summary}
+                      {plainSummary(i.summary)}
                     </p>
                   </td>
                   <td className='px-3 py-2.5'>

@@ -1,5 +1,6 @@
 import { StrictMode, type ReactNode } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import { setDictionary } from '../../client/i18n/index.js';
@@ -56,9 +57,13 @@ it('navigates to the pending task after a confirmed submission under StrictMode 
       </MemoryRouter>
     </StrictMode>,
   );
-  fireEvent.change(screen.getByLabelText(english['results.kind']), {
-    target: { value: 'task' },
-  });
+  const user = userEvent.setup();
+  await user.click(
+    screen.getByRole('combobox', { name: english['results.kind'] }),
+  );
+  await user.click(
+    await screen.findByRole('option', { name: english['results.taskKind'] }),
+  );
   fireEvent.change(screen.getByLabelText(english['results.titleField']), {
     target: { value: 'Investigate data' },
   });

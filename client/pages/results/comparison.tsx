@@ -6,7 +6,7 @@ import {
   matchesObservation,
 } from '../../../shared/result-comparison.js';
 import type { EffectResult } from '../effect-model.js';
-import { formatDateTime } from '#lib/format';
+import { formatDate, formatDateTime } from '#lib/format';
 const metrics = [
   ['gsc', 'clicks', 'common.searchClicks'],
   ['gsc', 'impressions', 'common.searchImpressions'],
@@ -57,8 +57,8 @@ export function Comparison({
       <strong>{resultStatus(safeConclusion(result))}</strong>
       <p className='text-sm'>
         {$t('results.windows', {
-          0: `${result.baseline.start} – ${result.baseline.end}`,
-          1: `${result.after.start} – ${result.after.end}`,
+          0: `${formatDate(result.baseline.start)} – ${formatDate(result.baseline.end)}`,
+          1: `${formatDate(result.after.start)} – ${formatDate(result.after.end)}`,
         })}
       </p>
       <div className='overflow-x-auto'>

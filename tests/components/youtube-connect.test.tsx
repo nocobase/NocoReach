@@ -308,7 +308,9 @@ it('keeps entered values after a rejected save and can cancel editing', async ()
     new NocoReachHttpError('YouTube 配置已被修改，请重新打开后重试', 409, {}),
   );
   await user.click(screen.getByRole('button', { name: '保存并读取' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('配置已被修改');
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    chinese['youtube.configChanged'],
+  );
   expect(input).toHaveValue('Changed');
   await user.click(screen.getByRole('button', { name: '取消' }));
   expect(screen.getByRole('button', { name: '修改' })).toBeVisible();
@@ -651,7 +653,9 @@ it('does not move focus back to the first edit field after input changes or a re
     new NocoReachHttpError('YouTube 配置已被修改，请重新打开后重试', 409, {}),
   );
   await user.click(screen.getByRole('button', { name: '保存并读取' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('配置已被修改');
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    chinese['youtube.configChanged'],
+  );
   expect(videos).toHaveValue(`  ${ID}  `);
   expect(refocus).not.toHaveBeenCalled();
 });
@@ -790,7 +794,7 @@ it('updates validation, in-flight errors and confirmation copy without replacing
     ),
   );
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'YouTube 配置已被修改，请重新打开后重试',
+    chinese['youtube.configChanged'],
   );
   expect(input).toHaveValue('分析。任务。');
   await act(async () => setDictionary(en));

@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { NocoReachHttpError } from '#lib/nocoreach-api';
 import { $t } from '#i18n';
 import { Button } from '#components/ui/button';
+import { cn } from '#lib/utils';
 
 export type RequestState = {
   data?: unknown;
@@ -20,6 +22,7 @@ export function RequestBlock({
   emptyText,
   info,
   compact = false,
+  quiet = false,
   children,
 }: {
   title: string;
@@ -30,6 +33,8 @@ export function RequestBlock({
    * visit): the title only names the region, and Retry shows only after a failure.
    */
   compact?: boolean;
+  /** A side block that should not draw the eye: a small grey heading and Refresh as an icon. */
+  quiet?: boolean;
   request: RequestState;
   empty?: boolean;
   emptyText?: string;
@@ -105,7 +110,14 @@ export function RequestBlock({
       className='space-y-2'
     >
       <div className='flex flex-wrap items-center justify-between gap-2'>
-        <h2 className='flex items-center gap-1 text-sm font-medium'>
+        <h2
+          className={cn(
+            'flex items-center gap-1',
+            quiet
+              ? 'text-xs font-normal text-muted-foreground'
+              : 'text-sm font-medium',
+          )}
+        >
           {title}
           {info}
         </h2>
@@ -114,16 +126,29 @@ export function RequestBlock({
             {$t('common.signAgain')}
           </Button>
         ) : (
-          !unavailable && (
+          !unavailable &&
+          (quiet && !failed ? (
             <Button
               variant='ghost'
-              size='sm'
+              size='icon-xs'
+              aria-label={$t('strategy.refreshBlock')}
+              title={$t('strategy.refreshBlock')}
+              disabled={request.loading}
+              onClick={request.reload}
+              className='text-muted-foreground'
+            >
+              <RefreshCw aria-hidden='true' />
+            </Button>
+          ) : (
+            <Button
+              variant='ghost'
+              size={quiet ? 'xs' : 'sm'}
               disabled={request.loading}
               onClick={request.reload}
             >
               {failed ? $t('common.retry') : $t('strategy.refreshBlock')}
             </Button>
-          )
+          ))
         )}
       </div>
       {alert}

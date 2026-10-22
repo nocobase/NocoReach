@@ -9,6 +9,7 @@ import { confirmAction } from '#components/reach/confirm';
 import { Button } from '#components/ui/button';
 import { Input } from '#components/ui/input';
 import { Badge } from '#components/ui/badge';
+import { InfoTip } from '#components/reach/info-tip';
 import {
   Table,
   TableHeader,
@@ -188,6 +189,32 @@ export default function Roles() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
+                  {/* System administrators are not a business role, but members can hold it; the list names it so
+                      Members and Roles agree (UI review 2026-10-21). It cannot be edited here. */}
+                  {activePage === 0 &&
+                  $t('accessMembers.systemAdministrator')
+                    .toLowerCase()
+                    .includes(search.toLowerCase()) ? (
+                    <TableRow data-role='system-administrator'>
+                      <TableCell>
+                        <span className='inline-flex items-center gap-1 font-medium'>
+                          {$t('accessMembers.systemAdministrator')}
+                          <InfoTip
+                            label={$t('accessMembers.systemAdministrator')}
+                          >
+                            {$t('accessMembers.systemAdministratorHelp')}
+                          </InfoTip>
+                        </span>
+                      </TableCell>
+                      <TableCell>{$t('accessMembers.scopes.all')}</TableCell>
+                      <TableCell>
+                        <Badge variant='secondary'>
+                          {$t('accessMembers.builtIn')}
+                        </Badge>
+                      </TableCell>
+                      <TableCell />
+                    </TableRow>
+                  ) : null}
                   {rows
                     .slice(activePage * 20, activePage * 20 + 20)
                     .map((role) => (

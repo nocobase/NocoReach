@@ -7,6 +7,7 @@ import { setDictionary } from '../../client/i18n';
 import { TaskDraftProvider } from '../../client/pages/task-detail/drafts';
 import { TaskDetail } from '../../client/pages/task-detail';
 import type { TaskData } from '../../client/pages/task-execution-types';
+import spanish from '../../shared/i18n/es-ES.json';
 
 const { action } = vi.hoisted(() => ({ action: vi.fn() }));
 vi.mock('../../client/lib/nocoreach-api', async (original) => {
@@ -157,17 +158,39 @@ function mount(data = pageChange(), entry = '/actions/1') {
   );
 }
 
+test('unknown activity actors use a member label instead of claiming the current user acted', async () => {
+  setDictionary(spanish, 'es-ES');
+  const data = pageChange();
+  data.work.history = [
+    {
+      at: '2026-10-13T02:14:00Z',
+      actor: 'missing-member',
+      action: 'linkContent',
+    },
+    { at: '2026-10-13T02:15:00Z', actor: '1', action: 'linkContent' },
+  ];
+  mount(data);
+  const activity = screen.getByRole('region', { name: 'Actividad' });
+  expect(
+    await within(activity).findByText('Miembro', { selector: 'b' }),
+  ).toBeVisible();
+  expect(
+    await within(activity).findByText('Super Admin', { selector: 'b' }),
+  ).toBeVisible();
+  expect(within(activity).queryByText('Tú', { selector: 'b' })).toBeNull();
+});
+
 test('a page change is reviewed as what readers see, with code kept in Technical details', async () => {
   const user = userEvent.setup();
   mount();
   const card = screen.getByRole('region', { name: '等你处理' });
   expect(
-    within(card).getByRole('heading', { name: 'Agent 改好了，看过再发布' }),
+    within(card).getByRole('heading', { name: '改动已完成，请检查后发布' }),
   ).toBeVisible();
   expect(within(card).getByText('オープンソース AI ノーコード')).toBeVisible();
   expect(within(card).getByText('（原来没有）')).toBeVisible();
   expect(
-    within(card).getByText('自动检查有提醒，发布前请开发同事看一下'),
+    within(card).getByText('自动检查有提醒，发布前请开发人员确认'),
   ).toBeVisible();
   // No pull request, branch, file path or raw check output on the page itself.
   expect(document.body).not.toHaveTextContent('#186');

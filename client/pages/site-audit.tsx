@@ -1,4 +1,5 @@
 import { useMessageState, $t, $tj, $legacyText } from "#i18n";
+import { usePageTab } from '#hooks/use-page-tab';
 // 审计, two tabs since 2026-10-14 (user request): 网站审计 — after every-app/open-seo db8bde1 src/client/features/audit/
 // (results grouped by severity, affected pages per issue; MIT). Changes: checks the pages of 网站内容 as last read
 // (re-read weekly, free) instead of a separate crawl, issues can be ticked and handed to the Agent from the page's button
@@ -40,6 +41,7 @@ export default function SiteAudit() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const view = params.get("view") === "performance" || params.has("lighthouse") ? "performance" : "issues";
+  usePageTab($t(view === 'performance' ? 'siteAudit.performanceTab' : 'siteAudit.issuesTab'));
   const choose = (v: string) => { const p = new URLSearchParams(params); if (v === "performance") p.set("view", v); else { p.delete("view"); p.delete("lighthouse"); } setParams(p, { replace: true }); };
   const [report, setReport] = useState<Report>();
   const [error, setError] = useMessageState("");

@@ -1,0 +1,217 @@
+{
+  "@nocobase/app-plugin-agents": {
+    "access": {
+      "section": "Nhóm tác nhân AI",
+      "businessSection": "Nhóm tác nhân AI",
+      "businesses": {
+        "agents": {
+          "title": "Tác nhân AI và kỹ năng",
+          "description": "Các tác nhân AI của nhóm và kỹ năng mà chúng sử dụng.",
+          "actions": {
+            "edit": {
+              "title": "Thay đổi tác nhân AI và kỹ năng",
+              "description": "Thay đổi cài đặt, kỹ năng và biến của tác nhân AI, lưu trữ, khôi phục và xóa tác nhân AI, cũng như chỉnh sửa kỹ năng. Tác nhân AI không được cấp quyền vượt quá quyền của người chỉnh sửa",
+              "related": "Thay đổi tác nhân AI và kỹ năng (tác nhân AI họ sở hữu và kỹ năng họ tạo)",
+              "relatedLabel": "Tác nhân AI tôi sở hữu và kỹ năng tôi tạo",
+              "relatedHint": "Các tác nhân AI thuộc sở hữu của tôi và các kỹ năng do tôi tạo",
+              "all": "Thay đổi tác nhân AI và kỹ năng (tất cả)"
+            }
+          }
+        }
+      },
+      "settings": {
+        "agents": {
+          "agents": "Tác nhân AI",
+          "runners": "Môi trường thực thi",
+          "prices": "Giá mô hình",
+          "services": "Dịch vụ mô hình"
+        }
+      },
+      "actions": {
+        "read": "Xem",
+        "manage": "Quản lý"
+      },
+      "keyScopes": {
+        "agents": {
+          "title": "Tác nhân AI",
+          "description": "Xem tác nhân AI, kỹ năng và lượt chạy; thay đổi tác nhân AI và kỹ năng, hủy và thử lại lượt chạy."
+        },
+        "runners": {
+          "title": "Môi trường thực thi",
+          "description": "Xem môi trường thực thi và mã đăng ký; quản lý môi trường thực thi."
+        },
+        "prices": {
+          "title": "Giá mô hình",
+          "description": "Xem và thay đổi giá mô hình dùng để ước tính chi phí."
+        },
+        "services": {
+          "title": "Dịch vụ mô hình",
+          "description": "Xem dịch vụ mô hình và các mô hình được cung cấp, không được xem khóa của dịch vụ."
+        }
+      }
+    }
+  },
+  "@nocobase/app-plugin-authorization": {
+    "sections": {
+      "pages": "Quyền truy cập trang",
+      "page": "Trang",
+      "business": "Quyền nghiệp vụ",
+      "administration": "Quản trị",
+      "other": "Khác"
+    },
+    "options": {
+      "defaultAndSharing": "Dùng phạm vi dữ liệu mặc định",
+      "actions": {
+        "assign": "Quản lý gán quyền",
+        "configure": "Cấu hình",
+        "inspect": "Kiểm tra quyền",
+        "read": "Đọc",
+        "create": "Tạo",
+        "update": "Cập nhật",
+        "delete": "Xóa",
+        "access": "Truy cập"
+      },
+      "settingsModules": {
+        "authorization": "Phân quyền"
+      },
+      "pages": {
+        "all": "Tất cả trang",
+        "allDescription": "Cho phép truy cập mọi trang, kể cả các trang được thêm sau này."
+      },
+      "settings": {
+        "inspector": "Công cụ kiểm tra quyền",
+        "permission-sets": "Bộ quyền"
+      },
+      "subjectTypes": {
+        "authenticated": "Tất cả người dùng đã đăng nhập",
+        "authenticatedDescription": "Áp dụng cho mọi người dùng có phiên đăng nhập hợp lệ.",
+        "user": "Người dùng"
+      },
+      "recordAccessPolicies": {
+        "allRecords": "Tất cả bản ghi",
+        "recordsIOwn": "Bản ghi tôi sở hữu",
+        "recordsICreated": "Bản ghi tôi tạo",
+        "customFilter": "Bộ lọc tùy chỉnh",
+        "customFilterHint": "Chọn bản ghi theo điều kiện lọc tùy chỉnh."
+      }
+    }
+  },
+  "@nocobase/app-plugin-authz-default-access": {
+    "resourceTitle": "Phạm vi dữ liệu mặc định"
+  },
+  "@nocobase/app-plugin-authz-restriction-rules": {
+    "resourceTitle": "Quy tắc hạn chế"
+  },
+  "@nocobase/app-plugin-authz-sharing-rules": {
+    "resourceTitle": "Quy tắc chia sẻ"
+  },
+  "@nocobase/app-plugin-notification": {
+    "errors": {
+      "logsForbidden": "Bạn cần có quyền truy cập nhật ký thông báo.",
+      "logNotFound": "Không tìm thấy nhật ký thông báo.",
+      "testHeaderRequired": "Yêu cầu thử thông báo phải có tiêu đề yêu cầu.",
+      "testForbidden": "Bạn cần có quyền gửi thử thông báo.",
+      "testInvalidRequest": "Nội dung yêu cầu phải chứa đích gửi thử và các giá trị trường.",
+      "testTargetUnavailable": "Đích gửi thử thông báo hiện không khả dụng.",
+      "testUnknownField": "Trường thử thông báo \"{{name}}\" không xác định.",
+      "testRequiredField": "Trường thử thông báo \"{{name}}\" là bắt buộc.",
+      "testFieldTooLong": "Trường thử thông báo \"{{name}}\" chỉ được chứa tối đa {{maxLength}} ký tự.",
+      "testFailed": "Thử thông báo thất bại.",
+      "testNotFound": "Không tìm thấy lần thử thông báo."
+    }
+  },
+  "@nocobase/app-plugin-notification-in-app": {
+    "errors": {
+      "authenticationRequired": "Bạn cần xác thực.",
+      "invalidPageToken": "pageToken không phải là mã thông báo do danh sách này trả về.",
+      "notFound": "Không tìm thấy thông báo."
+    },
+    "test": {
+      "channels": {
+        "inApp": "Trong ứng dụng"
+      },
+      "providers": {
+        "builtIn": "Tích hợp sẵn"
+      },
+      "fields": {
+        "route": "Đường dẫn nội bộ (không có tiền tố triển khai)",
+        "url": "URL HTTP(S) đầy đủ",
+        "recipientUserId": "ID người dùng nhận thông báo",
+        "title": "Tiêu đề",
+        "message": "Nội dung"
+      },
+      "placeholders": {
+        "currentUser": "ID người dùng ứng dụng"
+      },
+      "defaults": {
+        "title": "Thông báo thử từ NocoBase",
+        "body": "Đây là thông báo thử từ NocoBase."
+      }
+    }
+  },
+  "@nocobase/app-plugin-notification-providers": {
+    "test": {
+      "channels": {
+        "email": "Email",
+        "im": "IM"
+      },
+      "providers": {
+        "smtp": "SMTP",
+        "resend": "Resend",
+        "feishuWebhook": "Webhook Feishu",
+        "dingtalkWebhook": "Webhook DingTalk"
+      },
+      "fields": {
+        "subject": "Chủ đề",
+        "text": "Văn bản",
+        "html": "HTML",
+        "url": "URL HTTP(S) đầy đủ",
+        "recipient": "Người nhận",
+        "title": "Tiêu đề",
+        "message": "Nội dung"
+      },
+      "placeholders": {
+        "email": "name@example.com"
+      },
+      "defaults": {
+        "title": "Thông báo thử từ NocoBase",
+        "body": "Đây là thông báo thử từ NocoBase."
+      }
+    }
+  },
+  "@nocobase/app-plugin-scheduler": {
+    "nav": {
+      "automation": "Tự động hóa"
+    },
+    "authorization": {
+      "title": "Lịch chạy",
+      "read": "Đọc"
+    }
+  },
+  "@nocobase/app-plugin-users": {
+    "invitationEmail": {
+      "subject": "{{inviter}} đã mời bạn tham gia {{app}}",
+      "intro": "{{inviter}} đã mời bạn tham gia {{app}}.",
+      "summary": "Bạn cũng sẽ tham gia: {{items}}.",
+      "separator": ", ",
+      "action": "Chấp nhận lời mời",
+      "validity": "Mở liên kết để đặt tên và mật khẩu của bạn. Liên kết chỉ dùng được một lần và có hiệu lực đến {{date}}.",
+      "fallback": "Nếu liên kết không mở được, hãy sao chép và dán vào trình duyệt:"
+    }
+  },
+  "@nocobase/app-plugin-mail": {
+    "errors": {
+      "accessDenied": "Bạn cần có quyền truy cập thư.",
+      "idempotencyConflict": "Khóa chống xử lý trùng lặp đã được liên kết với một yêu cầu khác.",
+      "invalidRequest": "Yêu cầu thư không hợp lệ.",
+      "accountCredentialsInvalid": "Xác thực hộp thư thất bại. Vui lòng kiểm tra tên đăng nhập và mật khẩu hoặc mã ủy quyền, đồng thời xác nhận rằng IMAP/SMTP đã được bật. Gmail và các dịch vụ khác có thể yêu cầu mật khẩu ứng dụng.",
+      "requestFailed": "Không thể hoàn tất yêu cầu thư.",
+      "providerRateLimited": "Dịch vụ thư đang nhận quá nhiều yêu cầu. Vui lòng thử lại sau.",
+      "providerUnavailable": "Không thể kết nối với dịch vụ thư. Vui lòng thử lại sau.",
+      "reauthorizationRequired": "Bạn cần kết nối lại tài khoản thư này trước khi sử dụng.",
+      "syncRunNotFound": "Không tìm thấy lần đồng bộ thư.",
+      "messageNotFound": "Không tìm thấy thư.",
+      "authorizationStateRequired": "Cần có trạng thái ủy quyền thư."
+    }
+  }
+}

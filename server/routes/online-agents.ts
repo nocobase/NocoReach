@@ -42,17 +42,26 @@ const message = z.strictObject({
   revision: z.number().int().min(0),
   text: z.string().trim().min(1).max(30000),
 });
-const createConversation = z.strictObject({
-  requestId: z.uuid(),
-  agentId: z.string().min(1).max(100),
-  model: model.nullable().optional(),
-  projectId: z
-    .string()
-    .regex(/^[1-9]\d{0,15}$/)
-    .nullable()
-    .default(null),
-  text: z.string().trim().min(1).max(30000),
+const projectId = z.string().regex(/^[1-9]\d{0,15}$/);
+// Asked from Insights: the analysis day, and the opportunity when asked from its line.
+const subject = z.strictObject({
+  kind: z.literal('insights'),
+  day: z.iso.date(),
+  opportunityId: z.string().min(1).max(100).optional(),
 });
+const createConversation = z
+  .strictObject({
+    requestId: z.uuid(),
+    agentId: z.string().min(1).max(100),
+    model: model.nullable().optional(),
+    projectId: projectId.nullable().default(null),
+    subject: subject.nullable().optional(),
+    text: z.string().trim().min(1).max(30000),
+  })
+  .refine((v) => !v.subject || v.projectId, {
+    message: 'A conversation asked from Insights belongs to a project',
+    path: ['projectId'],
+  });
 const endpoint = (operationId: string, summary: string) =>
   describeRoute({
     tags: ['Online Agents'],
@@ -210,6 +219,21 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
       for (const conversation of await service().conversations(owner(context)))
         if (await canRead(conversation.projectId)) visible.push(conversation);
       return context.json({ data: visible });
+    },
+  );
+  router.get(
+    '/onlineAgents/threads',
+    endpoint(
+      'listOnlineInsightThreads',
+      "List the current person's conversations asked from Insights in a project",
+    ),
+    apiValidator('query', z.strictObject({ projectId })),
+    async (context) => {
+      const { projectId: id } = context.req.valid('query');
+      await project(id);
+      return context.json({
+        data: await service().threads(owner(context), id),
+      });
     },
   );
   router.post(

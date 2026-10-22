@@ -97,9 +97,9 @@ export function TaskTable({
           <col className='w-16' />
           <col />
           <col className='w-32' />
-          <col className='w-48' />
+          <col className='w-56' />
+          <col className='w-40' />
           <col className='w-36' />
-          <col className='w-32' />
           <col className='w-24' />
           <col className='w-10' />
         </colgroup>
