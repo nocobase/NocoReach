@@ -1,5 +1,13 @@
 # NocoReach Changelog
 
+## Unreleased — One conversation a day on Insights
+
+- What you ask from Insights joins the day's conversation, shown right under the day's analysis with its own input at the bottom: type and press Enter, and the answer appears there (what it read folds under "Sources checked"). Each day keeps one conversation, so the AI remembers what was asked before.
+- Ask AI on an opportunity line quotes the opportunity in that input instead of opening a separate conversation; the question and answer stay in the day's conversation with the quote above the question, here and in the side panel. Questions no longer appear under the opportunity lines.
+- Opening the side panel on Insights moves the day's conversation into it: the page hides its conversation and input, offers "Open today's conversation in the side panel", and folds Current situation to one line under the day's date. Only one input shows at a time.
+- Earlier days sit above today, folded to "Earlier analyses (N)" by default and opening a week at a time, oldest at the top, so the bottom of the page is left to the conversation. An opened day shows that day's conversation in full.
+- Hand off to agent looks the same on every line; the first one is no longer filled.
+
 ## Unreleased — Search performance: web search only, gaps said plainly
 
 - Search performance › Performance reads web search only. The search type choice (Web, Image, Video, News, Discover, Google News) is gone, with the server's handling of other types in the search views: they were read live from Search Console for this choice alone, while the scheduled sync, the daily analysis and Insights use web search only.
