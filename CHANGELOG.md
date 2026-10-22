@@ -4,6 +4,7 @@
 
 - Line tabs only switch a page's sections, under its header (2026-10-22 decision D1). What a table lists is chosen in its toolbar with the square grey segmented control, on the same row as its search: Website & product › Pages (All 658 | Blog 375 | Docs 199 …), Search performance (Close to page one | Queries | Pages | Rising …), its Index and Sitemaps, Traffic's reports, GitHub's and Downloads' tables, Keywords › AI suggestions, AI search's questions and Competitors › Domain lookup. They drew a second row of line tabs inside the card, which on Search performance sat right under the page's own tabs.
 - `DataTableTabs` draws that row: the segments (a `TabsList` with the new `segmented` variant, styled in styles.css like `Segmented`), its ⓘ, then `tools` (search and other filters) and `actions` at the right. A tab's description is its ⓘ (decision D5). The separate `DataTableToolbar` row under it is gone on those pages; on a narrow screen the row wraps.
+- Search performance's "Queries ranking 5–20…" line under the toolbar joins the Close to page one ⓘ (decision D5).
 - The same control for the other in-card choices: keyword details' Related keywords, Analysis rules' areas, and the "how to create" choice in New Skill and Add knowledge.
 
 ## Unreleased — Tasks and results: plain cards, skeletons, and the application's own controls
