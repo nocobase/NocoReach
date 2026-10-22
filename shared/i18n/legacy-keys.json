@@ -2612,7 +2612,6 @@
   "查看依据": "strategy.showEvidence",
   "查看全文": "taskDetail.viewFullText",
   "查看全部": "strategy.view",
-  "查看全部同步状态": "dataHealth.viewSyncStatus",
   "查看历史版本": "messages.viewVersionHistory",
   "查看同步数据": "syncPanel.viewSyncedData",
   "查看 Runner": "taskDetail.viewRunners",

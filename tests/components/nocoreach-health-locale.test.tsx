@@ -124,11 +124,7 @@ test('health panel, expanded table, alert and card preserve user content while s
       </MemoryRouter>
     </I18nProvider>,
   );
-  await userEvent.setup().click(
-    await screen.findByRole('button', {
-      name: $t('dataHealth.viewSyncStatus'),
-    }),
-  );
+  await screen.findByRole('table');
   const requestCount = action.mock.calls.length;
   for (const locale of ['en-US', 'zh-CN', 'en-US']) {
     await act(() => runtime.changeLanguage(locale));
@@ -191,11 +187,7 @@ test('the sync table says how often each source runs and links the daily analysi
       </MemoryRouter>
     </I18nProvider>,
   );
-  await userEvent.setup().click(
-    await screen.findByRole('button', {
-      name: $t('dataHealth.viewSyncStatus'),
-    }),
-  );
+  await screen.findByRole('table');
   const table = screen.getByRole('table');
   expect(
     within(table).getByRole('columnheader', { name: '频率' }),
