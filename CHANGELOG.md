@@ -5,6 +5,11 @@
 - When publishing an article to a target does not complete, the task card keeps its plain-words reason and now links to Technical details, which list each failed target with the step it stopped at (reading the article, checking the website repository, writing, or checking the saved changes), the error code, the time and what the target or the error said (for example `github:429`, or a network timeout with its host).
 - Every failed publish also leaves a warning in the application log (`NocoReach article publish failed`, with project, task, target, step, code and detail), so `nb-studio app logs` shows it. Errors other than the target's own (a request that got no answer, a code error) keep their cause instead of becoming a bare `unavailable`.
 
+## Unreleased — Tasks: one set of status choices, the shared drop-downs
+
+- Tasks no longer has a status drop-down beside Waiting for me, Current, Done and Closed: the two overlapped, and the board's columns and the list's order already separate statuses. An old `?status=` link shows the scope without filtering.
+- The playbook, owner and Agent filters use the application's drop-down instead of the browser's, as every other page does. Picking a playbook after opening an old `?playbook=` link no longer falls back to all playbooks when that link's option leaves the list.
+
 ## Unreleased — One product wording, the version in the account menu
 
 - The sidebar footer shows only the slogan; the template's name ("Default Template") is gone and the version moves to the bottom of the account menu ("NocoReach v1.0.0-beta.68").
