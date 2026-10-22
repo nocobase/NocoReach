@@ -8,7 +8,7 @@ import { $t, $tj } from '#i18n';
 import { Tag } from '#components/reach/tag';
 import { cn } from '#lib/utils';
 import { getStepKinds, type Step, type StepKind } from './playbook-model';
-import type { Skill } from './skill-model';
+import { skillFor, type Skill } from './skill-model';
 
 // A playbook's steps as Playbooks shows them; the task page's View steps drawer shows the same list.
 export function StepIcon({ kind }: { kind: StepKind }) {
@@ -106,8 +106,11 @@ export function PlaybookSteps({
 // The Skills a step names, by name (Skills deleted since are left out). They always go to the Agent for this step.
 function StepSkills({ ids, skills }: { ids?: string[]; skills: Skill[] }) {
   const named = (ids || [])
-    .map((id) => skills.find((s) => s.id === id))
-    .filter((s): s is Skill => Boolean(s));
+    .map((id) => skillFor(skills, id))
+    .filter(
+      (s, i, all): s is Skill =>
+        Boolean(s) && all.findIndex((x) => x?.id === s!.id) === i,
+    );
   return named.length ? (
     <p className='mt-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground'>
       {$t('playbooks.useSkills')}
