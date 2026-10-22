@@ -1,5 +1,15 @@
 # NocoReach Changelog
 
+## Unreleased — Tasks and results: plain cards, skeletons, and the application's own controls
+
+- Tasks › By Agent: a card waiting on you is a normal card with an amber "You" tag and a grey tag for what it waits for, as the board and the list say it; it was the only card painted amber, with the only solid tag on the site.
+- An empty column says "No tasks" on the board and in By Agent; By Agent said "Nothing running or queued", and the Chinese board wording is plainer.
+- While they load, the task list, a task page, the playbook list, a page's detail panel and a task's Performance show skeleton bars instead of "Loading…" text; `ListSkeleton` takes a `label` for screen readers ("Loading tasks").
+- A task's activity shows a placeholder bar for a person's name until the members have loaded, instead of "Member" that turned into the name a moment later.
+- The playbook to start a task with, the next playbook to continue with and Search Console's sync range use the application's dropdown instead of the browser's own.
+- A result's source opens its evidence with the site's "show more" button instead of the browser's ▶ disclosure.
+- The unused task-detail breadcrumb styles are removed.
+
 ## Unreleased — Data cards: one empty look, one tile, one chart colour, one name for each thing
 
 - An empty table says so in one muted sentence, as an empty card does, instead of an icon over a title: Bilibili and YouTube showed both on one page.

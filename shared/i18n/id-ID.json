@@ -3337,7 +3337,6 @@
   "taskAgents.statusIdle": "Tidak sibuk",
   "taskAgents.noRuntimeOnline": "Tidak ada lingkungan eksekusi yang daring",
   "taskAgents.noRuntimeNotice": "Tidak ada lingkungan runtime yang daring, jadi tugas yang diserahkan ke agen menunggu dalam antrean sampai ada yang daring.",
-  "taskAgents.nothing": "Tidak ada pekerjaan yang berjalan atau mengantre",
   "taskAgents.running": "Sedang dikerjakan",
   "taskAgents.queued": "Berikutnya",
   "taskAgents.waiting": "Menunggu penanganan",

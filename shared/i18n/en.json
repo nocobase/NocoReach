@@ -3288,7 +3288,6 @@
   "taskAgents.statusIdle": "Idle",
   "taskAgents.noRuntimeOnline": "No runtime online",
   "taskAgents.noRuntimeNotice": "No runtime is online, so tasks handed to an agent wait in the queue until one comes online.",
-  "taskAgents.nothing": "Nothing running or queued",
   "taskAgents.running": "Working on",
   "taskAgents.queued": "Up next",
   "taskAgents.waiting": "Waiting",

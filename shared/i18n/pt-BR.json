@@ -7021,7 +7021,6 @@
   "taskAgents.statusIdle": "Sem atividade",
   "taskAgents.noRuntimeOnline": "Nenhum ambiente de execução online",
   "taskAgents.noRuntimeNotice": "Nenhum ambiente de execução está on-line, então as tarefas entregues a um agente aguardam na fila até que haja um.",
-  "taskAgents.nothing": "Nenhum trabalho em execução ou na fila",
   "taskAgents.running": "Em andamento",
   "taskAgents.queued": "A seguir",
   "taskAgents.waiting": "Aguardando ação",
