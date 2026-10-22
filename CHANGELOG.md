@@ -2,30 +2,7 @@
 
 ## Unreleased — Ten interface languages
 
-- Compose keyword hand-off titles as complete localized sentences in all ten languages and clarify that Japanese sync coverage reports the latest collected day. Update stale CI assertions for schedule copy and the fixed community reply protocol.
-
-- Keep the indexing status grammatical for a single-page site, and preserve invalid external numeric character references instead of throwing while collecting or displaying text.
-
-- Clarify that more-action menu labels refer to a task or keyword, and that the Japanese chat timestamp reports data collection rather than user browsing.
-
-- Phrase tracked-keyword ranking objectives as requested improvements in Brazilian Portuguese, Spanish, French, German, and Indonesian, including when a keyword is currently outside the top 100.
-
-- State query-ranking, search-click and indexing hand-off objectives as requested outcomes across all ten languages; synchronize new Website & product and source-discovery copy when merging main.
-
-- Correct semantic, grammar and terminology errors across all eight added languages, including live states, data coverage dates, Agent activity, pre-release labels, search metrics, task objectives and Traditional Chinese wording. Keep variable quantities grammatical, render selection labels before counts, and select singular units for rule thresholds of one. Preserve machine-readable community reply markers, searchable timezone examples and supported question-detection examples. Align source navigation and GA4 instructions with their destinations, format expected result dates with the active locale, and label unknown activity actors as members. Clarify password handling, stale YouTube runs, retry actions and Agent assignment states; synchronize the latest Search, Market and Tasks copy across all ten languages.
-- Express audit and search-performance task objectives as requested changes in English, German, Brazilian Portuguese, Vietnamese, and Indonesian; preserve GitHub’s Insights → Traffic navigation labels in Spanish and Brazilian Portuguese.
-- Use complete localized sentences for AI mention/citation evidence and synchronize the latest main-branch update actions and tab counts.
-
-- Add Traditional Chinese, Japanese, Spanish, Brazilian Portuguese, French, German, Vietnamese, and Indonesian alongside English and Simplified Chinese.
-- Correct Japanese and Indonesian completion confirmations to state that no content will be published; label Japanese and Spanish revert PR links as existing pull requests.
-- Preserve shared date formatting when merging main and synchronize duration and signed-change translations across all languages.
-- Synchronize the latest Insights navigation and Agent failure guidance across all ten languages when merging main.
-- Translate business messages, application navigation, authentication, Agent conversations, schedules, and installed plugin interfaces; load each additional language on demand.
-- Keep the selected locale through business-page updates, deferred errors, server presentation messages, calendars, timestamps, and schedule descriptions. Distinguish Simplified and Traditional Chinese in the language menu.
-- Clarify weekly-average baselines in GitHub analysis rule descriptions, Japanese article publishing progress, and Indonesian skill-file read success.
-- Distinguish Indonesian noindex findings from instructions and Japanese publishing progress from live status; correct Traditional Chinese online/offline wording.
-- Correct Traditional Chinese approval and read-limit wording, and state the four-week average explicitly in GitHub topic hand-off summaries.
-- Validate language registration, translation keys, interpolation, and live language switching without losing in-progress input. Project content-generation language remains a separate setting.
+- Support ten interface languages: English, Simplified Chinese, Traditional Chinese, Japanese, Spanish, Brazilian Portuguese, French, German, Vietnamese, and Indonesian.
 
 ## Unreleased — Search & market pages, fixed and in plain words
 
