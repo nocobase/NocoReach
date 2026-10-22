@@ -258,7 +258,8 @@ test.each(['source', 'related', 'sidebar', 'breadcrumb', 'back-forward'])(
     mount();
     const user = await editBoth();
     if (kind === 'source')
-      await user.click(screen.getByRole('button', { name: /来自/ }));
+      // The From row of the properties column links the opportunity.
+      await user.click(screen.getByRole('button', { name: 'O-1' }));
     if (kind === 'related')
       await user.click(screen.getByRole('button', { name: /Next task/ }));
     if (kind === 'sidebar' || kind === 'back-forward')

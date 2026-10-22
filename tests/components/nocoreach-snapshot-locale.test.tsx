@@ -86,6 +86,12 @@ function task(id = 'tech-fix'): TaskData {
     agent: { repo: null, online: false },
   };
 }
+// The playbook's name is in the Playbook row of the task's properties column (2026-10-22), not the steps.
+const playbookCell = () =>
+  [...document.querySelectorAll('aside dt')].find((dt) =>
+    ['Playbook', '做法'].includes(dt.textContent || ''),
+  )?.nextElementSibling;
+
 async function setup(data: TaskData, locale: 'zh-CN' | 'en-US' = 'en-US') {
   const runtime = new I18nRuntime({
     defaultLocale: locale,
@@ -132,9 +138,7 @@ test('localizes proven built-in snapshot names without changing stored data or m
     'Technical fix · Write plan',
   );
   expect(screen.getByTestId('step')).toHaveTextContent('Agent: Write plan');
-  expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
-    'Technical fix',
-  );
+  expect(playbookCell()).toHaveTextContent('Technical fix');
   expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
     'Review plan',
   );
@@ -201,9 +205,7 @@ test.each(['custom', 'edited', 'clone', 'legacy', 'partial-origin'] as const)(
     expect(screen.getByTestId('board')).toHaveTextContent(
       '分析。任务。 {0} · 分析',
     );
-    expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
-      '分析。任务。 {0}',
-    );
+    expect(playbookCell()).toHaveTextContent('分析。任务。 {0}');
     expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent('分析');
     await act(() => runtime.changeLanguage('zh-CN'));
     await act(() => runtime.changeLanguage('en-US'));
@@ -355,16 +357,12 @@ test('legacy canonical task detail follows mounted language changes without rewr
   delete data.work.playbook!.edited;
   const before = structuredClone(data);
   const runtime = await setup(data);
-  expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
-    'Technical fix',
-  );
+  expect(playbookCell()).toHaveTextContent('Technical fix');
   expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
     'Review and publish',
   );
   await act(() => runtime.changeLanguage('zh-CN'));
-  expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
-    '技术修复',
-  );
+  expect(playbookCell()).toHaveTextContent('技术修复');
   await act(() => runtime.changeLanguage('en-US'));
   expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
     'Write plan',
