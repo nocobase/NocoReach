@@ -3,7 +3,8 @@ import { $t } from '#i18n';
 // same parts as the other 社区 pages (collector-content.tsx).
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { RefreshCw, TvMinimalPlay } from 'lucide-react';
+import { TvMinimalPlay } from 'lucide-react';
+import { RefreshButton } from '#components/reach/refresh-button';
 import { toast } from '#lib/toast';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { PageContainer, PageHeader } from '#components/reach/page';
@@ -169,15 +170,14 @@ export default function DataBilibili() {
         }
         actions={
           data?.connected && canSync ? (
-            <Button
-              variant='outline'
-              size='sm'
-              disabled={running || cooling}
+            <RefreshButton
+              busy={running}
+              disabled={cooling}
+              label={
+                running ? $t('common.loadingLoading') : $t('common.updateNow')
+              }
               onClick={() => void sync()}
-            >
-              <RefreshCw data-icon='inline-start' />
-              {running ? $t('common.loadingLoading') : $t('common.updateNow')}
-            </Button>
+            />
           ) : undefined
         }
       />

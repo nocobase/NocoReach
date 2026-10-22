@@ -3,7 +3,8 @@ import { $t } from '#i18n';
 // with the same parts as the other 社区 pages (collector-content.tsx).
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { RefreshCw, Youtube } from 'lucide-react';
+import { Youtube } from 'lucide-react';
+import { RefreshButton } from '#components/reach/refresh-button';
 import { toast } from '#lib/toast';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { PageContainer, PageHeader } from '#components/reach/page';
@@ -161,15 +162,11 @@ export default function DataYouTube() {
         }
         actions={
           data?.connected && canSync ? (
-            <Button
-              variant='outline'
-              size='sm'
-              disabled={running}
+            <RefreshButton
+              busy={running}
+              label={running ? $t('youtube.reading') : $t('common.updateNow')}
               onClick={() => void sync()}
-            >
-              <RefreshCw data-icon='inline-start' />
-              {running ? $t('youtube.reading') : $t('common.updateNow')}
-            </Button>
+            />
           ) : undefined
         }
       />

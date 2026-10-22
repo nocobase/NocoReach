@@ -5,6 +5,7 @@ import { useMessageState, $t } from "#i18n";
 // Ticked topics go to the Agent as 内容选题与大纲, ticked repositories as 研究变化.
 import { useEffect, useMemo, useState } from "react";
 import { Flame, RefreshCw, X } from "lucide-react";
+import { RefreshButton } from '#components/reach/refresh-button';
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { toast } from "#lib/toast";
 import { Button } from "#components/ui/button";
@@ -116,7 +117,7 @@ export function HotTab({ projectId }: { projectId: number }) {
   );
   return (
     <div className="flex flex-col gap-4" data-github-hot="">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{status}</span><NotesTip notes={notes} /><Button className="ml-auto" variant="outline" size="sm" disabled={hot.running} onClick={() => void refresh()}><RefreshCw data-icon="inline-start" />{$t('common.updateNow')}</Button></div>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{status}</span><NotesTip notes={notes} /><RefreshButton className="ml-auto" busy={hot.running} label={$t('common.updateNow')} onClick={() => void refresh()} /></div>
       <Frame data-hot-topics="" title={$t('githubHot.topics')} info={$t('githubHot.topicsInfo')} check={topics.length ? <AllCheck selection={topicSelection} count={topics.length} /> : undefined}
         actions={<Button variant="outline" size="sm" onClick={() => setEditing((v) => !v)}>{$t('githubHot.editTopics')}</Button>}>
         {editing ? <TopicEditor topics={topics.map((t) => t.name)} suggestions={hot.suggestions ?? []} onSave={save} onClose={() => setEditing(false)} /> : null}
