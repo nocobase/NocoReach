@@ -495,6 +495,14 @@ it('the tiles show at most five numbers that have data, the summary names the on
           source: 'site',
           to: '/website',
         },
+        {
+          key: 'c',
+          text: 'Google interest {0}',
+          values: ['↓ 36%'],
+          source: 'trends',
+          to: '/trends',
+          tone: 'amber',
+        },
       ],
     },
   ];
@@ -523,6 +531,19 @@ it('the tiles show at most five numbers that have data, the summary names the on
     name: 'strategy.currentSituation',
   });
   expect(await within(situation).findByText('Pages indexed: 120')).toBeTruthy();
+  // Two groups, the lines to deal with first.
+  const attention = within(situation).getByRole('region', {
+      name: 'strategy.situationGroupAttention',
+    }),
+    normal = within(situation).getByRole('region', {
+      name: 'strategy.situationGroupNormal',
+    });
+  expect(
+    attention.compareDocumentPosition(normal) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(within(attention).getByText(/Google interest/)).toBeTruthy();
+  expect(within(normal).getByText('Pages indexed: 120')).toBeTruthy();
   // No Refresh beside the tiles; All data is gone.
   expect(within(tiles).queryByRole('button')).toBeNull();
   expect(screen.queryByText('strategy.allData')).toBeNull();

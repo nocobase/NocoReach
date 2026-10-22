@@ -137,23 +137,36 @@ async function menu(name: string) {
 }
 
 describe('automatic runs', () => {
-  it('describes the daily analysis in plain words and keeps scheduler states out of the card', async () => {
+  it('lists the daily analysis as a table row in plain words and keeps scheduler states out of it', async () => {
     await mount('/schedules', 'zh-CN');
     expect(
       await screen.findByRole('heading', { name: '自动运行' }),
     ).toBeInTheDocument();
-    expect(await screen.findByText('1 个项目，5 条建议')).toBeInTheDocument();
+    expect(
+      screen.getByRole('columnheader', { name: '上次运行' }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText('5 条建议')).toBeInTheDocument();
     expect(screen.getByText('每天 09:00')).toBeInTheDocument();
     expect(screen.getByText('已开启')).toBeInTheDocument();
-    expect(screen.getByText(/更新到“洞察”和“机会”/u)).toBeInTheDocument();
+    // A run that went well carries no status of its own.
+    expect(screen.queryByText('完成')).toBeNull();
+    // The explanation sits behind ⓘ.
+    expect(screen.queryByText(/更新到“洞察”和“机会”/u)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '关于“每日分析”' }));
+    expect(
+      await screen.findByText(/更新到“洞察”和“机会”/u),
+    ).toBeInTheDocument();
     expect(screen.queryByText('0 9 * * *')).toBeNull();
     expect(screen.queryByText('就绪')).toBeNull();
     expect(screen.queryByText('Server description.')).toBeNull();
     // One item: no pagination.
     expect(screen.queryByRole('navigation')).toBeNull();
+    // Other automatic work and its link to Data sources are behind the ⓘ beside the title, not grey text.
+    expect(screen.queryByRole('link', { name: '去数据接入查看' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '其他自动工作' }));
     expect(
-      screen.getByRole('link', { name: '去数据接入查看' }),
-    ).toHaveAttribute('href', '/connections');
+      await screen.findByRole('link', { name: '去数据接入查看' }),
+    ).toHaveAttribute('href', '/connections?tab=health');
   });
   it('shows the scheduler details only on request', async () => {
     await mount();
@@ -242,10 +255,6 @@ describe('automatic runs', () => {
     expect(
       await screen.findByRole('button', { name: 'Run history' }),
     ).toHaveAttribute('href', '/schedules/schedule-1?page=2');
-    expect(screen.getByRole('button', { name: 'Change time' })).toHaveAttribute(
-      'href',
-      '/schedules/schedule-1/edit?page=2',
-    );
     expect(mocks.api.request).toHaveBeenCalledWith(
       expect.objectContaining({
         path: 'scheduler/schedules?page=2&pageSize=20',
@@ -259,6 +268,13 @@ describe('automatic runs', () => {
         }),
       ),
     );
+    // Changing the time is in the row's "…" menu and opens the time dialog over the same page.
+    await menu('Change time');
+    expect(
+      await screen.findByRole('dialog', {
+        name: 'Change the time of “Daily analysis”',
+      }),
+    ).toBeInTheDocument();
   });
   it('opens the run history by project name, loads the opaque cursor, and clears extra records on refresh', async () => {
     const defaultImplementation = mocks.api.request.getMockImplementation()!;
@@ -287,11 +303,20 @@ describe('automatic runs', () => {
     expect(
       await within(drawer).findByText('Daily analysis · Run history'),
     ).toBeInTheDocument();
-    expect(await within(drawer).findByText('NocoBloom')).toBeInTheDocument();
-    expect(within(drawer).getByText('5 suggestions')).toBeInTheDocument();
+    expect(
+      await within(drawer).findByText('5 suggestions'),
+    ).toBeInTheDocument();
+    // One project that went well: no project line, no status, and no summary for a single run.
+    expect(within(drawer).queryByText(/NocoBloom/u)).toBeNull();
+    expect(within(drawer).queryByText('Done')).toBeNull();
+    expect(within(drawer).queryByText(/last 1 run/iu)).toBeNull();
     fireEvent.click(within(drawer).getByRole('button', { name: 'Load more' }));
     expect(
       await within(drawer).findByText('Model unavailable'),
+    ).toBeInTheDocument();
+    expect(within(drawer).getByText('Failed')).toBeInTheDocument();
+    expect(
+      within(drawer).getByText('1 of the last 2 runs had a problem'),
     ).toBeInTheDocument();
     expect(mocks.api.request).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -305,6 +330,37 @@ describe('automatic runs', () => {
     expect(
       await within(drawer).findByRole('button', { name: 'Load more' }),
     ).toBeInTheDocument();
+  });
+  it('names the projects of a run only when there are several, with a failed one in red', async () => {
+    const defaultImplementation = mocks.api.request.getMockImplementation()!;
+    mocks.api.request.mockImplementation((input) => {
+      if (input.path.includes('/occurrences'))
+        return Promise.resolve({
+          data: [
+            {
+              ...occurrence,
+              resultSummary: {
+                projects: {
+                  '1': { ok: true, items: 5 },
+                  '2': { ok: false, error: 'AI service did not answer' },
+                },
+              },
+            },
+          ],
+          meta: {},
+        });
+      return defaultImplementation(input);
+    });
+    await mount('/schedules/schedule-1');
+    const drawer = await screen.findByRole('dialog');
+    expect(await within(drawer).findByText('NocoBloom 5')).toBeInTheDocument();
+    expect(
+      within(drawer).getByText(/Project 2 failed: AI service did not answer/u),
+    ).toHaveClass('text-destructive');
+    // The list page's last-run cell names the failed project without the reason.
+    expect(await screen.findByText('Project 2 failed')).toHaveClass(
+      'text-destructive',
+    );
   });
   it.each([401, 403, 404])(
     'hides the whole run history when pagination returns %s',
@@ -339,7 +395,7 @@ describe('automatic runs', () => {
       ).toBeNull();
     },
   );
-  it('clears the cards when a refresh reports revoked access', async () => {
+  it('clears the rows when a refresh reports revoked access', async () => {
     await mount();
     await screen.findByText('Daily analysis');
     mocks.api.request.mockRejectedValue(
@@ -394,9 +450,11 @@ describe('automatic runs', () => {
     };
     await mount();
     await screen.findByText('Daily analysis');
-    expect(screen.queryByRole('button', { name: 'Change time' })).toBeNull();
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'More actions' }));
+    expect(
+      await screen.findByRole('menuitem', { name: 'Change time' }),
+    ).toHaveAttribute('aria-disabled', 'true');
     expect(
       await screen.findByRole('menuitem', { name: 'Turn on' }),
     ).toHaveAttribute('aria-disabled', 'true');
@@ -447,7 +505,7 @@ describe('automatic runs', () => {
   });
 });
 
-it('changes the time from a deep link, starting from the server, and shows the new time on the card', async () => {
+it('changes the time from a deep link, starting from the server, and shows the new time in the row', async () => {
   const defaultRequest = mocks.api.request.getMockImplementation()!;
   mocks.api.request.mockImplementation(async (options) => {
     if (options.method === 'PUT') {
