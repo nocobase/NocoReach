@@ -50,6 +50,8 @@ type InsightChat = {
   reference: Reference | null;
   quote: (row: Row) => void;
   clearReference: () => void;
+  /** The day's latest conversation, read from the server while the page's list is still loading. */
+  dayThread: () => Promise<OnlineThread | undefined>;
   /** Read the day's conversation again (after a message is sent). */
   version: number;
   sent: () => void;
@@ -110,15 +112,31 @@ export function InsightChatProvider({
     const timer = setTimeout(reload, 3000);
     return () => clearTimeout(timer);
   }, [answering, view.data, reload]);
+  // Where a question goes depends on whether the day already has a conversation. Until the list is read (a slow
+  // connection, a failed read, or a cached copy being refreshed), the page cannot tell, and acting as if there were none
+  // would start a second conversation for the day: the server is asked instead.
+  const known = !view.loading && view.data !== undefined;
+  const dayThread = async () =>
+    known
+      ? current
+      : threadsOf(
+          await api<OnlineThread[]>(`threads?projectId=${projectId}`),
+          day,
+        ).at(-1);
   const openInPanel = (draft = '') => {
     if (!chat || !day) return;
-    if (current) chat.resume(current.id, draft);
-    else
-      chat.open({
-        draft,
-        projectId: String(projectId),
-        subject: { kind: 'insights', day },
-      });
+    const open = (thread: OnlineThread | undefined) => {
+      if (thread) chat.resume(thread.id, draft);
+      else
+        chat.open({
+          draft,
+          projectId: String(projectId),
+          subject: { kind: 'insights', day },
+        });
+    };
+    if (known) open(current);
+    // A failed read leaves what the page has.
+    else void dayThread().then(open, () => open(current));
   };
   // Opening the side panel here moves the day's conversation into it.
   const wasDockedRef = useRef(docked),
@@ -145,6 +163,7 @@ export function InsightChatProvider({
       else setReference(r);
     },
     clearReference: () => setReference(null),
+    dayThread,
     version,
     sent: () => {
       reload();
@@ -382,11 +401,12 @@ function ComposerInput({
     setBusy(true);
     setError(undefined);
     try {
-      if (current) {
+      const thread = await chat.dayThread();
+      if (thread) {
         const detail = await api<ConversationDetail>(
-          `conversations/${current.id}`,
+          `conversations/${thread.id}`,
         );
-        await api(`conversations/${current.id}/messages`, {
+        await api(`conversations/${thread.id}/messages`, {
           requestId: crypto.randomUUID(),
           revision: detail.conversation.revision,
           text: body,

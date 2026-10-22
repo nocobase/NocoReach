@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Steadier tests in CI
+
+- Insights: a question sent, or the side panel opened, before the page has read the owner's conversations joins the day's conversation instead of starting a second one for the day; on a slow connection Send used to act as if the day had none.
+- The Bilibili, Xiaohongshu and YouTube connection panels act on the first click of a button that has just appeared (Read now, Disconnect and the rest), which could be ignored while the permission that showed it had not reached the handler yet.
+- `classic-import-app.test.ts` stops NocoReach's timers before counting imported rows: the analysis timer's catch-up wrote two extra snapshots when the test ran across second 10 of a minute.
+
 ## Unreleased — Data sources show their logos
 
 - Every data source has its logo on a small tile: the cards and drawer title on Settings › Data sources, the rows and sync table on Data health, the results of Find data sources on your website, the source headings of Settings › Analysis rules and the source buttons when adding a rule. Brand marks come from Simple Icons (CC0), vendored as path data in `client/components/reach/brand-logos.ts` without a new dependency; black marks follow the text colour so they show in dark mode. Sources without a brand mark of their own (Website content, Website source, Blog CMS, DataForSEO, AI search visibility, Competitor activity, Rank tracking, Daily analysis) take a matching icon in the same tile.

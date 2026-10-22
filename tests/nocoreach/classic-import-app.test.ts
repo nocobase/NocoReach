@@ -12,6 +12,7 @@ import {
   DEFAULT_ADMIN_CREDENTIALS,
   signIn,
 } from '@nocobase/app-plugin-authentication/testing';
+import { jobExecutorServiceToken } from '@nocobase/app-server/jobs';
 import { bindAppCommand, runAppCommand } from '@nocobase/app-testing/cli';
 import { createAppTest } from '@nocobase/app-testing/server';
 import { afterAll, expect, vi } from 'vitest';
@@ -222,10 +223,17 @@ test('imports the classic rows, users and secrets into the running application o
   testApp,
   connection,
 }) => {
-  // This test verifies imported row counts, before task reconciliation can create business snapshots.
+  // This test verifies imported row counts, so nothing but the import may write NocoReach's tables: neither task
+  // reconciliation nor NocoReach's timers. Once the project's snapshot lands, the analysis timer (second 10 of every
+  // minute) catches up the day's missed analysis and writes daily-analysis:1 and signals:1 in the middle of the import.
+  // Shutting the timers down also waits for a tick in progress.
   testApp.application.container
     .resolve(nocoReachToken)
     .plugin.taskExecution.stop();
+  await testApp.application.container
+    .resolve(jobExecutorServiceToken)
+    .getScheduleExecutor('nocoreach')
+    .shutdown();
   const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
   const created = await admin.fetch('/nocoreachKeys', {
     method: 'POST',

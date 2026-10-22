@@ -1,7 +1,14 @@
 import { confirmCollectorClear } from '#lib/collector-clear';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/client';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import {
   keepPreviousData,
   useQuery,
@@ -137,7 +144,9 @@ function YouTubePanel({
     disconnect: canDisconnect,
     clear: canClear,
   });
-  useEffect(() => {
+  // A layout effect, not a passive one: a button appears in the commit that grants its permission, and a passive
+  // effect can run after the browser has already dispatched a click to it, so the handler would see the old denial.
+  useLayoutEffect(() => {
     accessRef.current = {
       connect: canConnect,
       sync: canSync,
