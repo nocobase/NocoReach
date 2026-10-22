@@ -116,7 +116,7 @@ export function AgentMenu({
             className={cn(
               'h-7 px-2',
               bare
-                ? '-ml-2 max-w-full font-normal'
+                ? '-mx-2 -my-1.5 h-8 max-w-[calc(100%+1rem)] text-sm font-normal'
                 : 'max-w-72 text-muted-foreground',
             )}
             disabled={busy}

@@ -267,6 +267,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
       'results',
       'result',
       'get',
+      'numbers',
       'members',
       'list',
       'pages',

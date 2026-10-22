@@ -15,6 +15,8 @@ import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNam
 import { matchArticle } from './article-targets-api';
 import { TaskMedia } from './task-detail/media.js';
 import { TaskProperties } from './task-detail/task-properties.js';
+import { TaskNumbers } from './task-detail/task-numbers.js';
+import { useMediaQuery } from '#hooks/use-media-query';
 import { hasTaskAgent } from './task-execution-types';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {createContext,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
@@ -130,6 +132,8 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
  const draftScope=!started?'start':JSON.stringify([w.flow?.id,w.flow?.version,index,stage?.key,w.results[index-1]?.id]);
  const runs=[...data.runs].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
  const {me,can}=useMe(),creator=(data.task.evidence as {createdBy?:{id?:string;name?:string}}|undefined)?.createdBy,ownerId=w.humanOwnerId||creator?.id;
+ // Performance sits under the properties beside the content from 1280px, after the current card below that.
+ const wide=useMediaQuery('(min-width: 1280px)',true);
  const access={allowed:can(ownerId),self:!ownerId||!me?.id||String(ownerId)===me.id,owner:w.humanOwnerName||creator?.name||$t('common.owner')};
  const no=(data.task.evidence as {no?:number}|undefined)?.no,heading=no?`T-${no} ${data.task.title}`:data.task.title;
  // The trail leads back the way the user came: from Results with its filters, otherwise to the task board.
@@ -140,13 +144,15 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
   <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_18.75rem] xl:items-start">
   <TaskProperties data={data} members={members} allowed={access.allowed} busy={busy} runActive={runActive} className="border-y py-2 xl:sticky xl:top-4 xl:col-start-2 xl:row-start-1 xl:border-y-0 xl:border-l xl:py-0 xl:pl-6"
    agentLocked={!access.allowed?$t('taskDetail.ownerAdminChange'):closedLabel(w)?$t('taskDetail.taskClosed'):w.stage==='done'?$t('taskDetail.taskDone'):runActive?$t('taskDetail.taskQueuedRunningWaitFinish'):undefined}
-   onOwner={userId=>void update('setOwner',{userId})} onAgent={async agentId=>Boolean(await update('setAgent',{agentId}))}/>
+   onOwner={userId=>void update('setOwner',{userId})} onAgent={async agentId=>Boolean(await update('setAgent',{agentId}))}
+   footer={wide&&<TaskNumbers data={data} projectId={projectId} taskId={taskId} className="mt-4 border-t pt-4"/>}/>
   <div className="flex min-w-0 flex-col gap-6 xl:col-start-1 xl:row-start-1">
   <TaskSummary data={data} list={list} pick={pick} onEvidence={()=>setEvidenceOpen(true)}/>
   {dirty&&<p role='status' className='nr-td-muted'>{$t('taskDetail.draftRetained')} <Button size='sm' variant='ghost' disabled={busy} onClick={()=>{void confirmAction({title:()=>($t('taskDetail.discardTaskDrafts',{0:data.task.title})),description:()=>($t('taskDetail.discardDraftWarning')),action:'taskDetail.discardDrafts'}).then(confirmed=>{if(confirmed)clear();});}}>{$t('taskDetail.discardDrafts')}</Button></p>}
   <TaskDraftRecovery activeScope={w.cancelledAt||w.archivedAt||done?undefined:draftScope}/>
   {error&&<p role="alert" className="nr-error">{error}</p>}
   {w.cancelledAt||w.archivedAt?<ClosedCard w={w} update={update} busy={busy}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} pick={pick} setPick={setPick} update={update} busy={busy} projectId={projectId} taskId={taskId}/></TaskDraftScope>:done?<DoneCard data={data} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} list={list}/></TaskDraftScope>}
+  {!wide&&<TaskNumbers data={data} projectId={projectId} taskId={taskId} className="rounded-lg border p-4"/>}
   <ActivityCard data={data} update={update} busy={busy} members={members}/>
   <TechnicalDetails data={data} projectId={projectId} taskId={taskId} runs={runs}/>
   </div>
