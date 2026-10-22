@@ -5,6 +5,12 @@
 - When publishing an article to a target does not complete, the task card keeps its plain-words reason and now links to Technical details, which list each failed target with the step it stopped at (reading the article, checking the website repository, writing, or checking the saved changes), the error code, the time and what the target or the error said (for example `github:429`, or a network timeout with its host).
 - Every failed publish also leaves a warning in the application log (`NocoReach article publish failed`, with project, task, target, step, code and detail), so `nb-studio app logs` shows it. Errors other than the target's own (a request that got no answer, a code error) keep their cause instead of becoming a bare `unavailable`.
 
+## Unreleased — Agent: tabs back, no duplicate local agents
+
+- Runtimes, Model services and Usage are tabs of the Agent page again, after Local agents, instead of pages of Settings; Settings no longer lists them, and `/runtimes`, `/models` and `/usage` open the tabs.
+- The Agent page shows Who does the work above the tabs; the local agents and the project default are in the Local agents tab only, instead of a second block below the overview. Change opens that tab.
+- When the chosen local agent's coding tool is not signed in or out of quota, the page no longer offers to switch to an agent that uses the same tool (switching from Claude · Fable 5.1 to Claude · Haiku 4.5 fails the same way); it offers an agent with another tool, or Change.
+
 ## Unreleased — Insights has one refresh
 
 - Update analysis is the page's refresh icon, as on Results, named and tooltipped "Update analysis": it spins while the analysis runs, and the numbers, Current situation and the waiting tasks are read again when it ends. Current situation no longer has a refresh of its own.

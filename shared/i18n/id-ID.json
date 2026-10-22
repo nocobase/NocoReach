@@ -1564,9 +1564,9 @@
   "siteContent.foundSitemaps": "Ditemukan dalam {0} peta situs",
   "siteContent.discoverySummary": "Ditemukan {1} halaman dalam {0} peta situs.",
   "agentRoles.cloud": "Model cloud",
-  "agentRoles.cloudHint": "Menggunakan model di Pengaturan › Layanan model; penyedia menagih setiap panggilan.",
+  "agentRoles.cloudHint": "Menggunakan model di tab Layanan model di bawah; penyedia menagih setiap panggilan.",
   "agentRoles.local": "Agen lokal",
-  "agentRoles.localHint": "Menggunakan Claude Code atau Codex di komputer pada Pengaturan › Lingkungan eksekusi, dengan akun yang masuk di sana.",
+  "agentRoles.localHint": "Menggunakan Claude Code atau Codex di komputer pada tab Lingkungan eksekusi di bawah, dengan akun yang masuk di sana.",
   "agentRoles.chatFootnote": "Jika Anda memilih agen lokal di panel percakapan, agen itu juga menjawab percakapan tersebut.",
   "agentRoles.colWork": "Pekerjaan",
   "agentRoles.colDoes": "Fungsi",
@@ -7022,5 +7022,9 @@
   "dataGithub.tabPulls": "Pull request",
   "dataGithub.tabReleases": "Rilis",
   "dataGithub.tabDiscussions": "Diskusi",
-  "siteAudit.readOnlyNoCost": "Audit menggunakan halaman yang sudah dibaca dan tidak dikenai biaya."
+  "siteAudit.readOnlyNoCost": "Audit menggunakan halaman yang sudah dibaca dan tidak dikenai biaya.",
+  "agentsPage.tabs": "Bagian agen",
+  "agentsPage.runtimes": "Lingkungan eksekusi",
+  "agentsPage.models": "Layanan model",
+  "agentsPage.usage": "Penggunaan"
 }

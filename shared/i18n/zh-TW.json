@@ -6939,9 +6939,9 @@
   "analysisRules.placeSingular": "位",
   "siteContent.discoverySummary": "在 {0} 個網站地圖中找到 {1} 個頁面。",
   "agentRoles.cloud": "雲端模型",
-  "agentRoles.cloudHint": "使用「設定 › 模型服務」裡的模型，依呼叫量付費給服務商。",
+  "agentRoles.cloudHint": "使用下方「模型服務」裡的模型，依呼叫量付費給服務商。",
   "agentRoles.local": "本地 Agent",
-  "agentRoles.localHint": "使用「設定 › 執行環境」裡那臺電腦上的 Claude Code 或 Codex，額度算那臺電腦登入的帳號。",
+  "agentRoles.localHint": "使用下方「執行環境」裡那臺電腦上的 Claude Code 或 Codex，額度算那臺電腦登入的帳號。",
   "agentRoles.chatFootnote": "在對話欄裡選了本地 Agent 時，那次對話也由它回答。",
   "agentRoles.colWork": "工作",
   "agentRoles.colDoes": "做什麼",
@@ -7022,5 +7022,9 @@
   "searchPerformance.appearanceOther": "其他（{0}）",
   "searchIndex.noteQuota": "每天最多檢查 {0} 個頁面，優先檢查最久未檢查的頁面。",
   "searchSitemaps.noteProperty": "Search Console 資源：{0}",
-  "searchHistory.details": "資料涵蓋範圍詳情"
+  "searchHistory.details": "資料涵蓋範圍詳情",
+  "agentsPage.tabs": "Agent 導覽",
+  "agentsPage.runtimes": "執行環境",
+  "agentsPage.models": "模型服務",
+  "agentsPage.usage": "用量"
 }
