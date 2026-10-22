@@ -6,7 +6,15 @@ import { PageContainer } from '#components/page-container';
 // The NocoReach header, as on every other page: actions centred on the title block rather than on its last line.
 import { PageHeader } from '#components/reach/page';
 import { Button } from '#components/ui/button';
-import { ScheduleCard } from './card.js';
+import {
+  Table,
+  TableBody,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '#components/ui/table';
+import { useScheduleFormatting } from './format.js';
+import { ScheduleRow } from './row.js';
 import { useScheduleResource, type ScheduleList } from './data.js';
 import { RefreshButton, Failure, Loading, EmptyState } from './shared.js';
 
@@ -24,12 +32,13 @@ export default function SchedulesPage() {
   const rawPage = Number(params.get('page') || 1);
   const page = Number.isSafeInteger(rawPage) && rawPage > 0 ? rawPage : 1;
   const [stamp, setStamp] = useState(0);
+  const format = useScheduleFormatting();
   const { data, error, refreshing, replace } =
     useScheduleResource<ScheduleList>(
       `scheduler/schedules?page=${page}&pageSize=20`,
       stamp,
     );
-  // Reads the list and each card's last run again; stable, so the overlays' context does not change.
+  // Reads the list and each row's last run again; stable, so the overlays' context does not change.
   const refresh = useCallback(() => setStamp((current) => current + 1), []);
   const outletContext = useMemo<SchedulesOutletContext>(
     () => ({ reload: refresh }),
@@ -53,24 +62,51 @@ export default function SchedulesPage() {
         {error ? <Failure error={error} retry={refresh} /> : null}
         {!data && !error ? <Loading /> : null}
         {data?.data.length === 0 ? <EmptyState /> : null}
-        {data?.data.map((schedule) => (
-          <ScheduleCard
-            key={schedule.id}
-            schedule={schedule}
-            stamp={stamp}
-            invalidated={refresh}
-            changed={(next) => {
-              if (next)
-                replace({
-                  ...data,
-                  data: data.data.map((item) =>
-                    item.id === next.id ? next : item,
-                  ),
-                });
-              refresh();
-            }}
-          />
-        ))}
+        {data?.data.length ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('schedules.columns.name')}</TableHead>
+                <TableHead>{t('schedules.columns.time')}</TableHead>
+                <TableHead>{t('schedules.columns.last')}</TableHead>
+                <TableHead>{t('schedules.columns.next')}</TableHead>
+                <TableHead>{t('schedules.columns.status')}</TableHead>
+                <TableHead>
+                  <span className='sr-only'>
+                    {t('schedules.columns.actions')}
+                  </span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.data.map((schedule) => (
+                <ScheduleRow
+                  key={schedule.id}
+                  schedule={schedule}
+                  stamp={stamp}
+                  invalidated={refresh}
+                  changed={(next) => {
+                    if (next)
+                      replace({
+                        ...data,
+                        data: data.data.map((item) =>
+                          item.id === next.id ? next : item,
+                        ),
+                      });
+                    refresh();
+                  }}
+                />
+              ))}
+            </TableBody>
+          </Table>
+        ) : null}
+        {data?.data.some(
+          (schedule) => schedule.timezone !== format.timeZone,
+        ) ? (
+          <p className='text-xs text-muted-foreground'>
+            {t('schedules.shownIn', { zone: format.zone(format.timeZone) })}
+          </p>
+        ) : null}
         {data ? (
           <p className='text-sm text-muted-foreground'>
             <Info

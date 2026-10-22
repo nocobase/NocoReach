@@ -28,10 +28,15 @@ test('selects a scheduling timezone, recalculates the next run, and retains it o
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.waitForURL((url) => !url.pathname.endsWith('/login'));
   await page.goto(`${base}/schedules`);
-  const card = page.locator('[data-slot="card"]').filter({
+  const row = page.getByRole('row').filter({
     has: page.getByText('Daily analysis', { exact: true }),
   });
-  await card.getByRole('button', { name: 'Change time', exact: true }).click();
+  // Changing the time is in the row's "…" menu.
+  const changeTime = async (more: string, name: string) => {
+    await row.getByRole('button', { name: more }).click();
+    await page.getByRole('menuitem', { name, exact: true }).click();
+  };
+  await changeTime('More actions', 'Change time');
   const dialog = page.getByRole('dialog', {
     name: 'Change the time of “Daily analysis”',
   });
@@ -62,15 +67,15 @@ test('selects a scheduling timezone, recalculates the next run, and retains it o
   expect(new Date(result.nextRunAt).getUTCHours()).toBe(1);
   await expect(dialog).toHaveCount(0);
   await page.reload();
-  // The card names the timezone plainly; the IANA id is under Technical details.
-  await expect(card.getByText('Daily at 09:00')).toBeVisible();
-  await expect(card.getByText('China Standard Time')).toBeVisible();
-  await expect(card.getByText(/Times shown in Eastern Time/)).toBeVisible();
+  // The row names the timezone plainly; the IANA id is under Technical details.
+  await expect(row.getByText('Daily at 09:00')).toBeVisible();
+  await expect(row.getByText('China Standard Time')).toBeVisible();
+  await expect(page.getByText(/Times shown in Eastern Time/)).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath('timezone-saved-en.png'),
     animations: 'disabled',
   });
-  await card.getByRole('button', { name: 'More actions' }).click();
+  await row.getByRole('button', { name: 'More actions' }).click();
   await page.getByRole('menuitem', { name: 'Technical details' }).click();
   const details = page.getByRole('dialog', { name: 'Technical details' });
   await expect(
@@ -80,7 +85,7 @@ test('selects a scheduling timezone, recalculates the next run, and retains it o
   await details.getByRole('button', { name: 'Close' }).click();
   await page.setViewportSize({ width: 375, height: 812 });
   await page.emulateMedia({ colorScheme: 'dark' });
-  await card.getByRole('button', { name: 'Change time', exact: true }).click();
+  await changeTime('More actions', 'Change time');
   await expect(dialog.getByRole('combobox', { name: 'Timezone' })).toHaveText(
     'China Standard Time · Asia/Shanghai',
   );
@@ -98,7 +103,7 @@ test('selects a scheduling timezone, recalculates the next run, and retains it o
   await page
     .getByRole('menuitemradio', { name: '简体中文', exact: true })
     .click();
-  await card.getByRole('button', { name: '修改时间', exact: true }).click();
+  await changeTime('更多操作', '修改时间');
   const chinese = page.getByRole('dialog', { name: '修改“每日分析”的时间' });
   await expect(chinese.getByRole('combobox', { name: '时区' })).toHaveText(
     '中国标准时间 · Asia/Shanghai',
