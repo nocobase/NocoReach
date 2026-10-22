@@ -2,8 +2,9 @@
 
 ## Unreleased — Opportunities shows where each handed-off task stands
 
-- On Opportunities › Handled, the Where it went column shows the state of a handed-off opportunity's task with its number, as Insights does: Handed off to agent while it waits to start, In progress, Needs confirmation, Done or Closed. O-43 read "Handed off to agent · T-34" after T-34 was done. The filter offers the same labels, and the opportunity's detail says the same beside Open task.
-- Insights and Opportunities read the state and its tag from one place, so the two pages say the same.
+- On Opportunities › Handled, the Where it went column shows the state of a handed-off opportunity's task with its number, as Insights does: Handed off to agent while it waits to start, In progress, Needs confirmation, Done or Closed. O-43 read "Handed off to agent · T-34" after T-34 was done. A change handed off on its own shows the same, now with its task number, and its detail's tag says the same instead of In progress for every open task. The filter offers the same labels, and an opportunity's detail says the state beside Open task.
+- The online assistant's `daily_analysis` tool reports a handed-off opportunity's task the same way (in progress, needs confirmation, done, closed) when the user may list tasks, so asking about O-43 in the Insights conversation no longer gets "handed off".
+- Insights, Opportunities, the online assistant and the verdict coverage of changes read where a task stands from one function, `taskStanding` in `shared/task-pending.ts`; the coverage also counts tasks finished before task work was recorded as done.
 
 ## Unreleased — See what a live task changed
 

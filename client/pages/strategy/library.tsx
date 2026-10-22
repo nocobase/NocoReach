@@ -148,6 +148,8 @@ function WatchList({items,ended,rows,busy,onOpen,onIgnore,onRestore,onOpportunit
 // 已处理: the opportunities decided (newest first) and the changes that need nothing; search by title or number (a search
 // finds the pending opportunities too), filter by where each went.
 type Settled={s:Signal;status:ReturnType<typeof statusOf>};
+/** A change's filter value: a handed-off one by where its open task stands, as its tag says. */
+const changeDest=(c:Settled):Dest=>c.status.next==='task'?(!c.status.task||c.status.task==='todo'?'task':c.status.task):c.status.ignored?'ignored':'skip';
 const RestoreButton=({busy,onClick}:{busy:boolean;onClick:()=>void})=><Button size="icon-sm" variant="ghost" className="-my-1.5" disabled={busy} aria-label={$t('strategy.restore')} title={$t('strategy.restore')} onClick={onClick}><RotateCcwIcon/></Button>;
 function DoneTable({rows,changes,busy,onOpen,onOpenChange,onRestore,onRestoreChange}:{rows:Item[];changes:Settled[];busy:boolean;onOpen:(r:Item)=>void;onOpenChange:(key:string)=>void;onRestore:(r:Item)=>void;onRestoreChange:(key:string)=>void}){
  const [q,setQ]=useState(''),[dest,setDest]=useState<Dest|''>('');
@@ -155,10 +157,9 @@ function DoneTable({rows,changes,busy,onOpen,onOpenChange,onRestore,onRestoreCha
  const match=(title:string,no?:number)=>!key||title.toLowerCase().includes(key)||Boolean(no&&[`o-${no}`,`o${no}`,String(no)].includes(key));
  const opps=rows.filter(r=>(key||destOf(r)!=='pending')&&(!dest||destOf(r)===dest)&&match(r.card.title,r.card.no))
   .sort((a,b)=>(b.card.no||0)-(a.card.no||0)||String(b.firstSeenAt).localeCompare(String(a.firstSeenAt)));
- const changeDest=(c:Settled):Dest=>c.status.next==='task'?'task':c.status.ignored?'ignored':'skip';
  const shown=changes.filter(c=>(!dest||changeDest(c)===dest)&&match(titleOf(c.s)));
  const tag=(r:Item)=>{const d=destOf(r);return d==='pending'?<Tag tone="amber" dot>{$t('common.pending')}</Tag>:r.state==='task'?<Tag tone={TASK_TAG[r.task??'todo'][0]} dot>{taskLine(r)}</Tag>:<Tag tone="grey" dot>{d==='ignored'?$t('strategy.dismissed'):$t('strategy.expired')}</Tag>;};
- const changeTag=(c:Settled)=>{const d=changeDest(c);return d==='task'?<Tag tone="blue" dot>{$t('strategy.handedOffAgent')}</Tag>:d==='ignored'?<Tag tone="grey" dot>{$t('strategy.dismissed')}</Tag>:<Tag tone="slate" dot>{$t('common.noActionNeeded')}</Tag>;};
+ const changeTag=(c:Settled)=>{const d=changeDest(c),t=c.status.task??'todo';return c.status.next==='task'?<Tag tone={TASK_TAG[t][0]} dot>{`${TASK_TAG[t][1]()}${c.status.taskNo?` · ${taskNo(c.status.taskNo)}`:''}`}</Tag>:d==='ignored'?<Tag tone="grey" dot>{$t('strategy.dismissed')}</Tag>:<Tag tone="slate" dot>{$t('common.noActionNeeded')}</Tag>;};
  return <div className="flex flex-col gap-3">
   <div className="flex flex-wrap items-center gap-2"><label className="relative flex min-w-48 flex-1 items-center sm:max-w-80"><SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" aria-hidden="true"/><input aria-label={$t('strategy.searchOpportunities')} value={q} onChange={e=>setQ(e.target.value)} placeholder={$t('strategy.searchTitleNumberLikeO')} className="w-full pl-8!"/></label>
    <Select value={dest||'all'} onValueChange={v=>setDest((v==='all'?'':v) as Dest|'')}><SelectTrigger className="w-full sm:w-40" aria-label={$t('strategy.filterWhereWent')}><SelectValue>{(v:string)=>getDestinations().find(([k])=>(k||'all')===v)?.[1]??v}</SelectValue></SelectTrigger><SelectContent className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{getDestinations().map(([k,v])=><SelectItem key={k||'all'} value={k||'all'}>{v}</SelectItem>)}</SelectContent></Select></div>
