@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — One product wording, the version in the account menu
+
+- The sidebar footer shows only the slogan; the template's name ("Default Template") is gone and the version moves to the bottom of the account menu ("NocoReach v1.0.0-beta.68").
+- The slogan, the sign-in panel and the README headers use one agreed wording in all ten interface languages: an AI growth operations platform; "Find the opportunities in your data. NocoReach puts them into action."; data collection, daily analysis and Agent execution in one platform. The sign-in panel's second point is Agent execution (you confirm, review the change and track the impact) instead of repository-native work, and its last line reads "Find opportunities · Put them into action · Track the impact".
+
 ## Unreleased — Search performance: web search only, gaps said plainly
 
 - Search performance › Performance reads web search only. The search type choice (Web, Image, Video, News, Discover, Google News) is gone, with the server's handling of other types in the search views: they were read live from Search Console for this choice alone, while the scheduled sync, the daily analysis and Insights use web search only.
