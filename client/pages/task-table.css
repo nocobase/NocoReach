@@ -4,8 +4,8 @@
 }
 
 .nr-task-table table {
-  /* Fixed columns take 198 spacing units; reserve 56 more for the title. */
-  min-width: max(50rem, calc(var(--spacing) * 254));
+  /* Fixed columns take 222 spacing units; reserve 56 more for the title. */
+  min-width: max(50rem, calc(var(--spacing) * 278));
 }
 
 .nr-task-table-title {
