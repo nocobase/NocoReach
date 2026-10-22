@@ -38,6 +38,7 @@ export async function clearAllBusinessData(
   host: DemoHost,
   drive: NocoBaseDriveManager,
   clearCache: () => void,
+  progress: (fraction: number) => Promise<void> = async () => {},
 ): Promise<void> {
   const database = host.db.access!.database;
   const activeRun = await database
@@ -78,9 +79,10 @@ export async function clearAllBusinessData(
   const projects = (await host.projects.all()) as { id: string | number }[];
   // Retiring a project makes queued outbound calls fail closed before they reach a real service.
   for (const project of projects) host.demoProjects.remove(String(project.id));
+  await progress(0.05);
 
   // Keep metadata until its blob is removed, so partial filesystem failures remain retryable.
-  for (const table of ['nrTaskMedia', 'agChatAttachments']) {
+  for (const [index, table] of ['nrTaskMedia', 'agChatAttachments'].entries()) {
     const media = await database
       .query()
       .selectFrom(table)
@@ -94,6 +96,7 @@ export async function clearAllBusinessData(
         .where('id', '=', file.id)
         .execute();
     }
+    await progress(0.05 + 0.25 * (index + 1));
   }
 
   const variables = await database
@@ -104,6 +107,8 @@ export async function clearAllBusinessData(
   for (const { name } of variables)
     if (PROJECT_VARIABLES.some((prefix) => name.startsWith(prefix)))
       await host.variables.set(name, null);
+  // Reported before the transaction: the lifecycle records progress in its own writes, which would wait for it.
+  await progress(0.6);
 
   // These are set-based deletions, including rows whose old project no longer exists.
   // Keep framework identities, global Agent/Runner/model/network configuration and migration history.
@@ -125,4 +130,5 @@ export async function clearAllBusinessData(
   });
   host.sync.resetCache();
   clearCache();
+  await progress(1);
 }

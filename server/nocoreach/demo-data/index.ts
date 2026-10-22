@@ -76,7 +76,10 @@ export function createNocoReachDemo(
       language === 'en-US' ? 'America/Los_Angeles' : 'Asia/Shanghai',
     accounts: demoAccounts,
     generate: (context) => generateNocoReachSamples(host, context),
-    clear: async () => clearAllBusinessData(host, drive, clearCache),
+    clear: async (context) =>
+      clearAllBusinessData(host, drive, clearCache, (fraction) =>
+        context.progress(fraction),
+      ),
     counts: async (context) => {
       const projects = await ids(context);
       const content = demoContent(context.language ?? 'zh-CN');
