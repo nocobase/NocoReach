@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — See what a live task changed
+
+- Once a task is live, its card names what changed in one line ("Changes (2): English · Summary, English · Title") with View changes, which opens the change that went live: an article field by field, before and after, or a page change as readers see it before and after. Nothing else is added to the card.
+- In the activity, View on a delivered article version now shows the same field-by-field comparison under the Agent's notes, instead of the notes alone.
+
 ## Unreleased — Handed-off opportunities show where their task stands
 
 - On Insights, an opportunity handed off to the agent shows its task's state now, with the task number: Handed off to agent while it waits to start, In progress, Needs confirmation, Completed or Closed. A finished task used to keep reading "Handed off to agent".
