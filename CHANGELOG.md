@@ -5,6 +5,14 @@
 - The sidebar footer shows only the slogan; the template's name ("Default Template") is gone and the version moves to the bottom of the account menu ("NocoReach v1.0.0-beta.68").
 - The slogan, the sign-in panel and the README headers use one agreed wording in all ten interface languages: an AI growth operations platform; "Find the opportunities in your data. NocoReach puts them into action."; data collection, daily analysis and Agent execution in one platform. The sign-in panel's second point is Agent execution (you confirm, review the change and track the impact) instead of repository-native work, and its last line reads "Find opportunities · Put them into action · Track the impact".
 
+## Unreleased — One conversation a day on Insights
+
+- What you ask from Insights joins the day's conversation, shown right under the day's analysis with its own input at the bottom: type and press Enter, and the answer appears there (what it read folds under "Sources checked"). Each day keeps one conversation, so the AI remembers what was asked before.
+- Ask AI on an opportunity line quotes the opportunity in that input instead of opening a separate conversation; the question and answer stay in the day's conversation with the quote above the question, here and in the side panel. Questions no longer appear under the opportunity lines.
+- Opening the side panel on Insights moves the day's conversation into it: the page hides its conversation and input, offers "Open today's conversation in the side panel", and folds Current situation to one line under the day's date. Only one input shows at a time.
+- Earlier days sit above today, folded to "Earlier analyses (N)" by default and opening a week at a time, oldest at the top, so the bottom of the page is left to the conversation. An opened day shows that day's conversation in full.
+- Hand off to agent looks the same on every line; the first one is no longer filled.
+
 ## Unreleased — Search performance: web search only, gaps said plainly
 
 - Search performance › Performance reads web search only. The search type choice (Web, Image, Video, News, Discover, Google News) is gone, with the server's handling of other types in the search views: they were read live from Search Console for this choice alone, while the scheduled sync, the daily analysis and Insights use web search only.
