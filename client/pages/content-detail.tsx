@@ -1,3 +1,4 @@
+import { ListSkeleton } from '#components/reach/states';
 import { googleLocalFreshness } from '../../shared/google-cache.js';
 import { $t, $tj } from "#i18n";
 import {useMemo,useState} from 'react';
@@ -41,7 +42,7 @@ export function ContentDetail({projectId,googleScope,page,tasks,range,from,to,ra
    <HandOffNotice result={handed}/>
    {handing&&<DraftHandOffDialog projectId={projectId} draft={contentPageDraft(page,rangeLabel)} playbookId="optimize-page" page={page.url} description={$t('contentDetail.pageRecentTrafficSearchData')} onClose={()=>setHanding(false)} onDone={r=>{setHanding(false);setHanded(r);}}/>}
    <section className="space-y-2"><div className="flex items-center gap-1"><h3 className="text-sm font-semibold">{$t('contentDetail.dailyTrafficSearchClicks')}</h3>{data?.window&&<InfoTip label={$t('common.howReadChart')}>{$tj('contentDetail.dashedLinesMarkDaysChanges',{0:formatDate(data.window.start),1:formatDate(data.window.end),2:formatDate(data.ga4Cutoff),3:formatDate(data.gscCutoff)})}</InfoTip>}</div>
-    {error?<p className="nr-error" role="alert">{$t('contentDetail.notLoadPageData')}</p>:!data?<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>:!hasData?<p className="text-muted-foreground">{$t('contentDetail.noTrafficSearchDataPage')}</p>:
+    {error?<p className="nr-error" role="alert">{$t('contentDetail.notLoadPageData')}</p>:!data?<ListSkeleton rows={3}/>:!hasData?<p className="text-muted-foreground">{$t('contentDetail.noTrafficSearchDataPage')}</p>:
      <div className="nr-chart-box" data-content-chart><ResponsiveContainer width="100%" height={220}><LineChart data={data.daily} margin={{top:16,right:8,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="date" tickFormatter={(d:string)=>d.slice(5)} minTickGap={24} fontSize={11}/><YAxis yAxisId="v" fontSize={11} width={40} allowDecimals={false}/><YAxis yAxisId="c" orientation="right" fontSize={11} width={32} allowDecimals={false}/><Tooltip/><Legend/>
       {releases.filter(r=>data.window&&r.date>=data.window.start&&r.date<=data.window.end).map(r=><ReferenceLine key={r.id} yAxisId="v" x={r.date} stroke="var(--chart-1)" strokeDasharray="4 3" label={{value:r.no?$t('contentDetail.tLive',{0:r.no}):$t('common.live'),position:'top',fontSize:10,fill:'var(--muted-foreground)'}}/>)}
       <Line yAxisId="v" isAnimationActive={false} type="linear" dataKey="views" name={$t('contentDetail.trafficGa4Views')} stroke="var(--chart-3)" dot={false} connectNulls={false}/><Line yAxisId="c" isAnimationActive={false} type="linear" dataKey="clicks" name={$t('common.searchClicks')} stroke="var(--chart-2)" dot={false} connectNulls={false}/></LineChart></ResponsiveContainer></div>}

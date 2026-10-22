@@ -3350,7 +3350,6 @@
   "taskAgents.statusIdle": "Rảnh",
   "taskAgents.noRuntimeOnline": "Không có môi trường thực thi trực tuyến",
   "taskAgents.noRuntimeNotice": "Không có môi trường chạy nào trực tuyến, nên các tác vụ giao cho tác nhân AI sẽ chờ trong hàng đợi cho đến khi có môi trường trực tuyến.",
-  "taskAgents.nothing": "Không có công việc đang chạy hoặc xếp hàng",
   "taskAgents.running": "Đang thực hiện",
   "taskAgents.queued": "Tiếp theo",
   "taskAgents.waiting": "Chờ xử lý",

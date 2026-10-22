@@ -7034,7 +7034,6 @@
   "taskAgents.statusIdle": "Sans activité",
   "taskAgents.noRuntimeOnline": "Aucun environnement d’exécution en ligne",
   "taskAgents.noRuntimeNotice": "Aucun environnement d’exécution n’est en ligne : les tâches confiées à un agent attendent dans la file jusqu’à ce qu’il y en ait un.",
-  "taskAgents.nothing": "Aucune tâche en cours ni en file d’attente",
   "taskAgents.running": "En cours",
   "taskAgents.queued": "À suivre",
   "taskAgents.waiting": "À traiter",

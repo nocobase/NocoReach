@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Segmented } from '#components/reach/segmented';
+import { Skeleton } from '#components/ui/skeleton';
 import { Link } from 'react-router';
 import { $t } from '#i18n';
 import { formatCount, formatDate } from '#lib/format';
@@ -313,9 +314,14 @@ function Current({
   const n = current?.numbers;
   if (!current)
     return (
-      <p className='m-0 text-sm text-muted-foreground'>
-        {$t('common.loading')}
-      </p>
+      <div
+        role='status'
+        aria-label={$t('common.loading')}
+        className='space-y-2'
+      >
+        <Skeleton className='h-4 w-full' />
+        <Skeleton className='h-4 w-2/3' />
+      </div>
     );
   if (current.failed || !n || !Array.isArray(n.pages))
     return (
