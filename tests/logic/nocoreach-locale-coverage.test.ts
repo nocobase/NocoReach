@@ -66,6 +66,62 @@ describe('NocoReach semantic-key translations', () => {
     );
     // A legacy alias keeps its historical source text when the visible copy changes.
     const changedLegacyCopy: Record<string, string> = {
+      // Task detail in formal words (2026-10-21), closed card.
+      '已关闭 · {0}':
+        '关闭时：{0}',
+      '{0} 关闭。':
+        '关闭于 {0}。',
+      // Space between Chinese and Agent (UI review A16).
+      '给{0}留言，下一次运行会读到':
+        '给 {0} 留言，下次运行时会读取',
+      // Space between Chinese and Agent (UI review A16).
+      'PR #{0} 等Agent 关闭（分支保留）':
+        'PR #{0} 等 Agent 关闭（分支保留）',
+      '交给Agent':
+        '交给 Agent',
+      '发布和观察只用于包含Agent 修改仓库的流程':
+        '发布和观察只用于包含 Agent 修改仓库的流程',
+      '审核通过的内容更新到网站后记录一下。接入Agent 后，这一步改为确认合并 PR。':
+        '审核通过的内容更新到网站后记录一下。接入 Agent 后，这一步改为确认合并 PR。',
+      '已交给Agent，马上开始。':
+        '已交给 Agent，马上开始。',
+      '帮你干活的 AI：在线 AI 每天分析数据、提出机会；所有任务交给Agent 去做。':
+        '帮你干活的 AI：在线 AI 每天分析数据、提出机会；所有任务交给 Agent 去做。',
+      '接受，交给Agent“{0}”':
+        '接受，交给 Agent“{0}”',
+      '由Agent 执行，{0}。':
+        '由 Agent 执行，{0}。',
+      '私有仓库也可以：Agent 用执行任务那台电脑上的 GitHub 登录读取和推送，NocoReach 不保存 GitHub 凭据。不接仓库也能用Agent 做调研、关键词调研、内容大纲这类只写文档的任务。':
+        '私有仓库也可以：Agent 用执行任务那台电脑上的 GitHub 登录读取和推送，NocoReach 不保存 GitHub 凭据。不接仓库也能用 Agent 做调研、关键词调研、内容大纲这类只写文档的任务。',
+      '等Agent 接手':
+        '等 Agent 接手',
+      '等Agent 开回退 PR（撤回 PR #{0}）':
+        '等 Agent 开回退 PR（撤回 PR #{0}）',
+      '这一步由Agent 完成：{0}':
+        '这一步由 Agent 完成：{0}',
+      // Task detail in formal words (2026-10-21), review wording.
+      'Agent 还没有开始。看过任务说明、选好做法再开始；不需要就关闭任务。':
+        'Agent 尚未开始。请阅读任务说明、选择做法后开始；不需要时可关闭任务。',
+      '{0}改好了并开了 PR。看过改动后通过，或在下方写意见让它重做。':
+        '{0}已完成改动并创建 PR。审核后通过，或在下方填写意见要求修改。',
+      '只合并你看过的那次提交，合并后自动核实上线。':
+        '只合并你审核过的提交，合并后自动核实上线。',
+      '将合并 PR #{0}（你看过的版本）':
+        '将合并 PR #{0}（你审核过的版本）',
+      'Agent 改了 {0} 个文件。看过改动后点发布，或在下方写意见让它重改。':
+        'Agent 修改了 {0} 个文件。审核后发布，或在下方填写意见要求修改。',
+      '超出允许范围：{0}。我已看过，确认这些改动没有问题':
+        '超出允许范围：{0}。我已审核，确认这些改动无误',
+      '这个任务由“{0}”交接而来，它交付的文档就是任务说明。Agent 还没有开始，看过再开始。':
+        '这个任务由“{0}”交接而来，它交付的文档就是任务说明。Agent 尚未开始，请先阅读再开始。',
+      // Task detail in formal words (2026-10-21).
+      '改好后你看过效果再发布':
+        '改动完成后，由你检查效果再发布',
+      '已停止，请检查此前已推送的改动或外部操作':
+        '已停止。如果网站已经改动，请开发人员检查。',
+      // Opportunities empty states (2026-10-21).
+      '现在没有观察中的变化。':
+        '现在没有观察中的变化',
       // Community pages in plain words (2026-10-21), second pass.
       'X 上提到产品的帖子，用你们自己的 X API 每天查一次。':
         'X 上提到产品的帖子，每天通过 X API 查询一次。',
@@ -215,8 +271,6 @@ describe('NocoReach semantic-key translations', () => {
       发送并要求修改: '发送意见',
       要求修改: '提修改意见',
       '停止不会撤销已经推送的改动或外部操作。': '停止不会撤销已经做出的改动。',
-      '已停止，请检查此前已推送的改动或外部操作':
-        '已停止。如果之前已经改了网站，请开发同事检查一下',
       '项目默认（未设置或不可用）': '项目默认（未设置）',
       '暂无团队可调用的 Runner Agent，请先创建或联系管理员。':
         '还没有可用的 Agent，请管理员在 AI 团队里接入。',

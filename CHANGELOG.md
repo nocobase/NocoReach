@@ -1,5 +1,13 @@
 # NocoReach Changelog
 
+## Unreleased — Opportunities, Tasks and Results, in plain words
+
+- Opportunities: nothing to review is a full-width empty state instead of a narrow box, and so is nothing being watched. Watching explains how watching works in an ⓘ beside the Change header instead of a grey paragraph, and a change's figure appears only in the Value column. In Handled, Restore is a row-end icon button that keeps every row the same height, and a handed-off opportunity slides in its detail here (with a link to its task) instead of leaving the page. Dates use the shared format.
+- Tasks: the Current step, Owner and Executor columns are wider so names and steps are no longer cut short at 1440 px.
+- Task page: the review card's title and hints read formally ("The change is ready. Review it before publishing"; "ask an engineer" rather than a colloquial "dev colleague" in Chinese), the publishing note moves into an ⓘ beside Publish, and the note composer's Send is a secondary button so the step's action is the only primary one. A closed task says Closed once: the card is headed Status and titled "When closed: …". Why no longer repeats the figure its title already states, and Start task and Choose playbook in Activity use icons that do not look like disclosure triangles.
+- Results: the period no longer says "(UTC)" (the ⓘ does), a change not yet live shows a dash under Went live because its status already says so, and the comparison windows use the shared date format. Create from a result uses the shared drop-downs and text area and shows the comparison in place instead of in a disclosure.
+- Chinese copy puts a space between Chinese text and "Agent" everywhere.
+
 ## Unreleased — Community pages, fixed and in plain words
 
 - Reddit shows one line under the search terms: when the last search succeeded and when the next may run, with the last attempt and the hourly scan in its ⓘ. A search that did not complete names the term and the reason in plain words (for example, that automatic retries are paused because it is unclear whether the search was charged); the provider's codes and task id move into a Diagnostics ⓘ. The subreddit card's empty state is a full sentence.

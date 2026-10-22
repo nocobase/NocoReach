@@ -144,7 +144,10 @@ function ResultsBoard({ projectId }: { projectId: string }) {
         description={$t('results.board.description')}
         info={
           <InfoTip label={$t('common.aboutData')}>
-            {$t('results.board.caveat')}
+            <span className='flex flex-col gap-1'>
+              <span>{$t('results.board.caveat')}</span>
+              <span>{$t('results.board.utc')}</span>
+            </span>
           </InfoTip>
         }
         actions={
@@ -475,9 +478,7 @@ function RecentCard({ items }: { items: ResultSummary[] }) {
                   <TableCell className='tabular-nums'>
                     {item.phase === 'live' && item.occurredAt
                       ? shortDate(item.occurredAt)
-                      : item.phase === 'pendingLive'
-                        ? $t('results.board.notLive')
-                        : '—'}
+                      : '—'}
                   </TableCell>
                   <TableCell>
                     <ResultTag

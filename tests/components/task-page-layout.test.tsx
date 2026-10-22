@@ -185,12 +185,12 @@ test('a page change is reviewed as what readers see, with code kept in Technical
   mount();
   const card = screen.getByRole('region', { name: '等你处理' });
   expect(
-    within(card).getByRole('heading', { name: 'Agent 改好了，看过再发布' }),
+    within(card).getByRole('heading', { name: '改动已完成，请检查后发布' }),
   ).toBeVisible();
   expect(within(card).getByText('オープンソース AI ノーコード')).toBeVisible();
   expect(within(card).getByText('（原来没有）')).toBeVisible();
   expect(
-    within(card).getByText('自动检查有提醒，发布前请开发同事看一下'),
+    within(card).getByText('自动检查有提醒，发布前请开发人员确认'),
   ).toBeVisible();
   // No pull request, branch, file path or raw check output on the page itself.
   expect(document.body).not.toHaveTextContent('#186');
