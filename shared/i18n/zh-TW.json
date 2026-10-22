@@ -4350,7 +4350,7 @@
   "strategy.everyDayAt": "每天 {0}",
   "strategy.timeInZone": "{0}（{1}）",
   "strategy.dailyAnalysisPaused": "每日自動分析已暫停",
-  "strategy.howAnalyzedDaily": "依{0}，{1}自動分析近 {2} 天的資料。",
+  "strategy.howAnalyzedDaily": "依{0}，{1} 自動分析近 {2} 天的資料。",
   "strategy.howAnalyzedPaused": "依{0}分析近 {2} 天的資料；{1}。",
   "strategy.howAnalyzedManual": "依{0}分析近 {1} 天的資料。",
   "github.fewerNowStarsRemovedDeleted": "（比現在少 {0} 個：之後取消或刪掉的不在其中）",
