@@ -32,8 +32,8 @@ interface OnlineChatState {
   projectId: string | null;
   subject: OnlineSubject | null;
   open(input: Entry): void;
-  /** Opens the panel on an existing conversation (Continue asking on Insights). */
-  resume(id: string): void;
+  /** Opens the panel on an existing conversation, with a draft to continue it when given. */
+  resume(id: string, draft?: string): void;
   /** Counts the messages sent here, so a page showing conversations knows to read them again. */
   activity: number;
   touch(): void;
@@ -50,13 +50,15 @@ export function OnlineChatProvider({ children }: { children: ReactNode }) {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [agentId, setAgentId] = useState(DEFAULT_ONLINE_AGENT);
   // What waits for the unsent draft to be discarded: a new conversation, or one to continue.
-  const [entry, setEntry] = useState<Entry | { resume: string } | null>(null);
+  const [entry, setEntry] = useState<
+    Entry | { resume: string; draft?: string } | null
+  >(null);
   const [subject, setSubject] = useState<OnlineSubject | null>(null);
   const [activity, setActivity] = useState(0);
-  function applyEntry(input: Entry | { resume: string }) {
+  function applyEntry(input: Entry | { resume: string; draft?: string }) {
     if ('resume' in input) {
       setConversationId(input.resume);
-      setDraft('');
+      setDraft(input.draft ?? '');
       setProjectId(null);
       setSubject(null);
     } else {
@@ -97,12 +99,17 @@ export function OnlineChatProvider({ children }: { children: ReactNode }) {
           if (draft.trim()) setEntry(input);
           else applyEntry(input);
         },
-        resume(id) {
+        resume(id, next) {
           panel.openChat();
           setMode('online');
-          if (request || id === conversationId) return;
-          if (draft.trim()) setEntry({ resume: id });
-          else applyEntry({ resume: id });
+          if (request) return;
+          // Already open on it: only a new draft (a quoted opportunity) goes into the composer.
+          if (id === conversationId) {
+            if (next && !draft.trim()) setDraft(next);
+            return;
+          }
+          if (draft.trim()) setEntry({ resume: id, draft: next });
+          else applyEntry({ resume: id, draft: next });
         },
         activity,
         touch() {
