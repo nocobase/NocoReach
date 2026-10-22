@@ -6991,7 +6991,7 @@
   "agentRoles.chatDisabled": "{0} 已停用。",
   "agentRoles.lastTask": "上次任務 {0} 完成",
   "agentRoles.noTaskYet": "還沒有執行過任務",
-  "agentRoles.lastTaskFailed": "上個任務沒有完成，可以在任務頁再試一次。",
+  "agentRoles.lastTaskFailed": "上次任務 {0} 沒有完成",
   "agentRoles.whereTeam": "{0} · 團隊共用",
   "agentRoles.whereOwner": "{0} · 只給擁有者用",
   "agentRoles.countTeam": "團隊共用 {0} 臺",
@@ -7065,5 +7065,9 @@
   "agentRoles.optionModel": "用不了這個模型",
   "agentRoles.optionSetup": "執行環境有問題",
   "agentRoles.chooseModel": "請選擇一個模型。",
-  "onlineAgent.sameAsAnalysis": "和每日分析相同（{0}）"
+  "onlineAgent.sameAsAnalysis": "和每日分析相同（{0}）",
+  "modelsInUse.title": "對話模型",
+  "modelsInUse.usedBy": "{0}在用",
+  "modelsInUse.unused": "沒有在用",
+  "modelsInUse.separator": "、"
 }

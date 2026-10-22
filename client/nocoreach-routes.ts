@@ -95,6 +95,19 @@ const withRuntimesSharing: Loader = async () => {
   };
 };
 
+// The model services page with which work uses each chat model under its list (2026-10-22 user report).
+const withModelsInUse: Loader = async () => {
+  const [{ default: Page }, { ModelsInUse }] = await Promise.all([
+    modelsRoute.componentLoader() as Promise<{ default: ComponentType<object> }>,
+    import('./pages/agents/models-in-use.js'),
+  ]);
+  return {
+    default: function ModelsPage(props: object) {
+      return createElement(Fragment, null, createElement(Page, props), createElement(ModelsInUse));
+    },
+  };
+};
+
 const redirect =
   (to: string): Loader =>
   () =>
@@ -185,7 +198,7 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     { ...page('agents', '/agents', () => import('./pages/agents/index.js'), { title: nav('agent'), icon: Bot, order: 1 }), children: [
       { ...page('runner-agents', 'runner', () => import('./pages/agents/runner.js')), authz: agentsRoute.authz },
       { ...runtimesRoute, path: 'runtimes', componentLoader: gated(withRuntimesSharing) },
-      { ...modelsRoute, path: 'models', componentLoader: gated(modelsRoute.componentLoader) },
+      { ...modelsRoute, path: 'models', componentLoader: gated(withModelsInUse) },
       { ...usageRoute, path: 'usage', componentLoader: gated(usageRoute.componentLoader) },
       page('online-agent-new', 'chat/new', () => import('./online-agent/edit.js')),
       page('online-agent-edit', 'chat/:onlineAgentId', () => import('./online-agent/edit.js')),

@@ -6991,7 +6991,7 @@
   "agentRoles.chatDisabled": "{0} ist deaktiviert.",
   "agentRoles.lastTask": "Letzte Aufgabe abgeschlossen: {0}",
   "agentRoles.noTaskYet": "Noch keine Aufgabe ausgeführt",
-  "agentRoles.lastTaskFailed": "Die letzte Aufgabe wurde nicht abgeschlossen; Sie können sie auf ihrer Seite erneut versuchen.",
+  "agentRoles.lastTaskFailed": "Letzte Aufgabe {0} nicht abgeschlossen",
   "agentRoles.whereTeam": "{0} · mit dem Team geteilt",
   "agentRoles.whereOwner": "{0} · nur Eigentümer",
   "agentRoles.countTeam": "Mit dem Team geteilt: {0}",
@@ -7065,5 +7065,9 @@
   "agentRoles.optionModel": "Modell nicht nutzbar",
   "agentRoles.optionSetup": "Problem mit der Laufzeitumgebung",
   "agentRoles.chooseModel": "Wählen Sie ein Modell.",
-  "onlineAgent.sameAsAnalysis": "Wie die tägliche Analyse ({0})"
+  "onlineAgent.sameAsAnalysis": "Wie die tägliche Analyse ({0})",
+  "modelsInUse.title": "Chat-Modelle",
+  "modelsInUse.usedBy": "Genutzt von: {0}",
+  "modelsInUse.unused": "Nicht in Gebrauch",
+  "modelsInUse.separator": ", "
 }

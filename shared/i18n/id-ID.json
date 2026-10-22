@@ -1581,7 +1581,7 @@
   "agentRoles.chatDisabled": "{0} dinonaktifkan.",
   "agentRoles.lastTask": "Tugas terakhir selesai: {0}",
   "agentRoles.noTaskYet": "Belum pernah menjalankan tugas",
-  "agentRoles.lastTaskFailed": "Tugas terakhir tidak selesai; Anda dapat mencobanya lagi di halaman tugas tersebut.",
+  "agentRoles.lastTaskFailed": "Tugas terakhir ({0}) tidak selesai",
   "agentRoles.whereTeam": "{0} · dibagikan dengan tim",
   "agentRoles.whereOwner": "{0} · hanya pemilik",
   "agentRoles.countTeam": "Dibagikan dengan tim: {0}",
@@ -7065,5 +7065,9 @@
   "agentRoles.optionModel": "Tidak bisa memakai model ini",
   "agentRoles.optionSetup": "Masalah lingkungan eksekusi",
   "agentRoles.chooseModel": "Pilih model.",
-  "onlineAgent.sameAsAnalysis": "Sama dengan analisis harian ({0})"
+  "onlineAgent.sameAsAnalysis": "Sama dengan analisis harian ({0})",
+  "modelsInUse.title": "Model percakapan",
+  "modelsInUse.usedBy": "Dipakai oleh: {0}",
+  "modelsInUse.unused": "Tidak dipakai",
+  "modelsInUse.separator": ", "
 }

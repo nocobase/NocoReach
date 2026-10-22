@@ -7026,7 +7026,7 @@
   "agentRoles.chatDisabled": "{0} 已停用。",
   "agentRoles.lastTask": "上次任务 {0} 完成",
   "agentRoles.noTaskYet": "还没有执行过任务",
-  "agentRoles.lastTaskFailed": "上个任务没有完成，可以在任务页再试一次。",
+  "agentRoles.lastTaskFailed": "上次任务 {0} 没有完成",
   "agentRoles.whereTeam": "{0} · 团队共用",
   "agentRoles.whereOwner": "{0} · 只给所有者用",
   "agentRoles.countTeam": "团队共用 {0} 台",
@@ -7065,5 +7065,9 @@
   "agentRoles.optionModel": "用不了这个模型",
   "agentRoles.optionSetup": "运行环境有问题",
   "agentRoles.chooseModel": "请选择一个模型。",
-  "onlineAgent.sameAsAnalysis": "和每日分析相同（{0}）"
+  "onlineAgent.sameAsAnalysis": "和每日分析相同（{0}）",
+  "modelsInUse.title": "对话模型",
+  "modelsInUse.usedBy": "{0}在用",
+  "modelsInUse.unused": "没有在用",
+  "modelsInUse.separator": "、"
 }

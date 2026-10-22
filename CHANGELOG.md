@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Agent page details
+
+- Who does the work no longer shows a row of column headings (screen readers still read them); each row already says what it holds.
+- What went wrong, or how the last task ended, is a small line under the agent in its own row ("Last task 10-22 21:54 did not finish") instead of a line of body text below the row.
+- Model services lists, under its table, each chat model with its service and who uses it ("deepseek-v4.1-flash · OpenAI-compatible · Used by Daily analysis, Chat panel"), since the table counts models without naming them.
+- Local agents puts its description on the same line as Show disabled, so the list starts as close to the tab bar as in the other tabs.
+
 ## Unreleased — Data sources show their logos
 
 - Every data source has its logo on a small tile: the cards and drawer title on Settings › Data sources, the rows and sync table on Data health, the results of Find data sources on your website, the source headings of Settings › Analysis rules and the source buttons when adding a rule. Brand marks come from Simple Icons (CC0), vendored as path data in `client/components/reach/brand-logos.ts` without a new dependency; black marks follow the text colour so they show in dark mode. Sources without a brand mark of their own (Website content, Website source, Blog CMS, DataForSEO, AI search visibility, Competitor activity, Rank tracking, Daily analysis) take a matching icon in the same tile.

@@ -6991,7 +6991,7 @@
   "agentRoles.chatDisabled": "{0} は無効になっています。",
   "agentRoles.lastTask": "前回のタスクの完了：{0}",
   "agentRoles.noTaskYet": "まだタスクを実行していません",
-  "agentRoles.lastTaskFailed": "前回のタスクは完了しませんでした。タスクのページで再試行できます。",
+  "agentRoles.lastTaskFailed": "前回のタスク（{0}）は完了しませんでした",
   "agentRoles.whereTeam": "{0} · チームで共有",
   "agentRoles.whereOwner": "{0} · 所有者のみ",
   "agentRoles.countTeam": "チームで共有：{0} 台",
@@ -7065,5 +7065,9 @@
   "agentRoles.optionModel": "このモデルは使えません",
   "agentRoles.optionSetup": "実行環境に問題があります",
   "agentRoles.chooseModel": "モデルを選んでください。",
-  "onlineAgent.sameAsAnalysis": "日次分析と同じ（{0}）"
+  "onlineAgent.sameAsAnalysis": "日次分析と同じ（{0}）",
+  "modelsInUse.title": "チャットモデル",
+  "modelsInUse.usedBy": "{0}で使用中",
+  "modelsInUse.unused": "未使用",
+  "modelsInUse.separator": "、"
 }

@@ -7026,7 +7026,7 @@
   "agentRoles.chatDisabled": "{0} is turned off.",
   "agentRoles.lastTask": "Last task finished {0}",
   "agentRoles.noTaskYet": "Has not run a task yet",
-  "agentRoles.lastTaskFailed": "The last task did not finish; you can try it again on its page.",
+  "agentRoles.lastTaskFailed": "Last task {0} did not finish",
   "agentRoles.whereTeam": "{0} · shared with the team",
   "agentRoles.whereOwner": "{0} · owner only",
   "agentRoles.countTeam": "{0} shared with the team",
@@ -7065,5 +7065,9 @@
   "agentRoles.optionModel": "Cannot use this model",
   "agentRoles.optionSetup": "Runtime problem",
   "agentRoles.chooseModel": "Choose a model.",
-  "onlineAgent.sameAsAnalysis": "Same as daily analysis ({0})"
+  "onlineAgent.sameAsAnalysis": "Same as daily analysis ({0})",
+  "modelsInUse.title": "Chat models",
+  "modelsInUse.usedBy": "Used by {0}",
+  "modelsInUse.unused": "Not in use",
+  "modelsInUse.separator": ", "
 }
