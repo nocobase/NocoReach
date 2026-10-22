@@ -686,3 +686,128 @@ test('Performance lists each page: the latest 28 days before going live, then da
   ).toHaveAttribute('href', '/results/1?day=7');
   expect(action.mock.calls.some(([, c]) => c === 'numbers')).toBe(true);
 });
+
+// T-34 after going live (2026-10-22): the card names what changed and opens the change itself.
+function liveArticle(): TaskData {
+  const data = failedPublish();
+  const [artifact] = data.work.results as NonNullable<
+    TaskData['work']['results'][number]
+  >[];
+  data.work.stage = 'done';
+  data.work.results = [
+    {
+      ...artifact,
+      content: 'Added the 2026 picks and updated the star counts.',
+      article: {
+        targetId: 'cms',
+        articleId: '7',
+        baseKey: 'base-1',
+        baseVersion: 'v1',
+        draft: {
+          locales: {
+            en: {
+              title: 'Top 12 Open Source No-Code AI Tools (2026)',
+              description: 'Updated for 2026 with star counts.',
+            },
+          },
+        },
+        changes: ['en.description', 'en.title'],
+      },
+    },
+  ] as TaskData['work']['results'];
+  data.articleBases = {
+    'base-1': {
+      id: '7',
+      slug: 'top-11-github-open-source-no-code-ai-tools',
+      version: 'v1',
+      readAt: '2026-10-22T02:51:00Z',
+      locales: {
+        en: {
+          title:
+            'Top 11 Open Source No-Code AI Tools with the Most GitHub Stars',
+          description: 'The most starred tools.',
+          body: 'Body',
+        },
+      },
+    },
+  };
+  data.work.release = {
+    state: 'live',
+    note: 'Added the 2026 picks',
+    pages: [
+      'https://www.nocobase.com/en/blog/top-11-github-open-source-no-code-ai-tools',
+    ],
+    liveAt: '2026-10-22T10:03:00Z',
+    article: {
+      artifactId: 'artifact-1',
+      targetId: 'cms',
+      articleId: '7',
+      slug: 'top-11-github-open-source-no-code-ai-tools',
+      published: {
+        articleId: '7',
+        slug: 'top-11-github-open-source-no-code-ai-tools',
+        version: 'v2',
+        written: ['en.description', 'en.title'],
+        at: '2026-10-22T09:43:00Z',
+      },
+    },
+  };
+  return data;
+}
+
+test('a live article names what changed on its card and shows each field before and after', async () => {
+  const user = userEvent.setup();
+  mount(liveArticle());
+  const card = screen.getByRole('region', { name: '已完成' });
+  expect(card).toHaveTextContent('改了 2 处：英语 · 摘要、英语 · 标题');
+  // The comparison itself stays out of the card until asked for.
+  expect(card).not.toHaveTextContent('The most starred tools.');
+  await user.click(within(card).getByRole('button', { name: /查看改动/ }));
+  const dialog = await screen.findByRole('dialog', { name: '改了什么' });
+  expect(dialog).toHaveTextContent('第 1 版');
+  expect(dialog).toHaveTextContent('审核通过');
+  expect(dialog).toHaveTextContent(
+    'Top 11 Open Source No-Code AI Tools with the Most GitHub Stars',
+  );
+  expect(dialog).toHaveTextContent(
+    'Top 12 Open Source No-Code AI Tools (2026)',
+  );
+  expect(dialog).toHaveTextContent('Updated for 2026 with star counts.');
+  await user.keyboard('{Escape}');
+  // The activity's View of the delivered version shows the Agent's notes and the same comparison.
+  const activity = screen.getByRole('region', { name: '动态' });
+  await user.click(within(activity).getByRole('button', { name: '查看' }));
+  const reader = await screen.findByRole('dialog', { name: /修改/ });
+  expect(reader).toHaveTextContent(
+    'Added the 2026 picks and updated the star counts.',
+  );
+  expect(reader).toHaveTextContent(
+    'Top 12 Open Source No-Code AI Tools (2026)',
+  );
+});
+
+test('a live page change names what readers see differently and opens it', async () => {
+  const user = userEvent.setup();
+  const data = pageChange();
+  data.work.stage = 'done';
+  data.work.stageIndex = 2;
+  data.work.results[0]!.approvedAt = '2026-10-13T03:00:00Z';
+  data.work.release = {
+    state: 'live',
+    note: '日语首页增加独立搜索标题与精简描述。',
+    pages: ['https://www.nocobase.com/ja'],
+    pr: {
+      number: 186,
+      url: 'https://github.com/nocobase/site/pull/186',
+      headSha: '8817982abc',
+    },
+    mergedAt: '2026-10-13T03:05:00Z',
+    liveAt: '2026-10-13T04:00:00Z',
+  };
+  mount(data);
+  const card = screen.getByRole('region', { name: '已完成' });
+  expect(card).toHaveTextContent('改了 1 处：搜索标题');
+  await user.click(within(card).getByRole('button', { name: /查看改动/ }));
+  const dialog = await screen.findByRole('dialog', { name: '改了什么' });
+  expect(dialog).toHaveTextContent('オープンソース AI ノーコード');
+});
