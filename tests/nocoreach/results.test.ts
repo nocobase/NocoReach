@@ -43,6 +43,25 @@ function parts(day = 7) {
   return out;
 }
 describe('safe result comparison', () => {
+  it('splits a comparison over several pages into each page, and leaves a single page alone', () => {
+    const other = 'https://example.com/other';
+    const records = parts().map((p) => ({
+      ...p,
+      payload: [
+        ...p.payload,
+        { page: other, clicks: 4, impressions: 40, position: 12 },
+      ],
+    }));
+    const r = compare(7, '2026-10-01', [url, other], records, '2026-10-12');
+    expect(r.gsc?.clicks).toEqual([28, 98]);
+    expect(r.byPage).toEqual([
+      { page: url, clicks: [0, 70], position: [0, 3] },
+      { page: other, clicks: [28, 28], position: [12, 12] },
+    ]);
+    expect(
+      compare(7, '2026-10-01', [url], parts(), '2026-10-12').byPage,
+    ).toBeUndefined();
+  });
   it('does not count a malformed date as a covered zero-data day', () => {
     const records = parts();
     records[2].date = '2026-09-2x';
