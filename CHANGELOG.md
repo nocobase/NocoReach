@@ -6,6 +6,12 @@
 - Run history opens with one line on the recent runs ("No problems in the last 8 runs", "2 of the last 8 runs had problems") with the refresh button beside it. Runs that went well no longer each carry a Done badge; only failed, skipped and running ones show a status. Each run is one line with its suggestions on the right, and projects are named only when there are several, or one was skipped or failed (in red, with the reason).
 - Dates other than today, yesterday and tomorrow use the shared format ("10-20 09:00" instead of "10月20日 09:00"), and a skipped run says it was already analyzed that day rather than "today".
 
+## Unreleased — Opportunities shows where each handed-off task stands
+
+- On Opportunities › Handled, the Where it went column shows the state of a handed-off opportunity's task with its number, as Insights does: Handed off to agent while it waits to start, In progress, Needs confirmation, Done or Closed. O-43 read "Handed off to agent · T-34" after T-34 was done. A change handed off on its own shows the same, now with its task number, and its detail's tag says the same instead of In progress for every open task. The filter offers the same labels, and an opportunity's detail says the state beside Open task.
+- The online assistant's `daily_analysis` tool reports a handed-off opportunity's task the same way (in progress, needs confirmation, done, closed) when the user may list tasks, so asking about O-43 in the Insights conversation no longer gets "handed off".
+- Insights, Opportunities, the online assistant and the verdict coverage of changes read where a task stands from one function, `taskStanding` in `shared/task-pending.ts`; the coverage also counts tasks finished before task work was recorded as done.
+
 ## Unreleased — Insights says how it analyzes, not how old the data is
 
 - The line under the Insights title no longer shows the period, the data date and the last analysis time ("Last 28 days · Data through … · Last analyzed … (daily, automatic)"): the data could end days before today's analysis, which read as analyzing old data, and each analysis rule reads its own window (7, 14, 28 or 30 days), not 28. It says how the insights are made instead, in one sentence with two links: "Analyzed every day at 09:00 using your analysis rules." The analysis rules link to AI team › Analysis rules and the time to Settings › Automatic runs; each is plain text for someone who cannot open that page.
