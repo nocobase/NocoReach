@@ -4,9 +4,11 @@ import {
   getCurrentLocale,
   translateSystemError,
   $t,
+  $tj,
   $legacyText,
 } from '#i18n';
-import { latestBatch, overviewPeriodDays, rowsFor, type Row } from './board';
+import { timeZoneName } from '#lib/time-zone-name';
+import { rowsFor, type Row } from './board';
 import { signalDisposition } from '../../../shared/strategy-pending.js';
 import {
   AreaList,
@@ -61,7 +63,6 @@ import {
   request,
   analysisRequest,
   judgeMissing,
-  type Context,
   type AnalysisStatus,
 } from './service';
 import '../reach-workspace.css';
@@ -91,21 +92,14 @@ export default function StrategyPage() {
 }
 function ProjectInsights({ projectId }: { projectId: number }) {
   const [state, setState] = useState<StrategyState>(),
-    [context, setContext] = useState<Context>(),
     [error, setError] = useMessageState(''),
     [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
     setError('');
-    Promise.all([
-      request<StrategyState>(projectId, 'state'),
-      request<Context>(projectId, 'context'),
-    ])
-      .then(([s, c]) => {
-        if (active) {
-          setState(s);
-          setContext(c);
-        }
+    request<StrategyState>(projectId, 'state')
+      .then((s) => {
+        if (active) setState(s);
       })
       .catch(() => {
         if (active) setError(() => $t('strategy.notLoadInsightsTryAgain'));
@@ -114,7 +108,7 @@ function ProjectInsights({ projectId }: { projectId: number }) {
       active = false;
     };
   }, [projectId, attempt, setError]);
-  if (!state || !context)
+  if (!state)
     return error ? (
       <PageContainer className='nr-page'>
         <p role='alert'>{error}</p>
@@ -125,25 +119,16 @@ function ProjectInsights({ projectId }: { projectId: number }) {
     ) : (
       <PageSkeleton title={$t('strategy.insights')} />
     );
-  return (
-    <Insights
-      projectId={projectId}
-      state={state}
-      setState={setState}
-      context={context}
-    />
-  );
+  return <Insights projectId={projectId} state={state} setState={setState} />;
 }
 function Insights({
   projectId,
   state,
   setState,
-  context,
 }: {
   projectId: number;
   state: StrategyState;
   setState: (s: StrategyState) => void;
-  context: Context;
 }) {
   const taskView = useFreshData(`insights-tasks:${projectId}`, () =>
     taskRecords<Task>(projectId),
@@ -158,8 +143,7 @@ function Insights({
     [handed, setHanded] = useState<HandOffResult>();
   const playbooks = localizePlaybookList(rawPlaybooks);
   const pendingRef = useRef(false),
-    operationRef = useRef({ key: '', id: '' }),
-    summary = context.evidence;
+    operationRef = useRef({ key: '', id: '' });
   async function mutate(action: string, body: object) {
     const key = JSON.stringify([action, state.revision, body]);
     if (operationRef.current.key !== key)
@@ -272,8 +256,7 @@ function Insights({
         setError(() => $t('strategy.notSaveRefreshTryAgain'));
       }
     });
-  const batch = latestBatch(state, overviewPeriodDays),
-    { mine } = useMe();
+  const { mine } = useMe();
   // Waiting for you: a step to review, or a handed-off task to start (2026-10-08) — only the tasks you own.
   const waiting = tasks
     .filter((t) => isWaitingTask(t, mine))
@@ -299,11 +282,11 @@ function Insights({
       }),
   );
   const overview = useFreshData<{ cards: SourceCard[] }>(
-    `data-view:overview:${projectId}:${JSON.stringify({ range: '28' })}`,
+    `data-view:overview:${projectId}:${JSON.stringify({ range: String(METRIC_DAYS) })}`,
     () =>
       api.action<{ cards: SourceCard[] }>('nrDataViews', 'overview', {
         method: 'POST',
-        body: { projectId, range: '28' },
+        body: { projectId, range: String(METRIC_DAYS) },
         unwrap: 'data',
       }),
     googleLocalFreshness,
@@ -322,27 +305,12 @@ function Insights({
     if (wasGeneratingRef.current && !generating) reloadAllRef.current();
     wasGeneratingRef.current = generating;
   }, [generating]);
-  const last = generating
-    ? $t('strategy.analyzing')
-    : batch
-      ? $t('strategy.lastAnalyzed', {
-          0: new Date(batch.generatedAt).toLocaleString(getCurrentLocale(), {
-            month: 'numeric',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
-          1: '',
-        })
-      : $t('strategy.notAnalyzedYet');
-  // A run of the daily workflow says so, linking to Settings › Automatic runs for those who may open it.
-  const automatic =
-      !generating &&
-      !!batch &&
-      !!analysis?.runs[0]?.ok &&
-      analysis.runs[0].trigger === 'workflow',
-    { can: canSchedules } = useCan({
+  const { can: canSchedules } = useCan({
       resource: { type: 'page', id: 'scheduler.schedules' },
+      action: 'access',
+    }),
+    { can: canRules } = useCan({
+      resource: { type: 'page', id: 'analysis-rules' },
       action: 'access',
     });
   const rows = rowsFor(state),
@@ -451,14 +419,11 @@ function Insights({
       <PageHeader
         title={$t('strategy.insights')}
         description={
-          <>
-            {$t('strategy.lastDaysDataThrough', {
-              0: summary.periodDays,
-              1: summary.availableThrough || $t('common.unknown'),
-              2: last,
-            })}
-            {automatic && <DailyAutomatic link={canSchedules} />}
-          </>
+          <HowAnalyzed
+            schedule={analysis?.schedule}
+            rulesLink={canRules}
+            schedulesLink={canSchedules}
+          />
         }
         // One refresh, as on Results (2026-10-22 user decision): it runs the analysis again, and every block is read
         // again when it ends.
@@ -494,7 +459,7 @@ function Insights({
       {/* On wide screens the page fills the window and only the day's conversation scrolls, between the numbers and
           the input (2026-10-22 user feedback). */}
       <div className='flex flex-col gap-6 lg:min-h-0 lg:flex-1'>
-        <MetricTiles metrics={metrics} overview={overview} />
+        <MetricTiles metrics={metrics} overview={overview} days={METRIC_DAYS} />
         {/* The day's conversation, with the standing facts in a narrow quiet column beside it (2026-10-21 user); with the
             side panel open, the facts fold to a line under the day's date. */}
         <div
@@ -520,25 +485,66 @@ function Insights({
     </PageContainer>
   );
 }
-/** “(daily, automatic)” after the last analysis, its words a link to Settings › Automatic runs when allowed. */
-function DailyAutomatic({ link }: { link: boolean }) {
-  const text = $t('strategy.dailyAutomatic'),
-    label = $t('strategy.dailyAutomaticLink'),
-    at = text.indexOf(label);
-  if (!link) return <>{text}</>;
-  if (at < 0)
-    return (
-      <Link className='underline underline-offset-4' to='/schedules'>
+// The subtitle says how the insights are made, not how fresh each source is (2026-10-22 user decision: "data through
+// 10/18" beside today's analysis read as analysing stale data; freshness lives under Data sources › Data health): which
+// rules, and when the daily analysis runs, each a link to where it is set for those who may open it. No period: each
+// rule reads its own window (7, 14, 28 or 30 days); the 28 days belong to the metric cards, which say so.
+// The metric cards: each source's last 28 days against the 28 before (nrDataViews:overview).
+const METRIC_DAYS = 28;
+const subtleLink = 'underline underline-offset-4 hover:text-foreground';
+function HowAnalyzed({
+  schedule,
+  rulesLink,
+  schedulesLink,
+}: {
+  schedule?: AnalysisStatus['schedule'];
+  rulesLink: boolean;
+  schedulesLink: boolean;
+}) {
+  const rules = rulesLink ? (
+    <Link className={subtleLink} to='/rules'>
+      {$t('strategy.analysisRulesLink')}
+    </Link>
+  ) : (
+    $t('strategy.analysisRulesLink')
+  );
+  const toSchedules = (text: string) =>
+    schedulesLink ? (
+      <Link className={subtleLink} to='/schedules'>
         {text}
       </Link>
+    ) : (
+      text
     );
-  return (
-    <>
-      {text.slice(0, at)}
-      <Link className='underline underline-offset-4' to='/schedules'>
-        {label}
-      </Link>
-      {text.slice(at + label.length)}
-    </>
-  );
+  // The daily time from the workflow's cron ("0 9 * * *"), in its time zone, named only when it is not the browser's.
+  const [minute, hour] = String(schedule?.cron || '')
+      .trim()
+      .split(/\s+/),
+    time =
+      /^\d+$/.test(minute || '') && /^\d+$/.test(hour || '')
+        ? `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`
+        : null,
+    zone = schedule?.timezone,
+    local = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (schedule && !schedule.enabled)
+    return $tj('strategy.howAnalyzedPaused', {
+      0: rules,
+      1: toSchedules($t('strategy.dailyAnalysisPaused')),
+    });
+  if (schedule && time)
+    return $tj('strategy.howAnalyzedDaily', {
+      0: rules,
+      1: toSchedules(
+        $t('strategy.everyDayAt', {
+          0:
+            zone && zone !== local
+              ? $t('strategy.timeInZone', {
+                  0: time,
+                  1: timeZoneName(zone, getCurrentLocale()),
+                })
+              : time,
+        }),
+      ),
+    });
+  return $tj('strategy.howAnalyzedManual', { 0: rules });
 }
