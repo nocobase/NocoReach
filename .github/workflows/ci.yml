@@ -10,7 +10,39 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
+  demo-plugin:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          persist-credentials: false
+      - name: Check out the exact unpublished plugin revision
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          repository: nocobase/nocobase
+          ref: 8f674ed25f81d60756039c413e20cb42afada04a
+          path: .demo-plugin-source
+          persist-credentials: false
+      - uses: pnpm/action-setup@c336a2788d9774dccfdeb4823a5058ccc9f07453
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: .demo-plugin-source/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile --filter @nocobase/app-plugin-demo-mode...
+        working-directory: .demo-plugin-source
+      - run: pnpm -r --filter @nocobase/app-plugin-demo-mode... build
+        working-directory: .demo-plugin-source
+      - run: node scripts/ci/prepare-demo-plugin.mjs pack .demo-plugin-source/packages/plugins/app-plugin-demo-mode "$RUNNER_TEMP/demo-plugin"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: demo-plugin
+          path: ${{ runner.temp }}/demo-plugin
+          include-hidden-files: true
+          retention-days: 1
   tests:
+    needs: demo-plugin
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -22,9 +54,15 @@ jobs:
         with:
           node-version: '24'
           cache: pnpm
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: demo-plugin
+          path: app-plugins/demo-mode
+      - run: node scripts/ci/prepare-demo-plugin.mjs prepare .
       - run: pnpm install --frozen-lockfile
       - run: pnpm test --maxWorkers=2 --passWithNoTests=false
   build:
+    needs: demo-plugin
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
@@ -36,5 +74,10 @@ jobs:
         with:
           node-version: '24'
           cache: pnpm
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: demo-plugin
+          path: app-plugins/demo-mode
+      - run: node scripts/ci/prepare-demo-plugin.mjs prepare .
       - run: pnpm install --frozen-lockfile
       - run: pnpm build --target linux-x64 --node-version 24
