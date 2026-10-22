@@ -2036,6 +2036,8 @@
   "taskExecutionPanels.currentExecutor": "目前執行者",
   "messages.currentPilotOpenAdmins": "目前串接試執行僅開放給管理員",
   "taskExecution.currentStepNeedsPersonOwner": "目前步驟需要真人負責人，並且必須是線上文字步驟",
+  "strategy.situationGroupAttention": "需要留意",
+  "strategy.situationGroupNormal": "正常",
   "strategy.whereThingsStand": "目前狀況",
   "strategy.statusExplanation": "目前狀況是什麼",
   "strategy.currentPilotSavesUp100": "目前試執行最多儲存 100 份方案。",

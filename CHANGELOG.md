@@ -7,6 +7,13 @@
 - Model services lists, under its table, each chat model with its service and who uses it ("deepseek-v4.1-flash · OpenAI-compatible · Used by Daily analysis, Chat panel"), since the table counts models without naming them.
 - Local agents puts its description on the same line as Show disabled, so the list starts as close to the tab bar as in the other tabs.
 
+## Unreleased — Insights looks sharper, with the same content
+
+- The metric cards sit on the same white surface as the messages below, with a hairline border; the number is larger and its change follows it in green or red; the sparkline has a light wash under it and a dot on the latest day.
+- The agent avatar is solid agent violet with the bot in white (dark in dark mode), so the daily analysis reads as the AI speaking. The avatar is shared: Tasks › By agent shows it the same way.
+- The daily analysis headline is slightly larger. In the opportunity lines, titles to decide on or handed off are in medium weight, dismissed and expired lines are dimmed as a whole, and the status or the actions sit in one right-hand column.
+- Current situation is split into Needs attention and Normal, without the dots; each line's numbers are in medium weight, coloured for the lines to deal with (a drop red, the rest amber).
+
 ## Unreleased — Automatic runs look like the other Settings pages
 
 - Settings › Automatic runs is a table like Network and Members (Work, Schedule, Last run, Next run, Status) instead of a card with the time in headline type. The daily analysis explanation is behind ⓘ beside its name, and the note on other automatic work (with its link to Data sources › Data health) is behind ⓘ beside the page title, like the page notes elsewhere; the browser-timezone note sits in an ⓘ beside Last run; Change time moves into the row's "…" menu with Run now, Pause and Technical details, and Run history stays on the row. Next run is left out on narrower screens so the table does not scroll sideways.

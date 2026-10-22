@@ -2036,6 +2036,8 @@
   "taskExecutionPanels.currentExecutor": "Exécutant actuel",
   "messages.currentPilotOpenAdmins": "La phase pilote actuelle est réservée aux administrateurs",
   "taskExecution.currentStepNeedsPersonOwner": "L’étape actuelle doit être attribuée à une personne et être une étape de texte en ligne",
+  "strategy.situationGroupAttention": "À surveiller",
+  "strategy.situationGroupNormal": "Normal",
   "strategy.whereThingsStand": "Situation actuelle",
   "strategy.statusExplanation": "Ce que cela indique",
   "strategy.currentPilotSavesUp100": "La phase pilote actuelle permet d’enregistrer jusqu’à 100 plans.",

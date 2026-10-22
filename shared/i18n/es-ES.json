@@ -2036,6 +2036,8 @@
   "taskExecutionPanels.currentExecutor": "Ejecutor actual",
   "messages.currentPilotOpenAdmins": "La prueba piloto actual solo está disponible para administradores",
   "taskExecution.currentStepNeedsPersonOwner": "El paso actual necesita una persona responsable y debe ser un paso de texto en línea",
+  "strategy.situationGroupAttention": "Requiere atención",
+  "strategy.situationGroupNormal": "Normal",
   "strategy.whereThingsStand": "Situación actual",
   "strategy.statusExplanation": "Qué muestra esto",
   "strategy.currentPilotSavesUp100": "La prueba piloto actual guarda hasta 100 planes.",

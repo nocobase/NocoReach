@@ -2036,6 +2036,8 @@
   "taskExecutionPanels.currentExecutor": "現在の実行者",
   "messages.currentPilotOpenAdmins": "現在、試験運用は管理者のみ利用できます",
   "taskExecution.currentStepNeedsPersonOwner": "現在のステップには人間の担当者が必要で、オンラインのテキストステップである必要があります",
+  "strategy.situationGroupAttention": "要確認",
+  "strategy.situationGroupNormal": "正常",
   "strategy.whereThingsStand": "現在の状況",
   "strategy.statusExplanation": "表示内容の説明",
   "strategy.currentPilotSavesUp100": "現在の試験運用では、最大 100 件の計画を保存できます。",
