@@ -17,11 +17,11 @@ export function registerDemoAdapters(
   configuration.registerWrite({
     id: 'nocoreach.tasks',
     title: 'Tasks',
-    table: 'nr_tasks',
+    collection: 'nrTasks',
     operations: ['update'],
     scopes: [
       { id: 'demo-projects', title: 'Demo projects: task workflow' },
-      { id: 'all', title: 'All records in this table' },
+      { id: 'all', title: 'All records in this collection' },
     ],
     async checkScope(scope, input) {
       const value = input as { projectId?: string; taskId?: string };
@@ -38,7 +38,7 @@ export function registerDemoAdapters(
   configuration.registerWrite({
     id: 'nocoreach.taskWork',
     title: 'Task workflow',
-    table: 'nr_snapshots',
+    collection: 'nrSnapshots',
     operations: ['insert', 'update', 'delete'],
     scopes: [{ id: 'demo-projects', title: 'Demo projects: task workflow' }],
     async checkScope(scope, input) {
@@ -56,14 +56,14 @@ export function registerDemoAdapters(
   configuration.registerWrite({
     id: 'nocoreach.keywordCandidates',
     title: 'Keyword candidates',
-    table: 'nr_keyword_candidates',
+    collection: 'nrKeywordCandidates',
     operations: ['insert', 'update', 'delete'],
-    scopes: [{ id: 'all', title: 'All records in this table' }],
+    scopes: [{ id: 'all', title: 'All records in this collection' }],
   });
   configuration.registerWrite({
     id: 'nocoreach.knowledge',
     title: 'Project knowledge',
-    table: 'nr_snapshots',
+    collection: 'nrSnapshots',
     operations: ['insert', 'update', 'delete'],
     scopes: [{ id: 'demo-projects', title: 'Demo projects: knowledge only' }],
     async checkScope(scope, input) {
@@ -75,19 +75,19 @@ export function registerDemoAdapters(
       );
     },
   });
-  for (const [id, title, table, operations] of [
-    ['nocoreach.taskCreation', 'Demo task creation', 'nr_tasks', ['insert']],
+  for (const [id, title, collection, operations] of [
+    ['nocoreach.taskCreation', 'Demo task creation', 'nrTasks', ['insert']],
     [
       'nocoreach.opportunities',
       'Demo opportunity handoff',
-      'nr_snapshots',
+      'nrSnapshots',
       ['insert', 'update', 'delete'],
     ],
   ] as const)
     configuration.registerWrite({
       id,
       title,
-      table,
+      collection,
       operations,
       scopes: [{ id: 'demo-projects', title: 'Demo projects' }],
       async checkScope(scope, input) {
@@ -103,7 +103,7 @@ export function registerDemoAdapters(
   configuration.registerWrite({
     id: 'nocoreach.onlineConversations',
     title: 'Online Agent conversations',
-    table: 'nr_online_agent_records',
+    collection: 'nrOnlineAgentRecords',
     operations: ['insert', 'update'],
     scopes: [
       {

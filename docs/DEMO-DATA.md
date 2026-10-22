@@ -70,10 +70,13 @@ pnpm nocobase demo-mode data clear --actor <管理员ID> --force
 
 ## 配置项
 
-| 环境变量                            | 配置                         | 说明                                                                                                                                              |
-| ----------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NOCOBASE_DEMO_DATA_MODELS`         | `demoMode.data.models`       | 默认 `true`；设为 `false` 时启动不初始化模拟模型                                                                                                  |
-| `NOCOBASE_DEMO_DATA_MODEL_BASE_URL` | `demoMode.data.modelBaseUrl` | 模型网关访问模拟模型的地址；默认是本机回环地址 `http://127.0.0.1:<端口><API 路径>/demoMode/models/v1`。嵌入式部署无法用回环地址访问应用时需要设置 |
+| 环境变量                             | 配置                        | 说明                                                                 |
+| ------------------------------------ | --------------------------- | -------------------------------------------------------------------- |
+| `NOCOBASE_DEMO_MODE`                 | `demoMode.mode`             | `off`（默认）、`observe` 或 `read-only`                              |
+| `NOCOBASE_DEMO_WRITABLE_COLLECTIONS` | `demoMode.allowCollections` | 逗号分隔的逻辑集合名（如 `nrTasks`），部署层面允许访客写入；默认为空 |
+| —                                    | `demoMode.quickSignIn`      | 是否提供免密切换演示账号，默认 `true`                                |
+
+模拟模型的地址由应用自动推导，不再需要配置；模拟模型、在线对话的开关和聊天模型在「演示管理 › 模拟与 AI」里设置。
 
 ## 接口
 

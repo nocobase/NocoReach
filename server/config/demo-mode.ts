@@ -1,11 +1,5 @@
-import {
-  defineAppConfig,
-  type AppConfigFactory,
-} from '@nocobase/app-server/config';
-import type { DemoModeConfig } from '@nocobase/app-plugin-demo-mode/server';
+import { defineDemoModeConfig } from '@nocobase/app-plugin-demo-mode/config';
 
 /** Deployment opt-in; administrator UI cannot turn a production instance into a demo. */
-const demoMode: AppConfigFactory<DemoModeConfig> = defineAppConfig({
-  defaults: { mode: 'off', allowTables: [], data: { models: true } },
-});
+const demoMode = defineDemoModeConfig();
 export default demoMode;
