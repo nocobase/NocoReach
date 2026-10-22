@@ -17,6 +17,10 @@ vi.mock('@nocobase/app-plugin-authentication/client', () => ({
 vi.mock('../../client/layouts/components/language-switcher.js', () => ({
   LanguageSwitcher: () => null,
 }));
+// The demo account switch reads the router, which these menus are rendered without.
+vi.mock('@nocobase/app-plugin-demo-mode/client/account-menu', () => ({
+  DemoAccountMenu: () => null,
+}));
 // Pending invitations are read through the application's API client, which these panels do not need.
 vi.mock('../../client/pages/access/api.js', () => ({
   usePendingInvitationCount: () => 0,
