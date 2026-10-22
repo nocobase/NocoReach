@@ -112,8 +112,8 @@ test('the Agent is chosen in the header, and Start waits for one', async () => {
   mount(data);
   const start = await screen.findByRole('button', { name: '确定开始执行' });
   expect(start).toBeDisabled();
-  expect(agentMenu()).toHaveTextContent('Agent · 未选择');
-  expect(screen.getByText('先在上方选一个 Agent。')).toBeVisible();
+  expect(agentMenu()).toHaveTextContent('未选择');
+  expect(screen.getByText('请先为任务选择 Agent。')).toBeVisible();
   expect(screen.queryByRole('combobox', { name: '本地 Agent' })).toBeNull();
   const selected = structuredClone(data);
   selected.work.agentId = 'codex';
@@ -139,7 +139,7 @@ test('the Agent is chosen in the header, and Start waits for one', async () => {
     }),
   );
   expect(agentMenu()).toHaveTextContent('NocoReach Codex');
-  expect(screen.queryByText('先在上方选一个 Agent。')).toBeNull();
+  expect(screen.queryByText('请先为任务选择 Agent。')).toBeNull();
 });
 
 test('with exactly one Agent available, starting saves it on the task first', async () => {
@@ -247,7 +247,9 @@ test('unavailable and empty Agent states are translated with the real dictionary
   const view = mount(data);
   expect(agentMenu()).toHaveTextContent('Old agent');
   expect(agentMenu()).toHaveTextContent('Unavailable');
-  expect(screen.getByText('Choose an Agent above first.')).toBeVisible();
+  expect(
+    screen.getByText('Choose an Agent for this task first.'),
+  ).toBeVisible();
   view.unmount();
   data.agent!.options = [];
   mount(data);

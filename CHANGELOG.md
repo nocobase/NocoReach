@@ -24,6 +24,12 @@
 - Search performance › Performance reads web search only. The search type choice (Web, Image, Video, News, Discover, Google News) is gone, with the server's handling of other types in the search views: they were read live from Search Console for this choice alone, while the scheduled sync, the daily analysis and Insights use web search only.
 - The coverage line shows only when days are missing: which days, why (fetching, failed, paused, waiting for an administrator, or older than the 16 months Search Console keeps) and the one action that fixes it. A complete range shows nothing; when the data was last saved, blank days, missing comparisons, the backfill limit and scheduled sync being off are in the page's ⓘ. "Re-fetch selected totals" is removed: the scheduled sync re-reads recent days, and gaps are filled automatically when an administrator opens the range.
 
+## Unreleased — Task properties in their own column
+
+- The task page keeps the title across the top and moves the task's properties out of the header into a column on the right from 1280px wide, like the sidebar of an issue: Owner and Agent (both can be changed there), Collaborators, Playbook, From (the opportunity), Article with its full title linked to the published page, Related page, Related tasks and Started. Rows without a value are left out. The column stays in view while the page scrolls; the page keeps its full width.
+- Below 1280px the properties sit under the title in two columns, and in one column on phones, instead of squeezing the content.
+- The content column reads why the task exists, the steps (no longer repeating the playbook's name), what needs doing now and the activity. The start card's hint says "Choose an Agent for this task first." instead of pointing above, in all ten languages.
+
 ## Unreleased — Settings and the sidebar in agreed words
 
 - The sidebar's slogan and the sign-in page's first line read as agreed in Chinese: "从数据中发现机会，NocoReach 帮你落地".
