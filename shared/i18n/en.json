@@ -6967,9 +6967,9 @@
   "analysisRules.placeSingular": "place",
   "siteContent.discoverySummary": "Sitemaps: {0}. Pages found: {1}.",
   "agentRoles.cloud": "Cloud models",
-  "agentRoles.cloudHint": "They use the models in Settings › Model services; the provider bills each call.",
+  "agentRoles.cloudHint": "They use the models in the Model services tab below; the provider bills each call.",
   "agentRoles.local": "Local agents",
-  "agentRoles.localHint": "They use Claude Code or Codex on a computer in Settings › Runtimes, on the account signed in there.",
+  "agentRoles.localHint": "They use Claude Code or Codex on a computer in the Runtimes tab below, on the account signed in there.",
   "agentRoles.chatFootnote": "When you pick a local agent in the chat panel, it answers that conversation too.",
   "agentRoles.colWork": "Work",
   "agentRoles.colDoes": "What it does",
@@ -7014,5 +7014,9 @@
   "runtimesPage.team": "Shared with the team: tasks any member starts may run on this computer, on the account and quota signed in there, and can read and write its files.",
   "runtimesPage.owner": "Owner only: it runs only the tasks of the person who added it.",
   "agentRoles.modelsLink": "Model services",
-  "agentRoles.runtimesLink": "Runtimes"
+  "agentRoles.runtimesLink": "Runtimes",
+  "agentsPage.tabs": "Agent sections",
+  "agentsPage.runtimes": "Runtimes",
+  "agentsPage.models": "Model services",
+  "agentsPage.usage": "Usage"
 }

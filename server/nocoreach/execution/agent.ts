@@ -53,7 +53,7 @@ export class AgentStore {
 
     // Call outside business transactions: model and actor eligibility checks open plugin reads.
     const availability = await agents.availability(conn, options, actor);
-    const choices = options.map(a => ({ id: a.id, name: a.name, type: 'runner', online: Boolean(availability.get(a.id)?.online), busy: availability.get(a.id)?.busy || 0 }));
+    const choices = options.map(a => ({ id: a.id, name: a.name, type: 'runner', tool: a.modelEntries?.[0]?.tool ?? null, online: Boolean(availability.get(a.id)?.online), busy: availability.get(a.id)?.busy || 0 }));
     const status = { ...d, agentId, defaultAgentId: d.agentId, options: choices, online: Boolean(choices.find(a => a.id === agentId)?.online) };
     if (!viewer || !actor) return status;
     // The Agent page also asks how each agent's latest tasks ended and where the chosen one runs (2026-10-21 user report:

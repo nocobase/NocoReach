@@ -6931,9 +6931,9 @@
   "analysisRules.placeSingular": "Platz",
   "siteContent.discoverySummary": "Sitemaps: {0}. Gefundene Seiten: {1}.",
   "agentRoles.cloud": "Cloud-Modelle",
-  "agentRoles.cloudHint": "Sie nutzen die Modelle unter Einstellungen › Modelldienste; der Anbieter rechnet jeden Aufruf ab.",
+  "agentRoles.cloudHint": "Sie nutzen die Modelle im Tab „Modelldienste“ unten; der Anbieter rechnet jeden Aufruf ab.",
   "agentRoles.local": "Lokale Agenten",
-  "agentRoles.localHint": "Sie nutzen Claude Code oder Codex auf einem Computer unter Einstellungen › Laufzeitumgebungen, mit dem dort angemeldeten Konto.",
+  "agentRoles.localHint": "Sie nutzen Claude Code oder Codex auf einem Computer im Tab „Laufzeitumgebungen“ unten, mit dem dort angemeldeten Konto.",
   "agentRoles.chatFootnote": "Wenn Sie im Chatbereich einen lokalen Agenten wählen, beantwortet er auch dieses Gespräch.",
   "agentRoles.colWork": "Arbeit",
   "agentRoles.colDoes": "Aufgabe",
@@ -7014,5 +7014,9 @@
   "searchPerformance.appearanceOther": "Sonstiges ({0})",
   "searchIndex.noteQuota": "Die Anzahl der pro Tag geprüften Seiten ist auf {0} begrenzt. Seiten, deren letzte Prüfung am längsten zurückliegt, werden zuerst geprüft.",
   "searchSitemaps.noteProperty": "Search Console-Property: {0}",
-  "searchHistory.details": "Details zur Datenabdeckung"
+  "searchHistory.details": "Details zur Datenabdeckung",
+  "agentsPage.tabs": "Agent-Bereiche",
+  "agentsPage.runtimes": "Laufzeitumgebungen",
+  "agentsPage.models": "Modelldienste",
+  "agentsPage.usage": "Nutzung"
 }
