@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '#components/ui/select';
-import { SectionHeading } from '#components/reach/page';
+import { PageContainer, SectionHeading } from '#components/reach/page';
 import { InlineError, ListSkeleton, LoadError } from '#components/reach/states';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { useProject } from '../reach-data.js';
@@ -23,18 +23,20 @@ type Settings = {
 };
 const NONE = '__none__';
 
-// The agents that run on a runtime's computer: the project default first, then the Agents plugin's list, where people
-// enable a reported agent and say what it is good at. The Agent page's Change action scrolls here (`id`).
-export function LocalAgents({
-  id,
-  onSaved,
-}: {
-  id?: string;
-  onSaved?: () => void;
-}) {
+// Agent › Local agents: the project default first, then the Agents plugin's list, where people enable a reported agent
+// and say what it is good at.
+export default function LocalAgentsPage() {
+  return (
+    <PageContainer>
+      <LocalAgents />
+    </PageContainer>
+  );
+}
+
+export function LocalAgents({ onSaved }: { onSaved?: () => void }) {
   const { project, error } = useProject();
   return (
-    <section id={id} className='flex scroll-mt-4 flex-col gap-4'>
+    <section className='flex flex-col gap-4'>
       <SectionHeading
         title={$t('common.runnerAgent')}
         description={$t('agentsPage.runnerDescription')}

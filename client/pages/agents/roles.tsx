@@ -44,6 +44,7 @@ type Status = {
   options: {
     id: string;
     name: string;
+    tool?: string | null;
     online?: boolean;
     health?: AgentHealth;
   }[];
@@ -116,17 +117,17 @@ function healthText(health: Extract<AgentHealth, { state: 'attention' }>) {
 
 /**
  * Who does which work in NocoReach, as the people running marketing meet it (2026-10-21 user decision): cloud models
- * (the model services in Settings › Model services) run the daily analysis and answer in the chat panel; local agents
- * (a coding tool on a computer in Settings › Runtimes) carry out tasks. Each row names the model or agent it uses, where
+ * (the Model services tab) run the daily analysis and answer in the chat panel; local agents
+ * (a coding tool on a computer in the Runtimes tab) carry out tasks. Each row names the model or agent it uses, where
  * a local agent runs and who may use that computer, and a status read from how its latest work ended, not only from
  * whether it is set up, with the one action that fixes it.
  */
 export function AgentRoles({
   refresh: outer = 0,
-  localAgentsId,
+  localAgentsTo,
 }: {
   refresh?: number;
-  localAgentsId?: string;
+  localAgentsTo?: string;
 }) {
   const { project } = useProject();
   const { search } = useLocation();
@@ -272,13 +273,13 @@ export function AgentRoles({
   const modelsLoading = models.data === undefined && !models.error;
   const noModels = !modelsLoading && services.length === 0;
   const addModel: Action | undefined = modelsPage.can
-    ? { label: $t('agentRoles.addModel'), to: '/models' }
+    ? { label: $t('agentRoles.addModel'), to: '/agents/models' }
     : undefined;
   const addRuntime: Action | undefined = runtimesPage.can
-    ? { label: $t('agentsPage.addRuntime'), to: '/runtimes/connect' }
+    ? { label: $t('agentsPage.addRuntime'), to: '/agents/runtimes/connect' }
     : undefined;
   const viewRuntimes: Action | undefined = runtimesPage.can
-    ? { label: $t('agentsPage.viewRuntimes'), to: '/runtimes' }
+    ? { label: $t('agentsPage.viewRuntimes'), to: '/agents/runtimes' }
     : undefined;
   const lastRun = analysis?.analysis?.last;
   // The daily analysis reports the model it runs on; a project on simulated data runs without a model service.
@@ -372,14 +373,26 @@ export function AgentRoles({
 
   const options = status?.options || [];
   const chosen = options.find((agent) => agent.id === status?.agentId);
+  // A coding tool that is not signed in or out of quota fails the same way for every agent that uses it, so only an
+  // agent with another tool is worth switching to (2026-10-22 user report: the page offered Claude · Haiku 4.5 while
+  // Claude Code was not signed in).
+  const failingTool =
+    chosen?.health?.state === 'attention' &&
+    (chosen.health.group === 'toolLogin' || chosen.health.group === 'quota')
+      ? (chosen.health.tool ?? chosen.tool ?? null)
+      : null;
+  const sameTool = (tool?: string | null) =>
+    failingTool !== null && tool === failingTool;
   const onlineOption = options.find(
-    (agent) => agent.online && agent.id !== status?.agentId,
+    (agent) =>
+      agent.online && agent.id !== status?.agentId && !sameTool(agent.tool),
   );
   const candidate = discovered.find(
     (agent) =>
       agent.status === 'pending' &&
       agent.canEdit &&
-      agent.runners.team + agent.runners.mine > 0,
+      agent.runners.team + agent.runners.mine > 0 &&
+      !sameTool(agent.modelEntries?.[0]?.tool),
   );
   const fix = (): Action | undefined => {
     if (onlineOption && canSaveDefault)
@@ -396,15 +409,9 @@ export function AgentRoles({
       };
     return undefined;
   };
-  // The project default is chosen in the Local agents section below the card.
-  const change: Action | undefined = localAgentsId
-    ? {
-        label: $t('agentRoles.change'),
-        run: async () =>
-          document
-            .getElementById(localAgentsId)
-            ?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-      }
+  // The project default is chosen in the Local agents tab.
+  const change: Action | undefined = localAgentsTo
+    ? { label: $t('agentRoles.change'), to: `${localAgentsTo}${search}` }
     : undefined;
   // Where the chosen agent can run now: the computer by name for those who may see machines, else how many.
   const where = (() => {
@@ -536,7 +543,7 @@ export function AgentRoles({
             hint={$t('agentRoles.cloudHint')}
             link={
               modelsPage.can
-                ? { to: '/models', label: $t('agentRoles.modelsLink') }
+                ? { to: '/agents/models', label: $t('agentRoles.modelsLink') }
                 : undefined
             }
           >
@@ -548,7 +555,10 @@ export function AgentRoles({
             hint={$t('agentRoles.localHint')}
             link={
               runtimesPage.can
-                ? { to: '/runtimes', label: $t('agentRoles.runtimesLink') }
+                ? {
+                    to: '/agents/runtimes',
+                    label: $t('agentRoles.runtimesLink'),
+                  }
                 : undefined
             }
           >

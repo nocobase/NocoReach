@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Agent: tabs back, no duplicate local agents
+
+- Runtimes, Model services and Usage are tabs of the Agent page again, after Local agents, instead of pages of Settings; Settings no longer lists them, and `/runtimes`, `/models` and `/usage` open the tabs.
+- The Agent page shows Who does the work above the tabs; the local agents and the project default are in the Local agents tab only, instead of a second block below the overview. Change opens that tab.
+- When the chosen local agent's coding tool is not signed in or out of quota, the page no longer offers to switch to an agent that uses the same tool (switching from Claude · Fable 5.1 to Claude · Haiku 4.5 fails the same way); it offers an agent with another tool, or Change.
+
 ## Unreleased — Insights has one refresh
 
 - Update analysis is the page's refresh icon, as on Results, named and tooltipped "Update analysis": it spins while the analysis runs, and the numbers, Current situation and the waiting tasks are read again when it ends. Current situation no longer has a refresh of its own.
