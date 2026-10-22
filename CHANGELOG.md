@@ -9,6 +9,7 @@
 - Tables drawn by hand take the shared header ground: Opportunities › Watching (Handled had it), GitHub hot topics, Downloads' versions, Skills, the task board's list and Knowledge.
 - GitHub hot topics' select-all boxes sit in the table header's first column, as every table's do, not before the card titles.
 - The chips listing terms are one size and shape: Trends' compared products, AI search's topics and the keywords offered on Trends › Watched keywords.
+- Playbook and Skill details open like every other detail panel: the title and its actions in a header row beside the close button, the content below without a card around it. The playbook panel drew its content in a bordered card under a separate close button; the Skill panel left an empty band above the title.
 - A row with one action shows it as a text button: Opportunities › Handled's Restore (was an icon) and Trends › Watched keywords' Remove (was a ⋯ menu with one item). The actions column of API keys has no visible name, as Members' has none.
 ## Unreleased — Playbook Skills matched by name
 
