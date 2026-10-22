@@ -14,7 +14,7 @@ import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
 import { RangePicker } from './range-picker';
 import { validRange, useRange } from './range-state';
-import { MetricTile, type Metric } from "./data-parts";
+import { MetricTile, metricGrid, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
 import { HandOffBar } from "./hand-off-bar";
 import { AllCheck, RowCheck, useTickedList, type Selection } from "#components/reach/hand-off-slot";
@@ -48,14 +48,14 @@ export default function DataCommunity() {
   const top = useTickedList("forum-top", view?.connected ? view.top : undefined, (t) => t.url, (ticked) => ({ playbookId: "community-summary", description: $t('dataCommunity.mostDiscussedTopicsBecomeOne'), draft: () => discussionsDraft(forum, $t('common.mostDiscussedTopics'), ticked.map((t) => ({ title: t.title, url: t.url, meta: topicMeta(t) }))) }));
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title={$t('common.forum')} description={view?.origin ? <>{$t('common.discourseForum')} <a className="nr-link" href={view.origin} target="_blank" rel="noreferrer">{view.title || view.origin}</a>  {$t('dataCommunity.topicsRepliesUnansweredQuestions')}</> : $t('dataCommunity.topicsRepliesUnansweredQuestionsCommunity')} />
-      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:formatDate(w.start),1:formatDate(w.end)}) : $t('common.comparedPreviousDays',{0:formatDate(w.start),1:formatDate(w.end),2:w.days})) : undefined} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title={$t('common.forum')} description={view?.origin ? <><a className="nr-link" href={view.origin} target="_blank" rel="noreferrer">{view.title || view.origin}</a>  {$t('dataCommunity.topicsRepliesUnansweredQuestions')}</> : $t('dataCommunity.topicsRepliesUnansweredQuestionsCommunity')} />
+      {view && !view.connected ? null : <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:formatDate(w.start),1:formatDate(w.end)}) : $t('common.comparedPreviousDays',{0:formatDate(w.start),1:formatDate(w.end),2:w.days})) : undefined} />}
       {error ? <LoadError title={$t('dataCommunity.notLoadForumData')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={5} /> : null}
       {view && !view.connected ? <EmptyState icon={<MessagesSquare />} title={$t('dataCommunity.onceCommunityForumConnectedDiscussion')} description={$t('dataCommunity.supportsPublicCategoriesDiscourseForums')} action={<Button onClick={() => navigate("/connections?source=discourse")}>{$t('dataCommunity.connectCommunityForum')}</Button>} /> : null}
       {view?.connected ? (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
+          <div className={metricGrid(view.kpis!.length)}>{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
           
           <Card className="gap-3 px-4">
             <div className="flex items-center gap-1"><h2 className="text-sm font-semibold">{$t('dataCommunity.newTopicsRepliesPerDay')}</h2><InfoTip label={$t('common.howReadChart')}>{$t('dataCommunity.repliesGroupedDayTopicCreated')}</InfoTip></div>

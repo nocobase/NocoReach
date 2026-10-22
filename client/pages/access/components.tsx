@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { type ReactNode } from 'react';
 import { $t } from '#i18n';
+import { usePageTab } from '#hooks/use-page-tab';
 import { PageHeader } from '#components/reach/page';
 import { Button } from '#components/ui/button';
 import { Alert, AlertDescription } from '#components/ui/alert';
@@ -221,6 +222,7 @@ export function AccessHeader({
     ['roles', 'accessMembers.roles'],
     ['invitations', 'accessMembers.pending'],
   ];
+  usePageTab($t(tabs.find(([key]) => key === tab)![1]));
   return (
     <>
       <PageHeader

@@ -1,4 +1,5 @@
 import { useBusinessAccess } from '#hooks/use-business-access';
+import { decodeHtmlNumericReference } from '../../shared/html-entities.js';
 import { type Message, useMessageState, $t, $tj, $legacyText, isChinese } from "#i18n";
 // 竞品动态 (竞品 › 动态, and its panel in 数据接入): up to five competitors looked at once a week for free — new pages in their
 // sitemaps, GitHub releases and stars. Picked updates go to the Agent as one 竞品对比 task. AI 识别 names candidates
@@ -28,7 +29,7 @@ const call = <T,>(projectId: number, action: string, body: object = {}) => api.a
 const getType = (): Record<Event["type"], string> => ({ page: $t('common.newPages'), release: $t('common.newRelease'), site: $t('common.websiteChanges') });
 const k = (n: number) => formatCount(n);
 // Titles and descriptions saved before the server decoded numeric character references still carry them ("that&#x27;s").
-const unescapeHtml = (v: string) => v.replace(/&#x([0-9a-f]+);/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_, d: string) => String.fromCodePoint(Number(d))).replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+const unescapeHtml = (v: string) => v.replace(/&#x([0-9a-f]+);/gi, (whole, h: string) => decodeHtmlNumericReference(whole, h, 16)).replace(/&#(\d+);/g, (whole, d: string) => decodeHtmlNumericReference(whole, d, 10)).replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 const host = (u: string) => u.replace(/^https:\/\//, "");
 
 type Candidate = { name: string; site: string; repo: string; reason: string; exists: boolean };

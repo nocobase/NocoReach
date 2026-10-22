@@ -1,8 +1,18 @@
 import { useTranslation } from '@nocobase/i18n/client';
 import cronstrue from 'cronstrue';
 import 'cronstrue/locales/zh_CN';
+import 'cronstrue/locales/zh_TW';
+import 'cronstrue/locales/ja';
+import 'cronstrue/locales/es';
+import 'cronstrue/locales/pt_BR';
+import 'cronstrue/locales/fr';
+import 'cronstrue/locales/de';
+import 'cronstrue/locales/vi';
+import 'cronstrue/locales/id';
+import { resolveLocale } from '../../../shared/i18n/locales';
+
 import { timeZoneName } from '#lib/time-zone-name';
-import { ANALYSIS_SCHEDULE, type Schedule } from './data.js';
+import { ANALYSIS_SCHEDULE, dailyTime, type Schedule } from './data.js';
 
 export function useScheduleFormatting() {
   const { t, i18n } = useTranslation();
@@ -51,9 +61,26 @@ export function useScheduleFormatting() {
         ? t('schedules.analysisTitle')
         : schedule.title,
     cron: (value: string) => {
+      // Reuse the native daily-time wording shown on schedule cards.
+      const time =
+        /^\s*(?:[0-5]?\d)\s+(?:[01]?\d|2[0-3])\s+\*\s+\*\s+\*\s*$/.test(value)
+          ? dailyTime(value)
+          : null;
+      if (time) return t('schedules.dailyAt', { time });
       try {
         return cronstrue.toString(value, {
-          locale: locale.startsWith('zh') ? 'zh_CN' : 'en',
+          locale: {
+            'en-US': 'en',
+            'zh-CN': 'zh_CN',
+            'zh-TW': 'zh_TW',
+            'ja-JP': 'ja',
+            'es-ES': 'es',
+            'pt-BR': 'pt_BR',
+            'fr-FR': 'fr',
+            'de-DE': 'de',
+            'vi-VN': 'vi',
+            'id-ID': 'id',
+          }[resolveLocale(locale)],
           use24HourTimeFormat: true,
         });
       } catch {

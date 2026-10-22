@@ -25,10 +25,12 @@ describe('app client routes', () => {
         // The page `deviceAuthorization()`'s verificationUri names, where a CLI's sign-in is approved.
         '/device',
         '/agents',
-        '/agents/runner',
-        '/agents/online',
-        '/agents/online/new',
-        '/agents/online/:onlineAgentId/edit',
+        '/agents/chat/new',
+        '/agents/chat/:onlineAgentId',
+        '/runtimes',
+        '/runtimes/connect',
+        '/models',
+        '/usage',
         '/schedules',
         '/schedules/:scheduleId',
         '/schedules/:scheduleId/edit',
@@ -99,11 +101,6 @@ describe('app client routes', () => {
     ).toEqual([
       { name: 'result-all-detail', authorizedAs: 'result-detail' },
       { name: 'result-all-create', authorizedAs: 'result-create' },
-      { name: 'runner-agents', authorizedAs: 'agents' },
-      { name: 'runtimes', authorizedAs: 'runtimes' },
-      { name: 'runtimes-connect', authorizedAs: 'runtimes' },
-      { name: 'models', authorizedAs: 'settings:agents.services' },
-      { name: 'usage', authorizedAs: 'usage' },
       { name: 'member-invite', authorizedAs: 'members' },
       { name: 'role-new', authorizedAs: 'members' },
       { name: 'role-edit', authorizedAs: 'members' },
@@ -114,6 +111,10 @@ describe('app client routes', () => {
       { name: 'schedules', authorizedAs: 'scheduler.schedules' },
       { name: 'schedule-edit', authorizedAs: 'scheduler.schedules' },
       { name: 'schedule-detail', authorizedAs: 'scheduler.schedules' },
+      { name: 'runtimes', authorizedAs: 'runtimes' },
+      { name: 'runtimes-connect', authorizedAs: 'runtimes' },
+      { name: 'models', authorizedAs: 'settings:agents.services' },
+      { name: 'usage', authorizedAs: 'usage' },
     ]);
   });
 

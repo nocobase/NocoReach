@@ -1,4 +1,5 @@
 import { useMessageState, $t, $tj, $legacyText, $legacyFragment } from "#i18n";
+import { usePageTab } from '#hooks/use-page-tab';
 import {useEffect,useState,type ReactNode} from 'react';
 import {Link,useNavigate,useSearchParams} from 'react-router';
 import {ArrowRightIcon,ExternalLinkIcon,EyeIcon,LightbulbIcon,RotateCcwIcon,SearchIcon} from 'lucide-react';
@@ -51,6 +52,7 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
  const linked=rows.find(r=>r.card.id===params.get('item'));
  const asked=params.get('tab');
  const tab:Tab=asked==='pending'||asked==='done'||asked==='watch'?asked:asked==='all'||asked==='task'||asked==='archived'?'done':linked&&linked.state!=='pending'?'done':'pending';
+ usePageTab(getTabs().find(([k])=>k===tab)?.[1]);
  const pending=rows.filter(r=>r.state==='pending').sort((a,b)=>(priorityRank[a.priority]??3)-(priorityRank[b.priority]??3)||String(b.firstSeenAt).localeCompare(String(a.firstSeenAt)));
  const selected=pending.find(r=>r.card.id===params.get('item'))||pending[0];
  const opened=tab==='done'?linked:undefined;

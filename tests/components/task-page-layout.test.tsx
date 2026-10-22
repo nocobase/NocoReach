@@ -7,6 +7,7 @@ import { setDictionary } from '../../client/i18n';
 import { TaskDraftProvider } from '../../client/pages/task-detail/drafts';
 import { TaskDetail } from '../../client/pages/task-detail';
 import type { TaskData } from '../../client/pages/task-execution-types';
+import spanish from '../../shared/i18n/es-ES.json';
 
 const { action } = vi.hoisted(() => ({ action: vi.fn() }));
 vi.mock('../../client/lib/nocoreach-api', async (original) => {
@@ -156,6 +157,28 @@ function mount(data = pageChange(), entry = '/actions/1') {
     </MemoryRouter>,
   );
 }
+
+test('unknown activity actors use a member label instead of claiming the current user acted', async () => {
+  setDictionary(spanish, 'es-ES');
+  const data = pageChange();
+  data.work.history = [
+    {
+      at: '2026-10-13T02:14:00Z',
+      actor: 'missing-member',
+      action: 'linkContent',
+    },
+    { at: '2026-10-13T02:15:00Z', actor: '1', action: 'linkContent' },
+  ];
+  mount(data);
+  const activity = screen.getByRole('region', { name: 'Actividad' });
+  expect(
+    await within(activity).findByText('Miembro', { selector: 'b' }),
+  ).toBeVisible();
+  expect(
+    await within(activity).findByText('Super Admin', { selector: 'b' }),
+  ).toBeVisible();
+  expect(within(activity).queryByText('Tú', { selector: 'b' })).toBeNull();
+});
 
 test('a page change is reviewed as what readers see, with code kept in Technical details', async () => {
   const user = userEvent.setup();

@@ -30,7 +30,7 @@ export function SiteContentConnect({projectId,onChange}:{projectId:number;onChan
   <label className="nr-field">{$t('common.websiteUrl')}<input aria-label={$t('common.websiteUrl')} value={url} disabled={busy} placeholder="https://example.com" onChange={e=>{setUrl(e.target.value);setFound(undefined);}}/></label>
   <div className="nr-step-actions">{editing&&<Button variant="ghost" disabled={busy} onClick={()=>setEditing(false)}>{$t('common.cancel')}</Button>}<Button disabled={busy||!url.trim()} onClick={()=>void run(async()=>{const d=await call<Discovery>(projectId,'discover',{url});setFound(d);setKeep(Object.keys(d.types));})}>{busy&&!found?$t('siteContent.readingWebsite'):$t('siteContent.readWebsite')}</Button></div>
   </>}
-  {found&&<div className="nr-guide-preview"><p>{$tj('siteContent.foundSitemaps',{0:found.sitemaps.length})} <strong>{found.total}</strong>  {$t('siteContent.pagesChooseTypesIncludeAnalysis')}</p>
+  {found&&<div className="nr-guide-preview"><p>{$tj('siteContent.discoverySummary',{0:found.sitemaps.length,1:<strong>{found.total}</strong>})} {$t('siteContent.pagesChooseTypesIncludeAnalysis')}</p>
    {Object.entries(found.types).map(([t,n])=><label key={t} className="nr-guide-type"><input type="checkbox" checked={keep.includes(t)} disabled={busy||!canConfirm} onChange={e=>setKeep(k=>e.target.checked?[...k,t]:k.filter(x=>x!==t))}/><span><strong>{getTypeLabels()[t]||t}</strong>  {$tj('siteContent.pagesMetaValue',{0:n})}<small>{found.samples[t]?.slice(0,3).map(u=>{try{return new URL(u).pathname;}catch{return u;}}).join('、')}</small></span></label>)}
    {found.warnings.map(w=><p className="nr-footnote" key={w}>{$legacyText(w)}</p>)}
    <p className="nr-footnote">{$t('siteContent.typesGuessedUrlPathsMay')}</p>

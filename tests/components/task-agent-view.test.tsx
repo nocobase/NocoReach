@@ -315,7 +315,7 @@ test('cards on the board and the list name the Agent, and the Agent filter narro
   expect(card(39)).toHaveTextContent('未分配');
   expect(document.body).not.toHaveTextContent(/·\s*Agent\b/);
   await user.selectOptions(
-    screen.getByRole('combobox', { name: '按执行 Agent 筛选' }),
+    screen.getByRole('combobox', { name: '按本地 Agent 筛选' }),
     'Claude · Fable 5.1',
   );
   expect(screen.getByTestId('url')).toHaveTextContent('agent=fable');

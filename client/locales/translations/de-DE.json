@@ -1,0 +1,823 @@
+{
+  "nocoreach.nav.apiKeys": "API-Schlüssel",
+  "schedules": {
+    "title": "Automatische Ausführungen",
+    "description": "Aufgaben, die NocoReach selbstständig erledigt. Die Uhrzeit der täglichen Analyse können Sie hier ändern.",
+    "analysisTitle": "Tägliche Analyse",
+    "analysisDescription": "Liest die neuesten Daten aller Projekte und lässt die KI Beobachtungen und Vorschläge für den aktuellen Zeitraum unter Erkenntnisse und Chancen erstellen. Ausgefallene Tagesanalysen werden automatisch nachgeholt.",
+    "otherWork": "Datensynchronisierungen, Positionsverfolgung, Trends, Wettbewerberaktivitäten und weitere automatische Aufgaben finden Sie für jedes Projekt unter Datenzustand.",
+    "otherWorkLink": "Datenquellen öffnen",
+    "dailyAt": "Täglich um {{time}}",
+    "last": "Zuletzt",
+    "nextLabel": "Als Nächstes",
+    "notRunYet": "Noch nicht ausgeführt",
+    "pausedNext": "Pausiert, keine automatischen Ausführungen",
+    "today": "Heute {{time}}",
+    "tomorrow": "Morgen {{time}}",
+    "yesterday": "Gestern {{time}}",
+    "shownIn": "Zeitangaben in {{zone}}",
+    "analyzed": "{{projects}}, {{items}}",
+    "projectCount_one": "{{count}} Projekt",
+    "projectCount_other": "{{count}} Projekte",
+    "allSkipped": "Heute bereits analysiert, übersprungen",
+    "moreActions": "Weitere Aktionen",
+    "details": "Technische Details",
+    "detailsHelp": "Zur Fehlerbehebung: So wird diese Aufgabe im Scheduler-Plugin geführt. Für die tägliche Nutzung sind diese Angaben nicht erforderlich.",
+    "scheduleKey": "Interner Schlüssel",
+    "editTime": "Uhrzeit ändern",
+    "editTitle": "Uhrzeit von „{{name}}“ ändern",
+    "editHelp": "Wird täglich zu dieser Uhrzeit ausgeführt. Änderungen gelten nach dem Speichern ab der nächsten Ausführung.",
+    "runNow": "Jetzt ausführen",
+    "dailyTime": "Täglich um",
+    "saveTime": "Speichern",
+    "invalidTime": "Geben Sie eine gültige Uhrzeit ein (HH:mm).",
+    "dataReadyHint": "Die meisten Datenquellen werden in dieser Zeitzone täglich gegen {{time}} aktualisiert. Planen Sie die Analyse danach, damit sie die neuesten Daten verwendet.",
+    "searchTimezone": "Zeitzonen suchen, z. B. Shanghai",
+    "noTimezone": "Keine passende Zeitzone.",
+    "dstHelp": "Bei der Zeitumstellung werden übersprungene Uhrzeiten nach hinten verschoben; doppelt vorkommende Uhrzeiten werden in der Regel nur einmal ausgeführt. Eine Wiederherstellung kann eine erneute Ausführung auslösen. Projekte, die an diesem lokalen Tag bereits erfolgreich analysiert wurden, werden übersprungen.",
+    "timeSaved": "Uhrzeit gespeichert",
+    "triggered": "Analyse gestartet. Das Ergebnis erscheint im Ausführungsverlauf.",
+    "runNowHelp": "Alle Projekte jetzt analysieren. Heute bereits analysierte Projekte werden übersprungen; der KI-Dienst wird aufgerufen. Die tägliche Uhrzeit bleibt unverändert.",
+    "submitting": "Wird gestartet…",
+    "confirmRun": "Jetzt ausführen",
+    "signIn": "Erneut anmelden",
+    "back": "Zurück zu den automatischen Ausführungen",
+    "emptyTitle": "Keine automatischen Ausführungen",
+    "noRunsTitle": "Noch keine Ausführungen",
+    "history": "Ausführungsverlauf",
+    "historyTitle": "{{name}} · Ausführungsverlauf",
+    "historyDescription": "Ergebnisse aller automatischen Ausführungen, neueste zuerst.",
+    "noDescription": "Keine Beschreibung.",
+    "refresh": "Aktualisieren",
+    "loading": "Wird geladen…",
+    "saving": "Wird gespeichert…",
+    "retry": "Erneut versuchen",
+    "errorTitle": "Anfrage konnte nicht abgeschlossen werden",
+    "failed": "Die Anfrage ist fehlgeschlagen. Versuchen Sie es erneut.",
+    "signedOut": "Ihre Sitzung ist abgelaufen. Melden Sie sich erneut an, um fortzufahren.",
+    "forbidden": "Sie haben keine Berechtigung, automatische Ausführungen zu verwalten. Wenden Sie sich an Ihren Administrator.",
+    "notFound": "Diese automatische Ausführung ist nicht mehr verfügbar.",
+    "empty": "Auf dieser Seite gibt es keine automatischen Ausführungen. Aktualisieren Sie die Seite oder kehren Sie zur vorherigen Seite zurück.",
+    "noRuns": "Noch nicht ausgeführt. Die erste Ausführung erfolgt zum nächsten geplanten Zeitpunkt.",
+    "plan": "Zeitplan",
+    "customSchedule": "Benutzerdefinierter Zeitplan",
+    "timezone": "Zeitzone",
+    "scheduling": "Planungsstatus",
+    "lifecycle": "Definitionsstatus",
+    "target": "Ausführungsziel",
+    "lastRun": "Letzte automatische Auslösung",
+    "nextRun": "Nächste Ausführung",
+    "enable": "Aktivieren",
+    "disable": "Pausieren",
+    "cancel": "Abbrechen",
+    "disableTitle": "„{{name}}“ pausieren?",
+    "disableHelp": "Wird bis zur erneuten Aktivierung nicht mehr automatisch ausgeführt. Eine bereits gestartete Ausführung wird abgeschlossen.",
+    "inactiveHelp": "Diese Aufgabe ist in der Anwendung nicht mehr definiert und kann hier nicht aktiviert werden.",
+    "enabledNotice": "„{{name}}“ ist aktiviert.",
+    "disabledNotice": "„{{name}}“ ist pausiert.",
+    "pagination": "Seiten mit automatischen Ausführungen",
+    "page": "Seite {{page}} · {{total}} Einträge",
+    "previous": "Zurück",
+    "next": "Weiter",
+    "more": "Mehr laden",
+    "runCount": "Automatische Auslösungen",
+    "completedCount": "Erfolgreiche Ausführungen",
+    "project": "Projekt {{id}}",
+    "items_one": "{{count}} Vorschlag",
+    "items_other": "{{count}} Vorschläge",
+    "states": {
+      "enabled": "Aktiviert",
+      "disabled": "Pausiert",
+      "active": "Aktiv",
+      "inactive": "Inaktiv",
+      "paused": "Pausiert",
+      "ready": "Bereit",
+      "missing": "Fehlt",
+      "invalid": "Ungültig",
+      "pending": "Wartet",
+      "running": "Wird ausgeführt",
+      "waiting": "Wird ausgeführt",
+      "succeeded": "Abgeschlossen",
+      "failed": "Fehlgeschlagen",
+      "skipped": "Übersprungen",
+      "cancelled": "Abgebrochen",
+      "timed_out": "Zeitüberschreitung",
+      "triggered": "Gestartet, Ergebnis unbekannt",
+      "unknown": "Unbekannt"
+    }
+  },
+  "auth.preparingSession": "Ihre Sitzung wird vorbereitet…",
+  "auth.connectionFailed": "Verbindung nicht möglich",
+  "auth.connectionFailedDescription": "Die Verbindung konnte nicht hergestellt werden. Versuchen Sie es erneut, um die Anwendung zu öffnen, oder melden Sie sich ab.",
+  "auth.passwordResetSuccess": "Ihr Passwort wurde zurückgesetzt. Melden Sie sich mit Ihrem neuen Passwort an.",
+  "auth.requestNewResetLink": "Neuen Link zum Zurücksetzen anfordern",
+  "deviceApproval.title": "Gerät autorisieren",
+  "deviceApproval.description": "Eine Befehlszeile oder ein anderes Gerät möchte sich in Ihrem Namen anmelden. Genehmigen Sie dies nur, wenn Sie die Anmeldung selbst gestartet haben.",
+  "deviceApproval.enterCode": "Geben Sie den Code ein, den Ihr Gerät anzeigt.",
+  "deviceApproval.codeLabel": "Code",
+  "deviceApproval.continue": "Weiter",
+  "deviceApproval.checking": "Code wird geprüft…",
+  "deviceApproval.confirm": "Prüfen Sie, ob dieser Code mit dem auf Ihrem Gerät angezeigten übereinstimmt.",
+  "deviceApproval.client": "Angefordert von {{client}}",
+  "deviceApproval.approve": "Genehmigen",
+  "deviceApproval.approving": "Wird genehmigt…",
+  "deviceApproval.deny": "Ablehnen",
+  "deviceApproval.denying": "Wird abgelehnt…",
+  "deviceApproval.approved": "Gerät genehmigt. Kehren Sie zum Terminal zurück, um fortzufahren; Sie können diese Seite schließen.",
+  "deviceApproval.denied": "Anfrage abgelehnt. Das Gerät wurde nicht angemeldet; Sie können diese Seite schließen.",
+  "deviceApproval.expired": "Dieser Code ist abgelaufen. Starten Sie die Anmeldung auf Ihrem Gerät erneut.",
+  "deviceApproval.invalid": "Dieser Code ist ungültig. Vergleichen Sie ihn mit Ihrem Gerät und versuchen Sie es erneut.",
+  "deviceApproval.notYours": "Dieser Code wird bereits von einem anderen Konto genehmigt.",
+  "deviceApproval.error": "Etwas ist schiefgelaufen. Versuchen Sie es erneut.",
+  "deviceApproval.retry": "Erneut versuchen",
+  "deviceApproval.otherCode": "Anderen Code eingeben",
+  "inbox.title": "Posteingang",
+  "inbox.description": "Benachrichtigungen und Anfragen an Sie.",
+  "inbox.views.all": "Alle",
+  "inbox.views.todo": "Zu erledigen",
+  "inbox.kinds.label": "Typ",
+  "inbox.kinds.all": "Alle Typen",
+  "inbox.kinds.decision": "Entscheidungen",
+  "inbox.kinds.info": "Benachrichtigungen",
+  "inbox.tabs.decision": "Von mir zu entscheiden",
+  "inbox.tabs.info": "Benachrichtigungen",
+  "inbox.clearFilter": "Filter zurücksetzen",
+  "inbox.noMatchDescription": "Setzen Sie den Filter zurück, um alle Typen zu sehen.",
+  "inbox.readAll": "Alle als gelesen markieren",
+  "inbox.allRead": "Alle als gelesen markiert.",
+  "inbox.loading": "Wird geladen",
+  "inbox.loadFailed": "Posteingang konnte nicht geladen werden",
+  "inbox.loadFailedDescription": "Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+  "inbox.retry": "Erneut versuchen",
+  "inbox.loadMore": "Mehr laden",
+  "inbox.emptyAll": "Keine Einträge",
+  "inbox.empty.todo": "Nichts wartet auf Sie",
+  "inbox.empty.decision": "Keine Entscheidungen ausstehend",
+  "inbox.empty.info": "Keine Benachrichtigungen",
+  "inbox.emptyDescription": "Benachrichtigungen und Anfragen an Sie erscheinen hier.",
+  "inbox.unread": "Ungelesen",
+  "inbox.unreadCount": "{{count}} ungelesen",
+  "inbox.pendingDecisions": "{{count}} ausstehend",
+  "inbox.resolved": "Erledigt",
+  "inbox.outcomes.approved": "Genehmigt",
+  "inbox.outcomes.rejected": "Abgelehnt",
+  "inbox.outcomes.withdrawn": "Zurückgezogen",
+  "inbox.count": "×{{count}}",
+  "inbox.actionsFor": "Aktionen für {{title}}",
+  "inbox.actions.read": "Als gelesen markieren",
+  "inbox.actions.unread": "Als ungelesen markieren",
+  "inbox.actions.delete": "Löschen",
+  "inbox.deleted": "Gelöscht.",
+  "inbox.requestFailed": "Die Anfrage ist fehlgeschlagen. Versuchen Sie es erneut.",
+  "inbox.forbidden": "Dazu sind Sie nicht berechtigt.",
+  "inbox.nothingSelected": "Wählen Sie einen Eintrag aus, um ihn anzuzeigen",
+  "inbox.back": "Zurück zur Liste",
+  "inbox.open": "Öffnen",
+  "inbox.keyMove": "Navigieren",
+  "inbox.keyOpen": "Öffnen",
+  "inbox.cancel": "Abbrechen",
+  "inbox.request.approve": "Genehmigen",
+  "inbox.request.reject": "Ablehnen",
+  "inbox.request.commentPlaceholder": "Schreiben Sie etwas…",
+  "inbox.request.commentFor": "{{action}}: {{title}}",
+  "inbox.request.quickSend": "zum Senden",
+  "inbox.request.newLine": "für eine neue Zeile",
+  "inboxButton.title": "Posteingang",
+  "inboxButton.pending": "Posteingang, {{count}} ausstehend",
+  "inboxButton.unread": "Posteingang, {{count}} ungelesen",
+  "inboxButton.pendingHint": "{{count}} warten auf Sie; die Zahl sinkt, sobald sie erledigt sind.",
+  "inboxButton.unreadHint": "{{count}} ungelesen; die Zahl sinkt, während Sie lesen.",
+  "auth.welcome": "Willkommen zurück",
+  "auth.loginDescription": "Melden Sie sich mit Benutzername oder E-Mail und Passwort an.",
+  "auth.registerTitle": "Konto erstellen",
+  "auth.registerDescription": "Erstellen Sie ein Konto, um loszulegen.",
+  "auth.forgotTitle": "Passwort vergessen",
+  "auth.forgotDescription": "Geben Sie Ihre E-Mail-Adresse ein. Falls das Konto existiert, senden wir einen Link zum Zurücksetzen.",
+  "auth.passwordResetUnavailable": "Das Zurücksetzen des Passworts durch Benutzer ist nicht aktiviert. Wenden Sie sich an einen Administrator, um Ihr Passwort zurückzusetzen.",
+  "auth.capabilityLoadFailed": "Es konnte nicht geprüft werden, ob das Zurücksetzen des Passworts verfügbar ist.",
+  "auth.retry": "Erneut versuchen",
+  "auth.loading": "Wird geladen",
+  "auth.resetDescription": "Wählen Sie ein neues Passwort für Ihr Konto.",
+  "auth.resetTitle": "Passwort zurücksetzen",
+  "auth.identifier": "Benutzername oder E-Mail",
+  "auth.password": "Passwort",
+  "auth.signIn": "Anmelden",
+  "auth.signingIn": "Anmeldung läuft…",
+  "auth.hidePassword": "Passwort ausblenden",
+  "auth.showPassword": "Passwort anzeigen",
+  "auth.forgotLink": "Passwort vergessen?",
+  "auth.noAccount": "Noch kein Konto?",
+  "auth.signUp": "Registrieren",
+  "auth.createAccount": "Konto erstellen",
+  "auth.creatingAccount": "Konto wird erstellt…",
+  "auth.name": "Name",
+  "auth.username": "Benutzername",
+  "auth.email": "E-Mail",
+  "auth.confirmPassword": "Passwort bestätigen",
+  "auth.existingAccount": "Sie haben bereits ein Konto?",
+  "auth.passwordMismatch": "Die Passwörter stimmen nicht überein.",
+  "auth.resetting": "Wird zurückgesetzt…",
+  "auth.newPassword": "Neues Passwort",
+  "auth.confirmNewPassword": "Neues Passwort bestätigen",
+  "auth.invalidResetLink": "Dieser Link zum Zurücksetzen des Passworts ist ungültig oder abgelaufen.",
+  "auth.backToSignIn": "Zurück zur Anmeldung",
+  "auth.sendResetLink": "Link zum Zurücksetzen senden",
+  "auth.sending": "Wird gesendet…",
+  "auth.resetSent": "Falls das Konto existiert, wurde ein Link zum Zurücksetzen gesendet.",
+  "auth.rememberPassword": "Passwort wieder eingefallen?",
+  "auth.methods": "Anmeldemethoden",
+  "auth.or": "Oder weiter mit",
+  "auth.continueWith": "Weiter mit {provider}",
+  "auth.about": "Über diese Anwendung",
+  "auth.platform": "KI-Team für Wachstum",
+  "auth.marketingTitleFirst": "Erkennen Sie, was zu tun ist,",
+  "auth.marketingTitleSecond": "übergeben Sie es einem Agenten,",
+  "auth.marketingTitleThird": "setzen Sie es um.",
+  "auth.marketingDescription": "NocoReach wertet täglich Ihre Such-, Besucher-, Community- und GitHub-Daten aus und erkennt, welche Maßnahmen sich lohnen. Sobald Sie zustimmen, nimmt Ihr Agent die Änderung in Ihrem Repository vor und erstellt einen Pull Request.",
+  "auth.frontend": "Tägliche Analyse",
+  "auth.frontendDescription": "Die Online-KI wertet täglich die Daten aus und schlägt belegbare Chancen vor.",
+  "auth.foundation": "Direkt im Repository",
+  "auth.foundationDescription": "Ihr Agent bearbeitet das Repository und erstellt einen Pull Request, den Sie prüfen können.",
+  "auth.marketingFooter": "Erkennen, umsetzen, messen.",
+  "status.loading": "Wird geladen",
+  "status.loadingPage": "Seite wird geladen",
+  "status.denied": "Zugriff verweigert",
+  "status.pageFailed": "Seite konnte nicht geladen werden",
+  "status.retry": "Erneut versuchen",
+  "navigation.brandHome": "NocoReach-Startseite",
+  "navigation.brandApps": "NocoReach-Anwendungen",
+  "routeOverlay.close": "Schließen",
+  "status.deniedDescription": "Sie haben keine Berechtigung für {{label}}.",
+  "status.routeFailedDescription": "Route {{label}} aus {{packageName}} konnte nicht geladen werden.",
+  "shell": {
+    "templateVersionUnknown": "Version unbekannt",
+    "buildFreely": "Entdecken Sie die Chancen in Ihren Daten.",
+    "reliability": "<brand>NocoReach</brand> setzt sie um."
+  },
+  "home": {
+    "platform": "NocoBase · KI-native Anwendungsplattform",
+    "title": "Beschreiben Sie es, und Ihr Agent baut es",
+    "description": "Diese Anwendung wird im Gespräch mit Ihrem Coding-Agenten entwickelt. Beschreiben Sie in einfachen Worten, was das Geschäft braucht, und er schreibt die Seiten, Datenmodelle, APIs und Geschäftsprozesse in diesem Projekt.",
+    "steps": {
+      "describe": {
+        "title": "Bedarf beschreiben",
+        "description": "Sagen Sie, wer es nutzt, welche Daten es speichert und was passieren soll."
+      },
+      "build": {
+        "title": "Den Agenten bauen lassen",
+        "description": "Er liest dieses Projekt und seine integrierten Funktionen und schreibt dann den Code."
+      },
+      "review": {
+        "title": "Prüfen und verfeinern",
+        "description": "Laden Sie die Seite neu, um es auszuprobieren, und bitten Sie auf dieselbe Weise um Änderungen."
+      }
+    },
+    "example": {
+      "title": "Probieren Sie eine Anfrage wie diese",
+      "text": "Erstellen Sie eine Anwendung für Bestellungen.\n\nEine Bestellung hat eine Nummer, einen Artikel, einen Antragsteller, einen Betrag und einen Genehmigungsstatus. Antragsteller erstellen Bestellungen und sehen nur ihre eigenen; Prüfer sehen alle offenen Bestellungen und genehmigen oder lehnen sie ab.\nBenachrichtigen Sie den Antragsteller nach einer Entscheidung im Posteingang, mit einem Link zur Bestellung.",
+      "hint": "Fügen Sie sie in Claude Code, Codex, Cursor oder einen anderen Coding-Agenten ein, der in diesem Projekt geöffnet ist."
+    },
+    "capabilitiesTitle": "Integrierte Funktionen",
+    "capabilitiesDescription": "Ihr Agent nutzt diese direkt, statt sie von Grund auf neu zu bauen. Öffnen Sie eine davon, um einen Prompt zu erhalten, den Sie bearbeiten und kopieren können.",
+    "viewPrompts": "Prompts anzeigen ({{count}})",
+    "prompt": {
+      "label": "Prompt",
+      "hint": "Passen Sie den Prompt vor dem Kopieren an Ihr Geschäft an. Änderungen gehen verloren, wenn der Dialog geschlossen wird.",
+      "copy": "Kopieren",
+      "copiedShort": "Kopiert",
+      "copied": "Prompt kopiert",
+      "copyFailed": "Kopieren nicht möglich. Markieren Sie den Text und kopieren Sie ihn manuell.",
+      "reset": "Standard wiederherstellen"
+    },
+    "capabilities": {
+      "auth": {
+        "title": "Authentifizierung",
+        "description": "Anmeldung, Registrierung, Zurücksetzen des Passworts und Single Sign-on des Unternehmens.",
+        "prompts": {
+          "disableSignUp": {
+            "label": "Registrierung schließen",
+            "text": "Diese Anwendung ist nur für Mitarbeitende des Unternehmens. Administratoren legen alle Konten an.\nDeaktivieren Sie die Selbstregistrierung und entfernen Sie den Registrierungslink von der Anmeldeseite.\nBestehende Mitarbeitende müssen sich weiterhin mit ihren Konten und Passwörtern anmelden können.\nBehalten Sie den Link „Passwort vergessen“ bei."
+          },
+          "companySso": {
+            "label": "Unternehmens-SSO",
+            "text": "Lassen Sie Mitarbeitende sich per OIDC über die Identitätsplattform unseres Unternehmens anmelden.\n\nBehalten Sie die Anmeldung mit Konto und Passwort bei und fügen Sie eine Schaltfläche „Unternehmenskonto“ hinzu.\nDie Schaltfläche öffnet die Identitätsplattform des Unternehmens. Nach erfolgreicher Anmeldung geht es zurück zur Startseite der Anwendung.\n\nErlauben Sie, dass bei der ersten Anmeldung ein Anwendungskonto angelegt wird, identifiziert über die stabile Benutzerkennung der Plattform.\nVerknüpfen Sie Konten nicht automatisch über übereinstimmende Namen oder E-Mail-Adressen. Neue Konten erhalten die Standardberechtigungen der Anwendung.\n\nListen Sie die Informationen auf, die der Administrator der Identitätsplattform bereitstellen muss, sowie die Callback-URL, die er registrieren muss."
+          },
+          "apiKeys": {
+            "label": "API-Schlüssel",
+            "text": "Fügen Sie dem Benutzermenü einen Eintrag „Integrationsschlüssel“ hinzu und nutzen Sie dafür die integrierte API-Schlüssel-Funktion der Anwendung.\nMitarbeitende verwalten nur die Schlüssel, die sie selbst erstellt haben, und geben dabei einen Zweck und eine Gültigkeitsdauer in Tagen an.\nZeigen Sie den vollständigen Schlüssel nur einmal nach der Erstellung an, mit dem Hinweis, ihn sofort zu kopieren und sicher aufzubewahren.\nListen Sie für jeden Schlüssel Name, ein erkennbares Fragment, Status, Ablaufdatum und letzte Verwendung auf und erlauben Sie, ihn nach Bestätigung zu widerrufen.\nZeigen Sie den vollständigen Schlüssel niemals in der Liste, in Logs oder in Details an."
+          }
+        }
+      },
+      "dataSources": {
+        "title": "Datenquellen",
+        "description": "Wählen Sie die Anwendungsdatenbank und nutzen Sie Geschäftsdaten aus bestehenden externen Datenbanken.",
+        "prompts": {
+          "postgres": {
+            "label": "Datenbank wechseln",
+            "text": "Stellen Sie die Anwendungsdatenbank von SQLite auf PostgreSQL um.\nLesen Sie die Verbindungsdaten aus der Laufzeitkonfiguration des Servers, nicht aus dem Quellcode.\nErklären Sie, welchen Datenbanktreiber ich installieren und welche Einstellungen ich ausfüllen muss, und weisen Sie mich darauf hin, dass vorhandene Daten nicht automatisch migriert werden."
+          },
+          "externalDatabase": {
+            "label": "Externe Datenbank",
+            "text": "Binden Sie die bestehende Finanzdatenbank des Unternehmens als schreibgeschützte externe Datenquelle an; ändern Sie ihre Tabellen nicht.\nOrdnen Sie Datensätze über die Lieferantennummer zu und ergänzen Sie die Lieferantendetails um einen Abschnitt „Abrechnung“ mit Abrechnungszyklus, Kreditlimit und Abrechnungsstatus, gekennzeichnet mit seiner Quelle.\nLesen Sie die Kontaktdaten der Lieferanten weiterhin aus der Anwendungsdatenbank und die Abrechnungsdaten direkt aus der externen Datenbank, ohne sie zu importieren.\nLesen Sie die Zugangsdaten der Verbindung aus der Laufzeitkonfiguration des Servers."
+          }
+        }
+      },
+      "authorization": {
+        "title": "Berechtigungen",
+        "description": "Legen Sie fest, wer welche Seiten öffnen, welche Aktionen ausführen und welche Datensätze sehen darf.",
+        "prompts": {
+          "jobs": {
+            "label": "Positionen",
+            "text": "Erstellen Sie für die Anwendung die Positionen „Bestellanforderer“ und „Bestellprüfer“.\nBestellanforderer können die Bestellseite öffnen und die von ihnen angeforderten Bestellungen ansehen.\nBestellprüfer können die Bestellseite öffnen, Bestellungen ansehen und offene Bestellungen genehmigen oder ablehnen.\nNur Administratoren der Anwendung können Berechtigungen und Zuweisungen ändern.\nNutzen Sie die vorhandene Autorisierungsfunktion der Anwendung, damit Administratoren Berechtigungen später anpassen und Personen zuweisen können."
+          },
+          "dataScopes": {
+            "label": "Datenbereiche",
+            "text": "Lassen Sie Bestellanforderer nur ihre eigenen Bestellungen sehen; die Zugehörigkeit bestimmt das Feld „Anforderer“ der Bestellung.\nBestellprüfer können alle Bestellungen sehen und offene Genehmigungen bearbeiten.\nAdministratoren können den Sichtbereich für Bestellungen jeder Position in deren Berechtigungssatz anpassen."
+          },
+          "restrictions": {
+            "label": "Einschränkungen",
+            "text": "Bob hilft vorübergehend bei der Prüfung von Bestellungen und darf nur Bestellungen bis 2.000 sehen.\nFügen Sie seiner Aktion „Bestellungen ansehen“ ein Betragslimit hinzu und behalten Sie seine bestehende Position und seine Datenbereiche bei.\nWenden Sie das Limit auf seine eigenen Bestellungen und auf mit ihm geteilte Bestellungen an.\nAdministratoren können den Betrag ändern oder die Regel entfernen; erklären Sie vor dem Entfernen, dass sich sein sichtbarer Bereich vergrößern kann."
+          }
+        }
+      },
+      "workflow": {
+        "title": "Workflows",
+        "description": "Führen Sie Geschäftsdatensätze durch Phasen – mit Wartezeiten, Timeouts, Wiederholungen und einem Verlauf, wer was getan hat.",
+        "prompts": {
+          "stages": {
+            "label": "Phasen",
+            "text": "Fügen Sie Bestellungen einen Prozess hinzu: Genehmigung ausstehend → Einkauf ausstehend → Eingegangen → Abgeschlossen.\nPrüfer genehmigen oder lehnen ab; eine Ablehnung erfordert eine Begründung und gibt die Bestellung an den Antragsteller zurück, der sie überarbeitet und erneut einreicht.\nNachdem der Einkäufer den Einkauf ausgelöst hat, steht die Bestellung auf „Einkauf ausstehend“; die Bestätigung der Lieferung mit unterschriebenem Empfangsbeleg setzt sie auf „Eingegangen“, und die Bestätigung des Antragstellers schließt sie ab.\nDie Bestelldetails bieten nur die Aktionen der aktuellen Phase an, und normale Bearbeitungen können die Phase nicht ändern.\nPrüfen Sie Phasen und Pflichtangaben auf dem Server und überschreiben Sie niemals ein Ergebnis, das jemand anderes bereits eingereicht hat."
+          },
+          "backgroundExport": {
+            "label": "Export im Hintergrund",
+            "text": "Fügen Sie eine Seite für Bestellberichte hinzu, die vorhandene Bestellungen als CSV exportiert.\nNach dem Absenden wartet der Export auf die Verarbeitung, wird im Hintergrund erzeugt und endet mit einem Download-Link.\nZeigen Sie die aktuelle Phase, den Dateinamen, die Anzahl exportierter Bestellungen sowie die Einträge zur Übermittlung und zur Systemverarbeitung an.\nWiederholen Sie fehlgeschlagene Erzeugungen nach festgelegten Regeln und überlassen Sie einen endgültigen Fehlschlag dem Verantwortlichen zur Bearbeitung; ein erneuter Lauf darf keine doppelten Berichtsdateien erzeugen.\nHalten Sie Fortschritt und Ergebnis nach dem Neuladen der Seite sichtbar und erlauben Sie nur berechtigten Personen, Bestellungen zu exportieren."
+          },
+          "history": {
+            "label": "Verlauf",
+            "text": "Zeigen Sie in den Bestelldetails die aktuelle Phase und den Bearbeitungsverlauf an.\nJeder Eintrag zeigt, wer gehandelt hat, wann, die Aktion, die Phase davor und danach sowie gegebenenfalls den Ablehnungsgrund oder den unterschriebenen Empfangsbeleg.\nKennzeichnen Sie automatisch ausgeführte Aktionen als vom System durchgeführt.\nBewahren Sie Fortschritt und Verlauf nach dem Neuladen der Seite, damit sich der gesamte Prozess nach Abschluss nachvollziehen lässt."
+          }
+        }
+      },
+      "scheduler": {
+        "title": "Geplante Aufgaben",
+        "description": "Führen Sie Geschäftsaufgaben zu festgelegten Zeiten aus und sehen Sie die nächste Ausführung und ihre Ergebnisse.",
+        "prompts": {
+          "reminder": {
+            "label": "Tägliche Erinnerung",
+            "text": "Fügen Sie der bestehenden Bestellanwendung eine Erinnerung an offene Bestellungen hinzu.\n\nSuchen Sie an jedem Werktag um 09:00 Uhr Pekinger Zeit die Bestellungen, die auf Genehmigung warten, gruppieren Sie sie nach Prüfer und senden Sie jedem Prüfer eine In-App-Benachrichtigung.\nGeben Sie die Anzahl offener Bestellungen an und verlinken Sie auf die Liste der offenen Bestellungen. Senden Sie nichts, wenn keine Bestellungen offen sind.\nAdministratoren können den Zeitplan und die Ausführungsprotokolle einsehen sowie Erinnerungen pausieren oder fortsetzen."
+          },
+          "weeklyReport": {
+            "label": "Wochenbericht",
+            "text": "Erstellen Sie jeden Montag um 08:00 Uhr Pekinger Zeit die Vertriebsübersicht der Vorwoche und benachrichtigen Sie den Vertriebsleiter.\nGeben Sie Umsatz, Anzahl der Bestellungen und Summen nach Region an. Administratoren können die Aufgabe und die Ausführungsprotokolle einsehen."
+          }
+        }
+      },
+      "notification": {
+        "title": "Benachrichtigungen",
+        "description": "Senden Sie In-App-Nachrichten, E-Mails oder Nachrichten über Gruppen-Bots, wenn etwas passiert.",
+        "prompts": {
+          "inApp": {
+            "label": "In-App-Nachricht",
+            "text": "Fügen Sie der aktuellen Anwendung eine Genehmigung für Bestellungen hinzu und benachrichtigen Sie Antragsteller per In-App-Nachricht über das Ergebnis.\n\nBestellungen enthalten Nummer, Name, Antragsteller, Betrag und Genehmigungsstatus.\nAntragsteller können ihre eigenen Bestellungen sehen. Prüfer können offene Bestellungen sehen und genehmigen oder ablehnen. Verwenden Sie vorhandene Bestell- und Genehmigungsfunktionen, falls verfügbar.\n\nSenden Sie nach der Genehmigung oder Ablehnung eine einzige In-App-Nachricht, und zwar nur an den Antragsteller der Bestellung.\nDer Titel gibt an, ob die Bestellung genehmigt oder abgelehnt wurde. Der Text enthält Bestellnummer, Name und Genehmigungsergebnis.\nEin Klick auf die Nachricht öffnet die zugehörigen Bestelldetails.\nSenden Sie nichts, solange die Genehmigung aussteht. Benachrichtigen Sie für dasselbe Genehmigungsergebnis nur einmal.\nEin Fehler bei der Benachrichtigung beeinträchtigt das gespeicherte Genehmigungsergebnis nicht."
+          },
+          "email": {
+            "label": "E-Mail",
+            "text": "Ergänzen Sie die bestehenden Benachrichtigungen zur Bestellgenehmigung um E-Mail und nutzen Sie dafür den konfigurierten E-Mail-Kanal der Anwendung.\n\nSenden Sie das Ergebnis nach der Genehmigung oder Ablehnung einer Bestellung an die Konto-E-Mail-Adresse des Antragstellers.\nNehmen Sie die Bestellnummer in den Betreff und den Bestellnamen sowie das Ergebnis in den Text auf.\nBehalten Sie die bestehenden In-App-Nachrichten bei. Hat der Antragsteller keine E-Mail-Adresse, senden Sie nur die In-App-Nachricht.\nEin Fehler beim E-Mail-Versand darf weder das Genehmigungsergebnis noch die In-App-Nachricht beeinträchtigen."
+          }
+        }
+      },
+      "mail": {
+        "title": "E-Mail",
+        "description": "Verbinden Sie persönliche Postfächer und lesen, beantworten und senden Sie geschäftliche E-Mails.",
+        "prompts": {
+          "providers": {
+            "label": "E-Mail-Anbieter",
+            "text": "Konfigurieren Sie mailbox.org für die Anwendung unter mail.providers in der Serverkonfiguration:\n- IMAP-Posteingangsserver: imap.mailbox.org, Port 993, SSL/TLS.\n- SMTP-Postausgangsserver: smtp.mailbox.org, Port 465, SSL/TLS.\nBenutzer geben ihre eigene E-Mail-Adresse, ihren Benutzernamen und ihr Passwort auf der Seite der Postfachkonten ein und wählen das Datum, ab dem die erste Synchronisierung beginnt; schreiben Sie Postfachpasswörter niemals in die Konfiguration oder den Quellcode."
+          },
+          "mailCenter": {
+            "label": "E-Mail-Center",
+            "text": "E-Mail ist in diese Anwendung integriert; verwenden Sie sie wieder, statt sie neu zu bauen oder ein weiteres Plugin zu installieren.\nFügen Sie der Navigation die Seiten „E-Mail-Center“ und „Postfachkonten“ hinzu und nutzen Sie dafür den E-Mail-Arbeitsbereich und die Seiten für Postfachkonten, die die E-Mail-Funktion bereitstellt.\nBenutzer können ihre eigenen Postfächer verbinden, eingehende Nachrichten synchronisieren, Nachrichten und Anhänge lesen und antworten; dabei bleiben der ursprüngliche Betreff und der Gesprächskontext erhalten, und die Antwort geht an den ursprünglichen Absender.\nJeder Benutzer arbeitet mit seinen eigenen verbundenen Postfächern."
+          },
+          "correspondence": {
+            "label": "Kunden-E-Mails",
+            "text": "Fügen Sie den Kundendetails einen Abschnitt „Korrespondenz“ hinzu und verwenden Sie dafür die integrierten Komponenten der Anwendung zum Lesen und Verfassen von E-Mails.\nZeigen Sie Nachrichten an, deren Absender oder Empfänger mit den Kontakt-E-Mail-Adressen des aktuellen Kunden übereinstimmt. Vertriebsmitarbeiter können Nachrichten lesen, Anhänge ansehen und über ihre eigenen verbundenen Postfächer antworten."
+          }
+        }
+      },
+      "file": {
+        "title": "Dateien",
+        "description": "Laden Sie Dateien hoch, hängen Sie sie an Datensätze an und zeigen Sie sie in der Vorschau an oder laden Sie sie herunter.",
+        "prompts": {
+          "attachments": {
+            "label": "Anhänge",
+            "text": "Fügen Sie meiner bestehenden Bestellverwaltung Einkaufsanhänge hinzu.\n\nFügen Sie den Bestelldetails einen Anhangsbereich hinzu. Jede Bestellung kann mehrere Dateien haben, darunter PDF, Bilder und DOCX.\nZeigen Sie Dateinamen und -größen an, mit Aktionen für Vorschau, Download und Entfernen von Anhängen.\nLassen Sie Benutzer die Anhänge nach dem Hochladen in der aktuellen Bestellung speichern. Sie bleiben verfügbar, wenn die Bestellung erneut geöffnet wird.\nJeder mit Zugriff auf eine Bestellung kann ihre Anhänge ansehen und herunterladen. Antragsteller und Prüfer können Anhänge hinzufügen oder entfernen.\nDas Entfernen eines Anhangs löst ihn nur von der aktuellen Bestellung; die Datei bleibt erhalten."
+          },
+          "avatar": {
+            "label": "Avatar",
+            "text": "Geben Sie jedem Mitarbeitenden einen Avatar, mit einem Bild pro Person.\nUnterstützen Sie das Hochladen und Ersetzen des Avatars und zeigen Sie ihn in Mitarbeiterlisten und -details an.\nVerwenden Sie nach dem Ersetzen den neuen Avatar und lassen Sie ihn nach dem Neuladen der Seite sichtbar."
+          }
+        }
+      },
+      "i18n": {
+        "title": "Sprachen",
+        "description": "Wechseln Sie die Sprache der Oberfläche, fügen Sie Sprachen hinzu und legen Sie die Standardsprache fest.",
+        "prompts": {
+          "addLanguage": {
+            "label": "Sprache hinzufügen",
+            "text": "Fügen Sie meiner Anwendung Spanisch hinzu. Übersetzen Sie die Oberfläche und die Servermeldungen und nehmen Sie Spanisch in das Sprachmenü auf."
+          },
+          "defaultLanguage": {
+            "label": "Standardsprache",
+            "text": "Machen Sie vereinfachtes Chinesisch zur Standardsprache der Anwendung für Personen, die keine Sprache gewählt haben. Englisch bleibt im Sprachmenü verfügbar."
+          }
+        }
+      },
+      "theme": {
+        "title": "Designs",
+        "description": "Passen Sie Farben, Schriften und Dichte an und wechseln Sie zwischen hell und dunkel.",
+        "prompts": {
+          "changeTheme": {
+            "label": "Design ändern",
+            "text": "Aktualisieren Sie das Design „Kompakt“: Verwenden Sie Blau als Primärfarbe und vergrößern Sie den Eckenradius leicht. Behalten Sie die aktuellen Schriften, Schriftgrößen und kompakten Abstände bei."
+          },
+          "newTheme": {
+            "label": "Neues Design",
+            "text": "Erstellen Sie ein Design „Wald“ mit Grün als Primärfarbe, sanften Hintergründen, mäßig abgerundeten Ecken und dezenten Schatten."
+          }
+        }
+      }
+    }
+  },
+  "appearance": {
+    "title": "Darstellung",
+    "mode": "Farbmodus",
+    "preset": "Design",
+    "light": "Hell",
+    "dark": "Dunkel",
+    "system": "System",
+    "themes": {
+      "default": "Großzügig",
+      "compact": "Kompakt"
+    }
+  },
+  "app": {
+    "title": "NocoReach"
+  },
+  "actions": {
+    "close": "Schließen",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "confirm": "Bestätigen",
+    "language": "Sprache"
+  },
+  "notices": {
+    "serverLocaleFallback": "Der Server unterstützt diese Sprache nicht, daher werden Servermeldungen auf Englisch angezeigt.",
+    "languageChangeFailed": "Die Sprache konnte nicht geändert werden. Bitte versuchen Sie es erneut."
+  },
+  "account": {
+    "signOutFailed": "Abmelden nicht möglich. Bitte versuchen Sie es erneut.",
+    "openMenu": "Kontomenü öffnen",
+    "fallback": "Konto",
+    "signOut": "Abmelden",
+    "signingOut": "Wird abgemeldet…"
+  },
+  "navigation": {
+    "home": "Startseite",
+    "open": "Navigation öffnen",
+    "close": "Navigation schließen",
+    "expand": "Navigation ausklappen",
+    "collapse": "Navigation einklappen",
+    "toggle": "Navigation aus- oder einklappen",
+    "label": "Anwendungsnavigation",
+    "description": "Rufen Sie eine Seite dieser Anwendung auf.",
+    "breadcrumb": "Pfadnavigation",
+    "breadcrumbMore": "Zwischenebenen anzeigen",
+    "back": "Zurück",
+    "backTo": "Zurück zu {{label}}"
+  },
+  "dataTable": {
+    "noResults": "Keine Ergebnisse.",
+    "sortAscending": "Aufsteigend",
+    "sortDescending": "Absteigend",
+    "hideColumn": "Ausblenden",
+    "view": "Ansicht",
+    "toggleColumns": "Spalten ein-/ausblenden",
+    "selectedCount": "{{selected}} von {{total}} Zeile(n) ausgewählt.",
+    "rowsPerPage": "Zeilen pro Seite",
+    "pageOf": "Seite {{page}} von {{pageCount}}",
+    "firstPage": "Zur ersten Seite",
+    "previousPage": "Zur vorherigen Seite",
+    "nextPage": "Zur nächsten Seite",
+    "lastPage": "Zur letzten Seite"
+  },
+  "datePicker": {
+    "placeholder": "Datum auswählen",
+    "rangePlaceholder": "Zeitraum auswählen"
+  },
+  "chat": {
+    "title": "Agentenchat",
+    "ask": "Agenten fragen",
+    "close": "Schließen",
+    "expand": "Volle Breite",
+    "restoreSize": "Zurück zur Seitenleiste",
+    "openPage": "Im Vollbild öffnen",
+    "openInPanel": "In der Seitenleiste öffnen",
+    "more": "Mehr",
+    "newConversation": "Neue Unterhaltung",
+    "untitled": "Unbenannte Unterhaltung",
+    "rename": "Umbenennen",
+    "renameHint": "{{title}} (zum Umbenennen klicken)",
+    "archive": "Archivieren",
+    "unarchive": "Aus Archiv wiederherstellen",
+    "you": "Sie",
+    "agentGone": "Gelöschter Agent",
+    "anyAgent": "Agent",
+    "loadFailed": "Unterhaltung konnte nicht geladen werden",
+    "notFound": "Diese Unterhaltung kann nicht geöffnet werden",
+    "notFoundDescription": "Sie wurde möglicherweise entfernt oder gehört einer anderen Person.",
+    "emptyTitle": "Was kann {{name}} für Sie tun?",
+    "emptyDescription": "Stellen Sie eine Frage oder beschreiben Sie die zu organisierenden Aufgaben. Der Inhalt dieser Seite wird als Kontext mitgesendet.",
+    "noAgent": "Es gibt keinen Agenten, mit dem Sie chatten dürfen. Bitten Sie einen Administrator, einen Agenten zu erstellen oder Ihnen Zugriff zu gewähren.",
+    "chooseAgent": "Wählen Sie unten aus, mit wem Sie chatten möchten. Legen Sie in Ihrem Profil einen Standardagenten fest, um jedes Mal mit diesem zu starten.",
+    "messages": "Nachrichten",
+    "olderMessages": "Ältere Nachrichten",
+    "sources": {
+      "panel": "Chat-Seitenleiste"
+    },
+    "availability": {
+      "online": "Online",
+      "agentMissing": "Gelöscht",
+      "agentArchived": "Archiviert",
+      "forbidden": "Für Sie nicht verfügbar",
+      "noRunner": "Kein Runner online",
+      "othersPersonal": "Nur auf persönlichen Runnern anderer Personen verfügbar"
+    },
+    "mode": {
+      "online": "Online",
+      "runner": "Runner",
+      "onlineHint": "Antwortet in Sekunden auf dem Server",
+      "runnerHint": "Ein Programmieragent in einer Laufzeitumgebung"
+    },
+    "reply": {
+      "writing": "Schreibt…",
+      "interrupted": "Die Antwort wurde hier unterbrochen."
+    },
+    "offline": {
+      "agentMissing": "{{name}} existiert nicht mehr",
+      "agentArchived": "{{name}} ist archiviert",
+      "forbidden": "Sie dürfen {{name}} nicht mehr verwenden",
+      "noRunner": "{{name}} hat derzeit keinen Runner online",
+      "othersPersonal": "{{name}} ist nur auf persönlichen Runnern anderer Personen verfügbar",
+      "kept": "Ihre Nachrichten werden gespeichert und beantwortet, sobald der Agent wieder antworten kann.",
+      "fallback": "Hier einen anderen Agenten verwenden",
+      "usingDefault": "Diese Unterhaltung verwendet vorübergehend {{name}} anstelle von {{own}}.",
+      "restore": "Zurück zu {{own}} wechseln"
+    },
+    "notice": {
+      "switchedToDefault": "Zum Systemstandard {{name}} gewechselt, bis {{own}} wieder verfügbar ist.",
+      "switchedToOnline": "{{own}} hat derzeit keinen Runner für Sie. Deshalb antwortet {{name}}, bis {{own}} wieder verfügbar ist.",
+      "onlineFallbackUnavailable": "Der Online-Ersatzagent kann nicht antworten ({{reason}}). Diese Unterhaltung bleibt bei {{own}}, während auf einen Runner gewartet wird.",
+      "switchedBack": "Wieder bei {{name}}.",
+      "runFailed": "Der Agent wurde vor der Antwort gestoppt.",
+      "runFailedReason": "Der Agent wurde vor der Antwort gestoppt: {{reason}}",
+      "runCancelled": "Gestoppt."
+    },
+    "consultation": {
+      "title": "{{name}} konsultiert",
+      "question": "Frage",
+      "answer": "Antwort",
+      "steps": "Schritte des Agenten",
+      "plans_one": "Ein Plan wurde zur Bestätigung vorgeschlagen.",
+      "plans_other": "{{count}} Pläne wurden zur Bestätigung vorgeschlagen.",
+      "usage": "Verwendete Eingabetokens: {{input}} · Ausgabetokens: {{output}}.",
+      "state": {
+        "running": "Antwortet…",
+        "completed": "Beantwortet",
+        "failed": "Fehlgeschlagen",
+        "refused": "Abgelehnt"
+      }
+    },
+    "steps": {
+      "title": "Schritte",
+      "waiting": "Wartet darauf, dass ein Runner die Aufgabe übernimmt…",
+      "starting": "Wird gestartet…",
+      "thinking": "Denkt nach…",
+      "reading": "Prüft {{subject}}",
+      "working": "Arbeitet an {{subject}}",
+      "count_one": "{{count}} Schritt",
+      "count_other": "{{count}} Schritte",
+      "started": "Der Agent antwortet.",
+      "finished": "Der Agent hat seine Antwort abgeschlossen."
+    },
+    "pending": {
+      "sending": "Wird gesendet…",
+      "failed": "Nicht gesendet",
+      "retry": "Erneut senden",
+      "discard": "Verwerfen"
+    },
+    "composer": {
+      "label": "Nachricht an den Agenten",
+      "placeholder": "Stellen Sie eine Frage oder beschreiben Sie die zu organisierenden Aufgaben…",
+      "hint": "Enter zum Senden, Shift+Enter für einen Zeilenumbruch",
+      "runningHint": "Nachrichten, die Sie jetzt senden, werden in die laufende Bearbeitung einbezogen",
+      "tooLong": "Höchstens {{max}} Zeichen.",
+      "send": "Senden",
+      "stop": "Stoppen",
+      "stopping": "Wird gestoppt…"
+    },
+    "attachments": {
+      "attach": "Dateien anhängen",
+      "label": "Dateianhänge der nächsten Nachricht",
+      "sent": "Mit dieser Nachricht gesendete Dateien",
+      "images": "Bilder",
+      "files": "Dateien",
+      "remove": "{{name}} entfernen",
+      "uploading": "Wird hochgeladen…",
+      "tooLarge": "Größer als {{max}}",
+      "failed": "Hochladen fehlgeschlagen",
+      "tooMany": "Höchstens {{max}} Dateien pro Nachricht.",
+      "blocked": "Entfernen Sie die Dateien, die nicht hochgeladen werden konnten, um die Nachricht zu senden.",
+      "waiting": "Wird gesendet, sobald die Dateien hochgeladen sind…",
+      "drop": "Dateien hier ablegen, um sie anzuhängen",
+      "preview": "Vorschau von {{name}}",
+      "download": "{{name}} herunterladen",
+      "previous": "Vorheriges Bild",
+      "next": "Nächstes Bild"
+    },
+    "context": {
+      "label": "Kontext der nächsten Nachricht",
+      "sent": "Mit dieser Nachricht gesendeter Kontext",
+      "filter": "Filter: {{filter}}",
+      "selection": "Ausgewählter Text: „{{text}}“",
+      "remove": "Kontext entfernen: {{label}}"
+    },
+    "agents": {
+      "switch": "Agent: {{name}}; anderen auswählen",
+      "withStatus": "{{name}}, {{status}}",
+      "chooseFor": "Chatten mit",
+      "startWith": "Neue Unterhaltung starten mit",
+      "boundHint": "Eine Unterhaltung bleibt ihrem Agenten zugeordnet. Wenn Sie einen anderen auswählen, beginnt eine neue Unterhaltung.",
+      "empty": "Kein Agent, mit dem Sie chatten dürfen",
+      "none": "Kein Agent",
+      "field": "Agent: {{name}}",
+      "unknown": "Unbekannter Agent",
+      "placeholder": "Agenten auswählen",
+      "myDefault": "Mein Standard",
+      "systemDefault": "Systemstandard",
+      "personal": "Nur persönliche Runner",
+      "temporary": "Vorübergehend",
+      "modeHint": "Verbinden Sie einen Runner und aktivieren Sie die von ihm erkannten Agenten, um eine Unterhaltung zu starten."
+    },
+    "history": {
+      "title": "Unterhaltungen",
+      "search": "Unterhaltungen suchen",
+      "show": "Anzeigen",
+      "active": "Offen",
+      "archived": "Archiviert",
+      "agent": "Agent",
+      "allAgents": "Alle Agenten",
+      "source": "Gestartet über",
+      "allSources": "Überall",
+      "loadFailed": "Unterhaltungen konnten nicht geladen werden",
+      "noMatch": "Keine passende Unterhaltung",
+      "noArchived": "Keine archivierten Unterhaltungen",
+      "empty": "Noch keine Unterhaltungen",
+      "more": "Mehr laden",
+      "unread": "Neue Antwort",
+      "actions": "Aktionen für {{title}}"
+    },
+    "loading": "Wird geladen",
+    "retry": "Erneut versuchen",
+    "errors": {
+      "forbidden": "Sie sind dazu nicht berechtigt.",
+      "notFound": "Das Element existiert nicht mehr.",
+      "requestFailed": "Die Anfrage ist fehlgeschlagen. Versuchen Sie es erneut."
+    },
+    "transcript": {
+      "waiting": "Wartet auf den Start des Agenten…",
+      "empty": "Bei dieser Ausführung wurden keine Ereignisse aufgezeichnet.",
+      "fetchFailed": "Neue Ereignisse konnten nicht abgerufen werden. Erneuter Versuch…",
+      "expand": "Alle anzeigen",
+      "truncated": "Gekürzt: Der vollständige Text war zu lang zum Speichern.",
+      "events": "Ausführungsprotokoll",
+      "inputDelivered": "{{count}} Eingabe(n) an den Agenten übermittelt",
+      "tokens": "Eingabetokens: {{input}} · Ausgabetokens: {{output}}",
+      "kinds": {
+        "text": "Agent",
+        "thinking": "Nachdenken",
+        "toolUse": "Werkzeug",
+        "toolResult": "Ergebnis",
+        "allowed": "Erlaubt",
+        "denied": "Verweigert",
+        "input": "Eingabe",
+        "checkout": "Checkout",
+        "status": "Status",
+        "error": "Fehler",
+        "usage": "Verbrauch"
+      }
+    }
+  },
+  "agentSetup.title": "NocoReach in Ihrem Agenten verwenden",
+  "agentSetup.description": "Kopieren Sie diese Anleitung in Claude Code, Codex oder einen anderen Programmieragenten, um eine Verbindung zu NocoReach herzustellen.",
+  "agentSetup.prompt": "Helfen Sie mir, NocoReach über diesen Programmieragenten zu verwenden.\n\n1. Installieren Sie die NocoReach CLI:\n{{install}}\n\n2. Starten Sie die Anmeldung im Browser:\n{{login}}\nZeigen Sie mir die Verifizierungs-URL und den Code. Warten Sie, bis ich den Code in meinem Browser geprüft und bestätigt habe; bestätigen Sie ihn nicht für mich.\n\n3. Führen Sie nach meiner Bestätigung `nocoreach whoami` aus, um das angemeldete Konto zu überprüfen, und anschließend `nocoreach docs`, um die verfügbaren Befehle kennenzulernen. Verwenden Sie diese Befehle für meine Anfragen im Rahmen meiner bestehenden Berechtigungen. Fragen Sie nicht nach meinem Passwort und verwenden Sie das Download-Token nicht als API-Schlüssel.",
+  "agentSetup.identity": "Das Download-Token dient nur zur Installation der CLI. Nachdem Sie die Anmeldung im Browser bestätigt haben, handelt der Agent über Ihr Konto mit Ihren bestehenden Berechtigungen.",
+  "agentSetup.expiry": "Das Installationstoken ist 30 Minuten gültig und erlaubt bis zu 3 Downloads. Halten Sie die Anleitung vertraulich. Erzeugen Sie ein neues Token, wenn es abläuft.",
+  "agentSetup.runtime": "Erfordert Node.js 24+ unter macOS oder Linux; verwenden Sie unter Windows WSL. Es wird nur die CLI installiert.",
+  "agentSetup.preparing": "Installationsanleitung wird vorbereitet…",
+  "agentSetup.promptLabel": "Anleitung zur Agenteneinrichtung",
+  "agentSetup.failed": "Die Installationsanleitung konnte nicht vorbereitet werden. Bitte versuchen Sie es erneut.",
+  "agentSetup.signedOut": "Ihre Sitzung ist abgelaufen. Melden Sie sich erneut an, um fortzufahren.",
+  "agentSetup.forbidden": "Sie haben keine Berechtigung, Installationsanleitungen zu erstellen. Wenden Sie sich an Ihren Administrator.",
+  "agentSetup.expired": "Dieses Installationstoken ist abgelaufen. Erzeugen Sie ein neues Token, um fortzufahren.",
+  "agentSetup.regenerate": "Neues Token erzeugen",
+  "agentSetup.copy": "Anleitung kopieren",
+  "agentSetup.copied": "Kopiert",
+  "agentSetup.copyFailed": "Kopieren fehlgeschlagen. Markieren Sie die Anleitung und kopieren Sie sie manuell.",
+  "agentSetup.signIn": "Erneut anmelden",
+  "agentSetup.signInFailed": "Ihre Sitzung konnte nicht erneuert werden. Bitte versuchen Sie es erneut.",
+  "nocoreach.agentCapabilities.group": "NocoReach-Aufgaben",
+  "nocoreach.agentCapabilities.read": "Aktuelle Aufgabendaten lesen",
+  "nocoreach.agentCapabilities.readDescription": "Momentaufnahmen der Aufgabendaten lesen: Kennzahlen, Keywords, Seiten, Website-Prüfung, Wissen, Skills und Forenbeiträge.",
+  "nocoreach.agentCapabilities.draft": "Entwurf zur Auswahl speichern",
+  "nocoreach.agentCapabilities.draftDescription": "Einen Entwurf für die aktuelle Ausführung speichern, ohne ihn freizugeben oder zu veröffentlichen.",
+  "nocoreach.agentCapabilities.research": "NocoReach Research",
+  "nocoreach.agentCapabilities.community": "NocoReach Community",
+  "nocoreach.agentCapabilities.presetDescription": "Auf Grundlage der Projektbelege arbeiten und einen Entwurf zur menschlichen Prüfung einreichen.",
+  "nocoreach.nav.insights": "Erkenntnisse",
+  "nocoreach.nav.opportunities": "Chancen",
+  "nocoreach.nav.tasks": "Aufgaben",
+  "nocoreach.nav.results": "Ergebnisse",
+  "nocoreach.nav.site": "Website & Produkt",
+  "nocoreach.nav.pages": "Seiten",
+  "nocoreach.nav.traffic": "Traffic",
+  "nocoreach.nav.audit": "Website-Prüfung",
+  "nocoreach.nav.github": "GitHub",
+  "nocoreach.nav.downloads": "Downloads",
+  "nocoreach.nav.search": "Suche & Markt",
+  "nocoreach.nav.searchPerformance": "Leistung",
+  "nocoreach.nav.keywords": "Keywords",
+  "nocoreach.nav.trends": "Trends",
+  "nocoreach.nav.competitors": "Wettbewerber",
+  "nocoreach.nav.aiSearch": "KI-Suche",
+  "nocoreach.nav.community": "Community",
+  "nocoreach.nav.forum": "Forum",
+  "nocoreach.nav.hackerNews": "Hacker News",
+  "nocoreach.nav.reddit": "Reddit",
+  "nocoreach.nav.x": "X",
+  "nocoreach.nav.discord": "Discord",
+  "nocoreach.nav.slack": "Slack",
+  "nocoreach.nav.xiaohongshu": "Xiaohongshu",
+  "nocoreach.nav.bilibili": "Bilibili",
+  "nocoreach.nav.youtube": "YouTube",
+  "nocoreach.nav.aiTeam": "KI-Team",
+  "nocoreach.nav.agent": "Agent",
+  "nocoreach.nav.playbooks": "Ablaufpläne",
+  "nocoreach.nav.skills": "Skills",
+  "nocoreach.nav.projectKnowledge": "Wissen",
+  "nocoreach.nav.analysisRules": "Analyseregeln",
+  "nocoreach.nav.settings": "Einstellungen",
+  "nocoreach.nav.connections": "Datenquellen",
+  "nocoreach.nav.proxyProfiles": "Netzwerk",
+  "nocoreach.nav.members": "Mitglieder & Rollen",
+  "overrides": {
+    "@nocobase/app-plugin-agents": {
+      "agentSkills": {
+        "onlineScripts": "Skripte werden für Chat-Agenten nicht ausgeführt: Der Agent kann sie lesen, aber nicht ausführen."
+      },
+      "models": {
+        "description": "Modelldienste und die von ihnen bereitgestellten Modelle. Chat-Modelle unterstützen die tägliche Analyse und den Chat-Agenten; Embedding- und Reranking-Modelle unterstützen die Suche."
+      },
+      "defaultModel": {
+        "description": "Chatagenten ohne eigene Modelle verwenden dieses Modell zum Antworten, etwa neue oder mit der Anwendung bereitgestellte Agenten."
+      },
+      "services": {
+        "empty": {
+          "description": "Sobald Sie einen Modelldienst hinzufügen, können Chatagenten darüber antworten."
+        },
+        "service": {
+          "enabledHint": "Chatagenten können die Modelle nur verwenden, solange der Dienst aktiviert ist."
+        }
+      },
+      "skills": {
+        "scriptsNote": "Enthält Skripte: Chatagenten können sie lesen, aber niemals ausführen",
+        "entry": {
+          "conventional": {
+            "scripts": "Code, den Agenten ausführen können. Chatagenten können ihn nur lesen."
+          }
+        }
+      },
+      "runtimes": {
+        "description": "Computer oder Server, auf denen der Runner läuft. Der Runner meldet die Programmierwerkzeuge auf diesem Rechner (etwa Claude Code oder Codex), und Ausführungsagenten erledigen dort Aufgaben."
+      },
+      "usage": {
+        "description": "Tokenverbrauch je Agent und Modell mit Kostenschätzungen anhand der aktuellen Preise."
+      }
+    }
+  },
+  "agentSetup.connectionsTitle": "Daten mit Ihrem Agenten verbinden",
+  "agentSetup.connectionsDescription": "Kopieren Sie diese Anleitung in Claude Code, Codex oder einen anderen Programmieragenten. Er installiert die NocoReach CLI, meldet Sie an und verbindet die Datenquellen dieses Projekts, nachdem Sie seinen Plan bestätigt haben.",
+  "agentSetup.connectionsPrompt": "Bitte hilf mir, die Datenquellen des NocoReach-Projekts „{{project}}“ (ID {{projectId}}) zu verbinden.\n\n1. Installiere die NocoReach CLI:\n{{install}}\n\n2. Starte die Anmeldung im Browser:\n{{login}}\nZeige mir die Verifizierungs-URL und den Code. Warte, bis ich den Code in meinem Browser überprüft und bestätigt habe; bestätige ihn nicht für mich.\n\n3. Führe nach meiner Bestätigung `nocoreach whoami` aus, um das angemeldete Konto zu überprüfen. Führe anschließend `nocoreach connect guide --json` aus und befolge die darin beschriebenen Schritte für das Projekt {{projectId}}. Zeige mir deinen Plan und warte auf meine Bestätigung, bevor du etwas verbindest. Frage nicht nach meinem Passwort, meinen Tokens oder API-Schlüsseln und verwende das Download-Token nicht als API-Schlüssel. Gib mir bei einer Datenquelle, die Zugangsdaten benötigt, den entsprechenden Link; ich werde die Zugangsdaten selbst im Browser eingeben.",
+  "nocoreach.nav.runtimes": "Laufzeitumgebungen",
+  "nocoreach.nav.models": "Modelldienste",
+  "nocoreach.nav.usage": "Nutzung"
+}

@@ -56,10 +56,27 @@ export interface OnlineRun {
   error: string | null;
   revision: number;
 }
+/** What a conversation started from: a day's analysis on Insights, and the opportunity it asked about, if any. */
+export interface OnlineSubject {
+  kind: 'insights';
+  day: string;
+  opportunityId?: string;
+}
+/** A conversation asked from Insights, as Insights shows it: the first question and the latest answer. */
+export interface OnlineThread {
+  id: string;
+  subject: OnlineSubject;
+  question: string;
+  answer: string;
+  status: OnlineRunStatus;
+  turns: number;
+  updatedAt: string;
+}
 export interface OnlineConversation {
   id: string;
   ownerId: string;
   projectId: string | null;
+  subject?: OnlineSubject | null;
   agentId: string;
   model: OnlineModel;
   title: string;
