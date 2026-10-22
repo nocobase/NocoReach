@@ -10,6 +10,12 @@
 - Refine is gone from the client runtime: the unused Refine data table and the five `@refinedev/*` packages are removed, and the app title is no longer set through `app.refine`.
 - The Scheduler patch moves unchanged to `1.0.0-beta.19`, whose patched files are identical to `1.0.0-beta.17`.
 
+## Unreleased — Automatic runs look like the other Settings pages
+
+- Settings › Automatic runs is a table like Network and Members (Work, Schedule, Last run, Next run, Status) instead of a card with the time in headline type. The daily analysis explanation is behind ⓘ beside its name, and the note on other automatic work (with its link to Data sources › Data health) is behind ⓘ beside the page title, like the page notes elsewhere; the browser-timezone note sits in an ⓘ beside Last run; Change time moves into the row's "…" menu with Run now, Pause and Technical details, and Run history stays on the row. Next run is left out on narrower screens so the table does not scroll sideways.
+- Run history opens with one line on the recent runs ("No problems in the last 8 runs", "2 of the last 8 runs had problems") with the refresh button beside it. Runs that went well no longer each carry a Done badge; only failed, skipped and running ones show a status. Each run is one line with its suggestions on the right, and projects are named only when there are several, or one was skipped or failed (in red, with the reason).
+- Dates other than today, yesterday and tomorrow use the shared format ("10-20 09:00" instead of "10月20日 09:00"), and a skipped run says it was already analyzed that day rather than "today".
+
 ## Unreleased — Data sources show their logos
 
 - Every data source has its logo on a small tile: the cards and drawer title on Settings › Data sources, the rows and sync table on Data health, the results of Find data sources on your website, the source headings of Settings › Analysis rules and the source buttons when adding a rule. Brand marks come from Simple Icons (CC0), vendored as path data in `client/components/reach/brand-logos.ts` without a new dependency; black marks follow the text colour so they show in dark mode. Sources without a brand mark of their own (Website content, Website source, Blog CMS, DataForSEO, AI search visibility, Competitor activity, Rank tracking, Daily analysis) take a matching icon in the same tile.
