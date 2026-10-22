@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
-import { ChevronRight, ServerIcon } from 'lucide-react';
+import { ChevronRight, ServerOff } from 'lucide-react';
+import { Link } from 'react-router';
 import { useRunnerOptions } from '@nocobase/app-plugin-agents/client/kit';
 import { $t } from '#i18n';
 import { ActorAvatar } from '#components/reach/actor';
@@ -8,14 +9,12 @@ import { useMe } from './me';
 import { stepOf } from './task-list-model';
 import {
   placeOf,
-  runCounts,
   taskAgentOf,
   UNASSIGNED,
   type AgentStatus,
   type Lane,
   type Placed,
 } from './task-agents';
-import type { Work } from './task-execution-types';
 import type { WorkCard } from './work-board';
 
 // Tasks › By Agent (2026-10-21, after Studio's Agent view): a column per Agent the project can run tasks with, then
@@ -316,33 +315,25 @@ function Card({
   );
 }
 
-// The line above the tasks (2026-10-21, after Studio): runs under way, waiting for an Agent and failed, and how many
-// runtimes are online. What waits for you is counted on Waiting for me already, so it is not repeated here.
-export function RunSummary({ works }: { works: (Work | undefined)[] }) {
-  const runners = useRunnerOptions(),
-    n = runCounts(works);
-  const item = (cls: string, label: string, value: number) => (
-    <span className='inline-flex items-center gap-1.5'>
-      <span aria-hidden='true' className={cn('size-1.5 rounded-full', cls)} />
-      {label}
-      <b className='font-medium text-foreground tabular-nums'>{value}</b>
-    </span>
-  );
+// Above the tasks, only what the rows cannot say (2026-10-22: the counts of running, queued and failed runs repeated
+// each row's status and sat tight on the table): no runtime is online, so work handed to an Agent waits. Nothing
+// when a runtime is online.
+export function RuntimeNotice() {
+  const runners = useRunnerOptions();
+  if (runners.loading || runners.online > 0) return null;
   return (
     <p
-      className='m-0 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground'
-      aria-label={$t('taskAgents.summary')}
+      role='status'
+      className='flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-muted/40 px-3 py-2 text-sm'
     >
-      {item(dot.running, $t('taskAgents.statusRunning'), n.running)}
-      {item(dot.queued, $t('taskAgents.statusQueued'), n.queued)}
-      {n.failed > 0 &&
-        item('bg-nr-ink-red', $t('taskAgents.runFailed'), n.failed)}
-      {!runners.loading && (
-        <span className='inline-flex items-center gap-1.5'>
-          <ServerIcon aria-hidden='true' className='size-3.5' />
-          {$t('taskAgents.runtimesOnline', { 0: runners.online })}
-        </span>
-      )}
+      <ServerOff
+        aria-hidden='true'
+        className='size-4 shrink-0 text-muted-foreground'
+      />
+      <span className='min-w-0 flex-1'>{$t('taskAgents.noRuntimeNotice')}</span>
+      <Link className='nr-link shrink-0' to='/agents/runtimes'>
+        {$t('agentsPage.viewRuntimes')}
+      </Link>
     </p>
   );
 }

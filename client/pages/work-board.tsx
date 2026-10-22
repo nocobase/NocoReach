@@ -31,7 +31,7 @@ function Avatar({name}:{name?:string}){return name?<span title={name} className=
 function Executor({w,agents}:{w?:Work;agents?:AgentStatus}){
  if(!agents)return w?.agentName?<span className="truncate">{w.agentName}</span>:<span className="text-muted-foreground">—</span>;
  const a=taskAgentOf(w,agents);if(!a)return <span className="truncate text-muted-foreground">{$t('taskAgents.unassigned')}</span>;
- return <span className="inline-flex min-w-0 items-center gap-1.5" title={a.name}><span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full',a.online?'bg-nr-ink-green':'bg-muted-foreground/50')}/>
+ return <span className="flex min-w-0 items-center gap-1.5" title={a.name}><span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full',a.online?'bg-nr-ink-green':'bg-muted-foreground/50')}/>
   <span className="truncate">{a.name}</span><span className="sr-only">{a.online?$t('taskDetail.agentOnline'):$t('taskDetail.agentOffline')}</span></span>;}
 function StatusTag({t}:{t:WorkCard}){const w=t.evidence?.work;if(isClosed(w))return <Tag tone="slate" dot>{$t('common.closed')}</Tag>;const s=workState(w,t.status);return <Tag tone={stateTone[s]} dot>{getWorkColumns()[s]}</Tag>;}
 function StepCell({w,muted='—'}:{w?:Work;muted?:string}){const s=stepOf(w);if(!s)return <span className="text-muted-foreground">{muted}</span>;return s.tone?<Tag tone={s.tone}>{s.text}</Tag>:<span className="truncate text-muted-foreground">{s.text}</span>;}
@@ -99,7 +99,7 @@ export function TaskTable({
           <col className='w-32' />
           <col className='w-56' />
           <col className='w-40' />
-          <col className='w-36' />
+          <col className='w-44' />
           <col className='w-24' />
           <col className='w-10' />
         </colgroup>
@@ -179,10 +179,11 @@ export function TaskTable({
                     )}
                   </span>
                 </td>
-                <td className='px-3 py-2.5'>
+                {/* Truncated with the full name on hover (2026-10-22: a long name ran into Updated). */}
+                <td className='overflow-hidden px-3 py-2.5'>
                   <Executor w={w} agents={agents} />
                 </td>
-                <td className='px-3 py-2.5 text-xs text-muted-foreground tabular-nums'>
+                <td className='px-3 py-2.5 text-xs whitespace-nowrap text-muted-foreground tabular-nums'>
                   {ago(t.updatedAt)}
                 </td>
                 <td

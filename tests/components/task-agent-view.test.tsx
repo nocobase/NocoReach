@@ -20,13 +20,13 @@ import locales from '../../client/locales';
 import OptimizationWork from '../../client/pages/optimization-work';
 import {
   placeOf,
-  runCounts,
   taskAgentOf,
   type AgentStatus,
 } from '../../client/pages/task-agents';
 import type { Work } from '../../client/pages/task-execution-types';
 
 const fixture = vi.hoisted(() => ({
+  online: 2,
   tasks: [] as unknown[],
   status: {} as AgentStatus,
   action: vi.fn(),
@@ -50,7 +50,11 @@ vi.mock('../../client/lib/nocoreach-api', () => ({
   getPortalBase: () => '/',
 }));
 vi.mock('@nocobase/app-plugin-agents/client/kit', () => ({
-  useRunnerOptions: () => ({ options: [], loading: false, online: 2 }),
+  useRunnerOptions: () => ({
+    options: [],
+    loading: false,
+    online: fixture.online,
+  }),
 }));
 vi.mock('../../client/components/app-shell/nav-badges', () => ({
   refreshNavBadges: vi.fn(),
@@ -105,6 +109,7 @@ const STATUS: AgentStatus = {
 
 let disconnect: (() => void) | undefined;
 beforeEach(() => {
+  fixture.online = 2;
   fixture.status = STATUS;
   fixture.action.mockReset();
   fixture.action.mockImplementation(async (resource: string) =>
@@ -203,14 +208,6 @@ test('places a task as running, next in line or waiting for a person, and leaves
     work({ archivedAt: '2026-10-20' }),
   ])
     expect(placeOf(w, true)).toBeNull();
-  expect(
-    runCounts([
-      work({ latestRun: { id: 'a', status: 'running' } }),
-      work({ latestRun: { id: 'b', status: 'queued' } }),
-      work({ latestRun: { id: 'c', status: 'failed' } }),
-      work({ latestRun: { id: 'd', status: 'failed' }, cancelledAt: 'x' }),
-    ]),
-  ).toEqual({ running: 1, queued: 1, failed: 1 });
 });
 
 function studioTasks() {
@@ -277,10 +274,8 @@ test('By Agent lays the tasks out per Agent: working on, up next in order, then 
   expect(columns[2]).toHaveTextContent('等运行环境上线');
   expect(columns[3]).toHaveTextContent('选 Agent 并开始');
   expect(board).not.toHaveTextContent('Task 7');
-  // The line above: runs, not what waits for you (Waiting for me counts that).
-  expect(screen.getByLabelText('运行情况')).toHaveTextContent(
-    '运行中1排队中3运行失败1运行环境 2 个在线',
-  );
+  // Runs are in the rows; with a runtime online nothing sits above the tasks.
+  expect(screen.queryByText(/没有在线的运行环境，交给 Agent/)).toBeNull();
   await userEvent
     .setup()
     .click(within(codex).getByRole('button', { name: /Task 37/ }));
@@ -326,4 +321,19 @@ test('cards on the board and the list name the Agent, and the Agent filter narro
   const table = screen.getByRole('table');
   expect(within(table).getByText('Claude · Fable 5.1')).toBeVisible();
   expect(within(table).queryByText('Task 38')).toBeNull();
+});
+
+test('with no runtime online, one notice above the tasks says work will wait, in every view', async () => {
+  fixture.online = 0;
+  fixture.tasks = studioTasks();
+  for (const view of ['', 'board', 'agent']) {
+    await mount(`/actions?view=${view}`);
+    const notice = screen.getByRole('status', {
+      name: (_, el) => el.textContent?.includes('没有在线的运行环境') ?? false,
+    });
+    expect(
+      within(notice).getByRole('link', { name: '查看运行环境' }),
+    ).toHaveAttribute('href', '/agents/runtimes');
+    cleanup();
+  }
 });
