@@ -16,6 +16,11 @@ const zhCN: AppResource = {
     '将下面的指引复制到 Claude Code、Codex 或其他编程 agent，连接 NocoReach。',
   'agentSetup.prompt':
     '请帮助我在当前编程 agent 中使用 NocoReach。\n\n1. 安装 NocoReach CLI：\n{{install}}\n\n2. 发起浏览器登录：\n{{login}}\n向我展示验证地址和验证码，等待我在浏览器中核对并批准，不要替我批准。\n\n3. 我批准后，运行 `nocoreach whoami` 核对登录账号，再运行 `nocoreach docs` 了解可用命令。使用这些命令，在我现有的权限范围内完成我的请求。不要索要我的密码，也不要将下载令牌用作 API Key。',
+  'agentSetup.connectionsTitle': '用电脑上的 Agent 接入数据',
+  'agentSetup.connectionsDescription':
+    '将下面的指引复制到 Claude Code、Codex 或其他编程 agent。它会安装 NocoReach CLI、以你的身份登录，在你确认计划后接入本项目的数据源。',
+  'agentSetup.connectionsPrompt':
+    '请帮我接入 NocoReach 项目“{{project}}”（ID {{projectId}}）的数据源。\n\n1. 安装 NocoReach CLI：\n{{install}}\n\n2. 发起浏览器登录：\n{{login}}\n向我展示验证地址和验证码，等待我在浏览器中核对并批准，不要替我批准。\n\n3. 我批准后，运行 `nocoreach whoami` 核对登录账号，再运行 `nocoreach connect guide --json`，按其中的步骤为项目 {{projectId}} 接入数据源。接入前先把计划给我确认。不要索要我的密码、token 或 API Key，也不要将下载令牌用作 API Key；需要凭据的数据源，把链接给我，由我在浏览器中填写。',
   'agentSetup.identity':
     '下载令牌仅用于安装 CLI。浏览器登录经你批准后，agent 将以你的账号身份操作，沿用现有权限。',
   'agentSetup.expiry':
@@ -82,8 +87,11 @@ const zhCN: AppResource = {
   'nocoreach.nav.proxyProfiles': '网络',
   'nocoreach.nav.demoData': '演示管理',
   'nocoreach.nav.members': '成员与角色',
+  'nocoreach.nav.runtimes': '运行环境',
+  'nocoreach.nav.models': '模型服务',
+  'nocoreach.nav.usage': '用量',
   'auth.platform': 'AI 增长团队',
-  'auth.marketingTitleFirst': '从数据里找机会，',
+  'auth.marketingTitleFirst': '从数据中发现机会，',
   'auth.marketingTitleSecond': '交给 Agent',
   'auth.marketingTitleThird': '改到上线。',
   'auth.marketingDescription':
@@ -97,8 +105,8 @@ const zhCN: AppResource = {
   'navigation.brandApps': 'NocoReach 应用',
   shell: {
     templateVersionUnknown: '版本未知',
-    buildFreely: '从数据里找机会。',
-    reliability: '<brand>NocoReach</brand> 帮你做出来。',
+    buildFreely: '从数据中发现机会，',
+    reliability: '<brand>NocoReach</brand> 帮你落地',
   },
   app: {
     title: 'NocoReach',

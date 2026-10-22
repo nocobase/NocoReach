@@ -166,8 +166,8 @@ function renderPage(path = '/search') {
 }
 const tile = (key: string) =>
   document.querySelector(`[data-metric="${key}"]`) as HTMLElement;
+// The details load with the page; wait for their table.
 const loadDetails = async () => {
-  await userEvent.click(screen.getByRole('button', { name: '加载查询词、页面及细分明细' }));
   await waitFor(() => expect(document.querySelector('[data-report]')).toBeTruthy());
 };
 const ready = () =>
@@ -229,29 +229,13 @@ describe('搜索表现', () => {
     expect(router.state.location.search).toContain('country=usa');
   });
 
-  it('switches the search type; Discover has no queries and no positions', async () => {
+  it('reads web search only, with no search type choice', async () => {
     renderPage();
     await ready();
-    await loadDetails();
-    await userEvent.click(screen.getByRole('button', { name: 'Discover' }));
-    await waitFor(() =>
-      expect(tile('position').textContent).toContain(
-        'Discover 和 Google 新闻没有排名',
-      ),
-    );
-    expect(action).toHaveBeenCalledWith(
-      'nrDataViews',
-      'search',
-      expect.objectContaining({
-        body: expect.objectContaining({ type: 'discover' }),
-      }),
-    );
-    await loadDetails();
-    const report = document.querySelector('[data-report]') as HTMLElement;
-    expect(within(report).queryByRole('tab', { name: '查询' })).toBeNull();
-    expect(
-      within(report).getByRole('tab', { name: '页面', selected: true }),
-    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Discover' })).toBeNull();
+    expect(screen.queryByRole('group', { name: '搜索类型' })).toBeNull();
+    for (const [, , options] of action.mock.calls)
+      expect((options as { body?: object }).body).not.toHaveProperty('type');
   });
 
   it('lists rising, falling and new queries, the breakdown tables, and opens a query', async () => {

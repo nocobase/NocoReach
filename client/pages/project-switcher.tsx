@@ -7,6 +7,7 @@ import {Button} from '#components/ui/button';
 import {Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle} from '#components/ui/dialog';
 import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuSeparator,DropdownMenuTrigger} from '#components/ui/dropdown-menu';
 import {Input} from '#components/ui/input';
+import {Select,SelectContent,SelectItem,SelectTrigger,SelectValue} from '#components/ui/select';
 import {ReachMark} from '#components/app-shell/brand';
 import {ProjectIcon,useProject,useProjects,type Project} from './reach-data';
 import {switchProject} from './current-project';
@@ -67,7 +68,7 @@ function ProjectForm({footer,onBusy}:{footer:(submit:ReactElement)=>ReactElement
  return <form className="space-y-3" onSubmit={e=>{e.preventDefault();void create();}}>
   <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t('common.projectName')}</span><Input aria-label={$t('common.projectName')} value={name} maxLength={60} placeholder={$t('projectSwitcher.nocobase')} onChange={e=>setName(e.target.value)} autoFocus/></label>
   <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t('common.websiteUrl')}</span><Input aria-label={$t('common.websiteUrl')} value={domain} placeholder="https://example.com" onChange={e=>setDomain(e.target.value)}/></label>
-  <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t('common.languageAiWrittenContent')}</span><select aria-label={$t('common.languageAiWrittenContent')} value={language} onChange={e=>setLanguage(e.target.value as 'zh-CN'|'en-US')} className='h-9 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base leading-normal transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80'><option value="zh-CN">{$t('common.chineseLanguage')}</option><option value="en-US">English</option></select></label>
+  <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t('common.languageAiWrittenContent')}</span><Select value={language} onValueChange={v=>setLanguage(v as 'zh-CN'|'en-US')}><SelectTrigger className="w-full" aria-label={$t('common.languageAiWrittenContent')}><SelectValue>{(v:string)=>v==='zh-CN'?$t('common.chineseLanguage'):'English'}</SelectValue></SelectTrigger><SelectContent className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal"><SelectItem value="zh-CN">{$t('common.chineseLanguage')}</SelectItem><SelectItem value="en-US">English</SelectItem></SelectContent></Select></label>
   {error?<p role="alert" className="nr-error">{error}</p>:null}
   <p className="text-xs text-muted-foreground">{$t('projectSwitcher.afterCreatingProjectChooseTask')}</p>
   {footer(<Button type="submit" disabled={busy||!name.trim()||!domain.trim()}>{busy?$t('projectSwitcher.creating'):$t('projectSwitcher.createConnectData')}</Button>)}

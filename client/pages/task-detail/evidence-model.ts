@@ -75,9 +75,13 @@ export function whyText(data: TaskData): {
   const { signals, brief, resultSource } = taskEvidence(data);
   if (signals.length) {
     const first = signals[0];
+    const text = $legacyText(first.title),
+      fact = first.facts[0] ? $legacyText(first.facts[0]) : '';
+    // A title that already states the figure (Average position 19.8, close to page one) is not followed by it again.
+    const bare = (value: string) => value.replace(/[\s:：]/g, '');
     return {
-      text: $legacyText(first.title),
-      fact: first.facts[0] ? $legacyText(first.facts[0]) : '',
+      text,
+      fact: fact && bare(text).includes(bare(fact)) ? '' : fact,
       more: signals.length - 1,
     };
   }

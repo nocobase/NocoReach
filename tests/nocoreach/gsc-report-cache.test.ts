@@ -215,14 +215,13 @@ it('expires partial dimensions after five minutes and does not cache total failu
   expect(upstream).toHaveBeenCalledTimes(16);
 });
 
-it('isolates projects, properties, authorization, simulated scopes, filters, countries, types and windows', async () => {
+it('isolates projects, properties, authorization, simulated scopes, filters, countries and windows', async () => {
   const { views, state, upstream } = await fixture();
   const read = (id = '1', changes = {}) =>
     views.searchBreakdown(id, { ...window, ...changes });
   await read();
   await read('2');
   await read('1', { country: 'usa' });
-  await read('1', { type: 'image' });
   await read('1', {
     pageFilter: { operator: 'contains', expression: '/docs' },
   });
@@ -233,10 +232,10 @@ it('isolates projects, properties, authorization, simulated scopes, filters, cou
   await read();
   state.mock = 'simulated-revision-2';
   await read();
-  expect(upstream).toHaveBeenCalledTimes(9 * 6);
+  expect(upstream).toHaveBeenCalledTimes(8 * 6);
   state.connected = false;
   expect(await read()).toEqual({ connected: false });
-  expect(upstream).toHaveBeenCalledTimes(9 * 6);
+  expect(upstream).toHaveBeenCalledTimes(8 * 6);
 });
 
 it('reuses local aggregations after restart, invalidates by sync version, and reuses live queries across sync changes', async () => {
@@ -268,10 +267,9 @@ it.each([
   'uses the $range report dates in persisted details without inventing all-time comparisons',
   async (range) => {
     const { views, plugin, upstream } = await fixture();
-    const report = await views.search('1', { ...range, type: 'image' });
+    const report = await views.search('1', range);
     const selection = {
       ...report.window,
-      type: 'image',
       dimension: 'query',
       key: 'crm',
     };

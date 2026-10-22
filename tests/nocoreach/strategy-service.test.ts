@@ -35,6 +35,21 @@ test('independent action does not require a project goal and preserves its objec
  assert.equal(writes[0].values.evidence.objective,'Improve onboarding');assert.equal(writes[0].values.evidence.insight.id,'opportunity-1');
  assert.equal(state.proposals[0].taskId,42);assert.equal(state.proposals[0].goal,null);
 });
+test('a change handed off on its own keeps its change and page on the task',async()=>{
+ // T-33 on Studio (2026-10-21): handed off from Insights › Today's changes, it kept neither, so its article could not be found.
+ const {StrategyService}=__strategy_service;
+ const writes=[];const service=new StrategyService({db:{getRepository:name=>({create:async options=>{writes.push({name,...options});return {id:43};}})}});
+ const state={goal:null,proposals:[],insights:{items:[],evidence:{}}};
+ service.context=async()=>({evidence:{signals:{items:[{key:'gsc-near-first:/en/blog/x',url:'https://www.nocobase.com/en/blog/x'}]}}});
+ service.mutate=async(_id,_v,fn)=>{await fn(state,{});return state;};
+ await service.confirmDirection(1,{title:'/en/blog/x ranks 19.8',brief:'b',objective:'o',signalKey:'gsc-near-first:/en/blog/x',page:'https://www.nocobase.com/en/blog/x'});
+ assert.equal(writes[0].values.evidence.signalKey,'gsc-near-first:/en/blog/x');
+ assert.equal(writes[0].values.evidence.page,'https://www.nocobase.com/en/blog/x');
+ assert.equal(writes[0].values.evidence.insight,null);
+ // Not an address: nothing is kept.
+ await service.confirmDirection(1,{title:'t',brief:'b',objective:'o',page:'javascript:alert(1)'});
+ assert.equal('page' in writes[1].values.evidence,false);
+});
 test('opportunity validation rejects missing evidence and strips generated identity',()=>{
  const {insightInput}=__strategy_service;
  assert.throws(()=>insightInput({title:'Unsupported claim'}));
@@ -175,6 +190,15 @@ test('每条变化的结论: do / watch / skip with a reason; a change an opport
  await assert.rejects(service.reviewSignal(1,{signalKey:'gone',verdict:'do'}),/不在最近一次分析/);
 });
 
+test('a change judged worth doing gets an opportunity, or is skipped when a task already covers it',async()=>{
+ const {StrategyService}=__strategy_service;const service=new StrategyService({});const state={proposals:[{id:'p',signalKey:'handed',taskId:7,taskNo:7}]};
+ const signals=[{key:'fresh',source:'gsc',title:'/en/blog/x ranks 19.8',facts:['5,790 impressions, 0 clicks'],url:'https://www.example.com/en/blog/x',actionable:true},{key:'handed',source:'gsc',title:'h',facts:[],actionable:true}];
+ service.context=async()=>({evidence:{signals:{items:signals}}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
+ await service.saveInsights(1,{insights:[],locale:'en-US',signalReviews:[{key:'fresh',verdict:'do',reason:'Rewrite the title'},{key:'handed',verdict:'do',reason:'r'}]});
+ assert.deepEqual(state.insights.items.map(c=>[c.title,c.signalIds,c.suggestion]),[['/en/blog/x ranks 19.8',['fresh'],'Rewrite the title']]);
+ assert.deepEqual(state.insights.signalReviews.fresh,{verdict:'do',reason:'Rewrite the title'});
+ assert.deepEqual(state.insights.signalReviews.handed,{verdict:'skip',reason:'Task T-7 is already on it'});
+});
 test('verdicts filled in afterwards keep the ones already there',async()=>{
  const {StrategyService}=__strategy_service;const service=new StrategyService({});
  const state={insights:{evidence:{signals:{items:[{key:'a',actionable:true},{key:'b',actionable:false}]}},signalReviews:{a:{verdict:'do',reason:'原来的'}}}};service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};

@@ -9,6 +9,7 @@ import {Button} from '#components/ui/button';
 import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuSeparator,DropdownMenuTrigger} from '#components/ui/dropdown-menu';
 import {getWorkColumns,workState,closeCommand,canReopen,closedWhen,isClosed,type BoardState,type Work} from './task-execution-types';
 import {stepOf,executorOf,getExecutorNames,ago,stateTone} from './task-list-model';
+import {taskAgentOf,type AgentStatus} from './task-agents';
 import {WithInfo} from '#components/reach/info-tip';
 import {help} from './glossary';
 import {localizeWorkSnapshots} from './playbook-snapshot';
@@ -26,9 +27,12 @@ type Action=(task:WorkCard,action:TaskAction)=>void;
 const dot:Record<BoardState,string>={todo:'bg-nr-ink-grey',doing:'bg-nr-ink-blue',review:'bg-nr-ink-violet',done:'bg-nr-ink-green'};
 // Small parts shared by the table and the board (NocoProject look: dot pill, the shared actor avatar, executor as agent avatar + name).
 function Avatar({name}:{name?:string}){return name?<span title={name} className="inline-flex"><ActorAvatar type="user" name={name} size="sm"/></span>:<span className="text-muted-foreground">—</span>;}
-function Executor({w,compact=false}:{w?:Work;compact?:boolean}){const e=executorOf(w);if(!e)return <span className="text-muted-foreground">—</span>;
- return <span className="inline-flex min-w-0 items-center gap-1.5" title={getExecutorNames()[e]}><ActorAvatar type="agent" size="xs"/>
-  <span className="truncate">{e==='agent'?(compact?'Agent':$t('common.localAgent')):$t('common.onlineAi')}</span></span>;}
+// The Agent by name, as the task page header shows it (2026-10-21: a bare "Agent" told nothing); Unassigned when none.
+function Executor({w,agents}:{w?:Work;agents?:AgentStatus}){
+ if(!agents)return w?.agentName?<span className="truncate">{w.agentName}</span>:<span className="text-muted-foreground">—</span>;
+ const a=taskAgentOf(w,agents);if(!a)return <span className="truncate text-muted-foreground">{$t('taskAgents.unassigned')}</span>;
+ return <span className="inline-flex min-w-0 items-center gap-1.5" title={a.name}><span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full',a.online?'bg-nr-ink-green':'bg-muted-foreground/50')}/>
+  <span className="truncate">{a.name}</span><span className="sr-only">{a.online?$t('taskDetail.agentOnline'):$t('taskDetail.agentOffline')}</span></span>;}
 function StatusTag({t}:{t:WorkCard}){const w=t.evidence?.work;if(isClosed(w))return <Tag tone="slate" dot>{$t('common.closed')}</Tag>;const s=workState(w,t.status);return <Tag tone={stateTone[s]} dot>{getWorkColumns()[s]}</Tag>;}
 function StepCell({w,muted='—'}:{w?:Work;muted?:string}){const s=stepOf(w);if(!s)return <span className="text-muted-foreground">{muted}</span>;return s.tone?<Tag tone={s.tone}>{s.text}</Tag>:<span className="truncate text-muted-foreground">{s.text}</span>;}
 function Menu({t,busy,moves,onMove,onAction}:{t:WorkCard;busy?:boolean;moves?:{col:BoardState;siblings:WorkCard[]};onMove?:(t:WorkCard,state:BoardState,beforeId?:number)=>void;onAction?:Action}){
@@ -43,7 +47,7 @@ function Menu({t,busy,moves,onMove,onAction}:{t:WorkCard;busy?:boolean;moves?:{c
 }
 // Board: four columns (待处理 · 进行中 · 待确认 · 已完成) of current tasks; drag or use the card menu to move. Moving never
 // starts AI or publishes, and closing is only in the menu (dragging must not stop a running executor).
-export function WorkBoard({tasks:visible,busy,list,onMove,onOpen,onAction}:{tasks:WorkCard[];busy:boolean;list:boolean;onMove:(task:WorkCard,state:BoardState,beforeId?:number)=>void;onOpen:(id:number)=>void;onAction?:Action}):ReactElement{
+export function WorkBoard({tasks:visible,busy,list,agents,onMove,onOpen,onAction}:{tasks:WorkCard[];busy:boolean;list:boolean;agents?:AgentStatus;onMove:(task:WorkCard,state:BoardState,beforeId?:number)=>void;onOpen:(id:number)=>void;onAction?:Action}):ReactElement{
  const [drag,setDrag]=useState<number|null>(null),[over,setOver]=useState(''),editable=useEditable();
  const state=(t:WorkCard)=>workState(t.evidence?.work,t.status);
  function move(t:WorkCard,target:BoardState,beforeId?:number){setDrag(null);setOver('');onMove(t,target,beforeId);}
@@ -56,7 +60,7 @@ export function WorkBoard({tasks:visible,busy,list,onMove,onOpen,onAction}:{task
    <No t={t}/>
    <h3 className="-mt-1.5 m-0 text-sm font-medium leading-snug"><button type="button" className="line-clamp-3 text-left hover:underline" onClick={()=>onOpen(t.id)}>{t.title}</button></h3>
    {s&&(s.tone?<Tag tone={s.tone}>{s.text}</Tag>:<span className="text-xs text-muted-foreground">{s.text}</span>)}
-   <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"><Avatar name={ownerOf(t)}/><span className="min-w-0 flex-1"><Executor w={w} compact/></span><span className="shrink-0">{ago(t.updatedAt)}</span>
+   <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"><Avatar name={ownerOf(t)}/><span className="min-w-0 flex-1"><Executor w={w} agents={agents}/></span><span className="shrink-0">{ago(t.updatedAt)}</span>
     {mine?<Menu t={t} busy={busy} moves={{col,siblings}} onMove={move} onAction={onAction}/>:null}</div>
   </article>;}
  if(list)return <div className="flex flex-col gap-2">{visible.map(card)}</div>;
@@ -71,11 +75,13 @@ export function WorkBoard({tasks:visible,busy,list,onMove,onOpen,onAction}:{task
 export function TaskTable({
   tasks,
   closed = false,
+  agents,
   onOpen,
   onAction,
 }: {
   tasks: WorkCard[];
   closed?: boolean;
+  agents?: AgentStatus;
   onOpen: (id: number) => void;
   onAction?: Action;
 }): ReactElement {
@@ -91,9 +97,9 @@ export function TaskTable({
           <col className='w-16' />
           <col />
           <col className='w-32' />
-          <col className='w-48' />
+          <col className='w-56' />
+          <col className='w-40' />
           <col className='w-36' />
-          <col className='w-32' />
           <col className='w-24' />
           <col className='w-10' />
         </colgroup>
@@ -174,7 +180,7 @@ export function TaskTable({
                   </span>
                 </td>
                 <td className='px-3 py-2.5'>
-                  <Executor w={w} />
+                  <Executor w={w} agents={agents} />
                 </td>
                 <td className='px-3 py-2.5 text-xs text-muted-foreground tabular-nums'>
                   {ago(t.updatedAt)}

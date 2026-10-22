@@ -377,7 +377,7 @@ Tests live in `tests/`, never beside the source they cover. Put logic and integr
 
 ### Notification testing
 
-通知管理 UI 已移除。具有 `notification:test` 的 `send` 权限时，可通过 `GET <APP_BASE_PATH>/api/notifications/testTargets` 查看测试目标，并通过 `POST <APP_BASE_PATH>/api/notifications/testSends` 发送测试通知。发送会产生真实外部操作，服务端仍校验权限。
+通知投递诊断通过应用本地脚本调用 `notification.send()`，使用显式指定的渠道和测试收件人，并从通知日志查看结果。通用测试表单和测试接口已退出使用。模拟部署仍禁止通知写操作，并在启动前限制为站内信渠道和进程内任务队列。
 
 ## API documentation
 

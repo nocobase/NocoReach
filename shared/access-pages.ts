@@ -29,7 +29,6 @@ export const REACH_PAGES = [
   'data-bilibili',
   'data-youtube',
   'agents',
-  'online-agents',
   'online-agent-new',
   'online-agent-edit',
   'playbooks',

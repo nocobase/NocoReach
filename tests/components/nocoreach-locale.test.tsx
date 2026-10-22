@@ -27,6 +27,8 @@ import { getWorkColumns } from '../../client/pages/task-execution-types';
 import { countryName } from '../../client/pages/countries';
 import { help } from '../../client/pages/glossary';
 import SourceConnections from '../../client/pages/source-connections';
+import { CONNECT_SOURCES } from '../../shared/connect-sources';
+import { systemMessageText } from '../../shared/i18n/messages';
 
 const { viewer, collector } = vi.hoisted(() => ({
   viewer: { can: true, networkOnly: false },
@@ -79,10 +81,6 @@ vi.mock('../../client/pages/data-health', () => ({
 vi.mock('../../client/components/app-shell/nav-badges', () => ({
   refreshNavBadges: () => {},
 }));
-const { openChat } = vi.hoisted(() => ({ openChat: vi.fn() }));
-vi.mock('../../client/online-agent/context.js', () => ({
-  useOnlineChat: () => ({ open: openChat }),
-}));
 vi.mock('../../client/pages/site-content-connect', () => ({
   SiteContentConnect: function SiteForm() {
     const [value, setValue] = useState('');
@@ -109,7 +107,6 @@ vi.mock('../../client/lib/nocoreach-api', () => ({
 let disconnect: (() => void) | undefined;
 afterEach(() => {
   cleanup();
-  openChat.mockClear();
   viewer.can = true;
   viewer.networkOnly = false;
   collector.onSavingChange = undefined;
@@ -282,30 +279,8 @@ describe('NocoReach language integration', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('opens an online chat draft in the source project after switching the drawer language', async () => {
+  it('describes the connection at the top of the drawer with what to prepare, and no AI', async () => {
     const i18n = await runtime('zh-CN');
-    const user = userEvent.setup();
-    render(
-      <I18nProvider runtime={i18n}>
-        <MemoryRouter>
-          <Page />
-        </MemoryRouter>
-      </I18nProvider>,
-    );
-    await screen.findByText('网站内容');
-    const card = document.querySelector('[data-source-id="site"]')!;
-    await user.click(card.querySelector('button')!);
-    await act(() => i18n.changeLanguage('en-US'));
-    const question = getCatalog().find((source) => source.id === 'site')!.guide!
-      .questions[0];
-    await user.click(screen.getByRole('button', { name: question }));
-    expect(openChat).toHaveBeenCalledWith({ draft: question, projectId: '1' });
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  });
-
-  it('describes the connection under the drawer title and marks only the Ask AI section as the AI', async () => {
-    const i18n = await runtime('zh-CN');
-    const user = userEvent.setup();
     render(
       <I18nProvider runtime={i18n}>
         <MemoryRouter initialEntries={['/?source=site']}>
@@ -323,27 +298,36 @@ describe('NocoReach language integration', () => {
         (item) => item.textContent,
       ),
     ).toEqual(guide.needs);
-    const ask = screen.getByRole('heading', { name: '问 AI' });
-    const avatars = dialog.querySelectorAll('[data-actor="agent"]');
-    expect(avatars).toHaveLength(1);
-    expect(ask).toContainElement(avatars[0] as HTMLElement);
+    // The drawer is set up by hand; no question buttons hand off to the AI chat.
+    expect(dialog.querySelector('[data-actor="agent"]')).toBeNull();
     await act(() => i18n.changeLanguage('en-US'));
     const english = getCatalog().find((source) => source.id === 'site')!.guide!;
     expect(dialog).toHaveAccessibleDescription(english.intro);
     expect(
       screen.getByRole('heading', { name: 'What you need' }),
     ).toBeVisible();
-    expect(screen.getByRole('heading', { name: 'Ask AI' })).toContainElement(
-      avatars[0] as HTMLElement,
-    );
-    await user.click(
-      screen.getByRole('button', { name: english.questions[0] }),
-    );
-    expect(openChat).toHaveBeenCalledWith({
-      draft: english.questions[0],
-      projectId: '1',
-    });
+    expect(
+      screen.queryByRole('heading', { name: 'Ask AI' }),
+    ).not.toBeInTheDocument();
   });
+
+  it.each(['en-US', 'zh-CN'] as const)(
+    'names every source and what it needs the same way as the connect commands in %s',
+    async (locale) => {
+      await runtime(locale);
+      const catalog = getCatalog();
+      expect(catalog.map((source) => source.id)).toEqual(
+        CONNECT_SOURCES.map((source) => source.id),
+      );
+      for (const source of CONNECT_SOURCES) {
+        const card = catalog.find((entry) => entry.id === source.id)!;
+        expect(card.name).toBe(systemMessageText(source.name, {}, locale));
+        expect(card.guide?.needs ?? []).toEqual(
+          source.needs.map((key) => systemMessageText(key, {}, locale)),
+        );
+      }
+    },
+  );
 
   it('recomputes imported labels, country names, glossary and status without reimporting modules', async () => {
     const i18n = await runtime('zh-CN');

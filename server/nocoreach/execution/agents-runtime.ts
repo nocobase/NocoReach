@@ -90,7 +90,10 @@ export interface TaskRunProgress {
     | 'finishedAt'
     | 'usage'
     | 'failureReason'
-  >;
+  > &
+    Partial<
+      Pick<Awaited<ReturnType<Agents['runs']['detail']>>, 'failureDetail'>
+    >;
   events: Awaited<ReturnType<Agents['runs']['events']>>['events'];
   truncated: boolean;
   canInspect: boolean;
@@ -175,7 +178,9 @@ export class TaskAgentsRuntime {
       this.transcripts.delete(this.transcripts.keys().next().value!);
     return {
       businessFailure,
-      run: metadata,
+      // What the tool itself reported when it stopped ("Not logged in · Please run /login"); the plugin redacts it,
+      // and like the transcript it is for those who may inspect the run.
+      run: { ...metadata, failureDetail: visible.failureDetail },
       events: cached.events,
       truncated: Boolean(cached.truncated),
       canInspect: true,

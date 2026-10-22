@@ -5,18 +5,21 @@ import {
   useState,
   type ReactElement,
 } from 'react';
-import { Loader2, ListFilter, ChevronDown, RefreshCw } from 'lucide-react';
+import { Loader2, ListFilter } from 'lucide-react';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { toast } from '#lib/toast';
 import { PageContainer, PageHeader, Section } from '#components/reach/page';
+import { RefreshButton } from '#components/reach/refresh-button';
 import { ListSkeleton, LoadError, EmptyState } from '#components/reach/states';
 import { Tag } from '#components/reach/tag';
+import { lineTabClass, lineTabListClass } from '#components/reach/line-tabs';
 import { Button } from '#components/ui/button';
 import { Input } from '#components/ui/input';
 import { Switch } from '#components/ui/switch';
 import { Textarea } from '#components/ui/textarea';
 import { useProject } from './reach-data';
+import { ruleUnitLabel } from './analysis-rules/labels';
 import { getSourceNames } from './strategy/board';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import {
@@ -26,6 +29,7 @@ import {
 } from './analysis-rules/schemes';
 import { RulesAssistant } from './analysis-rules/assistant';
 import type { Rule, Settings, View, Proposal } from './analysis-rules/types';
+import { formatDateTime } from '#lib/format';
 
 const call = <T,>(action: string, projectId: number, body: object = {}) =>
   api.action<T>('nrAnalysisRules', action, {
@@ -50,6 +54,19 @@ function settingsOf(rules: Rule[], change: Rule): Settings['rules'] {
       ]),
   );
 }
+// Sources by the area the rules summary names; the rule list is tabbed by these areas.
+const COVERAGE_AREAS = [
+  ['search', ['gsc', 'rank', 'trends', 'ai-search']],
+  ['traffic', ['ga4', 'github-traffic']],
+  ['content', ['site', 'youtube', 'bilibili', 'xiaohongshu']],
+  ['community', ['discourse', 'reddit', 'hackernews', 'discord', 'slack', 'x']],
+  ['product', ['github', 'packages']],
+  ['competitors', ['competitors']],
+] as const;
+const areaOf = (source: string): string =>
+  COVERAGE_AREAS.find(([, sources]) =>
+    (sources as readonly string[]).includes(source),
+  )?.[0] ?? 'other';
 const SOURCE_ORDER = [
   'gsc',
   'ga4',
@@ -70,7 +87,7 @@ const SOURCE_ORDER = [
   'competitors',
   'ai-search',
 ];
-const day = (iso: string) => new Date(iso).toLocaleString(getCurrentLocale());
+const day = (iso: string) => formatDateTime(iso);
 const statusOf = (e: unknown) =>
   e && typeof e === 'object' && 'status' in e ? Number(e.status) : undefined;
 const errorText = (e: unknown, fallback: string) =>
@@ -113,7 +130,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string>();
   const [manualRevision, setManualRevision] = useState(0);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [openArea, setOpenArea] = useState<string>();
   const selectedSchemeRef = useRef<string | undefined>(undefined);
   const aliveRef = useRef(true),
     pendingRef = useRef(false),
@@ -177,8 +194,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
       selectedSchemeRef.current = next.schemeId;
       setView(next);
       const added = next.rules.find((r) => r.id === next.addedRuleId);
-      if (added)
-        setExpanded((current) => ({ ...current, [added.source]: true }));
+      if (added) setOpenArea(areaOf(added.source));
       if (action !== 'apply') setManualRevision((value) => value + 1);
       closeEditor();
       toast.success(() =>
@@ -257,7 +273,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
       if (aliveRef.current) setBusy(false);
     }
   };
-  const groups = view
+  const groups: string[] = view
     ? [...new Set(view.rules.map((r) => r.source))].sort(
         (a, b) =>
           (SOURCE_ORDER.includes(a)
@@ -276,17 +292,19 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
       (_match, separator, letter: string) =>
         `${separator ? ' ' : ''}${letter.toUpperCase()}`,
     );
-  const coverageAreas = [
-    ['search', ['gsc', 'rank', 'trends', 'ai-search']],
-    ['traffic', ['ga4', 'github-traffic']],
-    ['content', ['site', 'youtube', 'bilibili', 'xiaohongshu']],
-    [
-      'community',
-      ['discourse', 'reddit', 'hackernews', 'discord', 'slack', 'x'],
-    ],
-    ['product', ['github', 'packages']],
-    ['competitors', ['competitors']],
-  ] as const;
+  const coverageAreas = COVERAGE_AREAS;
+  const areas = [
+    ...coverageAreas.map(([area]) => area as string),
+    'other',
+  ].filter((area) => groups.some((g) => areaOf(g) === area));
+  const area = openArea && areas.includes(openArea) ? openArea : areas[0];
+  const editingArea = editing
+    ? areaOf(view?.rules.find((r) => r.id === editing)?.source ?? '')
+    : undefined;
+  const areaName = (key: string) => {
+    const label = $t(`analysisRules.scope.${key}`);
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  };
   const enabledSources = groups.filter((g) =>
     view?.rules.some((r) => r.source === g && r.enabled),
   );
@@ -314,10 +332,9 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
         title={$t('analysisRules.analysisRules')}
         description={$t('analysisRules.pageHelp')}
         actions={
-          <Button
-            variant='outline'
-            size='sm'
-            disabled={busy || Boolean(editing)}
+          <RefreshButton
+            busy={busy}
+            disabled={Boolean(editing)}
             onClick={() => {
               setBusy(true);
               setManualRevision((v) => v + 1);
@@ -325,10 +342,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                 if (aliveRef.current) setBusy(false);
               });
             }}
-          >
-            <RefreshCw className={`size-4 ${busy ? 'animate-spin' : ''}`} />
-            {$t('strategy.refreshBlock')}
-          </Button>
+          />
         }
       />
       {error ? (
@@ -444,48 +458,56 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                 {saveError}
               </p>
             ) : null}
-            <div className='flex flex-col gap-3'>
-              {groups.map((g, index) => (
-                <div key={g} data-source={g}>
-                  <h3>
-                    <Button
-                      variant='ghost'
-                      className='h-auto w-full justify-start gap-3 whitespace-normal px-3 py-3 text-left'
-                      aria-expanded={expanded[g] ?? index === 0}
-                      aria-controls={`rules-group-${g}`}
-                      disabled={Boolean(
-                        editing &&
-                        view.rules.some(
-                          (r) => r.source === g && r.id === editing,
-                        ),
-                      )}
-                      onClick={() =>
-                        setExpanded((current) => ({
-                          ...current,
-                          [g]: !(current[g] ?? index === 0),
-                        }))
-                      }
-                    >
-                      <ChevronDown
-                        aria-hidden='true'
-                        className={`size-4 shrink-0 transition-transform ${(expanded[g] ?? index === 0) ? '' : '-rotate-90'}`}
-                      />
-                      <span>{sourceName(g)}</span>
-                      <span className='ml-auto text-xs font-normal text-muted-foreground'>
-                        {$t('analysisRules.groupEnabled', {
-                          0: view.rules.filter(
-                            (r) => r.source === g && r.enabled,
-                          ).length,
-                          1: view.rules.filter((r) => r.source === g).length,
-                        })}
-                      </span>
-                    </Button>
-                  </h3>
-                  <ul
-                    id={`rules-group-${g}`}
-                    hidden={!(expanded[g] ?? index === 0)}
-                    className='divide-y rounded-lg border'
+            {/* Rules by area as line tabs, each source a heading with its rules shown, instead of fold-out groups
+                (UI review A10). The area with an open editor cannot be left until it is saved or cancelled. */}
+            {areas.length ? (
+              <div
+                role='tablist'
+                aria-label={$t('analysisRules.ruleGroups')}
+                className={lineTabListClass}
+              >
+                {areas.map((key) => (
+                  <button
+                    key={key}
+                    type='button'
+                    role='tab'
+                    id={`rules-tab-${key}`}
+                    aria-selected={key === area}
+                    aria-controls='rules-panel'
+                    className={lineTabClass}
+                    disabled={Boolean(editingArea && editingArea !== key)}
+                    onClick={() => setOpenArea(key)}
                   >
+                    {areaName(key)}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <div
+              id='rules-panel'
+              role='tabpanel'
+              aria-labelledby={area ? `rules-tab-${area}` : undefined}
+              className='flex flex-col gap-5'
+            >
+              {groups.map((g) => (
+                <div
+                  key={g}
+                  data-source={g}
+                  hidden={areaOf(g) !== area}
+                  className='flex flex-col gap-2'
+                >
+                  <h3 className='flex items-baseline gap-2 text-sm font-medium'>
+                    {sourceName(g)}
+                    <span className='text-xs font-normal text-muted-foreground tabular-nums'>
+                      {$t('analysisRules.groupEnabled', {
+                        0: view.rules.filter(
+                          (r) => r.source === g && r.enabled,
+                        ).length,
+                        1: view.rules.filter((r) => r.source === g).length,
+                      })}
+                    </span>
+                  </h3>
+                  <ul className='divide-y rounded-lg border'>
                     {view.rules
                       .filter((r) => r.source === g)
                       .map((r) => (
@@ -546,7 +568,10 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                                 </span>
                                 <span className='font-medium tabular-nums'>
                                   {p.value}
-                                  {p.unit ? ` ${$legacyText(p.unit)}` : ''}
+                                  {/* "2%" not "2 %"; word units such as days keep their space. */}
+                                  {p.unit
+                                    ? `${p.unit === '%' ? '' : ' '}${ruleUnitLabel(p.unit, p.value)}`
+                                    : ''}
                                 </span>
                               </span>
                             ))}
@@ -665,8 +690,14 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
               ·{' '}
               {$tj('analysisRules.rulesFoundChangesData', {
                 0: last.found ?? '—',
-              })}{' '}
-              · {$tj('analysisRules.passedAi', { 0: last.passed ?? '—' })}
+              })}
+              {/* Without a count the clause is left out rather than reading "— passed to the AI" (UI review E7). */}
+              {last.passed != null ? (
+                <>
+                  {' '}
+                  · {$tj('analysisRules.passedAi', { 0: last.passed })}
+                </>
+              ) : null}
               {last.analyzedAt ? (
                 <>
                   {' '}

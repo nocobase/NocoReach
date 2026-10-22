@@ -10,7 +10,10 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { NocoReachHttpError } from '../../client/lib/nocoreach-api';
 import { ArticleTargetsConnect } from '../../client/pages/article-targets-connect';
-import { articleRequest } from '../../client/pages/article-targets-api';
+import {
+  articleRequest,
+  searchArticles,
+} from '../../client/pages/article-targets-api';
 import {
   ArticleEditor,
   ArticleReview,
@@ -19,11 +22,15 @@ import {
   DriftNotice,
   TargetRows,
 } from '../../client/pages/task-detail/article-release';
-import { ArticleStart } from '../../client/pages/task-detail/article-start';
+import {
+  DeliveryDialog,
+  DeliverySummary,
+} from '../../client/pages/task-detail/article-start';
 import {
   conflictHeading,
   defaultDelivery,
   deliveryPlan,
+  pageUrlsOf,
   type DeliveryChoice,
 } from '../../client/pages/task-detail/article-model';
 import { playbookRequest } from '../../client/pages/playbook-model';
@@ -731,7 +738,7 @@ it('lists each target of a release with its state and a conflict with its detail
   ).toBeInTheDocument();
 });
 
-it('chooses other targets on the start card: the primary leaves them, a limit applies', async () => {
+it('chooses other targets in the Change dialog: the primary leaves them, a limit applies', async () => {
   const many = ['cms', 'a', 'b', 'c', 'd', 'e'].map((id) => ({
     ...target,
     id,
@@ -743,46 +750,136 @@ it('chooses other targets on the start card: the primary leaves them, a limit ap
     work: { article: undefined },
     agent: { repo: { repo: 'org/site', baseBranch: 'main' } },
   } as unknown as TaskData;
-  function Harness() {
-    const [choice, setChoice] = useState<DeliveryChoice>({
-      target: 'cms',
-      mode: 'new',
-      also: [],
-    });
-    return (
-      <>
-        <ArticleStart
-          data={d}
-          projectId={1}
-          choice={choice}
-          setChoice={setChoice}
-          busy={false}
-          allowed
-          link={async () => true}
-        />
-        <output>{choice.also.join(',')}</output>
-      </>
-    );
-  }
+  const onSave = vi.fn();
   const user = userEvent.setup();
-  render(<Harness />);
+  render(
+    <DeliveryDialog
+      open
+      onClose={() => undefined}
+      data={d}
+      projectId={1}
+      choice={{ target: 'cms', mode: 'new', also: [] }}
+      busy={false}
+      link={async () => true}
+      onSave={onSave}
+    />,
+  );
+  const dialog = screen.getByRole('dialog', { name: 'Choose article' });
   expect(
-    screen.getByText(
+    within(dialog).getByText(
       'Matched by address (slug): an existing article is updated, otherwise a new one is created.',
     ),
   ).toBeInTheDocument();
   for (const n of ['A', 'B', 'C', 'D'])
-    await user.click(screen.getByRole('checkbox', { name: n }));
-  expect(screen.getByRole('checkbox', { name: 'E' })).toHaveAttribute(
+    await user.click(within(dialog).getByRole('checkbox', { name: n }));
+  expect(within(dialog).getByRole('checkbox', { name: 'E' })).toHaveAttribute(
     'data-disabled',
   );
-  expect(screen.getByText('Up to 4 more targets')).toBeInTheDocument();
-  await user.selectOptions(screen.getByLabelText('Publish to'), 'a');
-  expect(document.querySelector('output')?.textContent).toBe('b,c,d');
-  expect(screen.queryByRole('checkbox', { name: 'A' })).not.toBeInTheDocument();
-  await user.selectOptions(screen.getByLabelText('Publish to'), 'repo');
-  expect(document.querySelector('output')?.textContent).toBe('');
-  expect(screen.queryByText('Also publish to')).not.toBeInTheDocument();
+  expect(within(dialog).getByText('Up to 4 more targets')).toBeInTheDocument();
+  await user.selectOptions(within(dialog).getByLabelText('Publish to'), 'a');
+  expect(
+    within(dialog).queryByRole('checkbox', { name: 'A' }),
+  ).not.toBeInTheDocument();
+  expect(within(dialog).getByRole('checkbox', { name: 'B' })).toBeChecked();
+  // Nothing reaches the card before Save.
+  expect(onSave).not.toHaveBeenCalled();
+  await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+  expect(onSave).toHaveBeenCalledWith({
+    target: 'a',
+    mode: 'new',
+    also: ['b', 'c', 'd'],
+  });
+});
+
+it('picks an existing article in the Change dialog: saved on the task at Save, nothing on Cancel', async () => {
+  const d = {
+    ...data,
+    articleTargets: [target],
+    work: { article: undefined },
+    agent: { repo: null },
+  } as unknown as TaskData;
+  const found = {
+    targetId: 'cms',
+    articleId: '9',
+    slug: 'workflow-tools',
+    title: 'Workflow tools',
+    url: 'https://www.example.com/blog/workflow-tools',
+  };
+  vi.mocked(searchArticles).mockResolvedValue([
+    { id: '9', slug: 'workflow-tools', title: 'Workflow tools' },
+    { id: '12', slug: 'open-source-crm', title: 'Open source CRM' },
+  ]);
+  const link = vi.fn(async () => true),
+    onSave = vi.fn(),
+    onClose = vi.fn();
+  const user = userEvent.setup();
+  const show = () =>
+    render(
+      <DeliveryDialog
+        open
+        onClose={onClose}
+        data={d}
+        projectId={1}
+        choice={{ target: 'cms', mode: 'existing', also: [], article: found }}
+        found={found}
+        busy={false}
+        link={link}
+        onSave={onSave}
+      />,
+    );
+  show();
+  let dialog = screen.getByRole('dialog', { name: 'Choose article' });
+  expect(
+    within(dialog).getByText('Selected: Workflow tools (workflow-tools)'),
+  ).toBeInTheDocument();
+  await user.click(
+    await within(dialog).findByRole('button', { name: /Open source CRM/ }),
+  );
+  await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+  expect(onClose).toHaveBeenCalled();
+  expect(link).not.toHaveBeenCalled();
+  expect(onSave).not.toHaveBeenCalled();
+  cleanup();
+  // Picking the article found from the page again keeps it for the start; another one is saved on the task.
+  show();
+  dialog = screen.getByRole('dialog', { name: 'Choose article' });
+  await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+  expect(link).not.toHaveBeenCalled();
+  expect(onSave).toHaveBeenLastCalledWith({
+    target: 'cms',
+    mode: 'existing',
+    also: [],
+    article: found,
+  });
+  cleanup();
+  show();
+  dialog = screen.getByRole('dialog', { name: 'Choose article' });
+  await user.click(
+    await within(dialog).findByRole('button', { name: /Open source CRM/ }),
+  );
+  await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+  expect(link).toHaveBeenCalledWith('cms', '12');
+  expect(onSave).toHaveBeenLastCalledWith({
+    target: 'cms',
+    mode: 'existing',
+    also: [],
+  });
+  cleanup();
+  // Existing article with none picked yet: Save waits for one.
+  render(
+    <DeliveryDialog
+      open
+      onClose={onClose}
+      data={d}
+      projectId={1}
+      choice={{ target: 'cms', mode: 'existing', also: [] }}
+      busy={false}
+      link={link}
+      onSave={onSave}
+    />,
+  );
+  expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  expect(screen.getByText('Pick the article to change')).toBeInTheDocument();
 });
 
 it('defaults the start card to the playbook target, the repository, or the default target', () => {
@@ -813,4 +910,250 @@ it('defaults the start card to the playbook target, the repository, or the defau
     deliveryPlan(d({}), { target: 'cms', mode: 'new', also: ['news', 'cms'] })
       .delivery,
   ).toEqual({ targetId: 'cms', also: ['news'] });
+});
+
+it('decides where the change goes from the page: the article found, the repository, or a pick', () => {
+  const d = (entries: Record<string, string> = {}, repo = true) =>
+    ({
+      ...data,
+      articleTargets: [
+        { ...target, default: true },
+        { ...target, id: 'news', name: 'News' },
+      ],
+      articlePlaybookTargets: entries,
+      work: {},
+      agent: { repo: repo ? { repo: 'org/site', baseBranch: 'main' } : null },
+    }) as unknown as TaskData;
+  const article = {
+    targetId: 'news',
+    articleId: '9',
+    slug: 'workflow-tools',
+    title: 'Workflow tools',
+    url: 'https://www.example.com/blog/workflow-tools',
+  };
+  // Found from the page: that article, in the target holding it, saved on the task as it starts.
+  const found = defaultDelivery(d(), 'optimize-page', {
+    article,
+    unchecked: false,
+  });
+  expect(found).toEqual({
+    target: 'news',
+    mode: 'existing',
+    also: [],
+    article,
+  });
+  expect(deliveryPlan(d(), found)).toMatchObject({
+    ready: true,
+    link: { targetId: 'news', articleId: '9' },
+  });
+  // The page is known and no target holds it: a page of the site itself, changed by a pull request.
+  const none = { article: null, unchecked: false };
+  expect(defaultDelivery(d(), 'optimize-page', none)).toEqual({
+    target: 'repo',
+    mode: 'new',
+    also: [],
+  });
+  // Unless the playbook names a target, there is no repository, or the targets could not be asked: pick by hand.
+  for (const [data2, f] of [
+    [d({ 'optimize-page': 'news' }), none],
+    [d({}, false), none],
+    [d(), { article: null, unchecked: true }],
+    [d(), undefined],
+  ] as const)
+    expect(defaultDelivery(data2, 'optimize-page', f)).toMatchObject({
+      mode: 'existing',
+    });
+  // A blog post is a new article whatever page the task names.
+  expect(
+    defaultDelivery(d(), 'blog-post', { article, unchecked: false }),
+  ).toEqual({ target: 'cms', mode: 'new', also: [] });
+});
+
+it("reads a task's pages from the page linked on it and the opportunity it came from", () => {
+  const task = (evidence: Record<string, unknown>, page?: string) =>
+    ({
+      ...data,
+      task: { id: 1, title: '', brief: '', evidence },
+      work: page ? { page: { url: page, title: '' } } : {},
+    }) as unknown as TaskData;
+  expect(
+    pageUrlsOf(
+      task(
+        {
+          insight: {
+            target: 'https://www.example.com/blog/a',
+            signalIds: ['s1', 's3'],
+          },
+          context: {
+            signals: {
+              items: [
+                { key: 's1', url: 'https://www.example.com/blog/a' },
+                { key: 's2', url: 'https://www.example.com/blog/b' },
+                { key: 's3', url: 'https://www.example.com/blog/c' },
+              ],
+            },
+          },
+        },
+        'https://www.example.com/blog/linked',
+      ),
+    ),
+  ).toEqual([
+    'https://www.example.com/blog/linked',
+    'https://www.example.com/blog/a',
+    'https://www.example.com/blog/c',
+  ]);
+  expect(pageUrlsOf(task({ insight: { target: 'the docs site' } }))).toEqual(
+    [],
+  );
+});
+
+it('reads the page of a change handed off on its own, which has no opportunity', () => {
+  // T-33: handed off from Insights › Today's changes; no opportunity, the change and its page kept on the task.
+  const task = (evidence: Record<string, unknown>) =>
+    ({
+      ...data,
+      task: { id: 33, title: '', brief: '', evidence },
+      work: {},
+    }) as unknown as TaskData;
+  const context = {
+    signals: {
+      items: [
+        { key: 'other', url: 'https://www.example.com/blog/other' },
+        { key: 'gsc:x', url: 'https://www.example.com/blog/x' },
+      ],
+    },
+  };
+  expect(
+    pageUrlsOf(task({ insight: null, signalKey: 'gsc:x', context })),
+  ).toEqual(['https://www.example.com/blog/x']);
+  expect(
+    pageUrlsOf(
+      task({
+        insight: null,
+        page: 'https://www.example.com/blog/x',
+        signalKey: 'gsc:x',
+        context,
+      }),
+    ),
+  ).toEqual(['https://www.example.com/blog/x']);
+  // Without either, nothing names a page: the article is picked by hand, as before.
+  expect(pageUrlsOf(task({ insight: null, context }))).toEqual([]);
+});
+
+it('shows where the change goes in one line, with Change for the exceptions', async () => {
+  const d = {
+    ...data,
+    articleTargets: [target],
+    work: {},
+  } as unknown as TaskData;
+  const onChange = vi.fn();
+  const article = {
+    targetId: 'cms',
+    articleId: '9',
+    slug: 'workflow-tools',
+    title: 'Workflow tools',
+    url: 'https://www.example.com/blog/workflow-tools',
+  };
+  const show = (choice: DeliveryChoice, finding = false) =>
+    render(
+      <DeliverySummary
+        data={d}
+        choice={choice}
+        finding={finding}
+        allowed
+        busy={false}
+        onChange={onChange}
+      />,
+    );
+  const { unmount } = show({
+    target: 'cms',
+    mode: 'existing',
+    also: [],
+    article,
+  });
+  expect(screen.getByText('Article to change')).toBeInTheDocument();
+  expect(screen.getByText('Found from the page address')).toBeInTheDocument();
+  // The title opens the article where readers see it.
+  expect(screen.getByRole('link', { name: 'Workflow tools' })).toHaveAttribute(
+    'href',
+    article.url,
+  );
+  expect(screen.getByRole('link', { name: 'Workflow tools' })).toHaveAttribute(
+    'target',
+    '_blank',
+  );
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Change' }));
+  expect(onChange).toHaveBeenCalled();
+  unmount();
+  show({ target: 'repo', mode: 'new', also: [] }).unmount();
+  show({ target: 'cms', mode: 'new', also: [] });
+  expect(screen.getByText('Publishes to NocoBase CMS')).toBeInTheDocument();
+  cleanup();
+  // Still to be picked: the line says so and Choose article opens the dialog.
+  show({ target: 'cms', mode: 'existing', also: [] });
+  expect(screen.getByText('Pick the article to change')).toBeInTheDocument();
+  await userEvent
+    .setup()
+    .click(screen.getByRole('button', { name: 'Choose article' }));
+  expect(onChange).toHaveBeenCalledTimes(2);
+  cleanup();
+  show({ target: 'cms', mode: 'existing', also: [] }, true);
+  expect(
+    screen.getByText('Finding the article for this page…'),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
+});
+
+it('links a saved article through its target page patterns, preferring the task page, and lists other targets', () => {
+  const withPages = {
+    ...target,
+    pages: {
+      en: 'https://www.example.com/en/blog/{slug}',
+      zh: 'https://www.example.com/cn/blog/{slug}',
+    },
+  };
+  const d = (targets: unknown[], page?: string) =>
+    ({
+      ...data,
+      articleTargets: targets,
+      task: { id: 1, title: 'T', brief: '' },
+      work: {
+        article: {
+          targetId: 'cms',
+          articleId: '7',
+          slug: 'hello',
+          title: 'Hello',
+          sourceKey: null,
+        },
+        ...(page ? { page: { url: page, title: '' } } : {}),
+      },
+    }) as unknown as TaskData;
+  const show = (task: TaskData, also: string[] = []) =>
+    render(
+      <DeliverySummary
+        data={task}
+        choice={{ target: 'cms', mode: 'existing', also }}
+        finding={false}
+        allowed
+        busy={false}
+        onChange={() => undefined}
+      />,
+    );
+  show(d([withPages]));
+  expect(screen.getByRole('link', { name: 'Hello' })).toHaveAttribute(
+    'href',
+    'https://www.example.com/en/blog/hello',
+  );
+  cleanup();
+  show(d([withPages], 'https://example.com/cn/blog/hello/'));
+  expect(screen.getByRole('link', { name: 'Hello' })).toHaveAttribute(
+    'href',
+    'https://example.com/cn/blog/hello/',
+  );
+  cleanup();
+  // No patterns: the title stays plain text.
+  show(d([target, { ...target, id: 'news', name: 'News' }]), ['news']);
+  expect(screen.getByText('Hello')).toBeInTheDocument();
+  expect(screen.queryByRole('link')).toBeNull();
+  expect(screen.getByText('Also publishes to News')).toBeInTheDocument();
 });

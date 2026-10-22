@@ -1,4 +1,5 @@
-import { type Message, renderMessage, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { type Message, renderMessage, useMessageState, $t, $tj, $legacyText } from "#i18n";
+import { usePageTab } from '#hooks/use-page-tab';
 // AI 搜索: after every-app/open-seo db8bde1 src/client/features/ai-search/ (BrandLookupPage, PromptExplorerPage and their
 // components; MIT). Changes: the brand defaults to the project and our pages are marked from its domains; ChatGPT and
 // Google AI 概览 are looked up together and shown side by side; 问 AI asks the chosen models at once and shows each
@@ -35,6 +36,7 @@ import "./data-views.css";
 import {InfoTip,WithInfo} from "#components/reach/info-tip";
 import { help } from "./glossary";
 import { AiQuestions } from "./ai-questions";
+import { formatDate, formatDateTime } from '#lib/format';
 
 type Platform = "chat_gpt" | "google";
 type Model = "chat_gpt" | "claude" | "gemini" | "perplexity";
@@ -56,7 +58,7 @@ const MODEL: Record<Model, string> = { chat_gpt: "ChatGPT", claude: "Claude", ge
 const ai = <T,>(action: string, body: object = {}) => api.action<T>("nrAiSearch", action, { method: "POST", body: { projectId: String(currentProjectId()), ...body }, unwrap: "data" });
 const requestKey = () => crypto.randomUUID().replace(/-/g, "");
 const message = (e: unknown) => (e instanceof Error ? $legacyText(e.message) : $t('aiSearch.notCompleteTryAgainLater'));
-const when = (v?: string | null) => (v ? new Date(v).toLocaleString(getCurrentLocale(), { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
+const when = (v?: string | null) => (v ? formatDateTime(v) : "");
 // A run that did not complete: uncertain ones may be billed and are never asked again by themselves.
 const runProblem = (r: { status: string; errorCode?: string | null }) => (r.status === "unknown" ? r.errorCode || $t('common.resultUncertainMayChargedRepeat') : r.status === "failed" ? $t('aiSearch.dataforseoReturnedNoResults',{0:r.errorCode || $t('errors.unknownReason')}) : r.status === "running" ? $t('aiSearch.stillChecking') : "");
 
@@ -65,6 +67,7 @@ export default function AiSearch() {
   const { project } = useProject();
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") === "ask" ? "ask" : params.get("tab") === "brand" ? "brand" : "questions";
+  usePageTab($t(tab === 'ask' ? 'aiSearch.askAi' : tab === 'brand' ? 'aiSearch.brandMentions' : 'common.question'));
   const group = params.get("g");
   const [connection, setConnection] = useState<KeywordConnectionState>();
   const [recent, setRecent] = useState<Recent[]>();
@@ -84,7 +87,7 @@ export default function AiSearch() {
   const notConnected = connection && !connection.verifiedAt;
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<InfoTip label={$t('common.aboutData')} side="bottom">{$t('aiSearch.questionsAiAnswerSamplesDataforseo')}</InfoTip>} title={$t('common.aiSearch')} description={$t('aiSearch.whatPeopleAskChatgptGoogle')} />
+      <PageHeader info={<InfoTip label={$t('common.aboutData')} side="bottom"><p>{$t('aiSearch.questionsAiAnswerSamplesDataforseo')}</p><p>{$t('aiSearch.billingNote')}</p></InfoTip>} title={$t('common.aiSearch')} description={$t('aiSearch.whatPeopleAskChatgptGoogle')} />
       <HandOffNotice result={handOff} />
       <Tabs value={tab} onValueChange={(v) => go({ tab: v === "ask" ? "ask" : v === "brand" ? "brand" : "questions", g: null })}>
         <TabsList variant="line" className="h-auto! justify-start">
@@ -163,11 +166,11 @@ function BrandTab({ group, brand, projectId, recent, onOpen, onRan, onHandOff }:
             </div>
             <Select value={`${form.market.locationCode}:${form.market.language}`} onValueChange={(v) => { const m = getMarkets().find((x) => `${x.locationCode}:${x.language}` === v); if (m) setForm((f) => ({ ...f, market: m })); }}>
               <SelectTrigger className="w-full lg:w-44" aria-label={$t('aiSearch.googleAiOverviewsMarket')}><SelectValue>{(v: string) => $t(getMarkets().find((x) => `${x.locationCode}:${x.language}` === v)?.label ?? "")}</SelectValue></SelectTrigger>
-              <SelectContent>{getMarkets().map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
+              <SelectContent className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{getMarkets().map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
             </Select>
             <Button type="submit" disabled={busy} className="lg:px-6">{busy ? $t('common.querying') : $t('common.query')}</Button>
+            <InfoTip label={$t('common.info')}>{$t('aiSearch.platformCoverageHelp')}</InfoTip>
           </div>
-          <p className="text-xs text-muted-foreground">{$t('aiSearch.platformCoverageHelp')}</p>
           {error ? <p role="alert" className="nr-error">{error}</p> : null}
         </form>
       </Card>
@@ -232,7 +235,7 @@ function GapBlock({ spec, competitor, runs, projectId, onRuns }: { spec: BrandSp
     <section className="flex flex-col gap-2 border-t pt-3 first-of-type:border-0 first-of-type:pt-0" data-gap={competitor}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium">{$t('aiSearch.mentionedNot', { 0: competitor })}</span>
-        {done.length ? <span className="text-xs text-muted-foreground">{$t('aiSearch.questionsChecked', { 0: rows.length, 1: new Date(done[0].createdAt).toLocaleDateString(getCurrentLocale()) })}</span> : null}
+        {done.length ? <span className="text-xs text-muted-foreground">{$t('aiSearch.questionsChecked', { 0: rows.length, 1: formatDate(done[0].createdAt) })}</span> : null}
         <Button size="sm" variant="outline" className="ml-auto" disabled={busy} onClick={() => void ask()}>{busy ? $t('common.lookingUp') : done.length ? $t('aiSearch.checkAgainAbout03') : $t('aiSearch.checkAbout03')}</Button>
       </div>
       {error || failed.length ? <p role="alert" className="nr-error">{error || failed.join("；")}</p> : null}

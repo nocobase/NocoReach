@@ -1,11 +1,12 @@
 import { number, resultStatus, signed, signedPercent } from './format.js';
-import { $t, $legacyText, getCurrentLocale } from '#i18n';
+import { $t, $legacyText } from '#i18n';
 import {
   metricValues,
   safeConclusion,
   matchesObservation,
 } from '../../../shared/result-comparison.js';
 import type { EffectResult } from '../effect-model.js';
+import { formatDate, formatDateTime } from '#lib/format';
 const metrics = [
   ['gsc', 'clicks', 'common.searchClicks'],
   ['gsc', 'impressions', 'common.searchImpressions'],
@@ -56,8 +57,8 @@ export function Comparison({
       <strong>{resultStatus(safeConclusion(result))}</strong>
       <p className='text-sm'>
         {$t('results.windows', {
-          0: `${result.baseline.start} – ${result.baseline.end}`,
-          1: `${result.after.start} – ${result.after.end}`,
+          0: `${formatDate(result.baseline.start)} – ${formatDate(result.baseline.end)}`,
+          1: `${formatDate(result.after.start)} – ${formatDate(result.after.end)}`,
         })}
       </p>
       <div className='overflow-x-auto'>
@@ -117,7 +118,7 @@ export function Comparison({
       ))}
       <p className='text-xs text-muted-foreground'>
         {$t('results.computed', {
-          0: new Date(result.computedAt).toLocaleString(getCurrentLocale()),
+          0: formatDateTime(result.computedAt),
         })}
       </p>
       {[...new Set(result.notes)].map((note) => (

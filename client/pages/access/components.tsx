@@ -1,8 +1,14 @@
 import { ApiClientError } from '@nocobase/app-client';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { RefreshCw, MoreHorizontal } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  MoreHorizontal,
+  RefreshCw,
+} from 'lucide-react';
 import { type ReactNode } from 'react';
 import { $t } from '#i18n';
+import { usePageTab } from '#hooks/use-page-tab';
 import { PageHeader } from '#components/reach/page';
 import { Button } from '#components/ui/button';
 import { Alert, AlertDescription } from '#components/ui/alert';
@@ -19,6 +25,8 @@ import {
   TooltipContent,
 } from '#components/ui/tooltip';
 import { accessMessage, roleTitle, type BusinessRole } from './api';
+import { lineTabClass, lineTabListClass } from '#components/reach/line-tabs';
+import { formatCount } from '#lib/format';
 
 export function AccessError({
   error,
@@ -139,6 +147,8 @@ export function RolePicker({
     </div>
   );
 }
+// The same footer as the data tables' (TablePagination): the rows shown, the page, and previous and next as icons;
+// nothing at all while everything fits on one page.
 export function Pager({
   total,
   page,
@@ -148,26 +158,46 @@ export function Pager({
   page: number;
   onChange: (page: number) => void;
 }) {
-  const pages = Math.max(1, Math.ceil(total / 20));
+  const size = 20;
+  const pages = Math.max(1, Math.ceil(total / size));
+  if (pages <= 1) return null;
+  const start = page * size + 1;
+  const end = Math.min(total, (page + 1) * size);
   return (
-    <div className='flex flex-wrap items-center justify-end gap-3 text-sm text-muted-foreground'>
+    <div className='flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground tabular-nums'>
       <span>
-        {$t('accessMembers.pagination', { 0: total, 1: page + 1, 2: pages })}
+        {$t('tablePagination.rows', {
+          0: formatCount(start),
+          1: formatCount(end),
+          2: formatCount(total),
+        })}
       </span>
-      <Button
-        variant='outline'
-        disabled={page === 0}
-        onClick={() => onChange(page - 1)}
-      >
-        {$t('accessMembers.previous')}
-      </Button>
-      <Button
-        variant='outline'
-        disabled={page + 1 >= pages}
-        onClick={() => onChange(page + 1)}
-      >
-        {$t('accessMembers.next')}
-      </Button>
+      <div className='flex items-center gap-2'>
+        <span>
+          {$t('tablePagination.page', {
+            0: formatCount(page + 1),
+            1: formatCount(pages),
+          })}
+        </span>
+        <Button
+          variant='ghost'
+          size='icon-sm'
+          aria-label={$t('tablePagination.previous')}
+          disabled={page === 0}
+          onClick={() => onChange(page - 1)}
+        >
+          <ChevronLeft />
+        </Button>
+        <Button
+          variant='ghost'
+          size='icon-sm'
+          aria-label={$t('tablePagination.next')}
+          disabled={page + 1 >= pages}
+          onClick={() => onChange(page + 1)}
+        >
+          <ChevronRight />
+        </Button>
+      </div>
     </div>
   );
 }
@@ -192,6 +222,7 @@ export function AccessHeader({
     ['roles', 'accessMembers.roles'],
     ['invitations', 'accessMembers.pending'],
   ];
+  usePageTab($t(tabs.find(([key]) => key === tab)![1]));
   return (
     <>
       <PageHeader
@@ -204,14 +235,15 @@ export function AccessHeader({
         actions={actions}
       />
       <nav
-        className='flex flex-wrap gap-2'
+        className={lineTabListClass}
         aria-label={$t('accessMembers.memberViews')}
       >
         {tabs.map(([key, label]) =>
           key !== 'invitations' || invitations ? (
-            <Button
+            <button
+              type='button'
               key={key}
-              variant={tab === key ? 'secondary' : 'ghost'}
+              className={lineTabClass}
               onClick={() => {
                 if (tab === key) return;
                 const next = new URLSearchParams(params);
@@ -225,7 +257,7 @@ export function AccessHeader({
               aria-current={tab === key ? 'page' : undefined}
             >
               {$t(label)}
-            </Button>
+            </button>
           ) : null,
         )}
       </nav>

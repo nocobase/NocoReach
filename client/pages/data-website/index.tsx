@@ -26,7 +26,7 @@ import {
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { PageContainer, PageHeader } from '#components/reach/page';
 import { EmptyState, ListSkeleton, LoadError } from '#components/reach/states';
-import { NotesTip, InfoTip } from '#components/reach/info-tip';
+import { NotesTip, InfoTip, WithInfo } from '#components/reach/info-tip';
 import { Button } from '#components/ui/button';
 import { Card } from '#components/ui/card';
 import { cn } from '#lib/utils';
@@ -53,6 +53,7 @@ import {
   deviceName,
   KPI_KEYS,
   METRICS,
+  ownDays,
   show,
   TABLE_LABELS,
   visitorName,
@@ -61,6 +62,8 @@ import {
   type Row,
 } from './model';
 import '../data-views.css';
+import { formatDate } from '#lib/format';
+import { Tag } from '#components/reach/tag';
 
 const RANGES = defaultRanges;
 
@@ -136,12 +139,15 @@ export default function DataWebsite() {
         summary={
           w
             ? 'all' in w && w.all
-              ? $t('rangePicker.availableRange', { 0: w.start, 1: w.end })
+              ? $t('rangePicker.availableRange', {
+                  0: formatDate(w.start),
+                  1: formatDate(w.end),
+                })
               : $t('common.comparedPreviousDaysDataThrough', {
-                  0: w.start,
-                  1: w.end,
+                  0: formatDate(w.start),
+                  1: formatDate(w.end),
                   2: w.days,
-                  3: report?.cutoff,
+                  3: formatDate(report?.cutoff),
                 })
             : undefined
         }
@@ -212,13 +218,13 @@ export default function DataWebsite() {
                   </Card>
                   {(key === 'keyEvents' || key === 'keyEventRate') &&
                   keyEventRateSuspect ? (
-                    <span
-                      className='pointer-events-none absolute top-3 right-3 inline-flex items-center gap-1 rounded bg-nr-tint-amber px-1.5 py-0.5 text-xs text-nr-ink-amber'
+                    <Tag
+                      tone='amber'
+                      className='pointer-events-none absolute top-3 right-3'
                       data-quality-mark=''
                     >
-                      <TriangleAlert className='size-3' aria-hidden='true' />
                       {$t('dataWebsite.qualitySuspect')}
-                    </span>
+                    </Tag>
                   ) : null}
                 </div>
               );
@@ -311,11 +317,9 @@ function ChangeDrivers({
         { 0: list(x.pages.map((d) => driver(d.key, d))) },
       ),
     );
+  // What moved the figure is a finding, not a warning: plain text under the figures (UI review 2026-10-21).
   return (
-    <p
-      className='rounded-lg bg-nr-tint-amber px-3 py-2 text-sm text-nr-ink-amber'
-      data-change-drivers=''
-    >
+    <p className='text-sm' data-change-drivers=''>
       {parts.join(isChinese() ? '' : ' ')}
     </p>
   );
@@ -325,8 +329,9 @@ function ChangeDrivers({
 function TrendCard({ report, metric }: { report: Report; metric: MetricKey }) {
   const m = METRICS[metric],
     cutoff = report.cutoff!;
-  const points = (report.daily ?? []).map((d, i) => {
-    const before = report.previousDaily?.[i];
+  const days = ownDays(report.window, report.daily, report.previousDaily);
+  const points = days.current.map((d, i) => {
+    const before = days.previous[i];
     const value = m.of(d);
     return {
       date: d.date,
@@ -523,28 +528,32 @@ function QualityText({ issue }: { issue: QualityIssue }) {
   );
 }
 
-// The issues about the picked figure, under the figures, each shown in full.
+// The issues about the picked figure, under the figures: one line each, marked as needing a look, with why and how to
+// fix it in GA4 in its ⓘ rather than a paragraph of steps on the page (UI review 2026-10-21).
 function QualityNotes({ issues }: { issues: QualityIssue[] }) {
   if (!issues.length) return null;
   return (
     <section
       aria-label={$t('dataWebsite.qualityHeading')}
-      className='flex flex-col gap-2 rounded-lg bg-nr-tint-amber px-3 py-2 text-sm text-nr-ink-amber'
+      className='flex flex-col gap-1.5 text-sm'
       data-quality-notes=''
     >
       {issues.map((i) => (
-        <div key={`${i.kind}:${'channel' in i ? i.channel : ''}`}>
-          <p className='flex items-start gap-1.5 font-medium'>
-            <TriangleAlert
-              className='mt-0.5 size-4 shrink-0'
-              aria-hidden='true'
-            />
+        <p
+          key={`${i.kind}:${'channel' in i ? i.channel : ''}`}
+          className='flex flex-wrap items-center gap-2'
+        >
+          <Tag tone='amber'>{$t('dataWebsite.qualitySuspect')}</Tag>
+          <WithInfo
+            help={
+              <span className='flex flex-col gap-1'>
+                <QualityText issue={i} />
+              </span>
+            }
+          >
             {qualityText(i)[0]}
-          </p>
-          <div className='mt-1 flex flex-col gap-1 pl-5.5'>
-            <QualityText issue={i} />
-          </div>
-        </div>
+          </WithInfo>
+        </p>
       ))}
     </section>
   );

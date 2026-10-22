@@ -12,6 +12,7 @@ import {
   within,
   cleanup,
 } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import {
   afterAll,
@@ -26,8 +27,9 @@ import {
 import enUS from '../../client/locales/en-US.js';
 import zhCN from '../../client/locales/zh-CN.js';
 import SchedulesPage from '../../client/pages/schedules/index.js';
-import DetailPage from '../../client/pages/schedules/detail.js';
-import type { Schedule } from '../../client/pages/schedules/data.js';
+import EditDialog from '../../client/pages/schedules/edit.js';
+import HistoryDrawer from '../../client/pages/schedules/history.js';
+import { dailyTime, type Schedule } from '../../client/pages/schedules/data.js';
 
 const mocks = vi.hoisted(() => ({ api: { request: vi.fn() }, toast: vi.fn() }));
 vi.mock('@nocobase/app-client', async (original) => ({
@@ -37,11 +39,15 @@ vi.mock('@nocobase/app-client', async (original) => ({
 vi.mock('../../client/components/ui/toast.js', () => ({
   toast: { add: mocks.toast },
 }));
+// Project names for the run history; the workspace cache behind useProjects is not part of this page.
+vi.mock('../../client/pages/reach-data.js', () => ({
+  useProjects: () => ({ projects: [{ id: 1, name: 'NocoBloom' }] }),
+}));
 const schedule: Schedule = {
   id: 'schedule-1',
   key: 'nocoreach.daily-analysis',
   title: 'Daily analysis',
-  description: 'Analyse project signals.',
+  description: 'Server description.',
   cron: '0 9 * * *',
   timezone: 'UTC',
   enabled: true,
@@ -114,41 +120,64 @@ async function mount(path = '/schedules', locale = 'en-US') {
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path='/schedules' element={<SchedulesPage />}>
-            <Route path=':scheduleId' element={<DetailPage />} />
-            <Route path=':scheduleId/edit' element={<DetailPage />} />
+            <Route path=':scheduleId' element={<HistoryDrawer />} />
+            <Route path=':scheduleId/edit' element={<EditDialog />} />
           </Route>
         </Routes>
       </MemoryRouter>
     </TestI18nProvider>,
   );
 }
+const posts = () =>
+  mocks.api.request.mock.calls.filter(([r]) => r.method === 'POST');
+async function menu(name: string) {
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'More actions' }));
+  await user.click(await screen.findByRole('menuitem', { name }));
+}
 
-describe('scheduled task management', () => {
-  it('shows independent scheduling states and timezone in both languages', async () => {
+describe('automatic runs', () => {
+  it('describes the daily analysis in plain words and keeps scheduler states out of the card', async () => {
     await mount('/schedules', 'zh-CN');
-    expect(await screen.findByText('已启用')).toBeInTheDocument();
-    expect(screen.getByText('UTC')).toBeInTheDocument();
-    expect(screen.getByText('就绪')).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: '定时任务' }),
+      await screen.findByRole('heading', { name: '自动运行' }),
     ).toBeInTheDocument();
+    expect(await screen.findByText('1 个项目，5 条建议')).toBeInTheDocument();
+    expect(screen.getByText('每天 09:00')).toBeInTheDocument();
+    expect(screen.getByText('已开启')).toBeInTheDocument();
+    expect(screen.getByText(/更新到“洞察”和“机会”/u)).toBeInTheDocument();
+    expect(screen.queryByText('0 9 * * *')).toBeNull();
+    expect(screen.queryByText('就绪')).toBeNull();
+    expect(screen.queryByText('Server description.')).toBeNull();
+    // One item: no pagination.
+    expect(screen.queryByRole('navigation')).toBeNull();
     expect(
-      screen.getByRole('link', { name: 'Daily analysis' }),
-    ).toHaveAttribute('href', '/schedules/schedule-1');
+      screen.getByRole('link', { name: '去数据接入查看' }),
+    ).toHaveAttribute('href', '/connections');
   });
-  it('requires confirmation before disabling, updates returned state, and enables without a dialog', async () => {
+  it('shows the scheduler details only on request', async () => {
     await mount();
-    fireEvent.click(await screen.findByRole('button', { name: 'Disable' }));
-    const dialog = await screen.findByRole('alertdialog');
+    await menu('Technical details');
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('0 9 * * *')).toBeInTheDocument();
+    expect(within(dialog).getByText('Ready')).toBeInTheDocument();
     expect(
-      mocks.api.request.mock.calls.filter(([r]) => r.method === 'POST'),
-    ).toHaveLength(0);
-    expect(dialog).toHaveTextContent('Work already started will continue');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Disable' }));
-    expect(
-      await screen.findByText('Disabled', { selector: '[data-slot="badge"]' }),
+      within(dialog).getByText('nocoreach.daily-analysis'),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Enable' }));
+    expect(within(dialog).getByText('6')).toBeInTheDocument();
+  });
+  it('asks before pausing, updates the returned state, and turns on without a dialog', async () => {
+    await mount();
+    await menu('Pause');
+    const dialog = await screen.findByRole('alertdialog');
+    expect(posts()).toHaveLength(0);
+    expect(dialog).toHaveTextContent('A run already started finishes');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Pause' }));
+    expect(
+      await screen.findByText('Paused', { selector: '[data-slot="badge"]' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Paused, no automatic runs')).toBeInTheDocument();
+    await menu('Turn on');
     await waitFor(() =>
       expect(mocks.api.request).toHaveBeenCalledWith({
         method: 'POST',
@@ -156,15 +185,15 @@ describe('scheduled task management', () => {
       }),
     );
     expect(
-      await screen.findByRole('button', { name: 'Disable' }),
+      await screen.findByText('On', { selector: '[data-slot="badge"]' }),
     ).toBeInTheDocument();
     expect(mocks.toast).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'success' }),
     );
   });
-  it('keeps failed disable in the dialog and prevents duplicate submissions', async () => {
+  it('keeps a failed pause in the dialog and prevents duplicate submissions', async () => {
     await mount();
-    fireEvent.click(await screen.findByRole('button', { name: 'Disable' }));
+    await menu('Pause');
     let reject!: (error: Error) => void;
     mocks.api.request.mockImplementationOnce(
       () =>
@@ -173,7 +202,7 @@ describe('scheduled task management', () => {
         }),
     );
     const dialog = await screen.findByRole('alertdialog');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Disable' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Pause' }));
     expect(
       within(dialog).getByRole('button', { name: 'Saving…' }),
     ).toBeDisabled();
@@ -185,9 +214,7 @@ describe('scheduled task management', () => {
       'The request failed',
     );
     expect(dialog).not.toHaveTextContent('private upstream secret');
-    expect(
-      within(dialog).getByRole('button', { name: 'Disable' }),
-    ).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'Pause' })).toBeEnabled();
   });
   it.each([401, 403, 404])(
     'handles HTTP %s without leaking the response or offering retry',
@@ -210,11 +237,15 @@ describe('scheduled task management', () => {
         ).toBeInTheDocument();
     },
   );
-  it('preserves the list page in detail links and requests real server pages', async () => {
+  it('keeps the list page in overlay links and pages through the server', async () => {
     await mount('/schedules?page=2');
     expect(
-      await screen.findByRole('link', { name: 'Daily analysis' }),
+      await screen.findByRole('button', { name: 'Run history' }),
     ).toHaveAttribute('href', '/schedules/schedule-1?page=2');
+    expect(screen.getByRole('button', { name: 'Change time' })).toHaveAttribute(
+      'href',
+      '/schedules/schedule-1/edit?page=2',
+    );
     expect(mocks.api.request).toHaveBeenCalledWith(
       expect.objectContaining({
         path: 'scheduler/schedules?page=2&pageSize=20',
@@ -229,10 +260,10 @@ describe('scheduled task management', () => {
       ),
     );
   });
-  it('opens history directly, loads the opaque cursor, and clears additional records on refresh', async () => {
+  it('opens the run history by project name, loads the opaque cursor, and clears extra records on refresh', async () => {
     const defaultImplementation = mocks.api.request.getMockImplementation()!;
     mocks.api.request.mockImplementation((input) => {
-      if (input.path.includes('/occurrences'))
+      if (input.path.includes('/occurrences?pageSize=20'))
         return Promise.resolve(
           input.path.includes('pageToken=')
             ? {
@@ -252,24 +283,31 @@ describe('scheduled task management', () => {
       return defaultImplementation(input);
     });
     await mount('/schedules/schedule-1');
-    expect(await screen.findByText('5 results')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
-    expect(await screen.findByText('Model unavailable')).toBeInTheDocument();
+    const drawer = await screen.findByRole('dialog');
+    expect(
+      await within(drawer).findByText('Daily analysis · Run history'),
+    ).toBeInTheDocument();
+    expect(await within(drawer).findByText('NocoBloom')).toBeInTheDocument();
+    expect(within(drawer).getByText('5 suggestions')).toBeInTheDocument();
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Load more' }));
+    expect(
+      await within(drawer).findByText('Model unavailable'),
+    ).toBeInTheDocument();
     expect(mocks.api.request).toHaveBeenCalledWith(
       expect.objectContaining({
         path: 'scheduler/schedules/schedule-1/occurrences?pageSize=20&pageToken=opaque%2Bcursor%2F',
       }),
     );
-    fireEvent.click(screen.getAllByRole('button', { name: 'Refresh' }).at(-1)!);
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Refresh' }));
     await waitFor(() =>
-      expect(screen.queryByText('Model unavailable')).toBeNull(),
+      expect(within(drawer).queryByText('Model unavailable')).toBeNull(),
     );
     expect(
-      await screen.findByRole('button', { name: 'Load more' }),
+      await within(drawer).findByRole('button', { name: 'Load more' }),
     ).toBeInTheDocument();
   });
   it.each([401, 403, 404])(
-    'hides the entire detail when pagination returns %s',
+    'hides the whole run history when pagination returns %s',
     async (status) => {
       const original = mocks.api.request.getMockImplementation()!;
       mocks.api.request.mockImplementation((input) => {
@@ -281,7 +319,7 @@ describe('scheduled task management', () => {
               url: '/fixture',
             }),
           );
-        if (input.path.includes('/occurrences'))
+        if (input.path.includes('/occurrences?pageSize=20'))
           return Promise.resolve({
             data: [occurrence],
             meta: { nextPageToken: 'next' },
@@ -289,19 +327,21 @@ describe('scheduled task management', () => {
         return original(input);
       });
       await mount('/schedules/schedule-1');
-      await screen.findByText('5 results');
-      fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
-      await screen.findByRole('alert');
+      const drawer = await screen.findByRole('dialog');
+      await within(drawer).findByText('5 suggestions');
+      fireEvent.click(
+        within(drawer).getByRole('button', { name: 'Load more' }),
+      );
+      await within(drawer).findByRole('alert');
+      expect(within(drawer).queryByText('5 suggestions')).toBeNull();
       expect(
-        screen.queryByRole('heading', { name: 'Daily analysis' }),
+        within(drawer).queryByText('Daily analysis · Run history'),
       ).toBeNull();
-      expect(screen.queryByText('5 results')).toBeNull();
-      expect(screen.queryByRole('button', { name: 'Run now' })).toBeNull();
     },
   );
-  it('clears displayed records when a refresh reports revoked access', async () => {
+  it('clears the cards when a refresh reports revoked access', async () => {
     await mount();
-    await screen.findByText('Ready');
+    await screen.findByText('Daily analysis');
     mocks.api.request.mockRejectedValue(
       new ApiClientError('denied', {
         status: 403,
@@ -313,88 +353,38 @@ describe('scheduled task management', () => {
     await screen.findByRole('alert');
     expect(screen.queryByText('Daily analysis')).toBeNull();
   });
-  it('keeps a confirmed disable action fixed when refresh changes enabled state', async () => {
-    const defaultImplementation = mocks.api.request.getMockImplementation()!;
-    await mount();
-    await screen.findByText('Ready');
-    let resolveRefresh!: (value: unknown) => void;
-    mocks.api.request.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          resolveRefresh = resolve;
-        }),
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Disable' }));
-    const dialog = await screen.findByRole('alertdialog');
-    current = { ...current, enabled: false, scheduleStatus: 'paused' };
-    await act(async () =>
-      resolveRefresh({
-        data: [current],
-        meta: { page: 1, pageSize: 20, total: 1 },
-      }),
-    );
-    mocks.api.request.mockImplementation(defaultImplementation);
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Disable' }));
-    await waitFor(() =>
-      expect(mocks.api.request).toHaveBeenCalledWith({
-        method: 'POST',
-        path: 'scheduler/schedules/schedule-1/disable',
-      }),
-    );
-    expect(
-      mocks.api.request.mock.calls.filter(([r]) => r.path.endsWith('/enable')),
-    ).toHaveLength(0);
-  });
   it('reloads the list and ends the confirmation when the task was removed', async () => {
     await mount();
-    fireEvent.click(await screen.findByRole('button', { name: 'Disable' }));
+    await menu('Pause');
     const dialog = await screen.findByRole('alertdialog');
-    mocks.api.request
-      .mockRejectedValueOnce(
-        new ApiClientError('gone', {
-          status: 404,
-          method: 'POST',
-          url: '/fixture',
-        }),
-      )
-      .mockResolvedValueOnce({
-        data: [],
-        meta: { page: 1, pageSize: 20, total: 0 },
-      });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Disable' }));
-    expect(await screen.findByText('No scheduled tasks')).toBeInTheDocument();
-    expect(screen.queryByRole('alertdialog')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Disable' })).toBeNull();
-  });
-  it('retains history and keeps refresh disabled until both reads finish', async () => {
     const defaultImplementation = mocks.api.request.getMockImplementation()!;
-    await mount('/schedules/schedule-1');
-    await screen.findByText('5 results');
-    let resolveHistory!: (value: unknown) => void;
-    mocks.api.request.mockImplementation((input) =>
-      input.path.includes('/occurrences')
-        ? new Promise((resolve) => {
-            resolveHistory = resolve;
-          })
-        : defaultImplementation(input),
-    );
-    const refresh = screen.getAllByRole('button', { name: 'Refresh' }).at(-1)!;
-    fireEvent.click(refresh);
-    await waitFor(() => expect(resolveHistory).toBeDefined());
-    expect(screen.getByText('5 results')).toBeInTheDocument();
-    expect(refresh).toBeDisabled();
-    await act(async () => resolveHistory({ data: [], meta: {} }));
-    expect(await screen.findByText('No execution history')).toBeInTheDocument();
-    expect(refresh).toBeEnabled();
+    mocks.api.request.mockImplementation((input) => {
+      if (input.method === 'POST')
+        return Promise.reject(
+          new ApiClientError('gone', {
+            status: 404,
+            method: 'POST',
+            url: '/fixture',
+          }),
+        );
+      if (input.path.startsWith('scheduler/schedules?'))
+        return Promise.resolve({
+          data: [],
+          meta: { page: 1, pageSize: 20, total: 0 },
+        });
+      return defaultImplementation(input);
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Pause' }));
+    expect(await screen.findByText('No automatic runs')).toBeInTheDocument();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
   });
-  it('shows empty states and disables inactive definitions', async () => {
+  it('shows the empty state and offers nothing for a definition the application dropped', async () => {
     mocks.api.request.mockResolvedValueOnce({
       data: [],
       meta: { page: 1, pageSize: 20, total: 0 },
     });
     const view = await mount();
-    expect(await screen.findByText('No scheduled tasks')).toBeInTheDocument();
+    expect(await screen.findByText('No automatic runs')).toBeInTheDocument();
     view.unmount();
     current = {
       ...current,
@@ -403,33 +393,42 @@ describe('scheduled task management', () => {
       scheduleStatus: 'paused',
     };
     await mount();
+    await screen.findByText('Daily analysis');
+    expect(screen.queryByRole('button', { name: 'Change time' })).toBeNull();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'More actions' }));
     expect(
-      await screen.findByRole('button', { name: 'Enable' }),
-    ).toBeDisabled();
-    expect(
-      screen.getByText(/no longer defined by the application/u),
-    ).toBeInTheDocument();
+      await screen.findByRole('menuitem', { name: 'Turn on' }),
+    ).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('menuitem', { name: 'Run now' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
   it('ignores the old page response after navigation', async () => {
     const defaultImplementation = mocks.api.request.getMockImplementation()!;
     let finishOld!: (value: unknown) => void;
-    let calls = 0;
+    let pending = false;
     mocks.api.request.mockImplementation((input) => {
-      calls += 1;
-      if (calls === 2)
+      if (pending && input.path.startsWith('scheduler/schedules?')) {
+        pending = false;
         return new Promise((resolve) => {
           finishOld = resolve;
         });
+      }
       return defaultImplementation(input);
     });
     await mount('/schedules?page=2');
-    await screen.findByText('Ready');
+    await screen.findByText('Daily analysis');
+    pending = true;
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
-    // Navigation can happen through links/browser back even while refresh is pending.
-    const oldSignal = mocks.api.request.mock.calls[1]![0].signal as AbortSignal;
+    const oldSignal = mocks.api.request.mock.calls.findLast(([r]) =>
+      r.path.startsWith('scheduler/schedules?'),
+    )![0].signal as AbortSignal;
+    // Navigation can happen through links or browser back while a refresh is pending.
     cleanup();
     await mount('/schedules?page=1');
-    await screen.findByText('Ready');
+    await screen.findByText('Daily analysis');
     await act(async () =>
       finishOld({
         data: [{ ...schedule, title: 'Stale private task' }],
@@ -448,7 +447,7 @@ describe('scheduled task management', () => {
   });
 });
 
-it('edits a fresh daily time through a deep link and keeps server details out of errors', async () => {
+it('changes the time from a deep link, starting from the server, and shows the new time on the card', async () => {
   const defaultRequest = mocks.api.request.getMockImplementation()!;
   mocks.api.request.mockImplementation(async (options) => {
     if (options.method === 'PUT') {
@@ -459,17 +458,47 @@ it('edits a fresh daily time through a deep link and keeps server details out of
     return defaultRequest(options);
   });
   await mount('/schedules/schedule-1/edit?page=2', 'zh-CN');
-  const input = await screen.findByLabelText('每日执行时间');
+  const dialog = await screen.findByRole('dialog');
+  await waitFor(() => expect(dialog).toHaveTextContent('修改“每日分析”的时间'));
+  const input = await within(dialog).findByLabelText('每天');
   expect(input).toHaveValue('09:00');
+  // UTC midnight in UTC: when most sources update.
+  expect(dialog).toHaveTextContent('多数数据源每天约 00:00 更新');
   fireEvent.change(input, { target: { value: '14:30' } });
-  fireEvent.click(screen.getByRole('button', { name: '保存调度' }));
+  fireEvent.click(within(dialog).getByRole('button', { name: '保存' }));
   await waitFor(() =>
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
   );
-  expect((await screen.findAllByText('30 14 * * *')).length).toBeGreaterThan(0);
+  expect(await screen.findByText('每天 14:30')).toBeInTheDocument();
   expect(
     mocks.api.request.mock.calls.filter(([r]) => r.method === 'PUT'),
   ).toHaveLength(1);
+});
+
+it('rejects an invalid time without saving and keeps server details out of a failed save', async () => {
+  const defaultRequest = mocks.api.request.getMockImplementation()!;
+  mocks.api.request.mockImplementation(async (options) => {
+    if (options.method === 'PUT') throw new Error('private stack');
+    return defaultRequest(options);
+  });
+  await mount('/schedules/schedule-1/edit');
+  const dialog = await screen.findByRole('dialog');
+  const input = await within(dialog).findByLabelText('Every day at');
+  fireEvent.change(input, { target: { value: '' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+    'Enter a valid time',
+  );
+  expect(
+    mocks.api.request.mock.calls.filter(([r]) => r.method === 'PUT'),
+  ).toHaveLength(0);
+  fireEvent.change(input, { target: { value: '07:15' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+  expect(
+    await within(dialog).findByText('The request failed. Try again.'),
+  ).toBeInTheDocument();
+  expect(dialog).not.toHaveTextContent('private stack');
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
 });
 
 it('confirms a manual run and reuses its request id after an uncertain failure', async () => {
@@ -483,17 +512,18 @@ it('confirms a manual run and reuses its request id after an uncertain failure',
     }
     return defaultRequest(options);
   });
-  await mount('/schedules/schedule-1');
-  fireEvent.click(await screen.findByRole('button', { name: 'Run now' }));
+  await mount();
+  await menu('Run now');
   expect(ids).toHaveLength(0);
-  fireEvent.click(screen.getByRole('button', { name: 'Confirm run' }));
+  const dialog = await screen.findByRole('alertdialog');
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Run now' }));
   await waitFor(() =>
     expect(
-      screen.getByRole('button', { name: 'Confirm run' }),
+      within(dialog).getByRole('button', { name: 'Run now' }),
     ).not.toBeDisabled(),
   );
   expect(screen.queryByText('private token')).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Confirm run' }));
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Run now' }));
   await waitFor(() => expect(ids).toHaveLength(2));
   expect(ids[0]).toBe(ids[1]);
   await waitFor(() =>
@@ -501,7 +531,7 @@ it('confirms a manual run and reuses its request id after an uncertain failure',
   );
 });
 
-it('searches task timezones, saves the selection, and displays the recalculated server result', async () => {
+it('searches timezones, names them plainly, and saves the selection', async () => {
   const defaultRequest = mocks.api.request.getMockImplementation()!;
   current = { ...current, timezone: 'America/New_York' };
   mocks.api.request.mockImplementation(async (options) => {
@@ -520,29 +550,25 @@ it('searches task timezones, saves the selection, and displays the recalculated 
     return defaultRequest(options);
   });
   await mount('/schedules/schedule-1/edit');
-  const picker = await screen.findByRole('combobox', {
-    name: 'Schedule timezone',
-  });
-  expect(picker).toHaveTextContent('America/New_York');
+  const picker = await screen.findByRole('combobox', { name: 'Timezone' });
+  expect(picker).toHaveTextContent('Eastern Time · America/New_York');
   fireEvent.click(picker);
-  const search = await screen.findByPlaceholderText('Search IANA timezones…');
+  const search = await screen.findByPlaceholderText(
+    'Search timezones, e.g. Shanghai',
+  );
   fireEvent.change(search, { target: { value: 'Shanghai' } });
   fireEvent.click(await screen.findByRole('option', { name: 'Asia/Shanghai' }));
-  expect(picker).toHaveTextContent('Asia/Shanghai');
-  fireEvent.click(screen.getByRole('button', { name: 'Save schedule' }));
+  expect(picker).toHaveTextContent('China Standard Time · Asia/Shanghai');
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() =>
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
   );
-  expect((await screen.findAllByText('Asia/Shanghai')).length).toBeGreaterThan(
-    0,
-  );
-  expect(current.nextRunAt).toBe('2026-10-17T01:00:00Z');
+  expect(await screen.findByText('China Standard Time')).toBeInTheDocument();
 });
 
-it('exposes time editing directly from the task list and opens the prefilled editor', async () => {
-  await mount('/schedules?page=2', 'zh-CN');
-  const edit = await screen.findByRole('button', { name: '编辑时间' });
-  expect(edit).toHaveAttribute('href', '/schedules/schedule-1/edit?page=2');
-  fireEvent.click(edit);
-  expect(await screen.findByLabelText('每日执行时间')).toHaveValue('09:00');
+it('reads the daily time from five- and six-field crons only', () => {
+  expect(dailyTime('0 9 * * *')).toBe('09:00');
+  expect(dailyTime('0 30 7 * * *')).toBe('07:30');
+  expect(dailyTime('*/5 * * * *')).toBeNull();
+  expect(dailyTime('0 9 * * 1')).toBeNull();
 });

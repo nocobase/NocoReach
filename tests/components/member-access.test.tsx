@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryRouter, RouterProvider, Outlet } from 'react-router';
@@ -16,6 +23,7 @@ import MemberForm from '../../client/pages/access/member-form';
 import InviteForm from '../../client/pages/access/invite-form';
 import AcceptInvitation from '../../client/pages/access/accept';
 import RoleForm from '../../client/pages/access/role-form';
+import { usePendingInvitationCount } from '../../client/pages/access/api';
 
 const state = vi.hoisted(() => ({
   request: vi.fn(),
@@ -415,10 +423,60 @@ it('keeps an accepted invitation discoverable after navigating from the list and
   ).toHaveLength(1);
 });
 
+function countInvitations(enabled?: boolean) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return renderHook(() => usePendingInvitationCount(enabled), {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+}
+
+it('counts only the pending, unexpired invitations of the signed-in account', async () => {
+  state.request.mockImplementation(async ({ path }: { path: string }) =>
+    path === 'nocoreachAccess/mine'
+      ? {
+          data: [
+            { id: 'one', status: 'pending' },
+            { id: 'two', status: 'expired' },
+            { id: 'three', status: 'pending' },
+          ],
+        }
+      : { data: null },
+  );
+  const { result } = countInvitations();
+  await waitFor(() => expect(result.current).toBe(2));
+});
+
+it('counts no invitations when the read fails or is not enabled', async () => {
+  state.request.mockRejectedValue(
+    new ApiClientError('accountUnavailable', {
+      status: 403,
+      reason: 'accountUnavailable',
+      method: 'GET',
+      url: 'nocoreachAccess/mine',
+    }),
+  );
+  const failed = countInvitations();
+  await waitFor(() => expect(state.request).toHaveBeenCalledTimes(1));
+  expect(failed.result.current).toBe(0);
+  failed.unmount();
+  state.request.mockClear();
+  const disabled = countInvitations(false);
+  expect(disabled.result.current).toBe(0);
+  expect(state.request).not.toHaveBeenCalled();
+});
+
 it('shows built-in and custom definitions without exposing edit controls to a reader', async () => {
   state.canManage = false;
   setup('/members?tab=roles');
-  expect(await screen.findByText('Built-in')).toBeVisible();
+  // System administrator is listed first as a built-in row, then the business roles.
+  expect(
+    (await screen.findAllByText('Built-in')).length,
+  ).toBeGreaterThanOrEqual(2);
+  expect(screen.getByText('System administrator')).toBeVisible();
   expect(screen.getByText('Custom')).toBeVisible();
   expect(screen.queryByText('New role', { exact: true })).toBeNull();
   expect(

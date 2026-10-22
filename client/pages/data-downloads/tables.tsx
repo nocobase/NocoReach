@@ -22,6 +22,8 @@ import { packagesDraft } from "../seo-hand-off";
 import { Grid } from "../data-github/tables";
 import { Segmented } from "../data-github/segmented";
 import { ago, bytes, change, CHANNEL, dateOf, kindLabel, num, pct, REGISTRY, type AssetRow, type Channel, type Item, type TagRow, type VersionRow, type View } from "./model";
+import { formatChange, formatDate } from '#lib/format';
+import { Delta } from '#components/reach/delta';
 
 type TabId = "packages" | "versions" | "tags" | "assets";
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
@@ -53,7 +55,7 @@ export function ReportCard({ view, projectId }: { view: View; projectId?: number
   const choose = (id: string) => { const p = new URLSearchParams(params); if (id === "packages") p.delete("tab"); else p.set("tab", id); setParams(p, { replace: true }); setQuery(""); setLine("all"); };
   const q = query.trim().toLowerCase(), has = (...xs: (string | null | undefined)[]) => !q || xs.some((x) => x?.toLowerCase().includes(q));
   const lines = (rows: { channel: Channel }[]) => { const seen = new Set(rows.map((r) => r.channel)); return [{ id: "all", label: $t('dataDownloads.allLines') }, ...(Object.keys(CHANNEL) as Channel[]).filter((c) => seen.has(c)).map((c) => ({ id: c, label: CHANNEL[c].label() }))]; };
-  const period = $t('common.range', { 0: w.start, 1: w.end });
+  const period = $t('common.range', { 0: formatDate(w.start), 1: formatDate(w.end) });
   const several = (ids: string[]) => new Set(ids).size > 1;
   const notes: Record<TabId, string> = {
     packages: $t('dataDownloads.packagesNote'),
@@ -82,7 +84,7 @@ export function ReportCard({ view, projectId }: { view: View; projectId?: number
             text<Item>("name", $t('dataDownloads.package'), nameOf, (it) => <button type="button" className="flex min-w-0 flex-col text-left" onClick={() => setOpen(it)}><span className="truncate text-primary underline-offset-4 hover:underline">{nameOf(it)}</span>{it.name !== nameOf(it) ? <span className="truncate text-xs text-muted-foreground">{it.name}</span> : null}</button>),
             text<Item>("kind", $t('dataDownloads.source'), kindLabel, (it) => <span className="text-muted-foreground">{kindLabel(it)}</span>),
             count<Item>("value", $t('common.selectedPeriod'), (it) => it.value), count<Item>("previous", $t('dataDownloads.previousPeriod'), (it) => it.previous),
-            { ...count<Item>("change", $t('common.change'), (it) => it.change), cell: ({ row }) => { const c = row.original.change; return <span className={cn(c !== null && (c >= 0 ? "nr-up" : "nr-down"))}>{c === null ? "—" : `${c >= 0 ? "+" : ""}${(c * 100).toFixed(0)}%`}</span>; } },
+            { ...count<Item>("change", $t('common.change'), (it) => it.change), cell: ({ row }) => { const c = row.original.change; return c === null ? <span>—</span> : <Delta value={c} />; } },
             count<Item>("average", $t('dataDownloads.dailyAverageLabel'), (it) => it.average), count<Item>("peak", $t('dataDownloads.peak'), (it) => it.peak?.value),
             count<Item>("total", $t('dataDownloads.runningTotal'), (it) => it.total),
             { id: "latest", accessorFn: (it) => it.latest?.published || undefined, ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('dataDownloads.latestVersion')} help={false} />, cell: ({ row }) => { const l = row.original.latest; return l ? <span className="whitespace-nowrap tabular-nums">{l.version}<span className="ml-1.5 text-xs text-muted-foreground">{ago(l.published, w.end)}</span></span> : "—"; } },
@@ -126,20 +128,20 @@ function ItemDrawer({ view, item: it, onClose }: { view: View; item: Item; onClo
   const points = (view.daily ?? []).map((r, i) => ({ date: r.date, value: value(r), previous: value(view.previousDaily?.[i]) }));
   const c = change(it.value, it.previous);
   const rows: [string, string, string?][] = [
-    [$t('common.selectedPeriod'), num(it.value), it.previous != null ? `${$t('dataDownloads.previousPeriod')} ${num(it.previous)}${c != null ? ` · ${c >= 0 ? "+" : ""}${pct(c)}` : ""}` : undefined],
+    [$t('common.selectedPeriod'), num(it.value), it.previous != null ? `${$t('dataDownloads.previousPeriod')} ${num(it.previous)}${c != null ? ` · ${formatChange(c)}` : ""}` : undefined],
     [$t('dataDownloads.dailyAverageLabel'), num(it.average, 1)],
     [$t('dataDownloads.peak'), num(it.peak?.value), it.peak?.date],
     ...(it.total != null ? [[$t('dataDownloads.runningTotal'), num(it.total)] as [string, string]] : []),
     ...(it.latest ? [[$t('dataDownloads.latestVersion'), it.latest.version, ago(it.latest.published, w.end)] as [string, string, string]] : []),
   ];
   return (
-    <DetailDrawer open onClose={onClose} title={`${nameOf(it)} · ${kindLabel(it)}`} description={$t('common.range', { 0: w.start, 1: w.end })}>
+    <DetailDrawer open onClose={onClose} title={`${nameOf(it)} · ${kindLabel(it)}`} description={$t('common.range', { 0: formatDate(w.start), 1: formatDate(w.end) })}>
       {safeLink(it.url) ? <a className="nr-link mb-3 inline-flex items-center gap-1 break-all" href={safeLink(it.url)!} target="_blank" rel="noreferrer">{it.url}<ArrowUpRight className="size-3.5" /></a> : null}
       <table className="w-full text-sm" data-item-figures="">
         <tbody>{rows.map(([k, v, sub]) => <tr key={k} className="border-t border-border first:border-0"><td className="py-1.5">{k}</td><td className="py-1.5 text-right tabular-nums">{v}{sub ? <span className="ml-2 text-xs text-muted-foreground">{sub}</span> : null}</td></tr>)}</tbody>
       </table>
       <h3 className="mt-5 mb-1 text-sm font-semibold">{$t('dataDownloads.perDay', { 0: kindLabel(it) })}</h3>
-      {points.filter((x) => x.value !== null).length < 2 ? <p className="text-sm text-muted-foreground">{it.since ? $t('dataDownloads.noDaysInRange', { 0: it.since }) : $t('dataDownloads.shownAfterNextSync')}</p> : (
+      {points.filter((x) => x.value !== null).length < 2 ? <p className="text-sm text-muted-foreground">{it.since ? $t('dataDownloads.noDaysInRange', { 0: dateOf(it.since) }) : $t('dataDownloads.shownAfterNextSync')}</p> : (
         <div className="nr-chart-box" data-item-line="">
           <ResponsiveContainer width="100%" height={200}>
             <ComposedChart data={points} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>

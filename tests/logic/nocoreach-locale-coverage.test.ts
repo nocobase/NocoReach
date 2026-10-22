@@ -66,6 +66,129 @@ describe('NocoReach semantic-key translations', () => {
     );
     // A legacy alias keeps its historical source text when the visible copy changes.
     const changedLegacyCopy: Record<string, string> = {
+      // Task detail in formal words (2026-10-21), closed card.
+      '已关闭 · {0}':
+        '关闭时：{0}',
+      '{0} 关闭。':
+        '关闭于 {0}。',
+      // Space between Chinese and Agent (UI review A16).
+      '给{0}留言，下一次运行会读到':
+        '给 {0} 留言，下次运行时会读取',
+      // Space between Chinese and Agent (UI review A16).
+      'PR #{0} 等Agent 关闭（分支保留）':
+        'PR #{0} 等 Agent 关闭（分支保留）',
+      '交给Agent':
+        '交给 Agent',
+      '发布和观察只用于包含Agent 修改仓库的流程':
+        '发布和观察只用于包含 Agent 修改仓库的流程',
+      '审核通过的内容更新到网站后记录一下。接入Agent 后，这一步改为确认合并 PR。':
+        '审核通过的内容更新到网站后记录一下。接入 Agent 后，这一步改为确认合并 PR。',
+      '已交给Agent，马上开始。':
+        '已交给 Agent，马上开始。',
+      '帮你干活的 AI：在线 AI 每天分析数据、提出机会；所有任务交给Agent 去做。':
+        '帮你干活的 AI：在线 AI 每天分析数据、提出机会；所有任务交给 Agent 去做。',
+      '接受，交给Agent“{0}”':
+        '接受，交给 Agent“{0}”',
+      '由Agent 执行，{0}。':
+        '由 Agent 执行，{0}。',
+      '私有仓库也可以：Agent 用执行任务那台电脑上的 GitHub 登录读取和推送，NocoReach 不保存 GitHub 凭据。不接仓库也能用Agent 做调研、关键词调研、内容大纲这类只写文档的任务。':
+        '私有仓库也可以：Agent 用执行任务那台电脑上的 GitHub 登录读取和推送，NocoReach 不保存 GitHub 凭据。不接仓库也能用 Agent 做调研、关键词调研、内容大纲这类只写文档的任务。',
+      '等Agent 接手':
+        '等 Agent 接手',
+      '等Agent 开回退 PR（撤回 PR #{0}）':
+        '等 Agent 开回退 PR（撤回 PR #{0}）',
+      '这一步由Agent 完成：{0}':
+        '这一步由 Agent 完成：{0}',
+      // Task detail in formal words (2026-10-21), review wording.
+      'Agent 还没有开始。看过任务说明、选好做法再开始；不需要就关闭任务。':
+        'Agent 尚未开始。请阅读任务说明、选择做法后开始；不需要时可关闭任务。',
+      '{0}改好了并开了 PR。看过改动后通过，或在下方写意见让它重做。':
+        '{0}已完成改动并创建 PR。审核后通过，或在下方填写意见要求修改。',
+      '只合并你看过的那次提交，合并后自动核实上线。':
+        '只合并你审核过的提交，合并后自动核实上线。',
+      '将合并 PR #{0}（你看过的版本）':
+        '将合并 PR #{0}（你审核过的版本）',
+      'Agent 改了 {0} 个文件。看过改动后点发布，或在下方写意见让它重改。':
+        'Agent 修改了 {0} 个文件。审核后发布，或在下方填写意见要求修改。',
+      '超出允许范围：{0}。我已看过，确认这些改动没有问题':
+        '超出允许范围：{0}。我已审核，确认这些改动无误',
+      '这个任务由“{0}”交接而来，它交付的文档就是任务说明。Agent 还没有开始，看过再开始。':
+        '这个任务由“{0}”交接而来，它交付的文档就是任务说明。Agent 尚未开始，请先阅读再开始。',
+      // Task detail in formal words (2026-10-21).
+      '改好后你看过效果再发布':
+        '改动完成后，由你检查效果再发布',
+      '已停止，请检查此前已推送的改动或外部操作':
+        '已停止。如果网站已经改动，请开发人员检查。',
+      // Opportunities empty states (2026-10-21).
+      '现在没有观察中的变化。':
+        '现在没有观察中的变化',
+      // Community pages in plain words (2026-10-21), second pass.
+      'X 上提到产品的帖子，用你们自己的 X API 每天查一次。':
+        'X 上提到产品的帖子，每天通过 X API 查询一次。',
+      '{0} 选中频道里的消息和提问，每天读一次。':
+        '{0} 所选频道中的消息和提问，每天读取一次。',
+      '用你们自己建的 Discord 机器人，粘贴 token、选频道就行，免费。':
+        '通过项目自建的 Discord 机器人读取所选频道，不产生费用。',
+      '用工作区里的内部应用，粘贴 token、选频道就行，免费。':
+        '通过工作区中的内部应用读取所选频道，不产生费用。',
+      '的主题、回复与无人回复的问题。':
+        '的主题、回复和无人回复的问题。',
+      '社区论坛（Discourse）的主题、回复与无人回复的问题。':
+        '社区论坛的主题、回复和无人回复的问题。',
+      '来源：YouTube（yt-dlp） · 读取于 {0}':
+        '读取于 {0}',
+      '推算发布日：{0}':
+        '估算发布日期：{0}',
+      '每次最多 20 条，仅保留最近 1,000 条采集笔记。点赞为页面显示值，缩写保留原文；缺失值未知。推算发布日期不是准确发布时间。':
+        '每次最多 20 条，仅保留最近 1,000 条采集笔记。点赞为页面显示值，缩写保留原文；缺失值未知。估算发布日期不是准确发布时间。',
+      // Community pages in plain words (2026-10-21).
+      '所选时间内没有。':
+        '所选时间内没有涉及的版块。',
+      'Reddit 上提到产品的帖子，每周在 Google 里搜一次。':
+        'Reddit 上提到产品的帖子，每周通过 Google 搜索一次。',
+      // Preserve historical aliases when source labels and instructions change.
+      '认证信息加密保存，不会返回到浏览器。':
+        '认证信息加密保存。密码不会返回到浏览器。',
+      'YouTube 配置已被修改，请重新打开后重试':
+        'YouTube 设置或当前运行已变更，请重新打开面板后重试。',
+      'Issues 仅包含最近更新的最多 20 个返回项中的非 PR 条目，Releases 最多 5 条；不代表全量或统计周期。':
+        'Issues 仅包含最近更新的最多 20 个返回项中的非 PR 条目；另行采集最多 5 条 Releases。这些列表不代表全量数据或特定统计周期。',
+      个关键词已选: '已选关键词：',
+      个包已选: '已选包：',
+      个回答已选: '已选回答：',
+      个来源已选: '已选来源：',
+      个查询已选: '已选查询：',
+      个问题已选: '已选问题：',
+      '个页面。请选择要纳入分析的类型：': '请选择要纳入分析的类型：',
+      个页面已选: '已选页面：',
+      '做法#title': '做法',
+      '处理洞察“需要留意”里的：{0}': '处理“洞察 › 当前状况”里的：{0}',
+      '按问号和“怎么、如何、how”这类疑问词判断出来的消息。':
+        '通过问号、how 等英语疑问词，以及“如何”等中文疑问表达识别为问题的消息。',
+      '机会#title': '机会',
+      '由 NocoBase 工作流按 {0} 运行': '由 NocoBase 工作流按以下调度运行：{0}',
+      '竞品#title': '竞品',
+      '给{0}里没人回复的{1}各起草一条回复，审核后复制去回复':
+        '{0} — {1}：为每条选中内容起草回复，审核后复制去回复',
+      '观察中#tab': '观察中',
+      '遵守确认范围，核对事实与引用，不虚构外部执行。':
+        '遵守确认范围，核对事实与引用，不声称已执行实际未执行的外部操作。',
+      '需要留意#heading': '需要留意',
+      项已选: '已选：',
+      '给依据里的每个帖子起草一条回复。先打开原帖看完整内容和已有回复，再在仓库文档和知识库里找答案。每个帖子写一节，格式固定：第一行“## 原帖标题”，接着四行“- 链接：原帖网址”“- 在问：一句话概括”“- 引用：用到的文档标题和网址或仓库路径（没有写“无”）”“- 文档缺口：文档里没写清、需要补的内容（没有写“无”）”，然后一行“### 回复”，下面是回复正文。回复用原帖的语言，像社区成员一样友好、直接：先回答问题，再给文档链接；不确定的地方说清楚并建议怎么确认，不编造功能、配置或版本号。全部帖子之后写“## 小结”，列出需要补的文档。只写草稿，不发帖，不修改仓库。':
+        '为依据里的每篇帖子起草一条回复。先打开原帖，阅读完整内容和已有回复，再到仓库文档和知识库中查找答案。每篇帖子单独写一节，使用固定格式：第一行是“## 原帖标题”，接着四行是“- Link: 原帖网址”“- Asking: 一句话概括问题”“- References: 用到的文档标题和网址或仓库路径，没有则写 None”“- Docs gap: 文档未解释清楚、需要补充的内容，没有则写 None”。然后写“### Reply”，下面是回复正文。字段名 Link、Asking、References、Docs gap、回复小标题 Reply 和空值标记 None 必须保持原样。字段内容和回复正文使用原帖语言，语气像社区成员一样友好、直接：先回答问题，再给文档链接；说清不确定的地方并建议如何确认，不编造功能、配置或版本号。所有帖子之后写“## Summary”，列出需要补充的文档。只写草稿，不发帖，不修改仓库。',
+
+      // Hand-off objectives describe requested outcomes, not existing results.
+      '这些查询在 Google 里排进前 5 名：{0}':
+        '让这些查询在 Google 里排进前 5 名：{0}',
+      '这些页面在 Google 里获得更多点击：{0}':
+        '让这些页面在 Google 里获得更多点击：{0}',
+      '这些页面被 Google 正常编入索引，规范网址和富媒体结果没有问题：{0}':
+        '让这些页面被 Google 正常编入索引，并解决规范网址和富媒体结果的问题：{0}',
+
+      // The discovery findings open in a dialog (2026-10-21).
+      '完成。需要授权的项目可以随时点“去授权”，也可以在下方目录中管理。':
+        '完成。需要授权的来源可以点“去授权”，也可以关闭后在目录中管理。',
       // Connection drawers describe each source plainly (2026-10-21).
       'AI 搜索用已接入的 DataForSEO 查，不用另外接：在“搜索 → AI 搜索”里查品牌提及或问 AI，点了才查，花费算进 DataForSEO 的月度预算。':
         'AI 搜索使用已接入的 DataForSEO，不需要另外接入：在“搜索 → AI 搜索”中查询品牌提及或向 AI 提问，点击后才查询，费用计入 DataForSEO 的月度预算。',
@@ -74,7 +197,7 @@ describe('NocoReach semantic-key translations', () => {
       'Discussions 和 GitHub Traffic 用同一个只读 token：接入仓库并填好 token 后，我每天读取近 90 天的讨论，整理讨论最多和还没解决的问题。不需要另外的权限。':
         'Discussions 与 GitHub Traffic 使用同一个只读 token。接入仓库并填写 token 后，每天读取近 90 天的讨论，整理讨论最多和尚未解决的问题，不需要额外权限。',
       'GA4 与 Search Console 使用同一次 Google 授权。授权后选择对应网站的 GA4 属性，我会开始首次同步。':
-        'GA4 与 Search Console 共用一次 Google 授权。授权后选择网站对应的 GA4 属性，随即开始首次同步。',
+        'GA4 与 Search Console 共用一次 Google 授权。授权后选择网站对应的 GA4 属性和 Search Console 站点，再点“立即同步”拉取数据，默认拉取最近 56 天。',
       'Traffic 需要仓库的只读管理权限。我会一步步教你创建一个只授权这个仓库、只读的细粒度 token。GitHub 只保留最近 14 天的数据，接入后我每天归档，越早接入历史越完整。':
         'Traffic 需要仓库的只读管理权限，通过一个只授权此仓库的只读细粒度 token 获取，创建步骤见下方。GitHub 只保留最近 14 天的数据，接入后每天归档，越早接入，历史越完整。',
       'X 的接口现在只按条付费（每读一条约 $0.005），所以要用你们自己的 X API Bearer Token。我每天查一次：近一天提到产品的帖子数，以及新帖子的内容和点赞、转发；不含转发，也可以排除官方账号自己发的。你设一个每月上限（默认 $5，约 1,000 条），到了就停，下个月继续。':
@@ -104,7 +227,6 @@ describe('NocoReach semantic-key translations', () => {
         '支持 Discourse 论坛的公开分类，不需要账号。只读取帖子内容和互动数据，不保存用户名。首次同步约需一两分钟，在后台完成。',
       '用你们自己建的 Discord 机器人：在开发者后台建一个应用和机器人、打开 Message Content Intent，邀请进服务器（只要“查看频道”和“读取消息历史”）。把机器人 token 粘贴过来，我先检查、列出它能读的频道，你选好后每天读一次：消息数、提问，以及超过一天没人回的问题。消息内容只保存 30 天，不保存作者。':
         '使用自己创建的 Discord 机器人：在开发者后台创建应用和机器人，开启 Message Content Intent，并邀请进服务器（只需要“查看频道”和“读取消息历史”权限）。粘贴机器人 token 后，先检查并列出它能读取的频道；选好频道后每天读取一次：消息数、提问，以及超过一天无人回复的问题。消息内容只保存 30 天，不保存作者。',
-      '还有疑问？': '问 AI',
       '需要你提供：': '需要准备',
       // Opportunities expire 14 days after the last analysis that raised them, not at the next one.
       '已过期：最新的分析没有再提出': '已过期：{0} 天内的分析都没有再提出',
@@ -128,8 +250,20 @@ describe('NocoReach semantic-key translations', () => {
       '请选择团队可调用的 Agent': '请选择已启用且可调用的 Agent',
       'Agent 和在线 AI 按做法完成的工作，需要你确认时会停下来。':
         'Agent 按做法完成的工作，需要你确认时会停下来。',
-      // The Agent page names each AI by what it does (2026-10-20).
-      'Runner Agent': '执行 Agent',
+      // The Agent page names each AI by what it does (2026-10-20); agents on a runtime are local agents (2026-10-21).
+      'Runner Agent': '本地 Agent',
+      '任务执行 Agent': '本地 Agent',
+      '请选择任务执行 Agent': '请选择本地 Agent',
+      '执行 Agent': '本地 Agent',
+      '执行 Agent 已保存': '本地 Agent 已保存',
+      '把执行 Agent 改为“{0}”': '把本地 Agent 改为“{0}”',
+      '任务已完成，不能更换执行 Agent': '任务已完成，不能更换本地 Agent',
+      '项目使用允许所有成员调用的 Runner Agent。':
+        '项目使用允许所有成员调用的本地 Agent。',
+      '包含仓库改动的任务需要 Runner Agent，请重新选择':
+        '包含仓库改动的任务需要本地 Agent，请重新选择',
+      '创建项目后，在数据接入中选择任务执行 Agent；Runner 可供多个项目共用。':
+        '创建项目后，在数据接入中选择本地 Agent；Runner 可供多个项目共用。',
       '在线 Agent': '对话 Agent',
       // The task page reworded for marketers: no PR, Runner or push wording.
       'PR 审核已通过。合并并上线后点确认，之后开始观察效果。':
@@ -137,8 +271,6 @@ describe('NocoReach semantic-key translations', () => {
       发送并要求修改: '发送意见',
       要求修改: '提修改意见',
       '停止不会撤销已经推送的改动或外部操作。': '停止不会撤销已经做出的改动。',
-      '已停止，请检查此前已推送的改动或外部操作':
-        '已停止。如果之前已经改了网站，请开发同事检查一下',
       '项目默认（未设置或不可用）': '项目默认（未设置）',
       '暂无团队可调用的 Runner Agent，请先创建或联系管理员。':
         '还没有可用的 Agent，请管理员在 AI 团队里接入。',
@@ -159,6 +291,38 @@ describe('NocoReach semantic-key translations', () => {
       '编辑代理 Profile': '编辑网络 Profile',
       '集中管理代理，由每个接入选择网络出口。':
         '集中管理网络 Profile，在各接入点选择真实代理或模拟响应。',
+      // The daily analysis runs on the Scheduler now; pausing it is under Settings › Automatic runs.
+      每日分析工作流已停用: '每日分析已暂停',
+      // A weekly change carries its own sign, so a fall reads "−7/week" rather than "+-7/week" (2026-10-21).
+      '+{0}/周': '{0}/周',
+      '（近一周 {0}{1}）': '（近一周 {0}）',
+      // Website & product pages in plain words, GitHub's terms in Chinese where it has them (2026-10-21).
+      '这个仓库没有开启 Discussions。':
+        '这个仓库没有开启讨论区（Discussions）。',
+      '讨论最多的 Discussions 合成一个任务，让 Agent 归类问题、看哪些能用文档回答，确认后立即开始。':
+        '讨论最多的讨论帖合成一个任务，由 Agent 归类问题、找出可以用文档回答的部分，确认后立即开始。',
+      '讨论最多的 Issues 合成一个任务，让 Agent 分出哪些能用文档回答、哪些要改产品，确认后立即开始。':
+        '讨论最多的 Issue 合成一个任务，由 Agent 区分哪些可以用文档回答、哪些需要改产品，确认后立即开始。',
+      // Search & market pages in plain words, one sentence each (2026-10-21).
+      '竞品的官网新页面和 GitHub 新版本，每周看一次，免费。':
+        '竞品官网的新页面和 GitHub 新版本，每周检查一次。',
+      '查任何网站（包括竞品）在 Google 里排名的关键词和热门页面。DataForSEO 的市场估算，点了查询才收费。':
+        '查询任意网站（包括竞品）在 Google 上排名的关键词和热门页面。',
+      '输入一个域名（默认是本站），看看它在 Google 里排名的关键词。':
+        '输入域名（默认为本站），查看它在 Google 上排名的关键词。',
+      '产品、竞品和你关注的关键词在 Google 的关注度，每周用 Google Trends 查一次。':
+        '产品、竞品和关注的关键词在 Google 上的关注度变化。',
+      'AI 根据官网先建议一批关键词；也可以自己找新词。保存后对照本站在 Google 里的排名，想看准确名次的可以每周跟踪。':
+        '查找、保存并跟踪关键词，对照本站在 Google 上的排名。',
+      '用户在 ChatGPT、Google AI 概览里问什么，哪些回答提到了我们、哪些是机会，以及 AI 引用了谁。数据来自 DataForSEO，按查询收费。':
+        '用户在 ChatGPT 和 Google AI 概览中问什么、哪些回答提到了我们，以及 AI 引用了哪些网站。',
+      // Tab counts follow the tab name without brackets, as Opportunities' tabs do (2026-10-21).
+      '全部 ({0})': '全部 {0}',
+      '关键词 ({0})': '关键词 {0}',
+      '已出现 ({0})': '已出现 {0}',
+      '接近首页 ({0})': '接近首页 {0}',
+      '机会 ({0})': '机会 {0}',
+      '没有品牌 ({0})': '没有品牌 {0}',
     };
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(

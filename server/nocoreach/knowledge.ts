@@ -14,7 +14,8 @@ const FILE_TYPES=['.pdf','.docx','.doc','.pptx','.xlsx','.xls','.txt','.md','.ma
 const MAX_FILE=5*1024*1024,MAX_TEXT=200000,MAX_ITEMS=200,AGENT_BUDGET=400000;
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const str=(v,max)=>typeof v==='string'?v.trim().slice(0,max):'';
-const summaryOf=text=>text.replace(/\s+/g,' ').trim().slice(0,120);
+// Plain words for the list: Markdown heading and emphasis marks are not part of the summary.
+const summaryOf=text=>text.replace(/^#{1,6}\s+/gm,'').replace(/\*\*|__|`/g,'').replace(/\s+/g,' ').trim().slice(0,120);
 // Reads an uploaded file into text with an isolated document parser (PDF, Word, PowerPoint, Excel, text).
 async function readFile(name,buffer){
  const ext=path.extname(name).toLowerCase();if(!FILE_TYPES.includes(ext))fail(systemMessageText('knowledge.pdfWordPowerpointExcelMarkdown'));

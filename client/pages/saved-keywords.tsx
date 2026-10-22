@@ -1,4 +1,5 @@
-import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { useMessageState, $t, $tj, $legacyText } from "#i18n";
+import { usePageTab } from '#hooks/use-page-tab';
 // 关键词 (已保存): ported from every-app/open-seo db8bde1 src/routes/_app/p/$projectId/saved.tsx and
 // src/client/features/saved-keywords/ (table, filters, tag filter, tag chips, bulk tags modal, manage tags; MIT).
 // Changes: 本站排名 and 本站页面 from the synced Search Console data, 交给 Agent (one task for the chosen keywords),
@@ -40,6 +41,7 @@ import "./data-views.css";
 import {confirmAction} from "#components/reach/confirm";
 import { WithInfo } from "#components/reach/info-tip";
 import { help } from "./glossary";
+import { formatDate } from '#lib/format';
 
 type Saved = { tags: Tag[]; items: SavedKeyword[] };
 type Filters = { include: string; exclude: string; minVol: string; maxVol: string; minKd: string; maxKd: string; tagIds: string[] };
@@ -47,7 +49,7 @@ const EMPTY: Filters = { include: "", exclude: "", minVol: "", maxVol: "", minKd
 const PAGE_SIZES = [50, 100] as const;
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 const activeCount = (f: Filters) => [f.include, f.exclude, f.minVol || f.maxVol, f.minKd || f.maxKd, f.tagIds.length ? "x" : ""].filter(Boolean).length;
-const day = (v?: string | null) => (v ? new Date(v).toLocaleDateString(getCurrentLocale()) : "—");
+const day = (v?: string | null) => formatDate(v);
 function applyFilters(rows: SavedKeyword[], f: Filters) {
   const terms = (s: string) => s.split(/[,，]/).map((t) => t.trim().toLowerCase()).filter(Boolean);
   const inc = terms(f.include), exc = terms(f.exclude), num = (s: string) => (s.trim() === "" ? null : Number(s));
@@ -84,6 +86,7 @@ export default function SavedKeywords() {
   // AI 建议 opens first while nothing is saved (2026-10-04); a tab in the address wins.
   const explicit = (["suggest", "saved", "tracking", "research"] as const).find((t) => t === params.get("tab"));
   const tab = explicit ?? (data && !data.items.length ? "suggest" : "saved");
+  usePageTab(tab === 'suggest' ? $t('common.aiSuggestions') : tab === 'research' ? $t('common.findKeywords') : tab === 'tracking' ? $t('common.rankTracking') : $t('savedKeywords.savedValue', { 0: '' }));
   // Each tab keeps only its own query: 找新词 owns q, view, loc, lang and run.
   const setTab = (v: string) => { const p = new URLSearchParams(v === "research" ? params : undefined); p.set("tab", v); setParams(p, { replace: true }); };
   const [handOff, setHandOff] = useState<HandOffResult>();
@@ -112,13 +115,15 @@ export default function SavedKeywords() {
           </div>
         ),
       }) as ColumnDef<Row>,
-      helper.accessor((r) => marketLabel(r.market), { id: "market", enableSorting: false, header: () => $t('common.market'), cell: ({ row }) => <span className="text-muted-foreground">{row.original.market ? marketLabel(row.original.market) : row.original.source === "ai" ? $t('common.aiSuggestions') : $t('common.searchPerformance')}</span> }) as ColumnDef<Row>,
+      // Only the market the figures were looked up in; a keyword saved from AI suggestions or Search performance has none yet,
+      // and its source is not a market (UI review 2026-10-21).
+      helper.accessor((r) => marketLabel(r.market), { id: "market", enableSorting: false, header: () => $t('common.market'), cell: ({ row }) => <span className="text-muted-foreground">{marketLabel(row.original.market)}</span> }) as ColumnDef<Row>,
       helper.accessor((r) => r.metrics?.volume ?? undefined, { id: "volume", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.monthlyVolume')} align="right" help={$t('savedKeywords.numbersTimeSavingKeywordsSaved',{0:help($t('common.monthlyVolume'))})} />, cell: ({ row }) => metric(row.original.metrics?.volume), meta: right }) as ColumnDef<Row>,
       helper.accessor((r) => r.metrics?.difficulty ?? undefined, { id: "difficulty", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.difficulty')} align="right" />, cell: ({ row }) => <ScoreBadge value={row.original.metrics?.difficulty ?? null} />, meta: right }) as ColumnDef<Row>,
       helper.accessor((r) => r.metrics?.cpc ?? undefined, { id: "cpc", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="CPC" align="right" />, cell: ({ row }) => (row.original.metrics?.cpc == null ? "—" : `$${row.original.metrics.cpc.toFixed(2)}`), meta: right }) as ColumnDef<Row>,
       helper.display({ id: "intent", header: () => <WithInfo help={help($t('common.intent'))}>{$t('common.intent')}</WithInfo>, cell: ({ row }) => (row.original.metrics ? <IntentBadge intent={row.original.metrics.intent} /> : "—") }) as ColumnDef<Row>,
       helper.accessor("rank", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.sitePosition')} align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : Number(getValue()).toFixed(1)), meta: right }) as ColumnDef<Row>,
-      helper.display({ id: "page", header: () => $t('savedKeywords.page'), cell: ({ row }) => { const page = rankOf(ranks, row.original.keyword)?.page; return page ? (safeLink(page) ? <a className="block max-w-56 truncate text-primary hover:underline" href={safeLink(page)} target="_blank" rel="noreferrer" title={page}>{new URL(page).pathname}</a> : <span className="block max-w-56 truncate">{page}</span>) : <span className="text-muted-foreground">—</span>; } }) as ColumnDef<Row>,
+      helper.display({ id: "page", header: () => $t('savedKeywords.page'), cell: ({ row }) => { const page = rankOf(ranks, row.original.keyword)?.page; return page ? (safeLink(page) ? <a className="block max-w-44 truncate text-primary hover:underline" href={safeLink(page)} target="_blank" rel="noreferrer" title={page}>{new URL(page).pathname}</a> : <span className="block max-w-44 truncate">{page}</span>) : <span className="text-muted-foreground">—</span>; } }) as ColumnDef<Row>,
       helper.accessor("savedAt", { header: ({ column }) => <SortableHeader column={column} label={$t('savedKeywords.saved')} align="right" />, cell: ({ getValue }) => day(getValue()), meta: right }) as ColumnDef<Row>,
     ],
     [anchorRef, ranks, tagById],
@@ -149,7 +154,7 @@ export default function SavedKeywords() {
         <TabsList variant="line" className="h-auto! justify-start">
           <TabsTrigger value="suggest">{$t('common.aiSuggestions')}</TabsTrigger>
           <TabsTrigger value="research">{$t('common.findKeywords')}</TabsTrigger>
-          <TabsTrigger value="saved">{$tj('savedKeywords.savedValue',{0:data ? ` (${data.items.length})` : ""})}</TabsTrigger>
+          <TabsTrigger value="saved">{$tj('savedKeywords.savedValue',{0:data ? ` ${data.items.length}` : ""})}</TabsTrigger>
           <TabsTrigger value="tracking">{$t('common.rankTracking')}</TabsTrigger>
         </TabsList>
       </Tabs>

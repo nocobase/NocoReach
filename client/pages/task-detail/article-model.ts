@@ -2,6 +2,7 @@ import { $t, getCurrentLocale } from '#i18n';
 import type {
   ArticleContent,
   ArticleField,
+  ArticleMatch,
 } from '../../../shared/article-publishing.js';
 import { localeName, providerKey } from '../article-targets-api';
 import type {
@@ -21,18 +22,57 @@ export type DeliveryChoice = {
   target: string;
   mode: 'new' | 'existing';
   also: string[];
+  /** The article found from the task's page, linked when the task starts. */
+  article?: ArticleMatch;
 };
+/** What the page lookup said: the article found, or none; `unchecked` when a target could not be asked. */
+export type ArticleFound = { article: ArticleMatch | null; unchecked: boolean };
+
+/**
+ * The pages a task is about, most specific first: the page linked on the task, the page it was handed off with, the
+ * opportunity's target when it is an address, then the pages of the changes it cites or was handed off from.
+ */
+export function pageUrlsOf(data: TaskData): string[] {
+  const e = (data.task.evidence || {}) as {
+    page?: unknown;
+    signalKey?: unknown;
+    insight?: { target?: unknown; signalIds?: unknown } | null;
+    context?: { signals?: { items?: { key?: unknown; url?: unknown }[] } };
+  };
+  // A change handed off on its own (Insights › Today's changes) names its page and change instead of an opportunity.
+  const ids = new Set([
+    ...(Array.isArray(e.insight?.signalIds)
+      ? (e.insight.signalIds as unknown[])
+      : []),
+    ...(typeof e.signalKey === 'string' ? [e.signalKey] : []),
+  ]);
+  const cited = (e.context?.signals?.items || [])
+    .filter((s) => ids.has(s.key))
+    .map((s) => s.url);
+  return [
+    ...new Set(
+      [data.work.page?.url, e.page, e.insight?.target, ...cited]
+        .filter((u): u is string => typeof u === 'string')
+        .map((u) => u.trim())
+        .filter((u) => /^https?:\/\//i.test(u)),
+    ),
+  ].slice(0, 10);
+}
 export const REPO = 'repo';
 /** A task publishes to its primary target and at most this many others (article-flow.ts). */
 export const MAX_ALSO = 4;
 
 /**
- * The default: the linked article; otherwise the playbook's target, then the default target (a blog post → new article
- * there; other changes → pick an article). A playbook set to the repository opens a pull request.
+ * The default (2026-10-21: decided by where the page lives, not asked): the linked article; a playbook set to the
+ * repository opens a pull request; a blog post is a new article in the playbook's target, then the default target.
+ * Any other change goes to the article found from the task's page; when the page is known and no target holds it,
+ * it is a page of the site itself and goes to the repository (unless the playbook names a target). Otherwise an
+ * article is picked by hand.
  */
 export function defaultDelivery(
   data: TaskData,
   playbookId: string,
+  found?: ArticleFound,
 ): DeliveryChoice {
   const targets = data.articleTargets || [],
     linked = data.work.article,
@@ -45,15 +85,15 @@ export function defaultDelivery(
     };
   if (!targets.length || entry === REPO)
     return { target: REPO, mode: 'new', also: [] };
-  return {
-    target: (
-      targets.find((t) => t.id === entry) ||
-      targets.find((t) => t.default) ||
-      targets[0]
-    ).id,
-    mode: playbookId === 'blog-post' ? 'new' : 'existing',
-    also: [],
-  };
+  const named = targets.find((t) => t.id === entry),
+    target = (named || targets.find((t) => t.default) || targets[0]).id;
+  if (playbookId === 'blog-post') return { target, mode: 'new', also: [] };
+  const article = found?.article;
+  if (article && targets.some((t) => t.id === article.targetId))
+    return { target: article.targetId, mode: 'existing', also: [], article };
+  if (found && !found.unchecked && !named && data.agent?.repo)
+    return { target: REPO, mode: 'new', also: [] };
+  return { target, mode: 'existing', also: [] };
 }
 
 /** The start command's delivery and whether it can start yet; unlinks first when the saved article differs. */
@@ -62,12 +102,24 @@ export function deliveryPlan(data: TaskData, choice: DeliveryChoice) {
   if (choice.target === REPO)
     return { ready: true, unlink: Boolean(linked?.targetId), delivery: REPO };
   const also = choice.also.filter((id) => id !== choice.target);
-  if (choice.mode === 'existing')
+  if (choice.mode === 'existing') {
+    const saved = Boolean(
+        linked?.articleId && linked.targetId === choice.target,
+      ),
+      found =
+        !saved && choice.article?.targetId === choice.target
+          ? choice.article
+          : undefined;
     return {
-      ready: Boolean(linked?.articleId && linked.targetId === choice.target),
+      ready: saved || Boolean(found),
       unlink: false,
+      // The found article is saved on the task as the start is confirmed.
+      link: found
+        ? { targetId: found.targetId, articleId: found.articleId }
+        : undefined,
       delivery: also.length ? { also } : undefined,
     };
+  }
   return {
     ready: true,
     unlink: Boolean(

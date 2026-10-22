@@ -22,6 +22,7 @@ import { safeLink } from "../analytics";
 import { DetailDrawer } from "../detail-drawer";
 import { discussionsDraft, githubTrafficDraft } from "../seo-hand-off";
 import { dateOf, hours, num, pct, type Contributor, type Discussion, type Item, type Kind, type PopularPath, type Referrer, type Release, type Snapshot, type View } from "./model";
+import { formatDate, formatSigned } from '#lib/format';
 
 export const KIND: Record<Kind, { label: () => string; tone: Tone }> = {
   own: { label: () => $t('dataGithub.kindOwn'), tone: "blue" }, ai: { label: () => $t('dataGithub.kindAi'), tone: "violet" }, search: { label: () => $t('dataGithub.kindSearch'), tone: "green" },
@@ -35,7 +36,7 @@ type Pop = Snapshot<PopularPath>["items"][number];
 type TabId = "referrers" | "paths" | "contributors" | "issues" | "pulls" | "releases" | "discussions";
 const TABS: { id: TabId; label: () => string }[] = [
   { id: "referrers", label: () => $t('dataGithub.referringSites') }, { id: "paths", label: () => $t('dataGithub.popularPages') }, { id: "contributors", label: () => $t('dataGithub.contributors') },
-  { id: "issues", label: () => "Issues" }, { id: "pulls", label: () => "Pull requests" }, { id: "releases", label: () => "Releases" }, { id: "discussions", label: () => "Discussions" },
+  { id: "issues", label: () => $t('dataGithub.tabIssues') }, { id: "pulls", label: () => $t('dataGithub.tabPulls') }, { id: "releases", label: () => $t('dataGithub.tabReleases') }, { id: "discussions", label: () => $t('dataGithub.tabDiscussions') },
 ];
 const PAGE_SIZES = [25, 50, 100] as const;
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
@@ -51,7 +52,7 @@ function date<T>(id: string, label: string, get: (r: T) => string | null | undef
 }
 const plain = <T,>(id: string, label: string, cell: (r: T) => ReactNode, className?: string): ColumnDef<T> => ({ id, header: () => label, cell: ({ row }) => cell(row.original), enableSorting: false, meta: className ? { cellClassName: className } : undefined });
 // Against the snapshot about a week before: the difference in views, or 新上榜 when it was not in that top ten.
-const weekChange = (r: { count: number; previous: number | null }, compared: string | null) => (!compared || r.previous === null ? "—" : r.previous === 0 ? $t('dataGithub.newInTopTen') : `${r.count - r.previous > 0 ? "+" : ""}${num(r.count - r.previous)}`);
+const weekChange = (r: { count: number; previous: number | null }, compared: string | null) => (!compared || r.previous === null ? "—" : r.previous === 0 ? $t('dataGithub.newInTopTen') : formatSigned(r.count - r.previous));
 
 export function ReportCard({ view, projectId }: { view: View; projectId?: number }) {
   const [params, setParams] = useSearchParams();
@@ -62,8 +63,8 @@ export function ReportCard({ view, projectId }: { view: View; projectId?: number
   const t = view.tables!, repo = view.repo!, q = query.trim().toLowerCase(), has = (...xs: (string | null | undefined)[]) => !q || xs.some((x) => x?.toLowerCase().includes(q));
   const short = (path: string) => path.replace(new RegExp(`^/${repo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i"), "") || "/";
   const notes: Record<TabId, ReactNode> = {
-    referrers: t.referrers ? $t('dataGithub.snapshotNote', { 0: t.referrers.date, 1: t.referrers.comparedWith ?? "—" }) : null,
-    paths: t.paths ? $t('dataGithub.snapshotNote', { 0: t.paths.date, 1: t.paths.comparedWith ?? "—" }) : null,
+    referrers: t.referrers ? $t('dataGithub.snapshotNote', { 0: formatDate(t.referrers.date), 1: formatDate(t.referrers.comparedWith) }) : null,
+    paths: t.paths ? $t('dataGithub.snapshotNote', { 0: formatDate(t.paths.date), 1: formatDate(t.paths.comparedWith) }) : null,
     contributors: $t('dataGithub.contributorsNote'),
     issues: $t('dataGithub.openedInPeriodNote', { 0: num(t.issues.length) }),
     pulls: $t('dataGithub.openedInPeriodNote', { 0: num(t.pulls.length) }),
@@ -170,7 +171,7 @@ function SnapshotDrawer({ view, kind, itemKey, short, onClose }: { view: View; k
   const page = "path" in item ? `https://github.com${item.path}` : null;
   const rows: [string, string][] = [[$t('common.views'), num(item.count)], [$t('dataGithub.uniqueVisitors'), num(item.uniques)], [$t('dataGithub.shareOfTopTen'), pct(item.share)], [$t('dataGithub.weekBeforeValue', { 0: snap.comparedWith ?? "—" }), item.previous === null ? "—" : num(item.previous)]];
   return (
-    <DetailDrawer open onClose={onClose} title={`${kind === "referrers" ? $t('dataGithub.referringSites') : $t('dataGithub.popularPages')} · ${name}`} description={$t('dataGithub.fourteenDaysTo', { 0: snap.date })}>
+    <DetailDrawer open onClose={onClose} title={`${kind === "referrers" ? $t('dataGithub.referringSites') : $t('dataGithub.popularPages')} · ${name}`} description={$t('dataGithub.fourteenDaysTo', { 0: formatDate(snap.date) })}>
       {page && safeLink(page) ? <a className="nr-link mb-3 inline-flex items-center gap-1 break-all" href={safeLink(page)!} target="_blank" rel="noreferrer">{"title" in item && item.title ? item.title : page}<ArrowUpRight className="size-3.5" /></a> : null}
       {"kind" in item ? <p className="mb-3"><Tag tone={KIND[item.kind].tone}>{KIND[item.kind].label()}</Tag></p> : null}
       <table className="w-full text-sm" data-snapshot-figures="">

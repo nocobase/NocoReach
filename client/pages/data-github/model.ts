@@ -1,4 +1,5 @@
-import { getCurrentLocale, $t } from "#i18n";
+import { $t } from "#i18n";
+import { formatCount, formatDate, formatPercent } from '#lib/format';
 // GitHub page · 我们的仓库: what server/nocoreach/github-view.ts answers, and the eight figures at the top (as on 访问,
 // a figure picks the daily line below it).
 
@@ -36,12 +37,12 @@ export type View = {
   };
 };
 
-export const num = (v: number | null | undefined, digits = 0) => (v == null || !Number.isFinite(v) ? "—" : v.toLocaleString(getCurrentLocale(), { maximumFractionDigits: digits }));
-export const pct = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? "—" : `${(v * 100).toFixed(1)}%`);
+export const num = (v: number | null | undefined, digits = 0) => formatCount(v, digits);
+export const pct = (v: number | null | undefined) => formatPercent(v);
 export const ratio = (a: number | null | undefined, b: number | null | undefined) => (a != null && b ? a / b : null);
 export const change = (now: number | null | undefined, before: number | null | undefined) => (now == null || before == null || !before ? null : (now - before) / before);
 export const hours = (h: number | null | undefined) => (h == null ? "—" : h < 48 ? $t('dataGithub.hoursValue', { 0: h.toFixed(1) }) : $t('dataGithub.daysValue', { 0: (h / 24).toFixed(1) }));
-export const dateOf = (d: string | null | undefined) => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString(getCurrentLocale(), { timeZone: "UTC" }) : "—");
+export const dateOf = (d: string | null | undefined) => formatDate(d);
 
 // The eight figures: what each counts, its daily line, whether it needs the full history (token) or saved Traffic,
 // and the small line under it.
@@ -52,7 +53,7 @@ export const METRICS: Metric[] = [
   { key: "forks", label: () => $t('dataGithub.newForks'), value: (f) => f.forksAdded, line: "forksAdded", source: "always", hint: (v) => $t('dataGithub.totalValue', { 0: num(v.totals?.forks) }) },
   { key: "views", label: () => $t('common.views'), value: (f) => f.views, line: "views", source: "traffic", hint: (v) => (v.figures?.trafficDays ? $t('dataGithub.dailyUniqueVisitors', { 0: num((v.figures.uniques ?? 0) / v.figures.trafficDays) }) : undefined) },
   { key: "clones", label: () => $t('dataGithub.clones'), value: (f) => f.clones, line: "clones", source: "traffic", hint: (v) => (v.figures?.cloneDays ? $t('dataGithub.dailyUniqueCloners', { 0: num((v.figures.cloners ?? 0) / v.figures.cloneDays) }) : undefined) },
-  { key: "commits", label: () => "Commits", value: (f) => f.commits, line: "commits", source: "history", hint: (v) => $t('dataGithub.outsideShare', { 0: pct(ratio(v.figures?.externalCommits, v.figures?.commits)) }) },
+  { key: "commits", label: () => $t('dataGithub.commits'), value: (f) => f.commits, line: "commits", source: "history", hint: (v) => $t('dataGithub.outsideShare', { 0: pct(ratio(v.figures?.externalCommits, v.figures?.commits)) }) },
   { key: "contributors", label: () => $t('dataGithub.activeContributors'), value: (f) => f.activeContributors, line: "activeContributors", source: "history", hint: (v) => $t('dataGithub.firstTimeValue', { 0: num(v.figures?.newContributors) }) },
   { key: "issues", label: () => $t('dataGithub.issuesOpened'), value: (f) => f.issuesOpened, line: "issuesOpened", source: "history", hint: (v) => $t('dataGithub.closedAndOpen', { 0: num(v.figures?.issuesClosed), 1: num(v.totals?.openIssues) }) },
   { key: "pulls", label: () => $t('dataGithub.prsMerged'), value: (f) => f.prsMerged, line: "prsMerged", source: "history", hint: (v) => $t('dataGithub.mergeRateAndOpen', { 0: pct(ratio(v.figures?.prsMerged, v.figures?.prsClosed)), 1: num(v.totals?.openPrs) }) },

@@ -14,7 +14,12 @@ export type HandOffKeyword={keyword:string;market:{locationCode:number;language:
 const work=<T,>(projectId:number,taskId:number,action:string,body:object={})=>api.action<T>('nrTaskWork',action,{method:'POST',body:{projectId:String(projectId),taskId:String(taskId),...body},unwrap:'data'});
 export function keywordDraft(rows:HandOffKeyword[]){
  const head=rows[0].keyword,ranked=rows.filter(r=>r.rank);
- const title=(rows.length===1?$t('keywordHandOff.around',{0:head}):$t('keywordHandOff.aroundMoreKeywords',{0:head,1:rows.length}))+(ranked.length?$t('keywordHandOff.improveExistingPage'):$t('keywordHandOff.writeContent'));
+ const title=$t(
+  ranked.length
+   ? rows.length===1?'keywordHandOff.improveForKeyword':'keywordHandOff.improveForKeywords'
+   : rows.length===1?'keywordHandOff.writeForKeyword':'keywordHandOff.writeForKeywords',
+  {0:head,1:rows.length},
+ );
  const lines=rows.map(r=>$t('keywordHandOff.monthlyVolumeDifficultyIntent',{0:r.keyword,1:marketLabel(r.market),2:metric(r.volume),3:metric(r.difficulty),4:getIntentLabels()[toIntent(r.intent)],5:r.rank?$t('keywordHandOff.averagePositionOverLast28',{0:r.rank.position.toFixed(1),1:r.rank.clicks,2:r.rank.page}):$t('keywordHandOff.siteNotRankYet')}));
  const brief=[$t('keywordHandOff.keywords'),...lines,'',$t('keywordHandOff.evidenceSearchVolumeDifficultyIntent'),$t('keywordHandOff.suggestionCoverKeywordsOnePiece')].join('\n');
  return {title:title.slice(0,200),objective:$t('keywordHandOff.getSiteTopSearchResults',{0:rows.map(r=>r.keyword).join('、')}).slice(0,1000),brief:brief.slice(0,20000)};
@@ -28,7 +33,7 @@ export type TaskDraft={title:string;objective:string;brief:string;signalKey?:str
 // it is in 网站内容. Shared by every 交给 Agent on the data pages.
 export async function createDraftTask(projectId:number,draft:TaskDraft,playbookId:string,page?:string,requestId:string=crypto.randomUUID()):Promise<{taskId?:number;started:boolean}>{
  const state=await request<StrategyState>(projectId,'state');
- const next=await request<StrategyState>(projectId,'confirmDirection',{...draft,playbookId,revision:state.revision,requestId});
+ const next=await request<StrategyState>(projectId,'confirmDirection',{...draft,playbookId,...(page?{page}:{}),revision:state.revision,requestId});
  const taskId=next.proposals.find(p=>!p.insight&&p.taskId&&!state.proposals.some(o=>o.id===p.id))?.taskId;
  if(!taskId)return {started:false};
  refreshNavBadges();

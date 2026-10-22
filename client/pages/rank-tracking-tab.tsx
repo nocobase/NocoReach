@@ -1,4 +1,4 @@
-import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { useMessageState, $t, $tj, $legacyText } from "#i18n";
 // 排名跟踪 tab of 关键词: ported from every-app/open-seo db8bde1 src/client/features/rank-tracking/ (RankTrackingTable,
 // RankTrackingTrendChart, CheckConfirmModal; MIT). Changes: weekly desktop checks only (user choice), started from
 // 已保存 instead of a separate add flow, the site's Search Console position alongside, Chinese copy.
@@ -25,12 +25,14 @@ import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { trackedDraft, trackedPage, type TrackedRow } from "./seo-hand-off";
 import {confirmAction} from "#components/reach/confirm";
 import { InfoTip } from "#components/reach/info-tip";
+import { formatDate } from '#lib/format';
+import { Delta } from '#components/reach/delta';
 
 type Check = { at: string; position: number | null; url: string | null; runId: string };
 type Tracked = { id: string; keyword: string; locationCode: number; language: string; addedAt: string; latest: Check | null; previous: Check | null; history: Check[]; nextCheckAt: string | null };
 type Status = { keywords: Tracked[]; lastRun: { at: string; ok: boolean; errors: string[]; checked: number } | null };
 export const rankRequest = <T,>(action: string, body: object = {}) => api.action<T>("nrRankTracking", action, { method: "POST", body: { projectId: String(currentProjectId()), ...body }, unwrap: "data" });
-const day = (v?: string | null) => (v ? new Date(v).toLocaleDateString(getCurrentLocale()) : "—");
+const day = (v?: string | null) => formatDate(v);
 const pathOf = (u?: string | null) => { try { return u ? new URL(u).pathname : ""; } catch { return u || ""; } };
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 
@@ -79,7 +81,7 @@ function Move({ now, before }: { now: Check | null; before: Check | null }) {
   if (!now || !before) return <span className="text-muted-foreground">—</span>;
   const a = before.position ?? 101, b = now.position ?? 101, d = a - b;
   if (d === 0) return <span className="text-muted-foreground">{$t('common.flat')}</span>;
-  return <span className={d > 0 ? "nr-up" : "nr-down"}>{d > 0 ? "▲" : "▼"} {Math.abs(d)}</span>;
+  return <Delta value={d} kind="count" />;
 }
 const pos = (c: Check | null) => (!c ? "—" : c.position ? String(c.position) : $t('common.beyond100'));
 
@@ -103,7 +105,7 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
     helper.display({ id: "market", header: () => $t('common.market'), cell: ({ row }) => <span className="text-muted-foreground">{marketLabel(row.original)}</span> }) as ColumnDef<Tracked & { site?: number }>,
     helper.accessor((r) => r.latest?.position ?? (r.latest ? 101 : undefined), { id: "position", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('rankTracking.latestRank')} align="right" />, cell: ({ row }) => <span className="font-semibold">{pos(row.original.latest)}</span>, meta: right }) as ColumnDef<Tracked & { site?: number }>,
     helper.display({ id: "move", header: () => <span className="block text-right">{$t('rankTracking.sinceLastCheck')}</span>, cell: ({ row }) => <span className="block text-right tabular-nums"><Move now={row.original.latest} before={row.original.previous} /></span> }) as ColumnDef<Tracked & { site?: number }>,
-    helper.display({ id: "page", header: () => $t('common.rankingPage'), cell: ({ row }) => { const u = row.original.latest?.url; return u && safeLink(u) ? <a className="block max-w-56 truncate text-primary hover:underline" href={safeLink(u)} target="_blank" rel="noreferrer" title={u}>{pathOf(u)}</a> : <span className="text-muted-foreground">—</span>; } }) as ColumnDef<Tracked & { site?: number }>,
+    helper.display({ id: "page", header: () => $t('common.rankingPage'), cell: ({ row }) => { const u = row.original.latest?.url; return u && safeLink(u) ? <a className="block max-w-44 truncate text-primary hover:underline" href={safeLink(u)} target="_blank" rel="noreferrer" title={u}>{pathOf(u)}</a> : <span className="text-muted-foreground">—</span>; } }) as ColumnDef<Tracked & { site?: number }>,
     helper.display({ id: "trend", header: () => $t('rankTracking.trend'), cell: ({ row }) => <Spark history={row.original.history} /> }) as ColumnDef<Tracked & { site?: number }>,
     helper.accessor("site", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.searchConsolePosition')} align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : Number(getValue()).toFixed(1)), meta: right }) as ColumnDef<Tracked & { site?: number }>,
     helper.display({ id: "checked", header: () => <span className="block text-right">{$t('rankTracking.lastChecked')}</span>, cell: ({ row }) => <span className="block text-right text-muted-foreground tabular-nums">{row.original.latest ? day(row.original.latest.at) : $t('rankTracking.waitingFirstCheck')}</span> }) as ColumnDef<Tracked & { site?: number }>,
@@ -127,7 +129,7 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
     <>
       <Card className="gap-0 py-0">
         <DataTable table={table} empty={{ title: $t('rankTracking.noTrackedKeywordsYet') }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,[role=checkbox],a")) return; openKeyword(row.original.keyword, row.original); }}
-          toolbar={<DataTableToolbar actions={<Button variant="outline" size="sm" disabled={busy} onClick={() => void checkNow()}><RefreshCw data-icon="inline-start" className={busy ? "animate-spin" : ""} />{busy ? $t('common.checking') : $t('common.checkNow')}</Button>}>
+          toolbar={<DataTableToolbar actions={<Button variant="outline" size="sm" disabled={busy} onClick={() => void checkNow()}><RefreshCw data-icon="inline-start" className={busy ? "animate-spin" : ""} />{busy ? $t('common.checking') : $t('common.updateNow')}</Button>}>
             <span className="text-xs text-muted-foreground">{$tj('rankTracking.checkedWeeklyGoogleDesktopTop',{0:status.keywords.length,1:status.lastRun ? $t('rankTracking.last',{0:day(status.lastRun.at)}) : ""})}<InfoTip label={$t('rankTracking.howRankTrackingWorks')} className="ml-1">{$t('rankTracking.checkNowReusesResultLast')}</InfoTip></span>
           </DataTableToolbar>} />
       </Card>

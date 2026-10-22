@@ -1,5 +1,5 @@
 import { $t, getCurrentLocale } from '#i18n';
-import { duration } from '../data-parts';
+import { formatCount, formatDuration, formatPercent } from '#lib/format';
 import type { ChangeTables } from './drivers';
 // 访问 (GA4): the shapes the server answers with (server/nocoreach/website-report.ts), the metrics as GA4 names and
 // computes them, and how dimension values read in the page's language.
@@ -229,11 +229,11 @@ export const KPI_KEYS: MetricKey[] = [
 ];
 
 export const count = (v: number | null | undefined) =>
-  v == null ? '—' : Math.round(v).toLocaleString(getCurrentLocale());
+  formatCount(v == null ? v : Math.round(v));
 export function show(v: number | null | undefined, format: Format): string {
   if (v == null || !Number.isFinite(v)) return '—';
-  if (format === 'percent') return `${(v * 100).toFixed(1)}%`;
-  if (format === 'duration') return duration(v);
+  if (format === 'percent') return formatPercent(v);
+  if (format === 'duration') return formatDuration(v);
   if (format === 'decimal') return v.toFixed(2);
   return count(v);
 }
@@ -246,6 +246,21 @@ export function dayLabel(
     items?.[0]?.payload as { previousDate?: string } | undefined
   )?.previousDate;
   return `${typeof day === 'string' ? day : ''}${previous ? $t('common.previousPeriod', { 0: previous }) : ''}`;
+}
+// Each period's own days. A report cached before the server kept them apart carries the other period's days at zero,
+// which drew the comparison line over the wrong days and dropped both lines to zero where the periods meet.
+export function ownDays(
+  window: Window | undefined,
+  daily: Day[] | undefined,
+  previousDaily: Day[] | undefined,
+): { current: Day[]; previous: Day[] } {
+  if (!window) return { current: daily ?? [], previous: previousDaily ?? [] };
+  return {
+    current: (daily ?? []).filter((d) => d.date >= window.start),
+    previous: (previousDaily ?? []).filter(
+      (d) => d.date >= window.previousStart && d.date <= window.previousEnd,
+    ),
+  };
 }
 export const change = (now: number | null, before: number | null) =>
   now == null || before == null || before === 0

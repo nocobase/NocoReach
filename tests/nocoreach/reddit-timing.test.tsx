@@ -1,6 +1,7 @@
 import { I18nRuntime } from '@nocobase/i18n';
 import { I18nProvider } from '@nocobase/i18n/client';
 import { act, cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { expect, test } from 'vitest';
 import {
   connectLocale,
@@ -49,25 +50,28 @@ test('Reddit timing distinguishes attempts, cached success and retry timing in b
         <Timing />
       </I18nProvider>,
     );
-    expect(screen.getByText(/Last attempt:/)).toHaveTextContent(/10\/15\/2026/);
-    expect(screen.getByText(/Last successful query:/)).toHaveTextContent(
-      /10\/12\/2026/,
-    );
-    expect(screen.getByText(/Next retry eligible from:/)).toHaveTextContent(
-      /hourly scan/,
-    );
-    expect(screen.getByRole('alert')).toHaveTextContent('20000 / 50401');
-    expect(screen.getByRole('alert')).toHaveTextContent('safe-task');
+    // One line: the last success and the next search; the last attempt and the codes are in info tips.
+    expect(screen.getByText(/Last success:/)).toHaveTextContent(/Oct 12/);
+    expect(screen.getByText(/Last success:/)).toHaveTextContent(/Next retry:/);
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'reported cost is zero',
+      'no charge was made',
     );
+    expect(screen.getByRole('alert')).not.toHaveTextContent('20000');
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Search timing' }),
+    );
+    expect(await screen.findByText(/Last attempt:/)).toHaveTextContent(
+      /Oct 15/,
+    );
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(screen.getByRole('button', { name: 'Diagnostics' }));
+    expect(await screen.findByText(/20000 \/ 50401/)).toHaveTextContent(
+      'safe-task',
+    );
+    await userEvent.keyboard('{Escape}');
     await act(() => runtime.changeLanguage('zh-CN'));
-    expect(screen.getByText(/最近尝试：/)).toBeInTheDocument();
-    expect(screen.getByText(/最近成功查询：/)).toBeInTheDocument();
-    expect(screen.getByText(/下次重试最早时间：/)).toHaveTextContent(
-      '按小时扫描',
-    );
-    expect(screen.getByRole('alert')).toHaveTextContent('费用为零');
+    expect(screen.getByText(/上次成功：/)).toHaveTextContent(/下次重试：/);
+    expect(screen.getByRole('alert')).toHaveTextContent('没有扣费');
   } finally {
     disconnect();
     cleanup();

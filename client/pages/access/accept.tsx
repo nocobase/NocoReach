@@ -10,9 +10,10 @@ import { Button } from '#components/ui/button';
 import { Badge } from '#components/ui/badge';
 import { useAccessApi, useAccessQuery, type MemberInvitation } from './api';
 import { AccessError, Refresh } from './components';
+import { formatDateTime } from '#lib/format';
 
 export default function AcceptInvitation() {
-  const locale = useNocoReachLocale();
+  useNocoReachLocale();
   const { invitationId } = useParams();
   const navigate = useNavigate();
   const { reload: reloadMe } = useMe();
@@ -43,7 +44,7 @@ export default function AcceptInvitation() {
     }
   };
   return (
-    <PageContainer className='max-w-3xl'>
+    <PageContainer>
       <PageHeader
         title={$t('accessMembers.yourInvitations')}
         description={$t('accessMembers.acceptHelp')}
@@ -92,8 +93,7 @@ export default function AcceptInvitation() {
               {$t('accessMembers.acceptIdentity')}
             </p>
             <p className='text-sm'>
-              {$t('accessMembers.expires')}:{' '}
-              {new Date(row.expiresAt).toLocaleString(locale)}
+              {$t('accessMembers.expires')}: {formatDateTime(row.expiresAt)}
             </p>
             <div>
               <Button

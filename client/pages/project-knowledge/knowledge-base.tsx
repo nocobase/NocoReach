@@ -57,6 +57,13 @@ import {
   type Item,
   type ProjectKnowledgeContext,
 } from './model';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '#components/ui/select';
 
 // What the knowledge tab gives the drawer and the add dialog opened over it.
 export type KnowledgeTabContext = ProjectKnowledgeContext & {
@@ -66,6 +73,13 @@ export type KnowledgeTabContext = ProjectKnowledgeContext & {
 
 // 知识库 tab: material the Agent looks up when it needs to. Search, category and date order live in the URL, so the
 // drawer and the add dialog open over the same list and closing returns to it.
+// Summaries are the first characters of the text; Markdown heading and emphasis marks are dropped for display.
+const plainSummary = (text: string) =>
+  text
+    .replace(/(^|\s)#{1,6}\s+/g, '$1')
+    .replace(/\*\*|__|`/g, '')
+    .trim();
+
 export default function KnowledgeTab(): ReactElement {
   useNocoReachLocale();
   const context = useOutletContext<ProjectKnowledgeContext>();
@@ -179,19 +193,35 @@ export default function KnowledgeTab(): ReactElement {
             className='w-full pl-8!'
           />
         </label>
-        <select
-          aria-label={$t('projectKnowledge.filterCategory')}
-          value={category}
-          onChange={(e) => setParam('category', e.target.value)}
-          className='min-w-28'
+        <Select
+          value={category || 'all'}
+          onValueChange={(v) =>
+            setParam('category', v === 'all' ? '' : String(v))
+          }
         >
-          <option value=''>{$t('projectKnowledge.categories')}</option>
-          {getCategories().map(([k, v]) => (
-            <option key={k} value={k}>
-              {v}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger
+            className='w-full sm:w-40'
+            aria-label={$t('projectKnowledge.filterCategory')}
+          >
+            <SelectValue>
+              {(v: string) =>
+                v === 'all'
+                  ? $t('projectKnowledge.categories')
+                  : (getCategories().find(([k]) => k === v)?.[1] ?? v)
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent className='w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal'>
+            <SelectItem value='all'>
+              {$t('projectKnowledge.categories')}
+            </SelectItem>
+            {getCategories().map(([k, v]) => (
+              <SelectItem key={k} value={k}>
+                {v}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {filtered ? (
           <Button size='sm' variant='ghost' onClick={clearFilters}>
             {$t('projectKnowledge.clearFilters')}
@@ -318,9 +348,9 @@ export default function KnowledgeTab(): ReactElement {
                     </Link>
                     <p
                       className='truncate text-xs text-muted-foreground'
-                      title={i.summary}
+                      title={plainSummary(i.summary)}
                     >
-                      {i.summary}
+                      {plainSummary(i.summary)}
                     </p>
                   </td>
                   <td className='px-3 py-2.5'>

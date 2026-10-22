@@ -121,11 +121,11 @@ describe('shell translations', () => {
     expect(
       screen.getByRole('navigation', { name: '面包屑', hidden: true }),
     ).toBeInTheDocument();
-    expect(screen.getByText('从数据里找机会。')).toBeVisible();
+    expect(screen.getByText('从数据中发现机会，')).toBeVisible();
     // NocoReach's slogan; its name is emphasised, not a link to a site.
     expect(
-      screen.getByText('帮你做出来。', { exact: false }),
-    ).toHaveTextContent('NocoReach 帮你做出来。');
+      screen.getByText('帮你落地', { exact: false }),
+    ).toHaveTextContent('NocoReach 帮你落地');
     expect(
       screen.getByRole('button', { name: '展开或收起导航' }),
     ).toHaveAttribute('title', '展开或收起导航');

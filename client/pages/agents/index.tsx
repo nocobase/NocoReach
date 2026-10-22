@@ -1,132 +1,42 @@
-import { type ReactNode } from 'react';
-import { NavLink, Navigate, Outlet, useLocation, useMatch } from 'react-router';
+import { useState } from 'react';
+import { Outlet } from 'react-router';
 import { useCan } from '@nocobase/app-plugin-authorization/client';
-import {
-  agentsRoute,
-  modelsRoute,
-  runtimesRoute,
-  usageRoute,
-} from '@nocobase/app-plugin-agents/client/routes';
-import { cn } from 'cn';
+import { agentsRoute } from '@nocobase/app-plugin-agents/client/routes';
 import { $t } from '#i18n';
-import {
-  PageContainer,
-  PageHeader,
-  SectionHeading,
-} from '#components/reach/page';
+import { PageContainer, PageHeader } from '#components/reach/page';
+import type { AgentSettingsContext } from '../../online-agent/edit.js';
 import { AgentRoles } from './roles.js';
-import { buttonVariants } from '#components/ui/button';
-import { Skeleton } from '#components/ui/skeleton';
+import { LocalAgents } from './runner.js';
 import { routeAccess } from './access.js';
 
 const runnerAccess = routeAccess(agentsRoute);
+const LOCAL_AGENTS = 'local-agents';
 
-// One page for the AIs in NocoReach (2026-10-20 user decision): the page heading and the three roles with what each
-// does and needs come first, then the tabs in setup order (models, chat agent, runtimes, execution agent, usage). The
-// runtimes, models and usage tabs are the Agents plugin's own pages, which bring their own frame and heading, so every
-// tab renders its own page below this tab bar.
+// One page for the AIs in NocoReach (2026-10-21 user decision, after Studio's Agent page): which work cloud models do
+// and which local agents do, with what each uses and whether it works, then the local agents themselves. There are no
+// tabs: model services, runtimes and usage are pages of Settings, and the chat agent's settings open as a dialog over
+// this page (`chat/new`, `chat/:onlineAgentId`).
 export default function AgentsPage() {
-  return useMatch('/agents') ? (
-    <AgentIndex />
-  ) : (
-    <>
-      <PageContainer className='pb-0'>
-        <PageHeader
-          title={$t('agentsPage.title')}
-          description={$t('agentsPage.description')}
-        />
-        <AgentRoles />
-      </PageContainer>
-      <AgentsTabs />
-      <Outlet />
-    </>
-  );
-}
-
-function AgentIndex() {
-  const { can, isPending } = useCan(runnerAccess);
-  const { search } = useLocation();
-  if (!isPending) {
-    return (
-      <Navigate replace to={{ pathname: can ? 'runner' : 'online', search }} />
-    );
-  }
-  return (
-    <div role='status' aria-label={$t('common.loading')}>
-      <Skeleton className='h-48 w-full' />
-    </div>
-  );
-}
-
-function AgentsTabs() {
   const runner = useCan(runnerAccess);
-  const runtimes = useCan(routeAccess(runtimesRoute));
-  const models = useCan(routeAccess(modelsRoute));
-  const usage = useCan(routeAccess(usageRoute));
-  const { search } = useLocation();
-  // The usage filters (range, grouping, the prices sheet) belong to the usage tab: neither carried into it nor out of it.
-  const inUsage = useMatch('/agents/usage/*') !== null;
-  const tabClass = cn(
-    buttonVariants({ variant: 'ghost', size: 'sm' }),
-    'text-muted-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground',
-  );
-  // A tab whose check is pending or failed stays hidden; its route still checks a URL opened directly.
-  // In the order a new installation sets them up: the model service first, then a runtime and its agent.
-  const tabs = [
-    ...(models.can ? [{ path: 'models', label: $t('agentsPage.models') }] : []),
-    { path: 'online', label: $t('common.onlineAgent') },
-    ...(runtimes.can
-      ? [{ path: 'runtimes', label: $t('agentsPage.runtimes') }]
-      : []),
-    ...(runner.can
-      ? [{ path: 'runner', label: $t('common.runnerAgent') }]
-      : []),
-    ...(usage.can ? [{ path: 'usage', label: $t('agentsPage.usage') }] : []),
-  ];
-  return (
-    <div className='px-6 pt-4 md:px-8'>
-      <nav
-        aria-label={$t('agentsPage.tabs')}
-        className='flex flex-wrap gap-1 border-b pb-2'
-      >
-        {tabs.map((tab) => (
-          <NavLink
-            key={tab.path}
-            className={tabClass}
-            to={{
-              pathname: `/agents/${tab.path}`,
-              search: inUsage || tab.path === 'usage' ? '' : search,
-            }}
-          >
-            {tab.label}
-          </NavLink>
-        ))}
-      </nav>
-    </div>
-  );
-}
-
-// A tab of the application's own: its name and one sentence on what it is for, as the plugin's tabs carry theirs.
-export function AgentsPageLayout({
-  title,
-  description,
-  children,
-  actions,
-}: {
-  title: string;
-  description: string;
-  children: ReactNode;
-  actions?: ReactNode;
-}) {
+  const [refresh, setRefresh] = useState(0);
+  const changed = () => setRefresh((value) => value + 1);
+  const context: AgentSettingsContext = {
+    refresh: changed,
+    saved: changed,
+    back: '/agents',
+  };
   return (
     <PageContainer>
-      <SectionHeading
-        title={title}
-        description={description}
-        actions={actions}
-        className='[&_h2]:text-base [&_h2]:font-medium'
+      <PageHeader
+        title={$t('agentsPage.title')}
+        description={$t('agentsPage.description')}
       />
-      {children}
+      <AgentRoles
+        refresh={refresh}
+        localAgentsId={runner.can ? LOCAL_AGENTS : undefined}
+      />
+      {runner.can && <LocalAgents id={LOCAL_AGENTS} onSaved={changed} />}
+      <Outlet context={context} />
     </PageContainer>
   );
 }

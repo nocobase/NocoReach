@@ -44,3 +44,40 @@ it('concurrent viewers keep ordered unique events and never rewind the transcrip
   ).toEqual([1, 2, 3]);
   expect(events).toHaveBeenLastCalledWith('run', 3, 1000);
 });
+
+it("passes the tool's own failure message only to those who may inspect the run", async () => {
+  const agents = {
+    runs: {
+      detail: async () => ({
+        id: 'run',
+        status: 'failed',
+        actorUserId: 'owner',
+        ownerUserId: 'owner',
+        failureReason: 'toolAuth',
+        failureDetail: 'Not logged in · Please run /login',
+        executions: [],
+      }),
+      events: async () => ({ events: [], lastSeq: 0 }),
+    },
+  } as unknown as Agents;
+  const runtime = new TaskAgentsRuntime(
+    agents,
+    {} as ConstructorParameters<typeof TaskAgentsRuntime>[1],
+    '/main',
+  );
+  const owner = await runtime.progress('run', {
+    userId: 'owner',
+    seesMachines: false,
+  });
+  expect(owner.run).toMatchObject({
+    failureReason: 'toolAuth',
+    failureDetail: 'Not logged in · Please run /login',
+  });
+  const reader = await runtime.progress('run', {
+    userId: 'reader',
+    seesMachines: false,
+  });
+  expect(reader.canInspect).toBe(false);
+  expect(reader.run.failureReason).toBe('toolAuth');
+  expect(reader.run).not.toHaveProperty('failureDetail');
+});

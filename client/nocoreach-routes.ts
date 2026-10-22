@@ -1,4 +1,4 @@
-import { agentsRoute, runtimesRoute, modelsRoute, usageRoute } from '@nocobase/app-plugin-agents/client/routes';
+import { runtimesRoute, modelsRoute, usageRoute } from '@nocobase/app-plugin-agents/client/routes';
 // NocoReach's business pages keep the classic portal paths (apps/portal/src/routes.tsx), so links inside them keep
 // working. The top menu is 洞察 → 机会 → 任务, 网站与产品, 搜索与市场, 社区, AI 团队 and 设置. Settings lists Members,
 // Roles, API keys and the other settings as peers. Business pages use
@@ -13,6 +13,9 @@ import {
   Clock,
   Bookmark,
   Bot,
+  ChartColumn,
+  Cpu,
+  MonitorCog,
   ChartNoAxesCombined,
   ClipboardCheck,
   Earth,
@@ -46,7 +49,7 @@ import {
   TvMinimalPlay,
   Youtube,
 } from 'lucide-react';
-import { createElement, type ComponentType } from 'react';
+import { createElement, Fragment, type ComponentType } from 'react';
 import { Navigate } from 'react-router';
 import {
   defineAppRoutes,
@@ -82,6 +85,19 @@ const gated =
       },
     };
   };
+
+// The runtimes page with what "shared with the team" and "owner only" mean under its list (2026-10-21 user decision).
+const withRuntimesSharing: Loader = async () => {
+  const [{ default: Page }, { RuntimesSharing }] = await Promise.all([
+    runtimesRoute.componentLoader() as Promise<{ default: ComponentType<object> }>,
+    import('./pages/agents/runtimes-sharing.js'),
+  ]);
+  return {
+    default: function RuntimesPage(props: object) {
+      return createElement(Fragment, null, createElement(Page, props), createElement(RuntimesSharing));
+    },
+  };
+};
 
 const redirect =
   (to: string): Loader =>
@@ -167,13 +183,10 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     page('data-youtube', '/data/youtube', () => import('./pages/data-youtube.js'), { title: nav('youtube'), icon: Youtube, order: 9 }),
   ]),
   group('nav-ai', nav('aiTeam'), Sparkles, 7, [
+    // The Agent page has no tabs; the chat agent's settings open as a dialog over it.
     { ...page('agents', '/agents', () => import('./pages/agents/index.js'), { title: nav('agent'), icon: Bot, order: 1 }), children: [
-      { ...page('runner-agents', 'runner', () => import('./pages/agents/runner.js')), authz: agentsRoute.authz },
-      { ...page('online-agents', 'online', () => import('./online-agent/settings.js')), children: [page('online-agent-new', 'new', () => import('./online-agent/edit.js')), page('online-agent-edit', ':onlineAgentId/edit', () => import('./online-agent/edit.js'))] },
-      // The runtimes, models and usage pages are tabs of Agent, keeping the Agents plugin's own grants.
-      { ...runtimesRoute, path: 'runtimes', componentLoader: gated(runtimesRoute.componentLoader) },
-      { ...modelsRoute, path: 'models', componentLoader: gated(modelsRoute.componentLoader) },
-      { ...usageRoute, path: 'usage', componentLoader: gated(usageRoute.componentLoader) },
+      page('online-agent-new', 'chat/new', () => import('./online-agent/edit.js')),
+      page('online-agent-edit', 'chat/:onlineAgentId', () => import('./online-agent/edit.js')),
     ] },
     page('playbooks', '/playbooks', () => import('./pages/playbooks.js'), { title: nav('playbooks'), icon: Workflow, order: 3 }),
     page('skills', '/skills', () => import('./pages/skills.js'), { title: nav('skills'), icon: WandSparkles, order: 4 }),
@@ -201,23 +214,25 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
         action: 'access',
       },
       navigation: { title: 'schedules.title', icon: Clock, order: 6 },
-      // Anchor the history layer to the available content height, not the list's height.
       componentLoader: gated(() => import('./pages/schedules/index.js'), true),
+      // The time dialog and the run history drawer open over the list.
       children: [
         {
           name: 'schedule-edit',
           path: ':scheduleId/edit',
-          breadcrumb: { title: 'schedules.editTime' },
-          componentLoader: () => import('./pages/schedules/detail.js'),
+          componentLoader: () => import('./pages/schedules/edit.js'),
         },
         {
           name: 'schedule-detail',
           path: ':scheduleId',
-          breadcrumb: { title: 'schedules.history' },
-          componentLoader: () => import('./pages/schedules/detail.js'),
+          componentLoader: () => import('./pages/schedules/history.js'),
         },
       ],
     },
+    // The Agents plugin's runtimes, model services and usage pages, at the paths and under the grants it gives them.
+    { ...runtimesRoute, componentLoader: gated(withRuntimesSharing), navigation: { title: nav('runtimes'), icon: MonitorCog, order: 7 } },
+    { ...modelsRoute, componentLoader: gated(modelsRoute.componentLoader), navigation: { title: nav('models'), icon: Cpu, order: 8 } },
+    { ...usageRoute, componentLoader: gated(usageRoute.componentLoader), navigation: { title: nav('usage'), icon: ChartColumn, order: 9 } },
     page('data-connections', '/connections', () => import('./pages/source-connections.js'), { title: nav('connections'), icon: Plug, order: 1 }),
     page('demo-data', '/demo-data', () => import('./pages/demo-management/index.js'), { title: nav('demoData'), icon: DatabaseZap, order: 7 }),
     { ...page('proxy-profiles', '/proxy-profiles', () => import('./pages/network.js'), { title: nav('proxyProfiles'), icon: Globe2, order: 5 }), children: [
@@ -240,6 +255,13 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
 
   // Old addresses.
   moved('flows-legacy', '/flows', '/playbooks'),
+  moved('runner-agents-legacy', '/agents/runner', '/agents'),
+  moved('online-agents-legacy', '/agents/online', '/agents'),
+  moved('online-agent-new-legacy', '/agents/online/new', '/agents/chat/new'),
+  moved('runtimes-legacy', '/agents/runtimes', '/runtimes'),
+  moved('runtimes-connect-legacy', '/agents/runtimes/connect', '/runtimes/connect'),
+  moved('models-legacy', '/agents/models', '/models'),
+  moved('usage-legacy', '/agents/usage', '/usage'),
   moved('network-settings', '/network', '/proxy-profiles'),
   moved('data-overview', '/data', '/home'),
   moved('data-chat', '/data/chat', '/data/discord'),

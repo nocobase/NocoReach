@@ -27,6 +27,191 @@
 - Restrict demo accounts to demo projects, reject collisions with existing accounts, and resolve persisted demo markers before outbound requests in other processes. Retain the environment model when clearing the demo.
 - Add `demo-mode data status|import|clear|reset` commands with explicit change confirmation, an operation preview, and standalone package support.
 
+## Unreleased — One conversation a day on Insights
+
+- What you ask from Insights joins the day's conversation, shown right under the day's analysis with its own input at the bottom: type and press Enter, and the answer appears there (what it read folds under "Sources checked"). Each day keeps one conversation, so the AI remembers what was asked before.
+- Ask AI on an opportunity line quotes the opportunity in that input instead of opening a separate conversation; the question and answer stay in the day's conversation with the quote above the question, here and in the side panel. Questions no longer appear under the opportunity lines.
+- Opening the side panel on Insights moves the day's conversation into it: the page hides its conversation and input, offers "Open today's conversation in the side panel", and folds Current situation to one line under the day's date. Only one input shows at a time.
+- Earlier days sit above today, folded to "Earlier analyses (N)" by default and opening a week at a time, oldest at the top, so the bottom of the page is left to the conversation. An opened day shows that day's conversation in full.
+- Hand off to agent looks the same on every line; the first one is no longer filled.
+
+## Unreleased — Search performance: web search only, gaps said plainly
+
+- Search performance › Performance reads web search only. The search type choice (Web, Image, Video, News, Discover, Google News) is gone, with the server's handling of other types in the search views: they were read live from Search Console for this choice alone, while the scheduled sync, the daily analysis and Insights use web search only.
+- The coverage line shows only when days are missing: which days, why (fetching, failed, paused, waiting for an administrator, or older than the 16 months Search Console keeps) and the one action that fixes it. A complete range shows nothing; when the data was last saved, blank days, missing comparisons, the backfill limit and scheduled sync being off are in the page's ⓘ. "Re-fetch selected totals" is removed: the scheduled sync re-reads recent days, and gaps are filled automatically when an administrator opens the range.
+
+## Unreleased — Settings and the sidebar in agreed words
+
+- The sidebar's slogan and the sign-in page's first line read as agreed in Chinese: "从数据中发现机会，NocoReach 帮你落地".
+- Members & roles › Roles lists System administrator first as a built-in role for all projects, with an ⓘ saying it has every permission and cannot be edited there, so Roles agrees with Members; in Members it is a neutral badge like the other roles instead of a solid one.
+- Network describes itself in one sentence; the note on YouTube, Bilibili and Xiaohongshu moves from under the sources into the page's ⓘ.
+- Automatic runs says a failed day is retried in formal Chinese, and the new project's content language uses the shared drop-down.
+
+## Unreleased — AI team pages without side panels or fold-outs
+
+- Playbooks lists every playbook as a card by category across the full width; a card opens the playbook in a drawer to read or edit, instead of a list with a detail panel always beside it. A link to `?id=` opens that drawer, and nothing opens by default. Its category and Skill pickers use the shared drop-down.
+- Analysis rules shows rules by area as tabs (Search performance, Traffic and conversions, …), each source a heading with its rules shown, instead of fold-out source groups; the area with an open editor cannot be left until it is saved or cancelled. The last-analysis line leaves out "passed to the AI" when there is no count instead of showing a dash, and percentages read "2%".
+- Skills asks before discarding an edit with the app's own dialog instead of the browser's, and its drawer is as wide as the Playbooks drawer.
+- Sorted table headers use the text colour instead of the primary colour, as on tables that do not mark their sort; Project knowledge's summaries drop Markdown heading and emphasis marks.
+
+## Unreleased — Opportunities, Tasks and Results, in plain words
+
+- Opportunities: nothing to review is a full-width empty state instead of a narrow box, and so is nothing being watched. Watching explains how watching works in an ⓘ beside the Change header instead of a grey paragraph, and a change's figure appears only in the Value column. In Handled, Restore is a row-end icon button that keeps every row the same height, and a handed-off opportunity slides in its detail here (with a link to its task) instead of leaving the page. Dates use the shared format.
+- Tasks: the Current step, Owner and Executor columns are wider so names and steps are no longer cut short at 1440 px.
+- Task page: the review card's title and hints read formally ("The change is ready. Review it before publishing"; "ask an engineer" rather than a colloquial "dev colleague" in Chinese), the publishing note moves into an ⓘ beside Publish, and the note composer's Send is a secondary button so the step's action is the only primary one. A closed task says Closed once: the card is headed Status and titled "When closed: …". Why no longer repeats the figure its title already states, and Start task and Choose playbook in Activity use icons that do not look like disclosure triangles.
+- Results: the period no longer says "(UTC)" (the ⓘ does), a change not yet live shows a dash under Went live because its status already says so, and the comparison windows use the shared date format. Create from a result uses the shared drop-downs and text area and shows the comparison in place instead of in a disclosure.
+- Chinese copy puts a space between Chinese text and "Agent" everywhere.
+
+## Unreleased — Community pages, fixed and in plain words
+
+- Reddit shows one line under the search terms: when the last search succeeded and when the next may run, with the last attempt and the hourly scan in its ⓘ. A search that did not complete names the term and the reason in plain words (for example, that automatic retries are paused because it is unclear whether the search was charged); the provider's codes and task id move into a Diagnostics ⓘ. The subreddit card's empty state is a full sentence.
+- Metric rows fill their width: two, three or five tiles take the whole row instead of leaving empty columns (Hacker News, X with its monthly spend, Reddit with its visits).
+- Hacker News says there were no mentions in the period instead of drawing an empty axis.
+- X, Discord, Slack and Forum hide the date range until the source is connected. On X a post that is only a shortened link reads "(Link only)" beside its Open on X link.
+- Descriptions are one formal sentence: X, Discord and Slack no longer say "your own" or "just paste the token", the forum is named by its link without the platform name, and Xiaohongshu, Bilibili and YouTube end with a full stop and no longer mention the collector browser. YouTube writes "Retrieved …" without the tool's name, Bilibili lists tracked videos only when there are some, and dates in Discord, Slack and Reddit rows use the shared format.
+- One name per idea: "estimated publication date" and "selected period" replace their variants on the Xiaohongshu, Bilibili and YouTube pages.
+
+## Unreleased — The selected tab in the header
+
+- On a top-level page with tabs, the name that fades into the header after scrolling now includes the selected tab: GitHub › GitHub hot topics, Performance › Indexing, Keywords › Rank tracking, Agent › Execution agent, and likewise on Opportunities, Site audit, Trends, Competitors, AI search, Project knowledge, Members & roles and API keys. Clicking the page name opens its default tab at the top.
+
+## Unreleased — Agent: who does which work, and whether it works
+
+- The Agent page has no tabs. One table says which work cloud models do (Daily analysis and the Chat panel, with the model each uses) and which local agents do (Tasks, with the agent, the computer it runs on and whether that computer is shared with the team or owner only), each with a status and the one action that fixes it. The local agents and the project default follow below it.
+- A status follows how the work last ended, not only whether it is set up. An agent whose computer is online but whose latest tasks failed because the coding tool is not signed in, out of quota, cannot use the model or could not set up shows Needs attention, with how many tasks in a row, the computer and the tool, and what to do. A daily analysis whose last run did not finish shows the same.
+- Model services, Runtimes and Usage are pages of Settings at `/models`, `/runtimes` and `/usage`; the old addresses under `/agents` redirect. Runtimes opens with one sentence on what a runtime is and why it must stay on and signed in, and ends with what Shared with the team and Owner only mean, which are also the names in its list.
+- The chat agent's name, model and instructions open as a dialog from the Chat panel row; the separate chat agent list, and turning a chat agent off, are gone. A chat agent that is off can be turned on from the row.
+- Agents on a runtime are called local agents everywhere ("Execution agent" and "Task agent" before).
+
+## Unreleased — Insights puts the conversation first
+
+- The daily analysis's messages on Insights are white cards with a border, its headline one size larger and its avatar a little bigger, so the day's conversation is what the eye meets first.
+- Current situation becomes a narrow, quiet column: no card, a small grey heading, Refresh as an icon, one plain line per item with where it comes from on hover. Only the lines that need attention show; the others fold under "N more" (when none needs attention, the first three show).
+
+## Unreleased — Questions to AI stay with the day and the opportunity
+
+- Each opportunity line on Insights gains Ask AI: the chat opens on a new conversation about that opportunity. The questions asked stay under the line, with the start of the latest answer, Show all and Continue asking, which reopens the same conversation.
+- Questions asked with Ask AI at the bottom of Insights show after the day's message, as your question and the AI answer, while it is being answered too. Earlier days count their questions ("2 questions") and show them when opened, including days that raised no opportunity.
+- Only your own conversations show; they are read from the chat's records, which now note the analysis day and opportunity a conversation was asked from (`subject`), through `GET /onlineAgents/threads`. Continue asking with an unsent draft in the chat asks before discarding it.
+
+## Unreleased — Ten interface languages
+
+- Support ten interface languages: English, Simplified Chinese, Traditional Chinese, Japanese, Spanish, Brazilian Portuguese, French, German, Vietnamese, and Indonesian.
+
+## Unreleased — Search & market pages, fixed and in plain words
+
+- Search performance › Sitemaps names each sitemap with its host: a domain property lists every subdomain's sitemap, all called /sitemap.xml, and the rows could not be told apart.
+- Search performance › Performance shows whether the range is complete as a tag, with the record and save dates in its ⓘ and only what needs doing as text, instead of a block of sync details above the figures. The query, page and breakdown details load with the page instead of behind a button, and search appearances Search Console names `FORUMS` and `TPF_QA` are translated.
+- Indexing and Sitemaps describe themselves in full sentences; the daily quota, the Search Console property and the details' scope move into the ⓘ; the reason column stays empty for indexed pages, whose status already says so.
+- Keywords › Saved shows only a market in the Market column (AI suggestions is a source, not a market), its page columns are narrower so the table fits at 1440 px, and Competitors uses the same Taiwan market name as Keywords.
+- Competitors › Activity says a read error shared by several competitors once, above the cards, with a way to Settings › Network when it is about reaching a site, and decodes character references such as `&#x27;` in page titles and descriptions (pages read before are decoded on display). Overview hides the AI share column until a brand check has measured one and cuts long recent activity with an ellipsis.
+- Trends keeps the comparison notes in the ⓘ beside Compare and gives related searches a heading with its instruction in an ⓘ. AI search writes "24 (100%)" and keeps billing and platform notes in ⓘ.
+- Keywords, Trends, Competitors and AI search describe themselves in one sentence without colloquial or billing asides.
+
+## Unreleased — Ask AI reads the daily analysis
+
+- The online assistant can read the daily analysis behind Insights through a new read-only `daily_analysis` tool: a day's notes and limitations, the opportunities it raised with where each stands now (awaiting decision, handed off to agent with its task, dismissed, expired), its verdict on every change (do, watch, skip) with the reason, the opportunities awaiting a decision now, and the watches still open or ended. It reads the latest analysis or any earlier day, checks on every call that the conversation owner may still see Insights, and links opportunities to Opportunities. Asked about "the daily analysis of 10/21", it used to search the tasks and find nothing.
+- The metrics it reads (`project_data`, metrics) now include totals: each key metric of the last 28 days with the 28 days before and the change, as the Insights tiles show them, with the daily series. The snapshot of keywords, pages and audit issues had no previous period to compare with.
+- Opportunity links in chat answers open inside the application, like task links.
+
+## Unreleased — Tasks by Agent
+
+- Tasks gains a By agent view next to List and Board, after Studio's Agent view: a column per Agent the project runs tasks with (the project default first), then Unassigned. Each column says whether the Agent is running, queued, waiting or idle, and when no runtime is online; inside it are Working on, Up next (numbered, oldest first) and Waiting, where each card says what a person has to do (Confirm start, the review step, Confirm publish, confirm going live, Run failed) and who: "You" on a highlighted card listed first, otherwise the owner's name. Finished and closed tasks are left out.
+- Cards on the board and the Executor column of the list name the task's Agent (its own, else the project default, as the task page header shows it) with an online dot, or Unassigned, instead of a bare "Agent". A new Any agent filter narrows every view.
+- A line above the tasks counts runs under way, queued and failed, and the runtimes online. What waits for you stays counted on Waiting for me.
+
+## Unreleased — Website & product pages, fixed and in plain words
+
+- Traffic's daily chart draws the previous period over the same days of the current one again. GA4 answers each of the two date ranges on every day of both, at zero outside it; those zero days drew the comparison line over the wrong days and dropped both lines to zero where the periods met. The server keeps each range's own days, and the page ignores the extra days in reports cached before.
+- Traffic: Today shows skeletons while it loads, names the property's time zone ("China Standard Time" rather than `Asia/Shanghai`) and writes its sources the way the channel table does (Direct rather than `(direct) / (none)`). What moved the figure is plain text, and data that may be off is one line with a "Check data" tag and the explanation and GA4 steps in its ⓘ, instead of two amber blocks.
+- Pages describes itself in one sentence; the site, the pages read and how the sitemap's count relates to the tabs' are in the ⓘ. Not in sitemap is a tag.
+- Site audit and its performance check describe themselves in one sentence each (no cost moves into the ⓘ), and the device choice and the device filter use the same segmented control.
+- GitHub labels that were English in every language (Commits, Watchers, Issues, Pull requests, Releases, Discussions) are translated, and its copy uses those names.
+- Downloads describes what is connected rather than every registry it supports, says "Latest" instead of `latest`, and picks a package from a drop-down instead of buttons that ran past the card.
+
+## Unreleased — Data sources: two ways to connect, findings in a dialog
+
+- The top of Data sources shows two cards side by side: Find data sources on your website, with what it reads, and Use an agent on your computer, saying why: the agent researches the website and repositories, lists a plan and connects everything once you confirm, while authorizations and tokens stay in the browser.
+- Discover data opens its findings in a dialog that can be closed, instead of a long list on the page. The website's own title and description are no longer shown above the findings. Authorize closes the dialog and opens that source's panel.
+
+## Unreleased — One look for refresh buttons, drop-downs, tabs and pagination
+
+- The data pages call the action that reads new data "Update now" everywhere, instead of seven names (Read now, Search now, Check now, Query now, the competitor and Site audit wordings). The connection drawers keep their own steps.
+- A page's Refresh is the same outline icon button, last in the header: API keys moves it after Create key, Analysis rules uses it instead of a text button, and Settings › Automatic runs uses the header every other page uses, so the button lines up with the title instead of dropping below it.
+- The browser's own drop-downs on Competitors (market), Keywords › AI suggestions (market), GitHub › Hot (topic, language), Skills, Opportunities › Handled, Project knowledge (category, AI content language) and the knowledge forms are replaced by the application's drop-down. Tasks, Results and Playbooks follow with their own pages.
+- Members & roles, API keys and Agent use the same line tabs as the data pages instead of pill buttons, and tab counts follow the name without brackets ("All 658"), as on Opportunities.
+- Table footers disappear while every row fits on one page, and Members & roles and API keys use the same footer as the data tables when they do page.
+
+## Unreleased — One way to write dates, numbers and changes
+
+- Dates read the same on every page: in Chinese "2026-10-21", without the year in the current year ("10-21"), and times without seconds or a time zone ("10-21 14:03"); in English "Oct 21", "Oct 21, 2025", "Oct 21, 2:03 PM". This replaces eight styles in use, among them "2026/10/21", "21/10/2026, 16:40:18" (Search performance), "2026/10/19 GMT+8 9:34:24" (Reddit) and "2027/1/16" (API keys). Date ranges use the same days.
+- Changes are written one way: an arrow, a space and the size ("↑ 12%", "↓ 9.8%"), one decimal under 10% and whole numbers above, green for good news and red for bad; differences in a column keep their sign with a true minus ("+253", "−2,578"). This replaces "▲ 9.8%", "▼86.4%", "↓23%", "-24%" and "+50.0%". Competitors no longer shows "+-7/week" for a fall in stars.
+- Shares keep one decimal ("7.0%") so a column lines up, durations read "2 min 37 s" or "1 h 14 min", and numbers are no longer shortened to "19K" or "65.3k" next to full ones.
+- Dates, numbers and changes come from `client/lib/format.ts` and the `Delta` component; the Insights, Data sources, Opportunities and Tasks pages, which other changes are reworking, follow later.
+
+## Unreleased — Insights: Current situation beside the day, decisions kept
+
+- Current situation is back as a column beside the day's conversation, as before the redesign, with its explanation and Refresh. The Status link, its drawer and the All data menu are gone; each tile still opens its data page.
+- Opportunities decided today stay in today's message after those still waiting, marked Handed off to agent (with the task) or Dismissed, and the message counts them (Awaiting, Handed off, Dismissed), as the earlier days do. Each opportunity shows once: today while it waits or when today's analysis raised it, otherwise on the day it was first raised.
+- The metric tiles and the waiting tasks no longer show a Refresh icon on hover; they are read again on each visit, and Retry appears only after a failure.
+- "(daily, automatic)" after the last analysis links to Settings › Automatic runs for those who may open it. The fold markers are chevrons instead of ▾ and ▴.
+
+## Unreleased — Agent failures name the computer and the tool
+
+- When a task's Agent stops because its coding tool is not signed in, the card names the computer and the tool ("Claude Code on Office-Mac isn't signed in") and asks whoever manages that computer to sign in, or to change the Agent. A second line explains that an Agent shown as online only means its computer is connected. Connection, network and quota failures name the computer or the tool the same way when the run reports them; readers who may not see the computer get the general wording.
+- Try again is no longer the main button when trying again cannot help (the tool is not signed in, the run could not be set up, the model is unavailable); it stays available beside I'll do it myself. The setup failure now asks an engineer to check Technical details before trying again.
+- Technical details › Runs shows what the tool itself reported when the run stopped (for example "Not logged in · Please run /login"), to those who may read the run's transcript.
+
+## Unreleased — Insights as a conversation with the daily analysis
+
+- Insights now reads as the daily analysis speaking, so it no longer looks like Opportunities or opens on a wall of text. The key numbers stay on top as tiles with their trend (at most five, only those with data), with Status (the standing facts, in a drawer) and All data (every data page, grouped) below them.
+- Under the date, the daily analysis says how many decisions wait and which key numbers moved by 5% or more, with its notes folded. The opportunities waiting for a decision, the same ones as Opportunities › To do, follow as one line each with Hand off to agent and Ignore (five shown, the rest folded; the evidence stays on Opportunities), then the watches that ended that day, the tasks waiting for you and data that failed to sync.
+- Earlier days fold into one line each, with how many opportunities were raised that day and where each went (handed off, awaiting decision, dismissed, expired), opening to the list and the watches that ended. Ask AI at the bottom opens the chat with the day's analysis named.
+- The numbers, Status and the waiting tasks keep their own loading, failure and Retry. A change no analysis judged yet is still judged once in the background. Today's changes, with its standalone changes and their own hand-off, is gone: since #178 every change worth doing has an opportunity.
+
+## Unreleased — Connect data sources with your own agent
+
+- New `nocoreach connect` commands for a signed-in person: `guide` (the steps an agent follows), `list` (every data source of a project with its state, whether a command can connect it, and what it needs), `discover` (the sources a website links to), `preview` and `add` (website content, GitHub repository, forum, package downloads, Hacker News, competitors, and Google Trends and Reddit once DataForSEO is connected). Commands use the person's own grants; sources that need a credential, a Google authorization or a Collector answer with their panel address and are never connected from the command line.
+- Data sources: the discovery box becomes one row, Find data sources on your website, no longer presented as AI, with Use an agent on your computer beside it. That opens the account menu's agent setup with instructions to connect this project through `nocoreach connect guide`, confirming the plan first.
+
+## Unreleased — Start card: playbook steps, article link, Change dialog
+
+- The task start card's playbook line gains View steps: a drawer over the task page lists what the Agent does and what you check, with View or edit in Playbooks for the full page. The choices on the card stay as they are.
+- The article to change links to where readers see it, in a new tab: the address found from the task's page, or one built from the target's page pattern for an article saved on the task (the header's Article does the same). Without a pattern the title stays plain text. The task page now receives each target's public page patterns, never its key or API address.
+- Change opens a dialog with Publish to, Also publish to, New or Existing article and the article search; nothing changes until Save, and the card goes back to its one-line summary. When no article was found from the page, the line says why and Choose article opens the same dialog; the card no longer expands into the old two-column form.
+
+## Unreleased — Full-width pages and Your invitations on demand
+
+- Your invitations appears in the account menu, with a count, only when an invitation is waiting for the signed-in account. Inviting someone who already has an account adds them at once, so the entry was nearly always an empty page; the emailed invitation link still opens it.
+- Your invitations and the role form (Members & roles › a role, New role) use the page's full width instead of leaving the right side empty; the role's name and identifier inputs keep a readable width. docs/DEVELOPMENT.md records full-width pages as a NocoReach rule.
+
+## Unreleased — Verdicts and opportunities agree
+
+- A change the analysis judges worth doing always ends up as an opportunity, so Insights › Today's changes › To do and Opportunities list the same things. When a task, an opportunity or an ignored opportunity already covers the change or its page, the verdict becomes "No action needed" with the reason (for example "Task T-32 is already on it"); otherwise an opportunity is written from the change and its verdict, marked as needing checking. Verdicts filled in afterwards go through the same check.
+- Keep the page and the change on a task handed off on its own (Insights › Today's changes, data pages), so its start card finds the article to change instead of asking for one. Pages outside Site content are kept too.
+
+## Unreleased — Automatic runs in plain words
+
+- Settings › Scheduled tasks is now Settings › Automatic runs. The daily analysis card says what it does, "Daily at 09:00" with the timezone by name (China Standard Time rather than `Asia/Shanghai`), how the last run went (projects analyzed, suggestions written) and when the next one is. Change time opens a dialog over the list that also says when most data sources update in the chosen timezone; Run history opens a drawer that names each project instead of its id. Run now, Pause or Turn on, and Technical details (cron, Scheduler states, target, counters) are in the card's "…" menu. Pagination shows only when there is a second page.
+- Data sources › Data health › View sync status gains a Frequency column (daily, weekly or manual). The daily analysis row says "Runs daily at 09:00 (China Standard Time)" with a Change time link to Settings › Automatic runs for those who may open it, and gives its next run; it no longer shows the cron expression or speaks of a workflow. The other automatic work is listed there per project rather than repeated on Settings › Automatic runs.
+
+## Unreleased — Settings › Network at full width
+
+- Settings › Network no longer caps its content at 48rem: the proxy card and the data source table use the page's width, as the other pages do, instead of leaving the right side empty.
+
+## Unreleased — Ignored opportunities stay off Insights
+
+- Keep the changes behind an ignored opportunity out of Insights › Today's changes › To do, whichever analysis raised the opportunity. Opportunities ignored from an earlier analysis used to come back there as changes to act on with Hand off to agent and Ignore.
+
+## Unreleased — Article found from the task's page
+
+- Find the article a task changes from its page instead of picking it from hundreds: the page address is read back through each publishing target's page pattern to a slug and looked up there. The start card shows the article found with Change; it is linked as the task starts.
+- Decide where a change goes from where the page lives: a page no target holds goes to the website repository as a pull request (unless the playbook names a target), a blog post stays a new article in the playbook's target. Publish to, also-publish and the new/existing choice appear only after Change, when nothing was found, or when the targets could not be asked.
+
+## Unreleased — Notification diagnostics
+
+- Remove reliance on the generic notification test API from mock-isolation tests and operator guidance. Keep notification mutation blocking, authentication, inbox access and log reads covered.
+
 ## Unreleased — English code comments
 
 - AGENTS.md now asks for code comments in English, with interface elements named by their English labels. `tests/logic/comment-language.test.ts` parses every source file and fails when a file has more comments containing Chinese than `tests/logic/comment-language-baseline.json` allows (195 files, 595 older comments today); `COMMENT_LANGUAGE_BASELINE=lower` lowers the baseline after a cleanup and never raises it.
@@ -41,7 +226,8 @@
 ## Unreleased — Connection drawers in plain words
 
 - Describe how each data source connects at the top of the drawer, in product voice instead of an AI's first person, followed by a What you need list; only the title stays pinned while the drawer scrolls. The Agent avatar and grey message box are gone from the top of the drawer: no AI is answering there.
-- Head the question buttons at the bottom of the drawer, which open the AI chat, with the Agent avatar and "Ask AI".
+- Remove the question buttons at the bottom of the drawer. They opened the online chat with the question alone, which knows neither the data source nor how NocoReach connects it, so it could not answer; help with connecting will come through the user's own agent and the NocoReach CLI.
+- Correct the GA4 intro: choosing the Google resources does not start a sync; Sync now pulls the last 56 days by default.
 
 ## Unreleased — Why a data source cannot be reached
 

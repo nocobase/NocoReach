@@ -1,9 +1,9 @@
 import { googleHistoryFreshness } from '../../../shared/google-cache.js';
-import { getCurrentLocale, $t } from "#i18n";
-// 搜索表现 · what the page gained on 2026-10-14 (user request: everything Search Console's 效果 has, in NocoReach's own
-// style): the search types, 国家/地区 · 设备 · 搜索结果呈现 (read from Search Console when the page asks), 上升最快 ·
-// 下降最快 · 新出现 (Search Console Insights' trending queries and pages), 细分 tables, and one query's or page's
-// detail: its days against the period before and the pages it shows with (or the queries a page shows for).
+import { $t } from "#i18n";
+// Search performance › Performance, the parts beyond the totals: Country / region, Device and Search appearance (read
+// from Search Console when the page asks), Rising, Falling and New (Search Console Insights' trending queries and pages),
+// the breakdown tables, and one query's or page's detail: its days against the period before and the pages it shows
+// with (or the queries a page shows for). Web search only (2026-10-22): the other search types were dropped.
 import { useMemo, useState } from "react";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { ArrowUpRight } from "lucide-react";
@@ -22,12 +22,9 @@ import { DetailDrawer } from "../detail-drawer";
 import { countryName } from "../countries";
 import { useFreshData } from "../workspace-cache";
 import { Segmented } from "../data-github/segmented";
+import { formatCount, formatDate, formatPercent, formatSigned } from '#lib/format';
+import { Delta } from '#components/reach/delta';
 
-export type SearchType = "web" | "image" | "video" | "news" | "discover" | "googleNews";
-export const SEARCH_TYPES: { id: SearchType; label: () => string }[] = [
-  { id: "web", label: () => $t('searchPerformance.typeWeb') }, { id: "image", label: () => $t('searchPerformance.typeImage') }, { id: "video", label: () => $t('searchPerformance.typeVideo') },
-  { id: "news", label: () => $t('searchPerformance.typeNews') }, { id: "discover", label: () => "Discover" }, { id: "googleNews", label: () => $t('searchPerformance.typeGoogleNews') },
-];
 export type Metric = "clicks" | "impressions" | "ctr" | "position";
 export type Window = { all?: boolean; start: string; end: string; previousStart: string; previousEnd: string };
 export type BreakdownRow = { key: string; clicks: number; impressions: number; ctr: number; position: number; previousClicks: number | null; previousImpressions: number | null };
@@ -37,10 +34,10 @@ export type Movers = { rising: MoverRow[]; falling: MoverRow[]; fresh: MoverRow[
 type TrendPoint = { date: string; clicks: number | null; impressions: number | null; ctr: number | null; position: number | null; previousDate: string; previousClicks: number | null; previousImpressions: number | null; previousCtr: number | null; previousPosition: number | null };
 type RowDetail = { connected: boolean; trend: TrendPoint[]; related: { key: string; clicks: number; impressions: number; ctr: number; position: number }[] };
 // What the page knows about the report it shows, for the requests it makes on its own.
-export type Scope = { projectId: number; property?: string; compare?: boolean; type: SearchType; window: Window; country?: string; filters: Record<string, unknown> };
+export type Scope = { projectId: number; property?: string; compare?: boolean; window: Window; country?: string; filters: Record<string, unknown> };
 
-export const count = (v: number | null | undefined) => (v == null ? "—" : Math.round(v).toLocaleString(getCurrentLocale()));
-export const ctr = (v: number | null | undefined) => (v == null ? "—" : `${(v * 100).toFixed(1)}%`);
+export const count = (v: number | null | undefined) => formatCount(v == null ? v : Math.round(v));
+export const ctr = (v: number | null | undefined) => formatPercent(v);
 export const position = (v: number | null | undefined) => (v == null || !v ? "—" : v.toFixed(1));
 export const METRIC_LABEL: Record<Metric, () => string> = { clicks: () => $t('common.clicks'), impressions: () => $t('common.impressions'), ctr: () => $t('common.ctr'), position: () => $t('common.averagePosition') };
 export const showMetric = (m: Metric, v: number | null | undefined) => (m === "ctr" ? ctr(v) : m === "position" ? position(v) : count(v));
@@ -52,10 +49,11 @@ const APPEARANCE: Record<string, () => string> = {
   WEB_LIGHT_RESULT: () => $t('searchPerformance.appearanceWebLight'), VIDEO: () => $t('searchPerformance.appearanceVideo'), AMP_BLUE_LINK: () => "AMP", AMP_TOP_STORIES: () => $t('searchPerformance.appearanceTopStories'),
   RICHCARD: () => $t('searchPerformance.appearanceRichResult'), FAQ_RICH_RESULT: () => "FAQ", HOWTO_RICH_RESULT: () => "How-to", REVIEW_SNIPPET: () => $t('searchPerformance.appearanceReview'), PRODUCT_SNIPPETS: () => $t('searchPerformance.appearanceProduct'),
   MERCHANT_LISTINGS: () => $t('searchPerformance.appearanceMerchant'), TRANSLATED_RESULT: () => $t('searchPerformance.appearanceTranslated'), JOB_LISTING: () => $t('searchPerformance.appearanceJob'), EVENT: () => $t('searchPerformance.appearanceEvent'),
+  FORUMS: () => $t('searchPerformance.appearanceForums'), TPF_QA: () => $t('searchPerformance.appearanceQa'),
 };
-export const breakdownName = (kind: "country" | "device" | "appearance", key: string) => (kind === "country" ? countryName(key) : kind === "device" ? (DEVICE[key] ?? (() => key))() : (APPEARANCE[key] ?? (() => key.replaceAll("_", " ").toLowerCase()))());
-const changeText = (now: number, before: number | null) => (before == null || !before ? (now && before === 0 ? $t('searchPerformance.newRow') : "—") : `${now >= before ? "+" : ""}${(((now - before) / before) * 100).toFixed(0)}%`);
-const scopeBody = (s: Scope) => ({ projectId: s.projectId, type: s.type, compare: s.compare, ...s.window, ...(s.country ? { country: s.country } : {}), ...s.filters });
+export const breakdownName = (kind: "country" | "device" | "appearance", key: string) => (kind === "country" ? countryName(key) : kind === "device" ? (DEVICE[key] ?? (() => key))() : (APPEARANCE[key.toUpperCase()] ?? (() => $t('searchPerformance.appearanceOther', { 0: key.replaceAll("_", " ").toLowerCase() })))());
+const changeText = (now: number, before: number | null) => (before == null || !before ? (now && before === 0 ? $t('searchPerformance.newRow') : "—") : <Delta value={(now - before) / before} />);
+const scopeBody = (s: Scope) => ({ projectId: s.projectId, compare: s.compare, ...s.window, ...(s.country ? { country: s.country } : {}), ...s.filters });
 
 export function useBreakdown(scope: Scope | null) {
   return useFreshData<Breakdown>(scope ? `data-view:search-breakdown:${scope.projectId}:${JSON.stringify([scope.property,scopeBody(scope)])}` : null, () => api.action<Breakdown>("nrDataViews", "searchBreakdown", { method: "POST", body: scopeBody(scope!), unwrap: "data" }), googleHistoryFreshness);
@@ -113,7 +111,7 @@ export function MoversTable({ rows, dimension, onOpen, onHandOff, emptyNote }: {
     moverHelper.accessor("key", { enableSorting: false, header: () => (dimension === "page" ? $t('common.page') : $t('common.query')), cell: ({ getValue }) => <button type="button" className="block max-w-xl truncate text-left text-primary underline-offset-4 hover:underline" title={getValue()} onClick={() => onOpen(getValue())}>{getValue()}</button> }) as ColumnDef<MoverRow>,
     moverHelper.accessor("clicks", { header: ({ column }) => <SortableHeader column={column} label={$t('common.clicks')} align="right" />, cell: ({ getValue }) => count(getValue()), meta: right }) as ColumnDef<MoverRow>,
     moverHelper.accessor("previousClicks", { header: ({ column }) => <SortableHeader column={column} label={$t('searchPerformance.previousClicks')} align="right" help={false} />, cell: ({ getValue }) => count(getValue()), meta: right }) as ColumnDef<MoverRow>,
-    moverHelper.accessor("change", { header: ({ column }) => <SortableHeader column={column} label={$t('searchPerformance.clickChange')} align="right" help={false} />, cell: ({ getValue }) => <span className={cn(getValue() > 0 ? "nr-up" : getValue() < 0 ? "nr-down" : "")}>{getValue() > 0 ? "+" : ""}{count(getValue())}</span>, meta: right }) as ColumnDef<MoverRow>,
+    moverHelper.accessor("change", { header: ({ column }) => <SortableHeader column={column} label={$t('searchPerformance.clickChange')} align="right" help={false} />, cell: ({ getValue }) => <span className={cn(getValue() > 0 ? "nr-up" : getValue() < 0 ? "nr-down" : "")}>{formatSigned(getValue())}</span>, meta: right }) as ColumnDef<MoverRow>,
     moverHelper.accessor("impressions", { header: ({ column }) => <SortableHeader column={column} label={$t('common.impressions')} align="right" />, cell: ({ row }) => <span title={$t('searchPerformance.previousValue', { 0: count(row.original.previousImpressions) })}>{count(row.original.impressions)}</span>, meta: right }) as ColumnDef<MoverRow>,
     moverHelper.accessor((r) => r.position ?? undefined, { id: "position", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.position')} align="right" />, cell: ({ row }) => <span>{position(row.original.position)}<span className="ml-1.5 text-xs text-muted-foreground">{row.original.previousPosition != null ? `← ${position(row.original.previousPosition)}` : ""}</span></span>, meta: right }) as ColumnDef<MoverRow>,
   ], [anchorRef, dimension, onOpen]);
@@ -150,12 +148,12 @@ export const slices = (kind: "country" | "device" | "appearance", rows: Breakdow
 export function RowDrawer({ scope, dimension, rowKey, figures, metric, onClose }: { scope: Scope; dimension: "query" | "page"; rowKey: string; figures?: { clicks: number; impressions: number; ctr: number; position: number | null }; metric: Metric; onClose: () => void }) {
   const body = { ...scopeBody(scope), dimension, key: rowKey };
   const { data, error } = useFreshData<RowDetail>(`data-view:search-row:${scope.projectId}:${JSON.stringify([scope.property,body])}`, () => api.action<RowDetail>("nrDataViews", "searchRow", { method: "POST", body, unwrap: "data" }), googleHistoryFreshness);
-  const m: Metric = metric === "position" && scope.type === "discover" ? "clicks" : metric;
+  const m: Metric = metric;
   const prevKey = `previous${m[0].toUpperCase()}${m.slice(1)}` as keyof TrendPoint;
   const points = (data?.trend ?? []).map((p) => ({ date: p.date, value: p[m], previous: p[prevKey] }));
   const page = dimension === "page" && safeLink(rowKey) ? safeLink(rowKey)! : null;
   return (
-    <DetailDrawer open onClose={onClose} title={`${dimension === "page" ? $t('common.page') : $t('common.query')} · ${rowKey}`} description={$t('common.range', { 0: scope.window.start, 1: scope.window.end })}>
+    <DetailDrawer open onClose={onClose} title={`${dimension === "page" ? $t('common.page') : $t('common.query')} · ${rowKey}`} description={$t('common.range', { 0: formatDate(scope.window.start), 1: formatDate(scope.window.end) })}>
       {page ? <a className="nr-link mb-3 inline-flex items-center gap-1 break-all" href={page} target="_blank" rel="noreferrer">{rowKey}<ArrowUpRight className="size-3.5" /></a> : null}
       {figures ? (
         <table className="w-full text-sm" data-row-figures="">
@@ -177,7 +175,7 @@ export function RowDrawer({ scope, dimension, rowKey, figures, metric, onClose }
           </ResponsiveContainer>
         </div>
       )}
-      {data && !(dimension === "page" && (scope.type === "discover" || scope.type === "googleNews")) ? (
+      {data ? (
         <>
           <h3 className="mt-5 mb-1 text-sm font-semibold">{dimension === "query" ? $t('searchPerformance.pagesForQuery') : $t('searchPerformance.queriesForPage')}</h3>
           {data.related.length ? (

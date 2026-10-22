@@ -114,7 +114,7 @@ test('the Agent is chosen in the header, and Start waits for one', async () => {
   expect(start).toBeDisabled();
   expect(agentMenu()).toHaveTextContent('Agent · 未选择');
   expect(screen.getByText('先在上方选一个 Agent。')).toBeVisible();
-  expect(screen.queryByRole('combobox', { name: '执行 Agent' })).toBeNull();
+  expect(screen.queryByRole('combobox', { name: '本地 Agent' })).toBeNull();
   const selected = structuredClone(data);
   selected.work.agentId = 'codex';
   selected.work.agentName = 'NocoReach Codex';
@@ -565,4 +565,99 @@ test('an environment Demo Agent can start without selecting or changing a real R
         command === 'advance' && options?.body?.command === 'setAgent',
     ),
   ).toHaveLength(0);
+});
+
+// 2026-10-21 user report: a run that failed because Claude Code was not signed in said "the coding tool on that
+// computer (such as Codex or Claude Code)" while the header showed the Agent online, and pushed Try again.
+test('a sign-in failure names the computer and the tool, and does not push Try again', () => {
+  const data = failedWithRemovedAgent();
+  data.work.agentId = 'codex';
+  data.agent!.agentId = 'codex';
+  data.agent!.online = true;
+  data.execution = {
+    runId: 'run',
+    run: {
+      failureReason: 'toolAuth',
+      failureDetail: 'Not logged in · Please run /login',
+      executions: [
+        {
+          attempt: 1,
+          runnerId: 'r1',
+          runnerName: 'Office-Mac',
+          tool: 'claude',
+        },
+      ],
+    },
+    events: [],
+    truncated: false,
+    canInspect: true,
+  };
+  const view = mount(data);
+  expect(
+    screen.getByText('Office-Mac 上的 Claude Code 没有登录。'),
+  ).toBeVisible();
+  expect(
+    screen.getByText(
+      '请管理这台电脑的人在上面登录 Claude Code，或在上方换一个 Agent。',
+    ),
+  ).toBeVisible();
+  expect(
+    screen.getByText('Agent 显示“在线”，只说明这台电脑连上了 NocoReach。'),
+  ).toBeVisible();
+  const retry = screen.getByRole('button', { name: '再试一次' });
+  expect(retry).toBeEnabled();
+  expect(retry).not.toHaveClass('bg-primary');
+  expect(screen.getByRole('button', { name: '我自己完成' })).toBeVisible();
+  view.unmount();
+
+  // A reader who may not see the computer still learns which tool; without either, the general wording stays.
+  data.execution.run.executions = [
+    {
+      attempt: 1,
+      runnerId: 'r1',
+      runnerName: null,
+      tool: 'claude',
+      machineHidden: true,
+    },
+  ];
+  data.agent!.online = false;
+  const hidden = mount(data);
+  expect(
+    screen.getByText('运行 Agent 的电脑上的 Claude Code 没有登录。'),
+  ).toBeVisible();
+  expect(screen.queryByText(/只说明这台电脑连上了/)).toBeNull();
+  hidden.unmount();
+  data.execution.run.executions = [];
+  mount(data);
+  expect(
+    screen.getByText('那台电脑上的编码工具（如 Codex、Claude Code）没有登录。'),
+  ).toBeVisible();
+});
+
+test('Try again stays the main action when retrying can help', () => {
+  const data = failedWithRemovedAgent();
+  data.work.agentId = 'codex';
+  data.agent!.agentId = 'codex';
+  data.execution = {
+    runId: 'run',
+    run: {
+      failureReason: 'runnerOffline',
+      executions: [
+        {
+          attempt: 1,
+          runnerId: 'r1',
+          runnerName: 'Office-Mac',
+          tool: 'codex',
+        },
+      ],
+    },
+    events: [],
+    truncated: false,
+    canInspect: true,
+  };
+  mount(data);
+  expect(screen.getByText(/^Office-Mac 中途断开了连接/)).toBeVisible();
+  expect(screen.getByRole('button', { name: '再试一次' })).toHaveClass(
+    'bg-primary',
+  );
 });

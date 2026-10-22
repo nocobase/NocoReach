@@ -468,7 +468,7 @@ describe('访问', () => {
     expect(within(card).getByText('昨天同时段')).toBeTruthy();
     expect(within(card).getByText('12%', { exact: false })).toBeTruthy();
     expect(
-      within(card).getByText('截至 14:00 · Asia/Shanghai · 每 10 分钟更新'),
+      within(card).getByText('截至 14:00 · 中国标准时间 · 每 10 分钟更新'),
     ).toBeTruthy();
     expect(within(card).getByText('ChatGPT')).toBeTruthy();
     await userEvent.click(
@@ -585,17 +585,25 @@ describe('访问', () => {
       name === 'website' ? suspect : fallback(resource, name),
     );
     renderPage();
-    // Active users are picked: the note about the channel shows, in full, and the one about key events does not.
+    // Active users are picked: the note about the channel shows, one line with why and how to fix it in its ⓘ, and
+    // the one about key events does not.
     const notes = await screen.findByRole('region', { name: '数据可能有问题' });
     expect(
       within(notes).getByText('「未分配」渠道可能混有机器人流量'),
     ).toBeTruthy();
+    expect(screen.queryByText('怎么处理：')).toBeNull();
+    await userEvent.click(
+      within(notes).getByRole('button', {
+        name: '「未分配」渠道可能混有机器人流量是什么',
+      }),
+    );
     expect(
-      within(notes).getByText(
+      await screen.findByText(
         '它占会话 10.0%，互动率只有 1.0%，全站是 60.0%。',
       ),
     ).toBeTruthy();
-    expect(within(notes).getAllByText('怎么处理：')).toHaveLength(1);
+    expect(screen.getAllByText('怎么处理：')).toHaveLength(1);
+    await userEvent.keyboard('{Escape}');
     expect(within(notes).queryByText('关键事件率 30.0% 偏高')).toBeNull();
     expect(
       document.querySelector('[data-change-drivers]')?.textContent,
@@ -680,7 +688,7 @@ describe('访问', () => {
       ),
     );
     expect(within(drawer).getByText('前一期')).toBeTruthy();
-    expect(within(drawer).getAllByText('+25.0%').length).toBeGreaterThan(0);
+    expect(within(drawer).getAllByText('↑ 25%').length).toBeGreaterThan(0);
     await userEvent.click(
       within(drawer).getByRole('button', { name: '关闭详情' }),
     );

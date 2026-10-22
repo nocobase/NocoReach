@@ -53,6 +53,7 @@ import type {
   ResultBoard,
   ResultSummary,
 } from './types.js';
+import { formatDate } from '#lib/format';
 
 // 成果 (2026-10-16, user-confirmed sketch): a dashboard of the project's own work only — what went live in the period,
 // whether the pages it changed moved, and the results that need a look. Site-wide figures stay on 洞察 and the data
@@ -143,7 +144,10 @@ function ResultsBoard({ projectId }: { projectId: string }) {
         description={$t('results.board.description')}
         info={
           <InfoTip label={$t('common.aboutData')}>
-            {$t('results.board.caveat')}
+            <span className='flex flex-col gap-1'>
+              <span>{$t('results.board.caveat')}</span>
+              <span>{$t('results.board.utc')}</span>
+            </span>
           </InfoTip>
         }
         actions={
@@ -185,8 +189,8 @@ function ResultsBoard({ projectId }: { projectId: string }) {
             </span>
           ) : board?.window.start ? (
             $t('results.board.window', {
-              0: board.window.start,
-              1: board.window.end,
+              0: formatDate(board.window.start),
+              1: formatDate(board.window.end),
             })
           ) : undefined
         }
@@ -474,9 +478,7 @@ function RecentCard({ items }: { items: ResultSummary[] }) {
                   <TableCell className='tabular-nums'>
                     {item.phase === 'live' && item.occurredAt
                       ? shortDate(item.occurredAt)
-                      : item.phase === 'pendingLive'
-                        ? $t('results.board.notLive')
-                        : '—'}
+                      : '—'}
                   </TableCell>
                   <TableCell>
                     <ResultTag

@@ -1,4 +1,4 @@
-import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { useMessageState, $t, $tj, $legacyText } from "#i18n";
 // 竞品 › 总览 (2026-10-05, after Semrush and Similarweb): our site and each competitor side by side — estimated organic
 // search traffic and its year, ranking keywords (DataForSEO, updated monthly by itself) next to Google interest, GitHub
 // stars, the AI share of mentions and the last 30 days, all already collected. A row opens the competitor: its traffic
@@ -24,14 +24,17 @@ import { competitorKeywordsDraft } from "./seo-hand-off";
 import { rankOf, rankRequest, type Ranks } from "./keyword-api";
 import { help } from "./glossary";
 import { CompetitorWatchTab } from "./competitor-watch";
+import { formatCount, formatDate, formatSigned } from '#lib/format';
+import { Delta } from '#components/reach/delta';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#components/ui/select';
 
 type Gap = { keyword: string; volume: number | null; difficulty: number | null; intent: string | null; position: number | null; url: string | null; traffic: number | null };
 type Row = { id: string; name: string; domain: string | null; own: boolean; searched: boolean; checkedAt: string | null; errors: string[]; traffic: number | null; trafficChange: number | null; keywords: number | null; top10: number | null; months: { date: string; etv: number | null; count: number | null }[]; interest: number | null; interestChange: number | null; stars: number | null; starsWeek: number | null; aiShare: number | null; pages30: number; release: string | null; gap: Gap[]; topPages: { url: string; traffic: number | null; keywords: number | null }[]; events: { type: string; title: string; url: string; at: string }[] };
 type View = { dataforseo: boolean; market: { locationCode: number; language: string }; marketLabel: string; markets: { locationCode: number; language: string; label: string }[]; refreshing: boolean; sites: Row[]; notes: string[] };
 const call = <T,>(projectId: number, action: string, body: object = {}) => api.action<T>("nrCompetitorResearch", action, { method: "POST", body: { projectId, ...body }, unwrap: "data" });
-const short = (v: number | null) => (v === null ? "—" : v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e4 ? `${Math.round(v / 1000)}K` : v.toLocaleString(getCurrentLocale()));
+const short = (v: number | null) => formatCount(v);
 const pct = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%`);
-const delta = (v: number | null) => (v === null ? null : <span className={v >= 0 ? "text-nr-ink-green" : "text-nr-ink-red"}>{v >= 0 ? "↑" : "↓"}{Math.abs(Math.round(v * 100))}%</span>);
+const delta = (v: number | null) => <Delta value={v} />;
 const pathOf = (u: string) => { try { return new URL(u).pathname || "/"; } catch { return u; } };
 const helper = createColumnHelper<Row>();
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
@@ -56,6 +59,7 @@ export function CompetitorOverview({ projectId, onManage }: { projectId: number;
     try { setView(await call<View>(projectId, "market", { locationCode: Number(locationCode), language })); toast.success(() => ($t('competitorOverview.checkingSearchDataNewMarket'))); }
     catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('competitorOverview.noChange'))); }
   };
+  const hasAiShare = (view?.sites ?? []).some((r) => r.aiShare != null);
   const columns = useMemo<ColumnDef<Row>[]>(() => [
     helper.accessor("name", { enableSorting: false, header: () => $t('competitorOverview.website'), cell: ({ row }) => { const r = row.original; return <div className="min-w-0"><span className="flex items-center gap-1.5 font-medium">{r.name}{r.own ? <Tag tone="blue">{$t('common.us')}</Tag> : null}</span><span className="block truncate text-xs text-muted-foreground">{r.domain || $t('competitorOverview.noWebsite')}</span></div>; } }) as ColumnDef<Row>,
     helper.accessor((r) => r.traffic ?? undefined, { id: "traffic", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('competitorOverview.organicSearchTraffic')} align="right" />, cell: ({ row }) => <span className="inline-flex items-baseline gap-1.5">{short(row.original.traffic)}<span className="text-xs">{delta(row.original.trafficChange)}</span></span>, meta: right }) as ColumnDef<Row>,
@@ -63,10 +67,11 @@ export function CompetitorOverview({ projectId, onManage }: { projectId: number;
     helper.accessor((r) => r.keywords ?? undefined, { id: "keywords", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.rankingKeywords')} align="right" />, cell: ({ row }) => short(row.original.keywords), meta: right }) as ColumnDef<Row>,
     helper.accessor((r) => r.top10 ?? undefined, { id: "top10", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.top10')} align="right" />, cell: ({ row }) => short(row.original.top10), meta: right }) as ColumnDef<Row>,
     helper.accessor((r) => r.interest ?? undefined, { id: "interest", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.googleInterest')} align="right" />, cell: ({ row }) => row.original.interest ?? "—", meta: right }) as ColumnDef<Row>,
-    helper.accessor((r) => r.stars ?? undefined, { id: "stars", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="GitHub Star" align="right" help={$t('competitorOverview.currentStarsRepositorySmallNumber')} />, cell: ({ row }) => <span className="inline-flex items-baseline gap-1.5">{short(row.original.stars)}{row.original.starsWeek ? <span className="text-xs text-muted-foreground">{$tj('competitorOverview.week',{0:row.original.starsWeek})}</span> : null}</span>, meta: right }) as ColumnDef<Row>,
-    helper.accessor((r) => r.aiShare ?? undefined, { id: "ai", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.aiShareVoice')} align="right" />, cell: ({ row }) => pct(row.original.aiShare), meta: right }) as ColumnDef<Row>,
-    helper.display({ id: "recent", header: () => <WithInfo help={help($t('common.last30Days'))}>{$t('common.last30Days')}</WithInfo>, cell: ({ row }) => { const r = row.original; return <span className="text-xs text-muted-foreground">{$tj('competitorOverview.newPageCountDetail',{0:r.pages30,1:r.release ? ` · ${r.release}` : ""})}</span>; } }) as ColumnDef<Row>,
-  ], []);
+    helper.accessor((r) => r.stars ?? undefined, { id: "stars", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="GitHub Star" align="right" help={$t('competitorOverview.currentStarsRepositorySmallNumber')} />, cell: ({ row }) => <span className="inline-flex items-baseline gap-1.5">{short(row.original.stars)}{row.original.starsWeek ? <span className="text-xs text-muted-foreground">{$tj('competitorOverview.week',{0:formatSigned(row.original.starsWeek)})}</span> : null}</span>, meta: right }) as ColumnDef<Row>,
+    // No AI share column until a brand check has measured one (UI review 2026-10-21: an all-dash column).
+    ...(hasAiShare ? [helper.accessor((r) => r.aiShare ?? undefined, { id: "ai", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.aiShareVoice')} align="right" />, cell: ({ row }) => pct(row.original.aiShare), meta: right }) as ColumnDef<Row>] : []),
+    helper.display({ id: "recent", header: () => <WithInfo help={help($t('common.last30Days'))}>{$t('common.last30Days')}</WithInfo>, cell: ({ row }) => { const r = row.original; const text = $t('competitorOverview.newPageCountDetail',{0:r.pages30,1:r.release ? ` · ${r.release}` : ""}); return <span className="block max-w-56 truncate text-xs text-muted-foreground" title={text}>{text}</span>; } }) as ColumnDef<Row>,
+  ], [hasAiShare]);
   const rows = view?.sites ?? [];
   const table = useDataTable({ data: rows, columns, withSorting: true, getRowId: (r) => r.id });
   if (error) return <LoadError title={$t('competitorOverview.notLoadCompetitorOverview')} message={error} onRetry={() => void load()} />;
@@ -82,9 +87,10 @@ export function CompetitorOverview({ projectId, onManage }: { projectId: number;
           <NotesTip notes={view.notes} label={$t('competitorOverview.whereOverviewDataComes')} side="bottom" />
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          {view.dataforseo ? <select aria-label={$t('competitorOverview.searchDataMarket')} className="h-8 rounded-md border bg-background px-2 text-sm" value={`${view.market.locationCode}|${view.market.language}`} disabled={view.refreshing} onChange={(e) => void changeMarket(e.target.value)}>
-            {view.markets.map((m) => <option key={`${m.locationCode}|${m.language}`} value={`${m.locationCode}|${m.language}`}>{$t(m.label)}</option>)}
-          </select> : null}
+          {view.dataforseo ? <Select value={`${view.market.locationCode}|${view.market.language}`} disabled={view.refreshing} onValueChange={(v) => void changeMarket(String(v))}>
+            <SelectTrigger size="sm" className="w-full sm:w-40" aria-label={$t('competitorOverview.searchDataMarket')}><SelectValue>{(v: string) => $t(view.markets.find((m) => `${m.locationCode}|${m.language}` === v)?.label ?? "")}</SelectValue></SelectTrigger>
+            <SelectContent align="end" className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{view.markets.map((m) => <SelectItem key={`${m.locationCode}|${m.language}`} value={`${m.locationCode}|${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
+          </Select> : null}
           <Button size="sm" variant="outline" onClick={onManage}>{$t('competitorOverview.addRemoveCompetitors')}</Button>
         </div>
       </div>
@@ -105,7 +111,7 @@ function CompetitorDetail({ projectId, r, market, dataforseo, onClose }: { proje
   const chosen = r.gap.filter((g) => picked[g.keyword]);
   const tile = (label: string, value: string) => <div className="rounded-lg border bg-card p-3"><p className="text-xs text-muted-foreground"><WithInfo help={help(label)}>{label}</WithInfo></p><p className="text-xl font-semibold tabular-nums">{value}</p></div>;
   return (
-    <DetailDrawer open onClose={onClose} title={r.name} description={`${r.domain || $t('competitorOverview.noWebsite')}${r.searched ? $t('competitorOverview.updated',{0:market,1:new Date(r.checkedAt!).toLocaleDateString(getCurrentLocale())}) : ""}`}
+    <DetailDrawer open onClose={onClose} title={r.name} description={`${r.domain || $t('competitorOverview.noWebsite')}${r.searched ? $t('competitorOverview.updated',{0:market,1:formatDate(r.checkedAt)}) : ""}`}
       actions={!r.own && r.gap.length ? <SectionHandOff projectId={projectId} disabled={!chosen.length} playbookId="content-outline" label={chosen.length ? $t('common.handOffAgentValue',{0:chosen.length}) : $t('common.handOffAgent')} description={$t('competitorOverview.keywordHandoffHelp')} draft={() => competitorKeywordsDraft(r.domain || r.name, market, chosen.map((g) => ({ keyword: g.keyword, position: g.position, volume: g.volume, traffic: g.traffic, url: g.url, difficulty: g.difficulty, intent: g.intent })))} /> : undefined}>
       <div className="space-y-5">
         {r.errors.length ? <InlineError>{$tj('common.checkIncomplete',{0:$legacyText(r.errors[0])})}</InlineError> : null}
@@ -155,7 +161,7 @@ function CompetitorDetail({ projectId, r, market, dataforseo, onClose }: { proje
         {r.events.length ? (
           <section className="space-y-1">
             <h3 className="text-sm font-semibold">{$t('competitorOverview.recentActivity')}</h3>
-            {r.events.map((e) => <p key={e.url + e.at} className="flex items-center gap-2 text-sm"><Tag tone={e.type === "release" ? "violet" : "grey"}>{e.type === "release" ? $t('common.newRelease') : $t('common.newPages')}</Tag><a className="nr-link min-w-0 flex-1 truncate" href={e.url} target="_blank" rel="noreferrer">{e.title}<ExternalLink className="ml-0.5 inline size-3" /></a><span className="shrink-0 text-xs text-muted-foreground">{e.at.slice(5, 10)}</span></p>)}
+            {r.events.map((e) => <p key={e.url + e.at} className="flex items-center gap-2 text-sm"><Tag tone={e.type === "release" ? "violet" : "grey"}>{e.type === "release" ? $t('common.newRelease') : $t('common.newPages')}</Tag><a className="nr-link min-w-0 flex-1 truncate" href={e.url} target="_blank" rel="noreferrer">{e.title}<ExternalLink className="ml-0.5 inline size-3" /></a><span className="shrink-0 text-xs text-muted-foreground">{formatDate(e.at.slice(0, 10))}</span></p>)}
           </section>
         ) : null}
       </div>

@@ -16,6 +16,21 @@ export function scheduleDay(date: Date, timezone?: string): string {
   return `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, '0')}-${String(local.getDate()).padStart(2, '0')}`;
 }
 
+/** The next firing after `now`, or null when the expression does not parse. */
+export function nextScheduled(
+  cron: string,
+  now = new Date(),
+  timezone?: string,
+): Date | null {
+  try {
+    return CronExpressionParser.parse(cron, { currentDate: now, tz: timezone })
+      .next()
+      .toDate();
+  } catch {
+    return null;
+  }
+}
+
 /** The first firing in today's task-local day, using the Jobs parser's DST rules. */
 export function scheduledToday(
   cron: string,

@@ -1,8 +1,18 @@
 // @ts-nocheck
 import type { Agents } from '@nocobase/app-plugin-agents/server/tokens';
+import { runForViewer } from '@nocobase/app-plugin-agents/server/tokens';
 import type { LegacyTransaction } from '../legacy/database.js';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { fail, text } from './model';
+import { TASK_SUBJECT } from './agents-runtime';
+
+// Failures that last until someone acts: signs the coding tool in, tops up its quota, picks a model the account has or
+// fixes the computer's setup. Any other failure (a lost connection, a slow network, a stuck run) may pass on a retry.
+const NEEDS_ATTENTION: Record<string, 'toolLogin' | 'quota' | 'model' | 'setup'> = {
+  toolAuth: 'toolLogin', toolQuota: 'quota', modelUnavailable: 'model', setupFailed: 'setup', cliUnavailable: 'setup',
+  checkoutFailed: 'setup', repoAccessDenied: 'setup', repoAccessUnavailable: 'setup', runnerDiskFull: 'setup',
+};
+const HEALTH_RUNS = 10;
 
 export type RepoConfig = { repo: string; baseBranch: string; allowedPaths: string[]; contentCheck: boolean };
 export type AgentDoc = { revision: number; agentId: string | null; repo: RepoConfig | null };
@@ -35,7 +45,7 @@ export class AgentStore {
   async doc(project: string, tx?: LegacyTransaction): Promise<AgentDoc> {
     return (await this.s.snapshot(this.key(project), tx) as AgentDoc | null) || { revision: 0, agentId: null, repo: null };
   }
-  async status(project: string, taskAgentId?: string, actor?: string) {
+  async status(project: string, taskAgentId?: string, actor?: string, viewer?: { seesMachines: boolean }) {
     const d = await this.doc(project), agents = this.s.p.agents;
     const proxy = this.s.p.demoAgent;
     if (proxy && this.s.p.demoConfiguration?.enabled) {
@@ -51,7 +61,31 @@ export class AgentStore {
     // Call outside business transactions: model and actor eligibility checks open plugin reads.
     const availability = await agents.availability(conn, options, actor);
     const choices = options.map(a => ({ id: a.id, name: a.name, type: 'runner', online: Boolean(availability.get(a.id)?.online), busy: availability.get(a.id)?.busy || 0 }));
-    return { ...d, agentId, defaultAgentId: d.agentId, options: choices, online: Boolean(choices.find(a => a.id === agentId)?.online) };
+    const status = { ...d, agentId, defaultAgentId: d.agentId, options: choices, online: Boolean(choices.find(a => a.id === agentId)?.online) };
+    if (!viewer || !actor) return status;
+    // The Agent page also asks how each agent's latest tasks ended and where the chosen one runs (2026-10-21 user report:
+    // the page said Available while every task failed because the coding tool was not signed in).
+    const machines = { userId: actor, seesMachines: viewer.seesMachines };
+    const health = await Promise.all(choices.map(a => this.health(a.id, machines)));
+    const view = agentId ? (await agents.views(conn, actor, { canEdit: false })).find(v => v.id === agentId) : undefined;
+    const runners = view?.runners ? { team: view.runners.team, personal: view.runners.personal, mine: view.runners.mine, names: viewer.seesMachines ? view.runners.names : [] } : null;
+    return { ...status, options: choices.map((a, i) => ({ ...a, health: health[i] })), runners };
+  }
+  /** How the agent's latest task runs ended: a failure that lasts until someone acts is reported with how many in a row. */
+  async health(agentId: string, viewer: { userId: string; seesMachines: boolean }) {
+    const runs = (await this.s.p.agents.runs.list({ agentId, subjectKind: TASK_SUBJECT, limit: HEALTH_RUNS }))
+      .filter(r => r.status === 'completed' || r.status === 'failed');
+    const latest = runs[0];
+    if (!latest) return { state: 'unknown' };
+    const group = latest.status === 'failed' ? NEEDS_ATTENTION[latest.failureReason || ''] : undefined;
+    if (!group) return { state: 'ok', at: latest.finishedAt, outcome: latest.status };
+    let count = 0;
+    for (const r of runs) {
+      if (r.status !== 'failed' || NEEDS_ATTENTION[r.failureReason || ''] !== group) break;
+      count++;
+    }
+    const last = runForViewer(latest, viewer).executions?.at(-1);
+    return { state: 'attention', group, count, at: latest.finishedAt, runnerName: last && !last.machineHidden ? last.runnerName : null, tool: last?.tool ?? latest.tool ?? null };
   }
   async taskAgent(agentId: unknown, actor: string, tx: LegacyTransaction, project?: string) {
     const proxy = this.s.p.demoAgent;

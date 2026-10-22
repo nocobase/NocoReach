@@ -8,6 +8,7 @@ import {
   useWorkspaceCache,
   useWorkspaceCacheRevision,
 } from './workspace-cache';
+import { formatDate } from '#lib/format';
 
 export interface ReportWindow {
   start: string;
@@ -199,6 +200,13 @@ export function useCollectorReport<T extends CollectorReport>(
 export function windowSummary(w: ReportWindow | undefined) {
   if (!w) return undefined;
   return w.all
-    ? $t('rangePicker.availableRange', { 0: w.start, 1: w.end })
-    : $t('common.comparedPreviousDays', { 0: w.start, 1: w.end, 2: w.days });
+    ? $t('rangePicker.availableRange', {
+        0: formatDate(w.start),
+        1: formatDate(w.end),
+      })
+    : $t('common.comparedPreviousDays', {
+        0: formatDate(w.start),
+        1: formatDate(w.end),
+        2: w.days,
+      });
 }

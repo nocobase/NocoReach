@@ -25,6 +25,13 @@ import { toast } from '#lib/toast';
 import type { KnowledgeTabContext } from './knowledge-base';
 import { day, getCategories, request, type Item } from './model';
 import { CloseButton } from './memory-edit';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '#components/ui/select';
 
 // One material, at /project/knowledge/<id> over the list: its title and category (editable), where it came from, and
 // its full text; it can be deleted from here too.
@@ -196,17 +203,29 @@ function ItemDrawer({
           </label>
           <label className='nr-field'>
             {$t('common.category')}
-            <select
+            <Select
               value={category}
               disabled={!canEdit || busy}
-              onChange={(e) => setCategory(e.target.value)}
+              onValueChange={(v) => setCategory(String(v))}
             >
-              {getCategories().map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger
+                className='w-full'
+                aria-label={$t('common.category')}
+              >
+                <SelectValue>
+                  {(v: string) =>
+                    getCategories().find(([k]) => k === v)?.[1] ?? v
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent className='w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal'>
+                {getCategories().map(([k, v]) => (
+                  <SelectItem key={k} value={k}>
+                    {v}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </label>
         </div>
         {error ? (

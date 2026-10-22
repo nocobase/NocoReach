@@ -1,6 +1,13 @@
 import { I18nRuntime } from '@nocobase/i18n';
 import { I18nProvider } from '@nocobase/i18n/client';
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, test, vi } from 'vitest';
 import {
@@ -14,6 +21,20 @@ import { DiscoveryBox, type Finding } from '../../client/pages/discovery-box';
 const { action } = vi.hoisted(() => ({ action: vi.fn() }));
 vi.mock('../../client/lib/nocoreach-api', () => ({
   nocobaseClient: { action, wrapRequests: vi.fn() },
+}));
+vi.mock('../../client/components/agent-setup-dialog', () => ({
+  AgentSetupDialog: ({
+    open,
+    connections,
+  }: {
+    open: boolean;
+    connections?: { projectId: string; projectName: string };
+  }) =>
+    open ? (
+      <div role='dialog' aria-label='Agent setup'>
+        {connections?.projectId} {connections?.projectName}
+      </div>
+    ) : null,
 }));
 let disconnect: (() => void) | undefined;
 afterEach(() => {
@@ -30,7 +51,14 @@ function Page({
   onDone: () => void;
 }) {
   useNocoReachLocale();
-  return <DiscoveryBox projectId={42} open={open} onDone={onDone} />;
+  return (
+    <DiscoveryBox
+      projectId={42}
+      projectName='Acme'
+      open={open}
+      onDone={onDone}
+    />
+  );
 }
 const finding = (
   source: string,
@@ -146,6 +174,12 @@ test('only new direct sources are selected; connected sources cannot reconnect a
     ).toBeNull();
   await user.click(screen.getByRole('button', { name: 'Authorize' }));
   expect(open).toHaveBeenCalledWith('gsc');
+  // Authorizing closes the findings for the source's drawer; discovering again brings them back.
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+  );
+  await user.click(screen.getByRole('button', { name: 'Discover data' }));
+  await screen.findByRole('checkbox', { name: 'Connect docs.acme.dev' });
   await act(() => runtime.changeLanguage('zh-CN'));
   expect(screen.getAllByText('已接入')).toHaveLength(6);
   expect(
@@ -179,9 +213,13 @@ test('only new direct sources are selected; connected sources cannot reconnect a
       },
     ],
   ]);
+  await user.click(screen.getByRole('button', { name: 'Done' }));
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+  );
   await user.click(screen.getByRole('button', { name: 'Discover data' }));
   await user.click(
-    screen.getByRole('checkbox', { name: 'Connect docs.acme.dev' }),
+    await screen.findByRole('checkbox', { name: 'Connect docs.acme.dev' }),
   );
   await user.click(screen.getByRole('radio', { name: 'Connect acme/new' }));
   expect(screen.getByRole('radio', { name: 'Connect acme/new' })).toBeChecked();
@@ -271,6 +309,7 @@ function Prefilled({
     <DiscoveryBox
       key={projectId}
       projectId={projectId}
+      projectName='Acme'
       defaultUrl={defaultUrl}
       open={() => {}}
       onDone={() => {}}
@@ -313,6 +352,7 @@ function Refreshing({ refreshKey }: { refreshKey: number }) {
   return (
     <DiscoveryBox
       projectId={42}
+      projectName='Acme'
       refreshKey={refreshKey}
       open={() => {}}
       onDone={() => {}}
@@ -394,4 +434,90 @@ test('after the page reloads saved connections, listed findings show their new s
     body: { projectId: 42, items },
     unwrap: 'data',
   });
+});
+
+test('offers the website rules and the person’s own agent side by side, without presenting the rules as AI', async () => {
+  const runtime = new I18nRuntime({
+    defaultLocale: 'en-US',
+    locales: ['en-US', 'zh-CN'],
+    applicationNamespace: 'nocoreach',
+  });
+  runtime.registerApplicationNamespace('nocoreach', locales);
+  await runtime.init();
+  disconnect = connectLocale(runtime);
+  const user = userEvent.setup();
+  render(
+    <I18nProvider runtime={runtime}>
+      <Page open={() => {}} onDone={() => {}} />
+    </I18nProvider>,
+  );
+  expect(
+    screen.getByRole('heading', { name: 'Find data sources on your website' }),
+  ).toBeVisible();
+  expect(
+    screen.getByRole('heading', { name: 'Use an agent on your computer' }),
+  ).toBeVisible();
+  expect(document.body).toHaveTextContent(
+    'Rather not connect sources one by one?',
+  );
+  expect(document.querySelector('[data-actor]')).toBeNull();
+  expect(document.body).not.toHaveTextContent(/\bAI\b/u);
+  await user.click(
+    screen.getByRole('button', { name: 'Copy instructions for your agent' }),
+  );
+  expect(screen.getByRole('dialog', { name: 'Agent setup' })).toHaveTextContent(
+    '42 Acme',
+  );
+  expect(action).not.toHaveBeenCalled();
+});
+
+test('lists the findings in a dialog that closes, without the site’s own title and description', async () => {
+  action.mockImplementation(async (resource) =>
+    resource === 'nrDiscovery'
+      ? {
+          origin: 'https://www.acme.dev',
+          title: 'Acme title',
+          description: 'Acme description',
+          items: [
+            finding('site', 'https://www.acme.dev', 'direct', {
+              status: 'new',
+            }),
+          ],
+        }
+      : {},
+  );
+  const runtime = new I18nRuntime({
+    defaultLocale: 'en-US',
+    locales: ['en-US', 'zh-CN'],
+    applicationNamespace: 'nocoreach',
+  });
+  runtime.registerApplicationNamespace('nocoreach', locales);
+  await runtime.init();
+  disconnect = connectLocale(runtime);
+  const user = userEvent.setup();
+  render(
+    <I18nProvider runtime={runtime}>
+      <Page open={() => {}} onDone={() => {}} />
+    </I18nProvider>,
+  );
+  await user.type(screen.getByRole('textbox'), 'https://www.acme.dev');
+  await user.click(screen.getByRole('button', { name: 'Discover data' }));
+  const dialog = await screen.findByRole('dialog', {
+    name: 'Data sources found on www.acme.dev: 1',
+  });
+  expect(
+    within(dialog).getByRole('checkbox', {
+      name: 'Connect https://www.acme.dev',
+    }),
+  ).toBeChecked();
+  expect(document.body).not.toHaveTextContent('Acme title');
+  expect(document.body).not.toHaveTextContent('Acme description');
+  // The footer's Close, beside the corner ×.
+  await user.click(
+    within(dialog).getAllByRole('button', { name: 'Close' }).at(-1)!,
+  );
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+  );
+  expect(screen.getByRole('textbox')).toHaveValue('https://www.acme.dev');
 });

@@ -1,16 +1,14 @@
 import {signalDisposition} from '../../../shared/strategy-pending.js';
 import {WAITING_TASKS_URL} from '../task-waiting';
-import { useMessageState, getCurrentLocale, $t, $tj, $legacyText, $legacyFragment, $legacyJsx } from "#i18n";
-import {useEffect,useRef,useState,type ReactElement} from 'react';
+import { $t, $tj, $legacyText, $legacyFragment, $legacyJsx } from "#i18n";
+import {useState,type ReactElement} from 'react';
 import {useNavigate} from 'react-router';
-import {BellIcon,ArrowRightIcon,BotIcon,ChevronRightIcon,SparklesIcon} from 'lucide-react';
+import {BellIcon,ArrowRightIcon,BotIcon,ChevronDownIcon,ChevronRightIcon,SparklesIcon} from 'lucide-react';
 import {AiMark} from '#components/reach/actor';
-import {judgeMissing,judgeSignal,request} from './service';
 import {Button} from '#components/ui/button';
 import {Section} from '#components/reach/page';
-import {InfoTip} from '#components/reach/info-tip';
 import {Tag,type Tone} from '#components/reach/tag';
-import {citedSignals,reasonLine,getSourceNames,type Row} from './board';
+import {getSourceNames,type Row} from './board';
 import type {StrategyState,Signal,WatchRecord} from './model';
 import {type Work} from '../task-execution-types';
 import {DetailDrawer} from '../detail-drawer';
@@ -18,7 +16,7 @@ import {DraftHandOffDialog,type TaskDraft} from '../keyword-hand-off';
 import {SectionHandOff} from '../section-hand-off';
 import {AllCheck,RowCheck,useSelection} from '#components/reach/hand-off-slot';
 import type {HandOffResult} from './hand-off';
-import {verdictsOf,watchDays,watchOf,daysBetween,type Verdict} from './watch';
+import {daysBetween,type Verdict} from './watch';
 // 洞察 building blocks (SPEC §5): numbers and changes first, one line each; no paragraphs.
 export type Metric={key:string;label:string;value:number|null;previous:number|null;complete:boolean;change:number|null};
 export type SourceCard={id:string;cutoff:string|null;window:{start:string;end:string;days:number};metrics:Metric[];series:{date:string;value:number|null}[];seriesBy?:Record<string,{date:string;value:number|null}[]>};
@@ -45,28 +43,25 @@ export function chipOf(s:Signal):{tone:Tone;text:string}|null{
 }
 export const titleOf=(s:Signal)=>$legacyText(s.title.replace(/(下降|减少)\s*-(\d)/,'$1 $2').replace(/(上升|增加)\s*\+(\d)/,'$1 $2'));
 const pct=(n:number)=>`${Math.abs(n)>=0.095?Math.round(Math.abs(n)*100):(Math.abs(n)*100).toFixed(1)}%`;
-function Sparkline({points,change}:{points:{value:number|null}[];change?:number|null}):ReactElement|null{
+type Point={value:number|null};
+export function Sparkline({points,change}:{points:Point[];change?:number|null}):ReactElement|null{
  const v=points.map(p=>p.value).filter((x):x is number=>x!==null);if(v.length<2)return null;
  const min=Math.min(...v),max=Math.max(...v),span=max-min||1,step=100/(points.length-1);
  const d=points.map((p,i)=>p.value===null?null:`${(i*step).toFixed(1)},${(18-((p.value-min)/span)*16).toFixed(1)}`).filter(Boolean).join(' ');
  return <svg viewBox="0 0 100 20" preserveAspectRatio="none" className="h-5 w-full" aria-hidden="true"><polyline points={d} fill="none" stroke={change==null||change===0?'var(--muted-foreground)':change>0?'var(--nr-ink-green)':'var(--nr-ink-red)'} strokeWidth="1.2" vectorEffect="non-scaling-stroke"/></svg>;
 }
-// One tile per connected source (2026-10-03: every source, not four): search, visits and key events, then GitHub stars,
-// downloads, forum topics, Hacker News and Reddit when connected; each opens its page.
-export function KpiCards({cards}:{cards?:SourceCard[]}):ReactElement{
- const navigate=useNavigate(),by=new Map((cards||[]).map(c=>[c.id,c]));
- const pick=(c:SourceCard|undefined,key:string)=>({m:c?.metrics.find(x=>x.key===key),s:c?.seriesBy?.[key]||(c?.metrics[0]?.key===key?c.series:undefined)});
+// The page's numbers: search, visits and key events, then GitHub stars, downloads, forum topics, Hacker News and Reddit
+// when connected, each with its daily series and its data page. A metric without a value is left out by the caller.
+export type MetricItem={label:string;value:number|null;change:number|null;to:string;signed?:boolean;series?:Point[]};
+export function metricItems(cards?:SourceCard[]):MetricItem[]{
+ const by=new Map((cards||[]).map(c=>[c.id,c]));
+ const item=(label:string,c:SourceCard|undefined,key:string,to:string,signed=false,series?:Point[]):MetricItem=>{const m=c?.metrics.find(x=>x.key===key);
+  return {label,value:m?.value??null,change:m?.change??null,to,signed,series:series||c?.seriesBy?.[key]||(c?.metrics[0]?.key===key?c.series:undefined)};};
  const gsc=by.get('gsc'),ga4=by.get('ga4');
- const items=[{label:$t('common.searchClicks'),...pick(gsc,'clicks'),to:'/seo-opportunities'},{label:$t('common.searchImpressions'),...pick(gsc,'impressions'),to:'/seo-opportunities'},{label:$t('strategy.sessions'),...pick(ga4,'sessions'),to:'/website'},{label:$t('common.keyEvents'),...pick(ga4,'conversions'),to:'/website/conversion'},
-  ...([['github','stars',$t('common.newStars'),'/data/github'],['packages','downloads',$t('common.downloads'),'/data/downloads'],['discourse','topics',$t('strategy.newForumTopics'),'/data/community'],['mentions','mentions',$t('common.hackerNewsMentions'),'/data/hackernews'],['reddit','posts',$t('strategy.newRedditPosts'),'/data/reddit']] as const).flatMap(([id,key,label,to])=>by.get(id)?[{label,...pick(by.get(id),key),s:by.get(id)!.series,to}]:[])];
- return <section className="grid grid-cols-[repeat(auto-fit,minmax(10.5rem,1fr))] gap-4" aria-label={$t('strategy.keyMetrics')}>{items.map(({label,m,s,to})=>{const up=(m?.change??0)>=0;
-  return <button key={label} type="button" onClick={()=>navigate(to)} className="flex flex-col gap-1 rounded-lg border bg-card p-4 text-left text-card-foreground transition-colors hover:border-ring">
-   <span className="text-xs text-muted-foreground">{label}</span>
-   <span className="font-heading text-2xl font-semibold tabular-nums">{m?.value==null?'—':`${label===$t('common.newStars')&&m.value>0?'+':''}${m.value.toLocaleString(getCurrentLocale())}`}</span>
-   <span className="text-xs">{m?.change==null?<span className="text-muted-foreground">{m?.value==null?$t('strategy.noDataYet'):$t('strategy.noComparisonYet')}</span>:<span className={up?'text-nr-ink-green':'text-nr-ink-red'}>{up?'↑':'↓'} {pct(m.change)}</span>}</span>
-   {s&&<Sparkline points={s} change={m?.change}/>}
-  </button>;})}</section>;
+ return [item($t('common.searchClicks'),gsc,'clicks','/seo-opportunities'),item($t('common.searchImpressions'),gsc,'impressions','/seo-opportunities'),item($t('strategy.sessions'),ga4,'sessions','/website'),item($t('common.keyEvents'),ga4,'conversions','/website/conversion'),
+  ...([['github','stars',$t('common.newStars'),'/data/github',true],['packages','downloads',$t('common.downloads'),'/data/downloads',false],['discourse','topics',$t('strategy.newForumTopics'),'/data/community',false],['mentions','mentions',$t('common.hackerNewsMentions'),'/data/hackernews',false],['reddit','posts',$t('strategy.newRedditPosts'),'/data/reddit',false]] as const).flatMap(([id,key,label,to,signed])=>{const c=by.get(id);return c?[item(label,c,key,to,signed,c.series)]:[];})];
 }
+export const percent=pct;
 // 当前状况 (was 各方面一览, then 需要留意 — 2026-10-08 user: “留意” read like the AI's 先观察): how things stand now, as
 // against 今天的变化 (what changed) — no comparison and no AI, a problem stays here until it is fixed. The state of each connected source (server: nrInsights:summary), each opening its page.
 // 2026-10-08 (user: beside the metric cards, a second grid of number tiles left no telling which to look at): the metric
@@ -76,12 +71,23 @@ export type AreaRow={key:string;title:string;meta?:string;url?:string|null;tag?:
 export type AreaItem={key:string;text:string;values:string[];source:string;detail?:string;to:string;tone?:Tone;rows?:AreaRow[];total?:number;compare?:{label:string;now:string|number;before:string|number}[];handOff?:{playbookId:string;title:string}};
 export type Area={id:string;title:string;items:AreaItem[]};
 const sentence=(i:AreaItem)=>$legacyText(i.text).replace(/\{(\d+)\}/g,(_,k:string)=>i.values[Number(k)]??'');
-export function AreaList({areas,projectId}:{areas?:Area[];projectId:number}):ReactElement|null{
- const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),all=(areas||[]).flatMap(a=>a.items.map(i=>({...i,area:a.id,attention:i.tone==='amber'||i.tone==='red'})));if(!all.length)return null;
+export function AreaList({areas,projectId,quiet=false}:{areas?:Area[];projectId:number;quiet?:boolean}):ReactElement|null{
+ const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),[more,setMore]=useState(false),all=(areas||[]).flatMap(a=>a.items.map(i=>({...i,area:a.id,attention:i.tone==='amber'||i.tone==='red'})));if(!all.length)return null;
  const items=[...all.filter(i=>i.attention),...all.filter(i=>!i.attention)],open=items.find(i=>`${i.area}:${i.key}`===openKey);
  // A line with something behind it opens its detail here; one without (AI 搜索还没查过) goes to its page.
  const go=(i:typeof items[number])=>{if(i.rows?.length||i.compare?.length)setOpenKey(`${i.area}:${i.key}`);else navigate(i.to);};
- // Untitled: the block around it (index.tsx) carries the 当前状况 heading, its ⓘ and 刷新.
+ const detail=open?<AttentionDetail key={openKey} item={open} projectId={projectId} onClose={()=>setOpenKey(undefined)}/>:null;
+ // Quiet, beside the day's conversation on Insights (2026-10-21 user feedback: the column drew the eye from the
+ // conversation): one plain line each, the lines to deal with shown and the rest folded; where it comes from on hover.
+ if(quiet){const lead=items.filter(i=>i.attention),shown=more?items:lead.length?lead:items.slice(0,3),rest=items.length-(lead.length||Math.min(3,items.length));
+  return <div aria-label={$t('strategy.whereThingsStand')} className="flex flex-col"><ul>{shown.map(i=><li key={`${i.area}:${i.key}`}>
+   <button type="button" onClick={()=>go(i)} title={[$legacyText(i.source),i.detail?$legacyText(i.detail):''].filter(Boolean).join(' · ')} className={`flex w-full items-start gap-2 py-1 text-left text-xs hover:underline ${i.attention?'text-foreground/80':'text-muted-foreground'}`} data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
+    <span className={`mt-1.5 size-1.5 shrink-0 rounded-full ${i.attention?'bg-nr-ink-amber':'bg-muted-foreground/40'}`} aria-hidden="true"/>
+    <span className="min-w-0 flex-1">{$legacyJsx(i.text,Object.fromEntries(i.values.map((v,k)=>[k,<span key={k} className="tabular-nums">{v}</span>])))}</span>
+   </button></li>)}</ul>
+   {rest>0&&<button type="button" aria-expanded={more} onClick={()=>setMore(m=>!m)} className="nr-link mt-1 inline-flex items-center gap-0.5 self-start text-xs">{more?$t('common.collapse'):$t('strategy.situationMore',{0:rest})}<ChevronDownIcon className={`size-3.5 transition-transform ${more?'rotate-180':''}`} aria-hidden="true"/></button>}
+   {detail}</div>;}
+ // Untitled: the block around it carries the heading and what it means.
  return <Section aria-label={$t('strategy.whereThingsStand')}><ul className="divide-y">{items.map(i=><li key={`${i.area}:${i.key}`}>
   <button type="button" onClick={()=>go(i)} title={i.detail?$legacyText(i.detail):undefined} className="flex w-full items-start gap-2.5 py-2 text-left hover:opacity-80" data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
    <span className={`mt-1.5 size-2 shrink-0 rounded-full ${i.attention?'bg-nr-ink-amber':'bg-muted-foreground/40'}`} aria-hidden="true"/>
@@ -91,7 +97,7 @@ export function AreaList({areas,projectId}:{areas?:Area[];projectId:number}):Rea
    </span>
    <ChevronRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true"/>
   </button></li>)}</ul>
-  {open?<AttentionDetail key={openKey} item={open} projectId={projectId} onClose={()=>setOpenKey(undefined)}/>:null}</Section>;
+  {detail}</Section>;
 }
 // What is behind a 当前状况 line (2026-10-08 user feedback: the line led to a whole page where its own data was hard to
 // find): its rows (ticked ones go to the Agent from the top right, the task opening to be confirmed) or this period
@@ -142,57 +148,8 @@ export function statusOf(s:Signal,state:StrategyState,tasks:ChangeTask[]):Status
  if(review)return {...getVerdict()[review.verdict],next:'hand',reason:review.reason,earlier,why:review.verdict==='do'?$t('strategy.aiSuggestsActingNotWrite'):$t('strategy.ifDisagreeStillHandOff',{0:getVerdict()[review.verdict].why})};
  return {label:$t('strategy.awaitingVerdict'),tone:'grey',next:'judge',why:$t('strategy.analysisNotReachedVerdictChange'),earlier};
 }
-// 今天的变化 (2026-10-08 user request; replaces 今天值得做的事 and 最新变化, which listed the same things twice): one list
-// of the latest analysis in the three groups used on 机会 too (2026-10-08): 待处理 — each pending opportunity with the
-// change it rests on and 交给 Agent / 忽略, then changes the AI advises dealing with that have no opportunity of their own;
-// 观察中 (the first five); and, folded, 已处理 — already with a task, 无需处理 and 已忽略. Any row opens the change's detail.
-type Group='todo'|'watch'|'done';
-type Entry={key:string;group:Group;rank:number;title:string;sub:string;chip:{tone:Tone;text:string}|null;signal?:Signal;row?:Row;status?:Status;days?:number};
-const WATCH_SHOWN=5;
-// How long a change has been watched: 今天开始 on its first day, then the days in a row.
+// How long a change has been watched: Today on its first day, then the days in a row.
 export const watchedLabel=(days:number)=>days<=1?$t('strategy.watchingSinceToday'):$t('strategy.watchedDays',{0:days});
-export function TodayChanges({state,tasks,rows,projectId,busy,labelOf,convert,ignore,empty,onHandOff,onState}:{state:StrategyState;tasks:ChangeTask[];rows:Row[];projectId:number;busy:boolean;labelOf:(r:Row)=>string;convert:(r:Row)=>void;ignore:(r:Row)=>void;empty:string;onHandOff:(r:HandOffResult)=>void;onState:()=>void}):ReactElement{
- const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),[handing,setHanding]=useState<{s:Signal;reason?:string}>(),[judging,setJudging]=useState(false),[error,setError]=useMessageState(''),[more,setMore]=useState<Record<'watch'|'done',boolean>>({watch:false,done:false});
- const signals=[...(state.insights?.evidence.signals?.items||[])].sort((a,b)=>b.strength-a.strength);
- const open=signals.find(s=>s.key===openKey),st=open?statusOf(open,state,tasks):undefined,page=open?pageOf(open):undefined;
- // A change nobody judged yet (an analysis from before every change got a verdict) is judged once, at once, in the
- // background: the row reads “AI 判断中” meanwhile; only if that fails does it offer 让 AI 现在判断 by hand.
- const missing=signals.filter(s=>statusOf(s,state,tasks).next==='judge').length,asked=useRef(''),[auto,setAuto]=useState<'running'|'failed'|''>('');
- useEffect(()=>{const batch=state.insights?.generatedAt||'';if(!missing||asked.current===batch)return;asked.current=batch;setAuto('running');void judgeMissing(projectId).then(()=>{setAuto('');onState();}).catch(()=>setAuto('failed'));},[state.insights?.generatedAt,missing]);
- const shown=(x:Status):Status=>x.next==='judge'&&auto==='running'?{...x,label:$t('strategy.aiJudging')}:x;
- // 忽略 / 恢复 for a change without an opportunity of its own (the opportunities have theirs).
- const [deciding,setDeciding]=useState(false);
- const decide=async(s:Signal,status:'ignored'|'pending')=>{setDeciding(true);setError('');try{await request(projectId,'decideSignal',{signalKey:s.key,status,revision:state.revision,requestId:crypto.randomUUID()});onState();}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('strategy.notSaveRefreshTryAgain')));}finally{setDeciding(false);}};
- const judge=async(s:Signal)=>{setJudging(true);setError('');try{await judgeSignal(projectId,s.key);onState();}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('strategy.noVerdictTryAgain')));}finally{setJudging(false);}};
- const cited=new Set(rows.flatMap(r=>citedSignals(r).map(s=>s.key)));
- const entries:Entry[]=[...rows.map((r,i):Entry=>{const lead=citedSignals(r)[0];return {key:`o:${r.card.id}`,group:'todo',rank:i,title:r.card.title,sub:lead?`${getSourceNames()[lead.source]||lead.source} · ${titleOf(lead)}`:reasonLine(r),chip:lead?chipOf(lead):null,signal:lead,row:r};}),
-  ...signals.filter(s=>!cited.has(s.key)).map((s,i):Entry=>{const x=shown(statusOf(s,state,tasks)),worth=x.next==='hand'&&x.verdict==='do'&&!x.ignored;
-   const group:Group=worth||x.next==='opportunity'?'todo':x.next==='task'||x.verdict==='skip'||x.dismissed?'done':'watch';
-   return {key:s.key,group,rank:group==='todo'?(worth?100:200)+i:group==='done'?(x.next==='task'?0:100)+i:i,title:titleOf(s),sub:[getSourceNames()[s.source]||s.source,x.reason].filter(Boolean).join(' · '),chip:chipOf(s),signal:s,status:x,days:x.verdict==='watch'&&!x.dismissed?watchDays(state,s.key):undefined};})];
- const by=(g:Group)=>entries.filter(e=>e.group===g).sort((a,b)=>a.rank-b.rank),todo=by('todo'),watch=by('watch'),done=by('done');
- const item=(e:Entry)=><li key={e.key} className="flex items-center gap-3 py-2" data-change={e.signal?.key} data-opportunity-id={e.row?.card.id}>
-  <button type="button" className="min-w-0 flex-1 text-left hover:opacity-80" onClick={()=>{if(e.signal){setOpenKey(e.signal.key);setError('');}else if(e.row)navigate(`/opportunities?item=${encodeURIComponent(e.row.card.id)}`);}}>
-   <span className="flex items-center gap-2 text-sm font-medium"><span className="truncate">{e.title}</span>{e.chip?<Tag tone={e.chip.tone}>{e.chip.text}</Tag>:null}</span>
-   <span className="block truncate text-xs text-muted-foreground">{e.sub}</span></button>
-  {e.row?<><Button size="sm" variant="outline" disabled={busy} onClick={()=>convert(e.row!)}>{labelOf(e.row)}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>ignore(e.row!)}>{$t('common.ignore')}</Button></>
-   :e.status?.next==='hand'&&e.status.verdict==='do'&&!e.status.dismissed&&e.signal?.actionable?<><Button size="sm" variant="outline" onClick={()=>setHanding({s:e.signal!,reason:e.status?.reason})}>{$t('common.handOffAgent')}</Button><Button size="sm" variant="ghost" disabled={deciding} onClick={()=>void decide(e.signal!,'ignored')}>{$t('common.ignore')}</Button></>
-   :e.days?<><span className="w-[6.5rem] shrink-0 text-right text-xs text-muted-foreground tabular-nums" data-watched={e.days}>{watchedLabel(e.days)}</span><Button size="sm" variant="ghost" disabled={deciding} onClick={()=>void decide(e.signal!,'ignored')}>{$t('common.ignore')}</Button></>
-   :e.status?<span className="flex w-[6.5rem] shrink-0 justify-end"><Tag tone={e.status.tone} dot>{e.status.label}</Tag></span>:null}
- </li>;
- const head=(label:string,n:number)=><p className="pt-3 text-xs font-medium text-muted-foreground first:pt-0">{$tj("{0} {1}",{0:label,1:n})}</p>;
- const total=entries.length;
- return <Section aria-label={$t('strategy.todayChanges')} title={<>{$t('strategy.todayChanges')}<InfoTip label={$t('strategy.changeExplanation')}>{$t('strategy.analysisWorkflowHelp')}</InfoTip></>} count={total||undefined} actions={<Button size="sm" variant="ghost" onClick={()=>navigate('/opportunities')}>{$t('strategy.opportunities')}<ArrowRightIcon/></Button>}>
-  {total?<div>
-   {todo.length?<>{head($t('common.pending'),todo.length)}<ul className="divide-y">{todo.map(item)}</ul></>:null}
-   {watch.length?<>{head($t('tasks.watchingTab',undefined),watch.length)}<ul className="divide-y">{watch.slice(0,WATCH_SHOWN).map(item)}</ul>
-    {watch.length>WATCH_SHOWN?<Button size="sm" variant="ghost" onClick={()=>navigate('/opportunities?tab=watch')}>{$t('strategy.opportunitiesWatching',{0:watch.length})}<ArrowRightIcon/></Button>:null}</>:null}
-   {done.length?(more.done?<>{head($t('strategy.handled'),done.length)}<ul className="divide-y">{done.map(item)}</ul></>
-    :<Button size="sm" variant="ghost" className="mt-2" onClick={()=>setMore(m=>({...m,done:true}))}>{$t('strategy.handledValue',{0:done.length})}<ChevronRightIcon/></Button>):null}
-  </div>:<p className="text-sm text-muted-foreground">{empty}</p>}
-  {open&&st?<ChangeDetail signal={open} status={st} projectId={projectId} verdicts={verdictsOf(state,open.key)} watch={watchOf(state,open.key)} today={state.insights?.generatedAt} judging={judging||deciding} error={error} onJudge={()=>void judge(open)} onDecide={status=>void decide(open,status).then(()=>setOpenKey(undefined))} onClose={()=>setOpenKey(undefined)} onHandOff={onHandOff}/>:null}
-  {handing?<DraftHandOffDialog projectId={projectId} draft={changeDraft(handing.s,handing.reason)} playbookId={PLAYBOOK[handing.s.action||'']||'optimize-page'} page={handing.s.url&&handing.s.source==='site'?handing.s.url:undefined} description={$t('strategy.changeDataGoTaskBrief')} onClose={()=>setHanding(undefined)} onDone={r=>{setHanding(undefined);onHandOff(r);}}/>:null}
- </Section>;
-}
 // One change in a panel (洞察's 今天的变化, 机会's 观察中): its data, the AI's verdict and one next step, and the verdicts of
 // earlier days when there are some (how a watched change has been judged).
 export function ChangeDetail({signal:open,status:st,projectId,verdicts,watch,today,judging,error,onJudge,onDecide,onClose,onHandOff}:{signal:Signal;status:Status;projectId:number;verdicts?:Verdict[];watch?:WatchRecord;today?:string;judging?:boolean;error?:string;onJudge?:()=>void;onDecide?:(status:'ignored'|'pending')=>void;onClose:()=>void;onHandOff:(r:HandOffResult)=>void}):ReactElement{
@@ -221,7 +178,7 @@ export function ChangeDetail({signal:open,status:st,projectId,verdicts,watch,tod
     {error?<p role="alert" className="nr-error">{error}</p>:null}
    </div>
   </DetailDrawer>}
-  {handing?<DraftHandOffDialog projectId={projectId} draft={changeDraft(open,st.reason)} playbookId={PLAYBOOK[open.action||'']||'optimize-page'} page={open.url&&open.source==='site'?open.url:undefined} description={$t('strategy.changeDataGoTaskBrief')} onClose={onClose} onDone={r=>{onClose();onHandOff(r);}}/>:null}
+  {handing?<DraftHandOffDialog projectId={projectId} draft={changeDraft(open,st.reason)} playbookId={PLAYBOOK[open.action||'']||'optimize-page'} page={open.url||undefined} description={$t('strategy.changeDataGoTaskBrief')} onClose={onClose} onDone={r=>{onClose();onHandOff(r);}}/>:null}
  </>;
 }
 // Needs-you (§5.4 attention): one line, only when something waits.

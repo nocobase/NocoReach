@@ -37,8 +37,9 @@ import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { competitorKeywordsDraft, competitorPagesDraft, ownPagesDraft } from "./seo-hand-off";
 import "./reach-workspace.css";
 import "./data-views.css";
-import { WithInfo } from "#components/reach/info-tip";
+import { InfoTip, WithInfo } from "#components/reach/info-tip";
 import { help } from "./glossary";
+import { formatCount, formatDateTime } from '#lib/format';
 
 type Item = { id: string; keyword: string; url: string; volume: number | null; difficulty: number | null; intent: string | null; position: number | null; traffic: number | null; keywords: number | null; cpc: number | null };
 type Spec = { kind: "domain"; view: "keywords" | "pages"; target: string; locationCode: number; language: string };
@@ -47,7 +48,7 @@ type Recent = { id: string; status: string; spec: Spec; createdAt: string; compl
 const call = <T,>(action: string, body: object = {}) => api.action<T>("nrDomains", action, { method: "POST", body: { projectId: String(currentProjectId()), ...body }, unwrap: "data" });
 const requestKey = () => crypto.randomUUID().replace(/-/g, "");
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
-const fmtTime = (v?: string | null) => (v ? new Date(v).toLocaleString(getCurrentLocale(), { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
+const fmtTime = (v?: string | null) => formatDateTime(v);
 const pathOf = (u: string) => { try { return new URL(u).pathname || "/"; } catch { return u; } };
 const bare = (d?: string) => String(d || "").toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "");
 
@@ -105,11 +106,11 @@ export default function DomainOverview({ embedded = false }: { embedded?: boolea
             </div>
             <Select value={`${form.market.locationCode}:${form.market.language}`} onValueChange={(v) => { const m = getMarkets().find((x) => `${x.locationCode}:${x.language}` === v); if (m) setForm((f) => ({ ...f, market: m })); }}>
               <SelectTrigger className="w-full lg:w-44" aria-label={$t('common.market')}><SelectValue>{(v: string) => $t(getMarkets().find((x) => `${x.locationCode}:${x.language}` === v)?.label ?? "")}</SelectValue></SelectTrigger>
-              <SelectContent>{getMarkets().map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
+              <SelectContent className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{getMarkets().map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
             </Select>
             <Button type="submit" disabled={Boolean(busy) || !form.target.trim()} className="lg:px-6">{busy === "keywords" ? $t('common.querying') : $t('common.query')}</Button>
+            <InfoTip label={$t('common.info')}><p>{$t('domainOverview.organicRankingsDomainIncludingSubdomains')}</p><p>{$t('competitorsPage.lookupBilling')}</p></InfoTip>
           </form>
-          <p className="text-xs text-muted-foreground">{$t('domainOverview.organicRankingsDomainIncludingSubdomains')}</p>
           {error ? <p role="alert" className="nr-error">{error}</p> : null}
         </Card>
       )}
@@ -120,7 +121,7 @@ export default function DomainOverview({ embedded = false }: { embedded?: boolea
             <Card className="gap-0 py-0">
               <DataTableTabs value={tab} onValueChange={setTab}>
                 <TabsTrigger value="keywords">{$tj('domainOverview.keywords',{0:shown.result?.items.length ?? 0})}</TabsTrigger>
-                <TabsTrigger value="pages">{$tj('domainOverview.pages',{0:runs.pages?.result ? ` (${runs.pages.result.items.length})` : ""})}</TabsTrigger>
+                <TabsTrigger value="pages">{$tj('domainOverview.pages',{0:runs.pages?.result ? ` ${runs.pages.result.items.length}` : ""})}</TabsTrigger>
               </DataTableTabs>
               {tab === "keywords" ? <KeywordsTable run={shown} own={isOwn} /> : runs.pages && runs.pages.spec.target === shown.spec.target ? <PagesTable own={isOwn} run={runs.pages} /> : (
                 <div className="space-y-2 p-6 text-sm">
@@ -157,7 +158,7 @@ function Summary({ run }: { run: Run }) {
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[[$t('domainOverview.estimatedOrganicTrafficMonth'), s?.traffic], [$t('common.rankingKeywords'), s?.keywords], [$t('domainOverview.top3'), s?.top3], [$t('domainOverview.top10'), s?.top10]].map(([label, v]) => (
-          <Card key={String(label)} className="gap-0 p-4" data-metric={label}><StatTile label={String(label)} help={help(String(label))} value={v == null ? "—" : Math.round(Number(v)).toLocaleString(getCurrentLocale())} /></Card>
+          <Card key={String(label)} className="gap-0 p-4" data-metric={label}><StatTile label={String(label)} help={help(String(label))} value={v == null ? "—" : formatCount(Math.round(Number(v)))} /></Card>
         ))}
       </div>
       <p className="nr-footnote">{run.spec.target} · {marketLabel(run.spec)} · {fmtTime(run.completedAt || run.createdAt)}</p>

@@ -28,6 +28,10 @@ test('discover follows robots and sitemap index, drops foreign URLs, and fails c
  await assert.rejects(new SiteContent({},async()=>{throw new Error('404');}).discover('https://ex.com'),e=>e.status===422&&/sitemap/.test(e.message));
  await assert.rejects(new SiteContent({},read).discover('http://ex.com'),e=>e.status===400);
 });
+test('page metadata decodes numeric character references',()=>{
+ const m=pageMeta('<title>It&#x27;s new</title><meta name="description" content="What&#x27;s on by default &#39;now&#39; &amp; later"><body></body>','https://ex.com/');
+ assert.equal(m.title,"It's new");assert.equal(m.description,"What's on by default 'now' & later");
+});
 test('page metadata counts words and internal links only',()=>{
  const m=pageMeta('<title>Install &amp; run</title><meta name="description" content="Fast start"><body><p>安装 NocoBase in 5 minutes</p><a href="/docs/a">a</a><a href="https://ex.com/b">b</a><a href="https://other.com/c">c</a><a href="#top">t</a></body>','https://ex.com/docs/install');
  assert.equal(m.title,'Install & run');assert.equal(m.description,'Fast start');assert.equal(m.internalLinks,2);assert.ok(m.words>=5);
@@ -112,4 +116,25 @@ test('daily refresh dates pages that appear after the first read (for the weekly
  sc.discover=async()=>({pages:[{url:'https://ex.com/a',type:'page'},{url:'https://ex.com/new',type:'page'}]});
  await sc.refresh('1');const by=Object.fromEntries(payload.pages.map(p=>[p.url,p]));
  assert.equal(by['https://ex.com/a'].firstSeenAt,undefined);assert.equal(by['https://ex.com/a'].title,'A');assert.ok(by['https://ex.com/new'].firstSeenAt);
+});
+
+test.each([
+  ['out-of-range hexadecimal', '&#x110000;'],
+  ['out-of-range decimal', '&#99999999;'],
+  ['unsafe integer', '&#9007199254740993;'],
+  ['non-finite value', `&#${'9'.repeat(400)};`],
+])('site metadata and sitemaps keep %s references literal', (_, reference) => {
+  const value = `${reference} &apos; &#39; &#x27; &#x1F600; &#128512; &amp;#39;`;
+  const expected = `${reference} ' ' ' 😀 😀 &#39;`;
+  const meta = pageMeta(
+    `<meta name="description" content="${value}">`,
+    'https://ex.com/',
+  );
+  assert.equal(meta.description, expected);
+  const sitemap = parseSitemap(
+    `<urlset><url><loc>https://ex.com/${value}</loc><lastmod>${value}</lastmod></url></urlset>`,
+  );
+  assert.deepEqual(sitemap.urls, [
+    { loc: `https://ex.com/${expected}`, lastmod: expected },
+  ]);
 });

@@ -1,4 +1,5 @@
-import { type Message, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { questionBrandEvidence } from './ai-question-evidence.js';
+import { type Message, useMessageState, $t, $tj, $legacyText } from "#i18n";
 // AI 搜索 › 问题 (2026-10-05): what people ask ChatGPT and Google AI Overviews about our topics, which answers name or cite
 // us, which name competitors or other brands instead (the chances), and which name nobody. Topics are suggested by the
 // online AI and confirmed before anything is paid; then monthly. A question opens with the AI's answer, the brands and
@@ -24,6 +25,7 @@ import { DetailDrawer } from "./detail-drawer";
 import { DraftHandOffDialog, type TaskDraft } from "./keyword-hand-off";
 import type { HandOffResult } from "./strategy/hand-off";
 import { safeLink } from "./analytics";
+import { formatCount, formatDate } from '#lib/format';
 
 type Source = { url: string; title: string; domain: string; own: boolean; rival: string | null };
 type Question = { key: string; question: string; platform: "chat_gpt" | "google"; topics: string[]; volume: number | null; status: "ours" | "gap" | "open"; weNamed: boolean; weCited: boolean; rivals: string[]; brands: string[]; sources: Source[]; answer: string; at: string | null };
@@ -32,7 +34,7 @@ type View = { dataforseo: boolean; aiReady: boolean; refreshing: boolean; topics
 const call = <T,>(projectId: number, action: string, body: object = {}) => api.action<T>("nrAiQuestions", action, { method: "POST", body: { projectId, ...body }, unwrap: "data" });
 const getPlatform = () => ({ chat_gpt: "ChatGPT", google: $t('common.googleAiOverviews') } as const);
 const getStatus = () => ({ ours: { tone: "green", label: $t('aiQuestions.appears') }, gap: { tone: "amber", label: $t('aiQuestions.notAppearing') }, open: { tone: "grey", label: $t('aiQuestions.noBrands') } } as const);
-const n = (v: number | null) => (v === null ? "—" : v.toLocaleString(getCurrentLocale()));
+const n = (v: number | null) => formatCount(v);
 const COST = 0.2;
 const helper = createColumnHelper<Question>();
 
@@ -69,7 +71,7 @@ export function AiQuestions({ projectId, onHandOff }: { projectId: number; onHan
       <Topics projectId={projectId} view={view} onView={(v) => { setView(v); setRowSelection({}); }} />
       {view.refreshing ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />{$t('aiQuestions.checkingQuestionsAiUsuallyMinute')}</p> : null}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-question-counts>
-        {([[$t('aiQuestions.questionsAi'), n(view.counts.all), $t('aiQuestions.questionsDataforseoCollectedChatgptGoogle')], [$t('aiQuestions.appear'), `${view.counts.ours} · ${pct}%`, $t('aiQuestions.questionsWhoseAnswerMentionsProject')], [$t('aiQuestions.opportunityOthersAppearNot'), n(view.counts.gap), $t('aiQuestions.questionsWhoseAnswerMentionsCompetitors')], [$t('aiQuestions.noBrandMentioned'), n(view.counts.open), $t('aiQuestions.answerMentionsNoBrandsGood')]] as const).map(([label, value, tip]) => (
+        {([[$t('aiQuestions.questionsAi'), n(view.counts.all), $t('aiQuestions.questionsDataforseoCollectedChatgptGoogle')], [$t('aiQuestions.appear'), $t('aiQuestions.countShare', { 0: n(view.counts.ours), 1: `${pct}%` }), $t('aiQuestions.questionsWhoseAnswerMentionsProject')], [$t('aiQuestions.opportunityOthersAppearNot'), n(view.counts.gap), $t('aiQuestions.questionsWhoseAnswerMentionsCompetitors')], [$t('aiQuestions.noBrandMentioned'), n(view.counts.open), $t('aiQuestions.answerMentionsNoBrandsGood')]] as const).map(([label, value, tip]) => (
           <Card key={label} className="gap-1 p-4"><p className="flex items-center gap-1 text-xs text-muted-foreground">{label}<InfoTip label={$t('common.what',{0:label})}>{tip}</InfoTip></p><p className="text-2xl font-semibold tabular-nums">{value}</p></Card>
         ))}
       </div>
@@ -168,7 +170,7 @@ function Topics({ projectId, view, onView }: { projectId: number; view: View; on
 // One question: the AI's answer, who it names, what it cites.
 function QuestionDetail({ q, onClose, onHand }: { q: Question; onClose: () => void; onHand: () => void }) {
   return (
-    <DetailDrawer open onClose={onClose} title={q.question} description={$t('aiQuestions.questionVolume',{0:getPlatform()[q.platform],1:n(q.volume),2:q.at ? $t('aiQuestions.answered',{0:q.at.slice(0, 10)}) : ""})}
+    <DetailDrawer open onClose={onClose} title={q.question} description={$t('aiQuestions.questionVolume',{0:getPlatform()[q.platform],1:n(q.volume),2:q.at ? $t('aiQuestions.answered',{0:formatDate(q.at.slice(0, 10))}) : ""})}
       actions={<Button size="sm" onClick={onHand}><Bot data-icon="inline-start" />{$t('common.handOffAgent')}</Button>}>
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2"><Tag tone={getStatus()[q.status].tone} dot>{q.status === "ours" ? [q.weNamed ? $t('aiQuestions.mentionsUs') : "", q.weCited ? $t('common.citesSite') : ""].filter(Boolean).join("、") : getStatus()[q.status].label}</Tag>{q.rivals.map((r) => <Tag key={r} tone="grey">{r}</Tag>)}{q.brands.map((b) => <span key={b} className="text-xs text-muted-foreground">{b}</span>)}</div>
@@ -184,7 +186,7 @@ function QuestionDetail({ q, onClose, onHand }: { q: Question; onClose: () => vo
 // The questions picked become one task: how AI answers now, who it names and cites, and what to do.
 function questionsDraft(rows: Question[]): TaskDraft {
   const head = rows[0].question;
-  const lines = rows.slice(0, 30).map((q) => $t('aiQuestions.questionEvidence',{0:q.question,1:getPlatform()[q.platform],2:n(q.volume),3:q.status === "ours" ? $t('aiQuestions.alreadyUs',{0:q.weNamed ? $t('aiQuestions.mentioned') : "",1:q.weCited ? $t('aiQuestions.cited') : ""}) : $t('aiQuestions.notMentionUs'),4:q.rivals.length || q.brands.length ? $t('aiQuestions.mentions',{0:[...q.rivals, ...q.brands].slice(0, 6).join("、")}) : "",5:q.sources.length ? $t('aiQuestions.cites',{0:[...new Set(q.sources.map((s) => s.domain))].slice(0, 5).join("、")}) : "",6:q.answer ? $t('aiQuestions.answerBegins',{0:q.answer.slice(0, 240).replace(/\s+/g, " ")}) : ""}));
+  const lines = rows.slice(0, 30).map((q) => $t('aiQuestions.questionEvidence',{0:q.question,1:getPlatform()[q.platform],2:n(q.volume),3:q.status === "ours" ? questionBrandEvidence(q.weNamed, q.weCited) : $t('aiQuestions.notMentionUs'),4:q.rivals.length || q.brands.length ? $t('aiQuestions.mentions',{0:[...q.rivals, ...q.brands].slice(0, 6).join("、")}) : "",5:q.sources.length ? $t('aiQuestions.cites',{0:[...new Set(q.sources.map((s) => s.domain))].slice(0, 5).join("、")}) : "",6:q.answer ? $t('aiQuestions.answerBegins',{0:q.answer.slice(0, 240).replace(/\s+/g, " ")}) : ""}));
   return {
     title: (rows.length === 1 ? $t('common.getAiMentionUsWhen',{0:head}) : $t('aiQuestions.getAiMentionUsWhen',{0:head,1:rows.length})).slice(0, 200),
     objective: $t('aiQuestions.aiChatgptGoogleAiOverviews').slice(0, 1000),

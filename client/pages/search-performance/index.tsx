@@ -1,13 +1,14 @@
 import { googleLocalFreshness, googleCacheExpiry } from '../../../shared/google-cache.js';
-import { getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { $t, $tj, $legacyText } from "#i18n";
+import { usePageTab } from '#hooks/use-page-tab';
 // 搜索表现: ported from every-app/open-seo db8bde1 src/client/features/search-performance/ (SearchPerformancePage,
 // SearchPerformanceParts, SearchPerformanceColumns, SearchPerformanceTextFilters; MIT). Changes: data from the daily
 // sync (nrDataViews:search) instead of live Search Console calls, NocoReach's time range picker, a daily trend chart,
 // Chinese copy, CSV export only; no device filter (not wanted). A country is read live from Search Console, since the
 // synced rows do not keep countries.
-// 2026-10-14 (user request: everything Search Console's 效果 has, in NocoReach's own style, more.tsx): the search types
-// (web from the sync, the others read live), the four figures picking the daily line, 国家/地区 · 设备 · 搜索结果呈现,
-// 上升最快 · 下降最快 · 新出现, 细分 tables, and a query's or page's detail.
+// Beyond the totals (more.tsx): the four figures picking the daily line, the country, device and search appearance
+// breakdowns, Rising, Falling and New, and a query's or page's detail. Web search only; Search Console itself has the
+// other search types (2026-10-22 user decision).
 // Selected striking-distance queries can be saved to 关键词.
 // Sub-pages (?view=, as on GitHub): 效果 (this report), 索引 (indexing.tsx) and 站点地图 (sitemaps.tsx).
 import { HandOffBar } from "../hand-off-bar";
@@ -38,7 +39,7 @@ import { help } from "../glossary";
 import { downloadCsv, normalizeExportValue, type CsvValue } from "#components/seo/csv";
 import { useProject } from "../reach-data";
 import { useFreshData } from "../workspace-cache";
-import { SearchHistory, type CoveragePeriod } from './history';
+import { SearchHistory, coverageNotes, type CoveragePeriod } from './history';
 import { RangePicker } from '../range-picker';
 import { validRange, useRange } from '../range-state';
 import { safeLink } from "../analytics";
@@ -49,9 +50,10 @@ import { queryDraft, pageDraft, mainPage, type Period } from "../seo-hand-off";
 import { countryName } from "../countries";
 import { IndexingView } from "./indexing";
 import { SitemapsView } from "./sitemaps";
-import { BreakdownCards, METRIC_LABEL, MoversTable, RowDrawer, SEARCH_TYPES, Segmented, SliceTable, showMetric, slices, useBreakdown, type Metric, type MoverRow, type Movers, type Scope, type SearchType } from "./more";
+import { BreakdownCards, METRIC_LABEL, MoversTable, RowDrawer, Segmented, SliceTable, showMetric, slices, useBreakdown, type Metric, type MoverRow, type Movers, type Scope } from "./more";
 import "../reach-workspace.css";
 import "../data-views.css";
+import { formatCount, formatDate, formatPercent } from '#lib/format';
 
 type Totals = { clicks: number; impressions: number; ctr: number; position: number };
 type Filter = { operator: "contains" | "equals"; expression: string };
@@ -76,9 +78,6 @@ export type SearchReport = {
   movers?: { query: Movers | null; page: Movers } | null;
   pairDays?: number;
   country?: string | null;
-  type?: SearchType;
-  noQueries?: boolean;
-  noPosition?: boolean;
   live?: boolean;
   preliminary?: { date: string; clicks: number; impressions: number; position: number }[];
 };
@@ -91,8 +90,8 @@ const MOVER_TABS = ["rising", "falling", "fresh"] as const;
 const METRICS: Metric[] = ["clicks", "impressions", "ctr", "position"];
 const SLICES = ["country", "device", "appearance", "date"] as const;
 const PAGE_SIZES = [25, 50, 100] as const;
-const count = (v: number) => Math.round(v).toLocaleString(getCurrentLocale());
-const ctr = (v: number) => `${(v * 100).toFixed(1)}%`;
+const count = (v: number) => formatCount(Math.round(v));
+const ctr = (v: number) => formatPercent(v);
 const position = (v: number) => v.toFixed(1);
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 
@@ -107,6 +106,7 @@ export default function SearchPerformancePage() {
   const [range, setRange] = useRange();
   const [params, setParams] = useSearchParams();
   const view: View = VIEWS.find((v) => v === params.get("view")) ?? "performance";
+  usePageTab($t(view === 'index' ? 'searchPerformance.viewIndex' : view === 'sitemaps' ? 'searchPerformance.viewSitemaps' : 'searchPerformance.viewPerformance'));
   // A sub-page keeps only the time range; each one's own choices start over.
   const chooseView = (v: string) => {
     const next = new URLSearchParams();
@@ -114,12 +114,9 @@ export default function SearchPerformancePage() {
     if (v !== "performance") next.set("view", v);
     setParams(next, { replace: true });
   };
-  const type: SearchType = SEARCH_TYPES.find((t) => t.id === params.get("type"))?.id ?? "web";
-  const noQueries = type === "discover" || type === "googleNews";
-  const askedTab = TABS.find((t) => t === params.get("tab")) ?? (noQueries ? "pages" : "striking");
-  const tab: Tab = noQueries && (askedTab === "striking" || askedTab === "queries") ? "pages" : askedTab;
+  const tab: Tab = TABS.find((t) => t === params.get("tab")) ?? "striking";
   const metric: Metric = METRICS.find((m) => m === params.get("metric")) ?? "clicks";
-  const by: "query" | "page" = noQueries || params.get("by") === "page" ? "page" : "query";
+  const by: "query" | "page" = params.get("by") === "page" ? "page" : "query";
   const slice = SLICES.find((x) => x === params.get("slice")) ?? "country";
   const filters = useMemo(() => ({ queryFilter: readFilter(params, "q", "qm"), pageFilter: readFilter(params, "pg", "pm") }), [params]);
   const country = /^[a-z]{3}$/.test(params.get("country") ?? "") ? params.get("country")! : undefined;
@@ -134,23 +131,24 @@ export default function SearchPerformancePage() {
 
   const custom = !validRange(range);
   const { data: report, error, reload } = useFreshData<SearchReport>(
-    project && !custom && view === 'performance' ? `data-view:search:v4:${project.id}:${JSON.stringify([project.searchConsoleProperty, range, filters, country, type])}` : null,
-    () => api.action<SearchReport>("nrDataViews", "search", { method: "POST", body: { projectId: project!.id, ...range, ...filters, ...(country ? { country } : {}), type }, unwrap: "data" }),
+    project && !custom && view === 'performance' ? `data-view:search:v4:${project.id}:${JSON.stringify([project.searchConsoleProperty, range, filters, country])}` : null,
+    () => api.action<SearchReport>("nrDataViews", "search", { method: "POST", body: { projectId: project!.id, ...range, ...filters, ...(country ? { country } : {}) }, unwrap: "data" }),
     { ...googleLocalFreshness, expiresAt: googleCacheExpiry },
   );
-  const [detailsKey, setDetailsKey] = useState<string>();
-  const selectedDetailsKey = JSON.stringify([project?.id, project?.searchConsoleProperty, range, filters, country, type]);
-  const showDetails = detailsKey === selectedDetailsKey;
+  // The query, page and breakdown details load with the page (UI review 2026-10-21) instead of behind a button; they are
+  // still their own request, so the figures and chart show first.
+  const selectedDetailsKey = JSON.stringify([project?.id, project?.searchConsoleProperty, range, filters, country]);
+  const showDetails = true;
   const { data: details, error: detailsError } = useFreshData<SearchReport>(
     project && !custom && view === 'performance' && showDetails ? `data-view:search-details:${selectedDetailsKey}` : null,
-    () => api.action<SearchReport>('nrDataViews', 'search', { method: 'POST', body: { projectId: project!.id, ...range, ...filters, country, type, details: true }, unwrap: 'data' }),
+    () => api.action<SearchReport>('nrDataViews', 'search', { method: 'POST', body: { projectId: project!.id, ...range, ...filters, country, details: true }, unwrap: 'data' }),
     { ...googleLocalFreshness, expiresAt: googleCacheExpiry },
   );
   const tableReport = showDetails ? details : undefined;
   const w = report?.window;
   // 国家/地区, 设备 and 搜索结果呈现 come on their own (live Search Console queries), so the report never waits for them;
   // the countries also fill the country menu.
-  const scope: Scope | null = project && !custom && view === 'performance' && showDetails && w && report?.cutoff ? { projectId: project.id, property: project.searchConsoleProperty, type, compare: Boolean(report.complete && report.previousComplete), window: { all: w.all, start: w.start, end: w.end, previousStart: w.previousStart, previousEnd: w.previousEnd }, country, filters } : null;
+  const scope: Scope | null = project && !custom && view === 'performance' && showDetails && w && report?.cutoff ? { projectId: project.id, property: project.searchConsoleProperty, compare: Boolean(report.complete && report.previousComplete), window: { all: w.all, start: w.start, end: w.end, previousStart: w.previousStart, previousEnd: w.previousEnd }, country, filters } : null;
   const { data: breakdown, error: breakdownError } = useBreakdown(scope);
   const countries = (breakdown?.countries ?? []).map((c) => ({ key: c.key, clicks: c.clicks }));
   const loadError = projectError || (error ? (error instanceof Error ? error.message : $t('searchPerformance.notLoadSearchDataTry')) : "");
@@ -163,7 +161,7 @@ export default function SearchPerformancePage() {
 
   const exportTab = () => {
     if (!report?.connected || !w) return;
-    const stamp = $t('searchPerformance.dateRange',{0:w.start,1:w.end});
+    const stamp = $t('searchPerformance.dateRange',{0:formatDate(w.start),1:formatDate(w.end)});
     const metricsHead = [$t('common.clicks'), $t('common.impressions'), $t('common.ctr'), $t('common.position')];
     const ok =
       tab === "striking"
@@ -192,7 +190,7 @@ export default function SearchPerformancePage() {
   // No nr-page class: its legacy table and input rules are unlayered and would override the ported table.
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={view === "performance" && report?.totals ? <NotesTip notes={notesOf(report)} /> : undefined} title={$t('common.searchPerformance')} description={view === "index" ? $t('searchIndex.pageDescription') : view === "sitemaps" ? $t('searchSitemaps.pageDescription') : $t('searchPerformance.clicksImpressionsCtrPositionGoogle')} />
+      <PageHeader info={view === "performance" && report?.totals ? <NotesTip notes={[...notesOf(report), ...coverageNotes(report), ...(w ? [$t('searchHistory.detailsScope', { 0: formatDate(w.start), 1: formatDate(w.end) })] : [])]} /> : undefined} title={$t('common.searchPerformance')} description={view === "index" ? $t('searchIndex.pageDescription') : view === "sitemaps" ? $t('searchSitemaps.pageDescription') : $t('searchPerformance.clicksImpressionsCtrPositionGoogle')} />
       <Tabs value={view} onValueChange={(v) => chooseView(String(v))}>
         <TabsList variant="line" className="h-auto! justify-start">
           <TabsTrigger value="performance">{$t('searchPerformance.viewPerformance')}</TabsTrigger>
@@ -203,8 +201,7 @@ export default function SearchPerformancePage() {
       {view === "index" ? (project ? <IndexingView property={project.searchConsoleProperty} projectId={project.id} tab={params.get("list")} reason={params.get("reason")} onPick={(v) => update({ list: v.list, reason: v.reason })} /> : null)
         : view === "sitemaps" ? (project ? <SitemapsView property={project.searchConsoleProperty} projectId={project.id} tab={params.get("list")} onTab={(t) => update({ list: t })} /> : null)
         : <>
-      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:w.start,1:w.end}) : report?.complete && report.previousComplete ? $t('common.comparedPreviousDaysDataThrough',{0:w.start,1:w.end,2:w.days,3:report?.cutoff}) : $t('searchHistory.rangeSummary',{0:w.start,1:w.end,2:report?.cutoff})) : undefined} />
-      {report?.connected ? <div className="-mt-2 mb-1"><Segmented label={$t('searchPerformance.searchType')} options={SEARCH_TYPES.map((t) => ({ id: t.id, label: t.label() }))} value={type} onChange={(v) => update({ type: v === "web" ? undefined : v, tab: undefined, by: undefined })} /></div> : null}
+      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:formatDate(w.start),1:formatDate(w.end)}) : report?.complete && report.previousComplete ? $t('common.comparedPreviousDaysDataThrough',{0:formatDate(w.start),1:formatDate(w.end),2:w.days,3:formatDate(report?.cutoff)}) : $t('searchHistory.rangeSummary',{0:formatDate(w.start),1:formatDate(w.end),2:formatDate(report?.cutoff)})) : undefined} />
       {loadError ? <LoadError title={$t('searchPerformance.notLoadSearchData')} message={loadError} onRetry={() => window.location.reload()} /> : null}
       {!report && !loadError ? <ListSkeleton rows={6} /> : null}
       {report && !report.connected ? (
@@ -220,17 +217,15 @@ export default function SearchPerformancePage() {
         <>
           {project ? <SearchHistory key={String(project.id)} projectId={project.id} property={project.searchConsoleProperty} report={report} reload={reload} /> : null}
           <TotalsCards report={report} metric={metric} onMetric={(m) => update({ metric: m === "clicks" ? undefined : m })} />
-          <TrendCard report={report} metric={report.noPosition && metric === "position" ? "clicks" : metric} />
-          {!showDetails ? <Button variant="outline" className='h-auto w-fit max-w-full whitespace-normal text-left' onClick={() => setDetailsKey(selectedDetailsKey)}>{$t('searchHistory.loadDetails')}</Button> : null}
+          <TrendCard report={report} metric={metric} />
           {showDetails && !tableReport && !detailsError ? <ListSkeleton rows={4} /> : null}
           {showDetails && detailsError ? <LoadError title={$t('searchHistory.detailsFailed')} message={$t('searchHistory.detailsFailed')} onRetry={() => window.location.reload()} /> : null}
           {showDetails && tableReport ? <>
-          <p className="text-sm text-muted-foreground">{$t('searchHistory.detailsScope', { 0: w.start, 1: w.end })}</p>
           <BreakdownCards data={breakdown} error={breakdownError} onCountry={(c) => update({ country: c })} />
           <Card className="gap-0 py-0" data-report="">
             <DataTableTabs
               value={tab}
-              onValueChange={(v) => update({ tab: v === (noQueries ? "pages" : "striking") ? undefined : v })}
+              onValueChange={(v) => update({ tab: v === "striking" ? undefined : v })}
               info={tab === "striking" ? <InfoTip label={$t('searchPerformance.whatClosePageOneMeans')}>{help($t('searchPerformance.closePageOne'))}</InfoTip> : (MOVER_TABS as readonly string[]).includes(tab) ? <InfoTip label={$t('searchPerformance.howMoversCounted')}>{$t('searchPerformance.moversInfo')}</InfoTip> : undefined}
               actions={
                 <Button variant="outline" size="sm" onClick={exportTab}>
@@ -238,8 +233,8 @@ export default function SearchPerformancePage() {
                   {$t('common.exportCsv')}</Button>
               }
             >
-              {noQueries ? null : <TabsTrigger value="striking">{$tj('searchPerformance.closePageOneValue',{0:tableReport.striking?.length ?? 0})}</TabsTrigger>}
-              {noQueries ? null : <TabsTrigger value="queries">{$t('common.query')}</TabsTrigger>}
+              <TabsTrigger value="striking">{$tj('searchPerformance.closePageOneValue',{0:tableReport.striking?.length ?? 0})}</TabsTrigger>
+              <TabsTrigger value="queries">{$t('common.query')}</TabsTrigger>
               <TabsTrigger value="pages">{$t('common.page')}</TabsTrigger>
               <TabsTrigger value="rising">{$t('searchPerformance.rising')}</TabsTrigger>
               <TabsTrigger value="falling">{$t('searchPerformance.falling')}</TabsTrigger>
@@ -248,7 +243,7 @@ export default function SearchPerformancePage() {
             </DataTableTabs>
             <DataTableToolbar actions={countries.length || country ? <CountrySelect value={country} countries={countries} onChange={(c) => update({ country: c })} /> : undefined}>
               <DataTableFilterToggle open={showFilters} activeCount={activeFilters} onToggle={() => setShowFilters((v) => !v)} />
-              {(MOVER_TABS as readonly string[]).includes(tab) && !noQueries ? <Segmented label={$t('searchPerformance.moversBy')} options={[{ id: "query", label: $t('common.query') }, { id: "page", label: $t('common.page') }]} value={by} onChange={(v) => update({ by: v === "page" ? "page" : undefined })} /> : null}
+              {(MOVER_TABS as readonly string[]).includes(tab) ? <Segmented label={$t('searchPerformance.moversBy')} options={[{ id: "query", label: $t('common.query') }, { id: "page", label: $t('common.page') }]} value={by} onChange={(v) => update({ by: v === "page" ? "page" : undefined })} /> : null}
               {tab === "slices" ? <Segmented label={$t('searchPerformance.slices')} options={SLICES.map((x) => ({ id: x, label: { country: $t('searchPerformance.countryRegion'), device: $t('searchPerformance.device'), appearance: $t('searchPerformance.appearance'), date: $t('searchPerformance.date') }[x] }))} value={slice} onChange={(v) => update({ slice: v === "country" ? undefined : v })} /> : null}
             </DataTableToolbar>
             {showFilters ? (
@@ -257,7 +252,6 @@ export default function SearchPerformancePage() {
                 key={JSON.stringify(filters)}
                 value={filters}
                 activeCount={activeFilters}
-                noQueries={noQueries}
                 onApply={(f) => update({ q: f.queryFilter?.expression, qm: f.queryFilter?.operator === "equals" ? "equals" : undefined, pg: f.pageFilter?.expression, pm: f.pageFilter?.operator === "equals" ? "equals" : undefined })}
               />
             ) : null}
@@ -270,7 +264,6 @@ export default function SearchPerformancePage() {
                 period={report.window!}
                 data={(tab === "pages" ? tableReport?.pages : tableReport?.queries) ?? { rows: [], total: 0 }}
                 dimension={tab === "pages" ? "pages" : "queries"}
-                noPosition={report.noPosition}
                 isFiltered={activeFilters > 0}
                 onClearFilters={() => update({ q: undefined, qm: undefined, pg: undefined, pm: undefined })}
                 onOpen={(r) => openRow(tab === "pages" ? "page" : "query", r.key, r)}
@@ -309,7 +302,7 @@ function CountrySelect({ value, countries, onChange }: { value?: string; countri
         {items.map((c) => (
           <SelectItem key={c.key} value={c.key}>
             {countryName(c.key)}
-            <span className="ml-2 text-xs text-muted-foreground tabular-nums">{$tj('searchPerformance.clicks',{0:c.clicks.toLocaleString(getCurrentLocale())})}</span>
+            <span className="ml-2 text-xs text-muted-foreground tabular-nums">{$tj('searchPerformance.clicks',{0:formatCount(c.clicks)})}</span>
           </SelectItem>
         ))}
       </SelectContent>
@@ -328,16 +321,14 @@ function TotalsCards({ report, metric, onMetric }: { report: SearchReport; metri
     { key: "clicks", label: $t('common.clicks'), value: report.coverage?.current.recordedDays === 0 ? "—" : count(totals!.clicks), delta: previous && pct(totals!.clicks, previous.clicks) },
     { key: "impressions", label: $t('common.impressions'), value: report.coverage?.current.recordedDays === 0 ? "—" : count(totals!.impressions), delta: previous && pct(totals!.impressions, previous.impressions) },
     { key: "ctr", label: $t('common.ctr'), value: report.coverage?.current.recordedDays === 0 ? "—" : ctr(totals!.ctr), delta: previous && pct(totals!.ctr, previous.ctr) },
-    report.noPosition
-      ? { key: "position", label: $t('common.averagePosition'), value: "—", delta: null, hint: $t('searchPerformance.noPositionForType') }
-      : { key: "position", label: $t('common.averagePosition'), value: totals!.impressions ? position(totals!.position) : "—", delta: rank },
+    { key: "position", label: $t('common.averagePosition'), value: totals!.impressions ? position(totals!.position) : "—", delta: rank },
   ];
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" role="group" aria-label={$t('searchPerformance.figures')}>
         {tiles.map((t) => (
           <div key={t.key} data-metric={t.key} className={cn("relative rounded-xl", metric === t.key && "ring-2 ring-primary")}>
-            <button type="button" aria-pressed={metric === t.key} aria-label={t.label} disabled={t.key === "position" && report.noPosition} onClick={() => onMetric(t.key)} className="absolute inset-0 cursor-pointer rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-default" />
+            <button type="button" aria-pressed={metric === t.key} aria-label={t.label} onClick={() => onMetric(t.key)} className="absolute inset-0 cursor-pointer rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-default" />
             <Card className="pointer-events-none relative h-full gap-0 p-4 [&_[data-info-tip]]:pointer-events-auto">
               <StatTile label={t.label} value={t.value} delta={t.delta || null} help={help(t.label)} hint={t.hint} />
             </Card>
@@ -361,7 +352,7 @@ function TrendCard({ report, metric }: { report: SearchReport; metric: Metric })
     : trend;
   return (
     <Card className="gap-3 px-4" data-trend={metric}>
-      <div className="flex items-center gap-1"><h2 className="text-sm font-semibold">{$tj('searchPerformance.daily',{0:label})}</h2><InfoTip label={$t('common.howReadChart')}>{$tj('searchPerformance.solidLineSelectedPeriodDashed',{0:fresh.length ? $t('searchPerformance.preliminaryDataDottedLineGoogle',{0:fresh[0].date.slice(5),1:fresh.length > 1 ? $t('searchPerformance.rangeEnd',{0:fresh.at(-1)!.date.slice(5)}) : ""}) : ""})}{" "}{$t('searchPerformance.clickFigureToSwitch')}</InfoTip></div>
+      <div className="flex items-center gap-1"><h2 className="text-sm font-semibold">{$tj('searchPerformance.daily',{0:label})}</h2><InfoTip label={$t('common.howReadChart')}>{$tj('searchPerformance.solidLineSelectedPeriodDashed',{0:fresh.length ? $t('searchPerformance.preliminaryDataDottedLineGoogle',{0:formatDate(fresh[0].date),1:fresh.length > 1 ? $t('searchPerformance.rangeEnd',{0:formatDate(fresh.at(-1)!.date)}) : ""}) : ""})}{" "}{$t('searchPerformance.clickFigureToSwitch')}</InfoTip></div>
       <div className="nr-chart-box">
         <ResponsiveContainer width="100%" height={240}>
           <AreaChart data={data} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
@@ -379,7 +370,7 @@ function TrendCard({ report, metric }: { report: SearchReport; metric: Metric })
   );
 }
 
-function TextFilters({ value, activeCount, noQueries, onApply }: { value: { queryFilter?: Filter; pageFilter?: Filter }; activeCount: number; noQueries?: boolean; onApply: (f: { queryFilter?: Filter; pageFilter?: Filter }) => void }) {
+function TextFilters({ value, activeCount, onApply }: { value: { queryFilter?: Filter; pageFilter?: Filter }; activeCount: number; onApply: (f: { queryFilter?: Filter; pageFilter?: Filter }) => void }) {
   const [draft, setDraft] = useState({
     q: value.queryFilter?.expression ?? "",
     qm: value.queryFilter?.operator ?? "contains",
@@ -417,7 +408,7 @@ function TextFilters({ value, activeCount, noQueries, onApply }: { value: { quer
   return (
     <DataTableFilterPanel activeCount={activeCount} onReset={() => onApply({})}>
       <div className="grid gap-2 lg:grid-cols-2">
-        {noQueries ? null : row($t('common.query'), "q", "qm", $t('searchPerformance.crm'))}
+        {row($t('common.query'), "q", "qm", $t('searchPerformance.crm'))}
         {row($t('common.page'), "pg", "pm", $t('searchPerformance.docs'))}
       </div>
       <div className="flex items-center gap-3">
@@ -527,7 +518,7 @@ function StrikingTable({ projectId, period, rows, isFiltered, onClearFilters, on
 }
 
 const dimensionHelper = createColumnHelper<DimensionRow>();
-function DimensionTable({ projectId, period, data, dimension, noPosition, isFiltered, onClearFilters, onOpen }: { projectId?: number; period: Period; data: { rows: DimensionRow[]; total: number }; dimension: "pages" | "queries"; noPosition?: boolean; isFiltered: boolean; onClearFilters: () => void; onOpen: (r: DimensionRow) => void }) {
+function DimensionTable({ projectId, period, data, dimension, isFiltered, onClearFilters, onOpen }: { projectId?: number; period: Period; data: { rows: DimensionRow[]; total: number }; dimension: "pages" | "queries"; isFiltered: boolean; onClearFilters: () => void; onOpen: (r: DimensionRow) => void }) {
   const keyLabel = dimension === "pages" ? $t('common.page') : $t('common.query');
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
   const [rowSelection, setRowSelection] = useState({});
@@ -544,9 +535,9 @@ function DimensionTable({ projectId, period, data, dimension, noPosition, isFilt
       dimensionHelper.accessor("clicks", { header: ({ column }) => <SortableHeader column={column} label={$t('common.clicks')} align="right" />, cell: ({ getValue }) => count(getValue()), meta: right }) as ColumnDef<DimensionRow>,
       dimensionHelper.accessor("impressions", { header: ({ column }) => <SortableHeader column={column} label={$t('common.impressions')} align="right" />, cell: ({ getValue }) => count(getValue()), meta: right }) as ColumnDef<DimensionRow>,
       dimensionHelper.accessor("ctr", { header: ({ column }) => <SortableHeader column={column} label={$t('common.ctr')} align="right" />, cell: ({ getValue }) => ctr(getValue()), meta: right }) as ColumnDef<DimensionRow>,
-      ...(noPosition ? [] : [dimensionHelper.accessor("position", { header: ({ column }) => <SortableHeader column={column} label={$t('common.position')} align="right" />, cell: ({ getValue }) => position(getValue()), meta: right }) as ColumnDef<DimensionRow>]),
+      dimensionHelper.accessor("position", { header: ({ column }) => <SortableHeader column={column} label={$t('common.position')} align="right" />, cell: ({ getValue }) => position(getValue()), meta: right }) as ColumnDef<DimensionRow>,
     ],
-    [keyLabel, anchorRef, noPosition, onOpen],
+    [keyLabel, anchorRef, onOpen],
   );
   const table = useDataTable({
     data: data.rows,
@@ -574,7 +565,7 @@ function DimensionTable({ projectId, period, data, dimension, noPosition, isFilt
     <>
       {data.total > data.rows.length ? (
         <p className="px-4 pt-3 text-sm text-muted-foreground">
-          {$tj('searchPerformance.totalMostClicksListedHere',{0:data.total.toLocaleString(getCurrentLocale()),1:keyLabel,2:data.rows.length.toLocaleString(getCurrentLocale())})}</p>
+          {$tj('searchPerformance.totalMostClicksListedHere',{0:formatCount(data.total),1:keyLabel,2:formatCount(data.rows.length)})}</p>
       ) : null}
       <DataTable
         table={table}
@@ -604,11 +595,9 @@ function DimensionTable({ projectId, period, data, dimension, noPosition, isFilt
 function notesOf(report: SearchReport): string[] {
   const w = report.window!;
   return [
-    $t('searchPerformance.searchConsoleWebSearchSynced',{0:report.cutoff}),
+    $t('searchPerformance.searchConsoleWebSearchSynced',{0:formatDate(report.cutoff)}),
     ...(report.pairDays !== undefined && report.pairDays < w.days ? [$t('searchPerformance.queryPageDetailsCoverDays',{0:report.pairDays})] : []),
     ...(report.country ? [$t('searchPerformance.readDirectlySearchConsoleSame',{0:countryName(report.country)})] : report.filtered ? [$t('searchPerformance.filteredMetricsAddUpQuery')] : []),
-    ...(report.type && report.type !== "web" ? [$t('searchPerformance.otherTypeReadLive')] : []),
-    ...(report.noQueries ? [$t('searchPerformance.noQueriesForType')] : []),
     $t('searchPerformance.breakdownReadLive'),
   ];
 }

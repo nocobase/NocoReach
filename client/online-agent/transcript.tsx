@@ -1,7 +1,7 @@
 /* eslint-disable @eslint-react/no-array-index-key -- durable events are append-only within one keyed run */
-import { WrenchIcon } from 'lucide-react';
+import { CornerDownRight, WrenchIcon } from 'lucide-react';
 import { cn } from 'cn';
-import { $t, isChinese } from '#i18n';
+import { $t, getCurrentLocale } from '#i18n';
 import { ChatMarkdown } from '../extensions/nocobase-agent-chat/chat-markdown.js';
 import {
   onlineRunActive,
@@ -10,6 +10,7 @@ import {
 } from '../../shared/online-agent.js';
 import { OnlineApiError } from './api.js';
 import { OnlineError } from './controls.js';
+import { parseQuote } from './quote.js';
 export function OnlineTranscript({ run }: { run: OnlineRun }) {
   // Markdown must see a complete text segment, not one renderer per streaming delta.
   const parts: Extract<OnlineEvent, { type: 'text' | 'toolCall' }>[] = [];
@@ -25,7 +26,8 @@ export function OnlineTranscript({ run }: { run: OnlineRun }) {
       else parts.push({ ...event });
     } else if (event.type === 'toolCall') parts.push(event);
   }
-  const active = onlineRunActive(run);
+  const active = onlineRunActive(run),
+    { quote, question } = parseQuote(run.input);
   const hasText = parts.some(
     (part) => part.type === 'text' && part.text.trim(),
   );
@@ -42,7 +44,13 @@ export function OnlineTranscript({ run }: { run: OnlineRun }) {
       <div className='flex justify-end' data-chat-message='user'>
         <div className='max-w-[85%] rounded-2xl bg-primary/10 px-4 py-3 text-sm'>
           <span className='sr-only'>{$t('onlineAgent.you')}</span>
-          <p className='whitespace-pre-wrap wrap-anywhere'>{run.input}</p>
+          {quote && (
+            <p className='mb-1 flex items-center gap-1 text-xs text-muted-foreground'>
+              <CornerDownRight className='size-3 shrink-0' aria-hidden='true' />
+              {quote}
+            </p>
+          )}
+          <p className='whitespace-pre-wrap wrap-anywhere'>{question}</p>
         </div>
       </div>
       <div
@@ -121,10 +129,7 @@ export function OnlineTranscript({ run }: { run: OnlineRun }) {
                 0: run.usage.inputTokens,
                 1: run.usage.outputTokens,
               })}{' '}
-              ·{' '}
-              {new Date(run.createdAt).toLocaleString(
-                isChinese() ? 'zh-CN' : 'en-US',
-              )}
+              · {new Date(run.createdAt).toLocaleString(getCurrentLocale())}
             </p>
           </details>
         )}

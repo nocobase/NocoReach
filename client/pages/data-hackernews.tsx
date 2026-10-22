@@ -12,13 +12,14 @@ import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
 import { RangePicker } from './range-picker';
 import { validRange, useRange } from './range-state';
-import { MetricTile, type Metric } from "./data-parts";
+import { MetricTile, metricGrid, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
 import { HandOffBar } from "./hand-off-bar";
 import { AllCheck, RowCheck, useTickedList } from "#components/reach/hand-off-slot";
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
 import { NotesTip } from "#components/reach/info-tip";
+import { formatDate } from '#lib/format';
 
 type Story = { title: string; url: string | null; hnUrl: string; points: number; comments: number; date: string; term: string };
 type Comment = { title: string; hnUrl: string; excerpt: string; date: string; term: string };
@@ -31,24 +32,25 @@ export default function DataHackerNews() {
   const custom = !validRange(range);
   const { data: view, error } = useFreshData(project && !custom ? `data-view:hackernews:${project.id}:${JSON.stringify(range)}` : null, () => api.action<View>("nrDataViews", "hackernews", { method: "POST", body: { projectId: project!.id, ...range }, unwrap: "data" }));
   const w = view?.window;
-  const stories = useTickedList("hn-stories", view?.connected ? view.stories : undefined, (s) => s.hnUrl, (ticked) => ({ playbookId: "community-summary", description: $t('common.postsBecomeOneTaskAgent'), draft: () => discussionsDraft("Hacker News", $t('common.posts'), ticked.map((s) => ({ title: s.title, url: s.hnUrl, meta: $t('dataHackernews.pointsComments',{0:s.points,1:s.comments,2:s.date}) }))) }));
+  const stories = useTickedList("hn-stories", view?.connected ? view.stories : undefined, (s) => s.hnUrl, (ticked) => ({ playbookId: "community-summary", description: $t('common.postsBecomeOneTaskAgent'), draft: () => discussionsDraft("Hacker News", $t('common.posts'), ticked.map((s) => ({ title: s.title, url: s.hnUrl, meta: $t('dataHackernews.pointsComments',{0:s.points,1:s.comments,2:formatDate(s.date)}) }))) }));
   const comments = useTickedList("hn-comments", view?.connected ? view.comments : undefined, (c) => c.hnUrl, (ticked) => ({ playbookId: "community-summary", description: $t('dataHackernews.commentsBecomeOneTaskAgent'), draft: () => discussionsDraft("Hacker News", $t('common.comments'), ticked.map((c) => ({ title: c.title || $t('common.comments'), url: c.hnUrl, meta: c.date, excerpt: c.excerpt }))) }));
   return (
     <PageContainer className="nr-data-page">
       <PageHeader info={<NotesTip notes={view?.notes} />} title="Hacker News" description={$t('dataHackernews.postsCommentsMentioningProductHacker')} />
-      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:w.start,1:w.end}) : $t('common.comparedPreviousDays',{0:w.start,1:w.end,2:w.days})) : undefined} />
+      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:formatDate(w.start),1:formatDate(w.end)}) : $t('common.comparedPreviousDays',{0:formatDate(w.start),1:formatDate(w.end),2:w.days})) : undefined} />
       {error ? <LoadError title={$t('dataHackernews.notLoadHackerNewsMentions')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
       {view && !view.connected ? <EmptyState icon={<Newspaper />} title={$t('dataHackernews.onceHackerNewsConnectedDaily')} description={$t('dataHackernews.searchesPublicHackerNewsPosts')} action={<Button onClick={() => navigate("/connections?source=mentions")}>{$t('dataHackernews.connectHackerNews')}</Button>} /> : null}
       {view?.connected ? (
         <>
           <p className="nr-footnote">{$tj('common.searchTermValue',{0:view.terms!.join("、")})}</p>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
+          <div className={metricGrid(view.kpis!.length)}>{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
           
           {view.series!.length ? (
             <Card className="gap-3 px-4">
               <h2 className="text-sm font-semibold">{$t('dataHackernews.dailyMentions')}</h2>
-              <div className="nr-chart-box">
+              {/* No mention in the period: say so instead of drawing an empty axis (guideline T5.4). */}
+              {!view.series!.some((p) => p.value) ? <p className="text-sm text-muted-foreground">{$t('dataHackernews.noMentionsInPeriod')}</p> : <div className="nr-chart-box">
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={view.series} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -58,7 +60,7 @@ export default function DataHackerNews() {
                     <Bar isAnimationActive={false} dataKey="value" name={$t('dataHackernews.mentions')} fill="var(--chart-3)" />
                   </BarChart>
                 </ResponsiveContainer>
-              </div>
+              </div>}
             </Card>
           ) : null}
           <div className="grid gap-4 xl:grid-cols-2">
@@ -68,7 +70,7 @@ export default function DataHackerNews() {
                 <div key={s.hnUrl} className="flex items-start gap-3 border-b border-border px-4 py-2.5 last:border-0" data-story>
                   <span className="pt-0.5"><RowCheck selection={stories} k={s.hnUrl} label={s.title} /></span><div className="min-w-0 flex-1">
                   <a className="nr-link font-medium" href={safeLink(s.hnUrl)} target="_blank" rel="noreferrer">{s.title}</a>
-                  <p className="text-xs text-muted-foreground">{$tj('dataHackernews.pointsComments',{0:s.points,1:s.comments,2:s.date})}{s.url ? <> · <a className="nr-link" href={safeLink(s.url)} target="_blank" rel="noreferrer">{$t('dataHackernews.original')}</a></> : null}</p>
+                  <p className="text-xs text-muted-foreground">{$tj('dataHackernews.pointsComments',{0:s.points,1:s.comments,2:formatDate(s.date)})}{s.url ? <> · <a className="nr-link" href={safeLink(s.url)} target="_blank" rel="noreferrer">{$t('dataHackernews.original')}</a></> : null}</p>
                 </div></div>
               )) : <p className="px-4 py-3 text-sm text-muted-foreground">{$t('dataHackernews.noPostsMentionProductSelected')}</p>}
             </Card>
@@ -79,7 +81,7 @@ export default function DataHackerNews() {
                   <span className="pt-0.5"><RowCheck selection={comments} k={c.hnUrl} label={c.title || $t('common.comments')} /></span><div className="min-w-0 flex-1">
                   <a className="nr-link text-sm" href={safeLink(c.hnUrl)} target="_blank" rel="noreferrer">{c.title || $t('common.comments')}</a>
                   {c.excerpt ? <p className="line-clamp-2 text-sm text-muted-foreground">{c.excerpt}</p> : null}
-                  <p className="text-xs text-muted-foreground">{c.date}</p>
+                  <p className="text-xs text-muted-foreground">{formatDate(c.date)}</p>
                 </div></div>
               )) : <p className="px-4 py-3 text-sm text-muted-foreground">{$t('dataHackernews.noCommentsMentionProductSelected')}</p>}
             </Card>

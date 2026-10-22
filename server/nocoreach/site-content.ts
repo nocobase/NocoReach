@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { systemMessageText } from '../../shared/i18n/messages.js';
+import { decodeHtmlNumericReference } from '../../shared/html-entities.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { randomUUID } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
@@ -12,7 +13,8 @@ import { due, record } from './sync-policy.js';
 // Website content data source (SPEC §11): sitemap-based page inventory joined with GA4/GSC page samples.
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const MAX_SITEMAPS=20,MAX_PAGES=5000,MAX_SITES=5,ENRICH_PER_TICK=5,REREAD_MS=7*86400000;
-const decode=v=>v.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'").trim();
+// Numeric references too: sites write the apostrophe as &#x27; or &#39; (UI review 2026-10-21 found them shown raw).
+const decode=v=>v.replace(/&#x([0-9a-f]+);/gi,(whole:string,h:string)=>decodeHtmlNumericReference(whole,h,16)).replace(/&#(\d+);/g,(whole:string,d:string)=>decodeHtmlNumericReference(whole,d,10)).replace(/&nbsp;/g,' ').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&').trim();
 function robotsSitemaps(text){return String(text||'').split(/\r?\n/).map(l=>l.match(/^\s*sitemap\s*:\s*(\S+)/i)?.[1]).filter(Boolean);}
 function parseSitemap(xml){const text=String(xml||''),blocks=(tag)=>[...text.matchAll(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`,'gi'))].map(m=>m[1]);const loc=b=>decode(b.match(/<loc>([\s\S]*?)<\/loc>/i)?.[1]||''),lastmod=b=>decode(b.match(/<lastmod>([\s\S]*?)<\/lastmod>/i)?.[1]||'')||null;return {sitemaps:blocks('sitemap').map(loc).filter(Boolean),urls:blocks('url').map(b=>({loc:loc(b),lastmod:lastmod(b)})).filter(u=>u.loc)};}
 const BLOG=new Set(['blog','blogs','posts','post','news','articles','article','changelog','updates']),DOCS=new Set(['docs','doc','documentation','guide','guides','reference','api','tutorial','tutorials','learn','manual','handbook','handbooks','kb','help']);

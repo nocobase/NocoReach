@@ -1,4 +1,4 @@
-import { $t, getCurrentLocale, isChinese } from '#i18n';
+import { $t } from '#i18n';
 // Bilibili (社区): public videos found by the project's search terms and BV IDs, counted by publication date, with the
 // same parts as the other 社区 pages (collector-content.tsx).
 import { useEffect, useMemo, useState } from 'react';
@@ -47,12 +47,12 @@ import {
   type BilibiliVideo,
 } from './bilibili-api';
 import './data-views.css';
+import { formatDateTime } from '#lib/format';
 
 type Report = Omit<BilibiliStatus, 'recent'> &
   CollectorReport & { videos: BilibiliVideo[] };
 
-const stamp = (value: string | null) =>
-  value ? new Date(value).toLocaleString(getCurrentLocale()) : '—';
+const stamp = (value: string | null) => formatDateTime(value);
 const videoUrl = (id: string) =>
   `https://www.bilibili.com/video/${encodeURIComponent(id)}`;
 // Unknown counts stay "—"; Bilibili's search summaries never report a missing count as zero.
@@ -63,13 +63,7 @@ const summary = (v: BilibiliVideo) =>
     2: countText(v.comments),
   });
 // Bilibili gives publication times to the minute (UTC); they show in the reader's time zone.
-const published = (v: BilibiliVideo) =>
-  v.publishedAt
-    ? new Date(v.publishedAt).toLocaleString(getCurrentLocale(), {
-        dateStyle: 'short',
-        timeStyle: 'short',
-      })
-    : '—';
+const published = (v: BilibiliVideo) => formatDateTime(v.publishedAt);
 const SORTS = ['views', 'likes', 'comments'] as const;
 
 export default function DataBilibili() {
@@ -182,7 +176,7 @@ export default function DataBilibili() {
               onClick={() => void sync()}
             >
               <RefreshCw data-icon='inline-start' />
-              {running ? $t('common.loadingLoading') : $t('common.readNow')}
+              {running ? $t('common.loadingLoading') : $t('common.updateNow')}
             </Button>
           ) : undefined
         }
@@ -229,9 +223,13 @@ export default function DataBilibili() {
             {$t('common.searchTermValue', {
               0: data.terms.join('、') || '—',
             })}{' '}
-            · {$t('bilibili.bvIdsVideoLinks')}
-            {isChinese() ? '：' : ': '}
-            {data.bvids.join('、') || '—'} ·{' '}
+            ·{' '}
+            {data.bvids.length ? (
+              <>
+                {$t('bilibili.trackedVideos', { 0: data.bvids.join('、') })}{' '}
+                ·{' '}
+              </>
+            ) : null}
             {$t('bilibili.lastSuccessfulCollection', {
               0: stamp(data.verifiedAt),
             })}

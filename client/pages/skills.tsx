@@ -15,6 +15,7 @@ import {useProject,useUnsavedWarning} from './reach-data';
 import {playbookRequest,localizePlaybookList,type PlaybookList} from './playbook-model';
 import {skillRequest,readSkillFiles,SKILL_NAME,type LinkRead,type Skill,type SkillList} from './skill-model';
 import {confirmAction} from '#components/reach/confirm';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#components/ui/select';
 // Skills (SPEC §6.0): how a kind of work is done, as SKILL.md (name, when to use it, how) and files that come with it. One
 // library for every project; turned on here, a Skill goes with every task for the Agent to use when it fits. A 做法 step
 // can name Skills, and that step always uses them.
@@ -45,7 +46,7 @@ export default function SkillsPage(){
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
   <section className="flex flex-col gap-3" aria-label={$t('skills.skills')}>
    <div className="flex flex-wrap items-center gap-2"><label className="relative flex min-w-48 flex-1 items-center sm:max-w-72"><SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" aria-hidden="true"/><input aria-label={$t('skills.searchSkills')} value={q} onChange={e=>setQ(e.target.value)} placeholder={$t('skills.searchSkills')} className="w-full pl-8!"/></label>
-    <select aria-label={$t('skills.filterEnabled')} value={filter} onChange={e=>setFilter(e.target.value)} className="min-w-32"><option value="">{$t('skills.all')}</option><option value="on">{$t('skills.enabledInProject')}</option><option value="off">{$t('common.off')}</option></select>
+    <Select value={filter||'all'} onValueChange={v=>setFilter(v==='all'?'':String(v))}><SelectTrigger className="w-full sm:w-40" aria-label={$t('skills.filterEnabled')}><SelectValue>{(v:string)=>v==='on'?$t('skills.enabledInProject'):v==='off'?$t('common.off'):$t('skills.all')}</SelectValue></SelectTrigger><SelectContent className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal"><SelectItem value="all">{$t('skills.all')}</SelectItem><SelectItem value="on">{$t('skills.enabledInProject')}</SelectItem><SelectItem value="off">{$t('common.off')}</SelectItem></SelectContent></Select>
     {canRemove&&ticked.length>0&&<span className="ml-auto flex items-center gap-2 text-sm" role="group" aria-label={$t('skills.selectedSkills')}><span className="text-muted-foreground">{$tj('skills.selected',{0:ticked.length})}</span><Button size="sm" variant="ghost" disabled={busy} onClick={()=>setPicked([])}>{$t('common.clearSelection')}</Button><Button size="sm" variant="outline" className="text-destructive" disabled={busy} onClick={()=>void removeTicked()}><Trash2Icon/>{$t('skills.deleteSelected')}</Button></span>}</div>
    {!list?<p role="status" className="text-sm text-muted-foreground">{$t('common.loadingLoading')}</p>:visible.length?<div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[40rem] table-fixed border-collapse text-sm" aria-label="Skills">
     <colgroup>{canRemove&&<col className="w-10"/>}<col/><col className="w-56"/><col className="w-20"/><col className="w-20"/></colgroup>
@@ -134,7 +135,7 @@ function SkillDrawer({projectId,canEnable,canRemove,skill,usage,onClose,onToggle
  async function addFiles(list:FileList|null){if(!list?.length)return;const r=await readSkillFiles(list,false);if(!r.files.length){setError(() => ($t('skills.filesNotTextFilesToo')));return;}
   await act('addFiles',{files:r.files},() => ($t('skills.filesAdded',{0:r.files.length,1:r.skipped.length?$t('skills.skippedValueSuffix',{0:r.skipped.length}):''})));}
  async function remove(){if(!skill)return;if(!(await confirmAction({title:() => ($t('skills.delete',{0:skill.name})),description:() => (usage.length?$t('skills.playbookStepsCannotUseAnymore',{0:usage.join('、')}):undefined),action:'common.delete'})))return;void act('remove',{},() => ($t('skills.deleted',{0:skill.name})),true);}
- return <Sheet open={Boolean(skill)} onOpenChange={o=>{if(!o&&!(draft&&!confirm($t('common.discardUnsavedChanges'))))onClose();}}><SheetContent className="w-full overflow-y-auto sm:max-w-2xl" aria-describedby={undefined}>
+ return <Sheet open={Boolean(skill)} onOpenChange={o=>{if(!o)void (async()=>{if(draft&&!(await confirmAction({title:() => ($t('common.discardUnsavedChanges')),action:'playbooks.discard'})))return;onClose();})();}}><SheetContent className="w-full overflow-y-auto data-[side=right]:sm:max-w-2xl" aria-describedby={undefined}>
   <SheetHeader className="sr-only"><SheetTitle>{skill?.name||'Skill'}</SheetTitle></SheetHeader>
   {skill&&<div className="flex flex-col gap-4 p-4 pt-12" aria-label={$t('skills.skillDetails')} role="region">
    <div className="flex flex-wrap items-center gap-2"><h2 className="font-mono text-base font-semibold">{skill.name}</h2>{skill.enabled?<Tag tone="green">{$t('skills.enabledInProject')}</Tag>:<Tag tone="grey">{$t('skills.offProject')}</Tag>}

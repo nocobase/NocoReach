@@ -1,4 +1,5 @@
 import { $t, $tj } from "#i18n";
+import { usePageTab } from '#hooks/use-page-tab';
 // GitHub (网站与产品). 我们的仓库 rebuilt 2026-10-14 in the shape of 访问 (user request: NocoReach's own style, a page
 // description instead of the repository's, more to see): eight figures with the period before, a figure picking the
 // daily line under them; 社区健康, 访问来源 and 仓库构成; and one table with tabs (tables.tsx). Stars, forks, commits,
@@ -29,6 +30,8 @@ import { HotTab } from "./hot";
 import { ReportCard, KIND } from "./tables";
 import { change, dateOf, hours, METRICS, num, pct, ratio, waiting, type Figures, type Metric, type MetricKey, type View } from "./model";
 import "../data-views.css";
+import { formatDate } from '#lib/format';
+import { Delta } from '#components/reach/delta';
 
 const RANGES = githubRanges;
 
@@ -39,6 +42,7 @@ export default function DataGitHub() {
   const [params, setParams] = useSearchParams();
   const [metric, setMetric] = useState<MetricKey>("stars");
   const tab = params.get("view") === "hot" ? "hot" : "repo";
+  usePageTab(tab === 'hot' ? $t('githubHot.tab') : $t('githubHot.ourRepository'));
   const choose = (v: string) => { const p = new URLSearchParams(params); if (v === "hot") p.set("view", "hot"); else p.delete("view"); setParams(p, { replace: true }); };
   const custom = !validRange(range);
   const r = RANGES.includes(range.range) ? range : { range: "28" };
@@ -55,7 +59,7 @@ export default function DataGitHub() {
         </TabsList>
       </Tabs>
       {tab === "hot" ? (project ? <HotTab projectId={project.id} /> : null) : <>
-      <RangePicker value={r} onChange={setRange} options={RANGES} summary={w && repo ? (w.all ? $tj('dataGithub.repoRangeAll', { 0: repo, 1: w.start, 2: w.end }) : $tj('dataGithub.repoRange', { 0: repo, 1: w.start, 2: w.end, 3: w.days })) : undefined} />
+      <RangePicker value={r} onChange={setRange} options={RANGES} summary={w && repo ? (w.all ? $tj('dataGithub.repoRangeAll', { 0: repo, 1: formatDate(w.start), 2: formatDate(w.end) }) : $tj('dataGithub.repoRange', { 0: repo, 1: formatDate(w.start), 2: formatDate(w.end), 3: w.days })) : undefined} />
       {error ? <LoadError title={$t('dataGithub.notLoadGithubData')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={6} /> : null}
       {view && !view.connected ? <EmptyState icon={<Github />} title={$t('dataGithub.onceGithubRepositoryConnectedStars')} description={$t('dataGithub.publicRepositoriesNeedNoCredentials')} action={<Button onClick={() => navigate("/connections?source=github")}>{$t('dataGithub.connectGithub')}</Button>} /> : null}
@@ -172,19 +176,19 @@ function HealthCard({ view }: { view: View }) {
       {wait ? <p className="text-xs text-muted-foreground">{wait.label} · {wait.hint}</p> : null}
       <ul className="flex flex-col text-sm">
         {rows.map((r) => {
-          const c = change(r.now, r.before), good = c !== null && (r.lower ? c <= 0 : c >= 0);
+          const c = change(r.now, r.before);
           return (
             <li key={r.label} className="flex items-baseline gap-2 border-b border-border py-1.5 last:border-0">
               <span className="min-w-0 flex-1 truncate">{r.label}</span>
               <span className="tabular-nums">{r.show(r.now)}</span>
-              <span className={cn("w-24 shrink-0 text-right text-xs tabular-nums text-muted-foreground", c !== null && c !== 0 && (good ? "nr-up" : "nr-down"))} title={r.before != null ? $t('dataGithub.previousValue', { 0: r.show(r.before) }) : undefined}>
-                {c === null ? (r.before != null ? $t('dataGithub.previousValue', { 0: r.show(r.before) }) : "") : `${c > 0 ? "▲" : c < 0 ? "▼" : ""}${Math.abs(Math.round(c * 1000) / 10)}%`}
+              <span className="w-24 shrink-0 text-right text-xs tabular-nums text-muted-foreground" title={r.before != null ? $t('dataGithub.previousValue', { 0: r.show(r.before) }) : undefined}>
+                {c === null ? (r.before != null ? $t('dataGithub.previousValue', { 0: r.show(r.before) }) : "") : <Delta value={c} good={r.lower ? "down" : "up"} />}
               </span>
             </li>
           );
         })}
         <li className="flex items-baseline gap-2 border-b border-border py-1.5"><span className="flex-1">{$t('dataGithub.openIssuesPrs')}</span><span className="tabular-nums">{num(t.openIssues)} / {num(t.openPrs)}</span><span className="w-24 shrink-0" /></li>
-        <li className="flex items-baseline gap-2 py-1.5"><span className="flex-1">Watchers</span><span className="tabular-nums">{num(t.watchers)}</span><span className="w-24 shrink-0" /></li>
+        <li className="flex items-baseline gap-2 py-1.5"><span className="flex-1">{$t('dataGithub.watchers')}</span><span className="tabular-nums">{num(t.watchers)}</span><span className="w-24 shrink-0" /></li>
       </ul>
     </Card>
   );
@@ -195,12 +199,12 @@ function SourcesCard({ view }: { view: View }) {
   const s = view.sources;
   return (
     <Card className="gap-3 px-4" data-sources="">
-      <Head title={$t('dataGithub.sources')} info={$t('dataGithub.sourcesInfo', { 0: s?.date ?? "—" })} />
+      <Head title={$t('dataGithub.sources')} info={$t('dataGithub.sourcesInfo', { 0: formatDate(s?.date) })} />
       {s && s.total ? (
         <>
           <Bars rows={s.kinds.map((k) => ({ key: k.kind, name: KIND[k.kind].label(), share: k.share, accent: k.kind === "ai", value: num(k.count) }))} />
           <p className="border-t border-border pt-2 text-xs text-muted-foreground">
-            {s.ai ? $t('dataGithub.aiReferralViews', { 0: num(s.ai) }) : $t('dataGithub.noAiReferrals')} · {$t('dataGithub.snapshotOf', { 0: s.date })}
+            {s.ai ? $t('dataGithub.aiReferralViews', { 0: num(s.ai) }) : $t('dataGithub.noAiReferrals')} · {$t('dataGithub.snapshotOf', { 0: formatDate(s.date) })}
           </p>
         </>
       ) : <p className="text-sm text-muted-foreground">{view.history?.state === "token" ? $t('dataGithub.shownOnceTrafficConnected') : trafficSince(view)}</p>}

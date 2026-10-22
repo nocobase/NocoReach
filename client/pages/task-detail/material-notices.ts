@@ -1,4 +1,4 @@
-import { $t, isChinese } from '#i18n';
+import { $t, getCurrentLocale } from '#i18n';
 
 export interface MaterialNotice {
   code: string;
@@ -47,7 +47,7 @@ export function reportDate(value: string): string {
     return value || '—';
   const date = new Date(value);
   if (Number.isNaN(date.valueOf())) return value;
-  const locale = isChinese() ? 'zh-CN' : 'en-US';
+  const locale = getCurrentLocale();
   return value.length === 10
     ? date.toLocaleDateString(locale, { timeZone: 'UTC' })
     : date.toLocaleString(locale);
