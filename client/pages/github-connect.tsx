@@ -1,3 +1,4 @@
+import { formatDateTime, formatDate } from '#lib/format';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {ConnectionError,NetworkSettingsLink} from "#components/connection-error";
 import {useEffect,useState} from 'react';
@@ -10,7 +11,7 @@ type History={complete:boolean;total:number|null;from:string|null;at:string|null
 export type GitHubStatus={connected:boolean;history?:{running:boolean;stars:History;forks:History};repo?:string;url?:string;description?:string;lastSync?:{at:string;ok:boolean;errors:string[]}|null;token?:{verifiedAt:string;error:string|null;since:string|null}|null;latest?:{stars:number;forks:number;openIssues:number}|null;starDelta7?:number|null;views14?:number;topReferrers?:{referrer:string;count:number;uniques:number}[];issues?:{total:number;top:{title:string;url:string;comments:number}[]}|null;releases?:{tag:string;name:string;publishedAt:string;url:string}[]};
 type Preview={repo:string;url:string;description:string;stars:number;forks:number};
 const call=<T,>(projectId:number,action:string,body:object={},headers?:Record<string,string>)=>api.action<T>('nrGitHub',action,{method:'POST',body:{projectId,...body},headers,unwrap:'data'});
-const date=(v?:string|null)=>v?new Date(v).toLocaleDateString(getCurrentLocale()):'—';
+const date=(v?:string|null)=>v?formatDate(v):'—';
 export function GitHubConnect({projectId,focus,suggestedUrl,onChange}:{projectId:number;focus:'repo'|'traffic';suggestedUrl?:string;onChange:()=>void}){
  const {can:canPreview}=useBusinessAccess('nrGitHub.preview',projectId);
  const {can:canConnect}=useBusinessAccess('nrGitHub.connect',projectId);
@@ -40,7 +41,7 @@ export function GitHubConnect({projectId,focus,suggestedUrl,onChange}:{projectId
   <p>{$tj('github.last7DaysForksIssues',{0:status.latest?.stars.toLocaleString(getCurrentLocale())??'—',1:status.starDelta7===null||status.starDelta7===undefined?$t('github.needs7DaysData'):(status.starDelta7>=0?'+':'')+status.starDelta7,2:status.latest?.forks.toLocaleString(getCurrentLocale())??'—',3:status.issues?.total??'—'})}</p>
   {status.releases?.[0]&&<p className="nr-footnote">{$t('github.latestRelease')} <a className="nr-link" href={status.releases[0].url} target="_blank" rel="noreferrer">{status.releases[0].tag}</a> · {date(status.releases[0].publishedAt)}</p>}
   {!!status.issues?.top.length&&<div><p className="nr-guide-subtitle">{$t('github.mostDiscussedIssues')}</p>{status.issues.top.slice(0,3).map(i=><p key={i.url} className="nr-footnote"><a className="nr-link" href={i.url} target="_blank" rel="noreferrer">{i.title}</a>  {$tj('github.comments',{0:i.comments})}</p>)}</div>}
-  <p className="nr-footnote">{$tj('github.lastSyncedSyncsAutomaticallyOnce',{0:status.lastSync?new Date(status.lastSync.at).toLocaleString(getCurrentLocale()):'—'})}{status.lastSync?.errors.map(e=><span key={e} className="nr-block">{$tj('common.partlyNotUpdated',{0:$legacyText(e)})}</span>)}<NetworkSettingsLink messages={status.lastSync?.errors}/></p>
+  <p className="nr-footnote">{$tj('github.lastSyncedSyncsAutomaticallyOnce',{0:status.lastSync?formatDateTime(status.lastSync.at):'—'})}{status.lastSync?.errors.map(e=><span key={e} className="nr-block">{$tj('common.partlyNotUpdated',{0:$legacyText(e)})}</span>)}<NetworkSettingsLink messages={status.lastSync?.errors}/></p>
   <div className="nr-step-actions">{canSync&&<Button size="sm" variant="outline" disabled={busy} onClick={()=>void run(()=>call<GitHubStatus>(projectId,'sync'))}>{$t('common.syncNow')}</Button>}{canDisconnect&&<Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('github.stopSyncingRepository')),description:() => ($t('github.archivedDataKeptTokenDeleted')),action:'common.disconnect'}))void run(()=>call<GitHubStatus>(projectId,'disconnect'));}}>{$t('common.disconnect')}</Button>}</div></section>;
  const tokenForm=<><ol className="nr-guide-steps">
    <li>{$t('github.openGithub')} <a className="nr-link" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">{$t('github.newFineGrainedTokenPage')}</a>{$t('github.needLeastWriteAccessRepository')}</li>

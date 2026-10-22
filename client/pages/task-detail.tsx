@@ -1,3 +1,4 @@
+import { formatDateTime, formatDate } from '#lib/format';
 import {matchesObservation} from '../../shared/result-comparison.js';
 import { mockSettingsAvailable } from '../../app-plugins/nocoreach-mock/client/index.js';
 import { localizeWorkSnapshots } from './playbook-snapshot';
@@ -90,7 +91,7 @@ function failureOf(run:Run,data:Data):Failure{
 const call=<T,>(projectId:number,taskId:string,action:string,body:object={})=>api.action<T>('nrTaskWork',action,{method:'POST',body:{projectId:String(projectId),taskId,...body},unwrap:'data'});
 // Tasks run by a playbook (new tasks, and tasks started with a flow) use this page; older step-plan tasks keep theirs.
 export function isPlaybookTask(d:Data){const w=d.work;return Boolean(w.playbook||w.flow)||(w.stage==='plan'&&!w.plan&&!w.simple);}
-const when=(iso?:string)=>iso&&!Number.isNaN(Date.parse(iso))?new Date(iso).toLocaleString(getCurrentLocale(),{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+const when=(iso?:string)=>iso&&!Number.isNaN(Date.parse(iso))?formatDateTime(iso):'';
 // Agent text often carries machine timestamps (2026-10-16T10:03:33.905Z); show them as the rest of the page does.
 const humanTimes=(text:string)=>text.replace(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})/g,m=>when(m)||m);
 const active=(r:Run)=>r.status==='queued'||r.status==='running';
@@ -462,7 +463,7 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
  </StageCard>;
  const replies=repliesOf(w,accepted?.content);
  if(replies.length)return <StageCard tone="done" label={$t('common.completed')} icon={<Check/>} title={$t('taskDetail.replyDraftsAccepted')} sub={$t('taskDetail.copyReplyPostYourselfNocoreach')}><ReplyDrafts items={replies}/></StageCard>;
- return <StageCard tone="done" label={$t('common.completed')} icon={<Check/>} title={$t('common.completed')} sub={w.observeFrom?$t('taskDetail.trackingImpactSince',{0:new Date(w.observeFrom).toLocaleDateString(getCurrentLocale())}):undefined}>
+ return <StageCard tone="done" label={$t('common.completed')} icon={<Check/>} title={$t('common.completed')} sub={w.observeFrom?$t('taskDetail.trackingImpactSince',{0:formatDate(w.observeFrom)}):undefined}>
   {w.receipt?.note&&<p className="nr-td-text">{$tj('taskDetail.published',{0:w.receipt.note})}{w.receipt.url&&<> · <a className="nr-link" href={w.receipt.url} target="_blank" rel="noreferrer">{$t('common.openPage')}</a></>}</p>}
   {w.observeFrom&&<EffectList w={w}/>}
   {accepted&&!accepted.pr&&<><Reading><Markdown content={accepted.content}/></Reading>{accepted.report&&<ReportNotes report={accepted.report}/>}</>}
