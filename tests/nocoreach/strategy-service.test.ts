@@ -50,6 +50,21 @@ test('a change handed off on its own keeps its change and page on the task',asyn
  await service.confirmDirection(1,{title:'t',brief:'b',objective:'o',page:'javascript:alert(1)'});
  assert.equal('page' in writes[1].values.evidence,false);
 });
+test('a data page hand-off records who found it and from which page',async()=>{
+ // Found by <name> on the task (2026-10-22): the creator and the page they handed it off from.
+ const {StrategyService}=__strategy_service;
+ const writes=[];const service=new StrategyService({db:{getRepository:name=>({create:async options=>{writes.push({name,...options});return {id:44};}})}});
+ const state={goal:null,proposals:[],insights:{items:[],evidence:{}}};
+ service.context=async()=>({evidence:{}});
+ service.mutate=async(_id,_v,fn)=>{await fn(state,{});return state;};
+ const ctx={auth:{user:{id:2,nickname:'王磊'}}};
+ await service.confirmDirection(1,{title:'t',brief:'b',objective:'o',entry:'/main/data/github'},ctx);
+ assert.deepEqual(writes[0].values.evidence.createdBy,{id:'2',name:'王磊'});
+ assert.equal(writes[0].values.evidence.entry,'/main/data/github');
+ // Anything but a plain path is left out, without failing the hand-off.
+ await service.confirmDirection(1,{title:'t',brief:'b',objective:'o',entry:'https://evil.example/x'},ctx);
+ assert.equal('entry' in writes[1].values.evidence,false);
+});
 test('opportunity validation rejects missing evidence and strips generated identity',()=>{
  const {insightInput}=__strategy_service;
  assert.throws(()=>insightInput({title:'Unsupported claim'}));

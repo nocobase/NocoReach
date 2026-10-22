@@ -171,6 +171,34 @@ it('reads the latest analysis: notes, each opportunity with where it stands, eve
   ]);
 });
 
+it('a handed-off opportunity says where its task stands, from the tasks the user may list', async () => {
+  const of = (work: object) =>
+    (
+      analysisForAgent(state(), undefined, link, [
+        { id: 90, status: 'todo', evidence: { work } },
+      ]) as any
+    ).analysis.opportunities.find((o: any) => o.no === 'O-40');
+  expect(of({ stage: 'done' })).toMatchObject({
+    status: 'task_done',
+    task: 'T-32',
+  });
+  expect(of({ boardState: 'review' }).status).toBe('task_needs_confirmation');
+  expect(of({ boardState: 'doing' }).status).toBe('task_in_progress');
+  expect(of({ cancelledAt: '2026-10-21T00:00:00Z' }).status).toBe(
+    'task_closed',
+  );
+  expect(of({ boardState: 'todo' }).status).toBe('handed_off_to_agent');
+  // The tool reads them when given; without them the task is not known.
+  const tool = dailyAnalysisTool(
+    async () => state(),
+    async () => undefined,
+    link,
+    async () => [{ id: 90, evidence: { work: { stage: 'done' } } }],
+  );
+  const out = (await tool.execute({})) as { text: string };
+  expect(out.text).toContain('"status":"task_done","task":"T-32"');
+});
+
 it('reads an earlier day, and says when there is no analysis', () => {
   const view = analysisForAgent(state(), '2026-10-20', link) as any;
   expect(view.analysis.day).toBe('2026-10-20');
