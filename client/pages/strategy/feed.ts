@@ -11,12 +11,16 @@ export type Day = { day: string; items: Line[]; ended: WatchRecord[] };
 export type Feed = { pending: Row[]; decided: Line[]; days: Day[] };
 /**
  * Where each opportunity shows, once: today if it waits for a decision (most important first, as on Opportunities'
- * To do) or was raised, raised again or dismissed on the latest analysis day; otherwise on the day it was first raised,
+ * To do), or was raised, dismissed or handed off on the latest analysis day; otherwise on the day it was first raised,
  * with where it went. Merged duplicates are left out. Watches show on the day they ended.
  */
-export function feedOf(state: StrategyState, rows: Row[]): Feed {
-  const latest = state.insights?.generatedAt || '',
-    today = dayOf(latest),
+export function feedOf(
+  state: StrategyState,
+  rows: Row[],
+  /** When each task was created, by task id: a hand-off counts on the day it happened. */
+  taskCreated: ReadonlyMap<string, string> = new Map(),
+): Feed {
+  const today = dayOf(state.insights?.generatedAt),
     pending: Row[] = [],
     decided: Line[] = [],
     days = new Map<string, Day>(),
@@ -31,13 +35,17 @@ export function feedOf(state: StrategyState, rows: Row[]): Feed {
       pending.push(row);
       continue;
     }
+    // Decided today: raised today, dismissed today or handed off today. One decided earlier stays on the day it was
+    // raised, even when today's analysis lists it again (2026-10-22: T-27 and T-30 read as today's hand-offs beside
+    // the three opportunities dismissed today).
     const raised = dayOf(row.firstSeenAt),
-      ignored = dayOf(state.opportunityMeta?.[row.card.id]?.ignoredAt);
+      ignored = dayOf(state.opportunityMeta?.[row.card.id]?.ignoredAt),
+      handed = dayOf(row.taskId ? taskCreated.get(String(row.taskId)) : '');
     if (
       today &&
-      (row.batch.generatedAt === latest ||
-        raised >= today ||
-        (st.reason === 'ignored' && ignored >= today))
+      (raised >= today ||
+        (st.reason === 'ignored' && ignored >= today) ||
+        (st.state === 'task' && handed >= today))
     )
       decided.push({ row, st });
     else if (raised) at(raised).items.push({ row, st });

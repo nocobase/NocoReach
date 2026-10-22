@@ -590,7 +590,7 @@ export function Today({
       {docked ? (
         <InPanelNote />
       ) : (
-        <DayConversation day={dayOf(batch?.generatedAt)} />
+        <DayConversation day={dayOf(batch?.generatedAt)} folded />
       )}
     </>
   );
