@@ -435,8 +435,7 @@ function nextStep(item: ResultSummary) {
 }
 
 // A few results in a card (T5.3): plain headers, no sorting or paging; the task opens its drawer over this page.
-// The table reaches the card's edges and pads its outer cells with the card's spacing, as "Table in a card" does
-// (this app's DataTable is bound to refine's useTable).
+// The table reaches the card's edges and pads its outer cells with the card's spacing, as "Table in a card" does.
 function RecentCard({ items }: { items: ResultSummary[] }) {
   const location = useLocation();
   return (

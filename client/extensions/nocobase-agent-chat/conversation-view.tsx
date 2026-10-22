@@ -201,9 +201,10 @@ function ConversationBody({
     revision,
   );
   // NocoReach's online chat has its own service; this panel only starts Runner conversations.
+  const runners = useMemo(() => runnerAgents(agents.data), [agents.data]);
   const target = conversation
     ? null
-    : newConversationAgent(runnerAgents(agents.data), panel.newAgentId);
+    : newConversationAgent(runners, panel.newAgentId);
 
   const { selectConversation, resetSource, source, focusComposer } = panel;
   const created = useCallback(
@@ -608,7 +609,9 @@ function ConversationBody({
               conversationId,
               `registry:${source}:${conversationId ?? 'new'}`,
             ) ||
-            Boolean(conversation && !conversation.execution)
+            Boolean(conversation && !conversation.execution) ||
+            // Without a Runner target the server would pick the default agent, which may be the built-in online one.
+            (!conversation && target === null)
           }
           running={running}
           stopping={stopping}
@@ -626,7 +629,7 @@ function ConversationBody({
             conversation ? (
               <AgentNotice conversation={conversation} />
             ) : target === null && agents.isSuccess ? (
-              runnerAgents(agents.data).length > 0 ? (
+              runners.length > 0 ? (
                 <p
                   className='text-xs text-muted-foreground'
                   data-testid='chat-choose-agent'
