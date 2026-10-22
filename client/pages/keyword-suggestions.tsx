@@ -10,6 +10,7 @@ import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { Bookmark, LoaderCircle } from "lucide-react";
 import { RefreshButton } from '#components/reach/refresh-button';
+import { HeaderActions } from "#components/reach/page";
 import { AiMark } from "#components/reach/actor";
 import { toast } from "#lib/toast";
 import { LoadError, InlineError } from "#components/reach/states";
@@ -107,7 +108,7 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
             <SelectContent align="end" className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{getMarkets().map((m) => <SelectItem key={`${m.locationCode}|${m.language}`} value={`${m.locationCode}|${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
           </Select>
           {view.dataforseo && !view.metricsAt ? <Button size="sm" variant="outline" disabled={Boolean(busy)} onClick={() => void run("lookup")}>{busy === "lookup" ? $t('common.lookingUp') : $t('keywordSuggestions.checkVolume')}</Button> : null}
-          <RefreshButton busy={busy === "suggest"} disabled={Boolean(busy)} label={busy === "suggest" ? $t('keywordSuggestions.suggestingAgain') : $t('common.suggestAgain')} onClick={() => void run("suggest", { force: true })} />
+          <HeaderActions><RefreshButton busy={busy === "suggest"} disabled={Boolean(busy)} label={busy === "suggest" ? $t('keywordSuggestions.suggestingAgain') : $t('common.suggestAgain')} onClick={() => void run("suggest", { force: true })} /></HeaderActions>
         </div>
       </div>
       {error ? <p className="nr-error" role="alert">{error}</p> : null}

@@ -236,7 +236,11 @@ export default function Keys() {
                     <TableHead className='hidden lg:table-cell'>
                       {$t('accessKeys.lastUsed')}
                     </TableHead>
-                    <TableHead>{$t('accessMembers.actions')}</TableHead>
+                    <TableHead>
+                      <span className='sr-only'>
+                        {$t('accessMembers.actions')}
+                      </span>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
