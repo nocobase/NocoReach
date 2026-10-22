@@ -11,7 +11,7 @@ import { DeliveryDialog, DeliverySummary } from './task-detail/article-start.js'
 import { PlaybookDrawer } from './task-detail/playbook-drawer.js';
 import { ArticleEditor, ArticleReview } from './task-detail/article-review.js';
 import { ConflictBody, DriftNotice, PendingButton, TargetRows } from './task-detail/article-release.js';
-import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, pageUrlsOf, publishingTitle, soleConflict, type ArticleFound, type DeliveryChoice } from './task-detail/article-model.js';
+import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, fieldLabel, joinNames, pageUrlsOf, publishingTitle, soleConflict, type ArticleFound, type DeliveryChoice } from './task-detail/article-model.js';
 import { matchArticle } from './article-targets-api';
 import { TaskMedia } from './task-detail/media.js';
 import { TaskProperties } from './task-detail/task-properties.js';
@@ -447,10 +447,13 @@ function ClosedCard({w,update,busy}:{w:Work;update:Update;busy:boolean}){
 function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
  const w=data.work,r=w.release,canRevert=Boolean(data.agent?.repo);
  const accepted=[...w.results].reverse().find(x=>x?.approvedAt&&!x.rejectedAt);
+ // The version that went live: an article release names its artifact; a merged change is the accepted one.
+ const shipped=(r?.article?.artifactId&&w.results.find(x=>x?.id===r.article!.artifactId))||accepted||undefined;
  if(r?.state==='simulated')return <StageCard tone='done' label={$t('common.completed')} icon={<Check/>} title={$t('taskDetail.simulatedRelease')} sub={$t('taskDetail.simulatedReleaseDescription')}><div className='nr-td-what'><b>{$t('taskDetail.releaseNotes')}</b><p>{r.note}</p></div></StageCard>;
  if(r?.state==='live')return <StageCard tone="done" label={$t('common.completed')} icon={<Check/>} title={$t('taskDetail.live')} sub={$t('taskDetail.liveSince',{0:when(r.liveAt),1:(w.history||[]).some(e=>e.action==='live'&&e.actor==='system')?$t('taskDetail.sawChangeLive'):$t('common.confirmedLive')})}
   actions={r.pr&&r.mergedAt&&canRevert&&(!w.revert||w.revert.state==='failed')?<Button variant="outline" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('taskDetail.undoChangeConfirm')),description:() => ($t('taskDetail.undoChangeDescription')),action:'taskDetail.revertChange'}))void update('revertRelease');}}><Undo2/>{$t('taskDetail.revertCurrentChange')}</Button>:undefined}>
   {w.revert&&<p className={w.revert.state==='failed'?'nr-error':'nr-td-text'} data-revert={w.revert.state}>{w.revert.state==='opening'?$t('taskDetail.undoPreparing'):w.revert.state==='opened'?$t('taskDetail.undoPrepared'):$t('taskDetail.undoFailed',{0:w.revert.error||$t('errors.unknownReason')})}</p>}
+  <LiveChange data={data} artifact={shipped}/>
   <TargetRows data={data} r={r}/>
   <DriftNotice data={data} r={r}/>
   <EffectList w={w}/>
@@ -464,6 +467,26 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
   {w.observeFrom&&<EffectList w={w}/>}
   {accepted&&!accepted.pr&&<><Reading><Markdown content={accepted.content}/></Reading>{accepted.report&&<ReportNotes report={accepted.report}/>}</>}
  </StageCard>;
+}
+// What one delivered version changes, as its owner reviewed it: a page change's visible changes, or an article's fields
+// against the version it was written from. The activity's View and the live card's View changes both show it.
+function VersionChange({data,artifact,notes}:{data:Data;artifact:Artifact;notes:boolean}){
+ if(artifact.pr)return <PageChange pr={artifact.pr} content={artifact.content}/>;
+ if(artifact.article)return <ArticleReview data={data} article={artifact.article} notes={notes?artifact.content:''} settled/>;
+ return null;
+}
+// Once live, the card names what changed in one line; the change itself opens on demand.
+function LiveChange({data,artifact}:{data:Data;artifact?:Artifact}){
+ const [open,setOpen]=useState(false);
+ if(!artifact||(!artifact.pr&&!artifact.article))return null;
+ const a=artifact.article,visible=artifact.pr?.visibleChanges||[];
+ const paths=a?(a.changes.length?a.changes:a.carried||[]):[];
+ const labels=a?paths.map(fieldLabel):[...new Set(visible.map(v=>v.label))],count=a?paths.length:visible.length;
+ return <div className='flex flex-wrap items-center gap-x-2 gap-y-1 text-sm'>
+  {count>0&&<span>{$t('taskDetail.changedSummary',{0:count,1:joinNames(labels)})}</span>}
+  <Button variant='link' size='sm' className='h-auto p-0' onClick={()=>setOpen(true)}>{$t('taskDetail.viewChanges')}<ChevronRight/></Button>
+  <DocReader open={open} onClose={()=>setOpen(false)} title={$t('taskDetail.whatChanged')} meta={`${$t('taskDetail.versionNumber',{0:artifact.version})}${artifact.approvedAt?` · ${$t('taskDetail.approvedOn',{0:when(artifact.approvedAt)})}`:''}`} content=''><VersionChange data={data} artifact={artifact} notes={false}/></DocReader>
+ </div>;
 }
 // Impact tracking (SPEC §8): day 7 and day 28 against the same number of days before going live.
 function EffectList({w}:{w:Work}){
@@ -504,7 +527,7 @@ function ActivityCard({data,update,busy,members}:{data:Data;update:Update;busy:b
    const line=artifact?$t('taskDetail.deliveredVersion',{0:artifact.version,1:nameOf(artifact.stepId)}):plain[e.action]||t!.text;
    return <li key={`${e.at}:${e.action}:${e.runId||''}:${i}`} className="nr-td-event">{eventIcons[e.action]||<Play/>}<b>{e.action==='runSucceeded'?executor:who}</b><span>{line}</span>{artifact&&<Button size="sm" variant="ghost" className="h-6 px-2" onClick={()=>setView(artifact)}>{$t('common.view')}</Button>}<time>{when(e.at)}</time></li>;})}
    {!rows.length&&<li className="nr-td-muted">{$t('taskDetail.noActivityYet')}</li>}</ol>
-  {view&&<DocReader open onClose={()=>setView(undefined)} title={`${nameOf(view.stepId)} · ${$t('taskDetail.versionNumber',{0:view.version})}`} meta={when(view.createdAt)} content={view.pr?'':view.content}>{view.pr&&<PageChange pr={view.pr} content={view.content}/>}</DocReader>}
+  {view&&<DocReader open onClose={()=>setView(undefined)} title={`${nameOf(view.stepId)} · ${$t('taskDetail.versionNumber',{0:view.version})}`} meta={when(view.createdAt)} content={view.pr||view.article?'':view.content}><VersionChange data={data} artifact={view} notes/></DocReader>}
   {((!done&&!closed)||Boolean(text))&&<div className="nr-td-composer"><textarea id="nr-composer" aria-label={$t('taskDetail.noteExecutor')} rows={3} value={text} disabled={busy} readOnly={done||closed} placeholder={$t('taskDetail.leaveNoteNextRunReads',{0:executor})} onChange={e=>{setText(e.target.value);}}/>{!done&&!closed&&<div><Button size="sm" variant="outline" disabled={busy||!text.trim()} onClick={()=>void send()}>{$t('taskDetail.send')}</Button></div>}</div>}
  </section>;
 }
