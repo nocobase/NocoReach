@@ -1,5 +1,15 @@
 # NocoReach Changelog
 
+## Unreleased — Agents 1.0.0-beta.18 and the NocoBase framework it requires
+
+- Upgrade Agents to `1.0.0-beta.18`, Runner to `0.1.0-beta.15` and CLI Client to `0.1.0-beta.13`, with the framework versions of Default Template `1.0.0-beta.76`: App Server `3.0.0-beta.2`, App Client `4.0.0-beta.1`, i18n `2.0.0-beta.1`, Notification `2.0.0-beta.0` and the matching plugins. The template source is not merged; its marker stays `1.0.0-beta.68`. The application CLI release moves to `1.0.0-beta.69` so installed CLIs and runners fetch the new archives.
+- Deploy the application before updating runners: protocol 12 runners are refused by an older server. Drain active runs and back up the database first. Three Agents migrations only add columns (runner quota, conversation metadata and chat-list visibility); rolling them back is refused once a conversation has metadata, so restore the backup instead.
+- The Runner chat panel follows the Registry `agent-chat` block at `1.0.0-beta.18`: replies render as ordered AI SDK message parts with collapsible reasoning, tool approvals and clearer sending, waiting and failure feedback. The composer is disabled while a run is open (Stop ends it), and "Use another agent here" / "Switch back" are gone with the plugin's fallback and restore operations. Conversations started before the upgrade can be read but not continued.
+- The plugin's built-in online agent, listed when a default chat model exists, is kept out of the Runner panel; online chat still goes through NocoReach's own service. A new Runner conversation cannot be sent until a Runner agent is chosen, so the server never falls back to that agent, and choosing one keeps the draft and the pinned context.
+- Members › Roles: Authorization `1.0.0-beta.30` adds a `revision` to permission sets and returns their fields in a different order when read than when created, so the role revision is now hashed over sorted fields. Without this, deleting a custom role or saving it again answered "changed" every time.
+- Refine is gone from the client runtime: the unused Refine data table and the five `@refinedev/*` packages are removed, and the app title is no longer set through `app.refine`.
+- The Scheduler patch moves unchanged to `1.0.0-beta.19`, whose patched files are identical to `1.0.0-beta.17`.
+
 ## Unreleased — Tasks and results: plain cards, skeletons, and the application's own controls
 
 - Tasks › By Agent: a card waiting on you is a normal card with an amber "You" tag and a grey tag for what it waits for, as the board and the list say it; it was the only card painted amber, with the only solid tag on the site.
@@ -67,6 +77,7 @@
 - Data health lists the sources needing attention, each with the action that fits its failure: Retry; Change, which opens the source's settings, when a setting must change first (an expired Google authorization, a refused GitHub token, X's spending cap, a paused daily analysis, a competitor without a sitemap); or Check, then retry for an uncertain DataForSEO result that may be billed, which asks before querying again. Retry all retries the rows a plain retry can help and the person may retry, one after another, each row showing its progress and result. The full sync status table is shown directly.
 - Google Search Console and GA4 rows that are only late offer Retry, which asks for a sync as Update now does. Rank tracking and Trends record an uncertain DataForSEO result, and competitor activity a refusal only a changed setting cures, so Data health can tell them apart.
 - Agent edits and publishing (Website source and Blog CMS) is the first group of sources: every change the Agent makes lands in one of them. Group headings use the shared section heading at the size of the page's other headings, with the same space above every group and a small gap to its cards; the old plain heading took a page-wide rule that left it grey and touching its cards.
+
 ## Unreleased — Agent: one Settings per row, tidy tabs
 
 - Who does the work reads as a table: column headings, Cloud models and Local agents as light group rows with their explanation in an ⓘ, and what each work does under its name.
