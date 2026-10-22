@@ -800,3 +800,103 @@ test('chat stores one input per turn, reconstructs completed history and preserv
     ).toEqual(['First answer', 'First answer']);
   }
 });
+
+test('conversations asked from Insights keep their day and opportunity and list only for their owner', async ({
+  testApp,
+  connection,
+}) => {
+  const service = testApp.application.container.resolve(onlineAgentsToken);
+  await service.stop();
+  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const host = testApp.application.container.resolve(nocoReachToken);
+  await host.ready;
+  const project = String(
+    (
+      await host.plugin.projects.create({
+        name: 'Insights questions',
+        domain: 'insights-questions.example.test',
+      })
+    ).id,
+  );
+  vi.spyOn(service, 'resolveModel').mockResolvedValue({
+    modelService: 'test',
+    model: 'test-model',
+  });
+  vi.spyOn(service.models.gateway, 'stream').mockImplementation(
+    async function* () {
+      yield { type: 'text', delta: 'Re-crawling takes **1–3 weeks**.' };
+      yield finish;
+    },
+  );
+  const ask = (text: string, extra: object) =>
+    post(admin, '/onlineAgents/conversations', {
+      requestId: randomUUID(),
+      agentId: DEFAULT_ONLINE_AGENT,
+      projectId: project,
+      text,
+      ...extra,
+    });
+  const subject = {
+    kind: 'insights',
+    day: '2026-10-21',
+    opportunityId: 'o41',
+  };
+  const asked = await ask('How long until it shows?', { subject });
+  expect(asked.status).toBe(200);
+  expect(
+    ((await asked.json()) as { data: OnlineConversation }).data.subject,
+  ).toEqual(subject);
+  expect((await ask('Not from Insights', {})).status).toBe(200);
+  // A question from Insights belongs to a project, and its day is a date.
+  expect(
+    (
+      await post(admin, '/onlineAgents/conversations', {
+        requestId: randomUUID(),
+        agentId: DEFAULT_ONLINE_AGENT,
+        projectId: null,
+        text: 'No project',
+        subject,
+      })
+    ).status,
+  ).toBe(400);
+  expect(
+    (await ask('Bad day', { subject: { kind: 'insights', day: '21 Oct' } }))
+      .status,
+  ).toBe(400);
+  service.start();
+  await service.idle();
+  await service.stop();
+  const listed = await admin.fetch(
+    `/onlineAgents/threads?projectId=${project}`,
+  );
+  expect(listed.status).toBe(200);
+  expect((await listed.json()).data).toEqual([
+    expect.objectContaining({
+      subject,
+      question: 'How long until it shows?',
+      answer: 'Re-crawling takes **1–3 weeks**.',
+      status: 'completed',
+      turns: 1,
+    }),
+  ]);
+  // Another person sees none of them, even with access to the project.
+  const person = await connection
+    .repository('user')
+    .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } });
+  const other = await testApp.application.container
+    .resolve(userAdministrationServiceToken)
+    .create({
+      email: 'insights-other@example.com',
+      password: 'test-password-123',
+      name: 'Other',
+    });
+  await testApp.application.container
+    .resolve(authorizationToken)
+    .permissionSets.assign({
+      permissionSet: 'nr.member',
+      subject: { type: 'user', id: other.id },
+    });
+  await host.legacy.db.access!.joinCreatedProject(other.id, project);
+  expect(await service.threads(other.id, project)).toEqual([]);
+  expect(await service.threads(String(person!.id), project)).toHaveLength(1);
+});

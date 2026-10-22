@@ -3,7 +3,19 @@ import { addMonths, format, parseISO } from 'date-fns';
 import { CalendarIcon } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { useId, useState, type ReactNode } from 'react';
-import { enUS, zhCN } from 'react-day-picker/locale';
+import {
+  enUS,
+  zhCN,
+  zhTW,
+  ja,
+  es,
+  ptBR,
+  fr,
+  de,
+  vi,
+  id,
+} from 'react-day-picker/locale';
+import { resolveLocale } from '../../shared/i18n/locales';
 import { Button } from '#components/ui/button';
 import { Calendar } from '#components/ui/calendar';
 import {
@@ -48,7 +60,18 @@ const committedDraft = (value: Range, today: string): Draft =>
 export function RangePicker({ value, onChange, summary, options }: Props) {
   const location = useLocation();
   const localeCode = useNocoReachLocale();
-  const locale = localeCode === 'zh-CN' ? zhCN : enUS;
+  const locale = {
+    'en-US': enUS,
+    'zh-CN': zhCN,
+    'zh-TW': zhTW,
+    'ja-JP': ja,
+    'es-ES': es,
+    'pt-BR': ptBR,
+    'fr-FR': fr,
+    'de-DE': de,
+    'vi-VN': vi,
+    'id-ID': id,
+  }[resolveLocale(localeCode)];
   // Two months side by side wherever the calendar lays its months out in a row.
   const wide = useMediaQuery('(min-width: 48rem)', true);
   const errorId = useId();

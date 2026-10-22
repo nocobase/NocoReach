@@ -114,7 +114,7 @@ test('the Agent is chosen in the header, and Start waits for one', async () => {
   expect(start).toBeDisabled();
   expect(agentMenu()).toHaveTextContent('Agent · 未选择');
   expect(screen.getByText('先在上方选一个 Agent。')).toBeVisible();
-  expect(screen.queryByRole('combobox', { name: '执行 Agent' })).toBeNull();
+  expect(screen.queryByRole('combobox', { name: '本地 Agent' })).toBeNull();
   const selected = structuredClone(data);
   selected.work.agentId = 'codex';
   selected.work.agentName = 'NocoReach Codex';

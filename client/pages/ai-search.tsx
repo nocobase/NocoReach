@@ -1,4 +1,5 @@
 import { type Message, renderMessage, useMessageState, $t, $tj, $legacyText } from "#i18n";
+import { usePageTab } from '#hooks/use-page-tab';
 // AI 搜索: after every-app/open-seo db8bde1 src/client/features/ai-search/ (BrandLookupPage, PromptExplorerPage and their
 // components; MIT). Changes: the brand defaults to the project and our pages are marked from its domains; ChatGPT and
 // Google AI 概览 are looked up together and shown side by side; 问 AI asks the chosen models at once and shows each
@@ -66,6 +67,7 @@ export default function AiSearch() {
   const { project } = useProject();
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") === "ask" ? "ask" : params.get("tab") === "brand" ? "brand" : "questions";
+  usePageTab($t(tab === 'ask' ? 'aiSearch.askAi' : tab === 'brand' ? 'aiSearch.brandMentions' : 'common.question'));
   const group = params.get("g");
   const [connection, setConnection] = useState<KeywordConnectionState>();
   const [recent, setRecent] = useState<Recent[]>();

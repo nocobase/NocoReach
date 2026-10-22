@@ -1,4 +1,5 @@
 import { $t, $tj } from "#i18n";
+import { usePageTab } from '#hooks/use-page-tab';
 // GitHub (网站与产品). 我们的仓库 rebuilt 2026-10-14 in the shape of 访问 (user request: NocoReach's own style, a page
 // description instead of the repository's, more to see): eight figures with the period before, a figure picking the
 // daily line under them; 社区健康, 访问来源 and 仓库构成; and one table with tabs (tables.tsx). Stars, forks, commits,
@@ -41,6 +42,7 @@ export default function DataGitHub() {
   const [params, setParams] = useSearchParams();
   const [metric, setMetric] = useState<MetricKey>("stars");
   const tab = params.get("view") === "hot" ? "hot" : "repo";
+  usePageTab(tab === 'hot' ? $t('githubHot.tab') : $t('githubHot.ourRepository'));
   const choose = (v: string) => { const p = new URLSearchParams(params); if (v === "hot") p.set("view", "hot"); else p.delete("view"); setParams(p, { replace: true }); };
   const custom = !validRange(range);
   const r = RANGES.includes(range.range) ? range : { range: "28" };

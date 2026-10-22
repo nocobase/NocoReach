@@ -4,7 +4,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Link, useNavigate } from 'react-router';
-import { $t, isChinese, useNocoReachLocale } from '#i18n';
+import { $t, getCurrentLocale, useNocoReachLocale } from '#i18n';
 import { toast } from '#lib/toast';
 import { collectorName } from '#lib/collector-platforms';
 import { useBusinessAccess } from '#hooks/use-business-access';
@@ -122,7 +122,7 @@ const validBvid = (s: string) => {
 };
 const stamp = (value: string | null) =>
   value && Number.isFinite(Date.parse(value))
-    ? new Date(value).toLocaleString(isChinese() ? 'zh-CN' : 'en-US')
+    ? new Date(value).toLocaleString(getCurrentLocale())
     : $t('common.unknown');
 
 function BilibiliForm({
@@ -919,7 +919,7 @@ function BilibiliPanel({
         <p className='text-muted-foreground'>
           {state.total
             ? $t('collectorPage.savedSummary', {
-                0: state.total.toLocaleString(),
+                0: state.total.toLocaleString(getCurrentLocale()),
               })
             : $t('bilibili.saveCriteriaStartCollectionManually')}
         </p>

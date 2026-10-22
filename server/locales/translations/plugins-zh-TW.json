@@ -1,0 +1,217 @@
+{
+  "@nocobase/app-plugin-agents": {
+    "access": {
+      "section": "Agent 團隊",
+      "businessSection": "Agent 團隊",
+      "businesses": {
+        "agents": {
+          "title": "Agent 和技能",
+          "description": "團隊的 Agent 以及它們使用的技能。",
+          "actions": {
+            "edit": {
+              "title": "修改 Agent 和技能",
+              "description": "修改 Agent 的設定、技能和環境變數，封存、恢復和刪除 Agent，編輯技能。授予 Agent 的能力不能超出編輯者本身的權限",
+              "related": "修改 Agent 和技能（自己負責的 Agent 和自己建立的技能）",
+              "relatedLabel": "我負責的 Agent 和我建立的技能",
+              "relatedHint": "我是負責人的 Agent，以及我建立的技能",
+              "all": "修改 Agent 和技能（全部）"
+            }
+          }
+        }
+      },
+      "settings": {
+        "agents": {
+          "agents": "Agent",
+          "runners": "執行環境",
+          "prices": "模型價格",
+          "services": "模型服務"
+        }
+      },
+      "actions": {
+        "read": "檢視",
+        "manage": "管理"
+      },
+      "keyScopes": {
+        "agents": {
+          "title": "Agent",
+          "description": "檢視 Agent、技能和執行；修改 Agent 和技能，取消和重試執行。"
+        },
+        "runners": {
+          "title": "執行環境",
+          "description": "檢視執行環境和註冊權杖；管理執行環境。"
+        },
+        "prices": {
+          "title": "模型價格",
+          "description": "檢視用於估算成本的模型價格；修改它們。"
+        },
+        "services": {
+          "title": "模型服務",
+          "description": "檢視模型服務及其提供的模型，不含金鑰。"
+        }
+      }
+    }
+  },
+  "@nocobase/app-plugin-authorization": {
+    "sections": {
+      "pages": "頁面權限",
+      "page": "頁面",
+      "business": "業務權限",
+      "administration": "系統管理",
+      "other": "其他"
+    },
+    "options": {
+      "defaultAndSharing": "沿用預設資料範圍",
+      "actions": {
+        "assign": "管理授權",
+        "configure": "設定",
+        "inspect": "檢查權限",
+        "read": "檢視",
+        "create": "新增",
+        "update": "編輯",
+        "delete": "刪除",
+        "access": "存取"
+      },
+      "settingsModules": {
+        "authorization": "權限管理"
+      },
+      "pages": {
+        "all": "所有頁面",
+        "allDescription": "允許存取所有頁面，包括之後新增的頁面。"
+      },
+      "settings": {
+        "inspector": "權限檢查器",
+        "permission-sets": "權限集"
+      },
+      "subjectTypes": {
+        "authenticated": "所有已登入使用者",
+        "authenticatedDescription": "適用於所有已登入使用者。",
+        "user": "使用者"
+      },
+      "recordAccessPolicies": {
+        "allRecords": "全部記錄",
+        "recordsIOwn": "本人擁有的記錄",
+        "recordsICreated": "本人建立的記錄",
+        "customFilter": "自訂篩選",
+        "customFilterHint": "使用自訂篩選條件選擇記錄。"
+      }
+    }
+  },
+  "@nocobase/app-plugin-authz-default-access": {
+    "resourceTitle": "預設資料範圍"
+  },
+  "@nocobase/app-plugin-authz-restriction-rules": {
+    "resourceTitle": "限制規則"
+  },
+  "@nocobase/app-plugin-authz-sharing-rules": {
+    "resourceTitle": "共享規則"
+  },
+  "@nocobase/app-plugin-notification": {
+    "errors": {
+      "logsForbidden": "需要通知記錄存取權限。",
+      "logNotFound": "未找到通知記錄。",
+      "testHeaderRequired": "缺少通知測試的請求標頭。",
+      "testForbidden": "需要傳送通知測試的權限。",
+      "testInvalidRequest": "請求本文必須包含測試目標和欄位值。",
+      "testTargetUnavailable": "通知測試目標不可用。",
+      "testUnknownField": "未知的通知測試欄位「{{name}}」。",
+      "testRequiredField": "通知測試欄位「{{name}}」為必填項。",
+      "testFieldTooLong": "通知測試欄位「{{name}}」最多允許 {{maxLength}} 個字元。",
+      "testFailed": "通知測試失敗。",
+      "testNotFound": "未找到通知測試記錄。"
+    }
+  },
+  "@nocobase/app-plugin-notification-in-app": {
+    "errors": {
+      "authenticationRequired": "需要登入。",
+      "invalidPageToken": "pageToken 不是此清單返回的分頁標記。",
+      "notFound": "未找到該站內信。"
+    },
+    "test": {
+      "channels": {
+        "inApp": "站內信"
+      },
+      "providers": {
+        "builtIn": "系統內建"
+      },
+      "fields": {
+        "route": "內部路由（不含部署字首）",
+        "url": "完整 HTTP(S) 連結",
+        "recipientUserId": "接收使用者 ID",
+        "title": "標題",
+        "message": "訊息"
+      },
+      "placeholders": {
+        "currentUser": "應用程式使用者 ID"
+      },
+      "defaults": {
+        "title": "NocoBase 通知測試",
+        "body": "這是一則來自 NocoBase 的測試通知。"
+      }
+    }
+  },
+  "@nocobase/app-plugin-notification-providers": {
+    "test": {
+      "channels": {
+        "email": "郵件",
+        "im": "即時通訊"
+      },
+      "providers": {
+        "smtp": "SMTP",
+        "resend": "Resend",
+        "feishuWebhook": "飛書 Webhook",
+        "dingtalkWebhook": "釘釘 Webhook"
+      },
+      "fields": {
+        "subject": "郵件主旨",
+        "text": "文字內文",
+        "html": "HTML",
+        "url": "完整 HTTP(S) URL",
+        "recipient": "收件人",
+        "title": "標題",
+        "message": "訊息"
+      },
+      "placeholders": {
+        "email": "name@example.com"
+      },
+      "defaults": {
+        "title": "NocoBase 通知測試",
+        "body": "這是一則來自 NocoBase 的測試通知。"
+      }
+    }
+  },
+  "@nocobase/app-plugin-scheduler": {
+    "nav": {
+      "automation": "自動化"
+    },
+    "authorization": {
+      "title": "排程任務",
+      "read": "檢視"
+    }
+  },
+  "@nocobase/app-plugin-users": {
+    "invitationEmail": {
+      "subject": "{{inviter}} 邀請你加入 {{app}}",
+      "intro": "{{inviter}} 邀請你加入 {{app}}。",
+      "summary": "你還將加入：{{items}}。",
+      "separator": "、",
+      "action": "接受邀請",
+      "validity": "開啟連結設定姓名和密碼即可加入，{{date}} 前有效，只能使用一次。",
+      "fallback": "如果連結無法開啟，請複製到瀏覽器："
+    }
+  },
+  "@nocobase/app-plugin-mail": {
+    "errors": {
+      "accessDenied": "需要郵件存取權限。",
+      "idempotencyConflict": "該冪等鍵已關聯到另一個請求。",
+      "invalidRequest": "郵件請求無效。",
+      "accountCredentialsInvalid": "信箱認證失敗。請檢查登入名和密碼或授權碼，並確認已開啟 IMAP/SMTP。Gmail 等信箱可能需要使用應用程式專用密碼。",
+      "requestFailed": "無法完成郵件請求。",
+      "providerRateLimited": "郵件服務請求過於頻繁，請稍後再試一次。",
+      "providerUnavailable": "無法連線郵件服務，請稍後再試一次。",
+      "reauthorizationRequired": "需要重新連線此郵件帳戶後才能繼續使用。",
+      "syncRunNotFound": "未找到郵件同步任務。",
+      "messageNotFound": "未找到郵件。",
+      "authorizationStateRequired": "必須提供郵件授權狀態。"
+    }
+  }
+}

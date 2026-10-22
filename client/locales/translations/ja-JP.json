@@ -1,0 +1,823 @@
+{
+  "nocoreach.nav.apiKeys": "APIキー",
+  "schedules": {
+    "title": "自動実行",
+    "description": "NocoReach が自動で行う処理です。日次分析の実行時刻を変更できます。",
+    "analysisTitle": "日次分析",
+    "analysisDescription": "すべてのプロジェクトの最新データを読み込み、AI が対象期間の分析結果と提案を「インサイト」と「改善機会」にまとめます。実行できなかった日の分は自動で再試行します。",
+    "otherWork": "データ同期、順位追跡、トレンド、競合の動向などの自動処理は、各プロジェクトの「データの健全性」で確認できます。",
+    "otherWorkLink": "データソースを開く",
+    "dailyAt": "毎日 {{time}}",
+    "last": "前回",
+    "nextLabel": "次回",
+    "notRunYet": "未実行",
+    "pausedNext": "一時停止中（自動実行なし）",
+    "today": "今日 {{time}}",
+    "tomorrow": "明日 {{time}}",
+    "yesterday": "昨日 {{time}}",
+    "shownIn": "時刻は {{zone}} で表示しています",
+    "analyzed": "{{projects}}、{{items}}",
+    "projectCount_one": "{{count}} プロジェクト",
+    "projectCount_other": "{{count}} プロジェクト",
+    "allSkipped": "今日は分析済みのためスキップしました",
+    "moreActions": "その他の操作",
+    "details": "技術情報",
+    "detailsHelp": "トラブルシューティング用の情報です。Scheduler プラグインでのタスクの状態を確認できます。通常の操作では必要ありません。",
+    "scheduleKey": "内部キー",
+    "editTime": "時刻を変更",
+    "editTitle": "「{{name}}」の実行時刻を変更",
+    "editHelp": "毎日この時刻に実行します。保存すると、次回の実行から反映されます。",
+    "runNow": "今すぐ実行",
+    "dailyTime": "毎日の実行時刻",
+    "saveTime": "保存",
+    "invalidTime": "有効な時刻（HH:mm）を入力してください。",
+    "dataReadyHint": "ほとんどのデータソースは、このタイムゾーンで毎日 {{time}} 頃に更新されます。最新データを使用するには、それより後の時刻に分析を設定してください。",
+    "searchTimezone": "タイムゾーンを検索（例: Shanghai）",
+    "noTimezone": "一致するタイムゾーンがありません。",
+    "dstHelp": "夏時間への切り替えで存在しなくなる時刻は後ろにずらし、繰り返される時刻は通常 1 回だけ実行します。復旧時に再実行される場合もありますが、現地時間でその日に分析済みのプロジェクトはスキップします。",
+    "timeSaved": "実行時刻を保存しました",
+    "triggered": "分析を開始しました。結果は「実行履歴」で確認できます。",
+    "runNowHelp": "すべてのプロジェクトを今すぐ分析します。今日は分析済みのプロジェクトをスキップし、AI サービスを呼び出します。毎日の実行時刻は変更されません。",
+    "submitting": "開始中…",
+    "confirmRun": "今すぐ実行",
+    "signIn": "再度サインイン",
+    "back": "自動実行に戻る",
+    "emptyTitle": "自動実行する処理はありません",
+    "noRunsTitle": "実行履歴はまだありません",
+    "history": "実行履歴",
+    "historyTitle": "{{name}} · 実行履歴",
+    "historyDescription": "自動実行の結果を新しい順に表示します。",
+    "noDescription": "説明はありません。",
+    "refresh": "更新",
+    "loading": "読み込み中…",
+    "saving": "保存中…",
+    "retry": "再試行",
+    "errorTitle": "リクエストを完了できませんでした",
+    "failed": "リクエストに失敗しました。もう一度お試しください。",
+    "signedOut": "セッションの有効期限が切れました。続行するには再度サインインしてください。",
+    "forbidden": "自動実行を管理する権限がありません。管理者にお問い合わせください。",
+    "notFound": "この自動実行は利用できなくなりました。",
+    "empty": "このページに自動実行はありません。再読み込みするか、前のページに戻ってください。",
+    "noRuns": "まだ実行されていません。次の予定時刻に初回の実行を開始します。",
+    "plan": "スケジュール",
+    "customSchedule": "カスタムスケジュール",
+    "timezone": "タイムゾーン",
+    "scheduling": "スケジュール状態",
+    "lifecycle": "定義の状態",
+    "target": "実行対象",
+    "lastRun": "前回の自動起動",
+    "nextRun": "次回の実行",
+    "enable": "有効にする",
+    "disable": "一時停止",
+    "cancel": "キャンセル",
+    "disableTitle": "「{{name}}」を一時停止しますか？",
+    "disableHelp": "再度有効にするまで自動実行を停止します。すでに開始した処理は最後まで実行します。",
+    "inactiveHelp": "このタスクはアプリケーションで定義されなくなったため、ここでは有効にできません。",
+    "enabledNotice": "「{{name}}」を有効にしました。",
+    "disabledNotice": "「{{name}}」を一時停止しました。",
+    "pagination": "自動実行のページ切り替え",
+    "page": "{{page}} ページ · 全 {{total}} 件",
+    "previous": "前へ",
+    "next": "次へ",
+    "more": "さらに読み込む",
+    "runCount": "自動起動回数",
+    "completedCount": "実行成功回数",
+    "project": "プロジェクト{{id}}",
+    "items_one": "提案 {{count}} 件",
+    "items_other": "提案 {{count}} 件",
+    "states": {
+      "enabled": "有効",
+      "disabled": "一時停止中",
+      "active": "アクティブ",
+      "inactive": "非アクティブ",
+      "paused": "一時停止中",
+      "ready": "準備完了",
+      "missing": "見つかりません",
+      "invalid": "不正",
+      "pending": "待機中",
+      "running": "実行中",
+      "waiting": "実行中",
+      "succeeded": "完了",
+      "failed": "失敗",
+      "skipped": "スキップ済み",
+      "cancelled": "キャンセル済み",
+      "timed_out": "タイムアウト",
+      "triggered": "開始済み（結果不明）",
+      "unknown": "不明"
+    }
+  },
+  "auth.preparingSession": "セッションを準備しています…",
+  "auth.connectionFailed": "接続できません",
+  "auth.connectionFailedDescription": "接続できませんでした。再試行してアプリケーションを開くか、サインアウトしてください。",
+  "auth.passwordResetSuccess": "パスワードがリセットされました。新しいパスワードでログインしてください。",
+  "auth.requestNewResetLink": "リセットリンクを再申請",
+  "deviceApproval.title": "デバイスを認可",
+  "deviceApproval.description": "コマンドラインまたは別のデバイスが、あなたとしてログインしようとしています。ご自身でログインを開始した場合にのみ承認してください。",
+  "deviceApproval.enterCode": "デバイスに表示されているコードを入力してください。",
+  "deviceApproval.codeLabel": "コード",
+  "deviceApproval.continue": "続行",
+  "deviceApproval.checking": "コードを確認中…",
+  "deviceApproval.confirm": "このコードがデバイスに表示されているものと一致することを確認してください。",
+  "deviceApproval.client": "{{client}} からのリクエスト",
+  "deviceApproval.approve": "承認",
+  "deviceApproval.approving": "承認中…",
+  "deviceApproval.deny": "拒否",
+  "deviceApproval.denying": "拒否中…",
+  "deviceApproval.approved": "デバイスを承認しました。ターミナルに戻って操作を続けてください。このページは閉じてかまいません。",
+  "deviceApproval.denied": "リクエストを拒否しました。デバイスはログインしていません。このページは閉じてかまいません。",
+  "deviceApproval.expired": "このコードは有効期限が切れています。デバイスでもう一度ログインを開始してください。",
+  "deviceApproval.invalid": "このコードは無効です。デバイスの表示と照らし合わせて、もう一度お試しください。",
+  "deviceApproval.notYours": "このコードは別のアカウントで承認処理中です。",
+  "deviceApproval.error": "問題が発生しました。もう一度お試しください。",
+  "deviceApproval.retry": "再試行",
+  "deviceApproval.otherCode": "別のコードを入力",
+  "inbox.title": "受信トレイ",
+  "inbox.description": "あなた宛ての通知とリクエスト。",
+  "inbox.views.all": "すべて",
+  "inbox.views.todo": "未対応",
+  "inbox.kinds.label": "種類",
+  "inbox.kinds.all": "すべての種類",
+  "inbox.kinds.decision": "判断",
+  "inbox.kinds.info": "通知",
+  "inbox.tabs.decision": "判断待ち",
+  "inbox.tabs.info": "通知",
+  "inbox.clearFilter": "フィルターをクリア",
+  "inbox.noMatchDescription": "フィルターをクリアすると、すべての種類が表示されます。",
+  "inbox.readAll": "すべて既読にする",
+  "inbox.allRead": "すべて既読にしました。",
+  "inbox.loading": "読み込み中",
+  "inbox.loadFailed": "受信トレイを読み込めません",
+  "inbox.loadFailedDescription": "接続を確認して、もう一度お試しください。",
+  "inbox.retry": "再試行",
+  "inbox.loadMore": "さらに読み込む",
+  "inbox.emptyAll": "何もありません",
+  "inbox.empty.todo": "対応待ちの項目はありません",
+  "inbox.empty.decision": "判断待ちの項目はありません",
+  "inbox.empty.info": "通知はありません",
+  "inbox.emptyDescription": "あなた宛ての通知とリクエストがここに表示されます。",
+  "inbox.unread": "未読",
+  "inbox.unreadCount": "未読 {{count}} 件",
+  "inbox.pendingDecisions": "対応待ち {{count}} 件",
+  "inbox.resolved": "対応済み",
+  "inbox.outcomes.approved": "承認済み",
+  "inbox.outcomes.rejected": "却下済み",
+  "inbox.outcomes.withdrawn": "取り下げ済み",
+  "inbox.count": "×{{count}}",
+  "inbox.actionsFor": "{{title}} の操作",
+  "inbox.actions.read": "既読にする",
+  "inbox.actions.unread": "未読にする",
+  "inbox.actions.delete": "削除",
+  "inbox.deleted": "削除しました。",
+  "inbox.requestFailed": "リクエストに失敗しました。もう一度お試しください。",
+  "inbox.forbidden": "この操作を行う権限がありません。",
+  "inbox.nothingSelected": "表示する項目を選択してください",
+  "inbox.back": "一覧に戻る",
+  "inbox.open": "開く",
+  "inbox.keyMove": "移動",
+  "inbox.keyOpen": "開く",
+  "inbox.cancel": "キャンセル",
+  "inbox.request.approve": "承認",
+  "inbox.request.reject": "却下",
+  "inbox.request.commentPlaceholder": "コメントを入力…",
+  "inbox.request.commentFor": "{{action}}：{{title}}",
+  "inbox.request.quickSend": "で送信",
+  "inbox.request.newLine": "で改行",
+  "inboxButton.title": "受信トレイ",
+  "inboxButton.pending": "受信トレイ、対応待ち {{count}} 件",
+  "inboxButton.unread": "受信トレイ、未読 {{count}} 件",
+  "inboxButton.pendingHint": "対応待ちが {{count}} 件あります。対応すると減ります。",
+  "inboxButton.unreadHint": "未読が {{count}} 件あります。読むと減ります。",
+  "auth.welcome": "おかえりなさい",
+  "auth.loginDescription": "ユーザー名またはメールアドレスとパスワードでログインしてください。",
+  "auth.registerTitle": "アカウントを作成",
+  "auth.registerDescription": "アカウントを作成して始めましょう。",
+  "auth.forgotTitle": "パスワードをお忘れの場合",
+  "auth.forgotDescription": "メールアドレスを入力してください。アカウントが存在する場合、リセットリンクをお送りします。",
+  "auth.passwordResetUnavailable": "セルフサービスのパスワードリセットは有効になっていません。パスワードのリセットは管理者にお問い合わせください。",
+  "auth.capabilityLoadFailed": "パスワードリセットが利用可能か確認できませんでした。",
+  "auth.retry": "再試行",
+  "auth.loading": "読み込み中",
+  "auth.resetDescription": "アカウントの新しいパスワードを設定してください。",
+  "auth.resetTitle": "パスワードをリセット",
+  "auth.identifier": "ユーザー名またはメールアドレス",
+  "auth.password": "パスワード",
+  "auth.signIn": "ログイン",
+  "auth.signingIn": "ログイン中…",
+  "auth.hidePassword": "パスワードを隠す",
+  "auth.showPassword": "パスワードを表示",
+  "auth.forgotLink": "パスワードをお忘れですか？",
+  "auth.noAccount": "アカウントをお持ちでない場合",
+  "auth.signUp": "新規登録",
+  "auth.createAccount": "アカウントを作成",
+  "auth.creatingAccount": "アカウントを作成中…",
+  "auth.name": "氏名",
+  "auth.username": "ユーザー名",
+  "auth.email": "メールアドレス",
+  "auth.confirmPassword": "パスワード（確認）",
+  "auth.existingAccount": "すでにアカウントをお持ちの場合",
+  "auth.passwordMismatch": "パスワードが一致しません。",
+  "auth.resetting": "リセット中…",
+  "auth.newPassword": "新しいパスワード",
+  "auth.confirmNewPassword": "新しいパスワード（確認）",
+  "auth.invalidResetLink": "このパスワードリセットリンクは無効か、有効期限が切れています。",
+  "auth.backToSignIn": "ログインに戻る",
+  "auth.sendResetLink": "リセットリンクを送信",
+  "auth.sending": "送信中…",
+  "auth.resetSent": "アカウントが存在する場合、リセットリンクを送信しました。",
+  "auth.rememberPassword": "パスワードを思い出した場合",
+  "auth.methods": "ログイン方法",
+  "auth.or": "または次の方法で続行",
+  "auth.continueWith": "{provider} で続行",
+  "auth.about": "このアプリケーションについて",
+  "auth.platform": "AIグロースチーム",
+  "auth.marketingTitleFirst": "やるべきことを見つけ、",
+  "auth.marketingTitleSecond": "エージェントに任せ、",
+  "auth.marketingTitleThird": "成果につなげる。",
+  "auth.marketingDescription": "NocoReachは検索、トラフィック、コミュニティ、GitHubのデータを毎日読み取り、取り組む価値のある施策を見つけます。承認すると、エージェントがリポジトリを変更し、プルリクエストを作成します。",
+  "auth.frontend": "毎日の分析",
+  "auth.frontendDescription": "オンラインAIが毎日データを読み取り、根拠とともに改善の機会を提案します。",
+  "auth.foundation": "リポジトリと直接連携",
+  "auth.foundationDescription": "エージェントがリポジトリを編集し、レビュー用のプルリクエストを作成します。",
+  "auth.marketingFooter": "見つける、実行する、効果を測る。",
+  "status.loading": "読み込み中",
+  "status.loadingPage": "ページを読み込み中",
+  "status.denied": "アクセスが拒否されました",
+  "status.pageFailed": "ページを読み込めません",
+  "status.retry": "再試行",
+  "navigation.brandHome": "NocoReachホーム",
+  "navigation.brandApps": "NocoReachアプリケーション",
+  "routeOverlay.close": "閉じる",
+  "status.deniedDescription": "{{label}} にアクセスする権限がありません。",
+  "status.routeFailedDescription": "{{packageName}} のルート {{label}} を読み込めませんでした。",
+  "shell": {
+    "templateVersionUnknown": "バージョン不明",
+    "buildFreely": "データから改善の機会を見つけましょう。",
+    "reliability": "<brand>NocoReach</brand>が実行します。"
+  },
+  "home": {
+    "platform": "NocoBase · AI ネイティブなアプリケーションプラットフォーム",
+    "title": "伝えれば、エージェントが構築します",
+    "description": "このアプリケーションは、コーディングエージェントとの対話で開発します。業務に必要なことを普段の言葉で伝えると、エージェントがこのプロジェクトのページ、データモデル、API、業務プロセスを作成します。",
+    "steps": {
+      "describe": {
+        "title": "要件を伝える",
+        "description": "誰が使うのか、どのデータを保持するのか、どのように動作すべきかを伝えます。"
+      },
+      "build": {
+        "title": "エージェントに構築させる",
+        "description": "このプロジェクトと組み込み機能を読み込んでから、コードを書きます。"
+      },
+      "review": {
+        "title": "確認して調整",
+        "description": "ページを再読み込みして試し、変更があれば同じように依頼します。"
+      }
+    },
+    "example": {
+      "title": "このように依頼してみましょう",
+      "text": "発注アプリケーションを作成してください。\n\n発注には、番号、品目、申請者、金額、承認ステータスがあります。申請者は発注を作成でき、自分の発注だけを閲覧できます。審査者は承認待ちのすべての発注を閲覧し、承認または却下します。\n判断が出たら、発注へのリンク付きで申請者に受信トレイで通知してください。",
+      "hint": "このプロジェクトで開いた Claude Code、Codex、Cursor などのコーディングエージェントに貼り付けてください。"
+    },
+    "capabilitiesTitle": "組み込み機能",
+    "capabilitiesDescription": "エージェントはこれらをゼロから作らず、そのまま利用します。いずれかを開くと、編集してコピーできるプロンプトが表示されます。",
+    "viewPrompts": "プロンプトを表示（{{count}}）",
+    "prompt": {
+      "label": "プロンプト",
+      "hint": "コピーする前に、業務に合わせてプロンプトを編集してください。ダイアログを閉じると変更は保存されません。",
+      "copy": "コピー",
+      "copiedShort": "コピーしました",
+      "copied": "プロンプトをコピーしました",
+      "copyFailed": "コピーできません。テキストを選択して手動でコピーしてください。",
+      "reset": "既定に戻す"
+    },
+    "capabilities": {
+      "auth": {
+        "title": "認証",
+        "description": "ログイン、登録、パスワードリセット、社内シングルサインオン。",
+        "prompts": {
+          "disableSignUp": {
+            "label": "新規登録を停止",
+            "text": "このアプリケーションは社員専用です。アカウントはすべて管理者が作成します。\nセルフ登録を無効にし、ログインページから登録リンクを削除してください。\n既存の社員は、引き続き自分のアカウントとパスワードでログインできるようにしてください。\nパスワードを忘れた場合のリンクは残してください。"
+          },
+          "companySso": {
+            "label": "社内 SSO",
+            "text": "社員が OIDC を使って社内の ID プラットフォームでログインできるようにしてください。\n\nアカウントとパスワードによるログインは残し、「社内アカウント」ボタンを追加してください。\nボタンを押すと社内の ID プラットフォームが開き、ログインに成功したらアプリケーションのホームページに戻ります。\n\n初回ログイン時にアプリケーションのアカウントを作成できるようにし、プラットフォームの不変のユーザー識別子で識別してください。\n名前やメールアドレスの一致でアカウントを自動的に紐付けないでください。新しいアカウントにはアプリケーションの既定の権限を適用します。\n\nID プラットフォームの管理者が提供する必要がある情報と、登録が必要なコールバック URL を一覧にしてください。"
+          },
+          "apiKeys": {
+            "label": "API キー",
+            "text": "アプリケーションの組み込みの API キー機能を使い、ユーザーメニューに「連携キー」の項目を追加してください。\n社員は自分が作成したキーだけを管理でき、作成時に用途と有効日数を入力します。\nキーの全体は作成直後に一度だけ表示し、すぐにコピーして保管するよう促してください。\n各キーの名前、識別できる一部の文字列、ステータス、有効期限、最終使用日時を一覧表示し、確認のうえ失効できるようにしてください。\n一覧、ログ、詳細のいずれにもキーの全体を表示しないでください。"
+          }
+        }
+      },
+      "dataSources": {
+        "title": "データソース",
+        "description": "アプリケーションのデータベースを選び、既存の外部データベースの業務データを利用します。",
+        "prompts": {
+          "postgres": {
+            "label": "データベースを切り替え",
+            "text": "アプリケーションのデータベースを SQLite から PostgreSQL に切り替えてください。\n接続情報はソースコードではなく、サーバーの実行時設定から読み込んでください。\nインストールが必要なデータベースドライバーと入力が必要な設定を説明し、既存のデータは自動では移行されないことを知らせてください。"
+          },
+          "externalDatabase": {
+            "label": "外部データベース",
+            "text": "社内の既存の財務データベースを読み取り専用の外部データソースとして接続してください。そのテーブルは変更しないでください。\n仕入先番号でレコードを照合し、仕入先の詳細に「決済情報」セクションを追加して、決済サイクル、与信限度額、決済ステータスを出典を明記して表示してください。\n仕入先の連絡先情報は引き続きアプリケーションのデータベースから読み込み、決済データはインポートせずに外部データベースから直接読み込んでください。\n接続の認証情報はサーバーの実行時設定から読み込んでください。"
+          }
+        }
+      },
+      "authorization": {
+        "title": "権限",
+        "description": "誰がどのページを開き、どの操作を実行し、どのレコードを閲覧できるかを制御します。",
+        "prompts": {
+          "jobs": {
+            "label": "職務",
+            "text": "アプリケーションに「購買申請者」と「発注審査者」の職務を作成してください。\n購買申請者は発注ページに入り、自分が申請した発注を閲覧できます。\n発注審査者は発注ページに入り、発注を閲覧し、承認待ちの発注を承認または却下できます。\n権限と割り当てを変更できるのはアプリケーション管理者だけです。\nアプリケーションの既存の権限機能を使い、管理者が後から権限を調整したり担当者を割り当てたりできるようにしてください。"
+          },
+          "dataScopes": {
+            "label": "データ範囲",
+            "text": "購買申請者が自分の発注だけを閲覧できるようにし、発注の申請者フィールドで所有者を判定してください。\n発注審査者はすべての発注を閲覧し、承認待ちの発注を処理できます。\n管理者は各職務の権限セットで、発注の閲覧範囲を調整できます。"
+          },
+          "restrictions": {
+            "label": "制限ルール",
+            "text": "Bob は一時的に発注の確認を手伝っており、閲覧できるのは金額 2,000 以下の発注だけです。\n既存の職務とデータ範囲はそのままに、彼の「発注を閲覧」操作に金額の上限を追加してください。\nこの制限は、彼自身の発注と彼に共有された発注の両方に適用してください。\n管理者は金額を変更したりルールを削除したりできます。削除する前に、彼の閲覧範囲が広がる可能性があることを説明してください。"
+          }
+        }
+      },
+      "workflow": {
+        "title": "ワークフロー",
+        "description": "業務レコードをフェーズごとに進め、待機、タイムアウト、再試行、誰が何をしたかの履歴を扱います。",
+        "prompts": {
+          "stages": {
+            "label": "フェーズ",
+            "text": "発注にプロセスを追加してください：承認待ち → 購買待ち → 入荷済み → 完了。\n審査者は承認または却下します。却下には理由が必須で、発注は申請者に差し戻され、修正して再提出されます。\n購買担当者が発注すると購買待ちになり、署名済みの受領書付きで入荷を確認すると入荷済みに、申請者が確認すると完了になります。\n発注の詳細には現在のフェーズの操作だけを表示し、通常の編集ではフェーズを変更できないようにしてください。\nフェーズと必須情報はサーバーで確認し、他の人がすでに提出した結果を上書きしないでください。"
+          },
+          "backgroundExport": {
+            "label": "バックグラウンドエクスポート",
+            "text": "既存の発注を CSV にエクスポートする発注レポートページを追加してください。\n送信後、エクスポートは処理待ちとなり、バックグラウンドで生成され、ダウンロードリンク付きで完了します。\n現在のフェーズ、ファイル名、エクスポートした発注の件数、送信とシステム処理の記録を表示してください。\n生成に失敗した場合はルールに従って再試行し、最終的な失敗は担当者が対応できるよう残してください。再実行してもレポートファイルが重複して作成されないようにしてください。\nページを再読み込みしても進捗と結果を確認できるようにし、発注をエクスポートできるのは権限のある人だけにしてください。"
+          },
+          "history": {
+            "label": "履歴",
+            "text": "発注の詳細に、現在のフェーズと処理履歴を表示してください。\n各記録には、操作した人、日時、操作、前後のフェーズ、却下理由や署名済みの受領書を表示します。\n自動で実行された操作は、システムが実行したことを明示してください。\nページを再読み込みしても進捗と履歴を保持し、完了後にプロセス全体を振り返れるようにしてください。"
+          }
+        }
+      },
+      "scheduler": {
+        "title": "スケジュールタスク",
+        "description": "決まった時刻に業務処理を実行し、次回の実行と結果を確認できます。",
+        "prompts": {
+          "reminder": {
+            "label": "毎日のリマインダー",
+            "text": "既存の発注アプリケーションに「承認待ち発注のリマインダー」を追加してください。\n\n平日の毎朝 9:00（北京時間）に承認待ちの発注を検索し、審査者ごとにまとめて、各審査者にアプリ内通知を 1 件送信してください。\n通知には承認待ちの発注件数を含め、承認待ち発注の一覧へリンクしてください。承認待ちの発注がない場合は何も送信しません。\n管理者はスケジュールと実行記録を確認し、リマインダーを一時停止または再開できます。"
+          },
+          "weeklyReport": {
+            "label": "週次レポート",
+            "text": "毎週月曜日の 8:00（北京時間）に先週の売上サマリーを生成し、営業マネージャーに通知してください。\n売上高、受注件数、地域別の合計を含めてください。管理者はタスクと実行記録を確認できます。"
+          }
+        }
+      },
+      "notification": {
+        "title": "通知",
+        "description": "何かが起きたときに、アプリ内メッセージ、メール、グループのボットメッセージを送信します。",
+        "prompts": {
+          "inApp": {
+            "label": "アプリ内メッセージ",
+            "text": "現在のアプリケーションに発注の承認を追加し、結果をアプリ内メッセージで申請者に通知してください。\n\n発注には、番号、名称、申請者、金額、承認ステータスがあります。\n申請者は自分の発注を閲覧できます。審査者は承認待ちの発注を閲覧し、承認または却下できます。既存の発注機能や承認機能があれば再利用してください。\n\n承認または却下の後、その発注の申請者だけにアプリ内メッセージを 1 件送信してください。\nタイトルには承認か却下かを示し、本文には発注番号、名称、承認結果を含めます。\nメッセージをクリックすると、該当する発注の詳細が開きます。\n承認待ちの間は送信しないでください。同じ承認結果については一度だけ通知します。\n通知に失敗しても、保存された承認結果には影響しません。"
+          },
+          "email": {
+            "label": "メール",
+            "text": "アプリケーションで設定済みのメールチャネルを使い、既存の発注承認の通知にメールを追加してください。\n\n発注が承認または却下された後、申請者のアカウントのメールアドレスに結果を送信してください。\n件名には発注番号を、本文には発注の名称と結果を含めてください。\n既存のアプリ内メッセージは残してください。申請者にメールアドレスがない場合は、アプリ内メッセージだけを送信します。\nメールの送信に失敗しても、承認結果やアプリ内メッセージに影響しないようにしてください。"
+          }
+        }
+      },
+      "mail": {
+        "title": "メール",
+        "description": "個人のメールボックスを接続し、業務メールの閲覧、返信、送信を行います。",
+        "prompts": {
+          "providers": {
+            "label": "メールプロバイダー",
+            "text": "サーバー設定の mail.providers に、アプリケーション用の mailbox.org を設定してください：\n- IMAP 受信サーバー：imap.mailbox.org、ポート 993、SSL/TLS。\n- SMTP 送信サーバー：smtp.mailbox.org、ポート 465、SSL/TLS。\nユーザーはメールボックスアカウントのページで自分のメールアドレス、ユーザー名、パスワードを入力し、初回同期の開始日を選択します。メールボックスのパスワードは設定ファイルやソースコードに書かないでください。"
+          },
+          "mailCenter": {
+            "label": "メールセンター",
+            "text": "メールはこのアプリケーションに組み込まれています。作り直したり別のプラグインをインストールしたりせず、再利用してください。\nメール機能が提供するメールワークスペースとメールボックスアカウントのページを使い、ナビゲーションに「メールセンター」と「メールボックスアカウント」のページを追加してください。\nユーザーは自分のメールボックスを接続し、受信メッセージを同期し、メッセージと添付ファイルを閲覧し、返信できます。返信では元の件名と会話の文脈を保ち、宛先は元の送信者にします。\n各ユーザーは自分が接続したメールボックスだけを扱います。"
+          },
+          "correspondence": {
+            "label": "顧客とのメール",
+            "text": "アプリケーションの組み込みのメール閲覧・作成コンポーネントを再利用して、顧客の詳細にやり取りのセクションを追加してください。\n送信者または受信者が現在の顧客の連絡先メールアドレスと一致するメッセージを表示します。営業担当は、自分が接続したメールボックスを使ってメッセージの閲覧、添付ファイルの表示、返信ができます。"
+          }
+        }
+      },
+      "file": {
+        "title": "ファイル",
+        "description": "ファイルをアップロードしてレコードに添付し、プレビューやダウンロードができます。",
+        "prompts": {
+          "attachments": {
+            "label": "添付ファイル",
+            "text": "既存の発注管理アプリケーションに、購買の添付ファイルを追加してください。\n\n発注の詳細に添付ファイルエリアを追加してください。各発注には、PDF、画像、DOCX を含む複数のファイルを添付できます。\nファイル名とサイズを表示し、添付ファイルのプレビュー、ダウンロード、削除の操作を用意してください。\nアップロード後、ユーザーが添付ファイルを現在の発注に保存できるようにし、発注を開き直しても表示されるようにしてください。\n発注にアクセスできる人は誰でも添付ファイルを閲覧・ダウンロードできます。申請者と審査者は添付ファイルを追加・削除できます。\n添付ファイルを削除しても現在の発注との紐付けを解除するだけで、ファイル自体は保持します。"
+          },
+          "avatar": {
+            "label": "アバター",
+            "text": "各社員にアバターを追加してください。社員 1 人につき画像は 1 枚です。\nアバターのアップロードと差し替えに対応し、社員の一覧と詳細に表示してください。\n差し替え後は新しいアバターを使い、ページを再読み込みしても表示されるようにしてください。"
+          }
+        }
+      },
+      "i18n": {
+        "title": "言語",
+        "description": "画面の言語を切り替え、言語を追加し、既定の言語を設定します。",
+        "prompts": {
+          "addLanguage": {
+            "label": "言語を追加",
+            "text": "アプリケーションにスペイン語を追加してください。画面とサーバーのメッセージを翻訳し、言語メニューにスペイン語を追加してください。"
+          },
+          "defaultLanguage": {
+            "label": "既定の言語",
+            "text": "言語を選択していない人向けに、アプリケーションの既定の言語を簡体字中国語にしてください。言語メニューでは英語を引き続き選択できるようにしてください。"
+          }
+        }
+      },
+      "theme": {
+        "title": "テーマ",
+        "description": "色、フォント、密度を調整し、ライトとダークを切り替えます。",
+        "prompts": {
+          "changeTheme": {
+            "label": "テーマを変更",
+            "text": "「コンパクト」テーマを更新してください：プライマリカラーを青にし、角の丸みを少し大きくします。現在のフォント、文字サイズ、コンパクトな余白はそのままにしてください。"
+          },
+          "newTheme": {
+            "label": "新しいテーマ",
+            "text": "緑をプライマリカラーとし、柔らかな背景、ほどよく丸い角、控えめな影を持つ「フォレスト」テーマを作成してください。"
+          }
+        }
+      }
+    }
+  },
+  "appearance": {
+    "title": "外観",
+    "mode": "カラーモード",
+    "preset": "テーマ",
+    "light": "ライト",
+    "dark": "ダーク",
+    "system": "システム設定に従う",
+    "themes": {
+      "default": "ゆったり",
+      "compact": "コンパクト"
+    }
+  },
+  "app": {
+    "title": "NocoReach"
+  },
+  "actions": {
+    "close": "閉じる",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "confirm": "確定",
+    "language": "言語"
+  },
+  "notices": {
+    "serverLocaleFallback": "サーバーはこの言語に対応していないため、サーバーからのメッセージは英語で表示されます。",
+    "languageChangeFailed": "言語を切り替えられませんでした。もう一度お試しください。"
+  },
+  "account": {
+    "signOutFailed": "ログアウトできませんでした。もう一度お試しください。",
+    "openMenu": "アカウントメニューを開く",
+    "fallback": "アカウント",
+    "signOut": "ログアウト",
+    "signingOut": "ログアウト中…"
+  },
+  "navigation": {
+    "home": "ホーム",
+    "open": "ナビゲーションを開く",
+    "close": "ナビゲーションを閉じる",
+    "expand": "ナビゲーションを展開",
+    "collapse": "ナビゲーションを折りたたむ",
+    "toggle": "ナビゲーションを展開または折りたたむ",
+    "label": "アプリケーションのナビゲーション",
+    "description": "このアプリケーションのページに移動します。",
+    "breadcrumb": "パンくずリスト",
+    "breadcrumbMore": "中間の階層を表示",
+    "back": "戻る",
+    "backTo": "{{label}}に戻る"
+  },
+  "dataTable": {
+    "noResults": "結果がありません。",
+    "sortAscending": "昇順",
+    "sortDescending": "降順",
+    "hideColumn": "非表示",
+    "view": "表示",
+    "toggleColumns": "列の表示切り替え",
+    "selectedCount": "{{total}} 行中 {{selected}} 行を選択中。",
+    "rowsPerPage": "1 ページあたりの行数",
+    "pageOf": "{{page}} / {{pageCount}} ページ",
+    "firstPage": "最初のページへ",
+    "previousPage": "前のページへ",
+    "nextPage": "次のページへ",
+    "lastPage": "最後のページへ"
+  },
+  "datePicker": {
+    "placeholder": "日付を選択",
+    "rangePlaceholder": "期間を選択"
+  },
+  "chat": {
+    "title": "エージェントチャット",
+    "ask": "エージェントに相談",
+    "close": "閉じる",
+    "expand": "全幅表示",
+    "restoreSize": "サイドパネルに戻す",
+    "openPage": "全画面で開く",
+    "openInPanel": "サイドパネルで開く",
+    "more": "その他",
+    "newConversation": "新しい会話",
+    "untitled": "無題の会話",
+    "rename": "名前を変更",
+    "renameHint": "{{title}}（クリックして名前を変更）",
+    "archive": "アーカイブ",
+    "unarchive": "アーカイブを解除",
+    "you": "あなた",
+    "agentGone": "削除されたエージェント",
+    "anyAgent": "エージェント",
+    "loadFailed": "会話を読み込めませんでした",
+    "notFound": "この会話は開けません",
+    "notFoundDescription": "削除されたか、別のユーザーの会話である可能性があります。",
+    "emptyTitle": "{{name}}にどのようなことを手伝ってほしいですか？",
+    "emptyDescription": "気になることを質問するか、整理したい作業を説明してください。このページの表示内容もコンテキストとして送信されます。",
+    "noAgent": "チャットできるエージェントがありません。管理者にエージェントの作成またはアクセス権の付与を依頼してください。",
+    "chooseAgent": "下から会話するエージェントを選んでください。毎回同じエージェントで始めるには、プロフィールでデフォルトを設定してください。",
+    "messages": "メッセージ",
+    "olderMessages": "以前のメッセージ",
+    "sources": {
+      "panel": "チャットパネル"
+    },
+    "availability": {
+      "online": "オンライン",
+      "agentMissing": "削除済み",
+      "agentArchived": "アーカイブ済み",
+      "forbidden": "利用権限がありません",
+      "noRunner": "オンラインのランナーがありません",
+      "othersPersonal": "他のユーザーの個人用ランナーでのみ利用可能"
+    },
+    "mode": {
+      "online": "オンライン",
+      "runner": "ランナー",
+      "onlineHint": "サーバー上で数秒で回答します",
+      "runnerHint": "実行環境上のコーディングエージェント"
+    },
+    "reply": {
+      "writing": "回答を作成中…",
+      "interrupted": "回答はここで中断されました。"
+    },
+    "offline": {
+      "agentMissing": "{{name}}は削除されています",
+      "agentArchived": "{{name}}はアーカイブされています",
+      "forbidden": "{{name}}を利用する権限がなくなりました",
+      "noRunner": "{{name}}には現在オンラインのランナーがありません",
+      "othersPersonal": "{{name}}は他のユーザーの個人用ランナーでのみ利用できます",
+      "kept": "メッセージは保存され、回答できるようになり次第、回答します。",
+      "fallback": "ここで別のエージェントを使う",
+      "usingDefault": "この会話では一時的に{{own}}の代わりに{{name}}を使用しています。",
+      "restore": "{{own}}に戻す"
+    },
+    "notice": {
+      "switchedToDefault": "{{own}}が復帰するまで、システムのデフォルトである{{name}}に切り替えました。",
+      "switchedToOnline": "現在 {{own}} には利用可能なランナーがないため、{{own}} が復帰するまで {{name}} が回答します。",
+      "onlineFallbackUnavailable": "オンラインの代替エージェントが回答できません（{{reason}}）。この会話は{{own}}のまま、ランナーを待ちます。",
+      "switchedBack": "{{name}}に戻りました。",
+      "runFailed": "エージェントが回答する前に停止しました。",
+      "runFailedReason": "エージェントが回答する前に停止しました: {{reason}}",
+      "runCancelled": "停止しました。"
+    },
+    "consultation": {
+      "title": "{{name}}に相談しました",
+      "question": "質問",
+      "answer": "回答",
+      "steps": "実行ステップ",
+      "plans_one": "確認用の計画を提案しました。",
+      "plans_other": "確認用の計画を{{count}}件提案しました。",
+      "usage": "入力{{input}}トークン、出力{{output}}トークンを使用しました。",
+      "state": {
+        "running": "回答中…",
+        "completed": "回答済み",
+        "failed": "失敗",
+        "refused": "拒否"
+      }
+    },
+    "steps": {
+      "title": "ステップ",
+      "waiting": "ランナーが処理を開始するのを待っています…",
+      "starting": "開始中…",
+      "thinking": "思考中…",
+      "reading": "{{subject}}を確認中",
+      "working": "{{subject}}を処理中",
+      "count_one": "{{count}}ステップ",
+      "count_other": "{{count}}ステップ",
+      "started": "エージェントが回答中です。",
+      "finished": "エージェントの回答が完了しました。"
+    },
+    "pending": {
+      "sending": "送信中…",
+      "failed": "未送信",
+      "retry": "再送信",
+      "discard": "破棄"
+    },
+    "composer": {
+      "label": "エージェントへのメッセージ",
+      "placeholder": "質問するか、整理したい作業を説明してください…",
+      "hint": "Enterで送信、Shift+Enterで改行",
+      "runningHint": "今送信したメッセージは進行中の作業に追加されます",
+      "tooLong": "{{max}}文字以内で入力してください。",
+      "send": "送信",
+      "stop": "停止",
+      "stopping": "停止中…"
+    },
+    "attachments": {
+      "attach": "ファイルを添付",
+      "label": "次のメッセージに添付するファイル",
+      "sent": "このメッセージに添付したファイル",
+      "images": "画像",
+      "files": "ファイル",
+      "remove": "{{name}}を削除",
+      "uploading": "アップロード中…",
+      "tooLarge": "{{max}}を超えています",
+      "failed": "アップロードできませんでした",
+      "tooMany": "1件のメッセージに添付できるファイルは{{max}}個までです。",
+      "blocked": "送信するには、アップロードできなかったファイルを削除してください。",
+      "waiting": "ファイルのアップロードが完了したら送信します…",
+      "drop": "ファイルをドロップして添付",
+      "preview": "{{name}}をプレビュー",
+      "download": "{{name}}をダウンロード",
+      "previous": "前の画像",
+      "next": "次の画像"
+    },
+    "context": {
+      "label": "次のメッセージに含めるコンテキスト",
+      "sent": "このメッセージに含めたコンテキスト",
+      "filter": "フィルター: {{filter}}",
+      "selection": "選択したテキスト: “{{text}}”",
+      "remove": "コンテキストを削除: {{label}}"
+    },
+    "agents": {
+      "switch": "エージェント: {{name}}; 別のエージェントを選択",
+      "withStatus": "{{name}}, {{status}}",
+      "chooseFor": "会話するエージェント",
+      "startWith": "新しい会話を始めるエージェント",
+      "boundHint": "会話はエージェントに紐づいています。別のエージェントを選ぶと、新しい会話が始まります。",
+      "empty": "チャットできるエージェントがありません",
+      "none": "エージェントなし",
+      "field": "エージェント: {{name}}",
+      "unknown": "不明なエージェント",
+      "placeholder": "エージェントを選択",
+      "myDefault": "自分のデフォルト",
+      "systemDefault": "システムのデフォルト",
+      "personal": "個人用ランナーのみ",
+      "temporary": "一時的",
+      "modeHint": "会話を始めるには、ランナーを接続し、検出されたエージェントを有効にしてください。"
+    },
+    "history": {
+      "title": "会話",
+      "search": "会話を検索",
+      "show": "表示",
+      "active": "進行中",
+      "archived": "アーカイブ済み",
+      "agent": "エージェント",
+      "allAgents": "すべてのエージェント",
+      "source": "開始元",
+      "allSources": "すべての開始元",
+      "loadFailed": "会話を読み込めませんでした",
+      "noMatch": "一致する会話がありません",
+      "noArchived": "アーカイブ済みの会話はありません",
+      "empty": "まだ会話がありません",
+      "more": "さらに読み込む",
+      "unread": "新しい回答",
+      "actions": "{{title}}の操作"
+    },
+    "loading": "読み込み中",
+    "retry": "再試行",
+    "errors": {
+      "forbidden": "この操作を行う権限がありません。",
+      "notFound": "対象はすでに削除されています。",
+      "requestFailed": "リクエストに失敗しました。もう一度お試しください。"
+    },
+    "transcript": {
+      "waiting": "エージェントの開始を待っています…",
+      "empty": "この実行ではイベントが記録されませんでした。",
+      "fetchFailed": "新しいイベントを取得できません。再試行中…",
+      "expand": "すべて表示",
+      "truncated": "全文を保存するには長すぎたため、途中で省略されています。",
+      "events": "実行ログ",
+      "inputDelivered": "{{count}}件の入力をエージェントに送信しました",
+      "tokens": "入力{{input}}トークン, 出力{{output}}トークン",
+      "kinds": {
+        "text": "エージェント",
+        "thinking": "思考",
+        "toolUse": "ツール",
+        "toolResult": "結果",
+        "allowed": "許可",
+        "denied": "拒否",
+        "input": "入力",
+        "checkout": "チェックアウト",
+        "status": "状態",
+        "error": "エラー",
+        "usage": "使用量"
+      }
+    }
+  },
+  "agentSetup.title": "お使いのエージェントでNocoReachを使う",
+  "agentSetup.description": "この手順をClaude Code、Codexなどのコーディングエージェントにコピーして、NocoReachに接続してください。",
+  "agentSetup.prompt": "このコーディングエージェントからNocoReachを使えるようにしてください。\n\n1. NocoReach CLIをインストールしてください:\n{{install}}\n\n2. ブラウザーでのサインインを開始してください:\n{{login}}\n確認用のURLとコードを表示してください。私がブラウザーでコードを確認して承認するまで待ち、代わりに承認しないでください。\n\n3. 私が承認したら、`nocoreach whoami`を実行してサインイン中のアカウントを確認し、続いて`nocoreach docs`で利用可能なコマンドを確認してください。私の依頼には、既存の権限の範囲内でそれらのコマンドを使って対応してください。パスワードを尋ねたり、ダウンロードトークンをAPIキーとして使ったりしないでください。",
+  "agentSetup.identity": "ダウンロードトークンはCLIのインストール専用です。ブラウザーでのサインインを承認すると、エージェントは既存の権限の範囲内で、あなたのアカウントとして操作します。",
+  "agentSetup.expiry": "インストールトークンの有効期間は30分で、最大3回ダウンロードできます。この手順は他の人に共有しないでください。期限が切れた場合は、新しいトークンを生成してください。",
+  "agentSetup.runtime": "macOSまたはLinuxではNode.js 24+が必要です。WindowsではWSLを使用してください。インストールされるのはCLIのみです。",
+  "agentSetup.preparing": "インストール手順を準備中…",
+  "agentSetup.promptLabel": "エージェントのセットアップ手順",
+  "agentSetup.failed": "インストール手順を準備できませんでした。もう一度お試しください。",
+  "agentSetup.signedOut": "セッションの有効期限が切れました。続行するには再度サインインしてください。",
+  "agentSetup.forbidden": "インストール手順を生成する権限がありません。管理者にお問い合わせください。",
+  "agentSetup.expired": "このインストールトークンの有効期限が切れました。続行するには新しいトークンを生成してください。",
+  "agentSetup.regenerate": "新しいトークンを生成",
+  "agentSetup.copy": "手順をコピー",
+  "agentSetup.copied": "コピーしました",
+  "agentSetup.copyFailed": "コピーできませんでした。手順を選択して手動でコピーしてください。",
+  "agentSetup.signIn": "再度サインイン",
+  "agentSetup.signInFailed": "セッションを更新できませんでした。もう一度お試しください。",
+  "nocoreach.agentCapabilities.group": "NocoReachタスク",
+  "nocoreach.agentCapabilities.read": "現在のタスクデータを読み取る",
+  "nocoreach.agentCapabilities.readDescription": "指標、キーワード、ページ、監査、ナレッジ、スキル、フォーラム投稿のタスクスナップショットを読み取ります。",
+  "nocoreach.agentCapabilities.draft": "候補の下書きを保存",
+  "nocoreach.agentCapabilities.draftDescription": "承認や公開を行わず、現在の実行の下書きを保存します。",
+  "nocoreach.agentCapabilities.research": "NocoReachリサーチ",
+  "nocoreach.agentCapabilities.community": "NocoReachコミュニティ",
+  "nocoreach.agentCapabilities.presetDescription": "プロジェクトの根拠データに基づいて作業し、人によるレビュー用の下書きを提出します。",
+  "nocoreach.nav.insights": "インサイト",
+  "nocoreach.nav.opportunities": "改善機会",
+  "nocoreach.nav.tasks": "タスク",
+  "nocoreach.nav.results": "成果",
+  "nocoreach.nav.site": "サイト & 製品",
+  "nocoreach.nav.pages": "ページ",
+  "nocoreach.nav.traffic": "トラフィック",
+  "nocoreach.nav.audit": "サイト監査",
+  "nocoreach.nav.github": "GitHub",
+  "nocoreach.nav.downloads": "ダウンロード",
+  "nocoreach.nav.search": "検索 & 市場",
+  "nocoreach.nav.searchPerformance": "パフォーマンス",
+  "nocoreach.nav.keywords": "キーワード",
+  "nocoreach.nav.trends": "トレンド",
+  "nocoreach.nav.competitors": "競合",
+  "nocoreach.nav.aiSearch": "AI検索",
+  "nocoreach.nav.community": "コミュニティ",
+  "nocoreach.nav.forum": "フォーラム",
+  "nocoreach.nav.hackerNews": "Hacker News",
+  "nocoreach.nav.reddit": "Reddit",
+  "nocoreach.nav.x": "X",
+  "nocoreach.nav.discord": "Discord",
+  "nocoreach.nav.slack": "Slack",
+  "nocoreach.nav.xiaohongshu": "Xiaohongshu",
+  "nocoreach.nav.bilibili": "Bilibili",
+  "nocoreach.nav.youtube": "YouTube",
+  "nocoreach.nav.aiTeam": "AIチーム",
+  "nocoreach.nav.agent": "エージェント",
+  "nocoreach.nav.playbooks": "プレイブック",
+  "nocoreach.nav.skills": "スキル",
+  "nocoreach.nav.projectKnowledge": "ナレッジ",
+  "nocoreach.nav.analysisRules": "分析ルール",
+  "nocoreach.nav.settings": "設定",
+  "nocoreach.nav.connections": "データソース",
+  "nocoreach.nav.proxyProfiles": "ネットワーク",
+  "nocoreach.nav.members": "メンバー & ロール",
+  "overrides": {
+    "@nocobase/app-plugin-agents": {
+      "agentSkills": {
+        "onlineScripts": "チャットエージェントではスクリプトは実行されません。エージェントはスクリプトを読み取れますが、実行はできません。"
+      },
+      "models": {
+        "description": "モデルサービスと、それらが提供するモデルです。チャットモデルは毎日の分析とチャットエージェントに、埋め込みモデルとリランキングモデルは検索に使用されます。"
+      },
+      "defaultModel": {
+        "description": "新規作成したエージェントやアプリケーションに付属するエージェントなど、独自のモデルが設定されていないチャットエージェントが回答に使用します。"
+      },
+      "services": {
+        "empty": {
+          "description": "モデルサービスを追加すると、チャットエージェントがそのサービスを使って回答できるようになります。"
+        },
+        "service": {
+          "enabledHint": "チャットエージェントは、このサービスが有効な間のみ、そのモデルを使用できます。"
+        }
+      },
+      "skills": {
+        "scriptsNote": "スクリプトあり: チャットエージェントは読み取りのみ可能で、実行はできません",
+        "entry": {
+          "conventional": {
+            "scripts": "コーディングエージェントが実行できるコードです。チャットエージェントは読み取りのみ可能です。"
+          }
+        }
+      },
+      "runtimes": {
+        "description": "ランナーを実行しているコンピューターまたはサーバーです。ランナーはそのマシン上のコーディングツール（Claude CodeやCodexなど）を報告し、実行エージェントがそこでタスクを実行します。"
+      },
+      "usage": {
+        "description": "各エージェントとモデルのトークン使用量、および現在の料金に基づく推定費用です。"
+      }
+    }
+  },
+  "agentSetup.connectionsTitle": "エージェントでデータソースを接続",
+  "agentSetup.connectionsDescription": "以下の手順を Claude Code、Codex などのコーディングエージェントにコピーしてください。エージェントが NocoReach CLI をインストールしてあなたのアカウントでログインし、計画を確認してもらってから、このプロジェクトのデータソースを接続します。",
+  "agentSetup.connectionsPrompt": "NocoReach のプロジェクト「{{project}}」（ID {{projectId}}）にデータソースを接続するのを手伝ってください。\n\n1. NocoReach CLI をインストールしてください:\n{{install}}\n\n2. ブラウザーでのログインを開始してください:\n{{login}}\n認証用の URL とコードを私に提示してください。私がブラウザーでコードを確認して承認するまで待ち、代わりに承認しないでください。\n\n3. 私の承認後、`nocoreach whoami` を実行してログイン中のアカウントを確認し、続いて `nocoreach connect guide --json` を実行して、その手順に従ってプロジェクト {{projectId}} のデータソースを接続してください。接続する前に計画を提示し、私の確認を待ってください。パスワード、トークン、API キーを要求せず、ダウンロード用トークンを API キーとして使用しないでください。認証情報が必要なデータソースについてはリンクを提示し、私がブラウザーで入力できるようにしてください。",
+  "nocoreach.nav.runtimes": "実行環境",
+  "nocoreach.nav.models": "モデルサービス",
+  "nocoreach.nav.usage": "使用量"
+}
