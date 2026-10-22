@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Data sources: shorter cards, a group for what the Agent writes to
+
+- Each card on Settings › Data sources shows its name, status, one plain description and its button. The signal kinds at the bottom ("Change · Timing · Gap"), the role tags ("For analysis", "Can change", "Search and archive") and the "Once connected you can find:" prefix are gone, with their copy in every language.
+- A healthy source shows no sync line; Connected already says it. A source that Data health lists as needing attention shows "Needs attention" and the same reason ("No successful sync in over two days"). Hacker News and X now match their Data health rows, which use other ids.
+- A new last group, Agent edits and publishing, holds Website source (Git repository) and the article publishing target, now called Blog CMS: connect it when articles are managed in a CMS; articles kept in the repository don't need it. The drawer title follows ("Connect Blog CMS"); publishing and the drawer's form are unchanged.
+- Bilibili and Xiaohongshu say they are collected manually and not updated each day. What they collect still feeds the daily analysis's content rules.
+
 ## Unreleased — Agent: tabs back, no duplicate local agents
 
 - Runtimes, Model services and Usage are tabs of the Agent page again, after Local agents, instead of pages of Settings; Settings no longer lists them, and `/runtimes`, `/models` and `/usage` open the tabs.
