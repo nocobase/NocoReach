@@ -6,6 +6,19 @@
 - The Bilibili, Xiaohongshu and YouTube connection panels act on the first click of a button that has just appeared (Read now, Disconnect and the rest), which could be ignored while the permission that showed it had not reached the handler yet.
 - `classic-import-app.test.ts` stops NocoReach's timers before counting imported rows: the analysis timer's catch-up wrote two extra snapshots when the test ran across second 10 of a minute.
 
+## Unreleased — Insights looks sharper, with the same content
+
+- The metric cards sit on the same white surface as the messages below, with a hairline border; the number is larger and its change follows it in green or red; the sparkline has a light wash under it and a dot on the latest day.
+- The agent avatar is solid agent violet with the bot in white (dark in dark mode), so the daily analysis reads as the AI speaking. The avatar is shared: Tasks › By agent shows it the same way.
+- The daily analysis headline is slightly larger. In the opportunity lines, titles to decide on or handed off are in medium weight, dismissed and expired lines are dimmed as a whole, and the status or the actions sit in one right-hand column.
+- Current situation is split into Needs attention and Normal, without the dots; each line's numbers are in medium weight, coloured for the lines to deal with (a drop red, the rest amber).
+
+## Unreleased — Automatic runs look like the other Settings pages
+
+- Settings › Automatic runs is a table like Network and Members (Work, Schedule, Last run, Next run, Status) instead of a card with the time in headline type. The daily analysis explanation is behind ⓘ beside its name, and the note on other automatic work (with its link to Data sources › Data health) is behind ⓘ beside the page title, like the page notes elsewhere; the browser-timezone note sits in an ⓘ beside Last run; Change time moves into the row's "…" menu with Run now, Pause and Technical details, and Run history stays on the row. Next run is left out on narrower screens so the table does not scroll sideways.
+- Run history opens with one line on the recent runs ("No problems in the last 8 runs", "2 of the last 8 runs had problems") with the refresh button beside it. Runs that went well no longer each carry a Done badge; only failed, skipped and running ones show a status. Each run is one line with its suggestions on the right, and projects are named only when there are several, or one was skipped or failed (in red, with the reason).
+- Dates other than today, yesterday and tomorrow use the shared format ("10-20 09:00" instead of "10月20日 09:00"), and a skipped run says it was already analyzed that day rather than "today".
+
 ## Unreleased — Data sources show their logos
 
 - Every data source has its logo on a small tile: the cards and drawer title on Settings › Data sources, the rows and sync table on Data health, the results of Find data sources on your website, the source headings of Settings › Analysis rules and the source buttons when adding a rule. Brand marks come from Simple Icons (CC0), vendored as path data in `client/components/reach/brand-logos.ts` without a new dependency; black marks follow the text colour so they show in dark mode. Sources without a brand mark of their own (Website content, Website source, Blog CMS, DataForSEO, AI search visibility, Competitor activity, Rank tracking, Daily analysis) take a matching icon in the same tile.
