@@ -524,7 +524,7 @@ function HealthNote({ projectId }: { projectId: number }) {
       {$tj('dataHealth.failedSyncOverDayOpportunities', {
         0: items.map((i) => healthText(i.name, i.nameText)).join('、'),
       })}
-      <Link className='nr-link ml-1.5 text-xs' to='/connections'>
+      <Link className='nr-link ml-1.5 text-xs' to='/connections?tab=health'>
         {$t('dataHealth.fix')} →
       </Link>
     </Bubble>

@@ -37,7 +37,10 @@ import {ArticleTargetsConnect} from './article-targets-connect';
 import {articleRequest,type TargetList} from './article-targets-api';
 import {agentRequest,type AgentStatus} from './repo-connect-api';
 import {DiscoveryBox} from './discovery-box';
-import {HealthPanel,HealthLine,loadHealth,type HealthItem} from './data-health';
+import {HealthPanel,HealthLine,loadHealth,healthText,needsAttention,sourceList,type HealthItem} from './data-health';
+import {Tabs,TabsList,TabsTrigger} from '#components/ui/tabs';
+import {usePageTab} from '#hooks/use-page-tab';
+import {TriangleAlertIcon} from 'lucide-react';
 import {useProject} from './reach-data';
 import {useWorkspaceCache} from './workspace-cache';
 import {collectorReportKey} from './collector-report';
@@ -94,19 +97,32 @@ export default function SourceConnections(){const {project,error:projectError}=u
    });
  }
  function show(s:CatalogSource){if(savingOwnersRef.current.size)return;setError('');const p=new URLSearchParams(params);p.set('source',s.id);setParams(p);}
+ // Two tabs (2026-10-22): the sources, and Data health with the count needing attention; ?tab=health opens the second.
+ const tab=params.get('tab')==='health'?'health':'sources';
+ usePageTab(tab==='health'?$t('dataHealth.dataHealth'):$t('sourceConnections.sourcesTab'));
+ function setTab(next:string){const p=new URLSearchParams(params);if(next==='health')p.set('tab','health');else p.delete('tab');setParams(p,{replace:true});}
+ const attention=health.filter(needsAttention);
+ // Change on a Data health row opens that source's drawer, or the page that holds the setting.
+ function settingsOf(item:HealthItem){const id=SOURCE_OF_HEALTH[item.id]??item.id,s=getCatalog().find(x=>x.id===id&&x.availability==='available');if(s)return ()=>show(s);return item.id==='daily-analysis'?()=>void navigate('/schedules'):null;}
 
  return <PageContainer className='nr-page nr-discovery nr-sources'><PageHeader title={$t('sourceConnections.dataSources')} description={$t('sourceConnections.moreConnectMoreSignalsFind')}/>
  {(projectError||error)&&!open&&<p className='nr-error' role='alert'>{projectError||error} <Button variant='outline' onClick={()=>run(load)}>{$t('common.retry')}</Button></p>}
+ <Tabs value={tab} onValueChange={v=>setTab(String(v))}><TabsList variant='line' className='h-auto! justify-start'>
+  <TabsTrigger value='sources'>{$t('sourceConnections.sourcesTab')}</TabsTrigger>
+  <TabsTrigger value='health'>{$t('dataHealth.dataHealth')}{attention.length?<><span aria-hidden='true' className='rounded-full bg-attention px-1.5 text-xs leading-4 text-attention-foreground tabular-nums'>{attention.length}</span><span className='sr-only'>{$t('dataHealth.attentionCount',{0:attention.length})}</span></>:null}</TabsTrigger>
+ </TabsList></Tabs>
+ {tab==='health'?project&&<HealthPanel projectId={project.id} reloadKey={healthKey} onChange={()=>void load().catch(()=>undefined)} settingsOf={settingsOf}/>:<>
+ {attention.length?<div role='status' className='flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-nr-tint-amber px-3 py-2 text-sm text-nr-ink-amber'><TriangleAlertIcon className='size-4 shrink-0' aria-hidden='true'/><span className='min-w-0 flex-1'>{$tj('dataHealth.attentionNotice',{0:attention.length,1:sourceList(attention.map(i=>healthText(i.name,i.nameText)))})}</span><button type='button' className='underline-offset-4 hover:underline' onClick={()=>setTab('health')}>{$t('common.view')}</button></div>:null}
  {project&&canDiscover&&<DiscoveryBox key={project.id} projectId={project.id} projectName={project.name} refreshKey={healthKey} defaultUrl={project.domains?.[0]?`https://${project.domains[0]}`:undefined} open={id=>{const s=getCatalog().find(x=>x.id===id);if(s)show(s);}} onDone={()=>void load().catch(()=>undefined)}/>}
- {project&&<HealthPanel projectId={project.id} reloadKey={healthKey} onChange={()=>void load().catch(()=>undefined)}/>}
  {!loaded&&!error&&<p role='status'>{$t('sourceConnections.checkingDataSources')}</p>}
  {/* Groups use the shared section heading: a plain h2 here took the page-wide `.nr-page h2:not([class])` style, which
      left it grey and touching its cards. Groups sit further apart than a heading from its own cards. */}
- <div className='mt-8 flex flex-col gap-8'>{categories.map(cat=><section key={cat.id} className='nr-source-group flex flex-col gap-3' aria-labelledby={`source-group-${cat.id}`}><SectionHeading id={`source-group-${cat.id}`} title={$t(cat.label)} className='[&_h2]:text-base [&_h2]:font-medium'/><div className='nr-source-catalog'>{getCatalog().filter(s=>s.category===cat.id).map(s=>{const st=sourceState(s,status),problem=needsAttention(s.id,health),shown=problem?'attention':st;const actionable=s.availability==='available';return <article key={s.id} className='nr-catalog-card' data-source-id={s.id} data-state={shown}>
+ <div className='mt-8 flex flex-col gap-8'>{categories.map(cat=><section key={cat.id} className='nr-source-group flex flex-col gap-3' aria-labelledby={`source-group-${cat.id}`}><SectionHeading id={`source-group-${cat.id}`} title={$t(cat.label)} className='[&_h2]:text-base [&_h2]:font-medium'/><div className='nr-source-catalog'>{getCatalog().filter(s=>s.category===cat.id).map(s=>{const st=sourceState(s,status),problem=attentionOf(s.id,health),shown=problem?'attention':st;const actionable=s.availability==='available';return <article key={s.id} className='nr-catalog-card' data-source-id={s.id} data-state={shown}>
   <div className='nr-catalog-top'><h3>{s.name}</h3><Tag tone={stateToneOf(shown)} dot>{getStateLabels()[shown]}</Tag></div>
   <p>{s.detects}</p>{problem&&<HealthLine item={problem}/>}
   <div className='nr-catalog-bottom'>{actionable?<SourceAction source={s} projectId={projectId} canOpenNetwork={canOpenNetwork&&Boolean(sourceConnection[s.id])} outlined={st==='connected'||st==='done'} connected={st==='connected'||st==='partial'||(s.id==='xiaohongshu'&&Boolean(status.xiaohongshu?.connected))} onOpen={()=>show(s)}/>:<span className='nr-footnote'>{s.availability==='soon'?$t('sourceConnections.development'):s.priority}</span>}</div>
  </article>;})}</div></section>)}</div>
+ </>}
  <Sheet open={Boolean(open)} onOpenChange={(o,details)=>{if(!o&&savingOwnersRef.current.size){details.cancel();return;}if(!o)closePanel();}}><SheetContent side='right' className='nr-guide-sheet' showCloseButton={!connectionSaving}>{open&&<><SheetHeader><SheetTitle>{$tj('common.connectValue',{0:open.name})}</SheetTitle></SheetHeader><div className='nr-guide-body'>
   {/* The intro describes how the connection works; no AI speaks here, so it carries no Agent avatar. It scrolls with
       the body: only the title stays pinned, since some intros run to several lines. */}
@@ -125,7 +141,8 @@ export default function SourceConnections(){const {project,error:projectError}=u
 // A healthy source says nothing beyond its Connected tag; one that Data health lists as needing attention says so on its
 // card with the same reason. Data health names Hacker News and X by their own ids.
 const HEALTH_ID:Record<string,string>={mentions:'hackernews',social:'x'};
-function needsAttention(id:string,health:HealthItem[]){return health.find(item=>item.id===(HEALTH_ID[id]??id)&&(item.state==='warning'||item.state==='failing'));}
+const SOURCE_OF_HEALTH=Object.fromEntries(Object.entries(HEALTH_ID).map(([source,health])=>[health,source]));
+function attentionOf(id:string,health:HealthItem[]){return health.find(item=>item.id===(HEALTH_ID[id]??id)&&needsAttention(item));}
 
 function SourceAction({source,projectId,canOpenNetwork,outlined,connected,onOpen}:{source:CatalogSource;projectId:number|undefined;canOpenNetwork:boolean;outlined:boolean;connected:boolean;onOpen:()=>void}){
  const {can}=useSourceAccess(source.id,projectId);

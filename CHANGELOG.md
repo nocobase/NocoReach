@@ -1,9 +1,11 @@
 # NocoReach Changelog
 
-## Unreleased — Data sources: Agent edits and publishing first, readable group headings
+## Unreleased — Data sources: two tabs, Retry all, Agent edits and publishing first
 
-- Agent edits and publishing (Website source and Blog CMS) is the first group on Settings › Data sources, right under Data health: every change the Agent makes lands in one of them.
-- Group headings use the shared section heading in the page's text colour, the size of the Data health heading, with the same space above every group and a small gap to its cards. The old plain heading took a page-wide rule that left it grey and touching its cards.
+- Settings › Data sources has two tabs. Sources (the default) shows the cards, with one orange line at the top naming the sources that need attention and a View link to the other tab; Data health shows their count in orange on its tab and holds the sync status that used to sit above the cards.
+- Data health lists the sources needing attention, each with the action that fits its failure: Retry; Change, which opens the source's settings, when a setting must change first (an expired Google authorization, a refused GitHub token, X's spending cap, a paused daily analysis, a competitor without a sitemap); or Check, then retry for an uncertain DataForSEO result that may be billed, which asks before querying again. Retry all retries the rows a plain retry can help and the person may retry, one after another, each row showing its progress and result. The full sync status table is shown directly.
+- Google Search Console and GA4 rows that are only late offer Retry, which asks for a sync as Update now does. Rank tracking and Trends record an uncertain DataForSEO result, and competitor activity a refusal only a changed setting cures, so Data health can tell them apart.
+- Agent edits and publishing (Website source and Blog CMS) is the first group of sources: every change the Agent makes lands in one of them. Group headings use the shared section heading at the size of the page's other headings, with the same space above every group and a small gap to its cards; the old plain heading took a page-wide rule that left it grey and touching its cards.
 
 ## Unreleased — One look for every refresh and update button
 

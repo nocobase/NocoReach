@@ -76,6 +76,9 @@ vi.mock('../../client/pages/data-health', () => ({
   HealthPanel: () => null,
   HealthLine: () => null,
   loadHealth: async () => ({ items: [] }),
+  healthText: (original: string) => original,
+  needsAttention: () => false,
+  sourceList: (names: string[]) => names.join(', '),
 }));
 vi.mock('../../client/components/app-shell/nav-badges', () => ({
   refreshNavBadges: () => {},
