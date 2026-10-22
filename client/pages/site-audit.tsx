@@ -8,7 +8,8 @@ import { usePageTab } from '#hooks/use-page-tab';
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
-import { ClipboardCheck, RefreshCw } from "lucide-react";
+import { ClipboardCheck } from "lucide-react";
+import { RefreshButton } from '#components/reach/refresh-button';
 import { toast } from "#lib/toast";
 import { PageContainer, PageHeader } from "#components/reach/page";
 import { EmptyState, ListSkeleton, LoadError } from "#components/reach/states";
@@ -63,7 +64,7 @@ export default function SiteAudit() {
   return (
     <PageContainer className="nr-data-page">
       <PageHeader info={view === "issues" && report?.counts ? <InfoTip label={$t('common.aboutData')} side="bottom"><p>{$tj('siteAudit.pagesReadAgainWeeklyUp',{0:day(report.oldestRead),1:day(report.newestRead)})}</p><p>{$t('siteAudit.readOnlyNoCost')}</p></InfoTip> : undefined} title={$t('siteAudit.siteAudit')} description={view === "issues" ? $t('siteAudit.issuesHelp') : $t('siteAudit.performanceHelp')}
-        actions={view === "issues" && report?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void recheck()}><RefreshCw data-icon="inline-start" />{$t('common.updateNow')}</Button> : undefined} />
+        actions={view === "issues" && report?.connected ? <RefreshButton busy={busy} label={$t('common.updateNow')} onClick={() => void recheck()} /> : undefined} />
       <Tabs value={view} onValueChange={(v) => choose(String(v))}>
         <TabsList variant="line" className="h-auto! justify-start">
           <TabsTrigger value="issues">{$t('siteAudit.issuesTab')}</TabsTrigger>

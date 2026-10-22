@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router';
 import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query';
-import { MoreHorizontal, PowerOff, RefreshCw } from 'lucide-react';
+import { MoreHorizontal, PowerOff } from 'lucide-react';
+import { RefreshButton } from '#components/reach/refresh-button';
 import { $legacyText, $t } from '#i18n';
 import { toast } from '#lib/toast';
 import { PageHeader } from '#components/reach/page';
@@ -282,14 +283,11 @@ function SourcesCard({
         </CardDescription>
         {canTest && selections.data && (
           <CardAction>
-            <Button variant='outline' disabled={running} onClick={check}>
-              {running ? (
-                <Spinner data-icon='inline-start' />
-              ) : (
-                <RefreshCw data-icon='inline-start' />
-              )}
-              {$t('network.check')}
-            </Button>
+            <RefreshButton
+              busy={running}
+              label={$t('network.check')}
+              onClick={check}
+            />
           </CardAction>
         )}
       </CardHeader>
