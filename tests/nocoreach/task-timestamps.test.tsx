@@ -96,7 +96,8 @@ it('keeps existing rounding and hour/day boundaries, clamping small future clock
   expect(age(1439.49)).toBe('24 h ago');
   expect(age(1439.5)).toBe('Yesterday');
   expect(age(2879.49)).toBe('Yesterday');
-  expect(age(2880)).toMatch(/^\d+\/\d+$/);
+  // Older than yesterday: the date, as formatDate writes it everywhere.
+  expect(age(2880)).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
   const midnight = Date.parse('2026-11-01T00:10:00Z');
   expect(ago('2026-10-31T23:50:00Z', midnight)).toBe('20 min ago');
 });

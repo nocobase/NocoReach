@@ -1,3 +1,4 @@
+import { formatDateTime } from '#lib/format';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import {ConnectionError,NetworkSettingsLink} from '#components/connection-error';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
@@ -25,7 +26,7 @@ export function CommunityConnect({projectId,suggestedUrl,onChange}:{projectId:nu
   {!status.lastSync?<p role="status">{$t('community.syncingPublicPostsLast90')}</p>:<><p>{$tj('community.last90DaysTopicsUnanswered',{0:status.total,1:status.unanswered,2:status.solved})}</p>
   {!!status.categories?.length&&<p className="nr-footnote">{$tj('community.mainCategories',{0:status.categories.map(c=>`${c.name} ${c.count}`).join('、')})}</p>}
   {!!status.top?.length&&<div><p className="nr-guide-subtitle">{$t('common.mostDiscussedTopics')}</p>{status.top.slice(0,3).map(t=><p key={t.url} className="nr-footnote"><a className="nr-link" href={t.url} target="_blank" rel="noreferrer">{t.title}</a>  {$tj('community.viewsReplies',{0:t.views,1:t.replies,2:t.solved?$t('common.solved'):''})}</p>)}</div>}
-  <p className="nr-footnote">{$tj('common.lastSyncedSyncsAutomaticallyEvery',{0:new Date(status.lastSync.at).toLocaleString(getCurrentLocale())})}{status.lastSync.errors.map(e=><span key={e} className="nr-block">{$tj('common.partlyNotUpdated',{0:$legacyText(e)})}</span>)}<NetworkSettingsLink messages={status.lastSync.errors}/></p></>}
+  <p className="nr-footnote">{$tj('common.lastSyncedSyncsAutomaticallyEvery',{0:formatDateTime(status.lastSync.at)})}{status.lastSync.errors.map(e=><span key={e} className="nr-block">{$tj('common.partlyNotUpdated',{0:$legacyText(e)})}</span>)}<NetworkSettingsLink messages={status.lastSync.errors}/></p></>}
   <div className="nr-step-actions">{canSync&&<Button size="sm" variant="outline" disabled={busy||status.syncing} onClick={()=>void run(()=>call<CommunityStatus>(projectId,'sync'))}>{busy?$t('common.syncing'):$t('common.syncNow')}</Button>}{canDisconnect&&<Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('community.stopSyncingForum')),description:() => ($t('community.dataAlreadyReadKept')),action:'community.stopSyncing'}))void run(()=>call<CommunityStatus>(projectId,'disconnect'));}}>{$t('common.disconnect')}</Button>}</div></div>;
  return <>{error&&<ConnectionError message={error}/>}
   {!canPreview&&!preview&&<p className='nr-footnote'>{$t('messages.notConnectedYet')}</p>}

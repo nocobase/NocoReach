@@ -126,12 +126,6 @@ export default function DataWebsite() {
         title={$t('dataWebsite.traffic')}
         description={$t('dataWebsite.visitorsSourcesPagesEvents')}
       />
-      {report?.connected ? (
-        <TodayCard
-          projectId={project?.id}
-          propertyId={project?.analyticsPropertyId}
-        />
-      ) : null}
       <RangePicker
         value={r}
         onChange={setRange}
@@ -152,6 +146,13 @@ export default function DataWebsite() {
             : undefined
         }
       />
+      {/* The date range sits right under the header, as on every data page; Today follows it (UI review 2026-10-22). */}
+      {report?.connected ? (
+        <TodayCard
+          projectId={project?.id}
+          propertyId={project?.analyticsPropertyId}
+        />
+      ) : null}
       {error ? (
         <LoadError
           title={$t('dataWebsite.notLoadTrafficData')}

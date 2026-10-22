@@ -1,3 +1,4 @@
+import { formatDate } from '#lib/format';
 import { type Message, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useMemo,useState,type ReactElement} from 'react';
 import {ExternalLinkIcon,FileIcon,PencilIcon,PlusIcon,SearchIcon,Trash2Icon,XIcon} from 'lucide-react';
@@ -20,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#
 // library for every project; turned on here, a Skill goes with every task for the Agent to use when it fits. A 做法 step
 // can name Skills, and that step always uses them.
 type Usage=Record<string,string[]>;
-const day=(iso:string)=>{const d=new Date(iso);return `${d.getMonth()+1}/${d.getDate()}`;};
+const day=(iso:string)=>formatDate(iso);
 export default function SkillsPage(){
  const {project,error:projectError}=useProject();
  const {can:canCreate}=useBusinessAccess('nrSkills.create'),{can:canImport}=useBusinessAccess('nrSkills.import'),{can:canImportLink}=useBusinessAccess('nrSkills.importLink'),{can:canRemove}=useBusinessAccess('nrSkills.remove');

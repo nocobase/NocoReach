@@ -21,6 +21,7 @@ import { DetailDrawer } from "../detail-drawer";
 import { packagesDraft } from "../seo-hand-off";
 import { Grid } from "../data-github/tables";
 import { Segmented } from "#components/reach/segmented";
+import { distTagLabel } from "./dist-tag";
 import { ago, bytes, change, CHANNEL, dateOf, kindLabel, num, pct, REGISTRY, type AssetRow, type Channel, type Item, type TagRow, type VersionRow, type View } from "./model";
 import { formatChange, formatDate } from '#lib/format';
 import { Delta } from '#components/reach/delta';
@@ -93,7 +94,7 @@ export function ReportCard({ view, projectId }: { view: View; projectId?: number
         <Grid<VersionRow> key={tab} id="package-versions" {...common} empty={$t('dataDownloads.noDataInRange')} rows={t.versions.filter((v) => (line === "all" || v.channel === line) && has(v.version, v.package, ...v.tags))} rowId={(v) => v.key} sort="published"
           columns={[
             ...(several(t.versions.map((v) => v.id)) ? [text<VersionRow>("package", $t('dataDownloads.package'), (v) => v.package, (v) => <span className="text-muted-foreground">{v.package}</span>)] : []),
-            text<VersionRow>("version", $t('dataDownloads.version'), (v) => v.version, (v) => <span className="flex items-center gap-1.5 tabular-nums">{v.version}{v.tags.map((x) => <Tag key={x} tone={x === "latest" ? "blue" : "grey"}>{x}</Tag>)}{v.yanked ? <Tag tone="red">{$t('dataDownloads.yanked')}</Tag> : null}</span>),
+            text<VersionRow>("version", $t('dataDownloads.version'), (v) => v.version, (v) => <span className="flex items-center gap-1.5 tabular-nums">{v.version}{v.tags.map((x) => <Tag key={x} tone={x === "latest" ? "blue" : "grey"}>{distTagLabel(x)}</Tag>)}{v.yanked ? <Tag tone="red">{$t('dataDownloads.yanked')}</Tag> : null}</span>),
             channelCol<VersionRow>(), when<VersionRow>("published", $t('dataDownloads.published'), (v) => v.published, w.end),
             ...(t.versions.some((v) => v.registry === "npm") ? [count<VersionRow>("lastWeek", $t('dataDownloads.lastWeekDownloads'), (v) => v.lastWeek)] : []),
             ...(t.versions.some((v) => v.registry === "pypi") ? [count<VersionRow>("files", $t('dataDownloads.files'), (v) => v.files), count<VersionRow>("size", $t('dataDownloads.size'), (v) => v.size, bytes)] : []),

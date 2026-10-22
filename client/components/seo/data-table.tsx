@@ -14,12 +14,10 @@ import {
   type TableOptions,
 } from "@tanstack/react-table";
 import { useRef, type MouseEvent, type MutableRefObject, type ReactNode } from "react";
-import { Inbox, SearchX } from "lucide-react";
 import { Button } from "#components/ui/button";
 import { Checkbox } from "#components/ui/checkbox";
 import { Skeleton } from "#components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#components/ui/table";
-import { EmptyState } from "#components/reach/states";
 import { applyShiftRangeSelection, type SelectionAnchor } from "./table-selection";
 
 type AppColumnMeta<TData> = {
@@ -155,10 +153,9 @@ export function DataTable<TData>({
           ) : rows.length === 0 ? (
             <TableRow className="hover:bg-transparent">
               <TableCell colSpan={columns.length} className="whitespace-normal">
+                {/* An empty table says so in one muted sentence, like an empty card (UI review 2026-10-22). */}
                 {isFiltered ? (
-                  <EmptyState
-                    className="border-0 bg-transparent"
-                    icon={<SearchX />}
+                  <TableEmpty
                     title={$t('dataTable.noRowsMatchFilters')}
                     description={$t('dataTable.changeClearFiltersSeeMore')}
                     action={
@@ -169,7 +166,7 @@ export function DataTable<TData>({
                     }
                   />
                 ) : (
-                  <EmptyState className="border-0 bg-transparent" icon={<Inbox />} {...empty} />
+                  <TableEmpty {...empty} />
                 )}
               </TableCell>
             </TableRow>
@@ -195,6 +192,16 @@ export function DataTable<TData>({
         </TableBody>
       </Table>
       {footer}
+    </div>
+  );
+}
+
+function TableEmpty({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
+  return (
+    <div className="py-3 text-sm text-muted-foreground">
+      <p>{title}</p>
+      {description ? <p className="mt-1 text-xs">{description}</p> : null}
+      {action ? <div className="mt-3">{action}</div> : null}
     </div>
   );
 }
