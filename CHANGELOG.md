@@ -5,6 +5,11 @@
 - When publishing an article to a target does not complete, the task card keeps its plain-words reason and now links to Technical details, which list each failed target with the step it stopped at (reading the article, checking the website repository, writing, or checking the saved changes), the error code, the time and what the target or the error said (for example `github:429`, or a network timeout with its host).
 - Every failed publish also leaves a warning in the application log (`NocoReach article publish failed`, with project, task, target, step, code and detail), so `nb-studio app logs` shows it. Errors other than the target's own (a request that got no answer, a code error) keep their cause instead of becoming a bare `unavailable`.
 
+## Unreleased — Insights has one refresh
+
+- Update analysis is the page's refresh icon, as on Results, named and tooltipped "Update analysis": it spins while the analysis runs, and the numbers, Current situation and the waiting tasks are read again when it ends. Current situation no longer has a refresh of its own.
+- Current situation lists every line, those needing attention first, since the column has the room; "N more" is gone.
+
 ## Unreleased — Every language checked against English in the tests
 
 - `tests/logic/additional-locales.test.ts` compares each of the eight additional languages with English: `shared/i18n/<locale>.json` with `en.json`, and `client/locales/translations/<locale>.json` with the shell copy of `client/locales/en-US.ts`. It names every missing key, extra key and key whose `{0}` or `{{name}}` placeholders differ. The `build` check's client type check already failed on a missing key, but stopped at the first language and missed extra keys and changed placeholders.

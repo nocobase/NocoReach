@@ -39,7 +39,6 @@
   "strategy.noWaitingTasks": "Saat ini tidak ada tugas yang perlu Anda tangani.",
   "strategy.currentSituation": "Situasi terkini",
   "strategy.noCurrentSituation": "Belum ada data situasi terkini.",
-  "strategy.situationMore": "{0} lainnya",
   "strategy.refreshBlock": "Muat ulang",
   "strategy.blockFailed": "Tidak dapat memuat bagian ini. Silakan coba lagi.",
   "strategy.blockStale": "Gagal memuat ulang. Hasil sebelumnya ditampilkan; data mungkin sudah tidak terkini.",
