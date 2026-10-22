@@ -6,6 +6,13 @@
 - Run history opens with one line on the recent runs ("No problems in the last 8 runs", "2 of the last 8 runs had problems") with the refresh button beside it. Runs that went well no longer each carry a Done badge; only failed, skipped and running ones show a status. Each run is one line with its suggestions on the right, and projects are named only when there are several, or one was skipped or failed (in red, with the reason).
 - Dates other than today, yesterday and tomorrow use the shared format ("10-20 09:00" instead of "10月20日 09:00"), and a skipped run says it was already analyzed that day rather than "today".
 
+## Unreleased — Insights says how it analyzes, not how old the data is
+
+- The line under the Insights title no longer shows the period, the data date and the last analysis time ("Last 28 days · Data through … · Last analyzed … (daily, automatic)"): the data could end days before today's analysis, which read as analyzing old data, and each analysis rule reads its own window (7, 14, 28 or 30 days), not 28. It says how the insights are made instead, in one sentence with two links: "Analyzed every day at 09:00 using your analysis rules." The analysis rules link to AI team › Analysis rules and the time to Settings › Automatic runs; each is plain text for someone who cannot open that page.
+- The time is the daily workflow's configured time, with its time zone when it differs from the browser's. A paused daily analysis says it is paused; without a daily workflow the sentence names the rules only. Data dates stay on Data sources and Data health.
+- The metric cards say what they cover, in a quiet line above them: "Last 28 days vs the previous 28".
+- Insights no longer loads the analysis context it used only for that period.
+
 ## Unreleased — See what a live task changed
 
 - Once a task is live, its card names what changed in one line ("Changes (2): English · Summary, English · Title") with View changes, which opens the change that went live: an article field by field, before and after, or a page change as readers see it before and after. Nothing else is added to the card.
@@ -19,10 +26,21 @@
 
 - On Insights, an opportunity handed off to the agent shows its task's state now, with the task number: Handed off to agent while it waits to start, In progress, Needs confirmation, Completed or Closed. A finished task used to keep reading "Handed off to agent".
 
+## Unreleased — Tasks list: a notice only when no runtime is online; Executor no longer overlaps Updated
+
+- The line of counts above the tasks (running, queued, failed runs, runtimes online) is gone: each row's status already says running and queued, and a failed run shows in red on its row. When no runtime is online, one notice above the tasks says work handed to an agent will wait, with View runtimes; it uses the page's normal spacing (the old line's zero margin sat it on the table). The same applies to List, Board and By agent.
+- In the list, the Executor column truncates a long Agent name with an ellipsis (the full name on hover) instead of running into Updated, which no longer wraps.
+
 ## Unreleased — Today's decisions are today's; the conversation opens folded
 
 - Today's message on Insights lists only opportunities raised, dismissed or handed off today. One handed off on an earlier day that today's analysis lists again stays on the day it was raised; it read as handed off today beside the ones just dismissed (Studio, 10/22: T-27 and T-30 beside the three dismissed at 17:15). A hand-off counts on the day its task was created, and the waiting tasks are read again after one.
 - Today's conversation starts folded to its one line when Insights opens; a question sent since then opens it. An earlier day's conversation shows in full when that day is opened.
+
+## Unreleased — Found by AI or by a person, on every task
+
+- Task cards on the board and in the list say who found the task, beside its number: "Found by AI" (sparkles, violet) for a task from an opportunity of the daily analysis or a change on Insights the person only confirmed, "Found by <name>" for one a person handed off from a data page, created as a new task, started from a page to improve or created from Results. The finder is the person who created the task, who may not be its owner. Older tasks that did not record their creator show nothing.
+- The task page's properties start with Source: "Found by AI · O-41" with "Daily analysis · date", or "Found by <name>" with where it came from ("Handed off from Keywords · date", "New task · date"). It replaces the From row.
+- Hand-offs from data pages record the page they came from; tasks started from a page to improve record their creator; a task handed off from another keeps who found the first one and where.
 
 ## Unreleased — Failed article publishes say where and why
 
