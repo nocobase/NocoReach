@@ -910,3 +910,26 @@ it('the current situation beside the day lists every line, those needing attenti
     screen.getByRole('button', { name: 'strategy.updateAnalysis' }),
   ).toBeTruthy();
 });
+
+it('a handed-off opportunity says where its task stands now', async () => {
+  fixture.tasks = [
+    {
+      id: 5,
+      title: 'Done task',
+      status: 'todo',
+      createdAt: '2026-10-21T08:30:00Z',
+      evidence: { work: { stage: 'done' } },
+    },
+  ];
+  setup();
+  const group = await decisionGroup(7);
+  fireEvent.click(
+    within(group).getByRole('button', { name: /strategy.moreToDecide/ }),
+  );
+  const handed = await waitFor(() => {
+    const line = group.querySelector('[data-opportunity-id=handed]');
+    expect(line?.textContent).toContain('common.completed');
+    return line!;
+  });
+  expect(handed.textContent).not.toContain('strategy.handedOffAgent');
+});
