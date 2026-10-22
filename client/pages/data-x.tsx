@@ -22,7 +22,7 @@ import { HandOffBar } from "./hand-off-bar";
 import { AllCheck, RowCheck, useTickedList, type Selection } from "#components/reach/hand-off-slot";
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
-import { NotesTip } from "#components/reach/info-tip";
+import { InfoTip, NotesTip } from "#components/reach/info-tip";
 import { formatDate, formatDateTime } from '#lib/format';
 
 type Post = { id: string; text: string; createdAt: string; url: string; metrics: { likes: number; reposts: number; replies: number; quotes: number; views: number | null } };
@@ -79,7 +79,7 @@ export default function DataX() {
           
           {view.series!.filter((p) => p.value !== null).length > 1 ? (
             <Card className="gap-3 px-4">
-              <h2 className="text-sm font-semibold">{$t('dataX.postsMentioningProductPerDay')}</h2>
+              <h2 className="flex items-center gap-1 text-sm font-semibold">{$t('dataX.postsMentioningProductPerDay')}<InfoTip label={$t('common.info')}>{$t('dataX.postsPerDayNote')}</InfoTip></h2>
               <div className="nr-chart-box">
                 <ResponsiveContainer width="100%" height={200}>
                   <AreaChart data={view.series} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>

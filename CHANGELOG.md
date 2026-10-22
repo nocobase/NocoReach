@@ -1,5 +1,15 @@
 # NocoReach Changelog
 
+## Unreleased — Notes in ⓘ, one status line, one description per page
+
+- Every note under a card or chart title is an ⓘ beside the title (2026-10-22 decision D5): a `Section`'s description, Keywords › keyword details (History, Related keywords, Our indexed pages, Top 10, Rank history), Results (Changes, Latest results), Settings › Network (Proxy, How data sources connect), a task's Performance before its first checkpoint, Bilibili / YouTube / Xiaohongshu's Publishing trend and Sources, AI search's topic setup and Competitors › Activity's first setup. Titles no longer carry notes in brackets: X's chart is "Posts mentioning the product per day" with "Reposts are not counted" in its ⓘ, Trends' chart is "Weekly interest" with how 100 is set in its ⓘ.
+- The grey help lines under query forms and tabs are ⓘ too: Keywords › Find keywords (what each method searches), AI search › Ask AI (each model asked separately) and API keys (what a personal or organization key may do, now beside the page title).
+- Search performance › Index and Sitemaps tiles no longer repeat their ⓘ under the number; a warning's "does not block reading, but worth fixing" moved into its ⓘ.
+- Analysis rules' AI adjustment and Rules sections no longer repeat the scheme name under their titles: My schemes above marks the scheme shown.
+- A status line says when its data was updated with one word, "Updated" (decision D2), instead of Last success, Searched, Read, Last searched, Last read, Last checked, Last viewed or Collected; how often it runs is in its ⓘ. Reddit's two lines are one ("Search term: NocoBase · Updated 10-14 16:08 ⓘ", the next search in the ⓘ); Rank tracking's line moved out of the table card, above it, with the weekly check in its ⓘ; Keywords › AI suggestions says "· Updated 10-12". Xiaohongshu and the connection panels say "Search term:" like the other sources.
+- Search performance, Competitors and GitHub keep one description for the page and all its tabs (decision D3), saying what each tab holds; switching tabs no longer changes it.
+- Competitors › Activity says once, above the cards, which competitor could not be read; the cards no longer repeat "Not read last time, see above".
+
 ## Unreleased — One look for tabs, choices, refresh buttons and table headers
 
 - Every tab bar looks the same: a thin rule under the row, the tabs flush with the page title, the open one in black over a 2px line. Opportunities used a blue line; Members & roles, API keys, Agent, Analysis rules and Knowledge indented their tabs and had no rule.

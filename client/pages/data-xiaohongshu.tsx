@@ -192,7 +192,9 @@ export default function DataXiaohongshu() {
       {data && hasData ? (
         <>
           <p className='nr-footnote'>
-            {data.query ? $t('common.search', { 0: data.query }) : null}
+            {data.query
+              ? $t('common.searchTermValue', { 0: data.query })
+              : null}
             {data.query ? ' · ' : null}
             {data.verifiedAt
               ? $t('xiaohongshu.lastSuccessfulCollection', {

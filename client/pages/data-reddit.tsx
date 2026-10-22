@@ -54,8 +54,7 @@ export default function DataReddit() {
       {view && !view.connected ? <EmptyState icon={<MessageCircle />} title={$t('dataReddit.onceRedditDiscussionsConnectedPosts')} description={$t('dataReddit.searchedGoogleOnceWeekThrough')} action={<Button onClick={() => navigate("/connections?source=reddit")}>{$t('dataReddit.connectRedditDiscussions')}</Button>} /> : null}
       {view?.connected ? (
         <>
-          <p className="nr-footnote">{$tj('dataReddit.searchTerm',{0:view.terms!.join("、"),1:""})}</p>
-          <RedditTiming state={view}/>
+          <RedditTiming state={view} lead={$tj('dataReddit.searchTerm',{0:view.terms!.join("、"),1:""})}/>
           {!view.diagnostics?.length && view.lastRun?.errors?.length ? <div className="nr-error" role="alert">{view.lastRun.errors.map((message) => <p key={message}>{$tj('reddit.searchIncomplete',{0:$legacyText(message)})}</p>)}</div> : null}
           <div className={metricGrid(view.kpis!.length + (visits ? 1 : 0))}>
             {view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}

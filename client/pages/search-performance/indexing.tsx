@@ -134,10 +134,10 @@ export function IndexingView({ projectId, property, tab, reason, onPick }: { pro
 function Tiles({ pages, checked, tab, onTab }: { pages: IndexRow[]; checked: number; tab: Tab; onTab: (t: Tab) => void }) {
   const indexed = pages.filter((p) => p.status === "indexed").length, not = pages.filter((p) => p.status === "notIndexed");
   const reasons = new Set(not.map((p) => p.coverageState || "")).size, issues = pages.reduce((n, p) => { const x = issuesOf(p); return { errors: n.errors + x.errors, warnings: n.warnings + x.warnings, pages: n.pages + (x.errors + x.warnings ? 1 : 0) }; }, { errors: 0, warnings: 0, pages: 0 });
-  const tiles: { key: Tab; label: string; value: number; hint: string; help: string }[] = [
+  const tiles: { key: Tab; label: string; value: number; hint?: string; help: string }[] = [
     { key: "indexed", label: $t('searchIndex.indexed'), value: indexed, hint: $t('searchIndex.shareOfChecked', { 0: pct(checked ? indexed / checked : 0) }), help: $t('searchIndex.indexedHelp') },
     { key: "notIndexed", label: $t('searchIndex.notIndexed'), value: not.length, hint: $t('searchIndex.reasonCount', { 0: reasons }), help: $t('searchIndex.notIndexedHelp') },
-    { key: "canonical", label: $t('searchIndex.canonicalMismatch'), value: pages.filter((p) => p.canonicalMismatch).length, hint: $t('searchIndex.canonicalMismatchHint'), help: $t('searchIndex.canonicalMismatchHelp') },
+    { key: "canonical", label: $t('searchIndex.canonicalMismatch'), value: pages.filter((p) => p.canonicalMismatch).length, help: $t('searchIndex.canonicalMismatchHelp') },
     { key: "rich", label: $t('searchIndex.richIssues'), value: issues.pages, hint: $t('searchIndex.errorsWarnings', { 0: issues.errors, 1: issues.warnings }), help: $t('searchIndex.richIssuesHelp') },
   ];
   return (
