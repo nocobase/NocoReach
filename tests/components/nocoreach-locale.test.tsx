@@ -76,6 +76,9 @@ vi.mock('../../client/pages/data-health', () => ({
   HealthPanel: () => null,
   HealthLine: () => null,
   loadHealth: async () => ({ items: [] }),
+  healthText: (original: string) => original,
+  needsAttention: () => false,
+  sourceList: (names: string[]) => names.join(', '),
 }));
 vi.mock('../../client/components/app-shell/nav-badges', () => ({
   refreshNavBadges: () => {},
@@ -154,7 +157,7 @@ describe('NocoReach language integration', () => {
             getCatalog().filter((source) => source.category === category.id)
               .length,
         ),
-      ).toEqual([6, 5, 9, 2]);
+      ).toEqual([2, 6, 5, 9]);
       expect(
         new Set([...cards].map((card) => card.getAttribute('data-source-id')))
           .size,

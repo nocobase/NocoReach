@@ -5,8 +5,9 @@ import {Avatar,AvatarFallback} from '#components/ui/avatar';
 import {cn} from '#lib/utils';
 import {initials} from '#pages/task-list-model';
 // The one avatar for people, agents and the system (NocoSolution frontend standard §S5.1, as NpActorAvatar in
-// nocobase/NocoProject): a person is round with initials, an agent (Agent, Online AI) a rounded square with a bot in the
-// agent violet, the system a dashed round cog. Shape and colour both tell the kind apart and the kind is repeated for
+// nocobase/NocoProject): a person is round with initials, an agent (Agent, Online AI) a rounded square in solid agent
+// violet with the bot in the page colour (2026-10-22 visual polish: the pale square did not read as the AI speaking),
+// the system a dashed round cog. Shape and colour both tell the kind apart and the kind is repeated for
 // screen readers. Show it only where an AI speaks or acts; `--agent` is used for nothing else.
 export type ActorKind='user'|'agent'|'system';
 const getKind = (): Record<ActorKind,string> => ({user:$t('common.member'),agent:'Agent',system:$t('common.system')});
@@ -17,7 +18,7 @@ export function ActorAvatar({type,name,size='sm',showName=false,decorative=true,
  const avatar=<Avatar size={size==='default'?'default':'sm'} data-actor={type}
   className={cn(size==='xs'&&'size-4',type==='agent'&&'rounded-md after:rounded-md',type==='system'&&'after:border-dashed after:border-muted-foreground/50',!showName&&className)}
   {...(decorative||showName?{'aria-hidden':true}:{role:'img','aria-label':`${name??'—'}（${getKind()[type]}）`})} title={name??undefined}>
-  <AvatarFallback className={cn('font-medium text-foreground/80',size==='xs'&&'text-[0.5rem]',type==='agent'&&'rounded-md bg-agent/15 text-agent',type==='system'&&'bg-transparent text-muted-foreground')}>
+  <AvatarFallback className={cn('font-medium text-foreground/80',size==='xs'&&'text-[0.5rem]',type==='agent'&&'rounded-md bg-agent text-background',type==='system'&&'bg-transparent text-muted-foreground')}>
    {type==='agent'?<Bot className={icon} aria-hidden="true"/>:type==='system'?<Cog className={icon} aria-hidden="true"/>:<span aria-hidden="true">{initials(name??'')||'?'}</span>}
   </AvatarFallback>
  </Avatar>;
