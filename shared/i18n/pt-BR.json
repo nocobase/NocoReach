@@ -2036,6 +2036,8 @@
   "taskExecutionPanels.currentExecutor": "Executor atual",
   "messages.currentPilotOpenAdmins": "O piloto atual está disponível apenas para administradores",
   "taskExecution.currentStepNeedsPersonOwner": "A etapa atual precisa ter uma pessoa como responsável e ser uma etapa de texto online",
+  "strategy.situationGroupAttention": "Requer atenção",
+  "strategy.situationGroupNormal": "Normal",
   "strategy.whereThingsStand": "Situação atual",
   "strategy.statusExplanation": "O que isso mostra",
   "strategy.currentPilotSavesUp100": "O piloto atual salva até 100 planos.",

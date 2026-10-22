@@ -2037,6 +2037,8 @@
   "taskExecutionPanels.currentExecutor": "当前执行者",
   "messages.currentPilotOpenAdmins": "当前接入试运行仅开放给管理员",
   "taskExecution.currentStepNeedsPersonOwner": "当前步骤需要真人负责人，并且必须是在线文本步骤",
+  "strategy.situationGroupAttention": "需要留意",
+  "strategy.situationGroupNormal": "正常",
   "strategy.whereThingsStand": "当前状况",
   "strategy.statusExplanation": "当前状况是什么",
   "strategy.currentPilotSavesUp100": "当前试运行最多保存 100 份方案。",

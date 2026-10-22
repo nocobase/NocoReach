@@ -2037,6 +2037,8 @@
   "taskExecutionPanels.currentExecutor": "Current executor",
   "messages.currentPilotOpenAdmins": "The current pilot is open to admins only",
   "taskExecution.currentStepNeedsPersonOwner": "The current step needs a person as owner and must be an online text step",
+  "strategy.situationGroupAttention": "Needs attention",
+  "strategy.situationGroupNormal": "Normal",
   "strategy.whereThingsStand": "Where things stand",
   "strategy.statusExplanation": "What this shows",
   "strategy.currentPilotSavesUp100": "The current pilot saves up to 100 plans.",

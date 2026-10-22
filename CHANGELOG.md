@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Insights looks sharper, with the same content
+
+- The metric cards sit on the same white surface as the messages below, with a hairline border; the number is larger and its change follows it in green or red; the sparkline has a light wash under it and a dot on the latest day.
+- The agent avatar is solid agent violet with the bot in white (dark in dark mode), so the daily analysis reads as the AI speaking. The avatar is shared: Tasks › By agent shows it the same way.
+- The daily analysis headline is slightly larger. In the opportunity lines, titles to decide on or handed off are in medium weight, dismissed and expired lines are dimmed as a whole, and the status or the actions sit in one right-hand column.
+- Current situation is split into Needs attention and Normal, without the dots; each line's numbers are in medium weight, coloured for the lines to deal with (a drop red, the rest amber).
+
 ## Unreleased — Page notes in ⓘ
 
 - Move the remaining grey explanatory notes on Playbooks and the data source connection panels (GitHub, Google, DataForSEO, X, Reddit, Hacker News, Google Trends, Discord/Slack, community forum, website content, downloads, Xiaohongshu) into ⓘ tips beside the field, heading or line they explain; status lines, counts, setup steps and errors stay visible.
