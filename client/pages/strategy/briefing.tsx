@@ -52,9 +52,11 @@ const Chevron = ({ open }: { open: boolean }) => (
 export function MetricTiles({
   metrics,
   overview,
+  days,
 }: {
   metrics: MetricItem[];
   overview: RequestState;
+  days: number;
 }) {
   const items = metrics.filter((i) => i.value != null).slice(0, 5);
   return (
@@ -65,33 +67,41 @@ export function MetricTiles({
       empty={!items.length}
       emptyText={$t('strategy.noDataYet')}
     >
-      <div className='grid min-w-0 flex-1 grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3'>
-        {items.map((i) => (
-          <Link
-            key={i.label}
-            to={i.to}
-            className='flex flex-col gap-0.5 rounded-lg bg-muted/50 px-3 py-2 transition-colors hover:bg-muted'
-          >
-            <span className='text-xs text-muted-foreground'>{i.label}</span>
-            <span className='text-lg font-semibold tabular-nums'>
-              {number(i)}
-            </span>
-            <span className='flex items-center gap-2'>
-              {i.change == null ? (
-                <span className='text-xs text-muted-foreground'>
-                  {$t('strategy.noComparisonYet')}
-                </span>
-              ) : (
-                <Tag tone={i.change >= 0 ? 'green' : 'red'}>
-                  {arrow(i.change)}
-                </Tag>
-              )}
-              <span className='min-w-0 flex-1'>
-                {i.series && <Sparkline points={i.series} change={i.change} />}
+      {/* What the numbers and their changes cover, quietly above them (2026-10-22: the period left the subtitle). */}
+      <div className='flex min-w-0 flex-1 flex-col gap-1.5'>
+        <p className='text-xs text-muted-foreground'>
+          {$t('strategy.metricWindow', { 0: days })}
+        </p>
+        <div className='grid min-w-0 grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3'>
+          {items.map((i) => (
+            <Link
+              key={i.label}
+              to={i.to}
+              className='flex flex-col gap-0.5 rounded-lg bg-muted/50 px-3 py-2 transition-colors hover:bg-muted'
+            >
+              <span className='text-xs text-muted-foreground'>{i.label}</span>
+              <span className='text-lg font-semibold tabular-nums'>
+                {number(i)}
               </span>
-            </span>
-          </Link>
-        ))}
+              <span className='flex items-center gap-2'>
+                {i.change == null ? (
+                  <span className='text-xs text-muted-foreground'>
+                    {$t('strategy.noComparisonYet')}
+                  </span>
+                ) : (
+                  <Tag tone={i.change >= 0 ? 'green' : 'red'}>
+                    {arrow(i.change)}
+                  </Tag>
+                )}
+                <span className='min-w-0 flex-1'>
+                  {i.series && (
+                    <Sparkline points={i.series} change={i.change} />
+                  )}
+                </span>
+              </span>
+            </Link>
+          ))}
+        </div>
       </div>
     </RequestBlock>
   );
