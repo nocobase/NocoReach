@@ -1,3 +1,4 @@
+import type { TaskPart } from './opportunity-parts.js';
 import type {
   StrategyState,
   InsightBatch,
@@ -24,6 +25,8 @@ export type Row = {
   manual: boolean;
   taskId?: number;
   taskNo?: number;
+  /** Every task handed off from it, first first (an opportunity can need several, one per place to change). */
+  tasks: { taskId: number; taskNo?: number; part?: TaskPart }[];
   firstSeenAt: string;
 };
 export function rowsFor(state: StrategyState): Row[] {
@@ -58,9 +61,10 @@ export function rowsFor(state: StrategyState): Row[] {
         })
         .map((card) => {
           const m = state.opportunityMeta?.[card.id],
-            task = state.proposals.find(
-              (p) => p.taskId && p.insight?.id === card.id,
-            );
+            handed = state.proposals
+              .filter((p) => p.taskId && p.insight?.id === card.id)
+              .reverse(),
+            task = handed[0];
           return {
             card,
             batch,
@@ -69,6 +73,11 @@ export function rowsFor(state: StrategyState): Row[] {
             manual: Boolean(m?.priority),
             taskId: task?.taskId,
             taskNo: task?.taskNo,
+            tasks: handed.map((p) => ({
+              taskId: p.taskId!,
+              ...(p.taskNo !== undefined ? { taskNo: p.taskNo } : {}),
+              ...(p.part ? { part: p.part } : {}),
+            })),
             firstSeenAt:
               card.firstSeenAt ||
               [...batches]

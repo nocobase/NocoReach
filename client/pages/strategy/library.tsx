@@ -21,6 +21,8 @@ import {verdictsOf,watchDays,watchOf,recentlyEnded,daysBetween} from './watch';
 import {taskRecords} from '../reach-data';
 import type {Signal,WatchRecord} from './model';
 import {handOff,handOffLabel,handOffResult,recommendedFor,HandOffNotice,type HandOffResult} from './hand-off';
+import {OpportunityHandOffDialog,OpportunityTasks} from './places';
+import {placesOf,standingOf,type HandOffDone} from './places-model';
 import {playbookRequest,localizePlaybookList,type PlaybookList} from '../playbook-model';
 import {ResultSourcePanel} from '../results/source.js';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#components/ui/select';
@@ -45,7 +47,7 @@ export default function OpportunityLibrary(){
 }
 function Library({project,projectError}:{project?:Project;projectError:string}){
  const navigate=useNavigate();const [params,setParams]=useSearchParams();
- const [state,setState]=useState<StrategyState>(),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[error,setError]=useMessageState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState<HandOffResult>(),[tasks,setTasks]=useState<WatchTask[]>([]),[watchKey,setWatchKey]=useState<string>();
+ const [state,setState]=useState<StrategyState>(),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[error,setError]=useMessageState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState<HandOffResult>(),[tasks,setTasks]=useState<WatchTask[]>([]),[watchKey,setWatchKey]=useState<string>(),[handing,setHanding]=useState<Row>();
  const playbooks=localizePlaybookList(rawPlaybooks);
  useEffect(()=>{if(!project)return;void request<StrategyState>(project.id,'state').then(s=>{setState(s);setError('');}).catch(()=>setError(() => ($t('strategy.notLoadOpportunitiesTryAgain'))));void playbookRequest<PlaybookList>('list',project.id).then(setRawPlaybooks).catch(()=>undefined);void taskRecords<WatchTask>(project.id).then(setTasks).catch(()=>undefined);},[project?.id]);
  const rows:Item[]=state?rowsFor(state).map(r=>({...r,...opportunityState(r,state)})):[];
@@ -69,13 +71,17 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
  const watched=watching.find(x=>x.s.key===watchKey)||settled.find(x=>x.s.key===watchKey);
  function go(next:{tab?:string;item?:string}){const p=new URLSearchParams(params);for(const [k,v] of Object.entries(next)){if(v)p.set(k,v);else p.delete(k);}setParams(p,{replace:true});}
  async function decide(row:Row,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);setNotice(undefined);try{setState(await request<StrategyState>(project.id,'reviewOpportunity',{insightId:row.card.id,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');go({item:''});refreshNavBadges();}catch{setError(() => ($t('strategy.notSaveRefreshTryAgain')));}finally{setBusy(false);}}
- // 交给 Agent with the recommended 做法 and you as the owner; both can still change on the task before it starts.
- async function give(row:Row){if(!state||!project||busy)return;setBusy(true);setNotice(undefined);const pb=recommendedFor(row,playbooks?.playbooks);
+ // 交给 Agent with the recommended 做法 and you as the owner; both can still change on the task before it starts. An
+ // opportunity with several places asks which ones first, makes a task for each and stays here on its task list.
+ async function give(row:Row){if(!state||!project||busy)return;setNotice(undefined);if(placesOf(row).length){setHanding(row);return;}setBusy(true);const pb=recommendedFor(row,playbooks?.playbooks);
   try{const r=await handOff(project.id,state,row,pb?.id);setState(r.state);setError('');go({item:''});refreshNavBadges();
    setNotice(handOffResult(row,r,pb?.kind));}
   catch{setError(() => ($t('strategy.notHandOffOpportunityKept')));}finally{setBusy(false);}}
+ function handed(row:Row,r:HandOffDone){setHanding(undefined);setState(r.state);setError('');refreshNavBadges();go({tab:'done',item:row.card.id});
+  setNotice({ok:true,text:()=>$t('opportunityTasks.created',{0:r.taskIds.length})});if(project)void taskRecords<WatchTask>(project.id).then(setTasks).catch(()=>undefined);}
+ const byId=new Map(tasks.map(t=>[String(t.id),t]));
  function openRow(r:Item){if(r.state==='pending')go({tab:'pending',item:r.card.id});else go({item:r.card.id});}
- const detail=(r:Item)=><Detail key={r.card.id} row={r} busy={busy} onGive={()=>void give(r)} onIgnore={()=>void decide(r,'ignored')} onRestore={()=>void decide(r,'pending')} onOpen={()=>navigate(`/actions/${r.taskId}`)}/>;
+ const detail=(r:Item)=><Detail key={r.card.id} row={r} tasks={byId} busy={busy} onGive={()=>void give(r)} onIgnore={()=>void decide(r,'ignored')} onRestore={()=>void decide(r,'pending')} onOpen={()=>navigate(`/actions/${r.taskId}`)}/>;
  return <PageContainer className="nr-page"><PageHeader title={$t('strategy.opportunitiesTitle',undefined)} description={$t('strategy.thingsWorthDoingWhatChanged')}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}
   <HandOffNotice result={notice}/>
@@ -95,12 +101,13 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
    {selected&&detail(selected)}
   </div>}
   {watched&&project&&state?<ChangeDetail signal={watched.s} status={watched.status} projectId={project.id} verdicts={verdictsOf(state,watched.s.key)} watch={watchOf(state,watched.s.key)} today={state.insights?.generatedAt} judging={busy} onDecide={status=>void decideWatch(watched.s.key,status)} onClose={()=>setWatchKey(undefined)} onHandOff={r=>{refreshNavBadges();setNotice(r);void request<StrategyState>(project.id,'state').then(setState).catch(()=>undefined);}}/>:null}
+  {handing&&project&&state?<OpportunityHandOffDialog projectId={project.id} state={state} row={handing} playbooks={playbooks?.playbooks} onClose={()=>setHanding(undefined)} onDone={r=>handed(handing,r)}/>:null}
   <Sheet open={Boolean(opened)} onOpenChange={o=>{if(!o)go({item:''});}}>
    <SheetContent className="w-full overflow-y-auto data-[side=right]:sm:max-w-lg" aria-describedby={undefined}><SheetHeader className="sr-only"><SheetTitle>{$t('strategy.opportunityDetails')}</SheetTitle></SheetHeader><div className="p-4 pt-12">{opened&&detail(opened)}</div></SheetContent>
   </Sheet>
  </PageContainer>;
 }
-type WatchTask={id:number;status:string;evidence?:{no?:number;work?:import('../task-execution-types').Work}};
+type WatchTask={id:number;title?:string;status:string;evidence?:{no?:number;work?:import('../task-execution-types').Work}};
 // 观察中: one line per change — what changed, its numbers when watching started and now, what the AI waits for and the
 // day it must decide by; 忽略 ends it. Below, 最近结束: how the watches of the last 7 days ended.
 const short=(d?:string)=>d?d.slice(5,10).replace('-','/'):'—';
@@ -151,7 +158,7 @@ function DoneTable({rows,changes,busy,onOpen,onOpenChange,onRestore,onRestoreCha
   .sort((a,b)=>(b.card.no||0)-(a.card.no||0)||String(b.firstSeenAt).localeCompare(String(a.firstSeenAt)));
  const changeDest=(c:Settled):Dest=>c.status.next==='task'?'task':c.status.ignored?'ignored':'skip';
  const shown=changes.filter(c=>(!dest||changeDest(c)===dest)&&match(titleOf(c.s)));
- const tag=(r:Item)=>{const d=destOf(r);return d==='pending'?<Tag tone="amber" dot>{$t('common.pending')}</Tag>:d==='task'?<Tag tone="blue" dot>{$tj('strategy.handedOffAgentValue',{0:r.taskNo?` · ${taskNo(r.taskNo)}`:''})}</Tag>:<Tag tone="grey" dot>{d==='ignored'?$t('strategy.dismissed'):$t('strategy.expired')}</Tag>;};
+ const tag=(r:Item)=>{const d=destOf(r);return d==='pending'?<Tag tone="amber" dot>{$t('common.pending')}</Tag>:d==='task'?<Tag tone="blue" dot>{$tj('strategy.handedOffAgentValue',{0:handedTo(r)})}</Tag>:<Tag tone="grey" dot>{d==='ignored'?$t('strategy.dismissed'):$t('strategy.expired')}</Tag>;};
  const changeTag=(c:Settled)=>{const d=changeDest(c);return d==='task'?<Tag tone="blue" dot>{$t('strategy.handedOffAgent')}</Tag>:d==='ignored'?<Tag tone="grey" dot>{$t('strategy.dismissed')}</Tag>:<Tag tone="slate" dot>{$t('common.noActionNeeded')}</Tag>;};
  return <div className="flex flex-col gap-3">
   <div className="flex flex-wrap items-center gap-2"><label className="relative flex min-w-48 flex-1 items-center sm:max-w-80"><SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" aria-hidden="true"/><input aria-label={$t('strategy.searchOpportunities')} value={q} onChange={e=>setQ(e.target.value)} placeholder={$t('strategy.searchTitleNumberLikeO')} className="w-full pl-8!"/></label>
@@ -184,8 +191,12 @@ const PRIORITY:Record<string,[Tone,()=>string]>={high:['red',()=>$t('strategy.pr
 const EFFORT:Record<string,()=>string>={small:()=>$t('strategy.effortSmall'),medium:()=>$t('strategy.effortMedium'),large:()=>$t('strategy.effortLarge')};
 const CONFIDENCE:Record<string,[Tone,()=>string]>={supported:['green',()=>$t('strategy.confidenceSupported')],verify:['amber',()=>$t('strategy.confidenceVerify')]};
 function Block({title,children}:{title:string;children:ReactNode}){return <div className="flex flex-col gap-1.5"><h3 className="text-xs font-medium text-muted-foreground">{title}</h3><div className="text-sm leading-relaxed">{children}</div></div>;}
-function Detail({row,busy,onGive,onIgnore,onRestore,onOpen}:{row:Item;busy:boolean;onGive:()=>void;onIgnore:()=>void;onRestore:()=>void;onOpen:()=>void}){
+// Where a handed-off opportunity went: its task, or how many when it has several.
+const handedTo=(r:Row)=>r.tasks.length>1?` · ${$t('opportunityTasks.taskCount',{0:r.tasks.length})}`:r.taskNo?` · ${taskNo(r.taskNo)}`:'';
+function Detail({row,tasks,busy,onGive,onIgnore,onRestore,onOpen}:{row:Item;tasks:Map<string,WatchTask>;busy:boolean;onGive:()=>void;onIgnore:()=>void;onRestore:()=>void;onOpen:()=>void}){
  const card=row.card,c=leadChip(row),link=[...citedSignals(row)].sort((a,b)=>b.strength-a.strength).find(s=>s.url);
+ // An opportunity with several places lists its tasks; places no open task changes yet can still be handed off.
+ const places=placesOf(row).length,several=row.state==='task'&&(places>0||row.tasks.length>1),open=row.tasks.filter(t=>standingOf(tasks.get(String(t.taskId)))!=='closed').length;
  const priority=PRIORITY[row.priority],effort=EFFORT[card.effort||''],confidence=CONFIDENCE[card.confidence||''];
  const happened=card.observation||card.reason||card.evidenceText;
  return <article data-opportunity-id={card.id} aria-label={card.title} className="flex flex-col gap-4 rounded-lg border bg-card p-4 text-card-foreground">
@@ -193,15 +204,17 @@ function Detail({row,busy,onGive,onIgnore,onRestore,onOpen}:{row:Item;busy:boole
    {card.resultSource&&<ResultSourcePanel source={card.resultSource}/>}
    <div className="flex flex-wrap items-center gap-1">{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(row).map(s=><Tag key={s} tone="grey">{s}</Tag>)}{priority&&<Tag tone={priority[0]}>{priority[1]()}</Tag>}{effort&&<Tag tone="grey">{effort()}</Tag>}{confidence&&<Tag tone={confidence[0]}>{confidence[1]()}</Tag>}</div>
    <h2 className="flex flex-wrap items-baseline gap-2 text-lg font-semibold leading-snug"><No row={row}/><span>{card.title}</span></h2>
-   <p className="nr-footnote">{card.resultSource?$t('results.manualConfirmed',{0:day(row.firstSeenAt)}):$tj('strategy.firstFoundValue',{0:day(row.firstSeenAt),1:row.state==='pending'?$t('strategy.analysis',{0:day(row.batch.generatedAt)}):row.state==='task'?$t('strategy.handedOffAgentValue',{0:row.taskNo?$t('strategy.task',{0:taskNo(row.taskNo)}):''}):row.reason==='ignored'?$t('strategy.dismissedLaterAnalysesCannotSuggest'):row.reason==='replaced'?$t('strategy.expiredRaisedAgain'):$t('strategy.expiredLatestAnalysisNotSuggest',{0:opportunityKeepDays})})}</p>
+   <p className="nr-footnote">{card.resultSource?$t('results.manualConfirmed',{0:day(row.firstSeenAt)}):$tj('strategy.firstFoundValue',{0:day(row.firstSeenAt),1:row.state==='pending'?$t('strategy.analysis',{0:day(row.batch.generatedAt)}):row.state==='task'?$t('strategy.handedOffAgentValue',{0:several?'':row.taskNo?$t('strategy.task',{0:taskNo(row.taskNo)}):''}):row.reason==='ignored'?$t('strategy.dismissedLaterAnalysesCannotSuggest'):row.reason==='replaced'?$t('strategy.expiredRaisedAgain'):$t('strategy.expiredLatestAnalysisNotSuggest',{0:opportunityKeepDays})})}</p>
   </div>
   {happened&&<Block title={$t('strategy.briefWhatHappened')}>{happened}{link?.url&&<a className="ml-1 inline-flex align-middle text-muted-foreground hover:text-foreground" href={link.url} target="_blank" rel="noreferrer" aria-label={$t('strategy.openPage',{0:titleOf(link)})}><ExternalLinkIcon className="size-3.5"/></a>}</Block>}
   {card.meaning&&<Block title={$t('strategy.briefWhyWorthDoing')}>{card.meaning}{card.priorityReason&&<span className="mt-1 block text-xs text-muted-foreground">{card.priorityReason}</span>}</Block>}
   {card.suggestion&&<Block title={$t('strategy.briefWhatToDo')}>{card.suggestion}</Block>}
   {card.target?.trim()&&<Block title={$t('strategy.briefWhere')}><span className="break-words">{card.target}</span></Block>}
+  {several&&<OpportunityTasks row={row} tasks={tasks}/>}
   <div className="flex flex-wrap items-center gap-2 border-t pt-3">
    {row.state==='pending'&&<><Button disabled={busy} onClick={onGive}>{handOffLabel()}</Button><Button variant="ghost" disabled={busy} onClick={onIgnore}>{$t('common.ignore')}</Button></>}
-   {row.state==='task'&&<Button variant="outline" onClick={onOpen}>{$tj('strategy.openTask',{0:row.taskNo?` ${taskNo(row.taskNo)}`:''})}<ArrowRightIcon/></Button>}
+   {row.state==='task'&&!several&&<Button variant="outline" onClick={onOpen}>{$tj('strategy.openTask',{0:row.taskNo?` ${taskNo(row.taskNo)}`:''})}<ArrowRightIcon/></Button>}
+   {row.state==='task'&&several&&places>open&&<Button variant="outline" disabled={busy} onClick={onGive}>{handOffLabel()}</Button>}
    {row.state==='archived'&&<Button variant="outline" disabled={busy} onClick={onRestore}>{$t('strategy.restorePending')}</Button>}
    {card.limitation&&<span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">{$t('strategy.briefLimitation')}<InfoTip label={$t('strategy.briefLimitation')} side="left"><p>{card.limitation}</p></InfoTip></span>}
   </div>

@@ -300,7 +300,7 @@ function StandingTags({ lines }: { lines: Line[] }) {
   );
 }
 /** An opportunity already decided: its title and where it went. */
-function DecidedLine({ row, st, task }: Line) {
+function DecidedLine({ row, st, task, tasks }: Line) {
   return (
     <li data-opportunity-id={row.card.id} className='py-1.5'>
       <div className='flex items-center gap-2'>
@@ -313,7 +313,7 @@ function DecidedLine({ row, st, task }: Line) {
           {row.card.title}
         </Link>
         <QuoteOpportunity row={row} />
-        <StatusTag row={row} st={st} task={task} />
+        <StatusTag row={row} st={st} task={task} tasks={tasks} />
       </div>
     </li>
   );
@@ -612,7 +612,24 @@ const TASK_TAG: Record<TaskStanding, [Tone, () => string]> = {
   done: ['green', () => $t('common.completed')],
   closed: ['slate', () => $t('common.closed')],
 };
-function StatusTag({ row, st, task }: Line) {
+function StatusTag({ row, st, task, tasks }: Line) {
+  // Several tasks, one per place: how many and how many are done; the tag opens the opportunity with its task list.
+  if (st.state === 'task' && tasks) {
+    const done = tasks.filter((t) => t === 'done').length,
+      tone: Tone =
+        done === tasks.length
+          ? 'green'
+          : tasks.includes('review')
+            ? 'violet'
+            : 'blue';
+    return (
+      <Link to={itemLink(row)}>
+        <Tag tone={tone}>
+          {$t('opportunityTasks.progressTag', { 0: tasks.length, 1: done })}
+        </Tag>
+      </Link>
+    );
+  }
   if (st.state === 'task') {
     const [tone, text] = TASK_TAG[task ?? 'todo'];
     return (

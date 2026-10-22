@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — One opportunity, a task for each place to change
+
+- Hand off to agent on an opportunity whose changes point to several places (pages to improve or fix, a release to announce, community posts awaiting a reply) first lists one task per place, with its title ("Update Top 11 Open Source No-Code AI Tools"), page and playbook; untick the ones not to do now. One task is created per ticked place, and Opportunities shows the opportunity with its tasks instead of opening one of them. An opportunity with one place is handed off as one task, as before. The same rule applies on Opportunities, on Insights and to a hand-off asked for in a conversation (every place without a task).
+- The opportunity lists its tasks with their states and a count per state; on Insights its line reads "6 tasks · 1 done". Places that no open task changes yet can be handed off later from the opportunity.
+- A task's Related tasks list the other tasks of the same opportunity with their states, linked to the opportunity. Its brief starts by saying it is one of several tasks of the opportunity, the one place it changes and what the others change, and to keep one approach across them; its Agent reads the changes about its own place only. Its Performance and its article lookup use its own page only.
+- There are no parent tasks: the opportunity is the grouping, and the task list and board stay flat. Tasks handed off before this change keep their single task (T-34 stays as it is); its opportunity can hand off the places left.
+
 ## Unreleased — See what a live task changed
 
 - Once a task is live, its card names what changed in one line ("Changes (2): English · Summary, English · Title") with View changes, which opens the change that went live: an article field by field, before and after, or a page change as readers see it before and after. Nothing else is added to the card.
@@ -22,6 +29,7 @@
 
 - Today's message on Insights lists only opportunities raised, dismissed or handed off today. One handed off on an earlier day that today's analysis lists again stays on the day it was raised; it read as handed off today beside the ones just dismissed (Studio, 10/22: T-27 and T-30 beside the three dismissed at 17:15). A hand-off counts on the day its task was created, and the waiting tasks are read again after one.
 - Today's conversation starts folded to its one line when Insights opens; a question sent since then opens it. An earlier day's conversation shows in full when that day is opened.
+
 ## Unreleased — Found by AI or by a person, on every task
 
 - Task cards on the board and in the list say who found the task, beside its number: "Found by AI" (sparkles, violet) for a task from an opportunity of the daily analysis or a change on Insights the person only confirmed, "Found by <name>" for one a person handed off from a data page, created as a new task, started from a page to improve or created from Results. The finder is the person who created the task, who may not be its owner. Older tasks that did not record their creator show nothing.

@@ -78,6 +78,11 @@ export function analysisForAgent(
       title: card.title,
       status: row ? standing(row, state) : 'not_on_opportunities',
       task: row?.taskNo ? `T-${row.taskNo}` : null,
+      // An opportunity handed off one place at a time has a task per place.
+      tasks: (row?.tasks || []).map((t) => ({
+        task: t.taskNo ? `T-${t.taskNo}` : null,
+        place: t.part?.label ?? null,
+      })),
       priority: row?.priority ?? card.priority ?? null,
       firstRaised: row?.firstSeenAt ?? card.firstSeenAt ?? null,
       why: card.reason || null,
@@ -142,7 +147,7 @@ export function dailyAnalysisTool(
   return {
     name: 'daily_analysis',
     description:
-      "Read the project's daily analysis shown on Insights: the notes of a day's analysis, the opportunities it raised and where each stands now (awaiting decision, handed off to agent with its task, dismissed, expired), its verdict on every change (do, watch, skip) with the reason, the opportunities awaiting a decision now, and the watches. Omit day for the latest analysis; `days` lists the earlier ones. Follow nextOffset to read everything. Link opportunities with their url.",
+      "Read the project's daily analysis shown on Insights: the notes of a day's analysis, the opportunities it raised and where each stands now (awaiting decision, handed off to agent with its tasks, one per place to change, dismissed, expired), its verdict on every change (do, watch, skip) with the reason, the opportunities awaiting a decision now, and the watches. Omit day for the latest analysis; `days` lists the earlier ones. Follow nextOffset to read everything. Link opportunities with their url.",
     inputSchema: z.toJSONSchema(input),
     async execute(args) {
       await authorize();

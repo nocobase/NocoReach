@@ -1,3 +1,4 @@
+import type { TaskPart } from './opportunity-parts.js';
 import type { ResultSource } from './result-source.js';
 export type GoalFields = {
   intent: string;
@@ -18,6 +19,8 @@ export type Proposal = {
   insight?: Opportunity | null;
   taskId?: number;
   taskNo?: number;
+  /** The place of its opportunity the task was created for, when the opportunity was handed off one place at a time. */
+  part?: TaskPart;
   evidence: Evidence;
 };
 export type SourceSummary = {

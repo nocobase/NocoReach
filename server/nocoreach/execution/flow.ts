@@ -6,6 +6,7 @@ export type { StageKind, Stage, ChecklistItem, AgentMode } from '../../../shared
 import { languageOf } from './language';
 import { fail, text } from './model';
 import { memoryForAI } from './memory';
+import { ownSignalIds } from '../../../shared/opportunity-parts.js';
 
 // Flows (SPEC §6.0): Runner stages produce output for human review.
 // Review stages are human decisions; publish and observe are fixed system stages at the end of repository flows.
@@ -64,9 +65,12 @@ export function validateFlow(v: any): { name: string; description: string; stage
 // What a Runner stage reads: everything is material, the stage instruction says what to produce.
 export function flowRunInput(project: any, task: any, w: { flow?: FlowSnapshot; playbook?: { name: string }; results: ({ content: string; rejectedAt?: string } | null)[]; note?: string; history?: any[] }, index: number, content: unknown, reviews: any[]) {
   const stages = w.flow!.stages, stage = stages[index];
-  const insight = task?.evidence?.insight || null;
-  const ids = new Set<string>(Array.isArray(insight?.signalIds) ? insight.signalIds : []);
-  const signals = (task?.evidence?.context?.signals?.items || []).filter((s: any) => ids.has(s?.key)).slice(0, 20);
+  const insight = task?.evidence?.insight || null, part = task?.evidence?.part || null;
+  // One of an opportunity's several tasks reads the changes about its own place, and the opportunity's changes that
+  // name no page as background; the brief says which place it changes.
+  const own = new Set<string>(part ? ownSignalIds(task.evidence) : Array.isArray(insight?.signalIds) ? insight.signalIds : []);
+  const cited = new Set<string>(Array.isArray(insight?.signalIds) ? insight.signalIds : []);
+  const signals = (task?.evidence?.context?.signals?.items || []).filter((s: any) => own.has(s?.key) || (part && cited.has(s?.key) && !s?.url && s?.action !== 'reply')).slice(0, 20);
   const { work, context, handoff, ...rest } = task?.evidence || {};
   return {
     project: memoryForAI(project),
@@ -78,7 +82,7 @@ export function flowRunInput(project: any, task: any, w: { flow?: FlowSnapshot; 
     // Messages the person left for the executor, and the document handed over by the task before this one.
     notes: (w.history || []).filter(e => e?.action === 'comment' && e.comment).slice(-5).map(e => e.comment),
     handoff: task?.evidence?.handoff?.content || null,
-    evidence: insight ? { insight, signals } : rest,
+    evidence: insight ? { insight, signals, ...(part ? { part: { target: part.label, ...(part.url ? { url: part.url } : {}) } } : {}) } : rest,
     content: content || null,
     stage: { name: stage.name, instruction: stage.instruction || '', ...(stage.skills?.length ? { skills: stage.skills } : {}) },
     previousStages: stages.slice(0, index).map((s, i) => ({ stage: s.name, output: w.results[i]?.content || null })).filter(x => x.output),

@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { fail, text } from './model';
 import { validateFlow, type ChecklistItem } from './flow';
 import { memoryForAI } from './memory';
+import { playbookForActions } from '../../../shared/opportunity-parts';
 
 // 做法 (SPEC §6.0): how one kind of work is done — a few steps, all carried out by the Agent, with the person reviewing in
 // between. Steps: analyze (the Agent reads and writes a document, no repository change), change (the Agent changes the
@@ -75,13 +76,7 @@ export function defaultPlaybookId(task: any): string {
   const insight = task?.evidence?.insight;
   const ids = new Set<string>(Array.isArray(insight?.signalIds) ? insight.signalIds : []);
   const actions = (task?.evidence?.context?.signals?.items || []).filter((s: any) => ids.has(s?.key)).map((s: any) => s.action);
-  if (actions.includes('optimize')) return 'optimize-page';
-  if (actions.includes('technical')) return 'tech-fix';
-  // Posts nobody answered: draft a reply to each (2026-10-08).
-  if (actions.includes('reply')) return 'community-reply';
-  if (actions.includes('create')) return 'content-outline';
-  if (actions.includes('distribute')) return 'release-notes';
-  return actions.length ? 'change-research' : 'optimize-page';
+  return playbookForActions(actions);
 }
 
 // 新建做法 with AI: one sentence becomes a draft (name, category, steps with instructions and review items). The draft is

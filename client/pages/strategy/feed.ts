@@ -14,7 +14,13 @@ export const dayOf = (iso?: string) => String(iso || '').slice(0, 10);
 export type Standing = ReturnType<typeof opportunityState>;
 /** Where the task an opportunity became stands now. */
 export type TaskStanding = TaskState | 'closed';
-export type Line = { row: Row; st: Standing; task?: TaskStanding };
+export type Line = {
+  row: Row;
+  st: Standing;
+  task?: TaskStanding;
+  /** Where each task stands, when it was handed off one task per place and has several. */
+  tasks?: TaskStanding[];
+};
 /** What Insights knows of a task: when it was created and its work. */
 export type TaskInfo = {
   createdAt?: string;
@@ -52,15 +58,20 @@ export function feedOf(
     // Decided today: raised today, dismissed today or handed off today. One decided earlier stays on the day it was
     // raised, even when today's analysis lists it again (2026-10-22: T-27 and T-30 read as today's hand-offs beside
     // the three opportunities dismissed today).
-    const task = row.taskId ? tasks.get(String(row.taskId)) : undefined,
+    const standing = (t: TaskInfo): TaskStanding =>
+        taskClosed(t.work) ? 'closed' : taskState(t.work, t.status),
+      task = row.taskId ? tasks.get(String(row.taskId)) : undefined,
+      several = st.state === 'task' && row.tasks.length > 1,
       line: Line = {
         row,
         st,
-        ...(task && st.state === 'task'
+        ...(task && st.state === 'task' ? { task: standing(task) } : {}),
+        ...(several
           ? {
-              task: taskClosed(task.work)
-                ? 'closed'
-                : taskState(task.work, task.status),
+              tasks: row.tasks.map((t) => {
+                const info = tasks.get(String(t.taskId));
+                return info ? standing(info) : 'todo';
+              }),
             }
           : {}),
       },

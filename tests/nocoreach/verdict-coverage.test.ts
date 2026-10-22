@@ -270,3 +270,72 @@ it('a task handed off from a change on its own covers that change and its page',
   });
   expect(state.insights!.items).toEqual([]);
 });
+
+it('each task of an opportunity handed off one place at a time covers its own place', () => {
+  // O-43 cited two pages and was handed off as T-41 (top-11) and T-42 (top-15); the next analysis judges both again.
+  const a = signal('rank:a', 'https://www.nocobase.com/en/blog/top-11'),
+    b = signal('rank:b', 'https://www.nocobase.com/en/blog/top-15');
+  const o43 = card('o43', {
+    no: 43,
+    target: a.url,
+    signalIds: ['rank:a', 'rank:b'],
+  });
+  const part = (s: Signal) => ({
+    key: `page:${s.url}`,
+    kind: 'page' as const,
+    url: s.url,
+    label: s.key,
+    signalIds: [s.key],
+  });
+  const state: StrategyState = {
+    revision: 1,
+    goal: null,
+    proposals: [
+      {
+        id: 'p42',
+        title: '',
+        brief: '',
+        status: 'approved',
+        goalVersion: null,
+        insight: o43,
+        part: part(b),
+        taskId: 42,
+        taskNo: 42,
+      },
+      {
+        id: 'p41',
+        title: '',
+        brief: '',
+        status: 'approved',
+        goalVersion: null,
+        insight: o43,
+        part: part(a),
+        taskId: 41,
+        taskNo: 41,
+      },
+    ],
+    insights: batch('2026-10-23', [], [a, b]),
+    insightHistory: [batch('2026-10-22', [o43], [a, b])],
+  };
+  state.insights!.signalReviews = {
+    'rank:a': { verdict: 'do', reason: '' },
+    'rank:b': { verdict: 'do', reason: '' },
+  };
+  const tasks: CoverTask[] = [41, 42].map((no) => ({
+    id: no,
+    evidence: {
+      no,
+      work: { stage: 'plan' },
+      insight: o43,
+      part: part(no === 41 ? a : b),
+      page: no === 41 ? a.url : b.url,
+    },
+  }));
+  settleVerdicts(state, tasks, '2026-10-23T09:00:00Z', uuid, 'en-US');
+  expect(state.insights!.signalReviews!['rank:a'].reason).toBe(
+    'Task T-41 is already on it',
+  );
+  expect(state.insights!.signalReviews!['rank:b'].reason).toBe(
+    'Task T-42 is already on it',
+  );
+});
