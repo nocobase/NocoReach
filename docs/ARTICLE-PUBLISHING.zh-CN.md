@@ -15,7 +15,7 @@
 ## 连接 nocobase.com 的 CMS
 
 1. 在 CMS 中新建一个专用角色，只授予 `articles` 集合的查看、新建、编辑权限，再为这个角色创建 API key。不要使用管理员账号的密钥。
-2. 在 NocoReach 中打开“数据接入 › 文章发布目标”，点“新建发布目标”：
+2. 在 NocoReach 中打开“数据接入 › 博客 CMS”（在“Agent 修改与发布”分组里），点“新建发布目标”：
    - 名称：例如“NocoBase CMS”；类型：NocoBase API；地址：`https://cms.aliyun.nocobase.com`；访问密钥：第 1 步的 API key。
    - 高级设置里已有默认的字段映射（`title`/`title_cn`/`title_ja` 等），按下面补上页面地址和导出设置：
 

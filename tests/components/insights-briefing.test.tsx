@@ -34,6 +34,7 @@ const fixture = vi.hoisted(() => ({
   cards: [] as unknown[],
   areas: [] as unknown[],
   runs: [] as unknown[],
+  schedule: null as unknown,
 }));
 vi.mock('../../client/lib/nocoreach-api', async (original) => ({
   ...(await original<typeof import('../../client/lib/nocoreach-api')>()),
@@ -54,10 +55,21 @@ vi.mock('../../client/pages/me', async () => ({
 vi.mock('../../client/i18n', async () => {
   const text = (key: string, values?: Record<string, unknown>) =>
     values ? `${key}:${Object.values(values).join(',')}` : key;
+  const { createElement, Fragment, useState } = await import('react');
   return {
-    useMessageState: (await import('react')).useState,
+    useMessageState: useState,
     $t: text,
-    $tj: text,
+    // Elements among the values (links) are rendered, each after a comma.
+    $tj: (key: string, values?: Record<string, unknown>) =>
+      createElement(
+        Fragment,
+        null,
+        key,
+        ...Object.values(values || {}).flatMap((v, i) => [
+          i ? ',' : ':',
+          v as never,
+        ]),
+      ),
     $legacyText: (value: string) => value,
     $legacyJsx: (value: string) => value,
     $legacyFragment: (value: string) => value,
@@ -248,6 +260,7 @@ beforeEach(() => {
   fixture.cards = [];
   fixture.areas = [];
   fixture.runs = [];
+  fixture.schedule = null;
   fixture.action.mockReset();
   fixture.openChat.mockReset();
   fixture.resume.mockReset();
@@ -281,6 +294,16 @@ beforeEach(() => {
         return Promise.resolve(fixture.state);
       }
       if (resource === 'nrStrategy' && action === 'confirmDirection') {
+        fixture.tasks = [
+          ...fixture.tasks,
+          {
+            id: 99,
+            title: 'New',
+            status: 'todo',
+            createdAt: '2026-10-21T10:00:00Z',
+            evidence: {},
+          },
+        ];
         fixture.state = {
           ...fixture.state,
           revision: fixture.state.revision + 1,
@@ -309,7 +332,11 @@ beforeEach(() => {
       if (resource === 'nrInsights')
         return Promise.resolve({ areas: fixture.areas });
       if (resource === 'nrAnalysis')
-        return Promise.resolve({ running: false, runs: fixture.runs });
+        return Promise.resolve({
+          running: false,
+          runs: fixture.runs,
+          schedule: fixture.schedule,
+        });
       if (resource === 'nrPlaybooks') return Promise.resolve({ playbooks: [] });
       throw new Error(`Unexpected request ${resource}/${action}`);
     },
@@ -427,7 +454,7 @@ it('Hand off to agent turns the opportunity into a task and takes it off the lis
     }),
   );
   expect(decisions()).not.toContain('e');
-  expect(screen.getByText('strategy.handedCount:2')).toBeTruthy();
+  expect(await screen.findByText('strategy.handedCount:2')).toBeTruthy();
 });
 
 it('the tiles show at most five numbers that have data, the summary names the ones that moved, and the current situation sits beside the day', async () => {
@@ -477,6 +504,8 @@ it('the tiles show at most five numbers that have data, the summary names the on
   });
   await within(tiles).findByText('1,200');
   expect(within(tiles).getAllByRole('link')).toHaveLength(5);
+  // The cards say what their numbers and changes cover.
+  expect(within(tiles).getByText('strategy.metricWindow:28')).toBeTruthy();
   // Downloads is the sixth number: it waits under All data, and is not named in the summary either.
   expect(within(tiles).queryByText('4,000')).toBeNull();
   expect(within(tiles).getByText('+30')).toBeTruthy();
@@ -499,13 +528,52 @@ it('the tiles show at most five numbers that have data, the summary names the on
   expect(screen.queryByText('strategy.allData')).toBeNull();
 });
 
-it('a run of the daily workflow links to Settings › Automatic runs', async () => {
+it('the subtitle says how the insights are analyzed, linking the rules and the schedule', async () => {
   fixture.runs = [{ ok: true, trigger: 'workflow' }];
+  fixture.schedule = { workflowId: 1, enabled: true, cron: '0 9 * * *' };
   setup();
   const link = await screen.findByRole('link', {
-    name: 'strategy.dailyAutomatic',
+    name: 'strategy.everyDayAt:09:00',
   });
   expect(link.getAttribute('href')).toBe('/schedules');
+  const sentence = link.parentElement!;
+  expect(sentence.textContent).toBe(
+    'strategy.howAnalyzedDaily:strategy.analysisRulesLink,strategy.everyDayAt:09:00',
+  );
+  expect(
+    within(sentence)
+      .getByRole('link', { name: 'strategy.analysisRulesLink' })
+      .getAttribute('href'),
+  ).toBe('/rules');
+  // No data date, no last-run time and no period: the period is the metric cards'.
+  expect(
+    screen.queryByText(/strategy.lastDaysDataThrough|strategy.lastAnalyzed/),
+  ).toBeNull();
+});
+
+it('a paused daily analysis says so, still linking Settings › Automatic runs', async () => {
+  fixture.schedule = { workflowId: 1, enabled: false, cron: '0 9 * * *' };
+  setup();
+  const link = await screen.findByRole('link', {
+    name: 'strategy.dailyAnalysisPaused',
+  });
+  expect(link.getAttribute('href')).toBe('/schedules');
+  expect(link.parentElement!.textContent).toContain(
+    'strategy.howAnalyzedPaused:',
+  );
+});
+
+it('without a daily schedule the subtitle names the rules only', async () => {
+  setup();
+  const rules = await screen.findByRole('link', {
+    name: 'strategy.analysisRulesLink',
+  });
+  expect(rules.parentElement!.textContent).toBe(
+    'strategy.howAnalyzedManual:strategy.analysisRulesLink',
+  );
+  expect(
+    screen.queryByRole('link', { name: /strategy.everyDayAt/ }),
+  ).toBeNull();
 });
 
 it('the day also says which watches ended and which tasks wait for you', async () => {
@@ -631,6 +699,13 @@ it('today’s conversation follows the analysis, a quoted opportunity above its 
     expect(found).toBeTruthy();
     return found as HTMLElement;
   });
+  // Folded to one line when the page opens, so the day's analysis is what shows.
+  const fold = within(conversation).getByRole('button', {
+    name: /strategy.conversationTurns:2/,
+  });
+  expect(fold.getAttribute('aria-expanded')).toBe('false');
+  expect(conversation.querySelectorAll('[data-turn]')).toHaveLength(0);
+  fireEvent.click(fold);
   const turns = conversation.querySelectorAll('[data-turn]');
   expect(turns).toHaveLength(2);
   expect(turns[0].textContent).toContain('Which page fell most?');
@@ -652,15 +727,47 @@ it('today’s conversation follows the analysis, a quoted opportunity above its 
   // No questions under the opportunity lines any more.
   const b = screen.getByRole('listitem', { name: 'Opportunity b' });
   expect(within(b).queryByText(/How long/)).toBeNull();
-  // The conversation folds to one line, keeping the day's analysis in view.
-  const fold = within(conversation).getByRole('button', {
-    name: /strategy.conversationTurns:2/,
-  });
-  expect(fold.getAttribute('aria-expanded')).toBe('true');
+  // And folds again.
   fireEvent.click(fold);
   expect(conversation.querySelectorAll('[data-turn]')).toHaveLength(0);
-  fireEvent.click(fold);
-  expect(conversation.querySelectorAll('[data-turn]')).toHaveLength(2);
+});
+
+it('today’s message counts only what was decided today; a hand-off from an earlier day stays on its day', async () => {
+  // O-30, raised on 10/18 and handed off then as T-27, is listed again by today's analysis.
+  fixture.state.insights!.items.push(
+    card('old-handed', { no: 30, firstSeenAt: '2026-10-18' }),
+  );
+  fixture.state.proposals.push({
+    id: 'p-old',
+    title: '',
+    brief: '',
+    status: '',
+    goalVersion: null,
+    evidence: batch('', []).evidence,
+    taskId: 27,
+    taskNo: 27,
+    insight: card('old-handed'),
+  });
+  fixture.tasks = [
+    {
+      id: 27,
+      title: 'T',
+      status: 'todo',
+      createdAt: '2026-10-18T09:00:00Z',
+      evidence: {},
+    },
+  ];
+  setup();
+  const group = await decisionGroup(7);
+  await waitFor(() =>
+    expect(within(group).getByText('strategy.handedCount:1')).toBeTruthy(),
+  );
+  expect(group.querySelector('[data-opportunity-id=old-handed]')).toBeNull();
+  await showEarlier();
+  const day = screen
+    .getAllByRole('region')
+    .find((r) => r.getAttribute('aria-label')?.includes('10'))!;
+  expect(day.textContent).toContain('strategy.handedCount:1');
 });
 
 it('Ask AI on a line quotes it in the input; sending starts or continues the day’s conversation', async () => {
@@ -860,4 +967,27 @@ it('the current situation beside the day lists every line, those needing attenti
   expect(
     screen.getByRole('button', { name: 'strategy.updateAnalysis' }),
   ).toBeTruthy();
+});
+
+it('a handed-off opportunity says where its task stands now', async () => {
+  fixture.tasks = [
+    {
+      id: 5,
+      title: 'Done task',
+      status: 'todo',
+      createdAt: '2026-10-21T08:30:00Z',
+      evidence: { work: { stage: 'done' } },
+    },
+  ];
+  setup();
+  const group = await decisionGroup(7);
+  fireEvent.click(
+    within(group).getByRole('button', { name: /strategy.moreToDecide/ }),
+  );
+  const handed = await waitFor(() => {
+    const line = group.querySelector('[data-opportunity-id=handed]');
+    expect(line?.textContent).toContain('common.completed');
+    return line!;
+  });
+  expect(handed.textContent).not.toContain('strategy.handedOffAgent');
 });

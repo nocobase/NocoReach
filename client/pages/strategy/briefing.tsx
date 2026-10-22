@@ -12,7 +12,8 @@ import type { Work } from '../task-execution-types';
 import { RequestBlock, type RequestState } from './request-block';
 import { Sparkline, chipOf, percent, type MetricItem } from './insights-view';
 import { citedSignals, oppNo, taskNo, type Row } from './board';
-import { dayOf, type Day, type Feed, type Line, type Standing } from './feed';
+import { dayOf, type Day, type Feed, type Line } from './feed';
+import { TASK_TAG } from './task-standing';
 import { handOffLabel } from './hand-off';
 import {
   DayConversation,
@@ -51,9 +52,11 @@ const Chevron = ({ open }: { open: boolean }) => (
 export function MetricTiles({
   metrics,
   overview,
+  days,
 }: {
   metrics: MetricItem[];
   overview: RequestState;
+  days: number;
 }) {
   const items = metrics.filter((i) => i.value != null).slice(0, 5);
   return (
@@ -64,33 +67,41 @@ export function MetricTiles({
       empty={!items.length}
       emptyText={$t('strategy.noDataYet')}
     >
-      <div className='grid min-w-0 flex-1 grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3'>
-        {items.map((i) => (
-          <Link
-            key={i.label}
-            to={i.to}
-            className='flex flex-col gap-0.5 rounded-lg bg-muted/50 px-3 py-2 transition-colors hover:bg-muted'
-          >
-            <span className='text-xs text-muted-foreground'>{i.label}</span>
-            <span className='text-lg font-semibold tabular-nums'>
-              {number(i)}
-            </span>
-            <span className='flex items-center gap-2'>
-              {i.change == null ? (
-                <span className='text-xs text-muted-foreground'>
-                  {$t('strategy.noComparisonYet')}
-                </span>
-              ) : (
-                <Tag tone={i.change >= 0 ? 'green' : 'red'}>
-                  {arrow(i.change)}
-                </Tag>
-              )}
-              <span className='min-w-0 flex-1'>
-                {i.series && <Sparkline points={i.series} change={i.change} />}
+      {/* What the numbers and their changes cover, quietly above them (2026-10-22: the period left the subtitle). */}
+      <div className='flex min-w-0 flex-1 flex-col gap-1.5'>
+        <p className='text-xs text-muted-foreground'>
+          {$t('strategy.metricWindow', { 0: days })}
+        </p>
+        <div className='grid min-w-0 grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3'>
+          {items.map((i) => (
+            <Link
+              key={i.label}
+              to={i.to}
+              className='flex flex-col gap-0.5 rounded-lg bg-muted/50 px-3 py-2 transition-colors hover:bg-muted'
+            >
+              <span className='text-xs text-muted-foreground'>{i.label}</span>
+              <span className='text-lg font-semibold tabular-nums'>
+                {number(i)}
               </span>
-            </span>
-          </Link>
-        ))}
+              <span className='flex items-center gap-2'>
+                {i.change == null ? (
+                  <span className='text-xs text-muted-foreground'>
+                    {$t('strategy.noComparisonYet')}
+                  </span>
+                ) : (
+                  <Tag tone={i.change >= 0 ? 'green' : 'red'}>
+                    {arrow(i.change)}
+                  </Tag>
+                )}
+                <span className='min-w-0 flex-1'>
+                  {i.series && (
+                    <Sparkline points={i.series} change={i.change} />
+                  )}
+                </span>
+              </span>
+            </Link>
+          ))}
+        </div>
       </div>
     </RequestBlock>
   );
@@ -294,7 +305,7 @@ function StandingTags({ lines }: { lines: Line[] }) {
   );
 }
 /** An opportunity already decided: its title and where it went. */
-function DecidedLine({ row, st }: Line) {
+function DecidedLine({ row, st, task }: Line) {
   return (
     <li data-opportunity-id={row.card.id} className='py-1.5'>
       <div className='flex items-center gap-2'>
@@ -307,7 +318,7 @@ function DecidedLine({ row, st }: Line) {
           {row.card.title}
         </Link>
         <QuoteOpportunity row={row} />
-        <StatusTag row={row} st={st} />
+        <StatusTag row={row} st={st} task={task} />
       </div>
     </li>
   );
@@ -343,9 +354,10 @@ function Decisions({
         </div>
       )}
       <ul className='divide-y divide-border/70'>
-        {shown.map(({ row: r, st }) => {
+        {shown.map((line) => {
+          const { row: r, st } = line;
           if (st.state !== 'pending')
-            return <DecidedLine key={r.card.id} row={r} st={st} />;
+            return <DecidedLine key={r.card.id} {...line} />;
           const c = lead(r);
           return (
             <li
@@ -517,7 +529,7 @@ function HealthNote({ projectId }: { projectId: number }) {
       {$tj('dataHealth.failedSyncOverDayOpportunities', {
         0: items.map((i) => healthText(i.name, i.nameText)).join('、'),
       })}
-      <Link className='nr-link ml-1.5 text-xs' to='/connections'>
+      <Link className='nr-link ml-1.5 text-xs' to='/connections?tab=health'>
         {$t('dataHealth.fix')} →
       </Link>
     </Bubble>
@@ -590,22 +602,25 @@ export function Today({
       {docked ? (
         <InPanelNote />
       ) : (
-        <DayConversation day={dayOf(batch?.generatedAt)} />
+        <DayConversation day={dayOf(batch?.generatedAt)} folded />
       )}
     </>
   );
 }
 
-function StatusTag({ row, st }: { row: Row; st: Standing }) {
-  if (st.state === 'task')
+// Where a decided opportunity went; once handed off, where its task stands now (task-standing.ts).
+function StatusTag({ row, st, task }: Line) {
+  if (st.state === 'task') {
+    const [tone, text] = TASK_TAG[task ?? 'todo'];
     return (
       <Link to={`/actions/${row.taskId}`}>
-        <Tag tone='blue'>
-          {$t('strategy.handedOffAgent')}
+        <Tag tone={tone}>
+          {text()}
           {row.taskNo ? ` · ${taskNo(row.taskNo)}` : ''}
         </Tag>
       </Link>
     );
+  }
   if (st.state === 'pending')
     return <Tag tone='amber'>{$t('strategy.awaitingDecision')}</Tag>;
   return (

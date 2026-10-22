@@ -19,7 +19,6 @@ import {
   categories,
   getCatalog,
   getStateLabels,
-  getUseLabels,
   sourceState,
 } from '../../client/pages/data-sources';
 import { getRanges } from '../../client/pages/range-state';
@@ -77,6 +76,9 @@ vi.mock('../../client/pages/data-health', () => ({
   HealthPanel: () => null,
   HealthLine: () => null,
   loadHealth: async () => ({ items: [] }),
+  healthText: (original: string) => original,
+  needsAttention: () => false,
+  sourceList: (names: string[]) => names.join(', '),
 }));
 vi.mock('../../client/components/app-shell/nav-badges', () => ({
   refreshNavBadges: () => {},
@@ -155,7 +157,7 @@ describe('NocoReach language integration', () => {
             getCatalog().filter((source) => source.category === category.id)
               .length,
         ),
-      ).toEqual([8, 5, 9]);
+      ).toEqual([2, 6, 5, 9]);
       expect(
         new Set([...cards].map((card) => card.getAttribute('data-source-id')))
           .size,
@@ -341,7 +343,6 @@ describe('NocoReach language integration', () => {
     expect(countryName('USA')).toBe('United States');
     expect(help($t('common.impressions'))).not.toMatch(/[一-鿿]/u);
     expect(getStateLabels().connected).toBe('Connected');
-    expect(getUseLabels().analyze).not.toMatch(/[一-鿿]/u);
     expect(getWorkColumns().todo).not.toMatch(/[一-鿿]/u);
     expect(getCatalog().map(({ id, category }) => ({ id, category }))).toEqual(
       catalog,

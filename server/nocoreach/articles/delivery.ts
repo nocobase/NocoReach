@@ -16,6 +16,7 @@ import {
   ArticleError,
   changedFields,
   changesOf,
+  errorDetail,
   isEmpty,
   sameText,
   valueAt,
@@ -47,7 +48,25 @@ export type PublishOutcome =
       fields?: FieldConflict[];
       divergence?: Divergence[];
     }
-  | { kind: 'failed'; code: string };
+  | PublishFailure;
+export type PublishFailure = {
+  kind: 'failed';
+  code: string;
+  /** Where it stopped: reading the article, checking the downstream repository, writing, or checking the write. */
+  step: PublishStep;
+  /** What the target or the error said (errorDetail), for Technical details and the server log. */
+  detail?: string;
+};
+export type PublishStep = 'read' | 'downstream' | 'write' | 'verify';
+function failed(step: PublishStep, error: unknown): PublishFailure {
+  const detail = errorDetail(error);
+  return {
+    kind: 'failed',
+    code: error instanceof ArticleError ? error.code : 'unavailable',
+    step,
+    ...(detail ? { detail } : {}),
+  };
+}
 
 /** The article an artifact proposes: the draft, the target and the base it was written against. */
 export type ArticleProposal = {
@@ -290,13 +309,14 @@ export class ArticleDelivery {
     let provider: ArticleProvider;
     try {
       provider = this.provider(project, p.targetId);
-    } catch {
-      return { kind: 'failed', code: 'target_missing' };
+    } catch (error) {
+      return { ...failed('read', error), code: 'target_missing' };
     }
-    const wanted = changesOf(base, asChanges(p.draft));
+    const at = { step: 'read' as PublishStep };
     try {
+      const wanted = changesOf(base, asChanges(p.draft));
       if (!p.articleId)
-        return await this.create(project, provider, p, wanted, key);
+        return await this.create(project, provider, p, wanted, key, at);
       let current: ArticleSnapshot;
       try {
         current = await provider.get(p.articleId);
@@ -328,19 +348,26 @@ export class ArticleDelivery {
         if (fields.length)
           return { kind: 'conflict', reason: 'changed', current, fields };
       }
+      at.step = 'downstream';
       const downstream = this.targets.downstream(project, p.targetId);
       const divergence = downstream
         ? await downstream.divergence(current, wanted)
         : [];
       if (divergence.length)
         return { kind: 'conflict', reason: 'downstream', current, divergence };
+      at.step = 'write';
       const after = await provider.update(
         p.articleId,
         changesOf(current, wanted),
         { baseVersion: current.version, key },
       );
       if (!applied(after, wanted))
-        return { kind: 'failed', code: 'not_applied' };
+        return {
+          kind: 'failed',
+          code: 'not_applied',
+          step: 'verify',
+          detail: changedFields(after, wanted).join(', '),
+        };
       return {
         kind: 'published',
         snapshot: after,
@@ -361,9 +388,8 @@ export class ArticleDelivery {
             reason: 'slug_taken',
             current: error.current,
           };
-        return { kind: 'failed', code: error.code };
       }
-      return { kind: 'failed', code: 'unavailable' };
+      return failed(at.step, error);
     }
   }
   private async create(
@@ -372,6 +398,7 @@ export class ArticleDelivery {
     p: ArticleProposal,
     wanted: ArticleChanges,
     key: string,
+    at: { step: PublishStep },
   ): Promise<PublishOutcome> {
     const content: ArticleContent = {
       slug: p.draft.slug!,
@@ -389,12 +416,14 @@ export class ArticleDelivery {
             adopted: true,
           }
         : { kind: 'conflict', reason: 'slug_taken', current: existing };
+    at.step = 'downstream';
     const downstream = this.targets.downstream(project, p.targetId);
     const divergence = downstream
       ? await downstream.divergence({ slug: content.slug, locales: {} }, wanted)
       : [];
     if (divergence.length)
       return { kind: 'conflict', reason: 'downstream', divergence };
+    at.step = 'write';
     const created = await provider.create(content, { key });
     return {
       kind: 'published',

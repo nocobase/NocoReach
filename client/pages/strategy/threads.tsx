@@ -252,12 +252,27 @@ function Turn({ run }: { run: OnlineRun }) {
 }
 
 /** A day's conversation, every turn in order; read again while an answer is being written. */
-export function DayConversation({ day }: { day: string }) {
+export function DayConversation({
+  day,
+  folded = false,
+}: {
+  day: string;
+  /** Starts folded to its one line (today's, so the analysis is what shows). */
+  folded?: boolean;
+}) {
   const chat = useInsightChat();
   // Outside the provider (no chat mounted) there is nothing to read, and no chat client to read it with.
-  return chat ? <DayTurns chat={chat} day={day} /> : null;
+  return chat ? <DayTurns chat={chat} day={day} startFolded={folded} /> : null;
 }
-function DayTurns({ chat, day }: { chat: InsightChat; day: string }) {
+function DayTurns({
+  chat,
+  day,
+  startFolded,
+}: {
+  chat: InsightChat;
+  day: string;
+  startFolded: boolean;
+}) {
   const api = useOnlineApi();
   const key = threadsOf(chat.threads, day)
     .map((t) => t.id)
@@ -294,17 +309,20 @@ function DayTurns({ chat, day }: { chat: InsightChat; day: string }) {
   const runs = (state?.key === key ? state.details : [])
     .flatMap((d) => d.runs)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  // Folds to one line so the day's analysis stays in view (2026-10-22 user feedback); a new question opens it again.
-  const [folded, setFolded] = useState(false),
+  // Today's starts folded to one line, so the day's analysis is what shows when Insights opens (2026-10-22 user
+  // feedback); a question sent since then opens it.
+  const [folded, setFolded] = useState(startFolded),
     endRef = useRef<HTMLDivElement>(null),
-    countRef = useRef<number | null>(null);
+    countRef = useRef(0),
+    openedAtRef = useRef(chat.version);
+  // Only a question sent since the page opened unfolds it, not the turns read when it opens.
   useEffect(() => {
     const previous = countRef.current;
     countRef.current = runs.length;
-    if (previous === null || runs.length <= previous) return;
+    if (runs.length <= previous || chat.version === openedAtRef.current) return;
     setFolded(false);
     endRef.current?.scrollIntoView?.({ block: 'end', behavior: 'smooth' });
-  }, [runs.length]);
+  }, [runs.length, chat.version]);
   if (!runs.length) return null;
   return (
     <div className='flex flex-col gap-4' data-day-conversation={day}>

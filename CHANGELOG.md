@@ -10,6 +10,86 @@
 - Refine is gone from the client runtime: the unused Refine data table and the five `@refinedev/*` packages are removed, and the app title is no longer set through `app.refine`.
 - The Scheduler patch moves unchanged to `1.0.0-beta.19`, whose patched files are identical to `1.0.0-beta.17`.
 
+## Unreleased — Data sources show their logos
+
+- Every data source has its logo on a small tile: the cards and drawer title on Settings › Data sources, the rows and sync table on Data health, the results of Find data sources on your website, the source headings of Settings › Analysis rules and the source buttons when adding a rule. Brand marks come from Simple Icons (CC0), vendored as path data in `client/components/reach/brand-logos.ts` without a new dependency; black marks follow the text colour so they show in dark mode. Sources without a brand mark of their own (Website content, Website source, Blog CMS, DataForSEO, AI search visibility, Competitor activity, Rank tracking, Daily analysis) take a matching icon in the same tile.
+
+## Unreleased — Data sources: two tabs, Retry all, Agent edits and publishing first
+
+- Settings › Data sources has two tabs. Sources (the default) shows the cards, with one orange line at the top naming the sources that need attention and a View link to the other tab; Data health shows their count in orange on its tab and holds the sync status that used to sit above the cards.
+- Data health lists the sources needing attention, each with the action that fits its failure: Retry; Change, which opens the source's settings, when a setting must change first (an expired Google authorization, a refused GitHub token, X's spending cap, a paused daily analysis, a competitor without a sitemap); or Check, then retry for an uncertain DataForSEO result that may be billed, which asks before querying again. Retry all retries the rows a plain retry can help and the person may retry, one after another, each row showing its progress and result. The full sync status table is shown directly.
+- Google Search Console and GA4 rows that are only late offer Retry, which asks for a sync as Update now does. Rank tracking and Trends record an uncertain DataForSEO result, and competitor activity a refusal only a changed setting cures, so Data health can tell them apart.
+- Agent edits and publishing (Website source and Blog CMS) is the first group of sources: every change the Agent makes lands in one of them. Group headings use the shared section heading at the size of the page's other headings, with the same space above every group and a small gap to its cards; the old plain heading took a page-wide rule that left it grey and touching its cards.
+
+## Unreleased — Agent: one Settings per row, tidy tabs
+
+- Who does the work reads as a table: column headings, Cloud models and Local agents as light group rows with their explanation in an ⓘ, and what each work does under its name.
+- Every row has one Settings button for administrators, a dialog that changes what the row uses. Daily analysis › Settings chooses the model the analysis runs on (the default chat model, which no page let anyone change since the Agents plugin upgrade of 2026-10-16); Chat panel › Settings is the chat agent dialog, whose default model now names the model; Tasks › Settings chooses the project default and says beside each agent whether it is online, not signed in, out of quota or offline. While a row needs attention, the button is the fix instead.
+- The tabs follow setup order: Model services, Runtimes, Local agents, Usage. Each opens with one sentence and its button instead of a second page heading, at the same size in every tab. Local agents holds the agent list only; the project default moved to Tasks › Settings.
+- Shorter wording: the Model services and Runtimes descriptions are one sentence, the list's how-to is one sentence, and model counts read "2 chat models" instead of "2 chat".
+
+## Unreleased — Playbook Skills matched by name
+
+- Skills › Used in playbooks, the playbook steps and the step Skill picker now find a step's Skill by id, then by name, as a task does. A Skill imported under a built-in name (with its own id) shows where the built-in playbooks use it, and saving a step no longer drops those references.
+
+## Unreleased — Page notes in ⓘ
+
+- Move the remaining grey explanatory notes on Playbooks and the data source connection panels (GitHub, Google, DataForSEO, X, Reddit, Hacker News, Google Trends, Discord/Slack, community forum, website content, downloads, Xiaohongshu) into ⓘ tips beside the field, heading or line they explain; status lines, counts, setup steps and errors stay visible.
+
+## Unreleased — Opportunities shows where each handed-off task stands
+
+- On Opportunities › Handled, the Where it went column shows the state of a handed-off opportunity's task with its number, as Insights does: Handed off to agent while it waits to start, In progress, Needs confirmation, Done or Closed. O-43 read "Handed off to agent · T-34" after T-34 was done. A change handed off on its own shows the same, now with its task number, and its detail's tag says the same instead of In progress for every open task. The filter offers the same labels, and an opportunity's detail says the state beside Open task.
+- The online assistant's `daily_analysis` tool reports a handed-off opportunity's task the same way (in progress, needs confirmation, done, closed) when the user may list tasks, so asking about O-43 in the Insights conversation no longer gets "handed off".
+- Insights, Opportunities, the online assistant and the verdict coverage of changes read where a task stands from one function, `taskStanding` in `shared/task-pending.ts`; the coverage also counts tasks finished before task work was recorded as done.
+
+## Unreleased — Insights says how it analyzes, not how old the data is
+
+- The line under the Insights title no longer shows the period, the data date and the last analysis time ("Last 28 days · Data through … · Last analyzed … (daily, automatic)"): the data could end days before today's analysis, which read as analyzing old data, and each analysis rule reads its own window (7, 14, 28 or 30 days), not 28. It says how the insights are made instead, in one sentence with two links: "Analyzed every day at 09:00 using your analysis rules." The analysis rules link to AI team › Analysis rules and the time to Settings › Automatic runs; each is plain text for someone who cannot open that page.
+- The time is the daily workflow's configured time, with its time zone when it differs from the browser's. A paused daily analysis says it is paused; without a daily workflow the sentence names the rules only. Data dates stay on Data sources and Data health.
+- The metric cards say what they cover, in a quiet line above them: "Last 28 days vs the previous 28".
+- Insights no longer loads the analysis context it used only for that period.
+
+## Unreleased — See what a live task changed
+
+- Once a task is live, its card names what changed in one line ("Changes (2): English · Summary, English · Title") with View changes, which opens the change that went live: an article field by field, before and after, or a page change as readers see it before and after. Nothing else is added to the card.
+- In the activity, View on a delivered article version now shows the same field-by-field comparison under the Agent's notes, instead of the notes alone.
+
+## Unreleased — One look for every refresh and update button
+
+- Every refresh or update control is the same icon-only ↻ button with its explanation on hover, last in the page header or at the right of the toolbar it updates. The "↻ Update now" buttons with text on Trends, X, Reddit, Discord, Slack, Xiaohongshu, Bilibili, YouTube, Site audit, Rank tracking, GitHub hot topics and Competitors › Activity, Keywords › AI suggestions' Suggest again and Settings › Network's Check connectivity now look like Insights' and Results' buttons. The tooltip and accessible name say what happens and change while it runs ("Searching…").
+
+## Unreleased — Handed-off opportunities show where their task stands
+
+- On Insights, an opportunity handed off to the agent shows its task's state now, with the task number: Handed off to agent while it waits to start, In progress, Needs confirmation, Completed or Closed. A finished task used to keep reading "Handed off to agent".
+
+## Unreleased — Tasks list: a notice only when no runtime is online; Executor no longer overlaps Updated
+
+- The line of counts above the tasks (running, queued, failed runs, runtimes online) is gone: each row's status already says running and queued, and a failed run shows in red on its row. When no runtime is online, one notice above the tasks says work handed to an agent will wait, with View runtimes; it uses the page's normal spacing (the old line's zero margin sat it on the table). The same applies to List, Board and By agent.
+- In the list, the Executor column truncates a long Agent name with an ellipsis (the full name on hover) instead of running into Updated, which no longer wraps.
+
+## Unreleased — Today's decisions are today's; the conversation opens folded
+
+- Today's message on Insights lists only opportunities raised, dismissed or handed off today. One handed off on an earlier day that today's analysis lists again stays on the day it was raised; it read as handed off today beside the ones just dismissed (Studio, 10/22: T-27 and T-30 beside the three dismissed at 17:15). A hand-off counts on the day its task was created, and the waiting tasks are read again after one.
+- Today's conversation starts folded to its one line when Insights opens; a question sent since then opens it. An earlier day's conversation shows in full when that day is opened.
+
+## Unreleased — Found by AI or by a person, on every task
+
+- Task cards on the board and in the list say who found the task, beside its number: "Found by AI" (sparkles, violet) for a task from an opportunity of the daily analysis or a change on Insights the person only confirmed, "Found by <name>" for one a person handed off from a data page, created as a new task, started from a page to improve or created from Results. The finder is the person who created the task, who may not be its owner. Older tasks that did not record their creator show nothing.
+- The task page's properties start with Source: "Found by AI · O-41" with "Daily analysis · date", or "Found by <name>" with where it came from ("Handed off from Keywords · date", "New task · date"). It replaces the From row.
+- Hand-offs from data pages record the page they came from; tasks started from a page to improve record their creator; a task handed off from another keeps who found the first one and where.
+
+## Unreleased — Failed article publishes say where and why
+
+- When publishing an article to a target does not complete, the task card keeps its plain-words reason and now links to Technical details, which list each failed target with the step it stopped at (reading the article, checking the website repository, writing, or checking the saved changes), the error code, the time and what the target or the error said (for example `github:429`, or a network timeout with its host).
+- Every failed publish also leaves a warning in the application log (`NocoReach article publish failed`, with project, task, target, step, code and detail), so `nb-studio app logs` shows it. Errors other than the target's own (a request that got no answer, a code error) keep their cause instead of becoming a bare `unavailable`.
+
+## Unreleased — Data sources: shorter cards, a group for what the Agent writes to
+
+- Each card on Settings › Data sources shows its name, status, one plain description and its button. The signal kinds at the bottom ("Change · Timing · Gap"), the role tags ("For analysis", "Can change", "Search and archive") and the "Once connected you can find:" prefix are gone, with their copy in every language.
+- A healthy source shows no sync line; Connected already says it. A source that Data health lists as needing attention shows "Needs attention" and the same reason ("No successful sync in over two days"). Hacker News and X now match their Data health rows, which use other ids.
+- A new last group, Agent edits and publishing, holds Website source (Git repository) and the article publishing target, now called Blog CMS: connect it when articles are managed in a CMS; articles kept in the repository don't need it. The drawer title follows ("Connect Blog CMS"); publishing and the drawer's form are unchanged.
+- Bilibili and Xiaohongshu say they are collected manually and not updated each day. What they collect still feeds the daily analysis's content rules.
+
 ## Unreleased — Agent: tabs back, no duplicate local agents
 
 - Runtimes, Model services and Usage are tabs of the Agent page again, after Local agents, instead of pages of Settings; Settings no longer lists them, and `/runtimes`, `/models` and `/usage` open the tabs.
@@ -25,6 +105,12 @@
 
 - `tests/logic/additional-locales.test.ts` compares each of the eight additional languages with English: `shared/i18n/<locale>.json` with `en.json`, and `client/locales/translations/<locale>.json` with the shell copy of `client/locales/en-US.ts`. It names every missing key, extra key and key whose `{0}` or `{{name}}` placeholders differ. The `build` check's client type check already failed on a missing key, but stopped at the first language and missed extra keys and changed placeholders.
 - docs/DEVELOPMENT.md says new or changed copy needs all ten languages in the same pull request, and that a pull request updated from `main` is merged only after CI passes on that update: eight pull requests merged after the ten-language change (#183) were short 81 translations once `main` was merged into them, and were merged seconds after that push, before CI had run.
+
+## Unreleased — Performance on the task page, page by page
+
+- The task page shows Performance under its properties (after the current card below 1280px): each page the task is about with its own numbers. Before the change goes live it lists the latest 28 days, search clicks and average position (views when a page has no search data), and says that days 7 and 28 are compared with them; once live, the 28 days before going live and when the day 7 result is expected. From day 7 it shows each page before and after with the change, all pages together, a Day 7 / Day 28 switch and a link to the full comparison in Results. Three pages show at first, the rest on request.
+- Day 7 and day 28 comparisons now keep each page's own clicks, average position and views when a task changed more than one page; earlier results show the pages together. A new read action, `nrTaskWork.numbers`, returns each page's numbers over 28 days (read permission, as `get`).
+- The properties column shows labels and values in the same size, told apart by colour, with every row the same height and menus lined up with plain values.
 
 ## Unreleased — Tasks: one set of status choices, the shared drop-downs
 

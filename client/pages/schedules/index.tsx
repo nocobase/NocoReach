@@ -79,7 +79,7 @@ export default function SchedulesPage() {
             />
             {t('schedules.otherWork')}{' '}
             <Link
-              to='/connections'
+              to='/connections?tab=health'
               className='text-foreground underline underline-offset-4'
             >
               {t('schedules.otherWorkLink')}

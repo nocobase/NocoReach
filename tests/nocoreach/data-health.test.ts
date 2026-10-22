@@ -107,3 +107,18 @@ test('each item says how often it runs, and the daily analysis gives its time, t
  const paused=(await new DataHealth(plugin).list('1')).items.find(i=>i.id==='daily-analysis');
  assert.equal(paused.state,'warning');assert.equal(paused.nextSyncAt,null);assert.equal(paused.message,'每日分析已暂停');
 });
+
+test('each row needing attention says what fixes it: retry, change a setting, check billing first, or wait',async()=>{
+ const t=new Date(Date.now()-H).toISOString(),old=new Date(Date.now()-30*H).toISOString();
+ const plugin={env:()=>'',link:async()=>null,
+  github:{state:async()=>({repo:'org/repo',status:'active',daily:{},lastSync:{at:t,ok:true,errors:[],lastSuccessAt:t},token:{error:'token 无效或已过期'}})},
+  community:{syncing:null,state:async()=>({origin:'https://forum.ex.com',title:'Forum',status:'active',topics:{},lastSync:{at:t,ok:false,attempts:3,errors:['主题：429'],lastSuccessAt:old}})},
+  competitors:{checking:null,state:async()=>({list:[{id:'c',name:'Rival'}],track:{c:{checkedAt:old}},lastRun:{at:t,ok:false,errors:['Rival 官网：没有找到 sitemap。'],configError:true}})},
+  rankTracking:{state:async()=>({keywords:[{id:'k'}],checks:{k:[{at:old}]},lastRun:{at:t,ok:false,errors:['crm：结果不确定：可能已计费，所以没有自动重查。请在 DataForSEO 后台核对。'],uncertain:true}})}};
+ const items=Object.fromEntries((await new DataHealth(plugin).list('1')).items.map(i=>[i.id,i]));
+ assert.equal(items.discourse.fix,'retry');
+ assert.equal(items['github-traffic'].fix,'settings');
+ assert.equal(items.competitors.fix,'settings');assert.match(items.competitors.message,/没有找到 sitemap/);assert.doesNotMatch(items.competitors.message,/自动重试/);
+ assert.equal(items.rank.fix,'verify');assert.deepEqual(items.rank.retry,{resource:'nrRankTracking',action:'check',body:{retryUncertain:true}});assert.match(items.rank.message,/DataForSEO 后台核对/);
+ assert.equal(items.site,undefined);assert.equal(items.github.fix,undefined,'a healthy row asks for nothing');
+});

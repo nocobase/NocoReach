@@ -95,7 +95,7 @@
       "emptyTitle": "還沒有 agent",
       "emptyDescription": "連線一個登入了程式開發工具的執行環境：它上報的每個模型都會出現在這裡，等你啟用。",
       "noneInFilter": "這裡沒有 agent。",
-      "howToAdd": "想加一個本地 Agent：在某個執行環境上裝好程式開發工具並登入，執行環境上報後它會出現在這裡，寫好「擅長什麼」即可啟用。只在「只給擁有者用」的執行環境上有的 Agent，只能執行擁有者自己發起的任務。",
+      "howToAdd": "想加一個本地 Agent：在執行環境上裝好程式開發工具並登入，它會出現在「新發現」裡，寫好「擅長什麼」即可啟用。",
       "goodAtMissing": "還沒寫",
       "columns": {
         "agent": "Agent",
@@ -521,7 +521,7 @@
         }
       },
       "title": "執行環境",
-      "description": "裝了 Claude Code 或 Codex 的電腦或伺服器。NocoReach 把任務交給它，由上面的本地 Agent 去改網站程式碼、寫文章、提交 PR，所以它要開機、連網，程式開發工具要登入。",
+      "description": "裝了 Claude Code 或 Codex 的電腦或伺服器，本地 Agent 在上面執行任務，所以要保持開機、連網，程式開發工具要登入。",
       "add": "新增執行環境",
       "loadFailed": "無法載入執行環境",
       "emptyTitle": "還沒有連線執行環境",
@@ -757,7 +757,7 @@
     },
     "models": {
       "title": "模型服務",
-      "description": "每日分析和對話欄使用這裡的對話模型，依呼叫量付費給服務商；向量模型和重排序模型用於搜尋。本地 Agent 不使用這裡的模型，它使用執行環境上程式開發工具自己的登入。"
+      "description": "每日分析和對話欄用這裡的模型，依呼叫量付費給服務商。"
     },
     "defaultModel": {
       "title": "預設對話模型",
@@ -855,9 +855,9 @@
         "dimensions": "{{model}} 的向量維度",
         "dimensionsPlaceholder": "預設",
         "counts": {
-          "chat": "{{count}} 個對話",
-          "embedding": "{{count}} 個向量",
-          "rerank": "{{count}} 個重排序"
+          "chat": "{{count}} 個對話模型",
+          "embedding": "{{count}} 個向量模型",
+          "rerank": "{{count}} 個重排序模型"
         }
       }
     },

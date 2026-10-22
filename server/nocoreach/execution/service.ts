@@ -15,7 +15,7 @@ import { resultOf, type AgentResult } from './agent-result.js';
 import { TaskBusiness } from './task-business.js';
 import { serializeTaskInput, type TaskInput } from './task-materials';
 import type { LegacyDatabase, LegacyTransaction } from '../legacy/database';
-import { CHECKPOINTS, compare, dateOf, pageKey, shift, windows, type Partition } from './effect';
+import { CHECKPOINTS, compare, dateOf, pageKey, pageNumbers, shift, windows, type Partition } from './effect';
 import { listResults, readResult, resultBoard } from './result-view.js';
 import { ArticleFlow } from './article-flow.js';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
@@ -35,6 +35,8 @@ const withoutRepo = (w: Work, stage: Stage) => stage.kind === 'agent' && stage.m
 const articleTask = (w: Work) => w.delivery?.kind === 'article';
 const ID = /^[1-9]\d{0,15}$/;
 const HOUR = 3600000;
+// What says where a task came from (who found it, from which page or change), carried into a task it hands off to.
+const foundBy = (e: any) => Object.fromEntries(['createdBy', 'origin', 'signalKey', 'resultSource', 'entry'].filter(k => e?.[k] != null).map(k => [k, e[k]]));
 const httpsUrl = (v: unknown) => { try { const u = new URL(String(v)); return u.protocol === 'https:' && !u.username && !u.password ? u.href : ''; } catch { return ''; } };
 const optional = (v: unknown, max: number) => typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : '';
 // Before/after text of changed text files, for the change comparison; long files are cut and marked.
@@ -306,6 +308,32 @@ export class TaskService {
   }
   // The pages a finished task changed: what was released, the published page and the linked page.
   effectPages(w: Work) { return [...new Set([...(w.release?.pages || []), w.receipt?.url || '', w.page?.url || ''].map(httpsUrl).filter(Boolean))].slice(0, 10); }
+  // The pages the task page shows numbers for (2026-10-22): those the observation compares, then the page the task
+  // was handed off with, the opportunity's page and the cited changes' pages (as the article lookup reads them).
+  numberPages(task: any, w: Work) {
+    const e = task.evidence || {}, ids = new Set(Array.isArray(e.insight?.signalIds) ? e.insight.signalIds : []);
+    const cited = (e.context?.signals?.items || []).filter((s: any) => ids.has(s?.key)).map((s: any) => s?.url);
+    const pages = new Map<string, string>();
+    for (const u of [...this.effectPages(w), e.page, e.insight?.target, ...cited]) {
+      const url = typeof u === 'string' ? u.trim() : '';
+      if (/^https?:\/\//i.test(url) && pageKey(url) && !pages.has(pageKey(url))) pages.set(pageKey(url), url);
+    }
+    return [...pages.values()].slice(0, 10);
+  }
+  // Each page's numbers over 28 days, for the task page: the 28 days before the change went live once it has,
+  // otherwise the latest 28 days every source has data for.
+  async numbers(project: string, taskId: string) {
+    const task = await this.task(project, taskId), w = projectWork(task), pages = this.numberPages(task, w), live = Boolean(w.observeFrom);
+    if (!pages.length) return { pages: [], range: null, live };
+    let range: { start: string; end: string };
+    if (w.observeFrom) { const from = dateOf(w.observeFrom); range = { start: shift(from, -28), end: shift(from, -1) }; }
+    else {
+      const end = await this.dataEnd(project);
+      if (!end) return { pages: pages.map(page => ({ page })), range: null, live };
+      range = { start: shift(end, -27), end };
+    }
+    return { ...pageNumbers(await this.partitions(project, range.start, range.end), pages, range), live };
+  }
   // Daily Google partitions of the project's current property and site, between two dates.
   private async partitions(project: string, start: string, end: string): Promise<Partition[]> {
     const link = await this.p.link(project), out: Partition[] = [];
@@ -628,7 +656,7 @@ export class TaskService {
             // Hand-over: the accepted document becomes the brief of a new task with the next playbook (not started).
             if (w.stage !== 'done' || w.playbook?.kind !== 'plan' || !w.playbook.next.includes(v.next) || w.nextTaskId) return fail(systemMessageText('taskExecution.stepCannotHandedAnotherPlaybook'), 409);
             const p = await this.playbooks.get(project, v.next, tx), accepted = w.results[index - 1]!;
-            const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: `${p.name}：${task.title}`.slice(0, 200), brief: systemMessageText('messages.taskBriefDocumentDeliveredTask', { 0: task.title, 1: accepted.content }).slice(0, 30000), status: systemMessageText('common.pending'), evidence: { source: systemMessageText('taskExecution.chainedTask'), insight: task.evidence?.insight || null, context: task.evidence?.context || null, handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content }, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
+            const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: `${p.name}：${task.title}`.slice(0, 200), brief: systemMessageText('messages.taskBriefDocumentDeliveredTask', { 0: task.title, 1: accepted.content }).slice(0, 30000), status: systemMessageText('common.pending'), evidence: { source: systemMessageText('taskExecution.chainedTask'), insight: task.evidence?.insight || null, context: task.evidence?.context || null, ...foundBy(task.evidence), handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content }, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
             w.nextTaskId = String(child.get ? child.get('id') : child.id); event.note = p.name; event.nextTaskId = w.nextTaskId;
           }
         } else {
@@ -870,7 +898,7 @@ export class TaskService {
       const key=this.key('content-create',project,'index',v.requestId),previous=await this.snapshot(key,tx);
       if(previous){if(previous.contentId!==v.contentId||previous.actor!==actor)return fail(systemMessageText('taskExecution.requestIdAlreadyUsed'),409);return this.task(project,String(previous.taskId),tx);}
       const content=await this.snapshot(this.key('content',project,'index',v.contentId),tx);if(!content)return fail(systemMessageText('taskExecution.contentNotFound'),404);
-      const row=await this.repo('nrTasks').create({values:{projectId:project,taskKey:'content:'+randomUUID(),title:'优化 '+content.title,brief:systemMessageText('taskExecution.checkImprovePage')+content.url+systemMessageText('taskExecution.confirmExactScopeChangesBefore'),status:systemMessageText('common.pending'),evidence:{content:{id:content.id,url:content.url,repository:content.repository,paths:content.paths},work:{...projectWork({}),contentId:content.id,humanOwnerId:actor,humanOwnerName:actorName}}},transaction:tx});
+      const row=await this.repo('nrTasks').create({values:{projectId:project,taskKey:'content:'+randomUUID(),title:'优化 '+content.title,brief:systemMessageText('taskExecution.checkImprovePage')+content.url+systemMessageText('taskExecution.confirmExactScopeChangesBefore'),status:systemMessageText('common.pending'),evidence:{content:{id:content.id,url:content.url,repository:content.repository,paths:content.paths},createdBy:{id:String(actor),name:String(actorName||actor)},work:{...projectWork({}),contentId:content.id,humanOwnerId:actor,humanOwnerName:actorName}}},transaction:tx});
       await this.put(key,{taskId:row.id,contentId:v.contentId,actor},tx);return row.toJSON();
     });
   }
@@ -933,7 +961,7 @@ export class TaskService {
     this.p.app.acl.allow('nrPlaybooks', ['list', 'save', 'copy', 'remove', 'restore', 'draft'], 'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrAgent', actions: { status: wrap(async (p, v, c) => this.agents.status(p, undefined, String(c.auth.user.id), { seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), saveDefault: wrap((p, v, c) => this.agents.saveDefault(p, v, String(c.auth.user.id))), saveRepo: wrap((p, v) => this.agents.saveRepo(p, v)), removeRepo: wrap((p, v) => this.agents.removeRepo(p, v)) } });
     this.p.app.acl.allow('nrAgent', ['status', 'saveDefault', 'saveRepo', 'removeRepo'], 'loggedIn');
-    this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { results: wrap((p,v)=>listResults(this,p,v)), result: wrap((p,v)=>readResult(this,p,v)), board: wrap((p,v)=>resultBoard(this,p,v)), get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)) } });
-    this.p.app.acl.allow('nrTaskWork', ['results', 'result', 'board', 'get', 'advance', 'members', 'list', 'pages'], 'loggedIn');
+    this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { results: wrap((p,v)=>listResults(this,p,v)), result: wrap((p,v)=>readResult(this,p,v)), board: wrap((p,v)=>resultBoard(this,p,v)), get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), numbers: wrap((p, v) => this.numbers(p, String(v.taskId))), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)) } });
+    this.p.app.acl.allow('nrTaskWork', ['results', 'result', 'board', 'get', 'numbers', 'advance', 'members', 'list', 'pages'], 'loggedIn');
   }
 }

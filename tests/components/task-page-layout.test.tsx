@@ -238,6 +238,82 @@ test('an older ?run= link opens Technical details on its runs', async () => {
   );
 });
 
+// T-34 on Studio (2026-10-22): an article whose publish to the CMS stopped; the card stays in plain words.
+function failedPublish(): TaskData {
+  const data = pageChange();
+  const [artifact] = data.work.results as NonNullable<
+    TaskData['work']['results'][number]
+  >[];
+  data.work.stageIndex = 2;
+  data.work.results = [
+    {
+      ...artifact,
+      pr: undefined,
+      approvedAt: '2026-10-22T07:41:00Z',
+      article: {
+        targetId: 'cms',
+        articleId: '7',
+        baseKey: null,
+        baseVersion: 'v1',
+        draft: { locales: { en: { title: 'Workflow automation tools' } } },
+        changes: ['en.title'],
+      },
+    },
+  ] as TaskData['work']['results'];
+  data.work.release = {
+    state: 'publish_failed',
+    note: '',
+    pages: [],
+    article: {
+      artifactId: 'artifact-1',
+      targetId: 'cms',
+      articleId: '7',
+      slug: 'workflow-automation-tools',
+      error: 'unavailable',
+      errorStep: 'downstream',
+      errorDetail: 'github:429',
+      errorAt: '2026-10-22T07:42:00Z',
+    },
+  };
+  data.articleTargets = [
+    {
+      id: 'cms',
+      name: 'NocoBase CMS',
+      kind: 'nocobase-api',
+      locales: ['en'],
+      capabilities: { concurrency: 'check-before-write' },
+    },
+  ] as TaskData['articleTargets'];
+  return data;
+}
+
+test('a failed publish keeps its plain reason on the card and its step and detail in Technical details', async () => {
+  const user = userEvent.setup();
+  mount(failedPublish());
+  const card = screen.getByRole('region', { name: '等你处理' });
+  expect(
+    within(card).getByRole('heading', { name: '发布没有完成' }),
+  ).toBeVisible();
+  expect(
+    within(card).getByText('暂时无法连接目标系统，请稍后再试。'),
+  ).toBeVisible();
+  expect(document.body).not.toHaveTextContent('github:429');
+  expect(document.body).not.toHaveTextContent('检查网站仓库');
+  await user.click(within(card).getByRole('button', { name: '技术细节' }));
+  const dialog = await screen.findByRole('dialog', { name: '技术细节' });
+  expect(within(dialog).getByRole('tab', { name: '代码改动' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  const section = within(dialog)
+    .getByRole('heading', { name: '发布到 NocoBase CMS 没有完成' })
+    .closest('section')!;
+  expect(section).toHaveTextContent('停在检查网站仓库');
+  expect(section).toHaveTextContent('错误代码unavailable');
+  expect(section).toHaveTextContent('github:429');
+  expect(dialog).not.toHaveTextContent('这个任务没有代码改动。');
+});
+
 // T-32 on Studio (2026-10-21): an opportunity about one blog post; the article is found from its page, not picked.
 function blogPageTask(): TaskData {
   const page = 'https://www.nocobase.com/en/blog/workflow-automation-tools';
@@ -498,8 +574,11 @@ test('the properties column lists owner, Agent, playbook, source, article, page 
   expect(value('负责人')).toHaveTextContent('Super Admin');
   expect(value('Agent')).toHaveTextContent('codex');
   expect(value('做法')).toHaveTextContent('优化现有页面');
+  // Found by the AI from opportunity O-16, kept apart from the owner.
+  expect(value('来源')).toHaveTextContent(/Found by AI\s*·\s*O-16/);
+  expect(value('来源')).toHaveTextContent('每日分析');
   expect(
-    within(value('来自')).getByRole('button', { name: 'O-16' }),
+    within(value('来源')).getByRole('button', { name: 'O-16' }),
   ).toBeVisible();
   expect(
     within(value('文章')).getByRole('link', {
@@ -520,4 +599,218 @@ test('the properties column lists owner, Agent, playbook, source, article, page 
   expect(screen.getByRole('list', { name: '进度' })).not.toHaveTextContent(
     '优化现有页面',
   );
+});
+
+test('Performance lists each page: the latest 28 days before going live, then day 7 or 28 before and after', async () => {
+  const user = userEvent.setup();
+  const pages = [
+    'https://www.nocobase.com/en/blog/ai-agent-platforms',
+    'https://www.nocobase.com/en/blog/no-code-ai-tools',
+    'https://www.nocobase.com/en/blog/open-source-crm',
+    'https://www.nocobase.com/en/blog/workflow-tools',
+  ];
+  action.mockImplementation((resource: string, command: string) => {
+    if (resource === 'nrPlaybooks') return Promise.resolve({ playbooks: [] });
+    if (resource === 'nrTaskWork' && command === 'numbers')
+      return Promise.resolve({
+        range: { start: '2026-09-22', end: '2026-10-19' },
+        live: false,
+        gscDays: 28,
+        ga4Days: 0,
+        pages: pages.map((page, i) => ({
+          page,
+          clicks: 400 - i * 100,
+          position: 32 - i * 5,
+        })),
+      });
+    return Promise.resolve([]);
+  });
+  const { unmount } = mount();
+  let block = await screen.findByRole('region', { name: '数据表现' });
+  expect(
+    await within(block).findByText('近 28 天 · 搜索点击 · 平均排名'),
+  ).toBeVisible();
+  expect(
+    within(block).getByRole('link', { name: '/en/blog/ai-agent-platforms' }),
+  ).toHaveAttribute('href', pages[0]);
+  expect(block).toHaveTextContent('400 · 第 32 位');
+  // Three pages, then the rest on request.
+  expect(within(block).queryByText('/en/blog/workflow-tools')).toBeNull();
+  await user.click(
+    within(block).getByRole('button', { name: '还有 1 个页面' }),
+  );
+  expect(within(block).getByText('/en/blog/workflow-tools')).toBeVisible();
+  expect(block).toHaveTextContent('上线后在第 7 天、第 28 天和这些数字对比。');
+  unmount();
+  // Live with day 7: each page before and after, then all pages together; day 28 waits.
+  const data = pageChange();
+  data.work.observeFrom = '2026-10-01T08:00:00Z';
+  data.work.observation = {
+    results: [
+      {
+        day: 7,
+        baseline: { start: '2026-09-24', end: '2026-09-30' },
+        after: { start: '2026-10-02', end: '2026-10-08' },
+        pages: pages.slice(0, 2),
+        byPage: [
+          { page: pages[0], clicks: [96, 131], position: [32, 20] },
+          { page: pages[1], clicks: [71, 74], position: [18, 17] },
+        ],
+        gsc: {
+          clicks: [167, 205],
+          impressions: [0, 0],
+          ctr: [0, 0],
+          position: [0, 0],
+        },
+        primary: 'clicks',
+        change: 0.228,
+        conclusion: 'up',
+        notes: [],
+        computedAt: '2026-10-12T00:00:00Z',
+      },
+    ],
+  } as unknown as TaskData['work']['observation'];
+  mount(data);
+  block = screen.getByRole('region', { name: '数据表现' });
+  expect(
+    within(block).getByText('搜索点击 · 上线前 7 天 → 上线后 7 天'),
+  ).toBeVisible();
+  const rows = within(block).getAllByRole('listitem');
+  expect(rows[0]).toHaveTextContent(
+    '/en/blog/ai-agent-platforms96 → 131 ↑ 36%',
+  );
+  expect(rows[1]).toHaveTextContent('71 → 74 ↑ 4.2%');
+  expect(block).toHaveTextContent('合计 2 个页面167 → 205 ↑ 23%');
+  expect(
+    within(block).getByRole('button', { name: '第 28 天' }),
+  ).toBeDisabled();
+  expect(
+    within(block).getByRole('link', { name: '在成果页查看完整对比' }),
+  ).toHaveAttribute('href', '/results/1?day=7');
+  expect(action.mock.calls.some(([, c]) => c === 'numbers')).toBe(true);
+});
+
+// T-34 after going live (2026-10-22): the card names what changed and opens the change itself.
+function liveArticle(): TaskData {
+  const data = failedPublish();
+  const [artifact] = data.work.results as NonNullable<
+    TaskData['work']['results'][number]
+  >[];
+  data.work.stage = 'done';
+  data.work.results = [
+    {
+      ...artifact,
+      content: 'Added the 2026 picks and updated the star counts.',
+      article: {
+        targetId: 'cms',
+        articleId: '7',
+        baseKey: 'base-1',
+        baseVersion: 'v1',
+        draft: {
+          locales: {
+            en: {
+              title: 'Top 12 Open Source No-Code AI Tools (2026)',
+              description: 'Updated for 2026 with star counts.',
+            },
+          },
+        },
+        changes: ['en.description', 'en.title'],
+      },
+    },
+  ] as TaskData['work']['results'];
+  data.articleBases = {
+    'base-1': {
+      id: '7',
+      slug: 'top-11-github-open-source-no-code-ai-tools',
+      version: 'v1',
+      readAt: '2026-10-22T02:51:00Z',
+      locales: {
+        en: {
+          title:
+            'Top 11 Open Source No-Code AI Tools with the Most GitHub Stars',
+          description: 'The most starred tools.',
+          body: 'Body',
+        },
+      },
+    },
+  };
+  data.work.release = {
+    state: 'live',
+    note: 'Added the 2026 picks',
+    pages: [
+      'https://www.nocobase.com/en/blog/top-11-github-open-source-no-code-ai-tools',
+    ],
+    liveAt: '2026-10-22T10:03:00Z',
+    article: {
+      artifactId: 'artifact-1',
+      targetId: 'cms',
+      articleId: '7',
+      slug: 'top-11-github-open-source-no-code-ai-tools',
+      published: {
+        articleId: '7',
+        slug: 'top-11-github-open-source-no-code-ai-tools',
+        version: 'v2',
+        written: ['en.description', 'en.title'],
+        at: '2026-10-22T09:43:00Z',
+      },
+    },
+  };
+  return data;
+}
+
+test('a live article names what changed on its card and shows each field before and after', async () => {
+  const user = userEvent.setup();
+  mount(liveArticle());
+  const card = screen.getByRole('region', { name: '已完成' });
+  expect(card).toHaveTextContent('改了 2 处：英语 · 摘要、英语 · 标题');
+  // The comparison itself stays out of the card until asked for.
+  expect(card).not.toHaveTextContent('The most starred tools.');
+  await user.click(within(card).getByRole('button', { name: /查看改动/ }));
+  const dialog = await screen.findByRole('dialog', { name: '改了什么' });
+  expect(dialog).toHaveTextContent('第 1 版');
+  expect(dialog).toHaveTextContent('审核通过');
+  expect(dialog).toHaveTextContent(
+    'Top 11 Open Source No-Code AI Tools with the Most GitHub Stars',
+  );
+  expect(dialog).toHaveTextContent(
+    'Top 12 Open Source No-Code AI Tools (2026)',
+  );
+  expect(dialog).toHaveTextContent('Updated for 2026 with star counts.');
+  await user.keyboard('{Escape}');
+  // The activity's View of the delivered version shows the Agent's notes and the same comparison.
+  const activity = screen.getByRole('region', { name: '动态' });
+  await user.click(within(activity).getByRole('button', { name: '查看' }));
+  const reader = await screen.findByRole('dialog', { name: /修改/ });
+  expect(reader).toHaveTextContent(
+    'Added the 2026 picks and updated the star counts.',
+  );
+  expect(reader).toHaveTextContent(
+    'Top 12 Open Source No-Code AI Tools (2026)',
+  );
+});
+
+test('a live page change names what readers see differently and opens it', async () => {
+  const user = userEvent.setup();
+  const data = pageChange();
+  data.work.stage = 'done';
+  data.work.stageIndex = 2;
+  data.work.results[0]!.approvedAt = '2026-10-13T03:00:00Z';
+  data.work.release = {
+    state: 'live',
+    note: '日语首页增加独立搜索标题与精简描述。',
+    pages: ['https://www.nocobase.com/ja'],
+    pr: {
+      number: 186,
+      url: 'https://github.com/nocobase/site/pull/186',
+      headSha: '8817982abc',
+    },
+    mergedAt: '2026-10-13T03:05:00Z',
+    liveAt: '2026-10-13T04:00:00Z',
+  };
+  mount(data);
+  const card = screen.getByRole('region', { name: '已完成' });
+  expect(card).toHaveTextContent('改了 1 处：搜索标题');
+  await user.click(within(card).getByRole('button', { name: /查看改动/ }));
+  const dialog = await screen.findByRole('dialog', { name: '改了什么' });
+  expect(dialog).toHaveTextContent('オープンソース AI ノーコード');
 });

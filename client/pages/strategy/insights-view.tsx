@@ -17,6 +17,7 @@ import {SectionHandOff} from '../section-hand-off';
 import {AllCheck,RowCheck,useSelection} from '#components/reach/hand-off-slot';
 import type {HandOffResult} from './hand-off';
 import {daysBetween,type Verdict} from './watch';
+import {TASK_TAG,type TaskStanding} from './task-standing';
 // 洞察 building blocks (SPEC §5): numbers and changes first, one line each; no paragraphs.
 export type Metric={key:string;label:string;value:number|null;previous:number|null;complete:boolean;change:number|null};
 export type SourceCard={id:string;cutoff:string|null;window:{start:string;end:string;days:number};metrics:Metric[];series:{date:string;value:number|null}[];seriesBy?:Record<string,{date:string;value:number|null}[]>};
@@ -127,7 +128,7 @@ function AttentionDetail({item,projectId,onClose}:{item:AreaItem;projectId:numbe
 // in the daily analysis — 建议处理 (and an opportunity), 建议观察 or 无需处理, with a reason — or what came after it: 已交给
 // Agent, 已忽略. The detail shows the data, the verdict and one next step; a change from an older analysis without a
 // verdict can be judged on the spot.
-type Status={label:string;tone:Tone;verdict?:'do'|'watch'|'skip';next:'opportunity'|'task'|'hand'|'judge';row?:Row;taskId?:number;reason?:string;why:string;earlier?:{id:number;no?:number;state:'done'|'closed'};ignored?:boolean;dismissed?:boolean};
+type Status={label:string;tone:Tone;verdict?:'do'|'watch'|'skip';next:'opportunity'|'task'|'hand'|'judge';row?:Row;taskId?:number;taskNo?:number;task?:TaskStanding;reason?:string;why:string;earlier?:{id:number;no?:number;state:'done'|'closed'};ignored?:boolean;dismissed?:boolean};
 type ChangeTask={id:number;status:string;evidence?:{no?:number;work?:Work}};
 const SOURCE_PAGE:Record<string,string>={gsc:'/seo-opportunities',ga4:'/website',site:'/content',github:'/data/github','github-traffic':'/data/github',discourse:'/data/community',packages:'/data/downloads',hackernews:'/data/hackernews',reddit:'/data/reddit',x:'/data/x',discord:'/data/discord',slack:'/data/slack',trends:'/trends',competitors:'/research/domain',rank:'/keywords?tab=tracking','ai-search':'/ai-search'};
 const pageOf=(s:Signal)=>s.key.startsWith('audit-')?'/audit':SOURCE_PAGE[s.source];
@@ -138,10 +139,11 @@ const PLAYBOOK:Record<string,string>={technical:'tech-fix',optimize:'optimize-pa
 const getVerdict = () => ({do:{verdict:'do',label:$t('common.act'),tone:'amber',why:$t('strategy.aiSuggestsActing')},watch:{verdict:'watch',label:$t('common.watchRecommendation'),tone:'grey',why:$t('strategy.aiSuggestsWatchingLooksAgain')},skip:{verdict:'skip',label:$t('common.noActionNeeded'),tone:'slate',why:$t('strategy.aiFoundNoActionNeeded')}} as const);
 function changeDraft(s:Signal,reason?:string):TaskDraft{return {title:titleOf(s).slice(0,200),objective:$t('strategy.handleChange',{0:titleOf(s)}).slice(0,1000),brief:[$t('strategy.latestChangeInsights',{0:getSourceNames()[s.source]||s.source,1:titleOf(s)}),...s.facts.map(f=>`- ${$legacyText(f)}`),...(s.url?[$t('strategy.relatedPage',{0:s.url})]:[]),...(reason?[$t('strategy.aiVerdictValue',{0:reason})]:[]),'',$t('strategy.suggestionCheckDataAffectedPages')].join('\n').slice(0,20000),signalKey:s.key};}
 // A change keeps its key from day to day (the same 278 duplicate titles), so tasks handed off weeks ago still point at it:
-// only a task still open counts as 处理中; a finished or closed one is mentioned, and today's verdict decides again.
+// only a task still open counts as 处理中; a finished or closed one is mentioned, and today's verdict decides again. The
+// open task's tag says where it stands, in the words and tones of Opportunities' Where it went (task-standing.ts).
 export function statusOf(s:Signal,state:StrategyState,tasks:ChangeTask[]):Status{
  const x=signalDisposition(s,state,tasks),review=state.insights?.signalReviews?.[s.key],earlier=x.earlier;
- if(x.next==='task')return {label:$t('strategy.progress'),tone:'blue',next:'task',taskId:x.taskId,why:$t('strategy.taskHandling',{0:x.taskNo?` T-${x.taskNo}`:''})};
+ if(x.next==='task'){const task=x.taskStanding??'todo';return {label:TASK_TAG[task][1](),tone:TASK_TAG[task][0],next:'task',taskId:x.taskId,taskNo:x.taskNo,task,why:$t('strategy.taskHandling',{0:x.taskNo?` T-${x.taskNo}`:''})};}
  if(x.next==='opportunity')return {label:$t('common.act'),verdict:'do',tone:'amber',next:'opportunity',row:x.row,reason:review?.reason,earlier,why:$t('strategy.aiSuggestsActingWroteUp')};
  if(x.dismissed)return {label:$t('strategy.dismissed'),dismissed:true,tone:'slate',next:'hand',ignored:x.ignored,reason:x.ignored?review?.reason:undefined,earlier,why:$t(x.ignored?'strategy.ignoredChangeIfChangeMind':'strategy.dismissedMatchingOpportunityIfChange')};
  if(review)return {...getVerdict()[review.verdict],next:'hand',reason:review.reason,earlier,why:review.verdict==='do'?$t('strategy.aiSuggestsActingNotWrite'):$t('strategy.ifDisagreeStillHandOff',{0:getVerdict()[review.verdict].why})};

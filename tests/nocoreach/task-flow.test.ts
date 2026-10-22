@@ -186,7 +186,7 @@ test('Runner task input: memory, cited signals only, earlier output, feedback, n
 // Saved ai stages keep their business input and execute only on an explicit retry.
 const connectAgent=async f=>{const me=await selectAgent(f);await f.s.agents.saveRepo('1',{repo:'estheryo/website',baseBranch:'main',revision:1});return me;};
 test('document task: the Agent analyzes without changing the repository, a change request reruns, acceptance hands over to a new build task',async()=>{
- let invoked=0;const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>{invoked++;return {content:'x'};}},{insight:{id:'op',signalIds:['community-gap:q']},context:{signals:{items:signals}}});const me=await connectAgent(f);
+ let invoked=0;const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>{invoked++;return {content:'x'};}},{insight:{id:'op',signalIds:['community-gap:q']},context:{signals:{items:signals}},createdBy:{id:'1',name:'王磊'},entry:'/main/data/community'});const me=await connectAgent(f);
  let d=await f.view();assert.equal(d.playbookDefault,'content-outline');assert.equal(d.task.status,'待处理');
  d=await f.command('startTask',{note:'focus on blocks'});assert.equal(d.work.playbook.kind,'plan');assert.ok(d.runs[0].pluginRunId);assert.equal(d.task.status,'进行中');
  let c=await claim(f);assert.equal(c.run.mode,'plan','read-only for every Agent program version');assert.equal(c.run.input.step,'analyze');assert.equal(c.run.input.note,'focus on blocks');assert.deepEqual(c.run.capabilitySnapshot||['repo.read'],['repo.read']);
@@ -199,6 +199,8 @@ test('document task: the Agent analyzes without changing the repository, a chang
  assert.equal(d.work.stage,'done');assert.equal(d.task.status,'已完成');assert.ok(d.work.nextTaskId);assert.deepEqual(d.related.map(r=>r.relation),['next']);assert.equal(invoked,0,'no online AI call');
  const child=f.state.nrTasks.find(t=>String(t.id)===d.work.nextTaskId);
  assert.match(child.title,/^新建文档页：/);assert.match(child.brief,/outline 2/);assert.equal(child.evidence.handoff.content,'outline 2');assert.equal(child.evidence.insight.id,'op');
+ // The new task keeps who found the first one and where (2026-10-22).
+ assert.deepEqual(child.evidence.createdBy,{id:'1',name:'王磊'});assert.equal(child.evidence.entry,'/main/data/community');
  const ch=await f.view(String(child.id));assert.equal(ch.playbookDefault,'new-doc');assert.equal(ch.task.status,'待处理');assert.deepEqual(ch.related.map(r=>[r.relation,String(r.id)]),[['prev','1']]);
 });
 test('sharing (2026-10-08): an Agent run carries the page\'s data summary; an accepted document goes into the knowledge base',async()=>{
@@ -480,6 +482,23 @@ test('effect observation runs for finished tasks once the data covers the day, a
  assert.equal(r.day,7);assert.deepEqual(r.gsc.clicks,[70,112]);assert.deepEqual(r.ga4.views,[280,280],'only the connected property counts');assert.equal(r.conclusion,'up');
  assert.ok(r.notes.some(n=>n.includes('Another change')),'another change to the same page in the window is named');
  await f.s.observeEffects();d=await f.view();assert.equal(d.work.observation.results.length,1,'computed once');
+});
+
+test('the task page reads each page\'s numbers: the latest 28 days before going live, the 28 days before it after',async()=>{
+ const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>({content:'AI draft'})},{insight:{target:'https://www.example.com/docs/start/'}});f.state.nrSyncPartitions=[];
+ f.state.nrSnapshots.push({id:9301,key:'site-content:1',payload:{pages:[{url:'https://www.example.com/docs/install',title:'安装',type:'docs'}]}});
+ f.s.p.link=async()=>({get:k=>({gscSiteUrl:'sc-domain:example.com',ga4PropertyId:'p1'})[k]});
+ await f.command('linkPage',{url:'https://www.example.com/docs/install'});
+ let id=1;const add=(source,grain,resource,date,payload)=>f.state.nrSyncPartitions.push({id:id++,projectId:'1',source,grain,resource,date,payload});
+ for(let i=0;i<40;i++){const date=new Date(Date.parse('2026-08-10')+i*86400000).toISOString().slice(0,10);
+  add('gsc','query_page','sc-domain:example.com',date,[{keyword:'install',page:'https://www.example.com/docs/install',clicks:2,impressions:10,position:8},{keyword:'start',page:'https://example.com/docs/start',clicks:1,impressions:10,position:20}]);
+  add('ga4','page','p1',date,[{page:'/docs/install',views:5,conversions:0}]);}
+ // Data ends 9/18: the latest 28 days are 8/22-9/18; the opportunity's page counts once whatever its slash or host.
+ let n=await f.s.numbers('1','1');
+ assert.deepEqual(n.range,{start:'2026-08-22',end:'2026-09-18'});assert.equal(n.live,false);
+ assert.deepEqual(n.pages,[{page:'https://www.example.com/docs/install',clicks:56,position:8,views:140},{page:'https://www.example.com/docs/start/',clicks:28,position:20,views:0}]);
+ f.state.nrTasks[0].evidence.work.observeFrom='2026-09-01T08:00:00Z';
+ n=await f.s.numbers('1','1');assert.equal(n.live,true);assert.deepEqual(n.range,{start:'2026-08-04',end:'2026-08-31'});assert.equal(n.pages[0].clicks,44,'only the days with data before going live');
 });
 
 test('cancel and archive: a cancelled task stops, its PR is closed by the Agent, late results never apply; archive hides and restores',async()=>{
