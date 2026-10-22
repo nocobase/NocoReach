@@ -26,6 +26,9 @@ const fixture = vi.hoisted(() => ({
   openChat: vi.fn(),
   resume: vi.fn(),
   threads: [] as unknown[],
+  details: {} as Record<string, unknown>,
+  posts: [] as { path: string; body: unknown }[],
+  panelOpen: false,
   state: undefined as unknown as StrategyState,
   tasks: [] as unknown[],
   cards: [] as unknown[],
@@ -86,13 +89,27 @@ vi.mock('../../client/online-agent/context', () => ({
     open: fixture.openChat,
     resume: fixture.resume,
     activity: 0,
+    agentId: 'online-default',
   }),
 }));
-// The chat's records: the owner's questions asked from Insights in project 1.
+vi.mock('@nocobase/app-plugin-agents/client/chat', async (original) => ({
+  ...(await original<
+    typeof import('@nocobase/app-plugin-agents/client/chat')
+  >()),
+  useChatPanel: () => ({ open: fixture.panelOpen }),
+}));
+// The chat's records: the owner's questions asked from Insights in project 1, each conversation's turns, and what is
+// sent.
 vi.mock('../../client/online-agent/api', () => ({
-  useOnlineApi: () => async (path: string) => {
-    if (path !== 'threads?projectId=1') throw new Error(`Unexpected ${path}`);
-    return fixture.threads;
+  useOnlineApi: () => async (path: string, body?: unknown) => {
+    if (body !== undefined) {
+      fixture.posts.push({ path, body });
+      return {};
+    }
+    if (path === 'threads?projectId=1') return fixture.threads;
+    const id = /^conversations\/(.+)$/.exec(path)?.[1];
+    if (id && fixture.details[id]) return fixture.details[id];
+    throw new Error(`Unexpected ${path}`);
   },
 }));
 vi.mock('../../client/pages/playbook-snapshot', () => ({
@@ -226,6 +243,9 @@ beforeEach(() => {
   fixture.openChat.mockReset();
   fixture.resume.mockReset();
   fixture.threads = [];
+  fixture.details = {};
+  fixture.posts = [];
+  fixture.panelOpen = false;
   fixture.action.mockImplementation(
     (resource: string, action: string, options: { body?: object }) => {
       const body = (options?.body || {}) as Record<string, unknown>;
@@ -287,7 +307,7 @@ beforeEach(() => {
   );
 });
 function setup() {
-  return render(
+  const tree = () => (
     <MemoryRouter>
       <WorkspaceCacheProvider>
         <NavBadgeProvider>
@@ -295,9 +315,16 @@ function setup() {
           <StrategyPage />
         </NavBadgeProvider>
       </WorkspaceCacheProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+  const view = render(tree());
+  return { ...view, rerender: () => view.rerender(tree()) };
 }
+// Earlier days are folded above today until asked for.
+const showEarlier = async () =>
+  fireEvent.click(
+    await screen.findByRole('button', { name: /strategy.earlierAnalyses/ }),
+  );
 const decisionGroup = (n: number) =>
   screen.findByRole('group', { name: `strategy.decideCount:${n}` });
 const decisions = () =>
@@ -520,6 +547,7 @@ it('earlier days fold into one line each, with where every opportunity went', as
   });
   setup();
   await decisionGroup(7);
+  await showEarlier();
   const days = screen
     .getAllByRole('region')
     .filter(
@@ -543,93 +571,240 @@ it('earlier days fold into one line each, with where every opportunity went', as
   expect(within(day).getByText('Docs traffic dropped')).toBeTruthy();
 });
 
-it('Ask AI opens the chat with the analysis day named', async () => {
-  setup();
-  await decisionGroup(7);
-  fireEvent.click(
-    screen.getByRole('button', { name: /strategy.askPlaceholder/ }),
-  );
-  expect(fixture.openChat).toHaveBeenCalledWith({
-    draft: expect.stringMatching(/^strategy.askDraft:10\/21/),
-    projectId: '1',
-    subject: { kind: 'insights', day: '2026-10-21' },
-  });
-});
-
-const thread = (id: string, subject: object, extra: object = {}) => ({
+const run = (id: string, input: string, output: string, at: string) => ({
   id,
-  subject: { kind: 'insights', ...subject },
-  question: `question ${id}`,
-  answer: `**answer** of ${id}, see [Search](/seo-opportunities)`,
+  input,
+  output,
   status: 'completed',
-  turns: 1,
-  updatedAt: '2026-10-21T10:12:00Z',
+  createdAt: at,
+  agentName: 'Online Agent',
+  events: [
+    { type: 'toolCall', id: `${id}-1`, name: 'daily_analysis', args: {} },
+    { type: 'toolCall', id: `${id}-2`, name: 'project_data', args: {} },
+  ],
+});
+const thread = (id: string, day: string, extra: object = {}) => ({
+  id,
+  subject: { kind: 'insights', day },
+  question: `question ${id}`,
+  answer: `answer ${id}`,
+  status: 'completed',
+  turns: 2,
+  updatedAt: `${day}T10:12:00Z`,
   ...extra,
 });
 
-it('an opportunity line asks AI about it, and the questions asked stay under the line and the day', async () => {
-  fixture.threads = [
-    thread('t-b', { day: '2026-10-21', opportunityId: 'b' }, { turns: 3 }),
-    thread('t-day', { day: '2026-10-21' }),
-    thread(
-      't-running',
-      { day: '2026-10-21' },
-      { status: 'running', answer: '' },
-    ),
-    thread('t-old', { day: '2026-10-18' }),
-  ];
+it('today’s conversation follows the analysis, a quoted opportunity above its question', async () => {
+  fixture.threads = [thread('t-day', '2026-10-21')];
+  fixture.details['t-day'] = {
+    conversation: { id: 't-day', revision: 4 },
+    runs: [
+      run(
+        'r1',
+        'Which page fell most?',
+        '**smartsheet** fell out of the top 100',
+        '2026-10-21T10:00:00Z',
+      ),
+      run(
+        'r2',
+        '[O-5 Opportunity b](/opportunities?item=b)\nHow long until it shows?',
+        'One to three weeks.',
+        '2026-10-21T10:05:00Z',
+      ),
+    ],
+  };
+  setup();
+  await decisionGroup(7);
+  const conversation = await waitFor(() => {
+    const found = document.querySelector(
+      '[data-day-conversation="2026-10-21"]',
+    );
+    expect(found).toBeTruthy();
+    return found as HTMLElement;
+  });
+  const turns = conversation.querySelectorAll('[data-turn]');
+  expect(turns).toHaveLength(2);
+  expect(turns[0].textContent).toContain('Which page fell most?');
+  expect(within(turns[0] as HTMLElement).getByText('smartsheet')).toBeTruthy();
+  // The quote shows as a line above the question, not as raw Markdown.
+  expect(turns[1].textContent).toContain('O-5 Opportunity b');
+  expect(turns[1].textContent).not.toContain('](');
+  // The data the answer read is folded.
+  const tools = within(turns[1] as HTMLElement).getByRole('button', {
+    name: /strategy.toolsUsed:2/,
+  });
+  expect(
+    within(turns[1] as HTMLElement).queryByText('strategy.toolDailyAnalysis'),
+  ).toBeNull();
+  fireEvent.click(tools);
+  expect(
+    within(turns[1] as HTMLElement).getByText('strategy.toolDailyAnalysis'),
+  ).toBeTruthy();
+  // No questions under the opportunity lines any more.
+  const b = screen.getByRole('listitem', { name: 'Opportunity b' });
+  expect(within(b).queryByText(/How long/)).toBeNull();
+  // The conversation folds to one line, keeping the day's analysis in view.
+  const fold = within(conversation).getByRole('button', {
+    name: /strategy.conversationTurns:2/,
+  });
+  expect(fold.getAttribute('aria-expanded')).toBe('true');
+  fireEvent.click(fold);
+  expect(conversation.querySelectorAll('[data-turn]')).toHaveLength(0);
+  fireEvent.click(fold);
+  expect(conversation.querySelectorAll('[data-turn]')).toHaveLength(2);
+});
+
+it('Ask AI on a line quotes it in the input; sending starts or continues the day’s conversation', async () => {
   setup();
   await decisionGroup(7);
   const b = screen.getByRole('listitem', { name: 'Opportunity b' });
-  expect(await within(b).findByText('question t-b')).toBeTruthy();
-  // The preview is plain text; Show all renders the answer.
-  expect(within(b).getByText('answer of t-b, see Search')).toBeTruthy();
-  expect(within(b).getByText(/strategy.threadTurns:3/)).toBeTruthy();
-  fireEvent.click(
-    within(b).getByRole('button', { name: 'strategy.expandAnswer' }),
-  );
-  expect(within(b).getByRole('link', { name: 'Search' })).toBeTruthy();
-  fireEvent.click(
-    within(b).getByRole('button', { name: 'strategy.continueAsking' }),
-  );
-  expect(fixture.resume).toHaveBeenCalledWith('t-b');
-  // Asked about the day as a whole: shown after the day's message, one still being answered.
-  const day = screen.getByText('question t-day').closest('[data-thread-id]')!;
-  expect(day.textContent).toContain('answer of t-day');
+  fireEvent.click(within(b).getByRole('button', { name: 'strategy.askAi' }));
+  const input = screen.getByRole('textbox', { name: 'strategy.composerLabel' });
   expect(
-    screen.getByText('question t-running').closest('[data-thread-id]')!
-      .textContent,
-  ).toContain('strategy.threadAnswering');
-  // Asking about a line opens a new conversation about that opportunity.
-  fireEvent.click(
-    within(b).getAllByRole('button', { name: 'strategy.askAi' })[0],
+    screen.getByRole('button', { name: 'strategy.removeReference' }),
+  ).toBeTruthy();
+  fireEvent.change(input, { target: { value: 'Why this one?' } });
+  fireEvent.keyDown(input, { key: 'Enter' });
+  await waitFor(() => expect(fixture.posts).toHaveLength(1));
+  expect(fixture.posts[0]).toEqual({
+    path: 'conversations',
+    body: {
+      requestId: expect.any(String),
+      agentId: 'online-default',
+      projectId: '1',
+      subject: { kind: 'insights', day: '2026-10-21' },
+      text: expect.stringMatching(
+        /^\[Opportunity b\]\([^)]*\/opportunities\?item=b\)\nWhy this one\?$/,
+      ),
+    },
+  });
+  // The quote is cleared after sending.
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('button', { name: 'strategy.removeReference' }),
+    ).toBeNull(),
   );
-  expect(fixture.openChat).toHaveBeenCalledWith({
-    draft: 'strategy.askAboutOpportunity:Opportunity b',
-    projectId: '1',
-    subject: { kind: 'insights', day: '2026-10-21', opportunityId: 'b' },
+  expect(fixture.openChat).not.toHaveBeenCalled();
+});
+
+it('a follow-up joins the day’s existing conversation at its revision', async () => {
+  fixture.threads = [thread('t-day', '2026-10-21')];
+  fixture.details['t-day'] = {
+    conversation: { id: 't-day', revision: 4 },
+    runs: [run('r1', 'First', 'Answer', '2026-10-21T10:00:00Z')],
+  };
+  setup();
+  const input = await screen.findByRole('textbox', {
+    name: 'strategy.composerLabel',
+  });
+  fireEvent.change(input, { target: { value: 'And then?' } });
+  fireEvent.click(screen.getByRole('button', { name: 'strategy.send' }));
+  await waitFor(() => expect(fixture.posts).toHaveLength(1));
+  expect(fixture.posts[0]).toEqual({
+    path: 'conversations/t-day/messages',
+    body: { requestId: expect.any(String), revision: 4, text: 'And then?' },
   });
 });
 
-it('an earlier day counts its questions and shows them when opened, even with nothing raised that day', async () => {
-  fixture.threads = [thread('t-old', { day: '2026-10-18' })];
+it('with the side panel open the conversation moves there and the page gives it room', async () => {
+  fixture.threads = [thread('t-day', '2026-10-21')];
+  fixture.details['t-day'] = {
+    conversation: { id: 't-day', revision: 4 },
+    runs: [run('r1', 'First', 'Answer', '2026-10-21T10:00:00Z')],
+  };
+  fixture.areas = [
+    {
+      id: 'site',
+      title: 'Site',
+      items: [
+        {
+          key: 'a',
+          text: '54 pages not updated',
+          values: [],
+          source: 'site',
+          to: '/website',
+          tone: 'amber',
+        },
+      ],
+    },
+  ];
+  const view = setup();
+  await waitFor(() =>
+    expect(document.querySelector('[data-day-conversation]')).toBeTruthy(),
+  );
+  fixture.panelOpen = true;
+  view.rerender();
+  // Opening the panel continues the day's conversation there.
+  await waitFor(() => expect(fixture.resume).toHaveBeenCalledWith('t-day', ''));
+  expect(document.querySelector('[data-day-conversation]')).toBeNull();
+  expect(
+    screen.queryByRole('textbox', { name: 'strategy.composerLabel' }),
+  ).toBeNull();
+  fireEvent.click(
+    screen.getByRole('button', { name: /strategy.conversationInPanel/ }),
+  );
+  expect(fixture.resume).toHaveBeenCalledTimes(2);
+  // The current situation folds to one line under the day's date.
+  expect(screen.queryByText('54 pages not updated')).toBeNull();
+  fireEvent.click(
+    screen.getByRole('button', { name: /strategy.situationAttention:1/ }),
+  );
+  expect(await screen.findByText('54 pages not updated')).toBeTruthy();
+  // Ask AI on a line now quotes it into the panel's conversation.
+  const b = screen.getByRole('listitem', { name: 'Opportunity b' });
+  fireEvent.click(within(b).getByRole('button', { name: 'strategy.askAi' }));
+  expect(fixture.resume).toHaveBeenLastCalledWith(
+    't-day',
+    expect.stringMatching(
+      /^\[Opportunity b\]\([^)]*\/opportunities\?item=b\)\n$/,
+    ),
+  );
+});
+
+it('earlier days sit above today, folded, and show their conversation when opened', async () => {
+  fixture.threads = [thread('t-old', '2026-10-18', { turns: 1 })];
+  fixture.details['t-old'] = {
+    conversation: { id: 't-old', revision: 1 },
+    runs: [
+      run('r-old', 'question t-old', 'answer t-old', '2026-10-18T10:00:00Z'),
+    ],
+  };
   setup();
   await decisionGroup(7);
-  const old = await waitFor(() => {
-    const found = screen
-      .getAllByRole('region')
-      .find(
-        (r) =>
-          r.firstElementChild?.tagName === 'H3' &&
-          r.getAttribute('aria-label') !== 'strategy.analysisFeed' &&
-          r.textContent?.includes('strategy.dayThreads:1'),
-      );
-    expect(found).toBeTruthy();
-    return found!;
+  // Nothing of the earlier days shows until asked for, and the button sits above today.
+  const earlier = await screen.findByRole('button', {
+    name: /strategy.earlierAnalyses:1/,
   });
-  expect(within(old).queryByText('question t-old')).toBeNull();
-  fireEvent.click(within(old).getByRole('button', { expanded: false }));
-  expect(within(old).getByText('question t-old')).toBeTruthy();
+  const feed = screen.getByRole('region', { name: 'strategy.analysisFeed' });
+  expect(
+    earlier.compareDocumentPosition(
+      within(feed).getByRole('group', { name: 'strategy.decideCount:7' }),
+    ) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(screen.queryByText(/strategy.dayThreads/)).toBeNull();
+  fireEvent.click(earlier);
+  const days = screen
+    .getAllByRole('region')
+    .filter(
+      (r) =>
+        r.firstElementChild?.tagName === 'H3' &&
+        r.getAttribute('aria-label') !== 'strategy.analysisFeed',
+    );
+  // 10/18: a watch ended and a question was asked (e, raised 10/19, still waits and so stands in today's message).
+  expect(days).toHaveLength(1);
+  expect(days[0].textContent).toContain('strategy.dayThreads:1');
+  fireEvent.click(within(days[0]).getByRole('button', { expanded: false }));
+  expect(await within(days[0]).findByText('question t-old')).toBeTruthy();
+  // They fold again from above them or from just above today.
+  const hide = screen.getAllByRole('button', {
+    name: /strategy.collapseEarlier/,
+  });
+  expect(hide).toHaveLength(2);
+  fireEvent.click(hide[1]);
+  expect(screen.queryByText(/strategy.dayThreads/)).toBeNull();
+  expect(
+    screen.getByRole('button', { name: /strategy.earlierAnalyses:1/ }),
+  ).toBeTruthy();
 });
 
 it('the current situation beside the day shows what needs attention and folds the rest', async () => {

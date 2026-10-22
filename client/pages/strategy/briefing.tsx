@@ -1,12 +1,11 @@
 import { $t, $tj, $legacyText, getCurrentLocale } from '#i18n';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { ChevronDown, MessageSquare } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '#lib/utils';
 import { Tag, type Tone } from '#components/reach/tag';
 import { ActorAvatar, AiMark } from '#components/reach/actor';
 import { Button } from '#components/ui/button';
-import { useOptionalOnlineChat } from '../../online-agent/context';
 import { healthText, loadHealth, type HealthItem } from '../data-health';
 import { WAITING_TASKS_URL } from '../task-waiting';
 import type { Work } from '../task-execution-types';
@@ -16,11 +15,11 @@ import { citedSignals, oppNo, taskNo, type Row } from './board';
 import { dayOf, type Day, type Feed, type Line, type Standing } from './feed';
 import { handOffLabel } from './hand-off';
 import {
-  AskAboutOpportunity,
-  DayThreads,
-  OpportunityThreads,
-  threadCount,
-  useThreads,
+  DayConversation,
+  InPanelNote,
+  QuoteOpportunity,
+  questionCount,
+  useInsightChat,
 } from './threads';
 import { recentlyEnded } from './watch';
 import type { InsightBatch, StrategyState, WatchRecord } from './model';
@@ -307,10 +306,9 @@ function DecidedLine({ row, st }: Line) {
           <No row={row} />
           {row.card.title}
         </Link>
-        <AskAboutOpportunity row={row} />
+        <QuoteOpportunity row={row} />
         <StatusTag row={row} st={st} />
       </div>
-      <OpportunityThreads opportunityId={row.card.id} />
     </li>
   );
 }
@@ -345,7 +343,7 @@ function Decisions({
         </div>
       )}
       <ul className='divide-y divide-border/70'>
-        {shown.map(({ row: r, st }, i) => {
+        {shown.map(({ row: r, st }) => {
           if (st.state !== 'pending')
             return <DecidedLine key={r.card.id} row={r} st={st} />;
           const c = lead(r);
@@ -366,10 +364,10 @@ function Decisions({
                   <No row={r} />
                   {r.card.title}
                 </Link>
-                <AskAboutOpportunity row={r} />
+                <QuoteOpportunity row={r} />
                 <Button
                   size='xs'
-                  variant={i === 0 ? 'default' : 'outline'}
+                  variant='outline'
                   disabled={busy}
                   onClick={() => onGive(r)}
                 >
@@ -384,7 +382,6 @@ function Decisions({
                   {$t('common.ignore')}
                 </Button>
               </div>
-              <OpportunityThreads opportunityId={r.card.id} />
             </li>
           );
         })}
@@ -539,6 +536,7 @@ export function Today({
   generating,
   projectId,
   tasks,
+  situation,
   ...decide
 }: {
   state: StrategyState;
@@ -548,8 +546,11 @@ export function Today({
   generating: boolean;
   projectId: number;
   tasks: ReactNode;
+  /** Under the day's date: the current situation folded to a line while the side panel is open. */
+  situation?: ReactNode;
 } & Decide) {
-  const [now] = useState(() => new Date());
+  const [now] = useState(() => new Date()),
+    docked = useInsightChat()?.docked;
   const batch = state.insights,
     watching = Object.values(state.watch || {}).filter((w) => !w.ended).length;
   return (
@@ -557,6 +558,7 @@ export function Today({
       <DayDivider
         label={dayLabel(dayOf(batch?.generatedAt) || localDay(now), now)}
       />
+      {situation}
       <AgentMessage
         meta={
           <>
@@ -585,7 +587,11 @@ export function Today({
         {tasks}
         <HealthNote projectId={projectId} />
       </AgentMessage>
-      <DayThreads day={dayOf(batch?.generatedAt)} />
+      {docked ? (
+        <InPanelNote />
+      ) : (
+        <DayConversation day={dayOf(batch?.generatedAt)} />
+      )}
     </>
   );
 }
@@ -613,7 +619,7 @@ function StatusTag({ row, st }: { row: Row; st: Standing }) {
 /** An earlier day, folded to one line: what was suggested and where each went; opens to the list. */
 function PastDay({ day, rows, now }: { day: Day; rows: Row[]; now: Date }) {
   const [open, setOpen] = useState(false),
-    asked = threadCount(useThreads()?.threads || [], day.day);
+    asked = questionCount(useInsightChat()?.threads || [], day.day);
   return (
     <section
       aria-label={dayLabel(day.day, now)}
@@ -664,7 +670,7 @@ function PastDay({ day, rows, now }: { day: Day; rows: Row[]; now: Date }) {
               {day.ended.map((w) => (
                 <Ended key={w.key} w={w} rows={rows} />
               ))}
-              <DayThreads day={day.day} />
+              <DayConversation day={day.day} />
             </>
           )}
         </div>
@@ -672,7 +678,36 @@ function PastDay({ day, rows, now }: { day: Day; rows: Row[]; now: Date }) {
     </section>
   );
 }
-/** The days before the latest analysis, newest first, a week at a time. */
+/** The current situation folded to one line under the day's date, opening in place (while the side panel is open). */
+export function FoldedSituation({
+  count,
+  children,
+}: {
+  count: number;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className='flex flex-col gap-2'>
+      <button
+        type='button'
+        aria-expanded={open}
+        className='nr-link inline-flex items-center gap-0.5 self-end text-xs'
+        onClick={() => setOpen((o) => !o)}
+      >
+        {count
+          ? $t('strategy.situationAttention', { 0: count })
+          : $t('strategy.currentSituation')}
+        <Chevron open={open} />
+      </button>
+      {open && children}
+    </div>
+  );
+}
+/**
+ * The days before the latest analysis, above today as in a conversation (2026-10-22 user decision): folded by default to
+ * one line, then a week at a time, the oldest shown at the top so the page reads down to today and its conversation.
+ */
 export function History({
   days: feedDays,
   today,
@@ -682,9 +717,9 @@ export function History({
   today: string;
   rows: Row[];
 }) {
-  const [limit, setLimit] = useState(7),
+  const [shown, setShown] = useState(0),
     [now] = useState(() => new Date()),
-    threads = useThreads()?.threads || [];
+    threads = useInsightChat()?.threads || [];
   // A day whose analysis raised nothing but was asked about still shows, for its questions.
   const known = new Set(feedDays.map((d) => d.day)),
     asked = [...new Set(threads.map((t) => t.subject.day))].filter(
@@ -695,52 +730,41 @@ export function History({
       ...asked.map((day): Day => ({ day, items: [], ended: [] })),
     ].sort((a, b) => b.day.localeCompare(a.day));
   if (!days.length) return null;
-  return (
-    <>
-      {days.slice(0, limit).map((d) => (
-        <PastDay key={d.day} day={d} rows={rows} now={now} />
-      ))}
-      {days.length > limit && (
-        <button
-          type='button'
-          className='nr-link inline-flex items-center gap-0.5 self-center text-xs'
-          onClick={() => setLimit((n) => n + 7)}
-        >
-          {$t('strategy.earlierDays')}
-          <Chevron open={false} />
-        </button>
-      )}
-    </>
-  );
-}
-
-/** Ask AI: the chat opens on a new conversation about the day's analysis, which Insights then shows under that day. */
-export function AskBar({ projectId, day }: { projectId: number; day: string }) {
-  const chat = useOptionalOnlineChat();
-  if (!chat) return null;
-  const date = day
-    ? new Date(`${day}T00:00:00`).toLocaleDateString(getCurrentLocale(), {
-        month: 'numeric',
-        day: 'numeric',
-      })
-    : '';
-  return (
+  const hide = (
     <button
       type='button'
-      className='sticky bottom-3 z-10 flex w-full items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-left text-sm text-muted-foreground shadow-sm transition-colors hover:border-ring'
-      onClick={() =>
-        chat.open({
-          draft: date ? $t('strategy.askDraft', { 0: date }) : '',
-          projectId: String(projectId),
-          subject: day ? { kind: 'insights', day } : null,
-        })
-      }
+      className='nr-link inline-flex items-center gap-0.5 text-xs'
+      onClick={() => setShown(0)}
     >
-      <MessageSquare className='size-4 shrink-0' aria-hidden='true' />
-      <span className='min-w-0 flex-1 truncate'>
-        {$t('strategy.askPlaceholder')}
-      </span>
-      <span className='nr-link text-xs'>{$t('strategy.askAi')}</span>
+      {$t('strategy.collapseEarlier')}
+      <ChevronDown className='size-3.5' aria-hidden='true' />
     </button>
+  );
+  return (
+    <>
+      <div className='flex items-center justify-center gap-3'>
+        {shown < days.length && (
+          <button
+            type='button'
+            className='nr-link inline-flex items-center gap-0.5 text-xs'
+            onClick={() => setShown((n) => n + 7)}
+          >
+            <ChevronUp className='size-3.5' aria-hidden='true' />
+            {shown
+              ? $t('strategy.earlierDays')
+              : $t('strategy.earlierAnalyses', { 0: days.length })}
+          </button>
+        )}
+        {shown > 0 && hide}
+      </div>
+      {days
+        .slice(0, shown)
+        .reverse()
+        .map((d) => (
+          <PastDay key={d.day} day={d} rows={rows} now={now} />
+        ))}
+      {/* Folding again from just above today, where the reader is after scrolling through them. */}
+      {shown > 0 && <div className='flex justify-center'>{hide}</div>}
+    </>
   );
 }

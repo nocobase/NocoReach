@@ -3,6 +3,7 @@ import {
   useApiClient,
   useNavigationGuard,
 } from '@nocobase/app-client';
+import { confirmUnsavedLeave } from '#components/reach/confirm';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -116,10 +117,11 @@ function CreateTask({
   const [attempt, setAttempt] = useState<ManualTaskInput>();
   const pickerRef = useRef<HTMLInputElement>(null);
   const dirty = form.formState.isDirty || entries.length > 0;
-  useNavigationGuard(() => {
+  // Leaving with unsaved input asks in the application's own dialog, not the browser's (UI review 2026-10-22).
+  useNavigationGuard(async () => {
     if (savedRef.current || allowLeaveRef.current) return true;
     if (submittingRef.current) return false;
-    return !dirty || window.confirm($t('reachData.unsavedChangesLeaveAnyway'));
+    return !dirty || (await confirmUnsavedLeave());
   });
   useEffect(() => {
     if (isSaved || (!dirty && !busy)) return;

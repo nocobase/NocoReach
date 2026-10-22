@@ -1,37 +1,81 @@
-/* eslint-disable react-refresh/only-export-components -- the threads context and its hook live with their views */
+/* eslint-disable react-refresh/only-export-components -- the conversation context and its hook live with their views */
 import { $t, getCurrentLocale } from '#i18n';
 import {
   createContext,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
-import { MessageCircle } from 'lucide-react';
+import {
+  ArrowUp,
+  ChevronDown,
+  CornerDownRight,
+  MessageCircle,
+  X,
+} from 'lucide-react';
+import { resolveAppBase } from '@nocobase/app-client';
+import { useChatPanel } from '@nocobase/app-plugin-agents/client/chat';
+import { cn } from '#lib/utils';
 import { ActorAvatar } from '#components/reach/actor';
 import { Button } from '#components/ui/button';
 import { MarkdownView } from '#components/markdown-view';
 import { useOptionalOnlineChat } from '../../online-agent/context';
-import { useOnlineApi } from '../../online-agent/api';
+import { useOnlineApi, type ConversationDetail } from '../../online-agent/api';
+import { OnlineError } from '../../online-agent/controls';
+import { parseQuote } from '../../online-agent/quote';
 import { useFreshData } from '../workspace-cache';
-import type { OnlineThread } from '../../../shared/online-agent.js';
+import {
+  onlineRunActive,
+  type OnlineRun,
+  type OnlineThread,
+} from '../../../shared/online-agent.js';
 import { oppNo, type Row } from './board';
 
-// Questions asked from Insights stay with the day and the opportunity they were about (2026-10-21 user decision): the
-// owner's own conversations only, read from the chat's records; Continue asking reopens the same conversation.
+// One conversation a day on Insights (2026-10-22 user decision, after the questions under each opportunity and in the
+// side panel read as scattered): what is asked from Insights joins the day's conversation, shown under the day's
+// analysis with its own input. When the side panel opens, the same conversation moves there and the page keeps one line
+// pointing to it, so there is only ever one place to type. Only the owner's own conversations are read.
 
-type Threads = {
+type Reference = { id: string; label: string };
+type InsightChat = {
   threads: OnlineThread[];
-  /** The analysis day new questions are about. */
+  /** The latest analysis day: new questions join its conversation. */
   day: string;
   projectId: number;
+  /** The side panel is open, so the day's conversation is there. */
+  docked: boolean;
+  reference: Reference | null;
+  quote: (row: Row) => void;
+  clearReference: () => void;
+  /** Read the day's conversation again (after a message is sent). */
+  version: number;
+  sent: () => void;
+  openInPanel: () => void;
 };
-const Context = createContext<Threads | null>(null);
-export const useThreads = () => useContext(Context);
+const Context = createContext<InsightChat | null>(null);
+export const useInsightChat = () => useContext(Context);
 
-/** Reads the owner's Insights conversations for the project, again after each message and while one is answered. */
-export function ThreadsProvider({
+const appBase = () => {
+  try {
+    return resolveAppBase();
+  } catch {
+    return '/';
+  }
+};
+// A quoted opportunity travels in the message as a link on its own first line, which the agent can follow and the page
+// shows as a quote above the question.
+const referenceText = (r: Reference) =>
+  `[${r.label}](${appBase()}opportunities?item=${encodeURIComponent(r.id)})\n`;
+const byTime = (a: OnlineThread, b: OnlineThread) =>
+  a.updatedAt.localeCompare(b.updatedAt);
+export const threadsOf = (threads: OnlineThread[], day: string) =>
+  threads.filter((t) => t.subject.day === day).sort(byTime);
+
+/** Reads the owner's Insights conversations for the project, and moves the day's one into the side panel when it opens. */
+export function InsightChatProvider({
   projectId,
   day,
   children,
@@ -41,16 +85,24 @@ export function ThreadsProvider({
   children: ReactNode;
 }) {
   const api = useOnlineApi(),
-    chat = useOptionalOnlineChat();
+    chat = useOptionalOnlineChat(),
+    panel = useChatPanel();
   const view = useFreshData(`insight-threads:${projectId}`, () =>
     api<OnlineThread[]>(`threads?projectId=${projectId}`),
   );
   const { reload } = view;
-  const activity = chat?.activity ?? 0;
+  const [sends, setSends] = useState(0),
+    [reference, setReference] = useState<Reference | null>(null);
+  const threads = useMemo(() => view.data || [], [view.data]),
+    current = threadsOf(threads, day).at(-1),
+    docked = panel.open;
+  // Messages sent here or in the side panel: the day's conversation is read again.
+  const activity = chat?.activity ?? 0,
+    version = sends + activity;
   useEffect(() => {
     if (activity) reload();
   }, [activity, reload]);
-  const answering = (view.data || []).some(
+  const answering = threads.some(
     (t) => t.status === 'queued' || t.status === 'running',
   );
   useEffect(() => {
@@ -58,105 +110,66 @@ export function ThreadsProvider({
     const timer = setTimeout(reload, 3000);
     return () => clearTimeout(timer);
   }, [answering, view.data, reload]);
-  const value = useMemo(
-    () => ({ threads: view.data || [], day, projectId }),
-    [view.data, day, projectId],
-  );
+  const openInPanel = (draft = '') => {
+    if (!chat || !day) return;
+    if (current) chat.resume(current.id, draft);
+    else
+      chat.open({
+        draft,
+        projectId: String(projectId),
+        subject: { kind: 'insights', day },
+      });
+  };
+  // Opening the side panel here moves the day's conversation into it.
+  const wasDockedRef = useRef(docked),
+    openRef = useRef(openInPanel);
+  useEffect(() => {
+    openRef.current = openInPanel;
+  });
+  useEffect(() => {
+    if (docked && !wasDockedRef.current) openRef.current();
+    wasDockedRef.current = docked;
+  }, [docked]);
+  const value: InsightChat = {
+    threads,
+    day,
+    projectId,
+    docked,
+    reference,
+    quote: (row) => {
+      const r = {
+        id: row.card.id,
+        label: [oppNo(row.card), row.card.title].filter(Boolean).join(' '),
+      };
+      if (docked) openInPanel(referenceText(r));
+      else setReference(r);
+    },
+    clearReference: () => setReference(null),
+    version,
+    sent: () => {
+      reload();
+      setSends((n) => n + 1);
+    },
+    openInPanel: () => openInPanel(),
+  };
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 
-// A preview of an answer as plain text: no Markdown marks, links as their words.
-const plain = (markdown: string) =>
-  markdown
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/[*_`#>|]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-const answering = (t: OnlineThread) =>
-  t.status === 'queued' || t.status === 'running';
-function Answer({ thread, lines }: { thread: OnlineThread; lines: 2 | 3 }) {
-  const chat = useOptionalOnlineChat(),
-    [open, setOpen] = useState(false);
-  const text = answering(thread)
-    ? $t('strategy.threadAnswering')
-    : thread.answer
-      ? plain(thread.answer)
-      : $t('strategy.threadNoAnswer');
+/** Ask AI about an opportunity: it is quoted in the day's conversation, wherever that conversation is. */
+export function QuoteOpportunity({ row }: { row: Row }) {
+  const chat = useInsightChat();
+  if (!chat?.day) return null;
+  const label = $t('strategy.askAi');
   return (
-    <>
-      {open && thread.answer ? (
-        <MarkdownView content={thread.answer} />
-      ) : (
-        <p className={lines === 2 ? 'line-clamp-2' : 'line-clamp-3'}>{text}</p>
-      )}
-      <p className='mt-1 flex flex-wrap items-center gap-x-1.5 text-xs'>
-        {thread.answer && !answering(thread) && (
-          <>
-            <button
-              type='button'
-              className='nr-link'
-              aria-expanded={open}
-              onClick={() => setOpen((o) => !o)}
-            >
-              {open ? $t('common.collapse') : $t('strategy.expandAnswer')}
-            </button>
-            <span className='text-muted-foreground'>·</span>
-          </>
-        )}
-        <button
-          type='button'
-          className='nr-link'
-          onClick={() => chat?.resume(thread.id)}
-        >
-          {$t('strategy.continueAsking')}
-        </button>
-        {thread.turns > 1 && (
-          <span className='text-muted-foreground'>
-            · {$t('strategy.threadTurns', { 0: thread.turns })}
-          </span>
-        )}
-      </p>
-    </>
-  );
-}
-
-/** The questions asked about one opportunity, under its line: the question and the start of the latest answer. */
-export function OpportunityThreads({
-  opportunityId,
-}: {
-  opportunityId: string;
-}) {
-  const threads = (useThreads()?.threads || []).filter(
-    (t) => t.subject.opportunityId === opportunityId,
-  );
-  if (!threads.length) return null;
-  return (
-    <ul className='mb-1.5 ml-1.5 flex flex-col gap-1.5'>
-      {threads.map((t) => (
-        <li
-          key={t.id}
-          data-thread-id={t.id}
-          className='rounded-lg bg-muted/50 px-3 py-1.5 text-xs leading-relaxed'
-        >
-          <p>
-            <span className='text-muted-foreground'>
-              {$t('strategy.threadYou')}
-            </span>
-            {t.question}
-          </p>
-          <div className='flex gap-1'>
-            <span className='shrink-0 text-muted-foreground'>
-              {$t('strategy.threadAi')}
-            </span>
-            <div className='min-w-0 flex-1'>
-              <Answer thread={t} lines={2} />
-            </div>
-          </div>
-        </li>
-      ))}
-    </ul>
+    <Button
+      size='icon-xs'
+      variant='outline'
+      aria-label={label}
+      title={label}
+      onClick={() => chat.quote(row)}
+    >
+      <MessageCircle aria-hidden='true' />
+    </Button>
   );
 }
 
@@ -165,69 +178,280 @@ const clock = (iso: string) =>
     hour: '2-digit',
     minute: '2-digit',
   });
-/** The questions asked about a day's analysis as a whole, as the conversation that followed it. */
-export function DayThreads({ day }: { day: string }) {
-  const threads = (useThreads()?.threads || [])
-    .filter((t) => t.subject.day === day && !t.subject.opportunityId)
-    .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
-  if (!threads.length) return null;
+const toolName = (name: string) =>
+  name === 'project_data'
+    ? $t('onlineAgent.readProject')
+    : name === 'read_page'
+      ? $t('onlineAgent.readPage')
+      : name === 'daily_analysis'
+        ? $t('strategy.toolDailyAnalysis')
+        : name === 'task_list' || name === 'task_get'
+          ? $t('strategy.toolTasks')
+          : name;
+/** One question and its answer: the quote above the question, the answer as Markdown, the data it read folded. */
+function Turn({ run }: { run: OnlineRun }) {
+  const [open, setOpen] = useState(false),
+    { quote, question } = parseQuote(run.input),
+    tools = run.events.flatMap((e) => (e.type === 'toolCall' ? [e] : [])),
+    active = onlineRunActive(run);
   return (
-    <>
-      {threads.map((t) => (
-        <div key={t.id} data-thread-id={t.id} className='flex flex-col gap-2'>
-          <div className='flex justify-end'>
-            <p className='max-w-[70%] rounded-xl rounded-tr-sm bg-primary/10 px-3 py-2 text-sm'>
-              {t.question}
+    <div className='flex flex-col gap-2' data-turn={run.id}>
+      <div className='flex justify-end'>
+        <div className='max-w-[75%] rounded-xl rounded-tr-sm bg-primary/10 px-3.5 py-2 text-sm'>
+          {quote && (
+            <p className='mb-0.5 flex items-center gap-1 text-xs text-muted-foreground'>
+              <CornerDownRight className='size-3 shrink-0' aria-hidden='true' />
+              {quote}
             </p>
-          </div>
-          <div className='flex gap-2.5'>
-            <ActorAvatar type='agent' size='default' />
-            <div className='flex min-w-0 flex-1 flex-col gap-1.5'>
-              <p className='text-xs text-muted-foreground'>
-                {$t('strategy.threadAiAnswer')} · {clock(t.updatedAt)}
+          )}
+          <p className='whitespace-pre-wrap wrap-anywhere'>{question}</p>
+        </div>
+      </div>
+      <div className='flex gap-2.5'>
+        <ActorAvatar type='agent' size='default' />
+        <div className='flex min-w-0 flex-1 flex-col gap-2'>
+          <p className='flex h-8 items-center gap-1.5 text-xs text-muted-foreground'>
+            {run.agentName} · {clock(run.createdAt)}
+            {tools.length > 0 && (
+              <button
+                type='button'
+                aria-expanded={open}
+                className='inline-flex items-center gap-0.5 hover:text-foreground'
+                onClick={() => setOpen((o) => !o)}
+              >
+                · {$t('strategy.toolsUsed', { 0: tools.length })}
+                <ChevronDown
+                  className={cn('size-3.5', open && 'rotate-180')}
+                  aria-hidden='true'
+                />
+              </button>
+            )}
+          </p>
+          {open && (
+            <ul className='flex flex-wrap gap-x-3 text-xs text-muted-foreground'>
+              {tools.map((t) => (
+                <li key={t.id}>{toolName(t.name)}</li>
+              ))}
+            </ul>
+          )}
+          <div className='w-full rounded-xl rounded-tl-sm border bg-card px-3.5 py-2.5 text-sm leading-relaxed text-card-foreground'>
+            {run.output ? (
+              <MarkdownView content={run.output} />
+            ) : (
+              <p className='text-muted-foreground'>
+                {active
+                  ? $t('strategy.threadAnswering')
+                  : $t('strategy.threadNoAnswer')}
               </p>
-              <div className='rounded-xl rounded-tl-sm border bg-card px-3.5 py-2.5 text-sm leading-relaxed text-card-foreground'>
-                <Answer thread={t} lines={3} />
-              </div>
-            </div>
+            )}
           </div>
         </div>
-      ))}
-    </>
+      </div>
+    </div>
   );
 }
 
-/** How many questions were asked from a day's analysis, whichever they were about. */
-export const threadCount = (threads: OnlineThread[], day: string) =>
-  threads.filter((t) => t.subject.day === day).length;
-
-/** Ask AI about one opportunity: the chat opens on a new conversation about it, linked to the day's analysis. */
-export function AskAboutOpportunity({ row }: { row: Row }) {
-  const chat = useOptionalOnlineChat(),
-    threads = useThreads();
-  if (!chat || !threads?.day) return null;
-  const label = $t('strategy.askAi');
+/** A day's conversation, every turn in order; read again while an answer is being written. */
+export function DayConversation({ day }: { day: string }) {
+  const chat = useInsightChat();
+  // Outside the provider (no chat mounted) there is nothing to read, and no chat client to read it with.
+  return chat ? <DayTurns chat={chat} day={day} /> : null;
+}
+function DayTurns({ chat, day }: { chat: InsightChat; day: string }) {
+  const api = useOnlineApi();
+  const key = threadsOf(chat.threads, day)
+    .map((t) => t.id)
+    .join(',');
+  const [state, setState] = useState<{
+    key: string;
+    details: ConversationDetail[];
+  }>();
+  const version = chat.version;
+  useEffect(() => {
+    if (!key) return;
+    let live = true,
+      timer: ReturnType<typeof setTimeout> | undefined;
+    const load = async () => {
+      const list = await Promise.all(
+        key
+          .split(',')
+          .map((id) =>
+            api<ConversationDetail>(`conversations/${id}`).catch(() => null),
+          ),
+      );
+      if (!live) return;
+      const details = list.filter((d): d is ConversationDetail => !!d);
+      setState({ key, details });
+      if (details.some((d) => d.runs.some(onlineRunActive)))
+        timer = setTimeout(() => void load(), 1500);
+    };
+    void load();
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [key, version, api]);
+  const runs = (state?.key === key ? state.details : [])
+    .flatMap((d) => d.runs)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  // Folds to one line so the day's analysis stays in view (2026-10-22 user feedback); a new question opens it again.
+  const [folded, setFolded] = useState(false),
+    endRef = useRef<HTMLDivElement>(null),
+    countRef = useRef<number | null>(null);
+  useEffect(() => {
+    const previous = countRef.current;
+    countRef.current = runs.length;
+    if (previous === null || runs.length <= previous) return;
+    setFolded(false);
+    endRef.current?.scrollIntoView?.({ block: 'end', behavior: 'smooth' });
+  }, [runs.length]);
+  if (!runs.length) return null;
   return (
-    <Button
-      size='icon-xs'
-      variant='outline'
-      aria-label={label}
-      title={label}
-      onClick={() =>
-        chat.open({
-          draft: $t('strategy.askAboutOpportunity', {
-            0: [oppNo(row.card), row.card.title].filter(Boolean).join(' '),
-          }),
-          projectId: String(threads.projectId),
-          subject: {
-            kind: 'insights',
-            day: threads.day,
-            opportunityId: row.card.id,
-          },
-        })
-      }
+    <div className='flex flex-col gap-4' data-day-conversation={day}>
+      <button
+        type='button'
+        aria-expanded={!folded}
+        className='flex items-center gap-3 text-xs text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border hover:text-foreground'
+        onClick={() => setFolded((f) => !f)}
+      >
+        <span className='inline-flex items-center gap-0.5'>
+          {$t('strategy.conversationTurns', { 0: runs.length })}
+          <ChevronDown
+            className={cn('size-3.5', !folded && 'rotate-180')}
+            aria-hidden='true'
+          />
+        </span>
+      </button>
+      {!folded && runs.map((run) => <Turn key={run.id} run={run} />)}
+      <div ref={endRef} />
+    </div>
+  );
+}
+
+/** How many questions a day's conversation holds. */
+export const questionCount = (threads: OnlineThread[], day: string) =>
+  threadsOf(threads, day).reduce((n, t) => n + t.turns, 0);
+
+/** The input for the day's conversation: the quoted opportunity above it, Enter to send. */
+export function Composer() {
+  const chat = useInsightChat(),
+    online = useOptionalOnlineChat();
+  if (!chat || !online || !chat.day || chat.docked) return null;
+  return <ComposerInput chat={chat} agentId={online.agentId} />;
+}
+function ComposerInput({
+  chat,
+  agentId,
+}: {
+  chat: InsightChat;
+  agentId: string;
+}) {
+  const api = useOnlineApi();
+  const [text, setText] = useState(''),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState<unknown>(),
+    inputRef = useRef<HTMLTextAreaElement>(null);
+  const reference = chat.reference;
+  useEffect(() => {
+    if (reference) inputRef.current?.focus();
+  }, [reference]);
+  const current = threadsOf(chat.threads, chat.day).at(-1),
+    answering = current?.status === 'queued' || current?.status === 'running';
+  const send = async () => {
+    const question = text.trim();
+    if (!question || busy || answering) return;
+    const body = (reference ? referenceText(reference) : '') + question;
+    setBusy(true);
+    setError(undefined);
+    try {
+      if (current) {
+        const detail = await api<ConversationDetail>(
+          `conversations/${current.id}`,
+        );
+        await api(`conversations/${current.id}/messages`, {
+          requestId: crypto.randomUUID(),
+          revision: detail.conversation.revision,
+          text: body,
+        });
+      } else
+        await api('conversations', {
+          requestId: crypto.randomUUID(),
+          agentId,
+          projectId: String(chat.projectId),
+          subject: { kind: 'insights', day: chat.day },
+          text: body,
+        });
+      setText('');
+      chat.clearReference();
+      chat.sent();
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className='sticky bottom-3 z-10 flex flex-col gap-2 rounded-xl border bg-background p-2 shadow-sm focus-within:border-ring'>
+      {reference && (
+        <span className='inline-flex w-fit max-w-full items-center gap-1 rounded-full bg-primary/10 py-0.5 pr-1 pl-2 text-xs text-primary'>
+          <CornerDownRight className='size-3 shrink-0' aria-hidden='true' />
+          <span className='truncate'>{reference.label}</span>
+          <button
+            type='button'
+            aria-label={$t('strategy.removeReference')}
+            className='rounded-full p-0.5 hover:bg-primary/10'
+            onClick={chat.clearReference}
+          >
+            <X className='size-3' aria-hidden='true' />
+          </button>
+        </span>
+      )}
+      <div className='flex items-end gap-2'>
+        <textarea
+          ref={inputRef}
+          aria-label={$t('strategy.composerLabel')}
+          placeholder={$t('strategy.composerPlaceholder')}
+          rows={1}
+          maxLength={20000}
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            if (
+              event.key === 'Enter' &&
+              !event.shiftKey &&
+              !event.nativeEvent.isComposing
+            ) {
+              event.preventDefault();
+              void send();
+            }
+          }}
+          className='field-sizing-content max-h-40 flex-1 resize-none !min-h-9 !rounded-none !border-0 !bg-transparent !px-1.5 !py-1.5 !shadow-none outline-none'
+        />
+        <Button
+          size='icon-sm'
+          aria-label={$t('strategy.send')}
+          disabled={!text.trim() || busy || answering}
+          onClick={() => void send()}
+        >
+          <ArrowUp aria-hidden='true' />
+        </Button>
+      </div>
+      {error !== undefined && <OnlineError error={error} />}
+    </div>
+  );
+}
+
+/** While the side panel is open, the page points to the day's conversation there. */
+export function InPanelNote() {
+  const chat = useInsightChat();
+  if (!chat?.docked || !chat.day) return null;
+  return (
+    <button
+      type='button'
+      className='nr-link self-center text-xs'
+      onClick={chat.openInPanel}
     >
-      <MessageCircle aria-hidden='true' />
-    </Button>
+      {$t('strategy.conversationInPanel')} ›
+    </button>
   );
 }
