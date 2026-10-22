@@ -24,9 +24,10 @@ import {useNavigate,useSearchParams} from 'react-router';
 import {useNavigationGuard,usePageBreadcrumb} from '@nocobase/app-client';
 import {Comparison} from './results/comparison.js';
 import {nocobaseClient as api,NocoReachHttpError} from "#lib/nocoreach-api";
-import {Lock,Archive,ArchiveRestore,Ban,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitMerge,Globe,Eye,Search,ExternalLink,Users,Square,Undo2,Loader2,MoreHorizontal,Code2,ChevronDown,ChevronRight,TriangleAlert,CircleCheck} from 'lucide-react';
+import {BookOpen,CirclePlay,Lock,Archive,ArchiveRestore,Ban,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitMerge,Globe,Eye,Search,ExternalLink,Users,Square,Undo2,Loader2,MoreHorizontal,Code2,ChevronDown,ChevronRight,TriangleAlert,CircleCheck} from 'lucide-react';
 import {ActorAvatar} from '#components/reach/actor';
 import {Tag} from '#components/reach/tag';
+import {InfoTip} from '#components/reach/info-tip';
 import {PageContainer} from '#components/reach/page';
 import {Reveal} from '#components/reach/reveal';
 import {Button} from '#components/ui/button';
@@ -353,14 +354,13 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   }
   const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(pr?.outOfScope?.length&&!scopeOk);
   return <StageCard icon={<Eye/>} title={pr?$t('taskDetail.pageChangeReady'):$t('taskDetail.madeChangeYourselfAfterConfirm')} at={out.createdAt}
-   actions={<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote},...(pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}><Rocket/>{$t(mockSettingsAvailable() ? 'taskDetail.simulatePublish' : 'taskDetail.publishLive')}</Button>{requestButton}</>}>
+   actions={<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote},...(pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}><Rocket/>{$t(mockSettingsAvailable() ? 'taskDetail.simulatePublish' : 'taskDetail.publishLive')}</Button>{requestButton}<InfoTip label={$t('taskDetail.aboutPublishing')}>{mockSettingsAvailable()?$t('taskDetail.simulatedReleaseDescription'):$t('taskDetail.publishHint')}</InfoTip></>}>
    {request(getStageExecutor().agent)}
    <LastFeedback w={w} stage={stage} out={out}/>
    <PageChange pr={pr} content={out.content}/>
    <ScopeConfirm pr={pr} ok={scopeOk} setOk={setScopeOk} busy={busy}/>
    <Checklist stage={stage} checked={checked} setChecked={setChecked} busy={busy}/>
    <Reveal label={$t('taskDetail.editReleaseNotes')} defaultOpen={relNote!==(pr?.release||'')}><label className="nr-field">{$t('taskDetail.releaseNotesGoPublishRecord')}<textarea aria-label={$t('taskDetail.releaseNotes')} rows={3} value={relNote} disabled={busy} placeholder={$t('taskDetail.oneTwoSentencesWhatChanged')} onChange={e=>{setRelNote(e.target.value);}}/></label></Reveal>
-   <p className="text-xs text-muted-foreground">{mockSettingsAvailable()?$t('taskDetail.simulatedReleaseDescription'):$t('taskDetail.publishHint')}</p>
   </StageCard>;
  }
  if(stage.kind==='release'){
@@ -441,7 +441,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
 function ClosedCard({w,update,busy}:{w:Work;update:Update;busy:boolean}){
  const pr=w.prClose,prLine=pr?{closing:$t('taskDetail.unpublishedClosing'),closed:$t('taskDetail.unpublishedClosed'),failed:$t('taskDetail.unpublishedCloseFailed')}[pr.state]:'';
  const at=w.cancelledAt||w.archivedAt;
- return <StageCard tone="closed" label={$t('common.closed')} icon={w.cancelledAt?<Ban/>:<Archive/>} title={$t('taskDetail.closedValue',{0:closedWhen(w)})} sub={`${at?$t('taskDetail.closedValueMessage',{0:when(at)}):''}${canReopen(w)?'':$t('taskDetail.taskStoppedHalfwayCannotContinue')}`}
+ return <StageCard tone="closed" label={$t('common.status')} icon={w.cancelledAt?<Ban/>:<Archive/>} title={$t('taskDetail.closedValue',{0:closedWhen(w)})} sub={`${at?$t('taskDetail.closedValueMessage',{0:when(at)}):''}${canReopen(w)?'':$t('taskDetail.taskStoppedHalfwayCannotContinue')}`}
   actions={canReopen(w)?<Button variant="outline" disabled={busy} onClick={()=>void update('unarchiveTask')}><ArchiveRestore/>{$t('common.reopen')}</Button>:undefined}>{prLine&&<p className="nr-td-text">{prLine}</p>}</StageCard>;
 }
 // After the task: the effect once a change is live, otherwise the accepted result itself.
@@ -478,7 +478,7 @@ function EffectRow({r,observeFrom}:{r:EffectResult;observeFrom?:string}){
  return <li data-c={r.conclusion}><b>{effectLine(r,observeFrom)}</b><button type="button" className="nr-link" onClick={()=>setOpen(v=>!v)}>{open?$t('common.collapse'):$t('taskDetail.seeNumbers')}</button>
   {open&&<div className="nr-td-effect-detail"><Comparison result={r} observeFrom={observeFrom}/>{(!r.coverage||!matchesObservation(r,observeFrom))&&<Reveal label={$t('results.legacy')}><p>{r.conclusion} · {r.change===null?'—':`${r.change*100}%`}</p><p className="nr-td-muted">{$tj('taskDetail.beforeGoingLiveAfter',{0:range(r.baseline),1:range(r.after)})}</p><table><tbody>{rows.map(([k,[b,a],u])=><tr key={k}><th>{k}</th><td>{b}{u}</td><td>→</td><td>{a}{u}</td></tr>)}</tbody></table></Reveal>}</div>}</li>;
 }
-const eventIcons:Record<string,ReactNode>={merged:<GitMerge/>,live:<Globe/>,notSeen:<AlertCircle/>,retryMerge:<RotateCcw/>,markMerged:<GitMerge/>,confirmLive:<Globe/>,waitLonger:<RotateCcw/>,startTask:<Play/>,runSucceeded:<FileText/>,approveStage:<Check/>,editStageOutput:<Pencil/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setAgent:<Bot/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<Play/>,revertRelease:<Undo2/>};
+const eventIcons:Record<string,ReactNode>={merged:<GitMerge/>,live:<Globe/>,notSeen:<AlertCircle/>,retryMerge:<RotateCcw/>,markMerged:<GitMerge/>,confirmLive:<Globe/>,waitLonger:<RotateCcw/>,startTask:<CirclePlay/>,runSucceeded:<FileText/>,approveStage:<Check/>,editStageOutput:<Pencil/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setAgent:<Bot/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<BookOpen/>,revertRelease:<Undo2/>};
 // Run bookkeeping that only matters when something goes wrong; the stage card shows the current failure and
 // Technical details keeps every run.
 const QUIET=new Set(['runQueued','runFailed','flowWaiting']);
@@ -499,14 +499,14 @@ function ActivityCard({data,update,busy,members}:{data:Data;update:Update;busy:b
  async function send(){const d=await update('comment',{comment:text});if(d){clearText();}}
  return <section className="nr-td-section flex flex-col gap-3" aria-label={$t('common.activity')}><h2 className="text-base font-medium">{$t('common.activity')}</h2>
   {hidden>0&&<Button variant="link" size="sm" className="h-auto self-start p-0" onClick={()=>setAll(true)}>{$t('taskDetail.showEarlier',{0:hidden})}</Button>}
-  <ol className="nr-td-timeline">{shown.map(({e,t,i})=>{const who=t!.who===$t('common.you')?(e.actor&&people.get(e.actor))||$t('common.you'):t!.who;
+  <ol className="nr-td-timeline">{shown.map(({e,t,i})=>{const who=t!.who===$t('common.you')?(e.actor&&people.get(e.actor))||$t('common.member'):t!.who;
    if(e.action==='comment'||e.action==='requestStageChanges')return <li key={`${e.at}:${e.action}:${e.comment}`} className="nr-td-comment"><header><ActorAvatar type="user" name={who} size="xs"/><b>{who}</b>{e.action==='requestStageChanges'&&<Tag tone="violet">{$t('taskDetail.requestChanges')}</Tag>}<time>{when(e.at)}</time></header><p>{e.comment}</p></li>;
    const artifact=e.action==='runSucceeded'&&e.artifactId?artifacts.get(e.artifactId):undefined;
    const line=artifact?$t('taskDetail.deliveredVersion',{0:artifact.version,1:nameOf(artifact.stepId)}):plain[e.action]||t!.text;
    return <li key={`${e.at}:${e.action}:${e.runId||''}:${i}`} className="nr-td-event">{eventIcons[e.action]||<Play/>}<b>{e.action==='runSucceeded'?executor:who}</b><span>{line}</span>{artifact&&<Button size="sm" variant="ghost" className="h-6 px-2" onClick={()=>setView(artifact)}>{$t('common.view')}</Button>}<time>{when(e.at)}</time></li>;})}
    {!rows.length&&<li className="nr-td-muted">{$t('taskDetail.noActivityYet')}</li>}</ol>
   {view&&<DocReader open onClose={()=>setView(undefined)} title={`${nameOf(view.stepId)} · ${$t('taskDetail.versionNumber',{0:view.version})}`} meta={when(view.createdAt)} content={view.pr?'':view.content}>{view.pr&&<PageChange pr={view.pr} content={view.content}/>}</DocReader>}
-  {((!done&&!closed)||Boolean(text))&&<div className="nr-td-composer"><textarea id="nr-composer" aria-label={$t('taskDetail.noteExecutor')} rows={3} value={text} disabled={busy} readOnly={done||closed} placeholder={$t('taskDetail.leaveNoteNextRunReads',{0:executor})} onChange={e=>{setText(e.target.value);}}/>{!done&&!closed&&<div><Button size="sm" disabled={busy||!text.trim()} onClick={()=>void send()}>{$t('taskDetail.send')}</Button></div>}</div>}
+  {((!done&&!closed)||Boolean(text))&&<div className="nr-td-composer"><textarea id="nr-composer" aria-label={$t('taskDetail.noteExecutor')} rows={3} value={text} disabled={busy} readOnly={done||closed} placeholder={$t('taskDetail.leaveNoteNextRunReads',{0:executor})} onChange={e=>{setText(e.target.value);}}/>{!done&&!closed&&<div><Button size="sm" variant="outline" disabled={busy||!text.trim()} onClick={()=>void send()}>{$t('taskDetail.send')}</Button></div>}</div>}
  </section>;
 }
 function PageLinkEditor({data,projectId,taskId,busy,update}:{data:Data;projectId:number;taskId:string;busy:boolean;update:Update}){

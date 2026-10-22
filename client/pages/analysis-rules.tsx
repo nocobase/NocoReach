@@ -19,6 +19,7 @@ import { Input } from '#components/ui/input';
 import { Switch } from '#components/ui/switch';
 import { Textarea } from '#components/ui/textarea';
 import { useProject } from './reach-data';
+import { ruleUnitLabel } from './analysis-rules/labels';
 import { getSourceNames } from './strategy/board';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import {
@@ -569,7 +570,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                                   {p.value}
                                   {/* "2%" not "2 %"; word units such as days keep their space. */}
                                   {p.unit
-                                    ? `${p.unit === '%' ? '' : ' '}${$legacyText(p.unit)}`
+                                    ? `${p.unit === '%' ? '' : ' '}${ruleUnitLabel(p.unit, p.value)}`
                                     : ''}
                                 </span>
                               </span>

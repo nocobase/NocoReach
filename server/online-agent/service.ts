@@ -13,6 +13,8 @@ import {
   type OnlineEvent,
   type OnlineModel,
   type OnlineRun,
+  type OnlineSubject,
+  type OnlineThread,
 } from '../../shared/online-agent.js';
 import { OnlineAgentError, onlineErrorCode } from './errors.js';
 import { OnlineRecords } from './records.js';
@@ -21,7 +23,12 @@ import { executeChat, type ChatContext } from './executor.js';
 const now = () => new Date().toISOString();
 type MessageInput = { requestId: string; text: string } & (
   | { conversationId: string; revision: number }
-  | { agentId: string; projectId: string | null; model?: OnlineModel | null }
+  | {
+      agentId: string;
+      projectId: string | null;
+      model?: OnlineModel | null;
+      subject?: OnlineSubject | null;
+    }
 );
 
 /** Application-owned chat, with durable turns independent of the browser connection. */
@@ -117,6 +124,34 @@ export class OnlineAgentService {
       b.updatedAt.localeCompare(a.updatedAt),
     );
   }
+  /**
+   * The owner's conversations asked from Insights in one project, newest first: each with its first question, its
+   * latest answer (cut to a preview) and the state of its latest turn.
+   */
+  async threads(ownerId: string, projectId: string): Promise<OnlineThread[]> {
+    const threads: OnlineThread[] = [];
+    for (const conversation of await this.conversations(ownerId)) {
+      if (conversation.projectId !== projectId || !conversation.subject)
+        continue;
+      const runs = await this.conversationRuns(conversation),
+        latest = runs.at(-1);
+      if (!latest) continue;
+      threads.push({
+        id: conversation.id,
+        subject: conversation.subject,
+        question: runs[0].input.slice(0, 500),
+        answer: [...runs]
+          .reverse()
+          .find((r) => r.output)
+          ?.output.slice(0, 2000) ?? '',
+        status: latest.status,
+        turns: runs.length,
+        updatedAt: conversation.updatedAt,
+      });
+      if (threads.length >= 200) break;
+    }
+    return threads;
+  }
   async conversationRuns(
     conversation: OnlineConversation,
     context?: DatabaseConnection,
@@ -139,6 +174,7 @@ export class OnlineAgentService {
             input.projectId,
             input.model?.modelService ?? null,
             input.model?.model ?? null,
+            ...(input.subject ? [input.subject] : []),
           ];
     const requestHash = createHash('sha256')
       .update(JSON.stringify([ownerId, target, input.text]))
@@ -210,6 +246,9 @@ export class OnlineAgentService {
           id: run.conversationId,
           ownerId,
           projectId: run.projectId,
+          ...('subject' in input && input.subject
+            ? { subject: input.subject }
+            : {}),
           agentId: run.agentId,
           model,
           title: input.text.slice(0, 100),

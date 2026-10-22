@@ -12,7 +12,7 @@ import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
 import { RangePicker } from './range-picker';
 import { validRange, useRange } from './range-state';
-import { MetricTile, type Metric } from "./data-parts";
+import { MetricTile, metricGrid, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
 import { HandOffBar } from "./hand-off-bar";
 import { AllCheck, RowCheck, useTickedList } from "#components/reach/hand-off-slot";
@@ -44,12 +44,13 @@ export default function DataHackerNews() {
       {view?.connected ? (
         <>
           <p className="nr-footnote">{$tj('common.searchTermValue',{0:view.terms!.join("、")})}</p>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
+          <div className={metricGrid(view.kpis!.length)}>{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
           
           {view.series!.length ? (
             <Card className="gap-3 px-4">
               <h2 className="text-sm font-semibold">{$t('dataHackernews.dailyMentions')}</h2>
-              <div className="nr-chart-box">
+              {/* No mention in the period: say so instead of drawing an empty axis (guideline T5.4). */}
+              {!view.series!.some((p) => p.value) ? <p className="text-sm text-muted-foreground">{$t('dataHackernews.noMentionsInPeriod')}</p> : <div className="nr-chart-box">
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={view.series} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -59,7 +60,7 @@ export default function DataHackerNews() {
                     <Bar isAnimationActive={false} dataKey="value" name={$t('dataHackernews.mentions')} fill="var(--chart-3)" />
                   </BarChart>
                 </ResponsiveContainer>
-              </div>
+              </div>}
             </Card>
           ) : null}
           <div className="grid gap-4 xl:grid-cols-2">

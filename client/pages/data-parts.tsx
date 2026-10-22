@@ -15,3 +15,13 @@ export function MetricTile({m}:{m:Metric}){
  const delta=m.lowerIsBetter?(m.change!==null&&m.previous!==null&&m.value!==null?{change:m.previous-m.value,better:m.previous>=m.value,points:true}:null):m.change!==null?{change:m.change,better:m.change>=0}:null;
  return <StatTile label={m.label} value={value} delta={delta} help={help(m.label)} hint={m.change===null&&!m.complete&&m.value!==null?$t('dataParts.incompleteData'):undefined}/>;
 }
+
+// Metric rows hold at most four tiles; two, three or five fill the row instead of leaving a gap (UI review A8).
+export const metricGrid = (count: number) =>
+  count <= 2
+    ? "grid grid-cols-2 gap-3"
+    : count === 3
+      ? "grid grid-cols-2 gap-3 lg:grid-cols-3"
+      : count === 5
+        ? "grid grid-cols-2 gap-3 lg:grid-cols-5"
+        : "grid grid-cols-2 gap-3 lg:grid-cols-4";

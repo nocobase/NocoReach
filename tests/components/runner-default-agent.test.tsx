@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
-import RunnerAgents from '../../client/pages/agents/runner';
+import { LocalAgents as RunnerAgents } from '../../client/pages/agents/runner';
 const state = vi.hoisted(() => ({
   action: vi.fn(),
   canSave: true,
@@ -21,9 +21,6 @@ vi.mock('../../client/hooks/use-business-access', () => ({
       projectId === state.project.id,
   }),
 }));
-vi.mock('../../client/pages/agents/index', () => ({
-  AgentsPageLayout: ({ children }: { children: React.ReactNode }) => children,
-}));
 vi.mock('@nocobase/app-plugin-agents/client/kit', () => ({
   RunnerAgentsSection: () => <p>Runner list</p>,
 }));
@@ -40,7 +37,11 @@ beforeEach(() => {
 
 test('saves and clears the project default using its revision', async () => {
   const user = userEvent.setup();
-  render(<RunnerAgents />);
+  const saved = vi.fn();
+  render(<RunnerAgents onSaved={saved} />);
+  expect(
+    screen.getByRole('heading', { name: '本地 Agent' }),
+  ).toBeInTheDocument();
   expect(await screen.findByText(/Example.*未单独指定/)).toBeInTheDocument();
   const select = await screen.findByRole('combobox', {
     name: '项目默认 Agent',
@@ -49,6 +50,7 @@ test('saves and clears the project default using its revision', async () => {
   await user.click(select);
   await user.click(await screen.findByRole('option', { name: 'Codex' }));
   await screen.findByText('默认 Agent 已保存');
+  expect(saved).toHaveBeenCalledTimes(1);
   expect(state.action).toHaveBeenLastCalledWith('nrAgent', 'saveDefault', {
     method: 'POST',
     body: { projectId: '1', revision: 2, agentId: 'codex' },
