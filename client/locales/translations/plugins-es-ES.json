@@ -95,7 +95,7 @@
       "emptyTitle": "Aún no hay agentes",
       "emptyDescription": "Conecta un Runner con una herramienta de programación que tenga la sesión iniciada: cada uno de sus modelos aparecerá aquí como un agente que puedes activar.",
       "noneInFilter": "No hay agentes aquí.",
-      "howToAdd": "Para añadir un agente, instala una herramienta de programación en un Runner e inicia sesión para acceder a un modelo que puedas usar. Cuando el Runner lo comunique, aparecerá aquí y podrás activarlo describiendo qué se le da bien. Si un agente solo está disponible en Runner personales, solo podrá trabajar en las incidencias iniciadas por sus propietarios.",
+      "howToAdd": "Para añadir un agente local, instala una herramienta de programación en un entorno de ejecución e inicia sesión. Aparecerá en «Nuevos agentes detectados»; escribe en qué es bueno y habilítalo.",
       "goodAtMissing": "Aún sin describir",
       "columns": {
         "agent": "Agente",
@@ -521,7 +521,7 @@
         }
       },
       "title": "Runners",
-      "description": "Ordenadores o servidores con Claude Code o Codex. NocoReach les pasa tareas, y los agentes locales que hay en ellos editan el código del sitio web, escriben artículos y abren pull requests, así que deben estar encendidos y en línea, con la herramienta de programación con la sesión iniciada.",
+      "description": "Ordenadores o servidores con Claude Code o Codex en los que los agentes locales realizan las tareas; deben estar encendidos y conectados, con la herramienta de programación con sesión iniciada.",
       "add": "Añadir Runner",
       "loadFailed": "No se han podido cargar los Runners",
       "emptyTitle": "Aún no hay Runners conectados",
@@ -757,7 +757,7 @@
     },
     "models": {
       "title": "Servicios de modelos",
-      "description": "El análisis diario y el panel de chat usan los modelos de chat de aquí, que el proveedor factura por llamada; los modelos de embeddings y de reordenación se usan en las búsquedas. Los agentes locales no usan estos modelos: usan la herramienta de programación con la sesión iniciada en su entorno de ejecución."
+      "description": "El análisis diario y el panel de chat usan estos modelos; el proveedor factura cada llamada."
     },
     "defaultModel": {
       "title": "Modelo de chat predeterminado",
@@ -855,9 +855,9 @@
         "dimensions": "Tamaño del vector de {{model}}",
         "dimensionsPlaceholder": "Predeterminado",
         "counts": {
-          "chat": "{{count}} de chat",
-          "embedding": "{{count}} de vectorización",
-          "rerank": "{{count}} de reordenación"
+          "chat": "Modelos de chat: {{count}}",
+          "embedding": "Modelos de vectorización: {{count}}",
+          "rerank": "Modelos de reordenación: {{count}}"
         }
       }
     },

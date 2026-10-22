@@ -11,6 +11,13 @@
 - The chips listing terms are one size and shape: Trends' compared products, AI search's topics and the keywords offered on Trends › Watched keywords.
 - Playbook and Skill details open like every other detail panel: the title and its actions in a header row beside the close button, the content below without a card around it. The playbook panel drew its content in a bordered card under a separate close button; the Skill panel left an empty band above the title.
 - A row with one action shows it as a text button: Opportunities › Handled's Restore (was an icon) and Trends › Watched keywords' Remove (was a ⋯ menu with one item). The actions column of API keys has no visible name, as Members' has none.
+## Unreleased — Agent: one Settings per row, tidy tabs
+
+- Who does the work reads as a table: column headings, Cloud models and Local agents as light group rows with their explanation in an ⓘ, and what each work does under its name.
+- Every row has one Settings button for administrators, a dialog that changes what the row uses. Daily analysis › Settings chooses the model the analysis runs on (the default chat model, which no page let anyone change since the Agents plugin upgrade of 2026-10-16); Chat panel › Settings is the chat agent dialog, whose default model now names the model; Tasks › Settings chooses the project default and says beside each agent whether it is online, not signed in, out of quota or offline. While a row needs attention, the button is the fix instead.
+- The tabs follow setup order: Model services, Runtimes, Local agents, Usage. Each opens with one sentence and its button instead of a second page heading, at the same size in every tab. Local agents holds the agent list only; the project default moved to Tasks › Settings.
+- Shorter wording: the Model services and Runtimes descriptions are one sentence, the list's how-to is one sentence, and model counts read "2 chat models" instead of "2 chat".
+
 ## Unreleased — Playbook Skills matched by name
 
 - Skills › Used in playbooks, the playbook steps and the step Skill picker now find a step's Skill by id, then by name, as a task does. A Skill imported under a built-in name (with its own id) shows where the built-in playbooks use it, and saving a step no longer drops those references.

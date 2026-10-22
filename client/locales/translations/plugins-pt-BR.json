@@ -95,7 +95,7 @@
       "emptyTitle": "Ainda não há agentes",
       "emptyDescription": "Conecte um Runner com uma ferramenta de programação autenticada: cada modelo dela aparecerá aqui como um agente que você pode ativar.",
       "noneInFilter": "Nenhum agente aqui.",
-      "howToAdd": "Para adicionar um agente, instale uma ferramenta de programação em um Runner e autentique-se para acessar um modelo que você tem permissão para usar. Assim que o Runner informar o modelo, ele aparecerá aqui. Para ativá-lo, descreva seus pontos fortes. Um agente disponível apenas em Runners pessoais só trabalha em demandas iniciadas pelos proprietários desses Runners.",
+      "howToAdd": "Para adicionar um agente local, instale uma ferramenta de programação em um ambiente de execução e entre na conta. Ele aparece em “Novas descobertas”; escreva em que ele é bom para ativá-lo.",
       "goodAtMissing": "Ainda não informado",
       "columns": {
         "agent": "Agente",
@@ -521,7 +521,7 @@
         }
       },
       "title": "Ambientes de execução",
-      "description": "Computadores ou servidores com Claude Code ou Codex. O NocoReach entrega tarefas a eles, e os agentes locais ali editam o código do site, escrevem artigos e abrem pull requests; por isso, precisam ficar ligados e online, com a ferramenta de programação conectada.",
+      "description": "Computadores ou servidores com Claude Code ou Codex onde os agentes locais executam as tarefas; precisam ficar ligados e online, com a ferramenta de programação conectada.",
       "add": "Adicionar ambiente de execução",
       "loadFailed": "Não foi possível carregar os ambientes de execução",
       "emptyTitle": "Nenhum ambiente de execução conectado ainda",
@@ -757,7 +757,7 @@
     },
     "models": {
       "title": "Serviços de modelos",
-      "description": "A análise diária e o painel de conversa usam os modelos de chat daqui, cobrados por chamada pelo provedor; os modelos de embedding e de reclassificação são usados na pesquisa. Os agentes locais não usam esses modelos: eles usam a ferramenta de programação conectada no seu ambiente de execução."
+      "description": "A análise diária e o painel de conversa usam estes modelos; o provedor cobra por chamada."
     },
     "defaultModel": {
       "title": "Modelo de conversa padrão",
@@ -855,9 +855,9 @@
         "dimensions": "Tamanho do vetor de {{model}}",
         "dimensionsPlaceholder": "Padrão",
         "counts": {
-          "chat": "{{count}} de conversa",
-          "embedding": "{{count}} de vetorização",
-          "rerank": "{{count}} de reordenação"
+          "chat": "Modelos de conversa: {{count}}",
+          "embedding": "Modelos de vetorização: {{count}}",
+          "rerank": "Modelos de reordenação: {{count}}"
         }
       }
     },

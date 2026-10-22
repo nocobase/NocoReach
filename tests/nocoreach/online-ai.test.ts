@@ -64,3 +64,82 @@ test('a default lookup outage keeps the caller error instead of claiming configu
   );
   expect(f.generate).not.toHaveBeenCalled();
 });
+
+// Agent › Who does the work › Daily analysis › Settings (2026-10-22): the plugin's default chat model, which its own
+// pages no longer let anyone change, set through NocoReach by administrators only.
+function registered(setDefaultChat = vi.fn().mockResolvedValue({})) {
+  const actions: Record<
+    string,
+    (ctx: unknown, next: () => Promise<void>) => Promise<void>
+  > = {};
+  const p = {
+    app: {
+      resourceManager: {
+        define: ({ actions: a }: { actions: typeof actions }) =>
+          Object.assign(actions, a),
+      },
+      acl: { allow: vi.fn() },
+    },
+    agents: {
+      models: {
+        services: {
+          setDefaultChat,
+          defaults: vi.fn().mockResolvedValue({
+            effectiveChat: { modelService: 'service', model: 'pro' },
+          }),
+          list: async () => [],
+        },
+      },
+    },
+    analysis: { state: async () => ({ runs: [] }) },
+  };
+  new OnlineAI(p as never).register();
+  const call = async (values: Record<string, unknown>, roles: string[]) => {
+    const ctx = {
+      auth: { user: { id: 7 } },
+      state: { currentRoles: roles },
+      action: {
+        resourceName: 'nrOnlineAI',
+        actionName: 'setModel',
+        params: { values },
+      },
+      body: undefined as unknown,
+      throw: (status: number, message: string) => {
+        throw Object.assign(new Error(message), { status });
+      },
+    };
+    await actions.setModel!(ctx, async () => undefined);
+    return ctx.body as { model: string | null };
+  };
+  return { call, setDefaultChat, allow: p.app.acl.allow };
+}
+
+test('administrators set the daily analysis model through the plugin default', async () => {
+  const r = registered();
+  const body = await r.call({ modelService: 'service', model: 'pro' }, [
+    'root',
+  ]);
+  expect(r.setDefaultChat).toHaveBeenCalledWith(
+    { modelService: 'service', model: 'pro' },
+    '7',
+  );
+  expect(body.model).toBe('pro');
+  expect(r.allow).toHaveBeenCalledWith(
+    'nrOnlineAI',
+    ['status', 'setModel'],
+    'loggedIn',
+  );
+});
+
+test('setting the daily analysis model needs a model and an administrator', async () => {
+  const r = registered();
+  await expect(
+    r.call({ modelService: 'service' }, ['root']),
+  ).rejects.toMatchObject({ status: 400 });
+  await expect(
+    r.call({ modelService: 'service', model: 'pro' }, ['member']),
+  ).rejects.toMatchObject({
+    status: 403,
+  });
+  expect(r.setDefaultChat).not.toHaveBeenCalled();
+});

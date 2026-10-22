@@ -10,20 +10,10 @@ import AgentsPage from '../../client/pages/agents/index';
 import type { AgentSettingsContext } from '../../client/online-agent/edit';
 
 // The overview reads the project and the Agents plugin; its own test covers it.
-const seen = vi.hoisted(() => ({
-  refresh: [] as number[],
-  localAgentsTo: [] as (string | undefined)[],
-}));
+const seen = vi.hoisted(() => ({ refresh: [] as number[] }));
 vi.mock('../../client/pages/agents/roles', () => ({
-  AgentRoles: ({
-    refresh,
-    localAgentsTo,
-  }: {
-    refresh: number;
-    localAgentsTo?: string;
-  }) => {
+  AgentRoles: ({ refresh }: { refresh: number }) => {
     seen.refresh.push(refresh);
-    seen.localAgentsTo.push(localAgentsTo);
     return <p>Who does the work</p>;
   },
 }));
@@ -42,7 +32,6 @@ beforeEach(() => {
   Object.assign(access, { can: true, isPending: false });
   denied.clear();
   seen.refresh = [];
-  seen.localAgentsTo = [];
 });
 
 function ChatDialog() {
@@ -65,7 +54,18 @@ function mount(path = '/agents?view=saved') {
         Component: AgentsPage,
         children: [
           { path: 'runner', element: <p>Local agents content</p> },
-          { path: 'runtimes', element: <h1>Runtimes page</h1> },
+          {
+            path: 'runtimes',
+            element: (
+              <section>
+                <header>
+                  <div>
+                    <h1>Runtimes page</h1>
+                  </div>
+                </header>
+              </section>
+            ),
+          },
           { path: 'models', element: <h1>Models page</h1> },
           { path: 'usage', element: <h1>Usage page</h1> },
           { path: 'chat/new', Component: ChatDialog },
@@ -84,15 +84,22 @@ const tabNames = () =>
     .filter((link) => link.closest('nav'))
     .map((link) => link.textContent);
 
-test('shows who does the work above four tabs and opens Local agents first', async () => {
+test('shows who does the work above four tabs in setup order and opens the first', async () => {
   const router = mount();
   expect(screen.getByText('Who does the work')).toBeInTheDocument();
-  expect(await screen.findByText('Local agents content')).toBeInTheDocument();
-  expect(router.state.location.pathname).toBe('/agents/runner');
+  expect(await screen.findByText('Models page')).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe('/agents/models');
   expect(router.state.location.search).toBe('?view=saved');
   expect(router.state.historyAction).toBe('REPLACE');
-  expect(tabNames()).toEqual(['本地 Agent', '运行环境', '模型服务', '用量']);
-  expect(seen.localAgentsTo.at(-1)).toBe('/agents/runner');
+  expect(tabNames()).toEqual(['模型服务', '运行环境', '本地 Agent', '用量']);
+});
+
+test('the tab bar names each tab, so a tab page heading is for screen readers only', async () => {
+  mount('/agents/runtimes');
+  const heading = await screen.findByRole('heading', { name: 'Runtimes page' });
+  expect(heading.closest('div[class*="header_h1"]')?.className).toContain(
+    'sr-only',
+  );
 });
 
 test('switches tabs in the URL and keeps the usage filters to the usage tab', async () => {
@@ -124,10 +131,9 @@ test('shows only the tabs the reader may open, and opens the first of them', asy
   denied.add('agents');
   denied.add('usage');
   const router = mount();
-  expect(await screen.findByText('Runtimes page')).toBeInTheDocument();
-  expect(router.state.location.pathname).toBe('/agents/runtimes');
-  expect(tabNames()).toEqual(['运行环境', '模型服务']);
-  expect(seen.localAgentsTo.at(-1)).toBeUndefined();
+  expect(await screen.findByText('Models page')).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe('/agents/models');
+  expect(tabNames()).toEqual(['模型服务', '运行环境']);
 });
 
 test('does not redirect before the permissions resolve', () => {
