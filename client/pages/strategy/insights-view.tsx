@@ -7,7 +7,9 @@ import {BellIcon,ArrowRightIcon,BotIcon,ChevronRightIcon,SparklesIcon} from 'luc
 import {AiMark} from '#components/reach/actor';
 import {Button} from '#components/ui/button';
 import {Section} from '#components/reach/page';
+import {SourceLogo} from '#components/reach/source-logo';
 import {Tag,type Tone} from '#components/reach/tag';
+import {cn} from '#lib/utils';
 import {getSourceNames,type Row} from './board';
 import type {StrategyState,Signal,WatchRecord} from './model';
 import {type Work} from '../task-execution-types';
@@ -45,11 +47,17 @@ export function chipOf(s:Signal):{tone:Tone;text:string}|null{
 export const titleOf=(s:Signal)=>$legacyText(s.title.replace(/(下降|减少)\s*-(\d)/,'$1 $2').replace(/(上升|增加)\s*\+(\d)/,'$1 $2'));
 const pct=(n:number)=>`${Math.abs(n)>=0.095?Math.round(Math.abs(n)*100):(Math.abs(n)*100).toFixed(1)}%`;
 type Point={value:number|null};
+// A metric's daily series in its change's colour, with a light wash under the line and a dot on the latest day
+// (2026-10-22 visual polish). The dot is an element over the stretched drawing so it stays round.
 export function Sparkline({points,change}:{points:Point[];change?:number|null}):ReactElement|null{
  const v=points.map(p=>p.value).filter((x):x is number=>x!==null);if(v.length<2)return null;
  const min=Math.min(...v),max=Math.max(...v),span=max-min||1,step=100/(points.length-1);
- const d=points.map((p,i)=>p.value===null?null:`${(i*step).toFixed(1)},${(18-((p.value-min)/span)*16).toFixed(1)}`).filter(Boolean).join(' ');
- return <svg viewBox="0 0 100 20" preserveAspectRatio="none" className="h-5 w-full" aria-hidden="true"><polyline points={d} fill="none" stroke={change==null||change===0?'var(--muted-foreground)':change>0?'var(--nr-ink-green)':'var(--nr-ink-red)'} strokeWidth="1.2" vectorEffect="non-scaling-stroke"/></svg>;
+ const xy=points.flatMap((p,i)=>p.value===null?[]:[[i*step,18-((p.value-min)/span)*16] as const]),d=xy.map(([x,y])=>`${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+ const colour=change==null||change===0?'var(--muted-foreground)':change>0?'var(--nr-ink-green)':'var(--nr-ink-red)',[lastX,lastY]=xy[xy.length-1];
+ return <span className="relative block h-6 w-full" aria-hidden="true">
+  <svg viewBox="0 0 100 20" preserveAspectRatio="none" className="block size-full"><polygon points={`${xy[0][0].toFixed(1)},20 ${d} ${lastX.toFixed(1)},20`} fill={colour} fillOpacity="0.08"/><polyline points={d} fill="none" stroke={colour} strokeWidth="1.2" vectorEffect="non-scaling-stroke"/></svg>
+  <span className="absolute size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full" style={{left:`${lastX}%`,top:`${lastY*5}%`,background:colour}}/>
+ </span>;
 }
 // The page's numbers: search, visits and key events, then GitHub stars, downloads, forum topics, Hacker News and Reddit
 // when connected, each with its daily series and its data page. A metric without a value is left out by the caller.
@@ -71,6 +79,10 @@ export const percent=pct;
 export type AreaRow={key:string;title:string;meta?:string;url?:string|null;tag?:{tone:Tone;text:string}};
 export type AreaItem={key:string;text:string;values:string[];source:string;detail?:string;to:string;tone?:Tone;rows?:AreaRow[];total?:number;compare?:{label:string;now:string|number;before:string|number}[];handOff?:{playbookId:string;title:string}};
 export type Area={id:string;title:string;items:AreaItem[]};
+// Lines name their source in words, so its logo goes by the line's key (server: nrInsights:summary); every AI search line
+// is AI search's. Site audit sits under Website, as in Settings › Analysis rules.
+const LINE_SOURCE:Record<string,string>={striking:'gsc',ctr:'gsc',rank:'rank',trends:'trends',competitors:'competitors',saved:'keywords',audit:'site',stale:'site',forum:'discourse',discord:'discord',slack:'slack',x:'x'};
+const lineSource=(i:{area:string;key:string}):string|undefined=>i.area==='ai'?'ai-search':LINE_SOURCE[i.key];
 const sentence=(i:AreaItem)=>$legacyText(i.text).replace(/\{(\d+)\}/g,(_,k:string)=>i.values[Number(k)]??'');
 export function AreaList({areas,projectId,quiet=false}:{areas?:Area[];projectId:number;quiet?:boolean}):ReactElement|null{
  const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),all=(areas||[]).flatMap(a=>a.items.map(i=>({...i,area:a.id,attention:i.tone==='amber'||i.tone==='red'})));if(!all.length)return null;
@@ -79,14 +91,18 @@ export function AreaList({areas,projectId,quiet=false}:{areas?:Area[];projectId:
  const go=(i:typeof items[number])=>{if(i.rows?.length||i.compare?.length)setOpenKey(`${i.area}:${i.key}`);else navigate(i.to);};
  const detail=open?<AttentionDetail key={openKey} item={open} projectId={projectId} onClose={()=>setOpenKey(undefined)}/>:null;
  // Quiet, beside the day's conversation on Insights (2026-10-21 user feedback: the column drew the eye from the
- // conversation): one plain line each, the lines to deal with first, where it comes from on hover; all of them, since
- // the column has the room (2026-10-22).
- if(quiet)return <div aria-label={$t('strategy.whereThingsStand')} className="flex flex-col"><ul>{items.map(i=><li key={`${i.area}:${i.key}`}>
-   <button type="button" onClick={()=>go(i)} title={[$legacyText(i.source),i.detail?$legacyText(i.detail):''].filter(Boolean).join(' · ')} className={`flex w-full items-start gap-2 py-1 text-left text-xs hover:underline ${i.attention?'text-foreground/80':'text-muted-foreground'}`} data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
-    <span className={`mt-1.5 size-1.5 shrink-0 rounded-full ${i.attention?'bg-nr-ink-amber':'bg-muted-foreground/40'}`} aria-hidden="true"/>
-    <span className="min-w-0 flex-1">{$legacyJsx(i.text,Object.fromEntries(i.values.map((v,k)=>[k,<span key={k} className="tabular-nums">{v}</span>])))}</span>
-   </button></li>)}</ul>
-   {detail}</div>;
+ // conversation): one plain line each, where it comes from on hover; all of them, since the column has the room
+ // (2026-10-22). Two small groups, Needs attention then Normal, each line's numbers in medium weight, coloured for the
+ // lines to deal with (a drop red, the rest amber); the numbers stay in their sentence, which reads wrong without them
+ // ("21 up, 18 down this week"). Each line leads with its source's logo, bare as inside a button; a line with no
+ // known source keeps the logo's room empty, so the sentences stay aligned.
+ if(quiet){const ink=(i:typeof items[number],v:string)=>!i.attention?'text-foreground':i.tone==='red'||v.startsWith('↓')?'text-nr-ink-red':'text-nr-ink-amber',logo=(i:typeof items[number])=>{const s=lineSource(i);return s?<SourceLogo source={s} size='xs' className='mt-px'/>:<span aria-hidden='true' className='size-3.5 shrink-0'/>;};
+  const group=(label:string,list:typeof items)=>list.length?<section aria-label={label} className='flex flex-col'><h3 className='pb-0.5 text-[0.6875rem] font-medium text-muted-foreground'>{label}</h3><ul>{list.map(i=><li key={`${i.area}:${i.key}`}>
+   <button type='button' onClick={()=>go(i)} title={[$legacyText(i.source),i.detail?$legacyText(i.detail):''].filter(Boolean).join(' · ')} className={cn('flex w-full items-start gap-2 py-1 text-left text-xs hover:underline',i.attention?'text-foreground/80':'text-muted-foreground')} data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
+    {logo(i)}<span className='min-w-0 flex-1'>{$legacyJsx(i.text,Object.fromEntries(i.values.map((v,k)=>[k,<span key={k} className={cn('font-medium tabular-nums',ink(i,v))}>{v}</span>])))}</span>
+   </button></li>)}</ul></section>:null;
+  return <div aria-label={$t('strategy.whereThingsStand')} className='flex flex-col gap-3'>{group($t('strategy.situationGroupAttention'),items.filter(i=>i.attention))}{group($t('strategy.situationGroupNormal'),items.filter(i=>!i.attention))}
+   {detail}</div>;}
  // Untitled: the block around it carries the heading and what it means.
  return <Section aria-label={$t('strategy.whereThingsStand')}><ul className="divide-y">{items.map(i=><li key={`${i.area}:${i.key}`}>
   <button type="button" onClick={()=>go(i)} title={i.detail?$legacyText(i.detail):undefined} className="flex w-full items-start gap-2.5 py-2 text-left hover:opacity-80" data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
