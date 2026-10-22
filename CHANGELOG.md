@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — AI team pages without side panels or fold-outs
+
+- Playbooks lists every playbook as a card by category across the full width; a card opens the playbook in a drawer to read or edit, instead of a list with a detail panel always beside it. A link to `?id=` opens that drawer, and nothing opens by default. Its category and Skill pickers use the shared drop-down.
+- Analysis rules shows rules by area as tabs (Search performance, Traffic and conversions, …), each source a heading with its rules shown, instead of fold-out source groups; the area with an open editor cannot be left until it is saved or cancelled. The last-analysis line leaves out "passed to the AI" when there is no count instead of showing a dash, and percentages read "2%".
+- Skills asks before discarding an edit with the app's own dialog instead of the browser's, and its drawer is as wide as the Playbooks drawer.
+- Sorted table headers use the text colour instead of the primary colour, as on tables that do not mark their sort; Project knowledge's summaries drop Markdown heading and emphasis marks.
+
 ## Unreleased — Opportunities, Tasks and Results, in plain words
 
 - Opportunities: nothing to review is a full-width empty state instead of a narrow box, and so is nothing being watched. Watching explains how watching works in an ⓘ beside the Change header instead of a grey paragraph, and a change's figure appears only in the Value column. In Handled, Restore is a row-end icon button that keeps every row the same height, and a handed-off opportunity slides in its detail here (with a link to its task) instead of leaving the page. Dates use the shared format.
