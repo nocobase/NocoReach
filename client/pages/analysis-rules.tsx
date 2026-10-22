@@ -377,8 +377,8 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
           />
           {canPropose ? (
             <Section
+              // No grey second line naming the scheme (2026-10-22 decision D5): My schemes above marks the one shown.
               title={$t('analysisRules.aiSectionTitle')}
-              description={view.schemeName || $t('analysisSchemes.default')}
             >
               <RulesAssistant
                 key={`${view.schemeId}:${manualRevision}`}
@@ -395,7 +395,6 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
           ) : null}
           <Section
             title={$t('analysisRules.rulesSectionTitle')}
-            description={view.schemeName || $t('analysisSchemes.default')}
             actions={
               canAddRule && view.schemes ? (
                 <AddRule

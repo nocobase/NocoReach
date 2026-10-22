@@ -6,6 +6,7 @@ import { formatCount, formatDate } from '#lib/format';
 import { cn } from '#lib/utils';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { Delta } from '#components/reach/delta';
+import { InfoTip } from '#components/reach/info-tip';
 import { effectLine, type EffectResult } from '../effect-model';
 import type { TaskData } from '../task-execution-types';
 
@@ -113,14 +114,24 @@ export function TaskNumbers({
   const [picked, setPicked] = useState<number>();
   const result =
     results.find((x) => x.day === picked) || results.at(-1) || undefined;
+  // Before the first checkpoint, when it comes is a note on the title (2026-10-22 decision D5), not a grey line.
+  const note = result
+    ? null
+    : w.observeFrom
+      ? $t('taskNumbers.wentLive', {
+          0: formatDate(w.observeFrom),
+          1: expected(w.observeFrom, 7),
+        })
+      : $t('taskNumbers.comparedLater');
   return (
     <section
       aria-label={$t('taskNumbers.title')}
       className={cn('flex flex-col gap-2', className)}
     >
       <div className='flex items-center gap-2'>
-        <h2 className='m-0 flex-1 text-sm font-medium'>
+        <h2 className='m-0 flex flex-1 items-center gap-1 text-sm font-medium'>
           {$t('taskNumbers.title')}
+          {note ? <InfoTip label={$t('common.info')}>{note}</InfoTip> : null}
         </h2>
         {result && (
           <DaySwitch
@@ -137,7 +148,6 @@ export function TaskNumbers({
         <Current
           projectId={projectId}
           taskId={taskId}
-          observeFrom={w.observeFrom}
           // Read again when the pages or going live change.
           refresh={[
             w.observeFrom,
@@ -262,16 +272,14 @@ function Compared({
   );
 }
 
-// Before day 7: each page's numbers over 28 days, and when the comparison comes.
+// Before day 7: each page's numbers over 28 days; when the comparison comes is the title's ⓘ.
 function Current({
   projectId,
   taskId,
-  observeFrom,
   refresh,
 }: {
   projectId: number;
   taskId: string;
-  observeFrom?: string;
   refresh: string;
 }) {
   const [state, setState] = useState<{
@@ -303,12 +311,6 @@ function Current({
   }, [key, projectId, taskId]);
   const current = state?.key === key ? state : undefined;
   const n = current?.numbers;
-  const note = observeFrom
-    ? $t('taskNumbers.wentLive', {
-        0: formatDate(observeFrom),
-        1: expected(observeFrom, 7),
-      })
-    : $t('taskNumbers.comparedLater');
   if (!current)
     return (
       <p className='m-0 text-sm text-muted-foreground'>
@@ -368,7 +370,6 @@ function Current({
           </li>
         )}
       />
-      <p className='m-0 text-xs text-muted-foreground'>{note}</p>
     </>
   );
 }
