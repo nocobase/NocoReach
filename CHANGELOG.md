@@ -19,6 +19,11 @@
 
 - On Insights, an opportunity handed off to the agent shows its task's state now, with the task number: Handed off to agent while it waits to start, In progress, Needs confirmation, Completed or Closed. A finished task used to keep reading "Handed off to agent".
 
+## Unreleased — Tasks list: a notice only when no runtime is online; Executor no longer overlaps Updated
+
+- The line of counts above the tasks (running, queued, failed runs, runtimes online) is gone: each row's status already says running and queued, and a failed run shows in red on its row. When no runtime is online, one notice above the tasks says work handed to an agent will wait, with View runtimes; it uses the page's normal spacing (the old line's zero margin sat it on the table). The same applies to List, Board and By agent.
+- In the list, the Executor column truncates a long Agent name with an ellipsis (the full name on hover) instead of running into Updated, which no longer wraps.
+
 ## Unreleased — Today's decisions are today's; the conversation opens folded
 
 - Today's message on Insights lists only opportunities raised, dismissed or handed off today. One handed off on an earlier day that today's analysis lists again stays on the day it was raised; it read as handed off today beside the ones just dismissed (Studio, 10/22: T-27 and T-30 beside the three dismissed at 17:15). A hand-off counts on the day its task was created, and the waiting tasks are read again after one.
