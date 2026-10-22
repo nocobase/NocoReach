@@ -13,7 +13,7 @@ import {Sheet,SheetContent,SheetHeader,SheetTitle} from '#components/ui/sheet';
 import {cn} from '#lib/utils';
 import {useProject,useUnsavedWarning} from './reach-data';
 import {playbookRequest,localizePlaybookList,type PlaybookList} from './playbook-model';
-import {skillRequest,readSkillFiles,SKILL_NAME,type LinkRead,type Skill,type SkillList} from './skill-model';
+import {skillRequest,readSkillFiles,skillFor,SKILL_NAME,type LinkRead,type Skill,type SkillList} from './skill-model';
 import {confirmAction} from '#components/reach/confirm';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#components/ui/select';
 // Skills (SPEC §6.0): how a kind of work is done, as SKILL.md (name, when to use it, how) and files that come with it. One
@@ -27,7 +27,7 @@ export default function SkillsPage(){
  const {can:canReadLink}=useBusinessAccess('nrSkills.readLink',project?.id??null),{can:canEnable}=useBusinessAccess('nrSkills.setEnabled',project?.id??null);
  const canAdd=canCreate||canImport||(canReadLink&&canImportLink);
  const [list,setList]=useState<SkillList>(),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[q,setQ]=useState(''),[filter,setFilter]=useState(''),[creating,setCreating]=useState(false),[open,setOpen]=useState<string|null>(null),[picked,setPicked]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[notice,setNotice]=useMessageState('');
- const usage:Usage={};for(const p of localizePlaybookList(rawPlaybooks)?.playbooks||[])for(const step of p.steps)for(const id of step.skills||[])(usage[id]||=[]).push(`${p.name} · ${step.name}`);
+ const usage:Usage={};for(const p of localizePlaybookList(rawPlaybooks)?.playbooks||[])for(const step of p.steps)for(const ref of step.skills||[]){const key=skillFor(list?.skills||[],ref)?.id??ref;(usage[key]||=[]).push(`${p.name} · ${step.name}`);}
  const load=()=>{if(project)void skillRequest<SkillList>('list',project.id).then(setList).catch(()=>setError(() => ($t('skills.notLoadSkillsRefreshTry'))));};
  useEffect(load,[project?.id]);
  // Which 做法 steps name each Skill, from this project's playbooks.

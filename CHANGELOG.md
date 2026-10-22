@@ -10,6 +10,13 @@
 - GitHub hot topics' select-all boxes sit in the table header's first column, as every table's do, not before the card titles.
 - The chips listing terms are one size and shape: Trends' compared products, AI search's topics and the keywords offered on Trends › Watched keywords.
 - A row with one action shows it as a text button: Opportunities › Handled's Restore (was an icon) and Trends › Watched keywords' Remove (was a ⋯ menu with one item). The actions column of API keys has no visible name, as Members' has none.
+## Unreleased — Playbook Skills matched by name
+
+- Skills › Used in playbooks, the playbook steps and the step Skill picker now find a step's Skill by id, then by name, as a task does. A Skill imported under a built-in name (with its own id) shows where the built-in playbooks use it, and saving a step no longer drops those references.
+
+## Unreleased — Page notes in ⓘ
+
+- Move the remaining grey explanatory notes on Playbooks and the data source connection panels (GitHub, Google, DataForSEO, X, Reddit, Hacker News, Google Trends, Discord/Slack, community forum, website content, downloads, Xiaohongshu) into ⓘ tips beside the field, heading or line they explain; status lines, counts, setup steps and errors stay visible.
 
 ## Unreleased — Opportunities shows where each handed-off task stands
 
