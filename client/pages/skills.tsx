@@ -1,6 +1,7 @@
 import { formatDate } from '#lib/format';
 import { type Message, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useMemo,useState,type ReactElement} from 'react';
+import {segmentedItemClass,segmentedListClass} from '#components/reach/segmented';
 import {ExternalLinkIcon,FileIcon,PencilIcon,PlusIcon,SearchIcon,Trash2Icon,XIcon} from 'lucide-react';
 import {useBusinessAccess} from '#hooks/use-business-access';
 import {PageContainer,PageHeader} from '#components/reach/page';
@@ -93,7 +94,7 @@ function NewSkill({projectId,canCreate,canImport,canImportLink,canReadLink,onClo
  return <Dialog open onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className="sm:max-w-2xl">
   <DialogHeader><DialogTitle>{$t('skills.newSkill')}</DialogTitle><DialogDescription>{$t('skills.skillSpellsOutHowKind')}</DialogDescription></DialogHeader>
   <div className="flex flex-col gap-3">
-   <div className="nr-tabs" role="group" aria-label={$t('skills.howCreate')}>{([['form',$t('skills.write')],['folder',$t('skills.uploadFolder')],['link',$t('skills.enterLink')]] as const).filter(([k])=>k==='form'?canCreate:k==='folder'?canImport:canLink).map(([k,v])=><button key={k} type="button" aria-pressed={mode===k} onClick={()=>{setMode(k);setError('');}}>{v}</button>)}</div>
+   <div className={cn(segmentedListClass,'self-start')} role="group" aria-label={$t('skills.howCreate')}>{([['form',$t('skills.write')],['folder',$t('skills.uploadFolder')],['link',$t('skills.enterLink')]] as const).filter(([k])=>k==='form'?canCreate:k==='folder'?canImport:canLink).map(([k,v])=><button key={k} type="button" className={segmentedItemClass} aria-pressed={mode===k} onClick={()=>{setMode(k);setError('');}}>{v}</button>)}</div>
    {mode==='form'?<>
     <label className="nr-field">{$t('common.name')}<input value={name} maxLength={64} disabled={busy} onChange={e=>setName(e.target.value)} placeholder="seo-title" className="font-mono"/><span className="text-xs text-muted-foreground">{$t('skills.lowercaseEnglishLettersNumbersHyphens')}</span></label>
     <label className="nr-field">{$t('skills.whenUse')}<textarea rows={2} maxLength={1024} disabled={busy} value={description} onChange={e=>setDescription(e.target.value)} placeholder={$t('skills.useWhenWritingChangingPage')}/><span className="text-xs text-muted-foreground">{$t('skills.agentUsesLineDecideWhen')}</span></label>

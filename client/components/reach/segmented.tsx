@@ -1,6 +1,12 @@
 import type { ReactNode } from 'react';
 import { cn } from '#lib/utils';
 
+/** The group and item classes, for markup that cannot use `Segmented` (tabs with a tabpanel, buttons in a form). */
+export const segmentedListClass =
+  'inline-flex max-w-full shrink-0 flex-wrap overflow-hidden rounded-md border';
+export const segmentedItemClass =
+  'inline-flex h-8 items-center gap-1.5 px-3 text-sm whitespace-nowrap text-muted-foreground tabular-nums transition-colors hover:text-foreground focus-visible:relative focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 aria-pressed:bg-muted aria-pressed:font-medium aria-pressed:text-foreground aria-selected:bg-muted aria-selected:font-medium aria-selected:text-foreground';
+
 export type SegmentedOption = {
   id: string;
   label: ReactNode;
@@ -31,10 +37,7 @@ export function Segmented({
 }) {
   return (
     <div
-      className={cn(
-        'inline-flex shrink-0 flex-wrap overflow-hidden rounded-md border',
-        className,
-      )}
+      className={cn(segmentedListClass, className)}
       role='group'
       aria-label={label}
     >
@@ -48,8 +51,8 @@ export function Segmented({
           disabled={o.disabled}
           onClick={() => onChange(o.id)}
           className={cn(
-            'inline-flex items-center gap-1.5 whitespace-nowrap text-muted-foreground tabular-nums transition-colors hover:text-foreground focus-visible:relative focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 aria-pressed:bg-muted aria-pressed:font-medium aria-pressed:text-foreground',
-            size === 'sm' ? 'h-6 px-2 text-xs' : 'h-8 px-3 text-sm',
+            segmentedItemClass,
+            size === 'sm' && 'h-6 px-2 text-xs',
           )}
         >
           {o.label}
