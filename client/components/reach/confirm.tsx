@@ -106,3 +106,22 @@ function ConfirmDialog({
     </AlertDialog>
   );
 }
+
+/** The question before leaving a form or page with unsaved input: discard and leave, or stay. */
+export function confirmUnsavedLeave(): Promise<boolean> {
+  return confirmAction({
+    title: () => $t('common.discardUnsavedChanges'),
+    description: () => $t('common.unsavedChangesLost'),
+    action: () => $t('common.discard'),
+  });
+}
+
+/** The question before leaving a task page with drafts, which are kept while moving within the workspace. */
+export function confirmLeaveWithDrafts(): Promise<boolean> {
+  return confirmAction({
+    title: () => $t('taskDetail.leaveWithDraftsTitle'),
+    description: () => $t('taskDetail.leaveWithDrafts'),
+    action: () => $t('common.leaveAnyway'),
+    destructive: false,
+  });
+}

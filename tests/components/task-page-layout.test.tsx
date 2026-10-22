@@ -209,7 +209,7 @@ test('the header says why the task exists and opens the evidence', async () => {
   mount();
   expect(screen.getByText(/\/ja 搜索点击下降 34%/)).toBeVisible();
   expect(screen.getByRole('list', { name: '进度' })).toHaveTextContent(
-    '优化现有页面',
+    '看效果并发布',
   );
   await user.click(screen.getByRole('button', { name: '查看依据' }));
   const dialog = await screen.findByRole('dialog', { name: '依据' });
@@ -469,4 +469,55 @@ test('Change opens a dialog and the card keeps its one-line summary', async () =
   await user.click(within(dialog).getByRole('button', { name: '保存' }));
   expect(screen.queryByRole('dialog', { name: '选择文章' })).toBeNull();
   expect(within(card).getByText('发布到 NocoBase CMS')).toBeTruthy();
+});
+
+test('the properties column lists owner, Agent, playbook, source, article, page and start, with the article in full', async () => {
+  const data = pageChange();
+  data.work.article = {
+    targetId: 'cms',
+    articleId: '7',
+    slug: 'top-open-source-no-code-tools',
+    title: 'Top 11 Open Source No-Code Tools in 2026',
+    sourceKey: null,
+  };
+  data.work.page = { url: 'https://www.nocobase.com/ja', title: '' };
+  data.articleTargets = [
+    {
+      id: 'cms',
+      name: 'NocoBase CMS',
+      kind: 'nocobase-api',
+      locales: ['en'],
+      capabilities: { concurrency: 'check-before-write' },
+      pages: { en: 'https://www.nocobase.com/en/blog/{slug}' },
+    },
+  ];
+  mount(data);
+  const column = screen.getByRole('complementary', { name: '属性' });
+  const value = (label: string) =>
+    within(column).getByText(label, { selector: 'dt' }).nextElementSibling!;
+  expect(value('负责人')).toHaveTextContent('Super Admin');
+  expect(value('Agent')).toHaveTextContent('codex');
+  expect(value('做法')).toHaveTextContent('优化现有页面');
+  expect(
+    within(value('来自')).getByRole('button', { name: 'O-16' }),
+  ).toBeVisible();
+  expect(
+    within(value('文章')).getByRole('link', {
+      name: 'Top 11 Open Source No-Code Tools in 2026',
+    }),
+  ).toHaveAttribute(
+    'href',
+    'https://www.nocobase.com/en/blog/top-open-source-no-code-tools',
+  );
+  expect(within(value('关联页面')).getByRole('link')).toHaveAttribute(
+    'href',
+    'https://www.nocobase.com/ja',
+  );
+  expect(value('开始于')).toHaveTextContent('10');
+  // The header keeps the title and its menu only; the steps no longer repeat the playbook's name.
+  const header = screen.getByRole('heading', { level: 1 }).closest('header')!;
+  expect(header).not.toHaveTextContent('Super Admin');
+  expect(screen.getByRole('list', { name: '进度' })).not.toHaveTextContent(
+    '优化现有页面',
+  );
 });
