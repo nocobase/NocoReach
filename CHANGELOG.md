@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Agent: one Settings per row, tidy tabs
+
+- Who does the work reads as a table: column headings, Cloud models and Local agents as light group rows with their explanation in an ⓘ, and what each work does under its name.
+- Every row has one Settings button for administrators, a dialog that changes what the row uses. Daily analysis › Settings chooses the model the analysis runs on (the default chat model, which no page let anyone change since the Agents plugin upgrade of 2026-10-16); Chat panel › Settings is the chat agent dialog, whose default model now names the model; Tasks › Settings chooses the project default and says beside each agent whether it is online, not signed in, out of quota or offline. While a row needs attention, the button is the fix instead.
+- The tabs follow setup order: Model services, Runtimes, Local agents, Usage. Each opens with one sentence and its button instead of a second page heading, at the same size in every tab. Local agents holds the agent list only; the project default moved to Tasks › Settings.
+- Shorter wording: the Model services and Runtimes descriptions are one sentence, the list's how-to is one sentence, and model counts read "2 chat models" instead of "2 chat".
+
 ## Unreleased — Handed-off opportunities show where their task stands
 
 - On Insights, an opportunity handed off to the agent shows its task's state now, with the task number: Handed off to agent while it waits to start, In progress, Needs confirmation, Completed or Closed. A finished task used to keep reading "Handed off to agent".

@@ -17,12 +17,11 @@ import { routeAccess } from './access.js';
 
 const runnerAccess = routeAccess(agentsRoute);
 
-// One page for the AIs in NocoReach (2026-10-22 user decision): who does the work comes first, then four tabs, local
-// agents, runtimes, model services and usage. The last three are the Agents plugin's own pages, which bring their own
-// frame and heading, so every tab renders its own page below the tab bar. The chat agent's settings open as a dialog
+// One page for the AIs in NocoReach (2026-10-22 user decision): who does the work comes first, then four tabs, model
+// services, runtimes, local agents and usage. Model services, runtimes and usage are the Agents plugin's own pages,
+// which bring their own frame and heading, so every tab renders its own page below the tab bar. The chat agent's settings open as a dialog
 // over the page (`chat/new`, `chat/:onlineAgentId`).
 export default function AgentsPage() {
-  const runner = useCan(runnerAccess);
   const index = useMatch('/agents') !== null;
   const [refresh, setRefresh] = useState(0);
   const changed = () => setRefresh((value) => value + 1);
@@ -38,13 +37,13 @@ export default function AgentsPage() {
           title={$t('agentsPage.title')}
           description={$t('agentsPage.description')}
         />
-        <AgentRoles
-          refresh={refresh}
-          localAgentsTo={runner.can ? '/agents/runner' : undefined}
-        />
+        <AgentRoles refresh={refresh} />
       </PageContainer>
       <AgentsTabs />
-      {index ? <AgentIndex /> : <Outlet context={context} />}
+      {/* The tab bar names each tab, so a tab's own page heading is read by screen readers only (2026-10-22). */}
+      <div className='[&_header_h1]:sr-only'>
+        {index ? <AgentIndex /> : <Outlet context={context} />}
+      </div>
     </>
   );
 }
@@ -57,15 +56,16 @@ function useTabs() {
   // A tab whose check is pending or failed stays hidden; its route still checks a URL opened directly.
   return {
     pending: [runner, runtimes, models, usage].some((check) => check.isPending),
+    // In the order of the overview and of a first setup: the model service, the runtime, its local agents, then usage.
     tabs: [
-      ...(runner.can
-        ? [{ path: 'runner', label: $t('common.runnerAgent') }]
+      ...(models.can
+        ? [{ path: 'models', label: $t('agentsPage.models') }]
         : []),
       ...(runtimes.can
         ? [{ path: 'runtimes', label: $t('agentsPage.runtimes') }]
         : []),
-      ...(models.can
-        ? [{ path: 'models', label: $t('agentsPage.models') }]
+      ...(runner.can
+        ? [{ path: 'runner', label: $t('common.runnerAgent') }]
         : []),
       ...(usage.can ? [{ path: 'usage', label: $t('agentsPage.usage') }] : []),
     ],
