@@ -1,7 +1,5 @@
 import { useId, useState } from 'react';
-import { TriangleAlert } from 'lucide-react';
 import { $t, getCurrentLocale } from '#i18n';
-import { Alert, AlertDescription, AlertTitle } from '#components/ui/alert';
 import { Button } from '#components/ui/button';
 import { Input } from '#components/ui/input';
 import { Textarea } from '#components/ui/textarea';
@@ -24,6 +22,7 @@ import {
   type ArticleStatus,
 } from '../../../shared/article-publishing.js';
 import { Reveal } from '#components/reach/reveal';
+import { lineTabClass, lineTabListClass } from '#components/reach/line-tabs';
 import { ChangeView } from '../change-view';
 import { Markdown } from '../doc-view';
 import { localeName } from '../article-targets-api';
@@ -33,6 +32,8 @@ import type {
   TaskData,
 } from '../task-execution-types';
 import { useTaskDraft } from './draft-store.js';
+import { Notice } from './layout.js';
+import { text } from './styles.js';
 import {
   articleContext,
   fieldChange,
@@ -131,20 +132,16 @@ function ConflictList({
   targetName: string;
 }) {
   return (
-    <Alert>
-      <TriangleAlert />
-      <AlertTitle>
-        {$t('articleTask.conflictsTitle', { 0: targetName })}
-      </AlertTitle>
-      <AlertDescription className='flex flex-col gap-3'>
-        {conflicts.map((c) => (
-          <div key={c.field} className='flex min-w-0 flex-col gap-1'>
-            <span>{$t('articleTask.currentToDraft', { 0: targetName })}</span>
-            <ChangeView changes={[fieldChange(c.field, c.current, c.draft)]} />
-          </div>
-        ))}
-      </AlertDescription>
-    </Alert>
+    <Notice title={$t('articleTask.conflictsTitle', { 0: targetName })}>
+      {conflicts.map((c) => (
+        <div key={c.field} className='flex min-w-0 flex-col gap-1'>
+          <span className={text.muted}>
+            {$t('articleTask.currentToDraft', { 0: targetName })}
+          </span>
+          <ChangeView changes={[fieldChange(c.field, c.current, c.draft)]} />
+        </div>
+      ))}
+    </Notice>
   );
 }
 
@@ -204,7 +201,7 @@ export function ArticleReview({
         />
       )}
       <div
-        className='nr-change-tabs'
+        className={lineTabListClass}
         role='tablist'
         aria-label={$t('articleTask.article')}
       >
@@ -213,6 +210,7 @@ export function ArticleReview({
             key={l}
             type='button'
             role='tab'
+            className={lineTabClass}
             aria-selected={l === tab}
             onClick={() => setTab(l)}
           >
@@ -230,9 +228,7 @@ export function ArticleReview({
           const path = `${tab}.${f}`;
           return a.changes.includes(path) ? (
             <div key={path} className='flex min-w-0 flex-col gap-1'>
-              <h4 className='text-sm font-medium'>
-                {$t(`articleTask.field.${f}`)}
-              </h4>
+              <h3 className={text.muted}>{$t(`articleTask.field.${f}`)}</h3>
               <ChangeView
                 changes={[
                   fieldChange(path, valueAt(base, path), valueAt(draft, path)),
@@ -249,6 +245,9 @@ export function ArticleReview({
     </div>
   );
 }
+
+// The editor's labels in the page's grey secondary style rather than the form default.
+const LABEL = `${text.muted} font-normal`;
 
 type EditForm = {
   slug: string;
@@ -398,7 +397,7 @@ export function ArticleEditor({
       <fieldset disabled={busy} className='flex flex-col gap-4'>
         {create && (
           <Field data-invalid={Boolean(errors.slug)}>
-            <FieldLabel htmlFor={`${id}-slug`}>
+            <FieldLabel htmlFor={`${id}-slug`} className={LABEL}>
               {$t('articleTask.field.slug')} *
             </FieldLabel>
             <Input
@@ -412,7 +411,7 @@ export function ArticleEditor({
         )}
         {withStatus && (
           <Field>
-            <FieldLabel id={`${id}-status`}>
+            <FieldLabel id={`${id}-status`} className={LABEL}>
               {$t('articleTask.field.status')}
             </FieldLabel>
             <RadioGroup
@@ -426,7 +425,7 @@ export function ArticleEditor({
               {(['draft', 'published'] as const).map((v) => (
                 <div key={v} className='flex items-center gap-2'>
                   <RadioGroupItem id={`${id}-status-${v}`} value={v} />
-                  <Label htmlFor={`${id}-status-${v}`}>
+                  <Label htmlFor={`${id}-status-${v}`} className='font-normal'>
                     {$t(
                       v === 'draft'
                         ? 'articleTask.statusDraft'
@@ -441,7 +440,7 @@ export function ArticleEditor({
         )}
         {locales.map((l) => (
           <fieldset key={l} className='flex flex-col gap-3'>
-            <legend className='text-sm font-medium'>
+            <legend className={text.muted}>
               {localeName(l, getCurrentLocale())}
             </legend>
             {ARTICLE_FIELDS.map((f) => {
@@ -461,7 +460,7 @@ export function ArticleEditor({
               };
               return (
                 <Field key={key} data-invalid={Boolean(errors[key])}>
-                  <FieldLabel htmlFor={`${id}-${key}`}>
+                  <FieldLabel htmlFor={`${id}-${key}`} className={LABEL}>
                     {$t(`articleTask.field.${f}`)}
                     {required ? ' *' : ''}
                   </FieldLabel>
@@ -481,7 +480,7 @@ export function ArticleEditor({
           </fieldset>
         ))}
         <Field data-invalid={Boolean(errors.verifyText)}>
-          <FieldLabel htmlFor={`${id}-verifyText`}>
+          <FieldLabel htmlFor={`${id}-verifyText`} className={LABEL}>
             {$t('articleTask.verifyText')}
           </FieldLabel>
           <Input

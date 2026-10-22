@@ -13,7 +13,8 @@ const pathOf = (page: string) => {
 
 /**
  * What a visitor or a search result shows before and after a page change, grouped by page, in the Agent's plain
- * words. The code diff stays in Technical details: the owner reviewing here does not read code.
+ * words. The code diff stays in Technical details: the owner reviewing here does not read code. A table of rules rather
+ * than a box, so the card around it stays the only box.
  */
 export function VisibleChanges({ items }: { items: VisibleChange[] }) {
   const pages = [...new Set(items.map((item) => item.page))];
@@ -28,7 +29,7 @@ export function VisibleChanges({ items }: { items: VisibleChange[] }) {
           {page ? (
             /^https?:\/\//.test(page) ? (
               <a
-                className='nr-link inline-flex items-center gap-1 self-start text-sm font-medium'
+                className='nr-link inline-flex items-center gap-1 self-start text-sm'
                 href={page}
                 target='_blank'
                 rel='noreferrer'
@@ -37,13 +38,13 @@ export function VisibleChanges({ items }: { items: VisibleChange[] }) {
                 <ExternalLink className='size-3' aria-hidden='true' />
               </a>
             ) : (
-              <p className='text-sm font-medium'>{page}</p>
+              <p className='text-sm'>{page}</p>
             )
           ) : null}
           {/* A table from sm up; on a phone each change stacks with its own Before and After labels. */}
-          <div className='rounded-lg border text-sm'>
+          <div className='border-y text-sm'>
             <div
-              className='hidden grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)] gap-3 border-b bg-muted/50 px-3 py-2 text-xs text-muted-foreground sm:grid'
+              className='hidden grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)] gap-3 border-b py-2 text-muted-foreground sm:grid'
               aria-hidden='true'
             >
               <span />
@@ -56,9 +57,9 @@ export function VisibleChanges({ items }: { items: VisibleChange[] }) {
                 .map((item) => (
                   <div
                     key={`${item.label}:${item.before}:${item.after}`}
-                    className='grid gap-1 px-3 py-2 sm:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)] sm:gap-3'
+                    className='grid gap-1 py-2 sm:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)] sm:gap-3'
                   >
-                    <span className='font-medium sm:font-normal sm:text-muted-foreground'>
+                    <span className='text-muted-foreground'>
                       {item.label}
                     </span>
                     <span className='break-words whitespace-pre-wrap text-muted-foreground'>

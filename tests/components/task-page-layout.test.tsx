@@ -172,12 +172,12 @@ test('unknown activity actors use a member label instead of claiming the current
   mount(data);
   const activity = screen.getByRole('region', { name: 'Actividad' });
   expect(
-    await within(activity).findByText('Miembro', { selector: 'b' }),
+    await within(activity).findByText('Miembro', { selector: '[data-actor]' }),
   ).toBeVisible();
   expect(
-    await within(activity).findByText('Super Admin', { selector: 'b' }),
+    await within(activity).findByText('Super Admin', { selector: '[data-actor]' }),
   ).toBeVisible();
-  expect(within(activity).queryByText('Tú', { selector: 'b' })).toBeNull();
+  expect(within(activity).queryByText('Tú', { selector: '[data-actor]' })).toBeNull();
 });
 
 test('a page change is reviewed as what readers see, with code kept in Technical details', async () => {

@@ -8,6 +8,8 @@ import {
 import { useNavigationGuard } from '@nocobase/app-client';
 import { $t } from '#i18n';
 import { Button } from '#components/ui/button';
+import { Textarea } from '#components/ui/textarea';
+import { Card } from './layout';
 import {
   confirmAction,
   confirmLeaveWithDrafts,
@@ -104,19 +106,19 @@ export function TaskDraftRecovery({ activeScope }: { activeScope?: string }) {
   );
   if (!previous.length) return null;
   return (
-    <section
+    <Card
       aria-label={$t('taskDetail.previousDrafts')}
-      className='nr-td-card'
+      title={$t('taskDetail.previousDrafts')}
+      sub={$t('taskDetail.previousDraftsHelp')}
     >
-      <h3>{$t('taskDetail.previousDrafts')}</h3>
-      <p>{$t('taskDetail.previousDraftsHelp')}</p>
       {previous.map(([key, entry], index) => (
-        <div key={key} className='nr-field'>
-          <textarea
+        <div key={key} className='flex flex-col items-start gap-2'>
+          <Textarea
             aria-label={$t('taskDetail.previousDraftText', { 0: index + 1 })}
             value={String(entry.value)}
             readOnly
             rows={4}
+            className='field-sizing-fixed'
           />
           <Button
             size='sm'
@@ -136,6 +138,6 @@ export function TaskDraftRecovery({ activeScope }: { activeScope?: string }) {
           </Button>
         </div>
       ))}
-    </section>
+    </Card>
   );
 }

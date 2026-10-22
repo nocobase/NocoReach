@@ -2,13 +2,15 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { $t } from '#i18n';
 import { formatCount, formatDate } from '#lib/format';
-import { cn } from '#lib/utils';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { Delta } from '#components/reach/delta';
 import { effectLine, type EffectResult } from '../effect-model';
 import type { TaskData } from '../task-execution-types';
+import { cn } from '#lib/utils';
+import { Card } from './layout';
+import { text } from './styles';
 
-// Performance, under the task's properties (2026-10-22 user request): each page the task is about, with its numbers.
+// Performance, the card under the task's properties (2026-10-22 user request): each page the task is about, with its numbers.
 // Before the change goes live, the latest 28 days (or the 28 days before going live, once it has); from day 7 on,
 // before and after for day 7 or day 28. The full comparison stays on Results.
 
@@ -76,7 +78,7 @@ function Rows<T>({
       {items.length > SHOWN && (
         <button
           type='button'
-          className='nr-link self-start text-xs'
+          className='nr-link self-start text-sm'
           onClick={() => setAll((v) => !v)}
         >
           {all
@@ -113,23 +115,22 @@ export function TaskNumbers({
   const result =
     results.find((x) => x.day === picked) || results.at(-1) || undefined;
   return (
-    <section
+    <Card
       aria-label={$t('taskNumbers.title')}
-      className={cn('flex flex-col gap-2', className)}
-    >
-      <div className='flex items-center gap-2'>
-        <h2 className='m-0 flex-1 text-sm font-medium'>
-          {$t('taskNumbers.title')}
-        </h2>
-        {result && (
+      title={$t('taskNumbers.title')}
+      actions={
+        result && (
           <DaySwitch
             results={results}
             day={result.day}
             observeFrom={w.observeFrom}
             onPick={setPicked}
           />
-        )}
-      </div>
+        )
+      }
+      className={className}
+    >
+      <div className='flex flex-col gap-2'>
       {result ? (
         <Compared result={result} observeFrom={w.observeFrom} taskId={taskId} />
       ) : (
@@ -145,7 +146,8 @@ export function TaskNumbers({
           ].join('\n')}
         />
       )}
-    </section>
+      </div>
+    </Card>
   );
 }
 
@@ -163,7 +165,7 @@ function DaySwitch({
 }) {
   return (
     <div
-      className='inline-flex shrink-0 overflow-hidden rounded-md border text-xs'
+      className='inline-flex shrink-0 overflow-hidden rounded-md border text-sm'
       role='group'
       aria-label={$t('results.checkpoint')}
     >
@@ -183,7 +185,7 @@ function DaySwitch({
                   })
                 : undefined
             }
-            className='px-2 py-0.5 text-muted-foreground disabled:opacity-50 aria-pressed:bg-muted aria-pressed:font-medium aria-pressed:text-foreground'
+            className='px-2 py-0.5 text-muted-foreground disabled:opacity-50 aria-pressed:bg-muted aria-pressed:text-foreground'
             onClick={() => onPick(d)}
           >
             {$t('results.day', { 0: d })}
@@ -220,16 +222,14 @@ function Compared({
       }));
   return (
     <>
-      <p className='m-0 text-xs text-muted-foreground'>
+      <p className={text.muted}>
         {$t('taskNumbers.window', {
           0: $t(views ? 'common.viewCount' : 'common.searchClicks'),
           1: r.day,
         })}
       </p>
       {r.primary ? null : (
-        <p className='m-0 text-sm text-muted-foreground'>
-          {effectLine(r, observeFrom)}
-        </p>
+        <p className={text.muted}>{effectLine(r, observeFrom)}</p>
       )}
       {r.primary && (
         <Rows
@@ -237,7 +237,10 @@ function Compared({
           render={(row) => (
             <li
               key={row.page}
-              className='flex items-baseline gap-3 border-b py-1.5 text-sm last:border-b-0'
+              className={cn(
+                text.body,
+                'flex items-baseline gap-3 border-b py-1.5 last:border-b-0',
+              )}
             >
               <PageLink url={row.page} />
               <span className='ml-auto shrink-0 tabular-nums'>
@@ -249,7 +252,7 @@ function Compared({
         />
       )}
       {r.primary && r.byPage && (
-        <p className='m-0 flex items-baseline gap-3 border-t pt-1.5 text-sm font-medium'>
+        <p className={cn(text.body, 'flex items-baseline gap-3 border-t pt-1.5')}>
           <span className='min-w-0 flex-1'>
             {$t('taskNumbers.total', { 0: r.byPage.length })}
           </span>
@@ -317,28 +320,16 @@ function Current({
       })
     : $t('taskNumbers.comparedLater');
   if (!current)
-    return (
-      <p className='m-0 text-sm text-muted-foreground'>
-        {$t('common.loading')}
-      </p>
-    );
+    return <p className={text.muted}>{$t('common.loading')}</p>;
   if (current.failed || !n || !Array.isArray(n.pages))
-    return (
-      <p className='m-0 text-sm text-muted-foreground'>
-        {$t('taskNumbers.failed')}
-      </p>
-    );
+    return <p className={text.muted}>{$t('taskNumbers.failed')}</p>;
   if (!n.pages.length)
-    return (
-      <p className='m-0 text-sm text-muted-foreground'>
-        {$t('taskNumbers.noPages')}
-      </p>
-    );
+    return <p className={text.muted}>{$t('taskNumbers.noPages')}</p>;
   const clicks = Boolean(n.gscDays),
     views = !clicks && Boolean(n.ga4Days);
   return (
     <>
-      <p className='m-0 text-xs text-muted-foreground'>
+      <p className={text.muted}>
         {!n.range || (!clicks && !views)
           ? $t('taskNumbers.noData')
           : $t(
@@ -356,7 +347,10 @@ function Current({
         render={(p) => (
           <li
             key={p.page}
-            className='flex items-baseline gap-3 border-b py-1.5 text-sm last:border-b-0'
+            className={cn(
+              text.body,
+              'flex items-baseline gap-3 border-b py-1.5 last:border-b-0',
+            )}
           >
             <PageLink url={p.page} />
             <span className='ml-auto shrink-0 text-right tabular-nums'>
@@ -375,7 +369,7 @@ function Current({
           </li>
         )}
       />
-      <p className='m-0 text-xs text-muted-foreground'>{note}</p>
+      <p className={text.muted}>{note}</p>
     </>
   );
 }

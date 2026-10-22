@@ -1,5 +1,14 @@
 # NocoReach Changelog
 
+## Unreleased — Task page: one layout for every state
+
+- The task page has one skeleton in every state: a two-line header (the title with its T-number in grey and the status Tag on the right; then one grey line with the playbook's steps and where the task stands now, such as "Agent Change → Review and publish (you) → Live → Watch · Now: Waiting for you to start"), the card for what to do now and the activity on the left, and ✦ Why, Properties and Performance on the right, in that order. Below 1280px they stack as Why, Properties, now, Performance, Activity.
+- The long Why strip under the title is a ✦ Why card with the reason in a sentence or two and View evidence; while a change waits for review it reads Why this change, as on the website's demo card.
+- Four text styles only (page title, card title, body, grey secondary text) and one card shape (same radius, padding and spacing). Cards no longer hold boxes inside boxes: the before/after table, diffs, conflicts, reply drafts, the last change request and What changed are drawn with rules, tints and labels instead.
+- Start after review: the card's title and Confirm start share one row; the brief is plain text with Expand when long; the playbook is a full-width select with its description and View steps below; Notes (optional) is a full-width one-line field that grows as you type.
+- Activity and the message to the Agent are one card: the timeline, then a one-line field with Send.
+- The status Tag in the header is the one the task list and board show (`TaskStatusTag`).
+
 ## Unreleased — Data sources: two tabs, Retry all, Agent edits and publishing first
 
 - Settings › Data sources has two tabs. Sources (the default) shows the cards, with one orange line at the top naming the sources that need attention and a View link to the other tab; Data health shows their count in orange on its tab and holds the sync status that used to sit above the cards.
