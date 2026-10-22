@@ -8,7 +8,7 @@ import { EN_US } from './content-en-US.js';
 
 /** The people of the demo. Each is a sign-in; the stories' comments name them. */
 export type DemoPerson =
-  'growth' | 'editor' | 'content' | 'devrel' | 'consultant';
+  'growth' | 'editor' | 'content' | 'devrel' | 'consultant' | 'admin';
 
 type Brief = readonly [
   key: string,
@@ -44,7 +44,7 @@ export interface DemoContent {
     }
   >;
   people: Record<DemoPerson, { username: string; name: string; title: string }>;
-  roles: Record<'growth' | 'editor' | 'community' | 'viewer', string>;
+  roles: Record<'growth' | 'editor' | 'community' | 'viewer' | 'admin', string>;
   stories: readonly DemoStory[];
   documents: readonly {
     key: string;
@@ -138,12 +138,14 @@ const ZH_CN: DemoContent = {
       name: '陈澄',
       title: '实施顾问（只读）',
     },
+    admin: { username: 'zhaoqi', name: '赵琦', title: '系统管理员' },
   },
   roles: {
     growth: '增长负责人',
     editor: '内容主编',
     community: '社区与开发者关系',
     viewer: '只读观察',
+    admin: '演示管理员',
   },
   stories: DEMO_STORIES,
   documents: DEMO_DOCUMENTS.map((document) =>

@@ -839,7 +839,7 @@ test('imports the demo through the API and clears all business data while preser
     .select(['email', 'disabledAt'])
     .where('email', 'like', '%@nocobase.example')
     .execute();
-  expect(people).toHaveLength(5);
+  expect(people).toHaveLength(6);
   expect(people.every((person) => person.disabledAt)).toBe(true);
   expect(
     (await runtime.plugin.agents.models.services.list()).map((s) => s.title),
@@ -869,7 +869,17 @@ test('imports the demo through the API and clears all business data while preser
     'sophie',
     'henry',
     'chloe',
+    'alexreed',
   ]);
+  // The demo's administrator manages the demo itself: its configuration and its data.
+  const administrator = await signIn(testApp, {
+    email: 'alexreed@nocobase.example',
+    password: 'alexreed123',
+  });
+  expect((await administrator.fetch('/demoMode/configuration')).status).toBe(
+    200,
+  );
+  expect((await administrator.fetch('/demoMode/data')).status).toBe(200);
   const grace = await signIn(testApp, {
     email: 'grace@nocobase.example',
     password: 'grace123',

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Replace Settings › Demo management with the Demo Mode plugin's administration page, and switch demo accounts from the account menu; visitors who have not signed in keep the corner button.
+- Add a demo administrator account (`zhaoqi` / `alexreed`) with a demo-owned copy of the administrator role, so visitors can try settings and the demo's own management.
+
 - Add configurable online demo chat with existing live models, explicit tool policies, owned general conversations, and execution-time policy checks.
 
 - Add an application-configured Demo Agent proxy for analysis and change drafts, scoped opportunity handoff in read-only mode, and simulated release after human review.
