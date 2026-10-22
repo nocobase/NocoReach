@@ -66,6 +66,30 @@ describe('NocoReach semantic-key translations', () => {
     );
     // A legacy alias keeps its historical source text when the visible copy changes.
     const changedLegacyCopy: Record<string, string> = {
+      // Community pages in plain words (2026-10-21), second pass.
+      'X 上提到产品的帖子，用你们自己的 X API 每天查一次。':
+        'X 上提到产品的帖子，每天通过 X API 查询一次。',
+      '{0} 选中频道里的消息和提问，每天读一次。':
+        '{0} 所选频道中的消息和提问，每天读取一次。',
+      '用你们自己建的 Discord 机器人，粘贴 token、选频道就行，免费。':
+        '通过项目自建的 Discord 机器人读取所选频道，不产生费用。',
+      '用工作区里的内部应用，粘贴 token、选频道就行，免费。':
+        '通过工作区中的内部应用读取所选频道，不产生费用。',
+      '的主题、回复与无人回复的问题。':
+        '的主题、回复和无人回复的问题。',
+      '社区论坛（Discourse）的主题、回复与无人回复的问题。':
+        '社区论坛的主题、回复和无人回复的问题。',
+      '来源：YouTube（yt-dlp） · 读取于 {0}':
+        '读取于 {0}',
+      '推算发布日：{0}':
+        '估算发布日期：{0}',
+      '每次最多 20 条，仅保留最近 1,000 条采集笔记。点赞为页面显示值，缩写保留原文；缺失值未知。推算发布日期不是准确发布时间。':
+        '每次最多 20 条，仅保留最近 1,000 条采集笔记。点赞为页面显示值，缩写保留原文；缺失值未知。估算发布日期不是准确发布时间。',
+      // Community pages in plain words (2026-10-21).
+      '所选时间内没有。':
+        '所选时间内没有涉及的版块。',
+      'Reddit 上提到产品的帖子，每周在 Google 里搜一次。':
+        'Reddit 上提到产品的帖子，每周通过 Google 搜索一次。',
       // Preserve historical aliases when source labels and instructions change.
       '认证信息加密保存，不会返回到浏览器。':
         '认证信息加密保存。密码不会返回到浏览器。',

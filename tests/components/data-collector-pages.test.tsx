@@ -153,7 +153,7 @@ it('lists Xiaohongshu notes of the period literally and searches with the curren
   expect(
     screen.getByRole('heading', { name: '搜索词' }).closest('[data-groups]'),
   ).toHaveTextContent('NocoBase1');
-  expect(screen.getByText(/推算发布日：10-01/)).toBeVisible();
+  expect(screen.getByText(/估算发布日期：10-01/)).toBeVisible();
   expect(screen.getByText('期间发布')).toBeVisible();
   await userEvent.click(screen.getByRole('button', { name: '立即更新' }));
   await waitFor(() => expect(calls('search')).toHaveLength(1));
