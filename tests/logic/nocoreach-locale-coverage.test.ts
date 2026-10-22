@@ -347,6 +347,13 @@ describe('NocoReach semantic-key translations', () => {
       '接近首页 ({0})': '接近首页 {0}',
       '机会 ({0})': '机会 {0}',
       '没有品牌 ({0})': '没有品牌 {0}',
+      // Data sources cards without role tags (2026-10-22): the manual collectors say they are not updated daily.
+      'Agent 在这个仓库里修改内容、开 PR 给你审核；之后还会把网址对应到源文件':
+        'Agent 在这个仓库里修改网站，开 PR 给你审核',
+      '公开视频搜索摘要和指定视频详情，手动读取供调研':
+        '公开视频搜索摘要和指定视频详情，手动读取供调研，不会每天自动更新',
+      '已授权浏览器中搜索到的产品笔记和页面显示的点赞':
+        '已授权浏览器中搜索到的产品笔记和页面显示的点赞，手动采集，不会每天自动更新',
     };
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(
