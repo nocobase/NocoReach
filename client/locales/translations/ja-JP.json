@@ -7,6 +7,7 @@
     "analysisDescription": "すべてのプロジェクトの最新データを読み込み、AI が対象期間の分析結果と提案を「インサイト」と「改善機会」にまとめます。実行できなかった日の分は自動で再試行します。",
     "otherWork": "データ同期、順位追跡、トレンド、競合の動向などの自動処理は、各プロジェクトの「データの健全性」で確認できます。",
     "otherWorkLink": "データソースを開く",
+    "otherWorkLabel": "その他の自動処理",
     "dailyAt": "毎日 {{time}}",
     "notRunYet": "未実行",
     "pausedNext": "一時停止中（自動実行なし）",
@@ -14,6 +15,7 @@
     "tomorrow": "明日 {{time}}",
     "yesterday": "昨日 {{time}}",
     "shownIn": "時刻は {{zone}} で表示しています",
+    "timesLabel": "時刻について",
     "columns": {
       "name": "処理",
       "time": "実行時刻",

@@ -70,7 +70,10 @@ test('selects a scheduling timezone, recalculates the next run, and retains it o
   // The row names the timezone plainly; the IANA id is under Technical details.
   await expect(row.getByText('Daily at 09:00')).toBeVisible();
   await expect(row.getByText('China Standard Time')).toBeVisible();
+  // Last and next runs are in the browser's timezone, said in the ⓘ beside Last run.
+  await page.getByRole('button', { name: 'About these times' }).click();
   await expect(page.getByText(/Times shown in Eastern Time/)).toBeVisible();
+  await page.keyboard.press('Escape');
   await page.screenshot({
     path: testInfo.outputPath('timezone-saved-en.png'),
     animations: 'disabled',

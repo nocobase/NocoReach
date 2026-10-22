@@ -1,9 +1,9 @@
 import { useTranslation } from '@nocobase/i18n/client';
 import { useCallback, useMemo, useState } from 'react';
 import { Link, Outlet, useSearchParams } from 'react-router';
-import { Info } from 'lucide-react';
 import { PageContainer } from '#components/page-container';
 // The NocoReach header, as on every other page: actions centred on the title block rather than on its last line.
+import { InfoTip } from '#components/reach/info-tip';
 import { PageHeader } from '#components/reach/page';
 import { Button } from '#components/ui/button';
 import {
@@ -44,6 +44,10 @@ export default function SchedulesPage() {
     () => ({ reload: refresh }),
     [refresh],
   );
+  // Last and next runs are in the browser's timezone; the ⓘ on Last run says so when a schedule keeps another one.
+  const otherZone = data?.data.some(
+    (schedule) => schedule.timezone !== format.timeZone,
+  );
   function go(next: number) {
     setParams((current) => {
       const value = new URLSearchParams(current);
@@ -57,6 +61,19 @@ export default function SchedulesPage() {
         <PageHeader
           title={t('schedules.title')}
           description={t('schedules.description')}
+          info={
+            <InfoTip label={t('schedules.otherWorkLabel')} side='bottom'>
+              <p>
+                {t('schedules.otherWork')}{' '}
+                <Link
+                  to='/connections'
+                  className='text-foreground underline underline-offset-4'
+                >
+                  {t('schedules.otherWorkLink')}
+                </Link>
+              </p>
+            </InfoTip>
+          }
           actions={<RefreshButton busy={refreshing} refresh={refresh} />}
         />
         {error ? <Failure error={error} retry={refresh} /> : null}
@@ -68,7 +85,22 @@ export default function SchedulesPage() {
               <TableRow>
                 <TableHead>{t('schedules.columns.name')}</TableHead>
                 <TableHead>{t('schedules.columns.time')}</TableHead>
-                <TableHead>{t('schedules.columns.last')}</TableHead>
+                <TableHead>
+                  {otherZone ? (
+                    <span className='inline-flex items-center gap-1'>
+                      {t('schedules.columns.last')}
+                      <InfoTip label={t('schedules.timesLabel')}>
+                        <p>
+                          {t('schedules.shownIn', {
+                            zone: format.zone(format.timeZone),
+                          })}
+                        </p>
+                      </InfoTip>
+                    </span>
+                  ) : (
+                    t('schedules.columns.last')
+                  )}
+                </TableHead>
                 {/* Secondary: left out where the table would otherwise scroll sideways. */}
                 <TableHead className='hidden xl:table-cell'>
                   {t('schedules.columns.next')}
@@ -102,28 +134,6 @@ export default function SchedulesPage() {
               ))}
             </TableBody>
           </Table>
-        ) : null}
-        {data?.data.some(
-          (schedule) => schedule.timezone !== format.timeZone,
-        ) ? (
-          <p className='text-xs text-muted-foreground'>
-            {t('schedules.shownIn', { zone: format.zone(format.timeZone) })}
-          </p>
-        ) : null}
-        {data ? (
-          <p className='text-sm text-muted-foreground'>
-            <Info
-              aria-hidden='true'
-              className='mr-1.5 inline size-4 align-[-3px]'
-            />
-            {t('schedules.otherWork')}{' '}
-            <Link
-              to='/connections'
-              className='text-foreground underline underline-offset-4'
-            >
-              {t('schedules.otherWorkLink')}
-            </Link>
-          </p>
         ) : null}
         {data && (page > 1 || data.meta.total > data.meta.pageSize) ? (
           <nav

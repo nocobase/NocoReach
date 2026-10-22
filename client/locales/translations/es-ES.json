@@ -7,6 +7,7 @@
     "analysisDescription": "Lee los datos más recientes de todos los proyectos y utiliza la IA para redactar las observaciones y sugerencias del periodo en Hallazgos y Oportunidades. Si un día no se ejecuta, se vuelve a intentar automáticamente.",
     "otherWork": "Las sincronizaciones, el seguimiento de posiciones, las tendencias, la actividad de los competidores y el resto del trabajo automático se muestran por proyecto en Estado de los datos.",
     "otherWorkLink": "Abrir Fuentes de datos",
+    "otherWorkLabel": "Otras tareas automáticas",
     "dailyAt": "Todos los días a las {{time}}",
     "notRunYet": "Aún no se ha ejecutado",
     "pausedNext": "En pausa, sin ejecuciones automáticas",
@@ -14,6 +15,7 @@
     "tomorrow": "Mañana a las {{time}}",
     "yesterday": "Ayer a las {{time}}",
     "shownIn": "Horas indicadas en {{zone}}",
+    "timesLabel": "Acerca de estas horas",
     "columns": {
       "name": "Tarea",
       "time": "Programación",

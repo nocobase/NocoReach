@@ -8,6 +8,7 @@ const schedules = {
   otherWork:
     'Data syncs, rank tracking, trends, competitor activity and other automatic work are listed per project in Data health.',
   otherWorkLink: 'Open Data sources',
+  otherWorkLabel: 'Other automatic work',
   dailyAt: 'Daily at {{time}}',
   notRunYet: 'Not run yet',
   pausedNext: 'Paused, no automatic runs',
@@ -15,6 +16,7 @@ const schedules = {
   tomorrow: 'Tomorrow {{time}}',
   yesterday: 'Yesterday {{time}}',
   shownIn: 'Times shown in {{zone}}',
+  timesLabel: 'About these times',
   columns: {
     name: 'Work',
     time: 'Schedule',

@@ -161,8 +161,11 @@ describe('automatic runs', () => {
     expect(screen.queryByText('Server description.')).toBeNull();
     // One item: no pagination.
     expect(screen.queryByRole('navigation')).toBeNull();
+    // Other automatic work and its link to Data sources are behind the ⓘ beside the title, not grey text.
+    expect(screen.queryByRole('link', { name: '去数据接入查看' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '其他自动工作' }));
     expect(
-      screen.getByRole('link', { name: '去数据接入查看' }),
+      await screen.findByRole('link', { name: '去数据接入查看' }),
     ).toHaveAttribute('href', '/connections');
   });
   it('shows the scheduler details only on request', async () => {

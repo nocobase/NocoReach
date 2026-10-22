@@ -7,6 +7,7 @@
     "analysisDescription": "Membaca data terbaru dari setiap proyek dan meminta AI menyusun pengamatan serta saran untuk periode ini di Wawasan dan Peluang. Analisis yang terlewat akan dicoba lagi secara otomatis.",
     "otherWork": "Sinkronisasi data, pemantauan peringkat, tren, aktivitas pesaing, dan pekerjaan otomatis lainnya tercantum per proyek di Kesehatan data.",
     "otherWorkLink": "Buka Sumber data",
+    "otherWorkLabel": "Pekerjaan otomatis lainnya",
     "dailyAt": "Setiap hari pukul {{time}}",
     "notRunYet": "Belum dijalankan",
     "pausedNext": "Dijeda, tidak dijalankan otomatis",
@@ -14,6 +15,7 @@
     "tomorrow": "Besok {{time}}",
     "yesterday": "Kemarin {{time}}",
     "shownIn": "Waktu ditampilkan dalam zona {{zone}}",
+    "timesLabel": "Tentang waktu ini",
     "columns": {
       "name": "Pekerjaan",
       "time": "Jadwal",

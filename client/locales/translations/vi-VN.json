@@ -7,6 +7,7 @@
     "analysisDescription": "Đọc dữ liệu mới nhất của từng dự án và dùng AI để viết nhận định, đề xuất cho kỳ này trong mục Nhận định và Cơ hội cải thiện. Nếu có ngày chưa chạy, hệ thống sẽ tự động thử lại.",
     "otherWork": "Đồng bộ dữ liệu, theo dõi thứ hạng, xu hướng, hoạt động của đối thủ và các công việc tự động khác được liệt kê theo từng dự án trong mục Tình trạng dữ liệu.",
     "otherWorkLink": "Mở Nguồn dữ liệu",
+    "otherWorkLabel": "Công việc tự động khác",
     "dailyAt": "Hằng ngày lúc {{time}}",
     "notRunYet": "Chưa chạy",
     "pausedNext": "Đã tạm dừng, không chạy tự động",
@@ -14,6 +15,7 @@
     "tomorrow": "Ngày mai {{time}}",
     "yesterday": "Hôm qua {{time}}",
     "shownIn": "Thời gian hiển thị theo {{zone}}",
+    "timesLabel": "Về thời gian hiển thị",
     "columns": {
       "name": "Công việc",
       "time": "Lịch chạy",

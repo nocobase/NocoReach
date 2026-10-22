@@ -7,6 +7,7 @@
     "analysisDescription": "Lê os dados mais recentes de todos os projetos e usa IA para gerar observações e sugestões sobre o período em Insights e Oportunidades. Se a análise do dia não for concluída, uma nova tentativa será feita automaticamente.",
     "otherWork": "Sincronizações de dados, monitoramento de posições, tendências, atividades da concorrência e outras tarefas automáticas estão listadas por projeto em Saúde dos dados.",
     "otherWorkLink": "Abrir fontes de dados",
+    "otherWorkLabel": "Outras tarefas automáticas",
     "dailyAt": "Todos os dias às {{time}}",
     "notRunYet": "Ainda não houve execuções",
     "pausedNext": "Pausado, sem execuções automáticas",
@@ -14,6 +15,7 @@
     "tomorrow": "Amanhã às {{time}}",
     "yesterday": "Ontem às {{time}}",
     "shownIn": "Horários no fuso {{zone}}",
+    "timesLabel": "Sobre estes horários",
     "columns": {
       "name": "Tarefa",
       "time": "Agendamento",

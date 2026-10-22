@@ -8,6 +8,7 @@ const schedules: typeof enUS = {
   otherWork:
     '数据同步、排名跟踪、趋势、竞品动态等其他自动工作，按项目列在“数据健康”里。',
   otherWorkLink: '去数据接入查看',
+  otherWorkLabel: '其他自动工作',
   dailyAt: '每天 {{time}}',
   notRunYet: '还没运行过',
   pausedNext: '已暂停，不会自动运行',
@@ -15,6 +16,7 @@ const schedules: typeof enUS = {
   tomorrow: '明天 {{time}}',
   yesterday: '昨天 {{time}}',
   shownIn: '时间按{{zone}}显示',
+  timesLabel: '关于时间',
   columns: {
     name: '工作',
     time: '运行时间',

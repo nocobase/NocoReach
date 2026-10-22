@@ -7,6 +7,7 @@
     "analysisDescription": "讀取所有專案的最新資料，由 AI 寫出本期觀察和建議，更新到「洞察」和「機會」。當天未成功執行會自動重試。",
     "otherWork": "資料同步、排名追蹤、趨勢、競品動態等其他自動工作，按專案列在「資料健康」裡。",
     "otherWorkLink": "去資料串接檢視",
+    "otherWorkLabel": "其他自動工作",
     "dailyAt": "每天 {{time}}",
     "notRunYet": "還沒執行過",
     "pausedNext": "已暫停，不會自動執行",
@@ -14,6 +15,7 @@
     "tomorrow": "明天 {{time}}",
     "yesterday": "昨天 {{time}}",
     "shownIn": "時間按{{zone}}顯示",
+    "timesLabel": "關於時間",
     "columns": {
       "name": "工作",
       "time": "執行時間",

@@ -7,6 +7,7 @@
     "analysisDescription": "Consulte les dernières données de chaque projet et demande à l’IA de rédiger les observations et suggestions de la période pour les rubriques Enseignements et Opportunités. Si l’analyse n’a pas eu lieu un jour, elle est automatiquement relancée.",
     "otherWork": "Les synchronisations de données, le suivi du positionnement, les tendances, l’activité des concurrents et les autres tâches automatiques sont répertoriés par projet dans État des données.",
     "otherWorkLink": "Ouvrir les sources de données",
+    "otherWorkLabel": "Autres tâches automatiques",
     "dailyAt": "Chaque jour à {{time}}",
     "notRunYet": "Aucune exécution",
     "pausedNext": "En pause, aucune exécution automatique",
@@ -14,6 +15,7 @@
     "tomorrow": "Demain {{time}}",
     "yesterday": "Hier {{time}}",
     "shownIn": "Heures affichées dans le fuseau {{zone}}",
+    "timesLabel": "À propos de ces heures",
     "columns": {
       "name": "Tâche",
       "time": "Planification",

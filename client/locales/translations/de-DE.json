@@ -7,6 +7,7 @@
     "analysisDescription": "Liest die neuesten Daten aller Projekte und lässt die KI Beobachtungen und Vorschläge für den aktuellen Zeitraum unter Erkenntnisse und Chancen erstellen. Ausgefallene Tagesanalysen werden automatisch nachgeholt.",
     "otherWork": "Datensynchronisierungen, Positionsverfolgung, Trends, Wettbewerberaktivitäten und weitere automatische Aufgaben finden Sie für jedes Projekt unter Datenzustand.",
     "otherWorkLink": "Datenquellen öffnen",
+    "otherWorkLabel": "Weitere automatische Aufgaben",
     "dailyAt": "Täglich um {{time}}",
     "notRunYet": "Noch nicht ausgeführt",
     "pausedNext": "Pausiert, keine automatischen Ausführungen",
@@ -14,6 +15,7 @@
     "tomorrow": "Morgen {{time}}",
     "yesterday": "Gestern {{time}}",
     "shownIn": "Zeitangaben in {{zone}}",
+    "timesLabel": "Zu diesen Zeiten",
     "columns": {
       "name": "Aufgabe",
       "time": "Zeitplan",
