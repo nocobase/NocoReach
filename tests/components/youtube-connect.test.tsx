@@ -536,7 +536,8 @@ it('checks the project-scoped YouTube sync grant before exposing health retry', 
   const view = render(
     <HealthPanel projectId={1} reloadKey={0} onChange={() => {}} />,
   );
-  await screen.findByText('YouTube');
+  // The source shows in the attention list and in the sync table below it.
+  await screen.findAllByText('YouTube');
   expect(
     screen.queryByRole('button', { name: '重试' }),
   ).not.toBeInTheDocument();

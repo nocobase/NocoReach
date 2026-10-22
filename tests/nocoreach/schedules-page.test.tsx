@@ -166,7 +166,7 @@ describe('automatic runs', () => {
     fireEvent.click(screen.getByRole('button', { name: '其他自动工作' }));
     expect(
       await screen.findByRole('link', { name: '去数据接入查看' }),
-    ).toHaveAttribute('href', '/connections');
+    ).toHaveAttribute('href', '/connections?tab=health');
   });
   it('shows the scheduler details only on request', async () => {
     await mount();

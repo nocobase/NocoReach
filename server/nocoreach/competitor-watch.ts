@@ -21,6 +21,9 @@ const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status
 const DAY=86400000,WEEK=7*DAY,MAX=5,KNOWN=6000,EVENTS=400,TITLES=8,BURST=40,CANDIDATES=8;
 const hash=u=>createHash('sha1').update(String(u).replace(/\/$/,'')).digest('hex').slice(0,10);
 const str=(v,max)=>typeof v==='string'?v.trim().slice(0,max):'';
+// A refusal that only a changed setting cures (no sitemap, an invalid address, a missing or private repository, a refused
+// token); timeouts, rate limits and server errors may pass on their own. Data health offers Change instead of Retry.
+const settingsError=e=>Number(e?.status)>=400&&Number(e?.status)<500&&![408,429].includes(Number(e?.status));
 function siteOf(input){const raw=str(input,300);if(!raw)return '';let u;try{u=new URL(/^https?:\/\//i.test(raw)?raw:`https://${raw}`);}catch{fail(systemMessageText('competitorWatch.websiteUrlNotValidExample'));}
  if(!/\.[a-z]{2,}$/i.test(u.hostname))fail(systemMessageText('competitorWatch.websiteUrlNotValidExample'));return `https://${u.hostname.toLowerCase()}`;}
 function repoOf(input){const raw=str(input,300);if(!raw)return '';const m=raw.match(/^(?:https?:\/\/github\.com\/)?([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/i);if(!m)fail(systemMessageText('competitorWatch.writeGithubRepositoryHttpsGithub'));return `${m[1]}/${m[2]}`;}
@@ -79,25 +82,25 @@ class CompetitorWatch{
  async remove(id,v){await this.mutate(id,s=>{const {[v.competitorId]:_gone,...track}=s.track||{};return {...s,list:s.list.filter(c=>c.id!==v.competitorId),track,events:(s.events||[]).filter(e=>e.competitorId!==v.competitorId)};});this.changed(id);return this.status(id);}
  start(id,only){if(this.checking)return;this.checking=this.check(id,{force:true,only}).catch(()=>undefined).finally(()=>{this.checking=null;});}
  // One competitor: its sitemap against the pages seen before, its repository and releases.
- async look(id,c,old={}){const clock=businessNow(this.p,id,'competitors'),now=new Date(clock).toISOString(),track={...old,checkedAt:new Date().toISOString()},events=[],errors=[],ev=(type,title,url,detail='')=>events.push({id:randomUUID().slice(0,10),competitorId:c.id,type,title:str(title,300),url,detail:str(detail,300),at:now});
+ async look(id,c,old={}){const clock=businessNow(this.p,id,'competitors'),now=new Date(clock).toISOString(),track={...old,checkedAt:new Date().toISOString()},events=[],errors=[];let configErrors=0;const ev=(type,title,url,detail='')=>events.push({id:randomUUID().slice(0,10),competitorId:c.id,type,title:str(title,300),url,detail:str(detail,300),at:now});
   if(c.site){try{const d=await this.siteContent.discover(c.site),truncated=d.warnings.some(w=>/只收录/.test(w)),first=!Array.isArray(old.known),known=new Set(old.known||[]),month=clock-30*DAY;
     const fresh=first?[]:d.pages.filter(p=>!known.has(hash(p.url))&&(!truncated||Date.parse(p.lastmod||0)>=month));
     if(fresh.length>BURST)ev('site',systemMessageText('messages.newUrlsWebsite', { 0: fresh.length }),c.site,systemMessageText('competitorWatch.manyOnceMayMeanRedesign'));
     else for(const [i,p] of fresh.entries()){let title='',description='';if(i<TITLES){try{const r=await this.read(p.url);({title,description}=pageMeta(String(r.text||''),p.url));}catch{/* the address is enough */}}ev('page',title||new URL(p.url).pathname,p.url,description);}
     track.known=d.pages.map(p=>hash(p.url)).slice(0,KNOWN);track.pages=d.pages.length;track.siteError=null;}
-   catch(e){errors.push(systemMessageText('messages.website', { 0: c.name, 1: e.message }));track.siteError=e.message;}}
+   catch(e){errors.push(systemMessageText('messages.website', { 0: c.name, 1: e.message }));track.siteError=e.message;if(settingsError(e))configErrors++;}}
   if(c.repo){const token=this.p.github?.token?.(id)||undefined;
    try{const r=await this.github.gh(`/repos/${c.repo}`,token);const day=now.slice(0,10);track.stars={...(old.stars||{}),[day]:r.stargazers_count};track.stars=Object.fromEntries(Object.entries(track.stars).sort(([a],[b])=>a.localeCompare(b)).slice(-120));track.forks=r.forks_count;track.description=str(r.description,200);
     const rel=(await this.github.gh(`/repos/${c.repo}/releases?per_page=5`,token)||[]).filter(x=>!x.draft).map(x=>({name:str(x.name||x.tag_name,120),tag:str(x.tag_name,60),url:x.html_url,publishedAt:x.published_at}));
     if(old.latestRelease!==undefined)for(const x of rel.filter(x=>x.publishedAt&&x.publishedAt>(old.latestRelease?.publishedAt||'')).reverse())ev('release',systemMessageText('messages.released', { 0: x.name }),x.url,x.name.includes(x.tag)?'':x.tag);
     track.latestRelease=rel[0]||null;track.repoError=null;}
-   catch(e){errors.push(`${c.name} GitHub：${e.message}`);track.repoError=e.message;}}
-  return {track,events,errors};}
+   catch(e){errors.push(`${c.name} GitHub：${e.message}`);track.repoError=e.message;if(settingsError(e))configErrors++;}}
+  return {track,events,errors,configErrors};}
  async check(id,{force=false,only}={}){const s=await this.state(id);if(!s?.list?.length)return {events:0,errors:[]};const now=new Date().toISOString(),due=s.list.filter(c=>(!only||only.includes(c.id))&&(force||!s.track?.[c.id]?.checkedAt||Date.now()-Date.parse(s.track[c.id].checkedAt)>=WEEK-6*3600000));
   if(!due.length)return {events:0,errors:[]};const results={};for(const c of due)results[c.id]=await this.look(id,c,s.track?.[c.id]);
-  let count=0;const errors=Object.values(results).flatMap(r=>r.errors);
+  let count=0;const errors=Object.values(results).flatMap(r=>r.errors),configError=Object.values(results).some(r=>r.configErrors>0);
   await this.mutate(id,cur=>{const track={...(cur.track||{})},events=[...(cur.events||[])];for(const c of cur.list){const r=results[c.id];if(!r)continue;track[c.id]=r.track;events.unshift(...r.events);count+=r.events.length;}
-   return {...cur,track,events:events.slice(0,EVENTS),lastRun:{at:now,ok:!errors.length,errors:errors.slice(0,5)}};});
+   return {...cur,track,events:events.slice(0,EVENTS),lastRun:{at:now,ok:!errors.length,errors:errors.slice(0,5),...(configError?{configError:true}:{})}};});
   return {events:count,errors};}
  // Stars now and a week before (the sample closest to seven days back, at least five days old).
  starsOf(t){const days=Object.entries(t?.stars||{}).sort(([a],[b])=>a.localeCompare(b));if(!days.length)return {stars:null,week:null};const [lastDay,now]=days.at(-1),before=days.filter(([d])=>Date.parse(lastDay)-Date.parse(d)>=5*DAY).at(-1);return {stars:now,week:before?now-before[1]:null};}

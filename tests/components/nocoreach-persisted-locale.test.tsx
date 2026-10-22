@@ -261,11 +261,7 @@ describe('Persisted bilingual UI messages and tables', () => {
   });
   it('translates known system source names in the expanded health table', async () => {
     await setup('en-US', 'health');
-    await userEvent.setup().click(
-      await screen.findByRole('button', {
-        name: $t('dataHealth.viewSyncStatus'),
-      }),
-    );
+    await screen.findByRole('table');
     expect(screen.getByRole('table')).toHaveTextContent(
       $t('common.websiteContent'),
     );
