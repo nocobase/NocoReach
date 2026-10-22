@@ -6923,9 +6923,9 @@
   "analysisRules.placeSingular": "place",
   "siteContent.discoverySummary": "Plans de site : {0}. Pages trouvées : {1}.",
   "agentRoles.cloud": "Modèles cloud",
-  "agentRoles.cloudHint": "Ils utilisent les modèles de Paramètres › Services de modèles ; le fournisseur facture chaque appel.",
+  "agentRoles.cloudHint": "Ils utilisent les modèles de l’onglet Services de modèles ci-dessous ; le fournisseur facture chaque appel.",
   "agentRoles.local": "Agents locaux",
-  "agentRoles.localHint": "Ils utilisent Claude Code ou Codex sur un ordinateur de Paramètres › Environnements d’exécution, avec le compte qui y est connecté.",
+  "agentRoles.localHint": "Ils utilisent Claude Code ou Codex sur un ordinateur de l’onglet Environnements d’exécution ci-dessous, avec le compte qui y est connecté.",
   "agentRoles.chatFootnote": "Si vous choisissez un agent local dans le panneau de conversation, c’est lui qui répond à cette conversation.",
   "agentRoles.colWork": "Travail",
   "agentRoles.colDoes": "Rôle",
@@ -7006,5 +7006,9 @@
   "searchPerformance.appearanceOther": "Autre ({0})",
   "searchIndex.noteQuota": "Le nombre de pages vérifiées par jour est limité à {0}. Les pages vérifiées il y a le plus longtemps sont traitées en premier.",
   "searchSitemaps.noteProperty": "Propriété Search Console : {0}",
-  "searchHistory.details": "Détails de la couverture des données"
+  "searchHistory.details": "Détails de la couverture des données",
+  "agentsPage.tabs": "Sections Agent",
+  "agentsPage.runtimes": "Environnements d’exécution",
+  "agentsPage.models": "Services de modèles",
+  "agentsPage.usage": "Utilisation"
 }

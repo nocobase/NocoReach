@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Agent: tabs back, no duplicate local agents
+
+- Runtimes, Model services and Usage are tabs of the Agent page again, after Local agents, instead of pages of Settings; Settings no longer lists them, and `/runtimes`, `/models` and `/usage` open the tabs.
+- The Agent page shows Who does the work above the tabs; the local agents and the project default are in the Local agents tab only, instead of a second block below the overview. Change opens that tab.
+- When the chosen local agent's coding tool is not signed in or out of quota, the page no longer offers to switch to an agent that uses the same tool (switching from Claude · Fable 5.1 to Claude · Haiku 4.5 fails the same way); it offers an agent with another tool, or Change.
+
 ## Unreleased — One conversation a day on Insights
 
 - What you ask from Insights joins the day's conversation, shown right under the day's analysis with its own input at the bottom: type and press Enter, and the answer appears there (what it read folds under "Sources checked"). Each day keeps one conversation, so the AI remembers what was asked before.

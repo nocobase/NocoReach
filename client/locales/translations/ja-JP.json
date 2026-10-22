@@ -816,8 +816,5 @@
   },
   "agentSetup.connectionsTitle": "エージェントでデータソースを接続",
   "agentSetup.connectionsDescription": "以下の手順を Claude Code、Codex などのコーディングエージェントにコピーしてください。エージェントが NocoReach CLI をインストールしてあなたのアカウントでログインし、計画を確認してもらってから、このプロジェクトのデータソースを接続します。",
-  "agentSetup.connectionsPrompt": "NocoReach のプロジェクト「{{project}}」（ID {{projectId}}）にデータソースを接続するのを手伝ってください。\n\n1. NocoReach CLI をインストールしてください:\n{{install}}\n\n2. ブラウザーでのログインを開始してください:\n{{login}}\n認証用の URL とコードを私に提示してください。私がブラウザーでコードを確認して承認するまで待ち、代わりに承認しないでください。\n\n3. 私の承認後、`nocoreach whoami` を実行してログイン中のアカウントを確認し、続いて `nocoreach connect guide --json` を実行して、その手順に従ってプロジェクト {{projectId}} のデータソースを接続してください。接続する前に計画を提示し、私の確認を待ってください。パスワード、トークン、API キーを要求せず、ダウンロード用トークンを API キーとして使用しないでください。認証情報が必要なデータソースについてはリンクを提示し、私がブラウザーで入力できるようにしてください。",
-  "nocoreach.nav.runtimes": "実行環境",
-  "nocoreach.nav.models": "モデルサービス",
-  "nocoreach.nav.usage": "使用量"
+  "agentSetup.connectionsPrompt": "NocoReach のプロジェクト「{{project}}」（ID {{projectId}}）にデータソースを接続するのを手伝ってください。\n\n1. NocoReach CLI をインストールしてください:\n{{install}}\n\n2. ブラウザーでのログインを開始してください:\n{{login}}\n認証用の URL とコードを私に提示してください。私がブラウザーでコードを確認して承認するまで待ち、代わりに承認しないでください。\n\n3. 私の承認後、`nocoreach whoami` を実行してログイン中のアカウントを確認し、続いて `nocoreach connect guide --json` を実行して、その手順に従ってプロジェクト {{projectId}} のデータソースを接続してください。接続する前に計画を提示し、私の確認を待ってください。パスワード、トークン、API キーを要求せず、ダウンロード用トークンを API キーとして使用しないでください。認証情報が必要なデータソースについてはリンクを提示し、私がブラウザーで入力できるようにしてください。"
 }
