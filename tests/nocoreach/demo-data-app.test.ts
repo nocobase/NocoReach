@@ -869,12 +869,12 @@ test('imports the demo through the API and clears all business data while preser
     'sophie',
     'henry',
     'chloe',
-    'alexreed',
+    'admin',
   ]);
   // The demo's administrator manages the demo itself: its configuration and its data.
   const administrator = await signIn(testApp, {
-    email: 'alexreed@nocobase.example',
-    password: 'alexreed123',
+    email: 'admin@nocobase.example',
+    password: 'Demo@2026',
   });
   expect((await administrator.fetch('/demoMode/configuration')).status).toBe(
     200,
@@ -921,8 +921,8 @@ describe('existing account conflicts', () => {
     );
     const own = await users.create({
       name: 'Existing person',
-      username: 'xulan',
-      email: 'xulan@nocobase.example',
+      username: 'admin',
+      email: 'admin@nocobase.example',
       password: 'original-password-123',
     });
     const adminId = (await connection.query
@@ -952,7 +952,7 @@ describe('existing account conflicts', () => {
       disabledAt: null,
     });
     await signIn(testApp, {
-      email: 'xulan@nocobase.example',
+      email: 'admin@nocobase.example',
       password: 'original-password-123',
     });
     expect(await runtime.plugin.projects.all()).toEqual([]);

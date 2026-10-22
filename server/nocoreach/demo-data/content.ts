@@ -138,7 +138,7 @@ const ZH_CN: DemoContent = {
       name: '陈澄',
       title: '实施顾问（只读）',
     },
-    admin: { username: 'zhaoqi', name: '赵琦', title: '系统管理员' },
+    admin: { username: 'admin', name: '赵琦', title: '系统管理员' },
   },
   roles: {
     growth: '增长负责人',

@@ -6,10 +6,12 @@
 
 ## Unreleased
 
+- Standardize generated demo administrators on `admin` / `Demo@2026` in both languages and hide the floating demo entry while retaining account-menu switching.
+
 - Adapt Demo management to the application header, line tabs, sections and buttons through the plugin's public component contract, retaining permission and draft protection.
 
-- Replace Settings › Demo management with the Demo Mode plugin's administration page, and switch demo accounts from the account menu; visitors who have not signed in keep the corner button.
-- Add a demo administrator account (`zhaoqi` / `alexreed`) with a demo-owned copy of the administrator role, so visitors can try settings and the demo's own management.
+- Replace Settings › Demo management with the Demo Mode plugin's administration page, and switch demo accounts from the account menu; the floating guest entry is disabled.
+- Add a demo administrator account (`admin`, password `Demo@2026`) with a demo-owned copy of the administrator role, so visitors can try settings and the demo's own management.
 
 - Add configurable online demo chat with existing live models, explicit tool policies, owned general conversations, and execution-time policy checks.
 

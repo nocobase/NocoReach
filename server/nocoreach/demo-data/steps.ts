@@ -119,6 +119,9 @@ const PEOPLE: readonly {
   { person: 'admin', roles: [ROLE_KEYS.admin], projects: ['main', 'second'] },
 ];
 
+const demoPassword = (person: DemoPerson, username: string) =>
+  person === 'admin' ? 'Demo@2026' : `${username}123`;
+
 export const demoEmail = (username: string) => `${username}@nocobase.example`;
 
 /** The accounts the demo page lists before and after an import. */
@@ -128,7 +131,7 @@ export function demoAccounts(language: string) {
     username: content.people[person].username,
     name: content.people[person].name,
     role: content.people[person].title,
-    password: `${content.people[person].username}123`,
+    password: demoPassword(person, content.people[person].username),
   }));
 }
 
@@ -221,6 +224,7 @@ async function createPeople(
       username: spec.username,
       name: spec.name,
       email: demoEmail(spec.username),
+      password: demoPassword(person, spec.username),
       permissionSets: roles,
     });
     people[person] = id;
