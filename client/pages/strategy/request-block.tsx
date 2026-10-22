@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { RefreshCw } from 'lucide-react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { NocoReachHttpError } from '#lib/nocoreach-api';
 import { $t } from '#i18n';
@@ -33,7 +32,8 @@ export function RequestBlock({
    * visit): the title only names the region, and Retry shows only after a failure.
    */
   compact?: boolean;
-  /** A side block that should not draw the eye: a small grey heading and Refresh as an icon. */
+  /** A side block that should not draw the eye: a small grey heading, and Retry only after a failure (the page's own
+   * refresh reads it again). */
   quiet?: boolean;
   request: RequestState;
   empty?: boolean;
@@ -127,19 +127,7 @@ export function RequestBlock({
           </Button>
         ) : (
           !unavailable &&
-          (quiet && !failed ? (
-            <Button
-              variant='ghost'
-              size='icon-xs'
-              aria-label={$t('strategy.refreshBlock')}
-              title={$t('strategy.refreshBlock')}
-              disabled={request.loading}
-              onClick={request.reload}
-              className='text-muted-foreground'
-            >
-              <RefreshCw aria-hidden='true' />
-            </Button>
-          ) : (
+          (!quiet || failed) && (
             <Button
               variant='ghost'
               size={quiet ? 'xs' : 'sm'}
@@ -148,7 +136,7 @@ export function RequestBlock({
             >
               {failed ? $t('common.retry') : $t('strategy.refreshBlock')}
             </Button>
-          ))
+          )
         )}
       </div>
       {alert}

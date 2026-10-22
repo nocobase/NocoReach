@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Insights has one refresh
+
+- Update analysis is the page's refresh icon, as on Results, named and tooltipped "Update analysis": it spins while the analysis runs, and the numbers, Current situation and the waiting tasks are read again when it ends. Current situation no longer has a refresh of its own.
+- Current situation lists every line, those needing attention first, since the column has the room; "N more" is gone.
+
 ## Unreleased — Tasks: one set of status choices, the shared drop-downs
 
 - Tasks no longer has a status drop-down beside Waiting for me, Current, Done and Closed: the two overlapped, and the board's columns and the list's order already separate statuses. An old `?status=` link shows the scope without filtering.
