@@ -2,7 +2,7 @@
 
 Blog and article tasks can publish a structured article to a configured **publishing target** instead of opening a pull request. The writing steps (outline, draft, rewrite, review) are unchanged; only the change step's deliverable and the release differ. Code and page-layout tasks keep the pull-request flow.
 
-Administrators configure targets under Data sources › Article publishing, choose the default one and, per playbook, where its tasks publish (a target or the repository). A new task starts from where its page lives: the article found from the task's page in the target that publishes it, a page no target holds through the repository, a blog post as a new article in the playbook's target. Its owner can change this before starting, and also publish the same article to up to four other targets. Operator instructions in Chinese: [ARTICLE-PUBLISHING.zh-CN.md](ARTICLE-PUBLISHING.zh-CN.md). The HTTP protocol a site implements for the `http` kind: [ARTICLE-API.md](ARTICLE-API.md).
+Administrators configure targets under Data sources › Blog CMS (in the Agent edits and publishing group), choose the default one and, per playbook, where its tasks publish (a target or the repository). A new task starts from where its page lives: the article found from the task's page in the target that publishes it, a page no target holds through the repository, a blog post as a new article in the playbook's target. Its owner can change this before starting, and also publish the same article to up to four other targets. Operator instructions in Chinese: [ARTICLE-PUBLISHING.zh-CN.md](ARTICLE-PUBLISHING.zh-CN.md). The HTTP protocol a site implements for the `http` kind: [ARTICLE-API.md](ARTICLE-API.md).
 
 ## Model
 
