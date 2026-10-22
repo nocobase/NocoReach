@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Segmented } from '#components/reach/segmented';
+import { RefreshButton } from '#components/reach/refresh-button';
 import {
   Link,
   Outlet,
@@ -33,11 +35,13 @@ export default function ResultDetailPage() {
 function Detail({ projectId, taskId }: { projectId: string; taskId: string }) {
   const [data, setData] = useState<ResultDetail>(),
     [error, setError] = useState(false),
-    [refresh, setRefresh] = useState(0);
+    [refresh, setRefresh] = useState(0),
+    [loading, setLoading] = useState(true);
   const [params, setParams] = useSearchParams(),
     location = useLocation();
   useEffect(() => {
     let alive = true;
+    setLoading(true);
     void api
       .action<ResultDetail>('nrTaskWork', 'result', {
         method: 'POST',
@@ -48,6 +52,7 @@ function Detail({ projectId, taskId }: { projectId: string; taskId: string }) {
         if (alive) {
           setData(next);
           setError(false);
+          setLoading(false);
         }
       })
       .catch((failure: unknown) => {
@@ -58,6 +63,7 @@ function Detail({ projectId, taskId }: { projectId: string; taskId: string }) {
           )
             setData(undefined);
           setError(true);
+          setLoading(false);
         }
       });
     return () => {
@@ -84,14 +90,19 @@ function Detail({ projectId, taskId }: { projectId: string; taskId: string }) {
       className='sm:max-w-2xl'
     >
       <div className='flex flex-col gap-5'>
-        {error && (
-          <p role='alert'>
-            {$t(data ? 'results.stale' : 'results.loadFailed')}
-          </p>
-        )}
-        <Button variant='outline' onClick={() => setRefresh((n) => n + 1)}>
-          {$t('results.refresh')}
-        </Button>
+        <div className='flex items-start gap-3'>
+          {error && (
+            <p role='alert' className='flex-1'>
+              {$t(data ? 'results.stale' : 'results.loadFailed')}
+            </p>
+          )}
+          <RefreshButton
+            className='ml-auto'
+            busy={loading}
+            label={$t('results.refresh')}
+            onClick={() => setRefresh((n) => n + 1)}
+          />
+        </div>
         {data ? (
           <>
             <Link
@@ -122,23 +133,20 @@ function Detail({ projectId, taskId }: { projectId: string; taskId: string }) {
             <p className='text-sm'>
               {$t('results.observeFrom', { 0: data.observeFrom || '—' })}
             </p>
-            <nav className='flex gap-2' aria-label={$t('results.checkpoint')}>
-              {[7, 28].map((d) => (
-                <Button
-                  key={d}
-                  variant='outline'
-                  aria-pressed={day === d}
-                  className='aria-pressed:border-primary aria-pressed:bg-muted aria-pressed:text-primary'
-                  onClick={() => {
-                    const p = new URLSearchParams(params);
-                    p.set('day', String(d));
-                    setParams(p);
-                  }}
-                >
-                  {$t('results.day', { 0: d })}
-                </Button>
-              ))}
-            </nav>
+            <Segmented
+              label={$t('results.checkpoint')}
+              className='self-start'
+              options={[7, 28].map((d) => ({
+                id: String(d),
+                label: $t('results.day', { 0: d }),
+              }))}
+              value={String(day)}
+              onChange={(d) => {
+                const p = new URLSearchParams(params);
+                p.set('day', d);
+                setParams(p);
+              }}
+            />
             {result ? (
               <Comparison result={result} observeFrom={data.observeFrom} />
             ) : (
