@@ -4,11 +4,11 @@
 
 <h1 align="center">NocoReach</h1>
 
-<p align="center"><strong>Understand your data, turn it into market opportunities, and get them done.</strong></p>
+<p align="center"><strong>Find the opportunities in your data. NocoReach puts them into action.</strong></p>
 
 <p align="center">
 An AI growth operations platform.<br>
-Data collection, daily analysis and agent execution, all in one place.
+Data collection, daily analysis and Agent execution in one platform.
 </p>
 
 <p align="center">

@@ -15,7 +15,7 @@ import { resultOf, type AgentResult } from './agent-result.js';
 import { TaskBusiness } from './task-business.js';
 import { serializeTaskInput, type TaskInput } from './task-materials';
 import type { LegacyDatabase, LegacyTransaction } from '../legacy/database';
-import { CHECKPOINTS, compare, dateOf, pageKey, shift, windows, type Partition } from './effect';
+import { CHECKPOINTS, compare, dateOf, pageKey, pageNumbers, shift, windows, type Partition } from './effect';
 import { listResults, readResult, resultBoard } from './result-view.js';
 import { ArticleFlow } from './article-flow.js';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
@@ -312,6 +312,32 @@ export class TaskService {
   }
   // The pages a finished task changed: what was released, the published page and the linked page.
   effectPages(w: Work) { return [...new Set([...(w.release?.pages || []), w.receipt?.url || '', w.page?.url || ''].map(httpsUrl).filter(Boolean))].slice(0, 10); }
+  // The pages the task page shows numbers for (2026-10-22): those the observation compares, then the page the task
+  // was handed off with, the opportunity's page and the cited changes' pages (as the article lookup reads them).
+  numberPages(task: any, w: Work) {
+    const e = task.evidence || {}, ids = new Set(Array.isArray(e.insight?.signalIds) ? e.insight.signalIds : []);
+    const cited = (e.context?.signals?.items || []).filter((s: any) => ids.has(s?.key)).map((s: any) => s?.url);
+    const pages = new Map<string, string>();
+    for (const u of [...this.effectPages(w), e.page, e.insight?.target, ...cited]) {
+      const url = typeof u === 'string' ? u.trim() : '';
+      if (/^https?:\/\//i.test(url) && pageKey(url) && !pages.has(pageKey(url))) pages.set(pageKey(url), url);
+    }
+    return [...pages.values()].slice(0, 10);
+  }
+  // Each page's numbers over 28 days, for the task page: the 28 days before the change went live once it has,
+  // otherwise the latest 28 days every source has data for.
+  async numbers(project: string, taskId: string) {
+    const task = await this.task(project, taskId), w = projectWork(task), pages = this.numberPages(task, w), live = Boolean(w.observeFrom);
+    if (!pages.length) return { pages: [], range: null, live };
+    let range: { start: string; end: string };
+    if (w.observeFrom) { const from = dateOf(w.observeFrom); range = { start: shift(from, -28), end: shift(from, -1) }; }
+    else {
+      const end = await this.dataEnd(project);
+      if (!end) return { pages: pages.map(page => ({ page })), range: null, live };
+      range = { start: shift(end, -27), end };
+    }
+    return { ...pageNumbers(await this.partitions(project, range.start, range.end), pages, range), live };
+  }
   // Daily Google partitions of the project's current property and site, between two dates.
   private async partitions(project: string, start: string, end: string): Promise<Partition[]> {
     const link = await this.p.link(project), out: Partition[] = [];
@@ -955,7 +981,7 @@ export class TaskService {
     this.p.app.acl.allow('nrPlaybooks', ['list', 'save', 'copy', 'remove', 'restore', 'draft'], 'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrAgent', actions: { status: wrap(async (p, v, c) => this.agents.status(p, undefined, String(c.auth.user.id), { seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), saveDefault: wrap((p, v, c) => this.agents.saveDefault(p, v, String(c.auth.user.id))), saveRepo: wrap((p, v) => this.agents.saveRepo(p, v)), removeRepo: wrap((p, v) => this.agents.removeRepo(p, v)) } });
     this.p.app.acl.allow('nrAgent', ['status', 'saveDefault', 'saveRepo', 'removeRepo'], 'loggedIn');
-    this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { results: wrap((p,v)=>listResults(this,p,v)), result: wrap((p,v)=>readResult(this,p,v)), board: wrap((p,v)=>resultBoard(this,p,v)), get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)) } });
-    this.p.app.acl.allow('nrTaskWork', ['results', 'result', 'board', 'get', 'advance', 'members', 'list', 'pages'], 'loggedIn');
+    this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { results: wrap((p,v)=>listResults(this,p,v)), result: wrap((p,v)=>readResult(this,p,v)), board: wrap((p,v)=>resultBoard(this,p,v)), get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), numbers: wrap((p, v) => this.numbers(p, String(v.taskId))), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)) } });
+    this.p.app.acl.allow('nrTaskWork', ['results', 'result', 'board', 'get', 'numbers', 'advance', 'members', 'list', 'pages'], 'loggedIn');
   }
 }

@@ -6,9 +6,15 @@ import { Button } from '#components/ui/button';
 import { Spinner } from '#components/ui/spinner';
 import { Reveal } from '#components/reach/reveal';
 import { Tag, type Tone } from '#components/reach/tag';
+import { formatDateTime } from '#lib/format';
 import { ChangeView } from '../change-view';
-import type { Release, TaskData } from '../task-execution-types';
+import type {
+  Release,
+  ReleaseArticle,
+  TaskData,
+} from '../task-execution-types';
 import {
+  failedLegs,
   failureText,
   fieldChange,
   fieldLabel,
@@ -74,6 +80,65 @@ export function TargetRows({ data, r }: { data: TaskData; r?: Release }) {
       ))}
     </ul>
   );
+}
+
+const STEP_KEY: Record<NonNullable<ReleaseArticle['errorStep']>, string> = {
+  read: 'articleTask.failedStepRead',
+  downstream: 'articleTask.failedStepDownstream',
+  write: 'articleTask.failedStepWrite',
+  verify: 'articleTask.failedStepVerify',
+};
+/**
+ * For Technical details: each target whose publishing did not complete, with the step it stopped at, the error code
+ * and what the target or the error said (article-flow.ts `record`). The card itself keeps to the plain-words reason.
+ */
+export function PublishFailureDetails({
+  data,
+  r,
+}: {
+  data: TaskData;
+  r?: Release;
+}) {
+  const failed = failedLegs(r);
+  if (!failed.length) return null;
+  return failed.map(({ a }) => (
+    <section key={a.targetId} className='flex flex-col gap-2'>
+      <h3 className='text-sm font-medium'>
+        {$t('articleTask.failedTo', { 0: nameOf(data, a.targetId) })}
+      </h3>
+      <dl className='grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[6rem_1fr]'>
+        {a.errorStep && STEP_KEY[a.errorStep] ? (
+          <>
+            <dt className='text-muted-foreground'>
+              {$t('articleTask.failedStep')}
+            </dt>
+            <dd>{$t(STEP_KEY[a.errorStep])}</dd>
+          </>
+        ) : null}
+        <dt className='text-muted-foreground'>
+          {$t('articleTask.failureCode')}
+        </dt>
+        <dd>
+          <code>{a.error}</code>
+        </dd>
+        {a.errorAt ? (
+          <>
+            <dt className='text-muted-foreground'>
+              {$t('articleTask.failedAt')}
+            </dt>
+            <dd>{formatDateTime(a.errorAt)}</dd>
+          </>
+        ) : null}
+      </dl>
+      {a.errorDetail ? (
+        <Alert variant='destructive'>
+          <AlertDescription className='whitespace-pre-wrap break-words'>
+            {a.errorDetail}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+    </section>
+  ));
 }
 
 /** A card action that shows its own progress while the command runs. */

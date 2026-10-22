@@ -187,10 +187,21 @@ const visible = (id: number) =>
   expect(screen.getByText(`Task ${id}`)).toBeInTheDocument();
 const absent = (id: number) =>
   expect(screen.queryByText(`Task ${id}`)).not.toBeInTheDocument();
+// The filters are the application's Select: its options render in a popup once the trigger is opened, and the chosen
+// value is on the trigger's data-value.
 async function choose(name: string) {
-  await userEvent
-    .setup()
-    .selectOptions(select(), within(select()).getByRole('option', { name }));
+  const user = userEvent.setup();
+  await user.click(select());
+  await user.click(await screen.findByRole('option', { name }));
+}
+async function options() {
+  const user = userEvent.setup();
+  await user.click(select());
+  const list = await screen.findAllByRole('option');
+  const names = list.map((option) => option.textContent);
+  await user.keyboard('{Escape}');
+  await waitFor(() => expect(screen.queryByRole('option')).toBeNull());
+  return names;
 }
 
 test.each(['custom', 'edited'] as const)(
@@ -200,9 +211,7 @@ test.each(['custom', 'edited'] as const)(
     await choose('技术修复');
     visible(1);
     await act(() => runtime.changeLanguage('zh-CN'));
-    expect(
-      within(select()).getByRole('option', { name: '技术修复' }),
-    ).toBeInTheDocument();
+    expect(await options()).toContain('技术修复');
     visible(1);
   },
 );
@@ -220,7 +229,7 @@ test('selected canonical name survives both locale switches without refetch or U
     await act(() => runtime.changeLanguage(locale));
     visible(1);
     absent(2);
-    expect(select()).toHaveValue(playbookFilterValue('技术修复'));
+    expect(select()).toHaveAttribute('data-value', playbookFilterValue('技术修复'));
     expect(query().toString()).toBe(selectedQuery);
   }
   expect(taskRecords).toHaveBeenCalledTimes(1);
@@ -240,11 +249,9 @@ test('same raw name spans IDs, versions and origins while retaining each display
   await choose('Technical fix / 技术修复');
   for (const id of [1, 2, 3, 4, 5]) visible(id);
   absent(6);
-  expect(within(select()).getAllByRole('option')).toHaveLength(3);
+  expect(await options()).toHaveLength(3);
   await act(() => runtime.changeLanguage('zh-CN'));
-  expect(
-    within(select()).getByRole('option', { name: '技术修复' }),
-  ).toBeInTheDocument();
+  expect(await options()).toContain('技术修复');
   for (const id of [1, 2, 3, 4, 5]) visible(id);
   expect(tasks).toEqual(raw);
 });
@@ -291,7 +298,7 @@ test.each(['技术修复', 'Technical fix'])(
       if (name === 'Technical fix') visible(3);
       else absent(3);
       expect(query().toString()).toBe(initial.toString());
-      expect(select()).toHaveValue(playbookFilterValue(name, true));
+      expect(select()).toHaveAttribute('data-value', playbookFilterValue(name, true));
     }
     await choose($t('optimizationWork.playbooks'));
     expect(query().has('playbook')).toBe(false);
@@ -320,7 +327,7 @@ test.each([
     await act(() => runtime.changeLanguage('zh-CN'));
     visible(1);
     absent(2);
-    expect(select()).toHaveValue(playbookFilterValue(name));
+    expect(select()).toHaveAttribute('data-value', playbookFilterValue(name));
   },
 );
 
@@ -345,14 +352,14 @@ test('raw name parameter wins over an old alias, including an explicit empty val
   );
   visible(1);
   visible(2);
-  expect(select()).toHaveValue('');
+  expect(select()).toHaveAttribute('data-value', '');
 });
 
 test('empty or missing names have no filter option and remain in the unfiltered list', async () => {
   const missing = task(2, 'custom');
   delete missing.evidence.work;
   await setup([task(1, 'custom', ''), missing]);
-  expect(within(select()).getAllByRole('option')).toHaveLength(1);
+  expect(await options()).toHaveLength(1);
   visible(1);
   visible(2);
 });
@@ -360,9 +367,7 @@ test('empty or missing names have no filter option and remain in the unfiltered 
 test('legacy canonical localization and altered legacy raw names use the same display helper', async () => {
   const changed = task(2, 'legacy', '技术修复 {0}', 2);
   await setup([task(1, 'legacy'), changed]);
-  expect(
-    within(select()).getByRole('option', { name: 'Technical fix' }),
-  ).toBeInTheDocument();
+  expect(await options()).toContain('Technical fix');
   await choose('技术修复 {0}');
   absent(1);
   visible(2);
@@ -374,9 +379,7 @@ test('unknown legacy query stays unmatched and can be cleared', async () => {
   expect(
     screen.getByText('No matching tasks. Try adjusting the filters.'),
   ).toBeInTheDocument();
-  expect(
-    within(select()).getByRole('option', { name: 'unknown{0}' }),
-  ).toBeInTheDocument();
+  expect(await options()).toContain('unknown{0}');
   await choose('All playbooks');
   visible(1);
 });
@@ -398,46 +401,38 @@ test('rapid view and filter changes compose before the router commits', async ()
   await setup(
     [task(1, 'system'), task(2, 'custom', 'Other')],
     'en-US',
-    '?view=board&playbook=Technical+fix&keep=1',
+    '?view=board&playbook=Technical+fix&keep=1&status=doing',
   );
-  // One event batch leaves the router transition pending between interactions.
+  // The view changes and the filter is picked right after, before the router has settled.
   act(() => {
     fireEvent.click(screen.getByRole('button', { name: 'List', exact: true }));
-    fireEvent.change(select(), {
-      target: { value: playbookFilterValue('Other') },
-    });
-    fireEvent.change(
-      screen.getByRole('combobox', { name: 'Filter by status' }),
-      {
-        target: { value: 'doing' },
-      },
-    );
   });
+  await choose('Other');
+  await waitFor(() => expect(query().get('playbookName')).toBe('Other'));
   expect(
     screen.getByRole('button', { name: 'List', exact: true }),
   ).toHaveAttribute('aria-pressed', 'true');
   expect(query().get('view')).toBeNull();
-  expect(query().get('playbookName')).toBe('Other');
   expect(query().has('playbook')).toBe(false);
-  expect(query().get('status')).toBe('doing');
   expect(query().get('keep')).toBe('1');
+  // There is no status filter any more; an old ?status= link filters nothing.
+  expect(
+    screen.queryByRole('combobox', { name: 'Filter by status' }),
+  ).toBeNull();
   visible(2);
   absent(1);
 });
 
 test('rapid filter then view changes retain the last value of each parameter', async () => {
   await setup([task(1, 'system'), task(2, 'custom', 'Other')]);
+  await choose('Technical fix');
+  await choose('Other');
   act(() => {
-    fireEvent.change(select(), {
-      target: { value: playbookFilterValue('技术修复') },
-    });
-    fireEvent.change(select(), {
-      target: { value: playbookFilterValue('Other') },
-    });
     fireEvent.click(screen.getByRole('button', { name: 'Board', exact: true }));
   });
-  expect(query().get('view')).toBe('board');
+  await waitFor(() => expect(query().get('view')).toBe('board'));
   expect(query().get('playbookName')).toBe('Other');
+  expect(query().get('view')).toBe('board');
   visible(2);
   absent(1);
 });
@@ -456,14 +451,10 @@ test('back and forward replace pending parameters before the next edit', async (
   await user.click(screen.getByRole('button', { name: 'Test forward' }));
   expect(query().get('playbookName')).toBe('Other');
   await user.click(screen.getByRole('button', { name: 'Test back' }));
-  await user.selectOptions(
-    screen.getByRole('combobox', { name: 'Filter by status' }),
-    'doing',
-  );
-  expect(query().get('view')).toBe('board');
+  await user.click(screen.getByRole('button', { name: 'List', exact: true }));
+  expect(query().get('view')).toBeNull();
   expect(query().get('playbookName')).toBeNull();
   expect(query().get('keep')).toBe('1');
-  expect(query().get('status')).toBe('doing');
   visible(1);
   visible(2);
 });

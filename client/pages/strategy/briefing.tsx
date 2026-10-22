@@ -12,7 +12,13 @@ import type { Work } from '../task-execution-types';
 import { RequestBlock, type RequestState } from './request-block';
 import { Sparkline, chipOf, percent, type MetricItem } from './insights-view';
 import { citedSignals, oppNo, taskNo, type Row } from './board';
-import { dayOf, type Day, type Feed, type Line, type Standing } from './feed';
+import {
+  dayOf,
+  type Day,
+  type Feed,
+  type Line,
+  type TaskStanding,
+} from './feed';
 import { handOffLabel } from './hand-off';
 import {
   DayConversation,
@@ -294,7 +300,7 @@ function StandingTags({ lines }: { lines: Line[] }) {
   );
 }
 /** An opportunity already decided: its title and where it went. */
-function DecidedLine({ row, st }: Line) {
+function DecidedLine({ row, st, task }: Line) {
   return (
     <li data-opportunity-id={row.card.id} className='py-1.5'>
       <div className='flex items-center gap-2'>
@@ -307,7 +313,7 @@ function DecidedLine({ row, st }: Line) {
           {row.card.title}
         </Link>
         <QuoteOpportunity row={row} />
-        <StatusTag row={row} st={st} />
+        <StatusTag row={row} st={st} task={task} />
       </div>
     </li>
   );
@@ -343,9 +349,10 @@ function Decisions({
         </div>
       )}
       <ul className='divide-y divide-border/70'>
-        {shown.map(({ row: r, st }) => {
+        {shown.map((line) => {
+          const { row: r, st } = line;
           if (st.state !== 'pending')
-            return <DecidedLine key={r.card.id} row={r} st={st} />;
+            return <DecidedLine key={r.card.id} {...line} />;
           const c = lead(r);
           return (
             <li
@@ -590,22 +597,33 @@ export function Today({
       {docked ? (
         <InPanelNote />
       ) : (
-        <DayConversation day={dayOf(batch?.generatedAt)} />
+        <DayConversation day={dayOf(batch?.generatedAt)} folded />
       )}
     </>
   );
 }
 
-function StatusTag({ row, st }: { row: Row; st: Standing }) {
-  if (st.state === 'task')
+// Where a decided opportunity went; once handed off, where its task stands now (2026-10-22 user feedback: a finished
+// task still read "Handed off to agent").
+const TASK_TAG: Record<TaskStanding, [Tone, () => string]> = {
+  todo: ['blue', () => $t('strategy.handedOffAgent')],
+  doing: ['blue', () => $t('results.taskState.doing')],
+  review: ['violet', () => $t('results.taskState.review')],
+  done: ['green', () => $t('common.completed')],
+  closed: ['slate', () => $t('common.closed')],
+};
+function StatusTag({ row, st, task }: Line) {
+  if (st.state === 'task') {
+    const [tone, text] = TASK_TAG[task ?? 'todo'];
     return (
       <Link to={`/actions/${row.taskId}`}>
-        <Tag tone='blue'>
-          {$t('strategy.handedOffAgent')}
+        <Tag tone={tone}>
+          {text()}
           {row.taskNo ? ` · ${taskNo(row.taskNo)}` : ''}
         </Tag>
       </Link>
     );
+  }
   if (st.state === 'pending')
     return <Tag tone='amber'>{$t('strategy.awaitingDecision')}</Tag>;
   return (
@@ -730,26 +748,41 @@ export function History({
       ...asked.map((day): Day => ({ day, items: [], ended: [] })),
     ].sort((a, b) => b.day.localeCompare(a.day));
   if (!days.length) return null;
+  const hide = (
+    <button
+      type='button'
+      className='nr-link inline-flex items-center gap-0.5 text-xs'
+      onClick={() => setShown(0)}
+    >
+      {$t('strategy.collapseEarlier')}
+      <ChevronDown className='size-3.5' aria-hidden='true' />
+    </button>
+  );
   return (
     <>
-      {shown < days.length && (
-        <button
-          type='button'
-          className='nr-link inline-flex items-center gap-0.5 self-center text-xs'
-          onClick={() => setShown((n) => n + 7)}
-        >
-          <ChevronUp className='size-3.5' aria-hidden='true' />
-          {shown
-            ? $t('strategy.earlierDays')
-            : $t('strategy.earlierAnalyses', { 0: days.length })}
-        </button>
-      )}
+      <div className='flex items-center justify-center gap-3'>
+        {shown < days.length && (
+          <button
+            type='button'
+            className='nr-link inline-flex items-center gap-0.5 text-xs'
+            onClick={() => setShown((n) => n + 7)}
+          >
+            <ChevronUp className='size-3.5' aria-hidden='true' />
+            {shown
+              ? $t('strategy.earlierDays')
+              : $t('strategy.earlierAnalyses', { 0: days.length })}
+          </button>
+        )}
+        {shown > 0 && hide}
+      </div>
       {days
         .slice(0, shown)
         .reverse()
         .map((d) => (
           <PastDay key={d.day} day={d} rows={rows} now={now} />
         ))}
+      {/* Folding again from just above today, where the reader is after scrolling through them. */}
+      {shown > 0 && <div className='flex justify-center'>{hide}</div>}
     </>
   );
 }

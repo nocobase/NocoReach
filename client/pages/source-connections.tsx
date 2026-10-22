@@ -41,7 +41,7 @@ import {HealthPanel,HealthLine,loadHealth,type HealthItem} from './data-health';
 import {useProject} from './reach-data';
 import {useWorkspaceCache} from './workspace-cache';
 import {collectorReportKey} from './collector-report';
-import {getCatalog,categories,sourceState,getStateLabels,getUseLabels,type CatalogSource,type StatusInput} from './data-sources';
+import {getCatalog,categories,sourceState,getStateLabels,type CatalogSource,type StatusInput} from './data-sources';
 import './reach-workspace.css';
 import './strategy/strategy.css';
 import './source-connections.css';
@@ -100,10 +100,10 @@ export default function SourceConnections(){const {project,error:projectError}=u
  {project&&canDiscover&&<DiscoveryBox key={project.id} projectId={project.id} projectName={project.name} refreshKey={healthKey} defaultUrl={project.domains?.[0]?`https://${project.domains[0]}`:undefined} open={id=>{const s=getCatalog().find(x=>x.id===id);if(s)show(s);}} onDone={()=>void load().catch(()=>undefined)}/>}
  {project&&<HealthPanel projectId={project.id} reloadKey={healthKey} onChange={()=>void load().catch(()=>undefined)}/>}
  {!loaded&&!error&&<p role='status'>{$t('sourceConnections.checkingDataSources')}</p>}
- {categories.map(cat=><section key={cat.id} className='nr-source-group'><h2>{$t(cat.label)}</h2><div className='nr-source-catalog'>{getCatalog().filter(s=>s.category===cat.id).map(s=>{const st=sourceState(s,status);const actionable=s.availability==='available';return <article key={s.id} className='nr-catalog-card' data-source-id={s.id} data-state={st}>
-  <div className='nr-catalog-top'><h3>{s.name}</h3><Tag tone={stateToneOf(st)} dot>{getStateLabels()[st]}</Tag></div>
-  <p>{s.uses.includes('modify')?$t('sourceConnections.onceConnected'):$t('sourceConnections.onceConnectedFind')}{s.detects}</p><div className='flex flex-wrap gap-1.5' data-uses>{s.uses.map(u=><Tag key={u} tone={u==='modify'?'violet':'grey'}>{getUseLabels()[u]}</Tag>)}</div>{(()=>{const h=health.find(x=>x.id===s.id);return h&&(st==='connected'||st==='partial')?<HealthLine item={h}/>:null;})()}
-  <div className='nr-catalog-bottom'><span className='nr-footnote'>{s.signals.join(' · ')}</span>{actionable?<SourceAction source={s} projectId={projectId} canOpenNetwork={canOpenNetwork&&Boolean(sourceConnection[s.id])} outlined={st==='connected'||st==='done'} connected={st==='connected'||st==='partial'||(s.id==='xiaohongshu'&&Boolean(status.xiaohongshu?.connected))} onOpen={()=>show(s)}/>:<span className='nr-footnote'>{s.availability==='soon'?$t('sourceConnections.development'):s.priority}</span>}</div>
+ {categories.map(cat=><section key={cat.id} className='nr-source-group'><h2>{$t(cat.label)}</h2><div className='nr-source-catalog'>{getCatalog().filter(s=>s.category===cat.id).map(s=>{const st=sourceState(s,status),problem=needsAttention(s.id,health),shown=problem?'attention':st;const actionable=s.availability==='available';return <article key={s.id} className='nr-catalog-card' data-source-id={s.id} data-state={shown}>
+  <div className='nr-catalog-top'><h3>{s.name}</h3><Tag tone={stateToneOf(shown)} dot>{getStateLabels()[shown]}</Tag></div>
+  <p>{s.detects}</p>{problem&&<HealthLine item={problem}/>}
+  <div className='nr-catalog-bottom'>{actionable?<SourceAction source={s} projectId={projectId} canOpenNetwork={canOpenNetwork&&Boolean(sourceConnection[s.id])} outlined={st==='connected'||st==='done'} connected={st==='connected'||st==='partial'||(s.id==='xiaohongshu'&&Boolean(status.xiaohongshu?.connected))} onOpen={()=>show(s)}/>:<span className='nr-footnote'>{s.availability==='soon'?$t('sourceConnections.development'):s.priority}</span>}</div>
  </article>;})}</div></section>)}
  <Sheet open={Boolean(open)} onOpenChange={(o,details)=>{if(!o&&savingOwnersRef.current.size){details.cancel();return;}if(!o)closePanel();}}><SheetContent side='right' className='nr-guide-sheet' showCloseButton={!connectionSaving}>{open&&<><SheetHeader><SheetTitle>{$tj('common.connectValue',{0:open.name})}</SheetTitle></SheetHeader><div className='nr-guide-body'>
   {/* The intro describes how the connection works; no AI speaks here, so it carries no Agent avatar. It scrolls with
@@ -119,6 +119,11 @@ export default function SourceConnections(){const {project,error:projectError}=u
  </div></>}</SheetContent></Sheet>
  </PageContainer>;
 }
+
+// A healthy source says nothing beyond its Connected tag; one that Data health lists as needing attention says so on its
+// card with the same reason. Data health names Hacker News and X by their own ids.
+const HEALTH_ID:Record<string,string>={mentions:'hackernews',social:'x'};
+function needsAttention(id:string,health:HealthItem[]){return health.find(item=>item.id===(HEALTH_ID[id]??id)&&(item.state==='warning'||item.state==='failing'));}
 
 function SourceAction({source,projectId,canOpenNetwork,outlined,connected,onOpen}:{source:CatalogSource;projectId:number|undefined;canOpenNetwork:boolean;outlined:boolean;connected:boolean;onOpen:()=>void}){
  const {can}=useSourceAccess(source.id,projectId);

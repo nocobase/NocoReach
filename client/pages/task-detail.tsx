@@ -3,19 +3,20 @@ import { mockSettingsAvailable } from '../../app-plugins/nocoreach-mock/client/i
 import { localizeWorkSnapshots } from './playbook-snapshot';
 import { reportDate } from './task-detail/material-notices.js';
 import { TechnicalDetails } from './task-detail/technical-details.js';
-import { useTechnicalDetails } from './task-detail/technical-state.js';
+import { useTechnicalDetails, type TechnicalTab } from './task-detail/technical-state.js';
 import { EvidenceDialog } from './task-detail/evidence.js';
 import { taskEvidence, whyText } from './task-detail/evidence-model.js';
 import { VisibleChanges } from './task-detail/visible-changes.js';
 import { DeliveryDialog, DeliverySummary } from './task-detail/article-start.js';
-import { articlePageUrl } from './task-detail/article-page.js';
 import { PlaybookDrawer } from './task-detail/playbook-drawer.js';
 import { ArticleEditor, ArticleReview } from './task-detail/article-review.js';
 import { ConflictBody, DriftNotice, PendingButton, TargetRows } from './task-detail/article-release.js';
-import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, pageUrlsOf, publishingTitle, soleConflict, type ArticleFound, type DeliveryChoice } from './task-detail/article-model.js';
+import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, fieldLabel, joinNames, pageUrlsOf, publishingTitle, soleConflict, type ArticleFound, type DeliveryChoice } from './task-detail/article-model.js';
 import { matchArticle } from './article-targets-api';
 import { TaskMedia } from './task-detail/media.js';
-import { AgentMenu } from './task-detail/agent-menu.js';
+import { TaskProperties } from './task-detail/task-properties.js';
+import { TaskNumbers } from './task-detail/task-numbers.js';
+import { useMediaQuery } from '#hooks/use-media-query';
 import { hasTaskAgent } from './task-execution-types';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {createContext,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
@@ -24,7 +25,7 @@ import {useNavigate,useSearchParams} from 'react-router';
 import {useNavigationGuard,usePageBreadcrumb} from '@nocobase/app-client';
 import {Comparison} from './results/comparison.js';
 import {nocobaseClient as api,NocoReachHttpError} from "#lib/nocoreach-api";
-import {BookOpen,CirclePlay,Lock,Archive,ArchiveRestore,Ban,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitMerge,Globe,Eye,Search,ExternalLink,Users,Square,Undo2,Loader2,MoreHorizontal,Code2,ChevronDown,ChevronRight,TriangleAlert,CircleCheck} from 'lucide-react';
+import {BookOpen,CirclePlay,Lock,Archive,ArchiveRestore,Ban,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitMerge,Globe,Eye,Search,ExternalLink,Users,Square,Undo2,Loader2,MoreHorizontal,Code2,ChevronRight,TriangleAlert,CircleCheck} from 'lucide-react';
 import {ActorAvatar} from '#components/reach/actor';
 import {Tag} from '#components/reach/tag';
 import {InfoTip} from '#components/reach/info-tip';
@@ -32,7 +33,7 @@ import {PageContainer} from '#components/reach/page';
 import {Reveal} from '#components/reach/reveal';
 import {Button} from '#components/ui/button';
 import {Dialog,DialogContent,DialogHeader,DialogTitle} from '#components/ui/dialog';
-import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuCheckboxItem,DropdownMenuItem,DropdownMenuRadioGroup,DropdownMenuRadioItem,DropdownMenuSeparator,DropdownMenuSub,DropdownMenuSubTrigger,DropdownMenuSubContent} from '#components/ui/dropdown-menu';
+import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuCheckboxItem,DropdownMenuItem,DropdownMenuSeparator,DropdownMenuSub,DropdownMenuSubTrigger,DropdownMenuSubContent} from '#components/ui/dropdown-menu';
 import {TaskDraftScope,TaskDraftRecovery} from './task-detail/drafts.js';
 import {useTaskDraft,useTaskDraftStatus} from './task-detail/draft-store.js';
 import {DocReader,Markdown} from './doc-view';
@@ -131,64 +132,62 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
  const draftScope=!started?'start':JSON.stringify([w.flow?.id,w.flow?.version,index,stage?.key,w.results[index-1]?.id]);
  const runs=[...data.runs].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
  const {me,can}=useMe(),creator=(data.task.evidence as {createdBy?:{id?:string;name?:string}}|undefined)?.createdBy,ownerId=w.humanOwnerId||creator?.id;
+ // Performance sits under the properties beside the content from 1280px, after the current card below that.
+ const wide=useMediaQuery('(min-width: 1280px)',true);
  const access={allowed:can(ownerId),self:!ownerId||!me?.id||String(ownerId)===me.id,owner:w.humanOwnerName||creator?.name||$t('common.owner')};
  const no=(data.task.evidence as {no?:number}|undefined)?.no,heading=no?`T-${no} ${data.task.title}`:data.task.title;
  // The trail leads back the way the user came: from Results with its filters, otherwise to the task board.
  usePageBreadcrumb(resultParams.has('resultDay')?[{label:$t('results.title'),to:`/results/${taskId}${resultParams.get('resultQuery')||`?day=${resultParams.get('resultDay')==='28'?28:7}`}`},{label:heading}]:[{label:$t('common.tasks'),to:'/actions'},{label:heading}]);
  return <TaskAccess.Provider value={access}><PageContainer className="nr-task-page">
-  <TaskHeader data={data} list={list} pick={pick} busy={busy} runActive={runActive} members={members} update={update} onEvidence={()=>setEvidenceOpen(true)} onPage={()=>setPageOpen(true)}/>
+  <TaskHeading data={data} busy={busy} members={members} update={update} onPage={()=>setPageOpen(true)}/>
+  {/* Properties beside the content from 1280px, above it below that (2026-10-22 user request); the page keeps its full width. */}
+  <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_18.75rem] xl:items-start">
+  <TaskProperties data={data} members={members} allowed={access.allowed} busy={busy} runActive={runActive} className="border-y py-2 xl:sticky xl:top-4 xl:col-start-2 xl:row-start-1 xl:border-y-0 xl:border-l xl:py-0 xl:pl-6"
+   agentLocked={!access.allowed?$t('taskDetail.ownerAdminChange'):closedLabel(w)?$t('taskDetail.taskClosed'):w.stage==='done'?$t('taskDetail.taskDone'):runActive?$t('taskDetail.taskQueuedRunningWaitFinish'):undefined}
+   onOwner={userId=>void update('setOwner',{userId})} onAgent={async agentId=>Boolean(await update('setAgent',{agentId}))}
+   footer={wide&&<TaskNumbers data={data} projectId={projectId} taskId={taskId} className="mt-4 border-t pt-4"/>}/>
+  <div className="flex min-w-0 flex-col gap-6 xl:col-start-1 xl:row-start-1">
+  <TaskSummary data={data} list={list} pick={pick} onEvidence={()=>setEvidenceOpen(true)}/>
   {dirty&&<p role='status' className='nr-td-muted'>{$t('taskDetail.draftRetained')} <Button size='sm' variant='ghost' disabled={busy} onClick={()=>{void confirmAction({title:()=>($t('taskDetail.discardTaskDrafts',{0:data.task.title})),description:()=>($t('taskDetail.discardDraftWarning')),action:'taskDetail.discardDrafts'}).then(confirmed=>{if(confirmed)clear();});}}>{$t('taskDetail.discardDrafts')}</Button></p>}
   <TaskDraftRecovery activeScope={w.cancelledAt||w.archivedAt||done?undefined:draftScope}/>
   {error&&<p role="alert" className="nr-error">{error}</p>}
   {w.cancelledAt||w.archivedAt?<ClosedCard w={w} update={update} busy={busy}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} pick={pick} setPick={setPick} update={update} busy={busy} projectId={projectId} taskId={taskId}/></TaskDraftScope>:done?<DoneCard data={data} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} list={list}/></TaskDraftScope>}
+  {!wide&&<TaskNumbers data={data} projectId={projectId} taskId={taskId} className="rounded-lg border p-4"/>}
   <ActivityCard data={data} update={update} busy={busy} members={members}/>
   <TechnicalDetails data={data} projectId={projectId} taskId={taskId} runs={runs}/>
+  </div>
+  </div>
   <EvidenceDialog open={evidenceOpen} onClose={()=>setEvidenceOpen(false)} data={data} projectId={projectId} taskId={taskId}/>
   <Dialog open={pageOpen} onOpenChange={o=>{if(!o)setPageOpen(false);}}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>{$t('common.relatedPage')}</DialogTitle></DialogHeader><PageLinkEditor data={data} projectId={projectId} taskId={taskId} busy={busy} update={update}/></DialogContent></Dialog>
  </PageContainer></TaskAccess.Provider>;
 }
-// ① Why the task exists and where it stands: the title, one line of evidence, the steps and who owns it.
-function TaskHeader({data,list,pick,busy,runActive,members,update,onEvidence,onPage}:{data:Data;list?:PlaybookList;pick:string;busy:boolean;runActive:boolean;members:Member[];update:Update;onEvidence:()=>void;onPage:()=>void}){
- const navigate=useNavigate(),w=data.work,started=Boolean(w.flow),{allowed}=useContext(TaskAccess);
- const no=(data.task.evidence as {no?:number}|undefined)?.no,insight=(data.task.evidence as {insight?:{id?:string;no?:number}}|undefined)?.insight;
- const why=whyText(data),evidence=taskEvidence(data),hasEvidence=Boolean(evidence.signals.length||evidence.brief||evidence.note||evidence.attachments||evidence.resultSource);
- const pb=started?undefined:list?.playbooks.find(x=>x.id===pick),stages=started?w.flow!.stages:pb?stagesFor(pb):[],name=w.playbook?.name||w.flow?.name||pb?.name;
- const owners=members.some(m=>m.id===w.humanOwnerId)||!w.humanOwnerId?members:[{id:w.humanOwnerId,name:w.humanOwnerName||w.humanOwnerId},...members];
- const ownerName=w.humanOwnerName||owners.find(m=>m.id===w.humanOwnerId)?.name||$t('common.unassigned'),collab=w.collaborators||[];
- return <header className="flex flex-col gap-3">
-  <div className="flex items-start justify-between gap-3">
-   <h1 className="min-w-0 font-heading text-2xl font-semibold tracking-tight break-words">{no?<span className="mr-2 font-mono text-base font-normal text-muted-foreground">T-{no}</span>:null}{data.task.title}</h1>
-   <MoreMenu data={data} busy={busy} members={members} update={update} onPage={onPage}/>
-  </div>
-  {(why.text||hasEvidence)&&<p className="text-sm leading-relaxed">{why.text&&<><span className="text-muted-foreground">{$t('taskDetail.why')}</span>{why.text}{why.fact&&<span className="text-muted-foreground"> · {why.fact}</span>}{why.more>0&&<span className="text-muted-foreground"> {$t('taskDetail.moreSignals',{0:why.more})}</span>} </>}{hasEvidence&&<Button variant="link" size="sm" className="h-auto p-0 align-baseline" onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}</p>}
-  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-   {closedLabel(w)?<Tag tone="slate" dot>{closedLabel(w)}</Tag>:null}
-   {stages.length>0&&<StepBar name={name} stages={stages} w={w}/>}
-   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground lg:ml-auto">
-    {allowed&&members.length?<DropdownMenu><DropdownMenuTrigger render={<Button size="sm" variant="ghost" className="h-7 px-2 text-muted-foreground" disabled={busy||runActive} title={runActive?$t('taskDetail.executorRunningChangeAfterFinishes'):undefined}>{$t('common.owner')} · <span className="text-foreground">{ownerName}</span><ChevronDown/></Button>}/>
-     <DropdownMenuContent align="end"><DropdownMenuRadioGroup value={w.humanOwnerId||''} onValueChange={v=>{if(v&&v!==w.humanOwnerId)void update('setOwner',{userId:v});}}>{owners.map(m=><DropdownMenuRadioItem key={m.id} value={m.id}>{m.name}</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup></DropdownMenuContent></DropdownMenu>
-     :<span>{$t('common.owner')} · <span className="text-foreground">{ownerName}</span></span>}
-    <AgentMenu data={data} busy={busy} locked={!allowed?$t('taskDetail.ownerAdminChange'):closedLabel(w)?$t('taskDetail.taskClosed'):w.stage==='done'?$t('taskDetail.taskDone'):runActive?$t('taskDetail.taskQueuedRunningWaitFinish'):undefined} onChange={async agentId=>Boolean(await update('setAgent',{agentId}))}/>
-    {collab.length>0&&<span className="inline-flex items-center gap-1" title={collab.map(c=>c.name).join('、')}>{collab.slice(0,3).map(c=><ActorAvatar key={c.id} type="user" name={c.name} size="xs"/>)}{collab.length>3?`+${collab.length-3}`:''}</span>}
-    {insight?.id&&<button type="button" className="nr-link" onClick={()=>navigate(`/opportunities?item=${encodeURIComponent(insight.id!)}`)}>{$tj('taskDetail.sourceAttribution',{0:insight.no?`O-${insight.no}`:$t('common.opportunity')})}</button>}
-    {w.article?.articleId&&<HeaderArticle data={data}/>}
-    {w.page&&<a className="nr-link inline-flex items-center gap-1" href={w.page.url} target="_blank" rel="noreferrer">{pathOf(w.page.url)}<ExternalLink className="size-3" aria-hidden="true"/></a>}
-    {(data.related||[]).map(r=><button key={r.id} type="button" className="nr-link max-w-60 truncate" title={r.title} onClick={()=>navigate(`/actions/${r.id}`)}>{r.relation==='prev'?$t('taskDetail.previous'):$t('taskDetail.next')}{r.title}</button>)}
-   </div>
-  </div>
+// ① The title across the page, with the task's menu; the properties sit in their own column (task-properties.tsx).
+function TaskHeading({data,busy,members,update,onPage}:{data:Data;busy:boolean;members:Member[];update:Update;onPage:()=>void}){
+ const no=(data.task.evidence as {no?:number}|undefined)?.no;
+ return <header className="flex items-start justify-between gap-3">
+  <h1 className="min-w-0 font-heading text-2xl font-semibold tracking-tight break-words">{no?<span className="mr-2 font-mono text-base font-normal text-muted-foreground">T-{no}</span>:null}{data.task.title}</h1>
+  <MoreMenu data={data} busy={busy} members={members} update={update} onPage={onPage}/>
  </header>;
 }
-// The playbook's steps in one row: done ones ticked, the current one outlined, the person's steps in violet.
-// The task's article in the header, linked to where it can be read when its target has page patterns.
-function HeaderArticle({data}:{data:Data}){
- const a=data.work.article!,text=$t('articleTask.headerArticle',{0:a.title||a.slug}),url=articlePageUrl(data,a.targetId,a.slug);
- return url?<a className="nr-link inline-flex max-w-60 items-center gap-1" href={url} target="_blank" rel="noreferrer" title={a.slug}><span className="truncate">{text}</span><ExternalLink className="size-3 shrink-0" aria-hidden="true"/></a>:<span className='max-w-60 truncate' title={a.slug}>{text}</span>;
+// Why the task exists and where it stands: one line of evidence, then the steps.
+function TaskSummary({data,list,pick,onEvidence}:{data:Data;list?:PlaybookList;pick:string;onEvidence:()=>void}){
+ const w=data.work,started=Boolean(w.flow);
+ const why=whyText(data),evidence=taskEvidence(data),hasEvidence=Boolean(evidence.signals.length||evidence.brief||evidence.note||evidence.attachments||evidence.resultSource);
+ const pb=started?undefined:list?.playbooks.find(x=>x.id===pick),stages=started?w.flow!.stages:pb?stagesFor(pb):[];
+ if(!why.text&&!hasEvidence&&!stages.length&&!closedLabel(w))return null;
+ return <div className="flex flex-col gap-3">
+  {(why.text||hasEvidence)&&<p className="text-sm leading-relaxed">{why.text&&<><span className="text-muted-foreground">{$t('taskDetail.why')}</span>{why.text}{why.fact&&<span className="text-muted-foreground"> · {why.fact}</span>}{why.more>0&&<span className="text-muted-foreground"> {$t('taskDetail.moreSignals',{0:why.more})}</span>} </>}{hasEvidence&&<Button variant="link" size="sm" className="h-auto p-0 align-baseline" onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}</p>}
+  {(closedLabel(w)||stages.length>0)&&<div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+   {closedLabel(w)?<Tag tone="slate" dot>{closedLabel(w)}</Tag>:null}
+   {stages.length>0&&<StepBar stages={stages} w={w}/>}
+  </div>}
+ </div>;
 }
-function StepBar({name,stages,w}:{name?:string;stages:Stage[];w:Work}){
+// The playbook's steps in one row: done ones ticked, the current one outlined, the person's steps in violet.
+function StepBar({stages,w}:{stages:Stage[];w:Work}){
  const {self,owner}=useContext(TaskAccess),started=Boolean(w.flow),done=w.stage==='done',index=w.stageIndex||0,closed=Boolean(closedLabel(w));
  const label=(s:Stage)=>{const text=stageLabel(s);return s.kind==='review'&&!self?(text.startsWith($t('common.you'))?`${owner}${text.slice($t('common.you').length)}`:`${text} · ${owner}`):text;};
  return <ol className="nr-td-stepbar flex flex-wrap items-center gap-1" aria-label={$t('common.progress')}>
-  {name&&<li className="mr-1 text-sm font-medium">{name}</li>}
   {stages.map((s,i)=>{const st=!started?'todo':done||i<index?'done':i===index&&!closed?'current':'todo';return <li key={s.key} className="flex items-center gap-1" data-state={st} aria-current={st==='current'?'step':undefined}>
    {i>0&&<ChevronRight className="size-3 text-muted-foreground" aria-hidden="true"/>}
    <Tag tone={st==='done'?'green':st==='current'?(s.kind==='review'?'violet':'blue'):'grey'} icon={st==='done'?<Check/>:undefined} dot={st==='current'} className={st==='current'?'ring-1 ring-current':undefined}>{label(s)}</Tag>
@@ -228,7 +227,7 @@ function StageCard({icon,title,sub,at,children,actions,tone='attention',label=$t
  </section>;
 }
 // Shown in a card whose action needs an Agent when none can be used: the choice itself is in the header.
-const NeedsAgent=({data}:{data:Data})=>hasTaskAgent(data)||(data.agent?.options||[]).length===1?null:<p className="text-sm text-nr-ink-red">{(data.agent?.options||[]).length?$t('taskDetail.chooseAgentAbove'):$t('taskDetail.noTeamAccessibleRunnerAgents')}</p>;
+const NeedsAgent=({data}:{data:Data})=>hasTaskAgent(data)||(data.agent?.options||[]).length===1?null:<p className="text-sm text-nr-ink-red">{(data.agent?.options||[]).length?$t('taskDetail.chooseAgentFirst'):$t('taskDetail.noTeamAccessibleRunnerAgents')}</p>;
 // With no usable Agent saved on the task and exactly one available, that one is saved first, then `command` runs on
 // the revision the save returned (the same rule as Start).
 async function withUsableAgent(data:Data,update:Update,command:string,body:object={}){
@@ -330,7 +329,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  const producer=stages[index-1],out=w.results[index-1];
  const request=(executor:string)=>requestOpen&&out?<RequestBox executor={executor} busy={busy} onCancel={()=>setRequest(false)} onSend={async comment=>Boolean(await act('requestStageChanges',{artifactId:out.id,comment}))}/>:null;
  const requestButton=<Button variant="outline" disabled={busy} onClick={()=>setRequest(!requestOpen)}>{$t('taskDetail.requestChanges')}</Button>;
- const techLink=<Button variant="link" size="sm" className="h-auto self-start p-0 text-muted-foreground" onClick={()=>tech.open('runs')}><Code2/>{$t('taskDetail.technicalDetails')}</Button>;
+ const techLinkTo=(tab:TechnicalTab)=><Button variant="link" size="sm" className="h-auto self-start p-0 text-muted-foreground" onClick={()=>tech.open(tab)}><Code2/>{$t('taskDetail.technicalDetails')}</Button>,techLink=techLinkTo('runs');
  if(stage.kind==='review'&&stages[index+1]?.kind==='release'){
   const pr=out?.pr;
   if(!out)return <StageCard tone="error" icon={<AlertCircle/>} title={displayStageName(stage)} sub={$t('taskDetail.noChangesViewRefreshTry')}/>;
@@ -371,7 +370,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    // Several targets: each has a row with its state; the title and the one action follow the aggregate.
    const act2=allowed,rows=<TargetRows data={data} r={r}/>,sole=soleConflict(r);
    if(r.state==='publishing')return <StageCard tone='live' label={$t('taskDetail.currentProgress')} icon={<Loader2 className='animate-spin motion-reduce:animate-none'/>} title={publishingTitle(data,r)} sub={$t('articleTask.publishingHint')}>{rows}</StageCard>;
-   if(r.state==='publish_failed')return <StageCard tone='error' icon={<AlertCircle/>} title={$t('articleTask.publishFailed')} sub={failedSub(r)} actions={act2?<PendingButton disabled={busy} onClick={()=>act('retryPublish',{})}>{$t('articleTask.retry')}</PendingButton>:undefined}>{rows}</StageCard>;
+   if(r.state==='publish_failed')return <StageCard tone='error' icon={<AlertCircle/>} title={$t('articleTask.publishFailed')} sub={failedSub(r)} actions={act2?<PendingButton disabled={busy} onClick={()=>act('retryPublish',{})}>{$t('articleTask.retry')}</PendingButton>:undefined}>{rows}{techLinkTo('result')}</StageCard>;
    if(r.state==='publish_conflict')return <StageCard tone='error' icon={<AlertCircle/>} title={conflictHeading(data,r)} actions={act2&&canRebase(r)?<PendingButton disabled={busy} onClick={()=>act('rebaseArticle',{})}>{$t('articleTask.reviewAgain')}</PendingButton>:undefined}>{rows}{sole&&!r.also&&<ConflictBody data={data} r={sole}/>}</StageCard>;
    if(r.state==='exporting')return <StageCard tone='live' label={$t('taskDetail.currentProgress')} icon={<Globe/>} title={$t('articleTask.exporting',{0:exportingNames(data,r)})} sub={$t('articleTask.exportingHint')} actions={act2?<Button variant='ghost' disabled={busy} onClick={()=>void act('confirmLive',{})}>{$t('taskDetail.iConfirmLive')}</Button>:undefined}>{rows}<PageLinks pages={r.pages}/><DriftNotice data={data} r={r}/></StageCard>;
    if(r.state==='export_late')return <StageCard icon={<AlertCircle/>} title={$t('articleTask.exportLate')} sub={$t('articleTask.exportLateHint',{0:exportingNames(data,r)})} actions={act2?<><Button disabled={busy} onClick={()=>void act('confirmLive',{})}>{$t('taskDetail.iConfirmLive')}</Button><Button variant='outline' disabled={busy} onClick={()=>void act('waitLonger',{})}>{$t('common.waitAnother24Hours')}</Button></>:undefined}>{rows}<PageLinks pages={r.pages}/></StageCard>;
@@ -448,10 +447,13 @@ function ClosedCard({w,update,busy}:{w:Work;update:Update;busy:boolean}){
 function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
  const w=data.work,r=w.release,canRevert=Boolean(data.agent?.repo);
  const accepted=[...w.results].reverse().find(x=>x?.approvedAt&&!x.rejectedAt);
+ // The version that went live: an article release names its artifact; a merged change is the accepted one.
+ const shipped=(r?.article?.artifactId&&w.results.find(x=>x?.id===r.article!.artifactId))||accepted||undefined;
  if(r?.state==='simulated')return <StageCard tone='done' label={$t('common.completed')} icon={<Check/>} title={$t('taskDetail.simulatedRelease')} sub={$t('taskDetail.simulatedReleaseDescription')}><div className='nr-td-what'><b>{$t('taskDetail.releaseNotes')}</b><p>{r.note}</p></div></StageCard>;
  if(r?.state==='live')return <StageCard tone="done" label={$t('common.completed')} icon={<Check/>} title={$t('taskDetail.live')} sub={$t('taskDetail.liveSince',{0:when(r.liveAt),1:(w.history||[]).some(e=>e.action==='live'&&e.actor==='system')?$t('taskDetail.sawChangeLive'):$t('common.confirmedLive')})}
   actions={r.pr&&r.mergedAt&&canRevert&&(!w.revert||w.revert.state==='failed')?<Button variant="outline" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('taskDetail.undoChangeConfirm')),description:() => ($t('taskDetail.undoChangeDescription')),action:'taskDetail.revertChange'}))void update('revertRelease');}}><Undo2/>{$t('taskDetail.revertCurrentChange')}</Button>:undefined}>
   {w.revert&&<p className={w.revert.state==='failed'?'nr-error':'nr-td-text'} data-revert={w.revert.state}>{w.revert.state==='opening'?$t('taskDetail.undoPreparing'):w.revert.state==='opened'?$t('taskDetail.undoPrepared'):$t('taskDetail.undoFailed',{0:w.revert.error||$t('errors.unknownReason')})}</p>}
+  <LiveChange data={data} artifact={shipped}/>
   <TargetRows data={data} r={r}/>
   <DriftNotice data={data} r={r}/>
   <EffectList w={w}/>
@@ -465,6 +467,26 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
   {w.observeFrom&&<EffectList w={w}/>}
   {accepted&&!accepted.pr&&<><Reading><Markdown content={accepted.content}/></Reading>{accepted.report&&<ReportNotes report={accepted.report}/>}</>}
  </StageCard>;
+}
+// What one delivered version changes, as its owner reviewed it: a page change's visible changes, or an article's fields
+// against the version it was written from. The activity's View and the live card's View changes both show it.
+function VersionChange({data,artifact,notes}:{data:Data;artifact:Artifact;notes:boolean}){
+ if(artifact.pr)return <PageChange pr={artifact.pr} content={artifact.content}/>;
+ if(artifact.article)return <ArticleReview data={data} article={artifact.article} notes={notes?artifact.content:''} settled/>;
+ return null;
+}
+// Once live, the card names what changed in one line; the change itself opens on demand.
+function LiveChange({data,artifact}:{data:Data;artifact?:Artifact}){
+ const [open,setOpen]=useState(false);
+ if(!artifact||(!artifact.pr&&!artifact.article))return null;
+ const a=artifact.article,visible=artifact.pr?.visibleChanges||[];
+ const paths=a?(a.changes.length?a.changes:a.carried||[]):[];
+ const labels=a?paths.map(fieldLabel):[...new Set(visible.map(v=>v.label))],count=a?paths.length:visible.length;
+ return <div className='flex flex-wrap items-center gap-x-2 gap-y-1 text-sm'>
+  {count>0&&<span>{$t('taskDetail.changedSummary',{0:count,1:joinNames(labels)})}</span>}
+  <Button variant='link' size='sm' className='h-auto p-0' onClick={()=>setOpen(true)}>{$t('taskDetail.viewChanges')}<ChevronRight/></Button>
+  <DocReader open={open} onClose={()=>setOpen(false)} title={$t('taskDetail.whatChanged')} meta={`${$t('taskDetail.versionNumber',{0:artifact.version})}${artifact.approvedAt?` · ${$t('taskDetail.approvedOn',{0:when(artifact.approvedAt)})}`:''}`} content=''><VersionChange data={data} artifact={artifact} notes={false}/></DocReader>
+ </div>;
 }
 // Impact tracking (SPEC §8): day 7 and day 28 against the same number of days before going live.
 function EffectList({w}:{w:Work}){
@@ -505,7 +527,7 @@ function ActivityCard({data,update,busy,members}:{data:Data;update:Update;busy:b
    const line=artifact?$t('taskDetail.deliveredVersion',{0:artifact.version,1:nameOf(artifact.stepId)}):plain[e.action]||t!.text;
    return <li key={`${e.at}:${e.action}:${e.runId||''}:${i}`} className="nr-td-event">{eventIcons[e.action]||<Play/>}<b>{e.action==='runSucceeded'?executor:who}</b><span>{line}</span>{artifact&&<Button size="sm" variant="ghost" className="h-6 px-2" onClick={()=>setView(artifact)}>{$t('common.view')}</Button>}<time>{when(e.at)}</time></li>;})}
    {!rows.length&&<li className="nr-td-muted">{$t('taskDetail.noActivityYet')}</li>}</ol>
-  {view&&<DocReader open onClose={()=>setView(undefined)} title={`${nameOf(view.stepId)} · ${$t('taskDetail.versionNumber',{0:view.version})}`} meta={when(view.createdAt)} content={view.pr?'':view.content}>{view.pr&&<PageChange pr={view.pr} content={view.content}/>}</DocReader>}
+  {view&&<DocReader open onClose={()=>setView(undefined)} title={`${nameOf(view.stepId)} · ${$t('taskDetail.versionNumber',{0:view.version})}`} meta={when(view.createdAt)} content={view.pr||view.article?'':view.content}><VersionChange data={data} artifact={view} notes/></DocReader>}
   {((!done&&!closed)||Boolean(text))&&<div className="nr-td-composer"><textarea id="nr-composer" aria-label={$t('taskDetail.noteExecutor')} rows={3} value={text} disabled={busy} readOnly={done||closed} placeholder={$t('taskDetail.leaveNoteNextRunReads',{0:executor})} onChange={e=>{setText(e.target.value);}}/>{!done&&!closed&&<div><Button size="sm" variant="outline" disabled={busy||!text.trim()} onClick={()=>void send()}>{$t('taskDetail.send')}</Button></div>}</div>}
  </section>;
 }

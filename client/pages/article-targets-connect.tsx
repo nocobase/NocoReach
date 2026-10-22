@@ -74,7 +74,7 @@ import {
   type TestResult,
 } from './article-targets-api';
 
-// Data sources › Article publishing (docs/ARTICLE-PUBLISHING.md). One card per target, edited in place and saved on
+// Data sources › Blog CMS (docs/ARTICLE-PUBLISHING.md). One card per target, edited in place and saved on
 // its own; one card edits at a time. Languages, field mapping, page templates and the Git export are edited as JSON:
 // they differ per target kind and the presets fill them in. Credentials are write-only.
 

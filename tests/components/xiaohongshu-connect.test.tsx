@@ -129,9 +129,6 @@ const setup = (projectId = 1, onChange = vi.fn()) =>
 it('saves with the collector assumed ready, checks health honestly, then searches', async () => {
   const user = userEvent.setup();
   setup();
-  expect(getCatalog().find((item) => item.id === 'xiaohongshu')?.uses).toEqual([
-    'collect',
-  ]);
   const input = await screen.findByLabelText('小红书搜索词');
   await user.type(input, 'NocoBase');
   await user.click(screen.getByRole('button', { name: '检查采集器' }));

@@ -1,5 +1,88 @@
 # NocoReach Changelog
 
+## Unreleased — See what a live task changed
+
+- Once a task is live, its card names what changed in one line ("Changes (2): English · Summary, English · Title") with View changes, which opens the change that went live: an article field by field, before and after, or a page change as readers see it before and after. Nothing else is added to the card.
+- In the activity, View on a delivered article version now shows the same field-by-field comparison under the Agent's notes, instead of the notes alone.
+
+## Unreleased — One look for every refresh and update button
+
+- Every refresh or update control is the same icon-only ↻ button with its explanation on hover, last in the page header or at the right of the toolbar it updates. The "↻ Update now" buttons with text on Trends, X, Reddit, Discord, Slack, Xiaohongshu, Bilibili, YouTube, Site audit, Rank tracking, GitHub hot topics and Competitors › Activity, Keywords › AI suggestions' Suggest again and Settings › Network's Check connectivity now look like Insights' and Results' buttons. The tooltip and accessible name say what happens and change while it runs ("Searching…").
+
+## Unreleased — Handed-off opportunities show where their task stands
+
+- On Insights, an opportunity handed off to the agent shows its task's state now, with the task number: Handed off to agent while it waits to start, In progress, Needs confirmation, Completed or Closed. A finished task used to keep reading "Handed off to agent".
+
+## Unreleased — Tasks list: a notice only when no runtime is online; Executor no longer overlaps Updated
+
+- The line of counts above the tasks (running, queued, failed runs, runtimes online) is gone: each row's status already says running and queued, and a failed run shows in red on its row. When no runtime is online, one notice above the tasks says work handed to an agent will wait, with View runtimes; it uses the page's normal spacing (the old line's zero margin sat it on the table). The same applies to List, Board and By agent.
+- In the list, the Executor column truncates a long Agent name with an ellipsis (the full name on hover) instead of running into Updated, which no longer wraps.
+
+## Unreleased — Today's decisions are today's; the conversation opens folded
+
+- Today's message on Insights lists only opportunities raised, dismissed or handed off today. One handed off on an earlier day that today's analysis lists again stays on the day it was raised; it read as handed off today beside the ones just dismissed (Studio, 10/22: T-27 and T-30 beside the three dismissed at 17:15). A hand-off counts on the day its task was created, and the waiting tasks are read again after one.
+- Today's conversation starts folded to its one line when Insights opens; a question sent since then opens it. An earlier day's conversation shows in full when that day is opened.
+
+## Unreleased — Failed article publishes say where and why
+
+- When publishing an article to a target does not complete, the task card keeps its plain-words reason and now links to Technical details, which list each failed target with the step it stopped at (reading the article, checking the website repository, writing, or checking the saved changes), the error code, the time and what the target or the error said (for example `github:429`, or a network timeout with its host).
+- Every failed publish also leaves a warning in the application log (`NocoReach article publish failed`, with project, task, target, step, code and detail), so `nb-studio app logs` shows it. Errors other than the target's own (a request that got no answer, a code error) keep their cause instead of becoming a bare `unavailable`.
+
+## Unreleased — Data sources: shorter cards, a group for what the Agent writes to
+
+- Each card on Settings › Data sources shows its name, status, one plain description and its button. The signal kinds at the bottom ("Change · Timing · Gap"), the role tags ("For analysis", "Can change", "Search and archive") and the "Once connected you can find:" prefix are gone, with their copy in every language.
+- A healthy source shows no sync line; Connected already says it. A source that Data health lists as needing attention shows "Needs attention" and the same reason ("No successful sync in over two days"). Hacker News and X now match their Data health rows, which use other ids.
+- A new last group, Agent edits and publishing, holds Website source (Git repository) and the article publishing target, now called Blog CMS: connect it when articles are managed in a CMS; articles kept in the repository don't need it. The drawer title follows ("Connect Blog CMS"); publishing and the drawer's form are unchanged.
+- Bilibili and Xiaohongshu say they are collected manually and not updated each day. What they collect still feeds the daily analysis's content rules.
+
+## Unreleased — Agent: tabs back, no duplicate local agents
+
+- Runtimes, Model services and Usage are tabs of the Agent page again, after Local agents, instead of pages of Settings; Settings no longer lists them, and `/runtimes`, `/models` and `/usage` open the tabs.
+- The Agent page shows Who does the work above the tabs; the local agents and the project default are in the Local agents tab only, instead of a second block below the overview. Change opens that tab.
+- When the chosen local agent's coding tool is not signed in or out of quota, the page no longer offers to switch to an agent that uses the same tool (switching from Claude · Fable 5.1 to Claude · Haiku 4.5 fails the same way); it offers an agent with another tool, or Change.
+
+## Unreleased — Insights has one refresh
+
+- Update analysis is the page's refresh icon, as on Results, named and tooltipped "Update analysis": it spins while the analysis runs, and the numbers, Current situation and the waiting tasks are read again when it ends. Current situation no longer has a refresh of its own.
+- Current situation lists every line, those needing attention first, since the column has the room; "N more" is gone.
+
+## Unreleased — Every language checked against English in the tests
+
+- `tests/logic/additional-locales.test.ts` compares each of the eight additional languages with English: `shared/i18n/<locale>.json` with `en.json`, and `client/locales/translations/<locale>.json` with the shell copy of `client/locales/en-US.ts`. It names every missing key, extra key and key whose `{0}` or `{{name}}` placeholders differ. The `build` check's client type check already failed on a missing key, but stopped at the first language and missed extra keys and changed placeholders.
+- docs/DEVELOPMENT.md says new or changed copy needs all ten languages in the same pull request, and that a pull request updated from `main` is merged only after CI passes on that update: eight pull requests merged after the ten-language change (#183) were short 81 translations once `main` was merged into them, and were merged seconds after that push, before CI had run.
+
+## Unreleased — Performance on the task page, page by page
+
+- The task page shows Performance under its properties (after the current card below 1280px): each page the task is about with its own numbers. Before the change goes live it lists the latest 28 days, search clicks and average position (views when a page has no search data), and says that days 7 and 28 are compared with them; once live, the 28 days before going live and when the day 7 result is expected. From day 7 it shows each page before and after with the change, all pages together, a Day 7 / Day 28 switch and a link to the full comparison in Results. Three pages show at first, the rest on request.
+- Day 7 and day 28 comparisons now keep each page's own clicks, average position and views when a task changed more than one page; earlier results show the pages together. A new read action, `nrTaskWork.numbers`, returns each page's numbers over 28 days (read permission, as `get`).
+- The properties column shows labels and values in the same size, told apart by colour, with every row the same height and menus lined up with plain values.
+
+## Unreleased — Tasks: one set of status choices, the shared drop-downs
+
+- Tasks no longer has a status drop-down beside Waiting for me, Current, Done and Closed: the two overlapped, and the board's columns and the list's order already separate statuses. An old `?status=` link shows the scope without filtering.
+- The playbook, owner and Agent filters use the application's drop-down instead of the browser's, as every other page does. Picking a playbook after opening an old `?playbook=` link no longer falls back to all playbooks when that link's option leaves the list.
+
+## Unreleased — One product wording, the version in the account menu
+
+- The sidebar footer shows only the slogan; the template's name ("Default Template") is gone and the version moves to the bottom of the account menu ("NocoReach v1.0.0-beta.68").
+- The slogan, the sign-in panel and the README headers use one agreed wording in all ten interface languages: an AI growth operations platform; "Find the opportunities in your data. NocoReach puts them into action."; data collection, daily analysis and Agent execution in one platform. The sign-in panel's second point is Agent execution (you confirm, review the change and track the impact) instead of repository-native work, and its last line reads "Find opportunities · Put them into action · Track the impact".
+
+## Unreleased — Playbook step names in formal Chinese
+
+- Built-in playbook steps and step kinds read formally in Chinese and Traditional Chinese: Write plan, Review plan and Review and publish, and the step-kind notes (your review, review then approve or request changes, confirm then the system runs, changes the repository and opens a PR, no repository change). English is unchanged.
+- Tasks created before keep their stored step names; they display the new wording, because a stored name is matched to its system message through the alias manifest rather than by exact text. Stored data is not rewritten.
+
+## Unreleased — Leaving unsaved work asks in the application's dialog
+
+- Leaving New task, a role form or Create from a result with unsaved input, following a link out of Skills, the Google or keyword connection forms with unsaved input, and leaving a task page with drafts now ask in the application's own dialog instead of the browser's confirm box. Unsaved forms ask "Discard unsaved changes?" with Discard; a task page with drafts asks "Leave this page?" with Leave anyway, since its drafts are kept.
+
+## Unreleased — Insights scrolls inside its conversation
+
+- On wide screens Insights fills the window: the title, the numbers and the input stay in place and only the day's analysis and conversation scroll between them; Current situation scrolls on its own.
+- Earlier analyses opened above today fold again with "Hide earlier analyses", offered both above them and just above today.
+- The day's conversation folds to one line ("Conversation · questions: N") so the day's analysis stays in view; a new question opens it again and scrolls to it.
+- The input has one frame instead of a field inside a box.
+
 ## Unreleased — Shared sample generation
 
 - Extract the business sample generator and invoke it through the Demo Mode dataset's direct generation callback, preserving weighted progress and existing cleanup without changing core sample history or ordinary installation behavior.
@@ -47,6 +130,12 @@
 
 - Search performance › Performance reads web search only. The search type choice (Web, Image, Video, News, Discover, Google News) is gone, with the server's handling of other types in the search views: they were read live from Search Console for this choice alone, while the scheduled sync, the daily analysis and Insights use web search only.
 - The coverage line shows only when days are missing: which days, why (fetching, failed, paused, waiting for an administrator, or older than the 16 months Search Console keeps) and the one action that fixes it. A complete range shows nothing; when the data was last saved, blank days, missing comparisons, the backfill limit and scheduled sync being off are in the page's ⓘ. "Re-fetch selected totals" is removed: the scheduled sync re-reads recent days, and gaps are filled automatically when an administrator opens the range.
+
+## Unreleased — Task properties in their own column
+
+- The task page keeps the title across the top and moves the task's properties out of the header into a column on the right from 1280px wide, like the sidebar of an issue: Owner and Agent (both can be changed there), Collaborators, Playbook, From (the opportunity), Article with its full title linked to the published page, Related page, Related tasks and Started. Rows without a value are left out. The column stays in view while the page scrolls; the page keeps its full width.
+- Below 1280px the properties sit under the title in two columns, and in one column on phones, instead of squeezing the content.
+- The content column reads why the task exists, the steps (no longer repeating the playbook's name), what needs doing now and the activity. The start card's hint says "Choose an Agent for this task first." instead of pointing above, in all ten languages.
 
 ## Unreleased — Settings and the sidebar in agreed words
 

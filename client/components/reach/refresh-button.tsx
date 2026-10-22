@@ -8,16 +8,21 @@ import {
   TooltipTrigger,
 } from '#components/ui/tooltip';
 
-// A page's Refresh (guideline R4): an outline icon button named and tooltipped "Refresh", last among the header's
-// actions, its icon spinning while the refresh it started runs.
+// Every refresh or update control is this one look (2026-10-22 user decision: icon only, the explanation on hover):
+// an outline icon button named and tooltipped by `label`, last among the header's actions, its icon spinning while
+// the work it started runs. The label says what happens ("Refresh", "Update now", "Update analysis").
 export function RefreshButton({
   busy,
   disabled,
+  label = $t('common.refresh'),
   onClick,
+  className,
 }: {
   busy: boolean;
   disabled?: boolean;
+  label?: string;
   onClick: () => void;
+  className?: string;
 }): ReactElement {
   return (
     <Tooltip>
@@ -26,7 +31,8 @@ export function RefreshButton({
           <Button
             variant='outline'
             size='icon'
-            aria-label={$t('common.refresh')}
+            className={className}
+            aria-label={label}
             disabled={busy || disabled}
             onClick={onClick}
           />
@@ -34,7 +40,7 @@ export function RefreshButton({
       >
         <RefreshCw className={busy ? 'animate-spin' : undefined} />
       </TooltipTrigger>
-      <TooltipContent>{$t('common.refresh')}</TooltipContent>
+      <TooltipContent>{label}</TooltipContent>
     </Tooltip>
   );
 }

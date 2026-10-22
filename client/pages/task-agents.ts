@@ -96,19 +96,3 @@ export function placeOf(w: Work | undefined, hasAgent: boolean): Placed | null {
   }
   return null;
 }
-
-/** The counts above the tasks: runs under way, waiting for an Agent, and failed runs still to deal with. */
-export function runCounts(works: (Work | undefined)[]) {
-  const open = works.filter((w) => w?.flow && !isClosed(w));
-  const status = (s: string) =>
-    open.filter(
-      (w) =>
-        w!.latestRun?.status === s &&
-        w!.flow!.stages[w!.stageIndex || 0]?.kind === 'agent',
-    ).length;
-  return {
-    running: status('running'),
-    queued: status('queued'),
-    failed: status('failed'),
-  };
-}

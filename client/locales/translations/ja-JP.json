@@ -230,16 +230,16 @@
   "auth.or": "または次の方法で続行",
   "auth.continueWith": "{provider} で続行",
   "auth.about": "このアプリケーションについて",
-  "auth.platform": "AIグロースチーム",
-  "auth.marketingTitleFirst": "やるべきことを見つけ、",
-  "auth.marketingTitleSecond": "エージェントに任せ、",
-  "auth.marketingTitleThird": "成果につなげる。",
-  "auth.marketingDescription": "NocoReachは検索、トラフィック、コミュニティ、GitHubのデータを毎日読み取り、取り組む価値のある施策を見つけます。承認すると、エージェントがリポジトリを変更し、プルリクエストを作成します。",
+  "auth.platform": "AIグロース運用プラットフォーム",
+  "auth.marketingTitleFirst": "データから機会を見つけ、",
+  "auth.marketingTitleSecond": "NocoReachが実行に移します。",
+  "auth.marketingTitleThird": "",
+  "auth.marketingDescription": "データ収集、毎日の分析、エージェントによる実行をひとつのプラットフォームで。",
   "auth.frontend": "毎日の分析",
-  "auth.frontendDescription": "オンラインAIが毎日データを読み取り、根拠とともに改善の機会を提案します。",
-  "auth.foundation": "リポジトリと直接連携",
-  "auth.foundationDescription": "エージェントがリポジトリを編集し、レビュー用のプルリクエストを作成します。",
-  "auth.marketingFooter": "見つける、実行する、効果を測る。",
+  "auth.frontendDescription": "オンラインAIが毎日データを分析し、根拠のある機会を提案します。",
+  "auth.foundation": "エージェントによる実行",
+  "auth.foundationDescription": "確認後にエージェントが実行し、変更のレビューと効果の追跡ができます。",
+  "auth.marketingFooter": "機会を見つける · 実行に移す · 効果を追跡する",
   "status.loading": "読み込み中",
   "status.loadingPage": "ページを読み込み中",
   "status.denied": "アクセスが拒否されました",
@@ -252,8 +252,8 @@
   "status.routeFailedDescription": "{{packageName}} のルート {{label}} を読み込めませんでした。",
   "shell": {
     "templateVersionUnknown": "バージョン不明",
-    "buildFreely": "データから改善の機会を見つけましょう。",
-    "reliability": "<brand>NocoReach</brand>が実行します。"
+    "buildFreely": "データから機会を見つけ、",
+    "reliability": "<brand>NocoReach</brand>が実行に移します。"
   },
   "home": {
     "platform": "NocoBase · AI ネイティブなアプリケーションプラットフォーム",
@@ -817,8 +817,5 @@
   },
   "agentSetup.connectionsTitle": "エージェントでデータソースを接続",
   "agentSetup.connectionsDescription": "以下の手順を Claude Code、Codex などのコーディングエージェントにコピーしてください。エージェントが NocoReach CLI をインストールしてあなたのアカウントでログインし、計画を確認してもらってから、このプロジェクトのデータソースを接続します。",
-  "agentSetup.connectionsPrompt": "NocoReach のプロジェクト「{{project}}」（ID {{projectId}}）にデータソースを接続するのを手伝ってください。\n\n1. NocoReach CLI をインストールしてください:\n{{install}}\n\n2. ブラウザーでのログインを開始してください:\n{{login}}\n認証用の URL とコードを私に提示してください。私がブラウザーでコードを確認して承認するまで待ち、代わりに承認しないでください。\n\n3. 私の承認後、`nocoreach whoami` を実行してログイン中のアカウントを確認し、続いて `nocoreach connect guide --json` を実行して、その手順に従ってプロジェクト {{projectId}} のデータソースを接続してください。接続する前に計画を提示し、私の確認を待ってください。パスワード、トークン、API キーを要求せず、ダウンロード用トークンを API キーとして使用しないでください。認証情報が必要なデータソースについてはリンクを提示し、私がブラウザーで入力できるようにしてください。",
-  "nocoreach.nav.runtimes": "実行環境",
-  "nocoreach.nav.models": "モデルサービス",
-  "nocoreach.nav.usage": "使用量"
+  "agentSetup.connectionsPrompt": "NocoReach のプロジェクト「{{project}}」（ID {{projectId}}）にデータソースを接続するのを手伝ってください。\n\n1. NocoReach CLI をインストールしてください:\n{{install}}\n\n2. ブラウザーでのログインを開始してください:\n{{login}}\n認証用の URL とコードを私に提示してください。私がブラウザーでコードを確認して承認するまで待ち、代わりに承認しないでください。\n\n3. 私の承認後、`nocoreach whoami` を実行してログイン中のアカウントを確認し、続いて `nocoreach connect guide --json` を実行して、その手順に従ってプロジェクト {{projectId}} のデータソースを接続してください。接続する前に計画を提示し、私の確認を待ってください。パスワード、トークン、API キーを要求せず、ダウンロード用トークンを API キーとして使用しないでください。認証情報が必要なデータソースについてはリンクを提示し、私がブラウザーで入力できるようにしてください。"
 }

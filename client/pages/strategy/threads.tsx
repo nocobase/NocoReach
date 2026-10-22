@@ -252,12 +252,27 @@ function Turn({ run }: { run: OnlineRun }) {
 }
 
 /** A day's conversation, every turn in order; read again while an answer is being written. */
-export function DayConversation({ day }: { day: string }) {
+export function DayConversation({
+  day,
+  folded = false,
+}: {
+  day: string;
+  /** Starts folded to its one line (today's, so the analysis is what shows). */
+  folded?: boolean;
+}) {
   const chat = useInsightChat();
   // Outside the provider (no chat mounted) there is nothing to read, and no chat client to read it with.
-  return chat ? <DayTurns chat={chat} day={day} /> : null;
+  return chat ? <DayTurns chat={chat} day={day} startFolded={folded} /> : null;
 }
-function DayTurns({ chat, day }: { chat: InsightChat; day: string }) {
+function DayTurns({
+  chat,
+  day,
+  startFolded,
+}: {
+  chat: InsightChat;
+  day: string;
+  startFolded: boolean;
+}) {
   const api = useOnlineApi();
   const key = threadsOf(chat.threads, day)
     .map((t) => t.id)
@@ -294,12 +309,39 @@ function DayTurns({ chat, day }: { chat: InsightChat; day: string }) {
   const runs = (state?.key === key ? state.details : [])
     .flatMap((d) => d.runs)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  // Today's starts folded to one line, so the day's analysis is what shows when Insights opens (2026-10-22 user
+  // feedback); a question sent since then opens it.
+  const [folded, setFolded] = useState(startFolded),
+    endRef = useRef<HTMLDivElement>(null),
+    countRef = useRef(0),
+    openedAtRef = useRef(chat.version);
+  // Only a question sent since the page opened unfolds it, not the turns read when it opens.
+  useEffect(() => {
+    const previous = countRef.current;
+    countRef.current = runs.length;
+    if (runs.length <= previous || chat.version === openedAtRef.current) return;
+    setFolded(false);
+    endRef.current?.scrollIntoView?.({ block: 'end', behavior: 'smooth' });
+  }, [runs.length, chat.version]);
   if (!runs.length) return null;
   return (
     <div className='flex flex-col gap-4' data-day-conversation={day}>
-      {runs.map((run) => (
-        <Turn key={run.id} run={run} />
-      ))}
+      <button
+        type='button'
+        aria-expanded={!folded}
+        className='flex items-center gap-3 text-xs text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border hover:text-foreground'
+        onClick={() => setFolded((f) => !f)}
+      >
+        <span className='inline-flex items-center gap-0.5'>
+          {$t('strategy.conversationTurns', { 0: runs.length })}
+          <ChevronDown
+            className={cn('size-3.5', !folded && 'rotate-180')}
+            aria-hidden='true'
+          />
+        </span>
+      </button>
+      {!folded && runs.map((run) => <Turn key={run.id} run={run} />)}
+      <div ref={endRef} />
     </div>
   );
 }
@@ -367,7 +409,7 @@ function ComposerInput({
     }
   };
   return (
-    <div className='sticky bottom-3 z-10 flex flex-col gap-2 rounded-xl border bg-background p-2.5 shadow-sm'>
+    <div className='sticky bottom-3 z-10 flex flex-col gap-2 rounded-xl border bg-background p-2 shadow-sm focus-within:border-ring'>
       {reference && (
         <span className='inline-flex w-fit max-w-full items-center gap-1 rounded-full bg-primary/10 py-0.5 pr-1 pl-2 text-xs text-primary'>
           <CornerDownRight className='size-3 shrink-0' aria-hidden='true' />
@@ -401,7 +443,7 @@ function ComposerInput({
               void send();
             }
           }}
-          className='field-sizing-content max-h-40 min-h-9 flex-1 resize-none bg-transparent px-1.5 py-1.5 text-sm outline-none'
+          className='field-sizing-content max-h-40 flex-1 resize-none !min-h-9 !rounded-none !border-0 !bg-transparent !px-1.5 !py-1.5 !shadow-none outline-none'
         />
         <Button
           size='icon-sm'

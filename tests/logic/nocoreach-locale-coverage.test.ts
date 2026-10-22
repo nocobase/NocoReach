@@ -66,6 +66,30 @@ describe('NocoReach semantic-key translations', () => {
     );
     // A legacy alias keeps its historical source text when the visible copy changes.
     const changedLegacyCopy: Record<string, string> = {
+      // Playbook step names in formal wording (2026-10-22), quoted.
+      '有“Agent 修改”时，系统会在最后接上“上线 → 观察效果”；最后一步不是审核时会自动加上“看效果并发布”。':
+        '有“Agent 修改”时，系统会在最后接上“上线 → 观察效果”；最后一步不是审核时会自动加上“审核并发布”。',
+      '（不改仓库）':
+        '（不修改仓库）',
+      // Playbook step names in formal wording (2026-10-22).
+      '出方案':
+        '制定方案',
+      '看方案':
+        '审核方案',
+      '看效果并发布':
+        '审核并发布',
+      '你审核':
+        '由你审核',
+      '看过后通过或要求修改':
+        '审核后通过或要求修改',
+      '你确认 · 系统执行':
+        '确认后由系统执行',
+      '不改仓库':
+        '不修改仓库',
+      '不改仓库，写出一份文档':
+        '不修改仓库，产出一份文档',
+      '改仓库、开 PR':
+        '修改仓库并创建 PR',
       // Task detail in formal words (2026-10-21), closed card.
       '已关闭 · {0}':
         '关闭时：{0}',
@@ -323,6 +347,13 @@ describe('NocoReach semantic-key translations', () => {
       '接近首页 ({0})': '接近首页 {0}',
       '机会 ({0})': '机会 {0}',
       '没有品牌 ({0})': '没有品牌 {0}',
+      // Data sources cards without role tags (2026-10-22): the manual collectors say they are not updated daily.
+      'Agent 在这个仓库里修改内容、开 PR 给你审核；之后还会把网址对应到源文件':
+        'Agent 在这个仓库里修改网站，开 PR 给你审核',
+      '公开视频搜索摘要和指定视频详情，手动读取供调研':
+        '公开视频搜索摘要和指定视频详情，手动读取供调研，不会每天自动更新',
+      '已授权浏览器中搜索到的产品笔记和页面显示的点赞':
+        '已授权浏览器中搜索到的产品笔记和页面显示的点赞，手动采集，不会每天自动更新',
     };
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(

@@ -127,8 +127,17 @@ vi.mock('../../client/components/reach/page', () => ({
   PageContainer: ({ children }: { children: ReactNode }) => (
     <main>{children}</main>
   ),
-  PageHeader: ({ description }: { description?: ReactNode }) => (
-    <header>{description}</header>
+  PageHeader: ({
+    description,
+    actions,
+  }: {
+    description?: ReactNode;
+    actions?: ReactNode;
+  }) => (
+    <header>
+      {description}
+      {actions}
+    </header>
   ),
   Section: ({ children, ...rest }: { children: ReactNode }) => (
     <section {...rest}>{children}</section>
@@ -272,6 +281,16 @@ beforeEach(() => {
         return Promise.resolve(fixture.state);
       }
       if (resource === 'nrStrategy' && action === 'confirmDirection') {
+        fixture.tasks = [
+          ...fixture.tasks,
+          {
+            id: 99,
+            title: 'New',
+            status: 'todo',
+            createdAt: '2026-10-21T10:00:00Z',
+            evidence: {},
+          },
+        ];
         fixture.state = {
           ...fixture.state,
           revision: fixture.state.revision + 1,
@@ -418,7 +437,7 @@ it('Hand off to agent turns the opportunity into a task and takes it off the lis
     }),
   );
   expect(decisions()).not.toContain('e');
-  expect(screen.getByText('strategy.handedCount:2')).toBeTruthy();
+  expect(await screen.findByText('strategy.handedCount:2')).toBeTruthy();
 });
 
 it('the tiles show at most five numbers that have data, the summary names the ones that moved, and the current situation sits beside the day', async () => {
@@ -622,6 +641,13 @@ it('today’s conversation follows the analysis, a quoted opportunity above its 
     expect(found).toBeTruthy();
     return found as HTMLElement;
   });
+  // Folded to one line when the page opens, so the day's analysis is what shows.
+  const fold = within(conversation).getByRole('button', {
+    name: /strategy.conversationTurns:2/,
+  });
+  expect(fold.getAttribute('aria-expanded')).toBe('false');
+  expect(conversation.querySelectorAll('[data-turn]')).toHaveLength(0);
+  fireEvent.click(fold);
   const turns = conversation.querySelectorAll('[data-turn]');
   expect(turns).toHaveLength(2);
   expect(turns[0].textContent).toContain('Which page fell most?');
@@ -643,6 +669,47 @@ it('today’s conversation follows the analysis, a quoted opportunity above its 
   // No questions under the opportunity lines any more.
   const b = screen.getByRole('listitem', { name: 'Opportunity b' });
   expect(within(b).queryByText(/How long/)).toBeNull();
+  // And folds again.
+  fireEvent.click(fold);
+  expect(conversation.querySelectorAll('[data-turn]')).toHaveLength(0);
+});
+
+it('today’s message counts only what was decided today; a hand-off from an earlier day stays on its day', async () => {
+  // O-30, raised on 10/18 and handed off then as T-27, is listed again by today's analysis.
+  fixture.state.insights!.items.push(
+    card('old-handed', { no: 30, firstSeenAt: '2026-10-18' }),
+  );
+  fixture.state.proposals.push({
+    id: 'p-old',
+    title: '',
+    brief: '',
+    status: '',
+    goalVersion: null,
+    evidence: batch('', []).evidence,
+    taskId: 27,
+    taskNo: 27,
+    insight: card('old-handed'),
+  });
+  fixture.tasks = [
+    {
+      id: 27,
+      title: 'T',
+      status: 'todo',
+      createdAt: '2026-10-18T09:00:00Z',
+      evidence: {},
+    },
+  ];
+  setup();
+  const group = await decisionGroup(7);
+  await waitFor(() =>
+    expect(within(group).getByText('strategy.handedCount:1')).toBeTruthy(),
+  );
+  expect(group.querySelector('[data-opportunity-id=old-handed]')).toBeNull();
+  await showEarlier();
+  const day = screen
+    .getAllByRole('region')
+    .find((r) => r.getAttribute('aria-label')?.includes('10'))!;
+  expect(day.textContent).toContain('strategy.handedCount:1');
 });
 
 it('Ask AI on a line quotes it in the input; sending starts or continues the day’s conversation', async () => {
@@ -786,9 +853,19 @@ it('earlier days sit above today, folded, and show their conversation when opene
   expect(days[0].textContent).toContain('strategy.dayThreads:1');
   fireEvent.click(within(days[0]).getByRole('button', { expanded: false }));
   expect(await within(days[0]).findByText('question t-old')).toBeTruthy();
+  // They fold again from above them or from just above today.
+  const hide = screen.getAllByRole('button', {
+    name: /strategy.collapseEarlier/,
+  });
+  expect(hide).toHaveLength(2);
+  fireEvent.click(hide[1]);
+  expect(screen.queryByText(/strategy.dayThreads/)).toBeNull();
+  expect(
+    screen.getByRole('button', { name: /strategy.earlierAnalyses:1/ }),
+  ).toBeTruthy();
 });
 
-it('the current situation beside the day shows what needs attention and folds the rest', async () => {
+it('the current situation beside the day lists every line, those needing attention first, without a refresh of its own', async () => {
   const item = (key: string, text: string, tone?: string) => ({
     key,
     text,
@@ -816,14 +893,43 @@ it('the current situation beside the day shows what needs attention and folds th
   expect(
     await within(situation).findByText('54 pages not updated for a year'),
   ).toBeTruthy();
-  expect(within(situation).queryByText('Pages indexed: 120')).toBeNull();
-  // Refresh is a quiet icon that keeps its name.
+  const lines = within(situation)
+    .getAllByRole('listitem')
+    .map((l) => l.textContent);
+  expect(lines).toEqual([
+    '54 pages not updated for a year',
+    'Pages indexed: 120',
+    'Sitemap found',
+    'No critical audit issues',
+  ]);
   expect(
-    within(situation).getByRole('button', { name: 'strategy.refreshBlock' }),
+    within(situation).queryByRole('button', { name: 'strategy.refreshBlock' }),
+  ).toBeNull();
+  // The page has one refresh, which runs the analysis again.
+  expect(
+    screen.getByRole('button', { name: 'strategy.updateAnalysis' }),
   ).toBeTruthy();
+});
+
+it('a handed-off opportunity says where its task stands now', async () => {
+  fixture.tasks = [
+    {
+      id: 5,
+      title: 'Done task',
+      status: 'todo',
+      createdAt: '2026-10-21T08:30:00Z',
+      evidence: { work: { stage: 'done' } },
+    },
+  ];
+  setup();
+  const group = await decisionGroup(7);
   fireEvent.click(
-    within(situation).getByRole('button', { name: /strategy.situationMore:3/ }),
+    within(group).getByRole('button', { name: /strategy.moreToDecide/ }),
   );
-  expect(within(situation).getByText('Pages indexed: 120')).toBeTruthy();
-  expect(within(situation).getByText('No critical audit issues')).toBeTruthy();
+  const handed = await waitFor(() => {
+    const line = group.querySelector('[data-opportunity-id=handed]');
+    expect(line?.textContent).toContain('common.completed');
+    return line!;
+  });
+  expect(handed.textContent).not.toContain('strategy.handedOffAgent');
 });

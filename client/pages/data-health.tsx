@@ -21,7 +21,8 @@ export type Health={checkedAt:string;items:HealthItem[]};
 export const getStateText = (): Record<HealthItem['state'],string> => ({healthy:$t('dataHealth.ok'),warning:$t('dataHealth.needsAttention'),failing:$t('dataHealth.needsFixing'),pending:$t('dataHealth.waitingSync')});
 export function ago(v:string|null,now=Date.now()){if(!v)return $t('dataHealth.never');const m=Math.round((now-Date.parse(v))/60000);if(m<1)return $t('common.now');if(m<60)return $t('common.minAgo',{0:m});const h=Math.round(m/60);if(h<48)return $t('common.hAgo',{0:h});return $t('dataHealth.daysAgo',{0:Math.round(h/24)});}
 export function loadHealth(projectId:number){return api.action<Health>('nrHealth','list',{method:'POST',body:{projectId},unwrap:'data'});}
-export function HealthLine({item}:{item:HealthItem}){return <p className={'nr-health-line nr-health-'+item.state}><span className="nr-health-dot" aria-hidden="true"/>{item.state==='healthy'?$t('dataHealth.lastSynced',{0:ago(item.lastSuccessAt),1:item.dataThrough?$t('dataHealth.dataThroughMetaValue',{0:item.dataThrough}):''}):healthText(item.message,item.messageText)}</p>;}
+// The reason on a source card that needs attention; a healthy card shows no sync line.
+export function HealthLine({item}:{item:HealthItem}){return <p className={'nr-health-line nr-health-'+item.state}>{healthText(item.message,item.messageText)}</p>;}
 // Healthy sources collapse into one line; anything needing attention is listed with its reason and a retry.
 export function HealthPanel({projectId,reloadKey,onChange}:{projectId:number;reloadKey:number;onChange:()=>void}){
  const [health,setHealth]=useState<Health>(),[busy,setBusy]=useState(''),[error,setError]=useMessageState('');

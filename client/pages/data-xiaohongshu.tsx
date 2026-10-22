@@ -3,7 +3,8 @@ import { $t, useNocoReachLocale } from '#i18n';
 // the same parts as the other 社区 pages (collector-content.tsx).
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { BookHeart, RefreshCw } from 'lucide-react';
+import { BookHeart } from 'lucide-react';
+import { RefreshButton } from '#components/reach/refresh-button';
 import { toast } from '#lib/toast';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { PageContainer, PageHeader } from '#components/reach/page';
@@ -142,15 +143,13 @@ export default function DataXiaohongshu() {
         }
         actions={
           data?.connected && canSearch ? (
-            <Button
-              variant='outline'
-              size='sm'
-              disabled={running}
+            <RefreshButton
+              busy={running}
+              label={
+                running ? $t('xiaohongshu.collecting') : $t('common.updateNow')
+              }
               onClick={() => void search()}
-            >
-              <RefreshCw data-icon='inline-start' />
-              {running ? $t('xiaohongshu.collecting') : $t('common.updateNow')}
-            </Button>
+            />
           ) : undefined
         }
       />

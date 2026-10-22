@@ -35,6 +35,7 @@ import { AnalysisAlert } from './analysis-alert';
 import { PageContainer, PageHeader } from '#components/reach/page';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '#components/ui/button';
+import { RefreshButton } from '#components/reach/refresh-button';
 import { taskRecords, useProject } from '../reach-data';
 import { PageSkeleton } from '../workspace-cache';
 import { type Work } from '../task-execution-types';
@@ -69,6 +70,7 @@ type Task = {
   id: number;
   title: string;
   status: string;
+  createdAt?: string;
   updatedAt?: string;
   evidence?: { work?: Work; createdBy?: { id?: string } };
 };
@@ -253,6 +255,8 @@ function Insights({
         setState(r.state);
         setHanded(handOffResult(row, r, kindOf(row)));
         refreshNavBadges();
+        // The new task, so today's message counts the hand-off.
+        taskView.reload();
       } catch {
         setError(() => $t('strategy.notHandOffOpportunityKept'));
       }
@@ -304,6 +308,20 @@ function Insights({
       }),
     googleLocalFreshness,
   );
+  // When an analysis ends, the numbers, the situation and the tasks are read again with it.
+  const wasGeneratingRef = useRef(generating),
+    reloadAllRef = useRef(() => {});
+  useEffect(() => {
+    reloadAllRef.current = () => {
+      overview.reload();
+      summaryView.reload();
+      taskView.reload();
+    };
+  });
+  useEffect(() => {
+    if (wasGeneratingRef.current && !generating) reloadAllRef.current();
+    wasGeneratingRef.current = generating;
+  }, [generating]);
   const last = generating
     ? $t('strategy.analyzing')
     : batch
@@ -329,7 +347,20 @@ function Insights({
     });
   const rows = rowsFor(state),
     metrics = metricItems(overview.data?.cards),
-    feed = feedOf(state, rows),
+    feed = feedOf(
+      state,
+      rows,
+      new Map(
+        tasks.map((t) => [
+          String(t.id),
+          {
+            createdAt: t.createdAt,
+            work: t.evidence?.work,
+            status: t.status,
+          },
+        ]),
+      ),
+    ),
     analysisDay = dayOf(state.insights?.generatedAt),
     chat = useOptionalOnlineChat(),
     // With the side panel open the day's conversation is there; the page gives it the room.
@@ -379,10 +410,10 @@ function Insights({
   );
   // Earlier days above today, as in a conversation; the input for today's conversation at the bottom.
   const column = (
-    <div className='flex min-w-0 flex-col gap-4'>
+    <div className='flex min-w-0 flex-col gap-4 lg:h-full lg:min-h-0'>
       <section
         aria-label={$t('strategy.analysisFeed')}
-        className='flex flex-col gap-4'
+        className='flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-2'
       >
         <History days={feed.days} today={analysisDay} rows={rows} />
         <Today
@@ -416,7 +447,7 @@ function Insights({
     </div>
   );
   return (
-    <PageContainer className='nr-page'>
+    <PageContainer className='nr-page nr-insights-fill lg:flex lg:h-full lg:flex-col'>
       <PageHeader
         title={$t('strategy.insights')}
         description={
@@ -429,16 +460,19 @@ function Insights({
             {automatic && <DailyAutomatic link={canSchedules} />}
           </>
         }
+        // One refresh, as on Results (2026-10-22 user decision): it runs the analysis again, and every block is read
+        // again when it ends.
         actions={
-          <Button
-            variant='outline'
-            disabled={busy || generating}
+          <RefreshButton
+            label={
+              generating
+                ? $t('strategy.analyzing')
+                : $t('strategy.updateAnalysis')
+            }
+            busy={generating}
+            disabled={busy}
             onClick={() => void generate()}
-          >
-            {generating
-              ? $t('strategy.analyzing')
-              : $t('strategy.updateAnalysis')}
-          </Button>
+          />
         }
       />
       {error && (
@@ -457,15 +491,17 @@ function Insights({
         busy={busy || generating}
         onRun={() => void generate()}
       />
-      <div className='flex flex-col gap-6'>
+      {/* On wide screens the page fills the window and only the day's conversation scrolls, between the numbers and
+          the input (2026-10-22 user feedback). */}
+      <div className='flex flex-col gap-6 lg:min-h-0 lg:flex-1'>
         <MetricTiles metrics={metrics} overview={overview} />
         {/* The day's conversation, with the standing facts in a narrow quiet column beside it (2026-10-21 user); with the
             side panel open, the facts fold to a line under the day's date. */}
         <div
           className={
             docked
-              ? 'flex flex-col'
-              : 'grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_16rem]'
+              ? 'flex flex-col lg:min-h-0 lg:flex-1'
+              : 'grid items-start gap-8 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_16rem] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch'
           }
         >
           {/* Questions asked from Insights read the chat's records, so only where the chat is mounted. */}
@@ -476,7 +512,9 @@ function Insights({
           ) : (
             column
           )}
-          {!docked && situation}
+          {!docked && (
+            <div className='lg:min-h-0 lg:overflow-y-auto'>{situation}</div>
+          )}
         </div>
       </div>
     </PageContainer>
