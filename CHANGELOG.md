@@ -2,8 +2,10 @@
 
 ## Unreleased — Insights says how it analyzes, not how old the data is
 
-- The line under the Insights title no longer shows the data date and the last analysis time ("Last 28 days · Data through … · Last analyzed … (daily, automatic)"): the data could end days before today's analysis, which read as analyzing old data. It says how the insights are made instead, in one sentence with two links: "Analyzes the last 28 days every day at 09:00, using your analysis rules." The analysis rules link to AI team › Analysis rules and the time to Settings › Automatic runs; each is plain text for someone who cannot open that page.
-- The time is the daily workflow's configured time, with its time zone when it differs from the browser's. A paused daily analysis says it is paused; without a daily workflow the sentence names the rules and the 28 days only. Data dates stay on Data sources and Data health.
+- The line under the Insights title no longer shows the period, the data date and the last analysis time ("Last 28 days · Data through … · Last analyzed … (daily, automatic)"): the data could end days before today's analysis, which read as analyzing old data, and each analysis rule reads its own window (7, 14, 28 or 30 days), not 28. It says how the insights are made instead, in one sentence with two links: "Analyzed every day at 09:00 using your analysis rules." The analysis rules link to AI team › Analysis rules and the time to Settings › Automatic runs; each is plain text for someone who cannot open that page.
+- The time is the daily workflow's configured time, with its time zone when it differs from the browser's. A paused daily analysis says it is paused; without a daily workflow the sentence names the rules only. Data dates stay on Data sources and Data health.
+- The metric cards say what they cover, in a quiet line above them: "Last 28 days vs the previous 28".
+- Insights no longer loads the analysis context it used only for that period.
 
 ## Unreleased — See what a live task changed
 

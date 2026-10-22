@@ -504,6 +504,8 @@ it('the tiles show at most five numbers that have data, the summary names the on
   });
   await within(tiles).findByText('1,200');
   expect(within(tiles).getAllByRole('link')).toHaveLength(5);
+  // The cards say what their numbers and changes cover.
+  expect(within(tiles).getByText('strategy.metricWindow:28')).toBeTruthy();
   // Downloads is the sixth number: it waits under All data, and is not named in the summary either.
   expect(within(tiles).queryByText('4,000')).toBeNull();
   expect(within(tiles).getByText('+30')).toBeTruthy();
@@ -536,14 +538,14 @@ it('the subtitle says how the insights are analyzed, linking the rules and the s
   expect(link.getAttribute('href')).toBe('/schedules');
   const sentence = link.parentElement!;
   expect(sentence.textContent).toBe(
-    'strategy.howAnalyzedDaily:strategy.analysisRulesLink,strategy.everyDayAt:09:00,28',
+    'strategy.howAnalyzedDaily:strategy.analysisRulesLink,strategy.everyDayAt:09:00',
   );
   expect(
     within(sentence)
       .getByRole('link', { name: 'strategy.analysisRulesLink' })
       .getAttribute('href'),
   ).toBe('/rules');
-  // No data date and no last-run time.
+  // No data date, no last-run time and no period: the period is the metric cards'.
   expect(
     screen.queryByText(/strategy.lastDaysDataThrough|strategy.lastAnalyzed/),
   ).toBeNull();
@@ -567,7 +569,7 @@ it('without a daily schedule the subtitle names the rules only', async () => {
     name: 'strategy.analysisRulesLink',
   });
   expect(rules.parentElement!.textContent).toBe(
-    'strategy.howAnalyzedManual:strategy.analysisRulesLink,28',
+    'strategy.howAnalyzedManual:strategy.analysisRulesLink',
   );
   expect(
     screen.queryByRole('link', { name: /strategy.everyDayAt/ }),

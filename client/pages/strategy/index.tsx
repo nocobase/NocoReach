@@ -63,7 +63,6 @@ import {
   request,
   analysisRequest,
   judgeMissing,
-  type Context,
   type AnalysisStatus,
 } from './service';
 import '../reach-workspace.css';
@@ -93,21 +92,14 @@ export default function StrategyPage() {
 }
 function ProjectInsights({ projectId }: { projectId: number }) {
   const [state, setState] = useState<StrategyState>(),
-    [context, setContext] = useState<Context>(),
     [error, setError] = useMessageState(''),
     [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
     setError('');
-    Promise.all([
-      request<StrategyState>(projectId, 'state'),
-      request<Context>(projectId, 'context'),
-    ])
-      .then(([s, c]) => {
-        if (active) {
-          setState(s);
-          setContext(c);
-        }
+    request<StrategyState>(projectId, 'state')
+      .then((s) => {
+        if (active) setState(s);
       })
       .catch(() => {
         if (active) setError(() => $t('strategy.notLoadInsightsTryAgain'));
@@ -116,7 +108,7 @@ function ProjectInsights({ projectId }: { projectId: number }) {
       active = false;
     };
   }, [projectId, attempt, setError]);
-  if (!state || !context)
+  if (!state)
     return error ? (
       <PageContainer className='nr-page'>
         <p role='alert'>{error}</p>
@@ -127,25 +119,16 @@ function ProjectInsights({ projectId }: { projectId: number }) {
     ) : (
       <PageSkeleton title={$t('strategy.insights')} />
     );
-  return (
-    <Insights
-      projectId={projectId}
-      state={state}
-      setState={setState}
-      context={context}
-    />
-  );
+  return <Insights projectId={projectId} state={state} setState={setState} />;
 }
 function Insights({
   projectId,
   state,
   setState,
-  context,
 }: {
   projectId: number;
   state: StrategyState;
   setState: (s: StrategyState) => void;
-  context: Context;
 }) {
   const taskView = useFreshData(`insights-tasks:${projectId}`, () =>
     taskRecords<Task>(projectId),
@@ -160,8 +143,7 @@ function Insights({
     [handed, setHanded] = useState<HandOffResult>();
   const playbooks = localizePlaybookList(rawPlaybooks);
   const pendingRef = useRef(false),
-    operationRef = useRef({ key: '', id: '' }),
-    summary = context.evidence;
+    operationRef = useRef({ key: '', id: '' });
   async function mutate(action: string, body: object) {
     const key = JSON.stringify([action, state.revision, body]);
     if (operationRef.current.key !== key)
@@ -300,11 +282,11 @@ function Insights({
       }),
   );
   const overview = useFreshData<{ cards: SourceCard[] }>(
-    `data-view:overview:${projectId}:${JSON.stringify({ range: '28' })}`,
+    `data-view:overview:${projectId}:${JSON.stringify({ range: String(METRIC_DAYS) })}`,
     () =>
       api.action<{ cards: SourceCard[] }>('nrDataViews', 'overview', {
         method: 'POST',
-        body: { projectId, range: '28' },
+        body: { projectId, range: String(METRIC_DAYS) },
         unwrap: 'data',
       }),
     googleLocalFreshness,
@@ -438,7 +420,6 @@ function Insights({
         title={$t('strategy.insights')}
         description={
           <HowAnalyzed
-            days={summary.periodDays}
             schedule={analysis?.schedule}
             rulesLink={canRules}
             schedulesLink={canSchedules}
@@ -478,7 +459,7 @@ function Insights({
       {/* On wide screens the page fills the window and only the day's conversation scrolls, between the numbers and
           the input (2026-10-22 user feedback). */}
       <div className='flex flex-col gap-6 lg:min-h-0 lg:flex-1'>
-        <MetricTiles metrics={metrics} overview={overview} />
+        <MetricTiles metrics={metrics} overview={overview} days={METRIC_DAYS} />
         {/* The day's conversation, with the standing facts in a narrow quiet column beside it (2026-10-21 user); with the
             side panel open, the facts fold to a line under the day's date. */}
         <div
@@ -506,15 +487,16 @@ function Insights({
 }
 // The subtitle says how the insights are made, not how fresh each source is (2026-10-22 user decision: "data through
 // 10/18" beside today's analysis read as analysing stale data; freshness lives under Data sources › Data health): which
-// rules, and when the daily analysis runs, each a link to where it is set for those who may open it.
+// rules, and when the daily analysis runs, each a link to where it is set for those who may open it. No period: each
+// rule reads its own window (7, 14, 28 or 30 days); the 28 days belong to the metric cards, which say so.
+// The metric cards: each source's last 28 days against the 28 before (nrDataViews:overview).
+const METRIC_DAYS = 28;
 const subtleLink = 'underline underline-offset-4 hover:text-foreground';
 function HowAnalyzed({
-  days,
   schedule,
   rulesLink,
   schedulesLink,
 }: {
-  days: number;
   schedule?: AnalysisStatus['schedule'];
   rulesLink: boolean;
   schedulesLink: boolean;
@@ -548,7 +530,6 @@ function HowAnalyzed({
     return $tj('strategy.howAnalyzedPaused', {
       0: rules,
       1: toSchedules($t('strategy.dailyAnalysisPaused')),
-      2: days,
     });
   if (schedule && time)
     return $tj('strategy.howAnalyzedDaily', {
@@ -564,7 +545,6 @@ function HowAnalyzed({
               : time,
         }),
       ),
-      2: days,
     });
-  return $tj('strategy.howAnalyzedManual', { 0: rules, 1: days });
+  return $tj('strategy.howAnalyzedManual', { 0: rules });
 }
