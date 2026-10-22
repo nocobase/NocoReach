@@ -327,13 +327,15 @@ function ChangesCard({ board }: { board: ResultBoard }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{$t('results.board.changes')}</CardTitle>
-        <CardDescription>
-          {$t('results.board.changesDescription')}
-          {board.counts.live > board.changes.length
-            ? ` ${$t('results.board.changesMore', { 0: board.changes.length })}`
-            : ''}
-        </CardDescription>
+        <CardTitle className='flex items-center gap-1'>
+          {$t('results.board.changes')}
+          <InfoTip label={$t('common.info')}>
+            {$t('results.board.changesDescription')}
+            {board.counts.live > board.changes.length
+              ? ` ${$t('results.board.changesMore', { 0: board.changes.length })}`
+              : ''}
+          </InfoTip>
+        </CardTitle>
       </CardHeader>
       <CardContent>
         {board.changes.length ? (
@@ -441,10 +443,12 @@ function RecentCard({ items }: { items: ResultSummary[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{$t('results.board.recent')}</CardTitle>
-        <CardDescription>
-          {$t('results.board.recentDescription')}
-        </CardDescription>
+        <CardTitle className='flex items-center gap-1'>
+          {$t('results.board.recent')}
+          <InfoTip label={$t('common.info')}>
+            {$t('results.board.recentDescription')}
+          </InfoTip>
+        </CardTitle>
         <CardAction>
           <Link
             className={buttonVariants({ variant: 'outline', size: 'sm' })}

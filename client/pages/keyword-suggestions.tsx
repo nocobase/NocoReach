@@ -10,6 +10,7 @@ import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { Bookmark, LoaderCircle } from "lucide-react";
 import { RefreshButton } from '#components/reach/refresh-button';
+import { HeaderActions } from "#components/reach/page";
 import { AiMark } from "#components/reach/actor";
 import { toast } from "#lib/toast";
 import { LoadError, InlineError } from "#components/reach/states";
@@ -100,14 +101,14 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
     <>
       <HandOffNotice result={handOff} />
       <div className="flex flex-wrap items-center justify-between gap-2" data-suggest-basis>
-        <p className="nr-footnote flex items-center">{b ? $t('keywordSuggestions.generatedProjectMemory',{0:b.pages ? $t('keywordSuggestions.websitePages',{0:b.pages}) : $t('keywordSuggestions.homepage'),1:b.queries ? $t('keywordSuggestions.searchConsoleQueries',{0:b.queries}) : "",2:b.competitors ? $t('keywordSuggestions.competitors',{0:b.competitors}) : ""}) : ""}{view.at ? ` · ${formatDate(view.at)}` : ""}<InfoTip label={$t('keywordSuggestions.whereAiSuggestionsCome')} className="ml-1">{$tj('keywordSuggestions.aiSuggestionsStartingPointSearch',{0:view.metricsAt ? `（${new Date(view.metricsAt).toLocaleDateString(getCurrentLocale())}）` : ""})}</InfoTip></p>
+        <p className="nr-footnote flex items-center">{b ? $t('keywordSuggestions.generatedProjectMemory',{0:b.pages ? $t('keywordSuggestions.websitePages',{0:b.pages}) : $t('keywordSuggestions.homepage'),1:b.queries ? $t('keywordSuggestions.searchConsoleQueries',{0:b.queries}) : "",2:b.competitors ? $t('keywordSuggestions.competitors',{0:b.competitors}) : ""}) : ""}{view.at ? $t('common.updatedOn', { 0: formatDate(view.at) }) : ""}<InfoTip label={$t('keywordSuggestions.whereAiSuggestionsCome')} className="ml-1">{$tj('keywordSuggestions.aiSuggestionsStartingPointSearch',{0:view.metricsAt ? `（${new Date(view.metricsAt).toLocaleDateString(getCurrentLocale())}）` : ""})}</InfoTip></p>
         <div className="flex flex-wrap items-center gap-2">
           <Select value={`${view.market.locationCode}|${view.market.language}`} disabled={Boolean(busy)} onValueChange={(v) => { const [loc, lang] = String(v).split("|"); void run("suggest", { market: { locationCode: Number(loc), language: lang } }); }}>
             <SelectTrigger size="sm" className="w-full sm:w-40" aria-label={$t('keywordSuggestions.targetMarket')}><SelectValue>{(v: string) => $t(getMarkets().find((m) => `${m.locationCode}|${m.language}` === v)?.label ?? "")}</SelectValue></SelectTrigger>
             <SelectContent align="end" className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{getMarkets().map((m) => <SelectItem key={`${m.locationCode}|${m.language}`} value={`${m.locationCode}|${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
           </Select>
           {view.dataforseo && !view.metricsAt ? <Button size="sm" variant="outline" disabled={Boolean(busy)} onClick={() => void run("lookup")}>{busy === "lookup" ? $t('common.lookingUp') : $t('keywordSuggestions.checkVolume')}</Button> : null}
-          <RefreshButton busy={busy === "suggest"} disabled={Boolean(busy)} label={busy === "suggest" ? $t('keywordSuggestions.suggestingAgain') : $t('common.suggestAgain')} onClick={() => void run("suggest", { force: true })} />
+          <HeaderActions><RefreshButton busy={busy === "suggest"} disabled={Boolean(busy)} label={busy === "suggest" ? $t('keywordSuggestions.suggestingAgain') : $t('common.suggestAgain')} onClick={() => void run("suggest", { force: true })} /></HeaderActions>
         </div>
       </div>
       {error ? <p className="nr-error" role="alert">{error}</p> : null}

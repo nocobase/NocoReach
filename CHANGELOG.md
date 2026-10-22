@@ -10,6 +10,28 @@
 - Refine is gone from the client runtime: the unused Refine data table and the five `@refinedev/*` packages are removed, and the app title is no longer set through `app.refine`.
 - The Scheduler patch moves unchanged to `1.0.0-beta.19`, whose patched files are identical to `1.0.0-beta.17`.
 
+## Unreleased — Notes in ⓘ, one status line, one description per page
+
+- Every note under a card or chart title is an ⓘ beside the title (2026-10-22 decision D5): a `Section`'s description, Keywords › keyword details (History, Related keywords, Our indexed pages, Top 10, Rank history), Results (Changes, Latest results), Settings › Network (Proxy, How data sources connect), a task's Performance before its first checkpoint, Bilibili / YouTube / Xiaohongshu's Publishing trend and Sources, AI search's topic setup and Competitors › Activity's first setup. Titles no longer carry notes in brackets: X's chart is "Posts mentioning the product per day" with "Reposts are not counted" in its ⓘ, Trends' chart is "Weekly interest" with how 100 is set in its ⓘ.
+- The grey help lines under query forms and tabs are ⓘ too: Keywords › Find keywords (what each method searches), AI search › Ask AI (each model asked separately) and API keys (what a personal or organization key may do, now beside the page title).
+- Search performance › Index and Sitemaps tiles no longer repeat their ⓘ under the number; a warning's "does not block reading, but worth fixing" moved into its ⓘ.
+- Analysis rules' AI adjustment and Rules sections no longer repeat the scheme name under their titles: My schemes above marks the scheme shown.
+- A status line says when its data was updated with one word, "Updated" (decision D2), instead of Last success, Searched, Read, Last searched, Last read, Last checked, Last viewed or Collected; how often it runs is in its ⓘ. Reddit's two lines are one ("Search term: NocoBase · Updated 10-14 16:08 ⓘ", the next search in the ⓘ); Rank tracking's line moved out of the table card, above it, with the weekly check in its ⓘ; Keywords › AI suggestions says "· Updated 10-12". Xiaohongshu and the connection panels say "Search term:" like the other sources.
+- Search performance, Competitors and GitHub keep one description for the page and all its tabs (decision D3), saying what each tab holds; switching tabs no longer changes it.
+- Competitors › Activity says once, above the cards, which competitor could not be read; the cards no longer repeat "Not read last time, see above".
+
+## Unreleased — One look for tabs, choices, refresh buttons and table headers
+
+- Every tab bar looks the same: a thin rule under the row, the tabs flush with the page title, the open one in black over a 2px line. Opportunities used a blue line; Members & roles, API keys, Agent, Analysis rules and Knowledge indented their tabs and had no rule.
+- Tasks' Waiting for me / Current / Done / Closed stay in the toolbar as the shared `Segmented`: they filter one list, and line tabs only switch a page's sections (decision D1).
+- Every "pick one of a few" control is one square, grey-ground group (`Segmented`, now in `components/reach`): the date ranges of the 13 data pages (no longer blue pills), GitHub hot topics' periods, Downloads, Site performance, and the 7-day / 28-day checkpoints in a result and in a task's Performance.
+- A refresh for a whole tab sits top right in the page header, as a page's does: Keywords › AI suggestions and Rank tracking, GitHub hot topics and Competitors › Activity drew it on their status line or table toolbar. A tab puts its actions there with `HeaderActions`. A result's Refresh is the icon button too.
+- Tables drawn by hand take the shared header ground: Opportunities › Watching (Handled had it), GitHub hot topics, Downloads' versions, Skills, the task board's list and Knowledge.
+- GitHub hot topics' select-all boxes sit in the table header's first column, as every table's do, not before the card titles.
+- The chips listing terms are one size and shape: Trends' compared products, AI search's topics and the keywords offered on Trends › Watched keywords.
+- Playbook and Skill details open like every other detail panel: the title and its actions in a header row beside the close button, the content below without a card around it. The playbook panel drew its content in a bordered card under a separate close button; the Skill panel left an empty band above the title.
+- A row with one action shows it as a text button: Opportunities › Handled's Restore (was an icon) and Trends › Watched keywords' Remove (was a ⋯ menu with one item). The actions column of API keys has no visible name, as Members' has none.
+
 ## Unreleased — Insights looks sharper, with the same content
 
 - The metric cards sit on the same white surface as the messages below, with a hairline border; the number is larger and its change follows it in green or red; the sparkline has a light wash under it and a dot on the latest day.

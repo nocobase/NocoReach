@@ -20,7 +20,7 @@ import { safeLink } from "../analytics";
 import { DetailDrawer } from "../detail-drawer";
 import { packagesDraft } from "../seo-hand-off";
 import { Grid } from "../data-github/tables";
-import { Segmented } from "../data-github/segmented";
+import { Segmented } from "#components/reach/segmented";
 import { ago, bytes, change, CHANNEL, dateOf, kindLabel, num, pct, REGISTRY, type AssetRow, type Channel, type Item, type TagRow, type VersionRow, type View } from "./model";
 import { formatChange, formatDate } from '#lib/format';
 import { Delta } from '#components/reach/delta';
