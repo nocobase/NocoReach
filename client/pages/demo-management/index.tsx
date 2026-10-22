@@ -32,11 +32,11 @@ const LABELS: Partial<Record<DemoLabelKind, Record<string, string>>> = {
     'nocoreach.runner': 'demoConfig.adapterRunner',
   },
   chatTool: {
-    task_list: 'demoConfig.chatTool_task_list',
-    task_get: 'demoConfig.chatTool_task_get',
-    project_data: 'demoConfig.chatTool_project_data',
-    read_page: 'demoConfig.chatTool_read_page',
-    task_execute: 'demoConfig.chatTool_task_execute',
+    task_list: 'demoConfig.chatTool.taskList',
+    task_get: 'demoConfig.chatTool.taskGet',
+    project_data: 'demoConfig.chatTool.projectData',
+    read_page: 'demoConfig.chatTool.readPage',
+    task_execute: 'demoConfig.chatTool.taskExecute',
   },
 };
 

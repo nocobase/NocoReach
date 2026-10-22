@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           repository: nocobase/nocobase
-          ref: 99c8c9aa6844342b2977ee7256538625cd7ce30f
+          ref: 325d707ab4473c71a9861f646109ed5b045a30f4
           path: .demo-plugin-source
           persist-credentials: false
       - uses: pnpm/action-setup@c336a2788d9774dccfdeb4823a5058ccc9f07453
