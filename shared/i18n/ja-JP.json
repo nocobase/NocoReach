@@ -7034,7 +7034,6 @@
   "taskAgents.statusIdle": "アイドル",
   "taskAgents.noRuntimeOnline": "オンラインの実行環境がありません",
   "taskAgents.noRuntimeNotice": "オンラインの実行環境がないため、エージェントに渡したタスクは実行環境がオンラインになるまで待機します。",
-  "taskAgents.nothing": "実行中または待機列にある作業はありません",
   "taskAgents.running": "作業中",
   "taskAgents.queued": "次の作業",
   "taskAgents.waiting": "対応待ち",

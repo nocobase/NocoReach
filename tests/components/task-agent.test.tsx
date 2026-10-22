@@ -153,7 +153,12 @@ test('with exactly one Agent available, starting saves it on the task first', as
   advance.mockResolvedValueOnce(saved).mockResolvedValueOnce(saved);
   mount(data);
   expect(agentMenu()).toHaveTextContent('NocoReach Codex');
-  await screen.findByRole('option', { name: /调研/ });
+  // The playbooks have loaded once the playbook picker names one.
+  await waitFor(() =>
+    expect(screen.getByRole('combobox', { name: '做法' })).toHaveTextContent(
+      /调研/,
+    ),
+  );
   await user.click(screen.getByRole('button', { name: '确定开始执行' }));
   await waitFor(() =>
     expect(action).toHaveBeenCalledWith(
@@ -179,7 +184,12 @@ test('failed reassignment retains the saved agent and shows the server error', a
   data.work.agentId = 'codex';
   data.agent!.agentId = 'codex';
   mount(data);
-  await screen.findByRole('option', { name: /调研/ });
+  // The playbooks have loaded once the playbook picker names one.
+  await waitFor(() =>
+    expect(screen.getByRole('combobox', { name: '做法' })).toHaveTextContent(
+      /调研/,
+    ),
+  );
   advance.mockRejectedValueOnce(new Error('任务已更新，请刷新后再保存'));
   await user.click(agentMenu());
   await user.click(

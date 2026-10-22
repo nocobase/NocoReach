@@ -7034,7 +7034,6 @@
   "taskAgents.statusIdle": "Im Leerlauf",
   "taskAgents.noRuntimeOnline": "Keine Laufzeitumgebung online",
   "taskAgents.noRuntimeNotice": "Keine Laufzeitumgebung ist online. An einen Agenten übergebene Aufgaben warten in der Warteschlange, bis eine online ist.",
-  "taskAgents.nothing": "Keine laufenden oder eingereihten Aufgaben",
   "taskAgents.running": "In Arbeit",
   "taskAgents.queued": "Als Nächstes",
   "taskAgents.waiting": "Zu bearbeiten",
