@@ -730,26 +730,41 @@ export function History({
       ...asked.map((day): Day => ({ day, items: [], ended: [] })),
     ].sort((a, b) => b.day.localeCompare(a.day));
   if (!days.length) return null;
+  const hide = (
+    <button
+      type='button'
+      className='nr-link inline-flex items-center gap-0.5 text-xs'
+      onClick={() => setShown(0)}
+    >
+      {$t('strategy.collapseEarlier')}
+      <ChevronDown className='size-3.5' aria-hidden='true' />
+    </button>
+  );
   return (
     <>
-      {shown < days.length && (
-        <button
-          type='button'
-          className='nr-link inline-flex items-center gap-0.5 self-center text-xs'
-          onClick={() => setShown((n) => n + 7)}
-        >
-          <ChevronUp className='size-3.5' aria-hidden='true' />
-          {shown
-            ? $t('strategy.earlierDays')
-            : $t('strategy.earlierAnalyses', { 0: days.length })}
-        </button>
-      )}
+      <div className='flex items-center justify-center gap-3'>
+        {shown < days.length && (
+          <button
+            type='button'
+            className='nr-link inline-flex items-center gap-0.5 text-xs'
+            onClick={() => setShown((n) => n + 7)}
+          >
+            <ChevronUp className='size-3.5' aria-hidden='true' />
+            {shown
+              ? $t('strategy.earlierDays')
+              : $t('strategy.earlierAnalyses', { 0: days.length })}
+          </button>
+        )}
+        {shown > 0 && hide}
+      </div>
       {days
         .slice(0, shown)
         .reverse()
         .map((d) => (
           <PastDay key={d.day} day={d} rows={rows} now={now} />
         ))}
+      {/* Folding again from just above today, where the reader is after scrolling through them. */}
+      {shown > 0 && <div className='flex justify-center'>{hide}</div>}
     </>
   );
 }

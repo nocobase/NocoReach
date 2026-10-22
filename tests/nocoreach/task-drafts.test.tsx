@@ -117,6 +117,14 @@ function initial(): TaskData {
     },
   };
 }
+// Leaving asks in the application's dialog; here it answers through window.confirm so each test sets the answer.
+vi.mock('../../client/components/reach/confirm', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../../client/components/reach/confirm')
+  >()),
+  confirmLeaveWithDrafts: async () => window.confirm(''),
+  confirmUnsavedLeave: async () => window.confirm(''),
+}));
 beforeEach(() => {
   access.allowed = true;
   vi.spyOn(window, 'confirm').mockReturnValue(true);

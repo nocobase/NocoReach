@@ -5,6 +5,17 @@
 - Built-in playbook steps and step kinds read formally in Chinese and Traditional Chinese: Write plan, Review plan and Review and publish, and the step-kind notes (your review, review then approve or request changes, confirm then the system runs, changes the repository and opens a PR, no repository change). English is unchanged.
 - Tasks created before keep their stored step names; they display the new wording, because a stored name is matched to its system message through the alias manifest rather than by exact text. Stored data is not rewritten.
 
+## Unreleased — Leaving unsaved work asks in the application's dialog
+
+- Leaving New task, a role form or Create from a result with unsaved input, following a link out of Skills, the Google or keyword connection forms with unsaved input, and leaving a task page with drafts now ask in the application's own dialog instead of the browser's confirm box. Unsaved forms ask "Discard unsaved changes?" with Discard; a task page with drafts asks "Leave this page?" with Leave anyway, since its drafts are kept.
+
+## Unreleased — Insights scrolls inside its conversation
+
+- On wide screens Insights fills the window: the title, the numbers and the input stay in place and only the day's analysis and conversation scroll between them; Current situation scrolls on its own.
+- Earlier analyses opened above today fold again with "Hide earlier analyses", offered both above them and just above today.
+- The day's conversation folds to one line ("Conversation · questions: N") so the day's analysis stays in view; a new question opens it again and scrolls to it.
+- The input has one frame instead of a field inside a box.
+
 ## Unreleased — One conversation a day on Insights
 
 - What you ask from Insights joins the day's conversation, shown right under the day's analysis with its own input at the bottom: type and press Enter, and the answer appears there (what it read folds under "Sources checked"). Each day keeps one conversation, so the AI remembers what was asked before.
