@@ -22,7 +22,9 @@ import {daysBetween,type Verdict} from './watch';
 import {TASK_TAG,type TaskStanding} from './task-standing';
 // 洞察 building blocks (SPEC §5): numbers and changes first, one line each; no paragraphs.
 export type Metric={key:string;label:string;value:number|null;previous:number|null;complete:boolean;change:number|null};
-export type SourceCard={id:string;cutoff:string|null;window:{start:string;end:string;days:number};metrics:Metric[];series:{date:string;value:number|null}[];seriesBy?:Record<string,{date:string;value:number|null}[]>};
+export type SourceCard={id:string;cutoff:string|null;window:{start:string;end:string;days:number};metrics:Metric[];series:DayPoint[];seriesBy?:Record<string,DayPoint[]>;previousSeries?:DayPoint[];previousSeriesBy?:Record<string,DayPoint[]>};
+/** One day of a metric's series; the value is null for a day without data. */
+export type DayPoint={date:string;value:number|null};
 type Task={id:number;title:string;status:string;updatedAt?:string;evidence?:{work?:Work}};
 // The one coloured fact of a change (server-computed; read from the wording for signals stored before chips existed).
 export function chipOf(s:Signal):{tone:Tone;text:string}|null{
@@ -46,26 +48,14 @@ export function chipOf(s:Signal):{tone:Tone;text:string}|null{
 }
 export const titleOf=(s:Signal)=>$legacyText(s.title.replace(/(下降|减少)\s*-(\d)/,'$1 $2').replace(/(上升|增加)\s*\+(\d)/,'$1 $2'));
 const pct=(n:number)=>`${Math.abs(n)>=0.095?Math.round(Math.abs(n)*100):(Math.abs(n)*100).toFixed(1)}%`;
-type Point={value:number|null};
-// A metric's daily series in its change's colour, with a light wash under the line and a dot on the latest day
-// (2026-10-22 visual polish). The dot is an element over the stretched drawing so it stays round.
-export function Sparkline({points,change}:{points:Point[];change?:number|null}):ReactElement|null{
- const v=points.map(p=>p.value).filter((x):x is number=>x!==null);if(v.length<2)return null;
- const min=Math.min(...v),max=Math.max(...v),span=max-min||1,step=100/(points.length-1);
- const xy=points.flatMap((p,i)=>p.value===null?[]:[[i*step,18-((p.value-min)/span)*16] as const]),d=xy.map(([x,y])=>`${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
- const colour=change==null||change===0?'var(--muted-foreground)':change>0?'var(--nr-ink-green)':'var(--nr-ink-red)',[lastX,lastY]=xy[xy.length-1];
- return <span className="relative block h-6 w-full" aria-hidden="true">
-  <svg viewBox="0 0 100 20" preserveAspectRatio="none" className="block size-full"><polygon points={`${xy[0][0].toFixed(1)},20 ${d} ${lastX.toFixed(1)},20`} fill={colour} fillOpacity="0.08"/><polyline points={d} fill="none" stroke={colour} strokeWidth="1.2" vectorEffect="non-scaling-stroke"/></svg>
-  <span className="absolute size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full" style={{left:`${lastX}%`,top:`${lastY*5}%`,background:colour}}/>
- </span>;
-}
+type Point={date?:string;value:number|null};
 // The page's numbers: search, visits and key events, then GitHub stars, downloads, forum topics, Hacker News and Reddit
 // when connected, each with its daily series and its data page. A metric without a value is left out by the caller.
-export type MetricItem={label:string;value:number|null;change:number|null;to:string;signed?:boolean;series?:Point[]};
+export type MetricItem={label:string;value:number|null;change:number|null;to:string;signed?:boolean;series?:Point[];previous?:Point[]};
 export function metricItems(cards?:SourceCard[]):MetricItem[]{
  const by=new Map((cards||[]).map(c=>[c.id,c]));
  const item=(label:string,c:SourceCard|undefined,key:string,to:string,signed=false,series?:Point[]):MetricItem=>{const m=c?.metrics.find(x=>x.key===key);
-  return {label,value:m?.value??null,change:m?.change??null,to,signed,series:series||c?.seriesBy?.[key]||(c?.metrics[0]?.key===key?c.series:undefined)};};
+  return {label,value:m?.value??null,change:m?.change??null,to,signed,series:series||c?.seriesBy?.[key]||(c?.metrics[0]?.key===key?c.series:undefined),previous:(series?c?.previousSeries:undefined)||c?.previousSeriesBy?.[key]||(c?.metrics[0]?.key===key?c.previousSeries:undefined)};};
  const gsc=by.get('gsc'),ga4=by.get('ga4');
  return [item($t('common.searchClicks'),gsc,'clicks','/seo-opportunities'),item($t('common.searchImpressions'),gsc,'impressions','/seo-opportunities'),item($t('strategy.sessions'),ga4,'sessions','/website'),item($t('common.keyEvents'),ga4,'conversions','/website/conversion'),
   ...([['github','stars',$t('common.newStars'),'/data/github',true],['packages','downloads',$t('common.downloads'),'/data/downloads',false],['discourse','topics',$t('strategy.newForumTopics'),'/data/community',false],['mentions','mentions',$t('common.hackerNewsMentions'),'/data/hackernews',false],['reddit','posts',$t('strategy.newRedditPosts'),'/data/reddit',false]] as const).flatMap(([id,key,label,to,signed])=>{const c=by.get(id);return c?[item(label,c,key,to,signed,c.series)]:[];})];
@@ -84,6 +74,10 @@ export type Area={id:string;title:string;items:AreaItem[]};
 const LINE_SOURCE:Record<string,string>={striking:'gsc',ctr:'gsc',rank:'rank',trends:'trends',competitors:'competitors',saved:'keywords',audit:'site',stale:'site',forum:'discourse',discord:'discord',slack:'slack',x:'x'};
 const lineSource=(i:{area:string;key:string}):string|undefined=>i.area==='ai'?'ai-search':LINE_SOURCE[i.key];
 const sentence=(i:AreaItem)=>$legacyText(i.text).replace(/\{(\d+)\}/g,(_,k:string)=>i.values[Number(k)]??'');
+// Current situation leads each line with its number, then a short label (2026-10-22 user-approved design); the label
+// is chosen by the line's stable key, and a line without one (or without a number) keeps its sentence.
+const SITUATION_LABEL:Record<string,string>={striking:'strategy.situationLabelStriking',ctr:'strategy.situationLabelCtr',rank:'strategy.situationLabelRank',trends:'strategy.situationLabelTrends',competitors:'strategy.situationLabelCompetitors',saved:'strategy.situationLabelSaved',answers:'strategy.situationLabelAnswers',audit:'strategy.situationLabelAudit',stale:'strategy.situationLabelStale',forum:'strategy.situationLabelForum',discord:'strategy.situationLabelDiscord',slack:'strategy.situationLabelSlack',x:'strategy.situationLabelX','brand-chat_gpt':'strategy.situationLabelChatgpt','brand-google':'strategy.situationLabelGoogleAi'};
+const situationLabel=(i:{key:string;values:string[]})=>i.values.length&&SITUATION_LABEL[i.key]?$t(SITUATION_LABEL[i.key]):null;
 export function AreaList({areas,projectId,quiet=false}:{areas?:Area[];projectId:number;quiet?:boolean}):ReactElement|null{
  const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),all=(areas||[]).flatMap(a=>a.items.map(i=>({...i,area:a.id,attention:i.tone==='amber'||i.tone==='red'})));if(!all.length)return null;
  const items=[...all.filter(i=>i.attention),...all.filter(i=>!i.attention)],open=items.find(i=>`${i.area}:${i.key}`===openKey);
@@ -96,12 +90,15 @@ export function AreaList({areas,projectId,quiet=false}:{areas?:Area[];projectId:
  // lines to deal with (a drop red, the rest amber); the numbers stay in their sentence, which reads wrong without them
  // ("21 up, 18 down this week"). Each line leads with its source's logo, bare as inside a button; a line with no
  // known source keeps the logo's room empty, so the sentences stay aligned.
- if(quiet){const ink=(i:typeof items[number],v:string)=>!i.attention?'text-foreground':i.tone==='red'||v.startsWith('↓')?'text-nr-ink-red':'text-nr-ink-amber',logo=(i:typeof items[number])=>{const s=lineSource(i);return s?<SourceLogo source={s} size='xs' className='mt-px'/>:<span aria-hidden='true' className='size-3.5 shrink-0'/>;};
-  const group=(label:string,list:typeof items)=>list.length?<section aria-label={label} className='flex flex-col'><h3 className='pb-0.5 text-[0.6875rem] font-medium text-muted-foreground'>{label}</h3><ul>{list.map(i=><li key={`${i.area}:${i.key}`}>
-   <button type='button' onClick={()=>go(i)} title={[$legacyText(i.source),i.detail?$legacyText(i.detail):''].filter(Boolean).join(' · ')} className={cn('flex w-full items-start gap-2 py-1 text-left text-xs hover:underline',i.attention?'text-foreground/80':'text-muted-foreground')} data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
-    {logo(i)}<span className='min-w-0 flex-1'>{$legacyJsx(i.text,Object.fromEntries(i.values.map((v,k)=>[k,<span key={k} className={cn('font-medium tabular-nums',ink(i,v))}>{v}</span>])))}</span>
+ if(quiet){const ink=(i:typeof items[number],v:string)=>!i.attention?'text-foreground':i.tone==='red'||v.startsWith('↓')?'text-nr-ink-red':'text-nr-ink-amber',logo=(i:typeof items[number])=>{const s=lineSource(i);return s?<SourceLogo source={s} size='xs' className='mt-[3px]'/>:<span aria-hidden='true' className='mt-[3px] size-3.5 shrink-0'/>;};
+  const line=(i:typeof items[number])=>{const label=situationLabel(i),figure=i.key==='rank'&&i.values.length===2?`${i.values[0]}↑ ${i.values[1]}↓`:i.values[0];
+   return label&&figure?<><span className={cn('shrink-0 font-semibold tabular-nums',ink(i,figure))}>{figure}</span><span className='min-w-0 flex-1'>{label}</span></>
+    :<span className='min-w-0 flex-1'>{$legacyJsx(i.text,Object.fromEntries(i.values.map((v,k)=>[k,<span key={k} className={cn('font-semibold tabular-nums',ink(i,v))}>{v}</span>])))}</span>;};
+  const group=(label:string,list:typeof items)=>list.length?<section aria-label={label} className='flex flex-col'><h3 className='mb-1 flex items-center gap-3 text-xs font-normal text-muted-foreground after:h-px after:flex-1 after:bg-border'>{label}</h3><ul>{list.map(i=><li key={`${i.area}:${i.key}`}>
+   <button type='button' onClick={()=>go(i)} title={[$legacyText(i.source),i.detail?$legacyText(i.detail):''].filter(Boolean).join(' · ')} className='flex w-full items-start gap-2 py-1 text-left text-sm text-foreground/85 hover:underline' data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
+    {logo(i)}{line(i)}
    </button></li>)}</ul></section>:null;
-  return <div aria-label={$t('strategy.whereThingsStand')} className='flex flex-col gap-3'>{group($t('strategy.situationGroupAttention'),items.filter(i=>i.attention))}{group($t('strategy.situationGroupNormal'),items.filter(i=>!i.attention))}
+  return <div aria-label={$t('strategy.whereThingsStand')} className='flex flex-col gap-5'>{group($t('strategy.situationGroupAttention'),items.filter(i=>i.attention))}{group($t('strategy.situationGroupNormal'),items.filter(i=>!i.attention))}
    {detail}</div>;}
  // Untitled: the block around it carries the heading and what it means.
  return <Section aria-label={$t('strategy.whereThingsStand')}><ul className="divide-y">{items.map(i=><li key={`${i.area}:${i.key}`}>

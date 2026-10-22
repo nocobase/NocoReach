@@ -361,50 +361,38 @@ const showEarlier = async () =>
   fireEvent.click(
     await screen.findByRole('button', { name: /strategy.earlierAnalyses/ }),
   );
-const decisionGroup = (n: number) =>
-  screen.findByRole('group', { name: `strategy.decideCount:${n}` });
+// Today's briefing once its lead counts n decisions waiting; its Opportunities section.
+const decisionGroup = async (n: number) => {
+  await screen.findByText(new RegExp(`strategy\\.briefHeadline:${n}\\b`));
+  return screen.getByRole('region', { name: 'strategy.sectionOpportunities' });
+};
 const decisions = () =>
-  within(screen.getByRole('group', { name: /strategy.decideCount/ }))
+  within(screen.getByRole('region', { name: 'strategy.sectionOpportunities' }))
     .getAllByRole('listitem')
-    .map((a) => a.getAttribute('data-opportunity-id'));
+    .map((a) => a.getAttribute('data-opportunity-id'))
+    .filter(Boolean);
 
-it('lists every waiting opportunity in the message of the day, most important first: five lines, then the rest folded', async () => {
+it('lists every waiting opportunity in the day’s briefing, most important first: five lines, then the rest folded', async () => {
   setup();
-  await decisionGroup(7);
-  expect(screen.getByText('strategy.briefHeadline:7')).toBeTruthy();
-  // The analysis notes stay folded until asked for.
-  expect(screen.queryByText('Search clicks held steady this week.')).toBeNull();
-  fireEvent.click(
-    screen.getByRole('button', { name: /strategy.analysisNotes:1/ }),
-  );
+  const section = await decisionGroup(7);
+  // The analysis notes show in full, the first sentence as the title.
   expect(screen.getByText('Search clicks held steady this week.')).toBeTruthy();
   // High first (the newer of the two ahead), unrated last.
   expect(decisions()).toEqual(['b', 'e', 'd', 'a', 'g']);
-  // Those of today's analysis already decided stay in the day, after the rest, with where they went.
-  const group = screen.getByRole('group', { name: 'strategy.decideCount:7' });
-  for (const tag of [
-    'strategy.pendingCount:7',
-    'strategy.handedCount:1',
-    'strategy.dismissedCount:1',
-  ])
-    expect(within(group).getByText(tag)).toBeTruthy();
-  const more = screen.getByRole('button', { name: /strategy.moreToDecide:4/ });
+  const more = within(section).getByRole('button', {
+    name: /strategy.moreToDecide:3/,
+  });
   expect(more.getAttribute('aria-expanded')).toBe('false');
   fireEvent.click(more);
   expect(more.getAttribute('aria-expanded')).toBe('true');
-  expect(decisions()).toEqual([
-    'b',
-    'e',
-    'd',
-    'a',
-    'g',
-    'c',
-    'f',
-    'handed',
-    'ignored',
-  ]);
-  const handed = group.querySelector('[data-opportunity-id=handed]')!;
-  expect(handed.textContent).toContain('strategy.handedOffAgent');
+  // Those of today's analysis handed off follow; dismissed ones fold into one line.
+  expect(decisions()).toEqual(['b', 'e', 'd', 'a', 'g', 'c', 'f', 'handed']);
+  fireEvent.click(
+    within(section).getByRole('button', { name: /strategy.foldDismissed:1/ }),
+  );
+  expect(decisions().at(-1)).toBe('ignored');
+  const handed = section.querySelector('[data-opportunity-id=handed]')!;
+  expect(handed.textContent).toContain('strategy.lineTodo');
   expect(
     within(handed as HTMLElement).queryByRole('button', {
       name: 'common.handOffAgent',
@@ -432,7 +420,9 @@ it('Ignore records the decision and the line leaves, with the count and the menu
   );
   expect(decisions()).toEqual(['e', 'd', 'a', 'g', 'c']);
   // It stays in the day as dismissed.
-  expect(screen.getByText('strategy.dismissedCount:2')).toBeTruthy();
+  expect(
+    screen.getByRole('button', { name: /strategy.foldDismissed:2/ }),
+  ).toBeTruthy();
   await screen.findByText('badge:6');
 });
 
@@ -454,7 +444,6 @@ it('Hand off to agent turns the opportunity into a task and takes it off the lis
     }),
   );
   expect(decisions()).not.toContain('e');
-  expect(await screen.findByText('strategy.handedCount:2')).toBeTruthy();
 });
 
 it('the tiles show at most five numbers that have data, the summary names the ones that moved, and the current situation sits beside the day', async () => {
@@ -511,22 +500,34 @@ it('the tiles show at most five numbers that have data, the summary names the on
     name: 'strategy.keyMetrics',
   });
   await within(tiles).findByText('1,200');
-  expect(within(tiles).getAllByRole('link')).toHaveLength(5);
-  // The cards say what their numbers and changes cover.
-  expect(within(tiles).getByText('strategy.metricWindow:28')).toBeTruthy();
+  // The numbers are tabs over one chart, Search clicks first.
+  expect(within(tiles).getAllByRole('tab')).toHaveLength(5);
+  expect(
+    within(tiles).getByRole('tab', { selected: true }).textContent,
+  ).toContain('common.searchClicks');
   // Downloads is the sixth number: it waits under All data, and is not named in the summary either.
   expect(within(tiles).queryByText('4,000')).toBeNull();
   expect(within(tiles).getByText('+30')).toBeTruthy();
-  const brief = screen.getByRole('group', { name: 'strategy.todayBrief' });
+  // Without daily values the chart says so; choosing a tab shows that metric and links its data page.
+  expect(within(tiles).getByText('strategy.noDailyData')).toBeTruthy();
+  fireEvent.click(
+    within(tiles).getByRole('tab', { name: /strategy.sessions/ }),
+  );
   expect(
-    within(brief)
-      .getAllByRole('link')
-      .map((l) => l.textContent),
-  ).toEqual([
-    'common.searchClicks ↓ 31%',
-    'strategy.sessions ↑ 12%',
-    'strategy.watchingChip:1',
-  ]);
+    within(tiles).getByRole('tab', { selected: true }).textContent,
+  ).toContain('strategy.sessions');
+  expect(
+    within(tiles)
+      .getByRole('link', { name: 'strategy.chartDaily:strategy.sessions' })
+      .getAttribute('href'),
+  ).toBe('/website');
+  // The briefing's lead names the two numbers that moved most and the watches, after the decisions.
+  const brief = screen.getByRole('article', { name: 'strategy.todayBrief' });
+  const lead = within(brief).getByText(/^strategy\.leadTwo:/).textContent!;
+  expect(lead).toContain('strategy.briefHeadline:7');
+  expect(lead).toContain('strategy.leadFirstDown:common.searchClicks,28,31%');
+  expect(lead).toContain('strategy.leadNextUp:strategy.sessions,12%');
+  expect(lead).toContain('strategy.leadWatching:1');
   const situation = screen.getByRole('region', {
     name: 'strategy.currentSituation',
   });
@@ -663,8 +664,15 @@ it('earlier days fold into one line each, with where every opportunity went', as
   expect(toggle.textContent).toContain('strategy.dismissedCount:1');
   expect(within(day).queryByText('Opportunity old-done')).toBeNull();
   fireEvent.click(toggle);
+  // Opened, the day reads as its own briefing.
+  expect(
+    within(day).getByRole('article', { name: /strategy.analysisOfDay/ }),
+  ).toBeTruthy();
   expect(within(day).getByText('Opportunity old-done')).toBeTruthy();
-  expect(within(day).getByText('strategy.handedOffAgent · T-35')).toBeTruthy();
+  expect(within(day).getByText('strategy.lineTodo:T-35')).toBeTruthy();
+  fireEvent.click(
+    within(day).getByRole('button', { name: /strategy.foldDismissed:1/ }),
+  );
   expect(within(day).getByText('strategy.dismissed')).toBeTruthy();
   expect(within(day).getByText('Docs traffic dropped')).toBeTruthy();
 });
@@ -780,9 +788,10 @@ it('today’s message counts only what was decided today; a hand-off from an ear
   ];
   setup();
   const group = await decisionGroup(7);
-  await waitFor(() =>
-    expect(within(group).getByText('strategy.handedCount:1')).toBeTruthy(),
+  fireEvent.click(
+    within(group).getByRole('button', { name: /strategy.moreToDecide/ }),
   );
+  await waitFor(() => expect(decisions()).toContain('handed'));
   expect(group.querySelector('[data-opportunity-id=old-handed]')).toBeNull();
   await showEarlier();
   const day = screen
@@ -915,7 +924,9 @@ it('earlier days sit above today, folded, and show their conversation when opene
   const feed = screen.getByRole('region', { name: 'strategy.analysisFeed' });
   expect(
     earlier.compareDocumentPosition(
-      within(feed).getByRole('group', { name: 'strategy.decideCount:7' }),
+      within(feed).getByRole('region', {
+        name: 'strategy.sectionOpportunities',
+      }),
     ) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
   expect(screen.queryByText(/strategy.dayThreads/)).toBeNull();
@@ -1018,8 +1029,8 @@ it('a handed-off opportunity says where its task stands now', async () => {
   );
   const handed = await waitFor(() => {
     const line = group.querySelector('[data-opportunity-id=handed]');
-    expect(line?.textContent).toContain('common.completed');
+    expect(line?.textContent).toContain('strategy.lineDone');
     return line!;
   });
-  expect(handed.textContent).not.toContain('strategy.handedOffAgent');
+  expect(handed.textContent).not.toContain('strategy.lineTodo');
 });

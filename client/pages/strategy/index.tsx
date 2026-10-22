@@ -16,14 +16,9 @@ import {
   type SourceCard,
   type Area,
 } from './insights-view';
-import {
-  FoldedSituation,
-  History,
-  MetricTiles,
-  Today,
-  WaitingNote,
-} from './briefing';
+import { FoldedSituation, History, Today, WaitingNote } from './briefing';
 import { dayOf, feedOf } from './feed';
+import { MetricChart } from './metric-chart';
 import { Composer, InsightChatProvider } from './threads';
 import { useOptionalOnlineChat } from '../../online-agent/context';
 import { useChatPanel } from '@nocobase/app-plugin-agents/client/chat';
@@ -389,6 +384,7 @@ function Insights({
           rows={rows}
           feed={feed}
           metrics={metrics}
+          days={METRIC_DAYS}
           generating={generating}
           projectId={projectId}
           busy={busy || generating}
@@ -459,7 +455,7 @@ function Insights({
       {/* On wide screens the page fills the window and only the day's conversation scrolls, between the numbers and
           the input (2026-10-22 user feedback). */}
       <div className='flex flex-col gap-6 lg:min-h-0 lg:flex-1'>
-        <MetricTiles metrics={metrics} overview={overview} days={METRIC_DAYS} />
+        <MetricChart metrics={metrics} overview={overview} days={METRIC_DAYS} />
         {/* The day's conversation, with the standing facts in a narrow quiet column beside it (2026-10-21 user); with the
             side panel open, the facts fold to a line under the day's date. */}
         <div

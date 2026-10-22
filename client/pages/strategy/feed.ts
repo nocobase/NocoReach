@@ -9,14 +9,26 @@ import { taskStanding, type TaskStanding } from './task-standing';
 export const dayOf = (iso?: string) => String(iso || '').slice(0, 10);
 export type Standing = ReturnType<typeof opportunityState>;
 export type { TaskStanding };
-export type Line = { row: Row; st: Standing; task?: TaskStanding };
+/** An opportunity on a day: where it stands, its task's state, and whether that finished task is now being watched. */
+export type Line = {
+  row: Row;
+  st: Standing;
+  task?: TaskStanding;
+  observing?: boolean;
+};
 /** What Insights knows of a task: when it was created and its work. */
 export type TaskInfo = {
   createdAt?: string;
   work?: TaskWork | null;
   status?: string;
 };
-export type Day = { day: string; items: Line[]; ended: WatchRecord[] };
+/** An earlier day: its opportunities, the watches that ended, and its analysis's notes. */
+export type Day = {
+  day: string;
+  items: Line[];
+  ended: WatchRecord[];
+  notes?: string[];
+};
 export type Feed = { pending: Row[]; decided: Line[]; days: Day[] };
 /**
  * Where each opportunity shows, once: today if it waits for a decision (most important first, as on Opportunities'
@@ -51,7 +63,15 @@ export function feedOf(
       line: Line = {
         row,
         st,
-        ...(task && st.state === 'task' ? { task: taskStanding(task) } : {}),
+        ...(task && st.state === 'task'
+          ? {
+              task: taskStanding(task),
+              observing:
+                task.work?.stage === 'flow' &&
+                task.work.flow?.stages[task.work.stageIndex || 0]?.kind ===
+                  'observe',
+            }
+          : {}),
       },
       raised = dayOf(row.firstSeenAt),
       ignored = dayOf(state.opportunityMeta?.[row.card.id]?.ignoredAt),
@@ -69,6 +89,10 @@ export function feedOf(
     const day = dayOf(w.ended?.at);
     if (day && (!today || day < today)) at(day).ended.push(w);
   }
+  // Each earlier day keeps its analysis's notes (the last analysis of that day).
+  for (const b of [state.insights, ...(state.insightHistory || [])])
+    if (b?.generatedAt && days.has(dayOf(b.generatedAt)))
+      days.get(dayOf(b.generatedAt))!.notes ??= b.observations || [];
   pending.sort(
     (a, b) =>
       (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3) ||

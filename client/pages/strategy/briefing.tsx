@@ -1,19 +1,18 @@
 import { $t, $tj, $legacyText, getCurrentLocale } from '#i18n';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Minus } from 'lucide-react';
 import { cn } from '#lib/utils';
 import { Tag, type Tone } from '#components/reach/tag';
-import { ActorAvatar, AiMark } from '#components/reach/actor';
-import { Button } from '#components/ui/button';
+import { ActorAvatar } from '#components/reach/actor';
+import { Button, buttonVariants } from '#components/ui/button';
 import { healthText, loadHealth, type HealthItem } from '../data-health';
 import { WAITING_TASKS_URL } from '../task-waiting';
 import type { Work } from '../task-execution-types';
-import { RequestBlock, type RequestState } from './request-block';
-import { Sparkline, chipOf, percent, type MetricItem } from './insights-view';
-import { citedSignals, oppNo, taskNo, type Row } from './board';
+import { percent, type MetricItem } from './insights-view';
+import { oppNo, reasonLine, taskNo, type Row } from './board';
 import { dayOf, type Day, type Feed, type Line } from './feed';
-import { TASK_TAG } from './task-standing';
+import type { TaskStanding } from './task-standing';
 import { handOffLabel } from './hand-off';
 import {
   DayConversation,
@@ -23,17 +22,14 @@ import {
   useInsightChat,
 } from './threads';
 import { recentlyEnded } from './watch';
-import type { InsightBatch, StrategyState, WatchRecord } from './model';
+import type { StrategyState, WatchRecord } from './model';
 
-// Insights as a conversation with the daily analysis (2026-10-21 user decision: the brief of sections read like
-// Opportunities and was all text). The numbers stay as tiles with their trend; below, the analysis speaks once a day:
-// what matters, the opportunities to decide on as one line each, watches that ended, tasks and data that need you.
-// Earlier days fold into one line each, and Ask AI continues in the chat.
+// Insights as a conversation with the daily analysis (2026-10-21 user decision). Each day's analysis reads as a briefing
+// (2026-10-22 user-approved design, after Linear Pulse): the day as its title, a lead sentence from the day's numbers,
+// then sections, each a small grey label with a hairline: Analysis notes, Opportunities, Watches ended, and at the
+// bottom what waits for you. Only four text styles: the title, an item's title, body text and grey text. Earlier
+// days fold into one line each, and Ask AI continues in the chat.
 
-const number = (i: MetricItem) =>
-  `${i.signed && i.value! > 0 ? '+' : ''}${i.value!.toLocaleString(getCurrentLocale())}`;
-const arrow = (change: number) =>
-  `${change >= 0 ? '↑' : '↓'} ${percent(change)}`;
 /** The fold marker of a toggle: down when closed, up when open. */
 const Chevron = ({ open }: { open: boolean }) => (
   <ChevronDown
@@ -44,70 +40,6 @@ const Chevron = ({ open }: { open: boolean }) => (
     )}
   />
 );
-
-/**
- * The numbers as tiles (at most five, only those with a value), each with its trend and opening its data page. The
- * read has its own loading, failure and retry. Cards on the page surface like the messages below, the number large
- * with its change right after it (2026-10-22 visual polish).
- */
-export function MetricTiles({
-  metrics,
-  overview,
-  days,
-}: {
-  metrics: MetricItem[];
-  overview: RequestState;
-  days: number;
-}) {
-  const items = metrics.filter((i) => i.value != null).slice(0, 5);
-  return (
-    <RequestBlock
-      compact
-      title={$t('strategy.keyMetrics')}
-      request={overview}
-      empty={!items.length}
-      emptyText={$t('strategy.noDataYet')}
-    >
-      {/* What the numbers and their changes cover, quietly above them (2026-10-22: the period left the subtitle). */}
-      <div className='flex min-w-0 flex-1 flex-col gap-1.5'>
-        <p className='text-xs text-muted-foreground'>
-          {$t('strategy.metricWindow', { 0: days })}
-        </p>
-        <div className='grid min-w-0 grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3'>
-          {items.map((i) => (
-            <Link
-              key={i.label}
-              to={i.to}
-              className='flex flex-col gap-1 rounded-lg border bg-card px-3 pt-2.5 pb-2 text-card-foreground transition-colors hover:border-ring/60'
-            >
-              <span className='text-xs text-muted-foreground'>{i.label}</span>
-              <span className='flex flex-wrap items-baseline gap-x-2'>
-                <span className='text-xl leading-7 font-medium tabular-nums sm:text-[1.375rem]'>
-                  {number(i)}
-                </span>
-                {i.change == null ? (
-                  <span className='text-xs text-muted-foreground'>
-                    {$t('strategy.noComparisonYet')}
-                  </span>
-                ) : (
-                  <span
-                    className={cn(
-                      'text-xs font-medium tabular-nums',
-                      i.change >= 0 ? 'text-nr-ink-green' : 'text-nr-ink-red',
-                    )}
-                  >
-                    {arrow(i.change)}
-                  </span>
-                )}
-              </span>
-              {i.series && <Sparkline points={i.series} change={i.change} />}
-            </Link>
-          ))}
-        </div>
-      </div>
-    </RequestBlock>
-  );
-}
 
 const localDay = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -157,121 +89,535 @@ function AgentMessage({
     </div>
   );
 }
-function Bubble({
+
+/** "October 22" in the reader's language, as a briefing's title. */
+const analysisTitle = (day: string) =>
+  $t('strategy.analysisOfDay', {
+    0: new Date(`${day}T00:00:00`).toLocaleDateString(getCurrentLocale(), {
+      month: 'long',
+      day: 'numeric',
+    }),
+  });
+/** Today, Yesterday or the date, before the time in the message's header. */
+function relativeDay(day: string, now: Date) {
+  const yesterday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() - 1,
+  );
+  if (day === localDay(now)) return $t('strategy.dayToday');
+  if (day === localDay(yesterday)) return $t('strategy.dayYesterday');
+  return new Date(`${day}T00:00:00`).toLocaleDateString(getCurrentLocale(), {
+    month: 'numeric',
+    day: 'numeric',
+  });
+}
+
+/** A day's analysis as a briefing card: its title, a lead sentence, then its sections. */
+function Briefing({
+  title,
   label,
-  className,
+  lead,
   children,
+}: {
+  title: string;
+  label?: string;
+  lead?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <article
+      aria-label={label ?? title}
+      className='rounded-xl border bg-card px-5 py-5 text-card-foreground sm:px-7 sm:py-6'
+    >
+      <h3 className='text-xl leading-snug font-semibold'>{title}</h3>
+      {lead && <p className='mt-1.5 text-sm leading-relaxed'>{lead}</p>}
+      {children}
+    </article>
+  );
+}
+/** A section of a briefing: a small grey label with a hairline to its right, then its items. */
+function BriefSection({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <section aria-label={label} className='mt-6'>
+      <h4 className='mb-1 flex items-center gap-3 text-xs font-normal text-muted-foreground after:h-px after:flex-1 after:bg-border'>
+        {label}
+      </h4>
+      <ul>{children}</ul>
+    </section>
+  );
+}
+/** One item: an icon, its title in medium weight, one grey line, and at the right what it links to or offers. */
+function BriefItem({
+  icon,
+  title,
+  line,
+  end,
+  dim,
+  label,
   ...data
 }: {
+  icon: ReactNode;
+  title: ReactNode;
+  line?: ReactNode;
+  end?: ReactNode;
+  dim?: boolean;
+  /** The item's name when its title is more than text (an opportunity's title is a link with its number). */
   label?: string;
-  className?: string;
-  children: ReactNode;
 } & Record<`data-${string}`, string | undefined>) {
   return (
-    <div
-      role={label ? 'group' : undefined}
+    <li
       aria-label={label}
       className={cn(
-        'w-full rounded-xl rounded-tl-sm border bg-card px-3.5 py-2.5 text-sm leading-relaxed text-card-foreground',
-        className,
+        'grid grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-3 py-2 sm:grid-cols-[1.25rem_minmax(0,1fr)_auto]',
+        dim && 'opacity-60',
       )}
       {...data}
     >
-      {children}
-    </div>
+      <span className='mt-px flex'>{icon}</span>
+      <div className='min-w-0'>
+        <div className='text-sm font-medium'>{title}</div>
+        {line && <div className='text-sm text-muted-foreground'>{line}</div>}
+      </div>
+      {/* At the right on wider screens; under the title on a phone, so the title keeps its width. */}
+      {end && (
+        <div className='col-start-2 mt-1 flex items-center gap-1.5 sm:col-start-3 sm:row-start-1 sm:mt-0 sm:pt-px'>
+          {end}
+        </div>
+      )}
+    </li>
+  );
+}
+/** A fold inside a section: "3 more" or "3 dismissed", lined up with the items' titles. */
+function FoldToggle({
+  open,
+  label,
+  onToggle,
+}: {
+  open: boolean;
+  label: string;
+  onToggle: () => void;
+}) {
+  return (
+    <li className='py-1 pl-8'>
+      <button
+        type='button'
+        aria-expanded={open}
+        className='inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground'
+        onClick={onToggle}
+      >
+        {open ? $t('common.collapse') : label}
+        <Chevron open={open} />
+      </button>
+    </li>
   );
 }
 
-/** The day's first message: how many decisions wait, the numbers that moved most, then the analysis notes, folded. */
-function Summary({
-  batch,
-  pending,
-  metrics,
-  watching,
-}: {
-  batch?: InsightBatch;
-  pending: number;
-  metrics: MetricItem[];
-  watching: number;
-}) {
-  const [open, setOpen] = useState(false);
-  // The key numbers (the tiles) that moved by 5% or more, the largest two first.
-  const notes = (batch?.observations || []).map((o) => $legacyText(o)),
+/**
+ * Where an item stands, as one small icon in the one hue of its state (the shared task states of task-standing.ts):
+ * waiting for your decision amber, handed off and not started a dashed blue ring, in progress blue, waiting for your
+ * review violet, done green, closed, dismissed or expired grey. The grey line under the item says the same in words.
+ */
+type IconKind = TaskStanding | 'pending' | 'dismissed';
+function StatusIcon({ kind }: { kind: IconKind }) {
+  const ring = (colour: string) => (
+    <span
+      aria-hidden='true'
+      className={cn(
+        'flex size-5 shrink-0 items-center justify-center rounded-full border-2',
+        colour,
+      )}
+    >
+      <span className='size-1.5 rounded-full bg-current' />
+    </span>
+  );
+  if (kind === 'done')
+    return (
+      <span
+        aria-hidden='true'
+        className='flex size-5 shrink-0 items-center justify-center rounded-full bg-nr-ink-green text-background'
+      >
+        <Check className='size-3' strokeWidth={3} />
+      </span>
+    );
+  if (kind === 'doing') return ring('border-nr-ink-blue text-nr-ink-blue');
+  if (kind === 'review') return ring('border-nr-ink-violet text-nr-ink-violet');
+  if (kind === 'pending') return ring('border-nr-ink-amber text-nr-ink-amber');
+  if (kind === 'todo')
+    return (
+      <span
+        aria-hidden='true'
+        className='size-5 shrink-0 rounded-full border-2 border-dashed border-nr-ink-blue'
+      />
+    );
+  return (
+    <span
+      aria-hidden='true'
+      className='flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground'
+    >
+      <Minus className='size-3' />
+    </span>
+  );
+}
+/** A numbered grey circle, for the analysis notes. */
+const NumberIcon = ({ n }: { n: number }) => (
+  <span
+    aria-hidden='true'
+    className='flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] text-muted-foreground tabular-nums'
+  >
+    {n}
+  </span>
+);
+/** An exclamation in a tinted circle, for what waits for you at the bottom of the briefing. */
+const AlertIcon = ({ tone }: { tone: 'violet' | 'amber' }) => (
+  <span
+    aria-hidden='true'
+    className={cn(
+      'flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold',
+      tone === 'violet'
+        ? 'bg-nr-tint-violet text-nr-ink-violet'
+        : 'bg-nr-tint-amber text-nr-ink-amber',
+    )}
+  >
+    !
+  </span>
+);
+
+/** A label ending in a Latin letter or digit (New stars in Chinese ends in "Star") gets a space before Chinese or Japanese text. */
+const spaced = (label: string) =>
+  /[A-Za-z0-9]$/.test(label) && /^(zh|ja)/.test(getCurrentLocale())
+    ? `${label} `
+    : label;
+/**
+ * The lead sentence, from the day's own numbers and no new AI text: what waits for a decision, then the two key numbers
+ * that moved most (5% or more) against the previous period, and how many changes are being watched.
+ */
+function leadOf(
+  pending: number,
+  metrics: MetricItem[],
+  watching: number,
+  days: number,
+) {
+  const first = pending
+      ? $t('strategy.briefHeadline', { 0: pending })
+      : $t('strategy.briefHeadlineNone'),
     moved = metrics
       .filter((i) => i.value != null)
       .slice(0, 5)
       .filter((i) => Math.abs(i.change ?? 0) >= 0.05)
       .sort((a, b) => Math.abs(b.change!) - Math.abs(a.change!))
-      .slice(0, 2);
+      .slice(0, 2),
+    clauses = moved.map((i, k) =>
+      k === 0
+        ? $t(
+            i.change! > 0 ? 'strategy.leadFirstUp' : 'strategy.leadFirstDown',
+            { 0: spaced(i.label), 1: days, 2: percent(i.change!) },
+          )
+        : $t(i.change! > 0 ? 'strategy.leadNextUp' : 'strategy.leadNextDown', {
+            0: spaced(i.label),
+            1: percent(i.change!),
+          }),
+    );
+  if (watching) clauses.push($t('strategy.leadWatching', { 0: watching }));
+  return clauses.length
+    ? $t('strategy.leadTwo', {
+        0: first,
+        1: clauses.join($t('strategy.clauseSep')),
+      })
+    : $t('strategy.leadOne', { 0: first });
+}
+
+/** A note's first sentence as its title, the rest as its grey line. */
+function splitNote(text: string): [string, string] {
+  const m = /^(.+?(?:[。！？]|[.!?](?=\s|$)))\s*([\s\S]+)$/.exec(text);
+  return m ? [m[1], m[2]] : [text, ''];
+}
+/** Analysis notes: what the analysis observed, numbered, shown in full. */
+function Notes({ notes }: { notes: string[] }) {
+  if (!notes.length) return null;
   return (
-    <Bubble label={$t('strategy.todayBrief')}>
-      <p className='text-lg leading-snug font-semibold'>
-        {!batch
-          ? $t('strategy.noAnalysisYetClickUpdate')
-          : pending
-            ? $t('strategy.briefHeadline', { 0: pending })
-            : $t('strategy.briefHeadlineNone')}
-      </p>
-      {(moved.length > 0 || watching > 0) && (
-        <div className='mt-1.5 flex flex-wrap gap-1.5'>
-          {moved.map((i) => (
-            <Link key={i.label} to={i.to}>
-              <Tag tone={i.change! >= 0 ? 'green' : 'red'}>
-                {i.label} {arrow(i.change!)}
-              </Tag>
-            </Link>
-          ))}
-          {watching > 0 && (
-            <Link to='/opportunities?tab=watch'>
-              <Tag tone='grey'>
-                {$t('strategy.watchingChip', { 0: watching })}
-              </Tag>
-            </Link>
-          )}
-        </div>
-      )}
-      {notes.length > 0 && (
-        <>
-          <button
-            type='button'
-            aria-expanded={open}
-            className='mt-1.5 inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground'
-            onClick={() => setOpen((o) => !o)}
-          >
-            {$t('strategy.analysisNotes', { 0: notes.length })}
-            <Chevron open={open} />
-          </button>
-          {open && (
-            <ul className='mt-1 flex list-disc flex-col gap-0.5 pl-4 text-muted-foreground'>
-              {notes.map((o) => (
-                <li key={o}>{o}</li>
-              ))}
-            </ul>
-          )}
-        </>
-      )}
-    </Bubble>
+    <BriefSection label={$t('strategy.sectionNotes')}>
+      {notes.map((o, k) => {
+        const [head, rest] = splitNote(o);
+        return (
+          <BriefItem
+            key={o}
+            icon={<NumberIcon n={k + 1} />}
+            title={head}
+            line={rest || undefined}
+          />
+        );
+      })}
+    </BriefSection>
   );
 }
 
-const lead = (row: Row) =>
-  [...citedSignals(row)]
-    .sort((a, b) => b.strength - a.strength)
-    .map(chipOf)
-    .find(Boolean) || null;
 const itemLink = (row: Row) =>
   `/opportunities?item=${encodeURIComponent(row.card.id)}`;
-const No = ({ row }: { row: Row }) =>
-  row.card.no ? (
-    <span className='mr-1.5 font-mono text-xs font-normal text-muted-foreground tabular-nums'>
-      {oppNo(row.card)}
-    </span>
-  ) : null;
 type Decide = {
   busy: boolean;
   onGive: (r: Row) => void;
   onIgnore: (r: Row) => void;
 };
+const TASK_LINE: Record<TaskStanding, string> = {
+  todo: 'strategy.lineTodo',
+  doing: 'strategy.lineDoing',
+  review: 'strategy.lineReview',
+  done: 'strategy.lineDone',
+  closed: 'strategy.lineClosed',
+};
+/** One opportunity: its state's icon, "O-43 title", one grey line, and its task or the decision at the right. */
+function OpportunityItem({
+  line,
+  decide,
+}: {
+  line: Line;
+  decide?: Partial<Decide>;
+}) {
+  const { row, st, task = 'todo', observing } = line,
+    name = row.taskNo ? taskNo(row.taskNo) : $t('strategy.theTask'),
+    title = (
+      <Link to={itemLink(row)} className='hover:underline'>
+        {row.card.no ? `${oppNo(row.card)} ` : ''}
+        {row.card.title}
+      </Link>
+    );
+  if (st.state === 'pending')
+    return (
+      <BriefItem
+        label={row.card.title}
+        data-opportunity-id={row.card.id}
+        icon={<StatusIcon kind='pending' />}
+        title={title}
+        line={<span className='line-clamp-1'>{reasonLine(row)}</span>}
+        end={
+          <>
+            <QuoteOpportunity row={row} />
+            {decide?.onGive && (
+              <Button
+                size='xs'
+                variant='outline'
+                disabled={decide.busy}
+                onClick={() => decide.onGive!(row)}
+              >
+                {handOffLabel()}
+              </Button>
+            )}
+            {decide?.onIgnore && (
+              <Button
+                size='xs'
+                variant='ghost'
+                disabled={decide.busy}
+                onClick={() => decide.onIgnore!(row)}
+              >
+                {$t('common.ignore')}
+              </Button>
+            )}
+          </>
+        }
+      />
+    );
+  if (st.state === 'task')
+    return (
+      <BriefItem
+        label={row.card.title}
+        data-opportunity-id={row.card.id}
+        icon={<StatusIcon kind={task} />}
+        title={title}
+        line={$t(
+          task === 'done' && observing
+            ? 'strategy.lineObserving'
+            : TASK_LINE[task],
+          { 0: name },
+        )}
+        end={
+          <>
+            <QuoteOpportunity row={row} />
+            <Link
+              className='nr-link text-xs tabular-nums'
+              to={`/actions/${row.taskId}`}
+            >
+              {row.taskNo ? taskNo(row.taskNo) : $t('strategy.viewTask')}
+            </Link>
+          </>
+        }
+      />
+    );
+  return (
+    <BriefItem
+      dim
+      label={row.card.title}
+      data-opportunity-id={row.card.id}
+      icon={<StatusIcon kind='dismissed' />}
+      title={title}
+      line={
+        st.reason === 'ignored'
+          ? $t('strategy.dismissed')
+          : $t('strategy.expired')
+      }
+      end={<QuoteOpportunity row={row} />}
+    />
+  );
+}
+/**
+ * Opportunities: those waiting for a decision (most important first) with Hand off to agent and Ignore, then those
+ * handed off with where their task stands; five shown and the rest folded. Dismissed and expired fold into one line.
+ */
+function Opportunities({
+  pending,
+  decided,
+  decide,
+}: {
+  pending: Row[];
+  decided: Line[];
+  decide?: Partial<Decide>;
+}) {
+  const [more, setMore] = useState(false),
+    [dropped, setDropped] = useState(false),
+    active: Line[] = [
+      ...pending.map((row): Line => ({ row, st: { state: 'pending' } })),
+      ...decided.filter((l) => l.st.state === 'task'),
+    ],
+    rest = decided.filter((l) => l.st.state !== 'task'),
+    shown = more ? active : active.slice(0, 5),
+    ignored = rest.filter((l) => l.st.reason === 'ignored').length,
+    expired = rest.length - ignored;
+  if (!active.length && !rest.length) return null;
+  return (
+    <BriefSection label={$t('strategy.sectionOpportunities')}>
+      {shown.map((line) => (
+        <OpportunityItem key={line.row.card.id} line={line} decide={decide} />
+      ))}
+      {active.length > 5 && (
+        <FoldToggle
+          open={more}
+          label={$t('strategy.moreToDecide', { 0: active.length - 5 })}
+          onToggle={() => setMore((m) => !m)}
+        />
+      )}
+      {rest.length > 0 && (
+        <FoldToggle
+          open={dropped}
+          label={[
+            ignored ? $t('strategy.foldDismissed', { 0: ignored }) : '',
+            expired ? $t('strategy.foldExpired', { 0: expired }) : '',
+          ]
+            .filter(Boolean)
+            .join($t('strategy.clauseSep'))}
+          onToggle={() => setDropped((o) => !o)}
+        />
+      )}
+      {dropped &&
+        rest.map((line) => (
+          <OpportunityItem key={line.row.card.id} line={line} />
+        ))}
+      <li className='flex justify-end pt-1'>
+        <Link className='nr-link text-xs' to='/opportunities'>
+          {$t('strategy.evidenceOnOpportunities')}
+        </Link>
+      </li>
+    </BriefSection>
+  );
+}
+
+const OUTCOME: Record<string, [IconKind, () => string]> = {
+  normal: ['done', () => $t('strategy.backNormal')],
+  opportunity: ['pending', () => $t('strategy.becameOpportunity')],
+  ignored: ['dismissed', () => $t('strategy.ignored')],
+};
+/** Watches that ended: what was watched, how and why it ended, and the opportunity it became. */
+function EndedWatches({
+  watches,
+  rows,
+}: {
+  watches: WatchRecord[];
+  rows: Row[];
+}) {
+  if (!watches.length) return null;
+  return (
+    <BriefSection label={$t('strategy.sectionEnded')}>
+      {watches.map((w) => {
+        const e = w.ended!,
+          [kind, text] = OUTCOME[e.outcome] || [
+            'dismissed',
+            () => $t('common.noActionNeeded'),
+          ],
+          row = e.opportunityId
+            ? rows.find((r) => r.card.id === e.opportunityId)
+            : undefined;
+        return (
+          <BriefItem
+            key={w.key}
+            data-watch-ended={e.outcome}
+            icon={<StatusIcon kind={kind} />}
+            title={$legacyText(w.startTitle)}
+            line={[text(), e.reason].filter(Boolean).join(' · ')}
+            end={
+              e.outcome === 'opportunity' && row ? (
+                <Link className='nr-link text-xs' to={itemLink(row)}>
+                  {oppNo(row.card) || row.card.title}
+                </Link>
+              ) : undefined
+            }
+          />
+        );
+      })}
+    </BriefSection>
+  );
+}
+
+type WaitingTask = {
+  id: number;
+  title: string;
+  evidence?: { work?: Work };
+};
+/** Tasks waiting for you, at the bottom of today's briefing: each with what it waits for and a button to go there. */
+export function WaitingNote({
+  tasks,
+  label,
+}: {
+  tasks: WaitingTask[];
+  label: (w?: Work) => string;
+}) {
+  const navigate = useNavigate();
+  if (!tasks.length) return null;
+  return (
+    <div data-briefing-row='' className='flex w-full flex-col gap-2'>
+      {tasks.slice(0, 3).map((t) => (
+        <div key={t.id} className='flex items-center gap-3'>
+          <AlertIcon tone='violet' />
+          <button
+            type='button'
+            className='min-w-0 flex-1 truncate text-left text-sm font-medium hover:underline'
+            onClick={() => void navigate(`/actions/${t.id}`)}
+          >
+            {t.title} · {label(t.evidence?.work)}
+          </button>
+          <Button size='sm' onClick={() => void navigate(`/actions/${t.id}`)}>
+            {t.evidence?.work?.flow
+              ? $t('strategy.goReview')
+              : $t('strategy.goStart')}
+          </Button>
+        </div>
+      ))}
+      {tasks.length > 3 && (
+        <button
+          type='button'
+          className='nr-link self-end text-xs'
+          onClick={() => void navigate(WAITING_TASKS_URL)}
+        >
+          {$t('strategy.moreWaiting', { 0: tasks.length - 3 })} →
+        </button>
+      )}
+    </div>
+  );
+}
 
 /** Where a day's opportunities stand: awaiting decision, handed off, dismissed, expired (only those with any). */
 function StandingTags({ lines }: { lines: Line[] }) {
@@ -306,213 +652,6 @@ function StandingTags({ lines }: { lines: Line[] }) {
     </>
   );
 }
-/** The right-hand column of a line: its status or its actions, right-aligned so they read as one column. */
-const END_SLOT = 'flex shrink-0 items-center justify-end gap-1 sm:min-w-36';
-/**
- * An opportunity already decided: its title and where it went. One dismissed or expired is dimmed as a whole, so the
- * handed-off ones and their tasks stand out (2026-10-22 visual polish).
- */
-function DecidedLine({ row, st, task }: Line) {
-  return (
-    <li
-      data-opportunity-id={row.card.id}
-      className={cn('py-1.5', st.state !== 'task' && 'opacity-60')}
-    >
-      <div className='flex items-center gap-2'>
-        <Link
-          to={itemLink(row)}
-          title={row.card.title}
-          className={cn(
-            'min-w-0 flex-1 truncate hover:underline',
-            st.state === 'task' ? 'font-medium' : 'text-muted-foreground',
-          )}
-        >
-          <No row={row} />
-          {row.card.title}
-        </Link>
-        <QuoteOpportunity row={row} />
-        <span className={END_SLOT}>
-          <StatusTag row={row} st={st} task={task} />
-        </span>
-      </div>
-    </li>
-  );
-}
-
-/**
- * The opportunities of the day: those waiting for a decision (the same ones as Opportunities' To do, most important
- * first) with Hand off to agent and Ignore, then those decided today with where they went, one line each; five shown
- * and the rest folded. The evidence stays on Opportunities.
- */
-function Decisions({
-  pending,
-  decided,
-  busy,
-  onGive,
-  onIgnore,
-}: { pending: Row[]; decided: Line[] } & Decide) {
-  const [more, setMore] = useState(false),
-    lines: Line[] = [
-      ...pending.map((row): Line => ({ row, st: { state: 'pending' } })),
-      ...decided,
-    ],
-    shown = more ? lines : lines.slice(0, 5),
-    rest = lines.length - 5;
-  return (
-    <Bubble
-      label={$t('strategy.decideCount', { 0: pending.length })}
-      className='py-1'
-    >
-      {decided.length > 0 && (
-        <div className='flex flex-wrap items-center gap-1.5 border-b border-border/70 py-1.5'>
-          <StandingTags lines={lines} />
-        </div>
-      )}
-      <ul className='divide-y divide-border/70'>
-        {shown.map((line) => {
-          const { row: r, st } = line;
-          if (st.state !== 'pending')
-            return <DecidedLine key={r.card.id} {...line} />;
-          const c = lead(r);
-          return (
-            <li
-              key={r.card.id}
-              aria-label={r.card.title}
-              data-opportunity-id={r.card.id}
-              className='py-1.5'
-            >
-              <div className='flex items-center gap-2'>
-                {c && <Tag tone={c.tone}>{c.text}</Tag>}
-                <Link
-                  to={itemLink(r)}
-                  title={r.card.title}
-                  className='min-w-0 flex-1 truncate font-medium hover:underline'
-                >
-                  <No row={r} />
-                  {r.card.title}
-                </Link>
-                <QuoteOpportunity row={r} />
-                <span className={END_SLOT}>
-                  <Button
-                    size='xs'
-                    variant='outline'
-                    disabled={busy}
-                    onClick={() => onGive(r)}
-                  >
-                    {handOffLabel()}
-                  </Button>
-                  <Button
-                    size='xs'
-                    variant='ghost'
-                    disabled={busy}
-                    onClick={() => onIgnore(r)}
-                  >
-                    {$t('common.ignore')}
-                  </Button>
-                </span>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-      <div className='flex items-center justify-between gap-3 border-t border-border/70 py-1.5 text-xs'>
-        {rest > 0 ? (
-          <button
-            type='button'
-            aria-expanded={more}
-            className='nr-link inline-flex items-center gap-0.5'
-            onClick={() => setMore((m) => !m)}
-          >
-            {more
-              ? $t('common.collapse')
-              : $t('strategy.moreToDecide', { 0: rest })}
-            <Chevron open={more} />
-          </button>
-        ) : (
-          <span />
-        )}
-        <Link className='nr-link' to='/opportunities'>
-          {$t('strategy.evidenceOnOpportunities')}
-        </Link>
-      </div>
-    </Bubble>
-  );
-}
-
-const OUTCOME: Record<string, [Tone, () => string]> = {
-  normal: ['green', () => $t('strategy.backNormal')],
-  opportunity: ['amber', () => $t('strategy.becameOpportunity')],
-  ignored: ['grey', () => $t('strategy.ignored')],
-};
-/** A watch that ended: how it ended, what was watched and why it ended. */
-function Ended({ w, rows }: { w: WatchRecord; rows: Row[] }) {
-  const e = w.ended!,
-    [tone, text] = OUTCOME[e.outcome] || [
-      'grey',
-      () => $t('common.noActionNeeded'),
-    ],
-    row = e.opportunityId
-      ? rows.find((r) => r.card.id === e.opportunityId)
-      : undefined;
-  return (
-    <Bubble data-watch-ended={e.outcome}>
-      <Tag tone={tone} className='mr-1.5'>
-        {text()}
-      </Tag>
-      <span className='text-muted-foreground'>
-        {$t('strategy.watchEnded')} ·{' '}
-      </span>
-      {$legacyText(w.startTitle)}
-      {e.reason ? (
-        <span className='text-muted-foreground'> · {e.reason}</span>
-      ) : null}
-      {e.outcome === 'opportunity' && row && (
-        <Link className='nr-link ml-1.5 text-xs' to={itemLink(row)}>
-          {oppNo(row.card) || row.card.title} →
-        </Link>
-      )}
-    </Bubble>
-  );
-}
-
-type WaitingTask = {
-  id: number;
-  title: string;
-  evidence?: { work?: Work };
-};
-/** Tasks waiting for you: the first two by name, then the list. */
-export function WaitingNote({
-  tasks,
-  label,
-}: {
-  tasks: WaitingTask[];
-  label: (w?: Work) => string;
-}) {
-  const navigate = useNavigate();
-  if (!tasks.length) return null;
-  return (
-    <Bubble className='flex flex-wrap items-center gap-x-3 gap-y-1'>
-      <Tag tone='amber'>{$tj('strategy.thingsNeed', { 0: tasks.length })}</Tag>
-      {tasks.slice(0, 2).map((t) => (
-        <button
-          key={t.id}
-          type='button'
-          className='min-w-0 max-w-[24rem] truncate underline-offset-4 hover:underline'
-          onClick={() => void navigate(`/actions/${t.id}`)}
-        >
-          {t.title} · {label(t.evidence?.work)}
-        </button>
-      ))}
-      <button
-        type='button'
-        className='nr-link ml-auto text-xs'
-        onClick={() => void navigate(WAITING_TASKS_URL)}
-      >
-        {$t('strategy.view')} →
-      </button>
-    </Bubble>
-  );
-}
 
 /** Data that failed to sync for over a day, so today's analysis may lack it. */
 function HealthNote({ projectId }: { projectId: number }) {
@@ -539,29 +678,33 @@ function HealthNote({ projectId }: { projectId: number }) {
   const items = health?.projectId === projectId ? health.items : [];
   if (!items.length) return null;
   return (
-    <Bubble>
-      <Tag tone='amber' className='mr-1.5'>
-        {$t('strategy.syncFailed')}
-      </Tag>
-      {$tj('dataHealth.failedSyncOverDayOpportunities', {
-        0: items.map((i) => healthText(i.name, i.nameText)).join('、'),
-      })}
-      <Link className='nr-link ml-1.5 text-xs' to='/connections?tab=health'>
-        {$t('dataHealth.fix')} →
+    <div data-briefing-row='' className='flex items-center gap-3'>
+      <AlertIcon tone='amber' />
+      <p className='min-w-0 flex-1 text-sm'>
+        {$tj('dataHealth.failedSyncOverDayOpportunities', {
+          0: items.map((i) => healthText(i.name, i.nameText)).join('、'),
+        })}
+      </p>
+      <Link
+        className={buttonVariants({ variant: 'outline', size: 'sm' })}
+        to='/connections?tab=health'
+      >
+        {$t('dataHealth.fix')}
       </Link>
-    </Bubble>
+    </div>
   );
 }
 
 /**
- * Today in the conversation: the analysis's summary, the decisions waiting, the watches that ended today, then what
- * else needs you (tasks, data). `tasks` is the waiting-task read with its own loading and failure.
+ * Today in the conversation: the latest analysis as a briefing, then what else needs you at its bottom (tasks waiting
+ * for you, data that failed to sync). `tasks` is the waiting-task read with its own loading and failure.
  */
 export function Today({
   state,
   rows,
   feed,
   metrics,
+  days,
   generating,
   projectId,
   tasks,
@@ -572,49 +715,58 @@ export function Today({
   rows: Row[];
   feed: Feed;
   metrics: MetricItem[];
+  /** The key numbers' period, for the lead sentence. */
+  days: number;
   generating: boolean;
   projectId: number;
   tasks: ReactNode;
-  /** Under the day's date: the current situation folded to a line while the side panel is open. */
+  /** Above the message: the current situation folded to a line while the side panel is open. */
   situation?: ReactNode;
 } & Decide) {
   const [now] = useState(() => new Date()),
     docked = useInsightChat()?.docked;
   const batch = state.insights,
+    day = dayOf(batch?.generatedAt) || localDay(now),
     watching = Object.values(state.watch || {}).filter((w) => !w.ended).length;
   return (
     <>
-      <DayDivider
-        label={dayLabel(dayOf(batch?.generatedAt) || localDay(now), now)}
-      />
       {situation}
       <AgentMessage
         meta={
           <>
             {$t('strategy.dailyAnalysisName')}
-            <AiMark />
-            {generating ? $t('strategy.analyzing') : clock(batch?.generatedAt)}
+            <span aria-hidden='true'>·</span>
+            {generating
+              ? $t('strategy.analyzing')
+              : batch
+                ? `${relativeDay(day, now)} ${clock(batch.generatedAt)}`
+                : null}
           </>
         }
       >
-        <Summary
-          batch={batch}
-          pending={feed.pending.length}
-          metrics={metrics}
-          watching={watching}
-        />
-        {(feed.pending.length > 0 || feed.decided.length > 0) && (
-          <Decisions
+        <Briefing
+          label={$t('strategy.todayBrief')}
+          title={batch ? analysisTitle(day) : $t('strategy.noAnalysisTitle')}
+          lead={
+            batch
+              ? leadOf(feed.pending.length, metrics, watching, days)
+              : $t('strategy.noAnalysisYetClickUpdate')
+          }
+        >
+          <Notes
+            notes={(batch?.observations || []).map((o) => $legacyText(o))}
+          />
+          <Opportunities
             pending={feed.pending}
             decided={feed.decided}
-            {...decide}
+            decide={decide}
           />
-        )}
-        {recentlyEnded(state, 1).map((w) => (
-          <Ended key={w.key} w={w} rows={rows} />
-        ))}
-        {tasks}
-        <HealthNote projectId={projectId} />
+          <EndedWatches watches={recentlyEnded(state, 1)} rows={rows} />
+          <div className='mt-5 hidden flex-col gap-3 border-t pt-4 has-[[data-briefing-row]]:flex has-[[role=alert]]:flex'>
+            {tasks}
+            <HealthNote projectId={projectId} />
+          </div>
+        </Briefing>
       </AgentMessage>
       {docked ? (
         <InPanelNote />
@@ -625,33 +777,11 @@ export function Today({
   );
 }
 
-// Where a decided opportunity went; once handed off, where its task stands now (task-standing.ts).
-function StatusTag({ row, st, task }: Line) {
-  if (st.state === 'task') {
-    const [tone, text] = TASK_TAG[task ?? 'todo'];
-    return (
-      <Link to={`/actions/${row.taskId}`}>
-        <Tag tone={tone}>
-          {text()}
-          {row.taskNo ? ` · ${taskNo(row.taskNo)}` : ''}
-        </Tag>
-      </Link>
-    );
-  }
-  if (st.state === 'pending')
-    return <Tag tone='amber'>{$t('strategy.awaitingDecision')}</Tag>;
-  return (
-    <Tag tone='grey'>
-      {st.reason === 'ignored'
-        ? $t('strategy.dismissed')
-        : $t('strategy.expired')}
-    </Tag>
-  );
-}
-/** An earlier day, folded to one line: what was suggested and where each went; opens to the list. */
+/** An earlier day, folded to one line: what was suggested and where each went; opens to that day's briefing. */
 function PastDay({ day, rows, now }: { day: Day; rows: Row[]; now: Date }) {
   const [open, setOpen] = useState(false),
-    asked = questionCount(useInsightChat()?.threads || [], day.day);
+    asked = questionCount(useInsightChat()?.threads || [], day.day),
+    notes = (day.notes || []).map((o) => $legacyText(o));
   return (
     <section
       aria-label={dayLabel(day.day, now)}
@@ -690,18 +820,15 @@ function PastDay({ day, rows, now }: { day: Day; rows: Row[]; now: Date }) {
           </button>
           {open && (
             <>
-              {day.items.length > 0 && (
-                <Bubble className='py-1'>
-                  <ul className='divide-y divide-border/70'>
-                    {day.items.map((line) => (
-                      <DecidedLine key={line.row.card.id} {...line} />
-                    ))}
-                  </ul>
-                </Bubble>
+              {(day.items.length > 0 ||
+                day.ended.length > 0 ||
+                notes.length > 0) && (
+                <Briefing title={analysisTitle(day.day)}>
+                  <Notes notes={notes} />
+                  <Opportunities pending={[]} decided={day.items} />
+                  <EndedWatches watches={day.ended} rows={rows} />
+                </Briefing>
               )}
-              {day.ended.map((w) => (
-                <Ended key={w.key} w={w} rows={rows} />
-              ))}
               <DayConversation day={day.day} />
             </>
           )}

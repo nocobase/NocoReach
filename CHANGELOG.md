@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Insights: one chart and a daily briefing
+
+- The five metric cards become one card: the metrics as tabs across the top (the selected one dark and underlined, the others grey) and one large chart of the selected metric's days below, with gridlines, dates and a dot on the latest day. The previous 28 days are a dashed grey line (the data overview now also returns each card's previous-period daily series); when they have no daily data the legend says so and the line is left out. Search clicks shows first; the legend links each metric's data page. This replaces the "Last 28 days vs the previous 28" line.
+- Each day's analysis reads as a briefing: the day as its title ("Analysis of October 22"), a lead sentence from the day's own numbers (what waits for a decision, the two key numbers that moved most against the previous period, the changes being watched), then sections with a small grey label and a hairline. Analysis notes show in full, numbered, the first sentence in medium weight. Opportunities show a state icon in the shared task-state colours, "O-43 title" and one grey line ("Handed off to the agent; T-34 is done."), with the task link and Ask AI at the right; those waiting keep Hand off to agent and Ignore; dismissed and expired fold into one line. Watches that ended have their own section. Tasks waiting for you and data that failed to sync sit at the bottom with a button each, replacing the "N things need you" strip. Earlier days open to the same briefing.
+- Current situation keeps its two groups, each label with a hairline; every line leads with its source logo and its number, then a short label ("74 forum topics without replies", "21↑ 18↓ ranking changes this week"). Lines without a short label keep their sentence.
+
 ## Unreleased — One look for tabs, choices, refresh buttons and table headers
 
 - Every tab bar looks the same: a thin rule under the row, the tabs flush with the page title, the open one in black over a 2px line. Opportunities used a blue line; Members & roles, API keys, Agent, Analysis rules and Knowledge indented their tabs and had no rule.
@@ -35,6 +41,7 @@
 - Data health lists the sources needing attention, each with the action that fits its failure: Retry; Change, which opens the source's settings, when a setting must change first (an expired Google authorization, a refused GitHub token, X's spending cap, a paused daily analysis, a competitor without a sitemap); or Check, then retry for an uncertain DataForSEO result that may be billed, which asks before querying again. Retry all retries the rows a plain retry can help and the person may retry, one after another, each row showing its progress and result. The full sync status table is shown directly.
 - Google Search Console and GA4 rows that are only late offer Retry, which asks for a sync as Update now does. Rank tracking and Trends record an uncertain DataForSEO result, and competitor activity a refusal only a changed setting cures, so Data health can tell them apart.
 - Agent edits and publishing (Website source and Blog CMS) is the first group of sources: every change the Agent makes lands in one of them. Group headings use the shared section heading at the size of the page's other headings, with the same space above every group and a small gap to its cards; the old plain heading took a page-wide rule that left it grey and touching its cards.
+
 ## Unreleased — Agent: one Settings per row, tidy tabs
 
 - Who does the work reads as a table: column headings, Cloud models and Local agents as light group rows with their explanation in an ⓘ, and what each work does under its name.
