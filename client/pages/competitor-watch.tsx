@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { AlertCircle, ExternalLink, Github, Globe, LoaderCircle, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import { RefreshButton } from '#components/reach/refresh-button';
+import { HeaderActions } from "#components/reach/page";
 import { toast } from "#lib/toast";
 import { ListSkeleton } from "#components/reach/states";
 import { AiMark } from "#components/reach/actor";
@@ -181,7 +182,7 @@ export function CompetitorWatchTab({ projectId, onListChange }: { projectId: num
       {addDialog}{suggestDialog}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="nr-footnote flex items-center gap-1">{view.lastRun ? $t('competitorWatch.lastCheckedWeeklyAfterValue',{0:formatDateTime(view.lastRun.at)}) : $t('competitorWatch.checkingFirstTime')}<NotesTip notes={view.notes} label={$t('competitorWatch.howReadCompetitorActivity')} /></p>
-        <div className="flex flex-wrap gap-2">{view.list.length < view.max ? <>{canSuggest&&<Button size="sm" variant="outline" onClick={() => setSuggesting(true)}><Sparkles data-icon="inline-start" />{$t('competitorWatch.aiDetect')}</Button>}{canAdd&&<Button size="sm" variant="outline" onClick={() => setAdding(true)}><Plus data-icon="inline-start" />{$t('common.addCompetitor')}</Button>}</> : null}{canCheck&&<RefreshButton busy={busy || Boolean(view.checking)} label={busy ? $t('competitorWatch.checking') : $t('common.updateNow')} onClick={() => void check()} />}</div>
+        <div className="flex flex-wrap gap-2">{view.list.length < view.max ? <>{canSuggest&&<Button size="sm" variant="outline" onClick={() => setSuggesting(true)}><Sparkles data-icon="inline-start" />{$t('competitorWatch.aiDetect')}</Button>}{canAdd&&<Button size="sm" variant="outline" onClick={() => setAdding(true)}><Plus data-icon="inline-start" />{$t('common.addCompetitor')}</Button>}</> : null}{canCheck&&<HeaderActions><RefreshButton busy={busy || Boolean(view.checking)} label={busy ? $t('competitorWatch.checking') : $t('common.updateNow')} onClick={() => void check()} /></HeaderActions>}</div>
       </div>
       {/* The same reason on several cards is said once, above them, with the way to fix it (UI review 2026-10-21). */}
       {[...new Set(view.list.flatMap((c) => c.errors))].map((e) => <ConnectionError key={e} message={$t('competitorWatch.notReadFor', { 0: view.list.filter((c) => c.errors.includes(e)).map((c) => c.name).join(isChinese() ? "、" : ", "), 1: $legacyText(e) })} />)}

@@ -23,7 +23,7 @@ import { useFreshData } from "../workspace-cache";
 import { RangePicker } from '../range-picker';
 import { validRange, useRange } from '../range-state';
 import { HandOffBar } from "../hand-off-bar";
-import { Segmented } from "../data-github/segmented";
+import { Segmented } from "#components/reach/segmented";
 import { ReportCard } from "./tables";
 import { ago, bytes, change, CHANNEL, dateOf, kindLabel, num, otherName, pct, REGISTRY, type Item, type Row, type Share, type View } from "./model";
 import "../data-views.css";
@@ -221,7 +221,7 @@ function CoverageCard({ view }: { view: View }) {
         {list.length > 1 ? <div className="ml-auto"><Select value={c.id} onValueChange={(id) => pick(String(id))}><SelectTrigger size="sm" className="max-w-56" aria-label={$t('dataDownloads.coverage')}><SelectValue>{(id: string) => list.find((x) => x.id === id)?.image ?? id}</SelectValue></SelectTrigger><SelectContent align="end" className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{list.map((x) => <SelectItem key={x.id} value={x.id}>{x.image}</SelectItem>)}</SelectContent></Select></div> : null}
       </div>
       <table className="w-full text-sm">
-        <thead><tr className="border-b border-border text-left text-xs text-muted-foreground"><th className="py-2 pl-4 font-medium">{$t('dataDownloads.channel')}</th><th className="py-2 text-right font-medium">{$t('dataDownloads.tagsCount')}</th><th className="py-2 text-right font-medium">{$t('dataDownloads.builds')}</th><th className="py-2 pl-6 font-medium">CPU</th><th className="py-2 text-right font-medium">{$t('dataDownloads.largestImage')}</th><th className="py-2 pr-4 text-right font-medium">{$t('dataDownloads.lastPushed')}</th></tr></thead>
+        <thead data-slot="table-header"><tr className="border-b border-border text-left text-xs text-muted-foreground"><th className="py-2 pl-4 font-medium">{$t('dataDownloads.channel')}</th><th className="py-2 text-right font-medium">{$t('dataDownloads.tagsCount')}</th><th className="py-2 text-right font-medium">{$t('dataDownloads.builds')}</th><th className="py-2 pl-6 font-medium">CPU</th><th className="py-2 text-right font-medium">{$t('dataDownloads.largestImage')}</th><th className="py-2 pr-4 text-right font-medium">{$t('dataDownloads.lastPushed')}</th></tr></thead>
         <tbody>
           {c.rows.map((r) => (
             <tr key={r.channel} className="border-b border-border last:border-0" data-coverage-row={r.channel}>

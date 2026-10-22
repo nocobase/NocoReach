@@ -2086,6 +2086,8 @@
   "taskExecutionPanels.currentExecutor": "Pelaksana saat ini",
   "messages.currentPilotOpenAdmins": "Uji coba saat ini hanya terbuka untuk admin",
   "taskExecution.currentStepNeedsPersonOwner": "Langkah saat ini harus memiliki penanggung jawab manusia dan berupa langkah teks daring",
+  "strategy.situationGroupAttention": "Perlu perhatian",
+  "strategy.situationGroupNormal": "Normal",
   "strategy.whereThingsStand": "Kondisi saat ini",
   "strategy.statusExplanation": "Arti informasi ini",
   "strategy.currentPilotSavesUp100": "Uji coba saat ini menyimpan hingga 100 rencana.",

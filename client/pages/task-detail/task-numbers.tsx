@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Segmented } from '#components/reach/segmented';
 import { Link } from 'react-router';
 import { $t } from '#i18n';
 import { formatCount, formatDate } from '#lib/format';
@@ -10,9 +11,9 @@ import { cn } from '#lib/utils';
 import { Card } from './layout';
 import { text } from './styles';
 
-// Performance, the card under the task's properties (2026-10-22 user request): each page the task is about, with its numbers.
-// Before the change goes live, the latest 28 days (or the 28 days before going live, once it has); from day 7 on,
-// before and after for day 7 or day 28. The full comparison stays on Results.
+// Performance, the card under the task's properties (2026-10-22 user request): each page the task is about, with its
+// numbers. Before the change goes live, the latest 28 days (or the 28 days before going live, once it has); from day 7
+// on, before and after for day 7 or day 28. The full comparison stays on Results.
 
 type PageNumbers = {
   page: string;
@@ -168,35 +169,27 @@ function DaySwitch({
   onPick: (day: number) => void;
 }) {
   return (
-    <div
-      className='inline-flex shrink-0 overflow-hidden rounded-md border text-sm'
-      role='group'
-      aria-label={$t('results.checkpoint')}
-    >
-      {DAYS.map((d) => {
+    <Segmented
+      label={$t('results.checkpoint')}
+      size='sm'
+      options={DAYS.map((d) => {
         const has = results.some((x) => x.day === d);
-        return (
-          <button
-            key={d}
-            type='button'
-            aria-pressed={day === d}
-            disabled={!has}
-            title={
-              !has && observeFrom
-                ? $t('taskNumbers.expected', {
-                    0: d,
-                    1: expected(observeFrom, d),
-                  })
-                : undefined
-            }
-            className='px-2 py-0.5 text-muted-foreground disabled:opacity-50 aria-pressed:bg-muted aria-pressed:text-foreground'
-            onClick={() => onPick(d)}
-          >
-            {$t('results.day', { 0: d })}
-          </button>
-        );
+        return {
+          id: String(d),
+          label: $t('results.day', { 0: d }),
+          disabled: !has,
+          title:
+            !has && observeFrom
+              ? $t('taskNumbers.expected', {
+                  0: d,
+                  1: expected(observeFrom, d),
+                })
+              : undefined,
+        };
       })}
-    </div>
+      value={String(day)}
+      onChange={(d) => onPick(Number(d))}
+    />
   );
 }
 

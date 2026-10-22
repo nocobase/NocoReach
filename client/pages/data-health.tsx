@@ -9,6 +9,7 @@ import {Button} from '#components/ui/button';
 import {confirmAction} from '#components/reach/confirm';
 import {formatDateTime} from '#lib/format';
 import {InfoTip} from '#components/reach/info-tip';
+import {SourceLogo} from '#components/reach/source-logo';
 import {help} from './glossary';
 export type HealthText={key:string;params?:Record<string,string|number|HealthText|{systemError:string}>};
 // A missing descriptor is legacy or user-authored content: preserve the original verbatim.
@@ -58,14 +59,14 @@ export function HealthPanel({projectId,reloadKey,onChange,settingsOf}:{projectId
    {retryable.length?<Button size="sm" variant="outline" className="ml-auto" disabled={running} onClick={()=>void retry(retryable)}>{$t('dataHealth.retryAll',{0:retryable.length})}</Button>:null}</div>
   {attention.map(i=>i.retry?<RetryAccess key={i.id} projectId={projectId} item={i} onAccess={onAccess}/>:null)}
   {error&&<p className="nr-error" role="alert">{error}</p>}
-  {attention.length?<ul className="divide-y rounded-lg border bg-card">{attention.map(i=>{const run=runs[i.id],fix=fixOf(i),open=fix==='settings'?settingsOf?.(i)??null:null;return <li key={i.id} data-health-row={i.id} data-fix={fix} className={'flex flex-wrap items-center gap-3 px-4 py-3 text-sm nr-health-'+i.state}><span className="nr-health-dot" aria-hidden="true"/>
+  {attention.length?<ul className="divide-y rounded-lg border bg-card">{attention.map(i=>{const run=runs[i.id],fix=fixOf(i),open=fix==='settings'?settingsOf?.(i)??null:null;return <li key={i.id} data-health-row={i.id} data-fix={fix} className={'flex flex-wrap items-center gap-3 px-4 py-3 text-sm nr-health-'+i.state}><span className="nr-health-dot" aria-hidden="true"/><SourceLogo source={i.id} size="sm"/>
    <div className="min-w-0 flex-1"><p className="font-medium">{healthText(i.name,i.nameText)}</p><p className="text-muted-foreground">{$tj('dataHealth.lastSuccessValue',{0:healthText(i.message,i.messageText),1:ago(i.lastSuccessAt)})}</p>{fix==='settings'?<p className="text-nr-ink-amber">{$t('dataHealth.settingsFirst')}</p>:null}{run?.status==='failed'?<p className="text-destructive">{run.error}</p>:null}</div>
    {run?.status==='running'?<span role="status" className="text-muted-foreground">{$t('dataHealth.retryingLoading')}</span>:run?.status==='started'?<span role="status" className="text-muted-foreground">{$t('dataHealth.retryStarted')}</span>
     :fix==='retry'&&may(i)?<Button size="sm" variant="outline" disabled={running} onClick={()=>void retry([i])}>{$t('common.retry')}</Button>
     :fix==='verify'&&may(i)?<Button size="sm" variant="outline" disabled={running} onClick={()=>void verify(i)}>{$t('dataHealth.verifyRetry')}</Button>
     :open?<Button size="sm" variant="outline" onClick={open}>{$t('dataHealth.changeSettings')}</Button>:null}
   </li>;})}</ul>:null}
-  <div className="overflow-x-auto rounded-lg border bg-card"><table><thead><tr><th>{$t('dataHealth.dataSource')}</th><th>{$t('dataHealth.frequency')}</th><th>{$t('common.status')}</th><th>{$t('dataHealth.lastSuccess')}</th><th>{$t('dataHealth.dataThrough')}</th><th>{$t('dataHealth.nextSync')}</th></tr></thead><tbody>{health.items.map(i=><tr key={i.id}><td>{healthText(i.name,i.nameText)}{i.schedule?<ScheduleNote schedule={i.schedule}/>:i.note&&<span className="nr-block nr-footnote">{healthText(i.note,i.noteText)}</span>}</td><td>{i.cadence?getCadenceText()[i.cadence]:'—'}</td><td>{getStateText()[i.state]}</td><td>{ago(i.lastSuccessAt)}</td><td>{i.dataThrough||'—'}</td><td>{i.nextSyncAt?formatDateTime(i.nextSyncAt):'—'}</td></tr>)}</tbody></table></div>
+  <div className="overflow-x-auto rounded-lg border bg-card"><table><thead><tr><th>{$t('dataHealth.dataSource')}</th><th>{$t('dataHealth.frequency')}</th><th>{$t('common.status')}</th><th>{$t('dataHealth.lastSuccess')}</th><th>{$t('dataHealth.dataThrough')}</th><th>{$t('dataHealth.nextSync')}</th></tr></thead><tbody>{health.items.map(i=><tr key={i.id}><td><span className="flex items-center gap-2"><SourceLogo source={i.id} size="sm"/>{healthText(i.name,i.nameText)}</span>{i.schedule?<ScheduleNote schedule={i.schedule}/>:i.note&&<span className="nr-block nr-footnote">{healthText(i.note,i.noteText)}</span>}</td><td>{i.cadence?getCadenceText()[i.cadence]:'—'}</td><td>{getStateText()[i.state]}</td><td>{ago(i.lastSuccessAt)}</td><td>{i.dataThrough||'—'}</td><td>{i.nextSyncAt?formatDateTime(i.nextSyncAt):'—'}</td></tr>)}</tbody></table></div>
  </section>;
 }
 export const getCadenceText = (): Record<NonNullable<HealthItem['cadence']>,string> => ({daily:$t('dataHealth.cadenceDaily'),weekly:$t('dataHealth.cadenceWeekly'),manual:$t('dataHealth.cadenceManual')});

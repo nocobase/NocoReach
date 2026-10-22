@@ -2036,6 +2036,8 @@
   "taskExecutionPanels.currentExecutor": "Aktuelle Ausführungsinstanz",
   "messages.currentPilotOpenAdmins": "Der aktuelle Testbetrieb ist nur für Administratoren zugänglich",
   "taskExecution.currentStepNeedsPersonOwner": "Der aktuelle Schritt benötigt eine Person als Verantwortlichen und muss ein Online-Textschritt sein",
+  "strategy.situationGroupAttention": "Braucht Aufmerksamkeit",
+  "strategy.situationGroupNormal": "Normal",
   "strategy.whereThingsStand": "Aktueller Stand",
   "strategy.statusExplanation": "Was hier angezeigt wird",
   "strategy.currentPilotSavesUp100": "Im aktuellen Testbetrieb werden bis zu 100 Pläne gespeichert.",

@@ -8,6 +8,7 @@ import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { Trash2, TrendingUp } from "lucide-react";
 import { RefreshButton } from '#components/reach/refresh-button';
+import { HeaderActions } from "#components/reach/page";
 import { toast } from "#lib/toast";
 import { EmptyState, ListSkeleton, InlineError } from "#components/reach/states";
 import { Button } from "#components/ui/button";
@@ -130,7 +131,7 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
     <>
       <Card className="gap-0 py-0">
         <DataTable table={table} empty={{ title: $t('rankTracking.noTrackedKeywordsYet') }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,[role=checkbox],a")) return; openKeyword(row.original.keyword, row.original); }}
-          toolbar={<DataTableToolbar actions={<RefreshButton busy={busy} label={busy ? $t('common.checking') : $t('common.updateNow')} onClick={() => void checkNow()} />}>
+          toolbar={<DataTableToolbar actions={<HeaderActions><RefreshButton busy={busy} label={busy ? $t('common.checking') : $t('common.updateNow')} onClick={() => void checkNow()} /></HeaderActions>}>
             <span className="text-xs text-muted-foreground">{$tj('rankTracking.checkedWeeklyGoogleDesktopTop',{0:status.keywords.length,1:status.lastRun ? $t('rankTracking.last',{0:day(status.lastRun.at)}) : ""})}<InfoTip label={$t('rankTracking.howRankTrackingWorks')} className="ml-1">{$t('rankTracking.checkNowReusesResultLast')}</InfoTip></span>
           </DataTableToolbar>} />
       </Card>
