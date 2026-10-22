@@ -117,3 +117,24 @@ test('daily refresh dates pages that appear after the first read (for the weekly
  await sc.refresh('1');const by=Object.fromEntries(payload.pages.map(p=>[p.url,p]));
  assert.equal(by['https://ex.com/a'].firstSeenAt,undefined);assert.equal(by['https://ex.com/a'].title,'A');assert.ok(by['https://ex.com/new'].firstSeenAt);
 });
+
+test.each([
+  ['out-of-range hexadecimal', '&#x110000;'],
+  ['out-of-range decimal', '&#99999999;'],
+  ['unsafe integer', '&#9007199254740993;'],
+  ['non-finite value', `&#${'9'.repeat(400)};`],
+])('site metadata and sitemaps keep %s references literal', (_, reference) => {
+  const value = `${reference} &apos; &#39; &#x27; &#x1F600; &#128512; &amp;#39;`;
+  const expected = `${reference} ' ' ' 😀 😀 &#39;`;
+  const meta = pageMeta(
+    `<meta name="description" content="${value}">`,
+    'https://ex.com/',
+  );
+  assert.equal(meta.description, expected);
+  const sitemap = parseSitemap(
+    `<urlset><url><loc>https://ex.com/${value}</loc><lastmod>${value}</lastmod></url></urlset>`,
+  );
+  assert.deepEqual(sitemap.urls, [
+    { loc: `https://ex.com/${expected}`, lastmod: expected },
+  ]);
+});

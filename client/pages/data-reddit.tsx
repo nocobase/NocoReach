@@ -15,7 +15,7 @@ import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
 import { RangePicker } from './range-picker';
 import { validRange, useRange } from './range-state';
-import { MetricTile, type Metric } from "./data-parts";
+import { MetricTile, metricGrid, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
 import { HandOffBar } from "./hand-off-bar";
 import { AllCheck, RowCheck, useTickedList } from "#components/reach/hand-off-slot";
@@ -56,7 +56,7 @@ export default function DataReddit() {
           <p className="nr-footnote">{$tj('dataReddit.searchTerm',{0:view.terms!.join("、"),1:""})}</p>
           <RedditTiming state={view}/>
           {!view.diagnostics?.length && view.lastRun?.errors?.length ? <div className="nr-error" role="alert">{view.lastRun.errors.map((message) => <p key={message}>{$tj('reddit.searchIncomplete',{0:$legacyText(message)})}</p>)}</div> : null}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className={metricGrid(view.kpis!.length + (visits ? 1 : 0))}>
             {view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}
             {visits ? <Card className="gap-0 p-4" data-metric={$t('dataReddit.trafficReddit')}><StatTile label={$t('dataReddit.trafficReddit')} value={visits.sessions.toLocaleString(getCurrentLocale())} delta={visits.previous ? { change: (visits.sessions - visits.previous) / visits.previous, better: visits.sessions >= visits.previous } : null} hint={$t('dataReddit.viewsKeyEvents',{0:visits.views.toLocaleString(getCurrentLocale()),1:visits.conversions.toLocaleString(getCurrentLocale())})} /></Card> : null}
           </div>
@@ -69,7 +69,7 @@ export default function DataReddit() {
                   <span className="pt-0.5"><RowCheck selection={posts} k={String(p.id)} label={p.title || p.url} /></span><div className="min-w-0 flex-1">
                   <a className="nr-link font-medium" href={safeLink(p.url)} target="_blank" rel="noreferrer">{p.title || p.url}</a>
                   {p.snippet ? <p className="line-clamp-2 text-sm text-muted-foreground">{p.snippet}</p> : null}
-                  <p className="text-xs text-muted-foreground">r/{p.subreddit} · {p.postedAt ? $t('dataReddit.posted',{0:p.postedAt}) : $t('dataReddit.postDateUnknownFound',{0:p.firstSeenAt.slice(0, 10)})}</p>
+                  <p className="text-xs text-muted-foreground">r/{p.subreddit} · {p.postedAt ? $t('dataReddit.posted',{0:formatDate(p.postedAt)}) : $t('dataReddit.postDateUnknownFound',{0:formatDate(p.firstSeenAt)})}</p>
                 </div></div>
               )) : <p className="px-4 py-3 text-sm text-muted-foreground">{$t('dataReddit.noNewPostsSelectedPeriod')}</p>}
             </Card>

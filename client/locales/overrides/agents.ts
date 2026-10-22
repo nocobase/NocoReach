@@ -1,9 +1,9 @@
 import type { TranslationOverrides } from '@nocobase/i18n';
 
-// The Agents plugin's copy as NocoReach words it (2026-10-20 user decision): its runtimes, models and usage tabs say
-// what each one is for; the Chinese copy names a runner machine with the Runtimes tab's own word everywhere instead of
-// the plugin's second term for it; and both languages call the two kinds of agent by what they do, as the Agent page
-// and the chat picker do. Overrides freeze these strings; recheck them against the plugin's locale after upgrading it.
+// The Agents plugin's copy as NocoReach words it (2026-10-20 and 2026-10-21 user decisions): its runtimes, model
+// services and usage pages say what each one is for; the Chinese copy names a runner machine with the Runtimes page's own
+// word everywhere instead of the plugin's second term for it; agents on a runtime are local agents; and a runtime is
+// shared with the team or owner only. Overrides freeze these strings; recheck them against the plugin's locale after upgrading it.
 const PLUGIN = '@nocobase/app-plugin-agents';
 
 export const agentsOverridesZhCN: TranslationOverrides = {
@@ -11,7 +11,7 @@ export const agentsOverridesZhCN: TranslationOverrides = {
     agents: {
       description:
         '运行环境上报的每个「工具 · 模型」就是一个 agent。项目经理按「擅长什么」把任务的每一步派给它们。',
-      fromRunners: '来自运行环境的 agent',
+      fromRunners: '运行环境上报的本地 Agent',
       discovery: {
         provider: '服务商与运行环境',
       },
@@ -21,11 +21,11 @@ export const agentsOverridesZhCN: TranslationOverrides = {
       emptyDescription:
         '连接一个登录了编码工具的运行环境：它上报的每个模型都会出现在这里，等你启用。',
       howToAdd:
-        '想加一个 agent：在某个运行环境上装好工具、登录可用的模型，运行环境上报后它会出现在这里，写好「擅长什么」即可启用。只有个人运行环境能跑的 agent，只有运行环境的主人自己发起的任务能用。',
+        '想加一个本地 Agent：在某个运行环境上装好编码工具并登录，运行环境上报后它会出现在这里，写好「擅长什么」即可启用。只在「只给所有者用」的运行环境上有的 Agent，只能执行所有者自己发起的任务。',
       where: {
         none: '暂无运行环境',
         noneOnline: '现在没有运行环境在线',
-        personalOnly: '仅个人运行环境',
+        personalOnly: '只给所有者用',
       },
       state: {
         unreported: '暂无运行环境',
@@ -35,7 +35,7 @@ export const agentsOverridesZhCN: TranslationOverrides = {
         reportedBy_other: '由 {{count}} 个在线运行环境上报：{{names}}。',
         noRunnerNow: '现在没有在线的运行环境有它。',
         personalOnly:
-          '只有个人运行环境能跑：只有这些运行环境的主人自己发起的任务，项目经理才会派给它。',
+          '只有「只给所有者用」的运行环境能跑：只有这些运行环境的所有者自己发起的任务会派给它。',
       },
     },
     failures: {
@@ -54,9 +54,23 @@ export const agentsOverridesZhCN: TranslationOverrides = {
         pruning: '运行环境清理共享缓存，暂不接活',
       },
       emptyDescription:
-        '连接运行环境后，执行 Agent 可以在其中使用编码工具承接任务。',
+        '连接运行环境后，本地 Agent 可以在其中使用编码工具执行任务。',
       description:
-        '安装了 Runner 的电脑或服务器。Runner 会上报这台机器上的编码工具（如 Claude Code、Codex），执行 Agent 在这里运行任务。',
+        '装了 Claude Code 或 Codex 的电脑或服务器。NocoReach 把任务交给它，由上面的本地 Agent 去改网站代码、写文章、提交 PR，所以它要开机、联网，编码工具要登录。',
+      columns: {
+        sharing: '谁能用',
+      },
+      trust: {
+        label: '谁能用',
+        team: '团队共用',
+        teamHint:
+          '任何成员发起的任务都可能在这里运行，用这台电脑登录的账号和额度，也能读写这台电脑上的文件。适合团队共用的服务器或虚拟机。',
+        ownerOnly: '只给所有者用',
+        ownerOnlyHint:
+          '只运行添加它的人自己发起的任务。你自己添加的运行环境默认如此。',
+        personalOnly:
+          '这个运行环境将只给你自己用：只运行你发起的任务。之后可以再共享给团队。',
+      },
     },
     connect: {
       description:
@@ -68,7 +82,7 @@ export const agentsOverridesZhCN: TranslationOverrides = {
         othersPersonal: '只有别人的个人运行环境能跑',
       },
       agents: {
-        personalOnly: '仅个人运行环境',
+        personalOnly: '只给所有者用',
         hint: '列出已启用的 agent，你现在用不了的会写明原因。回答跑在运行环境上，第一条回复要等运行环境领取，通常十几秒。',
       },
     },
@@ -88,8 +102,9 @@ export const agentsOverridesZhCN: TranslationOverrides = {
         '脚本不会在对话 Agent 中执行：Agent 能读到脚本，但不会运行它们。',
     },
     models: {
+      title: '模型服务',
       description:
-        '模型服务及其提供的模型。对话模型用于每日分析和对话 Agent，向量模型和重排序模型用于搜索。',
+        '每日分析和对话栏用这里的对话模型，按调用量付费给服务商；向量模型和重排序模型用于搜索。本地 Agent 不用这里的模型，它用运行环境上编码工具自己的登录。',
     },
     defaultModel: {
       description:
@@ -119,13 +134,29 @@ export const agentsOverridesZhCN: TranslationOverrides = {
 
 export const agentsOverridesEnUS: TranslationOverrides = {
   [PLUGIN]: {
+    agents: {
+      fromRunners: 'Local agents reported by runtimes',
+    },
+    runtimes: {
+      description:
+        'Computers or servers with Claude Code or Codex. NocoReach hands tasks to them, and the local agents there edit the website code, write articles and open pull requests, so they must stay on and online with the coding tool signed in.',
+      columns: {
+        sharing: 'Who can use it',
+      },
+      trust: {
+        label: 'Who can use it',
+        team: 'Shared with the team',
+        ownerOnly: 'Owner only',
+      },
+    },
     agentSkills: {
       onlineScripts:
         'Scripts are not executed for chat agents: the agent can read them, not run them.',
     },
     models: {
+      title: 'Model services',
       description:
-        'Model services and the models they provide. Chat models power daily analysis and the chat agent; embedding and reranking models power search.',
+        'Daily analysis and the chat panel use the chat models here, billed per call by the provider; embedding and reranking models power search. Local agents do not use these models: they use the coding tool signed in on their runtime.',
     },
     defaultModel: {
       description:
@@ -147,10 +178,6 @@ export const agentsOverridesEnUS: TranslationOverrides = {
           scripts: 'Code agents can run. Chat agents only read it.',
         },
       },
-    },
-    runtimes: {
-      description:
-        'Computers or servers running the Runner. The Runner reports the coding tools on that machine (such as Claude Code or Codex), and execution agents run tasks there.',
     },
     usage: {
       description:

@@ -24,7 +24,7 @@
   font-weight: 600;
 }
 .nr-page th[aria-sort]:not([aria-sort='none']) {
-  color: var(--primary);
+  color: var(--foreground);
 }
 .nr-page th button {
   font-weight: inherit;

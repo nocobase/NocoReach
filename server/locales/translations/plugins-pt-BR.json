@@ -1,0 +1,217 @@
+{
+  "@nocobase/app-plugin-agents": {
+    "access": {
+      "section": "Equipe de agentes",
+      "businessSection": "Equipe de agentes",
+      "businesses": {
+        "agents": {
+          "title": "Agentes e habilidades",
+          "description": "Os agentes da equipe e as habilidades que eles usam.",
+          "actions": {
+            "edit": {
+              "title": "Alterar agentes e habilidades",
+              "description": "Alterar configurações, habilidades e variáveis de um agente, arquivá-lo, restaurá-lo e excluí-lo, além de editar habilidades. Um agente não recebe capacidades além das que a pessoa que o edita possui",
+              "related": "Alterar agentes e habilidades (agentes de sua propriedade e habilidades que criou)",
+              "relatedLabel": "Agentes de minha propriedade e habilidades que criei",
+              "relatedHint": "Agentes dos quais sou proprietário e habilidades que criei",
+              "all": "Alterar agentes e habilidades (todos)"
+            }
+          }
+        }
+      },
+      "settings": {
+        "agents": {
+          "agents": "Agentes",
+          "runners": "Ambientes de execução",
+          "prices": "Preços dos modelos",
+          "services": "Serviços de modelos"
+        }
+      },
+      "actions": {
+        "read": "Visualizar",
+        "manage": "Gerenciar"
+      },
+      "keyScopes": {
+        "agents": {
+          "title": "Agentes",
+          "description": "Visualizar agentes, habilidades e execuções; alterar agentes e habilidades, cancelar e repetir execuções."
+        },
+        "runners": {
+          "title": "Ambientes de execução",
+          "description": "Visualizar Runners e tokens de registro; gerenciar Runners."
+        },
+        "prices": {
+          "title": "Preços dos modelos",
+          "description": "Visualizar e alterar os preços dos modelos usados para estimar custos."
+        },
+        "services": {
+          "title": "Serviços de modelos",
+          "description": "Visualizar os serviços de modelos e os modelos que oferecem, sem acesso às suas chaves."
+        }
+      }
+    }
+  },
+  "@nocobase/app-plugin-authorization": {
+    "sections": {
+      "pages": "Permissões de páginas",
+      "page": "Páginas",
+      "business": "Permissões de negócio",
+      "administration": "Administração",
+      "other": "Outros"
+    },
+    "options": {
+      "defaultAndSharing": "Usar escopo de dados padrão",
+      "actions": {
+        "assign": "Gerenciar atribuições",
+        "configure": "Configurar",
+        "inspect": "Inspecionar permissões",
+        "read": "Ler",
+        "create": "Criar",
+        "update": "Atualizar",
+        "delete": "Excluir",
+        "access": "Acessar"
+      },
+      "settingsModules": {
+        "authorization": "Autorização"
+      },
+      "pages": {
+        "all": "Todas as páginas",
+        "allDescription": "Permitir acesso a todas as páginas, incluindo as adicionadas posteriormente."
+      },
+      "settings": {
+        "inspector": "Inspetor de permissões",
+        "permission-sets": "Conjuntos de permissões"
+      },
+      "subjectTypes": {
+        "authenticated": "Todos os usuários conectados",
+        "authenticatedDescription": "Aplica-se a todos os usuários com uma sessão autenticada válida.",
+        "user": "Usuários"
+      },
+      "recordAccessPolicies": {
+        "allRecords": "Todos os registros",
+        "recordsIOwn": "Registros de minha propriedade",
+        "recordsICreated": "Registros que criei",
+        "customFilter": "Filtro personalizado",
+        "customFilterHint": "Selecione registros com uma condição de filtro personalizada."
+      }
+    }
+  },
+  "@nocobase/app-plugin-authz-default-access": {
+    "resourceTitle": "Escopo de dados padrão"
+  },
+  "@nocobase/app-plugin-authz-restriction-rules": {
+    "resourceTitle": "Regras de restrição"
+  },
+  "@nocobase/app-plugin-authz-sharing-rules": {
+    "resourceTitle": "Regras de compartilhamento"
+  },
+  "@nocobase/app-plugin-notification": {
+    "errors": {
+      "logsForbidden": "É necessário ter acesso aos registros de notificações.",
+      "logNotFound": "Registro de notificação não encontrado.",
+      "testHeaderRequired": "O cabeçalho da requisição de teste de notificação é obrigatório.",
+      "testForbidden": "É necessário ter permissão para enviar notificações de teste.",
+      "testInvalidRequest": "O corpo da requisição deve conter um destino de teste e os valores dos campos.",
+      "testTargetUnavailable": "O destino do teste de notificação está indisponível.",
+      "testUnknownField": "Campo \"{{name}}\" desconhecido no teste de notificação.",
+      "testRequiredField": "O campo \"{{name}}\" é obrigatório no teste de notificação.",
+      "testFieldTooLong": "O campo \"{{name}}\" excede o limite de caracteres ({{maxLength}}).",
+      "testFailed": "Falha no teste de notificação.",
+      "testNotFound": "Teste de notificação não encontrado."
+    }
+  },
+  "@nocobase/app-plugin-notification-in-app": {
+    "errors": {
+      "authenticationRequired": "É necessário se autenticar.",
+      "invalidPageToken": "pageToken não corresponde a um token retornado por esta lista.",
+      "notFound": "Mensagem de notificação não encontrada."
+    },
+    "test": {
+      "channels": {
+        "inApp": "No aplicativo"
+      },
+      "providers": {
+        "builtIn": "Integrado"
+      },
+      "fields": {
+        "route": "Rota interna (sem prefixo de implantação)",
+        "url": "URL HTTP(S) completa",
+        "recipientUserId": "ID do usuário destinatário",
+        "title": "Título",
+        "message": "Mensagem"
+      },
+      "placeholders": {
+        "currentUser": "ID do usuário do aplicativo"
+      },
+      "defaults": {
+        "title": "Teste de notificação do NocoBase",
+        "body": "Esta é uma notificação de teste do NocoBase."
+      }
+    }
+  },
+  "@nocobase/app-plugin-notification-providers": {
+    "test": {
+      "channels": {
+        "email": "E-mail",
+        "im": "Mensagens instantâneas"
+      },
+      "providers": {
+        "smtp": "SMTP",
+        "resend": "Resend",
+        "feishuWebhook": "Webhook do Feishu",
+        "dingtalkWebhook": "Webhook do DingTalk"
+      },
+      "fields": {
+        "subject": "Assunto",
+        "text": "Texto",
+        "html": "HTML",
+        "url": "URL HTTP(S) completa",
+        "recipient": "Destinatário",
+        "title": "Título",
+        "message": "Mensagem"
+      },
+      "placeholders": {
+        "email": "name@example.com"
+      },
+      "defaults": {
+        "title": "Teste de notificação do NocoBase",
+        "body": "Esta é uma notificação de teste do NocoBase."
+      }
+    }
+  },
+  "@nocobase/app-plugin-scheduler": {
+    "nav": {
+      "automation": "Automação"
+    },
+    "authorization": {
+      "title": "Agendamentos",
+      "read": "Ler"
+    }
+  },
+  "@nocobase/app-plugin-users": {
+    "invitationEmail": {
+      "subject": "{{inviter}} convidou você para {{app}}",
+      "intro": "{{inviter}} convidou você para {{app}}.",
+      "summary": "Você também fará parte de: {{items}}.",
+      "separator": ", ",
+      "action": "Aceitar convite",
+      "validity": "Abra o link para definir seu nome e sua senha. Ele só pode ser usado uma vez e é válido até {{date}}.",
+      "fallback": "Se o link não abrir, copie e cole no navegador:"
+    }
+  },
+  "@nocobase/app-plugin-mail": {
+    "errors": {
+      "accessDenied": "É necessário ter acesso ao e-mail.",
+      "idempotencyConflict": "A chave de idempotência já está associada a outra requisição.",
+      "invalidRequest": "A requisição de e-mail é inválida.",
+      "accountCredentialsInvalid": "Falha na autenticação da caixa de e-mail. Verifique seu nome de usuário e sua senha ou código de autorização e confirme se o IMAP/SMTP está ativado. O Gmail e outros serviços podem exigir uma senha de app.",
+      "requestFailed": "Não foi possível concluir a requisição de e-mail.",
+      "providerRateLimited": "O serviço de e-mail está recebendo muitas requisições. Tente novamente mais tarde.",
+      "providerUnavailable": "Não foi possível conectar ao serviço de e-mail. Tente novamente mais tarde.",
+      "reauthorizationRequired": "É necessário reconectar esta conta de e-mail antes de usá-la.",
+      "syncRunNotFound": "Execução de sincronização de e-mail não encontrada.",
+      "messageNotFound": "Mensagem de e-mail não encontrada.",
+      "authorizationStateRequired": "O estado de autorização do e-mail é obrigatório."
+    }
+  }
+}

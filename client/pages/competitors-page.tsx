@@ -1,4 +1,5 @@
 import { $t } from "#i18n";
+import { usePageTab } from '#hooks/use-page-tab';
 // 竞品 (搜索): 总览 — our site and the competitors side by side (2026-10-05) —, 动态 — what the listed competitors published
 // this week (free, weekly) — and 查域名, any site's ranking keywords and pages through DataForSEO (paid, on request).
 import { useState } from "react";
@@ -17,6 +18,7 @@ export default function CompetitorsPage() {
   // A link with a looked-up domain opens 查域名; ?view= keeps the tab; 总览 by default.
   const initial = params.get("view") === "lookup" || params.has("d") || params.has("k") ? "lookup" : params.get("view") === "watch" ? "watch" : "overview";
   const [tab, setTab] = useState(initial);
+  usePageTab($t(tab === 'lookup' ? 'competitorsPage.domainLookup' : tab === 'watch' ? 'common.activity' : 'competitorsPage.overview'));
   const choose = (v: string) => { setTab(v); const p = new URLSearchParams(params); if (v === "overview") p.delete("view"); else p.set("view", v); setParams(p, { replace: true }); };
   const description = tab === "overview" ? $t('competitorsPage.usCompetitorsSideSideSearch') : tab === "watch" ? $t('competitorsPage.competitorsNewWebsitePagesGithub') : $t('competitorsPage.lookUpKeywordsTopPages');
   return (

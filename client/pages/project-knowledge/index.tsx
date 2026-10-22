@@ -1,4 +1,5 @@
 import { $legacyText, $t, $tj, useMessageState, type Message } from '#i18n';
+import { usePageTab } from '#hooks/use-page-tab';
 import {
   useCallback,
   useEffect,
@@ -106,6 +107,13 @@ function KnowledgeTabs({
       { path: knowledgePath.pathname, end: false },
       location.pathname,
     ) !== null;
+  usePageTab(
+    $t(
+      inKnowledge
+        ? 'projectKnowledge.knowledgeBase'
+        : 'projectKnowledge.memory',
+    ),
+  );
   return (
     <nav aria-label={$t('projectKnowledge.tabs')} className={lineTabListClass}>
       <NavLink className={tabClass} to={{ pathname: 'memory', search }}>

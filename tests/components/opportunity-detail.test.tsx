@@ -32,6 +32,7 @@ vi.mock('../../client/i18n', async () => ({
   $legacyText: (value: string) => value,
   $legacyFragment: (value: string) => value,
   getCurrentLocale: () => 'en-US',
+  isChinese: () => false,
   translateSystemError: (value: string) => value,
   renderMessage: () => '',
 }));

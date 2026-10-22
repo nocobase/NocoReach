@@ -135,7 +135,7 @@ function SkillDrawer({projectId,canEnable,canRemove,skill,usage,onClose,onToggle
  async function addFiles(list:FileList|null){if(!list?.length)return;const r=await readSkillFiles(list,false);if(!r.files.length){setError(() => ($t('skills.filesNotTextFilesToo')));return;}
   await act('addFiles',{files:r.files},() => ($t('skills.filesAdded',{0:r.files.length,1:r.skipped.length?$t('skills.skippedValueSuffix',{0:r.skipped.length}):''})));}
  async function remove(){if(!skill)return;if(!(await confirmAction({title:() => ($t('skills.delete',{0:skill.name})),description:() => (usage.length?$t('skills.playbookStepsCannotUseAnymore',{0:usage.join('、')}):undefined),action:'common.delete'})))return;void act('remove',{},() => ($t('skills.deleted',{0:skill.name})),true);}
- return <Sheet open={Boolean(skill)} onOpenChange={o=>{if(!o&&!(draft&&!confirm($t('common.discardUnsavedChanges'))))onClose();}}><SheetContent className="w-full overflow-y-auto sm:max-w-2xl" aria-describedby={undefined}>
+ return <Sheet open={Boolean(skill)} onOpenChange={o=>{if(!o)void (async()=>{if(draft&&!(await confirmAction({title:() => ($t('common.discardUnsavedChanges')),action:'playbooks.discard'})))return;onClose();})();}}><SheetContent className="w-full overflow-y-auto data-[side=right]:sm:max-w-2xl" aria-describedby={undefined}>
   <SheetHeader className="sr-only"><SheetTitle>{skill?.name||'Skill'}</SheetTitle></SheetHeader>
   {skill&&<div className="flex flex-col gap-4 p-4 pt-12" aria-label={$t('skills.skillDetails')} role="region">
    <div className="flex flex-wrap items-center gap-2"><h2 className="font-mono text-base font-semibold">{skill.name}</h2>{skill.enabled?<Tag tone="green">{$t('skills.enabledInProject')}</Tag>:<Tag tone="grey">{$t('skills.offProject')}</Tag>}
