@@ -14,6 +14,7 @@ import { RefreshButton } from '#components/reach/refresh-button';
 import { ListSkeleton, LoadError, EmptyState } from '#components/reach/states';
 import { Tag } from '#components/reach/tag';
 import { lineTabClass, lineTabListClass } from '#components/reach/line-tabs';
+import { SourceLogo } from '#components/reach/source-logo';
 import { Button } from '#components/ui/button';
 import { Input } from '#components/ui/input';
 import { Switch } from '#components/ui/switch';
@@ -496,7 +497,8 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                   hidden={areaOf(g) !== area}
                   className='flex flex-col gap-2'
                 >
-                  <h3 className='flex items-baseline gap-2 text-sm font-medium'>
+                  <h3 className='flex items-center gap-2 text-sm font-medium'>
+                    <SourceLogo source={g} size='sm' />
                     {sourceName(g)}
                     <span className='text-xs font-normal text-muted-foreground tabular-nums'>
                       {$t('analysisRules.groupEnabled', {

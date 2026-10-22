@@ -6,6 +6,10 @@
 - Run history opens with one line on the recent runs ("No problems in the last 8 runs", "2 of the last 8 runs had problems") with the refresh button beside it. Runs that went well no longer each carry a Done badge; only failed, skipped and running ones show a status. Each run is one line with its suggestions on the right, and projects are named only when there are several, or one was skipped or failed (in red, with the reason).
 - Dates other than today, yesterday and tomorrow use the shared format ("10-20 09:00" instead of "10月20日 09:00"), and a skipped run says it was already analyzed that day rather than "today".
 
+## Unreleased — Data sources show their logos
+
+- Every data source has its logo on a small tile: the cards and drawer title on Settings › Data sources, the rows and sync table on Data health, the results of Find data sources on your website, the source headings of Settings › Analysis rules and the source buttons when adding a rule. Brand marks come from Simple Icons (CC0), vendored as path data in `client/components/reach/brand-logos.ts` without a new dependency; black marks follow the text colour so they show in dark mode. Sources without a brand mark of their own (Website content, Website source, Blog CMS, DataForSEO, AI search visibility, Competitor activity, Rank tracking, Daily analysis) take a matching icon in the same tile.
+
 ## Unreleased — Data sources: two tabs, Retry all, Agent edits and publishing first
 
 - Settings › Data sources has two tabs. Sources (the default) shows the cards, with one orange line at the top naming the sources that need attention and a View link to the other tab; Data health shows their count in orange on its tab and holds the sync status that used to sit above the cards.
