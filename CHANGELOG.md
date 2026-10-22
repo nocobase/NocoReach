@@ -7,6 +7,17 @@
 - The daily analysis headline is slightly larger. In the opportunity lines, titles to decide on or handed off are in medium weight, dismissed and expired lines are dimmed as a whole, and the status or the actions sit in one right-hand column.
 - Current situation is split into Needs attention and Normal, without the dots; each line's numbers are in medium weight, coloured for the lines to deal with (a drop red, the rest amber).
 
+## Unreleased — Agent: one Settings per row, tidy tabs
+
+- Who does the work reads as a table: column headings, Cloud models and Local agents as light group rows with their explanation in an ⓘ, and what each work does under its name.
+- Every row has one Settings button for administrators, a dialog that changes what the row uses. Daily analysis › Settings chooses the model the analysis runs on (the default chat model, which no page let anyone change since the Agents plugin upgrade of 2026-10-16); Chat panel › Settings is the chat agent dialog, whose default model now names the model; Tasks › Settings chooses the project default and says beside each agent whether it is online, not signed in, out of quota or offline. While a row needs attention, the button is the fix instead.
+- The tabs follow setup order: Model services, Runtimes, Local agents, Usage. Each opens with one sentence and its button instead of a second page heading, at the same size in every tab. Local agents holds the agent list only; the project default moved to Tasks › Settings.
+- Shorter wording: the Model services and Runtimes descriptions are one sentence, the list's how-to is one sentence, and model counts read "2 chat models" instead of "2 chat".
+
+## Unreleased — Playbook Skills matched by name
+
+- Skills › Used in playbooks, the playbook steps and the step Skill picker now find a step's Skill by id, then by name, as a task does. A Skill imported under a built-in name (with its own id) shows where the built-in playbooks use it, and saving a step no longer drops those references.
+
 ## Unreleased — Page notes in ⓘ
 
 - Move the remaining grey explanatory notes on Playbooks and the data source connection panels (GitHub, Google, DataForSEO, X, Reddit, Hacker News, Google Trends, Discord/Slack, community forum, website content, downloads, Xiaohongshu) into ⓘ tips beside the field, heading or line they explain; status lines, counts, setup steps and errors stay visible.
