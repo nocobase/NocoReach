@@ -5,6 +5,11 @@
 - When publishing an article to a target does not complete, the task card keeps its plain-words reason and now links to Technical details, which list each failed target with the step it stopped at (reading the article, checking the website repository, writing, or checking the saved changes), the error code, the time and what the target or the error said (for example `github:429`, or a network timeout with its host).
 - Every failed publish also leaves a warning in the application log (`NocoReach article publish failed`, with project, task, target, step, code and detail), so `nb-studio app logs` shows it. Errors other than the target's own (a request that got no answer, a code error) keep their cause instead of becoming a bare `unavailable`.
 
+## Unreleased — Every language checked against English in the tests
+
+- `tests/logic/additional-locales.test.ts` compares each of the eight additional languages with English: `shared/i18n/<locale>.json` with `en.json`, and `client/locales/translations/<locale>.json` with the shell copy of `client/locales/en-US.ts`. It names every missing key, extra key and key whose `{0}` or `{{name}}` placeholders differ. The `build` check's client type check already failed on a missing key, but stopped at the first language and missed extra keys and changed placeholders.
+- docs/DEVELOPMENT.md says new or changed copy needs all ten languages in the same pull request, and that a pull request updated from `main` is merged only after CI passes on that update: eight pull requests merged after the ten-language change (#183) were short 81 translations once `main` was merged into them, and were merged seconds after that push, before CI had run.
+
 ## Unreleased — Tasks: one set of status choices, the shared drop-downs
 
 - Tasks no longer has a status drop-down beside Waiting for me, Current, Done and Closed: the two overlapped, and the board's columns and the list's order already separate statuses. An old `?status=` link shows the scope without filtering.
