@@ -154,7 +154,7 @@ async function mount(entry: string, locale: 'zh-CN' | 'en-US' = 'zh-CN') {
   );
   await waitFor(() =>
     expect(
-      screen.queryByText($t('common.loadingTasks')),
+      screen.queryByRole('status', { name: $t('common.loadingTasks') }),
     ).not.toBeInTheDocument(),
   );
 }
@@ -293,7 +293,7 @@ test('an Agent with nothing to do says so', async () => {
     name: 'Claude Code · Opus',
   });
   expect(claude).toHaveTextContent('Idle');
-  expect(claude).toHaveTextContent('Nothing running or queued');
+  expect(claude).toHaveTextContent('No tasks');
   expect(screen.queryByRole('region', { name: 'Unassigned' })).toBeNull();
 });
 

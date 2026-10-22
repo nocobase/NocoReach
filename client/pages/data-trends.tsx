@@ -118,7 +118,7 @@ export default function DataTrends() {
                 ))}
               </div>
               <Card className="gap-3 px-4">
-                <h2 className="text-sm font-semibold">{$t('dataTrends.interestWeeklyPeak100')}</h2>
+                <h2 className="flex items-center gap-1 text-sm font-semibold">{$t('dataTrends.interestWeeklyPeak100')}<InfoTip label={$t('common.info')}>{$t('dataTrends.interestNote')}</InfoTip></h2>
                 <div className="nr-chart-box" data-trends-chart>
                   <ResponsiveContainer width="100%" height={260}>
                     <LineChart data={chart} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>

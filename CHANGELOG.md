@@ -6,6 +6,38 @@
 - Each day's analysis reads as a briefing: the day as its title ("Analysis of October 22"), a lead sentence from the day's own numbers (what waits for a decision, the two key numbers that moved most against the previous period, the changes being watched), then sections with a small grey label and a hairline. Analysis notes show in full, numbered, the first sentence in medium weight. Opportunities show a state icon in the shared task-state colours, "O-43 title" and one grey line ("Handed off to the agent; T-34 is done."), with the task link and Ask AI at the right; those waiting keep Hand off to agent and Ignore; dismissed and expired fold into one line. Watches that ended have their own section. Tasks waiting for you and data that failed to sync sit at the bottom with a button each, replacing the "N things need you" strip. Earlier days open to the same briefing.
 - Current situation keeps its two groups, each label with a hairline; every line leads with its source logo and its number, then a short label ("74 forum topics without replies", "21↑ 18↓ ranking changes this week"). Lines without a short label keep their sentence.
 
+## Unreleased — Tasks and results: plain cards, skeletons, and the application's own controls
+
+- Tasks › By Agent: a card waiting on you is a normal card with an amber "You" tag and a grey tag for what it waits for, as the board and the list say it; it was the only card painted amber, with the only solid tag on the site.
+- An empty column says "No tasks" on the board and in By Agent; By Agent said "Nothing running or queued", and the Chinese board wording is plainer.
+- While they load, the task list, a task page, the playbook list, a page's detail panel and a task's Performance show skeleton bars instead of "Loading…" text; `ListSkeleton` takes a `label` for screen readers ("Loading tasks").
+- A task's activity shows a placeholder bar for a person's name until the members have loaded, instead of "Member" that turned into the name a moment later.
+- The playbook to start a task with, the next playbook to continue with and Search Console's sync range use the application's dropdown instead of the browser's own.
+- A result's source opens its evidence with the site's "show more" button instead of the browser's ▶ disclosure.
+- The unused task-detail breadcrumb styles are removed.
+
+## Unreleased — Data cards: one empty look, one tile, one chart colour, one name for each thing
+
+- An empty table says so in one muted sentence, as an empty card does, instead of an icon over a title: Bilibili and YouTube showed both on one page.
+- AI search's and Results' metric tiles are the data pages' tile: AI search's "Appears" share is the line under the number ("10% of all questions"), not brackets beside it; Results' numbers lose the "items" unit and the larger size.
+- Single-series charts and sparklines use the main chart colour: Forum's new topics, X's posts, Discord / Slack messages, Trends › Watched keywords and Competitors' search traffic were teal, violet or orange.
+- One name for each thing: Competitors' "Add or remove competitors" is "Manage competitors" as on Trends; the Competitors table marks our site "Our site" as keyword details do (was "Us"); Bilibili's and Downloads' Published column says "Published" like YouTube's and GitHub's; Downloads shows npm's latest and beta tags as "Latest version" and "Beta".
+- Dates go through `formatDate` / `formatDateTime` everywhere they were written by hand: a task's activity and stage cards ("10/22 20:16"), the task list's update time and Knowledge's last check ("10/19"), Skills, and the connection panels' last-synced lines, which showed the browser's full date and time.
+- Rank tracking's keyword column is narrower so the table fits 1,440px without scrolling sideways.
+- Traffic's date range sits right under the header, as on every data page, with Today below it; a report's breakdown (by channel, source, city…) is a dropdown in its toolbar instead of a second row of buttons under the tabs.
+- Forum categories show their change as ↑/↓ like every other list, not "previous period 44".
+- A page's Performance check in its detail panel is an outline button; as a ghost button it read as a heading.
+
+## Unreleased — Notes in ⓘ, one status line, one description per page
+
+- Every note under a card or chart title is an ⓘ beside the title (2026-10-22 decision D5): a `Section`'s description, Keywords › keyword details (History, Related keywords, Our indexed pages, Top 10, Rank history), Results (Changes, Latest results), Settings › Network (Proxy, How data sources connect), a task's Performance before its first checkpoint, Bilibili / YouTube / Xiaohongshu's Publishing trend and Sources, AI search's topic setup and Competitors › Activity's first setup. Titles no longer carry notes in brackets: X's chart is "Posts mentioning the product per day" with "Reposts are not counted" in its ⓘ, Trends' chart is "Weekly interest" with how 100 is set in its ⓘ.
+- The grey help lines under query forms and tabs are ⓘ too: Keywords › Find keywords (what each method searches), AI search › Ask AI (each model asked separately) and API keys (what a personal or organization key may do, now beside the page title).
+- Search performance › Index and Sitemaps tiles no longer repeat their ⓘ under the number; a warning's "does not block reading, but worth fixing" moved into its ⓘ.
+- Analysis rules' AI adjustment and Rules sections no longer repeat the scheme name under their titles: My schemes above marks the scheme shown.
+- A status line says when its data was updated with one word, "Updated" (decision D2), instead of Last success, Searched, Read, Last searched, Last read, Last checked, Last viewed or Collected; how often it runs is in its ⓘ. Reddit's two lines are one ("Search term: NocoBase · Updated 10-14 16:08 ⓘ", the next search in the ⓘ); Rank tracking's line moved out of the table card, above it, with the weekly check in its ⓘ; Keywords › AI suggestions says "· Updated 10-12". Xiaohongshu and the connection panels say "Search term:" like the other sources.
+- Search performance, Competitors and GitHub keep one description for the page and all its tabs (decision D3), saying what each tab holds; switching tabs no longer changes it.
+- Competitors › Activity says once, above the cards, which competitor could not be read; the cards no longer repeat "Not read last time, see above".
+
 ## Unreleased — One look for tabs, choices, refresh buttons and table headers
 
 - Every tab bar looks the same: a thin rule under the row, the tabs flush with the page title, the open one in black over a 2px line. Opportunities used a blue line; Members & roles, API keys, Agent, Analysis rules and Knowledge indented their tabs and had no rule.

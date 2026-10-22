@@ -1,4 +1,11 @@
 import type { Range } from '../range-state';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '#components/ui/select';
 import { $t, $tj } from '#i18n';
 import {
   GA4_HISTORY_CACHE_MS,
@@ -368,27 +375,35 @@ export function ReportCard({
         ))}
       </DataTableTabs>
       <DataTableToolbar>
+        {/* One row of tabs; how a tab's table is broken down is a dropdown in its toolbar, not a second row of
+            buttons (UI review 2026-10-22). */}
         {tab.views.length > 1 ? (
-          <div
-            className='inline-flex overflow-hidden rounded-md border'
-            role='group'
-            aria-label={$t('dataWebsite.breakDownBy')}
+          <Select
+            value={view.id}
+            onValueChange={(v) => {
+              const next = tab.views.find((x) => x === v);
+              if (next) set({ by: next });
+            }}
           >
-            {tab.views.map((v) => (
-              <button
-                key={v}
-                type='button'
-                aria-pressed={v === view.id}
-                onClick={() => set({ by: v })}
-                className={cn(
-                  'inline-flex h-8 items-center px-3 text-sm text-muted-foreground transition-colors hover:text-foreground',
-                  v === view.id && 'bg-muted font-medium text-foreground',
-                )}
-              >
-                {$t(VIEWS[v].label)}
-              </button>
-            ))}
-          </div>
+            <SelectTrigger
+              size='sm'
+              className='w-40'
+              aria-label={$t('dataWebsite.breakDownBy')}
+            >
+              <SelectValue>
+                {(v: string) =>
+                  $t(VIEWS[v as keyof typeof VIEWS]?.label ?? view.label)
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent className='w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal'>
+              {tab.views.map((v) => (
+                <SelectItem key={v} value={v}>
+                  {$t(VIEWS[v].label)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         ) : null}
         <label className='relative flex items-center'>
           <Search className='pointer-events-none absolute left-2.5 size-4 text-muted-foreground' />

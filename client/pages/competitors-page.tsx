@@ -20,7 +20,8 @@ export default function CompetitorsPage() {
   const [tab, setTab] = useState(initial);
   usePageTab($t(tab === 'lookup' ? 'competitorsPage.domainLookup' : tab === 'watch' ? 'common.activity' : 'competitorsPage.overview'));
   const choose = (v: string) => { setTab(v); const p = new URLSearchParams(params); if (v === "overview") p.delete("view"); else p.set("view", v); setParams(p, { replace: true }); };
-  const description = tab === "overview" ? $t('competitorsPage.usCompetitorsSideSideSearch') : tab === "watch" ? $t('competitorsPage.competitorsNewWebsitePagesGithub') : $t('competitorsPage.lookUpKeywordsTopPages');
+  // One description for the page and all its tabs (2026-10-22 decision D3): switching tabs does not change it.
+  const description = $t('competitorsPage.pageSummary');
   return (
     <PageContainer className="nr-data-page">
       <PageHeader title={$t('competitors.title',undefined)} description={description} />

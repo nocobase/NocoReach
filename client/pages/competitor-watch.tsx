@@ -6,13 +6,13 @@ import { type Message, useMessageState, $t, $tj, $legacyText, isChinese } from "
 // (websites and repositories checked) to tick; it runs by itself while the list is empty.
 import { useEffect, useState } from "react";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
-import { AlertCircle, ExternalLink, Github, Globe, LoaderCircle, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
+import { ExternalLink, Github, Globe, LoaderCircle, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import { RefreshButton } from '#components/reach/refresh-button';
 import { HeaderActions } from "#components/reach/page";
 import { toast } from "#lib/toast";
 import { ListSkeleton } from "#components/reach/states";
 import { AiMark } from "#components/reach/actor";
-import { NotesTip } from "#components/reach/info-tip";
+import { InfoTip, NotesTip } from "#components/reach/info-tip";
 import { Button } from "#components/ui/button";
 import { Card } from "#components/ui/card";
 import { Checkbox } from "#components/ui/checkbox";
@@ -108,7 +108,6 @@ function CompetitorCard({ c, projectId, onRemove, onSaved }: { c: Competitor; pr
       <div className="flex items-center gap-1"><h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{c.name}</h3>{canEdit&&<Button size="icon-xs" variant="ghost" aria-label={$t('competitorWatch.editItem',{0:c.name})} onClick={() => setEditing(true)}><Pencil className="text-muted-foreground" /></Button>}{canRemove&&<Button size="icon-xs" variant="ghost" aria-label={$t('competitorWatch.stopWatchingValue',{0:c.name})} onClick={onRemove}><Trash2 className="text-muted-foreground" /></Button>}</div>
       <p className="flex flex-wrap gap-x-3 text-xs">{!c.site && canEdit ? <button type="button" className="nr-link inline-flex items-center gap-1" onClick={() => setEditing(true)}><Globe className="size-3" />{$t('competitorWatch.addWebsite')}</button> : null}{c.site ? <a className="nr-link inline-flex items-center gap-1" href={c.site} target="_blank" rel="noreferrer"><Globe className="size-3" />{host(c.site)}</a> : null}{c.repo ? <a className="nr-link inline-flex items-center gap-1" href={`https://github.com/${c.repo}`} target="_blank" rel="noreferrer"><Github className="size-3" />{c.repo}</a> : null}</p>
       <p className="text-xs text-muted-foreground">{[c.pages != null ? $t('competitorWatch.pages',{0:formatCount(c.pages)}) : "", c.stars != null ? `Star ${k(c.stars)}${c.week != null ? $t('competitorWatch.lastWeek',{0:formatSigned(c.week)}) : ""}` : "", c.latestRelease ? $t('competitorWatch.latestRelease',{0:c.latestRelease.name}) : ""].filter(Boolean).join(" · ") || (c.checkedAt ? $t('competitorWatch.noDataRead') : $t('competitorWatch.checkingFirstTime'))}</p>
-      {c.errors.length ? <p className="flex items-center gap-1 text-xs text-destructive"><AlertCircle className="size-3.5 shrink-0" aria-hidden="true" />{$t('competitorWatch.notReadShort')}</p> : null}
     </Card>
   );
 }
@@ -172,7 +171,7 @@ export function CompetitorWatchTab({ projectId, onListChange }: { projectId: num
   if (!view.list.length) return (
     <>{addDialog}
       <Card className="gap-3 px-4" data-first-suggest>
-        <div><h2 className="flex items-center gap-1.5 text-sm font-semibold">{canSuggest ? <><AiMark label={$t('competitorWatch.aiDetect')} />{$t('competitorWatch.competitorsAiDetected')}</> : $t('common.addCompetitor')}</h2><p className="text-xs text-muted-foreground">{$t('competitorWatch.watchUp5FreeWeekly')}</p></div>
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold">{canSuggest ? <><AiMark label={$t('competitorWatch.aiDetect')} />{$t('competitorWatch.competitorsAiDetected')}</> : $t('common.addCompetitor')}<InfoTip label={$t('common.info')}>{$t('competitorWatch.watchUp5FreeWeekly')}</InfoTip></h2>
         {canAdd && (manual || !canSuggest) ? <AddForm projectId={projectId} suggestions={view.suggestions} onAdded={() => added(() => $t('competitorWatch.addedCheckingFirstTime'))} onCancel={() => setManual(false)} /> : <SuggestList projectId={projectId} room={view.max} onAdded={() => added(() => $t('competitorWatch.addedCheckingFirstTime'))} onManual={() => setManual(true)} />}
       </Card>
     </>

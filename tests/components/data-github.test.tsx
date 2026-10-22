@@ -235,7 +235,9 @@ describe('GitHub', () => {
     renderPage();
     await ready();
     expect(
-      screen.getByText('仓库的 Star、贡献、Issue、PR 和访问来源。'),
+      screen.getByText(
+        '项目仓库的 Star、贡献、Issue、PR 和访问来源，以及 GitHub 上关注话题的热门动向。',
+      ),
     ).toBeTruthy();
     expect(screen.queryByText('An open-source app builder')).toBeNull();
     const summary = document.querySelector('.nr-range-summary') as HTMLElement;

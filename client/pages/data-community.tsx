@@ -1,4 +1,5 @@
 import { $t, $tj } from "#i18n";
+import { Delta } from "#components/reach/delta";
 // 论坛 (社区): topics, replies and unanswered questions of the connected Discourse forum for the period against the one
 // before; categories; unanswered and most discussed topics (both can go to the Agent). Same parts as the other data
 // pages (2026-10-04).
@@ -68,7 +69,7 @@ export default function DataCommunity() {
                   <YAxis yAxisId="r" orientation="right" allowDecimals={false} fontSize={11} width={40} />
                   <Tooltip />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar isAnimationActive={false} yAxisId="t" dataKey="topics" name={$t('dataCommunity.newTopics')} fill="var(--chart-2)" />
+                  <Bar isAnimationActive={false} yAxisId="t" dataKey="topics" name={$t('dataCommunity.newTopics')} fill="var(--chart-3)" />
                   <Line isAnimationActive={false} yAxisId="r" dataKey="replies" name={$t('dataCommunity.repliesTopics')} stroke="var(--chart-5)" dot={false} />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -77,7 +78,7 @@ export default function DataCommunity() {
           <div className="grid gap-4 lg:grid-cols-2">
             <Card className="gap-0 py-0">
               <Head title={$t('common.category')} />
-              {view.categories!.length ? view.categories!.map((c) => <div key={c.name} className="flex items-center justify-between gap-2 border-b border-border px-4 py-2 text-sm last:border-0"><span className="truncate">{c.name}</span><span className="shrink-0 tabular-nums text-muted-foreground">{$tj('dataCommunity.newTopicsValue',{0:c.count,1:c.previous != null ? $t('common.previousPeriod',{0:c.previous}) : ""})}</span></div>) : <Empty>{$t('dataCommunity.noNewTopicsSelectedPeriod')}</Empty>}
+              {view.categories!.length ? view.categories!.map((c) => <div key={c.name} className="flex items-center justify-between gap-2 border-b border-border px-4 py-2 text-sm last:border-0"><span className="truncate">{c.name}</span><span className="shrink-0 tabular-nums text-muted-foreground">{$tj('dataCommunity.newTopicsValue',{0:c.count,1:""})}{c.previous ? <Delta value={(c.count - c.previous) / c.previous} className="ml-1.5 text-xs" /> : null}</span></div>) : <Empty>{$t('dataCommunity.noNewTopicsSelectedPeriod')}</Empty>}
             </Card>
             <Card className="gap-0 py-0">
               <Head title={$t('dataCommunity.unanswered')} check={<AllCheck selection={unanswered} count={view.unanswered!.length} />} />
