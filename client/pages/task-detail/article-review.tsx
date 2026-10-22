@@ -152,10 +152,13 @@ export function ArticleReview({
   data,
   article: a,
   notes,
+  settled = false,
 }: {
   data: TaskData;
   article: ArticleProposal;
   notes: string;
+  /** Looking back at a delivered version rather than reviewing it: what review settled (conflicts, adoption) is left out. */
+  settled?: boolean;
 }) {
   const { target, base } = articleContext(data, a);
   const locales = [
@@ -169,7 +172,7 @@ export function ArticleReview({
   return (
     <div className='flex flex-col gap-4'>
       <TargetLine target={target} a={a} base={base} />
-      {!a.changes.length && a.carried?.length ? (
+      {!settled && !a.changes.length && a.carried?.length ? (
         <p className='text-sm text-muted-foreground'>
           {$t('articleTask.alreadyPublished', {
             0: target?.name || a.targetId,
@@ -177,14 +180,14 @@ export function ArticleReview({
         </p>
       ) : null}
       <AlsoLines data={data} a={a} />
-      {a.conflicts?.length ? (
+      {!settled && a.conflicts?.length ? (
         <ConflictList
           conflicts={a.conflicts}
           targetName={target?.name || a.targetId}
         />
       ) : null}
       {(a.also || []).map((x) =>
-        x.conflicts?.length ? (
+        !settled && x.conflicts?.length ? (
           <ConflictList
             key={x.targetId}
             conflicts={x.conflicts}
