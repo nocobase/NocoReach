@@ -7,6 +7,7 @@ import {BellIcon,ArrowRightIcon,BotIcon,ChevronRightIcon,SparklesIcon} from 'luc
 import {AiMark} from '#components/reach/actor';
 import {Button} from '#components/ui/button';
 import {Section} from '#components/reach/page';
+import {SourceLogo} from '#components/reach/source-logo';
 import {Tag,type Tone} from '#components/reach/tag';
 import {cn} from '#lib/utils';
 import {getSourceNames,type Row} from './board';
@@ -78,6 +79,10 @@ export const percent=pct;
 export type AreaRow={key:string;title:string;meta?:string;url?:string|null;tag?:{tone:Tone;text:string}};
 export type AreaItem={key:string;text:string;values:string[];source:string;detail?:string;to:string;tone?:Tone;rows?:AreaRow[];total?:number;compare?:{label:string;now:string|number;before:string|number}[];handOff?:{playbookId:string;title:string}};
 export type Area={id:string;title:string;items:AreaItem[]};
+// Lines name their source in words, so its logo goes by the line's key (server: nrInsights:summary); every AI search line
+// is AI search's. Site audit sits under Website, as in Settings › Analysis rules.
+const LINE_SOURCE:Record<string,string>={striking:'gsc',ctr:'gsc',rank:'rank',trends:'trends',competitors:'competitors',saved:'keywords',audit:'site',stale:'site',forum:'discourse',discord:'discord',slack:'slack',x:'x'};
+const lineSource=(i:{area:string;key:string}):string|undefined=>i.area==='ai'?'ai-search':LINE_SOURCE[i.key];
 const sentence=(i:AreaItem)=>$legacyText(i.text).replace(/\{(\d+)\}/g,(_,k:string)=>i.values[Number(k)]??'');
 export function AreaList({areas,projectId,quiet=false}:{areas?:Area[];projectId:number;quiet?:boolean}):ReactElement|null{
  const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),all=(areas||[]).flatMap(a=>a.items.map(i=>({...i,area:a.id,attention:i.tone==='amber'||i.tone==='red'})));if(!all.length)return null;
@@ -89,11 +94,12 @@ export function AreaList({areas,projectId,quiet=false}:{areas?:Area[];projectId:
  // conversation): one plain line each, where it comes from on hover; all of them, since the column has the room
  // (2026-10-22). Two small groups, Needs attention then Normal, each line's numbers in medium weight, coloured for the
  // lines to deal with (a drop red, the rest amber); the numbers stay in their sentence, which reads wrong without them
- // ("21 up, 18 down this week"). A line is a flex row, so a source logo can lead it later.
- if(quiet){const ink=(i:typeof items[number],v:string)=>!i.attention?'text-foreground':i.tone==='red'||v.startsWith('↓')?'text-nr-ink-red':'text-nr-ink-amber';
+ // ("21 up, 18 down this week"). Each line leads with its source's logo, bare as inside a button; a line with no
+ // known source keeps the logo's room empty, so the sentences stay aligned.
+ if(quiet){const ink=(i:typeof items[number],v:string)=>!i.attention?'text-foreground':i.tone==='red'||v.startsWith('↓')?'text-nr-ink-red':'text-nr-ink-amber',logo=(i:typeof items[number])=>{const s=lineSource(i);return s?<SourceLogo source={s} size='xs' className='mt-px'/>:<span aria-hidden='true' className='size-3.5 shrink-0'/>;};
   const group=(label:string,list:typeof items)=>list.length?<section aria-label={label} className='flex flex-col'><h3 className='pb-0.5 text-[0.6875rem] font-medium text-muted-foreground'>{label}</h3><ul>{list.map(i=><li key={`${i.area}:${i.key}`}>
    <button type='button' onClick={()=>go(i)} title={[$legacyText(i.source),i.detail?$legacyText(i.detail):''].filter(Boolean).join(' · ')} className={cn('flex w-full items-start gap-2 py-1 text-left text-xs hover:underline',i.attention?'text-foreground/80':'text-muted-foreground')} data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
-    <span className='min-w-0 flex-1'>{$legacyJsx(i.text,Object.fromEntries(i.values.map((v,k)=>[k,<span key={k} className={cn('font-medium tabular-nums',ink(i,v))}>{v}</span>])))}</span>
+    {logo(i)}<span className='min-w-0 flex-1'>{$legacyJsx(i.text,Object.fromEntries(i.values.map((v,k)=>[k,<span key={k} className={cn('font-medium tabular-nums',ink(i,v))}>{v}</span>])))}</span>
    </button></li>)}</ul></section>:null;
   return <div aria-label={$t('strategy.whereThingsStand')} className='flex flex-col gap-3'>{group($t('strategy.situationGroupAttention'),items.filter(i=>i.attention))}{group($t('strategy.situationGroupNormal'),items.filter(i=>!i.attention))}
    {detail}</div>;}
