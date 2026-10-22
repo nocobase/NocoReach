@@ -7,6 +7,10 @@
 - The daily analysis headline is slightly larger. In the opportunity lines, titles to decide on or handed off are in medium weight, dismissed and expired lines are dimmed as a whole, and the status or the actions sit in one right-hand column.
 - Current situation is split into Needs attention and Normal, without the dots; each line's numbers are in medium weight, coloured for the lines to deal with (a drop red, the rest amber).
 
+## Unreleased — Data sources show their logos
+
+- Every data source has its logo on a small tile: the cards and drawer title on Settings › Data sources, the rows and sync table on Data health, the results of Find data sources on your website, the source headings of Settings › Analysis rules and the source buttons when adding a rule. Brand marks come from Simple Icons (CC0), vendored as path data in `client/components/reach/brand-logos.ts` without a new dependency; black marks follow the text colour so they show in dark mode. Sources without a brand mark of their own (Website content, Website source, Blog CMS, DataForSEO, AI search visibility, Competitor activity, Rank tracking, Daily analysis) take a matching icon in the same tile.
+
 ## Unreleased — Data sources: two tabs, Retry all, Agent edits and publishing first
 
 - Settings › Data sources has two tabs. Sources (the default) shows the cards, with one orange line at the top naming the sources that need attention and a View link to the other tab; Data health shows their count in orange on its tab and holds the sync status that used to sit above the cards.
