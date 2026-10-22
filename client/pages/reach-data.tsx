@@ -4,6 +4,7 @@ import {useEffect,useState} from 'react';
 import {useLocation} from 'react-router';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {currentProjectId,rememberProject} from './current-project';
+import {confirmUnsavedLeave} from '#components/reach/confirm';
 export type Project={id:number;name:string;domains:string[];language?:'zh-CN'|'en-US';end:string;importedAt:string;description:string;audience:string;market:string;analyticsPropertyId:string;searchConsoleProperty:string;positioning?:string;writingStyle?:string;terminology?:string;competitors?:string;keyPages?:string;contentLanguage?:string;doNotChange?:string;memory?:Record<string,string>};
 export type Snapshot={id:number;key:string;payload:Project};
 export async function records<T>(resource:string,filter?:object):Promise<T[]>{
@@ -41,6 +42,8 @@ export function ProjectIcon({projectId,name}:{projectId?:number;name?:string}){c
  useEffect(()=>{if(!projectId)return;let active=true;void cache.load(`project-icon:${projectId}`,()=>api.action<{dataUrl:string|null}>('nrProjectIcon','get',{method:'POST',body:{projectId:String(projectId)},unwrap:'data'})).then(r=>{if(active)setIcon(r?.dataUrl||null);}).catch(()=>undefined);return()=>{active=false;};},[projectId]);
  return icon&&!broken?<img src={icon} alt="" data-project-icon className="size-8 shrink-0 rounded-lg border border-border bg-white object-contain p-0.5" onError={()=>setBroken(true)}/>:<span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">{name?.slice(0,1)||'·'}</span>;}
 export function ProjectIdentity(){const {project,error}=useProject();return <div className="flex min-w-0 items-center gap-3" title={error||$t('common.currentProject')}><ProjectIcon projectId={project?.id} name={project?.name}/><div className="min-w-0"><div className="truncate text-sm font-semibold">{project?.name||(error?$t('common.notLoadProject'):$t('common.loadingProject'))}</div><div className="truncate text-xs text-muted-foreground">{project?.domains.join(', ')||$t('common.currentProject')}</div></div></div>;}
+// A link clicked with unsaved input is held while the application's dialog asks; if leaving is confirmed the same link
+// is clicked again and let through (UI review 2026-10-22: no browser confirm).
 export function useUnsavedWarning(dirty:boolean){
- useEffect(()=>{if(!dirty)return;const unload=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};const click=(e:MouseEvent)=>{const link=(e.target as Element)?.closest?.('a[href]');if(link&&!window.confirm($t('reachData.unsavedChangesLeaveAnyway'))){e.preventDefault();e.stopPropagation();}};window.addEventListener('beforeunload',unload);document.addEventListener('click',click,true);return()=>{window.removeEventListener('beforeunload',unload);document.removeEventListener('click',click,true);};},[dirty]);
+ useEffect(()=>{if(!dirty)return;let passing:Element|null=null;const unload=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};const click=(e:MouseEvent)=>{const link=(e.target as Element)?.closest?.('a[href]');if(!link)return;if(passing===link){passing=null;return;}e.preventDefault();e.stopPropagation();void confirmUnsavedLeave().then(ok=>{if(ok){passing=link;(link as HTMLElement).click();}});};window.addEventListener('beforeunload',unload);document.addEventListener('click',click,true);return()=>{window.removeEventListener('beforeunload',unload);document.removeEventListener('click',click,true);};},[dirty]);
 }

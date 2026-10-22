@@ -31,16 +31,19 @@ function Status({ online }: { online?: boolean }) {
  * The task's Agent beside its owner in the header, changed the same way (2026-10-20 user decision): who does the work
  * and whether it is online are visible before anything fails, and the stage cards no longer carry a picker. `locked`
  * says why it cannot be changed now (queued, running, done, closed, or not the owner); the server enforces the same.
+ * `bare` (the properties column, 2026-10-22) shows only the name, its row being labelled Agent already.
  */
 export function AgentMenu({
   data,
   busy,
   locked,
+  bare = false,
   onChange,
 }: {
   data: TaskData;
   busy: boolean;
   locked?: string;
+  bare?: boolean;
   onChange: (agentId: string) => Promise<boolean>;
 }) {
   const navigate = useNavigate();
@@ -81,11 +84,18 @@ export function AgentMenu({
   ) : (
     <span className='text-nr-ink-red'>{$t('taskDetail.agentNotChosen')}</span>
   );
-  const label = (
+  const label = bare ? (
+    name
+  ) : (
     <>
       {$t('taskDetail.agent')} · {name}
     </>
   );
+  const named = `${$t('taskDetail.agent')} · ${
+    shown?.name ||
+    (gone ? data.work.agentName || data.work.agentId : '') ||
+    $t('taskDetail.agentNotChosen')
+  }`;
   if (locked)
     return (
       <span
@@ -103,16 +113,25 @@ export function AgentMenu({
           <Button
             size='sm'
             variant='ghost'
-            className='h-7 max-w-72 px-2 text-muted-foreground'
+            className={cn(
+              'h-7 px-2',
+              bare
+                ? '-ml-2 max-w-full font-normal'
+                : 'max-w-72 text-muted-foreground',
+            )}
             disabled={busy}
             title={note || undefined}
+            aria-label={bare ? named : undefined}
           >
             {label}
             <ChevronDown />
           </Button>
         }
       />
-      <DropdownMenuContent align='end' className='w-auto min-w-56'>
+      <DropdownMenuContent
+        align={bare ? 'start' : 'end'}
+        className='w-auto min-w-56'
+      >
         {options.length ? (
           <DropdownMenuRadioGroup
             value={chosen?.id || ''}

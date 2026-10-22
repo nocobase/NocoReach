@@ -117,6 +117,14 @@ function initial(): TaskData {
     },
   };
 }
+// Leaving asks in the application's dialog; here it answers through window.confirm so each test sets the answer.
+vi.mock('../../client/components/reach/confirm', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../../client/components/reach/confirm')
+  >()),
+  confirmLeaveWithDrafts: async () => window.confirm(''),
+  confirmUnsavedLeave: async () => window.confirm(''),
+}));
 beforeEach(() => {
   access.allowed = true;
   vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -258,7 +266,8 @@ test.each(['source', 'related', 'sidebar', 'breadcrumb', 'back-forward'])(
     mount();
     const user = await editBoth();
     if (kind === 'source')
-      await user.click(screen.getByRole('button', { name: /来自/ }));
+      // The From row of the properties column links the opportunity.
+      await user.click(screen.getByRole('button', { name: 'O-1' }));
     if (kind === 'related')
       await user.click(screen.getByRole('button', { name: /Next task/ }));
     if (kind === 'sidebar' || kind === 'back-forward')
