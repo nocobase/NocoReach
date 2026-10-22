@@ -4,7 +4,8 @@ import { translateSourceError, getCurrentLocale, $t, $tj, $legacyText } from "#i
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
-import { AtSign, RefreshCw } from "lucide-react";
+import { AtSign } from "lucide-react";
+import { RefreshButton } from '#components/reach/refresh-button';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "#lib/toast";
 import { PageContainer, PageHeader } from "#components/reach/page";
@@ -63,7 +64,7 @@ export default function DataX() {
   );
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title="X" description={$t('dataX.postsXMentioningProductChecked')} actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t('common.searching') : $t('common.updateNow')}</Button> : undefined} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title="X" description={$t('dataX.postsXMentioningProductChecked')} actions={view?.connected ? <RefreshButton busy={busy} label={busy ? $t('common.searching') : $t('common.updateNow')} onClick={() => void check()} /> : undefined} />
       {view && !view.connected ? null : <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:formatDate(w.start),1:formatDate(w.end)}) : $t('common.comparedPreviousDays',{0:formatDate(w.start),1:formatDate(w.end),2:w.days})) : undefined} />}
       {error ? <LoadError title={$t('dataX.notLoadXMentions')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}

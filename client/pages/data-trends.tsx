@@ -7,7 +7,8 @@ import { usePageTab } from '#hooks/use-page-tab';
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
-import { ExternalLink, LoaderCircle, RefreshCw, TrendingUp } from "lucide-react";
+import { ExternalLink, LoaderCircle, TrendingUp } from "lucide-react";
+import { RefreshButton } from '#components/reach/refresh-button';
 import { confirmAction } from "#components/reach/confirm";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "#lib/toast";
@@ -84,7 +85,7 @@ export default function DataTrends() {
   useHandOffSource("trends-related", tab === "brand" && view?.connected && terms.length ? { count: chosen.length, playbookId: "content-outline", description: $t('common.selectedRelatedSearchesBecomeOne'), draft: () => trendsDraft(terms[0], view!.place || $t('common.worldwide'), chosen), clear: () => setPicked({}) } : null);
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={tab === "brand" ? <NotesTip notes={view?.notes} /> : undefined} title={$t('dataTrends.trends')} description={$t('dataTrends.googleInterestProductCompetitorsKeywords')} actions={view?.connected || view?.keywords?.length ? <Button variant="outline" size="sm" disabled={busy || view.checking} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t('common.querying') : $t('common.updateNow')}</Button> : undefined} />
+      <PageHeader info={tab === "brand" ? <NotesTip notes={view?.notes} /> : undefined} title={$t('dataTrends.trends')} description={$t('dataTrends.googleInterestProductCompetitorsKeywords')} actions={view?.connected || view?.keywords?.length ? <RefreshButton busy={busy || Boolean(view.checking)} label={busy ? $t('common.querying') : $t('common.updateNow')} onClick={() => void check()} /> : undefined} />
       {error ? <LoadError title={$t('dataTrends.notLoadTrends')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
       {view ? (

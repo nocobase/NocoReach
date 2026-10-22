@@ -4,7 +4,8 @@ import { translateSourceError, $t, $tj, $legacyText } from "#i18n";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
-import { MessagesSquare, RefreshCw } from "lucide-react";
+import { MessagesSquare } from "lucide-react";
+import { RefreshButton } from '#components/reach/refresh-button';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "#lib/toast";
 import { PageContainer, PageHeader } from "#components/reach/page";
@@ -62,7 +63,7 @@ export function DataChat({ platform }: { platform: "discord" | "slack" }) {
   );
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title={name} description={$t('dataChat.messagesQuestionsSelectedChannelsRead',{0:name})} actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void sync()}><RefreshCw data-icon="inline-start" />{busy ? $t('common.loadingLoading') : $t('common.updateNow')}</Button> : undefined} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title={name} description={$t('dataChat.messagesQuestionsSelectedChannelsRead',{0:name})} actions={view?.connected ? <RefreshButton busy={busy} label={busy ? $t('common.loadingLoading') : $t('common.updateNow')} onClick={() => void sync()} /> : undefined} />
       {view && !view.connected ? null : <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:formatDate(w.start),1:formatDate(w.end)}) : $t('common.comparedPreviousDays',{0:formatDate(w.start),1:formatDate(w.end),2:w.days})) : undefined} />}
       {error ? <LoadError title={$t('dataChat.notLoad',{0:name})} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
