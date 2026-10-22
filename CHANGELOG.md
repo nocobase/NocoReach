@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — The classic import keeps NocoReach's timers off half-imported data
+
+- While `pnpm nocobase app import-classic` writes, NocoReach's timers (sync, analysis and the rest) skip their firings, so none acts on a project before all its rows have arrived. The analysis timer used to catch up the day's analysis on partial data and write `daily-analysis:<id>` and `signals:<id>`, which could end up beside the classic rows with the same keys. Each import call renews a five-minute hold and the last one ends it; if the command stops midway, the timers run again five minutes after its last call.
+- The import first waits, up to 30 seconds, for background work already running, so `--replace` does not clear tables under a running sync or analysis; if the work is not done by then, the command stops before anything is cleared and asks to try again shortly.
+- A daily analysis the Scheduler fires during the import is recorded as cancelled in Settings › Automatic runs; the analysis timer catches the day up after the import.
+
 ## Unreleased — One look for tabs, choices, refresh buttons and table headers
 
 - Every tab bar looks the same: a thin rule under the row, the tabs flush with the page title, the open one in black over a 2px line. Opportunities used a blue line; Members & roles, API keys, Agent, Analysis rules and Knowledge indented their tabs and had no rule.
