@@ -65,7 +65,7 @@
     "agents": {
       "title": "Agentes",
       "description": "Cada combinación de herramienta de programación y modelo que comunica un Runner es un agente. El gestor de proyectos asigna cada paso de una incidencia al agente cuya descripción encaja con la tarea.",
-      "fromRunners": "Agentes de los Runner",
+      "fromRunners": "Agentes locales comunicados por los entornos de ejecución",
       "discovery": {
         "selectAll": "Seleccionar todos los resultados",
         "selectFirst": "Seleccionar los primeros {{limit}} resultados",
@@ -521,7 +521,7 @@
         }
       },
       "title": "Runners",
-      "description": "Ordenadores o servidores donde se ejecuta Runner. Runner informa de las herramientas de programación disponibles en ese equipo (como Claude Code o Codex), donde los agentes de ejecución realizan las tareas.",
+      "description": "Ordenadores o servidores con Claude Code o Codex. NocoReach les pasa tareas, y los agentes locales que hay en ellos editan el código del sitio web, escriben artículos y abren pull requests, así que deben estar encendidos y en línea, con la herramienta de programación con la sesión iniciada.",
       "add": "Añadir Runner",
       "loadFailed": "No se han podido cargar los Runners",
       "emptyTitle": "Aún no hay Runners conectados",
@@ -584,7 +584,7 @@
         "name": "Nombre",
         "status": "Estado",
         "tools": "Herramientas",
-        "sharing": "Uso compartido",
+        "sharing": "Quién puede usarlo",
         "version": "Runner",
         "lastSeen": "Última conexión",
         "slots": "Máximo de ejecuciones simultáneas"
@@ -626,10 +626,10 @@
         "version": "Versión {{version}}"
       },
       "trust": {
-        "label": "Para quién ejecuta tareas",
-        "team": "Equipo",
+        "label": "Quién puede usarlo",
+        "team": "Compartido con el equipo",
         "teamHint": "Ejecuta las tareas que inicia cualquier miembro del equipo, con sus variables y secretos. Para servidores compartidos y máquinas virtuales.",
-        "ownerOnly": "Personal",
+        "ownerOnly": "Solo el propietario",
         "ownerOnlyHint": "Ejecuta solo las tareas que tú inicias. Es la opción predeterminada al añadir un Runner.",
         "personalOnly": "Este Runner será personal: ejecutará solo las tareas que tú inicies. Podrás compartirlo con el equipo más adelante."
       },
@@ -756,8 +756,8 @@
       "saved": "Agente de chat predeterminado guardado"
     },
     "models": {
-      "title": "Modelos",
-      "description": "Servicios de modelos y los modelos que ofrecen. Los modelos de chat se utilizan para el análisis diario y el agente de chat; los modelos de vectorización y reordenación se utilizan para las búsquedas."
+      "title": "Servicios de modelos",
+      "description": "El análisis diario y el panel de chat usan los modelos de chat de aquí, que el proveedor factura por llamada; los modelos de embeddings y de reordenación se usan en las búsquedas. Los agentes locales no usan estos modelos: usan la herramienta de programación con la sesión iniciada en su entorno de ejecución."
     },
     "defaultModel": {
       "title": "Modelo de chat predeterminado",

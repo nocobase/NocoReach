@@ -170,8 +170,20 @@ describe('NocoReach semantic-key translations', () => {
       '请选择团队可调用的 Agent': '请选择已启用且可调用的 Agent',
       'Agent 和在线 AI 按做法完成的工作，需要你确认时会停下来。':
         'Agent 按做法完成的工作，需要你确认时会停下来。',
-      // The Agent page names each AI by what it does (2026-10-20).
-      'Runner Agent': '执行 Agent',
+      // The Agent page names each AI by what it does (2026-10-20); agents on a runtime are local agents (2026-10-21).
+      'Runner Agent': '本地 Agent',
+      '任务执行 Agent': '本地 Agent',
+      '请选择任务执行 Agent': '请选择本地 Agent',
+      '执行 Agent': '本地 Agent',
+      '执行 Agent 已保存': '本地 Agent 已保存',
+      '把执行 Agent 改为“{0}”': '把本地 Agent 改为“{0}”',
+      '任务已完成，不能更换执行 Agent': '任务已完成，不能更换本地 Agent',
+      '项目使用允许所有成员调用的 Runner Agent。':
+        '项目使用允许所有成员调用的本地 Agent。',
+      '包含仓库改动的任务需要 Runner Agent，请重新选择':
+        '包含仓库改动的任务需要本地 Agent，请重新选择',
+      '创建项目后，在数据接入中选择任务执行 Agent；Runner 可供多个项目共用。':
+        '创建项目后，在数据接入中选择本地 Agent；Runner 可供多个项目共用。',
       '在线 Agent': '对话 Agent',
       // The task page reworded for marketers: no PR, Runner or push wording.
       'PR 审核已通过。合并并上线后点确认，之后开始观察效果。':

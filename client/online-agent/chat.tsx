@@ -426,7 +426,7 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
               {canManage && (
                 <>
                   {' '}
-                  <Link className='underline' to='/agents/online'>
+                  <Link className='underline' to='/agents'>
                     {$t('onlineAgent.settings')}
                   </Link>
                 </>

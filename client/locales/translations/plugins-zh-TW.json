@@ -65,7 +65,7 @@
     "agents": {
       "title": "Agent",
       "description": "執行環境上報的每個「工具 · 模型」就是一個 agent。專案經理按「擅長什麼」把任務的每一步派給它們。",
-      "fromRunners": "來自執行環境的 agent",
+      "fromRunners": "執行環境上報的本地 Agent",
       "discovery": {
         "selectAll": "全選目前結果",
         "selectFirst": "選擇目前結果中的前 {{limit}} 組",
@@ -95,7 +95,7 @@
       "emptyTitle": "還沒有 agent",
       "emptyDescription": "連線一個登入了程式開發工具的執行環境：它上報的每個模型都會出現在這裡，等你啟用。",
       "noneInFilter": "這裡沒有 agent。",
-      "howToAdd": "想加一個 agent：在某個執行環境上裝好工具、登入可用的模型，執行環境上報後它會出現在這裡，寫好「擅長什麼」即可啟用。只有個人執行環境能跑的 agent，只有執行環境的主人自己發起的任務能用。",
+      "howToAdd": "想加一個本地 Agent：在某個執行環境上裝好程式開發工具並登入，執行環境上報後它會出現在這裡，寫好「擅長什麼」即可啟用。只在「只給擁有者用」的執行環境上有的 Agent，只能執行擁有者自己發起的任務。",
       "goodAtMissing": "還沒寫",
       "columns": {
         "agent": "Agent",
@@ -113,7 +113,7 @@
         "both": "團隊 {{team}} · 個人 {{personal}}",
         "names": "{{names}}",
         "noneOnline": "現在沒有執行環境線上",
-        "personalOnly": "僅個人執行環境",
+        "personalOnly": "只給擁有者用",
         "lastReported": "最後上報 {{when}}"
       },
       "state": {
@@ -521,11 +521,11 @@
         }
       },
       "title": "執行環境",
-      "description": "安裝了 Runner 的電腦或伺服器。Runner 會上報這臺機器上的程式開發工具（如 Claude Code、Codex），執行 Agent 在這裡執行任務。",
+      "description": "裝了 Claude Code 或 Codex 的電腦或伺服器。NocoReach 把任務交給它，由上面的本地 Agent 去改網站程式碼、寫文章、提交 PR，所以它要開機、連網，程式開發工具要登入。",
       "add": "新增執行環境",
       "loadFailed": "無法載入執行環境",
       "emptyTitle": "還沒有連線執行環境",
-      "emptyDescription": "連線執行環境後，執行 Agent 可以在其中使用程式開發工具承接任務。",
+      "emptyDescription": "連線執行環境後，本地 Agent 可以在其中使用程式開發工具執行任務。",
       "noneConnected": "沒有已連線的執行環境。",
       "revokedList_one": "{{count}} 個已吊銷的執行環境",
       "revokedList_other": "{{count}} 個已吊銷的執行環境",
@@ -584,7 +584,7 @@
         "name": "名稱",
         "status": "狀態",
         "tools": "工具",
-        "sharing": "共享",
+        "sharing": "誰能用",
         "version": "版本",
         "lastSeen": "最近線上",
         "slots": "最大同時執行數"
@@ -626,12 +626,12 @@
         "version": "版本 {{version}}"
       },
       "trust": {
-        "label": "為誰工作",
-        "team": "團隊",
-        "teamHint": "執行團隊中任何人發起的工作，並接收他們的變數和金鑰。適合團隊共用的伺服器或虛擬機器。",
-        "ownerOnly": "個人",
-        "ownerOnlyHint": "只執行你發起的工作。你自己新增的執行環境預設如此。",
-        "personalOnly": "這個執行環境將是個人的：只執行你發起的工作。之後可以再共享給團隊。"
+        "label": "誰能用",
+        "team": "團隊共用",
+        "teamHint": "任何成員發起的任務都可能在這裡執行，使用這臺電腦登入的帳號和額度，也能讀寫這臺電腦上的檔案。適合團隊共用的伺服器或虛擬機器。",
+        "ownerOnly": "只給擁有者用",
+        "ownerOnlyHint": "只執行新增它的人自己發起的任務。你自己新增的執行環境預設如此。",
+        "personalOnly": "這個執行環境將只給你自己用：只執行你發起的任務。之後可以再共享給團隊。"
       },
       "share": {
         "title": "把 {{name}} 共享給團隊？",
@@ -756,8 +756,8 @@
       "saved": "預設對話 Agent 已儲存"
     },
     "models": {
-      "title": "模型",
-      "description": "模型服務及其提供的模型。對話模型用於每日分析和對話 Agent，向量模型和重排序模型用於搜尋。"
+      "title": "模型服務",
+      "description": "每日分析和對話欄使用這裡的對話模型，依呼叫量付費給服務商；向量模型和重排序模型用於搜尋。本地 Agent 不使用這裡的模型，它使用執行環境上程式開發工具自己的登入。"
     },
     "defaultModel": {
       "title": "預設對話模型",

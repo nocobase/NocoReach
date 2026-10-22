@@ -65,7 +65,7 @@
     "agents": {
       "title": "Tác nhân AI",
       "description": "Mỗi tổ hợp công cụ lập trình và mô hình do môi trường thực thi báo cáo là một tác nhân AI. Trình quản lý dự án giao từng bước của một vấn đề cho tác nhân AI có mô tả phù hợp.",
-      "fromRunners": "Tác nhân AI từ môi trường thực thi",
+      "fromRunners": "Tác nhân AI cục bộ do môi trường thực thi báo cáo",
       "discovery": {
         "selectAll": "Chọn tất cả kết quả",
         "selectFirst": "Chọn {{limit}} kết quả đầu tiên",
@@ -521,7 +521,7 @@
         }
       },
       "title": "Môi trường thực thi",
-      "description": "Máy tính hoặc máy chủ chạy trình thực thi. Trình thực thi báo cáo các công cụ lập trình trên máy đó (như Claude Code hoặc Codex), và tác nhân AI thực thi chạy tác vụ tại đó.",
+      "description": "Máy tính hoặc máy chủ có Claude Code hoặc Codex. NocoReach giao tác vụ cho chúng, và các tác nhân AI cục bộ trên đó sẽ sửa mã website, viết bài và tạo pull request, nên máy cần bật, có kết nối mạng và công cụ lập trình phải được đăng nhập.",
       "add": "Thêm môi trường thực thi",
       "loadFailed": "Không thể tải các môi trường thực thi",
       "emptyTitle": "Chưa có môi trường thực thi nào được kết nối",
@@ -584,7 +584,7 @@
         "name": "Tên",
         "status": "Trạng thái",
         "tools": "Công cụ",
-        "sharing": "Chia sẻ",
+        "sharing": "Ai được dùng",
         "version": "Trình thực thi",
         "lastSeen": "Hoạt động lần cuối",
         "slots": "Số lần chạy đồng thời tối đa"
@@ -626,10 +626,10 @@
         "version": "Phiên bản {{version}}"
       },
       "trust": {
-        "label": "Phục vụ ai",
-        "team": "Nhóm",
+        "label": "Ai được dùng",
+        "team": "Dùng chung với nhóm",
         "teamHint": "Chạy tác vụ do bất kỳ ai trong nhóm khởi chạy, với các biến và thông tin bí mật của họ. Dành cho máy chủ và máy ảo dùng chung.",
-        "ownerOnly": "Cá nhân",
+        "ownerOnly": "Chỉ chủ sở hữu",
         "ownerOnlyHint": "Chỉ chạy tác vụ do bạn khởi chạy. Đây là chế độ mặc định khi bạn thêm môi trường thực thi.",
         "personalOnly": "Môi trường thực thi này sẽ ở chế độ cá nhân: chỉ chạy tác vụ do bạn khởi chạy. Bạn có thể chia sẻ với nhóm sau."
       },
@@ -756,8 +756,8 @@
       "saved": "Đã lưu tác nhân AI trò chuyện mặc định"
     },
     "models": {
-      "title": "Mô hình",
-      "description": "Các dịch vụ mô hình và mô hình mà dịch vụ cung cấp. Mô hình trò chuyện phục vụ phân tích hằng ngày và tác nhân AI trò chuyện; mô hình nhúng và xếp hạng lại phục vụ tìm kiếm."
+      "title": "Dịch vụ mô hình",
+      "description": "Phân tích hằng ngày và khung trò chuyện dùng các mô hình trò chuyện tại đây, nhà cung cấp tính phí theo từng lượt gọi; mô hình nhúng và mô hình xếp hạng lại dùng cho tìm kiếm. Tác nhân AI cục bộ không dùng các mô hình này mà dùng công cụ lập trình đã đăng nhập trên môi trường thực thi của nó."
     },
     "defaultModel": {
       "title": "Mô hình trò chuyện mặc định",

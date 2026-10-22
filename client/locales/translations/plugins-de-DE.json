@@ -65,7 +65,7 @@
     "agents": {
       "title": "Agenten",
       "description": "Jedes Programmierwerkzeug und Modell, das ein Runner meldet, ist ein Agent. Der Projektmanager übergibt jeden Bearbeitungsschritt eines Vorgangs an den Agenten, dessen Beschreibung dazu passt.",
-      "fromRunners": "Agenten von Runnern",
+      "fromRunners": "Von Laufzeitumgebungen gemeldete lokale Agenten",
       "discovery": {
         "selectAll": "Alle Ergebnisse auswählen",
         "selectFirst": "Die ersten {{limit}} Ergebnisse auswählen",
@@ -521,7 +521,7 @@
         }
       },
       "title": "Laufzeitumgebungen",
-      "description": "Computer oder Server, auf denen der Runner läuft. Der Runner meldet die Programmierwerkzeuge auf diesem Rechner (etwa Claude Code oder Codex), und Ausführungsagenten erledigen dort Aufgaben.",
+      "description": "Computer oder Server mit Claude Code oder Codex. NocoReach übergibt ihnen Aufgaben, und die lokalen Agenten dort bearbeiten den Website-Code, schreiben Artikel und öffnen Pull Requests. Deshalb müssen sie eingeschaltet und online sein, mit angemeldetem Programmierwerkzeug.",
       "add": "Laufzeitumgebung hinzufügen",
       "loadFailed": "Laufzeitumgebungen konnten nicht geladen werden",
       "emptyTitle": "Noch keine Laufzeitumgebungen verbunden",
@@ -584,7 +584,7 @@
         "name": "Name",
         "status": "Status",
         "tools": "Werkzeuge",
-        "sharing": "Freigabe",
+        "sharing": "Wer es nutzen kann",
         "version": "Runner",
         "lastSeen": "Zuletzt gesehen",
         "slots": "Max. gleichzeitige Läufe"
@@ -626,10 +626,10 @@
         "version": "Version {{version}}"
       },
       "trust": {
-        "label": "Für wen sie arbeitet",
-        "team": "Team",
+        "label": "Wer es nutzen kann",
+        "team": "Mit dem Team geteilt",
         "teamHint": "Führt Aufgaben aller Teammitglieder mit deren Variablen und Geheimnissen aus. Für gemeinsam genutzte Server und VMs.",
-        "ownerOnly": "Persönlich",
+        "ownerOnly": "Nur Eigentümer",
         "ownerOnlyHint": "Führt nur Aufgaben aus, die Sie starten. Die Standardeinstellung für eine von Ihnen hinzugefügte Laufzeitumgebung.",
         "personalOnly": "Diese Laufzeitumgebung ist persönlich: Sie führt nur Aufgaben aus, die Sie starten. Sie können sie später für das Team freigeben."
       },
@@ -756,8 +756,8 @@
       "saved": "Standard-Chatagent gespeichert"
     },
     "models": {
-      "title": "Modelle",
-      "description": "Modelldienste und die von ihnen bereitgestellten Modelle. Chat-Modelle unterstützen die tägliche Analyse und den Chat-Agenten; Embedding- und Reranking-Modelle unterstützen die Suche."
+      "title": "Modelldienste",
+      "description": "Die tägliche Analyse und der Chatbereich nutzen die Chat-Modelle hier, die der Anbieter pro Aufruf abrechnet; Embedding- und Reranking-Modelle werden für die Suche verwendet. Lokale Agenten nutzen diese Modelle nicht, sondern das auf ihrer Laufzeitumgebung angemeldete Programmierwerkzeug."
     },
     "defaultModel": {
       "title": "Standard-Chatmodell",

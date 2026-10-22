@@ -65,7 +65,7 @@
     "agents": {
       "title": "Agen",
       "description": "Setiap alat pemrograman dan model yang dilaporkan runner merupakan agen. Manajer proyek menyerahkan setiap langkah suatu isu kepada agen yang deskripsinya sesuai.",
-      "fromRunners": "Agen dari runner",
+      "fromRunners": "Agen lokal yang dilaporkan lingkungan eksekusi",
       "discovery": {
         "selectAll": "Pilih semua hasil",
         "selectFirst": "Pilih {{limit}} hasil pertama",
@@ -521,7 +521,7 @@
         }
       },
       "title": "Lingkungan eksekusi",
-      "description": "Komputer atau server yang menjalankan Runner. Runner melaporkan alat pemrograman pada mesin tersebut (seperti Claude Code atau Codex), dan agen eksekusi menjalankan tugas di sana.",
+      "description": "Komputer atau server dengan Claude Code atau Codex. NocoReach menyerahkan tugas ke sana, lalu agen lokal di dalamnya mengedit kode situs web, menulis artikel, dan membuka pull request, jadi perangkat harus tetap menyala dan daring dengan alat pemrograman dalam keadaan masuk.",
       "add": "Tambah lingkungan eksekusi",
       "loadFailed": "Tidak dapat memuat lingkungan eksekusi",
       "emptyTitle": "Belum ada lingkungan eksekusi yang terhubung",
@@ -584,7 +584,7 @@
         "name": "Nama",
         "status": "Status",
         "tools": "Alat",
-        "sharing": "Berbagi",
+        "sharing": "Siapa yang dapat menggunakannya",
         "version": "Runner",
         "lastSeen": "Terakhir terlihat",
         "slots": "Maksimum eksekusi bersamaan"
@@ -627,9 +627,9 @@
       },
       "trust": {
         "label": "Siapa yang dapat menggunakannya",
-        "team": "Tim",
+        "team": "Dibagikan dengan tim",
         "teamHint": "Menjalankan pekerjaan yang dimulai siapa pun dalam tim, beserta variabel dan rahasia mereka. Untuk server dan VM bersama.",
-        "ownerOnly": "Pribadi",
+        "ownerOnly": "Hanya pemilik",
         "ownerOnlyHint": "Hanya menjalankan pekerjaan yang Anda mulai. Pengaturan bawaan untuk lingkungan eksekusi yang Anda tambahkan.",
         "personalOnly": "Lingkungan eksekusi ini akan bersifat pribadi: hanya menjalankan pekerjaan yang Anda mulai. Anda dapat membagikannya kepada tim nanti."
       },
@@ -756,8 +756,8 @@
       "saved": "Agen percakapan bawaan disimpan"
     },
     "models": {
-      "title": "Model",
-      "description": "Layanan model dan model yang disediakannya. Model percakapan mendukung analisis harian dan agen percakapan; model penyematan dan pemeringkatan ulang mendukung pencarian."
+      "title": "Layanan model",
+      "description": "Analisis harian dan panel percakapan menggunakan model percakapan di sini, yang ditagih penyedia per panggilan; model embedding dan reranking digunakan untuk pencarian. Agen lokal tidak menggunakan model ini, melainkan alat pemrograman yang masuk di lingkungan eksekusinya."
     },
     "defaultModel": {
       "title": "Model percakapan bawaan",

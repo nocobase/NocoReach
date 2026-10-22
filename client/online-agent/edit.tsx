@@ -36,6 +36,8 @@ interface Catalog {
 export interface AgentSettingsContext {
   refresh(): void;
   saved(agent: OnlineAgentDefinition): void;
+  /** Where closing the dialog returns: the page it opened over. */
+  back: string;
 }
 export default function EditOnlineAgent() {
   const { onlineAgentId } = useParams(),
@@ -50,7 +52,7 @@ export default function EditOnlineAgent() {
     location = useLocation();
   const close = () => {
     parent.refresh();
-    void navigate(`/agents/online${location.search}`);
+    void navigate(`${parent.back}${location.search}`);
   };
   if (!canManage || (onlineAgentId && (!agent || data.loading)))
     return (
@@ -258,7 +260,7 @@ function AgentForm({
         />
         <FieldDescription>
           {$t('onlineAgent.modelHelp')}{' '}
-          <Link className='underline' to='/agents/models'>
+          <Link className='underline' to='/models'>
             {$t('onlineAgent.modelSettings')}
           </Link>
         </FieldDescription>

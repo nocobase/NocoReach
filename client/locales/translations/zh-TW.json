@@ -816,5 +816,8 @@
   },
   "agentSetup.connectionsTitle": "透過電腦上的 Agent 串接資料",
   "agentSetup.connectionsDescription": "將以下指引複製到 Claude Code、Codex 或其他程式開發 Agent。它會安裝 NocoReach CLI，以你的身分登入，並在你確認計畫後串接此專案的資料來源。",
-  "agentSetup.connectionsPrompt": "請協助我串接 NocoReach 專案「{{project}}」（ID {{projectId}}）的資料來源。\n\n1. 安裝 NocoReach CLI：\n{{install}}\n\n2. 發起瀏覽器登入：\n{{login}}\n向我顯示驗證網址和驗證碼，等我在瀏覽器中核對並核准，請勿代替我核准。\n\n3. 我核准後，執行 `nocoreach whoami` 核對登入帳號，再執行 `nocoreach connect guide --json`，依照其中的步驟為專案 {{projectId}} 串接資料來源。串接前，請先向我說明計畫並等我確認。請勿索取我的密碼、權杖或 API 金鑰，也不要將下載權杖當作 API 金鑰使用；若資料來源需要憑證，請提供連結，由我在瀏覽器中填寫。"
+  "agentSetup.connectionsPrompt": "請協助我串接 NocoReach 專案「{{project}}」（ID {{projectId}}）的資料來源。\n\n1. 安裝 NocoReach CLI：\n{{install}}\n\n2. 發起瀏覽器登入：\n{{login}}\n向我顯示驗證網址和驗證碼，等我在瀏覽器中核對並核准，請勿代替我核准。\n\n3. 我核准後，執行 `nocoreach whoami` 核對登入帳號，再執行 `nocoreach connect guide --json`，依照其中的步驟為專案 {{projectId}} 串接資料來源。串接前，請先向我說明計畫並等我確認。請勿索取我的密碼、權杖或 API 金鑰，也不要將下載權杖當作 API 金鑰使用；若資料來源需要憑證，請提供連結，由我在瀏覽器中填寫。",
+  "nocoreach.nav.runtimes": "執行環境",
+  "nocoreach.nav.models": "模型服務",
+  "nocoreach.nav.usage": "用量"
 }
