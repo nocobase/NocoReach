@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Opportunities shows where each handed-off task stands
+
+- On Opportunities › Handled, the Where it went column shows the state of a handed-off opportunity's task with its number, as Insights does: Handed off to agent while it waits to start, In progress, Needs confirmation, Done or Closed. O-43 read "Handed off to agent · T-34" after T-34 was done. A change handed off on its own shows the same, now with its task number, and its detail's tag says the same instead of In progress for every open task. The filter offers the same labels, and an opportunity's detail says the state beside Open task.
+- The online assistant's `daily_analysis` tool reports a handed-off opportunity's task the same way (in progress, needs confirmation, done, closed) when the user may list tasks, so asking about O-43 in the Insights conversation no longer gets "handed off".
+- Insights, Opportunities, the online assistant and the verdict coverage of changes read where a task stands from one function, `taskStanding` in `shared/task-pending.ts`; the coverage also counts tasks finished before task work was recorded as done.
+
 ## Unreleased — Insights says how it analyzes, not how old the data is
 
 - The line under the Insights title no longer shows the period, the data date and the last analysis time ("Last 28 days · Data through … · Last analyzed … (daily, automatic)"): the data could end days before today's analysis, which read as analyzing old data, and each analysis rule reads its own window (7, 14, 28 or 30 days), not 28. It says how the insights are made instead, in one sentence with two links: "Analyzed every day at 09:00 using your analysis rules." The analysis rules link to AI team › Analysis rules and the time to Settings › Automatic runs; each is plain text for someone who cannot open that page.
@@ -29,6 +35,7 @@
 
 - Today's message on Insights lists only opportunities raised, dismissed or handed off today. One handed off on an earlier day that today's analysis lists again stays on the day it was raised; it read as handed off today beside the ones just dismissed (Studio, 10/22: T-27 and T-30 beside the three dismissed at 17:15). A hand-off counts on the day its task was created, and the waiting tasks are read again after one.
 - Today's conversation starts folded to its one line when Insights opens; a question sent since then opens it. An earlier day's conversation shows in full when that day is opened.
+
 ## Unreleased — Found by AI or by a person, on every task
 
 - Task cards on the board and in the list say who found the task, beside its number: "Found by AI" (sparkles, violet) for a task from an opportunity of the daily analysis or a change on Insights the person only confirmed, "Found by <name>" for one a person handed off from a data page, created as a new task, started from a page to improve or created from Results. The finder is the person who created the task, who may not be its owner. Older tasks that did not record their creator show nothing.
