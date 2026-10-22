@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Tasks: one set of status choices, the shared drop-downs
+
+- Tasks no longer has a status drop-down beside Waiting for me, Current, Done and Closed: the two overlapped, and the board's columns and the list's order already separate statuses. An old `?status=` link shows the scope without filtering.
+- The playbook, owner and Agent filters use the application's drop-down instead of the browser's, as every other page does. Picking a playbook after opening an old `?playbook=` link no longer falls back to all playbooks when that link's option leaves the list.
+
 ## Unreleased — Search performance: web search only, gaps said plainly
 
 - Search performance › Performance reads web search only. The search type choice (Web, Image, Video, News, Discover, Google News) is gone, with the server's handling of other types in the search views: they were read live from Search Console for this choice alone, while the scheduled sync, the daily analysis and Insights use web search only.
