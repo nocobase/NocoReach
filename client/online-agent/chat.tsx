@@ -229,6 +229,9 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
             requestId: crypto.randomUUID(),
             agentId,
             projectId: chat.projectId || (project ? String(project.id) : null),
+            ...(chat.subject && chat.projectId
+              ? { subject: chat.subject }
+              : {}),
             text: chat.draft.trim(),
           },
     };
@@ -241,6 +244,7 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
       chat.setRequest(null);
       chat.select(conversation.id);
       chat.setDraft('');
+      chat.touch();
       setRefresh((value) => value + 1);
       composerRef.current?.focus();
     } catch (failure) {

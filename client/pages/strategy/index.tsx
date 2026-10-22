@@ -15,7 +15,9 @@ import {
   type Area,
 } from './insights-view';
 import { AskBar, History, MetricTiles, Today, WaitingNote } from './briefing';
-import { feedOf } from './feed';
+import { dayOf, feedOf } from './feed';
+import { ThreadsProvider } from './threads';
+import { useOptionalOnlineChat } from '../../online-agent/context';
 import { Link } from 'react-router';
 import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { InfoTip } from '#components/reach/info-tip';
@@ -320,7 +322,9 @@ function Insights({
     });
   const rows = rowsFor(state),
     metrics = metricItems(overview.data?.cards),
-    feed = feedOf(state, rows);
+    feed = feedOf(state, rows),
+    analysisDay = dayOf(state.insights?.generatedAt),
+    chat = useOptionalOnlineChat();
   // A change no analysis judged yet (an analysis from before every change got a verdict) is judged once in the
   // background, as the server does after each analysis; the state is read again afterwards.
   const unjudged = (state.insights?.evidence.signals?.items || []).filter(
@@ -342,6 +346,38 @@ function Insights({
       })
       .catch(() => undefined);
   }, [projectId, analyzedAt, unjudged, taskDataAvailable, setState]);
+  const column = (
+    <div className='flex min-w-0 flex-col gap-4'>
+      <section
+        aria-label={$t('strategy.analysisFeed')}
+        className='flex flex-col gap-4'
+      >
+        <Today
+          state={state}
+          rows={rows}
+          feed={feed}
+          metrics={metrics}
+          generating={generating}
+          projectId={projectId}
+          busy={busy || generating}
+          onGive={(row) => void convert(row)}
+          onIgnore={(row) => void review(row.card.id, { status: 'ignored' })}
+          tasks={
+            <RequestBlock
+              compact
+              title={$t('strategy.taskStatus')}
+              request={taskView}
+              empty={waiting.length === 0}
+            >
+              <WaitingNote tasks={waiting} label={waitingFor} />
+            </RequestBlock>
+          }
+        />
+        <History days={feed.days} today={analysisDay} rows={rows} />
+      </section>
+      <AskBar projectId={projectId} day={analysisDay} />
+    </div>
+  );
   return (
     <PageContainer className='nr-page'>
       <PageHeader
@@ -386,51 +422,18 @@ function Insights({
       />
       <div className='flex flex-col gap-6'>
         <MetricTiles metrics={metrics} overview={overview} />
-        {/* The day's conversation, with the standing facts beside it as before the redesign (2026-10-21 user). */}
-        <div className='grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]'>
-          <div className='flex min-w-0 flex-col gap-4'>
-            <section
-              aria-label={$t('strategy.analysisFeed')}
-              className='flex flex-col gap-4'
-            >
-              <Today
-                state={state}
-                rows={rows}
-                feed={feed}
-                metrics={metrics}
-                generating={generating}
-                projectId={projectId}
-                busy={busy || generating}
-                onGive={(row) => void convert(row)}
-                onIgnore={(row) =>
-                  void review(row.card.id, { status: 'ignored' })
-                }
-                tasks={
-                  <RequestBlock
-                    compact
-                    title={$t('strategy.taskStatus')}
-                    request={taskView}
-                    empty={waiting.length === 0}
-                  >
-                    <WaitingNote tasks={waiting} label={waitingFor} />
-                  </RequestBlock>
-                }
-              />
-              <History days={feed.days} rows={rows} />
-            </section>
-            <AskBar
-              projectId={projectId}
-              day={
-                state.insights
-                  ? new Date(state.insights.generatedAt).toLocaleDateString(
-                      getCurrentLocale(),
-                      { month: 'numeric', day: 'numeric' },
-                    )
-                  : ''
-              }
-            />
-          </div>
+        {/* The day's conversation, with the standing facts in a narrow quiet column beside it (2026-10-21 user). */}
+        <div className='grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_16rem]'>
+          {/* Questions asked from Insights read the chat's records, so only where the chat is mounted. */}
+          {chat ? (
+            <ThreadsProvider projectId={projectId} day={analysisDay}>
+              {column}
+            </ThreadsProvider>
+          ) : (
+            column
+          )}
           <RequestBlock
+            quiet
             title={$t('strategy.currentSituation')}
             info={
               <InfoTip label={$t('strategy.statusExplanation')}>
@@ -441,7 +444,11 @@ function Insights({
             empty={!summaryView.data?.areas.some((area) => area.items.length)}
             emptyText={$t('strategy.noCurrentSituation')}
           >
-            <AreaList areas={summaryView.data?.areas} projectId={projectId} />
+            <AreaList
+              quiet
+              areas={summaryView.data?.areas}
+              projectId={projectId}
+            />
           </RequestBlock>
         </div>
       </div>
