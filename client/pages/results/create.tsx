@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
 import { $t } from '#i18n';
 import { RouteDialog } from '#components/route-dialog';
+import { confirmUnsavedLeave } from '#components/reach/confirm';
 import { useRouteOverlay } from '#components/use-route-overlay';
 import { Button } from '#components/ui/button';
 import { Input } from '#components/ui/input';
@@ -27,9 +28,9 @@ export default function CreateFollowUp() {
     <RouteDialog
       title={$t('results.create')}
       description={$t('results.notStarted')}
-      beforeClose={() =>
+      beforeClose={async () =>
         !pendingRef.current &&
-        (!dirtyRef.current || window.confirm($t('results.dirty')))
+        (!dirtyRef.current || (await confirmUnsavedLeave()))
       }
     >
       <Form context={context} dirtyRef={dirtyRef} pendingRef={pendingRef} />

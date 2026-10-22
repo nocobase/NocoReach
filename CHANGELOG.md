@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Leaving unsaved work asks in the application's dialog
+
+- Leaving New task, a role form or Create from a result with unsaved input, following a link out of Skills, the Google or keyword connection forms with unsaved input, and leaving a task page with drafts now ask in the application's own dialog instead of the browser's confirm box. Unsaved forms ask "Discard unsaved changes?" with Discard; a task page with drafts asks "Leave this page?" with Leave anyway, since its drafts are kept.
+
 ## Unreleased — Insights scrolls inside its conversation
 
 - On wide screens Insights fills the window: the title, the numbers and the input stay in place and only the day's analysis and conversation scroll between them; Current situation scrolls on its own.

@@ -8,7 +8,10 @@ import {
 import { useNavigationGuard } from '@nocobase/app-client';
 import { $t } from '#i18n';
 import { Button } from '#components/ui/button';
-import { confirmAction } from '#components/reach/confirm';
+import {
+  confirmAction,
+  confirmLeaveWithDrafts,
+} from '#components/reach/confirm';
 import {
   DraftContext,
   ScopeContext,
@@ -71,12 +74,12 @@ export function TaskDraftScope({
 export function TaskDraftNavigationGuard() {
   const { drafts } = useDraftContext();
   const acknowledgedRef = useRef<Drafts>({});
-  useNavigationGuard(() => {
+  useNavigationGuard(async () => {
     const changed = Object.entries(drafts).some(
       ([key, entry]) => entry.dirty && acknowledgedRef.current[key] !== entry,
     );
     if (!changed) return true;
-    if (!window.confirm($t('taskDetail.leaveWithDrafts'))) return false;
+    if (!(await confirmLeaveWithDrafts())) return false;
     // Acknowledgement is not a save or discard: keep recovery and unload protection.
     // Entry identity makes any later edit require confirmation again.
     acknowledgedRef.current = drafts;
