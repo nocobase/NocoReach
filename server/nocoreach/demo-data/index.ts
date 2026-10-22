@@ -9,7 +9,8 @@ import { clearAllBusinessData } from './clear-all.js';
 import { DEMO_LANGUAGES, demoContent } from './content.js';
 import type { Connections } from '../plugin.js';
 import type { DemoHost } from './host.js';
-import { demoAccounts, demoSteps, type DemoData } from './steps.js';
+import { generateNocoReachSamples } from './samples.js';
+import { demoAccounts, type DemoData } from './steps.js';
 import type { DemoProject } from './upstream.js';
 
 export { DemoProjects } from './upstream.js';
@@ -74,7 +75,7 @@ export function createNocoReachDemo(
     timeZone: (language) =>
       language === 'en-US' ? 'America/Los_Angeles' : 'Asia/Shanghai',
     accounts: demoAccounts,
-    steps: (language) => demoSteps(host, language),
+    generate: (context) => generateNocoReachSamples(host, context),
     clear: async () => clearAllBusinessData(host, drive, clearCache),
     counts: async (context) => {
       const projects = await ids(context);

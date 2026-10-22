@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Shared sample generation
+
+- Extract the business sample generator and invoke it through the Demo Mode dataset's direct generation callback, preserving weighted progress and existing cleanup without changing core sample history or ordinary installation behavior.
+
 ## Unreleased
 
 - Replace Settings › Demo management with the Demo Mode plugin's administration page, and switch demo accounts from the account menu; visitors who have not signed in keep the corner button.
