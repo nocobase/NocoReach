@@ -14,14 +14,11 @@ export default function LocalAgentsPage() {
 }
 
 export function LocalAgents() {
-  // The plugin's list opens with a row holding only its Show disabled button once its heading is hidden; the
-  // description sits on that row, as the other tabs put their description beside their button (2026-10-22 user report:
-  // this tab's description stood a whole row further from its table than in the other tabs).
   return (
-    <section className='relative flex flex-col gap-3 sm:block sm:[&>section>div:first-child]:pb-3 [&_#agents-runner-heading]:sr-only'>
-      <header className='sm:absolute sm:inset-x-0 sm:top-0.5 sm:flex sm:min-h-8 sm:items-center sm:pr-40'>
+    <section className='flex flex-col gap-6 [&_#agents-runner-heading]:sr-only'>
+      <header>
         <h2 className='sr-only'>{$t('common.runnerAgent')}</h2>
-        <p className='max-w-3xl text-sm text-muted-foreground'>
+        <p className='mt-1.5 max-w-3xl text-sm text-muted-foreground'>
           {$t('agentsPage.runnerDescription')}
         </p>
       </header>
