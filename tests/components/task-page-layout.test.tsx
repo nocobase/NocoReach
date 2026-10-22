@@ -574,8 +574,11 @@ test('the properties column lists owner, Agent, playbook, source, article, page 
   expect(value('负责人')).toHaveTextContent('Super Admin');
   expect(value('Agent')).toHaveTextContent('codex');
   expect(value('做法')).toHaveTextContent('优化现有页面');
+  // Found by the AI from opportunity O-16, kept apart from the owner.
+  expect(value('来源')).toHaveTextContent(/Found by AI\s*·\s*O-16/);
+  expect(value('来源')).toHaveTextContent('每日分析');
   expect(
-    within(value('来自')).getByRole('button', { name: 'O-16' }),
+    within(value('来源')).getByRole('button', { name: 'O-16' }),
   ).toBeVisible();
   expect(
     within(value('文章')).getByRole('link', {

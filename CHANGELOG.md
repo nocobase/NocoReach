@@ -4,6 +4,12 @@
 
 - Today's message on Insights lists only opportunities raised, dismissed or handed off today. One handed off on an earlier day that today's analysis lists again stays on the day it was raised; it read as handed off today beside the ones just dismissed (Studio, 10/22: T-27 and T-30 beside the three dismissed at 17:15). A hand-off counts on the day its task was created, and the waiting tasks are read again after one.
 - Today's conversation starts folded to its one line when Insights opens; a question sent since then opens it. An earlier day's conversation shows in full when that day is opened.
+## Unreleased — Found by AI or by a person, on every task
+
+- Task cards on the board and in the list say who found the task, beside its number: "Found by AI" (sparkles, violet) for a task from an opportunity of the daily analysis or a change on Insights the person only confirmed, "Found by <name>" for one a person handed off from a data page, created as a new task, started from a page to improve or created from Results. The finder is the person who created the task, who may not be its owner. Older tasks that did not record their creator show nothing.
+- The task page's properties start with Source: "Found by AI · O-41" with "Daily analysis · date", or "Found by <name>" with where it came from ("Handed off from Keywords · date", "New task · date"). It replaces the From row.
+- Hand-offs from data pages record the page they came from; tasks started from a page to improve record their creator; a task handed off from another keeps who found the first one and where.
+
 ## Unreleased — Failed article publishes say where and why
 
 - When publishing an article to a target does not complete, the task card keeps its plain-words reason and now links to Technical details, which list each failed target with the step it stopped at (reading the article, checking the website repository, writing, or checking the saved changes), the error code, the time and what the target or the error said (for example `github:429`, or a network timeout with its host).
