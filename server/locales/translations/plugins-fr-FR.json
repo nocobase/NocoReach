@@ -1,0 +1,217 @@
+{
+  "@nocobase/app-plugin-agents": {
+    "access": {
+      "section": "Équipe d’agents",
+      "businessSection": "Équipe d’agents",
+      "businesses": {
+        "agents": {
+          "title": "Agents et compétences",
+          "description": "Les agents de l’équipe et les compétences qu’ils utilisent.",
+          "actions": {
+            "edit": {
+              "title": "Modifier les agents et les compétences",
+              "description": "Modifier les paramètres, les compétences et les variables d’un agent, l’archiver, le restaurer et le supprimer, ainsi que modifier les compétences. Un agent ne reçoit aucun droit au-delà de ceux de la personne qui le modifie",
+              "related": "Modifier les agents et les compétences (agents dont la personne est propriétaire et compétences qu’elle a créées)",
+              "relatedLabel": "Agents dont je suis propriétaire et compétences que j’ai créées",
+              "relatedHint": "Agents dont je suis propriétaire et compétences que j’ai créées",
+              "all": "Modifier les agents et les compétences (tous)"
+            }
+          }
+        }
+      },
+      "settings": {
+        "agents": {
+          "agents": "Agents",
+          "runners": "Environnements d’exécution",
+          "prices": "Tarifs des modèles",
+          "services": "Services de modèles"
+        }
+      },
+      "actions": {
+        "read": "Consulter",
+        "manage": "Gérer"
+      },
+      "keyScopes": {
+        "agents": {
+          "title": "Agents",
+          "description": "Consulter les agents, les compétences et les exécutions ; modifier les agents et les compétences, annuler et relancer les exécutions."
+        },
+        "runners": {
+          "title": "Environnements d’exécution",
+          "description": "Consulter les moteurs d’exécution et les jetons d’enregistrement ; gérer les moteurs d’exécution."
+        },
+        "prices": {
+          "title": "Tarifs des modèles",
+          "description": "Consulter et modifier les tarifs des modèles servant à estimer les coûts."
+        },
+        "services": {
+          "title": "Services de modèles",
+          "description": "Consulter les services de modèles et les modèles qu’ils proposent, sans jamais accéder à leurs clés."
+        }
+      }
+    }
+  },
+  "@nocobase/app-plugin-authorization": {
+    "sections": {
+      "pages": "Autorisations des pages",
+      "page": "Pages",
+      "business": "Autorisations métier",
+      "administration": "Administration",
+      "other": "Autres"
+    },
+    "options": {
+      "defaultAndSharing": "Utiliser le périmètre de données par défaut",
+      "actions": {
+        "assign": "Gérer les attributions",
+        "configure": "Configurer",
+        "inspect": "Inspecter les autorisations",
+        "read": "Lire",
+        "create": "Créer",
+        "update": "Mettre à jour",
+        "delete": "Supprimer",
+        "access": "Accéder"
+      },
+      "settingsModules": {
+        "authorization": "Autorisations"
+      },
+      "pages": {
+        "all": "Toutes les pages",
+        "allDescription": "Autoriser l’accès à toutes les pages, y compris celles ajoutées ultérieurement."
+      },
+      "settings": {
+        "inspector": "Inspecteur des autorisations",
+        "permission-sets": "Ensembles d’autorisations"
+      },
+      "subjectTypes": {
+        "authenticated": "Tous les utilisateurs connectés",
+        "authenticatedDescription": "S’applique à chaque utilisateur disposant d’une session de connexion valide.",
+        "user": "Utilisateurs"
+      },
+      "recordAccessPolicies": {
+        "allRecords": "Tous les enregistrements",
+        "recordsIOwn": "Enregistrements dont je suis propriétaire",
+        "recordsICreated": "Enregistrements que j’ai créés",
+        "customFilter": "Filtre personnalisé",
+        "customFilterHint": "Sélectionnez les enregistrements à l’aide d’une condition de filtrage personnalisée."
+      }
+    }
+  },
+  "@nocobase/app-plugin-authz-default-access": {
+    "resourceTitle": "Périmètre de données par défaut"
+  },
+  "@nocobase/app-plugin-authz-restriction-rules": {
+    "resourceTitle": "Règles de restriction"
+  },
+  "@nocobase/app-plugin-authz-sharing-rules": {
+    "resourceTitle": "Règles de partage"
+  },
+  "@nocobase/app-plugin-notification": {
+    "errors": {
+      "logsForbidden": "L’accès aux journaux de notifications est requis.",
+      "logNotFound": "Journal de notification introuvable.",
+      "testHeaderRequired": "L’en-tête de la requête de test de notification est requis.",
+      "testForbidden": "L’autorisation d’envoyer des notifications de test est requise.",
+      "testInvalidRequest": "Le corps de la requête doit contenir une cible de test et les valeurs des champs.",
+      "testTargetUnavailable": "La cible du test de notification est indisponible.",
+      "testUnknownField": "Champ de test de notification \"{{name}}\" inconnu.",
+      "testRequiredField": "Le champ de test de notification \"{{name}}\" est requis.",
+      "testFieldTooLong": "Le champ de test de notification \"{{name}}\" doit contenir au maximum {{maxLength}} caractères.",
+      "testFailed": "Le test de notification a échoué.",
+      "testNotFound": "Test de notification introuvable."
+    }
+  },
+  "@nocobase/app-plugin-notification-in-app": {
+    "errors": {
+      "authenticationRequired": "Authentification requise.",
+      "invalidPageToken": "pageToken ne correspond à aucun jeton renvoyé par cette liste.",
+      "notFound": "Message de notification introuvable."
+    },
+    "test": {
+      "channels": {
+        "inApp": "Dans l’application"
+      },
+      "providers": {
+        "builtIn": "Intégré"
+      },
+      "fields": {
+        "route": "Route interne (sans préfixe de déploiement)",
+        "url": "URL HTTP(S) complète",
+        "recipientUserId": "Identifiant utilisateur du destinataire",
+        "title": "Titre",
+        "message": "Message"
+      },
+      "placeholders": {
+        "currentUser": "Identifiant utilisateur de l’application"
+      },
+      "defaults": {
+        "title": "Test de notification NocoBase",
+        "body": "Ceci est une notification de test de NocoBase."
+      }
+    }
+  },
+  "@nocobase/app-plugin-notification-providers": {
+    "test": {
+      "channels": {
+        "email": "E-mail",
+        "im": "Messagerie instantanée"
+      },
+      "providers": {
+        "smtp": "SMTP",
+        "resend": "Resend",
+        "feishuWebhook": "Webhook Feishu",
+        "dingtalkWebhook": "Webhook DingTalk"
+      },
+      "fields": {
+        "subject": "Objet",
+        "text": "Texte",
+        "html": "HTML",
+        "url": "URL HTTP(S) complète",
+        "recipient": "Destinataire",
+        "title": "Titre",
+        "message": "Message"
+      },
+      "placeholders": {
+        "email": "name@example.com"
+      },
+      "defaults": {
+        "title": "Test de notification NocoBase",
+        "body": "Ceci est une notification de test de NocoBase."
+      }
+    }
+  },
+  "@nocobase/app-plugin-scheduler": {
+    "nav": {
+      "automation": "Automatisation"
+    },
+    "authorization": {
+      "title": "Planifications",
+      "read": "Lire"
+    }
+  },
+  "@nocobase/app-plugin-users": {
+    "invitationEmail": {
+      "subject": "{{inviter}} vous invite à rejoindre {{app}}",
+      "intro": "{{inviter}} vous invite à rejoindre {{app}}.",
+      "summary": "Vous rejoindrez également : {{items}}.",
+      "separator": ", ",
+      "action": "Accepter l’invitation",
+      "validity": "Ouvrez le lien pour définir votre nom et votre mot de passe. Ce lien est à usage unique et reste valable jusqu’au {{date}}.",
+      "fallback": "Si le lien ne s’ouvre pas, copiez-le dans votre navigateur :"
+    }
+  },
+  "@nocobase/app-plugin-mail": {
+    "errors": {
+      "accessDenied": "L’accès à la messagerie est requis.",
+      "idempotencyConflict": "La clé d’idempotence est déjà associée à une autre requête.",
+      "invalidRequest": "La requête de messagerie est invalide.",
+      "accountCredentialsInvalid": "L’authentification à la boîte mail a échoué. Vérifiez votre identifiant et votre mot de passe ou votre code d’autorisation, et assurez-vous que IMAP/SMTP est activé. Gmail et d’autres services peuvent nécessiter un mot de passe d’application.",
+      "requestFailed": "La requête de messagerie n’a pas pu aboutir.",
+      "providerRateLimited": "Le service de messagerie reçoit trop de requêtes. Veuillez réessayer plus tard.",
+      "providerUnavailable": "Impossible de joindre le service de messagerie. Veuillez réessayer plus tard.",
+      "reauthorizationRequired": "Ce compte de messagerie doit être reconnecté avant de pouvoir être utilisé.",
+      "syncRunNotFound": "Exécution de synchronisation de la messagerie introuvable.",
+      "messageNotFound": "E-mail introuvable.",
+      "authorizationStateRequired": "L’état d’autorisation de la messagerie est requis."
+    }
+  }
+}

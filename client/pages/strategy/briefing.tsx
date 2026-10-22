@@ -15,6 +15,13 @@ import { Sparkline, chipOf, percent, type MetricItem } from './insights-view';
 import { citedSignals, oppNo, taskNo, type Row } from './board';
 import { dayOf, type Day, type Feed, type Line, type Standing } from './feed';
 import { handOffLabel } from './hand-off';
+import {
+  AskAboutOpportunity,
+  DayThreads,
+  OpportunityThreads,
+  threadCount,
+  useThreads,
+} from './threads';
 import { recentlyEnded } from './watch';
 import type { InsightBatch, StrategyState, WatchRecord } from './model';
 
@@ -128,9 +135,9 @@ function AgentMessage({
 }) {
   return (
     <div className='flex gap-2.5'>
-      <ActorAvatar type='agent' size='sm' className='mt-0.5' />
-      <div className='flex min-w-0 flex-1 flex-col gap-1.5'>
-        <p className='flex items-center gap-1.5 text-xs text-muted-foreground'>
+      <ActorAvatar type='agent' size='default' />
+      <div className='flex min-w-0 flex-1 flex-col gap-2'>
+        <p className='flex h-8 items-center gap-1.5 text-xs text-muted-foreground'>
           {meta}
         </p>
         {children}
@@ -153,7 +160,7 @@ function Bubble({
       role={label ? 'group' : undefined}
       aria-label={label}
       className={cn(
-        'w-full rounded-xl rounded-tl-sm bg-muted/60 px-3 py-2 text-sm leading-relaxed',
+        'w-full rounded-xl rounded-tl-sm border bg-card px-3.5 py-2.5 text-sm leading-relaxed text-card-foreground',
         className,
       )}
       {...data}
@@ -186,7 +193,7 @@ function Summary({
       .slice(0, 2);
   return (
     <Bubble label={$t('strategy.todayBrief')}>
-      <p className='font-medium'>
+      <p className='text-base font-semibold'>
         {!batch
           ? $t('strategy.noAnalysisYetClickUpdate')
           : pending
@@ -290,19 +297,20 @@ function StandingTags({ lines }: { lines: Line[] }) {
 /** An opportunity already decided: its title and where it went. */
 function DecidedLine({ row, st }: Line) {
   return (
-    <li
-      data-opportunity-id={row.card.id}
-      className='flex items-center gap-2 py-1.5'
-    >
-      <Link
-        to={itemLink(row)}
-        title={row.card.title}
-        className='min-w-0 flex-1 truncate text-muted-foreground hover:underline'
-      >
-        <No row={row} />
-        {row.card.title}
-      </Link>
-      <StatusTag row={row} st={st} />
+    <li data-opportunity-id={row.card.id} className='py-1.5'>
+      <div className='flex items-center gap-2'>
+        <Link
+          to={itemLink(row)}
+          title={row.card.title}
+          className='min-w-0 flex-1 truncate text-muted-foreground hover:underline'
+        >
+          <No row={row} />
+          {row.card.title}
+        </Link>
+        <AskAboutOpportunity row={row} />
+        <StatusTag row={row} st={st} />
+      </div>
+      <OpportunityThreads opportunityId={row.card.id} />
     </li>
   );
 }
@@ -346,33 +354,37 @@ function Decisions({
               key={r.card.id}
               aria-label={r.card.title}
               data-opportunity-id={r.card.id}
-              className='flex items-center gap-2 py-1.5'
+              className='py-1.5'
             >
-              {c && <Tag tone={c.tone}>{c.text}</Tag>}
-              <Link
-                to={itemLink(r)}
-                title={r.card.title}
-                className='min-w-0 flex-1 truncate hover:underline'
-              >
-                <No row={r} />
-                {r.card.title}
-              </Link>
-              <Button
-                size='xs'
-                variant={i === 0 ? 'default' : 'outline'}
-                disabled={busy}
-                onClick={() => onGive(r)}
-              >
-                {handOffLabel()}
-              </Button>
-              <Button
-                size='xs'
-                variant='ghost'
-                disabled={busy}
-                onClick={() => onIgnore(r)}
-              >
-                {$t('common.ignore')}
-              </Button>
+              <div className='flex items-center gap-2'>
+                {c && <Tag tone={c.tone}>{c.text}</Tag>}
+                <Link
+                  to={itemLink(r)}
+                  title={r.card.title}
+                  className='min-w-0 flex-1 truncate hover:underline'
+                >
+                  <No row={r} />
+                  {r.card.title}
+                </Link>
+                <AskAboutOpportunity row={r} />
+                <Button
+                  size='xs'
+                  variant={i === 0 ? 'default' : 'outline'}
+                  disabled={busy}
+                  onClick={() => onGive(r)}
+                >
+                  {handOffLabel()}
+                </Button>
+                <Button
+                  size='xs'
+                  variant='ghost'
+                  disabled={busy}
+                  onClick={() => onIgnore(r)}
+                >
+                  {$t('common.ignore')}
+                </Button>
+              </div>
+              <OpportunityThreads opportunityId={r.card.id} />
             </li>
           );
         })}
@@ -573,6 +585,7 @@ export function Today({
         {tasks}
         <HealthNote projectId={projectId} />
       </AgentMessage>
+      <DayThreads day={dayOf(batch?.generatedAt)} />
     </>
   );
 }
@@ -599,7 +612,8 @@ function StatusTag({ row, st }: { row: Row; st: Standing }) {
 }
 /** An earlier day, folded to one line: what was suggested and where each went; opens to the list. */
 function PastDay({ day, rows, now }: { day: Day; rows: Row[]; now: Date }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false),
+    asked = threadCount(useThreads()?.threads || [], day.day);
   return (
     <section
       aria-label={dayLabel(day.day, now)}
@@ -628,6 +642,9 @@ function PastDay({ day, rows, now }: { day: Day; rows: Row[]; now: Date }) {
                 .join(' · ')}
             </span>
             <StandingTags lines={day.items} />
+            {asked > 0 && (
+              <Tag tone='grey'>{$t('strategy.dayThreads', { 0: asked })}</Tag>
+            )}
             <span className='nr-link ml-auto inline-flex items-center gap-0.5 text-xs'>
               {open ? $t('common.collapse') : $t('strategy.expandDay')}
               <Chevron open={open} />
@@ -647,6 +664,7 @@ function PastDay({ day, rows, now }: { day: Day; rows: Row[]; now: Date }) {
               {day.ended.map((w) => (
                 <Ended key={w.key} w={w} rows={rows} />
               ))}
+              <DayThreads day={day.day} />
             </>
           )}
         </div>
@@ -655,9 +673,27 @@ function PastDay({ day, rows, now }: { day: Day; rows: Row[]; now: Date }) {
   );
 }
 /** The days before the latest analysis, newest first, a week at a time. */
-export function History({ days, rows }: { days: Day[]; rows: Row[] }) {
+export function History({
+  days: feedDays,
+  today,
+  rows,
+}: {
+  days: Day[];
+  today: string;
+  rows: Row[];
+}) {
   const [limit, setLimit] = useState(7),
-    [now] = useState(() => new Date());
+    [now] = useState(() => new Date()),
+    threads = useThreads()?.threads || [];
+  // A day whose analysis raised nothing but was asked about still shows, for its questions.
+  const known = new Set(feedDays.map((d) => d.day)),
+    asked = [...new Set(threads.map((t) => t.subject.day))].filter(
+      (d) => !known.has(d) && (!today || d < today),
+    ),
+    days = [
+      ...feedDays,
+      ...asked.map((day): Day => ({ day, items: [], ended: [] })),
+    ].sort((a, b) => b.day.localeCompare(a.day));
   if (!days.length) return null;
   return (
     <>
@@ -678,18 +714,25 @@ export function History({ days, rows }: { days: Day[]; rows: Row[] }) {
   );
 }
 
-/** Ask AI: the chat opens with the day's analysis named, so the question continues from it. */
+/** Ask AI: the chat opens on a new conversation about the day's analysis, which Insights then shows under that day. */
 export function AskBar({ projectId, day }: { projectId: number; day: string }) {
   const chat = useOptionalOnlineChat();
   if (!chat) return null;
+  const date = day
+    ? new Date(`${day}T00:00:00`).toLocaleDateString(getCurrentLocale(), {
+        month: 'numeric',
+        day: 'numeric',
+      })
+    : '';
   return (
     <button
       type='button'
       className='sticky bottom-3 z-10 flex w-full items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-left text-sm text-muted-foreground shadow-sm transition-colors hover:border-ring'
       onClick={() =>
         chat.open({
-          draft: $t('strategy.askDraft', { 0: day }),
+          draft: date ? $t('strategy.askDraft', { 0: date }) : '',
           projectId: String(projectId),
+          subject: day ? { kind: 'insights', day } : null,
         })
       }
     >

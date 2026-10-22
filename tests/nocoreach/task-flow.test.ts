@@ -139,7 +139,7 @@ for (const unavailable of ['missing', 'database-error']) {
 test('built-in playbooks: every step is the Agent or you, grouped by work; custom playbooks are checked before saving',()=>{
  assert.equal(SYSTEM_PLAYBOOKS.length,12);
  // 起草社区回复 (2026-10-08): drafts only, by the Agent without changing the repository, then you; can go on to a docs page.
- {const r=SYSTEM_PLAYBOOKS.find(p=>p.id==='community-reply');assert.equal(r.kind,'plan');assert.deepEqual(stagesFor(r).map(s=>[s.kind,s.mode]),[['agent','analyze'],['review',undefined]]);assert.deepEqual(r.next,['new-doc','optimize-page']);assert.match(r.steps[0].instruction,/### 回复/);assert.match(r.steps[0].instruction,/不发帖/);
+ {const r=SYSTEM_PLAYBOOKS.find(p=>p.id==='community-reply');assert.equal(r.kind,'plan');assert.deepEqual(stagesFor(r).map(s=>[s.kind,s.mode]),[['agent','analyze'],['review',undefined]]);assert.deepEqual(r.next,['new-doc','optimize-page']);assert.match(r.steps[0].instruction,/### Reply/);assert.match(r.steps[0].instruction,/不发帖/);
   assert.equal(defaultPlaybookId({evidence:{insight:{signalIds:['community-unanswered']},context:{signals:{items:[{key:'community-unanswered',action:'reply'}]}}}}),'community-reply');}
  for(const p of SYSTEM_PLAYBOOKS){const st=stagesFor(p);validateFlow({name:p.name,stages:st});assert.ok(st.every(s=>s.kind!=='ai'),`${p.id} is run by the Agent`);assert.ok(['research','create','optimize','technical'].includes(p.category));
   assert.equal(st.some(s=>s.kind==='release'),p.kind==='build',`${p.id}: only repository changes are released`);}

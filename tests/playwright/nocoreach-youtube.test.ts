@@ -175,7 +175,7 @@ async function language(page: Page, locale: 'en' | 'zh') {
   await page.getByRole('menuitem', { name: /Language|语言/ }).hover();
   await page
     .getByRole('menuitemradio', {
-      name: locale === 'en' ? 'English' : '中文',
+      name: locale === 'en' ? 'English' : '简体中文',
       exact: true,
     })
     .click();
