@@ -97,10 +97,15 @@ describe('application authentication pages', () => {
       name: 'About this application',
     });
     expect(panel).toHaveClass('hidden', 'xl:block');
-    expect(panel).toHaveTextContent('AI growth team');
+    expect(panel).toHaveTextContent('AI growth operations platform');
+    expect(panel).toHaveTextContent(
+      'Find the opportunities in your data.NocoReach puts them into action.',
+    );
     expect(panel).toHaveTextContent('Daily analysis');
-    expect(panel).toHaveTextContent('Repository-native');
-    expect(panel).toHaveTextContent('Find it, ship it, measure it.');
+    expect(panel).toHaveTextContent('Agent execution');
+    expect(panel).toHaveTextContent(
+      'Find opportunities · Put them into action · Track the impact',
+    );
   });
 
   it('shows the action error', () => {

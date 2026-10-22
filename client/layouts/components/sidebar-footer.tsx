@@ -4,8 +4,6 @@ import { useTranslation } from '@nocobase/i18n/client';
 import { ShieldCheck } from 'lucide-react';
 import type { ReactElement } from 'react';
 
-import { formatTemplateVersion } from '#lib/template-version';
-
 import { SidebarFooter, useSidebar } from '#components/ui/sidebar';
 import {
   Tooltip,
@@ -14,26 +12,20 @@ import {
 } from '#components/ui/tooltip';
 
 /**
- * The application's sidebar footer: NocoReach's two-line slogan, then the template's name and its version, each
- * on its own line. In icon mode only the shield remains, and a tooltip carries the same text.
+ * The application's sidebar footer: NocoReach's two-line slogan. In icon mode only the shield remains, and a tooltip
+ * carries the same text. The version is in the account menu (2026-10-22: the template's name meant nothing to people
+ * using NocoReach).
  */
 export function AppSidebarFooter(): ReactElement {
   const { t } = useTranslation();
   const { isMobile, state } = useSidebar();
   const iconOnly = state === 'collapsed' && !isMobile;
-  const templateName = 'Default Template';
-  const versionLabel =
-    formatTemplateVersion(
-      typeof __NOCOREACH_TEMPLATE_VERSION__ === 'undefined'
-        ? undefined
-        : __NOCOREACH_TEMPLATE_VERSION__,
-    ) ?? t('shell.templateVersionUnknown', { defaultValue: 'Version unknown' });
   const buildFreely = t('shell.buildFreely', {
     defaultValue: 'Find the opportunities in your data.',
   });
   // The tooltip and the icon's accessible name have no link, so the brand's markup is dropped there.
   const reliability = t('shell.reliability', {
-    defaultValue: '<brand>NocoReach</brand> gets them done.',
+    defaultValue: '<brand>NocoReach</brand> puts them into action.',
   }).replace(/<\/?brand>/g, '');
 
   // NocoReach's name, emphasised but not a link (the template linked NocoBase's site here).
@@ -53,9 +45,7 @@ export function AppSidebarFooter(): ReactElement {
                 render={
                   <span
                     aria-label={
-                      iconOnly
-                        ? `${buildFreely} ${reliability} ${templateName} ${versionLabel}`
-                        : undefined
+                      iconOnly ? `${buildFreely} ${reliability}` : undefined
                     }
                     className='flex h-5 shrink-0 items-center rounded-sm text-sidebar-foreground/80 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring'
                     role={iconOnly ? 'img' : undefined}
@@ -72,9 +62,6 @@ export function AppSidebarFooter(): ReactElement {
               >
                 <span className='font-medium'>{buildFreely}</span>
                 <span>{reliability}</span>
-                <span className='mt-1 opacity-70'>
-                  {templateName} {versionLabel}
-                </span>
               </TooltipContent>
             </Tooltip>
           }
@@ -87,21 +74,11 @@ export function AppSidebarFooter(): ReactElement {
             <Trans
               t={t}
               i18nKey='shell.reliability'
-              defaults='<brand>NocoReach</brand> gets them done.'
+              defaults='<brand>NocoReach</brand> puts them into action.'
               components={{ brand: brandLink }}
             >
-              {brandLink} gets them done.
+              {brandLink} puts them into action.
             </Trans>
-          </p>
-          {/* Name and version stay on one line each; a long name is cut off, with the whole name as its title. */}
-          <p
-            className='mt-1 truncate text-muted-foreground'
-            title={templateName}
-          >
-            {templateName}
-          </p>
-          <p className='truncate text-muted-foreground' title={versionLabel}>
-            {versionLabel}
           </p>
         </div>
       </div>

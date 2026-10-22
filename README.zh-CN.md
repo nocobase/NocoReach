@@ -4,11 +4,11 @@
 
 <h1 align="center">NocoReach</h1>
 
-<p align="center"><strong>帮你读懂数据，把数据转化为市场机会，并执行落地。</strong></p>
+<p align="center"><strong>从数据中发现机会，NocoReach 帮你落地。</strong></p>
 
 <p align="center">
 AI 增长运营平台。<br>
-数据采集、每日分析和 Agent 执行，在同一个平台里完成。
+数据采集、每日分析和 Agent 执行在同一个平台完成。
 </p>
 
 <p align="center">
