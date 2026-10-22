@@ -1906,6 +1906,8 @@
   "strategy.conversationInPanel": "Ouvrir la conversation du jour dans le panneau latéral",
   "strategy.situationAttention": "Situation actuelle · à surveiller : {0}",
   "strategy.earlierAnalyses": "Analyses précédentes ({0})",
+  "strategy.collapseEarlier": "Masquer les analyses précédentes",
+  "strategy.conversationTurns": "Conversation · questions : {0}",
   "strategy.dayThreads": "Questions : {0}",
   "strategy.verdictCoveredTask": "La tâche {0} s’en occupe déjà",
   "strategy.verdictCoveredTaskDone": "La tâche {0} a déjà traité ce point",

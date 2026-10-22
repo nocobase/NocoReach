@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Insights scrolls inside its conversation
+
+- On wide screens Insights fills the window: the title, the numbers and the input stay in place and only the day's analysis and conversation scroll between them; Current situation scrolls on its own.
+- Earlier analyses opened above today fold again with "Hide earlier analyses", offered both above them and just above today.
+- The day's conversation folds to one line ("Conversation · questions: N") so the day's analysis stays in view; a new question opens it again and scrolls to it.
+- The input has one frame instead of a field inside a box.
+
 ## Unreleased — One conversation a day on Insights
 
 - What you ask from Insights joins the day's conversation, shown right under the day's analysis with its own input at the bottom: type and press Enter, and the answer appears there (what it read folds under "Sources checked"). Each day keeps one conversation, so the AI remembers what was asked before.

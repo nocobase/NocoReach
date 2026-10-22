@@ -1906,6 +1906,8 @@
   "strategy.conversationInPanel": "在右側開啟今天的對話",
   "strategy.situationAttention": "目前狀況 {0} 項需留意",
   "strategy.earlierAnalyses": "查看更早的分析（{0} 天）",
+  "strategy.collapseEarlier": "收起更早的分析",
+  "strategy.conversationTurns": "對話 · {0} 輪問答",
   "strategy.dayThreads": "{0} 次問答",
   "strategy.verdictCoveredTask": "已有任務 {0} 在處理",
   "strategy.verdictCoveredTaskDone": "任務 {0} 已經做過",

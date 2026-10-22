@@ -1960,6 +1960,8 @@
   "strategy.conversationInPanel": "Mở cuộc trò chuyện hôm nay ở bảng bên",
   "strategy.situationAttention": "Tình hình hiện tại · cần chú ý: {0}",
   "strategy.earlierAnalyses": "Các phân tích trước ({0} ngày)",
+  "strategy.collapseEarlier": "Ẩn các phân tích trước",
+  "strategy.conversationTurns": "Cuộc trò chuyện · {0} câu hỏi",
   "strategy.dayThreads": "{0} câu hỏi",
   "strategy.verdictCoveredTask": "Tác vụ {0} đang xử lý việc này",
   "strategy.verdictCoveredTaskDone": "Tác vụ {0} đã hoàn thành việc này",

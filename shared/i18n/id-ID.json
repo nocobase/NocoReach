@@ -1960,6 +1960,8 @@
   "strategy.conversationInPanel": "Buka percakapan hari ini di panel samping",
   "strategy.situationAttention": "Situasi saat ini · perlu perhatian: {0}",
   "strategy.earlierAnalyses": "Analisis sebelumnya ({0})",
+  "strategy.collapseEarlier": "Sembunyikan analisis sebelumnya",
+  "strategy.conversationTurns": "Percakapan · pertanyaan: {0}",
   "strategy.dayThreads": "{0} pertanyaan",
   "strategy.verdictCoveredTask": "Tugas {0} sudah menanganinya",
   "strategy.verdictCoveredTaskDone": "Tugas {0} sudah menyelesaikannya",

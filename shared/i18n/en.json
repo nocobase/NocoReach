@@ -1907,6 +1907,8 @@
   "strategy.conversationInPanel": "Open today’s conversation in the side panel",
   "strategy.situationAttention": "Current situation · needs attention: {0}",
   "strategy.earlierAnalyses": "Earlier analyses ({0})",
+  "strategy.collapseEarlier": "Hide earlier analyses",
+  "strategy.conversationTurns": "Conversation · questions: {0}",
   "strategy.dayThreads": "{0} questions",
   "strategy.verdictCoveredTask": "Task {0} is already on it",
   "strategy.verdictCoveredTaskDone": "Task {0} already did this",
