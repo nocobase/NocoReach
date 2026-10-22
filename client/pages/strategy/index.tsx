@@ -350,7 +350,16 @@ function Insights({
     feed = feedOf(
       state,
       rows,
-      new Map(tasks.map((t) => [String(t.id), t.createdAt || ''])),
+      new Map(
+        tasks.map((t) => [
+          String(t.id),
+          {
+            createdAt: t.createdAt,
+            work: t.evidence?.work,
+            status: t.status,
+          },
+        ]),
+      ),
     ),
     analysisDay = dayOf(state.insights?.generatedAt),
     chat = useOptionalOnlineChat(),
