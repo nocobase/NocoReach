@@ -13,6 +13,8 @@ export function applicationAction(resource: string, action: string): boolean {
       return action === 'create';
     case 'nrOnline':
       return action === 'manage';
+    case 'nrOnlineAI':
+      return action === 'setModel';
     case 'nrProxyProfiles':
       return !['selections', 'select', 'testConnection'].includes(action);
     case 'nrSkills':

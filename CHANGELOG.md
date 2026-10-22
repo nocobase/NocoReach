@@ -6,6 +6,13 @@
 - Run history opens with one line on the recent runs ("No problems in the last 8 runs", "2 of the last 8 runs had problems") with the refresh button beside it. Runs that went well no longer each carry a Done badge; only failed, skipped and running ones show a status. Each run is one line with its suggestions on the right, and projects are named only when there are several, or one was skipped or failed (in red, with the reason).
 - Dates other than today, yesterday and tomorrow use the shared format ("10-20 09:00" instead of "10月20日 09:00"), and a skipped run says it was already analyzed that day rather than "today".
 
+## Unreleased — Agent: one Settings per row, tidy tabs
+
+- Who does the work reads as a table: column headings, Cloud models and Local agents as light group rows with their explanation in an ⓘ, and what each work does under its name.
+- Every row has one Settings button for administrators, a dialog that changes what the row uses. Daily analysis › Settings chooses the model the analysis runs on (the default chat model, which no page let anyone change since the Agents plugin upgrade of 2026-10-16); Chat panel › Settings is the chat agent dialog, whose default model now names the model; Tasks › Settings chooses the project default and says beside each agent whether it is online, not signed in, out of quota or offline. While a row needs attention, the button is the fix instead.
+- The tabs follow setup order: Model services, Runtimes, Local agents, Usage. Each opens with one sentence and its button instead of a second page heading, at the same size in every tab. Local agents holds the agent list only; the project default moved to Tasks › Settings.
+- Shorter wording: the Model services and Runtimes descriptions are one sentence, the list's how-to is one sentence, and model counts read "2 chat models" instead of "2 chat".
+
 ## Unreleased — Playbook Skills matched by name
 
 - Skills › Used in playbooks, the playbook steps and the step Skill picker now find a step's Skill by id, then by name, as a task does. A Skill imported under a built-in name (with its own id) shows where the built-in playbooks use it, and saving a step no longer drops those references.
