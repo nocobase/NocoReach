@@ -39,7 +39,6 @@
   "strategy.noWaitingTasks": "Hiện không có tác vụ nào cần bạn xử lý.",
   "strategy.currentSituation": "Tình hình hiện tại",
   "strategy.noCurrentSituation": "Chưa có dữ liệu về tình hình hiện tại.",
-  "strategy.situationMore": "Thêm {0} mục",
   "strategy.refreshBlock": "Làm mới",
   "strategy.blockFailed": "Không thể tải phần này. Vui lòng thử lại.",
   "strategy.blockStale": "Làm mới không thành công. Đang hiển thị kết quả trước đó; dữ liệu có thể đã cũ.",
@@ -1562,9 +1561,9 @@
   "siteContent.foundSitemaps": "Tìm thấy trong {0} sơ đồ trang web",
   "siteContent.discoverySummary": "Đã tìm thấy {1} trang trong {0} sơ đồ trang web.",
   "agentRoles.cloud": "Mô hình đám mây",
-  "agentRoles.cloudHint": "Sử dụng các mô hình trong Cài đặt › Dịch vụ mô hình; nhà cung cấp tính phí theo từng lượt gọi.",
+  "agentRoles.cloudHint": "Sử dụng các mô hình trong thẻ Dịch vụ mô hình bên dưới; nhà cung cấp tính phí theo từng lượt gọi.",
   "agentRoles.local": "Tác nhân AI cục bộ",
-  "agentRoles.localHint": "Sử dụng Claude Code hoặc Codex trên một máy tính trong Cài đặt › Môi trường thực thi, bằng tài khoản đang đăng nhập trên máy đó.",
+  "agentRoles.localHint": "Sử dụng Claude Code hoặc Codex trên một máy tính trong thẻ Môi trường thực thi bên dưới, bằng tài khoản đang đăng nhập trên máy đó.",
   "agentRoles.chatFootnote": "Khi bạn chọn một tác nhân AI cục bộ trong khung trò chuyện, tác nhân đó cũng trả lời cuộc trò chuyện ấy.",
   "agentRoles.colWork": "Công việc",
   "agentRoles.colDoes": "Làm gì",
@@ -7002,5 +7001,9 @@
   "dataGithub.tabPulls": "Pull request (PR)",
   "dataGithub.tabReleases": "Bản phát hành",
   "dataGithub.tabDiscussions": "Thảo luận",
-  "siteAudit.readOnlyNoCost": "Kiểm tra sử dụng các trang đã đọc và không phát sinh chi phí."
+  "siteAudit.readOnlyNoCost": "Kiểm tra sử dụng các trang đã đọc và không phát sinh chi phí.",
+  "agentsPage.tabs": "Các mục tác nhân AI",
+  "agentsPage.runtimes": "Môi trường thực thi",
+  "agentsPage.models": "Dịch vụ mô hình",
+  "agentsPage.usage": "Mức sử dụng"
 }

@@ -39,7 +39,6 @@
   "strategy.noWaitingTasks": "現在、対応が必要なタスクはありません。",
   "strategy.currentSituation": "現在の状況",
   "strategy.noCurrentSituation": "現在の状況を示すデータはまだありません。",
-  "strategy.situationMore": "ほか {0} 件",
   "strategy.refreshBlock": "再読み込み",
   "strategy.blockFailed": "このセクションを読み込めませんでした。再試行してください。",
   "strategy.blockStale": "更新に失敗しました。前回の結果を表示しています。情報が古い可能性があります。",
@@ -6919,9 +6918,9 @@
   "analysisRules.placeSingular": "位",
   "siteContent.discoverySummary": "{0} 件のサイトマップで {1} ページを検出しました。",
   "agentRoles.cloud": "クラウドモデル",
-  "agentRoles.cloudHint": "「設定 › モデルサービス」のモデルを使用します。料金は呼び出しごとにプロバイダーへ支払います。",
+  "agentRoles.cloudHint": "下の「モデルサービス」タブのモデルを使用します。料金は呼び出しごとにプロバイダーへ支払います。",
   "agentRoles.local": "ローカルエージェント",
-  "agentRoles.localHint": "「設定 › 実行環境」にあるコンピューターの Claude Code または Codex を、そこでログインしているアカウントで使用します。",
+  "agentRoles.localHint": "下の「実行環境」タブにあるコンピューターの Claude Code または Codex を、そこでログインしているアカウントで使用します。",
   "agentRoles.chatFootnote": "チャットパネルでローカルエージェントを選んだ場合は、その会話にもそのエージェントが回答します。",
   "agentRoles.colWork": "作業",
   "agentRoles.colDoes": "内容",
@@ -7002,5 +7001,9 @@
   "searchPerformance.appearanceOther": "その他（{0}）",
   "searchIndex.noteQuota": "1 日に最大 {0} ページを、前回の検査から最も時間がたっている順に検査します。",
   "searchSitemaps.noteProperty": "Search Console プロパティ：{0}",
-  "searchHistory.details": "データの対象範囲の詳細"
+  "searchHistory.details": "データの対象範囲の詳細",
+  "agentsPage.tabs": "エージェントの項目",
+  "agentsPage.runtimes": "実行環境",
+  "agentsPage.models": "モデルサービス",
+  "agentsPage.usage": "使用量"
 }

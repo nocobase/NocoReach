@@ -127,8 +127,17 @@ vi.mock('../../client/components/reach/page', () => ({
   PageContainer: ({ children }: { children: ReactNode }) => (
     <main>{children}</main>
   ),
-  PageHeader: ({ description }: { description?: ReactNode }) => (
-    <header>{description}</header>
+  PageHeader: ({
+    description,
+    actions,
+  }: {
+    description?: ReactNode;
+    actions?: ReactNode;
+  }) => (
+    <header>
+      {description}
+      {actions}
+    </header>
   ),
   Section: ({ children, ...rest }: { children: ReactNode }) => (
     <section {...rest}>{children}</section>
@@ -807,7 +816,7 @@ it('earlier days sit above today, folded, and show their conversation when opene
   ).toBeTruthy();
 });
 
-it('the current situation beside the day shows what needs attention and folds the rest', async () => {
+it('the current situation beside the day lists every line, those needing attention first, without a refresh of its own', async () => {
   const item = (key: string, text: string, tone?: string) => ({
     key,
     text,
@@ -835,14 +844,20 @@ it('the current situation beside the day shows what needs attention and folds th
   expect(
     await within(situation).findByText('54 pages not updated for a year'),
   ).toBeTruthy();
-  expect(within(situation).queryByText('Pages indexed: 120')).toBeNull();
-  // Refresh is a quiet icon that keeps its name.
+  const lines = within(situation)
+    .getAllByRole('listitem')
+    .map((l) => l.textContent);
+  expect(lines).toEqual([
+    '54 pages not updated for a year',
+    'Pages indexed: 120',
+    'Sitemap found',
+    'No critical audit issues',
+  ]);
   expect(
-    within(situation).getByRole('button', { name: 'strategy.refreshBlock' }),
+    within(situation).queryByRole('button', { name: 'strategy.refreshBlock' }),
+  ).toBeNull();
+  // The page has one refresh, which runs the analysis again.
+  expect(
+    screen.getByRole('button', { name: 'strategy.updateAnalysis' }),
   ).toBeTruthy();
-  fireEvent.click(
-    within(situation).getByRole('button', { name: /strategy.situationMore:3/ }),
-  );
-  expect(within(situation).getByText('Pages indexed: 120')).toBeTruthy();
-  expect(within(situation).getByText('No critical audit issues')).toBeTruthy();
 });

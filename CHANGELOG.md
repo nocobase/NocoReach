@@ -7,6 +7,17 @@
 - A new last group, Agent edits and publishing, holds Website source (Git repository) and the article publishing target, now called Blog CMS: connect it when articles are managed in a CMS; articles kept in the repository don't need it. The drawer title follows ("Connect Blog CMS"); publishing and the drawer's form are unchanged.
 - Bilibili and Xiaohongshu say they are collected manually and not updated each day. What they collect still feeds the daily analysis's content rules.
 
+## Unreleased — Agent: tabs back, no duplicate local agents
+
+- Runtimes, Model services and Usage are tabs of the Agent page again, after Local agents, instead of pages of Settings; Settings no longer lists them, and `/runtimes`, `/models` and `/usage` open the tabs.
+- The Agent page shows Who does the work above the tabs; the local agents and the project default are in the Local agents tab only, instead of a second block below the overview. Change opens that tab.
+- When the chosen local agent's coding tool is not signed in or out of quota, the page no longer offers to switch to an agent that uses the same tool (switching from Claude · Fable 5.1 to Claude · Haiku 4.5 fails the same way); it offers an agent with another tool, or Change.
+
+## Unreleased — Insights has one refresh
+
+- Update analysis is the page's refresh icon, as on Results, named and tooltipped "Update analysis": it spins while the analysis runs, and the numbers, Current situation and the waiting tasks are read again when it ends. Current situation no longer has a refresh of its own.
+- Current situation lists every line, those needing attention first, since the column has the room; "N more" is gone.
+
 ## Unreleased — Every language checked against English in the tests
 
 - `tests/logic/additional-locales.test.ts` compares each of the eight additional languages with English: `shared/i18n/<locale>.json` with `en.json`, and `client/locales/translations/<locale>.json` with the shell copy of `client/locales/en-US.ts`. It names every missing key, extra key and key whose `{0}` or `{{name}}` placeholders differ. The `build` check's client type check already failed on a missing key, but stopped at the first language and missed extra keys and changed placeholders.

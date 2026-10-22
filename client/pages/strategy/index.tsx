@@ -35,6 +35,7 @@ import { AnalysisAlert } from './analysis-alert';
 import { PageContainer, PageHeader } from '#components/reach/page';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '#components/ui/button';
+import { RefreshButton } from '#components/reach/refresh-button';
 import { taskRecords, useProject } from '../reach-data';
 import { PageSkeleton } from '../workspace-cache';
 import { type Work } from '../task-execution-types';
@@ -304,6 +305,20 @@ function Insights({
       }),
     googleLocalFreshness,
   );
+  // When an analysis ends, the numbers, the situation and the tasks are read again with it.
+  const wasGeneratingRef = useRef(generating),
+    reloadAllRef = useRef(() => {});
+  useEffect(() => {
+    reloadAllRef.current = () => {
+      overview.reload();
+      summaryView.reload();
+      taskView.reload();
+    };
+  });
+  useEffect(() => {
+    if (wasGeneratingRef.current && !generating) reloadAllRef.current();
+    wasGeneratingRef.current = generating;
+  }, [generating]);
   const last = generating
     ? $t('strategy.analyzing')
     : batch
@@ -429,16 +444,19 @@ function Insights({
             {automatic && <DailyAutomatic link={canSchedules} />}
           </>
         }
+        // One refresh, as on Results (2026-10-22 user decision): it runs the analysis again, and every block is read
+        // again when it ends.
         actions={
-          <Button
-            variant='outline'
-            disabled={busy || generating}
+          <RefreshButton
+            label={
+              generating
+                ? $t('strategy.analyzing')
+                : $t('strategy.updateAnalysis')
+            }
+            busy={generating}
+            disabled={busy}
             onClick={() => void generate()}
-          >
-            {generating
-              ? $t('strategy.analyzing')
-              : $t('strategy.updateAnalysis')}
-          </Button>
+          />
         }
       />
       {error && (

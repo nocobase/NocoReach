@@ -1,7 +1,7 @@
 import { $t } from '#i18n';
 import { PageContainer } from '#components/reach/page';
 
-// Under Settings › Runtimes: whose tasks a computer runs, and what sharing it with the team gives away (2026-10-21 user
+// Under Agent › Runtimes: whose tasks a computer runs, and what sharing it with the team gives away (2026-10-21 user
 // decision: say plainly whether others can use my local agent).
 export function RuntimesSharing() {
   return (

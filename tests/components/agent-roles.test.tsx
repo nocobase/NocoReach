@@ -29,6 +29,7 @@ const state = vi.hoisted(() => ({
     options: [] as {
       id: string;
       name: string;
+      tool?: string;
       online?: boolean;
       health?: unknown;
     }[],
@@ -129,7 +130,7 @@ afterEach(() => cleanup());
 const mount = () =>
   render(
     <MemoryRouter>
-      <AgentRoles localAgentsId='local-agents' />
+      <AgentRoles localAgentsTo='/agents/runner' />
     </MemoryRouter>,
   );
 const row = (work: string) =>
@@ -156,11 +157,11 @@ test('says which work cloud models and local agents do, with what each uses and 
   expect(screen.getByRole('rowheader', { name: /本地 Agent/ })).toBeVisible();
   expect(screen.getByRole('link', { name: '模型服务' })).toHaveAttribute(
     'href',
-    '/models',
+    '/agents/models',
   );
   expect(screen.getByRole('link', { name: '运行环境' })).toHaveAttribute(
     'href',
-    '/runtimes',
+    '/agents/runtimes',
   );
   expect(screen.getByText(/在对话栏里选了本地 Agent 时/)).toBeVisible();
   expect(
@@ -194,7 +195,61 @@ test('an online agent whose latest tasks failed because the tool is not signed i
   );
   expect(
     within(row('执行任务')).getByRole('button', { name: '更换' }),
+  ).toHaveAttribute('href', '/agents/runner');
+});
+
+test('a tool that is not signed in is not fixed by an agent with the same tool', async () => {
+  const user = userEvent.setup();
+  const failing = {
+    id: 'fable',
+    name: 'Claude · Fable 5.1',
+    tool: 'claude',
+    online: true,
+    health: {
+      state: 'attention',
+      group: 'toolLogin',
+      count: 3,
+      at: '2026-10-21T11:30:38Z',
+      runnerName: 'CheeseMacBook-Pro',
+      tool: 'claude',
+    },
+  };
+  const haiku = {
+    id: 'haiku',
+    name: 'Claude · Haiku 4.5',
+    tool: 'claude',
+    online: true,
+  };
+  state.status.agentId = 'fable';
+  state.status.options = [failing, haiku];
+  const view = mount();
+  await waitFor(() =>
+    expect(within(row('执行任务')).getByText('需要处理')).toBeVisible(),
+  );
+  expect(screen.queryByRole('button', { name: /改用/ })).toBeNull();
+  expect(
+    within(row('执行任务')).getByRole('button', { name: '更换' }),
   ).toBeVisible();
+  view.unmount();
+
+  state.status.options = [
+    failing,
+    haiku,
+    { id: 'astra', name: 'Codex · GPT-6 Astra', tool: 'codex', online: true },
+  ];
+  mount();
+  await user.click(
+    await within(row('执行任务')).findByRole('button', {
+      name: '改用 Codex · GPT-6 Astra',
+    }),
+  );
+  expect(state.action).toHaveBeenCalledWith(
+    'nrAgent',
+    'saveDefault',
+    expect.objectContaining({
+      body: { projectId: '1', revision: 3, agentId: 'astra' },
+    }),
+  );
 });
 
 test('without a model service, analysis and chat point to connecting one', async () => {
@@ -206,7 +261,7 @@ test('without a model service, analysis and chat point to connecting one', async
     expect(within(row(work)).getByText('需要处理')).toBeVisible();
     expect(
       within(row(work)).getByRole('button', { name: '接入模型服务' }),
-    ).toHaveAttribute('href', '/models');
+    ).toHaveAttribute('href', '/agents/models');
     expect(within(row(work)).getByText('—')).toBeVisible();
   }
 });
@@ -339,6 +394,6 @@ test('with no runtime yet, tasks and the setup point to adding one', async () =>
   );
   expect(
     within(row('执行任务')).getByRole('button', { name: '添加运行环境' }),
-  ).toHaveAttribute('href', '/runtimes/connect');
+  ).toHaveAttribute('href', '/agents/runtimes/connect');
   expect(screen.getByText('最快配置')).toBeVisible();
 });

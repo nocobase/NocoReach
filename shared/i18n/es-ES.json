@@ -39,7 +39,6 @@
   "strategy.noWaitingTasks": "No hay tareas que requieran tu atención en este momento.",
   "strategy.currentSituation": "Situación actual",
   "strategy.noCurrentSituation": "Aún no hay datos sobre la situación actual.",
-  "strategy.situationMore": "{0} más",
   "strategy.refreshBlock": "Actualizar",
   "strategy.blockFailed": "No se ha podido cargar esta sección. Vuelve a intentarlo.",
   "strategy.blockStale": "No se ha podido actualizar. Se muestran los resultados anteriores, que podrían estar desactualizados.",
@@ -6919,9 +6918,9 @@
   "analysisRules.placeSingular": " posición",
   "siteContent.discoverySummary": "Mapas del sitio: {0}. Páginas encontradas: {1}.",
   "agentRoles.cloud": "Modelos en la nube",
-  "agentRoles.cloudHint": "Usan los modelos de Configuración › Servicios de modelos; el proveedor factura cada llamada.",
+  "agentRoles.cloudHint": "Usan los modelos de la pestaña Servicios de modelos, más abajo; el proveedor factura cada llamada.",
   "agentRoles.local": "Agentes locales",
-  "agentRoles.localHint": "Usan Claude Code o Codex en un ordenador de Configuración › Entornos de ejecución, con la cuenta que tenga la sesión iniciada allí.",
+  "agentRoles.localHint": "Usan Claude Code o Codex en un ordenador de la pestaña Entornos de ejecución, más abajo, con la cuenta que tenga la sesión iniciada allí.",
   "agentRoles.chatFootnote": "Si eliges un agente local en el panel de chat, también responde a esa conversación.",
   "agentRoles.colWork": "Trabajo",
   "agentRoles.colDoes": "Qué hace",
@@ -7002,5 +7001,9 @@
   "searchPerformance.appearanceOther": "Otro tipo ({0})",
   "searchIndex.noteQuota": "Máximo de páginas comprobadas al día: {0}. Se empieza por las que llevan más tiempo sin comprobarse.",
   "searchSitemaps.noteProperty": "Propiedad de Search Console: {0}",
-  "searchHistory.details": "Detalles de la cobertura de datos"
+  "searchHistory.details": "Detalles de la cobertura de datos",
+  "agentsPage.tabs": "Secciones de Agent",
+  "agentsPage.runtimes": "Entornos de ejecución",
+  "agentsPage.models": "Servicios de modelos",
+  "agentsPage.usage": "Uso"
 }
