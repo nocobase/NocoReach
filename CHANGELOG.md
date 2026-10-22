@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Task runs survive NocoReach restarts
+
+- A task run whose Runner lost its lease while NocoReach restarted (every deploy restarts it) is recorded as interrupted by the restart instead of blamed on the computer. NocoReach keeps the times it started (`nr-app-starts`) to tell the two apart.
+- The Agent step is started again once for each restart, as the system's Try again; the activity says so and the stage card says why it runs again. Review and publishing are never started again by themselves; an interrupted publish says the update interrupted it.
+- When the step could not start again, the card says the server was updating and offers Try again first; these runs no longer count toward "failed N times in a row". Technical details › Runs gives the restart time and the official reason.
+
 ## Unreleased — Data sources show their logos
 
 - Every data source has its logo on a small tile: the cards and drawer title on Settings › Data sources, the rows and sync table on Data health, the results of Find data sources on your website, the source headings of Settings › Analysis rules and the source buttons when adding a rule. Brand marks come from Simple Icons (CC0), vendored as path data in `client/components/reach/brand-logos.ts` without a new dependency; black marks follow the text colour so they show in dark mode. Sources without a brand mark of their own (Website content, Website source, Blog CMS, DataForSEO, AI search visibility, Competitor activity, Rank tracking, Daily analysis) take a matching icon in the same tile.

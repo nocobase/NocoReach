@@ -147,6 +147,10 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
   private markReady: () => void = () => {};
 
   public override register(): void {
+    // Taken before any provider boots (the Agents sweep among them): task runs a restart interrupted are told apart from
+    // a computer that went away by it (server/nocoreach/execution/restarts.ts). Studio restarts the application inside
+    // its host process, so the process start would not do.
+    const startedAt = new Date().toISOString();
     this.app.container.singleton(agentsAccessToken, () => ({
       scopeOf: async (identity) => {
         const runtime = this.app.container.resolve(nocoReachToken);
@@ -186,7 +190,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       }
       setCallbackPath(`${basePath}/api/nocoreach/nrGoogle/callback`);
       setPublicDns(this.app.config.get<NocoReachConfig>('nocoreach')?.publicDns ?? '');
-      const plugin = new Connections(legacy, variables, { basePath, publicOrigin: identity?.publicOrigin, browserCollectors: this.app.config.get<NocoReachConfig>('nocoreach')?.browserCollectors ?? [], mock: this.app.container.has(mockEngineToken) ? this.app.container.resolve(mockEngineToken) : undefined });
+      const plugin = new Connections(legacy, variables, { basePath, publicOrigin: identity?.publicOrigin, browserCollectors: this.app.config.get<NocoReachConfig>('nocoreach')?.browserCollectors ?? [], mock: this.app.container.has(mockEngineToken) ? this.app.container.resolve(mockEngineToken) : undefined, startedAt });
       plugin.agents = this.app.container.resolve(agentsToken);
       const ready = new Promise<void>((resolve) => (this.markReady = resolve));
       const analysisRuns = new ScheduledRuns(db, 'daily-analysis:occurrence');

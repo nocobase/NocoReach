@@ -294,6 +294,27 @@ export function TaskExecutionPanel({
               </AlertDescription>
             </Alert>
           ) : null}
+          {current?.restartedAt ? (
+            // NocoReach restarted under this run (server/nocoreach/execution/restarts.ts); the official reason says how
+            // the Runner was lost.
+            <p className='text-sm text-muted-foreground'>
+              {$t('taskDetail.restartTechnical', {
+                0: new Date(current.restartedAt).toLocaleString(
+                  getCurrentLocale(),
+                ),
+                1: execution?.run.failureReason || '—',
+              })}
+            </p>
+          ) : null}
+          {current?.autoRetry ? (
+            <p className='text-sm text-muted-foreground'>
+              {$t('taskDetail.restartRetryTechnical', {
+                0: new Date(current.autoRetry.restartedAt).toLocaleString(
+                  getCurrentLocale(),
+                ),
+              })}
+            </p>
+          ) : null}
           {run && execution && (
             <>
               <RunHeader

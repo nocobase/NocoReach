@@ -334,6 +334,54 @@ test('stopping, manual takeover and interrupted Agent runs',async()=>{
  await f.s.tick();d=await f.view();assert.equal(d.runs.find(r=>r.id===again.id).error,'agent_failed');assert.equal((await f.stage()).key,'build','an interrupted run is not retried by itself');
 });
 
+// 2026-10-22 user report: every deploy restarts NocoReach; the Agents sweep of the new instance failed the task's run as
+// lost and the card blamed the Mac. Such a run is recorded as the restart's and started again once by the system.
+const minutes=m=>new Date(Date.parse('2026-10-22T13:00:00Z')+m*60000).toISOString();
+const lose=(f,run,failureReason,dispatched,failed)=>Object.assign(f.s.p.agents.records.get(run.pluginRunId),{status:'failed',failureReason,dispatchedAt:minutes(dispatched),finishedAt:minutes(failed)});
+test('a run NocoReach\'s restart interrupted starts again once, as the system; other failures wait for you',async()=>{
+ const f=fixture();await selectAgent(f);
+ let d=await f.command('startTask',{playbookId:'change-research'});const first=d.runs[0];await claim(f);
+ f.s.startedAt=minutes(10);lose(f,first,'leaseExpired',0,11);
+ await f.s.tick();d=await f.view();
+ assert.deepEqual(f.state.nrSnapshots.find(r=>r.key==='nr-app-starts').payload.starts,[minutes(10)],'the start is kept for later views and restarts');
+ assert.deepEqual([d.runs.find(r=>r.id===first.id).status,d.runs.find(r=>r.id===first.id).restartedAt],['failed',minutes(10)]);
+ const again=d.runs.find(r=>r.status==='queued');
+ assert.deepEqual(again.autoRetry,{of:first.id,restartedAt:minutes(10)});assert.equal(again.actor,first.actor);assert.equal(again.stepId,'analyze');
+ assert.deepEqual(d.work.history.filter(e=>e.action==='retryStage').map(e=>[e.actor,e.note,e.stageKey,e.runId]),[['system','serverRestart','analyze',again.id]]);
+ assert.equal(d.work.latestRun.id,again.id);
+ // At most once per step for each restart.
+ await claim(f);lose(f,again,'runnerOffline',9,12);
+ await f.s.tick();d=await f.view();
+ assert.equal(d.runs.find(r=>r.id===again.id).restartedAt,minutes(10));assert.equal(d.runs.filter(r=>r.status==='queued').length,0);
+ // The next deploy interrupts the step again: it starts once more.
+ d=await f.command('retryStage',{stageKey:'analyze'});const third=d.runs.find(r=>r.status==='queued');await claim(f);
+ f.s.startedAt=minutes(30);lose(f,third,'leaseExpired',20,31);
+ await f.s.tick();d=await f.view();assert.equal(d.runs.find(r=>r.status==='queued')?.autoRetry?.restartedAt,minutes(30));
+ // A computer that went away well after the start, or a tool that is not signed in, is not the restart's doing.
+ const fourth=d.runs.find(r=>r.status==='queued');await claim(f);lose(f,fourth,'leaseExpired',20,45);
+ await f.s.tick();d=await f.view();assert.equal(d.runs.find(r=>r.id===fourth.id).restartedAt,undefined);assert.equal(d.runs.filter(r=>r.status==='queued').length,0);
+ d=await f.command('retryStage',{stageKey:'analyze'});const fifth=d.runs.find(r=>r.status==='queued');await claim(f);
+ Object.assign(f.s.p.agents.records.get(fifth.pluginRunId),{status:'failed',failureReason:'toolAuth',dispatchedAt:minutes(20),finishedAt:minutes(31)});
+ await f.s.tick();d=await f.view();assert.equal(d.runs.find(r=>r.id===fifth.id).restartedAt,undefined);assert.equal(d.runs.filter(r=>r.status==='queued').length,0);
+ assert.equal(d.work.history.filter(e=>e.action==='retryStage'&&e.actor==='system').length,2);
+});
+
+test('a restart never starts again a run you stopped, nor publishing',async()=>{
+ const f=fixture();await selectAgent(f);
+ await f.s.agents.saveRepo('1',{repo:'estheryo/website-test',baseBranch:'main',revision:1});
+ let d=await f.command('startTask',{playbookId:'blog-post'});const build=d.runs[0];await claim(f);
+ await f.command('cancelRun',{runId:build.id});f.s.startedAt=minutes(10);lose(f,build,'leaseExpired',0,11);
+ await f.s.tick();d=await f.view();assert.equal(d.runs.filter(r=>r.status==='queued').length,0,'the run you asked to stop stays stopped');
+ await f.command('retryStage',{stageKey:'build'});const c=await claim(f);
+ await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'Wrote it',pr:{url:'https://github.com/estheryo/website-test/pull/2',number:2,branch:'nocoreach/task-1',headSha:'abc1234',files:[],verifyText:'新文章',pages:['https://www.example.com/blog/new']}});
+ d=await f.view();d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[]});
+ const merge=d.runs.find(r=>r.status==='queued');assert.equal(merge.mode,'merge');await claim(f);
+ f.s.startedAt=minutes(30);lose(f,merge,'leaseExpired',20,31);
+ await f.s.tick();d=await f.view();
+ assert.equal(d.work.release.state,'merge_failed');assert.equal(d.runs.find(r=>r.id===merge.id).restartedAt,minutes(30),'the card can say why');
+ assert.equal(d.runs.filter(r=>r.status==='queued').length,0,'publishing waits for you');
+});
+
 test('people and page: owner changes between runs, collaborators and linked pages come from real users and 网站内容',async()=>{
  const f=fixture();f.state.users.push({id:2,nickname:'Lin'},{id:3,nickname:'Mia'});
  // Lin has joined as 成员 in 设置 · 成员; Mia is a NocoBase user who has not joined, so she cannot own or join a task.

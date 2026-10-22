@@ -206,3 +206,24 @@ test("shows the tool's own message when the run stopped without a business error
     await screen.findByText('Not logged in · Please run /login'),
   ).toBeInTheDocument();
 });
+test('a run a NocoReach restart interrupted names the restart and the official reason', async () => {
+  const interrupted = { ...run, restartedAt: '2026-10-22T13:42:00Z' };
+  action.mockResolvedValue({
+    ...data,
+    runs: [interrupted],
+    execution: {
+      ...data.execution,
+      run: { executions: [], failureReason: 'leaseExpired' },
+    },
+  });
+  render(
+    <MemoryRouter initialEntries={['/actions/1']}>
+      <TaskExecutionPanel projectId={2} taskId='1' runs={[interrupted]} />
+    </MemoryRouter>,
+  );
+  expect(
+    await screen.findByText(
+      /NocoReach 于 .+ 重新启动（部署或重启），这次运行在服务器停止期间与 Runner 失去联系（leaseExpired）。/,
+    ),
+  ).toBeInTheDocument();
+});
