@@ -8,14 +8,13 @@ import { EvidenceDialog } from './task-detail/evidence.js';
 import { taskEvidence, whyText } from './task-detail/evidence-model.js';
 import { VisibleChanges } from './task-detail/visible-changes.js';
 import { DeliveryDialog, DeliverySummary } from './task-detail/article-start.js';
-import { articlePageUrl } from './task-detail/article-page.js';
 import { PlaybookDrawer } from './task-detail/playbook-drawer.js';
 import { ArticleEditor, ArticleReview } from './task-detail/article-review.js';
 import { ConflictBody, DriftNotice, PendingButton, TargetRows } from './task-detail/article-release.js';
 import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, pageUrlsOf, publishingTitle, soleConflict, type ArticleFound, type DeliveryChoice } from './task-detail/article-model.js';
 import { matchArticle } from './article-targets-api';
 import { TaskMedia } from './task-detail/media.js';
-import { AgentMenu } from './task-detail/agent-menu.js';
+import { TaskProperties } from './task-detail/task-properties.js';
 import { hasTaskAgent } from './task-execution-types';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {createContext,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
@@ -24,7 +23,7 @@ import {useNavigate,useSearchParams} from 'react-router';
 import {useNavigationGuard,usePageBreadcrumb} from '@nocobase/app-client';
 import {Comparison} from './results/comparison.js';
 import {nocobaseClient as api,NocoReachHttpError} from "#lib/nocoreach-api";
-import {BookOpen,CirclePlay,Lock,Archive,ArchiveRestore,Ban,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitMerge,Globe,Eye,Search,ExternalLink,Users,Square,Undo2,Loader2,MoreHorizontal,Code2,ChevronDown,ChevronRight,TriangleAlert,CircleCheck} from 'lucide-react';
+import {BookOpen,CirclePlay,Lock,Archive,ArchiveRestore,Ban,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitMerge,Globe,Eye,Search,ExternalLink,Users,Square,Undo2,Loader2,MoreHorizontal,Code2,ChevronRight,TriangleAlert,CircleCheck} from 'lucide-react';
 import {ActorAvatar} from '#components/reach/actor';
 import {Tag} from '#components/reach/tag';
 import {InfoTip} from '#components/reach/info-tip';
@@ -32,7 +31,7 @@ import {PageContainer} from '#components/reach/page';
 import {Reveal} from '#components/reach/reveal';
 import {Button} from '#components/ui/button';
 import {Dialog,DialogContent,DialogHeader,DialogTitle} from '#components/ui/dialog';
-import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuCheckboxItem,DropdownMenuItem,DropdownMenuRadioGroup,DropdownMenuRadioItem,DropdownMenuSeparator,DropdownMenuSub,DropdownMenuSubTrigger,DropdownMenuSubContent} from '#components/ui/dropdown-menu';
+import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuCheckboxItem,DropdownMenuItem,DropdownMenuSeparator,DropdownMenuSub,DropdownMenuSubTrigger,DropdownMenuSubContent} from '#components/ui/dropdown-menu';
 import {TaskDraftScope,TaskDraftRecovery} from './task-detail/drafts.js';
 import {useTaskDraft,useTaskDraftStatus} from './task-detail/draft-store.js';
 import {DocReader,Markdown} from './doc-view';
@@ -136,59 +135,53 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
  // The trail leads back the way the user came: from Results with its filters, otherwise to the task board.
  usePageBreadcrumb(resultParams.has('resultDay')?[{label:$t('results.title'),to:`/results/${taskId}${resultParams.get('resultQuery')||`?day=${resultParams.get('resultDay')==='28'?28:7}`}`},{label:heading}]:[{label:$t('common.tasks'),to:'/actions'},{label:heading}]);
  return <TaskAccess.Provider value={access}><PageContainer className="nr-task-page">
-  <TaskHeader data={data} list={list} pick={pick} busy={busy} runActive={runActive} members={members} update={update} onEvidence={()=>setEvidenceOpen(true)} onPage={()=>setPageOpen(true)}/>
+  <TaskHeading data={data} busy={busy} members={members} update={update} onPage={()=>setPageOpen(true)}/>
+  {/* Properties beside the content from 1280px, above it below that (2026-10-22 user request); the page keeps its full width. */}
+  <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_18.75rem] xl:items-start">
+  <TaskProperties data={data} members={members} allowed={access.allowed} busy={busy} runActive={runActive} className="border-y py-2 xl:sticky xl:top-4 xl:col-start-2 xl:row-start-1 xl:border-y-0 xl:border-l xl:py-0 xl:pl-6"
+   agentLocked={!access.allowed?$t('taskDetail.ownerAdminChange'):closedLabel(w)?$t('taskDetail.taskClosed'):w.stage==='done'?$t('taskDetail.taskDone'):runActive?$t('taskDetail.taskQueuedRunningWaitFinish'):undefined}
+   onOwner={userId=>void update('setOwner',{userId})} onAgent={async agentId=>Boolean(await update('setAgent',{agentId}))}/>
+  <div className="flex min-w-0 flex-col gap-6 xl:col-start-1 xl:row-start-1">
+  <TaskSummary data={data} list={list} pick={pick} onEvidence={()=>setEvidenceOpen(true)}/>
   {dirty&&<p role='status' className='nr-td-muted'>{$t('taskDetail.draftRetained')} <Button size='sm' variant='ghost' disabled={busy} onClick={()=>{void confirmAction({title:()=>($t('taskDetail.discardTaskDrafts',{0:data.task.title})),description:()=>($t('taskDetail.discardDraftWarning')),action:'taskDetail.discardDrafts'}).then(confirmed=>{if(confirmed)clear();});}}>{$t('taskDetail.discardDrafts')}</Button></p>}
   <TaskDraftRecovery activeScope={w.cancelledAt||w.archivedAt||done?undefined:draftScope}/>
   {error&&<p role="alert" className="nr-error">{error}</p>}
   {w.cancelledAt||w.archivedAt?<ClosedCard w={w} update={update} busy={busy}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} pick={pick} setPick={setPick} update={update} busy={busy} projectId={projectId} taskId={taskId}/></TaskDraftScope>:done?<DoneCard data={data} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} list={list}/></TaskDraftScope>}
   <ActivityCard data={data} update={update} busy={busy} members={members}/>
   <TechnicalDetails data={data} projectId={projectId} taskId={taskId} runs={runs}/>
+  </div>
+  </div>
   <EvidenceDialog open={evidenceOpen} onClose={()=>setEvidenceOpen(false)} data={data} projectId={projectId} taskId={taskId}/>
   <Dialog open={pageOpen} onOpenChange={o=>{if(!o)setPageOpen(false);}}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>{$t('common.relatedPage')}</DialogTitle></DialogHeader><PageLinkEditor data={data} projectId={projectId} taskId={taskId} busy={busy} update={update}/></DialogContent></Dialog>
  </PageContainer></TaskAccess.Provider>;
 }
-// ① Why the task exists and where it stands: the title, one line of evidence, the steps and who owns it.
-function TaskHeader({data,list,pick,busy,runActive,members,update,onEvidence,onPage}:{data:Data;list?:PlaybookList;pick:string;busy:boolean;runActive:boolean;members:Member[];update:Update;onEvidence:()=>void;onPage:()=>void}){
- const navigate=useNavigate(),w=data.work,started=Boolean(w.flow),{allowed}=useContext(TaskAccess);
- const no=(data.task.evidence as {no?:number}|undefined)?.no,insight=(data.task.evidence as {insight?:{id?:string;no?:number}}|undefined)?.insight;
- const why=whyText(data),evidence=taskEvidence(data),hasEvidence=Boolean(evidence.signals.length||evidence.brief||evidence.note||evidence.attachments||evidence.resultSource);
- const pb=started?undefined:list?.playbooks.find(x=>x.id===pick),stages=started?w.flow!.stages:pb?stagesFor(pb):[],name=w.playbook?.name||w.flow?.name||pb?.name;
- const owners=members.some(m=>m.id===w.humanOwnerId)||!w.humanOwnerId?members:[{id:w.humanOwnerId,name:w.humanOwnerName||w.humanOwnerId},...members];
- const ownerName=w.humanOwnerName||owners.find(m=>m.id===w.humanOwnerId)?.name||$t('common.unassigned'),collab=w.collaborators||[];
- return <header className="flex flex-col gap-3">
-  <div className="flex items-start justify-between gap-3">
-   <h1 className="min-w-0 font-heading text-2xl font-semibold tracking-tight break-words">{no?<span className="mr-2 font-mono text-base font-normal text-muted-foreground">T-{no}</span>:null}{data.task.title}</h1>
-   <MoreMenu data={data} busy={busy} members={members} update={update} onPage={onPage}/>
-  </div>
-  {(why.text||hasEvidence)&&<p className="text-sm leading-relaxed">{why.text&&<><span className="text-muted-foreground">{$t('taskDetail.why')}</span>{why.text}{why.fact&&<span className="text-muted-foreground"> · {why.fact}</span>}{why.more>0&&<span className="text-muted-foreground"> {$t('taskDetail.moreSignals',{0:why.more})}</span>} </>}{hasEvidence&&<Button variant="link" size="sm" className="h-auto p-0 align-baseline" onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}</p>}
-  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-   {closedLabel(w)?<Tag tone="slate" dot>{closedLabel(w)}</Tag>:null}
-   {stages.length>0&&<StepBar name={name} stages={stages} w={w}/>}
-   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground lg:ml-auto">
-    {allowed&&members.length?<DropdownMenu><DropdownMenuTrigger render={<Button size="sm" variant="ghost" className="h-7 px-2 text-muted-foreground" disabled={busy||runActive} title={runActive?$t('taskDetail.executorRunningChangeAfterFinishes'):undefined}>{$t('common.owner')} · <span className="text-foreground">{ownerName}</span><ChevronDown/></Button>}/>
-     <DropdownMenuContent align="end"><DropdownMenuRadioGroup value={w.humanOwnerId||''} onValueChange={v=>{if(v&&v!==w.humanOwnerId)void update('setOwner',{userId:v});}}>{owners.map(m=><DropdownMenuRadioItem key={m.id} value={m.id}>{m.name}</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup></DropdownMenuContent></DropdownMenu>
-     :<span>{$t('common.owner')} · <span className="text-foreground">{ownerName}</span></span>}
-    <AgentMenu data={data} busy={busy} locked={!allowed?$t('taskDetail.ownerAdminChange'):closedLabel(w)?$t('taskDetail.taskClosed'):w.stage==='done'?$t('taskDetail.taskDone'):runActive?$t('taskDetail.taskQueuedRunningWaitFinish'):undefined} onChange={async agentId=>Boolean(await update('setAgent',{agentId}))}/>
-    {collab.length>0&&<span className="inline-flex items-center gap-1" title={collab.map(c=>c.name).join('、')}>{collab.slice(0,3).map(c=><ActorAvatar key={c.id} type="user" name={c.name} size="xs"/>)}{collab.length>3?`+${collab.length-3}`:''}</span>}
-    {insight?.id&&<button type="button" className="nr-link" onClick={()=>navigate(`/opportunities?item=${encodeURIComponent(insight.id!)}`)}>{$tj('taskDetail.sourceAttribution',{0:insight.no?`O-${insight.no}`:$t('common.opportunity')})}</button>}
-    {w.article?.articleId&&<HeaderArticle data={data}/>}
-    {w.page&&<a className="nr-link inline-flex items-center gap-1" href={w.page.url} target="_blank" rel="noreferrer">{pathOf(w.page.url)}<ExternalLink className="size-3" aria-hidden="true"/></a>}
-    {(data.related||[]).map(r=><button key={r.id} type="button" className="nr-link max-w-60 truncate" title={r.title} onClick={()=>navigate(`/actions/${r.id}`)}>{r.relation==='prev'?$t('taskDetail.previous'):$t('taskDetail.next')}{r.title}</button>)}
-   </div>
-  </div>
+// ① The title across the page, with the task's menu; the properties sit in their own column (task-properties.tsx).
+function TaskHeading({data,busy,members,update,onPage}:{data:Data;busy:boolean;members:Member[];update:Update;onPage:()=>void}){
+ const no=(data.task.evidence as {no?:number}|undefined)?.no;
+ return <header className="flex items-start justify-between gap-3">
+  <h1 className="min-w-0 font-heading text-2xl font-semibold tracking-tight break-words">{no?<span className="mr-2 font-mono text-base font-normal text-muted-foreground">T-{no}</span>:null}{data.task.title}</h1>
+  <MoreMenu data={data} busy={busy} members={members} update={update} onPage={onPage}/>
  </header>;
 }
-// The playbook's steps in one row: done ones ticked, the current one outlined, the person's steps in violet.
-// The task's article in the header, linked to where it can be read when its target has page patterns.
-function HeaderArticle({data}:{data:Data}){
- const a=data.work.article!,text=$t('articleTask.headerArticle',{0:a.title||a.slug}),url=articlePageUrl(data,a.targetId,a.slug);
- return url?<a className="nr-link inline-flex max-w-60 items-center gap-1" href={url} target="_blank" rel="noreferrer" title={a.slug}><span className="truncate">{text}</span><ExternalLink className="size-3 shrink-0" aria-hidden="true"/></a>:<span className='max-w-60 truncate' title={a.slug}>{text}</span>;
+// Why the task exists and where it stands: one line of evidence, then the steps.
+function TaskSummary({data,list,pick,onEvidence}:{data:Data;list?:PlaybookList;pick:string;onEvidence:()=>void}){
+ const w=data.work,started=Boolean(w.flow);
+ const why=whyText(data),evidence=taskEvidence(data),hasEvidence=Boolean(evidence.signals.length||evidence.brief||evidence.note||evidence.attachments||evidence.resultSource);
+ const pb=started?undefined:list?.playbooks.find(x=>x.id===pick),stages=started?w.flow!.stages:pb?stagesFor(pb):[];
+ if(!why.text&&!hasEvidence&&!stages.length&&!closedLabel(w))return null;
+ return <div className="flex flex-col gap-3">
+  {(why.text||hasEvidence)&&<p className="text-sm leading-relaxed">{why.text&&<><span className="text-muted-foreground">{$t('taskDetail.why')}</span>{why.text}{why.fact&&<span className="text-muted-foreground"> · {why.fact}</span>}{why.more>0&&<span className="text-muted-foreground"> {$t('taskDetail.moreSignals',{0:why.more})}</span>} </>}{hasEvidence&&<Button variant="link" size="sm" className="h-auto p-0 align-baseline" onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}</p>}
+  {(closedLabel(w)||stages.length>0)&&<div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+   {closedLabel(w)?<Tag tone="slate" dot>{closedLabel(w)}</Tag>:null}
+   {stages.length>0&&<StepBar stages={stages} w={w}/>}
+  </div>}
+ </div>;
 }
-function StepBar({name,stages,w}:{name?:string;stages:Stage[];w:Work}){
+// The playbook's steps in one row: done ones ticked, the current one outlined, the person's steps in violet.
+function StepBar({stages,w}:{stages:Stage[];w:Work}){
  const {self,owner}=useContext(TaskAccess),started=Boolean(w.flow),done=w.stage==='done',index=w.stageIndex||0,closed=Boolean(closedLabel(w));
  const label=(s:Stage)=>{const text=stageLabel(s);return s.kind==='review'&&!self?(text.startsWith($t('common.you'))?`${owner}${text.slice($t('common.you').length)}`:`${text} · ${owner}`):text;};
  return <ol className="nr-td-stepbar flex flex-wrap items-center gap-1" aria-label={$t('common.progress')}>
-  {name&&<li className="mr-1 text-sm font-medium">{name}</li>}
   {stages.map((s,i)=>{const st=!started?'todo':done||i<index?'done':i===index&&!closed?'current':'todo';return <li key={s.key} className="flex items-center gap-1" data-state={st} aria-current={st==='current'?'step':undefined}>
    {i>0&&<ChevronRight className="size-3 text-muted-foreground" aria-hidden="true"/>}
    <Tag tone={st==='done'?'green':st==='current'?(s.kind==='review'?'violet':'blue'):'grey'} icon={st==='done'?<Check/>:undefined} dot={st==='current'} className={st==='current'?'ring-1 ring-current':undefined}>{label(s)}</Tag>
@@ -228,7 +221,7 @@ function StageCard({icon,title,sub,at,children,actions,tone='attention',label=$t
  </section>;
 }
 // Shown in a card whose action needs an Agent when none can be used: the choice itself is in the header.
-const NeedsAgent=({data}:{data:Data})=>hasTaskAgent(data)||(data.agent?.options||[]).length===1?null:<p className="text-sm text-nr-ink-red">{(data.agent?.options||[]).length?$t('taskDetail.chooseAgentAbove'):$t('taskDetail.noTeamAccessibleRunnerAgents')}</p>;
+const NeedsAgent=({data}:{data:Data})=>hasTaskAgent(data)||(data.agent?.options||[]).length===1?null:<p className="text-sm text-nr-ink-red">{(data.agent?.options||[]).length?$t('taskDetail.chooseAgentFirst'):$t('taskDetail.noTeamAccessibleRunnerAgents')}</p>;
 // With no usable Agent saved on the task and exactly one available, that one is saved first, then `command` runs on
 // the revision the save returned (the same rule as Start).
 async function withUsableAgent(data:Data,update:Update,command:string,body:object={}){

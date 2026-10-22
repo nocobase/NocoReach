@@ -23,6 +23,7 @@ import {
   usePageBreadcrumb,
 } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
+import { confirmUnsavedLeave } from '#components/reach/confirm';
 import { $t, useNocoReachLocale } from '#i18n';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { PageContainer, PageHeader } from '#components/reach/page';
@@ -134,11 +135,10 @@ function Form({
   const allowLeaveRef = useRef(false);
   const dirty = initial !== JSON.stringify({ name, key, scope, capabilities });
   useNavigationGuard(
-    () =>
+    async () =>
       savedRef.current ||
       allowLeaveRef.current ||
-      (!busy &&
-        (!dirty || window.confirm($t('accessMembers.discardDescription')))),
+      (!busy && (!dirty || (await confirmUnsavedLeave()))),
   );
   const nameInvalid = !name.trim() || name.length > 100;
   const keyInvalid = !/^[a-zA-Z0-9_.-]{1,61}$/.test(key);

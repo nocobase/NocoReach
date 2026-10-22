@@ -379,10 +379,10 @@ function Insights({
   );
   // Earlier days above today, as in a conversation; the input for today's conversation at the bottom.
   const column = (
-    <div className='flex min-w-0 flex-col gap-4'>
+    <div className='flex min-w-0 flex-col gap-4 lg:h-full lg:min-h-0'>
       <section
         aria-label={$t('strategy.analysisFeed')}
-        className='flex flex-col gap-4'
+        className='flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-2'
       >
         <History days={feed.days} today={analysisDay} rows={rows} />
         <Today
@@ -416,7 +416,7 @@ function Insights({
     </div>
   );
   return (
-    <PageContainer className='nr-page'>
+    <PageContainer className='nr-page nr-insights-fill lg:flex lg:h-full lg:flex-col'>
       <PageHeader
         title={$t('strategy.insights')}
         description={
@@ -457,15 +457,17 @@ function Insights({
         busy={busy || generating}
         onRun={() => void generate()}
       />
-      <div className='flex flex-col gap-6'>
+      {/* On wide screens the page fills the window and only the day's conversation scrolls, between the numbers and
+          the input (2026-10-22 user feedback). */}
+      <div className='flex flex-col gap-6 lg:min-h-0 lg:flex-1'>
         <MetricTiles metrics={metrics} overview={overview} />
         {/* The day's conversation, with the standing facts in a narrow quiet column beside it (2026-10-21 user); with the
             side panel open, the facts fold to a line under the day's date. */}
         <div
           className={
             docked
-              ? 'flex flex-col'
-              : 'grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_16rem]'
+              ? 'flex flex-col lg:min-h-0 lg:flex-1'
+              : 'grid items-start gap-8 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_16rem] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch'
           }
         >
           {/* Questions asked from Insights read the chat's records, so only where the chat is mounted. */}
@@ -476,7 +478,9 @@ function Insights({
           ) : (
             column
           )}
-          {!docked && situation}
+          {!docked && (
+            <div className='lg:min-h-0 lg:overflow-y-auto'>{situation}</div>
+          )}
         </div>
       </div>
     </PageContainer>

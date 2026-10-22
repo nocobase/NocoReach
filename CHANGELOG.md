@@ -5,6 +5,27 @@
 - Tasks no longer has a status drop-down beside Waiting for me, Current, Done and Closed: the two overlapped, and the board's columns and the list's order already separate statuses. An old `?status=` link shows the scope without filtering.
 - The playbook, owner and Agent filters use the application's drop-down instead of the browser's, as every other page does. Picking a playbook after opening an old `?playbook=` link no longer falls back to all playbooks when that link's option leaves the list.
 
+## Unreleased — One product wording, the version in the account menu
+
+- The sidebar footer shows only the slogan; the template's name ("Default Template") is gone and the version moves to the bottom of the account menu ("NocoReach v1.0.0-beta.68").
+- The slogan, the sign-in panel and the README headers use one agreed wording in all ten interface languages: an AI growth operations platform; "Find the opportunities in your data. NocoReach puts them into action."; data collection, daily analysis and Agent execution in one platform. The sign-in panel's second point is Agent execution (you confirm, review the change and track the impact) instead of repository-native work, and its last line reads "Find opportunities · Put them into action · Track the impact".
+
+## Unreleased — Playbook step names in formal Chinese
+
+- Built-in playbook steps and step kinds read formally in Chinese and Traditional Chinese: Write plan, Review plan and Review and publish, and the step-kind notes (your review, review then approve or request changes, confirm then the system runs, changes the repository and opens a PR, no repository change). English is unchanged.
+- Tasks created before keep their stored step names; they display the new wording, because a stored name is matched to its system message through the alias manifest rather than by exact text. Stored data is not rewritten.
+
+## Unreleased — Leaving unsaved work asks in the application's dialog
+
+- Leaving New task, a role form or Create from a result with unsaved input, following a link out of Skills, the Google or keyword connection forms with unsaved input, and leaving a task page with drafts now ask in the application's own dialog instead of the browser's confirm box. Unsaved forms ask "Discard unsaved changes?" with Discard; a task page with drafts asks "Leave this page?" with Leave anyway, since its drafts are kept.
+
+## Unreleased — Insights scrolls inside its conversation
+
+- On wide screens Insights fills the window: the title, the numbers and the input stay in place and only the day's analysis and conversation scroll between them; Current situation scrolls on its own.
+- Earlier analyses opened above today fold again with "Hide earlier analyses", offered both above them and just above today.
+- The day's conversation folds to one line ("Conversation · questions: N") so the day's analysis stays in view; a new question opens it again and scrolls to it.
+- The input has one frame instead of a field inside a box.
+
 ## Unreleased — One conversation a day on Insights
 
 - What you ask from Insights joins the day's conversation, shown right under the day's analysis with its own input at the bottom: type and press Enter, and the answer appears there (what it read folds under "Sources checked"). Each day keeps one conversation, so the AI remembers what was asked before.
@@ -17,6 +38,12 @@
 
 - Search performance › Performance reads web search only. The search type choice (Web, Image, Video, News, Discover, Google News) is gone, with the server's handling of other types in the search views: they were read live from Search Console for this choice alone, while the scheduled sync, the daily analysis and Insights use web search only.
 - The coverage line shows only when days are missing: which days, why (fetching, failed, paused, waiting for an administrator, or older than the 16 months Search Console keeps) and the one action that fixes it. A complete range shows nothing; when the data was last saved, blank days, missing comparisons, the backfill limit and scheduled sync being off are in the page's ⓘ. "Re-fetch selected totals" is removed: the scheduled sync re-reads recent days, and gaps are filled automatically when an administrator opens the range.
+
+## Unreleased — Task properties in their own column
+
+- The task page keeps the title across the top and moves the task's properties out of the header into a column on the right from 1280px wide, like the sidebar of an issue: Owner and Agent (both can be changed there), Collaborators, Playbook, From (the opportunity), Article with its full title linked to the published page, Related page, Related tasks and Started. Rows without a value are left out. The column stays in view while the page scrolls; the page keeps its full width.
+- Below 1280px the properties sit under the title in two columns, and in one column on phones, instead of squeezing the content.
+- The content column reads why the task exists, the steps (no longer repeating the playbook's name), what needs doing now and the activity. The start card's hint says "Choose an Agent for this task first." instead of pointing above, in all ten languages.
 
 ## Unreleased — Settings and the sidebar in agreed words
 

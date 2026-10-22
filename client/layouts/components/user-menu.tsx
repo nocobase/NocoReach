@@ -18,6 +18,7 @@ import {
 import { AgentSetupDialog } from '#components/agent-setup-dialog';
 import { usePendingInvitationCount } from '#pages/access/api';
 
+import { AppVersion } from './app-version.js';
 import { LanguageSwitcher } from './language-switcher.js';
 
 export function UserMenu(): ReactElement {
@@ -155,6 +156,9 @@ export function UserMenu(): ReactElement {
               ? t('account.signingOut', { defaultValue: 'Signing out…' })
               : t('account.signOut', { defaultValue: 'Sign out' })}
           </DropdownMenuItem>
+          {/* The version, for support; it used to sit in the sidebar footer under the template's name. */}
+          <DropdownMenuSeparator />
+          <AppVersion />
         </DropdownMenuContent>
       </DropdownMenu>
       {identity && !isLoading ? (
