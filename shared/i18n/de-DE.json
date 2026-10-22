@@ -39,7 +39,6 @@
   "strategy.noWaitingTasks": "Derzeit benötigen keine Aufgaben Ihre Aufmerksamkeit.",
   "strategy.currentSituation": "Aktuelle Situation",
   "strategy.noCurrentSituation": "Noch keine Daten zur aktuellen Situation vorhanden.",
-  "strategy.situationMore": "{0} weitere",
   "strategy.refreshBlock": "Aktualisieren",
   "strategy.blockFailed": "Dieser Abschnitt konnte nicht geladen werden. Bitte versuchen Sie es erneut.",
   "strategy.blockStale": "Aktualisierung fehlgeschlagen. Die bisherigen Ergebnisse werden angezeigt und sind möglicherweise veraltet.",

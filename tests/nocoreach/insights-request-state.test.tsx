@@ -196,19 +196,13 @@ async function setup(locale = 'en-US', report = false) {
   };
 }
 type View = Awaited<ReturnType<typeof setup>>;
-// The current situation has Refresh; the metric tiles and the waiting tasks have none and are read again on the next
-// visit (the metrics once their local cache has expired).
+// No block has a Refresh of its own (the page's one runs the analysis again): each is read again on the next visit,
+// the metrics once their local cache has expired.
 async function refresh(
   block: (typeof blocks)[number],
   view: View,
   section: HTMLElement,
 ) {
-  if (block.kind === 'summary') {
-    await userEvent.click(
-      within(section).getByRole('button', { name: 'Refresh' }),
-    );
-    return section;
-  }
   expect(within(section).queryByRole('button', { name: 'Refresh' })).toBeNull();
   if (block.kind === 'metrics') {
     const later = Date.now() + GOOGLE_LOCAL_CACHE_MS;
@@ -282,10 +276,6 @@ for (const block of blocks) {
     );
     if (block.empty)
       expect(within(section).queryByText(english[block.empty])).toBeNull();
-    if (block.kind === 'summary')
-      expect(
-        within(section).getByRole('button', { name: 'Refresh' }),
-      ).toBeDisabled();
     await act(async () => pending.resolve(values[block.kind]));
     expect(
       within(section).getByText(known[block.kind], { exact: false }),
@@ -417,14 +407,12 @@ it.each([401, 403, 404])(
       .mockRejectedValueOnce(
         new NocoReachHttpError('private error', status, {}),
       );
-    await setup();
-    const section = await screen.findByRole('region', {
+    const view = await setup();
+    let section = await screen.findByRole('region', {
       name: english['strategy.currentSituation'],
     });
     await within(section).findByText(known.summary);
-    await userEvent.click(
-      within(section).getByRole('button', { name: 'Refresh' }),
-    );
+    section = await refresh(blocks[2], view, section);
     expect(await within(section).findByRole('alert')).not.toHaveTextContent(
       'private error',
     );
