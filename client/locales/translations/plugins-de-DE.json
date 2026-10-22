@@ -95,7 +95,7 @@
       "emptyTitle": "Noch keine Agenten",
       "emptyDescription": "Verbinden Sie einen Runner mit einem angemeldeten Programmierwerkzeug: Jedes seiner Modelle erscheint hier als Agent, den Sie aktivieren können.",
       "noneInFilter": "Keine Agenten vorhanden.",
-      "howToAdd": "Um einen Agenten hinzuzufügen, installieren Sie ein Programmierwerkzeug auf einem Runner und melden Sie sich für ein Modell an, das Sie verwenden dürfen. Sobald der Runner es meldet, erscheint es hier. Beschreiben Sie seine Stärken, um es zu aktivieren. Ein Agent, der nur auf persönlichen Runnern verfügbar ist, bearbeitet ausschließlich Vorgänge, die deren Eigentümer starten.",
+      "howToAdd": "Um einen lokalen Agenten hinzuzufügen, installieren Sie auf einer Laufzeitumgebung ein Programmierwerkzeug und melden sich an. Er erscheint unter „Neu erkannt“; schreiben Sie, worin er gut ist, und aktivieren Sie ihn.",
       "goodAtMissing": "Noch nicht beschrieben",
       "columns": {
         "agent": "Agent",
@@ -521,7 +521,7 @@
         }
       },
       "title": "Laufzeitumgebungen",
-      "description": "Computer oder Server mit Claude Code oder Codex. NocoReach übergibt ihnen Aufgaben, und die lokalen Agenten dort bearbeiten den Website-Code, schreiben Artikel und öffnen Pull Requests. Deshalb müssen sie eingeschaltet und online sein, mit angemeldetem Programmierwerkzeug.",
+      "description": "Computer oder Server mit Claude Code oder Codex, auf denen lokale Agenten Aufgaben ausführen; sie müssen eingeschaltet und online sein, mit angemeldetem Programmierwerkzeug.",
       "add": "Laufzeitumgebung hinzufügen",
       "loadFailed": "Laufzeitumgebungen konnten nicht geladen werden",
       "emptyTitle": "Noch keine Laufzeitumgebungen verbunden",
@@ -757,7 +757,7 @@
     },
     "models": {
       "title": "Modelldienste",
-      "description": "Die tägliche Analyse und der Chatbereich nutzen die Chat-Modelle hier, die der Anbieter pro Aufruf abrechnet; Embedding- und Reranking-Modelle werden für die Suche verwendet. Lokale Agenten nutzen diese Modelle nicht, sondern das auf ihrer Laufzeitumgebung angemeldete Programmierwerkzeug."
+      "description": "Die tägliche Analyse und der Chatbereich nutzen die Modelle hier; der Anbieter rechnet jeden Aufruf ab."
     },
     "defaultModel": {
       "title": "Standard-Chatmodell",
@@ -855,9 +855,9 @@
         "dimensions": "Vektorgröße von {{model}}",
         "dimensionsPlaceholder": "Standard",
         "counts": {
-          "chat": "{{count}} Chat",
-          "embedding": "{{count}} Einbettung",
-          "rerank": "{{count}} Neusortierung"
+          "chat": "Chatmodelle: {{count}}",
+          "embedding": "Einbettungsmodelle: {{count}}",
+          "rerank": "Reranking-Modelle: {{count}}"
         }
       }
     },

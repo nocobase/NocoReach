@@ -21,7 +21,7 @@ export const agentsOverridesZhCN: TranslationOverrides = {
       emptyDescription:
         '连接一个登录了编码工具的运行环境：它上报的每个模型都会出现在这里，等你启用。',
       howToAdd:
-        '想加一个本地 Agent：在某个运行环境上装好编码工具并登录，运行环境上报后它会出现在这里，写好「擅长什么」即可启用。只在「只给所有者用」的运行环境上有的 Agent，只能执行所有者自己发起的任务。',
+        '想加一个本地 Agent：在运行环境上装好编码工具并登录，它会出现在“新发现”里，写好「擅长什么」即可启用。',
       where: {
         none: '暂无运行环境',
         noneOnline: '现在没有运行环境在线',
@@ -56,7 +56,7 @@ export const agentsOverridesZhCN: TranslationOverrides = {
       emptyDescription:
         '连接运行环境后，本地 Agent 可以在其中使用编码工具执行任务。',
       description:
-        '装了 Claude Code 或 Codex 的电脑或服务器。NocoReach 把任务交给它，由上面的本地 Agent 去改网站代码、写文章、提交 PR，所以它要开机、联网，编码工具要登录。',
+        '装了 Claude Code 或 Codex 的电脑或服务器，本地 Agent 在上面执行任务，所以要保持开机、联网，编码工具要登录。',
       columns: {
         sharing: '谁能用',
       },
@@ -103,8 +103,7 @@ export const agentsOverridesZhCN: TranslationOverrides = {
     },
     models: {
       title: '模型服务',
-      description:
-        '每日分析和对话栏用这里的对话模型，按调用量付费给服务商；向量模型和重排序模型用于搜索。本地 Agent 不用这里的模型，它用运行环境上编码工具自己的登录。',
+      description: '每日分析和对话栏用这里的模型，按调用量付费给服务商。',
     },
     defaultModel: {
       description:
@@ -113,6 +112,13 @@ export const agentsOverridesZhCN: TranslationOverrides = {
     services: {
       empty: {
         description: '添加模型服务后，对话 Agent 就能通过它回答。',
+      },
+      models: {
+        counts: {
+          chat: '{{count}} 个对话模型',
+          embedding: '{{count}} 个向量模型',
+          rerank: '{{count}} 个重排序模型',
+        },
       },
       service: {
         enabledHint: '只有启用时，对话 Agent 才能使用它的模型。',
@@ -136,10 +142,12 @@ export const agentsOverridesEnUS: TranslationOverrides = {
   [PLUGIN]: {
     agents: {
       fromRunners: 'Local agents reported by runtimes',
+      howToAdd:
+        'To add a local agent, install a coding tool on a runtime and sign in. It then shows up as newly discovered; write what it is good at to enable it.',
     },
     runtimes: {
       description:
-        'Computers or servers with Claude Code or Codex. NocoReach hands tasks to them, and the local agents there edit the website code, write articles and open pull requests, so they must stay on and online with the coding tool signed in.',
+        'Computers or servers with Claude Code or Codex where local agents carry out tasks, so they must stay on and online with the coding tool signed in.',
       columns: {
         sharing: 'Who can use it',
       },
@@ -156,7 +164,7 @@ export const agentsOverridesEnUS: TranslationOverrides = {
     models: {
       title: 'Model services',
       description:
-        'Daily analysis and the chat panel use the chat models here, billed per call by the provider; embedding and reranking models power search. Local agents do not use these models: they use the coding tool signed in on their runtime.',
+        'Daily analysis and the chat panel use the models here; the provider bills each call.',
     },
     defaultModel: {
       description:
@@ -166,6 +174,13 @@ export const agentsOverridesEnUS: TranslationOverrides = {
       empty: {
         description:
           'Once you add a model service, chat agents can answer through it.',
+      },
+      models: {
+        counts: {
+          chat: 'Chat models: {{count}}',
+          embedding: 'Embedding models: {{count}}',
+          rerank: 'Reranking models: {{count}}',
+        },
       },
       service: {
         enabledHint: 'Chat agents may use its models only while it is on.',

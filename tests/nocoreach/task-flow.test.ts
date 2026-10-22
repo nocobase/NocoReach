@@ -186,7 +186,7 @@ test('Runner task input: memory, cited signals only, earlier output, feedback, n
 // Saved ai stages keep their business input and execute only on an explicit retry.
 const connectAgent=async f=>{const me=await selectAgent(f);await f.s.agents.saveRepo('1',{repo:'estheryo/website',baseBranch:'main',revision:1});return me;};
 test('document task: the Agent analyzes without changing the repository, a change request reruns, acceptance hands over to a new build task',async()=>{
- let invoked=0;const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>{invoked++;return {content:'x'};}},{insight:{id:'op',signalIds:['community-gap:q']},context:{signals:{items:signals}}});const me=await connectAgent(f);
+ let invoked=0;const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>{invoked++;return {content:'x'};}},{insight:{id:'op',signalIds:['community-gap:q']},context:{signals:{items:signals}},createdBy:{id:'1',name:'王磊'},entry:'/main/data/community'});const me=await connectAgent(f);
  let d=await f.view();assert.equal(d.playbookDefault,'content-outline');assert.equal(d.task.status,'待处理');
  d=await f.command('startTask',{note:'focus on blocks'});assert.equal(d.work.playbook.kind,'plan');assert.ok(d.runs[0].pluginRunId);assert.equal(d.task.status,'进行中');
  let c=await claim(f);assert.equal(c.run.mode,'plan','read-only for every Agent program version');assert.equal(c.run.input.step,'analyze');assert.equal(c.run.input.note,'focus on blocks');assert.deepEqual(c.run.capabilitySnapshot||['repo.read'],['repo.read']);
@@ -199,6 +199,8 @@ test('document task: the Agent analyzes without changing the repository, a chang
  assert.equal(d.work.stage,'done');assert.equal(d.task.status,'已完成');assert.ok(d.work.nextTaskId);assert.deepEqual(d.related.map(r=>r.relation),['next']);assert.equal(invoked,0,'no online AI call');
  const child=f.state.nrTasks.find(t=>String(t.id)===d.work.nextTaskId);
  assert.match(child.title,/^新建文档页：/);assert.match(child.brief,/outline 2/);assert.equal(child.evidence.handoff.content,'outline 2');assert.equal(child.evidence.insight.id,'op');
+ // The new task keeps who found the first one and where (2026-10-22).
+ assert.deepEqual(child.evidence.createdBy,{id:'1',name:'王磊'});assert.equal(child.evidence.entry,'/main/data/community');
  const ch=await f.view(String(child.id));assert.equal(ch.playbookDefault,'new-doc');assert.equal(ch.task.status,'待处理');assert.deepEqual(ch.related.map(r=>[r.relation,String(r.id)]),[['prev','1']]);
 });
 test('sharing (2026-10-08): an Agent run carries the page\'s data summary; an accepted document goes into the knowledge base',async()=>{
