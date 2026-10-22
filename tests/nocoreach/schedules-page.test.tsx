@@ -153,7 +153,7 @@ describe('automatic runs', () => {
     expect(screen.queryByRole('navigation')).toBeNull();
     expect(
       screen.getByRole('link', { name: '去数据接入查看' }),
-    ).toHaveAttribute('href', '/connections');
+    ).toHaveAttribute('href', '/connections?tab=health');
   });
   it('shows the scheduler details only on request', async () => {
     await mount();

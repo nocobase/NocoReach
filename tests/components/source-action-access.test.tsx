@@ -26,6 +26,7 @@ const state = vi.hoisted(() => ({
   grants: [] as string[],
   action: vi.fn(),
   authorization: { can: vi.fn(), invalidate: vi.fn() },
+  confirm: vi.fn(async () => true),
 }));
 vi.mock('@nocobase/app-plugin-authorization/client', () => ({
   useAuthorizationClient: () => state.authorization,
@@ -41,7 +42,7 @@ vi.mock('../../client/pages/reach-data', () => ({
   useUnsavedWarning: () => {},
 }));
 vi.mock('../../client/components/reach/confirm', () => ({
-  confirmAction: async () => true,
+  confirmAction: (ask: unknown) => state.confirm(ask),
 }));
 vi.mock('../../client/lib/toast', () => ({ toast: { success: () => {} } }));
 
@@ -364,4 +365,90 @@ it('checks each health retry against its actual project action', async () => {
       ([resource, action]) => resource === 'nrPackages' && action === 'sync',
     ),
   ).toBe(false);
+});
+
+it('retries all only the plain retries the person may run, asks before an uncertain retry and opens settings', async () => {
+  state.grants = ['nrGitHub.sync@1', 'nrRankTracking.check@1'];
+  const request = state.action.getMockImplementation()!;
+  const row = (
+    id: string,
+    resource: string,
+    action: string,
+    fix: string,
+    body: object = {},
+  ) => ({
+    id,
+    name: id,
+    state: 'failing',
+    message: 'Synthetic failure',
+    lastSuccessAt: null,
+    dataThrough: null,
+    nextSyncAt: null,
+    retry: { resource, action, body },
+    fix,
+  });
+  state.action.mockImplementation(async (resource, action, input) => {
+    if (resource === 'nrHealth')
+      return {
+        items: [
+          row('github', 'nrGitHub', 'sync', 'retry'),
+          row('packages', 'nrPackages', 'sync', 'retry'),
+          row('rank', 'nrRankTracking', 'check', 'verify', {
+            retryUncertain: true,
+          }),
+          row('competitors', 'nrCompetitors', 'check', 'settings'),
+        ],
+      };
+    if (resource === 'nrRankTracking') return {};
+    return request(resource, action, input);
+  });
+  const open = vi.fn();
+  setup(
+    <HealthPanel
+      projectId={1}
+      reloadKey={0}
+      onChange={() => {}}
+      settingsOf={(item) => (item.id === 'competitors' ? open : null)}
+    />,
+  );
+  // Packages may not be retried by this person, so Retry all counts and runs GitHub only.
+  await userEvent.click(
+    await screen.findByRole('button', { name: 'Retry all (1)' }),
+  );
+  await waitFor(() =>
+    expect(state.action).toHaveBeenCalledWith(
+      'nrGitHub',
+      'sync',
+      expect.objectContaining({ body: { projectId: 1 } }),
+    ),
+  );
+  expect(await screen.findByText('Retry started')).toBeInTheDocument();
+  expect(
+    state.action.mock.calls.some(
+      ([resource]) =>
+        resource === 'nrPackages' || resource === 'nrRankTracking',
+    ),
+  ).toBe(false);
+  // A configuration failure offers Change, which opens the source's settings.
+  expect(
+    screen.getByText(
+      'Change the settings first; retrying won’t help until then.',
+    ),
+  ).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Change' }));
+  expect(open).toHaveBeenCalled();
+  // An uncertain DataForSEO result is retried only after the person confirms.
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Check, then retry' }),
+  );
+  expect(state.confirm).toHaveBeenCalled();
+  await waitFor(() =>
+    expect(state.action).toHaveBeenCalledWith(
+      'nrRankTracking',
+      'check',
+      expect.objectContaining({
+        body: { projectId: 1, retryUncertain: true },
+      }),
+    ),
+  );
 });
