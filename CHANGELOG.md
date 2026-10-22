@@ -11,6 +11,10 @@
 - Questions asked with Ask AI at the bottom of Insights show after the day's message, as your question and the AI answer, while it is being answered too. Earlier days count their questions ("2 questions") and show them when opened, including days that raised no opportunity.
 - Only your own conversations show; they are read from the chat's records, which now note the analysis day and opportunity a conversation was asked from (`subject`), through `GET /onlineAgents/threads`. Continue asking with an unsent draft in the chat asks before discarding it.
 
+## Unreleased — Ten interface languages
+
+- Support ten interface languages: English, Simplified Chinese, Traditional Chinese, Japanese, Spanish, Brazilian Portuguese, French, German, Vietnamese, and Indonesian.
+
 ## Unreleased — Search & market pages, fixed and in plain words
 
 - Search performance › Sitemaps names each sitemap with its host: a domain property lists every subdomain's sitemap, all called /sitemap.xml, and the rows could not be told apart.

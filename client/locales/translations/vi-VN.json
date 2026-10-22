@@ -1,0 +1,820 @@
+{
+  "nocoreach.nav.apiKeys": "Khóa API",
+  "schedules": {
+    "title": "Chạy tự động",
+    "description": "Các công việc NocoReach tự thực hiện. Bạn có thể thay đổi giờ phân tích hằng ngày tại đây.",
+    "analysisTitle": "Phân tích hằng ngày",
+    "analysisDescription": "Đọc dữ liệu mới nhất của từng dự án và dùng AI để viết nhận định, đề xuất cho kỳ này trong mục Nhận định và Cơ hội cải thiện. Nếu có ngày chưa chạy, hệ thống sẽ tự động thử lại.",
+    "otherWork": "Đồng bộ dữ liệu, theo dõi thứ hạng, xu hướng, hoạt động của đối thủ và các công việc tự động khác được liệt kê theo từng dự án trong mục Tình trạng dữ liệu.",
+    "otherWorkLink": "Mở Nguồn dữ liệu",
+    "dailyAt": "Hằng ngày lúc {{time}}",
+    "last": "Lần trước",
+    "nextLabel": "Lần tới",
+    "notRunYet": "Chưa chạy",
+    "pausedNext": "Đã tạm dừng, không chạy tự động",
+    "today": "Hôm nay {{time}}",
+    "tomorrow": "Ngày mai {{time}}",
+    "yesterday": "Hôm qua {{time}}",
+    "shownIn": "Thời gian hiển thị theo {{zone}}",
+    "analyzed": "{{projects}}, {{items}}",
+    "projectCount_one": "{{count}} dự án",
+    "projectCount_other": "{{count}} dự án",
+    "allSkipped": "Đã phân tích hôm nay, bỏ qua",
+    "moreActions": "Thao tác khác",
+    "details": "Chi tiết kỹ thuật",
+    "detailsHelp": "Dùng để khắc phục sự cố: cách plugin Scheduler ghi nhận tác vụ này. Không cần dùng trong hoạt động hằng ngày.",
+    "scheduleKey": "Khóa nội bộ",
+    "editTime": "Đổi giờ",
+    "editTitle": "Đổi giờ chạy của “{{name}}”",
+    "editHelp": "Chạy hằng ngày vào giờ này. Thay đổi có hiệu lực từ lần chạy tiếp theo sau khi lưu.",
+    "runNow": "Chạy ngay",
+    "dailyTime": "Hằng ngày lúc",
+    "saveTime": "Lưu",
+    "invalidTime": "Vui lòng nhập giờ hợp lệ (HH:mm).",
+    "dataReadyHint": "Hầu hết nguồn dữ liệu cập nhật vào khoảng {{time}} mỗi ngày theo múi giờ này. Hãy lên lịch phân tích sau thời điểm đó để đọc được dữ liệu mới nhất.",
+    "searchTimezone": "Tìm múi giờ, ví dụ: Shanghai",
+    "noTimezone": "Không có múi giờ phù hợp.",
+    "dstHelp": "Khi chuyển đổi giờ mùa hè, các giờ không tồn tại sẽ được dời lên và các giờ lặp lại thường chỉ chạy một lần. Quá trình khôi phục có thể kích hoạt lại; các dự án đã phân tích thành công trong ngày đó theo giờ địa phương sẽ được bỏ qua.",
+    "timeSaved": "Đã lưu giờ chạy",
+    "triggered": "Đã bắt đầu phân tích. Kết quả sẽ xuất hiện trong Lịch sử chạy.",
+    "runNowHelp": "Phân tích mọi dự án ngay bây giờ. Các dự án đã phân tích hôm nay sẽ được bỏ qua và dịch vụ AI sẽ được gọi. Giờ chạy hằng ngày không thay đổi.",
+    "submitting": "Đang bắt đầu…",
+    "confirmRun": "Chạy ngay",
+    "signIn": "Đăng nhập lại",
+    "back": "Quay lại Chạy tự động",
+    "emptyTitle": "Không có lịch chạy tự động",
+    "noRunsTitle": "Chưa có lần chạy nào",
+    "history": "Lịch sử chạy",
+    "historyTitle": "{{name}} · Lịch sử chạy",
+    "historyDescription": "Kết quả của từng lần chạy tự động, mới nhất trước.",
+    "noDescription": "Không có mô tả.",
+    "refresh": "Làm mới",
+    "loading": "Đang tải…",
+    "saving": "Đang lưu…",
+    "retry": "Thử lại",
+    "errorTitle": "Không thể hoàn tất yêu cầu",
+    "failed": "Yêu cầu thất bại. Vui lòng thử lại.",
+    "signedOut": "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại để tiếp tục.",
+    "forbidden": "Bạn không có quyền quản lý lịch chạy tự động. Vui lòng liên hệ quản trị viên.",
+    "notFound": "Lịch chạy tự động này không còn khả dụng.",
+    "empty": "Không có lịch chạy tự động trên trang này. Hãy làm mới hoặc quay lại trang trước.",
+    "noRuns": "Chưa chạy lần nào. Lần chạy đầu tiên sẽ diễn ra vào thời điểm đã lên lịch tiếp theo.",
+    "plan": "Lịch chạy",
+    "customSchedule": "Lịch chạy tùy chỉnh",
+    "timezone": "Múi giờ",
+    "scheduling": "Trạng thái lập lịch",
+    "lifecycle": "Trạng thái định nghĩa",
+    "target": "Đích thực thi",
+    "lastRun": "Lần kích hoạt tự động gần nhất",
+    "nextRun": "Lần chạy tiếp theo",
+    "enable": "Bật",
+    "disable": "Tạm dừng",
+    "cancel": "Hủy",
+    "disableTitle": "Tạm dừng “{{name}}”?",
+    "disableHelp": "Tác vụ sẽ ngừng chạy tự động cho đến khi bạn bật lại. Lần chạy đã bắt đầu vẫn sẽ hoàn tất.",
+    "inactiveHelp": "Ứng dụng không còn định nghĩa tác vụ này nên bạn không thể bật tác vụ tại đây.",
+    "enabledNotice": "Đã bật “{{name}}”.",
+    "disabledNotice": "Đã tạm dừng “{{name}}”.",
+    "pagination": "Các trang lịch chạy tự động",
+    "page": "Trang {{page}} · {{total}} mục",
+    "previous": "Trước",
+    "next": "Tiếp",
+    "more": "Tải thêm",
+    "runCount": "Số lần kích hoạt tự động",
+    "completedCount": "Số lần thực thi thành công",
+    "project": "Dự án {{id}}",
+    "items_one": "{{count}} đề xuất",
+    "items_other": "{{count}} đề xuất",
+    "states": {
+      "enabled": "Đã bật",
+      "disabled": "Đã tạm dừng",
+      "active": "Đang hoạt động",
+      "inactive": "Không hoạt động",
+      "paused": "Đã tạm dừng",
+      "ready": "Sẵn sàng",
+      "missing": "Thiếu",
+      "invalid": "Không hợp lệ",
+      "pending": "Đang chờ",
+      "running": "Đang chạy",
+      "waiting": "Đang chạy",
+      "succeeded": "Hoàn tất",
+      "failed": "Thất bại",
+      "skipped": "Đã bỏ qua",
+      "cancelled": "Đã hủy",
+      "timed_out": "Đã hết thời gian chờ",
+      "triggered": "Đã bắt đầu, chưa rõ kết quả",
+      "unknown": "Không xác định"
+    }
+  },
+  "auth.preparingSession": "Đang chuẩn bị phiên của bạn…",
+  "auth.connectionFailed": "Không thể kết nối",
+  "auth.connectionFailedDescription": "Không thể thiết lập kết nối. Hãy thử lại để vào ứng dụng hoặc đăng xuất.",
+  "auth.passwordResetSuccess": "Mật khẩu của bạn đã được đặt lại. Hãy đăng nhập bằng mật khẩu mới.",
+  "auth.requestNewResetLink": "Yêu cầu liên kết đặt lại mới",
+  "deviceApproval.title": "Cấp quyền cho thiết bị",
+  "deviceApproval.description": "Một dòng lệnh hoặc thiết bị khác đang yêu cầu đăng nhập bằng tài khoản của bạn. Chỉ chấp thuận nếu chính bạn đã bắt đầu đăng nhập.",
+  "deviceApproval.enterCode": "Nhập mã hiển thị trên thiết bị của bạn.",
+  "deviceApproval.codeLabel": "Mã",
+  "deviceApproval.continue": "Tiếp tục",
+  "deviceApproval.checking": "Đang kiểm tra mã…",
+  "deviceApproval.confirm": "Kiểm tra xem mã này có khớp với mã hiển thị trên thiết bị của bạn không.",
+  "deviceApproval.client": "Yêu cầu bởi {{client}}",
+  "deviceApproval.approve": "Chấp thuận",
+  "deviceApproval.approving": "Đang chấp thuận…",
+  "deviceApproval.deny": "Từ chối",
+  "deviceApproval.denying": "Đang từ chối…",
+  "deviceApproval.approved": "Đã chấp thuận thiết bị. Quay lại terminal để tiếp tục; bạn có thể đóng trang này.",
+  "deviceApproval.denied": "Đã từ chối yêu cầu. Thiết bị chưa được đăng nhập; bạn có thể đóng trang này.",
+  "deviceApproval.expired": "Mã này đã hết hạn. Hãy bắt đầu đăng nhập lại trên thiết bị của bạn.",
+  "deviceApproval.invalid": "Mã này không hợp lệ. Hãy đối chiếu với thiết bị của bạn và thử lại.",
+  "deviceApproval.notYours": "Mã này đang được một tài khoản khác chấp thuận.",
+  "deviceApproval.error": "Đã xảy ra lỗi. Hãy thử lại.",
+  "deviceApproval.retry": "Thử lại",
+  "deviceApproval.otherCode": "Nhập mã khác",
+  "inbox.title": "Hộp thư đến",
+  "inbox.description": "Thông báo và yêu cầu gửi đến bạn.",
+  "inbox.views.all": "Tất cả",
+  "inbox.views.todo": "Cần làm",
+  "inbox.kinds.label": "Loại",
+  "inbox.kinds.all": "Tất cả các loại",
+  "inbox.kinds.decision": "Quyết định",
+  "inbox.kinds.info": "Thông báo",
+  "inbox.tabs.decision": "Cần tôi quyết định",
+  "inbox.tabs.info": "Thông báo",
+  "inbox.clearFilter": "Xóa bộ lọc",
+  "inbox.noMatchDescription": "Xóa bộ lọc để xem mọi loại.",
+  "inbox.readAll": "Đánh dấu tất cả là đã đọc",
+  "inbox.allRead": "Đã đánh dấu tất cả là đã đọc.",
+  "inbox.loading": "Đang tải",
+  "inbox.loadFailed": "Không thể tải hộp thư đến",
+  "inbox.loadFailedDescription": "Kiểm tra kết nối và thử lại.",
+  "inbox.retry": "Thử lại",
+  "inbox.loadMore": "Tải thêm",
+  "inbox.emptyAll": "Không có gì ở đây",
+  "inbox.empty.todo": "Không có gì đang chờ bạn",
+  "inbox.empty.decision": "Không có quyết định nào đang chờ bạn",
+  "inbox.empty.info": "Không có thông báo",
+  "inbox.emptyDescription": "Thông báo và yêu cầu gửi đến bạn sẽ hiển thị ở đây.",
+  "inbox.unread": "Chưa đọc",
+  "inbox.unreadCount": "{{count}} chưa đọc",
+  "inbox.pendingDecisions": "{{count}} đang chờ",
+  "inbox.resolved": "Đã xử lý",
+  "inbox.outcomes.approved": "Đã phê duyệt",
+  "inbox.outcomes.rejected": "Đã từ chối",
+  "inbox.outcomes.withdrawn": "Đã rút lại",
+  "inbox.count": "×{{count}}",
+  "inbox.actionsFor": "Thao tác cho {{title}}",
+  "inbox.actions.read": "Đánh dấu là đã đọc",
+  "inbox.actions.unread": "Đánh dấu là chưa đọc",
+  "inbox.actions.delete": "Xóa",
+  "inbox.deleted": "Đã xóa.",
+  "inbox.requestFailed": "Yêu cầu không thành công. Hãy thử lại.",
+  "inbox.forbidden": "Bạn không có quyền thực hiện thao tác này.",
+  "inbox.nothingSelected": "Chọn một mục để xem",
+  "inbox.back": "Quay lại danh sách",
+  "inbox.open": "Mở",
+  "inbox.keyMove": "Di chuyển",
+  "inbox.keyOpen": "Mở",
+  "inbox.cancel": "Hủy",
+  "inbox.request.approve": "Phê duyệt",
+  "inbox.request.reject": "Từ chối",
+  "inbox.request.commentPlaceholder": "Viết gì đó…",
+  "inbox.request.commentFor": "{{action}}: {{title}}",
+  "inbox.request.quickSend": "để gửi",
+  "inbox.request.newLine": "để xuống dòng",
+  "inboxButton.title": "Hộp thư đến",
+  "inboxButton.pending": "Hộp thư đến, {{count}} đang chờ",
+  "inboxButton.unread": "Hộp thư đến, {{count}} chưa đọc",
+  "inboxButton.pendingHint": "{{count}} mục đang chờ bạn; số này giảm khi chúng được xử lý.",
+  "inboxButton.unreadHint": "{{count}} mục chưa đọc; số này giảm khi bạn đọc chúng.",
+  "auth.welcome": "Chào mừng trở lại",
+  "auth.loginDescription": "Đăng nhập bằng tên người dùng hoặc email và mật khẩu.",
+  "auth.registerTitle": "Tạo tài khoản",
+  "auth.registerDescription": "Tạo tài khoản để bắt đầu.",
+  "auth.forgotTitle": "Quên mật khẩu",
+  "auth.forgotDescription": "Nhập email của bạn, chúng tôi sẽ gửi liên kết đặt lại nếu tài khoản tồn tại.",
+  "auth.passwordResetUnavailable": "Tính năng tự đặt lại mật khẩu chưa được bật. Hãy liên hệ quản trị viên để đặt lại mật khẩu.",
+  "auth.capabilityLoadFailed": "Không thể kiểm tra tính năng đặt lại mật khẩu.",
+  "auth.retry": "Thử lại",
+  "auth.loading": "Đang tải",
+  "auth.resetDescription": "Chọn mật khẩu mới cho tài khoản của bạn.",
+  "auth.resetTitle": "Đặt lại mật khẩu",
+  "auth.identifier": "Tên người dùng hoặc email",
+  "auth.password": "Mật khẩu",
+  "auth.signIn": "Đăng nhập",
+  "auth.signingIn": "Đang đăng nhập…",
+  "auth.hidePassword": "Ẩn mật khẩu",
+  "auth.showPassword": "Hiện mật khẩu",
+  "auth.forgotLink": "Quên mật khẩu?",
+  "auth.noAccount": "Chưa có tài khoản?",
+  "auth.signUp": "Đăng ký",
+  "auth.createAccount": "Tạo tài khoản",
+  "auth.creatingAccount": "Đang tạo tài khoản…",
+  "auth.name": "Họ tên",
+  "auth.username": "Tên người dùng",
+  "auth.email": "Email",
+  "auth.confirmPassword": "Xác nhận mật khẩu",
+  "auth.existingAccount": "Đã có tài khoản?",
+  "auth.passwordMismatch": "Mật khẩu không khớp.",
+  "auth.resetting": "Đang đặt lại…",
+  "auth.newPassword": "Mật khẩu mới",
+  "auth.confirmNewPassword": "Xác nhận mật khẩu mới",
+  "auth.invalidResetLink": "Liên kết đặt lại mật khẩu này không hợp lệ hoặc đã hết hạn.",
+  "auth.backToSignIn": "Quay lại đăng nhập",
+  "auth.sendResetLink": "Gửi liên kết đặt lại",
+  "auth.sending": "Đang gửi…",
+  "auth.resetSent": "Nếu tài khoản tồn tại, liên kết đặt lại đã được gửi.",
+  "auth.rememberPassword": "Bạn đã nhớ mật khẩu?",
+  "auth.methods": "Phương thức đăng nhập",
+  "auth.or": "Hoặc tiếp tục với",
+  "auth.continueWith": "Tiếp tục với {provider}",
+  "auth.about": "Giới thiệu ứng dụng",
+  "auth.platform": "Đội ngũ AI thúc đẩy tăng trưởng",
+  "auth.marketingTitleFirst": "Tìm việc cần làm,",
+  "auth.marketingTitleSecond": "giao cho tác nhân AI,",
+  "auth.marketingTitleThird": "đưa vào thực tế.",
+  "auth.marketingDescription": "NocoReach đọc dữ liệu tìm kiếm, lưu lượng truy cập, cộng đồng và GitHub của bạn mỗi ngày để tìm những việc đáng làm; khi bạn đồng ý, tác nhân AI sẽ chỉnh sửa trong kho mã của bạn và tạo yêu cầu hợp nhất.",
+  "auth.frontend": "Phân tích hằng ngày",
+  "auth.frontendDescription": "AI trực tuyến đọc dữ liệu mỗi ngày và đề xuất cơ hội cải thiện kèm bằng chứng.",
+  "auth.foundation": "Làm việc trực tiếp trong kho mã",
+  "auth.foundationDescription": "Tác nhân AI chỉnh sửa kho mã và tạo yêu cầu hợp nhất để bạn xem xét.",
+  "auth.marketingFooter": "Tìm ra, triển khai, đo lường.",
+  "status.loading": "Đang tải",
+  "status.loadingPage": "Đang tải trang",
+  "status.denied": "Truy cập bị từ chối",
+  "status.pageFailed": "Không thể tải trang",
+  "status.retry": "Thử lại",
+  "navigation.brandHome": "Trang chủ NocoReach",
+  "navigation.brandApps": "Ứng dụng NocoReach",
+  "routeOverlay.close": "Đóng",
+  "status.deniedDescription": "Bạn không có quyền truy cập {{label}}.",
+  "status.routeFailedDescription": "Không thể tải route {{label}} từ {{packageName}}.",
+  "shell": {
+    "templateVersionUnknown": "Không rõ phiên bản",
+    "buildFreely": "Tìm cơ hội cải thiện từ dữ liệu của bạn.",
+    "reliability": "<brand>NocoReach</brand> giúp bạn thực hiện."
+  },
+  "home": {
+    "platform": "NocoBase · Nền tảng ứng dụng AI-native",
+    "title": "Hãy mô tả, agent của bạn sẽ xây dựng",
+    "description": "Ứng dụng này được phát triển bằng cách trò chuyện với coding agent của bạn. Hãy nói nhu cầu nghiệp vụ bằng lời đơn giản, agent sẽ viết các trang, mô hình dữ liệu, API và quy trình nghiệp vụ trong dự án này.",
+    "steps": {
+      "describe": {
+        "title": "Mô tả nhu cầu",
+        "description": "Cho biết ai sử dụng, lưu trữ dữ liệu gì và điều gì cần xảy ra."
+      },
+      "build": {
+        "title": "Để agent xây dựng",
+        "description": "Agent đọc dự án này cùng các tính năng có sẵn, rồi viết mã."
+      },
+      "review": {
+        "title": "Kiểm tra và tinh chỉnh",
+        "description": "Làm mới trang để dùng thử, rồi yêu cầu thay đổi theo cách tương tự."
+      }
+    },
+    "example": {
+      "title": "Thử một yêu cầu như sau",
+      "text": "Xây dựng ứng dụng đơn mua hàng.\n\nMỗi đơn có số đơn, mặt hàng, người đề nghị, số tiền và trạng thái phê duyệt. Người đề nghị tạo đơn và chỉ xem đơn của mình; người duyệt xem mọi đơn đang chờ và phê duyệt hoặc từ chối.\nSau khi có quyết định, thông báo cho người đề nghị trong hộp thư đến kèm liên kết đến đơn.",
+      "hint": "Dán vào Claude Code, Codex, Cursor hoặc bất kỳ coding agent nào được mở trong dự án này."
+    },
+    "capabilitiesTitle": "Tính năng có sẵn",
+    "capabilitiesDescription": "Agent của bạn dùng trực tiếp các tính năng này thay vì xây dựng từ đầu. Mở một mục để lấy prompt bạn có thể chỉnh sửa và sao chép.",
+    "viewPrompts": "Xem prompt ({{count}})",
+    "prompt": {
+      "label": "Prompt",
+      "hint": "Chỉnh sửa prompt cho phù hợp với doanh nghiệp trước khi sao chép. Thay đổi không được lưu sau khi đóng hộp thoại.",
+      "copy": "Sao chép",
+      "copiedShort": "Đã sao chép",
+      "copied": "Đã sao chép prompt",
+      "copyFailed": "Không thể sao chép. Hãy chọn văn bản và sao chép thủ công.",
+      "reset": "Khôi phục mặc định"
+    },
+    "capabilities": {
+      "auth": {
+        "title": "Xác thực",
+        "description": "Đăng nhập, đăng ký, đặt lại mật khẩu và đăng nhập một lần (SSO) của công ty.",
+        "prompts": {
+          "disableSignUp": {
+            "label": "Đóng đăng ký",
+            "text": "Ứng dụng này chỉ dành cho nhân viên công ty. Quản trị viên tạo tất cả tài khoản.\nTắt tính năng tự đăng ký và bỏ liên kết đăng ký khỏi trang đăng nhập.\nNhân viên hiện có vẫn phải đăng nhập được bằng tài khoản và mật khẩu của mình.\nGiữ liên kết quên mật khẩu."
+          },
+          "companySso": {
+            "label": "SSO của công ty",
+            "text": "Cho phép nhân viên đăng nhập bằng nền tảng định danh của công ty qua OIDC.\n\nGiữ đăng nhập bằng tài khoản và mật khẩu, đồng thời thêm nút Tài khoản công ty.\nNút này mở nền tảng định danh của công ty. Sau khi đăng nhập thành công, quay về trang chủ của ứng dụng.\n\nCho phép lần đăng nhập đầu tiên tạo tài khoản ứng dụng, được nhận diện bằng mã định danh người dùng cố định của nền tảng.\nKhông tự động liên kết tài khoản theo tên hoặc email trùng khớp. Tài khoản mới dùng quyền mặc định của ứng dụng.\n\nLiệt kê các thông tin mà quản trị viên nền tảng định danh phải cung cấp và URL callback họ cần đăng ký."
+          },
+          "apiKeys": {
+            "label": "Khóa API",
+            "text": "Thêm mục Khóa tích hợp vào menu người dùng, dùng tính năng khóa API có sẵn của ứng dụng.\nNhân viên chỉ quản lý các khóa do mình tạo, nhập mục đích và thời hạn hiệu lực tính theo ngày.\nChỉ hiển thị toàn bộ khóa một lần sau khi tạo, kèm lời nhắc sao chép và lưu lại ngay.\nLiệt kê tên, một đoạn nhận dạng, trạng thái, ngày hết hạn và lần dùng gần nhất của mỗi khóa, và cho phép thu hồi sau khi xác nhận.\nKhông bao giờ hiển thị toàn bộ khóa trong danh sách, nhật ký hay chi tiết."
+          }
+        }
+      },
+      "dataSources": {
+        "title": "Nguồn dữ liệu",
+        "description": "Chọn cơ sở dữ liệu của ứng dụng và dùng dữ liệu nghiệp vụ từ các cơ sở dữ liệu bên ngoài hiện có.",
+        "prompts": {
+          "postgres": {
+            "label": "Đổi cơ sở dữ liệu",
+            "text": "Chuyển cơ sở dữ liệu của ứng dụng từ SQLite sang PostgreSQL.\nĐọc thông tin kết nối từ cấu hình chạy của máy chủ, không phải từ mã nguồn.\nGiải thích cần cài driver cơ sở dữ liệu nào và cần điền những thiết lập nào, đồng thời nhắc tôi rằng dữ liệu hiện có không được tự động di chuyển."
+          },
+          "externalDatabase": {
+            "label": "Cơ sở dữ liệu ngoài",
+            "text": "Kết nối cơ sở dữ liệu tài chính hiện có của công ty làm nguồn dữ liệu bên ngoài chỉ đọc; không sửa đổi các bảng của nó.\nĐối chiếu bản ghi theo mã nhà cung cấp và thêm mục Thanh toán vào chi tiết nhà cung cấp, hiển thị chu kỳ thanh toán, hạn mức tín dụng và trạng thái thanh toán, có ghi rõ nguồn.\nTiếp tục đọc thông tin liên hệ của nhà cung cấp từ cơ sở dữ liệu của ứng dụng, và đọc dữ liệu thanh toán trực tiếp từ cơ sở dữ liệu bên ngoài mà không nhập vào.\nĐọc thông tin xác thực kết nối từ cấu hình chạy của máy chủ."
+          }
+        }
+      },
+      "authorization": {
+        "title": "Phân quyền",
+        "description": "Kiểm soát ai được mở trang nào, thực hiện thao tác nào và xem bản ghi nào.",
+        "prompts": {
+          "jobs": {
+            "label": "Vị trí công việc",
+            "text": "Tạo các vị trí Người đề nghị mua hàng và Người duyệt đơn cho ứng dụng.\nNgười đề nghị mua hàng được vào trang đơn hàng và xem các đơn do mình đề nghị.\nNgười duyệt đơn được vào trang đơn hàng, xem đơn và phê duyệt hoặc từ chối các đơn đang chờ.\nChỉ quản trị viên ứng dụng được thay đổi quyền và phân công.\nDùng tính năng phân quyền có sẵn của ứng dụng để quản trị viên có thể điều chỉnh quyền và phân công người sau này."
+          },
+          "dataScopes": {
+            "label": "Phạm vi dữ liệu",
+            "text": "Chỉ cho người đề nghị mua hàng xem đơn của chính mình, dùng trường người đề nghị của đơn để xác định quyền sở hữu.\nNgười duyệt đơn được xem mọi đơn và xử lý các phê duyệt đang chờ.\nQuản trị viên có thể điều chỉnh phạm vi xem đơn của từng vị trí trong bộ quyền của vị trí đó."
+          },
+          "restrictions": {
+            "label": "Giới hạn",
+            "text": "Bob tạm thời hỗ trợ duyệt đơn mua hàng và chỉ được xem các đơn từ 2.000 trở xuống.\nThêm giới hạn số tiền vào thao tác Xem đơn của anh ấy, giữ nguyên vị trí và phạm vi dữ liệu hiện có.\nÁp dụng giới hạn cho đơn của chính anh ấy và các đơn được chia sẻ với anh ấy.\nQuản trị viên có thể đổi số tiền hoặc gỡ quy tắc; trước khi gỡ, hãy giải thích rằng phạm vi anh ấy xem được có thể rộng hơn."
+          }
+        }
+      },
+      "workflow": {
+        "title": "Quy trình",
+        "description": "Đưa bản ghi nghiệp vụ qua các giai đoạn, có chờ đợi, hết thời gian, thử lại và lịch sử ai đã làm gì.",
+        "prompts": {
+          "stages": {
+            "label": "Giai đoạn",
+            "text": "Thêm quy trình cho đơn mua hàng: Chờ phê duyệt → Chờ mua → Đã nhận hàng → Hoàn tất.\nNgười duyệt phê duyệt hoặc từ chối; từ chối phải có lý do và trả đơn về cho người đề nghị để sửa và gửi lại.\nSau khi người mua hàng đặt mua, đơn ở trạng thái chờ mua; xác nhận giao hàng kèm biên nhận có chữ ký sẽ chuyển đơn sang Đã nhận hàng, và xác nhận của người đề nghị sẽ hoàn tất đơn.\nChi tiết đơn chỉ hiển thị các thao tác của giai đoạn hiện tại, và chỉnh sửa thông thường không thể thay đổi giai đoạn.\nKiểm tra giai đoạn và thông tin bắt buộc trên máy chủ, và không bao giờ ghi đè kết quả người khác đã gửi."
+          },
+          "backgroundExport": {
+            "label": "Xuất dữ liệu nền",
+            "text": "Thêm trang báo cáo đơn hàng để xuất các đơn hiện có ra CSV.\nSau khi gửi, yêu cầu xuất chờ được xử lý, được tạo ở chế độ nền và hoàn tất kèm liên kết tải xuống.\nHiển thị giai đoạn hiện tại, tên tệp, số đơn đã xuất, cùng bản ghi gửi và bản ghi xử lý của hệ thống.\nThử lại việc tạo bị lỗi theo quy tắc, và giữ lỗi cuối cùng để người phụ trách xử lý; chạy lại không được tạo trùng tệp báo cáo.\nGiữ tiến độ và kết quả hiển thị sau khi làm mới trang, và chỉ cho phép người được cấp quyền xuất đơn."
+          },
+          "history": {
+            "label": "Lịch sử",
+            "text": "Hiển thị giai đoạn hiện tại và lịch sử xử lý trong chi tiết đơn.\nMỗi mục cho biết ai đã thực hiện, khi nào, thao tác gì, giai đoạn trước và sau, cùng lý do từ chối hoặc biên nhận có chữ ký nếu có.\nĐánh dấu các thao tác tự động là do hệ thống thực hiện.\nGiữ tiến độ và lịch sử sau khi làm mới trang, để có thể xem lại toàn bộ quy trình khi đã hoàn tất."
+          }
+        }
+      },
+      "scheduler": {
+        "title": "Tác vụ định kỳ",
+        "description": "Chạy công việc nghiệp vụ vào thời điểm định sẵn, xem lần chạy kế tiếp và kết quả.",
+        "prompts": {
+          "reminder": {
+            "label": "Nhắc nhở hằng ngày",
+            "text": "Thêm lời nhắc Đơn đang chờ vào ứng dụng đơn hàng hiện có.\n\nLúc 09:00 giờ Bắc Kinh mỗi ngày làm việc, tìm các đơn đang chờ phê duyệt, nhóm theo người duyệt và gửi cho mỗi người duyệt một thông báo trong ứng dụng.\nNêu số đơn đang chờ và liên kết đến danh sách đơn đang chờ. Không gửi gì khi không có đơn đang chờ.\nQuản trị viên có thể xem lịch chạy và bản ghi thực thi, cũng như tạm dừng hoặc tiếp tục lời nhắc."
+          },
+          "weeklyReport": {
+            "label": "Báo cáo tuần",
+            "text": "Lúc 08:00 giờ Bắc Kinh mỗi thứ Hai, tạo bản tổng hợp doanh số tuần trước và thông báo cho quản lý bán hàng.\nBao gồm doanh thu bán hàng, số đơn và tổng theo khu vực. Quản trị viên có thể xem tác vụ và bản ghi thực thi."
+          }
+        }
+      },
+      "notification": {
+        "title": "Thông báo",
+        "description": "Gửi tin nhắn trong ứng dụng, email hoặc tin nhắn bot nhóm khi có sự kiện xảy ra.",
+        "prompts": {
+          "inApp": {
+            "label": "Tin nhắn trong ứng dụng",
+            "text": "Thêm phê duyệt đơn hàng vào ứng dụng hiện tại và thông báo kết quả cho người đề nghị qua tin nhắn trong ứng dụng.\n\nĐơn hàng gồm số đơn, tên, người đề nghị, số tiền và trạng thái phê duyệt.\nNgười đề nghị có thể xem đơn của mình. Người duyệt có thể xem các đơn đang chờ và phê duyệt hoặc từ chối. Dùng lại tính năng đơn hàng và phê duyệt hiện có nếu có.\n\nSau khi phê duyệt hoặc từ chối, chỉ gửi một tin nhắn trong ứng dụng cho người đề nghị của đơn.\nTiêu đề cho biết đơn được phê duyệt hay bị từ chối. Nội dung gồm số đơn, tên đơn và kết quả phê duyệt.\nNhấp vào tin nhắn sẽ mở chi tiết đơn tương ứng.\nKhông gửi khi phê duyệt còn đang chờ. Chỉ thông báo một lần cho cùng một kết quả phê duyệt.\nLỗi gửi thông báo không ảnh hưởng đến kết quả phê duyệt đã lưu."
+          },
+          "email": {
+            "label": "Email",
+            "text": "Thêm email vào các thông báo phê duyệt đơn hàng hiện có, dùng kênh email đã cấu hình của ứng dụng.\n\nSau khi đơn được phê duyệt hoặc bị từ chối, gửi kết quả đến email tài khoản của người đề nghị.\nĐưa số đơn vào tiêu đề, tên đơn và kết quả vào nội dung.\nGiữ các tin nhắn trong ứng dụng hiện có. Nếu người đề nghị không có địa chỉ email, chỉ gửi tin nhắn trong ứng dụng.\nLỗi gửi email không được ảnh hưởng đến kết quả phê duyệt hay tin nhắn trong ứng dụng."
+          }
+        }
+      },
+      "mail": {
+        "title": "Email",
+        "description": "Kết nối hộp thư cá nhân, rồi đọc, trả lời và gửi email công việc.",
+        "prompts": {
+          "providers": {
+            "label": "Nhà cung cấp email",
+            "text": "Cấu hình mailbox.org cho ứng dụng trong mail.providers của cấu hình máy chủ:\n- Máy chủ nhận thư IMAP: imap.mailbox.org, cổng 993, SSL/TLS.\n- Máy chủ gửi thư SMTP: smtp.mailbox.org, cổng 465, SSL/TLS.\nNgười dùng tự nhập địa chỉ email, tên người dùng và mật khẩu của mình trên trang tài khoản hộp thư và chọn ngày bắt đầu đồng bộ lần đầu; không bao giờ ghi mật khẩu hộp thư vào cấu hình hay mã nguồn."
+          },
+          "mailCenter": {
+            "label": "Trung tâm email",
+            "text": "Email được tích hợp sẵn trong ứng dụng này; hãy dùng lại thay vì xây dựng lại hay cài thêm plugin khác.\nThêm các trang Trung tâm email và Tài khoản hộp thư vào thanh điều hướng, dùng trang làm việc email và trang tài khoản hộp thư mà tính năng email cung cấp.\nNgười dùng có thể kết nối hộp thư của mình, đồng bộ thư đến, đọc thư và tệp đính kèm, và trả lời, giữ nguyên tiêu đề gốc và ngữ cảnh cuộc hội thoại, gửi thư trả lời đến người gửi ban đầu.\nMỗi người dùng làm việc với các hộp thư đã kết nối của riêng mình."
+          },
+          "correspondence": {
+            "label": "Email khách hàng",
+            "text": "Thêm mục thư từ vào chi tiết khách hàng, dùng lại các thành phần đọc và soạn email có sẵn của ứng dụng.\nHiển thị các thư có người gửi hoặc người nhận trùng với địa chỉ email liên hệ của khách hàng hiện tại. Nhân viên bán hàng có thể đọc thư, xem tệp đính kèm và trả lời bằng hộp thư đã kết nối của mình."
+          }
+        }
+      },
+      "file": {
+        "title": "Tệp",
+        "description": "Tải tệp lên, đính kèm vào bản ghi, xem trước hoặc tải xuống.",
+        "prompts": {
+          "attachments": {
+            "label": "Tệp đính kèm",
+            "text": "Thêm tệp đính kèm mua hàng vào ứng dụng quản lý đơn hàng hiện có của tôi.\n\nThêm khu vực tệp đính kèm vào chi tiết đơn. Mỗi đơn có thể có nhiều tệp, gồm PDF, hình ảnh và DOCX.\nHiển thị tên tệp và kích thước, kèm các thao tác xem trước, tải xuống và gỡ tệp đính kèm.\nSau khi tải lên, cho phép người dùng lưu tệp đính kèm vào đơn hiện tại. Giữ chúng khi mở lại đơn.\nBất kỳ ai có quyền truy cập đơn đều có thể xem và tải xuống tệp đính kèm của đơn. Người đề nghị và người duyệt có thể thêm hoặc gỡ tệp đính kèm.\nGỡ tệp đính kèm chỉ hủy liên kết tệp với đơn hiện tại; vẫn giữ lại tệp."
+          },
+          "avatar": {
+            "label": "Ảnh đại diện",
+            "text": "Thêm ảnh đại diện cho mỗi nhân viên, mỗi nhân viên một ảnh.\nHỗ trợ tải lên và thay ảnh đại diện, và hiển thị ảnh trong danh sách và chi tiết nhân viên.\nDùng ảnh đại diện mới sau khi thay và giữ ảnh hiển thị sau khi làm mới trang."
+          }
+        }
+      },
+      "i18n": {
+        "title": "Ngôn ngữ",
+        "description": "Chuyển ngôn ngữ giao diện, thêm ngôn ngữ và đặt ngôn ngữ mặc định.",
+        "prompts": {
+          "addLanguage": {
+            "label": "Thêm ngôn ngữ",
+            "text": "Thêm tiếng Tây Ban Nha vào ứng dụng của tôi. Dịch giao diện và thông báo của máy chủ, và thêm tiếng Tây Ban Nha vào menu ngôn ngữ."
+          },
+          "defaultLanguage": {
+            "label": "Ngôn ngữ mặc định",
+            "text": "Đặt tiếng Trung giản thể làm ngôn ngữ mặc định của ứng dụng cho những người chưa chọn ngôn ngữ. Giữ tiếng Anh trong menu ngôn ngữ."
+          }
+        }
+      },
+      "theme": {
+        "title": "Giao diện",
+        "description": "Điều chỉnh màu sắc, phông chữ và mật độ, và chuyển giữa chế độ sáng và tối.",
+        "prompts": {
+          "changeTheme": {
+            "label": "Đổi giao diện",
+            "text": "Cập nhật giao diện Gọn: dùng màu xanh dương làm màu chính và tăng nhẹ độ bo góc. Giữ nguyên phông chữ, cỡ chữ và khoảng cách gọn hiện tại."
+          },
+          "newTheme": {
+            "label": "Giao diện mới",
+            "text": "Tạo giao diện Rừng xanh với màu xanh lá làm màu chính, nền dịu, góc bo vừa phải và đổ bóng nhẹ."
+          }
+        }
+      }
+    }
+  },
+  "appearance": {
+    "title": "Hiển thị",
+    "mode": "Chế độ màu",
+    "preset": "Giao diện",
+    "light": "Sáng",
+    "dark": "Tối",
+    "system": "Theo hệ thống",
+    "themes": {
+      "default": "Rộng rãi",
+      "compact": "Gọn"
+    }
+  },
+  "app": {
+    "title": "NocoReach"
+  },
+  "actions": {
+    "close": "Đóng",
+    "save": "Lưu",
+    "cancel": "Hủy",
+    "confirm": "Xác nhận",
+    "language": "Ngôn ngữ"
+  },
+  "notices": {
+    "serverLocaleFallback": "Máy chủ không hỗ trợ ngôn ngữ này, nên thông báo của máy chủ sẽ dùng tiếng Anh.",
+    "languageChangeFailed": "Không thể hoàn tất việc đổi ngôn ngữ. Vui lòng thử lại."
+  },
+  "account": {
+    "signOutFailed": "Không thể đăng xuất. Vui lòng thử lại.",
+    "openMenu": "Mở menu tài khoản",
+    "fallback": "Tài khoản",
+    "signOut": "Đăng xuất",
+    "signingOut": "Đang đăng xuất…"
+  },
+  "navigation": {
+    "home": "Trang chủ",
+    "open": "Mở điều hướng",
+    "close": "Đóng điều hướng",
+    "expand": "Mở rộng điều hướng",
+    "collapse": "Thu gọn điều hướng",
+    "toggle": "Mở rộng hoặc thu gọn điều hướng",
+    "label": "Điều hướng ứng dụng",
+    "description": "Đi đến một trang trong ứng dụng này.",
+    "breadcrumb": "Đường dẫn điều hướng",
+    "breadcrumbMore": "Hiển thị các cấp ở giữa",
+    "back": "Quay lại",
+    "backTo": "Quay lại {{label}}"
+  },
+  "dataTable": {
+    "noResults": "Không có kết quả.",
+    "sortAscending": "Tăng dần",
+    "sortDescending": "Giảm dần",
+    "hideColumn": "Ẩn",
+    "view": "Hiển thị",
+    "toggleColumns": "Ẩn/hiện cột",
+    "selectedCount": "Đã chọn {{selected}} trên {{total}} hàng.",
+    "rowsPerPage": "Số hàng mỗi trang",
+    "pageOf": "Trang {{page}} / {{pageCount}}",
+    "firstPage": "Đến trang đầu",
+    "previousPage": "Đến trang trước",
+    "nextPage": "Đến trang sau",
+    "lastPage": "Đến trang cuối"
+  },
+  "datePicker": {
+    "placeholder": "Chọn ngày",
+    "rangePlaceholder": "Chọn khoảng ngày"
+  },
+  "chat": {
+    "title": "Trò chuyện với tác nhân AI",
+    "ask": "Hỏi tác nhân AI",
+    "close": "Đóng",
+    "expand": "Toàn chiều rộng",
+    "restoreSize": "Quay lại bảng bên",
+    "openPage": "Mở toàn màn hình",
+    "openInPanel": "Mở trong bảng bên",
+    "more": "Thêm",
+    "newConversation": "Cuộc trò chuyện mới",
+    "untitled": "Cuộc trò chuyện chưa đặt tên",
+    "rename": "Đổi tên",
+    "renameHint": "{{title}} (nhấp để đổi tên)",
+    "archive": "Lưu trữ",
+    "unarchive": "Bỏ lưu trữ",
+    "you": "Bạn",
+    "agentGone": "Tác nhân AI đã bị xóa",
+    "anyAgent": "Tác nhân AI",
+    "loadFailed": "Không thể tải cuộc trò chuyện",
+    "notFound": "Không thể mở cuộc trò chuyện này",
+    "notFoundDescription": "Cuộc trò chuyện có thể đã bị xóa hoặc thuộc về người khác.",
+    "emptyTitle": "{{name}} có thể giúp gì cho bạn?",
+    "emptyDescription": "Hãy đặt câu hỏi hoặc mô tả công việc cần sắp xếp. Nội dung hiển thị trên trang này sẽ được gửi kèm làm ngữ cảnh.",
+    "noAgent": "Không có tác nhân AI nào bạn được phép trò chuyện cùng. Hãy nhờ quản trị viên tạo tác nhân AI hoặc cấp quyền truy cập cho bạn.",
+    "chooseAgent": "Chọn tác nhân AI để trò chuyện bên dưới. Để luôn bắt đầu với một tác nhân AI, hãy đặt tác nhân AI mặc định trong hồ sơ của bạn.",
+    "messages": "Tin nhắn",
+    "olderMessages": "Tin nhắn trước đó",
+    "sources": {
+      "panel": "Bảng trò chuyện"
+    },
+    "availability": {
+      "online": "Trực tuyến",
+      "agentMissing": "Đã xóa",
+      "agentArchived": "Đã lưu trữ",
+      "forbidden": "Bạn không có quyền sử dụng",
+      "noRunner": "Không có môi trường thực thi trực tuyến",
+      "othersPersonal": "Chỉ khả dụng trên môi trường thực thi cá nhân của người khác"
+    },
+    "mode": {
+      "online": "Trực tuyến",
+      "runner": "Môi trường thực thi",
+      "onlineHint": "Trả lời trong vài giây trên máy chủ",
+      "runnerHint": "Tác nhân AI lập trình chạy trên môi trường thực thi"
+    },
+    "reply": {
+      "writing": "Đang viết…",
+      "interrupted": "Phản hồi đã dừng tại đây."
+    },
+    "offline": {
+      "agentMissing": "{{name}} không còn tồn tại",
+      "agentArchived": "{{name}} đã được lưu trữ",
+      "forbidden": "Bạn không còn được phép sử dụng {{name}}",
+      "noRunner": "{{name}} hiện không có môi trường thực thi trực tuyến",
+      "othersPersonal": "{{name}} chỉ khả dụng trên môi trường thực thi cá nhân của người khác",
+      "kept": "Tin nhắn của bạn sẽ được giữ lại và trả lời khi tác nhân AI có thể phản hồi.",
+      "fallback": "Dùng tác nhân AI khác tại đây",
+      "usingDefault": "Cuộc trò chuyện này tạm thời dùng {{name}} thay cho {{own}}.",
+      "restore": "Chuyển lại sang {{own}}"
+    },
+    "notice": {
+      "switchedToDefault": "Đã chuyển sang {{name}}, tác nhân AI mặc định của hệ thống, cho đến khi {{own}} hoạt động trở lại.",
+      "switchedToOnline": "{{own}} hiện không có môi trường thực thi dành cho bạn, nên {{name}} sẽ trả lời cho đến khi {{own}} hoạt động trở lại.",
+      "onlineFallbackUnavailable": "Tác nhân AI trực tuyến dự phòng không thể trả lời ({{reason}}). Cuộc trò chuyện này vẫn dùng {{own}} trong khi chờ môi trường thực thi.",
+      "switchedBack": "Đã chuyển lại sang {{name}}.",
+      "runFailed": "Tác nhân AI đã dừng trước khi trả lời.",
+      "runFailedReason": "Tác nhân AI đã dừng trước khi trả lời: {{reason}}",
+      "runCancelled": "Đã dừng."
+    },
+    "consultation": {
+      "title": "Đã tham vấn {{name}}",
+      "question": "Câu hỏi",
+      "answer": "Câu trả lời",
+      "steps": "Các bước đã thực hiện",
+      "plans_one": "Đã đề xuất một kế hoạch để bạn xác nhận.",
+      "plans_other": "Đã đề xuất {{count}} kế hoạch để bạn xác nhận.",
+      "usage": "Đã dùng {{input}} token đầu vào và {{output}} token đầu ra.",
+      "state": {
+        "running": "Đang trả lời…",
+        "completed": "Đã trả lời",
+        "failed": "Thất bại",
+        "refused": "Đã từ chối"
+      }
+    },
+    "steps": {
+      "title": "Các bước",
+      "waiting": "Đang chờ môi trường thực thi tiếp nhận…",
+      "starting": "Đang bắt đầu…",
+      "thinking": "Đang suy nghĩ…",
+      "reading": "Đang xem {{subject}}",
+      "working": "Đang xử lý {{subject}}",
+      "count_one": "{{count}} bước",
+      "count_other": "{{count}} bước",
+      "started": "Tác nhân AI đang trả lời.",
+      "finished": "Tác nhân AI đã trả lời xong."
+    },
+    "pending": {
+      "sending": "Đang gửi…",
+      "failed": "Chưa gửi",
+      "retry": "Gửi lại",
+      "discard": "Loại bỏ"
+    },
+    "composer": {
+      "label": "Tin nhắn gửi tác nhân AI",
+      "placeholder": "Đặt câu hỏi hoặc mô tả công việc cần sắp xếp…",
+      "hint": "Enter để gửi, Shift+Enter để xuống dòng",
+      "runningHint": "Tin nhắn gửi lúc này sẽ được bổ sung vào công việc đang thực hiện",
+      "tooLong": "Tối đa {{max}} ký tự.",
+      "send": "Gửi",
+      "stop": "Dừng",
+      "stopping": "Đang dừng…"
+    },
+    "attachments": {
+      "attach": "Đính kèm tệp",
+      "label": "Tệp đính kèm tin nhắn tiếp theo",
+      "sent": "Tệp đã gửi kèm tin nhắn này",
+      "images": "Hình ảnh",
+      "files": "Tệp",
+      "remove": "Gỡ {{name}}",
+      "uploading": "Đang tải lên…",
+      "tooLarge": "Lớn hơn {{max}}",
+      "failed": "Không thể tải lên",
+      "tooMany": "Tối đa {{max}} tệp mỗi tin nhắn.",
+      "blocked": "Hãy gỡ các tệp không tải lên được để gửi tin nhắn.",
+      "waiting": "Sẽ gửi khi tải tệp lên xong…",
+      "drop": "Thả tệp để đính kèm",
+      "preview": "Xem trước {{name}}",
+      "download": "Tải xuống {{name}}",
+      "previous": "Ảnh trước",
+      "next": "Ảnh tiếp theo"
+    },
+    "context": {
+      "label": "Ngữ cảnh gửi kèm tin nhắn tiếp theo",
+      "sent": "Ngữ cảnh đã gửi kèm tin nhắn này",
+      "filter": "Bộ lọc: {{filter}}",
+      "selection": "Văn bản đã chọn: “{{text}}”",
+      "remove": "Gỡ ngữ cảnh: {{label}}"
+    },
+    "agents": {
+      "switch": "Tác nhân AI: {{name}}; chọn tác nhân AI khác",
+      "withStatus": "{{name}}, {{status}}",
+      "chooseFor": "Trò chuyện với",
+      "startWith": "Bắt đầu cuộc trò chuyện mới với",
+      "boundHint": "Mỗi cuộc trò chuyện gắn với một tác nhân AI; chọn tác nhân AI khác sẽ bắt đầu cuộc trò chuyện mới.",
+      "empty": "Không có tác nhân AI nào bạn được phép trò chuyện cùng",
+      "none": "Không có tác nhân AI",
+      "field": "Tác nhân AI: {{name}}",
+      "unknown": "Tác nhân AI không xác định",
+      "placeholder": "Chọn tác nhân AI",
+      "myDefault": "Mặc định của tôi",
+      "systemDefault": "Mặc định của hệ thống",
+      "personal": "Chỉ dùng môi trường thực thi cá nhân",
+      "temporary": "Tạm thời",
+      "modeHint": "Kết nối môi trường thực thi và bật các tác nhân AI được phát hiện trên đó để bắt đầu trò chuyện."
+    },
+    "history": {
+      "title": "Cuộc trò chuyện",
+      "search": "Tìm cuộc trò chuyện",
+      "show": "Hiển thị",
+      "active": "Đang mở",
+      "archived": "Đã lưu trữ",
+      "agent": "Tác nhân AI",
+      "allAgents": "Tất cả tác nhân AI",
+      "source": "Bắt đầu từ",
+      "allSources": "Mọi nơi",
+      "loadFailed": "Không thể tải các cuộc trò chuyện",
+      "noMatch": "Không có cuộc trò chuyện phù hợp",
+      "noArchived": "Không có cuộc trò chuyện đã lưu trữ",
+      "empty": "Chưa có cuộc trò chuyện nào",
+      "more": "Tải thêm",
+      "unread": "Phản hồi mới",
+      "actions": "Thao tác cho {{title}}"
+    },
+    "loading": "Đang tải",
+    "retry": "Thử lại",
+    "errors": {
+      "forbidden": "Bạn không được phép thực hiện thao tác này.",
+      "notFound": "Nội dung này không còn tồn tại.",
+      "requestFailed": "Yêu cầu thất bại. Vui lòng thử lại."
+    },
+    "transcript": {
+      "waiting": "Đang chờ tác nhân AI bắt đầu…",
+      "empty": "Lần chạy này không ghi nhận sự kiện nào.",
+      "fetchFailed": "Không thể lấy sự kiện mới. Đang thử lại…",
+      "expand": "Hiển thị tất cả",
+      "truncated": "Đã cắt bớt: văn bản đầy đủ quá dài để lưu lại.",
+      "events": "Nhật ký lần chạy",
+      "inputDelivered": "Đã chuyển {{count}} đầu vào cho tác nhân AI",
+      "tokens": "{{input}} token đầu vào, {{output}} đầu ra",
+      "kinds": {
+        "text": "Tác nhân AI",
+        "thinking": "Suy nghĩ",
+        "toolUse": "Công cụ",
+        "toolResult": "Kết quả",
+        "allowed": "Đã cho phép",
+        "denied": "Đã từ chối",
+        "input": "Đầu vào",
+        "checkout": "Lấy mã nguồn",
+        "status": "Trạng thái",
+        "error": "Lỗi",
+        "usage": "Mức sử dụng"
+      }
+    }
+  },
+  "agentSetup.title": "Dùng NocoReach trong tác nhân AI của bạn",
+  "agentSetup.description": "Sao chép hướng dẫn này vào Claude Code, Codex hoặc tác nhân AI lập trình khác để kết nối với NocoReach.",
+  "agentSetup.prompt": "Hãy giúp tôi sử dụng NocoReach từ tác nhân AI lập trình này.\n\n1. Cài đặt CLI NocoReach:\n{{install}}\n\n2. Bắt đầu đăng nhập qua trình duyệt:\n{{login}}\nHiển thị cho tôi URL xác minh và mã. Chờ tôi kiểm tra và phê duyệt mã trong trình duyệt; không phê duyệt thay tôi.\n\n3. Sau khi tôi phê duyệt, chạy `nocoreach whoami` để xác minh tài khoản đã đăng nhập, rồi chạy `nocoreach docs` để tìm hiểu các lệnh có sẵn. Sử dụng các lệnh đó để thực hiện yêu cầu của tôi trong phạm vi quyền hiện có của tôi. Không hỏi mật khẩu của tôi hoặc dùng mã tải xuống làm khóa API.",
+  "agentSetup.identity": "Mã tải xuống chỉ dùng để cài đặt CLI. Sau khi bạn phê duyệt đăng nhập qua trình duyệt, tác nhân AI sẽ sử dụng tài khoản của bạn với các quyền hiện có.",
+  "agentSetup.expiry": "Mã cài đặt có hiệu lực trong 30 phút và cho phép tải xuống tối đa 3 lần. Hãy giữ kín hướng dẫn này. Tạo mã mới nếu mã hết hạn.",
+  "agentSetup.runtime": "Yêu cầu Node.js 24+ trên macOS hoặc Linux; trên Windows, hãy dùng WSL. Thao tác này chỉ cài đặt CLI.",
+  "agentSetup.preparing": "Đang chuẩn bị hướng dẫn cài đặt…",
+  "agentSetup.promptLabel": "Hướng dẫn thiết lập tác nhân AI",
+  "agentSetup.failed": "Không thể chuẩn bị hướng dẫn cài đặt. Vui lòng thử lại.",
+  "agentSetup.signedOut": "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại để tiếp tục.",
+  "agentSetup.forbidden": "Bạn không có quyền tạo hướng dẫn cài đặt. Vui lòng liên hệ quản trị viên.",
+  "agentSetup.expired": "Mã cài đặt này đã hết hạn. Hãy tạo mã mới để tiếp tục.",
+  "agentSetup.regenerate": "Tạo mã mới",
+  "agentSetup.copy": "Sao chép hướng dẫn",
+  "agentSetup.copied": "Đã sao chép",
+  "agentSetup.copyFailed": "Không thể sao chép. Hãy chọn hướng dẫn và sao chép thủ công.",
+  "agentSetup.signIn": "Đăng nhập lại",
+  "agentSetup.signInFailed": "Không thể làm mới phiên đăng nhập. Vui lòng thử lại.",
+  "nocoreach.agentCapabilities.group": "Tác vụ NocoReach",
+  "nocoreach.agentCapabilities.read": "Đọc dữ liệu tác vụ hiện tại",
+  "nocoreach.agentCapabilities.readDescription": "Đọc bản chụp dữ liệu tác vụ: chỉ số, từ khóa, trang, kiểm tra, kiến thức, kỹ năng và bài đăng diễn đàn.",
+  "nocoreach.agentCapabilities.draft": "Lưu bản nháp đề xuất",
+  "nocoreach.agentCapabilities.draftDescription": "Lưu bản nháp cho lần chạy hiện tại mà không phê duyệt hoặc xuất bản.",
+  "nocoreach.agentCapabilities.research": "Nghiên cứu NocoReach",
+  "nocoreach.agentCapabilities.community": "Cộng đồng NocoReach",
+  "nocoreach.agentCapabilities.presetDescription": "Làm việc dựa trên bằng chứng của dự án và gửi bản nháp để con người xem xét.",
+  "nocoreach.nav.insights": "Nhận định",
+  "nocoreach.nav.opportunities": "Cơ hội cải thiện",
+  "nocoreach.nav.tasks": "Tác vụ",
+  "nocoreach.nav.results": "Kết quả",
+  "nocoreach.nav.site": "Trang web & sản phẩm",
+  "nocoreach.nav.pages": "Trang",
+  "nocoreach.nav.traffic": "Lưu lượng truy cập",
+  "nocoreach.nav.audit": "Kiểm tra trang web",
+  "nocoreach.nav.github": "GitHub",
+  "nocoreach.nav.downloads": "Lượt tải xuống",
+  "nocoreach.nav.search": "Tìm kiếm & thị trường",
+  "nocoreach.nav.searchPerformance": "Hiệu suất",
+  "nocoreach.nav.keywords": "Từ khóa",
+  "nocoreach.nav.trends": "Xu hướng",
+  "nocoreach.nav.competitors": "Đối thủ",
+  "nocoreach.nav.aiSearch": "Tìm kiếm bằng AI",
+  "nocoreach.nav.community": "Cộng đồng",
+  "nocoreach.nav.forum": "Diễn đàn",
+  "nocoreach.nav.hackerNews": "Hacker News",
+  "nocoreach.nav.reddit": "Reddit",
+  "nocoreach.nav.x": "X",
+  "nocoreach.nav.discord": "Discord",
+  "nocoreach.nav.slack": "Slack",
+  "nocoreach.nav.xiaohongshu": "Xiaohongshu",
+  "nocoreach.nav.bilibili": "Bilibili",
+  "nocoreach.nav.youtube": "YouTube",
+  "nocoreach.nav.aiTeam": "Đội ngũ AI",
+  "nocoreach.nav.agent": "Tác nhân AI",
+  "nocoreach.nav.playbooks": "Quy trình thực hiện",
+  "nocoreach.nav.skills": "Kỹ năng",
+  "nocoreach.nav.projectKnowledge": "Kiến thức",
+  "nocoreach.nav.analysisRules": "Quy tắc phân tích",
+  "nocoreach.nav.settings": "Cài đặt",
+  "nocoreach.nav.connections": "Nguồn dữ liệu",
+  "nocoreach.nav.proxyProfiles": "Mạng",
+  "nocoreach.nav.members": "Thành viên & vai trò",
+  "overrides": {
+    "@nocobase/app-plugin-agents": {
+      "agentSkills": {
+        "onlineScripts": "Tác nhân AI trò chuyện không thực thi tập lệnh: tác nhân AI có thể đọc nhưng không thể chạy chúng."
+      },
+      "models": {
+        "description": "Các dịch vụ mô hình và mô hình do chúng cung cấp. Mô hình trò chuyện phục vụ phân tích hằng ngày và tác nhân AI trò chuyện; mô hình nhúng và xếp hạng lại phục vụ tìm kiếm."
+      },
+      "defaultModel": {
+        "description": "Tác nhân AI trò chuyện chưa có mô hình riêng sẽ dùng mô hình này để trả lời, chẳng hạn như tác nhân AI mới hoặc tác nhân AI có sẵn trong ứng dụng."
+      },
+      "services": {
+        "empty": {
+          "description": "Sau khi bạn thêm dịch vụ mô hình, tác nhân AI trò chuyện có thể trả lời thông qua dịch vụ đó."
+        },
+        "service": {
+          "enabledHint": "Tác nhân AI trò chuyện chỉ có thể dùng các mô hình của dịch vụ khi dịch vụ được bật."
+        }
+      },
+      "skills": {
+        "scriptsNote": "Có tập lệnh: tác nhân AI trò chuyện có thể đọc nhưng không bao giờ chạy chúng",
+        "entry": {
+          "conventional": {
+            "scripts": "Mã mà tác nhân AI có thể chạy. Tác nhân AI trò chuyện chỉ đọc mã."
+          }
+        }
+      },
+      "runtimes": {
+        "description": "Máy tính hoặc máy chủ chạy Runner. Runner báo cáo các công cụ lập trình trên máy đó (như Claude Code hoặc Codex), và tác nhân AI thực thi chạy tác vụ tại đó."
+      },
+      "usage": {
+        "description": "Số token từng tác nhân AI và mô hình đã sử dụng, cùng chi phí ước tính theo giá hiện tại."
+      }
+    }
+  },
+  "agentSetup.connectionsTitle": "Kết nối dữ liệu bằng tác nhân AI của bạn",
+  "agentSetup.connectionsDescription": "Sao chép hướng dẫn này vào Claude Code, Codex hoặc một tác nhân AI lập trình khác. Tác nhân AI sẽ cài đặt NocoReach CLI, đăng nhập bằng tài khoản của bạn và kết nối các nguồn dữ liệu của dự án này sau khi bạn xác nhận kế hoạch.",
+  "agentSetup.connectionsPrompt": "Hãy giúp tôi kết nối các nguồn dữ liệu của dự án NocoReach \"{{project}}\" (ID {{projectId}}).\n\n1. Cài đặt NocoReach CLI:\n{{install}}\n\n2. Bắt đầu đăng nhập qua trình duyệt:\n{{login}}\nHiển thị cho tôi URL xác minh và mã xác minh. Chờ tôi kiểm tra và chấp thuận mã trong trình duyệt; không chấp thuận thay tôi.\n\n3. Sau khi tôi chấp thuận, chạy `nocoreach whoami` để kiểm tra tài khoản đã đăng nhập, rồi chạy `nocoreach connect guide --json` và làm theo các bước trong đó cho dự án {{projectId}}. Hãy trình bày kế hoạch và chờ tôi xác nhận trước khi kết nối bất kỳ nguồn nào. Không yêu cầu mật khẩu, token hoặc khóa API của tôi, và không dùng token tải xuống làm khóa API; với nguồn cần thông tin xác thực, hãy đưa tôi liên kết để tôi tự nhập trong trình duyệt."
+}

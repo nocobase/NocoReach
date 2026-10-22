@@ -499,7 +499,7 @@ function ActivityCard({data,update,busy,members}:{data:Data;update:Update;busy:b
  async function send(){const d=await update('comment',{comment:text});if(d){clearText();}}
  return <section className="nr-td-section flex flex-col gap-3" aria-label={$t('common.activity')}><h2 className="text-base font-medium">{$t('common.activity')}</h2>
   {hidden>0&&<Button variant="link" size="sm" className="h-auto self-start p-0" onClick={()=>setAll(true)}>{$t('taskDetail.showEarlier',{0:hidden})}</Button>}
-  <ol className="nr-td-timeline">{shown.map(({e,t,i})=>{const who=t!.who===$t('common.you')?(e.actor&&people.get(e.actor))||$t('common.you'):t!.who;
+  <ol className="nr-td-timeline">{shown.map(({e,t,i})=>{const who=t!.who===$t('common.you')?(e.actor&&people.get(e.actor))||$t('common.member'):t!.who;
    if(e.action==='comment'||e.action==='requestStageChanges')return <li key={`${e.at}:${e.action}:${e.comment}`} className="nr-td-comment"><header><ActorAvatar type="user" name={who} size="xs"/><b>{who}</b>{e.action==='requestStageChanges'&&<Tag tone="violet">{$t('taskDetail.requestChanges')}</Tag>}<time>{when(e.at)}</time></header><p>{e.comment}</p></li>;
    const artifact=e.action==='runSucceeded'&&e.artifactId?artifacts.get(e.artifactId):undefined;
    const line=artifact?$t('taskDetail.deliveredVersion',{0:artifact.version,1:nameOf(artifact.stepId)}):plain[e.action]||t!.text;

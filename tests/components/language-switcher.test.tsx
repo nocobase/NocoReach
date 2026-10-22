@@ -146,7 +146,7 @@ describe('LanguageSwitcher', () => {
       await screen.findByRole('menuitemradio', { name: 'English' }),
     ).toBeChecked();
     expect(
-      screen.getByRole('menuitemradio', { name: '中文' }),
+      screen.getByRole('menuitemradio', { name: '简体中文' }),
     ).not.toBeChecked();
   });
 
@@ -162,7 +162,9 @@ describe('LanguageSwitcher', () => {
       await screen.findByRole('menuitem', { name: /Language\s*English/ }),
     );
     // jsdom has no submenu geometry for the pointer safe corridor.
-    fireEvent.click(await screen.findByRole('menuitemradio', { name: '中文' }));
+    fireEvent.click(
+      await screen.findByRole('menuitemradio', { name: '简体中文' }),
+    );
 
     await waitFor(() => expect(runtime.getLocale()).toBe('zh-CN'));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
@@ -171,10 +173,10 @@ describe('LanguageSwitcher', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Account' }));
     await user.click(
-      await screen.findByRole('menuitem', { name: /语言\s*中文/ }),
+      await screen.findByRole('menuitem', { name: /语言\s*简体中文/ }),
     );
     expect(
-      await screen.findByRole('menuitemradio', { name: '中文' }),
+      await screen.findByRole('menuitemradio', { name: '简体中文' }),
     ).toBeChecked();
     expect(toaster.show).not.toHaveBeenCalled();
   });
@@ -196,7 +198,9 @@ describe('LanguageSwitcher', () => {
     await user.click(
       await screen.findByRole('menuitem', { name: /Language\s*English/ }),
     );
-    fireEvent.click(await screen.findByRole('menuitemradio', { name: '中文' }));
+    fireEvent.click(
+      await screen.findByRole('menuitemradio', { name: '简体中文' }),
+    );
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
     expect(runtime.getLocale()).toBe('zh-CN');
@@ -215,7 +219,7 @@ describe('LanguageSwitcher', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Account' }));
     expect(
-      await screen.findByRole('menuitem', { name: /语言\s*中文/ }),
+      await screen.findByRole('menuitem', { name: /语言\s*简体中文/ }),
     ).not.toHaveAttribute('aria-disabled');
     expect(toaster.show).toHaveBeenCalledOnce();
     await user.keyboard('{Escape}{Escape}');
@@ -235,7 +239,9 @@ describe('LanguageSwitcher', () => {
     await user.click(
       await screen.findByRole('menuitem', { name: /Language\s*English/ }),
     );
-    fireEvent.click(await screen.findByRole('menuitemradio', { name: '中文' }));
+    fireEvent.click(
+      await screen.findByRole('menuitemradio', { name: '简体中文' }),
+    );
 
     await waitFor(() => expect(runtime.getLocale()).toBe('zh-CN'));
     await waitFor(() =>
