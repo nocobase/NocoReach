@@ -230,7 +230,7 @@
   "auth.continueWith": "使用 {provider} 繼續",
   "auth.about": "關於此應用程式",
   "auth.platform": "AI 成長團隊",
-  "auth.marketingTitleFirst": "從資料裡找機會，",
+  "auth.marketingTitleFirst": "從資料中發現機會，",
   "auth.marketingTitleSecond": "交給 Agent",
   "auth.marketingTitleThird": "改到上線。",
   "auth.marketingDescription": "NocoReach 每天讀你的搜尋、流量、社群和 GitHub 資料，找出值得做的事；你點頭後，Agent 在你的儲存庫裡改好並開 PR。",
@@ -251,8 +251,8 @@
   "status.routeFailedDescription": "無法載入 {{packageName}} 的路由 {{label}}。",
   "shell": {
     "templateVersionUnknown": "版本未知",
-    "buildFreely": "從資料裡找機會。",
-    "reliability": "<brand>NocoReach</brand> 幫你做出來。"
+    "buildFreely": "從資料中發現機會，",
+    "reliability": "<brand>NocoReach</brand> 幫你落地"
   },
   "home": {
     "platform": "NocoBase · AI 原生應用程式平台",

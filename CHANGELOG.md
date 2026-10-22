@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Settings and the sidebar in agreed words
+
+- The sidebar's slogan and the sign-in page's first line read as agreed in Chinese: "从数据中发现机会，NocoReach 帮你落地".
+- Members & roles › Roles lists System administrator first as a built-in role for all projects, with an ⓘ saying it has every permission and cannot be edited there, so Roles agrees with Members; in Members it is a neutral badge like the other roles instead of a solid one.
+- Network describes itself in one sentence; the note on YouTube, Bilibili and Xiaohongshu moves from under the sources into the page's ⓘ.
+- Automatic runs says a failed day is retried in formal Chinese, and the new project's content language uses the shared drop-down.
+
 ## Unreleased — AI team pages without side panels or fold-outs
 
 - Playbooks lists every playbook as a card by category across the full width; a card opens the playbook in a drawer to read or edit, instead of a list with a detail panel always beside it. A link to `?id=` opens that drawer, and nothing opens by default. Its category and Skill pickers use the shared drop-down.

@@ -472,7 +472,11 @@ it('counts no invitations when the read fails or is not enabled', async () => {
 it('shows built-in and custom definitions without exposing edit controls to a reader', async () => {
   state.canManage = false;
   setup('/members?tab=roles');
-  expect(await screen.findByText('Built-in')).toBeVisible();
+  // System administrator is listed first as a built-in row, then the business roles.
+  expect(
+    (await screen.findAllByText('Built-in')).length,
+  ).toBeGreaterThanOrEqual(2);
+  expect(screen.getByText('System administrator')).toBeVisible();
   expect(screen.getByText('Custom')).toBeVisible();
   expect(screen.queryByText('New role', { exact: true })).toBeNull();
   expect(
