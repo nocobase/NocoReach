@@ -1906,6 +1906,8 @@
   "strategy.conversationInPanel": "Heutige Unterhaltung in der Seitenleiste öffnen",
   "strategy.situationAttention": "Aktuelle Lage · Handlungsbedarf: {0}",
   "strategy.earlierAnalyses": "Frühere Analysen ({0})",
+  "strategy.collapseEarlier": "Frühere Analysen ausblenden",
+  "strategy.conversationTurns": "Unterhaltung · Fragen: {0}",
   "strategy.dayThreads": "Fragen: {0}",
   "strategy.verdictCoveredTask": "Aufgabe {0} kümmert sich bereits darum",
   "strategy.verdictCoveredTaskDone": "Aufgabe {0} hat dies bereits erledigt",

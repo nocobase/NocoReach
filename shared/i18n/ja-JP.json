@@ -1906,6 +1906,8 @@
   "strategy.conversationInPanel": "今日の会話をサイドパネルで開く",
   "strategy.situationAttention": "現状 · 要注意 {0} 件",
   "strategy.earlierAnalyses": "以前の分析（{0} 日分）",
+  "strategy.collapseEarlier": "以前の分析をたたむ",
+  "strategy.conversationTurns": "会話 · 質問 {0} 件",
   "strategy.dayThreads": "質問 {0} 件",
   "strategy.verdictCoveredTask": "タスク {0} で対応中です",
   "strategy.verdictCoveredTaskDone": "タスク {0} で対応済みです",

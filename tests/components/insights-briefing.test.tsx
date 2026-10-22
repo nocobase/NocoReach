@@ -643,6 +643,15 @@ it('today’s conversation follows the analysis, a quoted opportunity above its 
   // No questions under the opportunity lines any more.
   const b = screen.getByRole('listitem', { name: 'Opportunity b' });
   expect(within(b).queryByText(/How long/)).toBeNull();
+  // The conversation folds to one line, keeping the day's analysis in view.
+  const fold = within(conversation).getByRole('button', {
+    name: /strategy.conversationTurns:2/,
+  });
+  expect(fold.getAttribute('aria-expanded')).toBe('true');
+  fireEvent.click(fold);
+  expect(conversation.querySelectorAll('[data-turn]')).toHaveLength(0);
+  fireEvent.click(fold);
+  expect(conversation.querySelectorAll('[data-turn]')).toHaveLength(2);
 });
 
 it('Ask AI on a line quotes it in the input; sending starts or continues the day’s conversation', async () => {
@@ -786,6 +795,16 @@ it('earlier days sit above today, folded, and show their conversation when opene
   expect(days[0].textContent).toContain('strategy.dayThreads:1');
   fireEvent.click(within(days[0]).getByRole('button', { expanded: false }));
   expect(await within(days[0]).findByText('question t-old')).toBeTruthy();
+  // They fold again from above them or from just above today.
+  const hide = screen.getAllByRole('button', {
+    name: /strategy.collapseEarlier/,
+  });
+  expect(hide).toHaveLength(2);
+  fireEvent.click(hide[1]);
+  expect(screen.queryByText(/strategy.dayThreads/)).toBeNull();
+  expect(
+    screen.getByRole('button', { name: /strategy.earlierAnalyses:1/ }),
+  ).toBeTruthy();
 });
 
 it('the current situation beside the day shows what needs attention and folds the rest', async () => {
