@@ -1,6 +1,7 @@
 import { ApiError } from '@nocobase/app-server/router';
 import type { NocoBaseDriveManager } from '@nocobase/drive';
 
+import { DEMO_NOTIFICATION } from './activity.js';
 import { PROJECT_TABLES, PROJECT_VARIABLES } from './clear.js';
 import type { DemoHost } from './host.js';
 
@@ -110,6 +111,25 @@ export async function clearAllBusinessData(
   // Reported before the transaction: the lifecycle records progress in its own writes, which would wait for it.
   await progress(0.6);
 
+  // Inbox messages about the cleared work: the demo's own and every message that links to a task, which is gone now.
+  const messages = await database
+    .query()
+    .selectFrom('notificationInAppItems')
+    .select(['id', 'notificationId', 'target'])
+    .execute<{ id: string; notificationId: string; target: unknown }>();
+  const stale = messages
+    .filter(({ notificationId, target }) => {
+      const value = (
+        typeof target === 'string' ? JSON.parse(target) : target
+      ) as { path?: unknown } | null;
+      const path = typeof value?.path === 'string' ? value.path : '';
+      return (
+        notificationId.startsWith(DEMO_NOTIFICATION) ||
+        path.startsWith('/actions/')
+      );
+    })
+    .map(({ id }) => id);
+
   // These are set-based deletions, including rows whose old project no longer exists.
   // Keep framework identities, global Agent/Runner/model/network configuration and migration history.
   await database.transaction(async (connection) => {
@@ -121,6 +141,11 @@ export async function clearAllBusinessData(
       .execute();
     for (const table of EXECUTION_TABLES)
       await connection.query.deleteFrom(table).allowAllRows().execute();
+    if (stale.length)
+      await connection.query
+        .deleteFrom('notificationInAppItems')
+        .where('id', 'in', stale)
+        .execute();
     let snapshots = connection.query.deleteFrom('nrSnapshots');
     for (const namespace of RETAINED_SNAPSHOTS)
       snapshots = snapshots

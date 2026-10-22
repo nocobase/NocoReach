@@ -1,24 +1,20 @@
-import { randomUUID } from 'node:crypto';
-
-import {
-  fixtureCatalog,
-  fixtureResponse,
-} from '../../../app-plugins/nocoreach-mock/server/fixtures.js';
-import type { MockRunContext } from '../../../app-plugins/nocoreach-mock/server/types.js';
 import type { DemoUpstream } from '../outbound-network.js';
+import { worldGoogle, worldResponse } from './world/index.js';
 
 export interface DemoProject {
   readonly id: string;
   readonly name: string;
   readonly domain: string;
+  /** The language the demo was imported in; the world's sites and communities speak it. */
+  readonly language?: string;
   /** Connections whose sign-in the demo shows as expired, such as `google`. */
   readonly expired?: readonly string[];
 }
 
 /**
- * The projects the demo data created and what answers their requests: the simulated deployment's fixture responses,
- * dated by the real clock so the data always reads as recent. A request the fixtures do not cover is refused, never
- * sent; nothing a demo project asks for leaves the process.
+ * The projects the demo data created and what answers their requests: the demo world (`world/`), dated by the real
+ * clock so the data always reads as recent. A request the world does not cover is refused, never sent; nothing a demo
+ * project asks for leaves the process.
  */
 export class DemoProjects implements DemoUpstream {
   public configuration?: import('@nocobase/app-plugin-demo-mode/server/tokens').DemoConfigurationService;
@@ -75,34 +71,19 @@ export class DemoProjects implements DemoUpstream {
     return [...this.projects.keys()];
   }
 
-  context(id: string, connection?: string): MockRunContext {
+  private project(id: string): DemoProject {
     const project = this.projects.get(String(id));
     if (!project) throw new Error(`Project ${id} is not a demo project`);
-    return {
-      projectId: String(id),
-      project: { name: project.name, domain: project.domain },
-      enabled: true,
-      seed: `nocoreach-demo-${project.domain}`,
-      clock: new Date().toISOString(),
-      // Lists long enough to page through, as the simulated deployment's demo has them.
-      scenario: 'pagination',
-      revision: 1,
-      runId: randomUUID(),
-      ...(connection ? { connection } : {}),
-    };
+    return project;
   }
 
-  /** The fictional Google account, property and site the fixtures answer for this project. */
+  /** The fictional Google account, property and site the world answers for this project. */
   catalog(id: string): {
     ga4PropertyId: string;
     gscSiteUrl: string;
     googleEmail: string;
   } {
-    return fixtureCatalog(this.context(id)) as {
-      ga4PropertyId: string;
-      gscSiteUrl: string;
-      googleEmail: string;
-    };
+    return worldGoogle(this.project(id));
   }
 
   async request(
@@ -116,10 +97,10 @@ export class DemoProjects implements DemoUpstream {
           url,
           init,
         })
-      : this.fixtureRequest(projectId, url, init);
+      : this.worldRequest(projectId, url, init);
   }
 
-  async fixtureRequest(
+  async worldRequest(
     projectId: string,
     url: string | URL,
     init: RequestInit = {},
@@ -138,7 +119,7 @@ export class DemoProjects implements DemoUpstream {
         { status: 400 },
       );
     try {
-      return await fixtureResponse(url, init, this.context(projectId));
+      return await worldResponse(this.project(projectId), url, init);
     } catch (cause) {
       throw Object.assign(
         new Error(

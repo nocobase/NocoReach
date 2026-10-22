@@ -122,7 +122,7 @@ export function registerDemoAdapters(
   });
   configuration.registerMock({
     id: 'nocoreach.sources',
-    title: 'External source fixtures',
+    title: 'External sources',
     kind: 'tool',
     scope: 'demo-projects',
     defaultEnabled: true,
@@ -134,7 +134,7 @@ export function registerDemoAdapters(
       };
       if (!(await host.demoProjects.recognize(value.projectId)))
         throw new Error('Demo source scope is required.');
-      return host.demoProjects.fixtureRequest(
+      return host.demoProjects.worldRequest(
         value.projectId,
         value.url,
         value.init,
@@ -147,8 +147,8 @@ export function registerDemoAdapters(
     defaultEnabled: true,
     execute: (input: DemoAgentInput) =>
       executeDemoAgent(input, async (projectId, url) => {
-        // The demo site's own page, from the fixtures the demo projects' requests are answered with.
-        const response = await host.demoProjects.fixtureRequest(projectId, url);
+        // The demo site's own page, from the world the demo projects' requests are answered with.
+        const response = await host.demoProjects.worldRequest(projectId, url);
         if (response.status === 404) return 'missing';
         return response.ok ? pageText(await response.text()) : null;
       }),

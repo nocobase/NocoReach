@@ -160,6 +160,8 @@
 
 ## Unreleased — Demo data
 
+- Rewrite the demo's collected data as a scripted world in the imported language: a 57-page site with audit findings, about 95 search queries per language whose positions and clicks follow the demo's tasks and opportunities, GA4 visits allocated from source to browser so every report adds up, a repository with issues, pull requests, discussions, releases and star history, a forum, Slack and Discord channels, X, Hacker News and Reddit posts, packages, keyword research, competitors, backlinks, AI answers, trends, and Bilibili, Xiaohongshu and YouTube through a demo collector. Figures are relative to today and vary by date, so each reset reads as current.
+- Add demo page-change tasks in every release state (failed Agent run, awaiting review, merge failed, waiting for the site, not seen live, simulated release, live and observed) with run records, earlier online Agent conversations, inbox notifications with read states, and a month of business AI model usage. Clearing also removes inbox messages that link to tasks.
 - Adopt the simplified Demo Mode plugin: environment-owned models, one business cleanup contract, environment-wide Demo Agent routing and one managed reset schedule. Preserve the existing model binding through an upgrade migration and force online chat to the environment model.
 
 - Add permission-aware demo management with revision-safe daily scheduling, explicit table/operation/scope exceptions, and independent model/tool/Runner adapter switches.

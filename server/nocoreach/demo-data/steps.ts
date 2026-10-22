@@ -29,7 +29,13 @@ import {
   type DemoContent,
   type DemoPerson,
 } from './content.js';
+import { writeActivity } from './activity.js';
 import type { DemoHost } from './host.js';
+import {
+  COLLECTOR_TOKEN,
+  collectorUrl,
+  followedVideos,
+} from './world/index.js';
 
 const DAY = 86_400_000;
 
@@ -168,6 +174,17 @@ export function demoSteps(host: DemoHost, language: string): DemoStep[] {
       key: 'opportunities',
       run: (context) => writeOpportunities(host, content, context),
     },
+    {
+      key: 'activity',
+      run: (context) =>
+        writeActivity(
+          host,
+          context,
+          data(context).projects!.main,
+          content.projects.main.domain,
+          data(context).people ?? {},
+        ),
+    },
   ];
 }
 
@@ -200,7 +217,12 @@ async function createProjects(
       }),
       undefined,
     );
-    host.demoProjects.add({ id, name: spec.name, domain: spec.domain });
+    host.demoProjects.add({
+      id,
+      name: spec.name,
+      domain: spec.domain,
+      language: context.language,
+    });
   }
 }
 
@@ -242,6 +264,41 @@ async function createPeople(
   await context.setData({ people });
 }
 
+/**
+ * Where the demo team researches search: the Chinese team reads the Chinese-language results of a market DataForSEO
+ * covers, the English team the United States. Seeds, tracked keywords and the AI question are the team's own.
+ */
+const MARKETS = {
+  'zh-CN': {
+    locationCode: 2702,
+    language: 'zh-CN',
+    seeds: ['内部工具', '工作流自动化', 'NocoBase'],
+    tracked: [
+      '开源低代码',
+      '自建crm',
+      'crm 数据权限',
+      '工作流引擎 开源',
+      'docker compose postgres',
+      'nocobase',
+    ],
+    question: '有哪些可以私有部署的开源无代码平台？',
+  },
+  'en-US': {
+    locationCode: 2840,
+    language: 'en',
+    seeds: ['internal tools', 'workflow automation', 'NocoBase'],
+    tracked: [
+      'open source low code',
+      'self hosted crm',
+      'crm data permissions',
+      'airtable alternative',
+      'docker compose postgres',
+      'nocobase',
+    ],
+    question: 'Which open-source no-code platforms can be self-hosted?',
+  },
+} as const;
+
 /** Runs the real connection and collection flows; the demo upstream answers every request in process. */
 async function connectSources(
   host: DemoHost,
@@ -256,6 +313,7 @@ async function connectSources(
   const slug = spec.domain.split('.')[0];
   const repository = `${slug}/${slug}`;
   const skipped: string[] = [...(data(context).skipped ?? [])];
+  const market = MARKETS[context.language === 'en-US' ? 'en-US' : 'zh-CN'];
   const phases: [string, () => Promise<unknown>][] = [
     [
       'google',
@@ -403,23 +461,19 @@ async function connectSources(
             id,
             Buffer.from(
               JSON.stringify({
-                login: `demo@${spec.domain}`,
+                login: `seo@${spec.domain}`,
                 password: 'demo-only-never-live',
               }),
             ).toString('base64'),
             10,
           );
           await p.keywordService.check(id);
-          for (const target of [
-            'internal tools',
-            'workflow automation',
-            spec.name,
-          ]) {
+          for (const target of market.seeds) {
             const run = (await p.keywordService.run(id, {
               view: 'related',
               target,
-              locationCode: 2840,
-              language: 'en',
+              locationCode: market.locationCode,
+              language: market.language,
               limit: 100,
               requestKey: randomUUID(),
             })) as {
@@ -435,16 +489,10 @@ async function connectSources(
             });
           }
           await p.rankTracking.add(id, {
-            keywords: [
-              'internal tools',
-              'workflow automation',
-              spec.name,
-              'low code platform',
-              'team dashboard',
-            ].map((keyword) => ({
+            keywords: market.tracked.map((keyword) => ({
               keyword,
-              locationCode: 2840,
-              language: 'en',
+              locationCode: market.locationCode,
+              language: market.language,
             })),
           });
           await p.rankTracking.check(id);
@@ -457,8 +505,8 @@ async function connectSources(
             await new DomainService(p).run(id, {
               target: spec.domain,
               view,
-              locationCode: 2840,
-              language: 'en',
+              locationCode: market.locationCode,
+              language: market.language,
               requestKey: randomUUID(),
             });
           for (const strategy of ['mobile', 'desktop'])
@@ -467,6 +515,45 @@ async function connectSources(
               strategy,
               requestKey: randomUUID(),
             });
+        },
+      ],
+      [
+        'media',
+        async () => {
+          // The demo's browser collector answers for the three media platforms.
+          for (const platform of [
+            'bilibili',
+            'xiaohongshu',
+            'youtube',
+          ] as const)
+            await p.collectors.save(id, platform, {
+              revision: 0,
+              url: collectorUrl(spec.domain),
+              token: COLLECTOR_TOKEN,
+            });
+          await p.bilibili.connect(id, {
+            collectorId: `project-bilibili-${id}`,
+            terms: [spec.name],
+            revision: null,
+          });
+          await p.bilibili.sync(id);
+          await p.xiaohongshu.connect(id, {
+            collectorId: `project-xiaohongshu-${id}`,
+            query: spec.name,
+            revision: 0,
+          });
+          await p.xiaohongshu.search(id, { revision: 1 });
+          await p.youtube.connect(id, {
+            terms: [spec.name],
+            videoUrls: followedVideos({
+              id,
+              name: spec.name,
+              domain: spec.domain,
+              language: context.language,
+            }),
+            revision: null,
+          });
+          await p.youtube.settled(id);
         },
       ],
       [
@@ -486,11 +573,21 @@ async function connectSources(
       [
         'competitors',
         async () => {
+          // One call, so the check it starts covers all three.
           await p.competitors.add(id, {
-            name: 'FlowGrove',
-            site: 'https://flowgrove.example',
+            items: [
+              { name: 'FlowGrove', site: 'https://flowgrove.example' },
+              { name: 'StackMeadow', site: 'https://stackmeadow.example' },
+              { name: 'Gridline', site: 'https://gridline.example' },
+            ],
           });
           await p.competitors.checking;
+          // The Chinese team compares in the Chinese market, which competitor research covers.
+          if (market.language === 'zh-CN')
+            await p.competitorResearch.setMarket(id, {
+              locationCode: 2156,
+              language: 'zh-CN',
+            });
           await p.competitorResearch.refresh(id);
         },
       ],
@@ -500,21 +597,30 @@ async function connectSources(
           await p.aiSearch.brand(id, {
             target: spec.name,
             platform: 'chat_gpt',
-            competitors: ['FlowGrove'],
+            competitors: ['FlowGrove', 'Gridline'],
             requestKey: randomUUID(),
           });
           await p.aiSearch.gap(id, {
             target: spec.name,
             platform: 'chat_gpt',
-            competitor: 'FlowGrove',
+            competitor: 'Gridline',
             requestKey: randomUUID(),
           });
           for (const model of ['chat_gpt', 'claude', 'gemini', 'perplexity'])
             await p.aiSearch.ask(id, {
-              question: `How does ${spec.name} help teams build internal tools?`,
+              question: market.question,
               model,
               requestKey: randomUUID(),
             });
+          await p.aiQuestions.setTopics(id, {
+            topics: [
+              'no code platform',
+              'open source crm',
+              'workflow automation',
+              'ai in business apps',
+            ],
+          });
+          await p.aiQuestions.refresh(id);
         },
       ],
     );

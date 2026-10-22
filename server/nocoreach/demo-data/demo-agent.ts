@@ -1,6 +1,6 @@
 /**
  * The demo projects' Agent. It works the way a Runner Agent does — reads the task, the page and its data, thinks,
- * writes a draft and submits it — but every step is scripted from the run's own materials and the demo fixtures. No
+ * writes a draft and submits it — but every step is scripted from the run's own materials and the demo world. No
  * model, real tool, repository or publishing service is used; the runtime plays the steps back over half a minute so
  * the task page shows a run in progress, with its transcript.
  */
@@ -28,7 +28,7 @@ export interface DemoAgentResult {
   usage: { inputTokens: number; outputTokens: number };
 }
 
-/** Reads a demo page through the in-process fixtures; never the network. */
+/** Reads a demo page through the in-process demo world; never the network. */
 export type DemoPageReader = (
   projectId: string,
   url: string,
@@ -376,6 +376,10 @@ export function pageText(html: string): { title: string; text: string } {
     .replace(/<(script|style|nav|header|footer)[\s\S]*?<\/\1>/giu, ' ')
     .replace(/<[^>]+>/gu, ' ')
     .replace(/&nbsp;/gu, ' ')
+    .replace(/&quot;/gu, '"')
+    .replace(/&#39;/gu, "'")
+    .replace(/&lt;/gu, '<')
+    .replace(/&gt;/gu, '>')
     .replace(/&amp;/gu, '&')
     .replace(/\s+/gu, ' ')
     .trim();

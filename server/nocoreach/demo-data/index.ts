@@ -44,6 +44,7 @@ export async function demoProjectsOf(
       id: String(project.id),
       name: project.name,
       domain: project.domains?.[0] ?? '',
+      ...(project.demo?.language ? { language: project.demo.language } : {}),
       ...(project.demo?.expired ? { expired: project.demo.expired } : {}),
     }));
 }
@@ -51,7 +52,7 @@ export async function demoProjectsOf(
 /**
  * NocoReach's demo: the NocoBase marketing team's two projects with their connected sources, tasks, results,
  * opportunities and knowledge, and five people with different roles. Sources are collected through the production
- * flows from in-process fixtures, so the pages and their refresh actions work and nothing leaves the process.
+ * flows from the in-process demo world, so the pages and their refresh actions work and nothing leaves the process.
  */
 export function createNocoReachDemo(
   connections: Connections,

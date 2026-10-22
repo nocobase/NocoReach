@@ -431,8 +431,9 @@ describe('read-only demo lifecycle', () => {
     const fetched = execution.events.find(
       (event) => event.type === 'toolResult' && event.tool === 'WebFetch',
     );
-    // This opportunity's page is not on the demo site yet, so the Agent reads a 404 and writes a new page.
-    expect(fetched?.output).toMatch(/404/u);
+    // The Agent reads the opportunity's page on the demo site, in the imported language.
+    expect(fetched?.output).toMatch(/Roles and permissions/u);
+    expect(fetched?.output).toContain('"owner = current user"');
     const review = detail.work.flow.stages[detail.work.stageIndex];
     expect(review.kind).toBe('review');
     const approved = await call('nrTaskWork', 'advance', {

@@ -18,6 +18,11 @@ import type { CompetitorWatch } from '../competitor-watch.js';
 import type { CompetitorResearch } from '../competitor-research.js';
 import type { Knowledge } from '../knowledge.js';
 import type { AiSearch } from '../ai-search.js';
+import type { AiQuestions } from '../ai-questions.js';
+import type { BilibiliSource } from '../bilibili-source.js';
+import type { XiaohongshuSource } from '../xiaohongshu-source.js';
+import type { YouTubeSource } from '../youtube-source.js';
+import type { CollectorConnections } from '../collector-connections.js';
 import type { ReachAccess } from '../../access/service.js';
 import type { DemoProjects } from './upstream.js';
 
@@ -41,6 +46,11 @@ export type DemoHost = Connections & {
   competitors: CompetitorWatch & { checking?: Promise<unknown> };
   competitorResearch: CompetitorResearch;
   aiSearch: AiSearch;
+  aiQuestions: AiQuestions;
+  bilibili: BilibiliSource;
+  xiaohongshu: XiaohongshuSource;
+  youtube: YouTubeSource;
+  collectors: CollectorConnections;
   knowledge: Knowledge;
   demoProjects: DemoProjects;
 };
