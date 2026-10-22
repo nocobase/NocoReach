@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { TaskService } from '../../server/nocoreach/execution/service.js';
 import { ArticleTargets } from '../../server/nocoreach/articles/targets.js';
 import { ArticleDelivery } from '../../server/nocoreach/articles/delivery.js';
+import { NocoBaseArticles } from '../../server/nocoreach/articles/nocobase-api.js';
 import { ARTICLE_TARGET_PRESETS } from '../../shared/article-publishing.js';
 import { boardState } from '../../server/nocoreach/execution/model.js';
 import { fakeGitHub, fakeNocoBase } from './article-fakes.js';
@@ -437,6 +438,75 @@ test('a failed publish is visible and retried idempotently; only the approved ve
   expect(
     f.cms.state.requests.filter((r) => r.action === 'update'),
   ).toHaveLength(1);
+});
+
+test('a failed publish records where it stopped and why, logs it, and a retry clears it', async () => {
+  const f = await fixture({ downstream: true });
+  const warn = vi.fn();
+  f.s.p.app.logger = { warn };
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  // GitHub rate-limits the check of the website repository.
+  const github = f.git.fetcher;
+  f.git.fetcher = async () =>
+    new Response('{"message":"API rate limit exceeded"}', { status: 429 });
+  await draftAndApprove(f);
+  let d = await f.view();
+  expect(d.work.release).toMatchObject({
+    state: 'publish_failed',
+    article: {
+      error: 'unavailable',
+      errorStep: 'downstream',
+      errorDetail: 'github:429',
+      errorAt: expect.any(String),
+    },
+  });
+  expect(f.cms.state.requests.some((r) => r.action === 'update')).toBe(false);
+  expect(warn).toHaveBeenCalledWith('NocoReach article publish failed', {
+    projectId: '1',
+    taskId: '1',
+    targetId: 'cms',
+    step: 'downstream',
+    code: 'unavailable',
+    detail: 'github:429',
+  });
+  f.git.fetcher = github;
+  await f.command('retryPublish', {
+    stageKey: d.work.flow.stages[d.work.stageIndex].key,
+  });
+  await f.settle();
+  d = await f.view();
+  expect(d.work.release.state).toBe('exporting');
+  for (const key of ['error', 'errorStep', 'errorDetail', 'errorAt'])
+    expect(d.work.release.article[key]).toBeUndefined();
+});
+
+test('an unexpected error while publishing keeps its name and message', async () => {
+  const f = await fixture();
+  const warn = vi.fn();
+  f.s.p.app.logger = { warn };
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  const update = vi
+    .spyOn(NocoBaseArticles.prototype, 'update')
+    .mockRejectedValueOnce(
+      new TypeError("Cannot read properties of undefined (reading 'id')"),
+    );
+  try {
+    await draftAndApprove(f);
+  } finally {
+    update.mockRestore();
+  }
+  const d = await f.view();
+  const detail = "TypeError: Cannot read properties of undefined (reading 'id')";
+  expect(d.work.release).toMatchObject({
+    state: 'publish_failed',
+    article: { error: 'unavailable', errorStep: 'write', errorDetail: detail },
+  });
+  expect(warn).toHaveBeenCalledWith(
+    'NocoReach article publish failed',
+    expect.objectContaining({ targetId: 'cms', step: 'write', detail }),
+  );
 });
 
 test('downstream export: publishing waits for the exporter, and an overwrite afterwards is shown on the task', async () => {

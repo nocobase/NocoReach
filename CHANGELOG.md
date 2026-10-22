@@ -4,6 +4,10 @@
 
 - Today's message on Insights lists only opportunities raised, dismissed or handed off today. One handed off on an earlier day that today's analysis lists again stays on the day it was raised; it read as handed off today beside the ones just dismissed (Studio, 10/22: T-27 and T-30 beside the three dismissed at 17:15). A hand-off counts on the day its task was created, and the waiting tasks are read again after one.
 - Today's conversation starts folded to its one line when Insights opens; a question sent since then opens it. An earlier day's conversation shows in full when that day is opened.
+## Unreleased — Failed article publishes say where and why
+
+- When publishing an article to a target does not complete, the task card keeps its plain-words reason and now links to Technical details, which list each failed target with the step it stopped at (reading the article, checking the website repository, writing, or checking the saved changes), the error code, the time and what the target or the error said (for example `github:429`, or a network timeout with its host).
+- Every failed publish also leaves a warning in the application log (`NocoReach article publish failed`, with project, task, target, step, code and detail), so `nb-studio app logs` shows it. Errors other than the target's own (a request that got no answer, a code error) keep their cause instead of becoming a bare `unavailable`.
 
 ## Unreleased — Data sources: shorter cards, a group for what the Agent writes to
 

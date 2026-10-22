@@ -25,6 +25,13 @@ const MAX_ALSO = 4;
 // with its own record and state; `release.state` is the aggregate (settle). Leg 0 is the primary.
 const legsOf = (r: any): any[] => [r.article, ...(r.also || [])];
 const proposalOf = (artifact: any, i: number) => (i === 0 ? artifact?.article : artifact?.article?.also?.[i - 1]);
+/** A leg that publishes again, or has published, no longer carries its last failure. */
+function clearFailure(rec: any) {
+  rec.error = undefined;
+  rec.errorStep = undefined;
+  rec.errorDetail = undefined;
+  rec.errorAt = undefined;
+}
 /** A leg's state; single-target releases from before several targets carry it on the release only. */
 function stateOf(r: any, rec: any) {
   if (rec.state) return rec.state;
@@ -315,7 +322,7 @@ export class ArticleFlow {
       for (const rec of legsOf(r))
         if (stateOf(r, rec) === 'publish_failed') {
           if (r.also) rec.state = 'publishing';
-          rec.error = undefined;
+          clearFailure(rec);
         }
       r.state = 'publishing';
       this.kick(project, taskId, tx);
@@ -407,7 +414,12 @@ export class ArticleFlow {
       });
       if (!claim) return;
       const outcomes = [];
-      for (const l of claim.legs) outcomes.push(await this.delivery.publish(project, l.p, l.base, l.key));
+      for (const l of claim.legs) {
+        const outcome = await this.delivery.publish(project, l.p, l.base, l.key);
+        // Every failed leg leaves a line in the application log (`nb-studio app logs`), whether or not it is recorded.
+        if (outcome.kind === 'failed') this.s.p.app?.logger?.warn?.('NocoReach article publish failed', { projectId: project, taskId, targetId: l.p.targetId, step: outcome.step, code: outcome.code, detail: outcome.detail });
+        outcomes.push(outcome);
+      }
       await this.s.lock(project, taskId, async (tx) => {
         const task = await this.s.task(project, taskId, tx),
           w = projectWork(task),
@@ -451,7 +463,7 @@ export class ArticleFlow {
       if (w.delivery && i === 0 && !w.delivery.articleId) w.delivery = { ...w.delivery, articleId: snap.id };
       if (i && w.delivery?.also?.[i - 1] && !w.delivery.also[i - 1].articleId) w.delivery.also[i - 1] = { ...w.delivery.also[i - 1], articleId: snap.id };
       a.conflict = undefined;
-      a.error = undefined;
+      clearFailure(a);
       a.state = this.s.p.articleTargets?.downstream(project, a.targetId) ? 'exporting' : 'published';
       w.history.push({ at, actor: 'system', action: 'articlePublished', note: note(snap.slug) });
       return;
@@ -474,6 +486,10 @@ export class ArticleFlow {
       return;
     }
     a.error = outcome.code;
+    // For Technical details: where it stopped and what the target or the error said.
+    a.errorStep = outcome.step;
+    a.errorDetail = outcome.detail ? clip(outcome.detail, 500) : undefined;
+    a.errorAt = at;
     a.state = 'publish_failed';
     w.history.push({ at, actor: 'system', action: 'articlePublishFailed', note: note(outcome.code) });
   }

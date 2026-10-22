@@ -3,7 +3,7 @@ import { mockSettingsAvailable } from '../../app-plugins/nocoreach-mock/client/i
 import { localizeWorkSnapshots } from './playbook-snapshot';
 import { reportDate } from './task-detail/material-notices.js';
 import { TechnicalDetails } from './task-detail/technical-details.js';
-import { useTechnicalDetails } from './task-detail/technical-state.js';
+import { useTechnicalDetails, type TechnicalTab } from './task-detail/technical-state.js';
 import { EvidenceDialog } from './task-detail/evidence.js';
 import { taskEvidence, whyText } from './task-detail/evidence-model.js';
 import { VisibleChanges } from './task-detail/visible-changes.js';
@@ -323,7 +323,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  const producer=stages[index-1],out=w.results[index-1];
  const request=(executor:string)=>requestOpen&&out?<RequestBox executor={executor} busy={busy} onCancel={()=>setRequest(false)} onSend={async comment=>Boolean(await act('requestStageChanges',{artifactId:out.id,comment}))}/>:null;
  const requestButton=<Button variant="outline" disabled={busy} onClick={()=>setRequest(!requestOpen)}>{$t('taskDetail.requestChanges')}</Button>;
- const techLink=<Button variant="link" size="sm" className="h-auto self-start p-0 text-muted-foreground" onClick={()=>tech.open('runs')}><Code2/>{$t('taskDetail.technicalDetails')}</Button>;
+ const techLinkTo=(tab:TechnicalTab)=><Button variant="link" size="sm" className="h-auto self-start p-0 text-muted-foreground" onClick={()=>tech.open(tab)}><Code2/>{$t('taskDetail.technicalDetails')}</Button>,techLink=techLinkTo('runs');
  if(stage.kind==='review'&&stages[index+1]?.kind==='release'){
   const pr=out?.pr;
   if(!out)return <StageCard tone="error" icon={<AlertCircle/>} title={displayStageName(stage)} sub={$t('taskDetail.noChangesViewRefreshTry')}/>;
@@ -364,7 +364,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    // Several targets: each has a row with its state; the title and the one action follow the aggregate.
    const act2=allowed,rows=<TargetRows data={data} r={r}/>,sole=soleConflict(r);
    if(r.state==='publishing')return <StageCard tone='live' label={$t('taskDetail.currentProgress')} icon={<Loader2 className='animate-spin motion-reduce:animate-none'/>} title={publishingTitle(data,r)} sub={$t('articleTask.publishingHint')}>{rows}</StageCard>;
-   if(r.state==='publish_failed')return <StageCard tone='error' icon={<AlertCircle/>} title={$t('articleTask.publishFailed')} sub={failedSub(r)} actions={act2?<PendingButton disabled={busy} onClick={()=>act('retryPublish',{})}>{$t('articleTask.retry')}</PendingButton>:undefined}>{rows}</StageCard>;
+   if(r.state==='publish_failed')return <StageCard tone='error' icon={<AlertCircle/>} title={$t('articleTask.publishFailed')} sub={failedSub(r)} actions={act2?<PendingButton disabled={busy} onClick={()=>act('retryPublish',{})}>{$t('articleTask.retry')}</PendingButton>:undefined}>{rows}{techLinkTo('result')}</StageCard>;
    if(r.state==='publish_conflict')return <StageCard tone='error' icon={<AlertCircle/>} title={conflictHeading(data,r)} actions={act2&&canRebase(r)?<PendingButton disabled={busy} onClick={()=>act('rebaseArticle',{})}>{$t('articleTask.reviewAgain')}</PendingButton>:undefined}>{rows}{sole&&!r.also&&<ConflictBody data={data} r={sole}/>}</StageCard>;
    if(r.state==='exporting')return <StageCard tone='live' label={$t('taskDetail.currentProgress')} icon={<Globe/>} title={$t('articleTask.exporting',{0:exportingNames(data,r)})} sub={$t('articleTask.exportingHint')} actions={act2?<Button variant='ghost' disabled={busy} onClick={()=>void act('confirmLive',{})}>{$t('taskDetail.iConfirmLive')}</Button>:undefined}>{rows}<PageLinks pages={r.pages}/><DriftNotice data={data} r={r}/></StageCard>;
    if(r.state==='export_late')return <StageCard icon={<AlertCircle/>} title={$t('articleTask.exportLate')} sub={$t('articleTask.exportLateHint',{0:exportingNames(data,r)})} actions={act2?<><Button disabled={busy} onClick={()=>void act('confirmLive',{})}>{$t('taskDetail.iConfirmLive')}</Button><Button variant='outline' disabled={busy} onClick={()=>void act('waitLonger',{})}>{$t('common.waitAnother24Hours')}</Button></>:undefined}>{rows}<PageLinks pages={r.pages}/></StageCard>;
