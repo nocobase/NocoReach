@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Opportunities shows where each handed-off task stands
+
+- On Opportunities › Handled, the Where it went column shows the state of a handed-off opportunity's task with its number, as Insights does: Handed off to agent while it waits to start, In progress, Needs confirmation, Done or Closed. O-43 read "Handed off to agent · T-34" after T-34 was done. The filter offers the same labels, and the opportunity's detail says the same beside Open task.
+- Insights and Opportunities read the state and its tag from one place, so the two pages say the same.
+
 ## Unreleased — See what a live task changed
 
 - Once a task is live, its card names what changed in one line ("Changes (2): English · Summary, English · Title") with View changes, which opens the change that went live: an article field by field, before and after, or a page change as readers see it before and after. Nothing else is added to the card.

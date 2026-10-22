@@ -12,13 +12,8 @@ import type { Work } from '../task-execution-types';
 import { RequestBlock, type RequestState } from './request-block';
 import { Sparkline, chipOf, percent, type MetricItem } from './insights-view';
 import { citedSignals, oppNo, taskNo, type Row } from './board';
-import {
-  dayOf,
-  type Day,
-  type Feed,
-  type Line,
-  type TaskStanding,
-} from './feed';
+import { dayOf, type Day, type Feed, type Line } from './feed';
+import { TASK_TAG } from './task-standing';
 import { handOffLabel } from './hand-off';
 import {
   DayConversation,
@@ -603,15 +598,7 @@ export function Today({
   );
 }
 
-// Where a decided opportunity went; once handed off, where its task stands now (2026-10-22 user feedback: a finished
-// task still read "Handed off to agent").
-const TASK_TAG: Record<TaskStanding, [Tone, () => string]> = {
-  todo: ['blue', () => $t('strategy.handedOffAgent')],
-  doing: ['blue', () => $t('results.taskState.doing')],
-  review: ['violet', () => $t('results.taskState.review')],
-  done: ['green', () => $t('common.completed')],
-  closed: ['slate', () => $t('common.closed')],
-};
+// Where a decided opportunity went; once handed off, where its task stands now (task-standing.ts).
 function StatusTag({ row, st, task }: Line) {
   if (st.state === 'task') {
     const [tone, text] = TASK_TAG[task ?? 'todo'];

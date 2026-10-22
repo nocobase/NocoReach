@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, expect, it, vi } from 'vitest';
 import OpportunityLibrary from '../../client/pages/strategy/library';
@@ -8,7 +9,11 @@ import type {
   StrategyState,
 } from '../../shared/strategy-model';
 
-const fixture = vi.hoisted(() => ({ action: vi.fn() }));
+const fixture = vi.hoisted(() => ({
+  action: vi.fn(),
+  state: undefined as unknown,
+  tasks: [] as unknown[],
+}));
 vi.mock('../../client/lib/nocoreach-api', async (original) => ({
   ...(await original<typeof import('../../client/lib/nocoreach-api')>()),
   nocobaseClient: { action: fixture.action },
@@ -16,7 +21,7 @@ vi.mock('../../client/lib/nocoreach-api', async (original) => ({
 vi.mock('../../client/pages/reach-data', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../client/pages/reach-data')>()),
   useProject: () => ({ project: { id: 1 }, error: '' }),
-  taskRecords: async () => [],
+  taskRecords: async () => fixture.tasks,
 }));
 vi.mock('../../client/components/app-shell/nav-badges', () => ({
   refreshNavBadges: () => undefined,
@@ -109,10 +114,12 @@ const playbooks = {
 };
 
 beforeEach(() => {
+  fixture.state = state;
+  fixture.tasks = [];
   fixture.action.mockReset();
   fixture.action.mockImplementation(
     async (resource: string, action: string) => {
-      if (resource === 'nrStrategy' && action === 'state') return state;
+      if (resource === 'nrStrategy' && action === 'state') return fixture.state;
       if (resource === 'nrPlaybooks') return playbooks;
       if (resource === 'nrStrategy' && action === 'confirmDirection')
         return {
@@ -196,5 +203,48 @@ it('lists every pending opportunity and opens the one a link points to', async (
   expect(listed[0].textContent).toContain(other.title);
   expect(
     screen.getByRole('button', { name: new RegExp(card.title) }),
+  ).toBeTruthy();
+});
+
+it('a handed-off opportunity shows where its task stands, and Handled filters by it', async () => {
+  // O-36 became T-34, now done; O-37 became T-35, in progress.
+  fixture.state = {
+    ...state,
+    proposals: [
+      { id: 'p', insight: { id: 'o36' }, taskId: 7, taskNo: 34 },
+      { id: 'q', insight: { id: 'o37' }, taskId: 8, taskNo: 35 },
+    ],
+  };
+  fixture.tasks = [
+    { id: 7, status: 'todo', evidence: { no: 34, work: { stage: 'done' } } },
+    {
+      id: 8,
+      status: 'todo',
+      evidence: { no: 35, work: { boardState: 'doing' } },
+    },
+  ];
+  show('/opportunities?tab=done');
+  const table = await screen.findByRole('table', { name: 'strategy.handled' });
+  const row = (id: string) =>
+    table.querySelector(`[data-opportunity-id="${id}"]`)?.textContent;
+  await waitFor(() => expect(row('o36')).toContain('common.completed · T-34'));
+  expect(row('o37')).toContain('results.taskState.doing · T-35');
+  expect(table.textContent).not.toContain('strategy.handedOffAgent');
+  // The filter offers the same labels; Done keeps only O-36.
+  const user = userEvent.setup();
+  await user.click(
+    screen.getByRole('combobox', { name: 'strategy.filterWhereWent' }),
+  );
+  await user.click(
+    await screen.findByRole('option', { name: 'common.completed' }),
+  );
+  await waitFor(() => expect(row('o37')).toBeUndefined());
+  expect(row('o36')).toContain('common.completed · T-34');
+  // Its detail says so too, beside the link to the task.
+  fireEvent.click(screen.getByRole('button', { name: card.title }));
+  const detail = await screen.findByRole('article', { name: card.title });
+  expect(detail.textContent).toContain('|common.completedstrategy.task(T-34))');
+  expect(
+    screen.getByRole('button', { name: /strategy.openTask/ }),
   ).toBeTruthy();
 });

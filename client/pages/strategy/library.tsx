@@ -21,17 +21,22 @@ import {verdictsOf,watchDays,watchOf,recentlyEnded,daysBetween} from './watch';
 import {taskRecords} from '../reach-data';
 import type {Signal,WatchRecord} from './model';
 import {handOff,handOffLabel,handOffResult,recommendedFor,HandOffNotice,type HandOffResult} from './hand-off';
+import {taskStanding,TASK_TAG,type TaskStanding} from './task-standing';
 import {playbookRequest,localizePlaybookList,type PlaybookList} from '../playbook-model';
 import {ResultSourcePanel} from '../results/source.js';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#components/ui/select';
 // The same three groups as 洞察's 今天的变化 (2026-10-08 user request): 待处理, 观察中, 已处理.
 type Tab='pending'|'watch'|'done';
 const getTabs = (): [Tab,string][] => ([['pending',$t('common.pending')],['watch',$t('tasks.watchingTab',undefined)],['done',$t('strategy.handled')]]);
-type Dest='pending'|'task'|'ignored'|'expired'|'skip';
-const getDestinations = (): [Dest|'',string][] => ([['',$t('strategy.anywhere')],['task',$t('strategy.handedOffAgent')],['ignored',$t('strategy.dismissed')],['expired',$t('strategy.expired')],['skip',$t('common.noActionNeeded')]]);
+// A handed-off opportunity goes by where its task stands now, as on Insights (2026-10-22 user feedback: T-34 was done
+// and its opportunity still read "Handed off to agent"); the filter offers the same labels as the tags.
+type Dest='pending'|'task'|Exclude<TaskStanding,'todo'>|'ignored'|'expired'|'skip';
+const getDestinations = (): [Dest|'',string][] => ([['',$t('strategy.anywhere')],['task',TASK_TAG.todo[1]()],['doing',TASK_TAG.doing[1]()],['review',TASK_TAG.review[1]()],['done',TASK_TAG.done[1]()],['closed',TASK_TAG.closed[1]()],['ignored',$t('strategy.dismissed')],['expired',$t('strategy.expired')],['skip',$t('common.noActionNeeded')]]);
 const day=(iso?:string)=>formatDate(iso);
-type Item=Row&{state:OpportunityState;reason?:string};
-const destOf=(r:Item):Dest=>r.state==='task'?'task':r.state==='archived'?(r.reason==='ignored'?'ignored':'expired'):'pending';
+type Item=Row&{state:OpportunityState;reason?:string;task?:TaskStanding};
+const destOf=(r:Item):Dest=>r.state==='task'?(!r.task||r.task==='todo'?'task':r.task):r.state==='archived'?(r.reason==='ignored'?'ignored':'expired'):'pending';
+/** A handed-off opportunity's tag text: where its task stands, with its number when known. */
+const taskLine=(r:Item)=>`${TASK_TAG[r.task??'todo'][1]()}${r.taskNo?` · ${taskNo(r.taskNo)}`:''}`;
 // The coloured fact of an opportunity: its strongest cited signal's tag (as on 洞察).
 const leadChip=(r:Row)=>{const s=[...citedSignals(r)].sort((a,b)=>b.strength-a.strength).map(chipOf).find(Boolean);return s||null;};
 const No=({row}:{row:Row})=>row.card.no?<span className="font-mono text-xs text-muted-foreground tabular-nums">{oppNo(row.card)}</span>:null;
@@ -48,7 +53,8 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
  const [state,setState]=useState<StrategyState>(),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[error,setError]=useMessageState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState<HandOffResult>(),[tasks,setTasks]=useState<WatchTask[]>([]),[watchKey,setWatchKey]=useState<string>();
  const playbooks=localizePlaybookList(rawPlaybooks);
  useEffect(()=>{if(!project)return;void request<StrategyState>(project.id,'state').then(s=>{setState(s);setError('');}).catch(()=>setError(() => ($t('strategy.notLoadOpportunitiesTryAgain'))));void playbookRequest<PlaybookList>('list',project.id).then(setRawPlaybooks).catch(()=>undefined);void taskRecords<WatchTask>(project.id).then(setTasks).catch(()=>undefined);},[project?.id]);
- const rows:Item[]=state?rowsFor(state).map(r=>({...r,...opportunityState(r,state)})):[];
+ const byId=new Map(tasks.map(t=>[String(t.id),t]));
+ const rows:Item[]=state?rowsFor(state).map(r=>{const st=opportunityState(r,state),t=st.state==='task'&&r.taskId?byId.get(String(r.taskId)):undefined;return {...r,...st,...(t?{task:taskStanding({work:t.evidence?.work,status:t.status})}:{})};}):[];
  const linked=rows.find(r=>r.card.id===params.get('item'));
  const asked=params.get('tab');
  const tab:Tab=asked==='pending'||asked==='done'||asked==='watch'?asked:asked==='all'||asked==='task'||asked==='archived'?'done':linked&&linked.state!=='pending'?'done':'pending';
@@ -151,7 +157,7 @@ function DoneTable({rows,changes,busy,onOpen,onOpenChange,onRestore,onRestoreCha
   .sort((a,b)=>(b.card.no||0)-(a.card.no||0)||String(b.firstSeenAt).localeCompare(String(a.firstSeenAt)));
  const changeDest=(c:Settled):Dest=>c.status.next==='task'?'task':c.status.ignored?'ignored':'skip';
  const shown=changes.filter(c=>(!dest||changeDest(c)===dest)&&match(titleOf(c.s)));
- const tag=(r:Item)=>{const d=destOf(r);return d==='pending'?<Tag tone="amber" dot>{$t('common.pending')}</Tag>:d==='task'?<Tag tone="blue" dot>{$tj('strategy.handedOffAgentValue',{0:r.taskNo?` · ${taskNo(r.taskNo)}`:''})}</Tag>:<Tag tone="grey" dot>{d==='ignored'?$t('strategy.dismissed'):$t('strategy.expired')}</Tag>;};
+ const tag=(r:Item)=>{const d=destOf(r);return d==='pending'?<Tag tone="amber" dot>{$t('common.pending')}</Tag>:r.state==='task'?<Tag tone={TASK_TAG[r.task??'todo'][0]} dot>{taskLine(r)}</Tag>:<Tag tone="grey" dot>{d==='ignored'?$t('strategy.dismissed'):$t('strategy.expired')}</Tag>;};
  const changeTag=(c:Settled)=>{const d=changeDest(c);return d==='task'?<Tag tone="blue" dot>{$t('strategy.handedOffAgent')}</Tag>:d==='ignored'?<Tag tone="grey" dot>{$t('strategy.dismissed')}</Tag>:<Tag tone="slate" dot>{$t('common.noActionNeeded')}</Tag>;};
  return <div className="flex flex-col gap-3">
   <div className="flex flex-wrap items-center gap-2"><label className="relative flex min-w-48 flex-1 items-center sm:max-w-80"><SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" aria-hidden="true"/><input aria-label={$t('strategy.searchOpportunities')} value={q} onChange={e=>setQ(e.target.value)} placeholder={$t('strategy.searchTitleNumberLikeO')} className="w-full pl-8!"/></label>
@@ -193,7 +199,7 @@ function Detail({row,busy,onGive,onIgnore,onRestore,onOpen}:{row:Item;busy:boole
    {card.resultSource&&<ResultSourcePanel source={card.resultSource}/>}
    <div className="flex flex-wrap items-center gap-1">{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(row).map(s=><Tag key={s} tone="grey">{s}</Tag>)}{priority&&<Tag tone={priority[0]}>{priority[1]()}</Tag>}{effort&&<Tag tone="grey">{effort()}</Tag>}{confidence&&<Tag tone={confidence[0]}>{confidence[1]()}</Tag>}</div>
    <h2 className="flex flex-wrap items-baseline gap-2 text-lg font-semibold leading-snug"><No row={row}/><span>{card.title}</span></h2>
-   <p className="nr-footnote">{card.resultSource?$t('results.manualConfirmed',{0:day(row.firstSeenAt)}):$tj('strategy.firstFoundValue',{0:day(row.firstSeenAt),1:row.state==='pending'?$t('strategy.analysis',{0:day(row.batch.generatedAt)}):row.state==='task'?$t('strategy.handedOffAgentValue',{0:row.taskNo?$t('strategy.task',{0:taskNo(row.taskNo)}):''}):row.reason==='ignored'?$t('strategy.dismissedLaterAnalysesCannotSuggest'):row.reason==='replaced'?$t('strategy.expiredRaisedAgain'):$t('strategy.expiredLatestAnalysisNotSuggest',{0:opportunityKeepDays})})}</p>
+   <p className="nr-footnote">{card.resultSource?$t('results.manualConfirmed',{0:day(row.firstSeenAt)}):$tj('strategy.firstFoundValue',{0:day(row.firstSeenAt),1:row.state==='pending'?$t('strategy.analysis',{0:day(row.batch.generatedAt)}):row.state==='task'?`${TASK_TAG[row.task??'todo'][1]()}${row.taskNo?$t('strategy.task',{0:taskNo(row.taskNo)}):''}`:row.reason==='ignored'?$t('strategy.dismissedLaterAnalysesCannotSuggest'):row.reason==='replaced'?$t('strategy.expiredRaisedAgain'):$t('strategy.expiredLatestAnalysisNotSuggest',{0:opportunityKeepDays})})}</p>
   </div>
   {happened&&<Block title={$t('strategy.briefWhatHappened')}>{happened}{link?.url&&<a className="ml-1 inline-flex align-middle text-muted-foreground hover:text-foreground" href={link.url} target="_blank" rel="noreferrer" aria-label={$t('strategy.openPage',{0:titleOf(link)})}><ExternalLinkIcon className="size-3.5"/></a>}</Block>}
   {card.meaning&&<Block title={$t('strategy.briefWhyWorthDoing')}>{card.meaning}{card.priorityReason&&<span className="mt-1 block text-xs text-muted-foreground">{card.priorityReason}</span>}</Block>}
