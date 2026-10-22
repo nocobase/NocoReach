@@ -30,7 +30,7 @@
     "projectFailed": "{{name}} thất bại",
     "projectFailedBecause": "{{name}} thất bại: {{reason}}",
     "projectSkipped": "{{name}} đã bỏ qua",
-    "allSkipped": "Đã phân tích hôm nay, bỏ qua",
+    "allSkipped": "Đã phân tích trong ngày, bỏ qua",
     "moreActions": "Thao tác khác",
     "details": "Chi tiết kỹ thuật",
     "detailsHelp": "Dùng để khắc phục sự cố: cách plugin Scheduler ghi nhận tác vụ này. Không cần dùng trong hoạt động hằng ngày.",

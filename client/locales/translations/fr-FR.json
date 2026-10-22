@@ -30,7 +30,7 @@
     "projectFailed": "{{name}} : échec",
     "projectFailedBecause": "{{name}} : échec ({{reason}})",
     "projectSkipped": "{{name}} : ignoré",
-    "allSkipped": "Analyse ignorée, déjà effectuée aujourd’hui",
+    "allSkipped": "Analyse ignorée, déjà effectuée ce jour-là",
     "moreActions": "Autres actions",
     "details": "Détails techniques",
     "detailsHelp": "Pour le dépannage : la façon dont le plugin Scheduler interprète cette tâche. Ces informations ne sont pas nécessaires au quotidien.",

@@ -31,7 +31,7 @@ const schedules = {
   projectFailed: '{{name}} failed',
   projectFailedBecause: '{{name}} failed: {{reason}}',
   projectSkipped: '{{name}} skipped',
-  allSkipped: 'Already analyzed today, skipped',
+  allSkipped: 'Already analyzed that day, skipped',
   moreActions: 'More actions',
   details: 'Technical details',
   detailsHelp:

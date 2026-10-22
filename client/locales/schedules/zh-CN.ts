@@ -31,7 +31,7 @@ const schedules: typeof enUS = {
   projectFailed: '{{name}} 失败',
   projectFailedBecause: '{{name}} 失败：{{reason}}',
   projectSkipped: '{{name}} 已跳过',
-  allSkipped: '今天已分析过，已跳过',
+  allSkipped: '当天已分析过，已跳过',
   moreActions: '更多操作',
   details: '技术细节',
   detailsHelp: '排查问题时使用：调度插件看到的这个任务。日常使用不需要关注。',

@@ -30,7 +30,7 @@
     "projectFailed": "{{name}}: falhou",
     "projectFailedBecause": "{{name}}: falhou ({{reason}})",
     "projectSkipped": "{{name}}: ignorado",
-    "allSkipped": "Análise ignorada: já realizada hoje",
+    "allSkipped": "Análise ignorada: já realizada nesse dia",
     "moreActions": "Mais ações",
     "details": "Detalhes técnicos",
     "detailsHelp": "Para diagnóstico de problemas: mostra como o plugin de agendamento vê esta tarefa. Não é necessário consultar no uso diário.",

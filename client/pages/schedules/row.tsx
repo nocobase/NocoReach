@@ -19,7 +19,7 @@ import { StateBadge } from './shared.js';
 
 /**
  * One automatic run as a row of Settings › Automatic runs, laid out like the other Settings tables: what it is (its
- * explanation behind ⓘ), when it runs in its own timezone, how the last run went, the next run and whether it is on.
+ * explanation behind ⓘ), when it runs in its own timezone, how the last run went, the next run (on wide screens) and whether it is on.
  * Run history opens from the row; changing the time, running now, pausing and the technical details are in "…".
  */
 export function ScheduleRow({
@@ -71,7 +71,7 @@ export function ScheduleRow({
           {format.zone(schedule.timezone)}
         </div>
       </TableCell>
-      <TableCell className='max-w-72 align-top whitespace-normal'>
+      <TableCell className='align-top'>
         {run ? (
           <>
             <span className='flex flex-wrap items-center gap-2'>
@@ -80,7 +80,7 @@ export function ScheduleRow({
                 <StateBadge value={run.status} />
               )}
             </span>
-            <div className='text-xs'>
+            <div className='max-w-64 text-xs whitespace-normal'>
               {items !== undefined ? (
                 <span className='text-muted-foreground'>
                   {t('schedules.items', { count: items })}
@@ -99,7 +99,7 @@ export function ScheduleRow({
           '—'
         )}
       </TableCell>
-      <TableCell className='align-top'>
+      <TableCell className='hidden align-top xl:table-cell'>
         {schedule.enabled ? (
           format.when(schedule.nextRunAt)
         ) : (

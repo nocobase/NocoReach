@@ -69,7 +69,10 @@ export default function SchedulesPage() {
                 <TableHead>{t('schedules.columns.name')}</TableHead>
                 <TableHead>{t('schedules.columns.time')}</TableHead>
                 <TableHead>{t('schedules.columns.last')}</TableHead>
-                <TableHead>{t('schedules.columns.next')}</TableHead>
+                {/* Secondary: left out where the table would otherwise scroll sideways. */}
+                <TableHead className='hidden xl:table-cell'>
+                  {t('schedules.columns.next')}
+                </TableHead>
                 <TableHead>{t('schedules.columns.status')}</TableHead>
                 <TableHead>
                   <span className='sr-only'>

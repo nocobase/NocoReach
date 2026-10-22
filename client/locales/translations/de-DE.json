@@ -30,7 +30,7 @@
     "projectFailed": "{{name}} fehlgeschlagen",
     "projectFailedBecause": "{{name}} fehlgeschlagen: {{reason}}",
     "projectSkipped": "{{name}} übersprungen",
-    "allSkipped": "Heute bereits analysiert, übersprungen",
+    "allSkipped": "An diesem Tag bereits analysiert, übersprungen",
     "moreActions": "Weitere Aktionen",
     "details": "Technische Details",
     "detailsHelp": "Zur Fehlerbehebung: So wird diese Aufgabe im Scheduler-Plugin geführt. Für die tägliche Nutzung sind diese Angaben nicht erforderlich.",

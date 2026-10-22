@@ -30,7 +30,7 @@
     "projectFailed": "{{name}}：失敗",
     "projectFailedBecause": "{{name}}：失敗（{{reason}}）",
     "projectSkipped": "{{name}}：スキップ済み",
-    "allSkipped": "今日は分析済みのためスキップしました",
+    "allSkipped": "当日は分析済みのためスキップしました",
     "moreActions": "その他の操作",
     "details": "技術情報",
     "detailsHelp": "トラブルシューティング用の情報です。Scheduler プラグインでのタスクの状態を確認できます。通常の操作では必要ありません。",

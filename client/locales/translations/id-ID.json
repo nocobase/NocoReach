@@ -30,7 +30,7 @@
     "projectFailed": "{{name}} gagal",
     "projectFailedBecause": "{{name}} gagal: {{reason}}",
     "projectSkipped": "{{name}} dilewati",
-    "allSkipped": "Sudah dianalisis hari ini, dilewati",
+    "allSkipped": "Sudah dianalisis pada hari itu, dilewati",
     "moreActions": "Tindakan lainnya",
     "details": "Detail teknis",
     "detailsHelp": "Untuk pemecahan masalah: informasi tugas ini di plugin Scheduler. Tidak diperlukan untuk penggunaan sehari-hari.",

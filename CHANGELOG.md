@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Automatic runs look like the other Settings pages
+
+- Settings › Automatic runs is a table like Network and Members (Work, Schedule, Last run, Next run, Status) instead of a card with the time in headline type. The daily analysis explanation is behind ⓘ beside its name; Change time moves into the row's "…" menu with Run now, Pause and Technical details, and Run history stays on the row. Next run is left out on narrower screens so the table does not scroll sideways.
+- Run history opens with one line on the recent runs ("No problems in the last 8 runs", "2 of the last 8 runs had problems") with the refresh button beside it. Runs that went well no longer each carry a Done badge; only failed, skipped and running ones show a status. Each run is one line with its suggestions on the right, and projects are named only when there are several, or one was skipped or failed (in red, with the reason).
+- Dates other than today, yesterday and tomorrow use the shared format ("10-20 09:00" instead of "10月20日 09:00"), and a skipped run says it was already analyzed that day rather than "today".
+
 ## Unreleased — See what a live task changed
 
 - Once a task is live, its card names what changed in one line ("Changes (2): English · Summary, English · Title") with View changes, which opens the change that went live: an article field by field, before and after, or a page change as readers see it before and after. Nothing else is added to the card.

@@ -30,7 +30,7 @@
     "projectFailed": "{{name}}: fallida",
     "projectFailedBecause": "{{name}}: fallida ({{reason}})",
     "projectSkipped": "{{name}}: omitido",
-    "allSkipped": "Omitidos: ya se han analizado hoy",
+    "allSkipped": "Omitidos: ya se habían analizado ese día",
     "moreActions": "Más acciones",
     "details": "Detalles técnicos",
     "detailsHelp": "Información para resolver problemas: cómo ve esta tarea el complemento de programación. No es necesaria para el uso diario.",

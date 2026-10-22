@@ -30,7 +30,7 @@
     "projectFailed": "{{name}} 失敗",
     "projectFailedBecause": "{{name}} 失敗：{{reason}}",
     "projectSkipped": "{{name}} 已略過",
-    "allSkipped": "今天已分析過，已略過",
+    "allSkipped": "當天已分析過，已略過",
     "moreActions": "更多操作",
     "details": "技術細節",
     "detailsHelp": "排查問題時使用：排程外掛看到的這個任務。日常使用不需要關注。",
