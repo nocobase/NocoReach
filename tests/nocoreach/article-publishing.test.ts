@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import {
   ARTICLE_TARGET_PRESETS,
   slugFromPage,
@@ -9,7 +9,13 @@ import {
   readFrontmatter,
   writeFrontmatter,
 } from '../../server/nocoreach/articles/git-files.js';
+import { NocoBaseArticles } from '../../server/nocoreach/articles/nocobase-api.js';
+import {
+  ArticleError,
+  errorDetail,
+} from '../../server/nocoreach/articles/provider.js';
 import { ArticleTargets } from '../../server/nocoreach/articles/targets.js';
+import { networkFailure } from '../../server/nocoreach/outbound-network.js';
 import type { LegacyVariables } from '../../server/nocoreach/legacy/variables.js';
 import { fakeArticleApi, fakeGitHub, fakeNocoBase } from './article-fakes.js';
 
@@ -164,6 +170,8 @@ describe('NocoBase API target', () => {
         expect(await delivery.publish('1', p, base, 'key-1')).toEqual({
           kind: 'failed',
           code: 'unknown_outcome',
+          step: 'write',
+          detail: 'Error: socket hang up',
         });
         expect((await delivery.publish('1', p, base, 'key-1')).kind).toBe(
           'published',
@@ -178,6 +186,7 @@ describe('NocoBase API target', () => {
         expect(await delivery.publish('1', p, base, 'key-1')).toEqual({
           kind: 'failed',
           code: 'unknown_outcome',
+          step: 'write',
         });
         const retry = await delivery.publish('1', p, base, 'key-1');
         expect(retry).toMatchObject({ kind: 'published', adopted: true });
@@ -633,6 +642,162 @@ describe('Git files target', () => {
     expect(
       readFrontmatter(git.read('content/blog/hello/index.md')!).keys.title,
     ).toBe('Hello');
+  });
+});
+
+// T-34 on Studio (2026-10-22) failed with only `unavailable` recorded: a failure now says where it stopped and why.
+describe('a failed publish keeps its step and detail', () => {
+  async function ready(fetchers: { site?: Fetch; github?: Fetch }) {
+    const cms = fakeNocoBase([row()]);
+    const target = cmsTarget({
+      downstream: {
+        repo: 'org/site',
+        branch: 'main',
+        files: { en: 'content/articles/{slug}/index.md' },
+        exporter: EXPORTER,
+      },
+    } as Partial<ArticleTarget>);
+    const { delivery } = await setup(
+      target,
+      { site: fetchers.site || cms.fetcher, github: fetchers.github },
+      { secret: 'cms-key' },
+    );
+    const read = await setup(cmsTarget(), { site: cms.fetcher }, {
+      secret: 'cms-key',
+    });
+    const base = await read.delivery.read('1', 'cms', '7');
+    const p = delivery.proposal('1', {
+      targetId: 'cms',
+      articleId: '7',
+      base,
+      baseKey: 'k',
+      draft: draft({ en: { body: '# Hello\n\nNew English body' } }),
+    });
+    return { cms, delivery, base, p };
+  }
+
+  test('a GitHub rate limit in the downstream check', async () => {
+    const git = fakeGitHub(
+      'org/site',
+      { 'content/articles/hello/index.md': '# Hello\n\nEnglish body' },
+      EXPORTER,
+    );
+    let limited = true;
+    const { cms, delivery, base, p } = await ready({
+      github: (url, init) =>
+        limited
+          ? Promise.resolve(
+              new Response('{"message":"API rate limit exceeded"}', {
+                status: 429,
+              }),
+            )
+          : git.fetcher(url, init),
+    });
+    expect(await delivery.publish('1', p, base, 'k')).toEqual({
+      kind: 'failed',
+      code: 'unavailable',
+      step: 'downstream',
+      detail: 'github:429',
+    });
+    expect(cms.state.requests.some((r) => r.action === 'update')).toBe(false);
+    limited = false;
+    expect((await delivery.publish('1', p, base, 'k')).kind).toBe(
+      'published',
+    );
+  });
+
+  test('an unexpected error keeps its name and message', async () => {
+    const git = fakeGitHub(
+      'org/site',
+      { 'content/articles/hello/index.md': '# Hello\n\nEnglish body' },
+      EXPORTER,
+    );
+    const { delivery, base, p } = await ready({ github: git.fetcher });
+    const update = vi
+      .spyOn(NocoBaseArticles.prototype, 'update')
+      .mockRejectedValueOnce(
+        new TypeError("Cannot read properties of undefined (reading 'id')"),
+      );
+    try {
+      expect(await delivery.publish('1', p, base, 'k')).toEqual({
+        kind: 'failed',
+        code: 'unavailable',
+        step: 'write',
+        detail: "TypeError: Cannot read properties of undefined (reading 'id')",
+      });
+    } finally {
+      update.mockRestore();
+    }
+  });
+
+  test('a request that got no answer names the network code, reason and host', async () => {
+    const { delivery, base, p } = await ready({
+      site: () =>
+        Promise.reject(
+          networkFailure('ETIMEDOUT', 'TimeoutError', 'cms.example.com', true),
+        ),
+    });
+    expect(await delivery.publish('1', p, base, 'k')).toEqual({
+      kind: 'failed',
+      code: 'unavailable',
+      step: 'read',
+      detail: 'ETIMEDOUT (timeout) cms.example.com via proxy',
+    });
+  });
+
+  test('a missing key is a target failure with its reason', async () => {
+    const { delivery, targets } = await setup(
+      cmsTarget(),
+      {},
+      { secret: 'cms-key' },
+    );
+    vi.spyOn(targets, 'provider').mockImplementationOnce(() => {
+      throw Object.assign(new Error('articles.secretRequired'), {
+        status: 409,
+      });
+    });
+    expect(
+      await delivery.publish(
+        '1',
+        {
+          targetId: 'cms',
+          articleId: '7',
+          baseKey: null,
+          baseVersion: null,
+          draft: { locales: {} },
+          changes: [],
+        },
+        null,
+        'k',
+      ),
+    ).toEqual({
+      kind: 'failed',
+      code: 'target_missing',
+      step: 'read',
+      detail: 'Error: articles.secretRequired',
+    });
+  });
+
+  test('details are one line, clipped, and never carry credentials', () => {
+    const token = `ghp_${'a'.repeat(36)}`;
+    const detail = errorDetail(
+      new Error(
+        `request to https://user:pa55word@proxy.example.com failed\nAuthorization: Bearer abcdefghijklmnop ${token} ?access_token=s3cr3t&page=2 ${'x'.repeat(800)}`,
+      ),
+    )!;
+    expect(detail).toContain('https://***@proxy.example.com failed');
+    expect(detail).not.toMatch(/pa55word|abcdefghijklmnop|ghp_a|s3cr3t/);
+    expect(detail).not.toContain('\n');
+    expect(detail.length).toBeLessThanOrEqual(500);
+    // A code with nothing more to say adds nothing; a cause is followed.
+    expect(errorDetail(new ArticleError('unavailable'))).toBeUndefined();
+    expect(
+      errorDetail(
+        Object.assign(new ArticleError('unavailable', 'github'), {
+          cause: new TypeError('fetch failed'),
+        }),
+      ),
+    ).toBe('github ← TypeError: fetch failed');
   });
 });
 

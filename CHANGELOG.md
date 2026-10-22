@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Failed article publishes say where and why
+
+- When publishing an article to a target does not complete, the task card keeps its plain-words reason and now links to Technical details, which list each failed target with the step it stopped at (reading the article, checking the website repository, writing, or checking the saved changes), the error code, the time and what the target or the error said (for example `github:429`, or a network timeout with its host).
+- Every failed publish also leaves a warning in the application log (`NocoReach article publish failed`, with project, task, target, step, code and detail), so `nb-studio app logs` shows it. Errors other than the target's own (a request that got no answer, a code error) keep their cause instead of becoming a bare `unavailable`.
+
 ## Unreleased — Data sources: shorter cards, a group for what the Agent writes to
 
 - Each card on Settings › Data sources shows its name, status, one plain description and its button. The signal kinds at the bottom ("Change · Timing · Gap"), the role tags ("For analysis", "Can change", "Search and archive") and the "Once connected you can find:" prefix are gone, with their copy in every language.

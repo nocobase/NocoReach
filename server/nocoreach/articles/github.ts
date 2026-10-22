@@ -1,4 +1,10 @@
-import { ArticleError, field, scalar, type Fetcher } from './provider.js';
+import {
+  ArticleError,
+  field,
+  scalar,
+  unreachable,
+  type Fetcher,
+} from './provider.js';
 
 const API = 'https://api.github.com';
 export type GitFile = { path: string; sha: string; text: string };
@@ -29,11 +35,12 @@ export class GitHubFiles {
         },
         signal: AbortSignal.timeout(20000),
       });
-    } catch {
-      throw new ArticleError(
+    } catch (error) {
+      throw unreachable(
         init.method && init.method !== 'GET'
           ? 'unknown_outcome'
           : 'unavailable',
+        error,
         'github',
       );
     }

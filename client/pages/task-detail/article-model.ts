@@ -245,6 +245,9 @@ export const focusSoon = (id: string) =>
 // Titles of a release to one target or several (article-release.tsx).
 const legsIn = (r: Release, state: string) =>
   releaseLegs(r).filter((l) => l.state === state);
+/** The targets whose publishing did not complete. */
+export const failedLegs = (r?: Release) =>
+  r?.article ? legsIn(r, 'publish_failed') : [];
 const namesIn = (data: TaskData, r: Release, state: string) => {
   const names = legsIn(r, state).map((l) => nameOf(data, l.a.targetId));
   return names.length ? joinNames(names) : targetName(data, r);

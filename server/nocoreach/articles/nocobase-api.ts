@@ -16,6 +16,7 @@ import {
   sendWrite,
   type ArticleChanges,
   type ArticleProvider,
+  unreachable,
   type Fetcher,
 } from './provider.js';
 
@@ -55,8 +56,8 @@ export class NocoBaseArticles implements ArticleProvider {
         headers: this.headers(),
         signal: AbortSignal.timeout(20000),
       });
-    } catch {
-      throw new ArticleError('unavailable');
+    } catch (error) {
+      throw unreachable('unavailable', error);
     }
     const body = await json(response);
     if (!response.ok)

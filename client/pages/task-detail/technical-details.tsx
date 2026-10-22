@@ -16,6 +16,8 @@ import type {
   TaskData,
 } from '../task-execution-types.js';
 import type { Stage } from '../playbook-model.js';
+import { failedLegs } from './article-model.js';
+import { PublishFailureDetails } from './article-release.js';
 import { TaskExecutionPanel } from './execution-panel.js';
 import { useTechnicalDetails, type TechnicalTab } from './technical-state.js';
 
@@ -119,6 +121,7 @@ export function TechnicalDetails({
       url: w.revert.url,
     },
   ].filter(Boolean) as { icon: ReactNode; text: string; url: string }[];
+  const publishFailed = failedLegs(w.release).length > 0;
   return (
     <Dialog
       open={tab !== null}
@@ -160,6 +163,7 @@ export function TechnicalDetails({
                 {link.text}
               </a>
             ))}
+            <PublishFailureDetails data={data} r={w.release} />
             {results.length ? (
               results.map(({ stage, artifact }) => (
                 <section key={stage.key} className='flex flex-col gap-2'>
@@ -170,7 +174,7 @@ export function TechnicalDetails({
                   <PrCard pr={artifact.pr!} />
                 </section>
               ))
-            ) : links.length ? null : (
+            ) : links.length || publishFailed ? null : (
               <p className='text-sm text-muted-foreground'>
                 {$t('taskDetail.noCodeChanges')}
               </p>

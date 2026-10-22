@@ -49,6 +49,59 @@ export class ArticleError extends Error {
   }
 }
 
+/** A request that got no answer. The transport error stays as the cause, so a failure can say why. */
+export const unreachable = (
+  code: 'unavailable' | 'unknown_outcome',
+  cause: unknown,
+  message?: string,
+) => Object.assign(new ArticleError(code, message), { cause });
+
+// Credentials that an error text could carry: bearer tokens, URL user info, key-like parameters and GitHub tokens.
+const SECRETS: [RegExp, string][] = [
+  [/\b(Bearer|Basic)\s+[\w.~+/=-]{8,}/g, '$1 ***'],
+  [/(\/\/)[^\s/@:]+:[^\s/@]+@/g, '$1***@'],
+  [
+    /\b((?:api[_-]?key|access[_-]?token|token|secret|password|passwd|authorization|sig|signature)["']?\s*[:=]\s*["']?)[^\s"'&,}]+/gi,
+    '$1***',
+  ],
+  [/\b(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,})\b/g, '***'],
+];
+const DETAIL_MAX = 500;
+
+/**
+ * Why a target request failed, for Technical details and the server log: an ArticleError's own detail (`github:429`, a
+ * response snippet), the network layer's code, reason and host for a request that got no answer, or any other error's
+ * name and message, following causes. One line, clipped, credentials masked. Undefined when there is nothing beyond
+ * the code.
+ */
+export function errorDetail(error: unknown): string | undefined {
+  const parts: string[] = [];
+  let e: unknown = error;
+  for (let depth = 0; e && depth < 4; depth++) {
+    const o = e as Record<string, unknown>;
+    const code = typeof o.code === 'string' ? o.code : '';
+    if (e instanceof ArticleError) {
+      if (e.message && e.message !== e.code) parts.push(e.message);
+    } else if (typeof o.reason === 'string' && typeof o.host === 'string') {
+      // outbound-network.ts networkFailure: its message is translated text and its cause only repeats the code.
+      parts.push(
+        `${code || 'network'} (${o.reason}) ${o.host}${o.proxied ? ' via proxy' : ''}`,
+      );
+      break;
+    } else if (e instanceof Error)
+      parts.push(
+        `${e.name}: ${e.message}${code && !e.message.includes(code) ? ` (${code})` : ''}`,
+      );
+    else if (typeof e === 'string') parts.push(e);
+    else if (code) parts.push(code);
+    e = o.cause;
+  }
+  let text = parts.join(' ← ').replace(/\s+/g, ' ').trim();
+  for (const [pattern, mask] of SECRETS) text = text.replace(pattern, mask);
+  if (!text) return undefined;
+  return text.length > DETAIL_MAX ? `${text.slice(0, DETAIL_MAX - 1)}…` : text;
+}
+
 /** One kind of publishing target. Conditional targets enforce `baseVersion` themselves in the write. */
 export interface ArticleProvider {
   readonly capabilities: ArticleCapabilities;
@@ -170,7 +223,7 @@ export async function sendWrite(
 ): Promise<Response> {
   try {
     return await fetcher(url, init);
-  } catch {
-    throw new ArticleError('unknown_outcome');
+  } catch (error) {
+    throw unreachable('unknown_outcome', error);
   }
 }
