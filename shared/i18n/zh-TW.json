@@ -39,7 +39,6 @@
   "strategy.noWaitingTasks": "目前沒有需要你處理的任務。",
   "strategy.currentSituation": "目前狀況",
   "strategy.noCurrentSituation": "暫無目前狀況資料。",
-  "strategy.situationMore": "其餘 {0} 項",
   "strategy.refreshBlock": "重新整理",
   "strategy.blockFailed": "此區塊讀取失敗，請再試一次。",
   "strategy.blockStale": "重新整理失敗，正在顯示上次結果，資料可能已過期。",

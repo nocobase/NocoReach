@@ -3,7 +3,7 @@ import {WAITING_TASKS_URL} from '../task-waiting';
 import { $t, $tj, $legacyText, $legacyFragment, $legacyJsx } from "#i18n";
 import {useState,type ReactElement} from 'react';
 import {useNavigate} from 'react-router';
-import {BellIcon,ArrowRightIcon,BotIcon,ChevronDownIcon,ChevronRightIcon,SparklesIcon} from 'lucide-react';
+import {BellIcon,ArrowRightIcon,BotIcon,ChevronRightIcon,SparklesIcon} from 'lucide-react';
 import {AiMark} from '#components/reach/actor';
 import {Button} from '#components/ui/button';
 import {Section} from '#components/reach/page';
@@ -72,21 +72,20 @@ export type AreaItem={key:string;text:string;values:string[];source:string;detai
 export type Area={id:string;title:string;items:AreaItem[]};
 const sentence=(i:AreaItem)=>$legacyText(i.text).replace(/\{(\d+)\}/g,(_,k:string)=>i.values[Number(k)]??'');
 export function AreaList({areas,projectId,quiet=false}:{areas?:Area[];projectId:number;quiet?:boolean}):ReactElement|null{
- const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),[more,setMore]=useState(false),all=(areas||[]).flatMap(a=>a.items.map(i=>({...i,area:a.id,attention:i.tone==='amber'||i.tone==='red'})));if(!all.length)return null;
+ const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),all=(areas||[]).flatMap(a=>a.items.map(i=>({...i,area:a.id,attention:i.tone==='amber'||i.tone==='red'})));if(!all.length)return null;
  const items=[...all.filter(i=>i.attention),...all.filter(i=>!i.attention)],open=items.find(i=>`${i.area}:${i.key}`===openKey);
  // A line with something behind it opens its detail here; one without (AI 搜索还没查过) goes to its page.
  const go=(i:typeof items[number])=>{if(i.rows?.length||i.compare?.length)setOpenKey(`${i.area}:${i.key}`);else navigate(i.to);};
  const detail=open?<AttentionDetail key={openKey} item={open} projectId={projectId} onClose={()=>setOpenKey(undefined)}/>:null;
  // Quiet, beside the day's conversation on Insights (2026-10-21 user feedback: the column drew the eye from the
- // conversation): one plain line each, the lines to deal with shown and the rest folded; where it comes from on hover.
- if(quiet){const lead=items.filter(i=>i.attention),shown=more?items:lead.length?lead:items.slice(0,3),rest=items.length-(lead.length||Math.min(3,items.length));
-  return <div aria-label={$t('strategy.whereThingsStand')} className="flex flex-col"><ul>{shown.map(i=><li key={`${i.area}:${i.key}`}>
+ // conversation): one plain line each, the lines to deal with first, where it comes from on hover; all of them, since
+ // the column has the room (2026-10-22).
+ if(quiet)return <div aria-label={$t('strategy.whereThingsStand')} className="flex flex-col"><ul>{items.map(i=><li key={`${i.area}:${i.key}`}>
    <button type="button" onClick={()=>go(i)} title={[$legacyText(i.source),i.detail?$legacyText(i.detail):''].filter(Boolean).join(' · ')} className={`flex w-full items-start gap-2 py-1 text-left text-xs hover:underline ${i.attention?'text-foreground/80':'text-muted-foreground'}`} data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
     <span className={`mt-1.5 size-1.5 shrink-0 rounded-full ${i.attention?'bg-nr-ink-amber':'bg-muted-foreground/40'}`} aria-hidden="true"/>
     <span className="min-w-0 flex-1">{$legacyJsx(i.text,Object.fromEntries(i.values.map((v,k)=>[k,<span key={k} className="tabular-nums">{v}</span>])))}</span>
    </button></li>)}</ul>
-   {rest>0&&<button type="button" aria-expanded={more} onClick={()=>setMore(m=>!m)} className="nr-link mt-1 inline-flex items-center gap-0.5 self-start text-xs">{more?$t('common.collapse'):$t('strategy.situationMore',{0:rest})}<ChevronDownIcon className={`size-3.5 transition-transform ${more?'rotate-180':''}`} aria-hidden="true"/></button>}
-   {detail}</div>;}
+   {detail}</div>;
  // Untitled: the block around it carries the heading and what it means.
  return <Section aria-label={$t('strategy.whereThingsStand')}><ul className="divide-y">{items.map(i=><li key={`${i.area}:${i.key}`}>
   <button type="button" onClick={()=>go(i)} title={i.detail?$legacyText(i.detail):undefined} className="flex w-full items-start gap-2.5 py-2 text-left hover:opacity-80" data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>

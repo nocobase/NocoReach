@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Insights has one refresh
+
+- Update analysis is the page's refresh icon, as on Results, named and tooltipped "Update analysis": it spins while the analysis runs, and the numbers, Current situation and the waiting tasks are read again when it ends. Current situation no longer has a refresh of its own.
+- Current situation lists every line, those needing attention first, since the column has the room; "N more" is gone.
+
 ## Unreleased — Every language checked against English in the tests
 
 - `tests/logic/additional-locales.test.ts` compares each of the eight additional languages with English: `shared/i18n/<locale>.json` with `en.json`, and `client/locales/translations/<locale>.json` with the shell copy of `client/locales/en-US.ts`. It names every missing key, extra key and key whose `{0}` or `{{name}}` placeholders differ. The `build` check's client type check already failed on a missing key, but stopped at the first language and missed extra keys and changed placeholders.
