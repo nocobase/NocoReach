@@ -31,6 +31,7 @@ const ADMIN_ONLY={
  nrReddit:['connect','disconnect'],nrX:['connect','disconnect'],nrTrends:['connect','disconnect'],
  nrSiteContent:['discover','confirm','remove','refresh'],nrDiscovery:['discover','connections'],nrKeywords:['configure','disconnect'],
  nrAgent:['saveDefault','saveRepo','removeRepo'],
+ nrOnlineAI:['setModel'],
  nrArticles:['saveTarget','removeTarget','setDefaultTarget','savePlaybookTargets','testTarget'],
  nrPlaybooks:['save','copy','remove','restore','draft'],
  nrSkills:['create','import','readLink','importLink','edit','addFiles','removeFile','remove','setEnabled'],

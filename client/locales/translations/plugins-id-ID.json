@@ -95,7 +95,7 @@
       "emptyTitle": "Belum ada agen",
       "emptyDescription": "Hubungkan runner dengan alat pemrograman yang sudah masuk ke akun: setiap modelnya akan muncul di sini sebagai agen yang dapat diaktifkan.",
       "noneInFilter": "Tidak ada agen di sini.",
-      "howToAdd": "Untuk menambahkan agen, instal alat pemrograman pada runner dan masuk ke model yang boleh Anda gunakan: setelah runner melaporkannya, agen akan muncul di sini. Aktifkan dengan menuliskan keahliannya. Agen yang hanya tersedia pada runner pribadi hanya menangani isu yang dimulai oleh pemilik runner tersebut.",
+      "howToAdd": "Untuk menambah agen lokal, pasang alat pemrograman di lingkungan eksekusi lalu masuk. Agen muncul di “Baru ditemukan”; tulis keunggulannya untuk mengaktifkannya.",
       "goodAtMissing": "Belum ditulis",
       "columns": {
         "agent": "Agen",
@@ -521,7 +521,7 @@
         }
       },
       "title": "Lingkungan eksekusi",
-      "description": "Komputer atau server dengan Claude Code atau Codex. NocoReach menyerahkan tugas ke sana, lalu agen lokal di dalamnya mengedit kode situs web, menulis artikel, dan membuka pull request, jadi perangkat harus tetap menyala dan daring dengan alat pemrograman dalam keadaan masuk.",
+      "description": "Komputer atau server dengan Claude Code atau Codex tempat agen lokal mengerjakan tugas; harus tetap menyala dan daring, dengan alat pemrograman yang sudah masuk.",
       "add": "Tambah lingkungan eksekusi",
       "loadFailed": "Tidak dapat memuat lingkungan eksekusi",
       "emptyTitle": "Belum ada lingkungan eksekusi yang terhubung",
@@ -757,7 +757,7 @@
     },
     "models": {
       "title": "Layanan model",
-      "description": "Analisis harian dan panel percakapan menggunakan model percakapan di sini, yang ditagih penyedia per panggilan; model embedding dan reranking digunakan untuk pencarian. Agen lokal tidak menggunakan model ini, melainkan alat pemrograman yang masuk di lingkungan eksekusinya."
+      "description": "Analisis harian dan panel percakapan memakai model di sini; penyedia menagih setiap panggilan."
     },
     "defaultModel": {
       "title": "Model percakapan bawaan",
@@ -855,9 +855,9 @@
         "dimensions": "Ukuran vektor {{model}}",
         "dimensionsPlaceholder": "Bawaan",
         "counts": {
-          "chat": "{{count}} percakapan",
-          "embedding": "{{count}} penyematan",
-          "rerank": "{{count}} pemeringkatan ulang"
+          "chat": "Model percakapan: {{count}}",
+          "embedding": "Model penyematan: {{count}}",
+          "rerank": "Model pemeringkatan ulang: {{count}}"
         }
       }
     },

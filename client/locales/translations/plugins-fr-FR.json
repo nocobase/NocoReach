@@ -95,7 +95,7 @@
       "emptyTitle": "Aucun agent pour le moment",
       "emptyDescription": "Connectez un moteur d’exécution doté d’un outil de programmation authentifié : chacun de ses modèles apparaîtra ici comme agent à activer.",
       "noneInFilter": "Aucun agent ici.",
-      "howToAdd": "Pour ajouter un agent, installez un outil de programmation sur un moteur d’exécution et authentifiez-vous auprès d’un modèle que vous pouvez utiliser. Dès que le moteur le signale, il apparaît ici ; décrivez ses points forts pour l’activer. Un agent disponible uniquement sur des moteurs personnels ne traite que les tickets lancés par leurs propriétaires.",
+      "howToAdd": "Pour ajouter un agent local, installez un outil de développement sur un environnement d’exécution et connectez-vous. Il apparaît dans « Nouvelles découvertes » ; indiquez ce qu’il sait bien faire pour l’activer.",
       "goodAtMissing": "Non renseigné",
       "columns": {
         "agent": "Agent",
@@ -521,7 +521,7 @@
         }
       },
       "title": "Environnements d’exécution",
-      "description": "Ordinateurs ou serveurs équipés de Claude Code ou de Codex. NocoReach leur confie des tâches, et les agents locaux qui s’y trouvent modifient le code du site web, rédigent des articles et ouvrent des pull requests ; ils doivent donc rester allumés et en ligne, avec l’outil de développement connecté.",
+      "description": "Ordinateurs ou serveurs équipés de Claude Code ou de Codex où les agents locaux exécutent les tâches ; ils doivent rester allumés et en ligne, avec l’outil de développement connecté.",
       "add": "Ajouter un environnement d’exécution",
       "loadFailed": "Impossible de charger les environnements d’exécution",
       "emptyTitle": "Aucun environnement d’exécution connecté pour le moment",
@@ -757,7 +757,7 @@
     },
     "models": {
       "title": "Services de modèles",
-      "description": "L’analyse quotidienne et le panneau de conversation utilisent les modèles de conversation définis ici, facturés à l’appel par le fournisseur ; les modèles d’embedding et de reclassement servent à la recherche. Les agents locaux n’utilisent pas ces modèles : ils utilisent l’outil de développement connecté sur leur environnement d’exécution."
+      "description": "L’analyse quotidienne et le panneau de conversation utilisent ces modèles ; le fournisseur facture chaque appel."
     },
     "defaultModel": {
       "title": "Modèle de conversation par défaut",
@@ -855,9 +855,9 @@
         "dimensions": "Taille des vecteurs de {{model}}",
         "dimensionsPlaceholder": "Par défaut",
         "counts": {
-          "chat": "{{count}} de conversation",
-          "embedding": "{{count}} de vectorisation",
-          "rerank": "{{count}} de reclassement"
+          "chat": "Modèles de conversation : {{count}}",
+          "embedding": "Modèles de vectorisation : {{count}}",
+          "rerank": "Modèles de reclassement : {{count}}"
         }
       }
     },
