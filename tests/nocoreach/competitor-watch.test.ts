@@ -45,6 +45,10 @@ test('weekly look: the first one records, later ones list new pages (titles read
  // failures are recorded per competitor, the rest still looked at
  w.p.siteContent.discover=async()=>{throw new Error('没有找到 sitemap');};for(const c of v.list)rows[0].payload.track[c.id].checkedAt=new Date(Date.now()-8*DAY).toISOString();
  const bad=await w.check('1');assert.deepEqual(bad.errors,['Retool 官网：没有找到 sitemap']);assert.deepEqual((await w.status('1')).list[0].errors,['没有找到 sitemap']);
+ // An error without a status may pass on its own; a refusal such as a missing sitemap (422) is a setting to change.
+ assert.equal(rows[0].payload.lastRun.configError,undefined);
+ w.p.siteContent.discover=async()=>{throw Object.assign(new Error('没有找到 sitemap'),{status:422});};for(const c of v.list)rows[0].payload.track[c.id].checkedAt=new Date(Date.now()-8*DAY).toISOString();
+ await w.check('1');assert.equal(rows[0].payload.lastRun.configError,true);
  await w.remove('1',{competitorId:v.list[0].id});v=await w.view('1');assert.deepEqual(v.list.map(c=>c.name),['ToolJet']);assert.ok(v.events.every(e=>e.competitor==='ToolJet'));
  assert.ok(calls.some(c=>c[0]==='gh'&&c[1]==='/repos/tooljet/tooljet'));
 });
