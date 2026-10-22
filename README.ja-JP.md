@@ -4,7 +4,7 @@
 
 <h1 align="center">NocoReach</h1>
 
-<p align="center"><strong>データを読み解き、市場の機会に変え、実行まで進めます。</strong></p>
+<p align="center"><strong>データから機会を見つけ、NocoReachが実行に移します。</strong></p>
 
 <p align="center">
 AI グロース運用プラットフォーム。<br>

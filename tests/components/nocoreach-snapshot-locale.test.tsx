@@ -86,6 +86,12 @@ function task(id = 'tech-fix'): TaskData {
     agent: { repo: null, online: false },
   };
 }
+// The playbook's name is in the Playbook row of the task's properties column (2026-10-22), not the steps.
+const playbookCell = () =>
+  [...document.querySelectorAll('aside dt')].find((dt) =>
+    ['Playbook', '做法'].includes(dt.textContent || ''),
+  )?.nextElementSibling;
+
 async function setup(data: TaskData, locale: 'zh-CN' | 'en-US' = 'en-US') {
   const runtime = new I18nRuntime({
     defaultLocale: locale,
@@ -132,9 +138,7 @@ test('localizes proven built-in snapshot names without changing stored data or m
     'Technical fix · Write plan',
   );
   expect(screen.getByTestId('step')).toHaveTextContent('Agent: Write plan');
-  expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
-    'Technical fix',
-  );
+  expect(playbookCell()).toHaveTextContent('Technical fix');
   expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
     'Review plan',
   );
@@ -142,7 +146,7 @@ test('localizes proven built-in snapshot names without changing stored data or m
     'Review and publish',
   );
   await act(() => runtime.changeLanguage('zh-CN'));
-  expect(screen.getByTestId('board')).toHaveTextContent('技术修复 · 出方案');
+  expect(screen.getByTestId('board')).toHaveTextContent('技术修复 · 制定方案');
   await act(() => runtime.changeLanguage('en-US'));
   expect(screen.getByTestId('board')).toHaveTextContent(
     'Technical fix · Write plan',
@@ -201,9 +205,7 @@ test.each(['custom', 'edited', 'clone', 'legacy', 'partial-origin'] as const)(
     expect(screen.getByTestId('board')).toHaveTextContent(
       '分析。任务。 {0} · 分析',
     );
-    expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
-      '分析。任务。 {0}',
-    );
+    expect(playbookCell()).toHaveTextContent('分析。任务。 {0}');
     expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent('分析');
     await act(() => runtime.changeLanguage('zh-CN'));
     await act(() => runtime.changeLanguage('en-US'));
@@ -344,7 +346,7 @@ test('custom IDs never become system copy even if imported flags claim otherwise
   setDictionary(english);
   const data = task();
   data.work.flow!.id = data.work.playbook!.id = 'custom-copy';
-  expect(workTypeLabel(data.work)).toBe('技术修复 · 出方案');
+  expect(workTypeLabel(data.work)).toBe('技术修复 · 制定方案');
 });
 
 test('legacy canonical task detail follows mounted language changes without rewriting its snapshots', async () => {
@@ -355,16 +357,12 @@ test('legacy canonical task detail follows mounted language changes without rewr
   delete data.work.playbook!.edited;
   const before = structuredClone(data);
   const runtime = await setup(data);
-  expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
-    'Technical fix',
-  );
+  expect(playbookCell()).toHaveTextContent('Technical fix');
   expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
     'Review and publish',
   );
   await act(() => runtime.changeLanguage('zh-CN'));
-  expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
-    '技术修复',
-  );
+  expect(playbookCell()).toHaveTextContent('技术修复');
   await act(() => runtime.changeLanguage('en-US'));
   expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
     'Write plan',
@@ -410,9 +408,42 @@ test('closed task labels and an open output reader refresh their canonical stage
   const dialog = screen.getByRole('dialog', { name: /Write plan/ });
   expect(dialog).toHaveTextContent('用户成果 {0}');
   await act(() => runtime.changeLanguage('zh-CN'));
-  expect(screen.getByRole('dialog', { name: /出方案/ })).toBe(dialog);
+  expect(screen.getByRole('dialog', { name: /制定方案/ })).toBe(dialog);
   expect(dialog).toHaveTextContent('用户成果 {0}');
   expect(closedWhen({ ...data.work, cancelledAt: '2026-10-02' })).toContain(
-    '看方案',
+    '审核方案',
   );
+});
+
+test('snapshots stored with the step names used before 2026-10-22 show the current wording', () => {
+  const renamed: Record<string, string> = {
+    制定方案: '出方案',
+    审核方案: '看方案',
+    审核并发布: '看效果并发布',
+  };
+  for (const legacy of [false, true]) {
+    const data = task();
+    for (const stage of data.work.flow!.stages)
+      stage.name = renamed[stage.name] ?? stage.name;
+    expect(data.work.flow!.stages.map((s) => s.name)).toContain('出方案');
+    if (legacy) {
+      // Old snapshots carried no provenance; they are recognised by matching the canonical definition.
+      delete data.work.flow!.system;
+      delete data.work.flow!.edited;
+      delete data.work.playbook!.system;
+      delete data.work.playbook!.edited;
+    }
+    setDictionary(null);
+    const chinese = localizeWorkSnapshots(data.work).flow!.stages.map(
+      (s) => s.name,
+    );
+    expect(chinese).toContain('制定方案');
+    expect(chinese).not.toContain('出方案');
+    setDictionary(english);
+    expect(
+      localizeWorkSnapshots(data.work).flow!.stages.map((s) => s.name),
+    ).toContain('Write plan');
+    // Stored data is never rewritten.
+    expect(data.work.flow!.stages.map((s) => s.name)).toContain('出方案');
+  }
 });

@@ -141,7 +141,7 @@ describe('keyword grouping and stored business copy', () => {
     const builtin: Playbook = {
       id: 'p',
       name: '调研分析',
-      description: '不改仓库，写出一份文档',
+      description: '不修改仓库，产出一份文档',
       category: 'research',
       kind: 'plan',
       next: [],

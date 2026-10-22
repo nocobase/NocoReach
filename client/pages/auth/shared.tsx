@@ -69,8 +69,6 @@ function BrandPanel(): ReactElement {
           {t('auth.marketingTitleFirst')}
           <br />
           {t('auth.marketingTitleSecond')}
-          <br />
-          {t('auth.marketingTitleThird')}
         </h2>
         <p className='mt-6 text-sm leading-7 text-white/60'>
           {t('auth.marketingDescription')}
