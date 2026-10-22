@@ -226,7 +226,7 @@ export default function SearchPerformancePage() {
             <DataTableTabs
               value={tab}
               onValueChange={(v) => update({ tab: v === "striking" ? undefined : v })}
-              info={tab === "striking" ? <InfoTip label={$t('searchPerformance.whatClosePageOneMeans')}>{help($t('searchPerformance.closePageOne'))}</InfoTip> : (MOVER_TABS as readonly string[]).includes(tab) ? <InfoTip label={$t('searchPerformance.howMoversCounted')}>{$t('searchPerformance.moversInfo')}</InfoTip> : undefined} actions={<>{countries.length || country ? <CountrySelect value={country} countries={countries} onChange={(c) => update({ country: c })} /> : undefined}{
+              info={tab === "striking" ? <InfoTip label={$t('searchPerformance.whatClosePageOneMeans')}><p>{help($t('searchPerformance.closePageOne'))}</p><p>{$t('searchPerformance.queriesRanking520Best')}</p></InfoTip> : (MOVER_TABS as readonly string[]).includes(tab) ? <InfoTip label={$t('searchPerformance.howMoversCounted')}>{$t('searchPerformance.moversInfo')}</InfoTip> : undefined} actions={<>{countries.length || country ? <CountrySelect value={country} countries={countries} onChange={(c) => update({ country: c })} /> : undefined}{
                 <Button variant="outline" size="sm" onClick={exportTab}>
                   <Download data-icon="inline-start" />
                   {$t('common.exportCsv')}</Button>
@@ -489,7 +489,6 @@ function StrikingTable({ projectId, period, rows, isFiltered, onClearFilters, on
   };
   return (
     <>
-      <p className="px-4 pt-3 text-sm text-muted-foreground">{$t('searchPerformance.queriesRanking520Best')}</p>
       <DataTable
         table={table}
         isFiltered={isFiltered}
