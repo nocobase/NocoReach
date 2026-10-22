@@ -103,14 +103,17 @@ export function Field({
   );
 }
 
-/** Long plain text clamped to three lines, with Expand / Collapse when it does not fit. */
+/** Long plain text clamped to three lines, with Expand / Collapse when it does not fit and any links after it. */
 export function Clamped({
   children,
   long,
+  extra,
 }: {
   children: string;
   /** Whether the text is long enough to clamp. */
   long: boolean;
+  /** Links shown on the same line as Expand. */
+  extra?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -124,16 +127,21 @@ export function Clamped({
       >
         {children}
       </p>
-      {long && (
-        <Button
-          variant='link'
-          size='sm'
-          className='h-auto p-0'
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-        >
-          {open ? $t('common.collapse') : $t('taskDetail.expand')}
-        </Button>
+      {(long || extra) && (
+        <div className='flex flex-wrap items-center gap-x-4 gap-y-1'>
+          {long && (
+            <Button
+              variant='link'
+              size='sm'
+              className='h-auto p-0 font-normal'
+              aria-expanded={open}
+              onClick={() => setOpen((v) => !v)}
+            >
+              {open ? $t('common.collapse') : $t('taskDetail.expand')}
+            </Button>
+          )}
+          {extra}
+        </div>
       )}
     </div>
   );

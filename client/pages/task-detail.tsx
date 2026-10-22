@@ -153,7 +153,7 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
      {dirty&&<p role='status' className={cn(text.muted,'flex flex-wrap items-center gap-x-2')}>{$t('taskDetail.draftRetained')} <Button size='sm' variant='ghost' disabled={busy} onClick={()=>{void confirmAction({title:()=>($t('taskDetail.discardTaskDrafts',{0:data.task.title})),description:()=>($t('taskDetail.discardDraftWarning')),action:'taskDetail.discardDrafts'}).then(confirmed=>{if(confirmed)clear();});}}>{$t('taskDetail.discardDrafts')}</Button></p>}
      <TaskDraftRecovery activeScope={w.cancelledAt||w.archivedAt||done?undefined:draftScope}/>
      {error&&<p role="alert" className="nr-error">{error}</p>}
-     {w.cancelledAt||w.archivedAt?<ClosedCard w={w} update={update} busy={busy}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} pick={pick} setPick={setPick} update={update} busy={busy} projectId={projectId} taskId={taskId}/></TaskDraftScope>:done?<DoneCard data={data} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} list={list}/></TaskDraftScope>}
+     {w.cancelledAt||w.archivedAt?<ClosedCard w={w} update={update} busy={busy}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} pick={pick} setPick={setPick} update={update} busy={busy} projectId={projectId} taskId={taskId} onEvidence={()=>setEvidenceOpen(true)}/></TaskDraftScope>:done?<DoneCard data={data} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} list={list}/></TaskDraftScope>}
     </div>
     <ActivityCard data={data} update={update} busy={busy} members={members}/>
    </div>
@@ -238,9 +238,10 @@ function useNow(data:Data):string{
 // card). While a change waits for review it answers why the change was made.
 function WhyCard({data,onEvidence}:{data:Data;onEvidence:()=>void}){
  const w=data.work,started=Boolean(w.flow),why=whyText(data),evidence=taskEvidence(data),hasEvidence=Boolean(evidence.signals.length||evidence.brief||evidence.note||evidence.attachments||evidence.resultSource);
- // Before the task starts the brief is shown in full in the card on the left; it is not repeated here.
+ // Before the task starts the brief is shown in full in the card on the left, with View evidence below it; a reason
+ // that would only repeat the brief leaves the card out.
  const reason=why.from==='brief'&&!started?'':why.text;
- if(!reason&&!hasEvidence)return null;
+ if(!reason&&(!started||!hasEvidence))return null;
  const stage=w.flow?.stages[w.stageIndex||0],out=w.results[(w.stageIndex||0)-1];
  const title=w.stage!=='done'&&!isClosed(w)&&stage?.kind==='review'&&Boolean(out?.pr||out?.article)?$t('taskDetail.whyChangeTitle'):$t('taskDetail.whyTitle');
  return <Card className="order-1" aria-label={title} title={<><Sparkles aria-hidden="true" className="size-4 shrink-0 text-agent"/>{title}</>}>
@@ -248,7 +249,7 @@ function WhyCard({data,onEvidence}:{data:Data;onEvidence:()=>void}){
    <p className={cn(text.body,'leading-6')}>{reason}</p>
    {(why.fact||why.more>0)&&<p className={cn(text.body,'leading-6')}>{why.fact}{why.more>0&&<span className="text-muted-foreground">{why.fact?' ':''}{$t('taskDetail.moreSignals',{0:why.more})}</span>}</p>}
   </div>}
-  {hasEvidence&&<Button variant="link" size="sm" className="h-auto self-start p-0" onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}
+  {hasEvidence&&<Button variant="link" size="sm" className="h-auto font-normal self-start p-0" onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}
  </Card>;
 }
 // Everything a task's owner rarely needs: Technical details for engineers, the linked page, collaborators, closing.
@@ -289,7 +290,7 @@ async function withUsableAgent(data:Data,update:Update,command:string,body:objec
 }
 // Before a task starts (2026-10-08 user decision: Hand off to agent only creates the task): what the Agent will get,
 // the playbook (the one suggested at hand-off preselected) and a note; nothing runs until Start.
-function StartCard({data,list,pick,setPick,update,busy,projectId,taskId}:{data:Data;list?:PlaybookList;pick:string;setPick:(id:string)=>void;update:Update;busy:boolean;projectId:number;taskId:string}){
+function StartCard({data,list,pick,setPick,update,busy,projectId,taskId,onEvidence}:{data:Data;list?:PlaybookList;pick:string;setPick:(id:string)=>void;update:Update;busy:boolean;projectId:number;taskId:string;onEvidence:()=>void}){
  const [note,setNote]=useTaskDraft('note',''),{allowed}=useContext(TaskAccess);
  const {clear}=useTaskDraftStatus();
  const p=list?.playbooks.find(x=>x.id===pick),handoff=(data.task.evidence?.handoff as {playbook?:string;content?:string}|undefined),brief=handoff?.content||data.task.brief||'',briefTitle=handoff?.content?$t('taskDetail.documentDelivered',{0:handoff.playbook}):$t('taskDetail.whatAgentReceive');
@@ -318,7 +319,7 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId}:{data:D
  // with its description, the article where the change goes, and the note.
  return <StageCard title={$t('taskDetail.startAfterReview')} sub={handoff?$t('taskDetail.taskHandedOverDocumentDelivered',{0:handoff.playbook}):$t('taskDetail.agentNotStartedReadBrief')}
   actions={<Button disabled={busy||!p||!ready||!plan.ready||finding} onClick={()=>void start()}>{$t('taskDetail.confirmStart')}</Button>}>
-  {briefText&&<Field label={briefTitle}><Clamped long={briefText.length>240||briefText.split('\n').length>3}>{briefText}</Clamped></Field>}
+  {briefText&&<Field label={briefTitle}><Clamped long={briefText.length>240||briefText.split('\n').length>3} extra={whyText(data).from==='brief'&&<Button variant="link" size="sm" className="h-auto font-normal p-0" onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}>{briefText}</Clamped></Field>}
   <Field label={$t('common.playbook')} id={`${taskId}-playbook`}>
    <Select value={pick} disabled={busy||!list||!allowed} onValueChange={v=>{if(v!=null)setPick(String(v));}}>
     <SelectTrigger className="w-full" aria-labelledby={`${taskId}-playbook`}><SelectValue>{(v:string)=>{const x=list?.playbooks.find(y=>y.id===v);return x?`${x.name}${x.id===data.playbookDefault?$t('taskDetail.recommended'):''}`:v;}}</SelectValue></SelectTrigger>
@@ -327,12 +328,12 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId}:{data:D
     </SelectContent>
    </Select>
    {/* View steps opens the playbook over the page (2026-10-21), so the choices made here stay. */}
-   {p&&<p className={text.muted}>{p.description}{p.description?' ':''}<Button variant="link" size="sm" className="h-auto p-0 align-baseline" onClick={()=>setViewing(true)}>{$t('taskDetail.viewSteps')}</Button></p>}
+   {p&&<p className={text.muted}>{p.description}{p.description?' ':''}<Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>setViewing(true)}>{$t('taskDetail.viewSteps')}</Button></p>}
    <PlaybookDrawer playbook={p} open={viewing} onClose={()=>setViewing(false)}/>
   </Field>
   {articleChoice&&<DeliverySummary data={data} choice={current} finding={finding} notice={notice} allowed={allowed} busy={busy} onChange={()=>setChoosing(true)}/>}
   {articleChoice&&<DeliveryDialog open={choosing} onClose={()=>setChoosing(false)} data={data} projectId={projectId} choice={current} found={found&&found!=='finding'?found.article:null} notice={notice} busy={busy} link={link} onSave={c=>setChoiceState({...c,playbook:pick})}/>}
-  <Field label={$t('taskDetail.notesOptional')} htmlFor={`${taskId}-note`}><Textarea id={`${taskId}-note`} aria-label={$t('taskDetail.additionalNotes')} rows={1} className="min-h-8 py-1.5" value={note} disabled={busy||!allowed} placeholder={$t('taskDetail.changeEnglishVersionKeepTechnical')} onChange={e=>setNote(e.target.value)}/></Field>
+  <Field label={$t('taskDetail.notesOptional')} htmlFor={`${taskId}-note`}><Textarea id={`${taskId}-note`} aria-label={$t('taskDetail.additionalNotes')} rows={1} className="min-h-8 resize-none py-1.5" value={note} disabled={busy||!allowed} placeholder={$t('taskDetail.changeEnglishVersionKeepTechnical')} onChange={e=>setNote(e.target.value)}/></Field>
   <NeedsAgent data={data}/>
   {attachments&&<Field label={$t('taskDetail.attachmentsDelivered')}><TaskMedia projectId={projectId} taskId={taskId}/></Field>}
  </StageCard>;
@@ -364,7 +365,7 @@ function PageChange({pr,content}:{pr?:PullRequestInfo;content:string}){
    {pr.previewUrl&&<a className="nr-link inline-flex items-center gap-1" href={pr.previewUrl} target="_blank" rel="noreferrer"><Globe className="size-4" aria-hidden="true"/>{$t('taskDetail.openPreviewPage')}</a>}
    {pages.map(u=><a key={u} className="nr-link inline-flex items-center gap-1" href={u} target="_blank" rel="noreferrer">{$t('common.openPage')} {pathOf(u)}<ExternalLink className="size-3" aria-hidden="true"/></a>)}
    {pr.checks&&<span className="inline-flex items-center gap-1 text-muted-foreground">{pr.checks.ok?<CircleCheck className="size-4 text-nr-ink-green" aria-hidden="true"/>:<TriangleAlert className="size-4 text-nr-ink-amber" aria-hidden="true"/>}{pr.checks.ok?$t('taskDetail.checksPassed'):$t('taskDetail.checksNeedAttention')}</span>}
-   <Button variant="link" size="sm" className="h-auto p-0 text-muted-foreground" onClick={()=>tech.open('result')}><Code2/>{$t('taskDetail.technicalDetails')}</Button>
+   <Button variant="link" size="sm" className="h-auto font-normal p-0 text-muted-foreground" onClick={()=>tech.open('result')}><Code2/>{$t('taskDetail.technicalDetails')}</Button>
   </div>}
  </div>;
 }
@@ -390,7 +391,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  const producer=stages[index-1],out=w.results[index-1];
  const request=(executor:string)=>requestOpen&&out?<RequestBox executor={executor} busy={busy} onCancel={()=>setRequest(false)} onSend={async comment=>Boolean(await act('requestStageChanges',{artifactId:out.id,comment}))}/>:null;
  const requestButton=<Button variant="outline" disabled={busy} onClick={()=>setRequest(!requestOpen)}>{$t('taskDetail.requestChanges')}</Button>;
- const techLinkTo=(tab:TechnicalTab)=><Button variant="link" size="sm" className="h-auto self-start p-0 text-muted-foreground" onClick={()=>tech.open(tab)}><Code2/>{$t('taskDetail.technicalDetails')}</Button>,techLink=techLinkTo('runs');
+ const techLinkTo=(tab:TechnicalTab)=><Button variant="link" size="sm" className="h-auto font-normal self-start p-0 text-muted-foreground" onClick={()=>tech.open(tab)}><Code2/>{$t('taskDetail.technicalDetails')}</Button>,techLink=techLinkTo('runs');
  const progress=$t('taskDetail.currentProgress');
  if(stage.kind==='review'&&stages[index+1]?.kind==='release'){
   const pr=out?.pr;
@@ -438,7 +439,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    if(r.state==='export_late')return <StageCard title={$t('articleTask.exportLate')} sub={$t('articleTask.exportLateHint',{0:exportingNames(data,r)})} actions={act2?<><Button disabled={busy} onClick={()=>void act('confirmLive',{})}>{$t('taskDetail.iConfirmLive')}</Button><Button variant='outline' disabled={busy} onClick={()=>void act('waitLonger',{})}>{$t('common.waitAnother24Hours')}</Button></>:undefined}>{rows}<PageLinks pages={r.pages}/></StageCard>;
   }
   const manualMark=<Button variant="ghost" disabled={busy} onClick={()=>void act('markMerged',{})}>{$t('taskDetail.publishedManually')}</Button>;
-  if(r.state==='merging')return <StageCard label={progress} spinning title={$t('taskDetail.publishing')} sub={queued&&!data.agent?.online?<>{$t('taskDetail.agentComputerOfflinePublish')} <Button variant="link" size="sm" className="h-auto p-0 align-baseline" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>:$t('taskDetail.publishingHint')} actions={queued?manualMark:undefined}/>;
+  if(r.state==='merging')return <StageCard label={progress} spinning title={$t('taskDetail.publishing')} sub={queued&&!data.agent?.online?<>{$t('taskDetail.agentComputerOfflinePublish')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>:$t('taskDetail.publishingHint')} actions={queued?manualMark:undefined}/>;
   if(r.state==='merge_failed')return <StageCard title={$t('taskDetail.publishFailed')} sub={$t('taskDetail.publishFailedHint')} actions={<><Button disabled={busy} onClick={()=>void act('retryMerge',{})}>{$t('taskDetail.tryAgain')}</Button>{manualMark}</>}>{techLink}</StageCard>;
   const live=<Button variant={r.state==='verifying'?'ghost':'default'} disabled={busy} onClick={()=>void act('confirmLive',{})}>{$t('taskDetail.iConfirmLive')}</Button>;
   if(r.state==='verifying')return <StageCard label={progress} title={$t('taskDetail.waitingSiteUpdate')} sub={$t('taskDetail.waitingSiteUpdateHint',{0:r.lastCheckAt?$t('taskDetail.lastCheckedNotSeenYet',{0:when(r.lastCheckAt)}):''})} actions={live}><TargetRows data={data} r={r}/><PageLinks pages={r.pages}/><DriftNotice data={data} r={r}/></StageCard>;
@@ -481,8 +482,8 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   const body=manual||(!isActive&&!manual&&canRun&&!hasTaskAgent(data)&&(agent?.options||[]).length!==1)||(approved&&source)?<>{manual&&<Field label={recordLabel} htmlFor={`${stage.key}-record`}><Textarea id={`${stage.key}-record`} aria-label={recordLabel} rows={4} value={record} disabled={busy} placeholder={readsOnly(stage)?(stage.mode==='analyze'?$t('taskDetail.writeAnalysisResult'):$t('taskDetail.whichFilesSectionsChangeWhat')):$t('taskDetail.prLinkWhichFilesContent')} onChange={e=>{setRecord(e.target.value);}}/></Field>}
    {!isActive&&!manual&&canRun&&<NeedsAgent data={data}/>}
    {approved&&source&&<Reveal label={$t('taskDetail.viewApprovedInput',{0:source.name})}><Reading><Markdown content={approved.content}/></Reading></Reveal>}</>:undefined;
-  if(!canRun)return <StageCard title={displayStageName(stage)} sub={<>{$t('taskDetail.noWebsiteSourceRepositoryConnectedMessage')} <Button variant="link" size="sm" className="h-auto p-0 align-baseline" onClick={()=>navigate('/connections?source=repo')}>{$t('common.goDataSources')}</Button></>} actions={actions}>{body}</StageCard>;
-  if(cur?.status==='queued')return <StageCard label={progress} title={$t('taskDetail.agentWorking',{0:stage.name})} sub={agent?.online?$t('taskDetail.handedOffAgentStartingNow'):<>{$t('taskDetail.agentComputerOffline')} <Button variant="link" size="sm" className="h-auto p-0 align-baseline" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>} actions={actions}>{body}</StageCard>;
+  if(!canRun)return <StageCard title={displayStageName(stage)} sub={<>{$t('taskDetail.noWebsiteSourceRepositoryConnectedMessage')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/connections?source=repo')}>{$t('common.goDataSources')}</Button></>} actions={actions}>{body}</StageCard>;
+  if(cur?.status==='queued')return <StageCard label={progress} title={$t('taskDetail.agentWorking',{0:stage.name})} sub={agent?.online?$t('taskDetail.handedOffAgentStartingNow'):<>{$t('taskDetail.agentComputerOffline')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>} actions={actions}>{body}</StageCard>;
   if(cur?.status==='running')return <StageCard label={progress} spinning title={<>{$t('taskDetail.agentWorking',{0:stage.name})}{cur.cancelRequested?$t('taskDetail.stoppingAside'):''}</>} sub={$t('taskDetail.agentWorkingFor',{0:since(cur.createdAt)})} actions={actions}>{body}</StageCard>;
   if(cur?.status==='failed'&&failure){
    const {why,next,group}=failure,stageRuns=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
@@ -551,7 +552,7 @@ function LiveChange({data,artifact}:{data:Data;artifact?:Artifact}){
  const labels=a?paths.map(fieldLabel):[...new Set(visible.map(v=>v.label))],count=a?paths.length:visible.length;
  return <div className={cn(text.body,'flex flex-wrap items-center gap-x-2 gap-y-1')}>
   {count>0&&<span>{$t('taskDetail.changedSummary',{0:count,1:joinNames(labels)})}</span>}
-  <Button variant='link' size='sm' className='h-auto p-0' onClick={()=>setOpen(true)}>{$t('taskDetail.viewChanges')}<ChevronRight/></Button>
+  <Button variant='link' size='sm' className='h-auto font-normal p-0' onClick={()=>setOpen(true)}>{$t('taskDetail.viewChanges')}<ChevronRight/></Button>
   <DocReader open={open} onClose={()=>setOpen(false)} title={$t('taskDetail.whatChanged')} meta={`${$t('taskDetail.versionNumber',{0:artifact.version})}${artifact.approvedAt?` · ${$t('taskDetail.approvedOn',{0:when(artifact.approvedAt)})}`:''}`} content=''><VersionChange data={data} artifact={artifact} notes={false}/></DocReader>
  </div>;
 }
@@ -564,7 +565,7 @@ function EffectList({w}:{w:Work}){
 function EffectRow({r,observeFrom}:{r:EffectResult;observeFrom?:string}){
  const [open,setOpen]=useState(false),range=(x:{start:string;end:string})=>$t('common.range',{0:x.start.slice(5),1:x.end.slice(5)});
  const rows:[string,[number,number],string?][]=[...(r.gsc?[[$t('common.searchClicks'),r.gsc.clicks],[$t('common.searchImpressions'),r.gsc.impressions],[$t('common.ctr'),r.gsc.ctr,'%'],[$t('common.averagePosition'),r.gsc.position]] as [string,[number,number],string?][]:[]),...(r.ga4?[[$t('common.viewCount'),r.ga4.views],[$t('common.keyEvents'),r.ga4.conversions]] as [string,[number,number],string?][]:[])];
- return <li className={cn(text.body,'flex flex-col items-start gap-1')} data-c={r.conclusion}><span>{effectLine(r,observeFrom)}</span><Button variant="link" size="sm" className="h-auto p-0" onClick={()=>setOpen(v=>!v)}>{open?$t('common.collapse'):$t('taskDetail.seeNumbers')}</Button>
+ return <li className={cn(text.body,'flex flex-col items-start gap-1')} data-c={r.conclusion}><span>{effectLine(r,observeFrom)}</span><Button variant="link" size="sm" className="h-auto font-normal p-0" onClick={()=>setOpen(v=>!v)}>{open?$t('common.collapse'):$t('taskDetail.seeNumbers')}</Button>
   {open&&<div className="nr-td-effect-detail"><Comparison result={r} observeFrom={observeFrom}/>{(!r.coverage||!matchesObservation(r,observeFrom))&&<Reveal label={$t('results.legacy')}><p>{r.conclusion} · {r.change===null?'—':`${r.change*100}%`}</p><p className="text-muted-foreground">{$tj('taskDetail.beforeGoingLiveAfter',{0:range(r.baseline),1:range(r.after)})}</p><table><tbody>{rows.map(([k,[b,a],u])=><tr key={k}><th>{k}</th><td>{b}{u}</td><td>→</td><td>{a}{u}</td></tr>)}</tbody></table></Reveal>}</div>}</li>;
 }
 const eventIcons:Record<string,ReactNode>={merged:<GitMerge/>,live:<Globe/>,notSeen:<AlertCircle/>,retryMerge:<RotateCcw/>,markMerged:<GitMerge/>,confirmLive:<Globe/>,waitLonger:<RotateCcw/>,startTask:<CirclePlay/>,runSucceeded:<FileText/>,approveStage:<Check/>,editStageOutput:<Pencil/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setAgent:<Bot/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<BookOpen/>,revertRelease:<Undo2/>};
@@ -589,15 +590,15 @@ function ActivityCard({data,update,busy,members}:{data:Data;update:Update;busy:b
  async function send(){const d=await update('comment',{comment:message});if(d){clearMessage();}}
  const composer=(!done&&!closed)||Boolean(message);
  return <Card className="order-5" aria-label={$t('common.activity')} title={$t('common.activity')}>
-  {hidden>0&&<Button variant="link" size="sm" className="h-auto self-start p-0" onClick={()=>setAll(true)}>{$t('taskDetail.showEarlier',{0:hidden})}</Button>}
+  {hidden>0&&<Button variant="link" size="sm" className="h-auto font-normal self-start p-0" onClick={()=>setAll(true)}>{$t('taskDetail.showEarlier',{0:hidden})}</Button>}
   <ol className="flex flex-col gap-3">{shown.map(({e,t,i})=>{const who=t!.who===$t('common.you')?(e.actor&&people.get(e.actor))||$t('common.member'):t!.who;
    if(e.action==='comment'||e.action==='requestStageChanges')return <li key={`${e.at}:${e.action}:${e.comment}`} className="flex items-start gap-2"><ActorAvatar type="user" name={who} size="xs"/><div className="flex min-w-0 flex-1 flex-col gap-0.5"><p className={cn(text.body,'flex flex-wrap items-center gap-x-2 gap-y-1')}><span data-actor="">{who}</span>{e.action==='requestStageChanges'&&<Tag tone="violet">{$t('taskDetail.requestChanges')}</Tag>}<time className="ml-auto text-muted-foreground">{when(e.at)}</time></p><p className={cn(text.body,'break-words whitespace-pre-wrap')}>{e.comment}</p></div></li>;
    const artifact=e.action==='runSucceeded'&&e.artifactId?artifacts.get(e.artifactId):undefined;
    const line=artifact?$t('taskDetail.deliveredVersion',{0:artifact.version,1:nameOf(artifact.stepId)}):plain[e.action]||t!.text;
-   return <li key={`${e.at}:${e.action}:${e.runId||''}:${i}`} className={cn(text.muted,'flex items-start gap-2')}><span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center [&_svg]:size-3.5">{eventIcons[e.action]||<Play/>}</span><p className="min-w-0 flex-1 break-words"><span data-actor="" className="text-foreground">{e.action==='runSucceeded'?executor:who}</span> {line}{artifact&&<> <Button variant="link" size="sm" className="h-auto p-0 align-baseline" onClick={()=>setView(artifact)}>{$t('common.view')}</Button></>}</p><time className="shrink-0">{when(e.at)}</time></li>;})}
+   return <li key={`${e.at}:${e.action}:${e.runId||''}:${i}`} className={cn(text.muted,'flex items-start gap-2')}><span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center [&_svg]:size-3.5">{eventIcons[e.action]||<Play/>}</span><p className="min-w-0 flex-1 break-words"><span data-actor="" className="text-foreground">{e.action==='runSucceeded'?executor:who}</span> {line}{artifact&&<> <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>setView(artifact)}>{$t('common.view')}</Button></>}</p><time className="shrink-0">{when(e.at)}</time></li>;})}
    {!rows.length&&<li className={text.muted}>{$t('taskDetail.noActivityYet')}</li>}</ol>
   {view&&<DocReader open onClose={()=>setView(undefined)} title={`${nameOf(view.stepId)} · ${$t('taskDetail.versionNumber',{0:view.version})}`} meta={when(view.createdAt)} content={view.pr||view.article?'':view.content}><VersionChange data={data} artifact={view} notes/></DocReader>}
-  {composer&&<div className="flex items-end gap-2"><Textarea id="nr-composer" aria-label={$t('taskDetail.noteExecutor')} rows={1} className="max-h-40 min-h-8 py-1.5" value={message} disabled={busy} readOnly={done||closed} placeholder={$t('taskDetail.leaveNoteNextRunReads',{0:executor})} onChange={e=>{setMessage(e.target.value);}}/>{!done&&!closed&&<Button variant="outline" disabled={busy||!message.trim()} onClick={()=>void send()}>{$t('taskDetail.send')}</Button>}</div>}
+  {composer&&<div className="flex items-end gap-2"><Textarea id="nr-composer" aria-label={$t('taskDetail.noteExecutor')} rows={1} className="max-h-40 min-h-8 resize-none py-1.5" value={message} disabled={busy} readOnly={done||closed} placeholder={$t('taskDetail.leaveNoteNextRunReads',{0:executor})} onChange={e=>{setMessage(e.target.value);}}/>{!done&&!closed&&<Button variant="outline" disabled={busy||!message.trim()} onClick={()=>void send()}>{$t('taskDetail.send')}</Button>}</div>}
  </Card>;
 }
 function PageLinkEditor({data,projectId,taskId,busy,update}:{data:Data;projectId:number;taskId:string;busy:boolean;update:Update}){

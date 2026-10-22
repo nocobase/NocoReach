@@ -227,8 +227,8 @@ export function ArticleReview({
         {ARTICLE_FIELDS.map((f) => {
           const path = `${tab}.${f}`;
           return a.changes.includes(path) ? (
+            // The diff's own first line names the field ("English · Title"), so no label above it.
             <div key={path} className='flex min-w-0 flex-col gap-1'>
-              <h3 className={text.muted}>{$t(`articleTask.field.${f}`)}</h3>
               <ChangeView
                 changes={[
                   fieldChange(path, valueAt(base, path), valueAt(draft, path)),

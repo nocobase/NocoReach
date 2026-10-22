@@ -315,7 +315,7 @@ function DeliveryForm({
                       <Button
                         variant='link'
                         size='sm'
-                        className='h-auto p-0'
+                        className='h-auto p-0 font-normal'
                         onClick={() => setAttempt((n) => n + 1)}
                       >
                         {$t('common.retry')}
@@ -403,7 +403,7 @@ export function DeliverySummary({
     <Button
       variant='link'
       size='sm'
-      className='h-auto p-0'
+      className='h-auto p-0 font-normal'
       disabled={busy}
       onClick={onChange}
     >

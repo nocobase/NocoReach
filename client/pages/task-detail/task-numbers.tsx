@@ -131,21 +131,25 @@ export function TaskNumbers({
       className={className}
     >
       <div className='flex flex-col gap-2'>
-      {result ? (
-        <Compared result={result} observeFrom={w.observeFrom} taskId={taskId} />
-      ) : (
-        <Current
-          projectId={projectId}
-          taskId={taskId}
-          observeFrom={w.observeFrom}
-          // Read again when the pages or going live change.
-          refresh={[
-            w.observeFrom,
-            w.page?.url,
-            ...(w.release?.pages || []),
-          ].join('\n')}
-        />
-      )}
+        {result ? (
+          <Compared
+            result={result}
+            observeFrom={w.observeFrom}
+            taskId={taskId}
+          />
+        ) : (
+          <Current
+            projectId={projectId}
+            taskId={taskId}
+            observeFrom={w.observeFrom}
+            // Read again when the pages or going live change.
+            refresh={[
+              w.observeFrom,
+              w.page?.url,
+              ...(w.release?.pages || []),
+            ].join('\n')}
+          />
+        )}
       </div>
     </Card>
   );
@@ -252,7 +256,9 @@ function Compared({
         />
       )}
       {r.primary && r.byPage && (
-        <p className={cn(text.body, 'flex items-baseline gap-3 border-t pt-1.5')}>
+        <p
+          className={cn(text.body, 'flex items-baseline gap-3 border-t pt-1.5')}
+        >
           <span className='min-w-0 flex-1'>
             {$t('taskNumbers.total', { 0: r.byPage.length })}
           </span>
@@ -319,8 +325,7 @@ function Current({
         1: expected(observeFrom, 7),
       })
     : $t('taskNumbers.comparedLater');
-  if (!current)
-    return <p className={text.muted}>{$t('common.loading')}</p>;
+  if (!current) return <p className={text.muted}>{$t('common.loading')}</p>;
   if (current.failed || !n || !Array.isArray(n.pages))
     return <p className={text.muted}>{$t('taskNumbers.failed')}</p>;
   if (!n.pages.length)

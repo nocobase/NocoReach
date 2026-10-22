@@ -59,9 +59,7 @@ export function VisibleChanges({ items }: { items: VisibleChange[] }) {
                     key={`${item.label}:${item.before}:${item.after}`}
                     className='grid gap-1 py-2 sm:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)] sm:gap-3'
                   >
-                    <span className='text-muted-foreground'>
-                      {item.label}
-                    </span>
+                    <span className='text-muted-foreground'>{item.label}</span>
                     <span className='break-words whitespace-pre-wrap text-muted-foreground'>
                       <span className='sm:sr-only'>
                         {$t('taskDetail.before')} ·{' '}
