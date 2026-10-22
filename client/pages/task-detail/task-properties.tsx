@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
-import { ChevronDown, ExternalLink } from 'lucide-react';
+import { ChevronDown, ExternalLink, Sparkles, UserSearch } from 'lucide-react';
+import { useTranslation } from '@nocobase/i18n/client';
 import { useNavigate } from 'react-router';
 import { $t } from '#i18n';
-import { formatDateTime } from '#lib/format';
+import { formatDate, formatDateTime } from '#lib/format';
 import { cn } from '#lib/utils';
 import { ActorAvatar } from '#components/reach/actor';
 import { Button } from '#components/ui/button';
@@ -16,6 +17,7 @@ import {
 import type { TaskData } from '../task-execution-types';
 import { AgentMenu } from './agent-menu';
 import { articlePageUrl } from './article-page';
+import { entryTitleKey, taskSource, type TaskSource } from '../task-source';
 
 // The task's properties in their own column (2026-10-22 user request, as the sidebar of a Linear, Jira or GitHub
 // issue): one label and value per row, so the header keeps only what to read. Beside the content from 1280px, above
@@ -70,13 +72,6 @@ export function TaskProperties({
 }) {
   const navigate = useNavigate(),
     w = data.work;
-  const evidence = data.task.evidence as
-    | {
-        insight?: { id?: string; no?: number };
-        createdBy?: { id?: string; name?: string };
-      }
-    | undefined;
-  const insight = evidence?.insight;
   const owners =
     members.some((m) => m.id === w.humanOwnerId) || !w.humanOwnerId
       ? members
@@ -148,6 +143,14 @@ export function TaskProperties({
       className={cn('min-w-0', className)}
     >
       <dl className='m-0 grid grid-cols-1 gap-x-8 sm:grid-cols-2 xl:grid-cols-1'>
+        <Row label={$t('taskDetail.propSource')}>
+          <Source
+            source={taskSource(data.task)}
+            onOpportunity={(id) =>
+              void navigate(`/opportunities?item=${encodeURIComponent(id)}`)
+            }
+          />
+        </Row>
         <Row label={$t('common.owner')}>{owner}</Row>
         <Row label={$t('taskDetail.agent')}>
           <AgentMenu
@@ -171,21 +174,6 @@ export function TaskProperties({
           </Row>
         )}
         {playbook && <Row label={$t('common.playbook')}>{playbook}</Row>}
-        {insight?.id && (
-          <Row label={$t('taskDetail.propSource')}>
-            <button
-              type='button'
-              className='nr-link text-left'
-              onClick={() =>
-                void navigate(
-                  `/opportunities?item=${encodeURIComponent(insight.id!)}`,
-                )
-              }
-            >
-              {insight.no ? `O-${insight.no}` : $t('common.opportunity')}
-            </button>
-          </Row>
-        )}
         {article && (
           <Row label={$t('articleTask.article')}>
             {articleUrl ? (
@@ -253,5 +241,78 @@ export function TaskProperties({
       </dl>
       {footer}
     </aside>
+  );
+}
+
+// Who found the task and where (2026-10-22, before the owner): "Found by AI · O-41" with the analysis date, or
+// "Found by <name>" with the page it was handed off from. An older task without its person shows the second line only.
+function Source({
+  source,
+  onOpportunity,
+}: {
+  source: TaskSource;
+  onOpportunity: (id: string) => void;
+}) {
+  const { t } = useTranslation();
+  const at = source.at ? formatDate(source.at) : '';
+  const entry = entryTitleKey(
+    source.via === 'content' ? '/content' : source.entry,
+  );
+  const label =
+    source.via === 'opportunity'
+      ? $t('strategy.dailyAnalysisName')
+      : source.via === 'change'
+        ? $t('taskSource.fromInsights')
+        : source.via === 'plan'
+          ? $t('taskSource.plan')
+          : source.via === 'newTask'
+            ? $t('manualTask.newTask')
+            : source.via === 'results'
+              ? $t('taskSource.fromResults')
+              : entry
+                ? $t('taskSource.handedOffFrom', { 0: t(entry) })
+                : source.via === 'dataPage'
+                  ? $t('taskSource.handedOff')
+                  : '';
+  // The place, then the date; a task found nowhere in particular says only when it was created.
+  const where = label
+    ? [label, at].filter(Boolean).join(' · ')
+    : at
+      ? $t('taskSource.created', { 0: at })
+      : '';
+  return (
+    <span className='flex flex-col'>
+      {source.by === 'ai' ? (
+        <span className='inline-flex flex-wrap items-center gap-x-1.5'>
+          <span className='inline-flex items-center gap-1 text-agent'>
+            <Sparkles aria-hidden='true' className='size-3.5' />
+            {$t('taskSource.foundByAi')}
+          </span>
+          {source.insight?.id && (
+            <>
+              <span className='text-muted-foreground'>·</span>
+              <button
+                type='button'
+                className='nr-link text-left'
+                onClick={() => onOpportunity(source.insight!.id!)}
+              >
+                {source.insight.no
+                  ? `O-${source.insight.no}`
+                  : $t('common.opportunity')}
+              </button>
+            </>
+          )}
+        </span>
+      ) : source.name ? (
+        <span className='inline-flex items-center gap-1'>
+          <UserSearch
+            aria-hidden='true'
+            className='size-3.5 shrink-0 text-muted-foreground'
+          />
+          {$t('taskSource.foundBy', { 0: source.name })}
+        </span>
+      ) : null}
+      {where && <span className='text-muted-foreground'>{where}</span>}
+    </span>
   );
 }

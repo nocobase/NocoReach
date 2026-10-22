@@ -10,6 +10,8 @@ import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuSeparator,
 import {getWorkColumns,workState,closeCommand,canReopen,closedWhen,isClosed,type BoardState,type Work} from './task-execution-types';
 import {stepOf,executorOf,getExecutorNames,ago,stateTone} from './task-list-model';
 import {taskAgentOf,type AgentStatus} from './task-agents';
+import {FoundBy} from './found-by';
+import {taskSource} from './task-source';
 import {WithInfo} from '#components/reach/info-tip';
 import {help} from './glossary';
 import {localizeWorkSnapshots} from './playbook-snapshot';
@@ -17,7 +19,7 @@ import {stageName} from './playbook-model';
 import {useMe} from './me';
 // A task someone else owns: a 成员 can open and read it, but not drag, move or close it (its owner and 管理员 can; 2026-10-09).
 function useEditable(){const {can}=useMe();return (t:WorkCard)=>can(t.evidence?.work?.humanOwnerId||t.evidence?.createdBy?.id);}
-export type WorkCard={id:number;title:string;brief:string;status:string;updatedAt:string;evidence?:{work?:Work;keyword?:string;no?:number;insight?:{id?:string;no?:number};createdBy?:{id?:string;name?:string}}};
+export type WorkCard={id:number;title:string;brief:string;status:string;updatedAt:string;createdAt?:string;taskKey?:string;evidence?:{work?:Work;keyword?:string;no?:number;insight?:{id?:string;no?:number};createdBy?:{id?:string;name?:string}}};
 // The owner: the one set on the task, or whoever created it before anything happened on it (2026-10-08).
 const ownerOf=(t:WorkCard)=>t.evidence?.work?.humanOwnerName||t.evidence?.createdBy?.name||'';
 // The short task number (T-12); the long record id is never shown.
@@ -31,7 +33,7 @@ function Avatar({name}:{name?:string}){return name?<span title={name} className=
 function Executor({w,agents}:{w?:Work;agents?:AgentStatus}){
  if(!agents)return w?.agentName?<span className="truncate">{w.agentName}</span>:<span className="text-muted-foreground">—</span>;
  const a=taskAgentOf(w,agents);if(!a)return <span className="truncate text-muted-foreground">{$t('taskAgents.unassigned')}</span>;
- return <span className="inline-flex min-w-0 items-center gap-1.5" title={a.name}><span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full',a.online?'bg-nr-ink-green':'bg-muted-foreground/50')}/>
+ return <span className="flex min-w-0 items-center gap-1.5" title={a.name}><span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full',a.online?'bg-nr-ink-green':'bg-muted-foreground/50')}/>
   <span className="truncate">{a.name}</span><span className="sr-only">{a.online?$t('taskDetail.agentOnline'):$t('taskDetail.agentOffline')}</span></span>;}
 function StatusTag({t}:{t:WorkCard}){const w=t.evidence?.work;if(isClosed(w))return <Tag tone="slate" dot>{$t('common.closed')}</Tag>;const s=workState(w,t.status);return <Tag tone={stateTone[s]} dot>{getWorkColumns()[s]}</Tag>;}
 function StepCell({w,muted='—'}:{w?:Work;muted?:string}){const s=stepOf(w);if(!s)return <span className="text-muted-foreground">{muted}</span>;return s.tone?<Tag tone={s.tone}>{s.text}</Tag>:<span className="truncate text-muted-foreground">{s.text}</span>;}
@@ -57,7 +59,7 @@ export function WorkBoard({tasks:visible,busy,list,agents,onMove,onOpen,onAction
    className={cn('flex flex-col gap-2',mine&&'cursor-grab','rounded-lg border bg-card p-3 text-card-foreground transition-colors hover:border-ring',over===String(t.id)&&'border-t-2 border-t-primary')}
    onDragStart={e=>{if(!mine){e.preventDefault();return;}setDrag(t.id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',String(t.id));}} onDragEnd={()=>{setDrag(null);setOver('');}}
    onDragOver={e=>{if(drag!==null&&!busy){e.preventDefault();e.stopPropagation();setOver(String(t.id));}}} onDrop={e=>{e.preventDefault();e.stopPropagation();drop(col,t.id);}}>
-   <No t={t}/>
+   <div className="flex min-w-0 items-center gap-2"><No t={t}/><FoundBy source={taskSource(t)} className="ml-auto"/></div>
    <h3 className="-mt-1.5 m-0 text-sm font-medium leading-snug"><button type="button" className="line-clamp-3 text-left hover:underline" onClick={()=>onOpen(t.id)}>{t.title}</button></h3>
    {s&&(s.tone?<Tag tone={s.tone}>{s.text}</Tag>:<span className="text-xs text-muted-foreground">{s.text}</span>)}
    <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"><Avatar name={ownerOf(t)}/><span className="min-w-0 flex-1"><Executor w={w} agents={agents}/></span><span className="shrink-0">{ago(t.updatedAt)}</span>
@@ -99,7 +101,7 @@ export function TaskTable({
           <col className='w-32' />
           <col className='w-56' />
           <col className='w-40' />
-          <col className='w-36' />
+          <col className='w-44' />
           <col className='w-24' />
           <col className='w-10' />
         </colgroup>
@@ -158,6 +160,7 @@ export function TaskTable({
                   >
                     {t.title}
                   </button>
+                  <FoundBy source={taskSource(t)} className='mt-0.5' />
                 </td>
                 <td className='px-3 py-2.5'>
                   <StatusTag t={t} />
@@ -179,10 +182,11 @@ export function TaskTable({
                     )}
                   </span>
                 </td>
-                <td className='px-3 py-2.5'>
+                {/* Truncated with the full name on hover (2026-10-22: a long name ran into Updated). */}
+                <td className='overflow-hidden px-3 py-2.5'>
                   <Executor w={w} agents={agents} />
                 </td>
-                <td className='px-3 py-2.5 text-xs text-muted-foreground tabular-nums'>
+                <td className='px-3 py-2.5 text-xs whitespace-nowrap text-muted-foreground tabular-nums'>
                   {ago(t.updatedAt)}
                 </td>
                 <td

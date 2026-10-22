@@ -1,19 +1,14 @@
 import { opportunityState, priorityRank, type Row } from './board';
 import type { StrategyState, WatchRecord } from './model';
-import {
-  taskClosed,
-  taskState,
-  type TaskState,
-  type TaskWork,
-} from '../../../shared/task-pending.js';
+import type { TaskWork } from '../../../shared/task-pending.js';
+import { taskStanding, type TaskStanding } from './task-standing';
 
 // Where each opportunity of Insights shows: in today's message or on an earlier day (briefing.tsx renders both).
 
 /** Days as yyyy-mm-dd, the way the analysis and the watch records date them. */
 export const dayOf = (iso?: string) => String(iso || '').slice(0, 10);
 export type Standing = ReturnType<typeof opportunityState>;
-/** Where the task an opportunity became stands now. */
-export type TaskStanding = TaskState | 'closed';
+export type { TaskStanding };
 export type Line = { row: Row; st: Standing; task?: TaskStanding };
 /** What Insights knows of a task: when it was created and its work. */
 export type TaskInfo = {
@@ -56,13 +51,7 @@ export function feedOf(
       line: Line = {
         row,
         st,
-        ...(task && st.state === 'task'
-          ? {
-              task: taskClosed(task.work)
-                ? 'closed'
-                : taskState(task.work, task.status),
-            }
-          : {}),
+        ...(task && st.state === 'task' ? { task: taskStanding(task) } : {}),
       },
       raised = dayOf(row.firstSeenAt),
       ignored = dayOf(state.opportunityMeta?.[row.card.id]?.ignoredAt),

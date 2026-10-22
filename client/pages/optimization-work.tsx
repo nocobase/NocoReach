@@ -14,7 +14,7 @@ import {taskRecords,useProject} from './reach-data';
 import {workState,isClosed,closeCommand,getCloseConfirm,type BoardState,type Work,type TaskData} from './task-execution-types';
 import {legacyPlaybookFilterLabel,matchesPlaybookFilter,playbookFilterOptions,playbookFilterValue} from './task-playbook-filter';
 import {WorkBoard,TaskTable,type TaskAction} from './work-board';
-import {AgentBoard,RunSummary} from './agent-board';
+import {AgentBoard,RuntimeNotice} from './agent-board';
 import {taskAgentOf,UNASSIGNED,type AgentStatus} from './task-agents';
 import {confirmAction} from '#components/reach/confirm';
 import {Empty,EmptyHeader,EmptyTitle,EmptyDescription,EmptyContent} from '#components/ui/empty';
@@ -109,7 +109,7 @@ export default function OptimizationWork(){
    {agents?.options?.length?<FilterSelect label={$t('optimizationWork.filterAgent')} value={agentFilter} options={[['',$t('optimizationWork.anyAgent')],...agents.options.map(a=>[a.id,a.name] as [string,string]),[UNASSIGNED,$t('taskAgents.unassigned')]]} onChange={v=>param('agent',v)}/>:null}
    <div className="ml-auto inline-flex overflow-hidden rounded-md border" role="group" aria-label={$t('optimizationWork.view')}>{([['',$t('optimizationWork.list'),ListIcon],['board',$t('optimizationWork.board'),KanbanIcon],['agent',$t('optimizationWork.byAgent'),BotIcon]] as const).map(([k,label,Icon])=>{const off=(closed||done)&&k!=='',on=k===(board?'board':byAgent?'agent':'');return <button key={label} type="button" aria-label={label} title={off?$t('optimizationWork.finishedClosedTasksShownList'):label} disabled={off} aria-pressed={on} onClick={()=>{saveView(k);param('view',k);}} className={cn('inline-flex size-8 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40',on&&'bg-muted text-foreground')}><Icon className="size-4"/></button>;})}</div>
   </div>
-  {!closed&&!done&&tasks.length>0&&<RunSummary works={tasks.map(t=>t.evidence?.work)}/>}
+  {!closed&&!done&&tasks.length>0&&<RuntimeNotice/>}
   {waiting&&<p role='status' className='text-sm text-muted-foreground'>{$t(isAdmin?'optimizationWork.waitingAdminScope':'optimizationWork.waitingMemberScope')}</p>}
   {loading?<p role="status" className="text-sm text-muted-foreground">{$t('common.loadingTasks')}</p>:byAgent?<AgentBoard tasks={rows} agents={agents} onOpen={id=>navigate('/actions/'+id)}/>:board?<WorkBoard tasks={rows} busy={busy} list={false} agents={agents} onMove={(t,s,before)=>void move(t as Task,s,before)} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>
    :rows.length?<TaskTable tasks={rows} closed={closed} agents={agents} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>:null}
