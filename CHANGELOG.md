@@ -6,6 +6,8 @@
 
 ## Unreleased
 
+- Adapt Demo management to the application header, line tabs, sections and buttons through the plugin's public component contract, retaining permission and draft protection.
+
 - Replace Settings › Demo management with the Demo Mode plugin's administration page, and switch demo accounts from the account menu; visitors who have not signed in keep the corner button.
 - Add a demo administrator account (`zhaoqi` / `alexreed`) with a demo-owned copy of the administrator role, so visitors can try settings and the demo's own management.
 

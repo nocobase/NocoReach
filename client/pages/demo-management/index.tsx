@@ -5,6 +5,7 @@ import {
 } from '@nocobase/app-plugin-demo-mode/client/settings';
 import type { ReactElement } from 'react';
 import { $t, useNocoReachLocale } from '#i18n';
+import { demoSettingsComponents } from './presentation.js';
 import { PageContainer } from '#components/reach/page';
 
 /** NocoReach's names for what it registers with Demo Mode; anything else shows the title it registered with. */
@@ -62,7 +63,11 @@ export default function DemoManagementPage(): ReactElement {
   useNocoReachLocale();
   return (
     <PageContainer>
-      <DemoModeSettings label={label} chatTools={CHAT_TOOLS} />
+      <DemoModeSettings
+        label={label}
+        chatTools={CHAT_TOOLS}
+        components={demoSettingsComponents}
+      />
     </PageContainer>
   );
 }
