@@ -19,6 +19,16 @@ const currentSystemText = new Map<string, MessageKey>(
     // These server-owned strings changed while their historical aliases stayed fixed.
     'playbooks.communityReplyInstruction',
     'publicSources.issuesIncludeNonPrItems',
+    // Playbook step names and kinds in formal wording (2026-10-22); the old wording stays as their aliases.
+    'playbook.writePlan',
+    'playbook.reviewPlan',
+    'playbook.reviewPublish',
+    'playbook.review',
+    'playbook.approveRequestChangesAfterReviewing',
+    'playbook.confirmSystemRuns',
+    'playbook.notChangeRepository',
+    'playbook.writesDocumentWithoutChangingRepository',
+    'playbook.changesRepositoryOpensPr',
   ].map((key) => [chinese[key as MessageKey], key as MessageKey]),
 );
 
