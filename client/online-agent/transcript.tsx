@@ -1,7 +1,7 @@
 /* eslint-disable @eslint-react/no-array-index-key -- durable events are append-only within one keyed run */
 import { WrenchIcon } from 'lucide-react';
 import { cn } from 'cn';
-import { $t, isChinese } from '#i18n';
+import { $t, getCurrentLocale } from '#i18n';
 import { ChatMarkdown } from '../extensions/nocobase-agent-chat/chat-markdown.js';
 import {
   onlineRunActive,
@@ -121,10 +121,7 @@ export function OnlineTranscript({ run }: { run: OnlineRun }) {
                 0: run.usage.inputTokens,
                 1: run.usage.outputTokens,
               })}{' '}
-              ·{' '}
-              {new Date(run.createdAt).toLocaleString(
-                isChinese() ? 'zh-CN' : 'en-US',
-              )}
+              · {new Date(run.createdAt).toLocaleString(getCurrentLocale())}
             </p>
           </details>
         )}

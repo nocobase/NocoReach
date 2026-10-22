@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Ten interface languages
+
+- Support ten interface languages: English, Simplified Chinese, Traditional Chinese, Japanese, Spanish, Brazilian Portuguese, French, German, Vietnamese, and Indonesian.
+
 ## Unreleased — Search & market pages, fixed and in plain words
 
 - Search performance › Sitemaps names each sitemap with its host: a domain property lists every subdomain's sitemap, all called /sitemap.xml, and the rows could not be told apart.
@@ -9,12 +13,12 @@
 - Competitors › Activity says a read error shared by several competitors once, above the cards, with a way to Settings › Network when it is about reaching a site, and decodes character references such as `&#x27;` in page titles and descriptions (pages read before are decoded on display). Overview hides the AI share column until a brand check has measured one and cuts long recent activity with an ellipsis.
 - Trends keeps the comparison notes in the ⓘ beside Compare and gives related searches a heading with its instruction in an ⓘ. AI search writes "24 (100%)" and keeps billing and platform notes in ⓘ.
 - Keywords, Trends, Competitors and AI search describe themselves in one sentence without colloquial or billing asides.
+
 ## Unreleased — Ask AI reads the daily analysis
 
 - The online assistant can read the daily analysis behind Insights through a new read-only `daily_analysis` tool: a day's notes and limitations, the opportunities it raised with where each stands now (awaiting decision, handed off to agent with its task, dismissed, expired), its verdict on every change (do, watch, skip) with the reason, the opportunities awaiting a decision now, and the watches still open or ended. It reads the latest analysis or any earlier day, checks on every call that the conversation owner may still see Insights, and links opportunities to Opportunities. Asked about "the daily analysis of 10/21", it used to search the tasks and find nothing.
 - The metrics it reads (`project_data`, metrics) now include totals: each key metric of the last 28 days with the 28 days before and the change, as the Insights tiles show them, with the daily series. The snapshot of keywords, pages and audit issues had no previous period to compare with.
 - Opportunity links in chat answers open inside the application, like task links.
-
 
 ## Unreleased — Tasks by Agent
 

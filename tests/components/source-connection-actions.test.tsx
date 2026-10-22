@@ -487,3 +487,39 @@ test('competitor add permission uses the manual form without invoking AI suggest
     state.action.mock.calls.some(([, operation]) => operation === 'suggest'),
   ).toBe(false);
 });
+
+test.each([
+  ['out-of-range hexadecimal', '&#x110000;'],
+  ['out-of-range decimal', '&#99999999;'],
+  ['unsafe integer', '&#9007199254740993;'],
+  ['non-finite value', `&#${'9'.repeat(400)};`],
+])(
+  'competitor events render %s references without crashing',
+  async (_, reference) => {
+    const encoded = `${reference} &apos; &#39; &#x27; &#x1F600; &#128512; &amp;#39;`;
+    const decoded = `${reference} ' ' ' 😀 😀 &#39;`;
+    state.responses.set('nrCompetitors', {
+      ...competitors,
+      events: [
+        {
+          id: 'release-entities',
+          competitorId: competitor.id,
+          competitor: competitor.name,
+          type: 'release',
+          title: `Release ${encoded}`,
+          detail: `Detail ${encoded}`,
+          url: 'https://github.com/retool/retool/releases/tag/v1',
+          at: run.at,
+        },
+      ],
+    });
+    render(<CompetitorWatchTab projectId={7} />);
+    expect(
+      await screen.findByRole('link', { name: `Release ${decoded}` }),
+    ).toHaveAttribute(
+      'href',
+      'https://github.com/retool/retool/releases/tag/v1',
+    );
+    expect(screen.getByText(`Detail ${decoded}`)).toBeVisible();
+  },
+);

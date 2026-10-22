@@ -95,7 +95,9 @@ test('selects a scheduling timezone, recalculates the next run, and retains it o
   await page.emulateMedia({ colorScheme: 'light' });
   await page.getByRole('button', { name: 'Open account menu' }).click();
   await page.getByRole('menuitem', { name: /Language/ }).hover();
-  await page.getByRole('menuitemradio', { name: /中文|Chinese/ }).click();
+  await page
+    .getByRole('menuitemradio', { name: '简体中文', exact: true })
+    .click();
   await card.getByRole('button', { name: '修改时间', exact: true }).click();
   const chinese = page.getByRole('dialog', { name: '修改“每日分析”的时间' });
   await expect(chinese.getByRole('combobox', { name: '时区' })).toHaveText(
