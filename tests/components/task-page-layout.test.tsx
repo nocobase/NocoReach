@@ -238,6 +238,82 @@ test('an older ?run= link opens Technical details on its runs', async () => {
   );
 });
 
+// T-34 on Studio (2026-10-22): an article whose publish to the CMS stopped; the card stays in plain words.
+function failedPublish(): TaskData {
+  const data = pageChange();
+  const [artifact] = data.work.results as NonNullable<
+    TaskData['work']['results'][number]
+  >[];
+  data.work.stageIndex = 2;
+  data.work.results = [
+    {
+      ...artifact,
+      pr: undefined,
+      approvedAt: '2026-10-22T07:41:00Z',
+      article: {
+        targetId: 'cms',
+        articleId: '7',
+        baseKey: null,
+        baseVersion: 'v1',
+        draft: { locales: { en: { title: 'Workflow automation tools' } } },
+        changes: ['en.title'],
+      },
+    },
+  ] as TaskData['work']['results'];
+  data.work.release = {
+    state: 'publish_failed',
+    note: '',
+    pages: [],
+    article: {
+      artifactId: 'artifact-1',
+      targetId: 'cms',
+      articleId: '7',
+      slug: 'workflow-automation-tools',
+      error: 'unavailable',
+      errorStep: 'downstream',
+      errorDetail: 'github:429',
+      errorAt: '2026-10-22T07:42:00Z',
+    },
+  };
+  data.articleTargets = [
+    {
+      id: 'cms',
+      name: 'NocoBase CMS',
+      kind: 'nocobase-api',
+      locales: ['en'],
+      capabilities: { concurrency: 'check-before-write' },
+    },
+  ] as TaskData['articleTargets'];
+  return data;
+}
+
+test('a failed publish keeps its plain reason on the card and its step and detail in Technical details', async () => {
+  const user = userEvent.setup();
+  mount(failedPublish());
+  const card = screen.getByRole('region', { name: '等你处理' });
+  expect(
+    within(card).getByRole('heading', { name: '发布没有完成' }),
+  ).toBeVisible();
+  expect(
+    within(card).getByText('暂时无法连接目标系统，请稍后再试。'),
+  ).toBeVisible();
+  expect(document.body).not.toHaveTextContent('github:429');
+  expect(document.body).not.toHaveTextContent('检查网站仓库');
+  await user.click(within(card).getByRole('button', { name: '技术细节' }));
+  const dialog = await screen.findByRole('dialog', { name: '技术细节' });
+  expect(within(dialog).getByRole('tab', { name: '代码改动' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  const section = within(dialog)
+    .getByRole('heading', { name: '发布到 NocoBase CMS 没有完成' })
+    .closest('section')!;
+  expect(section).toHaveTextContent('停在检查网站仓库');
+  expect(section).toHaveTextContent('错误代码unavailable');
+  expect(section).toHaveTextContent('github:429');
+  expect(dialog).not.toHaveTextContent('这个任务没有代码改动。');
+});
+
 // T-32 on Studio (2026-10-21): an opportunity about one blog post; the article is found from its page, not picked.
 function blogPageTask(): TaskData {
   const page = 'https://www.nocobase.com/en/blog/workflow-automation-tools';
