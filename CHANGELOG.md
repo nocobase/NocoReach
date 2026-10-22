@@ -7,6 +7,11 @@
 - The tabs follow setup order: Model services, Runtimes, Local agents, Usage. Each opens with one sentence and its button instead of a second page heading, at the same size in every tab. Local agents holds the agent list only; the project default moved to Tasks › Settings.
 - Shorter wording: the Model services and Runtimes descriptions are one sentence, the list's how-to is one sentence, and model counts read "2 chat models" instead of "2 chat".
 
+## Unreleased — See what a live task changed
+
+- Once a task is live, its card names what changed in one line ("Changes (2): English · Summary, English · Title") with View changes, which opens the change that went live: an article field by field, before and after, or a page change as readers see it before and after. Nothing else is added to the card.
+- In the activity, View on a delivered article version now shows the same field-by-field comparison under the Agent's notes, instead of the notes alone.
+
 ## Unreleased — One look for every refresh and update button
 
 - Every refresh or update control is the same icon-only ↻ button with its explanation on hover, last in the page header or at the right of the toolbar it updates. The "↻ Update now" buttons with text on Trends, X, Reddit, Discord, Slack, Xiaohongshu, Bilibili, YouTube, Site audit, Rank tracking, GitHub hot topics and Competitors › Activity, Keywords › AI suggestions' Suggest again and Settings › Network's Check connectivity now look like Insights' and Results' buttons. The tooltip and accessible name say what happens and change while it runs ("Searching…").
@@ -14,6 +19,11 @@
 ## Unreleased — Handed-off opportunities show where their task stands
 
 - On Insights, an opportunity handed off to the agent shows its task's state now, with the task number: Handed off to agent while it waits to start, In progress, Needs confirmation, Completed or Closed. A finished task used to keep reading "Handed off to agent".
+
+## Unreleased — Tasks list: a notice only when no runtime is online; Executor no longer overlaps Updated
+
+- The line of counts above the tasks (running, queued, failed runs, runtimes online) is gone: each row's status already says running and queued, and a failed run shows in red on its row. When no runtime is online, one notice above the tasks says work handed to an agent will wait, with View runtimes; it uses the page's normal spacing (the old line's zero margin sat it on the table). The same applies to List, Board and By agent.
+- In the list, the Executor column truncates a long Agent name with an ellipsis (the full name on hover) instead of running into Updated, which no longer wraps.
 
 ## Unreleased — Today's decisions are today's; the conversation opens folded
 
