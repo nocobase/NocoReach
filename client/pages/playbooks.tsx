@@ -15,6 +15,7 @@ import {useProject} from './reach-data';
 import {skillRequest,type Skill,type SkillList} from './skill-model';
 import {playbookRequest,localizePlaybookList,getCategories,categoryName,getStepKinds,type Category,type Playbook,type PlaybookList,type Step,type StepKind} from './playbook-model';
 import {confirmAction} from '#components/reach/confirm';
+import {InfoTip,WithInfo} from '#components/reach/info-tip';
 import {PlaybookSteps,StepIcon} from './playbook-steps';
 type Draft=Pick<Playbook,'name'|'category'|'description'|'steps'|'next'>&{id?:string};
 type Saved=PlaybookList&{playbook?:Playbook|null};
@@ -84,7 +85,7 @@ function Editor({draft,list,skills,busy,onChange,onSave,onCancel}:{draft:Draft;l
   <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem]"><label className="nr-field">{$t('common.name')}<input value={draft.name} maxLength={40} onChange={e=>set({name:e.target.value})}/></label>
    <label className="nr-field">{$t('common.category')}<Select value={draft.category} onValueChange={v=>set({category:v as Category})}><SelectTrigger className="w-full" aria-label={$t('common.category')}><SelectValue>{(v:string)=>categoryName(v as Category)}</SelectValue></SelectTrigger><SelectContent className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{getCategories().map(([k,v])=><SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select></label></div>
   <label className="nr-field">{$t('playbooks.oneLineDescription')}<input value={draft.description} maxLength={200} onChange={e=>set({description:e.target.value})}/></label>
-  <div className="flex flex-col gap-2"><h3 className="text-xs font-medium text-muted-foreground">{$t('common.steps')}</h3>
+  <div className="flex flex-col gap-2"><h3 className="text-xs font-medium text-muted-foreground"><WithInfo help={changes?$t('playbooks.agentChangeSystemAppendsGo'):$t('playbooks.ifLastStepNotReview')}>{$t('common.steps')}</WithInfo></h3>
    <ol className="flex flex-col gap-2" aria-label={$t('playbooks.editSteps')}>{draft.steps.map((s,i)=><li key={i} className="flex gap-2 rounded-lg border p-3">
     <span className={cn('mt-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md',s.kind==='review'?'bg-nr-tint-violet text-nr-ink-violet':'bg-nr-tint-blue text-nr-ink-blue')}><StepIcon kind={s.kind}/></span>
     <div className="flex min-w-0 flex-1 flex-col gap-2">
@@ -95,7 +96,6 @@ function Editor({draft,list,skills,busy,onChange,onSave,onCancel}:{draft:Draft;l
     <div className="flex flex-col gap-1"><Button size="icon-sm" variant="ghost" aria-label={$t('common.moveUp')} disabled={i===0} onClick={()=>move(i,-1)}><ArrowUpIcon/></Button><Button size="icon-sm" variant="ghost" aria-label={$t('common.moveDown')} disabled={i===draft.steps.length-1} onClick={()=>move(i,1)}><ArrowDownIcon/></Button><Button size="icon-sm" variant="ghost" aria-label={$t('playbooks.deleteStep')} onClick={()=>set({steps:draft.steps.filter((_,j)=>j!==i)})}><XIcon/></Button></div>
    </li>)}</ol>
    <div className="flex flex-wrap items-center gap-2 text-sm"><span className="text-xs text-muted-foreground">{$t('playbooks.addStep')}</span>{(['analyze','change','review'] as StepKind[]).map(k=><Button key={k} size="sm" variant="outline" disabled={draft.steps.length>=10} onClick={()=>set({steps:[...draft.steps,{key:'',name:getStepKinds()[k].name,kind:k,...(k==='review'?{checklist:[]}:{instruction:''})}]})}><PlusIcon/>{getStepKinds()[k].label}</Button>)}</div>
-   <p className="nr-footnote">{changes?$t('playbooks.agentChangeSystemAppendsGo'):$t('playbooks.ifLastStepNotReview')}</p>
   </div>
   {!changes&&buildable.length>0&&<fieldset className="flex flex-col gap-1.5 text-sm"><legend className="mb-1 text-xs font-medium text-muted-foreground">{$t('playbooks.continuePickOneWhenApproving')}</legend><div className="flex flex-wrap gap-x-4 gap-y-1">{buildable.map(p=><label key={p.id} className="flex items-center gap-1.5"><input type="checkbox" checked={draft.next.includes(p.id)} disabled={!draft.next.includes(p.id)&&draft.next.length>=3} onChange={e=>set({next:e.target.checked?[...draft.next,p.id]:draft.next.filter(x=>x!==p.id)})}/>{p.name}</label>)}</div></fieldset>}
  </section>;
@@ -110,8 +110,7 @@ function NewPlaybook({open,projectId,onClose,onDraft}:{open:boolean;projectId:nu
  const blank:Draft={name:'',category:'research',description:'',steps:[{key:'',name:$t('common.analyze'),kind:'analyze',instruction:''},{key:'',name:$t('common.review'),kind:'review',checklist:[]}],next:[]};
  return <Dialog open={open} onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className="sm:max-w-lg">
   <DialogHeader><DialogTitle>{$t('playbooks.newPlaybook')}</DialogTitle><DialogDescription>{$t('playbooks.describeOneSentenceWhatPlaybookMessage')}</DialogDescription></DialogHeader>
-  {canDraft&&<><label className="nr-field">{$t('playbooks.whatPlaybook')}<textarea rows={3} value={request} maxLength={500} disabled={busy} onChange={e=>setRequest(e.target.value)} placeholder={$t('playbooks.afterReleaseSyncChangesChinese')}/></label>
-  <p className="nr-footnote">{$t('playbooks.draftingCallsOnlineAiOnce')}</p></>}
+  {canDraft&&<><label className="nr-field"><span className='inline-flex items-center gap-1'>{$t('playbooks.whatPlaybook')}<InfoTip>{$t('playbooks.draftingCallsOnlineAiOnce')}</InfoTip></span><textarea rows={3} value={request} maxLength={500} disabled={busy} onChange={e=>setRequest(e.target.value)} placeholder={$t('playbooks.afterReleaseSyncChangesChinese')}/></label></>}
   {error&&<p role="alert" className="nr-error">{error}</p>}
   <DialogFooter className="sm:justify-between"><Button variant="ghost" disabled={busy} onClick={()=>onDraft(blank)}>{$t('playbooks.createWithoutAi')}</Button>{canDraft&&<Button disabled={busy} onClick={()=>void ask()}><SparklesIcon/>{busy?$t('playbooks.drafting'):$t('playbooks.draftAi')}</Button>}</DialogFooter>
  </DialogContent></Dialog>;

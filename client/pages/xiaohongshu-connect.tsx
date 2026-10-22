@@ -11,6 +11,7 @@ import { xiaohongshuRequest } from './xiaohongshu-api';
 import { ListSkeleton } from '#components/reach/states';
 import { Button } from '#components/ui/button';
 import { confirmAction } from '#components/reach/confirm';
+import { InfoTip } from '#components/reach/info-tip';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { CollectorClear } from '#components/collector-clear';
 
@@ -311,6 +312,11 @@ export function XiaohongshuConnect({
     }
     return true;
   };
+  const scopeTip = (
+    <InfoTip className='ml-1'>
+      {$t('xiaohongshu.currentlySupportsSearchResultCollection')}
+    </InfoTip>
+  );
   return (
     <div className='grid gap-4' data-xiaohongshu-connect>
       {errorState}
@@ -393,9 +399,14 @@ export function XiaohongshuConnect({
           {canConnect && (
             <>
               <label className='nr-field'>
-                {$t('xiaohongshu.xiaohongshuSearchPhrase')}{' '}
-                <span aria-hidden='true' className='text-destructive'>
-                  *
+                <span className='inline-flex items-center gap-1'>
+                  {$t('xiaohongshu.xiaohongshuSearchPhrase')}
+                  <span aria-hidden='true' className='text-destructive'>
+                    *
+                  </span>
+                  <InfoTip>
+                    {$t('xiaohongshu.enterOnePhraseManualSearch')}
+                  </InfoTip>
                 </span>
                 <input
                   ref={queryInputRef}
@@ -414,9 +425,6 @@ export function XiaohongshuConnect({
                   {$t('xiaohongshu.errors.invalidQuery')}
                 </p>
               )}
-              <p className='nr-footnote'>
-                {$t('xiaohongshu.enterOnePhraseManualSearch')}
-              </p>
             </>
           )}
           <div className='nr-step-actions flex-wrap'>
@@ -650,6 +658,7 @@ export function XiaohongshuConnect({
         <section className='grid gap-2'>
           <p className='nr-footnote'>
             {$t('collectorPage.savedSummary', { 0: data.total })}
+            {scopeTip}
           </p>
           <div className='nr-step-actions'>
             <Button
@@ -680,11 +689,9 @@ export function XiaohongshuConnect({
               ? 'xiaohongshu.saveConnectionChooseSearchNow'
               : 'xiaohongshu.noConfirmedNotesYetAsk',
           )}
+          {scopeTip}
         </p>
       )}
-      <p className='nr-footnote'>
-        {$t('xiaohongshu.currentlySupportsSearchResultCollection')}
-      </p>
     </div>
   );
 }

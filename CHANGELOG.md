@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Page notes in ⓘ
+
+- Move the remaining grey explanatory notes on Playbooks and the data source connection panels (GitHub, Google, DataForSEO, X, Reddit, Hacker News, Google Trends, Discord/Slack, community forum, website content, downloads, Xiaohongshu) into ⓘ tips beside the field, heading or line they explain; status lines, counts, setup steps and errors stay visible.
+
 ## Unreleased — Opportunities shows where each handed-off task stands
 
 - On Opportunities › Handled, the Where it went column shows the state of a handed-off opportunity's task with its number, as Insights does: Handed off to agent while it waits to start, In progress, Needs confirmation, Done or Closed. O-43 read "Handed off to agent · T-34" after T-34 was done. A change handed off on its own shows the same, now with its task number, and its detail's tag says the same instead of In progress for every open task. The filter offers the same labels, and an opportunity's detail says the state beside Open task.
