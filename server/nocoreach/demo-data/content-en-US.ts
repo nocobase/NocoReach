@@ -67,7 +67,7 @@ export const EN_US: DemoContent = {
     consultant: {
       username: 'chloe',
       name: 'Chloe Park',
-      title: 'Implementation consultant (read only)',
+      title: 'Implementation consultant',
     },
     admin: { username: 'admin', name: 'Alex Reed', title: 'Administrator' },
   },

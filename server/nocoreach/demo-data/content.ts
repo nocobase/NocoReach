@@ -136,7 +136,7 @@ const ZH_CN: DemoContent = {
     consultant: {
       username: 'chencheng',
       name: '陈澄',
-      title: '实施顾问（只读）',
+      title: '实施顾问',
     },
     admin: { username: 'admin', name: '赵琦', title: '系统管理员' },
   },
