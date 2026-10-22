@@ -5060,7 +5060,7 @@
   "taskNumbers.expected": "Day {0} result expected around {1}",
   "taskNumbers.total": "All {0} pages",
   "taskNumbers.openResults": "Full comparison in Results",
-  "taskNumbers.morePages": "{0} more pages",
+  "taskNumbers.morePages": "Show {0} more",
   "taskNumbers.wentLive": "Live since {0} · day 7 result expected around {1}",
   "taskNumbers.comparedLater": "After going live, days 7 and 28 are compared with these numbers.",
   "taskNumbers.failed": "The numbers could not be read. Refresh later.",

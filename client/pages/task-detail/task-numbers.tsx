@@ -109,18 +109,29 @@ export function TaskNumbers({
 }) {
   const w = data.work,
     results = w.observation?.results || [];
+  const [picked, setPicked] = useState<number>();
+  const result =
+    results.find((x) => x.day === picked) || results.at(-1) || undefined;
   return (
     <section
       aria-label={$t('taskNumbers.title')}
       className={cn('flex flex-col gap-2', className)}
     >
-      <h2 className='m-0 text-sm font-medium'>{$t('taskNumbers.title')}</h2>
-      {results.length ? (
-        <Compared
-          results={results}
-          observeFrom={w.observeFrom}
-          taskId={taskId}
-        />
+      <div className='flex items-center gap-2'>
+        <h2 className='m-0 flex-1 text-sm font-medium'>
+          {$t('taskNumbers.title')}
+        </h2>
+        {result && (
+          <DaySwitch
+            results={results}
+            day={result.day}
+            observeFrom={w.observeFrom}
+            onPick={setPicked}
+          />
+        )}
+      </div>
+      {result ? (
+        <Compared result={result} observeFrom={w.observeFrom} taskId={taskId} />
       ) : (
         <Current
           projectId={projectId}
@@ -138,18 +149,61 @@ export function TaskNumbers({
   );
 }
 
+// Day 7 or day 28, on the heading line; a day without its result yet says when it is expected.
+function DaySwitch({
+  results,
+  day,
+  observeFrom,
+  onPick,
+}: {
+  results: EffectResult[];
+  day: number;
+  observeFrom?: string;
+  onPick: (day: number) => void;
+}) {
+  return (
+    <div
+      className='inline-flex shrink-0 overflow-hidden rounded-md border text-xs'
+      role='group'
+      aria-label={$t('results.checkpoint')}
+    >
+      {DAYS.map((d) => {
+        const has = results.some((x) => x.day === d);
+        return (
+          <button
+            key={d}
+            type='button'
+            aria-pressed={day === d}
+            disabled={!has}
+            title={
+              !has && observeFrom
+                ? $t('taskNumbers.expected', {
+                    0: d,
+                    1: expected(observeFrom, d),
+                  })
+                : undefined
+            }
+            className='px-2 py-0.5 text-muted-foreground disabled:opacity-50 aria-pressed:bg-muted aria-pressed:font-medium aria-pressed:text-foreground'
+            onClick={() => onPick(d)}
+          >
+            {$t('results.day', { 0: d })}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // From day 7: each page before and after, for the day picked, then all pages together.
 function Compared({
-  results,
+  result: r,
   observeFrom,
   taskId,
 }: {
-  results: EffectResult[];
+  result: EffectResult;
   observeFrom?: string;
   taskId: string;
 }) {
-  const [picked, setPicked] = useState<number>(results.at(-1)!.day);
-  const r = results.find((x) => x.day === picked) || results.at(-1)!;
   const views = r.primary === 'views';
   const pair = (x: { clicks?: [number, number]; views?: [number, number] }) =>
     (views ? x.views : x.clicks) || [0, 0];
@@ -166,43 +220,12 @@ function Compared({
       }));
   return (
     <>
-      <div className='flex items-center gap-2'>
-        <p className='m-0 min-w-0 flex-1 text-xs text-muted-foreground'>
-          {$t('taskNumbers.window', {
-            0: $t(views ? 'common.viewCount' : 'common.searchClicks'),
-            1: r.day,
-          })}
-        </p>
-        <div
-          className='inline-flex shrink-0 overflow-hidden rounded-md border text-xs'
-          role='group'
-          aria-label={$t('results.checkpoint')}
-        >
-          {DAYS.map((d) => {
-            const has = results.some((x) => x.day === d);
-            return (
-              <button
-                key={d}
-                type='button'
-                aria-pressed={r.day === d}
-                disabled={!has}
-                title={
-                  !has && observeFrom
-                    ? $t('taskNumbers.expected', {
-                        0: d,
-                        1: expected(observeFrom, d),
-                      })
-                    : undefined
-                }
-                className='px-2 py-0.5 text-muted-foreground disabled:opacity-50 aria-pressed:bg-muted aria-pressed:font-medium aria-pressed:text-foreground'
-                onClick={() => setPicked(d)}
-              >
-                {$t('results.day', { 0: d })}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <p className='m-0 text-xs text-muted-foreground'>
+        {$t('taskNumbers.window', {
+          0: $t(views ? 'common.viewCount' : 'common.searchClicks'),
+          1: r.day,
+        })}
+      </p>
       {r.primary ? null : (
         <p className='m-0 text-sm text-muted-foreground'>
           {effectLine(r, observeFrom)}

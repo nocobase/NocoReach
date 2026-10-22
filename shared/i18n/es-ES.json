@@ -5029,7 +5029,7 @@
   "taskNumbers.expected": "Resultado del día {0} hacia el {1}",
   "taskNumbers.total": "Las {0} páginas",
   "taskNumbers.openResults": "Comparación completa en Resultados",
-  "taskNumbers.morePages": "{0} páginas más",
+  "taskNumbers.morePages": "Mostrar {0} más",
   "taskNumbers.wentLive": "Publicado el {0} · resultado del día 7 hacia el {1}",
   "taskNumbers.comparedLater": "Tras publicar, los días 7 y 28 se comparan con estas cifras.",
   "taskNumbers.failed": "No se pudieron leer las cifras. Actualiza más tarde.",

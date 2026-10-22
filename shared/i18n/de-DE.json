@@ -5029,7 +5029,7 @@
   "taskNumbers.expected": "Ergebnis für Tag {0} etwa am {1}",
   "taskNumbers.total": "Alle {0} Seiten",
   "taskNumbers.openResults": "Vollständiger Vergleich unter Ergebnisse",
-  "taskNumbers.morePages": "{0} weitere Seiten",
+  "taskNumbers.morePages": "{0} weitere anzeigen",
   "taskNumbers.wentLive": "Online seit {0} · Ergebnis für Tag 7 etwa am {1}",
   "taskNumbers.comparedLater": "Nach der Onlinestellung werden Tag 7 und 28 mit diesen Zahlen verglichen.",
   "taskNumbers.failed": "Die Zahlen konnten nicht gelesen werden. Laden Sie die Seite später neu.",
