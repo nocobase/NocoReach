@@ -7067,9 +7067,5 @@
   "agentRoles.optionModel": "このモデルは使えません",
   "agentRoles.optionSetup": "実行環境に問題があります",
   "agentRoles.chooseModel": "モデルを選んでください。",
-  "onlineAgent.sameAsAnalysis": "日次分析と同じ（{0}）",
-  "modelsInUse.title": "チャットモデル",
-  "modelsInUse.usedBy": "{0}で使用中",
-  "modelsInUse.unused": "未使用",
-  "modelsInUse.separator": "、"
+  "onlineAgent.sameAsAnalysis": "日次分析と同じ（{0}）"
 }

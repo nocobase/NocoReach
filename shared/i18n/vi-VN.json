@@ -7067,9 +7067,5 @@
   "agentRoles.optionModel": "Không dùng được mô hình này",
   "agentRoles.optionSetup": "Môi trường thực thi gặp sự cố",
   "agentRoles.chooseModel": "Hãy chọn một mô hình.",
-  "onlineAgent.sameAsAnalysis": "Giống phân tích hằng ngày ({0})",
-  "modelsInUse.title": "Mô hình trò chuyện",
-  "modelsInUse.usedBy": "Đang dùng cho: {0}",
-  "modelsInUse.unused": "Chưa dùng",
-  "modelsInUse.separator": ", "
+  "onlineAgent.sameAsAnalysis": "Giống phân tích hằng ngày ({0})"
 }

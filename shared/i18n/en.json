@@ -7067,9 +7067,5 @@
   "agentRoles.optionModel": "Cannot use this model",
   "agentRoles.optionSetup": "Runtime problem",
   "agentRoles.chooseModel": "Choose a model.",
-  "onlineAgent.sameAsAnalysis": "Same as daily analysis ({0})",
-  "modelsInUse.title": "Chat models",
-  "modelsInUse.usedBy": "Used by {0}",
-  "modelsInUse.unused": "Not in use",
-  "modelsInUse.separator": ", "
+  "onlineAgent.sameAsAnalysis": "Same as daily analysis ({0})"
 }

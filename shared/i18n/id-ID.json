@@ -7067,9 +7067,5 @@
   "agentRoles.optionModel": "Tidak bisa memakai model ini",
   "agentRoles.optionSetup": "Masalah lingkungan eksekusi",
   "agentRoles.chooseModel": "Pilih model.",
-  "onlineAgent.sameAsAnalysis": "Sama dengan analisis harian ({0})",
-  "modelsInUse.title": "Model percakapan",
-  "modelsInUse.usedBy": "Dipakai oleh: {0}",
-  "modelsInUse.unused": "Tidak dipakai",
-  "modelsInUse.separator": ", "
+  "onlineAgent.sameAsAnalysis": "Sama dengan analisis harian ({0})"
 }

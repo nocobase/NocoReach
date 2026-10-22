@@ -7067,9 +7067,5 @@
   "agentRoles.optionModel": "用不了这个模型",
   "agentRoles.optionSetup": "运行环境有问题",
   "agentRoles.chooseModel": "请选择一个模型。",
-  "onlineAgent.sameAsAnalysis": "和每日分析相同（{0}）",
-  "modelsInUse.title": "对话模型",
-  "modelsInUse.usedBy": "{0}在用",
-  "modelsInUse.unused": "没有在用",
-  "modelsInUse.separator": "、"
+  "onlineAgent.sameAsAnalysis": "和每日分析相同（{0}）"
 }

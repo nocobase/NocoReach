@@ -7067,9 +7067,5 @@
   "agentRoles.optionModel": "Modell nicht nutzbar",
   "agentRoles.optionSetup": "Problem mit der Laufzeitumgebung",
   "agentRoles.chooseModel": "Wählen Sie ein Modell.",
-  "onlineAgent.sameAsAnalysis": "Wie die tägliche Analyse ({0})",
-  "modelsInUse.title": "Chat-Modelle",
-  "modelsInUse.usedBy": "Genutzt von: {0}",
-  "modelsInUse.unused": "Nicht in Gebrauch",
-  "modelsInUse.separator": ", "
+  "onlineAgent.sameAsAnalysis": "Wie die tägliche Analyse ({0})"
 }

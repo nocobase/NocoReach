@@ -4,7 +4,6 @@
 
 - Who does the work no longer shows a row of column headings (screen readers still read them); each row already says what it holds.
 - What went wrong, or how the last task ended, is a small line under the agent in its own row ("Last task 10-22 21:54 did not finish") instead of a line of body text below the row.
-- Model services lists, under its table, each chat model with its service and who uses it ("deepseek-v4.1-flash · OpenAI-compatible · Used by Daily analysis, Chat panel"), since the table counts models without naming them.
 - Local agents puts its description on the same line as Show disabled, so the list starts as close to the tab bar as in the other tabs.
 
 ## Unreleased — Insights looks sharper, with the same content

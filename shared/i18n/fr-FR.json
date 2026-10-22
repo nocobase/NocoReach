@@ -7067,9 +7067,5 @@
   "agentRoles.optionModel": "Modèle indisponible",
   "agentRoles.optionSetup": "Problème d’environnement d’exécution",
   "agentRoles.chooseModel": "Choisissez un modèle.",
-  "onlineAgent.sameAsAnalysis": "Comme l’analyse quotidienne ({0})",
-  "modelsInUse.title": "Modèles de conversation",
-  "modelsInUse.usedBy": "Utilisé par : {0}",
-  "modelsInUse.unused": "Non utilisé",
-  "modelsInUse.separator": ", "
+  "onlineAgent.sameAsAnalysis": "Comme l’analyse quotidienne ({0})"
 }
