@@ -96,3 +96,20 @@ test.each([
     if (text) expect(screen.getByText(text)).toBeVisible();
   },
 );
+
+test('a question asked about an opportunity on Insights shows its quote, not the raw link', () => {
+  const { container } = render(
+    <OnlineTranscript
+      run={{
+        ...run,
+        input:
+          '[O-45 Release notes for v2.2.28](/main/opportunities?item=o45)\nI think they were published',
+      }}
+    />,
+  );
+  const message = container.querySelector('[data-chat-message="user"]')!;
+  expect(message.textContent).toContain('O-45 Release notes for v2.2.28');
+  expect(message.textContent).toContain('I think they were published');
+  expect(message.textContent).not.toContain('](');
+  expect(screen.queryByRole('link')).toBeNull();
+});
