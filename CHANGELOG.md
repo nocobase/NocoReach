@@ -5,6 +5,11 @@
 - `tests/logic/additional-locales.test.ts` compares each of the eight additional languages with English: `shared/i18n/<locale>.json` with `en.json`, and `client/locales/translations/<locale>.json` with the shell copy of `client/locales/en-US.ts`. It names every missing key, extra key and key whose `{0}` or `{{name}}` placeholders differ. The `build` check's client type check already failed on a missing key, but stopped at the first language and missed extra keys and changed placeholders.
 - docs/DEVELOPMENT.md says new or changed copy needs all ten languages in the same pull request, and that a pull request updated from `main` is merged only after CI passes on that update: eight pull requests merged after the ten-language change (#183) were short 81 translations once `main` was merged into them, and were merged seconds after that push, before CI had run.
 
+## Unreleased — Tasks: one set of status choices, the shared drop-downs
+
+- Tasks no longer has a status drop-down beside Waiting for me, Current, Done and Closed: the two overlapped, and the board's columns and the list's order already separate statuses. An old `?status=` link shows the scope without filtering.
+- The playbook, owner and Agent filters use the application's drop-down instead of the browser's, as every other page does. Picking a playbook after opening an old `?playbook=` link no longer falls back to all playbooks when that link's option leaves the list.
+
 ## Unreleased — One product wording, the version in the account menu
 
 - The sidebar footer shows only the slogan; the template's name ("Default Template") is gone and the version moves to the bottom of the account menu ("NocoReach v1.0.0-beta.68").

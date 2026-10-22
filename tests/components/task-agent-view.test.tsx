@@ -314,9 +314,9 @@ test('cards on the board and the list name the Agent, and the Agent filter narro
   expect(card(53)).toHaveTextContent('Claude Code · Opus');
   expect(card(39)).toHaveTextContent('未分配');
   expect(document.body).not.toHaveTextContent(/·\s*Agent\b/);
-  await user.selectOptions(
-    screen.getByRole('combobox', { name: '按本地 Agent 筛选' }),
-    'Claude · Fable 5.1',
+  await user.click(screen.getByRole('combobox', { name: '按本地 Agent 筛选' }));
+  await user.click(
+    await screen.findByRole('option', { name: 'Claude · Fable 5.1' }),
   );
   expect(screen.getByTestId('url')).toHaveTextContent('agent=fable');
   expect(screen.getByText('Task 10')).toBeVisible();
