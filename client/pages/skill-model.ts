@@ -9,6 +9,9 @@ export type SkillList={revision:number;skills:Skill[]};
 export type SkillAction='list'|'get'|'create'|'import'|'readLink'|'importLink'|'edit'|'addFiles'|'removeFile'|'remove'|'setEnabled';
 export function skillRequest<T>(action:SkillAction,projectId:number|string,body:object={}){return api.action<T>('nrSkills',action,{method:'POST',body:{projectId:String(projectId),...body},unwrap:'data'});}
 export const SKILL_NAME=/^[a-z0-9]+(-[a-z0-9]+)*$/;
+// The Skill a playbook step names: by id, else by name. A built-in is named by its id, which is also its name, so a Skill
+// imported under that name stands in for it, as when a task runs (server/nocoreach/skills.ts forAgent).
+export function skillFor(skills:Skill[],ref:string){return skills.find(s=>s.id===ref)||skills.find(s=>s.name===ref);}
 const MAX_FILE=200000;
 // Files picked in the browser (a folder or single files) read as text: hidden files, non-text and very large files are
 // skipped and counted. A folder's own name is dropped from each path, so SKILL.md sits at the top.

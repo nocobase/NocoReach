@@ -12,7 +12,7 @@ import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuTrigger} f
 import {Select,SelectContent,SelectItem,SelectTrigger,SelectValue} from '#components/ui/select';
 import {cn} from '#lib/utils';
 import {useProject} from './reach-data';
-import {skillRequest,type Skill,type SkillList} from './skill-model';
+import {skillRequest,skillFor,type Skill,type SkillList} from './skill-model';
 import {playbookRequest,localizePlaybookList,getCategories,categoryName,getStepKinds,type Category,type Playbook,type PlaybookList,type Step,type StepKind} from './playbook-model';
 import {confirmAction} from '#components/reach/confirm';
 import {PlaybookSteps,StepIcon} from './playbook-steps';
@@ -117,11 +117,12 @@ function NewPlaybook({open,projectId,onClose,onDraft}:{open:boolean;projectId:nu
  </DialogContent></Dialog>;
 }
 // Picking a step's Skills from the library: chips to remove, a list to add (at most 5).
-function PickSkills({index,ids,skills,onChange}:{index:number;ids:string[];skills:Skill[];onChange:(ids:string[])=>void}){
- const known=ids.filter(id=>skills.some(s=>s.id===id)),rest=skills.filter(s=>!ids.includes(s.id));
+export function PickSkills({index,ids,skills,onChange}:{index:number;ids:string[];skills:Skill[];onChange:(ids:string[])=>void}){
+ // Refs to Skills deleted since are dropped on the next change; a built-in named by its name stays.
+ const chosen=ids.flatMap(ref=>{const s=skillFor(skills,ref);return s?[{ref,s}]:[];}),kept=chosen.map(x=>x.ref),rest=skills.filter(s=>!chosen.some(x=>x.s.id===s.id));
  return <div className="flex flex-wrap items-center gap-1.5 text-xs" role="group" aria-label={$t('playbooks.skillsUsedStep',{0:index+1})}><span className="text-muted-foreground">{$t('playbooks.useSkills')}</span>
-  {known.map(id=>{const s=skills.find(x=>x.id===id)!;return <span key={id} className="inline-flex items-center gap-1 rounded-full bg-nr-tint-violet py-0.5 pr-1 pl-2 font-mono text-nr-ink-violet">{s.name}<button type="button" aria-label={$t('playbooks.notUse',{0:s.name})} className="rounded-full hover:bg-background/60" onClick={()=>onChange(ids.filter(x=>x!==id))}><XIcon className="size-3"/></button></span>;})}
-  {skills.length?known.length<5&&rest.length>0&&<Select value={null} onValueChange={v=>{if(v)onChange([...known,String(v)]);}}><SelectTrigger size="sm" className="min-w-28 text-xs" aria-label={$t('playbooks.addSkillsStep',{0:index+1})}><SelectValue placeholder={$t('playbooks.select')}/></SelectTrigger><SelectContent className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{rest.map(s=><SelectItem key={s.id} value={s.id} className="font-mono">{s.name}</SelectItem>)}</SelectContent></Select>
+  {chosen.map(({ref,s})=>{return <span key={ref} className="inline-flex items-center gap-1 rounded-full bg-nr-tint-violet py-0.5 pr-1 pl-2 font-mono text-nr-ink-violet">{s.name}<button type="button" aria-label={$t('playbooks.notUse',{0:s.name})} className="rounded-full hover:bg-background/60" onClick={()=>onChange(kept.filter(x=>x!==ref))}><XIcon className="size-3"/></button></span>;})}
+  {skills.length?chosen.length<5&&rest.length>0&&<Select value={null} onValueChange={v=>{if(v)onChange([...kept,String(v)]);}}><SelectTrigger size="sm" className="min-w-28 text-xs" aria-label={$t('playbooks.addSkillsStep',{0:index+1})}><SelectValue placeholder={$t('playbooks.select')}/></SelectTrigger><SelectContent className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{rest.map(s=><SelectItem key={s.id} value={s.id} className="font-mono">{s.name}</SelectItem>)}</SelectContent></Select>
    :<span className="text-muted-foreground">{$t('playbooks.noSkillsYetCreateThem')}</span>}
  </div>;
 }

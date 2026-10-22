@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Playbook Skills matched by name
+
+- Skills › Used in playbooks, the playbook steps and the step Skill picker now find a step's Skill by id, then by name, as a task does. A Skill imported under a built-in name (with its own id) shows where the built-in playbooks use it, and saving a step no longer drops those references.
+
 ## Unreleased — One look for every refresh and update button
 
 - Every refresh or update control is the same icon-only ↻ button with its explanation on hover, last in the page header or at the right of the toolbar it updates. The "↻ Update now" buttons with text on Trends, X, Reddit, Discord, Slack, Xiaohongshu, Bilibili, YouTube, Site audit, Rank tracking, GitHub hot topics and Competitors › Activity, Keywords › AI suggestions' Suggest again and Settings › Network's Check connectivity now look like Insights' and Results' buttons. The tooltip and accessible name say what happens and change while it runs ("Searching…").
