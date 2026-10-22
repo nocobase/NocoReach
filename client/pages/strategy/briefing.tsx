@@ -47,7 +47,8 @@ const Chevron = ({ open }: { open: boolean }) => (
 
 /**
  * The numbers as tiles (at most five, only those with a value), each with its trend and opening its data page. The
- * read has its own loading, failure and retry.
+ * read has its own loading, failure and retry. Cards on the page surface like the messages below, the number large
+ * with its change right after it (2026-10-22 visual polish).
  */
 export function MetricTiles({
   metrics,
@@ -77,28 +78,29 @@ export function MetricTiles({
             <Link
               key={i.label}
               to={i.to}
-              className='flex flex-col gap-0.5 rounded-lg bg-muted/50 px-3 py-2 transition-colors hover:bg-muted'
+              className='flex flex-col gap-1 rounded-lg border bg-card px-3 pt-2.5 pb-2 text-card-foreground transition-colors hover:border-ring/60'
             >
               <span className='text-xs text-muted-foreground'>{i.label}</span>
-              <span className='text-lg font-semibold tabular-nums'>
-                {number(i)}
-              </span>
-              <span className='flex items-center gap-2'>
+              <span className='flex flex-wrap items-baseline gap-x-2'>
+                <span className='text-xl leading-7 font-medium tabular-nums sm:text-[1.375rem]'>
+                  {number(i)}
+                </span>
                 {i.change == null ? (
                   <span className='text-xs text-muted-foreground'>
                     {$t('strategy.noComparisonYet')}
                   </span>
                 ) : (
-                  <Tag tone={i.change >= 0 ? 'green' : 'red'}>
+                  <span
+                    className={cn(
+                      'text-xs font-medium tabular-nums',
+                      i.change >= 0 ? 'text-nr-ink-green' : 'text-nr-ink-red',
+                    )}
+                  >
                     {arrow(i.change)}
-                  </Tag>
+                  </span>
                 )}
-                <span className='min-w-0 flex-1'>
-                  {i.series && (
-                    <Sparkline points={i.series} change={i.change} />
-                  )}
-                </span>
               </span>
+              {i.series && <Sparkline points={i.series} change={i.change} />}
             </Link>
           ))}
         </div>
@@ -203,7 +205,7 @@ function Summary({
       .slice(0, 2);
   return (
     <Bubble label={$t('strategy.todayBrief')}>
-      <p className='text-base font-semibold'>
+      <p className='text-lg leading-snug font-semibold'>
         {!batch
           ? $t('strategy.noAnalysisYetClickUpdate')
           : pending
@@ -261,7 +263,7 @@ const itemLink = (row: Row) =>
   `/opportunities?item=${encodeURIComponent(row.card.id)}`;
 const No = ({ row }: { row: Row }) =>
   row.card.no ? (
-    <span className='mr-1.5 font-mono text-xs text-muted-foreground tabular-nums'>
+    <span className='mr-1.5 font-mono text-xs font-normal text-muted-foreground tabular-nums'>
       {oppNo(row.card)}
     </span>
   ) : null;
@@ -304,21 +306,34 @@ function StandingTags({ lines }: { lines: Line[] }) {
     </>
   );
 }
-/** An opportunity already decided: its title and where it went. */
+/** The right-hand column of a line: its status or its actions, right-aligned so they read as one column. */
+const END_SLOT = 'flex shrink-0 items-center justify-end gap-1 sm:min-w-36';
+/**
+ * An opportunity already decided: its title and where it went. One dismissed or expired is dimmed as a whole, so the
+ * handed-off ones and their tasks stand out (2026-10-22 visual polish).
+ */
 function DecidedLine({ row, st, task }: Line) {
   return (
-    <li data-opportunity-id={row.card.id} className='py-1.5'>
+    <li
+      data-opportunity-id={row.card.id}
+      className={cn('py-1.5', st.state !== 'task' && 'opacity-60')}
+    >
       <div className='flex items-center gap-2'>
         <Link
           to={itemLink(row)}
           title={row.card.title}
-          className='min-w-0 flex-1 truncate text-muted-foreground hover:underline'
+          className={cn(
+            'min-w-0 flex-1 truncate hover:underline',
+            st.state === 'task' ? 'font-medium' : 'text-muted-foreground',
+          )}
         >
           <No row={row} />
           {row.card.title}
         </Link>
         <QuoteOpportunity row={row} />
-        <StatusTag row={row} st={st} task={task} />
+        <span className={END_SLOT}>
+          <StatusTag row={row} st={st} task={task} />
+        </span>
       </div>
     </li>
   );
@@ -371,28 +386,30 @@ function Decisions({
                 <Link
                   to={itemLink(r)}
                   title={r.card.title}
-                  className='min-w-0 flex-1 truncate hover:underline'
+                  className='min-w-0 flex-1 truncate font-medium hover:underline'
                 >
                   <No row={r} />
                   {r.card.title}
                 </Link>
                 <QuoteOpportunity row={r} />
-                <Button
-                  size='xs'
-                  variant='outline'
-                  disabled={busy}
-                  onClick={() => onGive(r)}
-                >
-                  {handOffLabel()}
-                </Button>
-                <Button
-                  size='xs'
-                  variant='ghost'
-                  disabled={busy}
-                  onClick={() => onIgnore(r)}
-                >
-                  {$t('common.ignore')}
-                </Button>
+                <span className={END_SLOT}>
+                  <Button
+                    size='xs'
+                    variant='outline'
+                    disabled={busy}
+                    onClick={() => onGive(r)}
+                  >
+                    {handOffLabel()}
+                  </Button>
+                  <Button
+                    size='xs'
+                    variant='ghost'
+                    disabled={busy}
+                    onClick={() => onIgnore(r)}
+                  >
+                    {$t('common.ignore')}
+                  </Button>
+                </span>
               </div>
             </li>
           );
@@ -529,7 +546,7 @@ function HealthNote({ projectId }: { projectId: number }) {
       {$tj('dataHealth.failedSyncOverDayOpportunities', {
         0: items.map((i) => healthText(i.name, i.nameText)).join('、'),
       })}
-      <Link className='nr-link ml-1.5 text-xs' to='/connections'>
+      <Link className='nr-link ml-1.5 text-xs' to='/connections?tab=health'>
         {$t('dataHealth.fix')} →
       </Link>
     </Bubble>

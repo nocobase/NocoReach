@@ -30,3 +30,11 @@ test('rank signals: drop of 5+, lost from the top 20, entered the top 10',()=>{
  const c=(at,position)=>({at,position,url:'https://x/'+position});const rt={keywords:[{id:'a',keyword:'a'},{id:'b',keyword:'b'},{id:'c',keyword:'c'},{id:'d',keyword:'d'}],checks:{a:[c('2026-09-20',4),c('2026-09-27',11)],b:[c('2026-09-20',15),c('2026-09-27',null)],c:[c('2026-09-20',14),c('2026-09-27',6)],d:[c('2026-09-20',5),c('2026-09-27',6)]}};
  assert.deepEqual(rankSignals({rt}).map(s=>s.key.split(':')[0]+':'+s.key.split(':')[1]),['rank-drop:a','rank-lost:b','rank-top10:c']);
 });
+test('an uncertain result is flagged for Data health and retried on purpose only when asked',async()=>{
+ const {t,rows,runs}=harness(()=>8);
+ await t.add('1',{keywords:[{keyword:'crm',locationCode:2840,language:'en'}]});
+ t.d4s.run=async(_id,_kind,v)=>{runs.push(v);return {id:1,status:'unknown',errorCode:'结果不确定：可能已计费'};};
+ await t.check('1',{all:true});
+ assert.equal(rows['rank-tracking:1'].lastRun.uncertain,true);assert.equal(runs.at(-1).retryUncertain,false);
+ await t.check('1',{all:true,retryUncertain:true});assert.equal(runs.at(-1).retryUncertain,true);
+});

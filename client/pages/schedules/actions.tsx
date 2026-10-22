@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApiClient } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
-import { MoreHorizontal } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router';
+import { Clock, Info, MoreHorizontal, Pause, Play, Power } from 'lucide-react';
 import { Button } from '#components/ui/button';
 import { toast } from '#components/ui/toast';
 import {
@@ -32,7 +33,7 @@ import { useScheduleFormatting } from './format.js';
 import { Failure, Field, StateBadge } from './shared.js';
 
 /**
- * The card's "…" menu: run now (daily analysis only), pause or turn on, and the technical details the Scheduler
+ * The row's "…" menu: change the time and run now (daily analysis only), pause or turn on, and the technical details the Scheduler
  * plugin reports. Pausing asks first; turning on does not. Each dialog keeps a failed request open with its reason,
  * and a request that lost access or found the task gone closes it and refreshes the list instead.
  */
@@ -48,6 +49,8 @@ export function ScheduleMenu({
   const { t } = useTranslation();
   const api = useApiClient();
   const format = useScheduleFormatting();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [open, setOpen] = useState<'run' | 'disable' | 'details' | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>();
@@ -131,8 +134,8 @@ export function ScheduleMenu({
         <DropdownMenuTrigger
           render={
             <Button
-              variant='outline'
-              size='icon'
+              variant='ghost'
+              size='icon-sm'
               aria-label={t('schedules.moreActions')}
               disabled={busy}
             />
@@ -142,9 +145,27 @@ export function ScheduleMenu({
         </DropdownMenuTrigger>
         <DropdownMenuContent align='end' className='min-w-40'>
           {schedule.key === ANALYSIS_SCHEDULE ? (
-            <DropdownMenuItem disabled={!runnable} onClick={() => show('run')}>
-              {t('schedules.runNow')}
-            </DropdownMenuItem>
+            <>
+              <DropdownMenuItem
+                disabled={!active}
+                onClick={() =>
+                  void navigate({
+                    pathname: `${encodeURIComponent(schedule.id)}/edit`,
+                    search: location.search,
+                  })
+                }
+              >
+                <Clock />
+                {t('schedules.editTime')}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!runnable}
+                onClick={() => show('run')}
+              >
+                <Play />
+                {t('schedules.runNow')}
+              </DropdownMenuItem>
+            </>
           ) : null}
           <DropdownMenuItem
             disabled={!active}
@@ -152,10 +173,12 @@ export function ScheduleMenu({
               schedule.enabled ? show('disable') : void request('enable')
             }
           >
+            {schedule.enabled ? <Pause /> : <Power />}
             {t(schedule.enabled ? 'schedules.disable' : 'schedules.enable')}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => show('details')}>
+            <Info />
             {t('schedules.details')}
           </DropdownMenuItem>
         </DropdownMenuContent>
