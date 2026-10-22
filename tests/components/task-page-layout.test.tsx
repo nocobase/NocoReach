@@ -521,3 +521,92 @@ test('the properties column lists owner, Agent, playbook, source, article, page 
     '优化现有页面',
   );
 });
+
+test('Performance lists each page: the latest 28 days before going live, then day 7 or 28 before and after', async () => {
+  const user = userEvent.setup();
+  const pages = [
+    'https://www.nocobase.com/en/blog/ai-agent-platforms',
+    'https://www.nocobase.com/en/blog/no-code-ai-tools',
+    'https://www.nocobase.com/en/blog/open-source-crm',
+    'https://www.nocobase.com/en/blog/workflow-tools',
+  ];
+  action.mockImplementation((resource: string, command: string) => {
+    if (resource === 'nrPlaybooks') return Promise.resolve({ playbooks: [] });
+    if (resource === 'nrTaskWork' && command === 'numbers')
+      return Promise.resolve({
+        range: { start: '2026-09-22', end: '2026-10-19' },
+        live: false,
+        gscDays: 28,
+        ga4Days: 0,
+        pages: pages.map((page, i) => ({
+          page,
+          clicks: 400 - i * 100,
+          position: 32 - i * 5,
+        })),
+      });
+    return Promise.resolve([]);
+  });
+  const { unmount } = mount();
+  let block = await screen.findByRole('region', { name: '数据表现' });
+  expect(
+    await within(block).findByText('近 28 天 · 搜索点击 · 平均排名'),
+  ).toBeVisible();
+  expect(
+    within(block).getByRole('link', { name: '/en/blog/ai-agent-platforms' }),
+  ).toHaveAttribute('href', pages[0]);
+  expect(block).toHaveTextContent('400 · 第 32 位');
+  // Three pages, then the rest on request.
+  expect(within(block).queryByText('/en/blog/workflow-tools')).toBeNull();
+  await user.click(
+    within(block).getByRole('button', { name: '还有 1 个页面' }),
+  );
+  expect(within(block).getByText('/en/blog/workflow-tools')).toBeVisible();
+  expect(block).toHaveTextContent('上线后在第 7 天、第 28 天和这些数字对比。');
+  unmount();
+  // Live with day 7: each page before and after, then all pages together; day 28 waits.
+  const data = pageChange();
+  data.work.observeFrom = '2026-10-01T08:00:00Z';
+  data.work.observation = {
+    results: [
+      {
+        day: 7,
+        baseline: { start: '2026-09-24', end: '2026-09-30' },
+        after: { start: '2026-10-02', end: '2026-10-08' },
+        pages: pages.slice(0, 2),
+        byPage: [
+          { page: pages[0], clicks: [96, 131], position: [32, 20] },
+          { page: pages[1], clicks: [71, 74], position: [18, 17] },
+        ],
+        gsc: {
+          clicks: [167, 205],
+          impressions: [0, 0],
+          ctr: [0, 0],
+          position: [0, 0],
+        },
+        primary: 'clicks',
+        change: 0.228,
+        conclusion: 'up',
+        notes: [],
+        computedAt: '2026-10-12T00:00:00Z',
+      },
+    ],
+  } as unknown as TaskData['work']['observation'];
+  mount(data);
+  block = screen.getByRole('region', { name: '数据表现' });
+  expect(
+    within(block).getByText('搜索点击 · 上线前 7 天 → 上线后 7 天'),
+  ).toBeVisible();
+  const rows = within(block).getAllByRole('listitem');
+  expect(rows[0]).toHaveTextContent(
+    '/en/blog/ai-agent-platforms96 → 131 ↑ 36%',
+  );
+  expect(rows[1]).toHaveTextContent('71 → 74 ↑ 4.2%');
+  expect(block).toHaveTextContent('合计 2 个页面167 → 205 ↑ 23%');
+  expect(
+    within(block).getByRole('button', { name: '第 28 天' }),
+  ).toBeDisabled();
+  expect(
+    within(block).getByRole('link', { name: '在成果页查看完整对比' }),
+  ).toHaveAttribute('href', '/results/1?day=7');
+  expect(action.mock.calls.some(([, c]) => c === 'numbers')).toBe(true);
+});

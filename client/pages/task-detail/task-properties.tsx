@@ -32,11 +32,13 @@ const pathOf = (u: string) => {
   }
 };
 
+// Labels and values in one size, told apart by colour (2026-10-22: a smaller label beside a larger value looked off,
+// as Linear, GitHub and Jira do it); each row 32px high, with a menu's text on the same left edge as plain values.
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className='grid grid-cols-[5.5rem_minmax(0,1fr)] items-start gap-3 py-1.5'>
-      <dt className='pt-0.5 text-xs text-muted-foreground'>{label}</dt>
-      <dd className='m-0 min-w-0 text-sm break-words'>{children}</dd>
+    <div className='grid grid-cols-[5.5rem_minmax(0,1fr)] items-start gap-3 text-sm leading-5'>
+      <dt className='py-1.5 text-muted-foreground'>{label}</dt>
+      <dd className='m-0 min-w-0 py-1.5 break-words'>{children}</dd>
     </div>
   );
 }
@@ -50,6 +52,7 @@ export function TaskProperties({
   agentLocked,
   onOwner,
   onAgent,
+  footer,
   className,
 }: {
   data: TaskData;
@@ -61,6 +64,8 @@ export function TaskProperties({
   agentLocked?: string;
   onOwner: (userId: string) => void;
   onAgent: (agentId: string) => Promise<boolean>;
+  /** Shown under the properties: Performance on wide screens. */
+  footer?: ReactNode;
   className?: string;
 }) {
   const navigate = useNavigate(),
@@ -101,7 +106,7 @@ export function TaskProperties({
             <Button
               size='sm'
               variant='ghost'
-              className='-ml-2 h-7 max-w-full px-2 font-normal'
+              className='-mx-2 -my-1.5 h-8 max-w-[calc(100%+1rem)] px-2 text-sm font-normal'
               disabled={busy || runActive}
               title={
                 runActive
@@ -246,6 +251,7 @@ export function TaskProperties({
           </Row>
         )}
       </dl>
+      {footer}
     </aside>
   );
 }

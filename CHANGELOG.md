@@ -5,6 +5,12 @@
 - `tests/logic/additional-locales.test.ts` compares each of the eight additional languages with English: `shared/i18n/<locale>.json` with `en.json`, and `client/locales/translations/<locale>.json` with the shell copy of `client/locales/en-US.ts`. It names every missing key, extra key and key whose `{0}` or `{{name}}` placeholders differ. The `build` check's client type check already failed on a missing key, but stopped at the first language and missed extra keys and changed placeholders.
 - docs/DEVELOPMENT.md says new or changed copy needs all ten languages in the same pull request, and that a pull request updated from `main` is merged only after CI passes on that update: eight pull requests merged after the ten-language change (#183) were short 81 translations once `main` was merged into them, and were merged seconds after that push, before CI had run.
 
+## Unreleased — Performance on the task page, page by page
+
+- The task page shows Performance under its properties (after the current card below 1280px): each page the task is about with its own numbers. Before the change goes live it lists the latest 28 days, search clicks and average position (views when a page has no search data), and says that days 7 and 28 are compared with them; once live, the 28 days before going live and when the day 7 result is expected. From day 7 it shows each page before and after with the change, all pages together, a Day 7 / Day 28 switch and a link to the full comparison in Results. Three pages show at first, the rest on request.
+- Day 7 and day 28 comparisons now keep each page's own clicks, average position and views when a task changed more than one page; earlier results show the pages together. A new read action, `nrTaskWork.numbers`, returns each page's numbers over 28 days (read permission, as `get`).
+- The properties column shows labels and values in the same size, told apart by colour, with every row the same height and menus lined up with plain values.
+
 ## Unreleased — Tasks: one set of status choices, the shared drop-downs
 
 - Tasks no longer has a status drop-down beside Waiting for me, Current, Done and Closed: the two overlapped, and the board's columns and the list's order already separate statuses. An old `?status=` link shows the scope without filtering.

@@ -7,8 +7,14 @@ export type Range = { start: string; end: string };
 export type Partition = { source: string; grain: string; date: string; payload: any[] };
 export type Totals = { clicks: number; impressions: number; weight: number; views: number; conversions: number; gscDays: number; ga4Days: number };
 export type Conclusion = 'insufficient' | 'flat' | 'up' | 'down';
+/** One page's numbers before and after going live (2026-10-22): search clicks and average position, views. */
+export type PageChange = { page: string; clicks?: [number, number]; position?: [number, number]; views?: [number, number] };
+/** One page's numbers in a window: search clicks, average position, views. */
+export type PageNumbers = { page: string; clicks?: number; position?: number; views?: number };
 export type EffectResult = {
   day: number; baseline: Range; after: Range; pages: string[];
+  /** Each page on its own, when the task changed more than one. */
+  byPage?: PageChange[];
   gsc?: { clicks: [number, number]; impressions: [number, number]; ctr: [number, number]; position: [number, number] };
   ga4?: { views: [number, number]; conversions: [number, number] };
   primary: 'clicks' | 'views' | null; change: number | null; conclusion: Conclusion; notes: string[]; computedAt: string;
@@ -44,6 +50,16 @@ export function totals(parts: Partition[], pages: string[], range: Range): Total
   return t;
 }
 const round = (n: number, d = 1) => Math.round(n * 10 ** d) / 10 ** d;
+const position = (t: Totals) => (t.impressions ? round(t.weight / t.impressions) : 0);
+/** Each page's numbers over a window, for the task page before a change goes live (2026-10-22). */
+export function pageNumbers(parts: Partition[], pages: string[], range: Range) {
+  const all = totals(parts, pages, range), gsc = all.gscDays > 0, ga4 = all.ga4Days > 0;
+  const rows: PageNumbers[] = pages.map(page => {
+    const t = totals(parts, [page], range);
+    return { page, ...(gsc ? { clicks: t.clicks, position: position(t) } : {}), ...(ga4 ? { views: t.views } : {}) };
+  });
+  return { range, pages: rows, gscDays: all.gscDays, ga4Days: all.ga4Days };
+}
 const pct = (n: number) => `${n > 0 ? '+' : ''}${Math.round(n * 100)}%`;
 // Clicks when the page gets enough of them (40 in both windows together), otherwise views. Too little data or too many missing days is
 // “数据不足”; a change needs at least 15% and 10 in absolute terms, otherwise it is “无明显变化”.
@@ -61,7 +77,11 @@ export function compare(day: number, from: string, pages: string[], parts: Parti
   else if (days[0] !== day || days[1] !== day) notes.push(systemMessageText('effect.tooManyMissingDaysJudge'));
   else if (before + now < 40) notes.push(systemMessageText('messages.tooLittleTotalJudge', { 0: primary === 'clicks' ? '点击' : '浏览', 1: before + now }));
   else { change = before === 0 ? null : round((now - before) / before, 3); conclusion = Math.abs(now - before) >= 10 && (change === null || Math.abs(change) >= 0.15) ? (now > before ? 'up' : 'down') : 'flat'; }
-  return { day, baseline, after, pages, ...(gsc ? { gsc } : {}), ...(ga4 ? { ga4 } : {}), primary, change, conclusion, notes, computedAt, coverage: { gsc: { baselineDays: b.gscDays, afterDays: a.gscDays }, ga4: { baselineDays: b.ga4Days, afterDays: a.ga4Days } } };
+  const byPage: PageChange[] | undefined = pages.length > 1 ? pages.map(page => {
+    const pb = totals(parts, [page], baseline), pa = totals(parts, [page], after);
+    return { page, ...(hasGsc ? { clicks: [pb.clicks, pa.clicks] as [number, number], position: [position(pb), position(pa)] as [number, number] } : {}), ...(hasGa4 ? { views: [pb.views, pa.views] as [number, number] } : {}) };
+  }) : undefined;
+  return { day, baseline, after, pages, ...(byPage ? { byPage } : {}), ...(gsc ? { gsc } : {}), ...(ga4 ? { ga4 } : {}), primary, change, conclusion, notes, computedAt, coverage: { gsc: { baselineDays: b.gscDays, afterDays: a.gscDays }, ga4: { baselineDays: b.ga4Days, afterDays: a.ga4Days } } };
 }
 export const conclusionLabels: Record<Conclusion, string> = { insufficient: systemMessageText('effect.notEnoughData'), flat: systemMessageText('effect.noClearChange'), up: systemMessageText('effect.up'), down: systemMessageText('effect.down') };
 export function summary(r: EffectResult) {

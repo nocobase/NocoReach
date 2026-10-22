@@ -482,6 +482,23 @@ test('effect observation runs for finished tasks once the data covers the day, a
  await f.s.observeEffects();d=await f.view();assert.equal(d.work.observation.results.length,1,'computed once');
 });
 
+test('the task page reads each page\'s numbers: the latest 28 days before going live, the 28 days before it after',async()=>{
+ const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>({content:'AI draft'})},{insight:{target:'https://www.example.com/docs/start/'}});f.state.nrSyncPartitions=[];
+ f.state.nrSnapshots.push({id:9301,key:'site-content:1',payload:{pages:[{url:'https://www.example.com/docs/install',title:'安装',type:'docs'}]}});
+ f.s.p.link=async()=>({get:k=>({gscSiteUrl:'sc-domain:example.com',ga4PropertyId:'p1'})[k]});
+ await f.command('linkPage',{url:'https://www.example.com/docs/install'});
+ let id=1;const add=(source,grain,resource,date,payload)=>f.state.nrSyncPartitions.push({id:id++,projectId:'1',source,grain,resource,date,payload});
+ for(let i=0;i<40;i++){const date=new Date(Date.parse('2026-08-10')+i*86400000).toISOString().slice(0,10);
+  add('gsc','query_page','sc-domain:example.com',date,[{keyword:'install',page:'https://www.example.com/docs/install',clicks:2,impressions:10,position:8},{keyword:'start',page:'https://example.com/docs/start',clicks:1,impressions:10,position:20}]);
+  add('ga4','page','p1',date,[{page:'/docs/install',views:5,conversions:0}]);}
+ // Data ends 9/18: the latest 28 days are 8/22-9/18; the opportunity's page counts once whatever its slash or host.
+ let n=await f.s.numbers('1','1');
+ assert.deepEqual(n.range,{start:'2026-08-22',end:'2026-09-18'});assert.equal(n.live,false);
+ assert.deepEqual(n.pages,[{page:'https://www.example.com/docs/install',clicks:56,position:8,views:140},{page:'https://www.example.com/docs/start/',clicks:28,position:20,views:0}]);
+ f.state.nrTasks[0].evidence.work.observeFrom='2026-09-01T08:00:00Z';
+ n=await f.s.numbers('1','1');assert.equal(n.live,true);assert.deepEqual(n.range,{start:'2026-08-04',end:'2026-08-31'});assert.equal(n.pages[0].clicks,44,'only the days with data before going live');
+});
+
 test('cancel and archive: a cancelled task stops, its PR is closed by the Agent, late results never apply; archive hides and restores',async()=>{
  const f=fixture();const me=await selectAgent(f);
  await f.s.agents.saveRepo('1',{repo:'estheryo/website-test',baseBranch:'main',revision:1});
