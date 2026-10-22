@@ -17,6 +17,7 @@ import {
 
 import { AgentSetupDialog } from '#components/agent-setup-dialog';
 
+import { DemoAccountMenu } from '@nocobase/app-plugin-demo-mode/client/account-menu';
 import { LanguageSwitcher } from './language-switcher.js';
 
 export function UserMenu(): ReactElement {
@@ -107,6 +108,8 @@ export function UserMenu(): ReactElement {
           ) : null}
           <LanguageSwitcher />
           <DropdownMenuSeparator />
+          {/* A demo's accounts, to switch between before signing out. */}
+          <DemoAccountMenu />
           <DropdownMenuItem
             disabled={isLoggingOut}
             onClick={() => {
