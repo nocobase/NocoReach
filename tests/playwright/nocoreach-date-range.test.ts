@@ -175,7 +175,9 @@ test('Chinese validation and the narrow light/dark calendar', async ({
   ).toBeVisible();
   await page.getByRole('button', { name: 'Open account menu' }).click();
   await page.getByRole('menuitem', { name: /Language/ }).hover();
-  await page.getByRole('menuitemradio', { name: '中文', exact: true }).click();
+  await page
+    .getByRole('menuitemradio', { name: '简体中文', exact: true })
+    .click();
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 375, height: 812 });
   await page

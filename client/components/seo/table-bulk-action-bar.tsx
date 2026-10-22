@@ -28,8 +28,8 @@ export function TableBulkActionBar({
           <Button variant="ghost" size="icon-xs" aria-label={$t('common.clearSelection')} className="text-muted-foreground" onClick={onClear}>
             <X />
           </Button>
-          <span className="font-medium tabular-nums">{selectedCount}</span>
           <span className="text-muted-foreground">{selectedLabel}</span>
+          <span className="font-medium tabular-nums">{selectedCount}</span>
         </div>
         <div className="flex items-center gap-1 px-1.5">{actions}</div>
       </div>
