@@ -95,7 +95,7 @@
       "emptyTitle": "Chưa có tác nhân AI",
       "emptyDescription": "Kết nối một môi trường thực thi có công cụ lập trình đã đăng nhập: mỗi mô hình của công cụ sẽ xuất hiện tại đây dưới dạng tác nhân AI để bạn bật.",
       "noneInFilter": "Không có tác nhân AI nào ở đây.",
-      "howToAdd": "Để thêm tác nhân AI, hãy cài công cụ lập trình trên môi trường thực thi và đăng nhập để dùng mô hình bạn có quyền truy cập: khi môi trường thực thi báo cáo mô hình đó, mô hình sẽ xuất hiện tại đây. Bạn có thể bật bằng cách mô tả thế mạnh của tác nhân AI. Tác nhân AI chỉ có trên môi trường thực thi cá nhân chỉ xử lý các vấn đề do chủ sở hữu môi trường đó khởi tạo.",
+      "howToAdd": "Để thêm tác nhân AI cục bộ, hãy cài công cụ lập trình trên môi trường thực thi và đăng nhập. Tác nhân sẽ xuất hiện trong “Mới phát hiện”; ghi điểm mạnh của nó để bật.",
       "goodAtMissing": "Chưa có mô tả",
       "columns": {
         "agent": "Tác nhân AI",
@@ -521,7 +521,7 @@
         }
       },
       "title": "Môi trường thực thi",
-      "description": "Máy tính hoặc máy chủ có Claude Code hoặc Codex. NocoReach giao tác vụ cho chúng, và các tác nhân AI cục bộ trên đó sẽ sửa mã website, viết bài và tạo pull request, nên máy cần bật, có kết nối mạng và công cụ lập trình phải được đăng nhập.",
+      "description": "Máy tính hoặc máy chủ có Claude Code hoặc Codex, nơi tác nhân AI cục bộ thực hiện tác vụ; cần luôn bật, có mạng và công cụ lập trình đã đăng nhập.",
       "add": "Thêm môi trường thực thi",
       "loadFailed": "Không thể tải các môi trường thực thi",
       "emptyTitle": "Chưa có môi trường thực thi nào được kết nối",
@@ -757,7 +757,7 @@
     },
     "models": {
       "title": "Dịch vụ mô hình",
-      "description": "Phân tích hằng ngày và khung trò chuyện dùng các mô hình trò chuyện tại đây, nhà cung cấp tính phí theo từng lượt gọi; mô hình nhúng và mô hình xếp hạng lại dùng cho tìm kiếm. Tác nhân AI cục bộ không dùng các mô hình này mà dùng công cụ lập trình đã đăng nhập trên môi trường thực thi của nó."
+      "description": "Phân tích hằng ngày và khung trò chuyện dùng các mô hình ở đây; nhà cung cấp tính phí theo từng lượt gọi."
     },
     "defaultModel": {
       "title": "Mô hình trò chuyện mặc định",
@@ -855,9 +855,9 @@
         "dimensions": "Số chiều vectơ của {{model}}",
         "dimensionsPlaceholder": "Mặc định",
         "counts": {
-          "chat": "{{count}} trò chuyện",
-          "embedding": "{{count}} nhúng",
-          "rerank": "{{count}} xếp hạng lại"
+          "chat": "Mô hình trò chuyện: {{count}}",
+          "embedding": "Mô hình nhúng: {{count}}",
+          "rerank": "Mô hình xếp hạng lại: {{count}}"
         }
       }
     },
