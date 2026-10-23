@@ -141,7 +141,7 @@ async function setup(entry = '/insights', locale = 'zh-CN') {
 async function assertWaiting(ids = [1, 2]) {
   await waitFor(() =>
     expect(
-      screen.queryByText($t('common.loadingTasks')),
+      screen.queryByRole('status', { name: $t('common.loadingTasks') }),
     ).not.toBeInTheDocument(),
   );
   for (const id of ids)

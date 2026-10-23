@@ -1,3 +1,4 @@
+import { formatDateTime } from '#lib/format';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { $t, useMessageState, useNocoReachLocale } from '#i18n';
@@ -492,7 +493,7 @@ export function XiaohongshuConnect({
             ·{' '}
             {data.verifiedAt
               ? $t('xiaohongshu.lastSuccessfulCollection', {
-                  0: new Date(data.verifiedAt).toLocaleString(locale),
+                  0: formatDateTime(data.verifiedAt),
                 })
               : $t('xiaohongshu.browserXiaohongshuLoginNotYet')}
           </p>

@@ -288,6 +288,7 @@ const systemErrors = new Set([
   'google.authorizationExpired',
   'analysis.signalsUnavailable',
   'analysis.invalidModelResult',
+  'analysis.modelTimedOut',
   'analysis.failed',
   'errors.networkRetryScheduled',
   ...youtubeSystemErrors,

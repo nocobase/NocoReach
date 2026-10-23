@@ -419,11 +419,12 @@ test('scheme selection reloads its own rules and copy opens a modal with source 
   await userEvent.click(
     screen.getByRole('button', { name: /第二方案\s*未启用/ }),
   );
-  for (const name of ['用 AI 调整', '规则']) {
-    const area = screen.getByRole('region', { name });
-    expect(await within(area).findByText('第二方案')).toBeVisible();
-    expect(within(area).queryByText('默认分析')).not.toBeInTheDocument();
-  }
+  // My schemes marks the scheme shown; the sections below no longer repeat its name.
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: /第二方案\s*未启用/ }),
+    ).toHaveAttribute('aria-pressed', 'true'),
+  );
   expect(action).toHaveBeenCalledWith(
     'nrAnalysisRules',
     'view',
@@ -636,7 +637,7 @@ test('add-rule validation messages update when switching language without cleari
   act(() => setDictionary(null));
 });
 
-test('rename opens a prefilled modal, keeps failures editable, and updates both section names', async () => {
+test('rename opens a prefilled modal, keeps failures editable, and renames the scheme', async () => {
   Object.assign(data, {
     schemeId: 'copy',
     schemeName: '默认分析 · 副本',
@@ -678,10 +679,9 @@ test('rename opens a prefilled modal, keeps failures editable, and updates both 
   await waitFor(() =>
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
   );
-  for (const name of ['规则', '用 AI 调整'])
-    expect(
-      within(screen.getByRole('region', { name })).getByText('内容增长'),
-    ).toBeVisible();
+  expect(
+    screen.getByRole('button', { name: '重命名「内容增长」' }),
+  ).toBeVisible();
   expect(calls('rename')[1][2].body).toMatchObject({
     schemeId: 'copy',
     name: '内容增长',

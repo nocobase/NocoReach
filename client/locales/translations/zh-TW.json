@@ -561,7 +561,9 @@
       "agentArchived": "已封存",
       "forbidden": "你無權使用",
       "noRunner": "沒有線上的執行環境",
-      "othersPersonal": "僅其他人的個人 Runner 可用"
+      "othersPersonal": "僅其他人的個人 Runner 可用",
+      "noModel": "請先設定聊天模型",
+      "modelUnavailable": "模型無法使用"
     },
     "mode": {
       "online": "線上",
@@ -582,7 +584,9 @@
       "kept": "訊息已儲存，它能回覆時會處理。",
       "fallback": "這段對話改用其他 Agent",
       "usingDefault": "這段對話暫時由 {{name}} 代替 {{own}} 回答。",
-      "restore": "切回 {{own}}"
+      "restore": "切回 {{own}}",
+      "noModel": "請先設定聊天模型",
+      "modelUnavailable": "{{name}} 的模型無法使用，請聯絡管理員"
     },
     "notice": {
       "switchedToDefault": "已臨時改用系統預設的 {{name}}，等 {{own}} 恢復後可以切回。",
@@ -591,15 +595,13 @@
       "switchedBack": "已切回 {{name}}。",
       "runFailed": "Agent 沒有回覆就停止了。",
       "runFailedReason": "Agent 沒有回覆就停止了：{{reason}}",
-      "runCancelled": "已停止。"
+      "runCancelled": "已要求取消。"
     },
     "consultation": {
       "title": "諮詢了 {{name}}",
       "question": "問題",
       "answer": "回答",
       "steps": "它的步驟",
-      "plans_one": "提出了一個計畫，等你確認。",
-      "plans_other": "提出了 {{count}} 個計畫，等你確認。",
       "usage": "用了 {{input}} 個輸入 token 和 {{output}} 個輸出 token。",
       "state": {
         "running": "回答中…",
@@ -630,7 +632,7 @@
       "label": "發給 Agent 的訊息",
       "placeholder": "提問，或者描述要安排的工作…",
       "hint": "Enter 傳送，Shift+Enter 換行",
-      "runningHint": "現在發的訊息會交給正在進行的工作一起處理",
+      "runningHint": "正在執行，可以隨時停止。",
       "tooLong": "最多 {{max}} 個字。",
       "send": "傳送",
       "stop": "停止",
@@ -726,6 +728,35 @@
         "error": "錯誤",
         "usage": "用量"
       }
+    },
+    "retrySaving": "重試儲存",
+    "contextFailed": "無法讀取所選內容或傳送訊息，請檢查目前頁面後再試一次。",
+    "approval": {
+      "request": "此工具需要你核准後才能執行。",
+      "approve": "核准",
+      "deny": "拒絕",
+      "denied": "已拒絕執行工具。",
+      "failed": "核准結果尚未確認，請重新整理已儲存的訊息後再試。"
+    },
+    "feedback": {
+      "sending": "正在傳送…",
+      "waiting": "等待 Agent 回應…",
+      "thinking": "正在思考…",
+      "stopping": "已要求停止，等待 Agent 確認結束…",
+      "completed": "已完成。",
+      "cancelled": "已取消。再次執行前請核對可能已完成的操作。",
+      "failed": "回應失敗。請先查看歷史，再決定是否重新傳送。",
+      "unknown": "結果或歷史儲存尚未確認。請重新整理歷史後再決定是否重新傳送。",
+      "effectReview": "部分操作可能已完成，再次執行前請核對結果。"
+    },
+    "executionFailed": "執行失敗。再次執行前請查看已儲存的歷史，核對可能已完成的操作。",
+    "historicalReadOnly": "歷史對話僅供檢視，請新增對話以繼續。",
+    "connectionUnknown": "連線已中斷，結果待確認。請重新整理已儲存的歷史後再決定是否傳送。",
+    "allowAnother": "允許再次傳送（可能重複）",
+    "refreshHistory": "重新整理歷史",
+    "reasoning": {
+      "title": "推理過程",
+      "thinking": "正在思考…"
     }
   },
   "agentSetup.title": "在 agent 中使用 NocoReach",

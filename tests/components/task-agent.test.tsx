@@ -106,6 +106,14 @@ function mount(data = initial()) {
 // The header's Agent menu, beside the owner (2026-10-20 user decision): the stage cards carry no picker.
 const agentMenu = () => screen.getByRole('button', { name: /^Agent ·/ });
 
+// The playbook list has loaded once the Playbook select shows the task's playbook.
+const playbookLoaded = () =>
+  waitFor(() =>
+    expect(screen.getByRole('combobox', { name: '做法' })).toHaveTextContent(
+      '调研',
+    ),
+  );
+
 test('the Agent is chosen in the header, and Start waits for one', async () => {
   const user = userEvent.setup();
   const data = initial();
@@ -153,7 +161,7 @@ test('with exactly one Agent available, starting saves it on the task first', as
   advance.mockResolvedValueOnce(saved).mockResolvedValueOnce(saved);
   mount(data);
   expect(agentMenu()).toHaveTextContent('NocoReach Codex');
-  await screen.findByRole('option', { name: /调研/ });
+  await playbookLoaded();
   await user.click(screen.getByRole('button', { name: '确定开始执行' }));
   await waitFor(() =>
     expect(action).toHaveBeenCalledWith(
@@ -179,7 +187,7 @@ test('failed reassignment retains the saved agent and shows the server error', a
   data.work.agentId = 'codex';
   data.agent!.agentId = 'codex';
   mount(data);
-  await screen.findByRole('option', { name: /调研/ });
+  await playbookLoaded();
   advance.mockRejectedValueOnce(new Error('任务已更新，请刷新后再保存'));
   await user.click(agentMenu());
   await user.click(

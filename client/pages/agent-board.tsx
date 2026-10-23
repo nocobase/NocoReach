@@ -4,6 +4,7 @@ import { Link } from 'react-router';
 import { useRunnerOptions } from '@nocobase/app-plugin-agents/client/kit';
 import { $t } from '#i18n';
 import { ActorAvatar } from '#components/reach/actor';
+import { Tag } from '#components/reach/tag';
 import { cn } from '#lib/utils';
 import { useMe } from './me';
 import { stepOf } from './task-list-model';
@@ -162,7 +163,7 @@ function AgentColumn({
       </header>
       {!c.items.length && (
         <p className='px-1 py-4 text-center text-xs text-muted-foreground'>
-          {$t('taskAgents.nothing')}
+          {$t('workBoard.noTasks')}
         </p>
       )}
       {running.length > 0 && (
@@ -273,26 +274,18 @@ function Card({
       data-task-id={i.t.id}
       data-mine={ask && i.mine ? '' : undefined}
       className={cn(
+        // Every card on the card ground; what waits on you is said by the amber tag, as on the board and the list
+        // (UI review 2026-10-22: this was the only card painted amber, with the only solid tag).
         'flex w-full flex-col gap-1.5 rounded-lg border bg-card p-2.5 text-left text-card-foreground transition-colors hover:border-ring',
-        ask && i.mine && 'border-nr-ink-amber/40 bg-nr-tint-amber',
       )}
       onClick={() => onOpen(i.t.id)}
     >
       <Title t={i.t} />
       {ask ? (
         <span className='flex w-full min-w-0 items-center gap-1.5 text-xs'>
-          <span
-            className={cn(
-              'shrink-0 rounded border px-1.5',
-              ask.tone === 'red' && 'border-nr-ink-red/40 text-nr-ink-red',
-            )}
-          >
-            {ask.text}
-          </span>
+          <Tag tone={ask.tone === 'red' ? 'red' : 'grey'}>{ask.text}</Tag>
           {i.mine ? (
-            <span className='shrink-0 rounded-full bg-nr-ink-amber px-1.5 font-medium text-white'>
-              {$t('taskAgents.you')}
-            </span>
+            <Tag tone='amber'>{$t('taskAgents.you')}</Tag>
           ) : who ? (
             <span className='truncate text-muted-foreground'>
               {$t('taskAgents.waitingFor', { 0: who })}
