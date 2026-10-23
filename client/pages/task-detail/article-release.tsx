@@ -1,13 +1,14 @@
 import { useState, type ComponentProps, type ReactNode } from 'react';
-import { TriangleAlert } from 'lucide-react';
 import { $t } from '#i18n';
-import { Alert, AlertDescription, AlertTitle } from '#components/ui/alert';
+import { Alert, AlertDescription } from '#components/ui/alert';
 import { Button } from '#components/ui/button';
 import { Spinner } from '#components/ui/spinner';
 import { Reveal } from '#components/reach/reveal';
 import { Tag, type Tone } from '#components/reach/tag';
 import { formatDateTime } from '#lib/format';
 import { ChangeView } from '../change-view';
+import { Notice } from './layout';
+import { text } from './styles';
 import type {
   Release,
   ReleaseArticle,
@@ -52,9 +53,7 @@ export function TargetRows({ data, r }: { data: TaskData; r?: Release }) {
       {releaseLegs(r).map(({ a, state }, i) => (
         <li key={a.targetId} className='flex min-w-0 flex-col gap-1'>
           <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
-            <span className='text-sm font-medium'>
-              {nameOf(data, a.targetId)}
-            </span>
+            <span className={text.body}>{nameOf(data, a.targetId)}</span>
             <Tag tone={LEG_TONE[state] || 'grey'}>
               {$t(`articleTask.targetState.${LEG_KEY[state] || 'published'}`)}
             </Tag>
@@ -250,29 +249,25 @@ function LegDrift({ data, r }: { data: TaskData; r: Release }): ReactNode {
       </p>
     );
   return (
-    <Alert>
-      <TriangleAlert />
-      <AlertTitle>
-        {$t('articleTask.driftTitle', {
-          0: targetName(data, r),
-          1: d.fields.map((f) => fieldLabel(f.field)).join(', '),
-        })}
-      </AlertTitle>
-      <AlertDescription className='flex flex-col gap-2'>
-        {d.fields.map((f) => (
-          <Reveal
-            key={f.field}
-            label={`${fieldLabel(f.field)} · ${$t('articleTask.compare')}`}
-          >
-            <span className='text-sm text-muted-foreground'>
-              {$t('articleTask.publishedToCurrent')}
-            </span>
-            <ChangeView
-              changes={[fieldChange(f.field, f.published, f.current)]}
-            />
-          </Reveal>
-        ))}
-      </AlertDescription>
-    </Alert>
+    <Notice
+      title={$t('articleTask.driftTitle', {
+        0: targetName(data, r),
+        1: d.fields.map((f) => fieldLabel(f.field)).join(', '),
+      })}
+    >
+      {d.fields.map((f) => (
+        <Reveal
+          key={f.field}
+          label={`${fieldLabel(f.field)} · ${$t('articleTask.compare')}`}
+        >
+          <span className='text-sm text-muted-foreground'>
+            {$t('articleTask.publishedToCurrent')}
+          </span>
+          <ChangeView
+            changes={[fieldChange(f.field, f.published, f.current)]}
+          />
+        </Reveal>
+      ))}
+    </Notice>
   );
 }

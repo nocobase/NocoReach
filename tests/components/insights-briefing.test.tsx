@@ -26,6 +26,8 @@ const fixture = vi.hoisted(() => ({
   openChat: vi.fn(),
   threads: [] as unknown[],
   messages: {} as Record<string, unknown[]>,
+  /** Holds the owner's conversation list back, as a slow connection does. */
+  threadsHeld: null as Promise<void> | null,
   posts: [] as { path: string; body: unknown }[],
   sent: [] as { conversationId: string | null; content: string }[],
   // Chat panel › Settings as the page read it, and as the server has it now.
@@ -142,9 +144,17 @@ vi.mock('../../client/online-agent/api', () => ({
   useOnlineApi: () => async (path: string, body?: unknown) => {
     if (body !== undefined) {
       fixture.posts.push({ path, body });
-      return { id: 't-new' };
+      const existing = fixture.threads.find(
+        (value) =>
+          (value as { subject: { day: string } }).subject.day ===
+          (body as { day: string }).day,
+      ) as { id: string } | undefined;
+      return { id: existing?.id ?? 't-new' };
     }
-    if (path === 'threads?projectId=1') return fixture.threads;
+    if (path === 'threads?projectId=1') {
+      if (fixture.threadsHeld) await fixture.threadsHeld;
+      return fixture.threads;
+    }
     throw new Error(`Unexpected ${path}`);
   },
 }));
@@ -289,6 +299,7 @@ beforeEach(() => {
   fixture.openChat.mockReset();
   fixture.threads = [];
   fixture.messages = {};
+  fixture.threadsHeld = null;
   fixture.posts = [];
   fixture.sent = [];
   fixture.chat = {
@@ -904,6 +915,53 @@ it('while the chat agent is off the day’s conversation stays and the page says
   ).toBeNull();
 });
 
+it('a question sent before the page has read the day’s conversations still joins the day’s conversation', async () => {
+  fixture.threads = [thread('t-day', '2026-10-21')];
+  let release!: () => void;
+  fixture.threadsHeld = new Promise((resolve) => {
+    release = resolve;
+  });
+  setup();
+  const input = await screen.findByRole('textbox', {
+    name: 'strategy.composerLabel',
+  });
+  fireEvent.change(input, { target: { value: 'And then?' } });
+  fireEvent.click(screen.getByRole('button', { name: 'strategy.send' }));
+  release();
+  await waitFor(() => expect(fixture.posts).toHaveLength(1));
+  expect(fixture.posts[0]).toEqual({
+    path: 'threads',
+    body: { projectId: '1', day: '2026-10-21' },
+  });
+  await waitFor(() =>
+    expect(fixture.sent).toContainEqual({
+      conversationId: 't-day',
+      content: 'And then?',
+    }),
+  );
+});
+
+it('a side panel opened before the page has read the day’s conversations continues the day’s conversation', async () => {
+  fixture.threads = [thread('t-day', '2026-10-21')];
+  let release!: () => void;
+  fixture.threadsHeld = new Promise((resolve) => {
+    release = resolve;
+  });
+  const view = setup();
+  await screen.findByRole('textbox', { name: 'strategy.composerLabel' });
+  fixture.panelOpen = true;
+  view.rerender();
+  release();
+  await waitFor(() =>
+    expect(fixture.openChat).toHaveBeenCalledWith({
+      conversationId: 't-day',
+      draft: undefined,
+      view: 'chat',
+    }),
+  );
+  expect(fixture.posts).toEqual([]);
+});
+
 it('with the side panel open the conversation moves there and the page gives it room', async () => {
   fixture.threads = [thread('t-day', '2026-10-21')];
   fixture.messages['t-day'] = [
@@ -1078,7 +1136,10 @@ it('earlier days sit above today, folded, and show their conversation when opene
     );
   // 10/18: a watch ended and a question was asked (e, raised 10/19, still waits and so stands in today's message).
   expect(days).toHaveLength(1);
-  expect(days[0].textContent).toContain('strategy.dayThreads:1');
+  // The question count comes with the conversation list, which may still be on its way.
+  await waitFor(() =>
+    expect(days[0].textContent).toContain('strategy.dayThreads:1'),
+  );
   fireEvent.click(within(days[0]).getByRole('button', { expanded: false }));
   expect(await within(days[0]).findByText('question t-old')).toBeTruthy();
   // They fold again from above them or from just above today.

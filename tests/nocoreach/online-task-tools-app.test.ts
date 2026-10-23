@@ -347,3 +347,164 @@ test('daily_analysis reads the saved analysis for a project member and stops onc
     status: 403,
   });
 });
+
+test('query_data reads the pages a member may open, through their services, and denies the others alone', async ({
+  testApp,
+}) => {
+  await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const container = testApp.application.container;
+  const host = container.resolve(nocoReachToken);
+  await host.ready;
+  const users = container.resolve(userAdministrationServiceToken);
+  const sets = container.resolve(authorizationToken).permissionSets;
+  const project = await host.plugin.projects.create({
+    name: 'Query data',
+    domain: 'query-data.example.test',
+  });
+  const projectId = String(project.id);
+  await sets.create({
+    key: 'nr.query-reader',
+    title: 'Query reader',
+    grants: host.legacy.db.access!.roleGrants({
+      scope: 'member',
+      capabilities: ['view', 'tasks', 'sources.use.hackernews'],
+    }),
+  });
+  const person = async (name: string, permissionSet: string) => {
+    const user = await users.create({
+      email: `${name}@example.test`,
+      password: 'test-password-123',
+      name,
+    });
+    await sets.assign({
+      permissionSet,
+      subject: { type: 'user', id: user.id },
+    });
+    await host.legacy.db.access!.joinCreatedProject(user.id, projectId);
+    return user;
+  };
+  const member = await person('query-member', 'nr.member');
+  const reader = await person('query-reader', 'nr.query-reader');
+  const DAY = 86400000,
+    ago = (days: number) => new Date(Date.now() - days * DAY).toISOString();
+  const snapshots = host.plugin.db.getRepository('nrSnapshots');
+  await snapshots.create({
+    values: {
+      key: `reddit:${projectId}`,
+      payload: {
+        terms: ['query data'],
+        status: 'active',
+        retainedFrom: ago(90).slice(0, 10),
+        dataThrough: ago(1).slice(0, 10),
+        posts: Object.fromEntries(
+          Array.from({ length: 60 }, (_, i) => [
+            `p${i}`,
+            {
+              id: `p${i}`,
+              title: i % 4 ? `Thread ${i}` : `Alternatives to query data ${i}`,
+              url: `https://www.reddit.com/r/selfhosted/comments/${i}`,
+              subreddit: 'selfhosted',
+              snippet: 'A thread',
+              postedAt: ago(2 + (i % 20)),
+              firstSeenAt: ago(2),
+              term: 'query data',
+            },
+          ]),
+        ),
+      },
+    },
+  });
+  await snapshots.create({
+    values: {
+      key: `hackernews:${projectId}`,
+      payload: {
+        terms: ['query data'],
+        status: 'active',
+        retainedFrom: ago(90).slice(0, 10),
+        mentions: Object.fromEntries(
+          Array.from({ length: 30 }, (_, i) => [
+            `h${i}`,
+            {
+              type: 'story',
+              title: `Show HN: query data ${i}`,
+              url: 'https://query-data.example.test',
+              hnUrl: `https://news.ycombinator.com/item?id=${i}`,
+              points: i * 3,
+              comments: i,
+              createdAt: ago(2 + (i % 10)),
+              term: 'query data',
+            },
+          ]),
+        ),
+      },
+    },
+  });
+  const signal = new AbortController().signal;
+  const queryFor = async (ownerId: string) => {
+    const context = await createNocoReachOnlineHost(() => host, '/main')(
+      { id: randomUUID(), ownerId, projectId, instructions: '' } as OnlineRun,
+      signal,
+    );
+    expect(context.instructions).toContain('query_data');
+    const tool = context.tools.find((t) => t.name === 'query_data')!;
+    return async (input: unknown): Promise<any> => tool.execute(input, signal);
+  };
+
+  const asMember = await queryFor(member.id);
+  const reddit = await asMember({ source: 'reddit' });
+  // The page's own count, and every post of the period behind it.
+  expect(reddit).toMatchObject({
+    page: 'Community › Reddit',
+    url: '/main/data/reddit',
+    total: 60,
+    nextOffset: 20,
+    dataThrough: ago(1).slice(0, 10),
+    summary: {
+      kpis: expect.arrayContaining([
+        expect.objectContaining({ key: 'posts', value: 60 }),
+      ]),
+    },
+  });
+  expect(reddit.rows).toHaveLength(20);
+  const rest = await asMember({ source: 'reddit', offset: 20, limit: 100 });
+  expect(rest).toMatchObject({ total: 60, nextOffset: null });
+  expect(rest.rows).toHaveLength(40);
+  const alternatives = await asMember({
+    source: 'reddit',
+    filters: { keyword: 'alternatives' },
+  });
+  expect(alternatives.total).toBe(15);
+  const week = await asMember({
+    source: 'hackernews',
+    range: '7',
+    sort: '-points',
+  });
+  expect(week.period.end).toBe(ago(1).slice(0, 10));
+  expect(
+    week.rows.every((r: { date: string }) => r.date >= week.period.start),
+  ).toBe(true);
+  expect(week.rows.map((r: { points: number }) => r.points)).toEqual(
+    [...week.rows.map((r: { points: number }) => r.points)].sort(
+      (a, b) => b - a,
+    ),
+  );
+  expect(await asMember({ source: 'forum' })).toMatchObject({
+    connected: false,
+  });
+
+  const asReader = await queryFor(reader.id);
+  expect(await asReader({ source: 'reddit' })).toEqual({
+    source: 'reddit',
+    page: 'Community › Reddit',
+    url: '/main/data/reddit',
+    accessDenied: true,
+  });
+  expect(await asReader({ source: 'search' })).toMatchObject({
+    accessDenied: true,
+  });
+  expect((await asReader({ source: 'hackernews' })).total).toBe(30);
+  // Site audit is part of viewing the project; this project has no website content yet.
+  expect(await asReader({ source: 'audit' })).toMatchObject({
+    connected: false,
+  });
+});

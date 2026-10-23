@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { NocoReachRuntime } from '../../providers/nocoreach.js';
 import type { OnlineBinding, OnlineTool, OnlineToolSpec } from './tool.js';
 import { legacyContext } from '../legacy/context.js';
-import { projectWork, boardState } from '../execution/model.js';
+import { projectWork, taskStanding } from '../execution/model.js';
 import { defaultPlaybookId, stagesFor } from '../execution/playbook.js';
 import { changesRepo, type Stage } from '../execution/flow.js';
 import { roleOf } from '../policy.js';
@@ -164,7 +164,8 @@ export function taskTools(
         projectId,
         title: String(task.title || '').slice(0, 300),
         url: url(projectId, taskId),
-        state: boardState(work),
+        // Closed, not done, for a cancelled task or one archived before it finished.
+        state: taskStanding(work),
         stage: work.stage,
         stageKey: stage?.key,
         stageName: stage?.name.slice(0, 120),

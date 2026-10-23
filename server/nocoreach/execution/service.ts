@@ -18,6 +18,7 @@ import type { LegacyDatabase, LegacyTransaction } from '../legacy/database';
 import { CHECKPOINTS, compare, dateOf, pageKey, pageNumbers, shift, windows, type Partition } from './effect';
 import { listResults, readResult, resultBoard } from './result-view.js';
 import { ArticleFlow } from './article-flow.js';
+import { STARTS_KEY, restartOf, withStart } from './restarts.js';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
 // Roles and what only 管理员 may change live with the server code (server/policy.js); the same relative path works from
 // the source and from dist/execution.
@@ -76,7 +77,10 @@ export class TaskService {
   readonly business: TaskBusiness;
   readonly articleFlow: ArticleFlow;
   private lastArticles = 0;
-  constructor(readonly p: any, provider?: OnlineProvider) { this.articleFlow = new ArticleFlow(this); this.provider = provider || new OnlineProvider(p); this.playbooks = new PlaybookStore(this); this.agents = new AgentStore(this); this.business = new TaskBusiness(this, p.agents); this.runtime = new TaskAgentsRuntime(p.agents, this, p.basePath || '/main'); }
+  /** When this application instance started (the provider's registration, else now); see restarts.ts. */
+  startedAt: string;
+  private startRecorded = false;
+  constructor(readonly p: any, provider?: OnlineProvider) { this.startedAt = p.startedAt || now(); this.articleFlow = new ArticleFlow(this); this.provider = provider || new OnlineProvider(p); this.playbooks = new PlaybookStore(this); this.agents = new AgentStore(this); this.business = new TaskBusiness(this, p.agents); this.runtime = new TaskAgentsRuntime(p.agents, this, p.basePath || '/main'); }
   repo(name: string) { return this.p.db.getRepository(name); }
   key(kind: string, project: string, task: string, id = '') { return `nr-task-${kind}:${project}:${task}:${id}`; }
   async snapshot(key: string, tx?: any) { const r = await this.repo('nrSnapshots').findOne({ filter: { key }, transaction: tx }); return r?.get('payload'); }
@@ -210,7 +214,7 @@ export class TaskService {
   // A run for the local Agent program: it reads the repository, writes a plan (plan step) or changes files (build step);
   // the program itself commits, pushes and opens the PR on the task's branch. An analysis in a playbook that never changes
   // the repository runs without one (repo null): the Agent works from the material and public pages only.
-  private async queueAgentRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
+  private async queueAgentRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string, extra: Partial<Run> = {}) {
     const index = w.stageIndex ?? 0, stage = w.flow!.stages[index], repo = (await this.agents.doc(project, tx)).repo || null;
     if (!repo && !withoutRepo(w, stage) && !articleTask(w)) return fail(systemMessageText('taskExecution.connectRepositoryUnderDataSources'), 409);
     if (!w.humanOwnerId) return fail(systemMessageText('taskExecution.assignOwnerFirst'), 409);
@@ -229,7 +233,7 @@ export class TaskService {
     const resultKind = mode === 'plan' ? (w.playbookId === 'community-reply' ? 'communityReply' : w.playbookId === 'content-outline' ? 'content' : 'research') : undefined;
     const article = mode === 'article' ? { article: await this.articleFlow.runInput(project, w, tx), delivery: w.delivery } : {}, protectedPaths = mode === 'build' ? this.articleFlow.ownedTemplates(project) : [];
     const input = serializeTaskInput({ resultKind, requiresRepository: !withoutRepo(w, stage) && !articleTask(w), ...flowRunInput(context, task, w, index, content, reviews), knowledge, skills, mode, step, repo: articleTask(w) ? null : repo, branch, taskId, title: task.title, ...(data ? { data } : {}), ...article, ...(protectedPaths.length ? { protectedPaths } : {}) });
-    const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, baseRejectedAt: w.results[index]?.rejectedAt, ownerId: w.humanOwnerId, actor, inputVersion: 1, capabilitySnapshot: mode === 'plan' ? ['repo.read'] : mode === 'article' ? ['article.draft'] : ['repo.read', 'repo.write', 'pr.open'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'configured-agent' }, flowStage: index, mode, branch };
+    const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, baseRejectedAt: w.results[index]?.rejectedAt, ownerId: w.humanOwnerId, actor, inputVersion: 1, capabilitySnapshot: mode === 'plan' ? ['repo.read'] : mode === 'article' ? ['article.draft'] : ['repo.read', 'repo.write', 'pr.open'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'configured-agent' }, flowStage: index, mode, branch, ...extra };
     run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
     await this.put(this.key('run', project, taskId, run.id), run, tx);
     w.latestRun = { id: run.id, status: run.status };
@@ -787,7 +791,7 @@ export class TaskService {
       return fresh.status === 'running' ? fresh : null;
     });
   }
-  async finish(run: Run, result?: { content: string; usage?: any; pr?: any; report?: any; article?: any }, error?: string, errorDetail?: string) {
+  async finish(run: Run, result?: { content: string; usage?: any; pr?: any; report?: any; article?: any }, error?: string, errorDetail?: string, restartedAt?: string) {
     return this.lock(run.projectId, run.taskId, async tx => {
       const key = this.key('run', run.projectId, run.taskId, run.id), fresh: Run = await this.snapshot(key, tx);
       if (!fresh || fresh.status !== 'running') return;
@@ -801,7 +805,7 @@ export class TaskService {
         fresh.artifactId = artifact.id; fresh.usage = result.usage;
         if (!stale) { w.results[run.flowStage ?? w.step] = artifact; w.boardState=undefined; }
         else fresh.error = 'candidate_only_context_changed';
-      } else { fresh.error = error || 'agent_failed'; fresh.errorDetail = errorDetail; }
+      } else { fresh.error = error || 'agent_failed'; fresh.errorDetail = errorDetail; if (restartedAt) fresh.restartedAt = restartedAt; }
       await this.put(key, fresh, tx); w.latestRun = { id: fresh.id, status: fresh.status };
       w.history.push({ at: now(), actor: 'system', action: result ? 'runSucceeded' : 'runFailed', runId: fresh.id, artifactId: fresh.artifactId, note: fresh.error });
       // A finished run hands over to the next stage; if it cannot start, the task waits for a retry.
@@ -815,6 +819,8 @@ export class TaskService {
   async tick() {
     if (this.busy || this.stopped) return; this.busy = true;
     try {
+      // Kept before the runs are synced, so a run this start interrupted is recognized (restarts.ts).
+      if (!this.startRecorded) { this.startRecorded = true; await this.recordStart().catch(() => { this.startRecorded = false; }); }
       // Durable queue: scan bounded pages; restarting never resubmits a running request.
       for (let offset = 0; !this.stopped; offset += 100) {
         const rows = await this.repo('nrSnapshots').find({ filter: { key: { $startsWith: 'nr-task-run:' } }, sort: 'id', limit: 100, offset });
@@ -831,6 +837,47 @@ export class TaskService {
     } finally { this.busy = false; }
   }
   stop() { this.stopped = true; this.unregisterRuntime?.(); }
+  // This instance's start joins the earlier ones, so failures a restart caused stay recognizable after the next deploy.
+  private async recordStart() {
+    await this.lock('app', 'starts', async tx => {
+      const stored = await this.snapshot(STARTS_KEY, tx) as { starts?: string[] } | null;
+      await this.put(STARTS_KEY, { starts: withStart(stored?.starts || [], this.startedAt) }, tx);
+    });
+  }
+  /** The start of NocoReach that interrupted the official run, if a restart lost it (restarts.ts). */
+  async restartOf(official: { status: string; failureReason?: string | null; dispatchedAt?: string | null; finishedAt?: string | null; executions?: readonly { dispatchedAt?: string | null }[] }) {
+    if (official.status !== 'failed') return undefined;
+    const stored = await this.snapshot(STARTS_KEY) as { starts?: string[] } | null;
+    return restartOf(official, withStart(stored?.starts || [], this.startedAt));
+  }
+  // A run the restart interrupted starts again once, as Try again does (retryStage): only on an Agent step that still
+  // waits on that run, never for review or publishing, at most once per step for each restart, recorded as the
+  // system's retry. Anything that would need a person's decision leaves the failure on the card instead.
+  async retryAfterRestart(run: Run, restartedAt: string) {
+    if (!['plan', 'build', 'article'].includes(run.mode || '')) return;
+    try {
+      // Authorization reads stay outside the task lock (SQLite has one connection); rechecked under it below.
+      const owner = projectWork(await this.task(run.projectId, run.taskId)).humanOwnerId;
+      if (!owner) return;
+      await this.authorized(run.actor, run.projectId);
+      if (owner !== run.actor) await this.authorized(owner, run.projectId);
+      await this.lock(run.projectId, run.taskId, async tx => {
+        const task = await this.task(run.projectId, run.taskId, tx), w = projectWork(task);
+        const stage = w.flow?.stages[w.stageIndex ?? 0], runs = await this.list('run', run.projectId, run.taskId, tx) as Run[];
+        if (w.cancelledAt || w.archivedAt || w.stage !== 'flow' || stage?.kind !== 'agent' || stage.key !== run.stepId || w.humanOwnerId !== owner) return;
+        const failed = runs.find(r => r.id === run.id);
+        if (w.latestRun?.id !== run.id || failed?.restartedAt !== restartedAt || failed.cancelRequested) return;
+        if (runs.some(active) || runs.some(r => r.stepId === run.stepId && r.autoRetry?.restartedAt === restartedAt)) return;
+        const at = now();
+        await this.queueAgentRun(run.projectId, run.taskId, task, w, tx, run.actor, at, { autoRetry: { of: run.id, restartedAt } });
+        w.history.push({ at, actor: 'system', action: 'retryStage', stage: w.stage, step: w.step, stageKey: stage.key, runId: w.latestRun?.id, note: 'serverRestart' });
+        await this.save(task, w, tx);
+      });
+    } catch (e: any) {
+      // The interrupted run stays failed and the card offers Try again.
+      this.p.app?.logger?.warn?.('NocoReach could not retry a task step after restarting', { projectId: run.projectId, taskId: run.taskId, runId: run.id, message: e?.message });
+    }
+  }
   private async ownRun(project: string, runtimeRunId: string, v: any, tx?: any): Promise<Run> {
     if (!ID.test(String(v?.taskId)) || typeof v?.runId !== 'string') return fail(systemMessageText('taskExecution.runNotFound'), 404);
     const r: Run = await this.snapshot(this.key('run', project, String(v.taskId), v.runId), tx);
@@ -854,7 +901,7 @@ export class TaskService {
     if (r.mode === 'merge') return this.finishMerge(r, v);
     if (r.mode === 'close') return this.finishClose(r, v);
     if (r.mode === 'revert') return this.finishRevert(r, v);
-    if (!v.ok) { await this.finish(r, undefined, typeof v.error === 'string' && /^[a-z_]{1,40}$/.test(v.error) ? v.error : 'agent_failed', optional(v.message || v.error, 2000)); return { accepted: true }; }
+    if (!v.ok) { await this.finish(r, undefined, typeof v.error === 'string' && /^[a-z_]{1,40}$/.test(v.error) ? v.error : 'agent_failed', optional(v.message || v.error, 2000), optional(v.restartedAt, 40)); return { accepted: true }; }
     let pr: any;
     if (r.mode === 'build') {
       const repo = await this.validateAgentResult(r, v), p = v.pr || {};
@@ -880,6 +927,8 @@ export class TaskService {
       fresh.endedAt = at; fresh.status = v.ok ? 'succeeded' : 'failed';
       if (!v.ok) {
         fresh.error = typeof v.error === 'string' && /^[a-z_]{1,40}$/.test(v.error) ? v.error : 'merge_failed';
+        // Publishing is never retried by itself; the card only says the restart interrupted it.
+        if (optional(v.restartedAt, 40)) fresh.restartedAt = optional(v.restartedAt, 40);
         if (current) w.release = { ...rel!, state: 'merge_failed', error: optional(v.message, 300) || systemMessageText('taskDetail.mergeNotComplete') };
       } else if (current) {
         const sha = typeof v.merged?.sha === 'string' && /^[0-9a-f]{7,40}$/.test(v.merged.sha) ? v.merged.sha : undefined, can = Boolean(rel!.verifyText && rel!.pages.length);

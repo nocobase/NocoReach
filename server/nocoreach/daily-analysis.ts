@@ -191,6 +191,8 @@ class DailyAnalysis{
   const prepared=(async()=>{const s=await this.state(id);if(s.runningSince&&Date.now()-Date.parse(s.runningSince)<STALE_MS)return false;await this.save(id,cur=>({...cur,runningSince:new Date().toISOString()}));return true;})();
   const operation=prepared.then(start=>start?this.run(id,trigger):undefined).finally(()=>{if(this.running===operation)this.running=null;});
   this.running=operation;
+  // The run outlives the tick that started it; the classic import waits for it before it writes (legacy/app.ts).
+  this.p.app.importHold?.track(operation);
   void operation.catch(e=>this.p.app.logger.warn('NocoReach analysis run failed',{message:e?.message}));
   await prepared;return this.status(id);
  }

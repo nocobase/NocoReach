@@ -149,6 +149,14 @@ export function InsightChatProvider({
       });
     return startRef.current;
   };
+  const known = !view.loading && view.data !== undefined;
+  const dayThread = async () =>
+    known
+      ? current
+      : threadsOf(
+          await api<OnlineThread[]>(`threads?projectId=${projectId}`),
+          day,
+        ).at(-1);
   const [pending, setPending] = useState<(() => void) | null>(null);
   // Set when this page opens the side panel on a chosen conversation, so the docking effect below leaves it there.
   const choseRef = useRef(false);
@@ -176,6 +184,13 @@ export function InsightChatProvider({
         toast.error(() => onlineError(error));
         chat.refresh();
       });
+    else if (!known)
+      void dayThread().then(
+        (thread) => {
+          if (thread) open(thread.id);
+        },
+        (error: unknown) => toast.error(() => onlineError(error)),
+      );
   };
   // Opening the side panel here moves the day's conversation into it, unless this page opened it on another
   // conversation; a day without one starts it with the first question.

@@ -351,7 +351,13 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
     key: 'chat',
     work: $t('agentRoles.chat'),
     does: $t('agentRoles.chatWork'),
-    uses: noModels ? undefined : chatSettings?.model?.model || analysisModel,
+    // The chat panel answers with its own model, else the default chat model (not the analysis's, which a project on
+    // simulated data replaces).
+    uses: noModels
+      ? undefined
+      : chatSettings?.model?.model ||
+        models.data?.defaultModel?.model ||
+        analysisModel,
     ...(modelsLoading || (chatSettings === undefined && !online.error)
       ? { state: 'loading' }
       : noModels
@@ -474,18 +480,20 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
         where:
           [
             where,
-            health?.state === 'ok' && health.outcome === 'completed'
-              ? $t('agentRoles.lastTask', { 0: formatDateTime(health.at) })
+            // The latest task's outcome in the same small line as the computer, like Daily analysis's last run.
+            health?.state === 'ok'
+              ? $t(
+                  health.outcome === 'completed'
+                    ? 'agentRoles.lastTask'
+                    : 'agentRoles.lastTaskFailed',
+                  { 0: formatDateTime(health.at) },
+                )
               : health?.state === 'unknown'
                 ? $t('agentRoles.noTaskYet')
                 : '',
           ]
             .filter(Boolean)
             .join(' · ') || undefined,
-        detail:
-          health?.state === 'ok' && health.outcome === 'failed'
-            ? $t('agentRoles.lastTaskFailed')
-            : undefined,
         action: change,
       };
     if (runners.options.length === 0)
@@ -567,7 +575,8 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
             <col className='w-[14%]' />
             <col className='w-[14%]' />
           </colgroup>
-          <thead>
+          {/* Column headings for screen readers: each row already says what it holds (2026-10-22 user decision). */}
+          <thead className='sr-only'>
             <tr className='text-xs text-muted-foreground'>
               <th scope='col' className='px-4 py-2 text-left font-normal'>
                 {$t('agentRoles.colWork')}
@@ -713,6 +722,18 @@ function RoleRow({ row, busy }: { row: Row; busy: boolean }) {
                   {row.where}
                 </span>
               )}
+              {/* What is wrong, in the row's own small type, not as a line of body text below the row. */}
+              {row.detail && (
+                <span
+                  className={
+                    row.state === 'attention'
+                      ? 'mt-1 block text-xs text-nr-ink-amber'
+                      : 'mt-1 block text-xs text-muted-foreground'
+                  }
+                >
+                  {row.detail}
+                </span>
+              )}
             </>
           )}
         </td>
@@ -737,21 +758,6 @@ function RoleRow({ row, busy }: { row: Row; busy: boolean }) {
           )}
         </td>
       </tr>
-      {row.detail && (
-        <tr>
-          <td />
-          <td
-            colSpan={3}
-            className={
-              row.state === 'attention'
-                ? 'px-4 pb-3 text-nr-ink-amber'
-                : 'px-4 pb-3 text-muted-foreground'
-            }
-          >
-            {row.detail}
-          </td>
-        </tr>
-      )}
     </>
   );
 }

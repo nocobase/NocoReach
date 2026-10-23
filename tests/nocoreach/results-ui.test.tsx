@@ -46,6 +46,7 @@ const row = {
   title: 'Completed task A',
   taskState: 'done',
   closed: false,
+  archived: false,
   simulated: false,
   occurredAt: null,
   pages: [],
@@ -126,8 +127,7 @@ const board = (overrides: object = {}) => ({
   total: 3,
   counts: {
     live: 2,
-    pendingLive: 1,
-    delivered: 0,
+    delivered: 1,
     up: 1,
     down: 1,
     flat: 0,
@@ -181,9 +181,9 @@ const board = (overrides: object = {}) => ({
       ...row,
       taskId: '14',
       taskNo: 14,
-      title: 'Speed up the home page',
-      phase: 'pendingLive',
-      taskState: 'review',
+      title: 'Write the pricing FAQ',
+      phase: 'delivered',
+      taskState: 'done',
     },
   ],
   ...overrides,
@@ -225,21 +225,24 @@ it('shows the work of the period: counts, page totals, each change and what need
   expect(
     screen.getByRole('link', { name: english['results.board.viewAll'] }),
   ).toHaveAttribute('href', '/results/all?days=28');
+  // Only work with an outcome: a finished delivery reads Delivered; nothing waits to go live.
   expect(
-    screen.getByText(english['results.phase.pendingLive']),
+    screen.getByText(english['results.phase.delivered']),
   ).toBeInTheDocument();
   expect(
-    screen.getByText(english['results.taskState.review']),
+    screen.getByText(
+      english['results.board.deliveredAlso'].replace('{0}', '1'),
+    ),
   ).toBeInTheDocument();
   const rows = screen.getAllByRole('row');
   expect(rows[1]).toHaveTextContent('T-9 · Add internal links');
-  expect(rows[2]).toHaveTextContent('T-14 · Speed up the home page');
+  expect(rows[2]).toHaveTextContent('T-14 · Write the pricing FAQ');
 });
 it('opens on 90 days and says so inside each card when nothing went live', async () => {
   action.mockResolvedValueOnce(
     board({
       total: 0,
-      counts: { ...board().counts, live: 0, pendingLive: 0, up: 0, down: 0 },
+      counts: { ...board().counts, live: 0, delivered: 0, up: 0, down: 0 },
       totals: { clicks: null, views: null },
       changes: [],
       attention: [],
@@ -317,7 +320,7 @@ it('lists the period with its own filters, and clearing them keeps the period', 
   action.mockResolvedValue({ items: [], total: 0 });
   render(
     <MemoryRouter
-      initialEntries={['/results/all?days=28&q=docs&status=pendingLive']}
+      initialEntries={['/results/all?days=28&q=docs&status=delivered']}
     >
       <Routes>
         <Route path='/results/all' element={<AllResultsPage />} />
@@ -333,7 +336,7 @@ it('lists the period with its own filters, and clearing them keeps the period', 
       page: 1,
       order: 'desc',
       q: 'docs',
-      status: 'pendingLive',
+      status: 'delivered',
     },
     unwrap: 'data',
   });
@@ -395,4 +398,43 @@ it('explains an invalid period on the full list instead of an empty page', async
     await screen.findByText(english['rangePicker.reversedDates']),
   ).toBeInTheDocument();
   expect(action).not.toHaveBeenCalled();
+});
+
+it('says a result archived after it finished is archived, and never calls a stopped task done', async () => {
+  action.mockResolvedValueOnce({
+    items: [
+      {
+        ...row,
+        taskId: '21',
+        taskNo: 21,
+        title: 'Pricing FAQ',
+        archived: true,
+      },
+      {
+        ...row,
+        taskId: '22',
+        taskNo: 22,
+        title: 'Title rewrite',
+        phase: 'live',
+        status: 'waiting',
+        taskState: 'closed',
+        closed: true,
+      },
+    ],
+    total: 2,
+  });
+  render(
+    <MemoryRouter initialEntries={['/results/all?days=28']}>
+      <Routes>
+        <Route path='/results/all' element={<AllResultsPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  const archived = await screen.findByText('T-21 · Pricing FAQ');
+  expect(archived.closest('td')).toHaveTextContent(
+    `${english['results.taskState.done']} · ${english['results.archived']}`,
+  );
+  const stopped = screen.getByText('T-22 · Title rewrite').closest('td')!;
+  expect(stopped).toHaveTextContent(english['results.taskState.closed']);
+  expect(stopped).not.toHaveTextContent(english['results.taskState.done']);
 });

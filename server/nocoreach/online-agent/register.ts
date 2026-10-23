@@ -60,6 +60,26 @@ const task = (value: unknown): Json => {
 /** What the chat shows of each call: never page text, project data or raw task records. */
 const publicOutput: Record<OnlineToolName, (value: unknown) => Json> = {
   project_data: page,
+  query_data: (value) => {
+    const result = (value ?? {}) as Record<string, unknown>;
+    return jsonOf(
+      Object.fromEntries(
+        [
+          'source',
+          'page',
+          'url',
+          'dataThrough',
+          'total',
+          'nextOffset',
+          'accessDenied',
+          'connected',
+          'error',
+        ]
+          .filter((key) => key in result)
+          .map((key) => [key, result[key]]),
+      ),
+    );
+  },
   read_page: page,
   daily_analysis: page,
   task_get: task,

@@ -214,6 +214,7 @@ test('online conversations take the nocoreach scope, its project tools and Chat 
     [
       'daily_analysis',
       'project_data',
+      'query_data',
       'read_page',
       'task_execute',
       'task_get',

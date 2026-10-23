@@ -45,11 +45,15 @@ function topicsDraft(rows: Topic[]): TaskDraft {
   };
 }
 function reposDraft(rows: Repo[], period: string): TaskDraft {
+  // The Why card's one sentence, from the numbers rather than the list (2026-10-23 user request).
+  const top = [...rows].sort((a, b) => (b.gained ?? -1) - (a.gained ?? -1))[0];
+  const why = top?.gained != null ? rows.length === 1 ? $t('githubHot.repoWhy', { 0: top.repo, 1: period, 2: num(top.gained) }) : $t('githubHot.reposWhy', { 0: rows.length, 1: top.repo, 2: period, 3: num(top.gained) }) : undefined;
   const lines = rows.slice(0, 30).map((r) => $t('githubHot.repoLine', { 0: r.url, 1: num(r.stars), 2: r.gained != null ? `+${num(r.gained)}` : "—", 3: period, 4: r.description || "" }));
   return {
     title: clip(rows.length === 1 ? $t('githubHot.repoTaskTitle', { 0: rows[0].repo }) : $t('githubHot.reposTaskTitle', { 0: rows[0].repo, 1: rows.length }), 200),
     objective: clip($t('githubHot.reposObjective'), 1000),
     brief: clip([$t('githubHot.reposBrief'), ...lines, "", $t('githubHot.reposSuggestion')].join("\n"), 20000),
+    ...(why ? { why: clip(why, 300) } : {}),
   };
 }
 
