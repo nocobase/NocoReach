@@ -292,7 +292,6 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     ...TASK_COMMANDS.map((command) => `nrTaskWork.command.${command}`),
     'nrTasks.createManual',
     ...list('nrStrategy', [
-      'createFromResult',
       'reviewOpportunity',
       'saveInsights',
       'context',

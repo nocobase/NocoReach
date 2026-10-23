@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — A result's drawer without follow-ups, in one text size
+
+- A result's drawer no longer offers Follow-ups or the full-width "Create follow-up" button (2026-10-23 user decision: the flow ran too long). The follow-up page, its routes, the `result-create` page permission, the `createFromResult` capability and the `nrStrategy:createFromResult` action are removed. Opportunities and tasks raised from a result before keep showing where they came from and keep working.
+- The drawer reads in one text size: the summary, the page, "Observing since" as a date (not a raw timestamp) and Open original task; the 7-day / 28-day switch and the refresh share one row; the waiting note is grey text like the rest.
+
 ## Unreleased — Results lists only work with an outcome; a closed task never reads Completed
 
 - Results (the overview, All results, a result's drawer and the counts) lists only tasks that produced an outcome: their change went live, or their delivery finished (done, or its execution recorded), even if archived afterwards. Tasks cancelled before going live, work archived before it finished (including the old-workflow archive) and work still waiting for review, approval or publishing stay in Tasks. "Waiting to go live" is no longer a phase of Results; the Live card says how many more were delivered. Simulated work (the demo install) follows the same rule and stays marked as simulated.

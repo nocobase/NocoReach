@@ -74,8 +74,6 @@ class StrategyService{
   const row=await this.row(id,transaction),state=row?.get('payload')||initial();
   if(typeof v.requestId!=='string'||!/^[-a-zA-Z0-9]{20,80}$/.test(v.requestId))fail(systemMessageText('strategy.invalidRequestIdMessage'));
   state.operations ||= [];
-  if(v.action==='createFromResult'&&state.resultSubmissions?.[v.requestId])return state;
-  if(v.action==='createFromResult'&&state.operations.includes(v.requestId))fail(systemMessageText('strategy.contentUpdatedAnotherWindowRefresh'),409);
   if(state.operations.includes(v.requestId))return state;
   if(v.action==='approve'&&state.proposals.find(p=>p.id===v.proposalId)?.taskId)return state;
   if(!Number.isInteger(v.revision)||v.revision!==state.revision)fail(systemMessageText('strategy.contentUpdatedAnotherWindowRefresh'),409);
@@ -139,38 +137,6 @@ class StrategyService{
   state.proposals.unshift({...proposal,taskId:task.id,taskNo:task.get?.('evidence')?.no,approvedAt:new Date().toISOString()});
  });}
  async createDirectionTask(id,proposal,v,ctx,transaction){return this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:systemMessageText('messages.goal',{0:proposal.objective,1:proposal.brief},ctx?.getCurrentLocale?.()),status:systemMessageText('common.pending'),evidence:{source:systemMessageText('strategy.aiOpportunityActionConfirmedPerson'),objective:proposal.objective,insight:proposal.insight,context:proposal.evidence,proposalId:proposal.id,...(proposal.signalKey?{signalKey:proposal.signalKey}:{}),...(proposal.page?{page:proposal.page}:{}),...(proposal.entry?{entry:proposal.entry}:{}),...(proposal.resultSource?{resultSource:proposal.resultSource}:{}),...creator(ctx),...(typeof v.playbookId==='string'&&/^[a-z0-9-]{1,60}$/.test(v.playbookId)?{suggestedPlaybook:v.playbookId}:{})}},transaction});}
- async createFromResult(id,v,ctx){
-  if(!['opportunity','task'].includes(v.kind))fail(systemMessageText('strategy.invalidStatus'));
-  const state=await this.mutate(id,{...v,action:'createFromResult'},async(state,transaction)=>{
-   const source=v.source;
-   if(!source||![7,28,null].includes(source.day)||!Number.isInteger(source.taskRevision)||!(source.computedAt===null||typeof source.computedAt==='string'))fail(systemMessageText('strategy.checkInputLength'));
-   const task=await this.p.taskExecution.task(id,String(source.taskId),transaction),w=projectWork(task);
-   const observation=source.day===null?null:w.observation?.results?.find(r=>r.day===source.day)||null;
-   if(w.revision!==source.taskRevision||(observation?.computedAt||null)!==source.computedAt||(!w.observeFrom&&source.day!==null)||(w.observeFrom&&source.day===null))fail(systemMessageText('strategy.contentUpdatedAnotherWindowRefresh'),409);
-   const {resultSummary}=await import('./execution/result-view.js');
-   const pages=this.p.taskExecution.effectPages(w);
-   if(!resultSummary(task,pages))fail(systemMessageText('strategy.opportunityNotFound'),404);
-   const resultSource={taskId:String(task.id),observeFrom:w.observeFrom||null,day:source.day,observation:observation?structuredClone(observation):null,pages:observation?[...observation.pages]:pages,capturedAt:new Date().toISOString()};
-   const fields=v.fields||{};
-   let target;
-   if(v.kind==='opportunity'){
-    const card=insightInput({...fields,signalIds:[],sources:[]});
-    state.resultOpportunities ||= [];
-    if(state.resultOpportunities.length>=100)fail(systemMessageText('strategy.currentPilotSavesUp100'),409);
-    target={...card,id:randomUUID(),resultSource,firstSeenAt:resultSource.capturedAt,updatedAt:resultSource.capturedAt,change:'new',sources:[...(observation?.gsc?['gsc']:[]),...(observation?.ga4?['ga4']:[])]};
-    state.resultOpportunities.unshift(target);
-   }else{
-    const fieldsChecked=proposalInput({title:fields.title,brief:fields.brief}),objective=text(fields.objective,1000,true);
-    if(fields.playbookId!==undefined&&(typeof fields.playbookId!=='string'||!/^[a-z0-9-]{1,60}$/.test(fields.playbookId)))fail(systemMessageText('strategy.checkInputLength'));
-    if(state.proposals.length>=100)fail(systemMessageText('strategy.currentPilotSavesUp100'),409);
-    const proposal={...fieldsChecked,objective,id:randomUUID(),status:'approved',goalVersion:null,goal:null,insight:null,evidence:resultEvidence(resultSource),resultSource,createdAt:resultSource.capturedAt};
-    target=await this.createDirectionTask(id,proposal,fields,ctx,transaction);
-    state.proposals.unshift({...proposal,taskId:target.id,taskNo:target.get?.('evidence')?.no,approvedAt:resultSource.capturedAt});
-   }
-   state.resultSubmissions ||= {};state.resultSubmissions[v.requestId]={kind:v.kind,id:String(target.id)};
-  });
-  return {...state.resultSubmissions[v.requestId],revision:state.revision};
- }
  // Short task numbers (T-1, T-2 …): task record ids are long generated numbers, so each new task gets the next number
  // of its project when it is created — one hook for every place that creates tasks; kept in evidence.no.
  async numberTask(model,options){
@@ -215,10 +181,10 @@ class StrategyService{
   proposal.status='approved';proposal.taskId=task.id;proposal.taskNo=task.get?.('evidence')?.no;proposal.approvedAt=new Date().toISOString();
  });}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,systemMessageText('strategy.workspaceRequestNotCompleteEdits'));}};
-  this.p.app.resourceManager.define({name:'nrStrategy',actions:{createFromResult:wrap((id,v,c)=>this.createFromResult(id,v,c)),state:wrap(id=>this.state(id)),reviewOpportunity:wrap((id,v)=>this.reviewOpportunity(id,v)),saveInsights:wrap((id,v,c)=>this.saveInsights(id,v,c)),context:wrap(async(id,v,c)=>{const context=await this.context(id,v.periodDays),evidenceToken=randomUUID();await c.cache.set(`nr-analysis:${id}:${c.auth.user.id}:${evidenceToken}`,context,86400000);return {...context,evidenceToken};}),saveGoal:wrap((id,v,c)=>this.saveGoal(id,v,c)),saveProposal:wrap((id,v)=>this.saveProposal(id,v)),approve:wrap((id,v,c)=>this.approve(id,v,c)),confirmDirection:wrap((id,v,c)=>this.confirmDirection(id,v,c)),decideSignal:wrap((id,v)=>this.decideSignal(id,v)),badges:wrap((id,v,c)=>this.badges(id,c))}});
+  this.p.app.resourceManager.define({name:'nrStrategy',actions:{state:wrap(id=>this.state(id)),reviewOpportunity:wrap((id,v)=>this.reviewOpportunity(id,v)),saveInsights:wrap((id,v,c)=>this.saveInsights(id,v,c)),context:wrap(async(id,v,c)=>{const context=await this.context(id,v.periodDays),evidenceToken=randomUUID();await c.cache.set(`nr-analysis:${id}:${c.auth.user.id}:${evidenceToken}`,context,86400000);return {...context,evidenceToken};}),saveGoal:wrap((id,v,c)=>this.saveGoal(id,v,c)),saveProposal:wrap((id,v)=>this.saveProposal(id,v)),approve:wrap((id,v,c)=>this.approve(id,v,c)),confirmDirection:wrap((id,v,c)=>this.confirmDirection(id,v,c)),decideSignal:wrap((id,v)=>this.decideSignal(id,v)),badges:wrap((id,v,c)=>this.badges(id,c))}});
   this.p.db.on('nrTasks.beforeCreate',(model,options)=>this.numberTask(model,options));
   this.p.app.on('afterStart',()=>this.numberAll().catch(e=>this.p.app.logger.warn('NocoReach opportunity numbers not filled',{message:e.message})));
-  this.p.app.acl.allow('nrStrategy',['createFromResult','state','context','reviewOpportunity','saveGoal','saveProposal','approve','confirmDirection','decideSignal','saveInsights','badges'],'loggedIn');
+  this.p.app.acl.allow('nrStrategy',['state','context','reviewOpportunity','saveGoal','saveProposal','approve','confirmDirection','decideSignal','saveInsights','badges'],'loggedIn');
  }
 }
 export { StrategyService, goalInput, proposalInput, insightInput, evidenceFrom, projectMemory, memoryFields };
