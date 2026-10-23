@@ -2836,6 +2836,7 @@
   "aiSearch.model": "モデル",
   "messages.modelServicesSetUpConfig": "モデルサービスは config.yml の ai.llmServices で設定します。NocoReach は読み取りのみ行います",
   "analysis.invalidModelResult": "モデルから解析可能な結果が返されませんでした",
+  "analysis.modelTimedOut": "AI サービスが {0} 分以内に結果を返しませんでした",
   "aiQuestions.occurrenceMeasure": "",
   "messages.handingOffAgent": "エージェントに引き継ぎ中…",
   "common.saving": "保存中…",
