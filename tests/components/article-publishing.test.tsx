@@ -141,6 +141,12 @@ it('reviews an article field by field against its source, per language', async (
     'Chinese (1 changes)',
   ]);
   expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
+  // The body changed, so the article opens as its readers will see it; Changes compares field by field.
+  expect(screen.getByRole('button', { name: 'Preview' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await userEvent.click(screen.getByRole('button', { name: 'Changes' }));
   const panel = screen.getByRole('tabpanel');
   expect(within(panel).getByText('新的中文正文')).toBeInTheDocument();
   expect(within(panel).getByText('中文正文')).toBeInTheDocument();
