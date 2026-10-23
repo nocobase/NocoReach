@@ -172,8 +172,8 @@ export default function KeywordResearch({ embedded = false }: { embedded?: boole
               </Select>
             </div>
             <Button type="submit" disabled={busy} className="lg:px-6">{busy ? $t('common.querying') : $t('common.query')}</Button>
+            <InfoTip label={$t('keywordResearch.method')} className="self-center">{$t('keywordResearch.searchModesHelp')}</InfoTip>
           </form>
-          <p className="text-xs text-muted-foreground">{$t('keywordResearch.searchModesHelp')}</p>
           {error ? <p role="alert" className="nr-error">{error}</p> : null}
         </Card>
       )}

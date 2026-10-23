@@ -36,6 +36,57 @@ export interface LegacyJob {
   readonly onTick: () => unknown;
 }
 
+/** How long the timers stay held after the classic import's last call: a CLI that stops lets them run again. */
+export const IMPORT_HOLD_LEASE_MS = 5 * 60_000;
+
+/**
+ * Keeps NocoReach's background work off the data while `pnpm nocobase app import-classic` writes it
+ * (server/nocoreach/classic-import.ts): the timers act on a project as soon as its snapshot lands, and would otherwise
+ * work on half a dataset. Each import call renews a lease instead of holding until `finish`, so a CLI that dies midway
+ * lets the timers run again. In memory: NocoReach and its timers run in one process.
+ */
+export class ImportHold {
+  private until = 0;
+  private readonly work = new Set<Promise<unknown>>();
+
+  get held(): boolean {
+    return Date.now() < this.until;
+  }
+
+  /** Holds, or renews the hold, for `lease` from now. */
+  hold(lease = IMPORT_HOLD_LEASE_MS): void {
+    this.until = Date.now() + lease;
+  }
+
+  release(): void {
+    this.until = 0;
+  }
+
+  /** Background work that `idle()` waits for. */
+  track<T>(work: Promise<T>): Promise<T> {
+    this.work.add(work);
+    const done = () => this.work.delete(work);
+    work.then(done, done);
+    return work;
+  }
+
+  /** True once the tracked work has finished, false if some still runs after `ms`. */
+  async idle(ms: number): Promise<boolean> {
+    const deadline = Date.now() + ms;
+    while (this.work.size) {
+      const left = deadline - Date.now();
+      if (left <= 0) return false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        Promise.allSettled([...this.work]),
+        new Promise((resolve) => (timer = setTimeout(resolve, left))),
+      ]);
+      clearTimeout(timer);
+    }
+    return true;
+  }
+}
+
 export class LegacyResources {
   private readonly actions = new Map<string, Record<string, LegacyAction>>();
   private readonly levels = new Map<string, AccessLevel>();
@@ -67,6 +118,7 @@ export class LegacyResources {
 export class LegacyApp {
   readonly resources = new LegacyResources();
   readonly jobs: LegacyJob[] = [];
+  readonly importHold = new ImportHold();
   private readonly plugins = new Map<string, unknown>();
   private readonly listeners = new Map<string, (() => unknown)[]>();
   readonly resourceManager: { define: LegacyResources['define'] };
@@ -99,6 +151,16 @@ export class LegacyApp {
     };
     this.pm = { get: (name) => this.plugins.get(name) ?? null };
     this.environment = { getVariables: () => variables.all() };
+  }
+
+  /**
+   * One firing of a timer the services registered, as the provider's schedule executor calls it. While the classic
+   * import holds the timers the firing is skipped, not queued: the next one does the work.
+   */
+  async tick(job: LegacyJob): Promise<boolean> {
+    if (this.importHold.held) return false;
+    await this.importHold.track(new Promise((resolve) => resolve(job.onTick())));
+    return true;
   }
 
   /** Makes a NocoBase 3 capability answer a classic `pm.get(name)`. */

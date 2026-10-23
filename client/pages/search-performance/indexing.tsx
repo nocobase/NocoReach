@@ -19,7 +19,7 @@ import { Input } from "#components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#components/ui/select";
 import { TabsTrigger } from "#components/ui/tabs";
 import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "#components/seo/data-table";
-import { DataTableTabs, DataTableToolbar } from "#components/seo/data-table-toolbar";
+import { DataTableTabs } from "#components/seo/data-table-toolbar";
 import { TablePagination } from "#components/seo/table-pagination";
 import { SortableHeader } from "#components/seo/sortable-header";
 import { StatTile } from "#components/seo/stat-tile";
@@ -134,10 +134,10 @@ export function IndexingView({ projectId, property, tab, reason, onPick }: { pro
 function Tiles({ pages, checked, tab, onTab }: { pages: IndexRow[]; checked: number; tab: Tab; onTab: (t: Tab) => void }) {
   const indexed = pages.filter((p) => p.status === "indexed").length, not = pages.filter((p) => p.status === "notIndexed");
   const reasons = new Set(not.map((p) => p.coverageState || "")).size, issues = pages.reduce((n, p) => { const x = issuesOf(p); return { errors: n.errors + x.errors, warnings: n.warnings + x.warnings, pages: n.pages + (x.errors + x.warnings ? 1 : 0) }; }, { errors: 0, warnings: 0, pages: 0 });
-  const tiles: { key: Tab; label: string; value: number; hint: string; help: string }[] = [
+  const tiles: { key: Tab; label: string; value: number; hint?: string; help: string }[] = [
     { key: "indexed", label: $t('searchIndex.indexed'), value: indexed, hint: $t('searchIndex.shareOfChecked', { 0: pct(checked ? indexed / checked : 0) }), help: $t('searchIndex.indexedHelp') },
     { key: "notIndexed", label: $t('searchIndex.notIndexed'), value: not.length, hint: $t('searchIndex.reasonCount', { 0: reasons }), help: $t('searchIndex.notIndexedHelp') },
-    { key: "canonical", label: $t('searchIndex.canonicalMismatch'), value: pages.filter((p) => p.canonicalMismatch).length, hint: $t('searchIndex.canonicalMismatchHint'), help: $t('searchIndex.canonicalMismatchHelp') },
+    { key: "canonical", label: $t('searchIndex.canonicalMismatch'), value: pages.filter((p) => p.canonicalMismatch).length, help: $t('searchIndex.canonicalMismatchHelp') },
     { key: "rich", label: $t('searchIndex.richIssues'), value: issues.pages, hint: $t('searchIndex.errorsWarnings', { 0: issues.errors, 1: issues.warnings }), help: $t('searchIndex.richIssuesHelp') },
   ];
   return (
@@ -266,14 +266,7 @@ function IndexTable({ pages, tab, reason, onTab, onReason, onOpen, onHandOff }: 
   };
   return (
     <Card className="gap-0 py-0" data-report="">
-      <DataTableTabs value={tab} onValueChange={(v) => onTab(v as Tab)} actions={<Button variant="outline" size="sm" onClick={exportRows}><Download data-icon="inline-start" />{$t('common.exportCsv')}</Button>}>
-        <TabsTrigger value="all">{$tj('searchIndex.tabAll', { 0: num(counts.all) })}</TabsTrigger>
-        <TabsTrigger value="indexed">{$tj('searchIndex.tabIndexed', { 0: num(counts.indexed) })}</TabsTrigger>
-        <TabsTrigger value="notIndexed">{$tj('searchIndex.tabNotIndexed', { 0: num(counts.notIndexed) })}</TabsTrigger>
-        <TabsTrigger value="canonical">{$tj('searchIndex.tabCanonical', { 0: num(counts.canonical) })}</TabsTrigger>
-        <TabsTrigger value="rich">{$tj('searchIndex.tabRich', { 0: num(counts.rich) })}</TabsTrigger>
-      </DataTableTabs>
-      <DataTableToolbar>
+      <DataTableTabs value={tab} onValueChange={(v) => onTab(v as Tab)} actions={<Button variant="outline" size="sm" onClick={exportRows}><Download data-icon="inline-start" />{$t('common.exportCsv')}</Button>} tools={<>
         <Input className="h-8 w-56" aria-label={$t('searchIndex.urlContains')} placeholder={$t('searchIndex.urlContains')} value={text} maxLength={500} onChange={(e) => { setText(e.target.value); setPagination((s) => ({ ...s, pageIndex: 0 })); }} />
         <Select value={reason ?? "all"} onValueChange={(v) => onReason(!v || v === "all" ? undefined : String(v))}>
           <SelectTrigger size="sm" className="w-56" aria-label={$t('searchIndex.reason')}><SelectValue>{(v: string) => (v === "all" ? $t('searchIndex.allReasons') : coverageName(v))}</SelectValue></SelectTrigger>
@@ -283,7 +276,13 @@ function IndexTable({ pages, tab, reason, onTab, onReason, onOpen, onHandOff }: 
           <SelectTrigger size="sm" className="w-32" aria-label={$t('searchIndex.pageType')}><SelectValue>{(v: string) => (v === "all" ? $t('searchIndex.allTypes') : (TYPE[v] ?? (() => v))())}</SelectValue></SelectTrigger>
           <SelectContent><SelectItem value="all">{$t('searchIndex.allTypes')}</SelectItem>{Object.keys(TYPE).map((k) => <SelectItem key={k} value={k}>{TYPE[k]()}</SelectItem>)}</SelectContent>
         </Select>
-      </DataTableToolbar>
+      </>}>
+        <TabsTrigger value="all">{$tj('searchIndex.tabAll', { 0: num(counts.all) })}</TabsTrigger>
+        <TabsTrigger value="indexed">{$tj('searchIndex.tabIndexed', { 0: num(counts.indexed) })}</TabsTrigger>
+        <TabsTrigger value="notIndexed">{$tj('searchIndex.tabNotIndexed', { 0: num(counts.notIndexed) })}</TabsTrigger>
+        <TabsTrigger value="canonical">{$tj('searchIndex.tabCanonical', { 0: num(counts.canonical) })}</TabsTrigger>
+        <TabsTrigger value="rich">{$tj('searchIndex.tabRich', { 0: num(counts.rich) })}</TabsTrigger>
+      </DataTableTabs>
       <DataTable table={table} isFiltered={Boolean(text.trim() || reason || type !== "all")} onClearFilters={() => { setText(""); setType("all"); onReason(undefined); }}
         empty={{ title: $t('searchIndex.noPagesHere') }}
         onRowClick={(row, e) => { if (!(e.target as HTMLElement).closest("button,a,[role=checkbox]")) onOpen(row.original); }}

@@ -1,45 +1,52 @@
 import { $t, $tj } from "#i18n";
 // Ported from every-app/open-seo db8bde1 src/client/components/table/DataTableToolbar.tsx (MIT).
-// The parts above a DataTable: a tab row, a toolbar row and a collapsible filter panel. Chinese copy.
+// The parts above a DataTable: a toolbar row (row filters, search, actions) and a collapsible filter panel.
 import { RotateCcw, SlidersHorizontal } from "lucide-react";
 import type { ReactNode } from "react";
 import { Badge } from "#components/ui/badge";
 import { Button } from "#components/ui/button";
 import { Input } from "#components/ui/input";
 import { Tabs, TabsList } from "#components/ui/tabs";
+import { InfoTip } from "#components/reach/info-tip";
 
-/** Tabs that switch what the table shows, as the first row of its card. Pass `TabsTrigger`s as children. */
+/**
+ * A table's row filters (All 658 | Blog 375 | Docs 199 …) as a segmented control at the left of its toolbar row, the
+ * search and other filters (`tools`) after it on the same row, `actions` at the right (2026-10-22 decision D1: line
+ * tabs only switch a page's sections under its header; what a table shows is chosen in its toolbar, like the tasks'
+ * quick views). Pass `TabsTrigger`s as children. `description` and `info` are an ⓘ beside the segments, not a grey
+ * line (decision D5). On a narrow screen the row wraps: the segments first, then the tools under them.
+ */
 export function DataTableTabs({
   value,
   onValueChange,
   actions,
   description,
   info,
+  tools,
   children,
 }: {
   value: string;
   onValueChange: (value: string) => void;
   actions?: ReactNode;
-  /** A short note about the active tab, under the tabs. */
+  /** A short note about the active filter, in an ⓘ beside the segments. */
   description?: ReactNode;
-  /** An ⓘ about the active tab, beside the tabs (a tab cannot hold a button). */
+  /** An ⓘ about the active filter, beside the segments (a segment cannot hold a button). */
   info?: ReactNode;
+  /** Search and other filters, on the same row after the segments. */
+  tools?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <div className="space-y-3 border-b border-border px-4 pt-3 pb-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-1">
-          <Tabs value={value} onValueChange={(next) => onValueChange(String(next))}>
-            <TabsList variant="line" className="h-auto! flex-wrap justify-start *:flex-none">
-              {children}
-            </TabsList>
-          </Tabs>
-          {info}
-        </div>
-        {actions}
+    <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
+      <div className="flex max-w-full items-center gap-1">
+        <Tabs value={value} onValueChange={(next) => onValueChange(String(next))} className="max-w-full">
+          <TabsList variant="segmented">{children}</TabsList>
+        </Tabs>
+        {description ? <InfoTip label={$t('common.info')}>{description}</InfoTip> : null}
+        {info}
       </div>
-      {description ? <div className="text-sm text-muted-foreground">{description}</div> : null}
+      {tools}
+      {actions ? <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div> : null}
     </div>
   );
 }

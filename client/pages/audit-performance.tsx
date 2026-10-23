@@ -27,7 +27,7 @@ import { SectionHandOff } from "./section-hand-off";
 import { safeLink } from "./analytics";
 import { help } from "./glossary";
 import { formatDateTime } from '#lib/format';
-import { Segmented } from './data-github/segmented';
+import { Segmented } from '#components/reach/segmented';
 
 type Issue = { category: string; key: string; title: string; description: string; value: string; score: number; savingsMs: number | null; savingsBytes: number | null; severity: "high" | "medium" };
 type Result = { url: string; finalUrl: string; strategy: "mobile" | "desktop"; version: string | null; scores: Record<string, number | null>; metrics: { key: string; label: string; value: string; score: number | null }[]; issues: Issue[] };

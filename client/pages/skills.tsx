@@ -1,5 +1,7 @@
+import { formatDate } from '#lib/format';
 import { type Message, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useMemo,useState,type ReactElement} from 'react';
+import {segmentedItemClass,segmentedListClass} from '#components/reach/segmented';
 import {ExternalLinkIcon,FileIcon,PencilIcon,PlusIcon,SearchIcon,Trash2Icon,XIcon} from 'lucide-react';
 import {useBusinessAccess} from '#hooks/use-business-access';
 import {PageContainer,PageHeader} from '#components/reach/page';
@@ -20,7 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#
 // library for every project; turned on here, a Skill goes with every task for the Agent to use when it fits. A 做法 step
 // can name Skills, and that step always uses them.
 type Usage=Record<string,string[]>;
-const day=(iso:string)=>{const d=new Date(iso);return `${d.getMonth()+1}/${d.getDate()}`;};
+const day=(iso:string)=>formatDate(iso);
 export default function SkillsPage(){
  const {project,error:projectError}=useProject();
  const {can:canCreate}=useBusinessAccess('nrSkills.create'),{can:canImport}=useBusinessAccess('nrSkills.import'),{can:canImportLink}=useBusinessAccess('nrSkills.importLink'),{can:canRemove}=useBusinessAccess('nrSkills.remove');
@@ -50,7 +52,7 @@ export default function SkillsPage(){
     {canRemove&&ticked.length>0&&<span className="ml-auto flex items-center gap-2 text-sm" role="group" aria-label={$t('skills.selectedSkills')}><span className="text-muted-foreground">{$tj('skills.selected',{0:ticked.length})}</span><Button size="sm" variant="ghost" disabled={busy} onClick={()=>setPicked([])}>{$t('common.clearSelection')}</Button><Button size="sm" variant="outline" className="text-destructive" disabled={busy} onClick={()=>void removeTicked()}><Trash2Icon/>{$t('skills.deleteSelected')}</Button></span>}</div>
    {!list?<p role="status" className="text-sm text-muted-foreground">{$t('common.loadingLoading')}</p>:visible.length?<div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[40rem] table-fixed border-collapse text-sm" aria-label="Skills">
     <colgroup>{canRemove&&<col className="w-10"/>}<col/><col className="w-56"/><col className="w-20"/><col className="w-20"/></colgroup>
-    <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>{canRemove&&<th className="py-2 pr-0 pl-3"><input type="checkbox" aria-label={$t('common.select')} checked={allTicked} onChange={e=>setPicked(e.target.checked?visible.map(s=>s.id):[])}/></th>}{[$t('skills.nameWhenUse'),$t('skills.usedPlaybooks'),$t('skills.attachedFiles')].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}<th className="px-3 py-2 text-left font-medium"><WithInfo help={$t('skills.projectEnablementHelp')}>{$t('skills.currentProject')}</WithInfo></th></tr></thead>
+    <thead data-slot="table-header" className="text-xs text-muted-foreground"><tr>{canRemove&&<th className="py-2 pr-0 pl-3"><input type="checkbox" aria-label={$t('common.select')} checked={allTicked} onChange={e=>setPicked(e.target.checked?visible.map(s=>s.id):[])}/></th>}{[$t('skills.nameWhenUse'),$t('skills.usedPlaybooks'),$t('skills.attachedFiles')].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}<th className="px-3 py-2 text-left font-medium"><WithInfo help={$t('skills.projectEnablementHelp')}>{$t('skills.currentProject')}</WithInfo></th></tr></thead>
     <tbody>{visible.map(s=><tr key={s.id} data-skill-id={s.id} className="cursor-pointer border-t transition-colors hover:bg-muted/40" onClick={()=>setOpen(s.id)}>
      {canRemove&&<td className="py-2.5 pr-0 pl-3" onClick={e=>e.stopPropagation()}><input type="checkbox" aria-label={$t('common.selectValue',{0:s.name})} checked={picked.includes(s.id)} onChange={e=>setPicked(e.target.checked?[...picked,s.id]:picked.filter(x=>x!==s.id))}/></td>}
      <td className="px-3 py-2.5"><button type="button" className="block w-full truncate text-left font-mono font-medium hover:underline" onClick={e=>{e.stopPropagation();setOpen(s.id);}}>{s.name}</button><p className="truncate text-xs text-muted-foreground">{s.builtIn&&s.createdAt&&s.createdAt===s.updatedAt?$legacyText(s.description):s.description}</p></td>
@@ -92,7 +94,7 @@ function NewSkill({projectId,canCreate,canImport,canImportLink,canReadLink,onClo
  return <Dialog open onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className="sm:max-w-2xl">
   <DialogHeader><DialogTitle>{$t('skills.newSkill')}</DialogTitle><DialogDescription>{$t('skills.skillSpellsOutHowKind')}</DialogDescription></DialogHeader>
   <div className="flex flex-col gap-3">
-   <div className="nr-tabs" role="group" aria-label={$t('skills.howCreate')}>{([['form',$t('skills.write')],['folder',$t('skills.uploadFolder')],['link',$t('skills.enterLink')]] as const).filter(([k])=>k==='form'?canCreate:k==='folder'?canImport:canLink).map(([k,v])=><button key={k} type="button" aria-pressed={mode===k} onClick={()=>{setMode(k);setError('');}}>{v}</button>)}</div>
+   <div className={cn(segmentedListClass,'self-start')} role="group" aria-label={$t('skills.howCreate')}>{([['form',$t('skills.write')],['folder',$t('skills.uploadFolder')],['link',$t('skills.enterLink')]] as const).filter(([k])=>k==='form'?canCreate:k==='folder'?canImport:canLink).map(([k,v])=><button key={k} type="button" className={segmentedItemClass} aria-pressed={mode===k} onClick={()=>{setMode(k);setError('');}}>{v}</button>)}</div>
    {mode==='form'?<>
     <label className="nr-field">{$t('common.name')}<input value={name} maxLength={64} disabled={busy} onChange={e=>setName(e.target.value)} placeholder="seo-title" className="font-mono"/><span className="text-xs text-muted-foreground">{$t('skills.lowercaseEnglishLettersNumbersHyphens')}</span></label>
     <label className="nr-field">{$t('skills.whenUse')}<textarea rows={2} maxLength={1024} disabled={busy} value={description} onChange={e=>setDescription(e.target.value)} placeholder={$t('skills.useWhenWritingChangingPage')}/><span className="text-xs text-muted-foreground">{$t('skills.agentUsesLineDecideWhen')}</span></label>
@@ -137,8 +139,8 @@ function SkillDrawer({projectId,canEnable,canRemove,skill,usage,onClose,onToggle
  async function remove(){if(!skill)return;if(!(await confirmAction({title:() => ($t('skills.delete',{0:skill.name})),description:() => (usage.length?$t('skills.playbookStepsCannotUseAnymore',{0:usage.join('、')}):undefined),action:'common.delete'})))return;void act('remove',{},() => ($t('skills.deleted',{0:skill.name})),true);}
  return <Sheet open={Boolean(skill)} onOpenChange={o=>{if(!o)void (async()=>{if(draft&&!(await confirmAction({title:() => ($t('common.discardUnsavedChanges')),action:'playbooks.discard'})))return;onClose();})();}}><SheetContent className="w-full overflow-y-auto data-[side=right]:sm:max-w-2xl" aria-describedby={undefined}>
   <SheetHeader className="sr-only"><SheetTitle>{skill?.name||'Skill'}</SheetTitle></SheetHeader>
-  {skill&&<div className="flex flex-col gap-4 p-4 pt-12" aria-label={$t('skills.skillDetails')} role="region">
-   <div className="flex flex-wrap items-center gap-2"><h2 className="font-mono text-base font-semibold">{skill.name}</h2>{skill.enabled?<Tag tone="green">{$t('skills.enabledInProject')}</Tag>:<Tag tone="grey">{$t('skills.offProject')}</Tag>}
+  {skill&&<div className="flex flex-col gap-4 pb-5 [&>*:not(:first-child)]:mx-5" aria-label={$t('skills.skillDetails')} role="region">
+   <div className="flex flex-wrap items-center gap-2 border-b py-5 pr-14 pl-5"><h2 className="font-mono text-base font-semibold">{skill.name}</h2>{skill.enabled?<Tag tone="green">{$t('skills.enabledInProject')}</Tag>:<Tag tone="grey">{$t('skills.offProject')}</Tag>}
     <span className="ml-auto flex items-center gap-2">{!draft&&canEdit&&<Button size="sm" variant="outline" disabled={busy||!content} onClick={()=>content&&setDraft({name:skill.name,description:skill.description,body:content.body})}><PencilIcon/>{$t('common.edit')}</Button>}
 </span></div>
    <label className="flex items-center gap-2 text-sm"><Switch aria-label={$t('skills.enableProject')} checked={skill.enabled} disabled={!canEnable} onCheckedChange={onToggle}/>{$t('skills.enableProject')}<span className="text-xs text-muted-foreground">{$t('skills.givenAgentEveryTaskUsed')}</span></label>

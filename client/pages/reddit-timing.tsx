@@ -1,6 +1,7 @@
 import { $t } from '#i18n';
 import { formatDateTime } from '#lib/format';
 import { InfoTip } from '#components/reach/info-tip';
+import type { ReactNode } from 'react';
 
 export type RedditTimingState = {
   lastRun?: { at: string; ok: boolean; lastSuccessAt?: string | null } | null;
@@ -17,7 +18,15 @@ export type RedditTimingState = {
 // One line under the search terms (UI review 2026-10-21): when the last search succeeded and when the next may run, the
 // last attempt and the scan rhythm in its ⓘ. A search that did not complete says which term and why, in plain words;
 // the provider's codes and task id, which only an administrator reconciling DataForSEO needs, sit in its own ⓘ.
-export function RedditTiming({ state }: { state: RedditTimingState }) {
+// One status line, as every data page has (2026-10-22 decision D2): what is searched, when it was updated, and in the
+// ⓘ when it runs next and when it last tried.
+export function RedditTiming({
+  state,
+  lead,
+}: {
+  state: RedditTimingState;
+  lead?: ReactNode;
+}) {
   const date = (value?: string | null) =>
     value ? formatDateTime(value) : $t('redditTiming.never');
   const success =
@@ -39,10 +48,11 @@ export function RedditTiming({ state }: { state: RedditTimingState }) {
   return (
     <div className='flex flex-col gap-2'>
       <p className='nr-footnote flex flex-wrap items-center gap-1'>
+        {lead ? <>{lead} · </> : null}
         {$t('redditTiming.lastSuccess', { 0: date(success) })}
-        {next ? <> · {next}</> : null}
         <InfoTip label={$t('redditTiming.details')}>
           <span className='flex flex-col gap-1'>
+            {next ? <span>{next}</span> : null}
             <span>
               {$t('redditTiming.lastAttempt', { 0: date(state.lastRun?.at) })}
             </span>

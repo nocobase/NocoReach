@@ -1007,7 +1007,7 @@ it('the current situation beside the day lists every line, those needing attenti
       title: 'Site',
       items: [
         item('a', 'Pages indexed: 120'),
-        item('b', '54 pages not updated for a year', 'amber'),
+        item('stale', '54 pages not updated for a year', 'amber'),
         item('c', 'Sitemap found'),
         item('d', 'No critical audit issues'),
       ],
@@ -1029,6 +1029,17 @@ it('the current situation beside the day lists every line, those needing attenti
     'Sitemap found',
     'No critical audit issues',
   ]);
+  // Each line leads with its source's logo; a line with no known source has none.
+  expect(
+    within(situation)
+      .getAllByRole('listitem')
+      .map(
+        (l) =>
+          l
+            .querySelector('[data-slot="source-logo"]')
+            ?.getAttribute('data-source') ?? null,
+      ),
+  ).toEqual(['site', null, null, null]);
   expect(
     within(situation).queryByRole('button', { name: 'strategy.refreshBlock' }),
   ).toBeNull();

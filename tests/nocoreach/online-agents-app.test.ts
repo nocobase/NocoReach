@@ -695,6 +695,7 @@ test('online agents cannot be task executors and chat exposes scoped task tools'
     [
       'daily_analysis',
       'project_data',
+      'query_data',
       'read_page',
       'task_execute',
       'task_get',

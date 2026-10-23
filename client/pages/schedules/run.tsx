@@ -1,4 +1,5 @@
 import { useTranslation } from '@nocobase/i18n/client';
+import { translateSystemError } from '#i18n';
 import { runTotals, type Occurrence } from './data.js';
 
 interface Part {
@@ -47,7 +48,7 @@ export function RunDetail({
             item.error && !brief
               ? t('schedules.projectFailedBecause', {
                   name: name(item.id),
-                  reason: item.error,
+                  reason: translateSystemError(item.error),
                 })
               : t('schedules.projectFailed', { name: name(item.id) }),
         },
@@ -65,7 +66,11 @@ export function RunDetail({
   });
   const shown =
     outcomes.length > 1 || parts.some((part) => part.notable) ? parts : [];
-  const reason = run.status !== 'succeeded' ? run.reason : undefined;
+  // The run's reason sums up its projects for the Scheduler, by id; the projects already say it by name.
+  const reason =
+    run.status !== 'succeeded' && !outcomes.length
+      ? translateSystemError(run.reason)
+      : undefined;
   if (!reason && !shown.length) return null;
   return (
     <p

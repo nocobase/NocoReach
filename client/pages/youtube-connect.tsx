@@ -1,3 +1,4 @@
+import { formatDateTime } from '#lib/format';
 import { confirmCollectorClear } from '#lib/collector-clear';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/client';
@@ -392,9 +393,7 @@ function YouTubePanel({
                   : $t('youtube.manualReading')}
                 {state.fetchedAt
                   ? $t('dataChat.lastRead', {
-                      0: new Date(state.fetchedAt).toLocaleString(
-                        getCurrentLocale(),
-                      ),
+                      0: formatDateTime(state.fetchedAt),
                     })
                   : ''}
               </p>

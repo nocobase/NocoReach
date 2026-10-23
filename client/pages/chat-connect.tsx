@@ -1,3 +1,4 @@
+import { formatDateTime } from '#lib/format';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import {ConnectionError} from '#components/connection-error';
 import { translateSourceError, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
@@ -28,7 +29,7 @@ export function ChatConnect({projectId,platform,onChange}:{projectId:number;plat
  if(!status)return error?<ConnectionError message={error}/>:<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
  const side=status[platform],label=platform==='discord'?'Discord':'Slack';
  if(side.connected&&(!editing||!canInspect||!canConnect))return <><div className="nr-guide-connected">{error&&<ConnectionError message={error}/>}<h3>{$tj('chat.connectionBot',{0:label,1:side.name,2:side.bot})}</h3><p>{$tj('chat.read',{0:side.channels!.map(c=>`#${c.name}`).join('、')})}</p>
-  {(side.lastRun||status.lastRun)?<p className="nr-footnote">{$tj('chat.lastReadMessagesReadsOnce',{0:new Date((side.lastRun||status.lastRun)!.at).toLocaleString(getCurrentLocale()),1:(side.lastRun||status.lastRun)!.read})}{(side.lastRun||status.lastRun)!.errors.map(e=><span key={e} className="nr-block">{$tj('chat.notFullyRead',{0:translateSourceError(e)})}</span>)}</p>:<p role="status">{$t('chat.readingFirstTimeLast14')}</p>}
+  {(side.lastRun||status.lastRun)?<p className="nr-footnote">{$tj('chat.lastReadMessagesReadsOnce',{0:formatDateTime((side.lastRun||status.lastRun)!.at),1:(side.lastRun||status.lastRun)!.read})}{(side.lastRun||status.lastRun)!.errors.map(e=><span key={e} className="nr-block">{$tj('chat.notFullyRead',{0:translateSourceError(e)})}</span>)}</p>:<p role="status">{$t('chat.readingFirstTimeLast14')}</p>}
   <div className="nr-step-actions">{canSync&&<Button size="sm" variant="outline" disabled={busy||status.syncing} onClick={()=>void run(()=>call<ChatStatus>(projectId,'sync',{platform}),s=>{setStatus(s);onChange();})}>{busy?$t('common.loadingLoading'):$t('common.readNow')}</Button>}{canInspect&&canConnect&&<Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setEditing(true);void inspect();}}>{$t('chat.changeChannels')}</Button>}{canDisconnect&&<Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('chat.disconnect',{0:label})),description:() => ($t('chat.savedTokenDeletedMessagesAlready')),action:'common.disconnect'}))void run(()=>call<ChatStatus>(projectId,'disconnect',{platform}),s=>{setStatus(s);onChange();});}}>{$t('common.disconnect')}</Button>}</div></div></>;
  return <>{error&&<ConnectionError message={error}/>}
   {!canInspect&&!info&&<p className='nr-footnote'>{$t('messages.notConnectedYet')}</p>}

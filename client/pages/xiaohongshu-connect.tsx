@@ -1,3 +1,4 @@
+import { formatDateTime } from '#lib/format';
 import {
   useCallback,
   useEffect,
@@ -501,7 +502,7 @@ export function XiaohongshuConnect({
             ·{' '}
             {data.verifiedAt
               ? $t('xiaohongshu.lastSuccessfulCollection', {
-                  0: new Date(data.verifiedAt).toLocaleString(locale),
+                  0: formatDateTime(data.verifiedAt),
                 })
               : $t('xiaohongshu.browserXiaohongshuLoginNotYet')}
           </p>
