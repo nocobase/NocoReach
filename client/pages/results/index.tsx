@@ -237,9 +237,9 @@ function BoardBody({ board }: { board: ResultBoard }) {
           label={$t('results.board.live')}
           value={formatNumber(counts.live)}
           detail={
-            counts.pendingLive
-              ? $t('results.board.pendingLive', { 0: counts.pendingLive })
-              : $t('results.board.noPending')
+            counts.delivered
+              ? $t('results.board.deliveredAlso', { 0: counts.delivered })
+              : ''
           }
         />
         <Metric
@@ -418,11 +418,9 @@ function ChangeBar({ change }: { change: BoardChange }) {
   );
 }
 
-// What comes next: the next check of live work, the state of work still to go live, nothing for the rest.
+// What comes next: the next check of live work, nothing for a finished delivery.
 function nextStep(item: ResultSummary) {
   if (item.phase === 'live') return nextCheck(item) || '—';
-  if (item.phase === 'pendingLive')
-    return $t(`results.taskState.${item.taskState}`);
   return '—';
 }
 
@@ -474,11 +472,7 @@ function RecentCard({ items }: { items: ResultSummary[] }) {
                       : '—'}
                   </TableCell>
                   <TableCell>
-                    <ResultTag
-                      phase={item.phase}
-                      status={item.status}
-                      taskState={item.taskState}
-                    />
+                    <ResultTag phase={item.phase} status={item.status} />
                   </TableCell>
                   <TableCell className='text-muted-foreground'>
                     {nextStep(item)}
