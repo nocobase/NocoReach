@@ -24,10 +24,10 @@ import { WorkspaceCacheProvider } from '../../client/pages/workspace-cache';
 const fixture = vi.hoisted(() => ({
   action: vi.fn(),
   openChat: vi.fn(),
-  resume: vi.fn(),
   threads: [] as unknown[],
-  details: {} as Record<string, unknown>,
+  messages: {} as Record<string, unknown[]>,
   posts: [] as { path: string; body: unknown }[],
+  sent: [] as { conversationId: string | null; content: string }[],
   panelOpen: false,
   state: undefined as unknown as StrategyState,
   tasks: [] as unknown[],
@@ -97,30 +97,38 @@ vi.mock('../../client/pages/data-health', () => ({
   healthText: (name: string) => name,
 }));
 vi.mock('../../client/online-agent/context', () => ({
-  useOptionalOnlineChat: () => ({
-    open: fixture.openChat,
-    resume: fixture.resume,
-    activity: 0,
-    agentId: 'online-default',
-  }),
+  useOptionalOnlineChat: () => ({ activity: 0, enabled: true }),
 }));
+// The Agents plugin keeps the conversations: each one's messages, and what is sent to it.
 vi.mock('@nocobase/app-plugin-agents/client/chat', async (original) => ({
   ...(await original<
     typeof import('@nocobase/app-plugin-agents/client/chat')
   >()),
-  useChatPanel: () => ({ open: fixture.panelOpen }),
+  useChatPanel: () => ({ open: fixture.panelOpen, openChat: fixture.openChat }),
+  useConversation: (id: string | null) => ({
+    data: id ? { id, execution: null, run: null } : undefined,
+  }),
+  useChatStream: () => undefined,
+  useConversationMessages: (id: string | null) => ({
+    items: (id && fixture.messages[id]) || [],
+    pending: [],
+    dispatch: vi.fn(),
+  }),
+  useSendMessage:
+    ({ conversationId }: { conversationId: string | null }) =>
+    ({ content }: { content: string }) => {
+      fixture.sent.push({ conversationId, content });
+      return true;
+    },
 }));
-// The chat's records: the owner's questions asked from Insights in project 1, each conversation's turns, and what is
-// sent.
+// NocoReach's index of them: the owner's questions asked from Insights in project 1, and a day's conversation started.
 vi.mock('../../client/online-agent/api', () => ({
   useOnlineApi: () => async (path: string, body?: unknown) => {
     if (body !== undefined) {
       fixture.posts.push({ path, body });
-      return {};
+      return { id: 't-new' };
     }
     if (path === 'threads?projectId=1') return fixture.threads;
-    const id = /^conversations\/(.+)$/.exec(path)?.[1];
-    if (id && fixture.details[id]) return fixture.details[id];
     throw new Error(`Unexpected ${path}`);
   },
 }));
@@ -263,10 +271,10 @@ beforeEach(() => {
   fixture.schedule = null;
   fixture.action.mockReset();
   fixture.openChat.mockReset();
-  fixture.resume.mockReset();
   fixture.threads = [];
-  fixture.details = {};
+  fixture.messages = {};
   fixture.posts = [];
+  fixture.sent = [];
   fixture.panelOpen = false;
   fixture.action.mockImplementation(
     (resource: string, action: string, options: { body?: object }) => {
@@ -669,24 +677,32 @@ it('earlier days fold into one line each, with where every opportunity went', as
   expect(within(day).getByText('Docs traffic dropped')).toBeTruthy();
 });
 
-const run = (id: string, input: string, output: string, at: string) => ({
+const user = (id: string, text: string, at: string) => ({
   id,
-  input,
-  output,
-  status: 'completed',
-  createdAt: at,
-  agentName: 'Online Agent',
-  events: [
-    { type: 'toolCall', id: `${id}-1`, name: 'daily_analysis', args: {} },
-    { type: 'toolCall', id: `${id}-2`, name: 'project_data', args: {} },
+  role: 'user',
+  parts: [{ type: 'text', text }],
+  metadata: { createdAt: at },
+});
+const reply = (id: string, text: string, tools: string[] = []) => ({
+  id,
+  role: 'assistant',
+  parts: [
+    ...tools.map((name, index) => ({
+      type: `tool-${name}`,
+      toolCallId: `${id}-${index}`,
+      state: 'output-available',
+      input: {},
+      output: {},
+    })),
+    { type: 'text', text },
   ],
 });
 const thread = (id: string, day: string, extra: object = {}) => ({
   id,
   subject: { kind: 'insights', day },
-  question: `question ${id}`,
-  answer: `answer ${id}`,
-  status: 'completed',
+  title: `question ${id}`,
+  running: false,
+  read: true,
   turns: 2,
   updatedAt: `${day}T10:12:00Z`,
   ...extra,
@@ -694,23 +710,16 @@ const thread = (id: string, day: string, extra: object = {}) => ({
 
 it('today’s conversation follows the analysis, a quoted opportunity above its question', async () => {
   fixture.threads = [thread('t-day', '2026-10-21')];
-  fixture.details['t-day'] = {
-    conversation: { id: 't-day', revision: 4 },
-    runs: [
-      run(
-        'r1',
-        'Which page fell most?',
-        '**smartsheet** fell out of the top 100',
-        '2026-10-21T10:00:00Z',
-      ),
-      run(
-        'r2',
-        '[O-5 Opportunity b](/opportunities?item=b)\nHow long until it shows?',
-        'One to three weeks.',
-        '2026-10-21T10:05:00Z',
-      ),
-    ],
-  };
+  fixture.messages['t-day'] = [
+    user('m1', 'Which page fell most?', '2026-10-21T10:00:00Z'),
+    reply('m2', '**smartsheet** fell out of the top 100'),
+    user(
+      'm3',
+      '[O-5 Opportunity b](/opportunities?item=b)\nHow long until it shows?',
+      '2026-10-21T10:05:00Z',
+    ),
+    reply('m4', 'One to three weeks.', ['daily_analysis', 'project_data']),
+  ];
   setup();
   await decisionGroup(7);
   const conversation = await waitFor(() => {
@@ -802,18 +811,16 @@ it('Ask AI on a line quotes it in the input; sending starts or continues the day
   ).toBeTruthy();
   fireEvent.change(input, { target: { value: 'Why this one?' } });
   fireEvent.keyDown(input, { key: 'Enter' });
-  await waitFor(() => expect(fixture.posts).toHaveLength(1));
-  expect(fixture.posts[0]).toEqual({
-    path: 'conversations',
-    body: {
-      requestId: expect.any(String),
-      agentId: 'online-default',
-      projectId: '1',
-      subject: { kind: 'insights', day: '2026-10-21' },
-      text: expect.stringMatching(
-        /^\[Opportunity b\]\([^)]*\/opportunities\?item=b\)\nWhy this one\?$/,
-      ),
-    },
+  // The day's conversation is started, bound to the project, then the question is sent to it.
+  await waitFor(() => expect(fixture.sent).toHaveLength(1));
+  expect(fixture.posts).toEqual([
+    { path: 'threads', body: { projectId: '1', day: '2026-10-21' } },
+  ]);
+  expect(fixture.sent[0]).toEqual({
+    conversationId: 't-new',
+    content: expect.stringMatching(
+      /^\[Opportunity b\]\([^)]*\/opportunities\?item=b\)\nWhy this one\?$/,
+    ),
   });
   // The quote is cleared after sending.
   await waitFor(() =>
@@ -824,31 +831,32 @@ it('Ask AI on a line quotes it in the input; sending starts or continues the day
   expect(fixture.openChat).not.toHaveBeenCalled();
 });
 
-it('a follow-up joins the day’s existing conversation at its revision', async () => {
+it('a follow-up joins the day’s existing conversation', async () => {
   fixture.threads = [thread('t-day', '2026-10-21')];
-  fixture.details['t-day'] = {
-    conversation: { id: 't-day', revision: 4 },
-    runs: [run('r1', 'First', 'Answer', '2026-10-21T10:00:00Z')],
-  };
+  fixture.messages['t-day'] = [
+    user('m1', 'First', '2026-10-21T10:00:00Z'),
+    reply('m2', 'Answer'),
+  ];
   setup();
   const input = await screen.findByRole('textbox', {
     name: 'strategy.composerLabel',
   });
   fireEvent.change(input, { target: { value: 'And then?' } });
   fireEvent.click(screen.getByRole('button', { name: 'strategy.send' }));
-  await waitFor(() => expect(fixture.posts).toHaveLength(1));
-  expect(fixture.posts[0]).toEqual({
-    path: 'conversations/t-day/messages',
-    body: { requestId: expect.any(String), revision: 4, text: 'And then?' },
+  await waitFor(() => expect(fixture.sent).toHaveLength(1));
+  expect(fixture.sent[0]).toEqual({
+    conversationId: 't-day',
+    content: 'And then?',
   });
+  expect(fixture.posts).toEqual([]);
 });
 
 it('with the side panel open the conversation moves there and the page gives it room', async () => {
   fixture.threads = [thread('t-day', '2026-10-21')];
-  fixture.details['t-day'] = {
-    conversation: { id: 't-day', revision: 4 },
-    runs: [run('r1', 'First', 'Answer', '2026-10-21T10:00:00Z')],
-  };
+  fixture.messages['t-day'] = [
+    user('m1', 'First', '2026-10-21T10:00:00Z'),
+    reply('m2', 'Answer'),
+  ];
   fixture.areas = [
     {
       id: 'site',
@@ -872,7 +880,13 @@ it('with the side panel open the conversation moves there and the page gives it 
   fixture.panelOpen = true;
   view.rerender();
   // Opening the panel continues the day's conversation there.
-  await waitFor(() => expect(fixture.resume).toHaveBeenCalledWith('t-day', ''));
+  await waitFor(() =>
+    expect(fixture.openChat).toHaveBeenCalledWith({
+      conversationId: 't-day',
+      draft: undefined,
+      view: 'chat',
+    }),
+  );
   expect(document.querySelector('[data-day-conversation]')).toBeNull();
   expect(
     screen.queryByRole('textbox', { name: 'strategy.composerLabel' }),
@@ -880,7 +894,7 @@ it('with the side panel open the conversation moves there and the page gives it 
   fireEvent.click(
     screen.getByRole('button', { name: /strategy.conversationInPanel/ }),
   );
-  expect(fixture.resume).toHaveBeenCalledTimes(2);
+  expect(fixture.openChat).toHaveBeenCalledTimes(2);
   // The current situation folds to one line under the day's date.
   expect(screen.queryByText('54 pages not updated')).toBeNull();
   fireEvent.click(
@@ -890,22 +904,21 @@ it('with the side panel open the conversation moves there and the page gives it 
   // Ask AI on a line now quotes it into the panel's conversation.
   const b = screen.getByRole('listitem', { name: 'Opportunity b' });
   fireEvent.click(within(b).getByRole('button', { name: 'strategy.askAi' }));
-  expect(fixture.resume).toHaveBeenLastCalledWith(
-    't-day',
-    expect.stringMatching(
+  expect(fixture.openChat).toHaveBeenLastCalledWith({
+    conversationId: 't-day',
+    draft: expect.stringMatching(
       /^\[Opportunity b\]\([^)]*\/opportunities\?item=b\)\n$/,
     ),
-  );
+    view: 'chat',
+  });
 });
 
 it('earlier days sit above today, folded, and show their conversation when opened', async () => {
   fixture.threads = [thread('t-old', '2026-10-18', { turns: 1 })];
-  fixture.details['t-old'] = {
-    conversation: { id: 't-old', revision: 1 },
-    runs: [
-      run('r-old', 'question t-old', 'answer t-old', '2026-10-18T10:00:00Z'),
-    ],
-  };
+  fixture.messages['t-old'] = [
+    user('m-old', 'question t-old', '2026-10-18T10:00:00Z'),
+    reply('m-old-answer', 'answer t-old'),
+  ];
   setup();
   await decisionGroup(7);
   // Nothing of the earlier days shows until asked for, and the button sits above today.

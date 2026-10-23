@@ -50,31 +50,11 @@ export function OnlineChatAction({
   );
 }
 const knownErrors = new Set([
-  'agentDisabled',
-  'modelRequired',
+  'chatDisabled',
   'modelUnavailable',
   'revisionConflict',
-  'requestConflict',
-  'runActive',
-  'contextLimit',
-  'timeout',
-  'interrupted',
   'accessDenied',
   'sessionChanged',
-  'modelAuth',
-  'modelQuota',
-  'modelRateLimit',
-  'modelNetwork',
-  'modelFailed',
-  'filtered',
-  'length',
-  'incompleteResponse',
-  'emptyResponse',
-  'invalidToolCall',
-  'toolOutputLimit',
-  'transcriptLimit',
-  'stepLimit',
-  'outputLimit',
 ]);
 function onlineError(error: unknown) {
   if (error instanceof OnlineApiError) {

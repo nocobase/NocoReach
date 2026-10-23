@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { NocoReachRuntime } from '../../providers/nocoreach.js';
-import { OnlineAgentError } from '../../online-agent/errors.js';
-import type { OnlineTool } from '../../online-agent/executor.js';
+import { OnlineAgentError } from './errors.js';
+import type { OnlineTool, OnlineToolSpec } from './tool.js';
 import { download, plain } from '../public-sources.js';
 const input = z.strictObject({
   url: z.url().max(2000),
@@ -15,6 +15,11 @@ export const pageData = (value: unknown, offset: number) => {
     totalCharacters: text.length,
   };
 };
+export const readPageSpec: OnlineToolSpec = {
+  description:
+    'Read a public webpage as evidence. Never signs in, sends messages or changes a website. Use nextOffset to read the complete captured text.',
+  input,
+};
 /** Uses the application's public-address checks, DNS pinning, redirect checks and project network policy. */
 export function publicPageTool(
   plugin: NocoReachRuntime['plugin'],
@@ -25,9 +30,7 @@ export function publicPageTool(
   const pages = new Map<string, unknown>();
   return {
     name: 'read_page',
-    description:
-      'Read a public webpage as evidence. Never signs in, sends messages or changes a website. Use nextOffset to read the complete captured text.',
-    inputSchema: z.toJSONSchema(input),
+    ...readPageSpec,
     async execute(args) {
       signal.throwIfAborted();
       await authorize();

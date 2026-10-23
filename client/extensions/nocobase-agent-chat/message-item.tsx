@@ -23,6 +23,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
+import { $t } from '#i18n';
 import { Button } from '#components/ui/button';
 import { cn } from 'cn';
 import { ChatMarkdown } from './chat-markdown.js';
@@ -31,6 +32,27 @@ import { ConsultationCard } from './consultation-card.js';
 import { SentContext } from './context-chips.js';
 import { MessageAttachments } from './message-attachments.js';
 import { ReasoningPart } from './reasoning-part.js';
+
+/** The only error text the OnlineAgent shows for a failed tool call, in English; its own detail never reaches the chat. */
+const ONLINE_TOOL_ERROR = 'The tool could not complete.';
+
+/** The OnlineAgent's end-of-reply notice, whose title the plugin writes in English; null for any other notice. */
+function executionStatusText(part: {
+  readonly id?: string;
+  readonly data: { readonly type?: string };
+}): string | null {
+  if (part.id !== 'execution-status') return null;
+  switch (part.data.type) {
+    case 'approval':
+      return $t('onlineAgent.statusApproval');
+    case 'cancelled':
+      return $t('onlineAgent.statusCancelled');
+    case 'failed':
+      return $t('onlineAgent.statusInterrupted');
+    default:
+      return null;
+  }
+}
 
 function Time({
   at,
@@ -181,7 +203,9 @@ export function MessageItem({
         <div key={part.id ?? key} data-chat-part='notice'>
           {card ?? (
             <p className='text-xs text-muted-foreground'>
-              {extensions.newsText?.(part.data, t) ?? part.data.title}
+              {extensions.newsText?.(part.data, t) ??
+                executionStatusText(part) ??
+                part.data.title}
             </p>
           )}
         </div>
@@ -271,7 +295,11 @@ export function MessageItem({
             <p>{t('chat.approval.denied')}</p>
           ) : null}
           {part.state === 'output-error' ? (
-            <p role='alert'>{part.errorText}</p>
+            <p role='alert'>
+              {part.errorText === ONLINE_TOOL_ERROR
+                ? $t('onlineAgent.toolFailed')
+                : part.errorText}
+            </p>
           ) : null}
         </div>
       );

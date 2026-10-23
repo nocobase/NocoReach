@@ -1,16 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiClientError, useApiClient } from '@nocobase/app-client';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
-import type {
-  OnlineAgentDefinition,
-  OnlineConversation,
-  OnlineRun,
-} from '../../shared/online-agent.js';
-export type Agent = OnlineAgentDefinition & { ready: boolean };
-export type ConversationDetail = {
-  conversation: OnlineConversation;
-  runs: OnlineRun[];
-};
+import type { OnlineChatSettings } from '../../shared/online-agent.js';
+/** Chat panel › Settings, with whether the model it uses can answer now. */
+export type OnlineSettings = OnlineChatSettings & { ready: boolean };
 export class OnlineApiError extends Error {
   constructor(
     readonly status: number,

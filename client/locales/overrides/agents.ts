@@ -77,6 +77,8 @@ export const agentsOverridesZhCN: TranslationOverrides = {
         '在装有编码工具的主机（服务器、虚拟机或个人设备）上运行下面的命令。Agent 在那里以运行 Runner的用户身份完全放开地运行，能读写该用户能访问的一切，包括 SSH 密钥和其他凭证。运行环境不是安全边界：请用专用系统用户、容器或虚拟机来运行它。',
     },
     chat: {
+      // Conversations started from Insights (`INSIGHTS_SOURCE`), named as its page is.
+      sources: { insights: '洞察' },
       availability: {
         noRunner: '暂无运行环境，选不了',
         othersPersonal: '只有别人的个人运行环境能跑',
@@ -140,6 +142,7 @@ export const agentsOverridesZhCN: TranslationOverrides = {
 
 export const agentsOverridesEnUS: TranslationOverrides = {
   [PLUGIN]: {
+    chat: { sources: { insights: 'Insights' } },
     agents: {
       fromRunners: 'Local agents reported by runtimes',
       howToAdd:

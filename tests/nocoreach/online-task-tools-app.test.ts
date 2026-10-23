@@ -12,9 +12,15 @@ import { expect, vi } from 'vitest';
 import { createStandaloneServer } from '../../server/standalone.js';
 import { nocoReachToken } from '../../server/providers/nocoreach.js';
 import { createNocoReachOnlineHost } from '../../server/nocoreach/online-agent/host.js';
-import type { OnlineRun } from '../../shared/online-agent.js';
+import type { OnlineBinding } from '../../server/nocoreach/online-agent/tool.js';
 import { discoverAgents } from './runner-fixture.js';
 
+const settings = async () => ({
+  enabled: true,
+  instructions: '',
+  model: null,
+  revision: 0,
+});
 vi.setConfig({ testTimeout: 120000, hookTimeout: 120000 });
 const test = createAppTest({
   scope: 'test',
@@ -69,19 +75,19 @@ test('online tools isolate users/projects, paginate, link tasks and recheck revo
     });
     ids.push(String(task.id));
   }
-  const run = {
-    id: randomUUID(),
+  const run: OnlineBinding = {
+    turnId: randomUUID(),
     ownerId: user.id,
     projectId: null,
-    instructions: '',
-  } as OnlineRun;
-  const signal = new AbortController().signal;
-  const context = await createNocoReachOnlineHost(() => host, '/nested/main')(
-    run,
-    signal,
-  );
+    signal: new AbortController().signal,
+  };
+  const context = await createNocoReachOnlineHost(
+    () => host,
+    '/nested/main',
+    settings,
+  )(run);
   const call = async (name: string, input: unknown): Promise<any> =>
-    context.tools.find((tool) => tool.name === name)!.execute(input, signal);
+    context.tools.find((tool) => tool.name === name)!.execute(input);
   const first = await call('task_list', { limit: 1 });
   expect(first.items).toHaveLength(1);
   expect(first.nextOffset).toBe(1);
@@ -198,20 +204,20 @@ test('online start enqueues the selected Runner exactly once and never becomes t
       },
     },
   });
-  const taskId = String(task.id),
-    signal = new AbortController().signal;
-  const run = {
-    id: randomUUID(),
+  const taskId = String(task.id);
+  const run: OnlineBinding = {
+    turnId: randomUUID(),
     ownerId: actor,
     projectId: null,
-    instructions: '',
-  } as OnlineRun;
-  const context = await createNocoReachOnlineHost(() => host, '/main')(
-    run,
-    signal,
-  );
+    signal: new AbortController().signal,
+  };
+  const context = await createNocoReachOnlineHost(
+    () => host,
+    '/main',
+    settings,
+  )(run);
   const call = async (name: string, input: unknown): Promise<any> =>
-    context.tools.find((tool) => tool.name === name)!.execute(input, signal);
+    context.tools.find((tool) => tool.name === name)!.execute(input);
   const selected = await call('task_execute', {
     projectId,
     taskId,
@@ -312,17 +318,18 @@ test('daily_analysis reads the saved analysis for a project member and stops onc
     },
   });
   const signal = new AbortController().signal;
-  const context = await createNocoReachOnlineHost(() => host, '/main')(
-    {
-      id: randomUUID(),
-      ownerId: user.id,
-      projectId,
-      instructions: '',
-    } as OnlineRun,
+  const context = await createNocoReachOnlineHost(
+    () => host,
+    '/main',
+    settings,
+  )({
+    turnId: randomUUID(),
+    ownerId: user.id,
+    projectId,
     signal,
-  );
+  });
   const tool = context.tools.find((t) => t.name === 'daily_analysis')!;
-  const page = (await tool.execute({}, signal)) as { text: string };
+  const page = (await tool.execute({})) as { text: string };
   const view = JSON.parse(page.text);
   expect(view.analysis).toMatchObject({
     day: '2026-10-21',
@@ -336,7 +343,7 @@ test('daily_analysis reads the saved analysis for a project member and stops onc
   await container
     .resolve(authorizationToken)
     .permissionSets.revoke(assignment.id);
-  await expect(tool.execute({}, signal)).rejects.toMatchObject({
+  await expect(tool.execute({})).rejects.toMatchObject({
     status: 403,
   });
 });

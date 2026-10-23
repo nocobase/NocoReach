@@ -15,7 +15,7 @@ import {
   type TaskStanding,
   type TaskWork,
 } from '../../../shared/task-pending.js';
-import type { OnlineTool } from '../../online-agent/executor.js';
+import type { OnlineTool, OnlineToolSpec } from './tool.js';
 import { pageData } from './web-tool.js';
 
 const input = z.strictObject({
@@ -165,6 +165,11 @@ export function analysisForAgent(
   };
 }
 
+export const dailyAnalysisSpec: OnlineToolSpec = {
+  description:
+    "Read the project's daily analysis shown on Insights: the notes of a day's analysis, the opportunities it raised and where each stands now (awaiting decision; handed off to agent with its task, then that task in progress, needing confirmation, done or closed; dismissed; expired), its verdict on every change (do, watch, skip) with the reason, the opportunities awaiting a decision now, and the watches. Omit day for the latest analysis; `days` lists the earlier ones. Follow nextOffset to read everything. Link opportunities with their url.",
+  input,
+};
 /**
  * `daily_analysis`: the saved daily analysis, read after `authorize` checks the user may still see Insights; the
  * project's tasks (empty when the user may not list them) say where each handed-off opportunity's task stands.
@@ -177,9 +182,7 @@ export function dailyAnalysisTool(
 ): OnlineTool {
   return {
     name: 'daily_analysis',
-    description:
-      "Read the project's daily analysis shown on Insights: the notes of a day's analysis, the opportunities it raised and where each stands now (awaiting decision; handed off to agent with its task, then that task in progress, needing confirmation, done or closed; dismissed; expired), its verdict on every change (do, watch, skip) with the reason, the opportunities awaiting a decision now, and the watches. Omit day for the latest analysis; `days` lists the earlier ones. Follow nextOffset to read everything. Link opportunities with their url.",
-    inputSchema: z.toJSONSchema(input),
+    ...dailyAnalysisSpec,
     async execute(args) {
       await authorize();
       const value = input.parse(args);

@@ -23,6 +23,7 @@ import {
 } from '@nocobase/app-server/runtime';
 import { spaRootRoutes } from '@nocobase/app-server/spa';
 import { taskAgentRetryGuard } from './routes/agent-retry-guard';
+import { onlineChatGuard } from './routes/online-chat-guard.js';
 import { accessGuard } from './routes/access-guard.js';
 import { MockDatasetSafetyProvider } from './providers/mock-dataset.js';
 import {
@@ -78,6 +79,8 @@ export function createApp(runtime: AppRuntimeContext): Application {
   // Install the subject-specific guard before plugin contributions (see AGENTS.md).
   app.addRoutes(mockExternalGuard);
   app.addRoutes(taskAgentRetryGuard);
+  // Chat panel › Settings' off switch also holds for conversations started before it was turned off.
+  app.addRoutes(onlineChatGuard);
   app.addRuntimeContributions(isolateMockMailRuntime(runtime));
   app.addRoutes(spaRootRoutes);
 

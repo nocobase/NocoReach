@@ -1,10 +1,5 @@
-import { onlineAgentsToken } from '../../server/providers/online-agents.js';
 // @vitest-environment node
-import {
-  signIn,
-  DEFAULT_ADMIN_CREDENTIALS,
-} from '@nocobase/app-plugin-authentication/testing';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { afterEach, expect, vi } from 'vitest';
 import { createAppTest } from '@nocobase/app-testing/server';
 import { createStandaloneServer } from '../../server/standalone';
@@ -336,67 +331,4 @@ test('rolled-back transaction snapshots never enter the shared cache', async ({
     { page: '/docs', views: 42, sessions: 0, conversions: 0 },
   ]);
   expect(after).toBe(before);
-});
-
-test('online chat model I/O leaves the database responsive', async ({
-  testApp,
-  connection,
-}) => {
-  const runtime = testApp.application.container.resolve(nocoReachToken),
-    plugin = runtime.plugin;
-  vi.spyOn(plugin.taskExecution, 'tick').mockResolvedValue(undefined);
-  vi.spyOn(plugin.sync, 'tick').mockResolvedValue(undefined);
-  const service = testApp.application.container.resolve(onlineAgentsToken);
-  await service.stop();
-  vi.spyOn(service, 'resolveModel').mockResolvedValue({
-    modelService: 'fixture',
-    model: 'fixture',
-  });
-  const entered = deferred(),
-    release = deferred();
-  vi.spyOn(service.models.gateway, 'stream').mockImplementation(
-    async function* () {
-      entered.resolve();
-      await release.promise;
-      yield { type: 'text' as const, delta: 'Candidate' };
-      yield {
-        type: 'finish' as const,
-        reason: 'stop' as const,
-        model: 'fixture',
-        usage: { inputTokens: 1, outputTokens: 1 },
-      };
-    },
-  );
-  vi.spyOn(plugin, 'project').mockResolvedValue({
-    id: '900003',
-    name: 'Fixture',
-  });
-  await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
-  const owner = String(
-    (await connection
-      .repository('user')
-      .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } }))!.id,
-  );
-  const conversation = await service.send(owner, {
-    requestId: randomUUID(),
-    projectId: null,
-    agentId: 'online-default',
-    text: 'Draft',
-  });
-  service.start();
-  try {
-    await entered.promise;
-    // The model is still waiting: this real SQLite query must not wait for model completion.
-    await connection.repository('nrSnapshots').count({});
-    expect((await service.run(conversation.activeRunId!)).status).toBe(
-      'running',
-    );
-  } finally {
-    release.resolve();
-    await service.idle();
-    await service.stop();
-  }
-  expect((await service.run(conversation.activeRunId!)).status).toBe(
-    'completed',
-  );
 });

@@ -29,8 +29,7 @@ export const REACH_PAGES = [
   'data-bilibili',
   'data-youtube',
   'agents',
-  'online-agent-new',
-  'online-agent-edit',
+  'online-chat-settings',
   'playbooks',
   'skills',
   'project-settings',
@@ -41,11 +40,7 @@ export const REACH_PAGES = [
   'search-overview-legacy',
   'search-performance-legacy',
 ] as const;
-export const ADMIN_PAGES = new Set([
-  'proxy-profiles',
-  'online-agent-new',
-  'online-agent-edit',
-]);
+export const ADMIN_PAGES = new Set(['proxy-profiles', 'online-chat-settings']);
 export const TEAM_SETTINGS = [
   'agents.agents',
   'agents.runners',

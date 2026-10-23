@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { createAppTest } from '@nocobase/app-testing/server';
 import {
   DEFAULT_ADMIN_CREDENTIALS,
@@ -7,18 +7,15 @@ import {
 } from '@nocobase/app-plugin-authentication/testing';
 import { userAdministrationServiceToken } from '@nocobase/app-plugin-authentication';
 import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
-import { afterEach, expect, onTestFinished, vi } from 'vitest';
+import { agentsToken } from '@nocobase/app-plugin-agents/server/tokens';
+import { MockLanguageModelV4 } from 'ai/test';
+import { expect, vi } from 'vitest';
 import { createStandaloneServer } from '../../server/standalone.js';
 import { nocoReachToken } from '../../server/providers/nocoreach.js';
-import { onlineAgentsToken } from '../../server/providers/online-agents.js';
-import {
-  DEFAULT_ONLINE_AGENT,
-  type OnlineConversation,
-} from '../../shared/online-agent.js';
-import { OnlineAgentError } from '../../server/online-agent/errors.js';
-import type { ModelEvent } from '@nocobase/app-plugin-agents/server/tokens';
+import { onlineChatSettingsToken } from '../../server/providers/online-agents.js';
+import type { OnlineThread } from '../../shared/online-agent.js';
+
 vi.setConfig({ testTimeout: 120000, hookTimeout: 120000 });
-afterEach(() => vi.restoreAllMocks());
 const test = createAppTest({
   createServer: createStandaloneServer,
   config: {
@@ -27,671 +24,169 @@ const test = createAppTest({
   },
 });
 type Client = Awaited<ReturnType<typeof signIn>>;
-const post = (client: Client, path: string, body: unknown, method = 'POST') =>
+type Chunk = Record<string, unknown>;
+type App = Parameters<Parameters<typeof test>[1]>[0]['testApp'];
+const send = (client: Client, path: string, body: unknown, method = 'POST') =>
   client.fetch(path, {
     method,
     headers: { 'Content-Type': 'application/json', origin: 'http://localhost' },
     body: JSON.stringify(body),
   });
-const finish: ModelEvent = {
-  type: 'finish',
-  reason: 'stop',
-  model: 'test-model',
-  usage: { inputTokens: 7, outputTokens: 9 },
+const usage = {
+  inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+  outputTokens: { total: 1, text: 1, reasoning: 0 },
 };
+const finish = (reason = 'stop'): Chunk => ({
+  type: 'finish',
+  usage,
+  finishReason: { unified: reason, raw: reason },
+});
+const toolCall = (name: string, input: unknown): Chunk[] => [
+  {
+    type: 'tool-call',
+    toolCallId: `${name}-call`,
+    toolName: name,
+    input: JSON.stringify(input),
+  },
+  finish('tool-calls'),
+];
+const text = (value: string): Chunk[] => [
+  { type: 'text-start', id: 't' },
+  { type: 'text-delta', id: 't', delta: value },
+  { type: 'text-end', id: 't' },
+  finish(),
+];
 
-test('online conversation access follows each stored project after grants narrow', async ({
+/** The plugin's native execution answers from these steps instead of a model service. */
+function scriptModel(testApp: App, steps: Chunk[][]) {
+  const prompts: unknown[] = [];
+  const model = new MockLanguageModelV4({
+    doStream: async (options) => {
+      prompts.push(options.prompt);
+      const chunks = steps.shift() ?? text('Done.');
+      return {
+        stream: new ReadableStream({
+          start(controller) {
+            for (const chunk of chunks) controller.enqueue(chunk);
+            controller.close();
+          },
+        }),
+      };
+    },
+  });
+  type Deps = {
+    model: () => Promise<unknown>;
+    defaultModel: () => Promise<unknown>;
+  };
+  // The service, its native backend and the native execution each keep a copy of the model dependencies.
+  const backend = (
+    testApp.application.container.resolve(agentsToken)
+      .onlineAgent as unknown as {
+      native: { deps: Deps; native: { deps: Deps } };
+    }
+  ).native;
+  for (const deps of [backend.deps, backend.native.deps]) {
+    deps.model = async () => model;
+    deps.defaultModel = async () => ({
+      modelService: 'fixture',
+      model: 'chat',
+    });
+  }
+  return prompts;
+}
+async function startOnline(
+  client: Client,
+  projectId: string | null,
+  agentId = 'online',
+) {
+  return send(client, '/agents/conversations', {
+    agentId,
+    config: { scope: ['nocoreach'], context: { variable: { projectId } } },
+  });
+}
+async function ask(client: Client, id: string, question: string) {
+  const response = await send(client, `/agents/conversations/${id}/messages`, {
+    message: {
+      id: `q-${Date.now()}`,
+      role: 'user',
+      parts: [{ type: 'text', text: question }],
+    },
+  });
+  expect(response.status).toBe(200);
+  await response.text();
+  await vi.waitFor(
+    async () => {
+      const detail = (
+        await (await client.fetch(`/agents/conversations/${id}`)).json()
+      ).data;
+      // Waiting for an approval also ends the turn for now.
+      expect(
+        detail.execution?.waitingApproval ||
+          (detail.execution?.status ?? 'idle') === 'idle',
+      ).toBe(true);
+    },
+    { timeout: 20000 },
+  );
+  return (
+    await (await client.fetch(`/agents/conversations/${id}/messages`)).json()
+  ).data as {
+    role: string;
+    parts: { type: string; state?: string; output?: unknown }[];
+  }[];
+}
+async function member(testApp: App, email: string) {
+  const container = testApp.application.container;
+  const credentials = { email, password: 'test-password-123' };
+  const user = await container
+    .resolve(userAdministrationServiceToken)
+    .create({ ...credentials, name: email });
+  const assignment = await container
+    .resolve(authorizationToken)
+    .permissionSets.assign({
+      permissionSet: 'nr.member',
+      subject: { type: 'user', id: user.id },
+    });
+  return { user, assignment, client: await signIn(testApp, credentials) };
+}
+
+test('online conversations take the nocoreach scope, its project tools and Chat panel settings', async ({
   testApp,
 }) => {
   const container = testApp.application.container;
-  const service = container.resolve(onlineAgentsToken);
-  await service.stop();
-  vi.spyOn(service, 'resolveModel').mockResolvedValue({
-    modelService: 'test',
-    model: 'test-model',
-  });
-  const { plugin, legacy } = container.resolve(nocoReachToken);
-  const first = await plugin.projects.create({
-    name: 'Visible chat',
-    domain: 'visible-chat.example.test',
-  });
-  const second = await plugin.projects.create({
-    name: 'Hidden chat',
-    domain: 'hidden-chat.example.test',
-  });
-  const credentials = {
-    email: 'project-chat@example.test',
-    password: 'test-password-123',
-  };
-  const user = await container.resolve(userAdministrationServiceToken).create({
-    ...credentials,
-    name: 'Project reader',
-  });
-  onTestFinished(async () => {
-    for (const conversation of await service.conversations(user.id))
-      if (conversation.activeRunId)
-        await service.cancel(conversation.activeRunId);
-  });
-  const sets = container.resolve(authorizationToken).permissionSets;
-  const membership = await sets.assign({
-    permissionSet: 'nr.member',
-    subject: { type: 'user', id: user.id },
-  });
-  for (const project of [first, second])
-    await legacy.db.access!.joinCreatedProject(user.id, String(project.id));
-  const client = await signIn(testApp, credentials);
-  const conversations: OnlineConversation[] = [];
-  for (const projectId of [String(first.id), String(second.id), null]) {
-    const response = await post(client, '/onlineAgents/conversations', {
-      requestId: randomUUID(),
-      agentId: DEFAULT_ONLINE_AGENT,
-      projectId,
-      text: 'Project question',
-    });
-    expect(response.status).toBe(200);
-    conversations.push((await response.json()).data);
-  }
-  await sets.create({
-    key: 'nr.project-chat',
-    grants: legacy.db.access!.grants(
-      [{ resource: 'nrOnline', action: 'read' }],
-      String(first.id),
-    ),
-  });
-  await sets.assign({
-    permissionSet: 'nr.project-chat',
-    subject: { type: 'user', id: user.id },
-  });
-  await sets.revoke(membership.id);
-
-  expect((await client.fetch('/onlineAgents/definitions')).status).toBe(200);
-  expect((await client.fetch('/onlineAgents/models')).status).toBe(200);
-  const listed = await client.fetch('/onlineAgents/conversations');
-  expect(listed.status).toBe(200);
-  // A conversation without a project stays available to a reader of any of their projects.
-  expect(
-    (await listed.json()).data
-      .map((item: OnlineConversation) => item.id)
-      .sort(),
-  ).toEqual([conversations[0].id, conversations[2].id].sort());
-  for (const [index, conversation] of conversations.entries()) {
-    expect(
-      (await client.fetch(`/onlineAgents/conversations/${conversation.id}`))
-        .status,
-    ).toBe(index === 1 ? 403 : 200);
-  }
-  for (const projectId of [String(first.id), String(second.id), null]) {
-    expect(
-      (
-        await post(client, '/onlineAgents/conversations', {
-          requestId: randomUUID(),
-          agentId: DEFAULT_ONLINE_AGENT,
-          projectId,
-          text: 'New question',
-        })
-      ).status,
-    ).toBe(projectId === String(second.id) ? 403 : 200);
-  }
-  expect(
-    (
-      await post(
-        client,
-        `/onlineAgents/runs/${conversations[0].activeRunId}/cancel`,
-        {},
-      )
-    ).status,
-  ).toBe(200);
-  expect(
-    (
-      await post(client, '/onlineAgents/definitions', {
-        name: 'Forbidden',
-        instructions: '',
-        enabled: false,
-        model: null,
-        revision: 0,
-      })
-    ).status,
-  ).toBe(403);
-});
-
-test('online conversations are durable, idempotent, owner-scoped and cancellable without a Runner', async ({
-  testApp,
-  connection,
-}) => {
-  const service = testApp.application.container.resolve(onlineAgentsToken);
-  await service.stop();
+  const { plugin } = container.resolve(nocoReachToken);
   const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
-  const person = await connection
-    .repository('user')
-    .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } });
-  const actor = String(person!.id);
-  vi.spyOn(service, 'resolveModel').mockResolvedValue({
-    modelService: 'test',
-    model: 'test-model',
+  const project = await plugin.projects.create({
+    name: 'Scoped chat',
+    domain: 'scoped-chat.example.test',
   });
-  const stream = vi
-    .spyOn(service.models.gateway, 'stream')
-    .mockImplementation(async function* () {
-      yield { type: 'text', delta: 'Complete answer' };
-      yield finish;
-    });
-  const input = {
-    requestId: randomUUID(),
-    agentId: DEFAULT_ONLINE_AGENT,
-    projectId: null,
-    text: 'Original question',
-  };
-  const created = await post(admin, '/onlineAgents/conversations', input);
-  expect(created.status).toBe(200);
-  const conversation = ((await created.json()) as { data: OnlineConversation })
+  const projectId = String(project.id);
+  const settings = (await (await admin.fetch('/onlineAgents/settings')).json())
     .data;
-  expect((await post(admin, '/onlineAgents/conversations', input)).status).toBe(
-    200,
-  );
-  const conflict = await post(admin, '/onlineAgents/conversations', {
-    ...input,
-    text: 'Changed',
-  });
-  expect(conflict.status).toBe(409);
-  expect((await conflict.json()).error.reason).toBe('requestConflict');
-  service.start();
-  await service.idle();
-  await service.stop();
-  const runs = await service.conversationRuns(conversation);
-  expect(runs).toHaveLength(1);
-  expect(runs[0]).toMatchObject({
-    status: 'completed',
-    output: 'Complete answer',
-    usage: { inputTokens: 7, outputTokens: 9 },
-  });
-  expect(stream).toHaveBeenCalledOnce();
-  const credentials = {
-    email: 'online-member@example.com',
-    password: 'test-password-123',
-    name: 'Member',
-  };
-  const other = await testApp.application.container
-    .resolve(userAdministrationServiceToken)
-    .create(credentials);
-  // Direct calls also enforce ownership; an application non-member is denied before reading any conversation.
-  await expect(
-    service.conversation(conversation.id, other.id),
-  ).rejects.toMatchObject({ status: 404 });
-  const outsider = await signIn(testApp, credentials);
-  expect(
-    (await outsider.fetch(`/onlineAgents/conversations/${conversation.id}`))
-      .status,
-  ).toBe(403);
-  expect(
-    (
-      await post(outsider, '/onlineAgents/definitions', {
-        name: 'Unauthorized',
-        instructions: '',
-        enabled: true,
-        model: null,
-        revision: 0,
-      })
-    ).status,
-  ).toBe(403);
-  expect(
-    (
-      await post(admin, '/nocoreach/nrMembers/setRole', {
-        userId: other.id,
-        role: 'member',
-      })
-    ).status,
-  ).toBe(200);
-  expect(
-    (await outsider.fetch(`/onlineAgents/conversations/${conversation.id}`))
-      .status,
-  ).toBe(404);
-  expect(
-    (
-      await post(outsider, '/onlineAgents/definitions', {
-        name: 'Unauthorized member',
-        instructions: '',
-        enabled: true,
-        model: null,
-        revision: 0,
-      })
-    ).status,
-  ).toBe(403);
-  const message = {
-    requestId: randomUUID(),
-    revision: conversation.revision,
-    text: 'Follow up',
-  };
-  expect(
-    (
-      await post(
-        admin,
-        `/onlineAgents/conversations/${conversation.id}/messages`,
-        message,
-      )
-    ).status,
-  ).toBe(200);
-  expect(
-    (
-      await post(
-        admin,
-        `/onlineAgents/conversations/${conversation.id}/messages`,
-        message,
-      )
-    ).status,
-  ).toBe(200);
-  const latest = await service.conversation(conversation.id, actor);
-  await expect(
-    service.send(actor, {
-      ...message,
-      conversationId: conversation.id,
-      revision: latest.revision,
-    }),
-  ).rejects.toMatchObject({ code: 'requestConflict' });
-  await expect(
-    service.send(actor, {
-      ...input,
-      requestId: message.requestId,
-    }),
-  ).rejects.toMatchObject({ code: 'requestConflict' });
-  expect(await service.conversationRuns(latest)).toHaveLength(2);
-  const cancelled = await post(
+  expect(settings).toMatchObject({ enabled: true, instructions: '' });
+  const saved = await send(
     admin,
-    `/onlineAgents/runs/${latest.activeRunId}/cancel`,
-    {},
-  );
-  expect(cancelled.status).toBe(200);
-  service.start();
-  await service.idle();
-  await service.stop();
-  expect(stream).toHaveBeenCalledOnce();
-  expect((await service.run(latest.activeRunId!)).status).toBe('cancelled');
-  const concurrent = await Promise.allSettled(
-    ['A', 'B'].map((text) =>
-      service.send(actor, {
-        requestId: randomUUID(),
-        conversationId: latest.id,
-        revision: latest.revision,
-        text,
-      }),
-    ),
-  );
-  expect(
-    concurrent.filter((result) => result.status === 'fulfilled'),
-  ).toHaveLength(1);
-  expect(
-    concurrent.filter((result) => result.status === 'rejected'),
-  ).toHaveLength(1);
-  const afterConcurrent = await service.conversation(conversation.id, actor);
-  expect(await service.conversationRuns(afterConcurrent)).toHaveLength(3);
-  await service.cancel(afterConcurrent.activeRunId);
-  const invalid = await service.saveDefinition({
-    name: 'Retired model',
-    instructions: '',
-    enabled: true,
-    model: { modelService: 'removed', model: 'gone' },
-    revision: 0,
-  });
-  vi.mocked(service.resolveModel).mockRejectedValueOnce(
-    new OnlineAgentError('modelUnavailable'),
-  );
-  await expect(
-    service.saveDefinition(
-      { ...invalid, instructions: 'Still enabled' },
-      invalid.id,
-    ),
-  ).rejects.toMatchObject({ code: 'modelUnavailable' });
-  vi.mocked(service.resolveModel).mockRejectedValueOnce(
-    new OnlineAgentError('modelUnavailable'),
-  );
-  expect(
-    await service.saveDefinition({ ...invalid, enabled: false }, invalid.id),
-  ).toMatchObject({ enabled: false });
-  vi.mocked(service.resolveModel).mockResolvedValue({
-    modelService: 'test',
-    model: 'test-model',
-  });
-  const definition = await service.definition(DEFAULT_ONLINE_AGENT);
-  await service.saveDefinition(
-    { ...definition, enabled: false },
-    definition.id,
-  );
-  await expect(
-    service.saveDefinition(definition, definition.id),
-  ).rejects.toMatchObject({ code: 'revisionConflict' });
-  expect(
-    (
-      await post(
-        admin,
-        `/onlineAgents/conversations/${conversation.id}/messages`,
-        {
-          requestId: randomUUID(),
-          revision: afterConcurrent.revision,
-          text: 'Disabled',
-        },
-      )
-    ).status,
-  ).toBe(409);
-  expect(
-    (await admin.fetch(`/onlineAgents/conversations/${conversation.id}`))
-      .status,
-  ).toBe(200);
-  await service.saveDefinition(
-    { ...(await service.definition(definition.id)), enabled: true },
-    definition.id,
-  );
-});
-
-test('active cancellation preserves partial output and expired claims never replay after restart', async ({
-  testApp,
-  connection,
-}) => {
-  const service = testApp.application.container.resolve(onlineAgentsToken);
-  await service.stop();
-  await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
-  const actor = String(
-    (await connection
-      .repository('user')
-      .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } }))!.id,
-  );
-  vi.spyOn(service, 'resolveModel').mockResolvedValue({
-    modelService: 'test',
-    model: 'test-model',
-  });
-  const stream = vi
-    .spyOn(service.models.gateway, 'stream')
-    .mockImplementation(async function* ({ signal }) {
-      yield { type: 'text', delta: 'Partial answer' };
-      await new Promise<void>((resolve, reject) => {
-        if (signal.aborted) reject(signal.reason);
-        else
-          signal.addEventListener('abort', () => reject(signal.reason), {
-            once: true,
-          });
-      });
-      yield finish;
-    });
-  const conversation = await service.send(actor, {
-    requestId: randomUUID(),
-    agentId: DEFAULT_ONLINE_AGENT,
-    projectId: null,
-    text: 'Stop me',
-  });
-  service.start();
-  await vi.waitFor(async () =>
-    expect((await service.run(conversation.activeRunId!)).output).toBe(
-      'Partial answer',
-    ),
-  );
-  await service.cancel(conversation.activeRunId!);
-  await service.idle();
-  await service.stop();
-  expect(await service.run(conversation.activeRunId!)).toMatchObject({
-    status: 'cancelled',
-    output: 'Partial answer',
-  });
-  const next = await service.send(actor, {
-    conversationId: conversation.id,
-    requestId: randomUUID(),
-    revision: 0,
-    text: 'Interrupted turn',
-  });
-  const run = await service.run(next.activeRunId!);
-  await service.records.save('run', {
-    ...run,
-    status: 'running',
-    holder: 'previous-process',
-    startedAt: '2020-01-01T00:00:00.000Z',
-    deadline: '2020-01-01T00:00:01.000Z',
-  });
-  service.start();
-  await service.idle();
-  await service.stop();
-  expect(await service.run(next.activeRunId!)).toMatchObject({
-    status: 'failed',
-    error: 'interrupted',
-  });
-  expect(stream).toHaveBeenCalledOnce();
-});
-
-test('disabled accounts stop active work, and shutdown does not wait for a stalled host preparation', async ({
-  testApp,
-  connection,
-}) => {
-  const service = testApp.application.container.resolve(onlineAgentsToken);
-  await service.stop();
-  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
-  const administration = testApp.application.container.resolve(
-    userAdministrationServiceToken,
-  );
-  const member = await administration.create({
-    email: `disabled-online-${randomUUID()}@example.com`,
-    password: 'test-password-123',
-    name: 'Temporary member',
-  });
-  expect(
-    (
-      await post(admin, '/nocoreach/nrMembers/setRole', {
-        userId: member.id,
-        role: 'member',
-      })
-    ).status,
-  ).toBe(200);
-  // Shared conversations need a member of at least one project.
-  await testApp.application.container
-    .resolve(nocoReachToken)
-    .legacy.db.access!.joinCreatedProject(member.id, '1');
-  vi.spyOn(service, 'resolveModel').mockResolvedValue({
-    modelService: 'test',
-    model: 'test-model',
-  });
-  vi.spyOn(service.models.gateway, 'stream').mockImplementation(
-    async function* ({ signal }) {
-      yield { type: 'text', delta: 'Before revocation' };
-      await new Promise<void>((_resolve, reject) => {
-        if (signal.aborted) reject(signal.reason);
-        else
-          signal.addEventListener('abort', () => reject(signal.reason), {
-            once: true,
-          });
-      });
-      yield finish;
+    '/onlineAgents/settings',
+    {
+      enabled: true,
+      instructions: 'Answer briefly.',
+      model: null,
+      revision: settings.revision,
     },
+    'PUT',
   );
-  const conversation = await service.send(member.id, {
-    requestId: randomUUID(),
-    agentId: DEFAULT_ONLINE_AGENT,
-    projectId: null,
-    text: 'Authorized before disable',
-  });
-  service.start();
-  await vi.waitFor(async () =>
-    expect((await service.run(conversation.activeRunId!)).output).toBe(
-      'Before revocation',
-    ),
-  );
-  await administration.disable(member.id);
-  await vi.waitFor(async () =>
-    expect(await service.run(conversation.activeRunId!)).toMatchObject({
-      status: 'failed',
-      error: 'accessDenied',
-    }),
-  );
-  await service.stop();
-  const actor = String(
-    (await connection
-      .repository('user')
-      .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } }))!.id,
-  );
-  const { OnlineAgentService } =
-    await import('../../server/online-agent/service.js');
-  let release!: (context: {
-    instructions: string;
-    tools: [];
-    authorize: () => Promise<void>;
-  }) => void;
-  let entered = false;
-  const stream = vi.mocked(service.models.gateway.stream).mockClear();
-  const stalled = new OnlineAgentService(
-    service.database,
-    service.models,
-    () => {
-      entered = true;
-      return new Promise((resolve) => {
-        release = resolve;
-      });
-    },
-  );
-  vi.spyOn(stalled, 'resolveModel').mockResolvedValue({
-    modelService: 'test',
-    model: 'test-model',
-  });
-  const waiting = await stalled.send(actor, {
-    requestId: randomUUID(),
-    agentId: DEFAULT_ONLINE_AGENT,
-    projectId: null,
-    text: 'Stalled input preparation',
-  });
-  stalled.start();
-  await vi.waitFor(() => expect(entered).toBe(true));
-  try {
-    await Promise.race([
-      stalled.stop(),
-      new Promise((_, reject) =>
-        setTimeout(
-          () => reject(new Error('Shutdown waited for host I/O')),
-          1000,
-        ),
-      ),
-    ]);
-    expect(await stalled.run(waiting.activeRunId!)).toMatchObject({
-      status: 'failed',
-      error: 'interrupted',
-    });
-  } finally {
-    release({ instructions: '', tools: [], authorize: async () => {} });
-  }
-  expect(stream).not.toHaveBeenCalled();
-});
+  expect(saved.status).toBe(200);
 
-test('online agents cannot be task executors and chat exposes scoped task tools', async ({
-  testApp,
-  connection,
-}) => {
-  const service = testApp.application.container.resolve(onlineAgentsToken);
-  await service.stop();
-  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
-  const actor = String(
-    (await connection
-      .repository('user')
-      .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } }))!.id,
-  );
-  const { plugin } = testApp.application.container.resolve(nocoReachToken);
-  await plugin.projects.create({
-    name: 'Chat context',
-    domain: 'chat.example.com',
-    language: 'zh-CN',
-  });
-  const project = String((await plugin.projects.list()).at(-1).id);
-  vi.spyOn(service, 'resolveModel').mockResolvedValue({
-    modelService: 'fixture',
-    model: 'fixture',
-  });
-  let metrics: unknown;
-  const stream = vi
-    .spyOn(service.models.gateway, 'stream')
-    .mockImplementation(async function* (request) {
-      if (!request.messages.some((message) => message.role === 'tool')) {
-        yield {
-          type: 'toolCall',
-          call: {
-            id: 'metrics',
-            name: 'project_data',
-            args: { section: 'metrics' },
-          },
-        };
-        yield { ...finish, reason: 'toolCalls' };
-        return;
-      }
-      const material = request.messages.find(
-        (message) => message.role === 'tool',
-      );
-      metrics = JSON.parse(JSON.parse(material!.content).text);
-      yield { type: 'text', delta: 'Answer from context' };
-      yield finish;
-    });
-  const before = await service.conversations(actor);
-  const status = await plugin.taskExecution.agents.status(
-    project,
-    undefined,
-    actor,
-  );
-  expect(
-    status.options.some((agent) => agent.id === DEFAULT_ONLINE_AGENT),
-  ).toBe(false);
-  expect(
-    (
-      await post(admin, '/nocoreach/nrAgent/select', {
-        projectId: project,
-        agentId: DEFAULT_ONLINE_AGENT,
-        revision: 0,
-      })
-    ).status,
-  ).toBe(404);
-  const task = await plugin.db.getRepository('nrTasks').create({
-    values: {
-      projectId: project,
-      taskKey: randomUUID(),
-      title: 'Runner only',
-      status: '待处理',
-      evidence: { createdBy: { id: actor, name: 'Admin' } },
-    },
-  });
-  const response = await post(admin, '/nocoreach/nrTaskWork/advance', {
-    projectId: project,
-    taskId: String(task.id),
-    revision: 0,
-    requestId: randomUUID(),
-    command: 'setAgent',
-    agentId: DEFAULT_ONLINE_AGENT,
-  });
-  expect(response.status).toBe(409);
-  const tasks = plugin.taskExecution;
-  const taskId = String(task.id);
-  const view = await tasks.get(project, taskId);
-  // A task saved by the previous deployment cannot bypass Runner validation on start.
-  await tasks.lock(project, taskId, async (tx) => {
-    const stored = await tasks.task(project, taskId, tx);
-    await tasks.save(
-      stored,
-      { ...view.work, agentId: DEFAULT_ONLINE_AGENT },
-      tx,
-    );
-  });
-  const denied = await post(admin, '/nocoreach/nrTaskWork/advance', {
-    projectId: project,
-    taskId,
-    revision: (await tasks.get(project, taskId)).work.revision,
-    requestId: randomUUID(),
-    command: 'startTask',
-    playbookId: 'change-research',
-  });
-  expect(denied.status).toBe(409);
-  expect(await denied.text()).toContain('任务 Agent 已失效，请重新选择');
-  expect(
-    (await plugin.taskExecution.get(project, String(task.id))).runs,
-  ).toEqual([]);
-  expect(await service.conversations(actor)).toEqual(before);
-  const conversation = await service.send(actor, {
-    requestId: randomUUID(),
-    projectId: project,
-    agentId: DEFAULT_ONLINE_AGENT,
-    text: 'Project question',
-  });
-  service.start();
-  await service.idle();
-  await service.stop();
-  expect(stream).toHaveBeenCalledTimes(2);
-  expect(stream.mock.calls[0][0].tools.map((tool) => tool.name).sort()).toEqual(
+  const prompts = scriptModel(testApp, [
+    toolCall('project_data', { section: 'project' }),
+    text('The project is Scoped chat.'),
+  ]);
+  const created = await startOnline(admin, projectId);
+  expect(created.status).toBe(201);
+  const id = (await created.json()).data.id as string;
+  const config = (
+    await (await admin.fetch(`/agents/conversations/${id}/config`)).json()
+  ).data;
+  expect(config.tool.sort()).toEqual(
     [
       'daily_analysis',
       'project_data',
@@ -699,204 +194,208 @@ test('online agents cannot be task executors and chat exposes scoped task tools'
       'task_execute',
       'task_get',
       'task_list',
-    ],
+    ].sort(),
   );
-  expect(metrics).toEqual({ available: false, reason: 'metrics_unavailable' });
-  expect((await service.run(conversation.activeRunId!)).status).toBe(
-    'completed',
-  );
-});
+  expect(config.systemPrompt).toContain('Answer briefly.');
+  expect(config.systemPrompt).toContain('online assistant in NocoReach');
+  expect(config.variable).toEqual({ projectId });
 
-test('chat stores one input per turn, reconstructs completed history and preserves safe gateway error codes', async ({
-  testApp,
-  connection,
-}) => {
-  const service = testApp.application.container.resolve(onlineAgentsToken);
-  await service.stop();
-  await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
-  const actor = String(
-    (await connection
-      .repository('user')
-      .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } }))!.id,
-  );
-  vi.spyOn(service, 'resolveModel').mockResolvedValue({
-    modelService: 'fixture',
-    model: 'fixture',
-  });
-  const { agentsToken } =
-    await import('@nocobase/app-plugin-agents/server/tokens');
-  const gateway =
-    testApp.application.container.resolve(agentsToken).models.gateway;
-  const requests: unknown[][] = [];
-  const stream = vi
-    .spyOn(gateway, 'stream')
-    .mockImplementation(async function* (request) {
-      requests.push(structuredClone(request.messages) as unknown[]);
-      yield { type: 'text', delta: 'First answer' };
-      yield finish;
-    });
-  let conversation = await service.send(actor, {
-    requestId: randomUUID(),
-    projectId: null,
-    agentId: DEFAULT_ONLINE_AGENT,
-    text: 'First question',
-  });
-  const execute = async () => {
-    service.start();
-    await service.idle();
-    await service.stop();
-  };
-  await execute();
-  conversation = await service.send(actor, {
-    conversationId: conversation.id,
-    requestId: randomUUID(),
-    revision: conversation.revision,
-    text: 'Second question',
-  });
-  await execute();
-  const prompt = (requests[1] as { role: string; content: string }[]).filter(
-    (message) => message.role !== 'system',
-  );
-  expect(prompt).toEqual([
-    { role: 'user', content: 'First question' },
-    { role: 'assistant', content: 'First answer' },
-    { role: 'user', content: 'Second question' },
+  const history = await ask(admin, id, 'What is this project?');
+  const tool = history
+    .flatMap((message) => message.parts)
+    .find((part) => part.type === 'tool-project_data');
+  expect(tool).toMatchObject({ state: 'output-available' });
+  // The chat shows how much was read, never the project data itself.
+  expect(Object.keys(tool!.output as object).sort()).toEqual([
+    'nextOffset',
+    'totalCharacters',
   ]);
-  const stored = await service.conversationRuns(conversation);
-  expect(stored.map((turn) => turn.input)).toEqual([
-    'First question',
-    'Second question',
-  ]);
-  expect(
-    stored.every((turn) => !('messages' in turn) && !('subject' in turn)),
-  ).toBe(true);
-  for (const [code, safe] of [
-    ['auth', 'modelAuth'],
-    ['quota', 'modelQuota'],
-    ['rateLimit', 'modelRateLimit'],
-    ['network', 'modelNetwork'],
-  ]) {
-    stream.mockImplementation(async function* () {
-      yield { type: 'text', delta: 'Unfinished answer' };
-      throw Object.assign(
-        new Error('provider credentials and raw details must remain private'),
-        { name: 'ModelError', code },
-      );
-    });
-    conversation = await service.send(actor, {
-      conversationId: conversation.id,
-      requestId: randomUUID(),
-      revision: conversation.revision,
-      text: `Question ${code}`,
-    });
-    await execute();
-    const failed = await service.run(conversation.activeRunId!);
-    expect(failed).toMatchObject({ status: 'failed', error: safe });
-    expect(JSON.stringify(failed)).not.toContain('provider credentials');
-    expect(
-      stream.mock
-        .lastCall![0].messages.filter((message) => message.role === 'assistant')
-        .map((message) => message.content),
-    ).toEqual(['First answer', 'First answer']);
-  }
-});
+  expect(JSON.stringify(history)).not.toContain('scoped-chat.example.test');
+  expect(JSON.stringify(prompts.at(-1))).toContain('Scoped chat');
 
-test('conversations asked from Insights keep their day and opportunity and list only for their owner', async ({
-  testApp,
-  connection,
-}) => {
-  const service = testApp.application.container.resolve(onlineAgentsToken);
-  await service.stop();
-  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
-  const host = testApp.application.container.resolve(nocoReachToken);
-  await host.ready;
-  const project = String(
-    (
-      await host.plugin.projects.create({
-        name: 'Insights questions',
-        domain: 'insights-questions.example.test',
-      })
-    ).id,
+  // Without a project only the task tools are offered.
+  const unbound = await startOnline(admin, null);
+  const unboundConfig = (
+    await (
+      await admin.fetch(
+        `/agents/conversations/${(await unbound.json()).data.id}/config`,
+      )
+    ).json()
+  ).data;
+  expect(unboundConfig.tool.sort()).toEqual(
+    ['task_execute', 'task_get', 'task_list'].sort(),
   );
-  vi.spyOn(service, 'resolveModel').mockResolvedValue({
-    modelService: 'test',
-    model: 'test-model',
-  });
-  vi.spyOn(service.models.gateway, 'stream').mockImplementation(
-    async function* () {
-      yield { type: 'text', delta: 'Re-crawling takes **1–3 weeks**.' };
-      yield finish;
-    },
-  );
-  const ask = (text: string, extra: object) =>
-    post(admin, '/onlineAgents/conversations', {
-      requestId: randomUUID(),
-      agentId: DEFAULT_ONLINE_AGENT,
-      projectId: project,
-      text,
-      ...extra,
-    });
-  const subject = {
-    kind: 'insights',
-    day: '2026-10-21',
-    opportunityId: 'o41',
-  };
-  const asked = await ask('How long until it shows?', { subject });
-  expect(asked.status).toBe(200);
-  expect(
-    ((await asked.json()) as { data: OnlineConversation }).data.subject,
-  ).toEqual(subject);
-  expect((await ask('Not from Insights', {})).status).toBe(200);
-  // A question from Insights belongs to a project, and its day is a date.
+  // A Runner agent cannot take NocoReach's native tools.
+  expect((await startOnline(admin, null, 'runner-agent')).status).not.toBe(201);
+  // Variables are checked against the scope.
   expect(
     (
-      await post(admin, '/onlineAgents/conversations', {
-        requestId: randomUUID(),
-        agentId: DEFAULT_ONLINE_AGENT,
-        projectId: null,
-        text: 'No project',
-        subject,
+      await send(admin, '/agents/conversations', {
+        agentId: 'online',
+        config: {
+          scope: ['nocoreach'],
+          context: { variable: { projectId: 'x' } },
+        },
       })
     ).status,
   ).toBe(400);
-  expect(
-    (await ask('Bad day', { subject: { kind: 'insights', day: '21 Oct' } }))
-      .status,
-  ).toBe(400);
-  service.start();
-  await service.idle();
-  await service.stop();
-  const listed = await admin.fetch(
-    `/onlineAgents/threads?projectId=${project}`,
+});
+
+test('creation and tools recheck project access and the Chat panel switch', async ({
+  testApp,
+}) => {
+  const container = testApp.application.container;
+  const { plugin, legacy } = container.resolve(nocoReachToken);
+  await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const joined = await plugin.projects.create({
+    name: 'Joined',
+    domain: 'joined.example.test',
+  });
+  const other = await plugin.projects.create({
+    name: 'Other',
+    domain: 'other.example.test',
+  });
+  const { user, assignment, client } = await member(
+    testApp,
+    'online-member@example.test',
   );
-  expect(listed.status).toBe(200);
-  expect((await listed.json()).data).toEqual([
+  await legacy.db.access!.joinCreatedProject(user.id, String(joined.id));
+  scriptModel(testApp, [
+    toolCall('project_data', { section: 'project' }),
+    text('Read.'),
+  ]);
+  expect((await startOnline(client, String(other.id))).status).toBe(403);
+  const created = await startOnline(client, String(joined.id));
+  expect(created.status).toBe(201);
+  const id = (await created.json()).data.id as string;
+
+  const store = container.resolve(onlineChatSettingsToken);
+  const current = await store.get();
+  await store.save({ ...current, enabled: false });
+  expect((await startOnline(client, String(joined.id))).status).toBe(403);
+  // A conversation created before the switch was turned off cannot be continued or approved in either.
+  for (const path of ['messages', 'approval']) {
+    const refused = await send(client, `/agents/conversations/${id}/${path}`, {
+      message: {
+        id: `q-${path}`,
+        role: 'user',
+        parts: [{ type: 'text', text: 'Read the project' }],
+      },
+    });
+    expect(refused.status).toBe(403);
+    expect((await refused.json()).error).toMatchObject({
+      domain: 'onlineAgent',
+      reason: 'chatDisabled',
+    });
+  }
+
+  const enabled = await store.get();
+  await store.save({ ...enabled, enabled: true });
+  // On again, the same conversation answers, and its tools read the project.
+  const history = await ask(client, id, 'Read the project');
+  const tool = history
+    .flatMap((message) => message.parts)
+    .find((part) => part.type === 'tool-project_data');
+  expect(tool?.state).toBe('output-available');
+  await container
+    .resolve(authorizationToken)
+    .permissionSets.revoke(assignment.id);
+  expect((await startOnline(client, String(joined.id))).status).toBe(403);
+});
+
+test('task_execute waits for approval in the chat before it hands work to a Runner', async ({
+  testApp,
+}) => {
+  const container = testApp.application.container;
+  const { plugin } = container.resolve(nocoReachToken);
+  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const project = await plugin.projects.create({
+    name: 'Approval',
+    domain: 'approval.example.test',
+  });
+  scriptModel(testApp, [
+    toolCall('task_execute', {
+      projectId: String(project.id),
+      taskId: '1',
+      command: 'startTask',
+      revision: 0,
+    }),
+  ]);
+  const id = (await (await startOnline(admin, String(project.id))).json()).data
+    .id as string;
+  const history = await ask(admin, id, 'Start task 1');
+  const part = history
+    .flatMap((message) => message.parts)
+    .find((item) => item.type === 'tool-task_execute');
+  expect(part?.state).toBe('approval-requested');
+});
+
+test('conversations asked from Insights are indexed by project and day and list only for their owner', async ({
+  testApp,
+}) => {
+  const container = testApp.application.container;
+  const { plugin, legacy } = container.resolve(nocoReachToken);
+  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const project = await plugin.projects.create({
+    name: 'Insights',
+    domain: 'insights.example.test',
+  });
+  const projectId = String(project.id);
+  scriptModel(testApp, [text('About that day.')]);
+  const started = await send(admin, '/onlineAgents/threads', {
+    projectId,
+    day: '2026-10-21',
+    opportunityId: 'o1',
+  });
+  expect(started.status).toBe(200);
+  const id = (await started.json()).data.id as string;
+  const detail = (
+    await (await admin.fetch(`/agents/conversations/${id}`)).json()
+  ).data;
+  expect(detail.source).toBe('insights');
+  const config = (
+    await (await admin.fetch(`/agents/conversations/${id}/config`)).json()
+  ).data;
+  expect(config.variable).toEqual({ projectId });
+  await ask(admin, id, 'Why this opportunity?');
+
+  const listed = (
+    await (
+      await admin.fetch(`/onlineAgents/threads?projectId=${projectId}`)
+    ).json()
+  ).data as OnlineThread[];
+  expect(listed).toEqual([
     expect.objectContaining({
-      subject,
-      question: 'How long until it shows?',
-      answer: 'Re-crawling takes **1–3 weeks**.',
-      status: 'completed',
+      id,
+      subject: { kind: 'insights', day: '2026-10-21', opportunityId: 'o1' },
+      running: false,
       turns: 1,
     }),
   ]);
-  // Another person sees none of them, even with access to the project.
-  const person = await connection
-    .repository('user')
-    .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } });
-  const other = await testApp.application.container
-    .resolve(userAdministrationServiceToken)
-    .create({
-      email: 'insights-other@example.com',
-      password: 'test-password-123',
-      name: 'Other',
-    });
-  await testApp.application.container
-    .resolve(authorizationToken)
-    .permissionSets.assign({
-      permissionSet: 'nr.member',
-      subject: { type: 'user', id: other.id },
-    });
-  await host.legacy.db.access!.joinCreatedProject(other.id, project);
-  expect(await service.threads(other.id, project)).toEqual([]);
-  expect(await service.threads(String(person!.id), project)).toHaveLength(1);
+
+  const { user, client } = await member(
+    testApp,
+    'insights-member@example.test',
+  );
+  await legacy.db.access!.joinCreatedProject(user.id, projectId);
+  expect(
+    (
+      await (
+        await client.fetch(`/onlineAgents/threads?projectId=${projectId}`)
+      ).json()
+    ).data,
+  ).toEqual([]);
+  expect((await client.fetch(`/agents/conversations/${id}`)).status).toBe(404);
+  const hidden = await plugin.projects.create({
+    name: 'Hidden',
+    domain: 'hidden-insights.example.test',
+  });
+  expect(
+    (
+      await send(client, '/onlineAgents/threads', {
+        projectId: String(hidden.id),
+        day: '2026-10-21',
+      })
+    ).status,
+  ).toBe(403);
 });

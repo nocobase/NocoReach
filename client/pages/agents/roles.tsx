@@ -38,9 +38,9 @@ import { useBusinessAccess } from '#hooks/use-business-access';
 import {
   useOnlineApi,
   useOnlineResource,
-  type Agent as OnlineAgent,
+  type OnlineSettings,
 } from '../../online-agent/api.js';
-import type { OnlineAgentDefinition } from '../../../shared/online-agent.js';
+import { useOptionalOnlineChat } from '../../online-agent/context.js';
 import { useProject } from '../reach-data.js';
 import { routeAccess } from './access.js';
 
@@ -158,7 +158,8 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
   const [inner, setInner] = useState(0);
   const refresh = outer + inner;
   const models = useOnlineResource<Catalog>('models', refresh);
-  const online = useOnlineResource<OnlineAgent[]>('definitions', refresh);
+  const online = useOnlineResource<OnlineSettings>('settings', refresh);
+  const onlineChat = useOptionalOnlineChat();
   const modelsPage = useCan(routeAccess(modelsRoute));
   const runtimesPage = useCan(routeAccess(runtimesRoute));
   const manageAgents = useCan(settings('agents.agents', 'manage'));
@@ -274,19 +275,19 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
     });
     await saveDefault(agent.id);
   };
-  const turnOn = (agent: OnlineAgentDefinition) =>
+  const turnOn = (settings: OnlineSettings) =>
     run(async () => {
       await onlineApi(
-        `definitions/${agent.id}`,
+        'settings',
         {
-          name: agent.name,
-          instructions: agent.instructions,
-          model: agent.model,
-          revision: agent.revision,
           enabled: true,
+          instructions: settings.instructions,
+          model: settings.model,
+          revision: settings.revision,
         },
         'PUT',
       );
+      onlineChat?.refresh();
     });
 
   const services = models.data?.services || [];
@@ -342,24 +343,16 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
             }),
   };
 
-  const definitions = online.data || [];
-  const chatAgent =
-    definitions.find((agent) => agent.enabled && agent.ready) ||
-    definitions.find((agent) => agent.enabled) ||
-    definitions[0];
-  const chatSettings: Action | undefined =
-    canManageChat && chatAgent
-      ? {
-          label: $t('agentRoles.settings'),
-          to: `/agents/chat/${encodeURIComponent(chatAgent.id)}${search}`,
-        }
-      : undefined;
+  const chatSettings = online.data;
+  const chatAction: Action | undefined = canManageChat
+    ? { label: $t('agentRoles.settings'), to: `/agents/chat${search}` }
+    : undefined;
   const chatRow: Row = {
     key: 'chat',
     work: $t('agentRoles.chat'),
     does: $t('agentRoles.chatWork'),
-    uses: noModels ? undefined : chatAgent?.model?.model || analysisModel,
-    ...(modelsLoading || (online.data === undefined && !online.error)
+    uses: noModels ? undefined : chatSettings?.model?.model || analysisModel,
+    ...(modelsLoading || (chatSettings === undefined && !online.error)
       ? { state: 'loading' }
       : noModels
         ? {
@@ -367,37 +360,24 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
             detail: $t('agentRoles.noModel'),
             action: addModel,
           }
-        : !chatAgent
+        : chatSettings && !chatSettings.enabled
           ? {
               state: 'attention',
-              detail: $t('agentRoles.chatMissing'),
+              detail: $t('agentRoles.chatOff'),
               action: canManageChat
                 ? {
-                    label: $t('agentRoles.addChat'),
-                    to: `/agents/chat/new${search}`,
+                    label: $t('agentRoles.turnOn'),
+                    run: () => turnOn(chatSettings),
                   }
                 : undefined,
             }
-          : !chatAgent.enabled
+          : chatSettings && !chatSettings.ready
             ? {
                 state: 'attention',
-                detail: $t('agentRoles.chatDisabled', { 0: chatAgent.name }),
-                action: canManageChat
-                  ? {
-                      label: $t('agentRoles.turnOn'),
-                      run: () => turnOn(chatAgent),
-                    }
-                  : undefined,
+                detail: $t('agentRoles.chatModelOff'),
+                action: chatAction,
               }
-            : !chatAgent.ready
-              ? {
-                  state: 'attention',
-                  detail: $t('agentRoles.chatModelUnavailable', {
-                    0: chatAgent.name,
-                  }),
-                  action: chatSettings,
-                }
-              : { state: 'ready', action: chatSettings }),
+            : { state: 'ready', action: chatAction }),
   };
 
   const options = status?.options || [];
