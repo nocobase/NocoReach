@@ -1,3 +1,8 @@
+import { cn } from '#lib/utils';
+import {
+  segmentedItemClass,
+  segmentedListClass,
+} from '#components/reach/segmented';
 import {
   $legacyText,
   $t,
@@ -262,7 +267,7 @@ export default function AddKnowledgeDialog(): ReactElement {
         ) : !sug ? (
           <div className='flex flex-col gap-3'>
             <div
-              className='nr-tabs'
+              className={cn(segmentedListClass, 'self-start')}
               role='group'
               aria-label={$t('projectKnowledge.howAdd')}
             >
@@ -276,6 +281,7 @@ export default function AddKnowledgeDialog(): ReactElement {
                 <button
                   key={k}
                   type='button'
+                  className={segmentedItemClass}
                   aria-pressed={mode === k}
                   onClick={() => {
                     setMode(k);

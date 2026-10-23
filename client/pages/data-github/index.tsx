@@ -51,7 +51,7 @@ export default function DataGitHub() {
   const repo = view?.repo ? (link ? <a className="nr-link inline-flex items-center gap-0.5" href={link} target="_blank" rel="noreferrer">{view.repo}<ArrowUpRight className="size-3" /></a> : view.repo) : null;
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={tab === "repo" && view?.notes?.length ? <NotesTip notes={view.notes} /> : undefined} title="GitHub" description={tab === "hot" ? $t('githubHot.description') : $t('dataGithub.pageDescription')} />
+      <PageHeader info={tab === "repo" && view?.notes?.length ? <NotesTip notes={view.notes} /> : undefined} title="GitHub" description={$t('dataGithub.pageSummary')} />
       <Tabs value={tab} onValueChange={(v) => choose(String(v))}>
         <TabsList variant="line" className="h-auto! justify-start">
           <TabsTrigger value="repo">{$t('githubHot.ourRepository')}</TabsTrigger>

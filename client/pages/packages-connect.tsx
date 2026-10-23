@@ -1,3 +1,4 @@
+import { formatDateTime } from '#lib/format';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import {ConnectionError,NetworkSettingsLink} from '#components/connection-error';
 import { translateSourceError, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
@@ -29,7 +30,7 @@ export function PackagesConnect({projectId,onChange}:{projectId:number;onChange:
    {status.packages.map(p=><div key={p.id} className="nr-package-row" data-package={p.id}><div><a className="nr-link" href={p.url} target="_blank" rel="noreferrer">{p.title||p.name}</a><span className="nr-footnote"> · {p.registryName}</span>
     <p className="nr-footnote">{p.registry==='docker'?$t('packages.totalPullsRecordedDailyDifference',{0:n(p.pulls)}):p.downloads28!=null?$t('packages.downloadsLast28Days',{0:n(p.downloads28)}):$t('packages.readingDownloads')}{p.since?$t('packages.since',{0:p.since}):''}</p></div>
     {canRemove&&<Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('packages.stopRecordingDownloads',{0:p.title||p.name})),description:() => ($t('packages.recordedDataDeletedToo')),action:'common.remove'}))void run(()=>call<PackagesStatus>(projectId,'remove',{id:p.id}));}}>{$t('common.remove')}</Button>}</div>)}
-   {status.lastSync?<p className="nr-footnote">{$tj('common.lastSyncedSyncsAutomaticallyEvery',{0:new Date(status.lastSync.at).toLocaleString(getCurrentLocale())})}{status.lastSync.errors.map(e=><span key={e} className="nr-block">{$tj('common.partlyNotUpdated',{0:translateSourceError(e)})}</span>)}<NetworkSettingsLink messages={status.lastSync.errors}/></p>:<p role="status" className="nr-footnote">{$t('packages.readingDownloadsFirstTime')}</p>}
+   {status.lastSync?<p className="nr-footnote">{$tj('common.lastSyncedSyncsAutomaticallyEvery',{0:formatDateTime(status.lastSync.at)})}{status.lastSync.errors.map(e=><span key={e} className="nr-block">{$tj('common.partlyNotUpdated',{0:translateSourceError(e)})}</span>)}<NetworkSettingsLink messages={status.lastSync.errors}/></p>:<p role="status" className="nr-footnote">{$t('packages.readingDownloadsFirstTime')}</p>}
    <div className="nr-step-actions">{canSync&&<Button size="sm" variant="outline" disabled={busy||status.syncing} onClick={()=>void run(()=>call<PackagesStatus>(projectId,'sync'))}>{busy?$t('common.syncing'):$t('common.syncNow')}</Button>}</div>
   </div>}
   {!status.connected&&!canPreview&&!preview&&<p className='nr-footnote'>{$t('messages.notConnectedYet')}</p>}

@@ -2,7 +2,7 @@ import { useMessageState, $t, $tj, $legacyText, $legacyFragment } from "#i18n";
 import { usePageTab } from '#hooks/use-page-tab';
 import {useEffect,useState,type ReactNode} from 'react';
 import {Link,useNavigate,useSearchParams} from 'react-router';
-import {ArrowRightIcon,ExternalLinkIcon,EyeIcon,LightbulbIcon,RotateCcwIcon,SearchIcon} from 'lucide-react';
+import {ArrowRightIcon,ExternalLinkIcon,EyeIcon,LightbulbIcon,SearchIcon} from 'lucide-react';
 import {PageContainer,PageHeader} from '#components/reach/page';
 import {Tag,type Tone} from '#components/reach/tag';
 import {InfoTip} from '#components/reach/info-tip';
@@ -127,7 +127,7 @@ function WatchList({items,ended,rows,busy,onOpen,onIgnore,onRestore,onOpportunit
    :e.outcome==='normal'?<Tag tone="grey">{$t('strategy.backNormal')}</Tag>:e.outcome==='ignored'?<Tag tone="slate">{$t('strategy.ignored')}</Tag>:<Tag tone="grey">{e.outcome==='expired'?$t('strategy.deadlineNoActionNeeded'):$t('common.noActionNeeded')}</Tag>;};
  return <div className="flex flex-col gap-3">
   {items.length?<div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[48rem] table-fixed border-collapse text-sm" aria-label={$t('tasks.watchingTab',undefined)}>
-   <thead className="text-xs text-muted-foreground"><tr className="border-b"><th className="w-[36%] px-4 py-2 text-left font-normal"><span className="inline-flex items-center gap-1">{$t('common.change')}<InfoTip label={$t('strategy.howWatchingWorks')}><p>{$t('strategy.watchLifecycleHelp')} <Link className="nr-link" to="/rules">{$t('strategy.seeAnalysisRules')}</Link></p></InfoTip></span></th><th className="w-[17%] px-3 py-2 text-left font-normal">{$t('strategy.value')}</th><th className="px-3 py-2 text-left font-normal">{$t('strategy.decisionCondition')}</th><th className="w-28 px-3 py-2 text-left font-normal">{$t('strategy.deadline')}</th><th className="w-20 px-3 py-2"><span className="sr-only">{$t('common.actions')}</span></th></tr></thead>
+   <thead data-slot="table-header" className="text-xs text-muted-foreground"><tr className="border-b"><th className="w-[36%] px-4 py-2 text-left font-normal"><span className="inline-flex items-center gap-1">{$t('common.change')}<InfoTip label={$t('strategy.howWatchingWorks')}><p>{$t('strategy.watchLifecycleHelp')} <Link className="nr-link" to="/rules">{$t('strategy.seeAnalysisRules')}</Link></p></InfoTip></span></th><th className="w-[17%] px-3 py-2 text-left font-normal">{$t('strategy.value')}</th><th className="px-3 py-2 text-left font-normal">{$t('strategy.decisionCondition')}</th><th className="w-28 px-3 py-2 text-left font-normal">{$t('strategy.deadline')}</th><th className="w-20 px-3 py-2"><span className="sr-only">{$t('common.actions')}</span></th></tr></thead>
    <tbody>{items.map(w=>{return <tr key={w.s.key} className="cursor-pointer border-b last:border-0 hover:bg-muted/40" data-watch={w.s.key} onClick={()=>onOpen(w.s.key)}>
     <td className="px-4 py-2.5"><button type="button" className="block w-full min-w-0 text-left" onClick={e=>{e.stopPropagation();onOpen(w.s.key);}}><span className="block truncate font-medium">{titleOf(w.s)}</span>
      <span className="block truncate text-xs text-muted-foreground">{getSourceNames()[w.s.source]||w.s.source} · <span data-watched={w.days}>{watchedLabel(w.days)}</span></span></button></td>
@@ -150,7 +150,7 @@ function WatchList({items,ended,rows,busy,onOpen,onIgnore,onRestore,onOpportunit
 type Settled={s:Signal;status:ReturnType<typeof statusOf>};
 /** A change's filter value: a handed-off one by where its open task stands, as its tag says. */
 const changeDest=(c:Settled):Dest=>c.status.next==='task'?(!c.status.task||c.status.task==='todo'?'task':c.status.task):c.status.ignored?'ignored':'skip';
-const RestoreButton=({busy,onClick}:{busy:boolean;onClick:()=>void})=><Button size="icon-sm" variant="ghost" className="-my-1.5" disabled={busy} aria-label={$t('strategy.restore')} title={$t('strategy.restore')} onClick={onClick}><RotateCcwIcon/></Button>;
+const RestoreButton=({busy,onClick}:{busy:boolean;onClick:()=>void})=><Button size="sm" variant="ghost" className="-my-1.5" disabled={busy} onClick={onClick}>{$t('strategy.restore')}</Button>;
 function DoneTable({rows,changes,busy,onOpen,onOpenChange,onRestore,onRestoreChange}:{rows:Item[];changes:Settled[];busy:boolean;onOpen:(r:Item)=>void;onOpenChange:(key:string)=>void;onRestore:(r:Item)=>void;onRestoreChange:(key:string)=>void}){
  const [q,setQ]=useState(''),[dest,setDest]=useState<Dest|''>('');
  const key=q.trim().toLowerCase().replace(/\s+/g,'');
@@ -165,7 +165,7 @@ function DoneTable({rows,changes,busy,onOpen,onOpenChange,onRestore,onRestoreCha
    <Select value={dest||'all'} onValueChange={v=>setDest((v==='all'?'':v) as Dest|'')}><SelectTrigger className="w-full sm:w-40" aria-label={$t('strategy.filterWhereWent')}><SelectValue>{(v:string)=>getDestinations().find(([k])=>(k||'all')===v)?.[1]??v}</SelectValue></SelectTrigger><SelectContent className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{getDestinations().map(([k,v])=><SelectItem key={k||'all'} value={k||'all'}>{v}</SelectItem>)}</SelectContent></Select></div>
   {opps.length||shown.length?<div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[40rem] table-fixed border-collapse text-sm" aria-label={$t('strategy.handled')}>
    <colgroup><col className="w-20"/><col/><col className="w-48"/><col className="w-28"/><col className="w-12"/></colgroup>
-   <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>{[$t('common.identifier'),$t('common.title'),$t('strategy.whereWent'),$t('strategy.firstFound')].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}<th><span className="sr-only">{$t('common.actions')}</span></th></tr></thead>
+   <thead data-slot="table-header" className="text-xs text-muted-foreground"><tr>{[$t('common.identifier'),$t('common.title'),$t('strategy.whereWent'),$t('strategy.firstFound')].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}<th><span className="sr-only">{$t('common.actions')}</span></th></tr></thead>
    <tbody>{opps.map(r=><tr key={r.card.id} data-opportunity-id={r.card.id} className={cn('cursor-pointer border-t transition-colors hover:bg-muted/40',r.state==='archived'&&'text-muted-foreground')} onClick={()=>onOpen(r)}>
     <td className="px-3 py-2.5"><No row={r}/></td>
     <td className="px-3 py-2.5"><button type="button" className="block w-full truncate text-left font-medium hover:underline" onClick={e=>{e.stopPropagation();onOpen(r);}}>{r.card.title}</button></td>

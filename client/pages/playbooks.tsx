@@ -4,6 +4,7 @@ import {useSearchParams} from 'react-router';
 import {ArrowDownIcon,ArrowUpIcon,MoreHorizontal,PencilIcon,PlusIcon,SparklesIcon,XIcon} from 'lucide-react';
 import {useBusinessAccess} from '#hooks/use-business-access';
 import {PageContainer,PageHeader} from '#components/reach/page';
+import {ListSkeleton} from '#components/reach/states';
 import {Tag} from '#components/reach/tag';
 import {Button} from '#components/ui/button';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter} from '#components/ui/dialog';
@@ -43,7 +44,7 @@ export default function PlaybooksPage(){
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
   {/* Playbooks as cards by category across the full width; one opens in a drawer to read or edit (UI review: no
       persistent side panel). A link to ?id= opens that playbook's drawer. */}
-  {!list?<p role="status" className="text-sm text-muted-foreground">{$t('playbooks.loadingPlaybooks')}</p>:<div className="flex flex-col gap-5">
+  {!list?<ListSkeleton rows={6} label={$t('playbooks.loadingPlaybooks')}/>:<div className="flex flex-col gap-5">
    {getCategories().map(([c,label])=>{const items=list.playbooks.filter(p=>p.category===c);return items.length?<section key={c} className="flex flex-col gap-2" aria-label={label}>
     <h2 className="text-sm font-medium text-muted-foreground">{label}</h2>
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{items.map(p=><button key={p.id} type="button" aria-current={selected?.id===p.id} onClick={()=>void pick(p.id)} className="flex flex-col gap-1 rounded-lg border bg-card p-3 text-left text-card-foreground transition-colors hover:border-ring aria-[current=true]:border-primary">
@@ -51,7 +52,7 @@ export default function PlaybooksPage(){
    </section>:null;})}
   </div>}
   <Sheet open={Boolean(list&&((draft&&canSave)||selected))} onOpenChange={o=>{if(!o)void close();}}>
-   <SheetContent className="w-full overflow-y-auto data-[side=right]:sm:max-w-2xl" aria-describedby={undefined}><SheetHeader className="sr-only"><SheetTitle>{draft?$t('playbooks.editPlaybook'):$t('playbooks.playbookDetails')}</SheetTitle></SheetHeader><div className="p-4 pt-12">
+   <SheetContent className="w-full overflow-y-auto data-[side=right]:sm:max-w-2xl" aria-describedby={undefined}><SheetHeader className="sr-only"><SheetTitle>{draft?$t('playbooks.editPlaybook'):$t('playbooks.playbookDetails')}</SheetTitle></SheetHeader><div className={list&&draft&&canSave?'p-4 pt-12':undefined}>
    {list&&draft&&canSave?<Editor draft={draft} list={list} skills={skills} busy={busy} onChange={setDraft} onSave={save} onCancel={()=>{setDraft(null);setError('');if(id===NEW){const p=new URLSearchParams(params);p.delete('id');setParams(p,{replace:true});}}}/>
    :list&&selected?<Detail p={selected} list={list} skills={skills} busy={busy} onEdit={canSave?()=>setDraft({id:selected.id,name:selected.name,category:selected.category,description:selected.description,steps:structuredClone(selected.steps),next:[...selected.next]}):undefined}
      onCopy={canCopy?()=>void call('copy',{playbookId:selected.id},() => ($t('playbooks.duplicatedKeepEditing'))):undefined} onRestore={canRestore?async()=>{if(await confirmAction({title:() => ($t('playbooks.restoreDefault',{0:selected.name})),description:() => ($t('playbooks.changesDiscardedTasksAlreadyStarted')),action:'common.restoreDefault'}))void call('restore',{playbookId:selected.id},() => ($t('playbooks.defaultRestored')));}:undefined}
@@ -63,8 +64,8 @@ export default function PlaybooksPage(){
 }
 function Detail({p,list,skills,busy,onEdit,onCopy,onRestore,onRemove}:{p:Playbook;list:PlaybookList;skills:Skill[];busy:boolean;onEdit?:()=>void;onCopy?:()=>void;onRestore?:()=>void;onRemove?:()=>void}){
  const next=p.next.map(id=>list.playbooks.find(x=>x.id===id)?.name).filter(Boolean);
- return <section className="flex flex-col gap-3 rounded-lg border bg-card p-4 text-card-foreground" aria-label={$t('playbooks.playbookDetails')}>
-  <div className="flex items-start gap-2"><div className="min-w-0 flex-1"><h2 className="text-lg font-semibold leading-snug">{p.name}</h2><p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><Tag tone="grey">{categoryName(p.category)}</Tag>{$tj('playbooks.runAgent',{0:source(p)})}</p></div>
+ return <section className="flex flex-col gap-4 pb-5 [&>*:not(:first-child)]:mx-5" aria-label={$t('playbooks.playbookDetails')}>
+  <div className="flex items-start gap-2 border-b py-5 pr-14 pl-5"><div className="min-w-0 flex-1"><h2 className="text-lg font-semibold leading-snug">{p.name}</h2><p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><Tag tone="grey">{categoryName(p.category)}</Tag>{$tj('playbooks.runAgent',{0:source(p)})}</p></div>
    {onEdit&&<Button size="sm" variant="outline" disabled={busy} onClick={onEdit}><PencilIcon/>{$t('common.edit')}</Button>}
    {(onCopy||(p.edited&&onRestore)||(!p.system&&onRemove))&&<DropdownMenu><DropdownMenuTrigger render={<Button size="icon-sm" variant="ghost" aria-label={$t('playbooks.moreActions')} disabled={busy}/>}><MoreHorizontal/></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-max">
     {onCopy&&<DropdownMenuItem onClick={onCopy}>{$t('playbooks.duplicate')}</DropdownMenuItem>}{p.edited&&onRestore&&<DropdownMenuItem onClick={onRestore}>{$t('common.restoreDefault')}</DropdownMenuItem>}{!p.system&&onRemove&&<DropdownMenuItem variant="destructive" onClick={onRemove}>{$t('common.delete')}</DropdownMenuItem>}

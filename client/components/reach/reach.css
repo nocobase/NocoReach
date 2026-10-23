@@ -39,12 +39,15 @@
 .nr-field>input,.nr-field>select,.nr-field>textarea{font-weight:400;width:100%;box-sizing:border-box}
 .nr-step-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:calc(var(--spacing)*2)}
 
-/* In-page tabs (§3.3): underline, the selected one in the primary colour, counts in muted tabular numbers. */
-.nr-tabs{display:flex;flex-wrap:wrap;gap:calc(var(--spacing)*5);border-bottom:1px solid var(--border)}
-.nr-tabs button{padding:calc(var(--spacing)*2) 0;margin-bottom:-1px;border:0;border-bottom:2px solid transparent;background:none;color:var(--muted-foreground);font-size:var(--text-sm);font-weight:500;font-variant-numeric:tabular-nums}
+/* In-page tabs (§3.3), for markup not yet on lineTabClass: the same look as every other tab bar — a thin rule under
+   the row, the open one in the foreground over a 2px line, counts in tabular numbers. */
+.nr-tabs{display:flex;flex-wrap:wrap;gap:0 calc(var(--spacing)*5);border-bottom:1px solid var(--border)}
+.nr-tabs button{height:calc(var(--spacing)*10);padding:0;margin-bottom:-1px;border:0;border-bottom:2px solid transparent;background:none;color:var(--muted-foreground);font-size:var(--text-sm);font-weight:500;font-variant-numeric:tabular-nums}
 .nr-tabs button:hover{color:var(--foreground)}
-.nr-tabs button[aria-pressed=true],.nr-tabs button[aria-selected=true]{color:var(--foreground);border-bottom-color:var(--primary)}
+.nr-tabs button[aria-pressed=true],.nr-tabs button[aria-selected=true]{color:var(--foreground);border-bottom-color:var(--foreground)}
 
 /* Status pill in the tag style (§5.3) for markup not yet on <Tag>: one hue per meaning. */
 /* DataForSEO spending in 数据接入 */
 .nr-spend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:calc(var(--spacing)*2) calc(var(--spacing)*4);margin:calc(var(--spacing)*3) 0;padding:calc(var(--spacing)*3) calc(var(--spacing)*4);border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}.nr-spend>div{display:flex;flex-direction:column;min-width:0}.nr-spend span{font-size:var(--text-xs);color:var(--muted-foreground)}.nr-spend strong{font-size:var(--text-2xl);font-weight:600;font-variant-numeric:tabular-nums}.nr-spend small{font-size:var(--text-xs);color:var(--muted-foreground)}.nr-spend>p{grid-column:1/-1;margin:0}
+/* The page header's action row: hidden while it holds nothing but an empty tab slot. */
+.nr-page-actions:not(:has(> :not(:empty))){display:none}
