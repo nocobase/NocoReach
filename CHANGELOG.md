@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Steadier tests in CI
+
+- Insights: a question sent, or the side panel opened, before the page has read the owner's conversations joins the day's conversation instead of starting a second one for the day; on a slow connection Send used to act as if the day had none.
+- The Bilibili, Xiaohongshu and YouTube connection panels act on the first click of a button that has just appeared (Read now, Disconnect and the rest), which could be ignored while the permission that showed it had not reached the handler yet.
+- `classic-import-app.test.ts` stops NocoReach's timers before counting imported rows: the analysis timer's catch-up wrote two extra snapshots when the test ran across second 10 of a minute.
+
 ## Unreleased — Agent page details
 
 - Who does the work no longer shows a row of column headings (screen readers still read them); each row already says what it holds.

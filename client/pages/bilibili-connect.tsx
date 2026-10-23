@@ -1,6 +1,12 @@
 import { formatDateTime } from '#lib/format';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -454,7 +460,9 @@ function BilibiliPanel({
     cancel: canCancel,
     disconnect: canDisconnect,
   });
-  useEffect(() => {
+  // A layout effect, not a passive one: a button appears in the commit that grants its permission, and a passive
+  // effect can run after the browser has already dispatched a click to it, so the handler would see the old denial.
+  useLayoutEffect(() => {
     accessRef.current = {
       connect: canConnect,
       test: canTest,
@@ -466,7 +474,8 @@ function BilibiliPanel({
   const confirmationRef = useRef<AbortController | null>(null);
   const confirmingRef = useRef(false);
   const stoppingRef = useRef(false);
-  useEffect(() => {
+  // A layout effect for the same reason: Disconnect must not reach the aborted owner of the denial it replaces.
+  useLayoutEffect(() => {
     const owner = new AbortController();
     confirmationRef.current = owner;
     if (!canDisconnect) owner.abort();
