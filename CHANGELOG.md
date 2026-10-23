@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Current situation's marks in one grey
+
+- On Insights, every line of Current situation starts with its source mark in the same grey and size: brand logos (Google, Search Console, Discord, Slack, X) no longer show their brand colours beside the grey icons, which made the column look cluttered. `SourceLogo` has a `mono` option for this; Data sources and the other pages keep the brand colours.
+
 ## Unreleased — Steadier tests in CI
 
 - Insights: a question sent, or the side panel opened, before the page has read the owner's conversations joins the day's conversation instead of starting a second one for the day; on a slow connection Send used to act as if the day had none.
