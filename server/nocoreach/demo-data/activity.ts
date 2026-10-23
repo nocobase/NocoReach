@@ -1115,11 +1115,9 @@ export async function writeActivity(
   people: Partial<Record<DemoPerson, string>>,
 ): Promise<void> {
   await writeChangeTasks(host, context, projectId, domain, people);
-  const chat = (await host.agents.models.services.defaults()).effectiveChat as
-    { modelService: string; model: string } | null | undefined;
-  const model = chat
-    ? { modelService: chat.modelService, model: chat.model }
-    : null;
+  // Earlier conversations ran on the demo's own simulated model, never the global default.
+  const service = host.demoModels?.serviceName;
+  const model = service ? { modelService: service, model: 'demo-chat' } : null;
   await writeConversations(host, context, projectId, people, model);
   // Tracked, so a failed import removes them with its other writes.
   await context.track(

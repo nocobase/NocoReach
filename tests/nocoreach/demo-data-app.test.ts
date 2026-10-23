@@ -76,7 +76,7 @@ describe('read-only demo conversations', () => {
           headers: json,
           body: JSON.stringify({
             expectedRevision: initial.data.revision,
-            value: { enabled: true, model: null, tools: {} },
+            value: { enabled: true, tools: {} },
           }),
         })
       ).status,
@@ -157,7 +157,7 @@ describe('read-only demo conversations', () => {
           headers: json,
           body: JSON.stringify({
             expectedRevision: 2,
-            value: { enabled: false, model: null, tools: {} },
+            value: { enabled: false, tools: {} },
           }),
         })
       ).status,

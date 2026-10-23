@@ -76,7 +76,7 @@ pnpm nocobase demo-mode data clear --actor <管理员ID> --force
 | `NOCOBASE_DEMO_WRITABLE_COLLECTIONS` | `demoMode.allowCollections` | 逗号分隔的逻辑集合名（如 `nrTasks`），部署层面允许访客写入；默认为空 |
 | —                                    | `demoMode.quickSignIn`      | 是否提供免密切换演示账号，默认 `true`                                |
 
-模拟模型的地址由应用自动推导，不再需要配置；模拟模型、在线对话的开关和聊天模型在「演示管理 › 模拟与 AI」里设置。
+模拟模型的地址由应用自动推导，不再需要配置；模拟模型和在线对话的开关在「演示管理 › 模拟与 AI」里设置；在线对话始终使用模拟模型，不能选择真实模型。
 
 ## 接口
 
@@ -86,7 +86,6 @@ pnpm nocobase demo-mode data clear --actor <管理员ID> --force
 
 - 小红书、哔哩哔哩、YouTube 需要浏览器采集器，演示项目暂不接入，页面显示为未连接。
 - 模拟模型只会回答预先写好的几类问题（任务、搜索数据、机会），其余问题给出标明「演示模型」的通用回答。
-- 模拟模型会临时改变应用的默认模型，影响所有使用该默认模型的项目。需要保持真实项目的模型不变时，可在生成前关闭模拟模型配置。
 
 ## 管理配置
 
