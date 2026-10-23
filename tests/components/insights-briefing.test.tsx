@@ -28,6 +28,14 @@ const fixture = vi.hoisted(() => ({
   messages: {} as Record<string, unknown[]>,
   posts: [] as { path: string; body: unknown }[],
   sent: [] as { conversationId: string | null; content: string }[],
+  // Chat panel › Settings as the page read it, and as the server has it now.
+  chat: { activity: 0, enabled: true, settings: { enabled: true } } as {
+    activity: number;
+    enabled: boolean;
+    settings: { enabled: boolean };
+    refresh?: () => void;
+  },
+  chatOnNow: true,
   panelOpen: false,
   state: undefined as unknown as StrategyState,
   tasks: [] as unknown[],
@@ -97,7 +105,7 @@ vi.mock('../../client/pages/data-health', () => ({
   healthText: (name: string) => name,
 }));
 vi.mock('../../client/online-agent/context', () => ({
-  useOptionalOnlineChat: () => ({ activity: 0, enabled: true }),
+  useOptionalOnlineChat: () => fixture.chat,
 }));
 // The Agents plugin keeps the conversations: each one's messages, and what is sent to it.
 vi.mock('@nocobase/app-plugin-agents/client/chat', async (original) => ({
@@ -129,6 +137,7 @@ vi.mock('../../client/online-agent/api', () => ({
       return { id: 't-new' };
     }
     if (path === 'threads?projectId=1') return fixture.threads;
+    if (path === 'settings') return { enabled: fixture.chatOnNow };
     throw new Error(`Unexpected ${path}`);
   },
 }));
@@ -275,6 +284,13 @@ beforeEach(() => {
   fixture.messages = {};
   fixture.posts = [];
   fixture.sent = [];
+  fixture.chat = {
+    activity: 0,
+    enabled: true,
+    settings: { enabled: true },
+    refresh: vi.fn(),
+  };
+  fixture.chatOnNow = true;
   fixture.panelOpen = false;
   fixture.action.mockImplementation(
     (resource: string, action: string, options: { body?: object }) => {
@@ -849,6 +865,39 @@ it('a follow-up joins the day’s existing conversation', async () => {
     content: 'And then?',
   });
   expect(fixture.posts).toEqual([]);
+});
+
+it('a question asked after the chat agent was turned off elsewhere is not sent', async () => {
+  fixture.threads = [thread('t-day', '2026-10-21')];
+  fixture.messages['t-day'] = [user('m1', 'First', '2026-10-21T10:00:00Z')];
+  fixture.chatOnNow = false;
+  setup();
+  const input = await screen.findByRole('textbox', {
+    name: 'strategy.composerLabel',
+  });
+  fireEvent.change(input, { target: { value: 'Still there?' } });
+  fireEvent.click(screen.getByRole('button', { name: 'strategy.send' }));
+  // The page reads Chat panel › Settings again instead of sending.
+  await waitFor(() => expect(fixture.chat.refresh).toHaveBeenCalledOnce());
+  expect(fixture.sent).toEqual([]);
+});
+
+it('while the chat agent is off the day’s conversation stays and the page says why there is no input', async () => {
+  fixture.threads = [thread('t-day', '2026-10-21')];
+  fixture.messages['t-day'] = [
+    user('m1', 'First', '2026-10-21T10:00:00Z'),
+    reply('m2', 'Answer'),
+  ];
+  fixture.chat = {
+    ...fixture.chat,
+    enabled: false,
+    settings: { enabled: false },
+  };
+  setup();
+  expect(await screen.findByText('onlineAgent.chatDisabled')).toBeTruthy();
+  expect(
+    screen.queryByRole('textbox', { name: 'strategy.composerLabel' }),
+  ).toBeNull();
 });
 
 it('with the side panel open the conversation moves there and the page gives it room', async () => {

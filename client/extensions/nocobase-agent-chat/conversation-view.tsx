@@ -29,6 +29,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useEffectEvent,
   useRef,
   useState,
   type DragEvent,
@@ -50,6 +51,7 @@ import { Skeleton } from '#components/ui/skeleton';
 import { Spinner } from '#components/ui/spinner';
 import { cn } from 'cn';
 
+import { useOnlineApi, type OnlineSettings } from '../../online-agent/api.js';
 import { useOnlineChat } from '../../online-agent/context.js';
 import { useProject } from '../../pages/reach-data.js';
 import {
@@ -227,6 +229,28 @@ function ConversationBody({
     isOnlineAgent(conversation?.agent) &&
     online.settings !== undefined &&
     !online.enabled;
+  // The panel's copy of the switch may be older than an administrator's change. A message or an approval in an online
+  // conversation reads it again first, so the panel says the agent is off instead of failing at the server's guard.
+  const onlineApi = useOnlineApi();
+  const onlineAgent = isOnlineAgent(conversation?.agent);
+  const stillOn = async (): Promise<boolean> => {
+    // Unreadable: the server's guard decides.
+    const current = await onlineApi<OnlineSettings>('settings').catch(
+      () => null,
+    );
+    if (current && !current.enabled) {
+      online.refresh();
+      return false;
+    }
+    return true;
+  };
+  // A message the server refused anyway (switched off a moment before) also reads it again.
+  const refreshOnline = useEffectEvent(() => online.refresh());
+  const sendRefused =
+    onlineAgent && messages.pending.some((item) => item.status !== 'sending');
+  useEffect(() => {
+    if (sendRefused) refreshOnline();
+  }, [sendRefused]);
 
   const { selectConversation, resetSource, source, focusComposer } = panel;
   const created = useCallback(
@@ -282,6 +306,22 @@ function ConversationBody({
           if (liveRef.current) setStarting({ input, error });
         },
       );
+    return true;
+  };
+  // In an existing online conversation, the message waits for the switch to be read; off, it stays unsent.
+  const recheck = (input: Input): boolean => {
+    if (starting && !starting.error) return false;
+    startedRef.current = true;
+    setStarting({ input });
+    void stillOn().then((on) => {
+      if (!liveRef.current) return;
+      if (!on) {
+        setStarting({ input, error: new Error('chatDisabled') });
+        return;
+      }
+      setStarting(null);
+      if (send(input)) online.touch();
+    });
     return true;
   };
   useEffect(() => {
@@ -375,10 +415,13 @@ function ConversationBody({
               ? extensions.renderMessageExtra?.(segment.message)
               : null
           }
-          approvalDisabled={receiving}
+          approvalDisabled={receiving || onlineOff}
           onApproval={
             conversationId
-              ? (input) => chatController.approve(conversationId, input)
+              ? async (input) => {
+                  if (onlineAgent && !(await stillOn())) return;
+                  await chatController.approve(conversationId, input);
+                }
               : undefined
           }
         />
@@ -443,19 +486,32 @@ function ConversationBody({
     feedback === 'waiting' ||
     feedback === 'thinking' ||
     feedback === 'stopping';
-  const feedbackNotice = feedback ? (
-    <div
-      role='status'
-      aria-live='polite'
-      className='flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground'
-      data-chat-feedback={feedback}
-    >
-      {busyFeedback ? (
-        <Spinner aria-hidden='true' className='shrink-0' />
-      ) : null}
-      {t(`chat.feedback.${feedback}`)}
-    </div>
-  ) : null;
+  // A stopped or interrupted online reply already ends with its saved notice saying so; the same line is not repeated.
+  const lastStatus = messages.items
+    .at(-1)
+    ?.parts.find(
+      (part) => part.type === 'data-notice' && part.id === 'execution-status',
+    );
+  const savedOutcome =
+    lastStatus?.type === 'data-notice' ? lastStatus.data.type : undefined;
+  const feedbackNotice =
+    feedback &&
+    !(
+      (feedback === 'cancelled' || feedback === 'failed') &&
+      savedOutcome === feedback
+    ) ? (
+      <div
+        role='status'
+        aria-live='polite'
+        className='flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground'
+        data-chat-feedback={feedback}
+      >
+        {busyFeedback ? (
+          <Spinner aria-hidden='true' className='shrink-0' />
+        ) : null}
+        {t(`chat.feedback.${feedback}`)}
+      </div>
+    ) : null;
 
   const empty =
     entries.length === 0 &&
@@ -570,7 +626,11 @@ function ConversationBody({
                       createdAt: '',
                       status: starting.error ? 'failed' : 'sending',
                     }}
-                    onRetry={() => void start(starting.input)}
+                    onRetry={() =>
+                      void (conversation
+                        ? recheck(starting.input)
+                        : start(starting.input))
+                    }
                     onDiscard={() => setStarting(null)}
                     onCheck={() => {}}
                   />
@@ -700,6 +760,8 @@ function ConversationBody({
           onSend={(content, context, attachments) => {
             if (!conversationId && isOnlineAgent(target))
               return start({ content, context, attachments });
+            if (conversationId && onlineAgent)
+              return recheck({ content, context, attachments });
             const accepted = send({ content, context, attachments });
             if (accepted && isOnlineAgent(conversation?.agent)) online.touch();
             if (accepted) focusComposer();

@@ -33,7 +33,7 @@ import { ActorAvatar } from '#components/reach/actor';
 import { Button } from '#components/ui/button';
 import { MarkdownView } from '#components/markdown-view';
 import { useOptionalOnlineChat } from '../../online-agent/context';
-import { useOnlineApi } from '../../online-agent/api';
+import { useOnlineApi, type OnlineSettings } from '../../online-agent/api';
 import { OnlineError } from '../../online-agent/controls';
 import { parseQuote } from '../../online-agent/quote';
 import { useFreshData } from '../workspace-cache';
@@ -432,12 +432,23 @@ export const questionCount = (threads: OnlineThread[], day: string) =>
 export function Composer() {
   const chat = useInsightChat(),
     online = useOptionalOnlineChat();
-  if (!chat || !online?.enabled || !chat.day || chat.docked) return null;
+  if (!chat || !chat.day || chat.docked) return null;
+  // Off in Chat panel › Settings: the day's conversation stays readable, and the page says why there is no input.
+  if (online?.settings && !online.enabled)
+    return (
+      <p className='self-center text-xs text-muted-foreground'>
+        {$t('onlineAgent.chatDisabled')}
+      </p>
+    );
+  if (!online?.enabled) return null;
   return <ComposerInput chat={chat} />;
 }
 function ComposerInput({ chat }: { chat: InsightChat }) {
-  const panel = useChatPanel();
+  const panel = useChatPanel(),
+    online = useOptionalOnlineChat(),
+    api = useOnlineApi();
   const [text, setText] = useState(''),
+    [checking, setChecking] = useState(false),
     [starting, setStarting] = useState<{ body: string; id?: string }>(),
     [error, setError] = useState<unknown>(),
     inputRef = useRef<HTMLTextAreaElement>(null);
@@ -456,6 +467,11 @@ function ComposerInput({ chat }: { chat: InsightChat }) {
       stream?.status === 'streaming' ||
       messages.pending.some((m) => m.status === 'sending');
   const failed = messages.pending.find((m) => m.status !== 'sending');
+  // Refused, perhaps because the chat agent was turned off a moment ago: read Chat panel › Settings again.
+  const refreshOnline = useEffectEvent(() => online?.refresh());
+  useEffect(() => {
+    if (failed) refreshOnline();
+  }, [failed]);
   const sendMessage = useSendMessage({
     conversationId,
     agentId: ONLINE_AGENT_ID,
@@ -486,12 +502,24 @@ function ComposerInput({ chat }: { chat: InsightChat }) {
     setStarting(undefined);
     deliverStarted(starting.body);
   }, [starting, conversationId]);
-  const busy = !!starting || answering;
+  const busy = !!starting || checking || answering;
   const send = () => {
     const question = text.trim();
     if (!question || busy) return;
     const body = (reference ? referenceText(reference) : '') + question;
     setError(undefined);
+    // This page's copy of Chat panel › Settings may be older than an administrator's change; off, nothing is sent and
+    // the page says so. Unreadable, the server's guard decides.
+    setChecking(true);
+    void api<OnlineSettings>('settings')
+      .catch(() => null)
+      .then((current) => {
+        setChecking(false);
+        if (current && !current.enabled) online?.refresh();
+        else ask(body);
+      });
+  };
+  const ask = (body: string) => {
     if (conversationId) {
       deliver(body);
       return;
