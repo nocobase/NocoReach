@@ -12,7 +12,7 @@ import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip,
 import { Card } from "#components/ui/card";
 import { Input } from "#components/ui/input";
 import { TabsTrigger } from "#components/ui/tabs";
-import { DataTableTabs, DataTableToolbar } from "#components/seo/data-table-toolbar";
+import { DataTableTabs } from "#components/seo/data-table-toolbar";
 import { SortableHeader } from "#components/seo/sortable-header";
 import { Tag } from "#components/reach/tag";
 import { cn } from "#lib/utils";
@@ -68,16 +68,15 @@ export function ReportCard({ view, projectId }: { view: View; projectId?: number
   const label = tabs.find((x) => x.id === tab)!.label;
   return (
     <Card className="gap-0 py-0" data-report="">
-      <DataTableTabs value={tab} onValueChange={choose} description={notes[tab]}>
-        {tabs.map((x) => <TabsTrigger key={x.id} value={x.id}>{x.label}</TabsTrigger>)}
-      </DataTableTabs>
-      <DataTableToolbar>
+      <DataTableTabs value={tab} onValueChange={choose} description={notes[tab]} tools={<>
         {tab === "versions" || tab === "tags" ? <Segmented label={$t('dataDownloads.channel')} options={lines(tab === "versions" ? t.versions : t.tags)} value={line} onChange={setLine} /> : null}
         <label className="relative flex items-center">
           <Search className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" />
           <Input aria-label={$t('dataDownloads.searchIn', { 0: label })} className="h-8 w-64 pl-8" placeholder={$t('dataDownloads.searchIn', { 0: label })} value={query} onChange={(e) => setQuery(e.target.value)} />
         </label>
-      </DataTableToolbar>
+      </>}>
+        {tabs.map((x) => <TabsTrigger key={x.id} value={x.id}>{x.label}</TabsTrigger>)}
+      </DataTableTabs>
       {tab === "packages" ? (
         <Grid<Item> key={tab} id="packages" {...common} empty={$t('dataDownloads.noDataInRange')} rows={items.filter((it) => has(it.title, it.name, kindLabel(it)))} rowId={(it) => it.id} sort="value" onOpen={setOpen}
           handOff={(ticked) => ({ noun: $t('dataDownloads.packagesSelected'), playbookId: "change-research", description: $t('dataDownloads.tickedPackagesBecomeOneTask'), draft: () => packagesDraft(ticked.map((it) => ({ title: nameOf(it), registry: kindLabel(it), value: it.value, previous: it.previous, change: it.change })), period) })}

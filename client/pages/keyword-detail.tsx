@@ -1073,7 +1073,8 @@ function RelatedSection({
       description={$t('keywordDetail.relatedDescription')}
     >
       <Tabs value={tab} onValueChange={(v) => setPicked(String(v))}>
-        <TabsList variant='line' className='h-auto! flex-wrap justify-start'>
+        {/* What the table lists is chosen like a table's row filters (2026-10-22 decision D1). */}
+        <TabsList variant='segmented'>
           {tabs.map((t) => (
             <TabsTrigger key={t.key} value={t.key}>
               {t.label} {t.count}

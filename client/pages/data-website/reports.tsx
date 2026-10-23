@@ -41,10 +41,7 @@ import {
   useDataTable,
   useSelectionAnchor,
 } from '#components/seo/data-table';
-import {
-  DataTableTabs,
-  DataTableToolbar,
-} from '#components/seo/data-table-toolbar';
+import { DataTableTabs } from '#components/seo/data-table-toolbar';
 import { TablePagination } from '#components/seo/table-pagination';
 import { SortableHeader } from '#components/seo/sortable-header';
 import { useHandOffSource } from '#components/reach/hand-off-slot';
@@ -367,59 +364,64 @@ export function ReportCard({
   });
   return (
     <Card className='gap-0 py-0'>
-      <DataTableTabs value={tab.id} onValueChange={(v) => set({ tab: v })}>
+      <DataTableTabs
+        value={tab.id}
+        onValueChange={(v) => set({ tab: v })}
+        tools={
+          <>
+            {/* One row of tabs; how a tab's table is broken down is a dropdown in its toolbar, not a second row of
+            buttons (UI review 2026-10-22). */}
+            {tab.views.length > 1 ? (
+              <Select
+                value={view.id}
+                onValueChange={(v) => {
+                  const next = tab.views.find((x) => x === v);
+                  if (next) set({ by: next });
+                }}
+              >
+                <SelectTrigger
+                  size='sm'
+                  className='w-40'
+                  aria-label={$t('dataWebsite.breakDownBy')}
+                >
+                  <SelectValue>
+                    {(v: string) =>
+                      $t(VIEWS[v as keyof typeof VIEWS]?.label ?? view.label)
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className='w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal'>
+                  {tab.views.map((v) => (
+                    <SelectItem key={v} value={v}>
+                      {$t(VIEWS[v].label)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
+            <label className='relative flex items-center'>
+              <Search className='pointer-events-none absolute left-2.5 size-4 text-muted-foreground' />
+              <Input
+                aria-label={$t('dataWebsite.searchDimension', {
+                  0: $t(view.label),
+                })}
+                className='h-8 w-64 pl-8'
+                placeholder={$t('dataWebsite.searchDimension', {
+                  0: $t(view.label),
+                })}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </label>
+          </>
+        }
+      >
         {TABS.map((t) => (
           <TabsTrigger key={t.id} value={t.id}>
             {$t(t.label)}
           </TabsTrigger>
         ))}
       </DataTableTabs>
-      <DataTableToolbar>
-        {/* One row of tabs; how a tab's table is broken down is a dropdown in its toolbar, not a second row of
-            buttons (UI review 2026-10-22). */}
-        {tab.views.length > 1 ? (
-          <Select
-            value={view.id}
-            onValueChange={(v) => {
-              const next = tab.views.find((x) => x === v);
-              if (next) set({ by: next });
-            }}
-          >
-            <SelectTrigger
-              size='sm'
-              className='w-40'
-              aria-label={$t('dataWebsite.breakDownBy')}
-            >
-              <SelectValue>
-                {(v: string) =>
-                  $t(VIEWS[v as keyof typeof VIEWS]?.label ?? view.label)
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent className='w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal'>
-              {tab.views.map((v) => (
-                <SelectItem key={v} value={v}>
-                  {$t(VIEWS[v].label)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : null}
-        <label className='relative flex items-center'>
-          <Search className='pointer-events-none absolute left-2.5 size-4 text-muted-foreground' />
-          <Input
-            aria-label={$t('dataWebsite.searchDimension', {
-              0: $t(view.label),
-            })}
-            className='h-8 w-64 pl-8'
-            placeholder={$t('dataWebsite.searchDimension', {
-              0: $t(view.label),
-            })}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </label>
-      </DataTableToolbar>
       {all === undefined ? (
         <div className='px-4 py-6'>
           <InlineError>{$t('dataWebsite.tableNotReturned')}</InlineError>
