@@ -7,6 +7,11 @@
 - Without a chat model, Organize with AI is disabled with an ⓘ naming AI team › Agent › Model services (a link for those who may change it); Fill in manually keeps working. An unusable answer is 422 and asks to rephrase or fill in manually; a failed call is 503. One draft runs at a time per person (429), with a 90-second limit and at most 4,000 output tokens.
 - `POST /nocoreachTasks/draft` checks the new `nrTasks.draftManual` action, which the Tasks capability grants with `nrTasks.createManual`; existing roles gain it when NocoReach starts. It is browser-only, like the other new task commands. Simulated deployments answer it with the `task-draft` fixture.
 
+## Unreleased — Results lists only work with an outcome; a closed task never reads Completed
+
+- Results (the overview, All results, a result's drawer and the counts) lists only tasks that produced an outcome: their change went live, or their delivery finished (done, or its execution recorded), even if archived afterwards. Tasks cancelled before going live, work archived before it finished (including the old-workflow archive) and work still waiting for review, approval or publishing stay in Tasks. "Waiting to go live" is no longer a phase of Results; the Live card says how many more were delivered. Simulated work (the demo install) follows the same rule and stays marked as simulated.
+- A cancelled task, or one archived before it finished, reads Closed everywhere: the Results subtitle, Insights, Opportunities, and what the online assistant's task tools report. One archived after it finished reads "Completed · Archived". `taskStanding` on the server (`execution/model.ts`) and in `shared/task-pending.ts` apply the same rule.
+
 ## Unreleased — Current situation's marks in one grey
 
 - On Insights, every line of Current situation starts with its source mark in the same grey and size: brand logos (Google, Search Console, Discord, Slack, X) no longer show their brand colours beside the grey icons, which made the column look cluttered. `SourceLogo` has a `mono` option for this; Data sources and the other pages keep the brand colours.

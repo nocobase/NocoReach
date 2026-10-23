@@ -55,12 +55,16 @@ export function taskOwner(task: Pick<PendingTask, 'evidence'>): string | null {
 export const taskClosed = (work?: TaskWork | null): boolean =>
   Boolean(work?.cancelledAt || work?.archivedAt);
 /**
- * Where a task stands now, a cancelled or archived one closed: what Insights, Opportunities and the online agent say
- * of the task an opportunity or a change was handed off as.
+ * Where a task stands now: what Insights, Opportunities and the online agent say of the task an opportunity or a
+ * change was handed off as. A cancelled task, or one archived before it finished, is closed; one archived after it
+ * finished stays done (2026-10-23, as Results counts it; server/nocoreach/execution/model.ts `taskStanding`).
  */
 export type TaskStanding = TaskState | 'closed';
 export const taskStanding = (task: {
   work?: TaskWork | null;
   status?: string;
-}): TaskStanding =>
-  taskClosed(task.work) ? 'closed' : taskState(task.work, task.status);
+}): TaskStanding => {
+  if (task.work?.cancelledAt) return 'closed';
+  const state = taskState(task.work, task.status);
+  return task.work?.archivedAt && state !== 'done' ? 'closed' : state;
+};

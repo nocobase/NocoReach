@@ -1,13 +1,17 @@
 import type { EffectResult } from '../effect-model.js';
 export type { ResultSource } from '../../../shared/result-source.js';
-// live: the observe stage started; pendingLive: its flow still goes live; delivered: no page to watch.
-export type ResultPhase = 'live' | 'pendingLive' | 'delivered';
+// Results lists only tasks with an outcome (server/nocoreach/execution/result-view.ts `hasOutcome`): live, the
+// observe stage started; delivered, finished without a page to watch.
+export type ResultPhase = 'live' | 'delivered';
 export type ResultSummary = {
   taskId: string;
   taskNo: number | null;
   title: string;
+  /** Where its task stands: done, or closed once stopped after going live. */
   taskState: string;
   closed: boolean;
+  /** Archived after it finished. */
+  archived: boolean;
   phase: ResultPhase;
   nextDay: number | null;
   nextDate: string | null;
@@ -24,6 +28,7 @@ export type ResultDetail = {
     title: string;
     state: string;
     closed: boolean;
+    archived: boolean;
     simulated: boolean;
     summary: string;
   };
@@ -55,7 +60,6 @@ export type ResultBoard = {
   total: number;
   counts: {
     live: number;
-    pendingLive: number;
     delivered: number;
     up: number;
     down: number;
