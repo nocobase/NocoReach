@@ -18,3 +18,7 @@ export function onlineApiError(error: OnlineAgentError) {
     message: error.code,
   });
 }
+
+/** The Agents plugin's answer for a conversation that is not there or not the caller's; any other failure is not. */
+export const conversationMissing = (error: unknown) =>
+  (error as { code?: unknown } | null)?.code === 'CONVERSATION_NOT_FOUND';

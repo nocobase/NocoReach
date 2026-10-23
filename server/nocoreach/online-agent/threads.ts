@@ -9,6 +9,7 @@ import {
   type OnlineSubject,
   type OnlineThread,
 } from '../../../shared/online-agent.js';
+import { conversationMissing } from './errors.js';
 
 type Row = {
   conversationId: string;
@@ -17,14 +18,18 @@ type Row = {
   day: string;
   opportunityId: string | null;
   createdAt: string;
+  /** The questions counted up to message `countedSeq`; `countedAt` is the conversation's last message then. */
+  turns: number | null;
+  countedSeq: number | null;
+  /** Null while a long conversation is still being counted. */
+  countedAt: string | null;
 };
 /** Threads listed at most, newest first. */
 const LISTED = 200;
 /** Pages of the owner's Insights conversations read before falling back to reading them one by one. */
 const SUMMARY_PAGES = 5;
-/** Pages of 200 messages a count reads in one list, and the conversations whose counts are kept. */
+/** Pages of 200 messages a count reads in one list. */
 const COUNT_PAGES = 5;
-const COUNTS_KEPT = 2000;
 /** Conversations counted at once. */
 const COUNTS_AT_ONCE = 8;
 
@@ -34,10 +39,6 @@ const COUNTS_AT_ONCE = 8;
  */
 export class InsightThreads {
   private readonly starting = new Map<string, Promise<string>>();
-  private readonly counts = new Map<
-    string,
-    { seq: number; turns: number; lastMessageAt: string; complete: boolean }
-  >();
   constructor(
     private readonly database: DatabaseManager,
     private readonly agents: Agents,
@@ -62,7 +63,10 @@ export class InsightThreads {
     }
     return started;
   }
-  /** The day's open conversation; a row whose conversation is archived or gone is removed, so a new one can take it. */
+  /**
+   * The day's open conversation; a row whose conversation is archived or gone is removed, so a new one can take it.
+   * Any other failure to read it is thrown: the row, and with it the conversation's place in Insights, is kept.
+   */
   private async open(ownerId: string, projectId: string, day: string) {
     const row = await this.repo().findOne({
       filter: { ownerId, projectId, day },
@@ -70,7 +74,10 @@ export class InsightThreads {
     if (!row) return null;
     const detail = await this.agents.conversations
       .get(ownerId, row.conversationId)
-      .catch(() => null);
+      .catch((error: unknown) => {
+        if (conversationMissing(error)) return null;
+        throw error;
+      });
     if (detail && !detail.archivedAt) return row.conversationId;
     await this.repo().deleteMany({
       filter: { conversationId: row.conversationId },
@@ -105,6 +112,9 @@ export class InsightThreads {
           day: subject.day,
           opportunityId: subject.opportunityId ?? null,
           createdAt: new Date().toISOString(),
+          turns: 0,
+          countedSeq: 0,
+          countedAt: null,
         },
       });
       return chat.sessionId;
@@ -145,33 +155,34 @@ export class InsightThreads {
     return found;
   }
   /**
-   * The questions asked in a conversation. Counts are kept by message position: nothing is read while its last message
-   * is unchanged, and then only the messages since. Null while a long conversation is still being counted.
+   * The questions asked in a conversation. Counts are kept on its row by message position, so restarts and other
+   * processes share them: nothing is read while its last message is unchanged, and then only the messages since. Null
+   * while a long conversation is still being counted.
    */
-  private async turns(
-    ownerId: string,
-    id: string,
-    lastMessageAt: string,
-  ): Promise<number | null> {
-    const kept = this.counts.get(id);
-    if (kept?.complete && kept.lastMessageAt === lastMessageAt)
-      return kept.turns;
-    let { seq, turns } = kept ?? { seq: 0, turns: 0 };
+  private async turns(row: Row, lastMessageAt: string): Promise<number | null> {
+    if (row.countedAt === lastMessageAt) return row.turns ?? 0;
+    let seq = row.countedSeq ?? 0;
+    let turns = row.turns ?? 0;
     let complete = false;
     for (let page = 0; page < COUNT_PAGES && !complete; page++) {
-      const { items } = await this.agents.conversations.messages(ownerId, id, {
-        after: seq,
-        limit: 200,
-      });
+      const { items } = await this.agents.conversations.messages(
+        row.ownerId,
+        row.conversationId,
+        { after: seq, limit: 200 },
+      );
       for (const message of items) if (message.role === 'user') turns++;
       seq = items.at(-1)?.seq ?? seq;
       complete = items.length < 200;
     }
-    // Most recently counted last, so the oldest goes first.
-    this.counts.delete(id);
-    this.counts.set(id, { seq, turns, lastMessageAt, complete });
-    if (this.counts.size > COUNTS_KEPT)
-      this.counts.delete(this.counts.keys().next().value!);
+    // Two processes counting at once write the same count for the same position.
+    await this.repo().updateMany({
+      filter: { conversationId: row.conversationId },
+      values: {
+        turns,
+        countedSeq: seq,
+        countedAt: complete ? lastMessageAt : null,
+      },
+    });
     return complete ? turns : null;
   }
   async list(ownerId: string, projectId: string): Promise<OnlineThread[]> {
@@ -190,7 +201,7 @@ export class InsightThreads {
       const detail = details.get(row.conversationId);
       return detail ? [{ row, detail }] : [];
     });
-    // Counted a few conversations at a time: after a restart every count is read again.
+    // Counted a few conversations at a time; only those with new messages read any.
     const counts: (number | null)[] = [];
     for (let i = 0; i < open.length; i += COUNTS_AT_ONCE)
       counts.push(
@@ -198,11 +209,7 @@ export class InsightThreads {
           open
             .slice(i, i + COUNTS_AT_ONCE)
             .map(({ row, detail }) =>
-              this.turns(
-                ownerId,
-                row.conversationId,
-                detail.lastMessageAt,
-              ).catch(() => null),
+              this.turns(row, detail.lastMessageAt).catch(() => null),
             ),
         )),
       );

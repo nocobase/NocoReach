@@ -8,6 +8,7 @@ import {
 import { userAdministrationServiceToken } from '@nocobase/app-plugin-authentication';
 import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
 import { agentsToken } from '@nocobase/app-plugin-agents/server/tokens';
+import { databaseManagerToken } from '@nocobase/db';
 import { MockLanguageModelV4 } from 'ai/test';
 import { expect, vi } from 'vitest';
 import { createStandaloneServer } from '../../server/standalone.js';
@@ -310,6 +311,24 @@ test('creation and tools recheck project access and the Chat panel switch', asyn
     .flatMap((message) => message.parts)
     .find((part) => part.type === 'tool-project_data');
   expect(tool?.state).toBe('output-available');
+  // Still a member, but no longer in the project: its conversation cannot be continued.
+  await container
+    .resolve(databaseManagerToken)
+    .transaction((connection) =>
+      legacy.db.access!.setProjects(connection, user.id, []),
+    );
+  const left = await send(client, `/agents/conversations/${id}/messages`, {
+    message: {
+      id: 'q-left',
+      role: 'user',
+      parts: [{ type: 'text', text: 'Read the project again' }],
+    },
+  });
+  expect(left.status).toBe(403);
+  expect((await left.json()).error).toMatchObject({
+    domain: 'onlineAgent',
+    reason: 'accessDenied',
+  });
   await container
     .resolve(authorizationToken)
     .permissionSets.revoke(assignment.id);

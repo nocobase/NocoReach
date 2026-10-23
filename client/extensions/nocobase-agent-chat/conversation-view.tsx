@@ -607,7 +607,8 @@ function ConversationBody({
                       status: starting.error ? 'failed' : 'sending',
                     }}
                     onRetry={() =>
-                      void (conversation
+                      // Created already, even while its detail loads: send again rather than create another.
+                      void (conversationId
                         ? deliver(starting.input)
                         : start(starting.input))
                     }

@@ -18,13 +18,17 @@ import { z } from 'zod';
 import { onlineChatSettingsToken } from '../providers/online-agents.js';
 import { nocoReachToken } from '../providers/nocoreach.js';
 import { roleOf } from '../nocoreach/policy.js';
-import { authorizationToken, type AuthorizationEnv } from '@nocobase/app-plugin-authorization/server';
+import {
+  authorizationToken,
+  type AuthorizationEnv,
+} from '@nocobase/app-plugin-authorization/server';
 import {
   OnlineAgentError,
   onlineApiError,
 } from '../nocoreach/online-agent/errors.js';
 import { InsightThreads } from '../nocoreach/online-agent/threads.js';
 import { databaseManagerToken } from '@nocobase/db';
+import { onlineProjectId as projectId } from '../../shared/online-agent.js';
 
 const model = z.strictObject({
   modelService: z.string().min(1).max(100),
@@ -36,7 +40,6 @@ const settings = z.strictObject({
   model: model.nullable(),
   revision: z.number().int().min(0),
 });
-const projectId = z.string().regex(/^[1-9]\d{0,15}$/);
 // Asked from Insights: the analysis day, and the opportunity when asked from its line.
 const thread = z.strictObject({
   projectId,
@@ -148,7 +151,10 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
   );
   router.put(
     '/onlineAgents/settings',
-    endpoint('updateOnlineChatSettings', 'Update Chat panel settings at their revision'),
+    endpoint(
+      'updateOnlineChatSettings',
+      'Update Chat panel settings at their revision',
+    ),
     apiValidator('json', settings),
     async (context) => {
       await admin(context);
@@ -209,7 +215,9 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
         {
           kind: 'insights',
           day: input.day,
-          ...(input.opportunityId ? { opportunityId: input.opportunityId } : {}),
+          ...(input.opportunityId
+            ? { opportunityId: input.opportunityId }
+            : {}),
         },
       );
       return context.json({ data: { id } });

@@ -6,11 +6,13 @@ import type {
   OnlineTool,
 } from '../../server/nocoreach/online-agent/tool.js';
 
+// One turn's tool calls share its execution's signal.
+const signal = new AbortController().signal;
 const binding = (turnId: string): OnlineBinding => ({
   ownerId: '1',
   projectId: null,
   turnId,
-  signal: new AbortController().signal,
+  signal,
 });
 const tools: OnlineTool[] = [];
 
@@ -59,5 +61,22 @@ describe('turnTools', () => {
     abort.abort();
     await toolsOf(binding('a'));
     expect(build).toHaveBeenCalledTimes(2);
+  });
+
+  it('builds again for a turn resumed after an approval under a new signal, and drops it when that one stops', async () => {
+    const build = vi.fn(async () => ({ tools }));
+    const toolsOf = turnTools(build);
+    await toolsOf(binding('a'));
+    const resumed = new AbortController();
+    await toolsOf({ ...binding('a'), signal: resumed.signal });
+    expect(build).toHaveBeenCalledTimes(2);
+    expect(build.mock.lastCall).toEqual([
+      expect.objectContaining({ signal: resumed.signal }),
+    ]);
+    await toolsOf({ ...binding('a'), signal: resumed.signal });
+    expect(build).toHaveBeenCalledTimes(2);
+    resumed.abort();
+    await toolsOf(binding('a'));
+    expect(build).toHaveBeenCalledTimes(3);
   });
 });

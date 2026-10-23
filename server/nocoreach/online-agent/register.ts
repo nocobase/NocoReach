@@ -10,6 +10,7 @@ import {
   INSIGHTS_SOURCE,
   ONLINE_AGENT_ID,
   ONLINE_CHAT_SCOPE,
+  onlineProjectId,
   type OnlineChatSettings,
 } from '../../../shared/online-agent.js';
 import { OnlineAgentError, onlineApiError } from './errors.js';
@@ -24,10 +25,9 @@ import {
 } from './host.js';
 import type { OnlineBinding, OnlineTool } from './tool.js';
 
-const projectId = z.string().regex(/^[1-9]\d{0,15}$/);
 /** The business variable of an online conversation: the project it belongs to, set when it is created. */
 export const onlineChatVariable = z.object({
-  projectId: projectId.nullable(),
+  projectId: onlineProjectId.nullable(),
 });
 
 type Json = { [key: string]: OnlineAgentJson };
@@ -86,7 +86,6 @@ export function variableProject(variable: unknown): string | null {
   return parsed.success ? parsed.data.projectId : null;
 }
 
-/** Turns whose tools are kept, and for how long: long enough for one turn's tool calls. */
 /**
  * Turns whose tools are kept, and how long one is kept after its last tool call. The plugin says when a turn is
  * cancelled but not when it finishes, so a finished turn's tools (with the pages and project data they read) go once
@@ -96,13 +95,18 @@ const TURNS_KEPT = 50;
 const TURN_IDLE = 5 * 60_000;
 /**
  * One model turn's tools, built once: paging through read_page or project_data reads what the turn already fetched,
- * and read_page's page limit holds for the whole turn. Each tool still rechecks access on every call.
+ * and read_page's page limit holds for the whole turn. Each tool still rechecks access on every call. A turn resumed
+ * after an approval keeps its id but runs under a new signal, so its tools are built again for that signal: Stop must
+ * reach read_page's downloads and drop what the turn read.
  */
 export function turnTools(
   build: (binding: OnlineBinding) => Promise<{ tools: OnlineTool[] }>,
   now: () => number = Date.now,
 ) {
-  const turns = new Map<string, { at: number; tools: Promise<OnlineTool[]> }>();
+  const turns = new Map<
+    string,
+    { at: number; signal: AbortSignal; tools: Promise<OnlineTool[]> }
+  >();
   return (binding: OnlineBinding) => {
     const at = now();
     // Least recently used first: drop what has been idle too long or overflows.
@@ -111,9 +115,9 @@ export function turnTools(
         turns.delete(key);
       else break;
     const kept = turns.get(binding.turnId);
-    if (kept) {
-      turns.delete(binding.turnId);
-      turns.set(binding.turnId, { at, tools: kept.tools });
+    turns.delete(binding.turnId);
+    if (kept?.signal === binding.signal) {
+      turns.set(binding.turnId, { ...kept, at });
       return kept.tools;
     }
     const tools = build(binding).then((value) => value.tools);
@@ -121,7 +125,7 @@ export function turnTools(
       if (turns.get(binding.turnId)?.tools === tools)
         turns.delete(binding.turnId);
     };
-    turns.set(binding.turnId, { at, tools });
+    turns.set(binding.turnId, { at, signal: binding.signal, tools });
     // A refusal is not kept: the next call checks again. A stopped turn calls no more tools.
     tools.catch(forget);
     binding.signal.addEventListener('abort', forget, { once: true });
