@@ -7041,7 +7041,7 @@
   "agentRoles.chatDisabled": "{0} 已停用。",
   "agentRoles.lastTask": "上次任务 {0} 完成",
   "agentRoles.noTaskYet": "还没有执行过任务",
-  "agentRoles.lastTaskFailed": "上个任务没有完成，可以在任务页再试一次。",
+  "agentRoles.lastTaskFailed": "上次任务 {0} 没有完成",
   "agentRoles.whereTeam": "{0} · 团队共用",
   "agentRoles.whereOwner": "{0} · 只给所有者用",
   "agentRoles.countTeam": "团队共用 {0} 台",

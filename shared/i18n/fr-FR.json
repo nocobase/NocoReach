@@ -7008,7 +7008,7 @@
   "agentRoles.chatDisabled": "{0} est désactivé.",
   "agentRoles.lastTask": "Dernière tâche terminée : {0}",
   "agentRoles.noTaskYet": "Aucune tâche exécutée pour l’instant",
-  "agentRoles.lastTaskFailed": "La dernière tâche n’a pas abouti ; vous pouvez la relancer depuis sa page.",
+  "agentRoles.lastTaskFailed": "La dernière tâche ({0}) n’a pas abouti",
   "agentRoles.whereTeam": "{0} · partagé avec l’équipe",
   "agentRoles.whereOwner": "{0} · propriétaire uniquement",
   "agentRoles.countTeam": "Partagés avec l’équipe : {0}",

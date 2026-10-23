@@ -1584,7 +1584,7 @@
   "agentRoles.chatDisabled": "{0} đang tắt.",
   "agentRoles.lastTask": "Tác vụ gần nhất hoàn tất: {0}",
   "agentRoles.noTaskYet": "Chưa thực hiện tác vụ nào",
-  "agentRoles.lastTaskFailed": "Tác vụ gần nhất chưa hoàn tất; bạn có thể thử lại trên trang của tác vụ.",
+  "agentRoles.lastTaskFailed": "Tác vụ gần nhất ({0}) chưa hoàn tất",
   "agentRoles.whereTeam": "{0} · dùng chung với nhóm",
   "agentRoles.whereOwner": "{0} · chỉ chủ sở hữu",
   "agentRoles.countTeam": "Dùng chung với nhóm: {0}",

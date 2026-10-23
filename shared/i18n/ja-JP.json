@@ -7008,7 +7008,7 @@
   "agentRoles.chatDisabled": "{0} は無効になっています。",
   "agentRoles.lastTask": "前回のタスクの完了：{0}",
   "agentRoles.noTaskYet": "まだタスクを実行していません",
-  "agentRoles.lastTaskFailed": "前回のタスクは完了しませんでした。タスクのページで再試行できます。",
+  "agentRoles.lastTaskFailed": "前回のタスク（{0}）は完了しませんでした",
   "agentRoles.whereTeam": "{0} · チームで共有",
   "agentRoles.whereOwner": "{0} · 所有者のみ",
   "agentRoles.countTeam": "チームで共有：{0} 台",
