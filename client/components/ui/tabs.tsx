@@ -27,6 +27,8 @@ const tabsListVariants = cva(
       variant: {
         default: 'bg-muted',
         line: 'gap-1 bg-transparent',
+        // A table's row filters, drawn like `Segmented` by styles.css.
+        segmented: 'gap-0 bg-transparent',
       },
     },
     defaultVariants: {

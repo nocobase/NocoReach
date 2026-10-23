@@ -24,6 +24,7 @@ import { RangePicker } from '../range-picker';
 import { validRange, useRange } from '../range-state';
 import { HandOffBar } from "../hand-off-bar";
 import { Segmented } from "#components/reach/segmented";
+import { distTagLabel } from "./dist-tag";
 import { ReportCard } from "./tables";
 import { ago, bytes, change, CHANNEL, dateOf, kindLabel, num, otherName, pct, REGISTRY, type Item, type Row, type Share, type View } from "./model";
 import "../data-views.css";
@@ -152,7 +153,7 @@ function ReleasesCard({ view }: { view: View }) {
         <ul className="flex flex-col text-sm">
           {r?.tags.slice(0, 8).map((t) => (
             <li key={`${t.id}:${t.tag}`} className="flex items-baseline gap-2 border-b border-border py-1.5 last:border-0" data-dist-tag={t.tag}>
-              <Tag tone={t.tag === "latest" ? "blue" : "grey"}>{t.tag}</Tag>
+              <Tag tone={t.tag === "latest" ? "blue" : "grey"}>{distTagLabel(t.tag)}</Tag>
               <span className="min-w-0 flex-1 truncate tabular-nums">{t.version}{several ? <span className="ml-1.5 text-xs text-muted-foreground">{t.package}</span> : null}</span>
               <span className="shrink-0 text-xs text-muted-foreground" title={dateOf(t.published)}>{ago(t.published, end)}</span>
             </li>

@@ -172,12 +172,16 @@ test('unknown activity actors use a member label instead of claiming the current
   mount(data);
   const activity = screen.getByRole('region', { name: 'Actividad' });
   expect(
-    await within(activity).findByText('Miembro', { selector: 'b' }),
+    await within(activity).findByText('Miembro', { selector: '[data-actor]' }),
   ).toBeVisible();
   expect(
-    await within(activity).findByText('Super Admin', { selector: 'b' }),
+    await within(activity).findByText('Super Admin', {
+      selector: '[data-actor]',
+    }),
   ).toBeVisible();
-  expect(within(activity).queryByText('Tú', { selector: 'b' })).toBeNull();
+  expect(
+    within(activity).queryByText('Tú', { selector: '[data-actor]' }),
+  ).toBeNull();
 });
 
 test('a page change is reviewed as what readers see, with code kept in Technical details', async () => {
@@ -640,7 +644,14 @@ test('Performance lists each page: the latest 28 days before going live, then da
     within(block).getByRole('button', { name: '还有 1 个页面' }),
   );
   expect(within(block).getByText('/en/blog/workflow-tools')).toBeVisible();
-  expect(block).toHaveTextContent('上线后在第 7 天、第 28 天和这些数字对比。');
+  // When the comparison comes is the title's ⓘ.
+  expect(block).not.toHaveTextContent(
+    '上线后在第 7 天、第 28 天和这些数字对比。',
+  );
+  await user.click(within(block).getByRole('button', { name: '说明' }));
+  expect(
+    await screen.findByText('上线后在第 7 天、第 28 天和这些数字对比。'),
+  ).toBeVisible();
   unmount();
   // Live with day 7: each page before and after, then all pages together; day 28 waits.
   const data = pageChange();

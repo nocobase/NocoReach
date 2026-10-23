@@ -1,4 +1,5 @@
 import {
+  chatIsRunning,
   useAgentText,
   useChatAgents,
   useConversationActions,
@@ -302,7 +303,7 @@ function HistoryRow({
           onClick={onOpen}
         >
           <span className='flex w-full min-w-0 items-center gap-1.5'>
-            {item.run ? <Pulse /> : null}
+            {chatIsRunning(item) ? <Pulse /> : null}
             <span
               className={cn(
                 'truncate text-sm',

@@ -14,7 +14,6 @@ import {
   Card,
   CardAction,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '#components/ui/card';
@@ -159,18 +158,20 @@ function ProxyCard({ proxy }: { proxy: Proxy }) {
     <Card>
       <CardHeader>
         <CardTitle className='flex items-center gap-2'>
-          {$t('network.proxyTitle')}
+          <span className='flex items-center gap-1'>
+            {$t('network.proxyTitle')}
+            <InfoTip label={$t('common.info')}>
+              {$t(
+                proxy
+                  ? 'network.proxyOnDescription'
+                  : 'network.proxyOffDescription',
+              )}
+            </InfoTip>
+          </span>
           <Tag tone={proxy ? 'green' : 'grey'} dot>
             {$t(proxy ? 'network.proxyOn' : 'network.proxyOff')}
           </Tag>
         </CardTitle>
-        <CardDescription>
-          {$t(
-            proxy
-              ? 'network.proxyOnDescription'
-              : 'network.proxyOffDescription',
-          )}
-        </CardDescription>
         {canSave && (
           <CardAction className='flex items-center gap-2'>
             {proxy ? (
@@ -271,16 +272,19 @@ function SourcesCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{$t('network.sourcesTitle')}</CardTitle>
-        <CardDescription>
-          {project &&
-            $t(
-              proxy
-                ? 'network.sourcesDescription'
-                : 'network.sourcesDirectDescription',
-              { 0: project.name },
-            )}
-        </CardDescription>
+        <CardTitle className='flex items-center gap-1'>
+          {$t('network.sourcesTitle')}
+          {project && (
+            <InfoTip label={$t('common.info')}>
+              {$t(
+                proxy
+                  ? 'network.sourcesDescription'
+                  : 'network.sourcesDirectDescription',
+                { 0: project.name },
+              )}
+            </InfoTip>
+          )}
+        </CardTitle>
         {canTest && selections.data && (
           <CardAction>
             <RefreshButton

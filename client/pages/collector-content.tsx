@@ -28,6 +28,7 @@ import {
   type HandOffSource,
 } from '#components/reach/hand-off-slot';
 import { Tag } from '#components/reach/tag';
+import { InfoTip } from '#components/reach/info-tip';
 import type {
   CollectorGroup,
   CollectorSort,
@@ -80,13 +81,15 @@ export function CollectorTrendCard({
     trend.unit === 'month' ? date.slice(0, 7) : date.slice(5);
   return (
     <Card className='gap-3 px-4' data-trend=''>
-      <div className='flex flex-col gap-0.5'>
+      <div className='flex items-center gap-1'>
         <h2 className='text-sm font-semibold'>
           {$t('collectorPage.trendTitle')}
         </h2>
-        <p className='text-xs text-muted-foreground'>
+        <InfoTip
+          label={$t('common.what', { 0: $t('collectorPage.trendTitle') })}
+        >
           {$t(trendNote[trend.unit])}
-        </p>
+        </InfoTip>
       </div>
       {matched ? (
         <div className='nr-chart-box'>
@@ -140,9 +143,11 @@ export function CollectorGroupsCard({
 }) {
   return (
     <Card className='gap-0 py-0' data-groups=''>
-      <div className='flex flex-col gap-0.5 border-b border-border px-4 py-3'>
+      <div className='flex items-center gap-1 border-b border-border px-4 py-3'>
         <h2 className='text-sm font-semibold'>{title}</h2>
-        {note ? <p className='text-xs text-muted-foreground'>{note}</p> : null}
+        {note ? (
+          <InfoTip label={$t('common.what', { 0: title })}>{note}</InfoTip>
+        ) : null}
       </div>
       {groups.length ? (
         groups.map((group) => {

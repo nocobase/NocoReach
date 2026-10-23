@@ -27,8 +27,8 @@
     "README.md"
   ],
   "peerDependencies": {
-    "@nocobase/app-client": "^3.0.0-beta.2",
-    "@nocobase/app-server": "^2.0.0-beta.8",
+    "@nocobase/app-client": "^4.0.0-beta.1",
+    "@nocobase/app-server": "^3.0.0-beta.2",
     "@nocobase/service-provider": "^0.0.2-beta.2",
     "react": "^19.2.0",
     "zod": "^4.6.5",
@@ -40,7 +40,7 @@
     "prepack": "pnpm run build"
   },
   "devDependencies": {
-    "@nocobase/dev-config": "^0.1.0-beta.22",
+    "@nocobase/dev-config": "^0.1.0-beta.24",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.0",
     "typescript": "^6.0.3"
