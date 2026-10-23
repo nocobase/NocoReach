@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — The classic import keeps NocoReach's timers off half-imported data
+
+- While `pnpm nocobase app import-classic` writes, NocoReach's timers (sync, analysis and the rest) skip their firings, so none acts on a project before all its rows have arrived. The analysis timer used to catch up the day's analysis on partial data and write `daily-analysis:<id>` and `signals:<id>`, which could end up beside the classic rows with the same keys. Each import call renews a five-minute hold and the last one ends it; if the command stops midway, the timers run again five minutes after its last call.
+- The import first waits, up to 30 seconds, for background work already running, so `--replace` does not clear tables under a running sync or analysis; if the work is not done by then, the command stops before anything is cleared and asks to try again shortly.
+- A daily analysis the Scheduler fires during the import is recorded as cancelled in Settings › Automatic runs; the analysis timer catches the day up after the import.
+
 ## Unreleased — The chat panel reads every data page
 
 - The chat panel's assistant has a read-only `query_data` tool covering every source a data page shows: Search Console (queries, pages, striking distance, rising and falling, countries and devices, one query or page in detail), GA4 traffic tables, site pages, the site audit and indexing, GitHub and GitHub trends, downloads, saved keywords with the site's rank, rank tracking, keyword suggestions, Trends, competitor activity, saved AI search lookups, Forum, Hacker News, Reddit, X, Discord, Slack, YouTube, Bilibili, Xiaohongshu and public web sources. It takes a period (or from/to), filters for keyword, page and country, a sort, a limit and an offset, and answers bounded rows with the page they come from, the data cutoff, the period and the one before it, the total and the next offset. Each source goes through the service method its page calls, so the numbers match the page, and is read only after the asking user's own permission for that page's action; a source they may not open answers accessDenied without stopping the others. Nothing is synced, inspected or bought: Trends reads the saved check instead of the page's view, indexing waits until its page has run the first inspection, and AI search lists saved lookups only.
