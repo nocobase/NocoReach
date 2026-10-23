@@ -13,7 +13,10 @@ import { PageContainer, PageHeader, Section } from '#components/reach/page';
 import { RefreshButton } from '#components/reach/refresh-button';
 import { ListSkeleton, LoadError, EmptyState } from '#components/reach/states';
 import { Tag } from '#components/reach/tag';
-import { lineTabClass, lineTabListClass } from '#components/reach/line-tabs';
+import {
+  segmentedItemClass,
+  segmentedListClass,
+} from '#components/reach/segmented';
 import { SourceLogo } from '#components/reach/source-logo';
 import { Button } from '#components/ui/button';
 import { Input } from '#components/ui/input';
@@ -377,8 +380,8 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
           />
           {canPropose ? (
             <Section
+              // No grey second line naming the scheme (2026-10-22 decision D5): My schemes above marks the one shown.
               title={$t('analysisRules.aiSectionTitle')}
-              description={view.schemeName || $t('analysisSchemes.default')}
             >
               <RulesAssistant
                 key={`${view.schemeId}:${manualRevision}`}
@@ -395,7 +398,6 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
           ) : null}
           <Section
             title={$t('analysisRules.rulesSectionTitle')}
-            description={view.schemeName || $t('analysisSchemes.default')}
             actions={
               canAddRule && view.schemes ? (
                 <AddRule
@@ -459,13 +461,14 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                 {saveError}
               </p>
             ) : null}
-            {/* Rules by area as line tabs, each source a heading with its rules shown, instead of fold-out groups
-                (UI review A10). The area with an open editor cannot be left until it is saved or cancelled. */}
+            {/* Rules by area, each source a heading with its rules shown, instead of fold-out groups (UI review A10);
+                the areas are chosen like a table's row filters, a segmented control (2026-10-22 decision D1). The
+                area with an open editor cannot be left until it is saved or cancelled. */}
             {areas.length ? (
               <div
                 role='tablist'
                 aria-label={$t('analysisRules.ruleGroups')}
-                className={lineTabListClass}
+                className={segmentedListClass}
               >
                 {areas.map((key) => (
                   <button
@@ -475,7 +478,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                     id={`rules-tab-${key}`}
                     aria-selected={key === area}
                     aria-controls='rules-panel'
-                    className={lineTabClass}
+                    className={segmentedItemClass}
                     disabled={Boolean(editingArea && editingArea !== key)}
                     onClick={() => setOpenArea(key)}
                   >

@@ -21,7 +21,7 @@ import { safeLink } from "../analytics";
 import { DetailDrawer } from "../detail-drawer";
 import { countryName } from "../countries";
 import { useFreshData } from "../workspace-cache";
-import { Segmented } from "../data-github/segmented";
+import { Segmented } from "#components/reach/segmented";
 import { formatCount, formatDate, formatPercent, formatSigned } from '#lib/format';
 import { Delta } from '#components/reach/delta';
 

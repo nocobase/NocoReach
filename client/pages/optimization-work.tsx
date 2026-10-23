@@ -4,7 +4,9 @@ import { renderMessage, type Message, useMessageState, $t, $legacyText } from "#
 import {useEffect,useRef,useState} from 'react';
 import {Outlet,useLocation,useNavigate} from 'react-router';
 import {useUrlSearch} from '#hooks/use-url-search';
-import {ArchiveIcon,BotIcon,CircleCheckIcon,CircleDotIcon,KanbanIcon,ListIcon,SearchIcon} from 'lucide-react';
+import {BotIcon,KanbanIcon,ListIcon,SearchIcon} from 'lucide-react';
+import {Segmented} from '#components/reach/segmented';
+import {ListSkeleton} from '#components/reach/states';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {cn} from '#lib/utils';
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
@@ -100,7 +102,9 @@ export default function OptimizationWork(){
  return <PageContainer className="nr-page"><PageHeader title={$t('common.tasks')} description={$t('optimizationWork.workAgentOnlineAiPlaybook')} actions={tasks.length||loading?<Button onClick={()=>void newTask()}>{$t('manualTask.newTask')}</Button>:undefined}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}<Button disabled={busy} variant="outline" size="sm" onClick={()=>void load()}>{$t('common.reload')}</Button></p>}{notice&&<p role="status" className="nr-success">{renderMessage(notice.text)}{notice.undo&&<button type="button" disabled={busy} className="ml-auto underline-offset-4 hover:underline" onClick={()=>void undo(notice.undo!)}>{$t('optimizationWork.undo')}</button>}</p>}
   <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label={$t('common.filter')}>
-   <div className="inline-flex flex-wrap overflow-hidden rounded-md border" role="group" aria-label={$t('optimizationWork.scope')}>{([['waiting',$t('optimizationWork.waitingForMe'),CircleDotIcon,waitingCount],['',$t('optimizationWork.current'),CircleDotIcon,tasks.length-closedCount-doneCount],['done',$t('common.completed'),CircleCheckIcon,doneCount],['closed',$t('common.closed'),ArchiveIcon,closedCount]] as const).map(([c,label,Icon,n])=>{const on=c===(waiting?'waiting':closed?'closed':done?'done':'');return <button key={label} type="button" aria-pressed={on} onClick={()=>param('scope',c)} className={cn('inline-flex h-8 items-center gap-1.5 px-3 text-sm text-muted-foreground transition-colors hover:text-foreground',on&&'bg-muted font-medium text-foreground')}><Icon className="size-3.5"/>{label} <span className="tabular-nums">{loading?'':n}</span></button>;})}</div>
+   {/* The scopes filter this one list, so they are the toolbar's pick-one control, not tabs (2026-10-22 decision D1:
+       line tabs only switch a page's sections; a table's filters are a segmented control in its toolbar). */}
+   <Segmented label={$t('optimizationWork.scope')} options={([['waiting',$t('optimizationWork.waitingForMe'),waitingCount],['',$t('optimizationWork.current'),tasks.length-closedCount-doneCount],['done',$t('common.completed'),doneCount],['closed',$t('common.closed'),closedCount]] as const).map(([c,label,n])=>({id:c,label:<>{label} <span>{loading?'':n}</span></>,title:label}))} value={waiting?'waiting':closed?'closed':done?'done':''} onChange={c=>param('scope',c)}/>
    <label className="relative flex min-w-48 flex-1 items-center sm:max-w-72"><SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" aria-hidden="true"/><input aria-label={$t('optimizationWork.searchTasks')} {...inputProps} placeholder={$t('optimizationWork.searchTitleNumber')} className="w-full pl-8!"/></label>
    {/* One set of status choices: the scopes above (UI review 2026-10-22). The board's columns and the list's order
        already separate the statuses, so there is no separate status filter; an old ?status= link is ignored. */}
@@ -111,7 +115,7 @@ export default function OptimizationWork(){
   </div>
   {!closed&&!done&&tasks.length>0&&<RuntimeNotice/>}
   {waiting&&<p role='status' className='text-sm text-muted-foreground'>{$t(isAdmin?'optimizationWork.waitingAdminScope':'optimizationWork.waitingMemberScope')}</p>}
-  {loading?<p role="status" className="text-sm text-muted-foreground">{$t('common.loadingTasks')}</p>:byAgent?<AgentBoard tasks={rows} agents={agents} onOpen={id=>navigate('/actions/'+id)}/>:board?<WorkBoard tasks={rows} busy={busy} list={false} agents={agents} onMove={(t,s,before)=>void move(t as Task,s,before)} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>
+  {loading?<ListSkeleton rows={6} label={$t('common.loadingTasks')}/>:byAgent?<AgentBoard tasks={rows} agents={agents} onOpen={id=>navigate('/actions/'+id)}/>:board?<WorkBoard tasks={rows} busy={busy} list={false} agents={agents} onMove={(t,s,before)=>void move(t as Task,s,before)} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>
    :rows.length?<TaskTable tasks={rows} closed={closed} agents={agents} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>:null}
   {!loading&&!tasks.length?<Empty className="min-h-48 border"><EmptyHeader><EmptyTitle>{$t('manualTask.emptyTitle')}</EmptyTitle><EmptyDescription>{$t('manualTask.createHint')}</EmptyDescription></EmptyHeader><EmptyContent><Button onClick={()=>void newTask()}>{$t('manualTask.newTask')}</Button></EmptyContent></Empty>:!loading&&!rows.length&&!board&&!byAgent&&<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{closed?$t('optimizationWork.noClosedTasks'):done?$t('optimizationWork.noFinishedTasksYet'):q||playbook||(!waiting&&owner)||agentFilter?$t('optimizationWork.noMatchingTasksTryAdjusting'):waiting?$t('optimizationWork.noWaitingTasks'):$t('optimizationWork.noTasksYetTasksCreated')}</p>}
   <Outlet/>

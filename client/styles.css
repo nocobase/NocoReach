@@ -523,6 +523,45 @@ label:has(> .sr-only:focus-visible),
   height: 2px;
 }
 
+/* Segmented tabs: a table's row filters in its toolbar (2026-10-22 decision D1), the same square grey-ground group as
+   `Segmented` (components/reach/segmented.tsx): a thin border, no gaps, the chosen one on the muted ground. Unlayered,
+   so it wins over the primitive's utilities. A long row wraps. */
+[data-slot='tabs-list'][data-variant='segmented'] {
+  height: auto;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: transparent;
+}
+[data-slot='tabs-list'][data-variant='segmented'] > [data-slot='tabs-trigger'] {
+  flex: none;
+  height: calc(var(--spacing) * 8);
+  padding-inline: calc(var(--spacing) * 3);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+[data-slot='tabs-list'][data-variant='segmented'] > [data-slot='tabs-trigger']:hover {
+  color: var(--foreground);
+}
+[data-slot='tabs-list'][data-variant='segmented'] > [data-slot='tabs-trigger'][data-active] {
+  background: var(--muted);
+  color: var(--foreground);
+  font-weight: 500;
+}
+[data-slot='tabs-list'][data-variant='segmented'] > [data-slot='tabs-trigger']::after {
+  display: none;
+}
+
 /* Every scrollbar, across and down: a thin rounded bar in a faint grey on no
    track, drawn only while its element scrolls or the mouse is near the edge
    it runs along (revealScrollbarsWhileScrolling

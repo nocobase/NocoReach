@@ -67,8 +67,8 @@ export function SitemapsView({ projectId, property, tab, onTab }: { projectId: n
   const tiles = [
     { key: "count", label: $t('searchSitemaps.submittedSitemaps'), value: num(submitted.length), hint: submitted.some((s) => s.isIndex) ? $t('searchSitemaps.indexFiles', { 0: submitted.filter((s) => s.isIndex).length }) : "", help: $t('searchSitemaps.submittedSitemapsHelp') },
     { key: "urls", label: $t('searchSitemaps.submittedUrls'), value: num(submitted.reduce((n, s) => n + urls(s), 0)), hint: [...byType].filter(([, n]) => n).length > 1 ? [...byType].filter(([, n]) => n).map(([t, n]) => $t('searchSitemaps.contentCount', { 0: contentName(t), 1: num(n) })).join(" · ") : "", help: $t('searchSitemaps.submittedUrlsHelp') },
-    { key: "errors", label: $t('searchSitemaps.errors'), value: num(submitted.reduce((n, s) => n + s.errors, 0)), hint: $t('searchSitemaps.errorsHint'), help: $t('searchSitemaps.errorsHelp') },
-    { key: "warnings", label: $t('searchSitemaps.warnings'), value: num(submitted.reduce((n, s) => n + s.warnings, 0)), hint: $t('searchSitemaps.warningsHint'), help: $t('searchSitemaps.warningsHelp') },
+    { key: "errors", label: $t('searchSitemaps.errors'), value: num(submitted.reduce((n, s) => n + s.errors, 0)), help: $t('searchSitemaps.errorsHelp') },
+    { key: "warnings", label: $t('searchSitemaps.warnings'), value: num(submitted.reduce((n, s) => n + s.warnings, 0)), help: <><p>{$t('searchSitemaps.warningsHelp')}</p><p>{$t('searchSitemaps.warningsHint')}</p></> },
   ];
   const shown = rows.filter((r) => current === "all" || (current === "unsubmitted" ? r.status === "unsubmitted" : r.status === "error" || r.status === "warning"));
   return (

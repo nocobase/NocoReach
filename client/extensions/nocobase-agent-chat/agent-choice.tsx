@@ -5,7 +5,7 @@ import {
   useChatPanel,
   useConversation,
 } from '@nocobase/app-plugin-agents/client/chat';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { CheckIcon } from 'lucide-react';
 import { $t } from '#i18n';
 import { AgentIdentity, AgentPicker } from '#components/agent-picker';
@@ -22,6 +22,7 @@ import {
 } from '../../online-agent/api.js';
 import { OnlineConfirm, OnlineError } from '../../online-agent/controls.js';
 import { useAgentPickerLabels } from './chat-i18n.js';
+import { runnerAgents } from './runner-agents.js';
 
 export function RunnerChatChoice() {
   const [refresh, setRefresh] = useState(0);
@@ -59,9 +60,10 @@ export function ChatAgentChoice({
   const text = useAgentText();
   const labels = useAgentPickerLabels();
   const [pending, setPending] = useState<(() => void) | null>(null);
+  const runnerList = useMemo(() => runnerAgents(runners.data), [runners.data]);
   const runner = panel.conversationId
     ? conversation.data?.agent
-    : newConversationAgent(runners.data, panel.newAgentId);
+    : newConversationAgent(runnerList, panel.newAgentId);
   const currentOnline =
     onlineAgent || onlineAgents.find((item) => item.id === chat.agentId);
   function selectOnline(id: string) {
@@ -81,7 +83,10 @@ export function ChatAgentChoice({
   function selectRunner(id: string) {
     const changed = runner?.id !== id;
     const apply = () => {
-      if (changed || !panel.conversationId) panel.selectConversation(null, id);
+      // On a new conversation, choosing the Runner keeps the draft and pinned context; leaving one starts fresh.
+      if (!panel.conversationId)
+        panel.selectConversation(null, id, { preserveComposer: true });
+      else if (changed) panel.selectConversation(null, id);
       panel.setView('chat');
       chat.setMode('runner');
     };
@@ -92,7 +97,7 @@ export function ChatAgentChoice({
   return (
     <>
       <AgentPicker
-        agents={runners.data || []}
+        agents={runnerList}
         value={chat.mode === 'online' ? null : runner?.id || null}
         shown={
           chat.mode === 'online'
@@ -177,7 +182,7 @@ export function ChatAgentChoice({
               {$t('agentChoice.runnerHint')}
             </span>
           </DropdownMenuLabel>
-          {runners.isSuccess && runners.data.length === 0 && (
+          {runners.isSuccess && runnerList.length === 0 && (
             <DropdownMenuItem disabled>{labels.empty}</DropdownMenuItem>
           )}
           {runners.isLoading && (

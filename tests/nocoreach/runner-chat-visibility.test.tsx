@@ -5,10 +5,10 @@ import { ConversationView } from '../../client/extensions/nocobase-agent-chat/co
 const { panel, online, markRead, actions } = vi.hoisted(() => {
   const markRead = vi.fn();
   return {
-    panel: { open: true, view: 'chat', newAgentId: null },
+    panel: { open: true, view: 'chat', newAgentId: null, composerRevision: 0 },
     online: { mode: 'online', setRunnerPending: vi.fn() },
     markRead,
-    actions: { markRead, stop: {}, fallback: {}, restore: {} },
+    actions: { markRead, stop: {} },
   };
 });
 vi.mock('../../client/online-agent/context.js', () => ({
@@ -17,10 +17,14 @@ vi.mock('../../client/online-agent/context.js', () => ({
 vi.mock('../../client/extensions/nocobase-agent-chat/composer.js', () => ({
   Composer: () => null,
 }));
-vi.mock('@nocobase/app-plugin-agents/client/chat', async () => {
-  const { createContext } = await import('react');
+// The plugin's pure helpers stay real; only the hooks that reach the provider, the network or the DOM are replaced.
+vi.mock('@nocobase/app-plugin-agents/client/chat', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@nocobase/app-plugin-agents/client/chat')
+    >();
   return {
-    ChatExtensionsContext: createContext({}),
+    ...actual,
     useChatPanel: () => panel,
     useConversation: () => ({
       data: {
@@ -29,14 +33,36 @@ vi.mock('@nocobase/app-plugin-agents/client/chat', async () => {
         read: false,
         agent: { id: 'runner', name: 'Runner' },
         run: null,
+        execution: null,
+        availability: { online: true, reason: null, onlineRunners: 1 },
       },
     }),
     useConversationActions: () => actions,
     useChatAgents: () => ({ data: [] }),
-    useConversationMessages: () => ({ items: [], pending: [], lastSeq: 0 }),
+    useConversationMessages: () => ({
+      items: [],
+      pending: [],
+      lastSeq: 0,
+      hasMore: false,
+      loadingOlder: false,
+      dispatch: vi.fn(),
+      loadOlder: vi.fn(),
+      fetchNewer: vi.fn(),
+    }),
     useSendMessage: () => vi.fn(),
     useAgentText: () => ({ name: (agent: { name: string }) => agent.name }),
-    timelineOrder: (items: unknown[]) => items,
+    useChatStream: () => null,
+    useChatScroll: () => ({ current: null }),
+    useChatController: () => ({
+      isStopping: () => false,
+      resume: vi.fn(),
+      approve: vi.fn(),
+      submissions: {
+        blocked: () => false,
+        releaseUnknown: vi.fn(),
+        snapshot: () => [],
+      },
+    }),
   };
 });
 

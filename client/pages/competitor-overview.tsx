@@ -43,7 +43,7 @@ function Spark({ months }: { months: Row["months"] }) {
   const vals = months.map((m) => m.etv).filter((v): v is number => v !== null);
   if (vals.length < 2) return <span className="text-muted-foreground">—</span>;
   const max = Math.max(...vals), min = Math.min(...vals), span = max - min || 1, step = 80 / (vals.length - 1);
-  return <svg width="80" height="20" viewBox="0 0 80 20" aria-hidden="true" data-spark><polyline fill="none" stroke="var(--chart-1)" strokeWidth="1.5" points={vals.map((v, i) => `${(i * step).toFixed(1)},${(18 - ((v - min) / span) * 16).toFixed(1)}`).join(" ")} /></svg>;
+  return <svg width="80" height="20" viewBox="0 0 80 20" aria-hidden="true" data-spark><polyline fill="none" stroke="var(--chart-3)" strokeWidth="1.5" points={vals.map((v, i) => `${(i * step).toFixed(1)},${(18 - ((v - min) / span) * 16).toFixed(1)}`).join(" ")} /></svg>;
 }
 
 export function CompetitorOverview({ projectId, onManage }: { projectId: number; onManage: () => void }) {
@@ -61,7 +61,7 @@ export function CompetitorOverview({ projectId, onManage }: { projectId: number;
   };
   const hasAiShare = (view?.sites ?? []).some((r) => r.aiShare != null);
   const columns = useMemo<ColumnDef<Row>[]>(() => [
-    helper.accessor("name", { enableSorting: false, header: () => $t('competitorOverview.website'), cell: ({ row }) => { const r = row.original; return <div className="min-w-0"><span className="flex items-center gap-1.5 font-medium">{r.name}{r.own ? <Tag tone="blue">{$t('common.us')}</Tag> : null}</span><span className="block truncate text-xs text-muted-foreground">{r.domain || $t('competitorOverview.noWebsite')}</span></div>; } }) as ColumnDef<Row>,
+    helper.accessor("name", { enableSorting: false, header: () => $t('competitorOverview.website'), cell: ({ row }) => { const r = row.original; return <div className="min-w-0"><span className="flex items-center gap-1.5 font-medium">{r.name}{r.own ? <Tag tone="blue">{$t('common.site')}</Tag> : null}</span><span className="block truncate text-xs text-muted-foreground">{r.domain || $t('competitorOverview.noWebsite')}</span></div>; } }) as ColumnDef<Row>,
     helper.accessor((r) => r.traffic ?? undefined, { id: "traffic", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('competitorOverview.organicSearchTraffic')} align="right" />, cell: ({ row }) => <span className="inline-flex items-baseline gap-1.5">{short(row.original.traffic)}<span className="text-xs">{delta(row.original.trafficChange)}</span></span>, meta: right }) as ColumnDef<Row>,
     helper.display({ id: "spark", header: () => $t('competitorOverview.value12Months'), cell: ({ row }) => <Spark months={row.original.months} /> }) as ColumnDef<Row>,
     helper.accessor((r) => r.keywords ?? undefined, { id: "keywords", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.rankingKeywords')} align="right" />, cell: ({ row }) => short(row.original.keywords), meta: right }) as ColumnDef<Row>,
@@ -128,7 +128,7 @@ function CompetitorDetail({ projectId, r, market, dataforseo, onClose }: { proje
                   <XAxis dataKey="date" fontSize={11} minTickGap={24} />
                   <YAxis fontSize={11} width={44} tickFormatter={(v: number) => short(v)} />
                   <Tooltip formatter={(v) => short(Number(v))} />
-                  <Line isAnimationActive={false} type="linear" dataKey="etv" name={$t('competitorOverview.organicSearchTraffic')} stroke="var(--chart-1)" strokeWidth={2} dot={false} connectNulls />
+                  <Line isAnimationActive={false} type="linear" dataKey="etv" name={$t('competitorOverview.organicSearchTraffic')} stroke="var(--chart-3)" strokeWidth={2} dot={false} connectNulls />
                 </LineChart>
               </ResponsiveContainer>
             </div>

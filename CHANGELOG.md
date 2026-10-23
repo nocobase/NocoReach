@@ -5,6 +5,98 @@
 - Who does the work no longer shows a row of column headings (screen readers still read them); each row already says what it holds.
 - What went wrong, or how the last task ended, is a small line under the agent in its own row ("Last task 10-22 21:54 did not finish") instead of a line of body text below the row.
 
+## Unreleased — Task runs survive NocoReach restarts
+
+- A task run whose Runner lost its lease while NocoReach restarted (every deploy restarts it) is recorded as interrupted by the restart instead of blamed on the computer. NocoReach keeps the times it started (`nr-app-starts`) to tell the two apart.
+- The Agent step is started again once for each restart, as the system's Try again; the activity says so and the stage card says why it runs again. Review and publishing are never started again by themselves; an interrupted publish says the update interrupted it.
+- When the step could not start again, the card says the server was updating and offers Try again first; these runs no longer count toward "failed N times in a row". Technical details › Runs gives the restart time and the official reason.
+
+## Unreleased — The classic import keeps NocoReach's timers off half-imported data
+
+- While `pnpm nocobase app import-classic` writes, NocoReach's timers (sync, analysis and the rest) skip their firings, so none acts on a project before all its rows have arrived. The analysis timer used to catch up the day's analysis on partial data and write `daily-analysis:<id>` and `signals:<id>`, which could end up beside the classic rows with the same keys. Each import call renews a five-minute hold and the last one ends it; if the command stops midway, the timers run again five minutes after its last call.
+- The import first waits, up to 30 seconds, for background work already running, so `--replace` does not clear tables under a running sync or analysis; if the work is not done by then, the command stops before anything is cleared and asks to try again shortly.
+- A daily analysis the Scheduler fires during the import is recorded as cancelled in Settings › Automatic runs; the analysis timer catches the day up after the import.
+
+## Unreleased — The chat panel reads every data page
+
+- The chat panel's assistant has a read-only `query_data` tool covering every source a data page shows: Search Console (queries, pages, striking distance, rising and falling, countries and devices, one query or page in detail), GA4 traffic tables, site pages, the site audit and indexing, GitHub and GitHub trends, downloads, saved keywords with the site's rank, rank tracking, keyword suggestions, Trends, competitor activity, saved AI search lookups, Forum, Hacker News, Reddit, X, Discord, Slack, YouTube, Bilibili, Xiaohongshu and public web sources. It takes a period (or from/to), filters for keyword, page and country, a sort, a limit and an offset, and answers bounded rows with the page they come from, the data cutoff, the period and the one before it, the total and the next offset. Each source goes through the service method its page calls, so the numbers match the page, and is read only after the asking user's own permission for that page's action; a source they may not open answers accessDenied without stopping the others. Nothing is synced, inspected or bought: Trends reads the saved check instead of the page's view, indexing waits until its page has run the first inspection, and AI search lists saved lookups only.
+
+## Unreleased — Task page: one layout for every state
+
+- The task page has one skeleton in every state: a two-line header (the title with its T-number in grey and the status Tag on the right; then one grey line with the playbook's steps and where the task stands now, such as "Agent Change → Review and publish (you) → Live → Watch · Now: Waiting for you to start"), the card for what to do now and the activity on the left, and ✦ Why, Properties and Performance on the right, in that order. Below 1280px they stack as Why, Properties, now, Performance, Activity.
+- The long Why strip under the title is a ✦ Why card with the reason in a sentence or two and View evidence; while a change waits for review it reads Why this change, as on the website's demo card.
+- Four text styles only (page title, card title, body, grey secondary text) and one card shape (same radius, padding and spacing). Cards no longer hold boxes inside boxes: the before/after table, diffs, conflicts, reply drafts, the last change request and What changed are drawn with rules, tints and labels instead.
+- Start after review: the card's title and Confirm start share one row; the brief is plain text with Expand when long; the playbook is a full-width select with its description and View steps below; Notes (optional) is a full-width one-line field that grows as you type.
+- Activity and the message to the Agent are one card: the timeline, then a one-line field with Send.
+- The status Tag in the header is the one the task list and board show (`TaskStatusTag`).
+
+## Unreleased — The daily report waits up to ten minutes
+
+- The daily analysis gives its report call ten minutes instead of the provider's default four. A large project's report takes 65–140 seconds; on 2026-10-23 the model service ran about 2.6× slower and NocoBase's report was stopped at four minutes twice ("The call was stopped."), while the smaller Retool project finished. The short calls (style rewrite, judging one signal) keep the four-minute limit, and a project's run is now held for 30 minutes instead of 10 so a slow run is not started a second time.
+- A report stopped at its limit now says so in the reader's language ("The AI service gave no complete answer within 10 minutes") on Insights and in Automatic runs' history, instead of the provider's English text.
+- Automatic runs' history no longer repeats a failure as the Scheduler's summary ("项目 1：…") above the same failure named by project.
+
+## Unreleased — A table's filters are a segmented control in its toolbar
+
+- Line tabs only switch a page's sections, under its header (2026-10-22 decision D1). What a table lists is chosen in its toolbar with the square grey segmented control, on the same row as its search: Website & product › Pages (All 658 | Blog 375 | Docs 199 …), Search performance (Close to page one | Queries | Pages | Rising …), its Index and Sitemaps, Traffic's reports, GitHub's and Downloads' tables, Keywords › AI suggestions, AI search's questions and Competitors › Domain lookup. They drew a second row of line tabs inside the card, which on Search performance sat right under the page's own tabs.
+- `DataTableTabs` draws that row: the segments (a `TabsList` with the new `segmented` variant, styled in styles.css like `Segmented`), its ⓘ, then `tools` (search and other filters) and `actions` at the right. A tab's description is its ⓘ (decision D5). The separate `DataTableToolbar` row under it is gone on those pages; on a narrow screen the row wraps.
+- Search performance's "Queries ranking 5–20…" line under the toolbar joins the Close to page one ⓘ (decision D5).
+- The same control for the other in-card choices: keyword details' Related keywords, Analysis rules' areas, and the "how to create" choice in New Skill and Add knowledge.
+
+## Unreleased — Agents 1.0.0-beta.18 and the NocoBase framework it requires
+
+- Upgrade Agents to `1.0.0-beta.18`, Runner to `0.1.0-beta.15` and CLI Client to `0.1.0-beta.13`, with the framework versions of Default Template `1.0.0-beta.76`: App Server `3.0.0-beta.2`, App Client `4.0.0-beta.1`, i18n `2.0.0-beta.1`, Notification `2.0.0-beta.0` and the matching plugins. The template source is not merged; its marker stays `1.0.0-beta.68`. The application CLI release moves to `1.0.0-beta.69` so installed CLIs and runners fetch the new archives.
+- Deploy the application before updating runners: protocol 12 runners are refused by an older server. Drain active runs and back up the database first. Three Agents migrations only add columns (runner quota, conversation metadata and chat-list visibility); rolling them back is refused once a conversation has metadata, so restore the backup instead.
+- The Runner chat panel follows the Registry `agent-chat` block at `1.0.0-beta.18`: replies render as ordered AI SDK message parts with collapsible reasoning, tool approvals and clearer sending, waiting and failure feedback. The composer is disabled while a run is open (Stop ends it), and "Use another agent here" / "Switch back" are gone with the plugin's fallback and restore operations. Conversations started before the upgrade can be read but not continued.
+- The plugin's built-in online agent, listed when a default chat model exists, is kept out of the Runner panel; online chat still goes through NocoReach's own service. A new Runner conversation cannot be sent until a Runner agent is chosen, so the server never falls back to that agent, and choosing one keeps the draft and the pinned context.
+- Members › Roles: Authorization `1.0.0-beta.30` adds a `revision` to permission sets and returns their fields in a different order when read than when created, so the role revision is now hashed over sorted fields. Without this, deleting a custom role or saving it again answered "changed" every time.
+- Refine is gone from the client runtime: the unused Refine data table and the five `@refinedev/*` packages are removed, and the app title is no longer set through `app.refine`.
+- The Scheduler patch moves unchanged to `1.0.0-beta.19`, whose patched files are identical to `1.0.0-beta.17`.
+
+## Unreleased — Tasks and results: plain cards, skeletons, and the application's own controls
+
+- Tasks › By Agent: a card waiting on you is a normal card with an amber "You" tag and a grey tag for what it waits for, as the board and the list say it; it was the only card painted amber, with the only solid tag on the site.
+- An empty column says "No tasks" on the board and in By Agent; By Agent said "Nothing running or queued", and the Chinese board wording is plainer.
+- While they load, the task list, a task page, the playbook list, a page's detail panel and a task's Performance show skeleton bars instead of "Loading…" text; `ListSkeleton` takes a `label` for screen readers ("Loading tasks").
+- A task's activity shows a placeholder bar for a person's name until the members have loaded, instead of "Member" that turned into the name a moment later.
+- The playbook to start a task with, the next playbook to continue with and Search Console's sync range use the application's dropdown instead of the browser's own.
+- A result's source opens its evidence with the site's "show more" button instead of the browser's ▶ disclosure.
+- The unused task-detail breadcrumb styles are removed.
+
+## Unreleased — Data cards: one empty look, one tile, one chart colour, one name for each thing
+
+- An empty table says so in one muted sentence, as an empty card does, instead of an icon over a title: Bilibili and YouTube showed both on one page.
+- AI search's and Results' metric tiles are the data pages' tile: AI search's "Appears" share is the line under the number ("10% of all questions"), not brackets beside it; Results' numbers lose the "items" unit and the larger size.
+- Single-series charts and sparklines use the main chart colour: Forum's new topics, X's posts, Discord / Slack messages, Trends › Watched keywords and Competitors' search traffic were teal, violet or orange.
+- One name for each thing: Competitors' "Add or remove competitors" is "Manage competitors" as on Trends; the Competitors table marks our site "Our site" as keyword details do (was "Us"); Bilibili's and Downloads' Published column says "Published" like YouTube's and GitHub's; Downloads shows npm's latest and beta tags as "Latest version" and "Beta".
+- Dates go through `formatDate` / `formatDateTime` everywhere they were written by hand: a task's activity and stage cards ("10/22 20:16"), the task list's update time and Knowledge's last check ("10/19"), Skills, and the connection panels' last-synced lines, which showed the browser's full date and time.
+- Rank tracking's keyword column is narrower so the table fits 1,440px without scrolling sideways.
+- Traffic's date range sits right under the header, as on every data page, with Today below it; a report's breakdown (by channel, source, city…) is a dropdown in its toolbar instead of a second row of buttons under the tabs.
+- Forum categories show their change as ↑/↓ like every other list, not "previous period 44".
+- A page's Performance check in its detail panel is an outline button; as a ghost button it read as a heading.
+
+## Unreleased — Notes in ⓘ, one status line, one description per page
+
+- Every note under a card or chart title is an ⓘ beside the title (2026-10-22 decision D5): a `Section`'s description, Keywords › keyword details (History, Related keywords, Our indexed pages, Top 10, Rank history), Results (Changes, Latest results), Settings › Network (Proxy, How data sources connect), a task's Performance before its first checkpoint, Bilibili / YouTube / Xiaohongshu's Publishing trend and Sources, AI search's topic setup and Competitors › Activity's first setup. Titles no longer carry notes in brackets: X's chart is "Posts mentioning the product per day" with "Reposts are not counted" in its ⓘ, Trends' chart is "Weekly interest" with how 100 is set in its ⓘ.
+- The grey help lines under query forms and tabs are ⓘ too: Keywords › Find keywords (what each method searches), AI search › Ask AI (each model asked separately) and API keys (what a personal or organization key may do, now beside the page title).
+- Search performance › Index and Sitemaps tiles no longer repeat their ⓘ under the number; a warning's "does not block reading, but worth fixing" moved into its ⓘ.
+- Analysis rules' AI adjustment and Rules sections no longer repeat the scheme name under their titles: My schemes above marks the scheme shown.
+- A status line says when its data was updated with one word, "Updated" (decision D2), instead of Last success, Searched, Read, Last searched, Last read, Last checked, Last viewed or Collected; how often it runs is in its ⓘ. Reddit's two lines are one ("Search term: NocoBase · Updated 10-14 16:08 ⓘ", the next search in the ⓘ); Rank tracking's line moved out of the table card, above it, with the weekly check in its ⓘ; Keywords › AI suggestions says "· Updated 10-12". Xiaohongshu and the connection panels say "Search term:" like the other sources.
+- Search performance, Competitors and GitHub keep one description for the page and all its tabs (decision D3), saying what each tab holds; switching tabs no longer changes it.
+- Competitors › Activity says once, above the cards, which competitor could not be read; the cards no longer repeat "Not read last time, see above".
+
+## Unreleased — One look for tabs, choices, refresh buttons and table headers
+
+- Every tab bar looks the same: a thin rule under the row, the tabs flush with the page title, the open one in black over a 2px line. Opportunities used a blue line; Members & roles, API keys, Agent, Analysis rules and Knowledge indented their tabs and had no rule.
+- Tasks' Waiting for me / Current / Done / Closed stay in the toolbar as the shared `Segmented`: they filter one list, and line tabs only switch a page's sections (decision D1).
+- Every "pick one of a few" control is one square, grey-ground group (`Segmented`, now in `components/reach`): the date ranges of the 13 data pages (no longer blue pills), GitHub hot topics' periods, Downloads, Site performance, and the 7-day / 28-day checkpoints in a result and in a task's Performance.
+- A refresh for a whole tab sits top right in the page header, as a page's does: Keywords › AI suggestions and Rank tracking, GitHub hot topics and Competitors › Activity drew it on their status line or table toolbar. A tab puts its actions there with `HeaderActions`. A result's Refresh is the icon button too.
+- Tables drawn by hand take the shared header ground: Opportunities › Watching (Handled had it), GitHub hot topics, Downloads' versions, Skills, the task board's list and Knowledge.
+- GitHub hot topics' select-all boxes sit in the table header's first column, as every table's do, not before the card titles.
+- The chips listing terms are one size and shape: Trends' compared products, AI search's topics and the keywords offered on Trends › Watched keywords.
+- Playbook and Skill details open like every other detail panel: the title and its actions in a header row beside the close button, the content below without a card around it. The playbook panel drew its content in a bordered card under a separate close button; the Skill panel left an empty band above the title.
+- A row with one action shows it as a text button: Opportunities › Handled's Restore (was an icon) and Trends › Watched keywords' Remove (was a ⋯ menu with one item). The actions column of API keys has no visible name, as Members' has none.
+
 ## Unreleased — Insights looks sharper, with the same content
 
 - The metric cards sit on the same white surface as the messages below, with a hairline border; the number is larger and its change follows it in green or red; the sparkline has a light wash under it and a dot on the latest day.
