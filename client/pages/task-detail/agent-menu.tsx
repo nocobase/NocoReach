@@ -39,12 +39,17 @@ export function AgentMenu({
   locked,
   bare = false,
   onChange,
+  open,
+  onOpenChange,
 }: {
   data: TaskData;
   busy: boolean;
   locked?: string;
   bare?: boolean;
   onChange: (agentId: string) => Promise<boolean>;
+  /** Controlled from elsewhere when given (the properties column opens it for a failed step's Switch Agent). */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const navigate = useNavigate();
   const options = data.agent?.options || [];
@@ -107,10 +112,13 @@ export function AgentMenu({
       </span>
     );
   return (
-    <DropdownMenu>
+    <DropdownMenu
+      {...(onOpenChange ? { open: Boolean(open), onOpenChange } : {})}
+    >
       <DropdownMenuTrigger
         render={
           <Button
+            id={bare ? 'task-agent-menu' : undefined}
             size='sm'
             variant='ghost'
             className={cn(

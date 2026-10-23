@@ -27,7 +27,8 @@ export function keywordDraft(rows:HandOffKeyword[]){
 // The best ranking page among the keywords, if any (it is linked to the task when it is in 网站内容).
 export const rankedPage=(rows:HandOffKeyword[])=>rows.filter(r=>r.rank).sort((a,b)=>b.rank!.clicks-a.rank!.clicks||a.rank!.position-b.rank!.position)[0]?.rank?.page;
 // signalKey: set when the task comes straight from a 最新变化 on 洞察.
-export type TaskDraft={title:string;objective:string;brief:string;signalKey?:string};
+// `why`: the task's short reason in one or two plain sentences, shown first in its Why card (evidence.why).
+export type TaskDraft={title:string;objective:string;brief:string;signalKey?:string;why?:string};
 // Creates a task from a draft (not from an opportunity), not started (2026-10-08 user decision: the person starts it on
 // the task page with 确定开始执行 after reading it); the suggested 做法 is preselected there, and the page is linked when
 // it is in 网站内容. Shared by every 交给 Agent on the data pages.
