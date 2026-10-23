@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Current situation's marks in one grey
+
+- On Insights, every line of Current situation starts with its source mark in the same grey and size: brand logos (Google, Search Console, Discord, Slack, X) no longer show their brand colours beside the grey icons, which made the column look cluttered. `SourceLogo` has a `mono` option for this; Data sources and the other pages keep the brand colours.
+
 ## Unreleased — A table's filters are a segmented control in its toolbar
 
 - Line tabs only switch a page's sections, under its header (2026-10-22 decision D1). What a table lists is chosen in its toolbar with the square grey segmented control, on the same row as its search: Website & product › Pages (All 658 | Blog 375 | Docs 199 …), Search performance (Close to page one | Queries | Pages | Rising …), its Index and Sitemaps, Traffic's reports, GitHub's and Downloads' tables, Keywords › AI suggestions, AI search's questions and Competitors › Domain lookup. They drew a second row of line tabs inside the card, which on Search performance sat right under the page's own tabs.

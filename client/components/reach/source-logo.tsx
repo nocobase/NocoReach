@@ -63,10 +63,16 @@ const SIZE = {
 export function SourceLogo({
   source,
   size = 'md',
+  mono = false,
   className,
 }: {
   source: string;
   size?: keyof typeof SIZE;
+  /**
+   * One colour for every mark, brand or icon: it takes the text colour around it, so a column of marks reads as one
+   * set (Insights' Current situation, 2026-10-23 user feedback: brand colours beside grey icons looked cluttered).
+   */
+  mono?: boolean;
   className?: string;
 }): ReactElement {
   const brand = BRAND[source] ? BRAND_LOGOS[BRAND[source]] : null;
@@ -89,11 +95,14 @@ export function SourceLogo({
           fill='currentColor'
           className={cn(
             SIZE[size].mark,
-            brand.color ? 'text-(--brand-color)' : 'text-foreground',
-            'darkText' in brand && brand.darkText && 'dark:text-foreground',
+            !mono && (brand.color ? 'text-(--brand-color)' : 'text-foreground'),
+            !mono &&
+              'darkText' in brand &&
+              brand.darkText &&
+              'dark:text-foreground',
           )}
           style={
-            brand.color
+            !mono && brand.color
               ? ({ '--brand-color': brand.color } as CSSProperties)
               : undefined
           }
@@ -101,7 +110,10 @@ export function SourceLogo({
           <path d={brand.path} />
         </svg>
       ) : (
-        <Icon className={cn(SIZE[size].mark, 'text-muted-foreground')} />
+        <Icon
+          className={cn(SIZE[size].mark, !mono && 'text-muted-foreground')}
+          strokeWidth={mono ? 1.75 : undefined}
+        />
       )}
     </span>
   );
