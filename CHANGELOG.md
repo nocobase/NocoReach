@@ -6,6 +6,11 @@
 - The Bilibili, Xiaohongshu and YouTube connection panels act on the first click of a button that has just appeared (Read now, Disconnect and the rest), which could be ignored while the permission that showed it had not reached the handler yet.
 - `classic-import-app.test.ts` stops NocoReach's timers before counting imported rows: the analysis timer's catch-up wrote two extra snapshots when the test ran across second 10 of a minute.
 
+## Unreleased — Agent page details
+
+- Who does the work no longer shows a row of column headings (screen readers still read them); each row already says what it holds.
+- What went wrong, or how the last task ended, is a small line under the agent in its own row ("Last task 10-22 21:54 did not finish") instead of a line of body text below the row.
+
 ## Unreleased — Task runs survive NocoReach restarts
 
 - A task run whose Runner lost its lease while NocoReach restarted (every deploy restarts it) is recorded as interrupted by the restart instead of blamed on the computer. NocoReach keeps the times it started (`nr-app-starts`) to tell the two apart.

@@ -1584,7 +1584,7 @@
   "agentRoles.chatDisabled": "{0} dinonaktifkan.",
   "agentRoles.lastTask": "Tugas terakhir selesai: {0}",
   "agentRoles.noTaskYet": "Belum pernah menjalankan tugas",
-  "agentRoles.lastTaskFailed": "Tugas terakhir tidak selesai; Anda dapat mencobanya lagi di halaman tugas tersebut.",
+  "agentRoles.lastTaskFailed": "Tugas terakhir ({0}) tidak selesai",
   "agentRoles.whereTeam": "{0} · dibagikan dengan tim",
   "agentRoles.whereOwner": "{0} · hanya pemilik",
   "agentRoles.countTeam": "Dibagikan dengan tim: {0}",

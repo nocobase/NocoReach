@@ -164,7 +164,10 @@ const row = (work: string) =>
     .getByRole('rowheader', { name: new RegExp(`^${work}`) })
     .closest('tr')!;
 // A row's explanation sits on the line below it.
-const detail = (work: string) => row(work).nextElementSibling as HTMLElement;
+// What is wrong sits in the row's own Runs on cell, in small type (2026-10-22 user report: it was a line of body text
+// below the row).
+const detail = (work: string) =>
+  row(work).querySelectorAll('td')[0] as HTMLElement;
 
 test('says which work cloud models and local agents do, with what each uses and whether it works', async () => {
   mount();
@@ -522,4 +525,26 @@ test('members see the overview without Settings buttons', async () => {
     expect(within(row('执行任务')).getByText('正常')).toBeVisible(),
   );
   expect(screen.queryByRole('button', { name: '设置' })).toBeNull();
+});
+
+test('a last task that did not finish is a small line in the row, and column headings are for screen readers', async () => {
+  state.status.options = [
+    {
+      id: 'codex',
+      name: 'Codex · GPT-6 Astra',
+      tool: 'codex',
+      online: true,
+      health: { state: 'ok', at: '2026-10-22T13:54:00Z', outcome: 'failed' },
+    },
+  ];
+  mount();
+  await waitFor(() =>
+    expect(within(row('执行任务')).getByText('正常')).toBeVisible(),
+  );
+  const line = within(row('执行任务')).getByText(/上次任务 .+ 没有完成/);
+  expect(line).toHaveClass('text-xs');
+  expect(screen.queryByText(/可以在任务页再试一次/)).toBeNull();
+  expect(
+    screen.getByRole('columnheader', { name: '工作' }).closest('thead'),
+  ).toHaveClass('sr-only');
 });

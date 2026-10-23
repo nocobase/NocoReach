@@ -7041,7 +7041,7 @@
   "agentRoles.chatDisabled": "{0} is turned off.",
   "agentRoles.lastTask": "Last task finished {0}",
   "agentRoles.noTaskYet": "Has not run a task yet",
-  "agentRoles.lastTaskFailed": "The last task did not finish; you can try it again on its page.",
+  "agentRoles.lastTaskFailed": "Last task {0} did not finish",
   "agentRoles.whereTeam": "{0} · shared with the team",
   "agentRoles.whereOwner": "{0} · owner only",
   "agentRoles.countTeam": "{0} shared with the team",
