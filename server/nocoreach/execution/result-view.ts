@@ -5,7 +5,7 @@ import {
   metricValues,
 } from '../../../shared/result-comparison.js';
 import { CHECKPOINTS, shift } from './effect.js';
-import { boardState, projectWork, type Work } from './model.js';
+import { projectWork, taskStanding, type Work } from './model.js';
 
 type Task = {
   id: string | number;
@@ -29,7 +29,7 @@ type Service = {
   effectPages(work: Work): string[];
   snapshot(key: string): Promise<Strategy | null>;
 };
-type Phase = 'live' | 'pendingLive' | 'delivered';
+type Phase = 'live' | 'delivered';
 type Filters = {
   page?: number;
   pageSize?: number;
@@ -48,7 +48,7 @@ const STATUSES = [
   'insufficient',
   'unavailable',
 ];
-const PHASES = ['pendingLive', 'delivered'];
+const PHASES = ['delivered'];
 const invalid = (): never => {
   throw Object.assign(
     new Error(systemMessageText('strategy.checkInputLength')),
@@ -68,39 +68,30 @@ const latestDate = (dates: (string | undefined)[]) =>
     )
     .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
 
+/**
+ * Whether a task produced an outcome, the only tasks Results lists or counts (2026-10-23 user decision: "it never
+ * finished, so where would an outcome come from?"): its change went live, or its delivery finished (done, or its
+ * execution recorded), even if archived afterwards. Cancelled tasks that never went live, work archived before it
+ * finished (including the old-workflow archive), and work still waiting for review, approval or publishing stay in
+ * Tasks. Simulated work (the demo install, a simulated release) follows the same rule and is marked as simulated.
+ */
+export function hasOutcome(task: Task, work: Work = projectWork(task)) {
+  if (work.observeFrom || work.release?.liveAt) return true;
+  return taskStanding(work) === 'done';
+}
+
 export function resultSummary(task: Task, pages: string[]) {
   const work = projectWork(task),
     results = work.observation?.results || [];
+  if (!hasOutcome(task, work)) return null;
   const artifacts = work.results.filter(
     (artifact): artifact is NonNullable<typeof artifact> => Boolean(artifact),
   );
   const receipt = work.receipt as { note?: string; recordedAt?: string } | null;
-  const delivered =
-    artifacts.length ||
-    receipt?.note ||
-    work.release ||
-    work.observeFrom ||
-    results.length;
-  if (
-    !delivered &&
-    (work.cancelledAt || work.archivedAt || boardState(work) !== 'done')
-  )
-    return null;
   const candidate = [...results].sort((a, b) => b.day - a.day)[0] || null;
-  const closed = Boolean(work.cancelledAt || work.archivedAt);
-  // Live once the observe stage started; a flow that still has its observe stage ahead goes live later; anything
-  // else (research, documents, replies, closed or simulated work) is delivered without a page to watch.
-  const phase: Phase = work.observeFrom
-    ? 'live'
-    : !closed &&
-        work.release?.state !== 'simulated' &&
-        work.stage === 'flow' &&
-        (work.flow?.stages || []).some(
-          (stage, index) =>
-            stage.kind === 'observe' && index >= (work.stageIndex ?? 0),
-        )
-      ? 'pendingLive'
-      : 'delivered';
+  // Live once the observe stage started; everything else listed (research, documents, replies) was delivered without
+  // a page to watch.
+  const phase: Phase = work.observeFrom ? 'live' : 'delivered';
   // The next checkpoint still to come and the day its data is expected (about three days after its window ends, as
   // the result drawer estimates).
   const checked = new Set(
@@ -139,8 +130,10 @@ export function resultSummary(task: Task, pages: string[]) {
     taskId: String(task.id),
     taskNo: task.evidence?.no || null,
     title: task.title,
-    taskState: boardState(work),
-    closed,
+    taskState: taskStanding(work),
+    // Stopped after going live; archived after it finished.
+    closed: Boolean(work.cancelledAt),
+    archived: Boolean(work.archivedAt && !work.cancelledAt),
     phase,
     nextDay,
     nextDate: nextDay
@@ -294,6 +287,7 @@ export async function readResult(
       title: task.title,
       state: summary.taskState,
       closed: summary.closed,
+      archived: summary.archived,
       simulated: summary.simulated,
       summary: (
         work.release?.note ||
@@ -350,14 +344,12 @@ export function boardWindow(
   }
   return { start: shift(today, 1 - Number(range)), end: today };
 }
-// Results that went down, then those waiting for the viewer, then checks still to come, then the rest.
+// Results that went down, then checks still to come, then the other live work, then deliveries.
 function attentionRank(item: Summary) {
   if (item.phase === 'live' && item.status === 'down') return 0;
-  if (item.phase === 'pendingLive' && item.taskState === 'review') return 1;
-  if (item.phase === 'live' && item.nextDay) return 2;
-  if (item.phase === 'live') return 3;
-  if (item.phase === 'pendingLive') return 4;
-  return 5;
+  if (item.phase === 'live' && item.nextDay) return 1;
+  if (item.phase === 'live') return 2;
+  return 3;
 }
 export async function resultBoard(
   service: Service,
@@ -395,7 +387,6 @@ export async function resultBoard(
     total: items.length,
     counts: {
       live: live.length,
-      pendingLive: count(items, (item) => item.phase === 'pendingLive'),
       delivered: count(items, (item) => item.phase === 'delivered'),
       up: count(live, (item) => item.status === 'up'),
       down: count(live, (item) => item.status === 'down'),

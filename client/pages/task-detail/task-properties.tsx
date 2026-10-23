@@ -6,6 +6,8 @@ import { $t } from '#i18n';
 import { formatDate, formatDateTime } from '#lib/format';
 import { cn } from '#lib/utils';
 import { ActorAvatar } from '#components/reach/actor';
+import { Card } from './layout';
+import { text } from './styles';
 import { Button } from '#components/ui/button';
 import {
   DropdownMenu,
@@ -19,9 +21,9 @@ import { AgentMenu } from './agent-menu';
 import { articlePageUrl } from './article-page';
 import { entryTitleKey, taskSource, type TaskSource } from '../task-source';
 
-// The task's properties in their own column (2026-10-22 user request, as the sidebar of a Linear, Jira or GitHub
-// issue): one label and value per row, so the header keeps only what to read. Beside the content from 1280px, above
-// it in two columns below that, one column on phones. Rows without a value are left out.
+// The task's properties in their own card (2026-10-22 user request, as the sidebar of a Linear, Jira or GitHub issue):
+// one label and value per row, so the header keeps only what to read. In the right column from 1280px, in two columns
+// below that, one column on phones. Rows without a value are left out.
 
 type Member = { id: string; name: string };
 
@@ -38,9 +40,11 @@ const pathOf = (u: string) => {
 // as Linear, GitHub and Jira do it); each row 32px high, with a menu's text on the same left edge as plain values.
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className='grid grid-cols-[5.5rem_minmax(0,1fr)] items-start gap-3 text-sm leading-5'>
-      <dt className='py-1.5 text-muted-foreground'>{label}</dt>
-      <dd className='m-0 min-w-0 py-1.5 break-words'>{children}</dd>
+    <div className='grid grid-cols-[5.5rem_minmax(0,1fr)] items-start gap-3 leading-5'>
+      <dt className={cn(text.muted, 'py-1.5')}>{label}</dt>
+      <dd className={cn(text.body, 'm-0 min-w-0 py-1.5 break-words')}>
+        {children}
+      </dd>
     </div>
   );
 }
@@ -54,7 +58,8 @@ export function TaskProperties({
   agentLocked,
   onOwner,
   onAgent,
-  footer,
+  agentPicker,
+  onAgentPicker,
   className,
 }: {
   data: TaskData;
@@ -66,8 +71,9 @@ export function TaskProperties({
   agentLocked?: string;
   onOwner: (userId: string) => void;
   onAgent: (agentId: string) => Promise<boolean>;
-  /** Shown under the properties: Performance on wide screens. */
-  footer?: ReactNode;
+  /** The Agent menu opened from elsewhere on the page (a failed step's Switch Agent). */
+  agentPicker?: boolean;
+  onAgentPicker?: (open: boolean) => void;
   className?: string;
 }) {
   const navigate = useNavigate(),
@@ -138,11 +144,13 @@ export function TaskProperties({
       </span>
     );
   return (
-    <aside
+    <Card
+      as='aside'
       aria-label={$t('taskDetail.properties')}
-      className={cn('min-w-0', className)}
+      title={$t('taskDetail.properties')}
+      className={className}
     >
-      <dl className='m-0 grid grid-cols-1 gap-x-8 sm:grid-cols-2 xl:grid-cols-1'>
+      <dl className='-my-1.5 grid grid-cols-1 gap-x-8 sm:grid-cols-2 xl:grid-cols-1'>
         <Row label={$t('taskDetail.propSource')}>
           <Source
             source={taskSource(data.task)}
@@ -157,6 +165,8 @@ export function TaskProperties({
             data={data}
             busy={busy}
             locked={agentLocked}
+            open={agentPicker}
+            onOpenChange={onAgentPicker}
             bare
             onChange={onAgent}
           />
@@ -233,14 +243,11 @@ export function TaskProperties({
         )}
         {started && (
           <Row label={$t('taskDetail.propStarted')}>
-            <span className='text-muted-foreground'>
-              {formatDateTime(started)}
-            </span>
+            {formatDateTime(started)}
           </Row>
         )}
       </dl>
-      {footer}
-    </aside>
+    </Card>
   );
 }
 
@@ -284,8 +291,8 @@ function Source({
     <span className='flex flex-col'>
       {source.by === 'ai' ? (
         <span className='inline-flex flex-wrap items-center gap-x-1.5'>
-          <span className='inline-flex items-center gap-1 text-agent'>
-            <Sparkles aria-hidden='true' className='size-3.5' />
+          <span className='inline-flex items-center gap-1'>
+            <Sparkles aria-hidden='true' className='size-3.5 text-agent' />
             {$t('taskSource.foundByAi')}
           </span>
           {source.insight?.id && (

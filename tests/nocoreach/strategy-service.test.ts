@@ -65,6 +65,20 @@ test('a data page hand-off records who found it and from which page',async()=>{
  await service.confirmDirection(1,{title:'t',brief:'b',objective:'o',entry:'https://evil.example/x'},ctx);
  assert.equal('entry' in writes[1].values.evidence,false);
 });
+test('a hand-off keeps its short why, else the opportunity reason, as evidence.why',async()=>{
+ // The task page's Why card shows it first (2026-10-23): plain text, at most 300 characters, never required.
+ const {StrategyService}=__strategy_service;
+ const writes=[];const service=new StrategyService({db:{getRepository:name=>({create:async options=>{writes.push({name,...options});return {id:45};}})}});
+ const state={goal:null,proposals:[],insights:{items:[{id:'opportunity-2',title:'Clicks fell',reason:'/ja clicks fell 34% in 28 days'}],evidence:{}}};
+ service.context=async()=>({evidence:{}});
+ service.mutate=async(_id,_v,fn)=>{await fn(state,{});return state;};
+ await service.confirmDirection(1,{title:'t',brief:'b',objective:'o',why:'**3 repos** gained\n 1,200 stars this week.'});
+ assert.equal(writes[0].values.evidence.why,'3 repos gained 1,200 stars this week.');
+ await service.confirmDirection(1,{title:'t',brief:'b',objective:'o',insightId:'opportunity-2'});
+ assert.equal(writes[1].values.evidence.why,'/ja clicks fell 34% in 28 days');
+ await service.confirmDirection(1,{title:'t',brief:'b',objective:'o',why:'x'.repeat(301)});
+ assert.equal('why' in writes[2].values.evidence,false);
+});
 test('opportunity validation rejects missing evidence and strips generated identity',()=>{
  const {insightInput}=__strategy_service;
  assert.throws(()=>insightInput({title:'Unsupported claim'}));

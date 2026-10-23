@@ -95,7 +95,9 @@ export class Connections{
  articles: ArticleDelivery;
  bilibili?: BilibiliSource;
  xiaohongshu?: XiaohongshuSource;
- constructor(app,variables,{basePath,publicOrigin,browserCollectors=[],mock}: {basePath:string;publicOrigin?:string;browserCollectors?:unknown;mock?:MockEngine}){this.publicOrigin=publicOrigin;this.mock=mock;this.browserCollectors=mock?.enabled?mockBrowserCollectors:browserCollectors;this.basePath=basePath;this.app=app;this.db=app.db;this.variables=variables;this.proxyProfiles=new ProxyProfiles(variables);this.network=new OutboundNetwork(this.proxyProfiles,mock);this.RETURN=`${basePath}/connections`;}
+ /** When this application instance started; see execution/restarts.ts. */
+ startedAt?: string;
+ constructor(app,variables,{basePath,publicOrigin,browserCollectors=[],mock,startedAt}: {basePath:string;publicOrigin?:string;browserCollectors?:unknown;mock?:MockEngine;startedAt?:string}){this.startedAt=startedAt;this.publicOrigin=publicOrigin;this.mock=mock;this.browserCollectors=mock?.enabled?mockBrowserCollectors:browserCollectors;this.basePath=basePath;this.app=app;this.db=app.db;this.variables=variables;this.proxyProfiles=new ProxyProfiles(variables);this.network=new OutboundNetwork(this.proxyProfiles,mock);this.RETURN=`${basePath}/connections`;}
  mock?: MockEngine;
  // The demo data's projects, answered in process, and its simulated model (demo-data/).
  demoProjects?: DemoProjects;

@@ -339,6 +339,9 @@ describe('automatic runs', () => {
           data: [
             {
               ...occurrence,
+              status: 'failed',
+              // The Scheduler's summary of the same failure, by project id.
+              reason: '项目 2：AI service did not answer',
               resultSummary: {
                 projects: {
                   '1': { ok: true, items: 5 },
@@ -357,6 +360,8 @@ describe('automatic runs', () => {
     expect(
       within(drawer).getByText(/Project 2 failed: AI service did not answer/u),
     ).toHaveClass('text-destructive');
+    // The projects say it by name; the Scheduler's summary is not repeated.
+    expect(within(drawer).queryByText(/项目 2：/u)).toBeNull();
     // The list page's last-run cell names the failed project without the reason.
     expect(await screen.findByText('Project 2 failed')).toHaveClass(
       'text-destructive',

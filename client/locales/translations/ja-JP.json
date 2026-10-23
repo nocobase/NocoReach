@@ -562,7 +562,9 @@
       "agentArchived": "アーカイブ済み",
       "forbidden": "利用権限がありません",
       "noRunner": "オンラインのランナーがありません",
-      "othersPersonal": "他のユーザーの個人用ランナーでのみ利用可能"
+      "othersPersonal": "他のユーザーの個人用ランナーでのみ利用可能",
+      "noModel": "先にチャットモデルを設定してください",
+      "modelUnavailable": "モデルを利用できません"
     },
     "mode": {
       "online": "オンライン",
@@ -583,7 +585,9 @@
       "kept": "メッセージは保存され、回答できるようになり次第、回答します。",
       "fallback": "ここで別のエージェントを使う",
       "usingDefault": "この会話では一時的に{{own}}の代わりに{{name}}を使用しています。",
-      "restore": "{{own}}に戻す"
+      "restore": "{{own}}に戻す",
+      "noModel": "先にチャットモデルを設定してください",
+      "modelUnavailable": "{{name}} のモデルを利用できません。管理者に連絡してください"
     },
     "notice": {
       "switchedToDefault": "{{own}}が復帰するまで、システムのデフォルトである{{name}}に切り替えました。",
@@ -592,15 +596,13 @@
       "switchedBack": "{{name}}に戻りました。",
       "runFailed": "エージェントが回答する前に停止しました。",
       "runFailedReason": "エージェントが回答する前に停止しました: {{reason}}",
-      "runCancelled": "停止しました。"
+      "runCancelled": "キャンセルを要求しました。"
     },
     "consultation": {
       "title": "{{name}}に相談しました",
       "question": "質問",
       "answer": "回答",
       "steps": "実行ステップ",
-      "plans_one": "確認用の計画を提案しました。",
-      "plans_other": "確認用の計画を{{count}}件提案しました。",
       "usage": "入力{{input}}トークン、出力{{output}}トークンを使用しました。",
       "state": {
         "running": "回答中…",
@@ -631,7 +633,7 @@
       "label": "エージェントへのメッセージ",
       "placeholder": "質問するか、整理したい作業を説明してください…",
       "hint": "Enterで送信、Shift+Enterで改行",
-      "runningHint": "今送信したメッセージは進行中の作業に追加されます",
+      "runningHint": "実行中です。この実行は停止できます。",
       "tooLong": "{{max}}文字以内で入力してください。",
       "send": "送信",
       "stop": "停止",
@@ -727,6 +729,35 @@
         "error": "エラー",
         "usage": "使用量"
       }
+    },
+    "retrySaving": "保存を再試行",
+    "contextFailed": "選択したコンテキストを読み取れないか、メッセージを送信できませんでした。現在のページを確認してから、もう一度お試しください。",
+    "approval": {
+      "request": "このツールは実行前に承認が必要です。",
+      "approve": "承認",
+      "deny": "拒否",
+      "denied": "ツールの実行は拒否されました。",
+      "failed": "承認がまだ確定していません。保存済みメッセージを更新してから再度お試しください。"
+    },
+    "feedback": {
+      "sending": "送信中…",
+      "waiting": "エージェントを待っています…",
+      "thinking": "考えています…",
+      "stopping": "停止を要求しました。エージェントの終了を待っています…",
+      "completed": "完了しました。",
+      "cancelled": "キャンセルしました。繰り返す前に、すでに完了している可能性のある操作を確認してください。",
+      "failed": "応答に失敗しました。再送信するか決める前に履歴を確認してください。",
+      "unknown": "結果または保存済み履歴が確定していません。再送信するか決める前に履歴を更新してください。",
+      "effectReview": "一部の操作は完了している可能性があります。繰り返す前に結果を確認してください。"
+    },
+    "executionFailed": "実行に失敗しました。繰り返す前に、保存済み履歴とすでに完了している可能性のある操作を確認してください。",
+    "historicalReadOnly": "この過去の会話は閲覧のみです。続けるには新しいチャットを開始してください。",
+    "connectionUnknown": "接続が中断され、結果は不明です。再送信する前に保存済み履歴を更新してください。",
+    "allowAnother": "もう一度送信を許可（重複の可能性あり）",
+    "refreshHistory": "履歴を更新",
+    "reasoning": {
+      "title": "推論",
+      "thinking": "考えています…"
     }
   },
   "agentSetup.title": "お使いのエージェントでNocoReachを使う",

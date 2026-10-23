@@ -298,7 +298,10 @@ export default function KnowledgeTab(): ReactElement {
               <col className='hidden w-24 sm:table-column' />
               <col className='w-12' />
             </colgroup>
-            <thead className='text-xs text-muted-foreground'>
+            <thead
+              data-slot='table-header'
+              className='text-xs text-muted-foreground'
+            >
               <tr>
                 <th className='px-3 py-2 text-left'>
                   {$t('projectKnowledge.titleSummary')}

@@ -1,3 +1,4 @@
+import { formatDateTime } from '#lib/format';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Bot, Clock3 } from 'lucide-react';
@@ -184,7 +185,7 @@ export function TaskExecutionPanel({
       : undefined;
   const items = official.map((item) => ({
     value: item.id,
-    label: `${new Date(item.createdAt).toLocaleString(getCurrentLocale())} · ${item.agentName || $t('common.localAgent')} · ${historyLabels().status[item.status === 'succeeded' ? 'completed' : item.status === 'failed' ? 'failed' : item.status === 'running' ? 'running' : 'queued']}`,
+    label: `${formatDateTime(item.createdAt)} · ${item.agentName || $t('common.localAgent')} · ${historyLabels().status[item.status === 'succeeded' ? 'completed' : item.status === 'failed' ? 'failed' : item.status === 'running' ? 'running' : 'queued']}`,
   }));
   return (
     // Shown on the Runs tab of Technical details, which supplies the frame; the heading stays for screen readers and
@@ -295,6 +296,27 @@ export function TaskExecutionPanel({
               </AlertDescription>
             </Alert>
           ) : null}
+          {current?.restartedAt ? (
+            // NocoReach restarted under this run (server/nocoreach/execution/restarts.ts); the official reason says how
+            // the Runner was lost.
+            <p className='text-sm text-muted-foreground'>
+              {$t('taskDetail.restartTechnical', {
+                0: new Date(current.restartedAt).toLocaleString(
+                  getCurrentLocale(),
+                ),
+                1: execution?.run.failureReason || '—',
+              })}
+            </p>
+          ) : null}
+          {current?.autoRetry ? (
+            <p className='text-sm text-muted-foreground'>
+              {$t('taskDetail.restartRetryTechnical', {
+                0: new Date(current.autoRetry.restartedAt).toLocaleString(
+                  getCurrentLocale(),
+                ),
+              })}
+            </p>
+          ) : null}
           {run && execution && (
             <>
               <RunHeader
@@ -304,12 +326,8 @@ export function TaskExecutionPanel({
               />
               <p className='flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
                 <Clock3 className='size-4' />
-                {run.startedAt
-                  ? new Date(run.startedAt).toLocaleString(getCurrentLocale())
-                  : '—'}
-                {run.finishedAt
-                  ? ` → ${new Date(run.finishedAt).toLocaleString(getCurrentLocale())}`
-                  : ''}
+                {run.startedAt ? formatDateTime(run.startedAt) : '—'}
+                {run.finishedAt ? ` → ${formatDateTime(run.finishedAt)}` : ''}
               </p>
               {execution.canInspect ? (
                 <RunTranscript
@@ -347,9 +365,7 @@ export function TaskExecutionPanel({
               <div className='flex flex-col gap-2 text-sm'>
                 <p className='text-muted-foreground'>
                   {$t('taskDetail.sourcesPrepared', {
-                    0: new Date(detail.sources.capturedAt).toLocaleString(
-                      getCurrentLocale(),
-                    ),
+                    0: formatDateTime(detail.sources.capturedAt),
                   })}
                 </p>
                 {detail.sources.topics.map((topic) => (

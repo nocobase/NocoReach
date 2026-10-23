@@ -328,7 +328,11 @@ function renderApplication(
     [apiClientToken, apiClient],
     [
       realtimeClientToken,
-      { subscribe: () => () => {}, onOpen: () => () => {} },
+      {
+        subscribe: () => () => {},
+        onOpen: () => () => {},
+        watch: () => ({ close: () => {} }),
+      },
     ],
     [authenticationClientToken, authClient],
     [authorizationClientToken, authorizationClient],

@@ -1,4 +1,6 @@
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { chipButtonClass, chipClass } from '#components/reach/chip';
+import { cn } from '#lib/utils';
 // 趋势 › 关注的关键词 (2026-10-04 user choice): keywords added right here (or picked from 关键词), each with its own
 // 12-month line in Google Trends (100 = its own busiest week, so they are not compared with each other) and its related
 // searches. Queried at once when added, then weekly; a row opens the full line and the searches, which go to the Agent.
@@ -7,7 +9,7 @@ import { useNavigate } from "react-router";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ExternalLink, LoaderCircle, MoreHorizontal, Plus, TrendingUp } from "lucide-react";
+import { ExternalLink, LoaderCircle, Plus, TrendingUp } from "lucide-react";
 import { toast } from "#lib/toast";
 import { EmptyState, InlineError } from "#components/reach/states";
 import { InfoTip } from "#components/reach/info-tip";
@@ -17,7 +19,6 @@ import { Button } from "#components/ui/button";
 import { Card } from "#components/ui/card";
 import { Checkbox } from "#components/ui/checkbox";
 import { Input } from "#components/ui/input";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "#components/ui/dropdown-menu";
 import { DataTable, useDataTable } from "#components/seo/data-table";
 import { SortableHeader } from "#components/seo/sortable-header";
 import { DetailDrawer } from "./detail-drawer";
@@ -42,7 +43,7 @@ function Spark({ points }: { points: WatchedKeyword["points"] }) {
   if (vals.filter((v) => v !== null).length < 2) return <span className="text-muted-foreground">—</span>;
   const step = 110 / Math.max(vals.length - 1, 1);
   const line = vals.map((v, i) => (v === null ? null : `${(i * step).toFixed(1)},${(22 - (v / 100) * 20).toFixed(1)}`)).filter(Boolean).join(" ");
-  return <svg width="110" height="24" viewBox="0 0 110 24" aria-hidden="true" data-spark><polyline fill="none" stroke="var(--chart-1)" strokeWidth="1.5" points={line} /></svg>;
+  return <svg width="110" height="24" viewBox="0 0 110 24" aria-hidden="true" data-spark><polyline fill="none" stroke="var(--chart-3)" strokeWidth="1.5" points={line} /></svg>;
 }
 
 export function TrendKeywords({ projectId, view, onView, onRetry }: { projectId: number; view: KeywordWatch; onView: (v: KeywordWatch) => void; onRetry: (keywordId: string) => void }) {
@@ -78,7 +79,7 @@ export function TrendKeywords({ projectId, view, onView, onRetry }: { projectId:
     helper.display({ id: "spark", header: () => $t('trendsKeywords.value12MonthTrend'), cell: ({ row }) => <Spark points={row.original.points} /> }) as ColumnDef<WatchedKeyword>,
     helper.display({ id: "rising", header: () => $t('trendsKeywords.risingRelatedSearches'), cell: ({ row }) => { const r = row.original.rising, fresh = r.filter((q) => q.isNew).length; return r.length ? <span className="flex min-w-0 items-center gap-2 text-sm"><span className="truncate" title={r[0].query}>{r[0].query} <span className="text-nr-ink-green tabular-nums">+{r[0].value.toLocaleString(getCurrentLocale())}%</span></span>{r.length > 1 ? <span className="shrink-0 text-xs text-muted-foreground">{$tj('common.moreValue',{0:r.length})}</span> : null}{fresh ? <Tag tone="blue">{$tj('trendsKeywords.newWeek',{0:fresh})}</Tag> : null}</span> : <span className="text-muted-foreground">—</span>; } }) as ColumnDef<WatchedKeyword>,
     // The menu cell stops clicks: events from the menu's portal would reach the row and open the detail.
-    helper.display({ id: "actions", header: () => <span className="sr-only">{$t('common.actions')}</span>, cell: ({ row }) => <div className="flex justify-end" onClick={(e) => e.stopPropagation()}><DropdownMenu><DropdownMenuTrigger render={<Button size="icon-sm" variant="ghost" aria-label={$t('common.moreActions',{0:row.original.keyword})} />}><MoreHorizontal /></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem variant="destructive" onClick={() => void remove(row.original)}>{$t('common.remove')}</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div> }) as ColumnDef<WatchedKeyword>,
+    helper.display({ id: "actions", header: () => <span className="sr-only">{$t('common.actions')}</span>, cell: ({ row }) => <div className="flex justify-end" onClick={(e) => e.stopPropagation()}><Button size="sm" variant="ghost" className="-my-1.5" onClick={() => void remove(row.original)}>{$t('common.remove')}</Button></div> }) as ColumnDef<WatchedKeyword>,
   ], []);
   const table = useDataTable({ data: list, columns, withSorting: true, getRowId: (k) => k.id });
   if (!view.dataforseo) return <EmptyState icon={<TrendingUp />} title={$t('common.connectDataforseoFirst')} description={$t('trendsKeywords.keywordTrendsCheckGoogleTrends')} action={<Button onClick={() => navigate("/connections?source=keywords")}>{$t('common.openConnections')}</Button>} />;
@@ -91,7 +92,7 @@ export function TrendKeywords({ projectId, view, onView, onRetry }: { projectId:
           <Button type="submit" disabled={busy || full || !text.trim()}><Plus data-icon="inline-start" />{busy ? $t('common.adding') : $t('common.add')}</Button>
           <span className="flex items-center gap-1 text-xs text-muted-foreground">{$tj('trendsKeywords.following',{0:list.length,1:max,2:$legacyText(place)})}<InfoTip label={$t('trendsKeywords.howKeywordTrendsChecked')}>{$tj('trendsKeywords.scheduleAndCostHelp',{0:getOwn()})}</InfoTip></span>
         </form>
-        {picks.length && !full ? <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" data-picks>{$t('trendsKeywords.pickKeywords')}{picks.map((k) => <Button key={k} type="button" size="xs" variant="outline" className="rounded-full" disabled={busy} onClick={() => void add(k)}>{k}</Button>)}</p> : null}
+        {picks.length && !full ? <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" data-picks>{$t('trendsKeywords.pickKeywords')}{picks.map((k) => <button key={k} type="button" className={cn(chipClass, chipButtonClass, "text-foreground")} disabled={busy} onClick={() => void add(k)}>{k}</button>)}</p> : null}
         {error ? <InlineError>{error}</InlineError> : null}
       </div>
       <Card className="gap-0 py-0">
@@ -141,7 +142,7 @@ function KeywordDetail({ projectId, k, place, onClose, onRemove, onRetry }: { pr
                   <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} minTickGap={32} fontSize={11} />
                   <YAxis domain={[0, 100]} allowDecimals={false} fontSize={11} width={32} />
                   <Tooltip />
-                  <Line isAnimationActive={false} type="linear" dataKey="value" name={$t('trendsKeywords.interest')} stroke="var(--chart-1)" strokeWidth={2} dot={false} connectNulls />
+                  <Line isAnimationActive={false} type="linear" dataKey="value" name={$t('trendsKeywords.interest')} stroke="var(--chart-3)" strokeWidth={2} dot={false} connectNulls />
                 </LineChart>
               </ResponsiveContainer>
             </div>

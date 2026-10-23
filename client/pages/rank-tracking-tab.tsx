@@ -8,6 +8,7 @@ import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { Trash2, TrendingUp } from "lucide-react";
 import { RefreshButton } from '#components/reach/refresh-button';
+import { HeaderActions } from "#components/reach/page";
 import { toast } from "#lib/toast";
 import { EmptyState, ListSkeleton, InlineError } from "#components/reach/states";
 import { Button } from "#components/ui/button";
@@ -15,7 +16,6 @@ import { Card } from "#components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "#components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#components/ui/select";
 import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "#components/seo/data-table";
-import { DataTableToolbar } from "#components/seo/data-table-toolbar";
 import { TableBulkActionButton } from "#components/seo/table-bulk-action-bar";
 import { SortableHeader } from "#components/seo/sortable-header";
 import { safeLink } from "./analytics";
@@ -102,7 +102,7 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
   const rows = useMemo(() => (status?.keywords ?? []).map((k) => ({ ...k, site: rankOf(ranks, k.keyword)?.position })), [status, ranks]);
   const columns = useMemo<ColumnDef<Tracked & { site?: number }>[]>(() => [
     makeSelectionColumn<Tracked & { site?: number }>(anchorRef),
-    helper.accessor("keyword", { header: ({ column }) => <SortableHeader column={column} label={$t('common.keywords')} />, cell: ({ getValue }) => <span className="block max-w-xs truncate font-medium" title={getValue()}>{getValue()}</span> }) as ColumnDef<Tracked & { site?: number }>,
+    helper.accessor("keyword", { header: ({ column }) => <SortableHeader column={column} label={$t('common.keywords')} />, cell: ({ getValue }) => <span className="block max-w-60 truncate font-medium" title={getValue()}>{getValue()}</span> }) as ColumnDef<Tracked & { site?: number }>,
     helper.display({ id: "market", header: () => $t('common.market'), cell: ({ row }) => <span className="text-muted-foreground">{marketLabel(row.original)}</span> }) as ColumnDef<Tracked & { site?: number }>,
     helper.accessor((r) => r.latest?.position ?? (r.latest ? 101 : undefined), { id: "position", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('rankTracking.latestRank')} align="right" />, cell: ({ row }) => <span className="font-semibold">{pos(row.original.latest)}</span>, meta: right }) as ColumnDef<Tracked & { site?: number }>,
     helper.display({ id: "move", header: () => <span className="block text-right">{$t('rankTracking.sinceLastCheck')}</span>, cell: ({ row }) => <span className="block text-right tabular-nums"><Move now={row.original.latest} before={row.original.previous} /></span> }) as ColumnDef<Tracked & { site?: number }>,
@@ -128,11 +128,11 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
   if (!status.keywords.length) return <EmptyState icon={<TrendingUp />} title={$t('rankTracking.noTrackedKeywordsYet')} description={$t('rankTracking.selectKeywordsUnderSavedClick')} />;
   return (
     <>
+      {/* The status line sits above the table, outside the card, as on every data page (UI review 2026-10-22). */}
+      <p className="nr-footnote flex items-center">{$tj('rankTracking.checkedWeeklyGoogleDesktopTop',{0:status.keywords.length,1:status.lastRun ? $t('rankTracking.last',{0:day(status.lastRun.at)}) : ""})}<InfoTip label={$t('rankTracking.howRankTrackingWorks')} className="ml-1"><p>{$t('rankTracking.weeklyNote')}</p><p>{$t('rankTracking.checkNowReusesResultLast')}</p></InfoTip></p>
+      <HeaderActions><RefreshButton busy={busy} label={busy ? $t('common.checking') : $t('common.updateNow')} onClick={() => void checkNow()} /></HeaderActions>
       <Card className="gap-0 py-0">
-        <DataTable table={table} empty={{ title: $t('rankTracking.noTrackedKeywordsYet') }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,[role=checkbox],a")) return; openKeyword(row.original.keyword, row.original); }}
-          toolbar={<DataTableToolbar actions={<RefreshButton busy={busy} label={busy ? $t('common.checking') : $t('common.updateNow')} onClick={() => void checkNow()} />}>
-            <span className="text-xs text-muted-foreground">{$tj('rankTracking.checkedWeeklyGoogleDesktopTop',{0:status.keywords.length,1:status.lastRun ? $t('rankTracking.last',{0:day(status.lastRun.at)}) : ""})}<InfoTip label={$t('rankTracking.howRankTrackingWorks')} className="ml-1">{$t('rankTracking.checkNowReusesResultLast')}</InfoTip></span>
-          </DataTableToolbar>} />
+        <DataTable table={table} empty={{ title: $t('rankTracking.noTrackedKeywordsYet') }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,[role=checkbox],a")) return; openKeyword(row.original.keyword, row.original); }} />
       </Card>
       {status.lastRun && !status.lastRun.ok ? <InlineError>{$tj('rankTracking.lastCheckNotFinish',{0:$legacyText(status.lastRun.errors[0])})}</InlineError> : null}
       <HandOffNotice result={handed} />

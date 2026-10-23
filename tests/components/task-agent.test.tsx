@@ -106,6 +106,14 @@ function mount(data = initial()) {
 // The header's Agent menu, beside the owner (2026-10-20 user decision): the stage cards carry no picker.
 const agentMenu = () => screen.getByRole('button', { name: /^Agent ·/ });
 
+// The playbook list has loaded once the Playbook select shows the task's playbook.
+const playbookLoaded = () =>
+  waitFor(() =>
+    expect(screen.getByRole('combobox', { name: '做法' })).toHaveTextContent(
+      '调研',
+    ),
+  );
+
 test('the Agent is chosen in the header, and Start waits for one', async () => {
   const user = userEvent.setup();
   const data = initial();
@@ -153,7 +161,7 @@ test('with exactly one Agent available, starting saves it on the task first', as
   advance.mockResolvedValueOnce(saved).mockResolvedValueOnce(saved);
   mount(data);
   expect(agentMenu()).toHaveTextContent('NocoReach Codex');
-  await screen.findByRole('option', { name: /调研/ });
+  await playbookLoaded();
   await user.click(screen.getByRole('button', { name: '确定开始执行' }));
   await waitFor(() =>
     expect(action).toHaveBeenCalledWith(
@@ -179,7 +187,7 @@ test('failed reassignment retains the saved agent and shows the server error', a
   data.work.agentId = 'codex';
   data.agent!.agentId = 'codex';
   mount(data);
-  await screen.findByRole('option', { name: /调研/ });
+  await playbookLoaded();
   advance.mockRejectedValueOnce(new Error('任务已更新，请刷新后再保存'));
   await user.click(agentMenu());
   await user.click(
@@ -510,7 +518,7 @@ test('a failed run says why in plain words and what to do, from the official rea
   mount(data);
   expect(screen.getByText(/运行 Agent 的电脑中途断开了连接/)).toBeVisible();
   expect(screen.getByText(/确认那台电脑开着、联网/)).toBeVisible();
-  expect(screen.getByText(/已经连续 2 次没做完/)).toBeVisible();
+  expect(screen.getByText(/已连续 2 次没有完成/)).toBeVisible();
   expect(document.body).not.toHaveTextContent('agent_failed');
   expect(document.body).not.toHaveTextContent('leaseExpired');
 });
@@ -530,7 +538,7 @@ test("without an official reason, the Agent's own message or a plain fallback is
   expect(
     screen.getByText('这次运行没有完成，也没有留下具体原因。'),
   ).toBeVisible();
-  expect(screen.queryByText(/已经连续/)).toBeNull();
+  expect(screen.queryByText(/已连续/)).toBeNull();
 });
 
 test('an environment Demo Agent can start without selecting or changing a real Runner', async () => {
@@ -596,20 +604,19 @@ test('a sign-in failure names the computer and the tool, and does not push Try a
   };
   const view = mount(data);
   expect(
-    screen.getByText('Office-Mac 上的 Claude Code 没有登录。'),
-  ).toBeVisible();
-  expect(
     screen.getByText(
-      '请管理这台电脑的人在上面登录 Claude Code，或在上方换一个 Agent。',
+      'Office-Mac 上的 Claude Code 没有登录。 Agent 显示“在线”，只说明这台电脑连上了 NocoReach。',
     ),
   ).toBeVisible();
   expect(
-    screen.getByText('Agent 显示“在线”，只说明这台电脑连上了 NocoReach。'),
+    screen.getByText('请管理这台电脑的人登录 Claude Code，然后再试一次。'),
   ).toBeVisible();
   const retry = screen.getByRole('button', { name: '再试一次' });
   expect(retry).toBeEnabled();
   expect(retry).not.toHaveClass('bg-primary');
-  expect(screen.getByRole('button', { name: '我自己完成' })).toBeVisible();
+  // The failure card offers another Agent and a message; doing the step by hand lives in the More menu.
+  expect(screen.getByRole('button', { name: '给 Agent 留言' })).toBeVisible();
+  expect(screen.queryByRole('button', { name: '我自己完成' })).toBeNull();
   view.unmount();
 
   // A reader who may not see the computer still learns which tool; without either, the general wording stays.
@@ -634,6 +641,43 @@ test('a sign-in failure names the computer and the tool, and does not push Try a
   expect(
     screen.getByText('那台电脑上的编码工具（如 Codex、Claude Code）没有登录。'),
   ).toBeVisible();
+});
+
+// 2026-10-23 user request: the failure card's own ways forward. Another Agent opens the Agent picker in Properties, a
+// message goes to the activity composer, and doing the step by hand is in the More menu, not on the card.
+test('a failed step offers another Agent and a message, and doing it by hand from the More menu', async () => {
+  const user = userEvent.setup();
+  const data = failedWithRemovedAgent();
+  data.work.agentId = 'codex';
+  data.agent!.agentId = 'codex';
+  data.agent!.options = [
+    { id: 'codex', name: 'NocoReach Codex', online: true },
+    { id: 'claude', name: 'Research Claude', online: true },
+  ];
+  const view = mount(data);
+  expect(screen.getByText('Agent 没能完成这一步')).toBeVisible();
+  await user.click(screen.getByRole('button', { name: '换一个 Agent' }));
+  expect(
+    await screen.findByRole('menuitemradio', { name: /Research Claude/ }),
+  ).toBeVisible();
+  await user.keyboard('{Escape}');
+  await user.click(screen.getByRole('button', { name: '给 Agent 留言' }));
+  expect(document.activeElement).toHaveAttribute('id', 'nr-composer');
+  await user.click(screen.getByRole('button', { name: '更多' }));
+  await user.click(
+    await screen.findByRole('menuitem', { name: '手动完成这一步' }),
+  );
+  expect(
+    await screen.findByRole('textbox', { name: '分析结果' }),
+  ).toBeVisible();
+  view.unmount();
+
+  // While the Agent works on the step, the More menu does not offer to take it over.
+  data.runs[0].status = 'running';
+  mount(data);
+  await user.click(screen.getByRole('button', { name: '更多' }));
+  await screen.findByRole('menuitem', { name: '技术细节' });
+  expect(screen.queryByRole('menuitem', { name: '手动完成这一步' })).toBeNull();
 });
 
 test('Try again stays the main action when retrying can help', () => {
@@ -662,4 +706,102 @@ test('Try again stays the main action when retrying can help', () => {
   expect(screen.getByRole('button', { name: '再试一次' })).toHaveClass(
     'bg-primary',
   );
+});
+
+// 2026-10-22 user report: each deploy restarted NocoReach and the card blamed a healthy Mac three times in a row.
+test('a run a NocoReach restart interrupted says so, keeps Try again first and is left out of the streak', () => {
+  const data = failedWithRemovedAgent();
+  data.work.agentId = 'codex';
+  data.agent!.agentId = 'codex';
+  data.runs = [
+    {
+      ...data.runs[0],
+      id: 'run-3',
+      createdAt: '2026-10-22T13:30:00Z',
+      restartedAt: '2026-10-22T13:42:00Z',
+    },
+    { ...data.runs[0], id: 'run-2', createdAt: '2026-10-22T13:10:00Z' },
+    {
+      ...data.runs[0],
+      id: 'run-1',
+      createdAt: '2026-10-22T12:50:00Z',
+      restartedAt: '2026-10-22T13:03:00Z',
+    },
+  ];
+  data.execution = {
+    runId: 'run-3',
+    run: {
+      failureReason: 'leaseExpired',
+      executions: [
+        { attempt: 1, runnerId: 'r1', runnerName: 'Office-Mac', tool: 'codex' },
+      ],
+    },
+    events: [],
+    truncated: false,
+    canInspect: true,
+  };
+  const view = mount(data);
+  expect(
+    screen.getByText(
+      'NocoReach 服务器当时正在更新，这次运行因此中断，与运行 Agent 的电脑无关。',
+    ),
+  ).toBeVisible();
+  expect(screen.getByText('再试一次即可，不需要检查那台电脑。')).toBeVisible();
+  expect(document.body).not.toHaveTextContent('Office-Mac');
+  expect(screen.queryByText(/已连续/)).toBeNull();
+  expect(screen.getByRole('button', { name: '再试一次' })).toHaveClass(
+    'bg-primary',
+  );
+  view.unmount();
+
+  // A later failure of the computer's own counts only the runs the restarts did not interrupt.
+  data.runs = [
+    { ...data.runs[1], id: 'run-4', createdAt: '2026-10-22T14:00:00Z' },
+    ...data.runs,
+  ];
+  data.execution = { ...data.execution, runId: 'run-4' };
+  mount(data);
+  expect(screen.getByText(/^Office-Mac 中途断开了连接/)).toBeVisible();
+  expect(screen.getByText(/已连续 2 次没有完成/)).toBeVisible();
+});
+
+test('a step the system started again after a restart says why it runs again', () => {
+  const data = failedWithRemovedAgent();
+  data.work.agentId = 'codex';
+  data.agent!.agentId = 'codex';
+  data.agent!.online = true;
+  data.runs = [
+    {
+      ...data.runs[0],
+      id: 'run-2',
+      status: 'queued',
+      error: undefined,
+      createdAt: '2026-10-22T13:43:00Z',
+      autoRetry: { of: 'run-1', restartedAt: '2026-10-22T13:42:00Z' },
+    },
+    {
+      ...data.runs[0],
+      id: 'run-1',
+      createdAt: '2026-10-22T13:30:00Z',
+      restartedAt: '2026-10-22T13:42:00Z',
+    },
+  ];
+  data.work.history = [
+    {
+      at: '2026-10-22T13:43:00Z',
+      actor: 'system',
+      action: 'retryStage',
+      stageKey: 'analyze',
+      runId: 'run-2',
+      note: 'serverRestart',
+    },
+  ];
+  mount(data);
+  expect(
+    screen.getByText(
+      'NocoReach 服务器刚才在更新，上一次运行因此中断，已自动重新开始。',
+    ),
+  ).toBeVisible();
+  expect(screen.getByText('NocoReach 更新后自动重新开始“分析”')).toBeVisible();
+  expect(screen.queryByText(/重试“分析”/)).toBeNull();
 });

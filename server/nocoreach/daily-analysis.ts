@@ -16,7 +16,12 @@ import { scheduleDay as localDay, scheduledToday } from './schedule-time.js';
 const __plugin_workflow={Instruction:class{constructor(workflow){this.workflow=workflow;}},JOB_STATUS:{RESOLVED:1,FAILED:-1}};
 // Daily analysis (SPEC §9): signals → server-side model call → validated observations and suggestions.
 // Scheduling belongs to a NocoBase workflow ("NocoReach 每日分析" node); the analysis itself lives here and is tested.
-const NODE_TYPE='nocoreach-analysis',WORKFLOW_TITLE=systemMessageText('settings.nocoreachDailyAnalysis'),DEFAULT_CRON='0 9 * * *',MAX_INPUT=60000,STALE_MS=10*60000;
+const NODE_TYPE='nocoreach-analysis',WORKFLOW_TITLE=systemMessageText('settings.nocoreachDailyAnalysis'),DEFAULT_CRON='0 9 * * *',MAX_INPUT=60000,STALE_MS=30*60000;
+// The daily report is the one long call: a large project's report took 65–140 s with the model service of 2026-10, and
+// the same report hit the provider's default 4-minute limit when that service ran 2.6× slower (2026-10-23). Ten minutes
+// leaves room for that; the other calls (style rewrite, judging one signal) are short and keep the default. A project's
+// run is held for STALE_MS, which stays above this limit so a slow run is not started a second time.
+const REPORT_TIMEOUT_MS=10*60000;
 // When the daily analysis fails (2026-10-08 user decision, ROADMAP ④): a schedule the service missed (it was not running
 // at 9:00) runs once when it is back, the same day; a failure that surely cost nothing — before the model was asked, or
 // the provider could not be reached or refused at once — is tried again after 5, 15 and 60 minutes, at most 3 times; a
@@ -132,7 +137,7 @@ class DailyAnalysis{
  key(id){return `daily-analysis:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||{runs:[]};}
  async save(id,fn){const row=await this.repo().findOne({filter:{key:this.key(id)}});const next=await fn(row?.get('payload')||{runs:[]});if(row)await this.repo().update({filterByTk:row.id,values:{payload:next}});else await this.repo().create({values:{key:this.key(id),payload:next}});return next;}
- async invoke(system,user,operation: MockAiOperation='daily-report'){const provider=new OnlineProvider(this.p);const model=await provider.prepare();return {text:await provider.complete(system,user,operation),model:`${model.llmService}/${model.model}`};}
+ async invoke(system,user,operation: MockAiOperation='daily-report'){const provider=new OnlineProvider(this.p);const model=await provider.prepare();return {text:await provider.complete(system,user,operation,operation==='daily-report'?AbortSignal.timeout(REPORT_TIMEOUT_MS):undefined),model:`${model.llmService}/${model.model}`};}
  async run(id,trigger){const started=Date.now(),at=new Date().toISOString();let outcome,phase='prepare';
   try{const strategy=this.p.strategy;const context=await strategy.context(id,28);if(!context.evidence.signals)throw new Error(systemMessageText('analysis.signalsUnavailable'));
    const language=await this.language(id);
@@ -141,7 +146,7 @@ class DailyAnalysis{
    let saved;for(let attempt=0;attempt<2;attempt++){const current=await strategy.state(id);try{saved=await strategy.saveInsights(id,{insights,observations,sourceReviews,signalReviews:Array.isArray(parsed.signalReviews)?parsed.signalReviews:[],periodDays:28,locale:language,revision:current.revision,requestId:randomUUID()},undefined,context);break;}catch(e){if(e.status!==409||attempt)throw e;}}
    try{await this.judgeMissing(id);}catch{/* the page can still ask for the rest */}
    outcome={ok:true,items:saved.insights?.items?.length||0,observations:saved.insights?.observations?.length||0,dropped:(parsed.insights||[]).length-(saved.insights?.items?.length||0),rewritten:style.rewritten,styleIssues:style.remaining,model:reply.model};
-  }catch(e){outcome={ok:false,error:String(e.message||systemMessageText('analysis.failed')).slice(0,300),retryable:retryable(e,phase),failureKind:phase==='after'?'billing_unknown':e instanceof ModelPreparationError?e.reason:phase==='prepare'?'precondition':retryable(e,phase)?'provider_unavailable':'billing_unknown'};}
+  }catch(e){outcome={ok:false,error:(phase==='model'&&e?.name==='ModelError'&&e?.code==='aborted'?systemMessageText('analysis.modelTimedOut',{0:REPORT_TIMEOUT_MS/60000}):String(e.message||systemMessageText('analysis.failed'))).slice(0,300),retryable:retryable(e,phase),failureKind:phase==='after'?'billing_unknown':e instanceof ModelPreparationError?e.reason:phase==='prepare'?'precondition':retryable(e,phase)?'provider_unavailable':'billing_unknown'};}
   const entry={at,trigger,ms:Date.now()-started,...outcome};
   let retry=null;
   await this.save(id,cur=>{retry=trigger==='manual'?(entry.ok||!entry.retryable?null:cur.retry||null):this.nextRetry(cur.retry,entry);return {...cur,runningSince:null,retry,last:record(cur.last,{at,ok:entry.ok,errors:entry.ok?[]:[entry.error]}),runs:[entry,...(cur.runs||[])].slice(0,30)};});
@@ -186,6 +191,8 @@ class DailyAnalysis{
   const prepared=(async()=>{const s=await this.state(id);if(s.runningSince&&Date.now()-Date.parse(s.runningSince)<STALE_MS)return false;await this.save(id,cur=>({...cur,runningSince:new Date().toISOString()}));return true;})();
   const operation=prepared.then(start=>start?this.run(id,trigger):undefined).finally(()=>{if(this.running===operation)this.running=null;});
   this.running=operation;
+  // The run outlives the tick that started it; the classic import waits for it before it writes (legacy/app.ts).
+  this.p.app.importHold?.track(operation);
   void operation.catch(e=>this.p.app.logger.warn('NocoReach analysis run failed',{message:e?.message}));
   await prepared;return this.status(id);
  }

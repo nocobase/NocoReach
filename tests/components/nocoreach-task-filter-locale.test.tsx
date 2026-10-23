@@ -174,7 +174,7 @@ async function setup(
   );
   await waitFor(() =>
     expect(
-      screen.queryByText($t('common.loadingTasks')),
+      screen.queryByRole('status', { name: $t('common.loadingTasks') }),
     ).not.toBeInTheDocument(),
   );
   return runtime;

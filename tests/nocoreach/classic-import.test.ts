@@ -2,7 +2,7 @@
 // records, the row shape, the classic secrets' encryption, and the root-only `nrImport` actions.
 import { createCipheriv } from 'node:crypto';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { decryptClassic } from '../../cli/commands/lib/classic-source.js';
 import {
@@ -14,8 +14,10 @@ import {
   remapUsers,
 } from '../../server/nocoreach/classic-import.js';
 import {
-  LegacyResources,
+  IMPORT_HOLD_LEASE_MS,
+  LegacyApp,
   type LegacyAction,
+  type LegacyJob,
 } from '../../server/nocoreach/legacy/app.js';
 import {
   LegacyCache,
@@ -248,7 +250,6 @@ describe('the nrImport actions', () => {
     };
     const saved: Record<string, { value: string; secret: boolean }> = {};
     let loads = 0;
-    const resources = new LegacyResources();
     const db = {
       getRepository: (name: string) => ({
         count: async () => tables[name]!.length,
@@ -279,16 +280,13 @@ describe('the nrImport actions', () => {
         transaction: async (fn: (t: unknown) => Promise<unknown>) => fn({}),
       },
     };
+    const legacy = new LegacyApp(db as never, console, {
+      all: () => ({}),
+    } as never);
+    const resources = legacy.resources;
     registerClassicImport({
       plugin: { mock: { enabled: mock } },
-      legacy: {
-        db,
-        resourceManager: { define: (o: never) => resources.define(o) },
-        acl: {
-          allow: (r: string, a: string[], l: 'loggedIn') =>
-            resources.allow(r, a, l),
-        },
-      } as never,
+      legacy,
       users: { find: async () => accounts } as never,
       variables: {
         set: async (name: string, value: string, secret: boolean) => {
@@ -326,12 +324,12 @@ describe('the nrImport actions', () => {
       );
       return ctx.body as any;
     };
-    return { tables, saved, call, loads: () => loads };
+    return { tables, saved, call, legacy, loads: () => loads };
   }
 
   it('refuses every import phase when simulation is enabled or a dataset marker exists', async () => {
     for (const enabled of [true, false]) {
-      const { call, tables } = fixture(enabled);
+      const { call, tables, legacy } = fixture(enabled);
       if (!enabled)
         tables.nrVariables!.push({
           name: 'NOREACH_MOCK_DATASET_MARKER',
@@ -346,6 +344,7 @@ describe('the nrImport actions', () => {
           }),
         ).rejects.toMatchObject({ status: 409 });
       expect(JSON.stringify(tables)).toBe(before);
+      expect(legacy.importHold.held).toBe(false);
     }
   });
 
@@ -441,5 +440,86 @@ describe('the nrImport actions', () => {
       'daily-analysis:workflow',
     ]);
     expect(tables.nrVariables).toEqual([]);
+  });
+
+  describe('holding NocoReach timers', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+    const timer = (onTick: () => unknown): LegacyJob => ({
+      name: 'analysisCron',
+      cronTime: '10 * * * * *',
+      onTick,
+    });
+
+    it('skips timer firings from begin to finish, renews the hold with each call, and lets it lapse when the CLI stops', async () => {
+      vi.useFakeTimers();
+      const { call, legacy } = fixture();
+      let ticks = 0;
+      const analysis = timer(async () => {
+        ticks++;
+      });
+
+      // A dry run holds nothing.
+      await call('plan', {});
+      expect(await legacy.tick(analysis)).toBe(true);
+      await call('begin', { replace: false });
+      expect(await legacy.tick(analysis)).toBe(false);
+      vi.advanceTimersByTime(IMPORT_HOLD_LEASE_MS - 1000);
+      await call('rows', {
+        table: 'nrSnapshots',
+        rows: [{ id: '10', key: 'project:1', payload: { id: 1 } }],
+      });
+      vi.advanceTimersByTime(IMPORT_HOLD_LEASE_MS - 1000);
+      expect(await legacy.tick(analysis)).toBe(false);
+      await call('variables', { variables: [] });
+      expect(await legacy.tick(analysis)).toBe(false);
+      await call('finish', {});
+      expect(await legacy.tick(analysis)).toBe(true);
+      expect(ticks).toBe(2);
+
+      // A CLI that dies after a call: the timers run again once the lease has passed since that call ended.
+      await call('begin', { replace: true });
+      vi.advanceTimersByTime(IMPORT_HOLD_LEASE_MS - 1);
+      expect(await legacy.tick(analysis)).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect(await legacy.tick(analysis)).toBe(true);
+      expect(ticks).toBe(3);
+    });
+
+    it('begin waits for a firing already running, and refuses without clearing anything when it outlasts the wait', async () => {
+      vi.useFakeTimers();
+      const { call, legacy, tables } = fixture();
+      let end!: () => void;
+      const running = legacy.tick(
+        timer(() => new Promise<void>((resolve) => (end = resolve))),
+      );
+      let begun = false;
+      const begin = call('begin', { replace: false }).then(() => {
+        begun = true;
+      });
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(begun).toBe(false);
+      // Held while it waits: no new firing starts.
+      expect(await legacy.tick(timer(() => undefined))).toBe(false);
+      end();
+      await begin;
+      expect(await running).toBe(true);
+      await call('rows', {
+        table: 'nrTasks',
+        rows: [{ id: '11', taskKey: 'p1:T-1' }],
+      });
+      await call('finish', {});
+
+      // Work that does not finish within the wait: begin answers 409, clears nothing and releases the timers.
+      void legacy.importHold.track(new Promise(() => {}));
+      const refused = call('begin', { replace: true }).catch(
+        (error: unknown) => error,
+      );
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(await refused).toMatchObject({ status: 409 });
+      expect(tables.nrTasks).toHaveLength(1);
+      expect(legacy.importHold.held).toBe(false);
+    });
   });
 });

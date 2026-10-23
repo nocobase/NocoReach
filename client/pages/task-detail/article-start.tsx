@@ -1,6 +1,7 @@
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { $t, getCurrentLocale, useMessageState } from '#i18n';
+import { cn } from '#lib/utils';
 import { Button } from '#components/ui/button';
 import { Checkbox } from '#components/ui/checkbox';
 import {
@@ -22,6 +23,8 @@ import { errorStatus, searchArticles } from '../article-targets-api';
 import type { TaskData } from '../task-execution-types';
 import { MAX_ALSO, REPO, type DeliveryChoice } from './article-model';
 import { articlePageUrl } from './article-page';
+import { Field } from './layout';
+import { text } from './styles';
 
 // Where a task's change goes, chosen before it starts (docs/ARTICLE-PUBLISHING.md): a publishing target (an existing
 // article or a new one), or the website repository as a PR. Other targets can receive the same article: matched by
@@ -312,7 +315,7 @@ function DeliveryForm({
                       <Button
                         variant='link'
                         size='sm'
-                        className='h-auto p-0'
+                        className='h-auto p-0 font-normal'
                         onClick={() => setAttempt((n) => n + 1)}
                       >
                         {$t('common.retry')}
@@ -400,7 +403,7 @@ export function DeliverySummary({
     <Button
       variant='link'
       size='sm'
-      className='h-auto p-0'
+      className='h-auto p-0 font-normal'
       disabled={busy}
       onClick={onChange}
     >
@@ -408,23 +411,27 @@ export function DeliverySummary({
     </Button>
   );
   const row = (label: string, body: ReactNode, action: ReactNode = change) => (
-    <div className='nr-td-start-field' data-delivery-summary=''>
-      <span>{label}</span>
-      <p className='flex flex-wrap items-center gap-x-2 gap-y-1 text-sm'>
+    <Field label={label}>
+      <div
+        className={cn(text.body, 'flex flex-wrap items-center gap-x-2 gap-y-1')}
+        data-delivery-summary=''
+      >
         {body}
         {action}
-      </p>
+      </div>
       {also.length > 0 && (
-        <small>
+        <p className={text.muted}>
           {$t('articleTask.alsoPublishesTo', { 0: names(data, also) })}
-        </small>
+        </p>
       )}
-    </div>
+    </Field>
   );
   if (finding)
     return row(
       $t('articleTask.articleToChange'),
-      <span className='nr-td-muted'>{$t('articleTask.findingArticle')}</span>,
+      <span className='text-muted-foreground'>
+        {$t('articleTask.findingArticle')}
+      </span>,
     );
   if (choice.target === REPO)
     return row($t('articleTask.changeVia'), $t('articleTask.repository'));
@@ -437,7 +444,7 @@ export function DeliverySummary({
   if (!picked)
     return row(
       $t('articleTask.articleToChange'),
-      <span className='nr-td-muted' data-article-not-found=''>
+      <span className='text-muted-foreground' data-article-not-found=''>
         {notice || $t('articleTask.pickArticle')}
       </span>,
       allowed && (
@@ -455,7 +462,7 @@ export function DeliverySummary({
     <>
       {/^https?:\/\//i.test(url) ? (
         <a
-          className='nr-link inline-flex items-center gap-1 font-medium'
+          className='nr-link inline-flex items-center gap-1'
           href={url}
           target='_blank'
           rel='noreferrer'
@@ -464,7 +471,7 @@ export function DeliverySummary({
           <ExternalLink className='size-3 shrink-0' aria-hidden='true' />
         </a>
       ) : (
-        <span className='font-medium'>{picked.title}</span>
+        <span>{picked.title}</span>
       )}
       <Tag tone='grey'>{name(choice.target)}</Tag>
       {choice.article && (

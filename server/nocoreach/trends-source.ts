@@ -136,4 +136,4 @@ class TrendsSource{
    addKeyword:wrap((id,v)=>this.addKeyword(id,v)),removeKeyword:wrap((id,v)=>this.removeKeyword(id,v)),pick:wrap((id,v)=>this.pick(id,v))};
   this.p.app.resourceManager.define({name:'nrTrends',actions});this.p.app.acl.allow('nrTrends',Object.keys(actions),'loggedIn');}
 }
-export { TrendsSource, termsOf, specification, result, summary, keywordSpecification, keywordResult, LOCATIONS };
+export { TrendsSource, termsOf, specification, result, summary, keywordSummary, keywordSpecification, keywordResult, LOCATIONS };

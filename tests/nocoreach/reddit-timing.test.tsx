@@ -50,9 +50,9 @@ test('Reddit timing distinguishes attempts, cached success and retry timing in b
         <Timing />
       </I18nProvider>,
     );
-    // One line: the last success and the next search; the last attempt and the codes are in info tips.
-    expect(screen.getByText(/Last success:/)).toHaveTextContent(/Oct 12/);
-    expect(screen.getByText(/Last success:/)).toHaveTextContent(/Next retry:/);
+    // One line says when it was updated; the next search, the last attempt and the codes are in info tips.
+    expect(screen.getByText(/Updated/)).toHaveTextContent(/Oct 12/);
+    expect(screen.getByText(/Updated/)).not.toHaveTextContent(/Next retry:/);
     expect(screen.getByRole('alert')).toHaveTextContent(
       'no charge was made',
     );
@@ -60,6 +60,7 @@ test('Reddit timing distinguishes attempts, cached success and retry timing in b
     await userEvent.click(
       screen.getByRole('button', { name: 'Search timing' }),
     );
+    expect(await screen.findByText(/Next retry:/)).toBeVisible();
     expect(await screen.findByText(/Last attempt:/)).toHaveTextContent(
       /Oct 15/,
     );
@@ -70,7 +71,7 @@ test('Reddit timing distinguishes attempts, cached success and retry timing in b
     );
     await userEvent.keyboard('{Escape}');
     await act(() => runtime.changeLanguage('zh-CN'));
-    expect(screen.getByText(/上次成功：/)).toHaveTextContent(/下次重试：/);
+    expect(screen.getByText(/更新于/)).not.toHaveTextContent(/下次重试：/);
     expect(screen.getByRole('alert')).toHaveTextContent('没有扣费');
   } finally {
     disconnect();

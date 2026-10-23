@@ -5,13 +5,13 @@ import { $t, getCurrentLocale } from '#i18n';
 import { PageContainer, PageHeader } from '#components/reach/page';
 import { EmptyState } from '#components/reach/states';
 import { InfoTip } from '#components/reach/info-tip';
+import { StatTile } from '#components/seo/stat-tile';
 import { Alert, AlertDescription } from '#components/ui/alert';
 import { Button, buttonVariants } from '#components/ui/button';
 import {
   Card,
   CardAction,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '#components/ui/card';
@@ -235,16 +235,16 @@ function BoardBody({ board }: { board: ResultBoard }) {
       >
         <Metric
           label={$t('results.board.live')}
-          value={$t('results.board.items', { 0: formatNumber(counts.live) })}
+          value={formatNumber(counts.live)}
           detail={
-            counts.pendingLive
-              ? $t('results.board.pendingLive', { 0: counts.pendingLive })
-              : $t('results.board.noPending')
+            counts.delivered
+              ? $t('results.board.deliveredAlso', { 0: counts.delivered })
+              : ''
           }
         />
         <Metric
           label={$t('results.board.up')}
-          value={$t('results.board.items', { 0: formatNumber(counts.up) })}
+          value={formatNumber(counts.up)}
           detail={$t('results.board.upDetail', {
             0: counts.down,
             1: counts.flat,
@@ -259,27 +259,21 @@ function BoardBody({ board }: { board: ResultBoard }) {
   );
 }
 
+// The data pages' tile (UI review 2026-10-22): the number at their size and without a unit, the detail below it.
 function Metric({
   label,
   value,
   detail,
-  info,
+  help,
 }: {
   label: string;
   value: string;
   detail: string;
-  info?: ReactNode;
+  help?: ReactNode;
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardDescription className='flex items-center gap-1'>
-          {label}
-          {info}
-        </CardDescription>
-        <CardTitle className='text-3xl tabular-nums'>{value}</CardTitle>
-        <p className='text-sm text-muted-foreground tabular-nums'>{detail}</p>
-      </CardHeader>
+    <Card className='gap-0 p-4'>
+      <StatTile label={label} value={value} hint={detail} help={help} />
     </Card>
   );
 }
@@ -296,11 +290,7 @@ function TotalMetric({
   return (
     <Metric
       label={label}
-      info={
-        <InfoTip label={$t('common.what', { 0: label })}>
-          {$t('results.board.totalsTip')}
-        </InfoTip>
-      }
+      help={$t('results.board.totalsTip')}
       value={total ? signed(total.after - total.before) : '—'}
       detail={
         total
@@ -327,13 +317,15 @@ function ChangesCard({ board }: { board: ResultBoard }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{$t('results.board.changes')}</CardTitle>
-        <CardDescription>
-          {$t('results.board.changesDescription')}
-          {board.counts.live > board.changes.length
-            ? ` ${$t('results.board.changesMore', { 0: board.changes.length })}`
-            : ''}
-        </CardDescription>
+        <CardTitle className='flex items-center gap-1'>
+          {$t('results.board.changes')}
+          <InfoTip label={$t('common.info')}>
+            {$t('results.board.changesDescription')}
+            {board.counts.live > board.changes.length
+              ? ` ${$t('results.board.changesMore', { 0: board.changes.length })}`
+              : ''}
+          </InfoTip>
+        </CardTitle>
       </CardHeader>
       <CardContent>
         {board.changes.length ? (
@@ -426,26 +418,25 @@ function ChangeBar({ change }: { change: BoardChange }) {
   );
 }
 
-// What comes next: the next check of live work, the state of work still to go live, nothing for the rest.
+// What comes next: the next check of live work, nothing for a finished delivery.
 function nextStep(item: ResultSummary) {
   if (item.phase === 'live') return nextCheck(item) || '—';
-  if (item.phase === 'pendingLive')
-    return $t(`results.taskState.${item.taskState}`);
   return '—';
 }
 
 // A few results in a card (T5.3): plain headers, no sorting or paging; the task opens its drawer over this page.
-// The table reaches the card's edges and pads its outer cells with the card's spacing, as "Table in a card" does
-// (this app's DataTable is bound to refine's useTable).
+// The table reaches the card's edges and pads its outer cells with the card's spacing, as "Table in a card" does.
 function RecentCard({ items }: { items: ResultSummary[] }) {
   const location = useLocation();
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{$t('results.board.recent')}</CardTitle>
-        <CardDescription>
-          {$t('results.board.recentDescription')}
-        </CardDescription>
+        <CardTitle className='flex items-center gap-1'>
+          {$t('results.board.recent')}
+          <InfoTip label={$t('common.info')}>
+            {$t('results.board.recentDescription')}
+          </InfoTip>
+        </CardTitle>
         <CardAction>
           <Link
             className={buttonVariants({ variant: 'outline', size: 'sm' })}
@@ -481,11 +472,7 @@ function RecentCard({ items }: { items: ResultSummary[] }) {
                       : '—'}
                   </TableCell>
                   <TableCell>
-                    <ResultTag
-                      phase={item.phase}
-                      status={item.status}
-                      taskState={item.taskState}
-                    />
+                    <ResultTag phase={item.phase} status={item.status} />
                   </TableCell>
                   <TableCell className='text-muted-foreground'>
                     {nextStep(item)}

@@ -418,11 +418,11 @@ function AskTab({ group, projectId, brand, domains, recent, onOpen, onRan }: Tab
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
             <Input className="flex-1" aria-label={$t('common.question')} placeholder={$t('aiSearch.enterQuestionPeopleAskAi')} maxLength={500} value={question} onChange={(e) => setQuestion(e.target.value)} />
             <Button type="submit" disabled={busy} className="lg:px-6">{busy ? $t('aiSearch.asking') : $t('aiSearch.question')}</Button>
+            <InfoTip label={$t('aiSearch.model')} className="self-center">{$t('aiSearch.modelAskedSeparatelyWebAccess')}</InfoTip>
           </div>
           <div className="flex flex-wrap items-center gap-4 text-sm" role="group" aria-label={$t('aiSearch.model')}>
             {MODELS.map((m) => <label key={m} className="flex items-center gap-1.5"><Checkbox checked={models.includes(m)} onCheckedChange={(on) => setModels((list) => (on ? MODELS.filter((x) => x === m || list.includes(x)) : list.filter((x) => x !== m)))} aria-label={MODEL[m]} />{MODEL[m]}</label>)}
           </div>
-          <p className="text-xs text-muted-foreground">{$t('aiSearch.modelAskedSeparatelyWebAccess')}</p>
           {error ? <p role="alert" className="nr-error">{error}</p> : null}
         </form>
       </Card>

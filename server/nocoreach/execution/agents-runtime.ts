@@ -68,6 +68,8 @@ interface TaskTransport {
     runId: string,
     value: Record<string, unknown>,
   ): Promise<unknown>;
+  restartOf(run: PluginRun): Promise<string | undefined>;
+  retryAfterRestart(run: Run, restartedAt: string): Promise<void>;
 }
 export const TASK_SUBJECT = 'nocoreachTask';
 const terminal = new Set(['completed', 'failed', 'cancelled']);
@@ -540,6 +542,8 @@ export class TaskAgentsRuntime {
       if (!claimed) return;
     }
     if (!terminal.has(current.status)) return;
+    // A run lost while NocoReach restarted is recorded as such, so the task page does not blame the computer.
+    const restartedAt = await this.tasks.restartOf(current);
     try {
       await this.tasks.acceptAgentResult(run.projectId, current.id, {
         taskId: run.taskId,
@@ -550,6 +554,7 @@ export class TaskAgentsRuntime {
               ok: false,
               error:
                 current.status === 'cancelled' ? 'cancelled' : 'agent_failed',
+              ...(restartedAt ? { restartedAt } : {}),
             }),
       });
     } catch (error) {
@@ -566,6 +571,8 @@ export class TaskAgentsRuntime {
         message: (error as Error).message,
       });
     }
+    // Before settling: if NocoReach stops in between, the next sync tries again (the retry happens once).
+    if (restartedAt) await this.tasks.retryAfterRestart(run, restartedAt);
     await this.settled(run);
   }
   async completedSummary(run: Run): Promise<string | null> {

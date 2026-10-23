@@ -562,7 +562,9 @@
       "agentArchived": "Diarsipkan",
       "forbidden": "Tidak tersedia untuk Anda",
       "noRunner": "Tidak ada Runner yang daring",
-      "othersPersonal": "Hanya tersedia di Runner pribadi milik orang lain"
+      "othersPersonal": "Hanya tersedia di Runner pribadi milik orang lain",
+      "noModel": "Atur model obrolan terlebih dahulu",
+      "modelUnavailable": "Model tidak tersedia"
     },
     "mode": {
       "online": "Daring",
@@ -583,7 +585,9 @@
       "kept": "Pesan Anda disimpan dan akan dijawab begitu agen dapat menjawab.",
       "fallback": "Gunakan agen lain di sini",
       "usingDefault": "Percakapan ini sementara menggunakan {{name}} sebagai pengganti {{own}}.",
-      "restore": "Beralih kembali ke {{own}}"
+      "restore": "Beralih kembali ke {{own}}",
+      "noModel": "Atur model obrolan terlebih dahulu",
+      "modelUnavailable": "Model {{name}} tidak tersedia; hubungi administrator"
     },
     "notice": {
       "switchedToDefault": "Beralih ke {{name}}, agen bawaan sistem, hingga {{own}} kembali tersedia.",
@@ -592,15 +596,13 @@
       "switchedBack": "Kembali bersama {{name}}.",
       "runFailed": "Agen berhenti sebelum menjawab.",
       "runFailedReason": "Agen berhenti sebelum menjawab: {{reason}}",
-      "runCancelled": "Dihentikan."
+      "runCancelled": "Pembatalan diminta."
     },
     "consultation": {
       "title": "Berkonsultasi dengan {{name}}",
       "question": "Pertanyaan",
       "answer": "Jawaban",
       "steps": "Langkah yang dilakukan",
-      "plans_one": "Mengusulkan satu rencana untuk Anda konfirmasi.",
-      "plans_other": "Mengusulkan {{count}} rencana untuk Anda konfirmasi.",
       "usage": "Menggunakan {{input}} token masukan dan {{output}} token keluaran.",
       "state": {
         "running": "Menjawab…",
@@ -631,7 +633,7 @@
       "label": "Pesan untuk agen",
       "placeholder": "Tanyakan sesuatu, atau jelaskan pekerjaan yang perlu diatur…",
       "hint": "Enter untuk mengirim, Shift+Enter untuk baris baru",
-      "runningHint": "Pesan yang Anda kirim sekarang akan disertakan dalam pekerjaan yang sedang berlangsung",
+      "runningHint": "Sedang berjalan. Anda dapat menghentikan eksekusi ini.",
       "tooLong": "Maksimal {{max}} karakter.",
       "send": "Kirim",
       "stop": "Hentikan",
@@ -727,6 +729,35 @@
         "error": "Kesalahan",
         "usage": "Penggunaan"
       }
+    },
+    "retrySaving": "Coba simpan lagi",
+    "contextFailed": "Tidak dapat membaca konteks yang dipilih atau mengirim pesan. Periksa halaman saat ini, lalu coba lagi.",
+    "approval": {
+      "request": "Alat ini memerlukan persetujuan Anda sebelum dijalankan.",
+      "approve": "Setujui",
+      "deny": "Tolak",
+      "denied": "Eksekusi alat ditolak.",
+      "failed": "Persetujuan belum dikonfirmasi. Muat ulang pesan tersimpan sebelum mencoba lagi."
+    },
+    "feedback": {
+      "sending": "Mengirim…",
+      "waiting": "Menunggu agen…",
+      "thinking": "Berpikir…",
+      "stopping": "Penghentian diminta. Menunggu agen selesai…",
+      "completed": "Selesai.",
+      "cancelled": "Dibatalkan. Periksa tindakan yang mungkin sudah selesai sebelum mengulanginya.",
+      "failed": "Respons gagal. Periksa riwayat sebelum memutuskan untuk mengirim lagi.",
+      "unknown": "Hasil atau riwayat tersimpannya belum dikonfirmasi. Muat ulang riwayat sebelum memutuskan untuk mengirim lagi.",
+      "effectReview": "Beberapa tindakan mungkin sudah selesai. Periksa hasilnya sebelum mengulanginya."
+    },
+    "executionFailed": "Eksekusi gagal. Periksa riwayat tersimpan dan tindakan yang mungkin sudah selesai sebelum mengulanginya.",
+    "historicalReadOnly": "Percakapan lama ini hanya dapat dibaca. Mulai obrolan baru untuk melanjutkan.",
+    "connectionUnknown": "Koneksi terputus. Hasilnya tidak diketahui. Muat ulang riwayat tersimpan sebelum mengirim lagi.",
+    "allowAnother": "Izinkan kirim lagi (mungkin duplikat)",
+    "refreshHistory": "Muat ulang riwayat",
+    "reasoning": {
+      "title": "Penalaran",
+      "thinking": "Berpikir…"
     }
   },
   "agentSetup.title": "Gunakan NocoReach di agen Anda",

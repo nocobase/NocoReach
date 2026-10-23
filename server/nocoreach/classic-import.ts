@@ -330,9 +330,13 @@ interface ImportTable {
 
 const MAX_ROWS = 5000;
 
+/** How long `begin` waits for background work already running before it gives up without writing. */
+const BUSY_WAIT_MS = 30_000;
+
 /** The `nrImport` actions: plan (read only), begin (empty or clear the tables), rows, variables, finish. Root only. */
 export function registerClassicImport(nr: ImportRuntime) {
   const db = nr.legacy.db;
+  const hold = nr.legacy.importHold;
   const table = (name: string, t: unknown) => db.table(name, t) as ImportTable;
   const counts = async () => {
     const out: Record<string, number> = {};
@@ -373,6 +377,10 @@ export function registerClassicImport(nr: ImportRuntime) {
       };
     },
     async begin(v) {
+      // The hold is taken (wrap) before this waits, so nothing new starts; what already runs finishes first, so no
+      // timer writes into the cleared tables.
+      if (!(await hold.idle(BUSY_WAIT_MS)))
+        fail('NocoReach 的后台任务还在运行；过一两分钟再运行导入', 409);
       const existing = await counts();
       const total = Object.values(existing).reduce((a, b) => a + b, 0);
       if (total && v.replace !== true)
@@ -456,7 +464,7 @@ export function registerClassicImport(nr: ImportRuntime) {
     },
   };
   const wrap =
-    (fn: (v: Values, userId: string) => Promise<unknown>) =>
+    (name: string, fn: (v: Values, userId: string) => Promise<unknown>) =>
     async (ctx: LegacyContext, next: () => Promise<void>) => {
       if (!ctx.auth?.user?.id)
         ctx.throw(401, systemMessageText('classicImport.signFirst'));
@@ -480,16 +488,27 @@ export function registerClassicImport(nr: ImportRuntime) {
           .findOne({ filter: { name: 'NOREACH_MOCK_DATASET_MARKER' } }))
       )
         ctx.throw(409, 'NR_MOCK_CLASSIC_IMPORT_BLOCKED');
-      ctx.body = await fn(
-        (ctx.action.params.values as Values) || {},
-        String(ctx.auth!.user.id),
-      );
+      // Every call but plan (the dry run) holds NocoReach's timers, from its start and again from its end, so the
+      // hold lasts the lease past the last call (legacy/app.ts); finish, or a begin that fails, releases it.
+      const holds = name !== 'plan';
+      if (holds) hold.hold();
+      let ok = false;
+      try {
+        ctx.body = await fn(
+          (ctx.action.params.values as Values) || {},
+          String(ctx.auth!.user.id),
+        );
+        ok = true;
+      } finally {
+        if (name === 'finish' || (name === 'begin' && !ok)) hold.release();
+        else if (holds) hold.hold();
+      }
       await next();
     };
   nr.legacy.resourceManager.define({
     name: 'nrImport',
     actions: Object.fromEntries(
-      Object.entries(actions).map(([k, fn]) => [k, wrap(fn)]),
+      Object.entries(actions).map(([k, fn]) => [k, wrap(k, fn)]),
     ),
   });
   nr.legacy.acl.allow('nrImport', Object.keys(actions), 'loggedIn');

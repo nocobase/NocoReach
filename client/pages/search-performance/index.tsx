@@ -29,7 +29,7 @@ import { Input } from "#components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "#components/ui/tabs";
 import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "#components/seo/data-table";
-import { DataTableFilterPanel, DataTableFilterToggle, DataTableTabs, DataTableToolbar } from "#components/seo/data-table-toolbar";
+import { DataTableFilterPanel, DataTableFilterToggle, DataTableTabs } from "#components/seo/data-table-toolbar";
 import { TablePagination } from "#components/seo/table-pagination";
 import { TableBulkActionButton } from "#components/seo/table-bulk-action-bar";
 import { SortableHeader } from "#components/seo/sortable-header";
@@ -190,7 +190,7 @@ export default function SearchPerformancePage() {
   // No nr-page class: its legacy table and input rules are unlayered and would override the ported table.
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={view === "performance" && report?.totals ? <NotesTip notes={[...notesOf(report), ...coverageNotes(report), ...(w ? [$t('searchHistory.detailsScope', { 0: formatDate(w.start), 1: formatDate(w.end) })] : [])]} /> : undefined} title={$t('common.searchPerformance')} description={view === "index" ? $t('searchIndex.pageDescription') : view === "sitemaps" ? $t('searchSitemaps.pageDescription') : $t('searchPerformance.clicksImpressionsCtrPositionGoogle')} />
+      <PageHeader info={view === "performance" && report?.totals ? <NotesTip notes={[...notesOf(report), ...coverageNotes(report), ...(w ? [$t('searchHistory.detailsScope', { 0: formatDate(w.start), 1: formatDate(w.end) })] : [])]} /> : undefined} title={$t('common.searchPerformance')} description={$t('searchPerformance.pageSummary')} />
       <Tabs value={view} onValueChange={(v) => chooseView(String(v))}>
         <TabsList variant="line" className="h-auto! justify-start">
           <TabsTrigger value="performance">{$t('searchPerformance.viewPerformance')}</TabsTrigger>
@@ -226,13 +226,15 @@ export default function SearchPerformancePage() {
             <DataTableTabs
               value={tab}
               onValueChange={(v) => update({ tab: v === "striking" ? undefined : v })}
-              info={tab === "striking" ? <InfoTip label={$t('searchPerformance.whatClosePageOneMeans')}>{help($t('searchPerformance.closePageOne'))}</InfoTip> : (MOVER_TABS as readonly string[]).includes(tab) ? <InfoTip label={$t('searchPerformance.howMoversCounted')}>{$t('searchPerformance.moversInfo')}</InfoTip> : undefined}
-              actions={
+              info={tab === "striking" ? <InfoTip label={$t('searchPerformance.whatClosePageOneMeans')}><p>{help($t('searchPerformance.closePageOne'))}</p><p>{$t('searchPerformance.queriesRanking520Best')}</p></InfoTip> : (MOVER_TABS as readonly string[]).includes(tab) ? <InfoTip label={$t('searchPerformance.howMoversCounted')}>{$t('searchPerformance.moversInfo')}</InfoTip> : undefined} actions={<>{countries.length || country ? <CountrySelect value={country} countries={countries} onChange={(c) => update({ country: c })} /> : undefined}{
                 <Button variant="outline" size="sm" onClick={exportTab}>
                   <Download data-icon="inline-start" />
                   {$t('common.exportCsv')}</Button>
-              }
-            >
+              }</>} tools={<>
+              <DataTableFilterToggle open={showFilters} activeCount={activeFilters} onToggle={() => setShowFilters((v) => !v)} />
+              {(MOVER_TABS as readonly string[]).includes(tab) ? <Segmented label={$t('searchPerformance.moversBy')} options={[{ id: "query", label: $t('common.query') }, { id: "page", label: $t('common.page') }]} value={by} onChange={(v) => update({ by: v === "page" ? "page" : undefined })} /> : null}
+              {tab === "slices" ? <Segmented label={$t('searchPerformance.slices')} options={SLICES.map((x) => ({ id: x, label: { country: $t('searchPerformance.countryRegion'), device: $t('searchPerformance.device'), appearance: $t('searchPerformance.appearance'), date: $t('searchPerformance.date') }[x] }))} value={slice} onChange={(v) => update({ slice: v === "country" ? undefined : v })} /> : null}
+            </>}>
               <TabsTrigger value="striking">{$tj('searchPerformance.closePageOneValue',{0:tableReport.striking?.length ?? 0})}</TabsTrigger>
               <TabsTrigger value="queries">{$t('common.query')}</TabsTrigger>
               <TabsTrigger value="pages">{$t('common.page')}</TabsTrigger>
@@ -241,11 +243,6 @@ export default function SearchPerformancePage() {
               <TabsTrigger value="fresh">{$t('searchPerformance.fresh')}</TabsTrigger>
               <TabsTrigger value="slices">{$t('searchPerformance.slices')}</TabsTrigger>
             </DataTableTabs>
-            <DataTableToolbar actions={countries.length || country ? <CountrySelect value={country} countries={countries} onChange={(c) => update({ country: c })} /> : undefined}>
-              <DataTableFilterToggle open={showFilters} activeCount={activeFilters} onToggle={() => setShowFilters((v) => !v)} />
-              {(MOVER_TABS as readonly string[]).includes(tab) ? <Segmented label={$t('searchPerformance.moversBy')} options={[{ id: "query", label: $t('common.query') }, { id: "page", label: $t('common.page') }]} value={by} onChange={(v) => update({ by: v === "page" ? "page" : undefined })} /> : null}
-              {tab === "slices" ? <Segmented label={$t('searchPerformance.slices')} options={SLICES.map((x) => ({ id: x, label: { country: $t('searchPerformance.countryRegion'), device: $t('searchPerformance.device'), appearance: $t('searchPerformance.appearance'), date: $t('searchPerformance.date') }[x] }))} value={slice} onChange={(v) => update({ slice: v === "country" ? undefined : v })} /> : null}
-            </DataTableToolbar>
             {showFilters ? (
               <TextFilters
                 // Remount on URL changes (back/forward) so the draft matches.
@@ -492,7 +489,6 @@ function StrikingTable({ projectId, period, rows, isFiltered, onClearFilters, on
   };
   return (
     <>
-      <p className="px-4 pt-3 text-sm text-muted-foreground">{$t('searchPerformance.queriesRanking520Best')}</p>
       <DataTable
         table={table}
         isFiltered={isFiltered}

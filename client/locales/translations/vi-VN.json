@@ -562,7 +562,9 @@
       "agentArchived": "Đã lưu trữ",
       "forbidden": "Bạn không có quyền sử dụng",
       "noRunner": "Không có môi trường thực thi trực tuyến",
-      "othersPersonal": "Chỉ khả dụng trên môi trường thực thi cá nhân của người khác"
+      "othersPersonal": "Chỉ khả dụng trên môi trường thực thi cá nhân của người khác",
+      "noModel": "Hãy cấu hình mô hình chat trước",
+      "modelUnavailable": "Mô hình không khả dụng"
     },
     "mode": {
       "online": "Trực tuyến",
@@ -583,7 +585,9 @@
       "kept": "Tin nhắn của bạn sẽ được giữ lại và trả lời khi tác nhân AI có thể phản hồi.",
       "fallback": "Dùng tác nhân AI khác tại đây",
       "usingDefault": "Cuộc trò chuyện này tạm thời dùng {{name}} thay cho {{own}}.",
-      "restore": "Chuyển lại sang {{own}}"
+      "restore": "Chuyển lại sang {{own}}",
+      "noModel": "Hãy cấu hình mô hình chat trước",
+      "modelUnavailable": "Mô hình của {{name}} không khả dụng; hãy liên hệ quản trị viên"
     },
     "notice": {
       "switchedToDefault": "Đã chuyển sang {{name}}, tác nhân AI mặc định của hệ thống, cho đến khi {{own}} hoạt động trở lại.",
@@ -592,15 +596,13 @@
       "switchedBack": "Đã chuyển lại sang {{name}}.",
       "runFailed": "Tác nhân AI đã dừng trước khi trả lời.",
       "runFailedReason": "Tác nhân AI đã dừng trước khi trả lời: {{reason}}",
-      "runCancelled": "Đã dừng."
+      "runCancelled": "Đã yêu cầu hủy."
     },
     "consultation": {
       "title": "Đã tham vấn {{name}}",
       "question": "Câu hỏi",
       "answer": "Câu trả lời",
       "steps": "Các bước đã thực hiện",
-      "plans_one": "Đã đề xuất một kế hoạch để bạn xác nhận.",
-      "plans_other": "Đã đề xuất {{count}} kế hoạch để bạn xác nhận.",
       "usage": "Đã dùng {{input}} token đầu vào và {{output}} token đầu ra.",
       "state": {
         "running": "Đang trả lời…",
@@ -631,7 +633,7 @@
       "label": "Tin nhắn gửi tác nhân AI",
       "placeholder": "Đặt câu hỏi hoặc mô tả công việc cần sắp xếp…",
       "hint": "Enter để gửi, Shift+Enter để xuống dòng",
-      "runningHint": "Tin nhắn gửi lúc này sẽ được bổ sung vào công việc đang thực hiện",
+      "runningHint": "Đang chạy. Bạn có thể dừng lần thực thi này.",
       "tooLong": "Tối đa {{max}} ký tự.",
       "send": "Gửi",
       "stop": "Dừng",
@@ -727,6 +729,35 @@
         "error": "Lỗi",
         "usage": "Mức sử dụng"
       }
+    },
+    "retrySaving": "Thử lưu lại",
+    "contextFailed": "Không thể đọc ngữ cảnh đã chọn hoặc gửi tin nhắn. Hãy kiểm tra trang hiện tại rồi thử lại.",
+    "approval": {
+      "request": "Công cụ này cần bạn phê duyệt trước khi chạy.",
+      "approve": "Phê duyệt",
+      "deny": "Từ chối",
+      "denied": "Đã từ chối chạy công cụ.",
+      "failed": "Phê duyệt chưa được xác nhận. Hãy làm mới tin nhắn đã lưu trước khi thử lại."
+    },
+    "feedback": {
+      "sending": "Đang gửi…",
+      "waiting": "Đang chờ tác nhân AI…",
+      "thinking": "Đang suy nghĩ…",
+      "stopping": "Đã yêu cầu dừng. Đang chờ tác nhân AI kết thúc…",
+      "completed": "Đã hoàn tất.",
+      "cancelled": "Đã hủy. Hãy kiểm tra các thao tác có thể đã hoàn tất trước khi lặp lại.",
+      "failed": "Phản hồi thất bại. Hãy xem lịch sử trước khi quyết định gửi lại.",
+      "unknown": "Kết quả hoặc lịch sử đã lưu chưa được xác nhận. Hãy làm mới lịch sử trước khi quyết định gửi lại.",
+      "effectReview": "Một số thao tác có thể đã hoàn tất. Hãy kiểm tra kết quả trước khi lặp lại."
+    },
+    "executionFailed": "Thực thi thất bại. Hãy xem lịch sử đã lưu và các thao tác có thể đã hoàn tất trước khi lặp lại.",
+    "historicalReadOnly": "Cuộc trò chuyện cũ này chỉ để xem. Hãy bắt đầu cuộc trò chuyện mới để tiếp tục.",
+    "connectionUnknown": "Kết nối bị gián đoạn, chưa rõ kết quả. Hãy làm mới lịch sử đã lưu trước khi gửi lại.",
+    "allowAnother": "Cho phép gửi lại (có thể trùng lặp)",
+    "refreshHistory": "Làm mới lịch sử",
+    "reasoning": {
+      "title": "Suy luận",
+      "thinking": "Đang suy nghĩ…"
     }
   },
   "agentSetup.title": "Dùng NocoReach trong tác nhân AI của bạn",

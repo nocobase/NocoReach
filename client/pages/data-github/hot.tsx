@@ -6,6 +6,7 @@ import { useMessageState, $t } from "#i18n";
 import { useEffect, useMemo, useState } from "react";
 import { Flame, RefreshCw, X } from "lucide-react";
 import { RefreshButton } from '#components/reach/refresh-button';
+import { HeaderActions } from "#components/reach/page";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { toast } from "#lib/toast";
 import { Button } from "#components/ui/button";
@@ -17,7 +18,7 @@ import { AllCheck, RowCheck, useTickedList } from "#components/reach/hand-off-sl
 import { Tag } from "#components/reach/tag";
 import { safeLink } from "../analytics";
 import type { TaskDraft } from "../keyword-hand-off";
-import { Segmented } from "./segmented";
+import { Segmented } from "#components/reach/segmented";
 import { num } from "./model";
 import { formatDate, formatDateTime } from "#lib/format";
 import { Delta } from '#components/reach/delta';
@@ -44,11 +45,15 @@ function topicsDraft(rows: Topic[]): TaskDraft {
   };
 }
 function reposDraft(rows: Repo[], period: string): TaskDraft {
+  // The Why card's one sentence, from the numbers rather than the list (2026-10-23 user request).
+  const top = [...rows].sort((a, b) => (b.gained ?? -1) - (a.gained ?? -1))[0];
+  const why = top?.gained != null ? rows.length === 1 ? $t('githubHot.repoWhy', { 0: top.repo, 1: period, 2: num(top.gained) }) : $t('githubHot.reposWhy', { 0: rows.length, 1: top.repo, 2: period, 3: num(top.gained) }) : undefined;
   const lines = rows.slice(0, 30).map((r) => $t('githubHot.repoLine', { 0: r.url, 1: num(r.stars), 2: r.gained != null ? `+${num(r.gained)}` : "—", 3: period, 4: r.description || "" }));
   return {
     title: clip(rows.length === 1 ? $t('githubHot.repoTaskTitle', { 0: rows[0].repo }) : $t('githubHot.reposTaskTitle', { 0: rows[0].repo, 1: rows.length }), 200),
     objective: clip($t('githubHot.reposObjective'), 1000),
     brief: clip([$t('githubHot.reposBrief'), ...lines, "", $t('githubHot.reposSuggestion')].join("\n"), 20000),
+    ...(why ? { why: clip(why, 300) } : {}),
   };
 }
 
@@ -65,10 +70,10 @@ function RepoName({ r }: { r: Repo }) {
     </span>
   );
 }
-function Frame({ title, info, actions, check, children, ...rest }: { title: string; info: string; actions?: React.ReactNode; check?: React.ReactNode; children: React.ReactNode; [k: `data-${string}`]: unknown }) {
+function Frame({ title, info, actions, children, ...rest }: { title: string; info: string; actions?: React.ReactNode; children: React.ReactNode; [k: `data-${string}`]: unknown }) {
   return (
     <Card className="gap-0 py-0" {...rest}>
-      <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">{check}<div className="flex items-center gap-1"><h2 className="text-sm font-semibold">{title}</h2><InfoTip label={$t('common.aboutData')}>{info}</InfoTip></div>{actions ? <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div> : null}</div>
+      <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3"><div className="flex items-center gap-1"><h2 className="text-sm font-semibold">{title}</h2><InfoTip label={$t('common.aboutData')}>{info}</InfoTip></div>{actions ? <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div> : null}</div>
       {children}
     </Card>
   );
@@ -117,13 +122,13 @@ export function HotTab({ projectId }: { projectId: number }) {
   );
   return (
     <div className="flex flex-col gap-4" data-github-hot="">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{status}</span><NotesTip notes={notes} /><RefreshButton className="ml-auto" busy={hot.running} label={$t('common.updateNow')} onClick={() => void refresh()} /></div>
-      <Frame data-hot-topics="" title={$t('githubHot.topics')} info={$t('githubHot.topicsInfo')} check={topics.length ? <AllCheck selection={topicSelection} count={topics.length} /> : undefined}
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{status}</span><NotesTip notes={notes} /><HeaderActions><RefreshButton busy={hot.running} label={$t('common.updateNow')} onClick={() => void refresh()} /></HeaderActions></div>
+      <Frame data-hot-topics="" title={$t('githubHot.topics')} info={$t('githubHot.topicsInfo')}
         actions={<Button variant="outline" size="sm" onClick={() => setEditing((v) => !v)}>{$t('githubHot.editTopics')}</Button>}>
         {editing ? <TopicEditor topics={topics.map((t) => t.name)} suggestions={hot.suggestions ?? []} onSave={save} onClose={() => setEditing(false)} /> : null}
         {topics.length ? (
           <table className="w-full text-sm">
-            <thead><tr className="border-b border-border text-left text-xs text-muted-foreground"><th className="w-10 py-2 pl-4" /><th className="py-2 font-medium">{$t('githubHot.topic')}</th><th className="py-2 text-right font-medium">{$t('githubHot.repositories')}</th><th className="py-2 text-right font-medium">{$t('githubHot.new7')}</th><th className="py-2 text-right font-medium">{$t('githubHot.lastWeekVsBefore')}</th><th className="py-2 pl-4 font-medium">{$t('githubHot.weeklyNew')}</th><th className="py-2 pr-4 font-medium">{$t('githubHot.leaders')}</th></tr></thead>
+            <thead data-slot="table-header"><tr className="border-b border-border text-left text-xs text-muted-foreground"><th className="w-10 py-2 pl-4"><AllCheck selection={topicSelection} count={topics.length} /></th><th className="py-2 font-medium">{$t('githubHot.topic')}</th><th className="py-2 text-right font-medium">{$t('githubHot.repositories')}</th><th className="py-2 text-right font-medium">{$t('githubHot.new7')}</th><th className="py-2 text-right font-medium">{$t('githubHot.lastWeekVsBefore')}</th><th className="py-2 pl-4 font-medium">{$t('githubHot.weeklyNew')}</th><th className="py-2 pr-4 font-medium">{$t('githubHot.leaders')}</th></tr></thead>
             <tbody>{topics.map((t) => { const c = t.lastWeek != null && t.priorAverage ? (t.lastWeek - t.priorAverage) / t.priorAverage : null; return (
               <tr key={t.name} className="border-b border-border last:border-0" data-topic={t.name}>
                 <td className="py-2 pl-4"><RowCheck selection={topicSelection} k={t.name} label={t.name} /></td>
@@ -136,7 +141,7 @@ export function HotTab({ projectId }: { projectId: number }) {
           </table>
         ) : <Empty>{$t('githubHot.noTopics')}</Empty>}
       </Frame>
-      <Frame data-hot-gainers="" title={$t('githubHot.gainers')} info={$t('githubHot.gainersInfo', { 0: hot.recordedSince ?? "—" })} check={gainers.length ? <AllCheck selection={repoSelection} count={gainers.length} /> : undefined}
+      <Frame data-hot-gainers="" title={$t('githubHot.gainers')} info={$t('githubHot.gainersInfo', { 0: hot.recordedSince ?? "—" })}
         actions={<>
           <Segmented label={$t('githubHot.gainers')} options={[{ id: "day", label: $t('githubHot.today') }, { id: "week", label: $t('githubHot.thisWeek') }, { id: "month", label: $t('githubHot.thisMonth') }]} value={period} onChange={(v) => setPeriod(v as typeof period)} />
           <Select value={topic} onValueChange={(v) => setTopic(String(v))}>
@@ -150,7 +155,7 @@ export function HotTab({ projectId }: { projectId: number }) {
         </>}>
         {gainers.length ? (
           <table className="w-full table-fixed text-sm">
-            <thead><tr className="border-b border-border text-left text-xs text-muted-foreground"><th className="w-10 py-2 pl-4" /><th className="py-2 font-medium">{$t('githubHot.repository')}</th><th className="w-28 py-2 font-medium">{$t('githubHot.language')}</th><th className="w-28 py-2 text-right font-medium">{$t('githubHot.totalStars')}</th><th className="w-28 py-2 pr-4 text-right font-medium">{$t('githubHot.gainedIn', { 0: periodLabel })}</th></tr></thead>
+            <thead data-slot="table-header"><tr className="border-b border-border text-left text-xs text-muted-foreground"><th className="w-10 py-2 pl-4"><AllCheck selection={repoSelection} count={gainers.length} /></th><th className="py-2 font-medium">{$t('githubHot.repository')}</th><th className="w-28 py-2 font-medium">{$t('githubHot.language')}</th><th className="w-28 py-2 text-right font-medium">{$t('githubHot.totalStars')}</th><th className="w-28 py-2 pr-4 text-right font-medium">{$t('githubHot.gainedIn', { 0: periodLabel })}</th></tr></thead>
             <tbody>{gainers.map((r) => <tr key={r.repo} className="border-b border-border last:border-0" data-gainer={r.repo}><td className="py-2 pl-4 align-top"><RowCheck selection={repoSelection} k={r.repo} label={r.repo} /></td><td className="py-2"><RepoName r={r} /></td><td className="py-2 text-muted-foreground">{r.language || "—"}</td><td className="py-2 text-right tabular-nums">{num(r.stars)}</td><td className="py-2 pr-4 text-right tabular-nums nr-up">+{num(r.gained)}</td></tr>)}</tbody>
           </table>
         ) : <Empty>{$t('githubHot.gainersCollecting', { 0: formatDate(hot.recordedSince ?? hot.day), 1: periodLabel })}</Empty>}

@@ -132,7 +132,7 @@ export function analysisCompletion(status: number, result: unknown): ScheduleExe
 
 export function analysisObservation(run: ScheduledRun | null): ScheduleTargetObservation {
   if (!run) return { state: 'unknown', reason: 'no-run-record' };
-  if (run.status === 'succeeded' || run.status === 'failed')
+  if (run.status === 'succeeded' || run.status === 'failed' || run.status === 'cancelled')
     return {
       state: 'completed',
       completion: { status: run.status, ...(run.reason ? { reason: run.reason } : {}), ...(run.result ? { result: run.result as JsonObject } : {}) },
@@ -151,6 +151,10 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
   private markReady: () => void = () => {};
 
   public override register(): void {
+    // Taken before any provider boots (the Agents sweep among them): task runs a restart interrupted are told apart from
+    // a computer that went away by it (server/nocoreach/execution/restarts.ts). Studio restarts the application inside
+    // its host process, so the process start would not do.
+    const startedAt = new Date().toISOString();
     this.app.container.singleton(agentsAccessToken, () => ({
       scopeOf: async (identity) => {
         const runtime = this.app.container.resolve(nocoReachToken);
@@ -190,7 +194,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       }
       setCallbackPath(`${basePath}/api/nocoreach/nrGoogle/callback`);
       setPublicDns(this.app.config.get<NocoReachConfig>('nocoreach')?.publicDns ?? '');
-      const plugin = new Connections(legacy, variables, { basePath, publicOrigin: identity?.publicOrigin, browserCollectors: this.app.config.get<NocoReachConfig>('nocoreach')?.browserCollectors ?? [], mock: this.app.container.has(mockEngineToken) ? this.app.container.resolve(mockEngineToken) : undefined });
+      const plugin = new Connections(legacy, variables, { basePath, publicOrigin: identity?.publicOrigin, browserCollectors: this.app.config.get<NocoReachConfig>('nocoreach')?.browserCollectors ?? [], mock: this.app.container.has(mockEngineToken) ? this.app.container.resolve(mockEngineToken) : undefined, startedAt });
       plugin.agents = this.app.container.resolve(agentsToken);
       const ready = new Promise<void>((resolve) => (this.markReady = resolve));
       const analysisRuns = new ScheduledRuns(db, 'daily-analysis:occurrence');
@@ -239,7 +243,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
         await nr.ready;
         const reference = analysisReference(occurrenceId);
         const done = await nr.analysisRuns.get(occurrenceId);
-        if (done && (done.status === 'succeeded' || done.status === 'failed')) {
+        if (done && (done.status === 'succeeded' || done.status === 'failed' || done.status === 'cancelled')) {
           const observed = analysisObservation(done);
           if (observed.state === 'completed') await handle.reportCompletion(occurrenceId, reference, observed.completion);
           return;
@@ -250,15 +254,21 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
           // The classic instruction: every project in turn, skipping one that already succeeded today.
           const Instruction = nr.workflows.instruction(NODE_TYPE);
           if (!Instruction) throw new Error('每日分析没有注册');
-          const { status, result } = await new Instruction({}).run();
-          completion = analysisCompletion(status, result);
+          // While the classic import holds NocoReach's background work, the firing does not run; the minute timer
+          // catches the day up after the import (DailyAnalysis.tick). The check and the start are one synchronous
+          // step, so an import that begins later waits for this run.
+          if (nr.legacy.importHold.held) completion = { status: 'cancelled', reason: '导入旧版数据期间未运行；当天的分析在导入完成后补跑' };
+          else {
+            const { status, result } = await nr.legacy.importHold.track(new Instruction({}).run());
+            completion = analysisCompletion(status, result);
+          }
         } catch (error) {
           // Shutdown: the task returns to waiting and runs again after the restart.
           if (signal.aborted) throw new JobInterruptedError();
           completion = { status: 'failed', reason: String((error as Error)?.message || '分析失败').slice(0, 300) };
         }
         await nr.analysisRuns.put(occurrenceId, {
-          status: completion.status === 'succeeded' ? 'succeeded' : 'failed',
+          status: completion.status === 'succeeded' || completion.status === 'cancelled' ? completion.status : 'failed',
           ...(completion.reason ? { reason: completion.reason } : {}),
           ...(completion.result ? { result: completion.result } : {}),
         });
@@ -414,7 +424,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
         options: { cron: job.cronTime, tz },
         payload: {},
         execute: async () => {
-          await job.onTick();
+          await runtime.legacy.tick(job);
         },
       });
     await this.executor.setup();

@@ -38,7 +38,7 @@ export type Work = {
 };
 /** A transcript event of a demo run, as the demo Agent plays it back (`demo-data/demo-agent.ts`). */
 export type RunEvent = { seq: number; at: string; type: string; content?: string; tool?: string; input?: unknown; output?: unknown; meta?: Record<string, unknown> };
-export type Run = { demoAgentId?: string; simulated?: boolean; transcript?: RunEvent[]; errorDetail?: string; agentId?: string; agentName?: string; id: string; projectId: string; taskId: string; planVersion: number; stepId: string; baseArtifactId: string | null; baseRejectedAt?: string; ownerId: string; actor: string; inputVersion: 1; capabilitySnapshot: string[]; runtimeRunId?: string; pluginRunId?: string; pluginSettled?: boolean; cancelRequested?: boolean; mode?: 'plan' | 'build' | 'article' | 'merge' | 'close' | 'revert'; branch?: string; status: 'queued' | 'running' | 'succeeded' | 'failed'; createdAt: string; startedAt?: string; endedAt?: string; input: string; model: { llmService: string; model: string }; artifactId?: string; error?: string; usage?: { inputTokens?: number; outputTokens?: number }; flowStage?: number; };
+export type Run = { demoAgentId?: string; simulated?: boolean; transcript?: RunEvent[]; errorDetail?: string; agentId?: string; agentName?: string; id: string; projectId: string; taskId: string; planVersion: number; stepId: string; baseArtifactId: string | null; baseRejectedAt?: string; ownerId: string; actor: string; inputVersion: 1; capabilitySnapshot: string[]; runtimeRunId?: string; pluginRunId?: string; pluginSettled?: boolean; cancelRequested?: boolean; mode?: 'plan' | 'build' | 'article' | 'merge' | 'close' | 'revert'; branch?: string; status: 'queued' | 'running' | 'succeeded' | 'failed'; createdAt: string; startedAt?: string; endedAt?: string; input: string; model: { llmService: string; model: string }; artifactId?: string; error?: string; usage?: { inputTokens?: number; outputTokens?: number }; flowStage?: number; restartedAt?: string; autoRetry?: { of: string; restartedAt: string }; };
 export function planInput(v: any): Plan {
   if (!v || !Array.isArray(v.steps) || v.steps.length < 1 || v.steps.length > 6) return fail(systemMessageText('taskWork.planNeeds16Steps'));
   return { deliverable: text(v.deliverable, 2000), verification: text(v.verification, 3000), steps: v.steps.map((s: any) => {
@@ -98,6 +98,17 @@ export function boardState(w: Work): BoardState {
   if (w.stage === 'execution') return 'review';
   if (w.stage === 'work') return w.results[w.step] && !w.results[w.step]?.rejectedAt ? 'review' : 'doing';
   return 'todo';
+}
+/**
+ * Where a task stands for people, closed apart (2026-10-23 user feedback: a cancelled task read "Completed · Closed"):
+ * a cancelled task, or one archived before it finished (including the old-workflow archive), is closed; one archived
+ * after finishing stays done. `boardState` keeps cancelled tasks in the board's done column; labels use this.
+ */
+export type TaskStanding = BoardState | 'closed';
+export function taskStanding(w: Work): TaskStanding {
+  if (w.cancelledAt) return 'closed';
+  const state = boardState(w);
+  return w.archivedAt && state !== 'done' ? 'closed' : state;
 }
 export function contentInput(v: any, domains: string[]) {
   let url: URL;

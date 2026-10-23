@@ -28,8 +28,17 @@ export function accessError(
     metadata: { ns: 'nocoreach', key: `accessMembers.errors.${reason}` },
   });
 }
+// Key order differs between Authorization's create and read results, so hash the fields in a fixed order.
 export const roleRevision = (set: PermissionSet) =>
-  createHash('sha256').update(JSON.stringify(set)).digest('hex');
+  createHash('sha256')
+    .update(
+      JSON.stringify(
+        Object.fromEntries(
+          Object.entries(set).sort(([a], [b]) => a.localeCompare(b)),
+        ),
+      ),
+    )
+    .digest('hex');
 
 /** Only policyless, explicitly catalogued business grants are configurable in this surface. */
 export class ReachManagement {

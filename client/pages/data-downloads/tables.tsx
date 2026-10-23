@@ -12,7 +12,7 @@ import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip,
 import { Card } from "#components/ui/card";
 import { Input } from "#components/ui/input";
 import { TabsTrigger } from "#components/ui/tabs";
-import { DataTableTabs, DataTableToolbar } from "#components/seo/data-table-toolbar";
+import { DataTableTabs } from "#components/seo/data-table-toolbar";
 import { SortableHeader } from "#components/seo/sortable-header";
 import { Tag } from "#components/reach/tag";
 import { cn } from "#lib/utils";
@@ -20,7 +20,8 @@ import { safeLink } from "../analytics";
 import { DetailDrawer } from "../detail-drawer";
 import { packagesDraft } from "../seo-hand-off";
 import { Grid } from "../data-github/tables";
-import { Segmented } from "../data-github/segmented";
+import { Segmented } from "#components/reach/segmented";
+import { distTagLabel } from "./dist-tag";
 import { ago, bytes, change, CHANNEL, dateOf, kindLabel, num, pct, REGISTRY, type AssetRow, type Channel, type Item, type TagRow, type VersionRow, type View } from "./model";
 import { formatChange, formatDate } from '#lib/format';
 import { Delta } from '#components/reach/delta';
@@ -67,16 +68,15 @@ export function ReportCard({ view, projectId }: { view: View; projectId?: number
   const label = tabs.find((x) => x.id === tab)!.label;
   return (
     <Card className="gap-0 py-0" data-report="">
-      <DataTableTabs value={tab} onValueChange={choose} description={notes[tab]}>
-        {tabs.map((x) => <TabsTrigger key={x.id} value={x.id}>{x.label}</TabsTrigger>)}
-      </DataTableTabs>
-      <DataTableToolbar>
+      <DataTableTabs value={tab} onValueChange={choose} description={notes[tab]} tools={<>
         {tab === "versions" || tab === "tags" ? <Segmented label={$t('dataDownloads.channel')} options={lines(tab === "versions" ? t.versions : t.tags)} value={line} onChange={setLine} /> : null}
         <label className="relative flex items-center">
           <Search className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" />
           <Input aria-label={$t('dataDownloads.searchIn', { 0: label })} className="h-8 w-64 pl-8" placeholder={$t('dataDownloads.searchIn', { 0: label })} value={query} onChange={(e) => setQuery(e.target.value)} />
         </label>
-      </DataTableToolbar>
+      </>}>
+        {tabs.map((x) => <TabsTrigger key={x.id} value={x.id}>{x.label}</TabsTrigger>)}
+      </DataTableTabs>
       {tab === "packages" ? (
         <Grid<Item> key={tab} id="packages" {...common} empty={$t('dataDownloads.noDataInRange')} rows={items.filter((it) => has(it.title, it.name, kindLabel(it)))} rowId={(it) => it.id} sort="value" onOpen={setOpen}
           handOff={(ticked) => ({ noun: $t('dataDownloads.packagesSelected'), playbookId: "change-research", description: $t('dataDownloads.tickedPackagesBecomeOneTask'), draft: () => packagesDraft(ticked.map((it) => ({ title: nameOf(it), registry: kindLabel(it), value: it.value, previous: it.previous, change: it.change })), period) })}
@@ -93,7 +93,7 @@ export function ReportCard({ view, projectId }: { view: View; projectId?: number
         <Grid<VersionRow> key={tab} id="package-versions" {...common} empty={$t('dataDownloads.noDataInRange')} rows={t.versions.filter((v) => (line === "all" || v.channel === line) && has(v.version, v.package, ...v.tags))} rowId={(v) => v.key} sort="published"
           columns={[
             ...(several(t.versions.map((v) => v.id)) ? [text<VersionRow>("package", $t('dataDownloads.package'), (v) => v.package, (v) => <span className="text-muted-foreground">{v.package}</span>)] : []),
-            text<VersionRow>("version", $t('dataDownloads.version'), (v) => v.version, (v) => <span className="flex items-center gap-1.5 tabular-nums">{v.version}{v.tags.map((x) => <Tag key={x} tone={x === "latest" ? "blue" : "grey"}>{x}</Tag>)}{v.yanked ? <Tag tone="red">{$t('dataDownloads.yanked')}</Tag> : null}</span>),
+            text<VersionRow>("version", $t('dataDownloads.version'), (v) => v.version, (v) => <span className="flex items-center gap-1.5 tabular-nums">{v.version}{v.tags.map((x) => <Tag key={x} tone={x === "latest" ? "blue" : "grey"}>{distTagLabel(x)}</Tag>)}{v.yanked ? <Tag tone="red">{$t('dataDownloads.yanked')}</Tag> : null}</span>),
             channelCol<VersionRow>(), when<VersionRow>("published", $t('dataDownloads.published'), (v) => v.published, w.end),
             ...(t.versions.some((v) => v.registry === "npm") ? [count<VersionRow>("lastWeek", $t('dataDownloads.lastWeekDownloads'), (v) => v.lastWeek)] : []),
             ...(t.versions.some((v) => v.registry === "pypi") ? [count<VersionRow>("files", $t('dataDownloads.files'), (v) => v.files), count<VersionRow>("size", $t('dataDownloads.size'), (v) => v.size, bytes)] : []),
