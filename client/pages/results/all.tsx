@@ -66,7 +66,6 @@ export default function AllResultsPage() {
 
 // Filter values follow the tags: work that is not live by its phase, live work by its comparison status.
 const STATUS_FILTERS = [
-  'pendingLive',
   'delivered',
   'up',
   'down',
@@ -79,7 +78,7 @@ const filterLabel = (value: string) =>
   value === 'all'
     ? $t('results.allStatuses')
     : $t(
-        value === 'pendingLive' || value === 'delivered'
+        value === 'delivered'
           ? `results.phase.${value}`
           : `results.status.${value}`,
       );
@@ -357,7 +356,7 @@ function ResultsList({ projectId }: { projectId: string }) {
                       />
                       <p className='text-xs text-muted-foreground'>
                         {$t(`results.taskState.${item.taskState}`)}
-                        {item.closed ? ` · ${$t('common.closed')}` : ''}
+                        {item.archived ? ` · ${$t('results.archived')}` : ''}
                         {item.simulated ? ` · ${$t('results.simulated')}` : ''}
                       </p>
                     </TableCell>
@@ -390,11 +389,7 @@ function ResultsList({ projectId }: { projectId: string }) {
                         : $t('results.timeUnknown')}
                     </TableCell>
                     <TableCell>
-                      <ResultTag
-                        phase={item.phase}
-                        status={item.status}
-                        taskState={item.taskState}
-                      />
+                      <ResultTag phase={item.phase} status={item.status} />
                     </TableCell>
                   </TableRow>
                 ))}

@@ -134,7 +134,7 @@ test('results gate and manual follow-ups use real auth, project filters and atom
   );
   // The dashboard reads the same evidence, per project, through the same gate.
   const board = await json(await call('nrTaskWork', 'board', { range: 'all' }));
-  expect(board.counts).toMatchObject({ live: 1, up: 1, pendingLive: 0 });
+  expect(board.counts).toMatchObject({ live: 1, up: 1, delivered: 0 });
   expect(board.totals.clicks).toEqual({ before: 0, after: 70, tasks: 1 });
   expect(board.changes.map((c: { taskId: string }) => c.taskId)).toEqual([
     taskId,
