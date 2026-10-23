@@ -561,7 +561,9 @@
       "agentArchived": "Archivé",
       "forbidden": "Non accessible pour vous",
       "noRunner": "Aucun environnement d’exécution en ligne",
-      "othersPersonal": "Disponible uniquement sur les environnements d’exécution personnels d’autres utilisateurs"
+      "othersPersonal": "Disponible uniquement sur les environnements d’exécution personnels d’autres utilisateurs",
+      "noModel": "Configurez d’abord un modèle de chat",
+      "modelUnavailable": "Modèle indisponible"
     },
     "mode": {
       "online": "En ligne",
@@ -582,7 +584,9 @@
       "kept": "Vos messages sont conservés et recevront une réponse dès que l’agent pourra répondre.",
       "fallback": "Utiliser un autre agent ici",
       "usingDefault": "Cette conversation utilise temporairement {{name}} à la place de {{own}}.",
-      "restore": "Revenir à {{own}}"
+      "restore": "Revenir à {{own}}",
+      "noModel": "Configurez d’abord un modèle de chat",
+      "modelUnavailable": "Le modèle de {{name}} est indisponible ; contactez un administrateur"
     },
     "notice": {
       "switchedToDefault": "Passage à {{name}}, l’agent par défaut du système, jusqu’au retour de {{own}}.",
@@ -591,15 +595,13 @@
       "switchedBack": "Retour à {{name}}.",
       "runFailed": "L’agent s’est arrêté avant de répondre.",
       "runFailedReason": "L’agent s’est arrêté avant de répondre : {{reason}}",
-      "runCancelled": "Arrêté."
+      "runCancelled": "Annulation demandée."
     },
     "consultation": {
       "title": "{{name}} a été consulté",
       "question": "Question",
       "answer": "Réponse",
       "steps": "Ses étapes",
-      "plans_one": "A proposé un plan à confirmer.",
-      "plans_other": "A proposé {{count}} plans à confirmer.",
       "usage": "Jetons en entrée : {{input}} · jetons en sortie : {{output}}.",
       "state": {
         "running": "Réponse en cours…",
@@ -630,7 +632,7 @@
       "label": "Message à l’agent",
       "placeholder": "Posez une question ou décrivez le travail à organiser…",
       "hint": "Entrée pour envoyer, Maj+Entrée pour un saut de ligne",
-      "runningHint": "Les messages envoyés maintenant sont intégrés au travail en cours",
+      "runningHint": "En cours. Vous pouvez arrêter cette exécution.",
       "tooLong": "{{max}} caractères maximum.",
       "send": "Envoyer",
       "stop": "Arrêter",
@@ -726,6 +728,35 @@
         "error": "Erreur",
         "usage": "Consommation"
       }
+    },
+    "retrySaving": "Réessayer l’enregistrement",
+    "contextFailed": "Impossible de lire le contexte sélectionné ou d’envoyer le message. Vérifiez la page actuelle et réessayez.",
+    "approval": {
+      "request": "Cet outil a besoin de votre approbation avant de s’exécuter.",
+      "approve": "Approuver",
+      "deny": "Refuser",
+      "denied": "L’exécution de l’outil a été refusée.",
+      "failed": "L’approbation n’est pas confirmée. Actualisez le message enregistré avant de réessayer."
+    },
+    "feedback": {
+      "sending": "Envoi…",
+      "waiting": "En attente de l’agent…",
+      "thinking": "Réflexion…",
+      "stopping": "Arrêt demandé. En attente de la fin de l’agent…",
+      "completed": "Terminé.",
+      "cancelled": "Annulé. Vérifiez les actions peut-être déjà effectuées avant de les répéter.",
+      "failed": "La réponse a échoué. Consultez l’historique avant de décider de renvoyer.",
+      "unknown": "Le résultat ou son historique enregistré n’est pas confirmé. Actualisez l’historique avant de décider de renvoyer.",
+      "effectReview": "Certaines actions ont peut-être été effectuées. Vérifiez leurs résultats avant de les répéter."
+    },
+    "executionFailed": "L’exécution a échoué. Vérifiez l’historique enregistré et les actions peut-être déjà effectuées avant de les répéter.",
+    "historicalReadOnly": "Cette ancienne conversation est en lecture seule. Démarrez une nouvelle discussion pour continuer.",
+    "connectionUnknown": "Connexion interrompue. Le résultat est inconnu. Actualisez l’historique enregistré avant de renvoyer.",
+    "allowAnother": "Autoriser un nouvel envoi (risque de doublon)",
+    "refreshHistory": "Actualiser l’historique",
+    "reasoning": {
+      "title": "Raisonnement",
+      "thinking": "Réflexion…"
     }
   },
   "agentSetup.title": "Utiliser NocoReach dans votre agent",

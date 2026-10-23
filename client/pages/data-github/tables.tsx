@@ -13,7 +13,7 @@ import { Card } from "#components/ui/card";
 import { Input } from "#components/ui/input";
 import { TabsTrigger } from "#components/ui/tabs";
 import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "#components/seo/data-table";
-import { DataTableTabs, DataTableToolbar } from "#components/seo/data-table-toolbar";
+import { DataTableTabs } from "#components/seo/data-table-toolbar";
 import { TablePagination } from "#components/seo/table-pagination";
 import { SortableHeader } from "#components/seo/sortable-header";
 import { useHandOffSource, type HandOffSource } from "#components/reach/hand-off-slot";
@@ -77,15 +77,14 @@ export function ReportCard({ view, projectId }: { view: View; projectId?: number
   const common = { projectId, query: q, onClear: () => setQuery("") };
   return (
     <Card className="gap-0 py-0" data-report="">
-      <DataTableTabs value={tab} onValueChange={choose} description={notes[tab]}>
-        {TABS.map((x) => <TabsTrigger key={x.id} value={x.id}>{x.label()}</TabsTrigger>)}
-      </DataTableTabs>
-      <DataTableToolbar>
+      <DataTableTabs value={tab} onValueChange={choose} description={notes[tab]} tools={<>
         <label className="relative flex items-center">
           <Search className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" />
           <Input aria-label={$t('dataGithub.searchIn', { 0: label })} className="h-8 w-64 pl-8" placeholder={$t('dataGithub.searchIn', { 0: label })} value={query} onChange={(e) => setQuery(e.target.value)} />
         </label>
-      </DataTableToolbar>
+      </>}>
+        {TABS.map((x) => <TabsTrigger key={x.id} value={x.id}>{x.label()}</TabsTrigger>)}
+      </DataTableTabs>
       {tab === "referrers" ? (
         <Grid<Ref> key={tab} id="github-referrers" {...common} empty={t.referrers ? $t('dataGithub.noRecordsInRange') : trafficEmpty} rows={(t.referrers?.items ?? []).filter((r) => has(r.referrer, KIND[r.kind].label()))} rowId={(r) => r.key} sort="count" onOpen={(r) => setOpen({ kind: "referrers", key: r.key })}
           handOff={(ticked) => ({ noun: $t('dataGithub.sourcesSelected'), playbookId: "change-research", description: $t('dataGithub.tickedReferringSitesBecomeOne'), draft: () => githubTrafficDraft(repo, "referrers", ticked.map((r) => ({ name: r.referrer, count: r.count, uniques: r.uniques }))) })}

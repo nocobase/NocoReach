@@ -25,7 +25,7 @@ type AppColumnMeta<TData> = {
   cellClassName?: string | ((row: Row<TData>) => string | undefined);
 };
 
-// Read through a cast rather than a global ColumnMeta augmentation, which would break the template's data-table filters.
+// Read through a cast rather than a global ColumnMeta augmentation, which would leak into every table in the app.
 const metaOf = <TData,>(meta: unknown) => meta as AppColumnMeta<TData> | undefined;
 
 type UseDataTableOptions<TData> = Omit<TableOptions<TData>, "getCoreRowModel"> & {
