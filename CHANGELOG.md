@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Task page: a failure notice, a short Why and copy without positions
+
+- A failed step shows one error notice: an icon and "The Agent could not finish this step", the reason in a sentence (with "failed N times in a row" as a short fact), what to do next, and Technical details. Its actions are Try again, Switch Agent (opens the Agent picker in Properties) and Message the Agent (focuses the activity composer). Completing an Agent's step by hand moved from the card to the ⋯ menu as "Complete this step manually", offered while the step is not running.
+- Tasks keep a short reason as `evidence.why` (plain text, at most 300 characters). Hand-offs send it as `why` (GitHub Hot's repositories send one built from the star counts); an opportunity's short reason is used when none is sent. The Why card shows it first, then the opportunity's reason, the first signal, the result, and otherwise the first sentence of the objective or brief (`firstSentence`: no "Goal:" label, links, list markers or Markdown, at most about 80 characters, cut at a word).
+- Copy no longer points at positions ("above", "below", "top right"): it names the place instead, such as Properties, Activity or Performance, in all ten languages.
+
 ## Unreleased — Results lists only work with an outcome; a closed task never reads Completed
 
 - Results (the overview, All results, a result's drawer and the counts) lists only tasks that produced an outcome: their change went live, or their delivery finished (done, or its execution recorded), even if archived afterwards. Tasks cancelled before going live, work archived before it finished (including the old-workflow archive) and work still waiting for review, approval or publishing stay in Tasks. "Waiting to go live" is no longer a phase of Results; the Live card says how many more were delivered. Simulated work (the demo install) follows the same rule and stays marked as simulated.
