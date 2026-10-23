@@ -31,17 +31,18 @@ function useWidth(): [RefObject<HTMLDivElement | null>, number] {
   return [ref, width];
 }
 
-/** A round top for the axis: 1, 2 or 5 times a power of ten, in three steps. */
+/** A round top for the axis: 1, 2 or 5 times a power of ten, in two steps. */
 function axisTop(max: number) {
-  if (max <= 0) return { top: 3, step: 1 };
-  const raw = max / 3,
+  if (max <= 0) return { top: 2, step: 1 };
+  const raw = max / 2,
     p = 10 ** Math.floor(Math.log10(raw)),
     step = [1, 2, 2.5, 5, 10].map((m) => m * p).find((s) => s >= raw)!;
-  return { top: step * 3, step };
+  return { top: step * 2, step };
 }
 
-const HEIGHT = 220,
-  PAD = { top: 10, right: 10, bottom: 26, left: 44 };
+// Low, so the day's briefing below keeps the room (2026-10-23 user feedback: the chart took too much of the screen).
+const HEIGHT = 112,
+  PAD = { top: 8, right: 10, bottom: 22, left: 40 };
 
 /** The selected metric's days as an area, the previous period's days dashed, gridlines with y labels and dates on x. */
 function Chart({ item, days }: { item: MetricItem; days: number }) {
@@ -75,9 +76,9 @@ function Chart({ item, days }: { item: MetricItem; days: number }) {
   );
   if (!drawn)
     return (
-      <div className='flex flex-col gap-2 px-5 pt-3 pb-4'>
+      <div className='flex flex-col gap-1 px-5 pt-2 pb-3'>
         {legend}
-        <p className='py-10 text-center text-sm text-muted-foreground'>
+        <p className='py-6 text-center text-sm text-muted-foreground'>
           {$t('strategy.noDailyData')}
         </p>
       </div>
@@ -102,7 +103,7 @@ function Chart({ item, days }: { item: MetricItem; days: number }) {
       notation: 'compact',
       maximumFractionDigits: 1,
     }),
-    ticks = [0, step, step * 2, step * 3],
+    ticks = [0, step, step * 2],
     // Seven dates across a wide chart, four on a phone, so the labels never run together.
     steps = width < 520 ? 3 : 6,
     dateTicks = Array.from({ length: steps + 1 }, (_, k) =>
@@ -116,7 +117,7 @@ function Chart({ item, days }: { item: MetricItem; days: number }) {
           })
         : '';
   return (
-    <div className='flex flex-col gap-2 px-5 pt-3 pb-2'>
+    <div className='flex flex-col gap-1 px-5 pt-2 pb-1'>
       {legend}
       <div ref={ref} className='w-full'>
         {width > 0 && (
@@ -165,7 +166,7 @@ function Chart({ item, days }: { item: MetricItem; days: number }) {
               <text
                 key={cur[i]?.date ?? `tick-${i}`}
                 x={x(i)}
-                y={HEIGHT - 6}
+                y={HEIGHT - 5}
                 textAnchor={k === 0 ? 'start' : k === steps ? 'end' : 'middle'}
                 className='fill-muted-foreground text-[11px]'
               >
@@ -245,7 +246,7 @@ export function MetricChart({
               aria-selected={k === index}
               onClick={() => setSelected(k)}
               className={cn(
-                'relative min-w-36 flex-1 border-r px-4 py-3 text-left transition-colors last:border-r-0 hover:bg-muted/40 sm:px-5',
+                'relative min-w-32 flex-1 border-r px-4 py-2 text-left transition-colors last:border-r-0 hover:bg-muted/40 sm:px-5',
                 k === index &&
                   'after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-foreground',
               )}
@@ -256,7 +257,7 @@ export function MetricChart({
               <span className='mt-0.5 flex flex-wrap items-baseline gap-x-1.5'>
                 <span
                   className={cn(
-                    'text-2xl font-semibold tabular-nums',
+                    'text-xl font-semibold tabular-nums',
                     k === index ? 'text-foreground' : 'text-muted-foreground',
                   )}
                 >
