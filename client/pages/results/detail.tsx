@@ -15,6 +15,19 @@ const withoutDay = (search: string) => {
   const rest = params.toString();
   return rest ? `?${rest}` : '';
 };
+// A delivered article's summary is its Markdown; the drawer shows it as plain sentences, without heading, quote or
+// list markers and blank lines.
+const plainSummary = (text: string) =>
+  text
+    .split('\n')
+    .map((line) =>
+      line
+        .replace(/^\s{0,3}(#{1,6}\s+|>\s?|[-*+]\s+|\d+\.\s+)/, '')
+        .replace(/[*_`]{1,3}([^*_`]+)[*_`]{1,3}/g, '$1')
+        .trim(),
+    )
+    .filter(Boolean)
+    .join('\n');
 export default function ResultDetailPage() {
   const { project } = useProject(),
     { taskId } = useParams();
@@ -94,7 +107,7 @@ function Detail({ projectId, taskId }: { projectId: string; taskId: string }) {
         {data ? (
           <>
             <p className='line-clamp-4 whitespace-pre-wrap'>
-              {data.task.summary || $t('results.noSummary')}
+              {plainSummary(data.task.summary) || $t('results.noSummary')}
             </p>
             <div className='flex flex-col gap-1'>
               {data.pages.length ? (
