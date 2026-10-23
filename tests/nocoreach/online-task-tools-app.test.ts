@@ -11,7 +11,10 @@ import { agentsToken } from '@nocobase/app-plugin-agents/server/tokens';
 import { expect, vi } from 'vitest';
 import { createStandaloneServer } from '../../server/standalone.js';
 import { nocoReachToken } from '../../server/providers/nocoreach.js';
-import { createNocoReachOnlineHost } from '../../server/nocoreach/online-agent/host.js';
+import {
+  createNocoReachOnlineHost,
+  onlineSystemPrompt,
+} from '../../server/nocoreach/online-agent/host.js';
 import type { OnlineBinding } from '../../server/nocoreach/online-agent/tool.js';
 import { discoverAgents } from './runner-fixture.js';
 
@@ -441,13 +444,14 @@ test('query_data reads the pages a member may open, through their services, and 
   });
   const signal = new AbortController().signal;
   const queryFor = async (ownerId: string) => {
-    const context = await createNocoReachOnlineHost(() => host, '/main')(
-      { id: randomUUID(), ownerId, projectId, instructions: '' } as OnlineRun,
-      signal,
-    );
-    expect(context.instructions).toContain('query_data');
+    const context = await createNocoReachOnlineHost(
+      () => host,
+      '/main',
+      settings,
+    )({ turnId: randomUUID(), ownerId, projectId, signal });
+    expect(onlineSystemPrompt('')).toContain('query_data');
     const tool = context.tools.find((t) => t.name === 'query_data')!;
-    return async (input: unknown): Promise<any> => tool.execute(input, signal);
+    return async (input: unknown): Promise<any> => tool.execute(input);
   };
 
   const asMember = await queryFor(member.id);

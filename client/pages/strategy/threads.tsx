@@ -21,6 +21,7 @@ import { resolveAppBase } from '@nocobase/app-client';
 import {
   appUIMessageText,
   chatIsRunning,
+  useChatController,
   useChatPanel,
   useChatStream,
   useConversation,
@@ -37,6 +38,8 @@ import { useOptionalOnlineChat } from '../../online-agent/context';
 import { onlineError, useOnlineApi } from '../../online-agent/api';
 import { OnlineConfirm, OnlineError } from '../../online-agent/controls';
 import { parseQuote } from '../../online-agent/quote';
+import { executionStatusText } from '../../online-agent/status';
+import { useChatTranslation } from '../../extensions/nocobase-agent-chat/chat-i18n';
 import { useFreshData } from '../workspace-cache';
 import {
   INSIGHTS_SOURCE,
@@ -343,6 +346,13 @@ function Turn({
     { quote, question } = parseQuote(appUIMessageText(turn.question)),
     tools = turn.answers.flatMap(toolParts),
     output = turn.answers.map(appUIMessageText).filter(Boolean).join('\n\n'),
+    status = turn.answers
+      .flatMap((message) => message.parts)
+      .filter((part) => part.type === 'data-notice')
+      .filter((part) => ['cancelled', 'failed'].includes(part.data.type))
+      .map(executionStatusText)
+      .filter(Boolean)
+      .at(-1),
     waiting = tools.some((tool) => tool.state === 'approval-requested');
   return (
     <div className='flex flex-col gap-2' data-turn={turn.id}>
@@ -388,11 +398,16 @@ function Turn({
           <div className='w-full rounded-xl rounded-tl-sm border bg-card px-3.5 py-2.5 text-sm leading-relaxed text-card-foreground'>
             {output ? (
               <MarkdownView content={output} />
-            ) : (
+            ) : !status ? (
               <p className='text-muted-foreground'>
                 {active
                   ? $t('strategy.threadAnswering')
                   : $t('strategy.threadNoAnswer')}
+              </p>
+            ) : null}
+            {status && (
+              <p className={cn('text-muted-foreground', output && 'mt-2')}>
+                {status}
               </p>
             )}
             {waiting && (
@@ -478,6 +493,10 @@ function DayTurns({
   );
 }
 function ThreadTurns({ id, approve }: { id: string; approve: () => void }) {
+  const { t } = useChatTranslation();
+  const controller = useChatController();
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const loadingRef = useRef(false);
   const detail = useConversation(id).data ?? null,
     stream = useChatStream(detail?.execution ? id : null),
     messages = useConversationMessages(id),
@@ -486,14 +505,49 @@ function ThreadTurns({ id, approve }: { id: string; approve: () => void }) {
       stream?.status === 'submitted' ||
       stream?.status === 'streaming',
     turns = turnsOf(messages.items);
-  return turns.map((turn, index) => (
-    <Turn
-      key={turn.id}
-      turn={turn}
-      active={running && index === turns.length - 1}
-      approve={approve}
-    />
-  ));
+  const loadOlder = async () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    setLoadingOlder(true);
+    try {
+      const token = controller.history(id).state.olderToken;
+      await controller.loadHistory(id, true);
+      // An in-flight refresh is joined by the controller. Honor this click once that read finishes.
+      const after = controller.history(id);
+      if (token && after.state.olderToken === token && !after.error)
+        await controller.loadHistory(id, true);
+    } finally {
+      loadingRef.current = false;
+      setLoadingOlder(false);
+    }
+  };
+  return (
+    <>
+      {messages.error && (
+        <OnlineError error={messages.error} retry={() => void loadOlder()} />
+      )}
+      {messages.hasMore && (
+        <div className='flex justify-center'>
+          <Button
+            variant='ghost'
+            size='xs'
+            disabled={loadingOlder || messages.loadingOlder}
+            onClick={() => void loadOlder()}
+          >
+            {t('chat.olderMessages')}
+          </Button>
+        </div>
+      )}
+      {turns.map((turn, index) => (
+        <Turn
+          key={turn.id}
+          turn={turn}
+          active={running && index === turns.length - 1}
+          approve={approve}
+        />
+      ))}
+    </>
+  );
 }
 
 /** How many questions a day's conversation holds. */

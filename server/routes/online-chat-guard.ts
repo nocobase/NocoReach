@@ -3,6 +3,7 @@ import {
   type AuthEnv,
 } from '@nocobase/app-plugin-authentication';
 import { agentsToken } from '@nocobase/app-plugin-agents/server/tokens';
+import type { ConversationSummary } from '@nocobase/app-plugin-agents/shared/conversations';
 import {
   authorizationToken,
   type AuthorizationEnv,
@@ -19,10 +20,12 @@ import {
 } from '../../shared/online-agent.js';
 import {
   conversationOrNull,
+  conversationMissing,
   OnlineAgentError,
   onlineApiError,
 } from '../nocoreach/online-agent/errors.js';
 import { onlineAuthorization } from '../nocoreach/online-agent/host.js';
+import { requireOnlineMember } from '../nocoreach/online-agent/access.js';
 import { variableProject } from '../nocoreach/online-agent/register.js';
 import { nocoReachToken } from '../providers/nocoreach.js';
 import { onlineChatSettingsToken } from '../providers/online-agents.js';
@@ -33,14 +36,15 @@ type Env = AuthEnv & AuthorizationEnv;
  * The plugin resolves the `nocoreach` scope, where Chat panel › Settings' switch, the person's role and their access to
  * the project are checked, only when a conversation is created; a saved conversation keeps its configuration. So a new
  * message or an approval in an online conversation checks them again here, as every tool call does. Runner
- * conversations pass untouched. Stop and reading stay open. Creating one without that scope, or changing a saved one's
- * scopes to leave it out, is refused too. Register before plugin routes.
+ * conversations pass untouched. Stop stays open; reading and config edits recheck project access even while chat is
+ * off. Lists omit conversations the owner can no longer read. Saved scopes and the project binding cannot be removed
+ * to bypass these checks. Register before plugin routes.
  */
 export const onlineChatGuard: AppApiRouteContribution<Application> =
   defineApiRoutes((app) => {
     const router = new Hono<Env>();
     const authenticate: MiddlewareHandler<AuthEnv> = async (context, next) => {
-      if (!['POST', 'PATCH'].includes(context.req.method)) return next();
+      if (!['GET', 'POST', 'PATCH'].includes(context.req.method)) return next();
       return app.container.resolve(authenticationToken).required()(
         context,
         next,
@@ -50,7 +54,7 @@ export const onlineChatGuard: AppApiRouteContribution<Application> =
     // authorization context is built, so they skip it: only reading the online configuration needs it.
     const online = new WeakSet<Request>();
     const identify: MiddlewareHandler<AuthEnv> = async (context, next) => {
-      if (context.req.method !== 'POST') return next();
+      if (!['GET', 'POST', 'PATCH'].includes(context.req.method)) return next();
       const detail = await conversationOrNull(
         app.container.resolve(agentsToken),
         String(context.get('auth')!.user.id),
@@ -69,28 +73,49 @@ export const onlineChatGuard: AppApiRouteContribution<Application> =
         next,
       );
     };
-    const authorizeOnline: MiddlewareHandler<Env> = async (context, next) => {
-      if (!online.has(context.req.raw)) return next();
-      const agents = app.container.resolve(agentsToken);
+    const configuration = (context: Context<Env>, id: string) => {
       const auth = context.get('auth')!;
-      const ownerId = String(auth.user.id);
-      const id = context.req.param('conversationId')!;
-      const config = await agents.onlineAgent.configuration(
+      return app.container.resolve(agentsToken).onlineAgent.configuration(
         {
-          user: { id: ownerId },
+          user: { id: String(auth.user.id) },
           authorization: context.get('authz'),
           credentials: auth,
         },
         id,
       );
+    };
+    const authorizeOnline: MiddlewareHandler<Env> = async (context, next) => {
+      if (!online.has(context.req.raw)) return next();
+      const ownerId = String(context.get('auth')!.user.id);
+      const config = await configuration(
+        context,
+        context.req.param('conversationId')!,
+      );
+      const projectId = variableProject(config.variable);
       const host = app.container.resolve(nocoReachToken);
       await host.ready;
       try {
-        await onlineAuthorization(
-          host,
-          { ownerId, projectId: variableProject(config.variable) },
-          () => app.container.resolve(onlineChatSettingsToken).get(),
-        )();
+        if (context.req.method === 'POST')
+          await onlineAuthorization(host, { ownerId, projectId }, () =>
+            app.container.resolve(onlineChatSettingsToken).get(),
+          )();
+        else {
+          await requireOnlineMember(
+            host.legacy.db,
+            ownerId,
+            projectId ?? undefined,
+          );
+          if (projectId) await host.plugin.project(projectId);
+          // History belongs to its original project, including when the owner can currently read both projects.
+          if (context.req.method === 'PATCH') {
+            const variable = (await bodyOf(context))?.config?.context?.variable;
+            if (
+              variable !== undefined &&
+              variableProject(variable) !== projectId
+            )
+              throw new OnlineAgentError('accessDenied', 403);
+          }
+        }
       } catch (error) {
         if (error instanceof OnlineAgentError) throw onlineApiError(error);
         throw error;
@@ -108,7 +133,11 @@ export const onlineChatGuard: AppApiRouteContribution<Application> =
         // Malformed: the plugin's validator answers.
         .catch(() => null) as Promise<{
         agentId?: unknown;
-        config?: { agentId?: unknown; scope?: unknown };
+        config?: {
+          agentId?: unknown;
+          scope?: unknown;
+          context?: { variable?: unknown };
+        };
       } | null>;
     const named = (scope: unknown) =>
       Array.isArray(scope) && scope.includes(ONLINE_CHAT_SCOPE);
@@ -138,14 +167,87 @@ export const onlineChatGuard: AppApiRouteContribution<Application> =
       if (detail?.agent?.id !== ONLINE_AGENT_ID) return next();
       throw scopeRequired();
     };
-    router.use('/agents/conversations', authenticate, requireScope);
+    const authorizeList: MiddlewareHandler<AuthorizationEnv> = async (
+      context,
+      next,
+    ) => {
+      if (context.req.method !== 'GET') return next();
+      return app.container.resolve(authorizationToken).middleware()(
+        context,
+        next,
+      );
+    };
+    const filterList: MiddlewareHandler<Env> = async (context, next) => {
+      if (context.req.method !== 'GET') return next();
+      await next();
+      if (context.res.status !== 200) return;
+      const result = (await context.res.clone().json()) as {
+        data: ConversationSummary[];
+      };
+      const ownerId = String(context.get('auth')!.user.id);
+      const host = app.container.resolve(nocoReachToken);
+      await host.ready;
+      // Share checks only within this request; revoked grants must take effect on the next read.
+      const projects = new Map<string | null, Promise<void>>();
+      const visible = async (item: ConversationSummary) => {
+        if (item.agent?.id !== ONLINE_AGENT_ID) return true;
+        try {
+          const projectId = variableProject(
+            (await configuration(context, item.id)).variable,
+          );
+          let permitted = projects.get(projectId);
+          if (!permitted) {
+            permitted = requireOnlineMember(
+              host.legacy.db,
+              ownerId,
+              projectId ?? undefined,
+            );
+            projects.set(projectId, permitted);
+          }
+          await permitted;
+          return true;
+        } catch (error) {
+          if (
+            conversationMissing(error) ||
+            (error instanceof OnlineAgentError && error.status === 403)
+          )
+            return false;
+          throw error;
+        }
+      };
+      const filtered: ConversationSummary[] = [];
+      // The plugin exposes saved configuration per conversation; bound reads on a full history page.
+      for (let offset = 0; offset < result.data.length; offset += 8) {
+        const batch = result.data.slice(offset, offset + 8);
+        const allowed = await Promise.all(batch.map(visible));
+        filtered.push(...batch.filter((_, index) => allowed[index]));
+      }
+      const headers = new Headers(context.res.headers);
+      headers.delete('Content-Length');
+      context.res = new Response(
+        JSON.stringify({ ...result, data: filtered }),
+        { status: context.res.status, headers },
+      );
+    };
+    router.use(
+      '/agents/conversations',
+      authenticate,
+      requireScope,
+      authorizeList,
+      filterList,
+    );
     router.use(
       '/agents/conversations/:conversationId/config',
       authenticate,
       keepScope,
+      identify,
+      authorize,
+      authorizeOnline,
     );
     for (const path of [
+      '/agents/conversations/:conversationId',
       '/agents/conversations/:conversationId/messages',
+      '/agents/conversations/:conversationId/events',
       '/agents/conversations/:conversationId/approval',
     ])
       router.use(path, authenticate, identify, authorize, authorizeOnline);

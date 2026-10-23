@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -26,6 +27,8 @@ const fixture = vi.hoisted(() => ({
   openChat: vi.fn(),
   threads: [] as unknown[],
   messages: {} as Record<string, unknown[]>,
+  older: {} as Record<string, { hasMore: boolean; loading: boolean }>,
+  loadOlder: vi.fn(),
   /** Holds the owner's conversation list back, as a slow connection does. */
   threadsHeld: null as Promise<void> | null,
   posts: [] as { path: string; body: unknown }[],
@@ -127,10 +130,19 @@ vi.mock('@nocobase/app-plugin-agents/client/chat', async (original) => ({
     data: id ? { id, execution: null, run: null } : undefined,
   }),
   useChatStream: () => undefined,
+  useChatController: () => ({
+    history: (id: string) => ({
+      state: { olderToken: fixture.older[id]?.hasMore ? 'older-page' : null },
+    }),
+    loadHistory: (id: string, older: boolean) => fixture.loadOlder(id, older),
+  }),
   useConversationMessages: (id: string | null) => ({
     items: (id && fixture.messages[id]) || [],
     pending: id ? fixture.pending : [],
     dispatch: vi.fn(),
+    hasMore: id ? (fixture.older[id]?.hasMore ?? false) : false,
+    loadingOlder: id ? (fixture.older[id]?.loading ?? false) : false,
+    loadOlder: () => fixture.loadOlder(id),
   }),
   useSendMessage:
     ({ conversationId }: { conversationId: string | null }) =>
@@ -299,6 +311,8 @@ beforeEach(() => {
   fixture.openChat.mockReset();
   fixture.threads = [];
   fixture.messages = {};
+  fixture.older = {};
+  fixture.loadOlder.mockReset();
   fixture.threadsHeld = null;
   fixture.posts = [];
   fixture.sent = [];
@@ -741,6 +755,109 @@ const thread = (id: string, day: string, extra: object = {}) => ({
   turns: 2,
   updatedAt: `${day}T10:12:00Z`,
   ...extra,
+});
+
+it.each([
+  ['cancelled', 'Partial answer', 'onlineAgent.statusCancelled'],
+  ['cancelled', '', 'onlineAgent.statusCancelled'],
+  ['failed', 'Partial answer', 'onlineAgent.statusInterrupted'],
+  ['failed', '', 'onlineAgent.statusInterrupted'],
+])(
+  'shows a saved %s reply notice with content %j',
+  async (type, content, key) => {
+    fixture.threads = [thread('t-day', '2026-10-21', { turns: 1 })];
+    const answer = reply('a', content);
+    fixture.messages['t-day'] = [
+      user('q', 'Start the task', '2026-10-21T10:00:00Z'),
+      {
+        ...answer,
+        parts: [
+          ...answer.parts,
+          { type: 'data-notice', id: 'execution-status', data: { type } },
+        ],
+      },
+    ];
+    setup();
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'strategy.conversationTurns:1',
+      }),
+    );
+    expect(screen.getAllByText(key)).toHaveLength(1);
+    expect(screen.queryByText('strategy.threadNoAnswer')).toBeNull();
+    if (content) expect(screen.getByText(content)).toBeVisible();
+  },
+);
+
+it('loads older questions for a day beyond the newest message page and keeps them in order', async () => {
+  fixture.threads = [thread('t-day', '2026-10-21', { turns: 30 })];
+  const all = Array.from({ length: 30 }, (_, index) => [
+    user(`q-${index}`, `Question ${index}`, '2026-10-21T10:00:00Z'),
+    reply(`a-${index}`, `Answer ${index}`),
+  ]).flat();
+  fixture.messages['t-day'] = all.slice(-50);
+  fixture.older['t-day'] = { hasMore: true, loading: false };
+  const view = setup();
+  fireEvent.click(
+    await screen.findByRole('button', {
+      name: 'strategy.conversationTurns:30',
+    }),
+  );
+  const turns = () =>
+    document.querySelectorAll('[data-day-conversation] [data-turn]');
+  expect(turns()).toHaveLength(25);
+  expect(screen.queryByText('Question 0')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'chat.olderMessages' }));
+  expect(fixture.loadOlder).toHaveBeenCalledExactlyOnceWith('t-day', true);
+  fixture.older['t-day'].loading = true;
+  view.rerender();
+  expect(
+    screen.getByRole('button', { name: 'chat.olderMessages' }),
+  ).toBeDisabled();
+  fixture.messages['t-day'] = all;
+  fixture.older['t-day'] = { hasMore: false, loading: false };
+  view.rerender();
+  await waitFor(() => expect(turns()).toHaveLength(30));
+  expect(turns()[0].textContent).toContain('Question 0');
+  expect(turns()[29].textContent).toContain('Question 29');
+  expect(
+    screen.queryByRole('button', { name: 'chat.olderMessages' }),
+  ).toBeNull();
+});
+
+it('loads the requested older page after joining an in-flight history refresh', async () => {
+  fixture.threads = [thread('t-day', '2026-10-21', { turns: 2 })];
+  fixture.messages['t-day'] = [
+    user('q2', 'Latest question', '2026-10-21T10:00:00Z'),
+  ];
+  fixture.older['t-day'] = { hasMore: true, loading: false };
+  let finishRefresh!: () => void;
+  fixture.loadOlder.mockImplementationOnce(
+    () => new Promise<void>((resolve) => (finishRefresh = resolve)),
+  );
+  fixture.loadOlder.mockImplementationOnce(() => {
+    fixture.messages['t-day'].unshift(
+      user('q1', 'Earlier question', '2026-10-21T09:00:00Z'),
+    );
+    fixture.older['t-day'].hasMore = false;
+  });
+  setup();
+  fireEvent.click(
+    await screen.findByRole('button', {
+      name: 'strategy.conversationTurns:2',
+    }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'chat.olderMessages' }));
+  expect(
+    screen.getByRole('button', { name: 'chat.olderMessages' }),
+  ).toBeDisabled();
+  expect(screen.queryByText('Earlier question')).toBeNull();
+  await act(async () => finishRefresh());
+  expect(await screen.findByText('Earlier question')).toBeVisible();
+  expect(fixture.loadOlder).toHaveBeenCalledTimes(2);
+  expect(
+    screen.queryByRole('button', { name: 'chat.olderMessages' }),
+  ).toBeNull();
 });
 
 it('today’s conversation follows the analysis, a quoted opportunity above its question', async () => {

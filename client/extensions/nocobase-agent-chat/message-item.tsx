@@ -32,24 +32,7 @@ import { ConsultationCard } from './consultation-card.js';
 import { SentContext } from './context-chips.js';
 import { MessageAttachments } from './message-attachments.js';
 import { ReasoningPart } from './reasoning-part.js';
-
-/** The OnlineAgent's end-of-reply notice, whose title the plugin writes in English; null for any other notice. */
-function executionStatusText(part: {
-  readonly id?: string;
-  readonly data: { readonly type?: string };
-}): string | null {
-  if (part.id !== 'execution-status') return null;
-  switch (part.data.type) {
-    case 'approval':
-      return $t('onlineAgent.statusApproval');
-    case 'cancelled':
-      return $t('onlineAgent.statusCancelled');
-    case 'failed':
-      return $t('onlineAgent.statusInterrupted');
-    default:
-      return null;
-  }
-}
+import { executionStatusText } from '../../online-agent/status.js';
 
 function Time({
   at,

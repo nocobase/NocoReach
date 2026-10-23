@@ -202,8 +202,22 @@ test('online conversations take the nocoreach scope, its project tools and Chat 
 
   const prompts = scriptModel(testApp, [
     toolCall('project_data', { section: 'project' }),
+    toolCall('query_data', { source: 'forum' }),
     text('The project is Scoped chat.'),
   ]);
+  const overview = vi.spyOn(plugin.dataViews, 'community').mockResolvedValue({
+    origin: 'https://forum.example.test',
+    window: { start: '2026-10-01', end: '2026-10-23' },
+  });
+  const forum = vi.spyOn(plugin.community, 'state').mockResolvedValue({
+    topics: {
+      '42': {
+        id: 42,
+        title: 'Private forum topic',
+        createdAt: '2026-10-20T00:00:00Z',
+      },
+    },
+  });
   const created = await startOnline(admin, projectId);
   expect(created.status).toBe(201);
   const id = (await created.json()).data.id as string;
@@ -237,6 +251,17 @@ test('online conversations take the nocoreach scope, its project tools and Chat 
   ]);
   expect(JSON.stringify(history)).not.toContain('scoped-chat.example.test');
   expect(JSON.stringify(prompts.at(-1))).toContain('Scoped chat');
+  expect(JSON.stringify(prompts.at(-1))).toContain('Private forum topic');
+  const query = history
+    .flatMap((message) => message.parts)
+    .find((part) => part.type === 'tool-query_data');
+  expect(query).toMatchObject({
+    state: 'output-available',
+    output: { source: 'forum', total: 1, nextOffset: null },
+  });
+  expect(JSON.stringify(history)).not.toContain('Private forum topic');
+  overview.mockRestore();
+  forum.mockRestore();
 
   // Without a project only the task tools are offered.
   const unbound = await startOnline(admin, null);
@@ -378,6 +403,122 @@ test('creation and tools recheck project access and the Chat panel switch', asyn
     .resolve(authorizationToken)
     .permissionSets.revoke(assignment.id);
   expect((await startOnline(client, String(joined.id))).status).toBe(403);
+});
+
+test('history rechecks project membership without depending on the Chat panel switch', async ({
+  testApp,
+  onTestFinished,
+}) => {
+  const container = testApp.application.container;
+  const { plugin, legacy } = container.resolve(nocoReachToken);
+  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const first = await plugin.projects.create({
+    name: 'First',
+    domain: 'first.example.test',
+  });
+  const second = await plugin.projects.create({
+    name: 'Second',
+    domain: 'second.example.test',
+  });
+  const firstId = String(first.id),
+    secondId = String(second.id);
+  const { user, client } = await member(testApp, 'history-member@example.test');
+  await legacy.db.access!.joinCreatedProject(user.id, firstId);
+  await legacy.db.access!.joinCreatedProject(user.id, secondId);
+  scriptModel(testApp, [text('Private project answer')]);
+  const id = (await (await startOnline(client, firstId)).json()).data
+    .id as string;
+  const retained = (await (await startOnline(client, secondId)).json()).data
+    .id as string;
+  await ask(client, id, 'Read the first project');
+  // Even a current member of both projects cannot relabel history to keep it after losing its original project.
+  for (const projectId of [secondId, null]) {
+    expect(
+      (
+        await send(
+          client,
+          `/agents/conversations/${id}/config`,
+          {
+            config: { context: { variable: { projectId } } },
+          },
+          'PATCH',
+        )
+      ).status,
+    ).toBe(403);
+  }
+  expect(
+    (
+      await send(
+        client,
+        `/agents/conversations/${id}/config`,
+        {
+          config: { context: { variable: { projectId: firstId } } },
+        },
+        'PATCH',
+      )
+    ).status,
+  ).toBe(200);
+  const store = container.resolve(onlineChatSettingsToken);
+  const original = await store.get();
+  onTestFinished(async () => {
+    await store.save({ ...original, revision: (await store.get()).revision });
+  });
+  await store.save({ ...original, enabled: false });
+  for (const path of ['', '/messages', '/config'])
+    expect(
+      (await client.fetch(`/agents/conversations/${id}${path}`)).status,
+    ).toBe(200);
+  const readable = await (await client.fetch('/agents/conversations')).json();
+  expect(readable.data.map((item: { id: string }) => item.id)).toContain(id);
+  expect(
+    (await admin.fetch(`/agents/conversations/${id}/messages`)).status,
+  ).toBe(404);
+  await container
+    .resolve(databaseManagerToken)
+    .transaction((connection) =>
+      legacy.db.access!.setProjects(connection, user.id, [secondId]),
+    );
+  for (const path of ['', '/messages', '/config', '/events']) {
+    const response = await client.fetch(`/agents/conversations/${id}${path}`);
+    expect(response.status).toBe(403);
+    expect((await response.json()).error).toMatchObject({
+      domain: 'onlineAgent',
+      reason: 'accessDenied',
+    });
+  }
+  expect(
+    (
+      await send(
+        client,
+        `/agents/conversations/${id}/config`,
+        {
+          config: { context: { variable: { projectId: secondId } } },
+        },
+        'PATCH',
+      )
+    ).status,
+  ).toBe(403);
+  const listed = await (await client.fetch('/agents/conversations')).json();
+  expect(listed.data.map((item: { id: string }) => item.id)).toEqual([
+    retained,
+  ]);
+  expect(
+    (await client.fetch(`/agents/conversations/${retained}/messages`)).status,
+  ).toBe(200);
+  expect(
+    (await send(client, `/agents/conversations/${id}/stop`, {})).status,
+  ).toBe(200);
+  // A new request after rejoining restores the history, even with Chat panel still switched off.
+  await legacy.db.access!.joinCreatedProject(user.id, firstId);
+  const restored = await (
+    await client.fetch(`/agents/conversations/${id}/messages`)
+  ).json();
+  expect(JSON.stringify(restored.data)).toContain('Private project answer');
+  expect(
+    (await (await client.fetch('/agents/conversations')).json()).data.map(
+      (item: { id: string }) => item.id,
+    ),
+  ).toContain(id);
 });
 
 test('task_execute waits for approval in the chat before it hands work to a Runner', async ({
