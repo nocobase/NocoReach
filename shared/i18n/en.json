@@ -53,6 +53,7 @@
   "manualTask.draftBackground": "Background: {0}",
   "manualTask.draftWork": "What to do:",
   "manualTask.draftCriteria": "Completion criteria:",
+  "manualTask.whyHint": "Shown on the task page under Why this task. One or two sentences.",
   "strategy.blockForbidden": "You do not have permission to view this section.",
   "strategy.blockUnavailable": "This project or section is no longer available.",
   "strategy.taskStatus": "Waiting for you",

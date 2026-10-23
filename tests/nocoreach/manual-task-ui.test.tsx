@@ -366,6 +366,7 @@ const draftView = {
   title: 'Rewrite the pricing page title and opening',
   description:
     'Background: /pricing had 120 visits.\n\nWhat to do:\n1. Rewrite the title.\n\nCompletion criteria:\n- The new title is live.',
+  why: 'Fewer people reach the plans.',
   playbookId: 'optimize-page',
   playbooks: [
     // Built-in names arrive in their stored system wording and show translated.
@@ -409,6 +410,10 @@ it('turns a rough idea into an editable draft with AI and creates the edited tas
   expect(
     screen.getByRole('combobox', { name: 'Suggested playbook' }),
   ).toHaveTextContent('Improve existing page');
+  // The Why card's sentence is prefilled and editable.
+  const why = screen.getByRole('textbox', { name: 'Why this task' });
+  expect(why).toHaveValue(draftView.why);
+  fireEvent.change(why, { target: { value: '  Plans are hard to find.  ' } });
   fireEvent.change(screen.getByLabelText(/Task title/), {
     target: { value: 'Edited title' },
   });
@@ -419,6 +424,7 @@ it('turns a rough idea into an editable draft with AI and creates the edited tas
   expect(request.mock.calls[1][0].json).toMatchObject({
     projectId: '1',
     title: 'Edited title',
+    why: 'Plans are hard to find.',
     description: draftView.description,
     playbookId: 'optimize-page',
     attachmentIds: [],
@@ -468,6 +474,7 @@ it('fills in manually with the idea as the description and no playbook', async (
     'Write a launch post',
   );
   expect(screen.queryByLabelText('Suggested playbook')).toBeNull();
+  expect(screen.queryByLabelText('Why this task')).toBeNull();
   expect(
     screen.queryByRole('button', { name: 'Restore original text' }),
   ).toBeNull();
@@ -479,6 +486,7 @@ it('fills in manually with the idea as the description and no playbook', async (
   expect(request).toHaveBeenCalledTimes(1);
   expect(request.mock.calls[0][0].path).toBe('nocoreachTasks');
   expect(request.mock.calls[0][0].json).not.toHaveProperty('playbookId');
+  expect(request.mock.calls[0][0].json).not.toHaveProperty('why');
 });
 
 it('asks for an idea before organizing', () => {

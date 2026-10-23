@@ -53,6 +53,7 @@
   "manualTask.draftBackground": "Latar belakang: {0}",
   "manualTask.draftWork": "Yang perlu dilakukan:",
   "manualTask.draftCriteria": "Kriteria penyelesaian:",
+  "manualTask.whyHint": "Ditampilkan di halaman tugas, pada Mengapa tugas ini. Satu atau dua kalimat sudah cukup.",
   "strategy.blockForbidden": "Anda tidak memiliki izin untuk melihat bagian ini.",
   "strategy.blockUnavailable": "Proyek atau bagian ini tidak lagi tersedia.",
   "strategy.taskStatus": "Menunggu Anda",

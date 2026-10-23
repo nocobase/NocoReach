@@ -53,6 +53,7 @@
   "manualTask.draftBackground": "Bối cảnh: {0}",
   "manualTask.draftWork": "Việc cần làm:",
   "manualTask.draftCriteria": "Tiêu chí hoàn thành:",
+  "manualTask.whyHint": "Hiển thị trên trang tác vụ, trong mục Vì sao cần làm. Một hoặc hai câu là đủ.",
   "strategy.blockForbidden": "Bạn không có quyền xem phần này.",
   "strategy.blockUnavailable": "Dự án hoặc phần này không còn khả dụng.",
   "strategy.taskStatus": "Chờ bạn xử lý",

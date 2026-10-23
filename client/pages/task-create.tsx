@@ -49,6 +49,7 @@ import {
   TASK_MEDIA_COUNT,
   TASK_MEDIA_LIMIT,
   TASK_MEDIA_TYPES,
+  TASK_WHY_MAX,
   type ManualTaskDraftView,
   type ManualTaskView,
   type TaskMediaView,
@@ -62,7 +63,7 @@ type Entry = {
   record?: TaskMediaView;
   controller: AbortController;
 };
-type Fields = { title: string; description: string };
+type Fields = { title: string; description: string; why: string };
 // The Suggested playbook select's value for leaving the choice to the task page.
 const LATER = 'later';
 
@@ -104,7 +105,7 @@ function CreateTask({
   }, [validScope]);
   const headers = { 'X-NocoReach-Task-Session': scope.sessionId };
   const form = useForm<Fields>({
-    defaultValues: { title: '', description: '' },
+    defaultValues: { title: '', description: '', why: '' },
     resolver: zodResolver(
       z.object({
         title: z
@@ -117,6 +118,7 @@ function CreateTask({
           .trim()
           .min(1, $t('manualTask.descriptionRequired'))
           .max(30000, $t('manualTask.descriptionRequired')),
+        why: z.string().trim().max(TASK_WHY_MAX),
       }),
     ),
   });
@@ -302,8 +304,11 @@ function CreateTask({
     submittingRef.current = true;
     setBusy(true);
     setError(false);
+    const why = draft ? fields.why.trim() : '';
     const payload = attempt ?? {
-      ...fields,
+      title: fields.title,
+      description: fields.description,
+      ...(why ? { why } : {}),
       ...(draft && playbookId !== LATER ? { playbookId } : {}),
       projectId: scope.projectId,
       requestId: scope.requestId,
@@ -368,7 +373,11 @@ function CreateTask({
       if (!activeRef.current || !scopeValidRef.current) return;
       setDraft(data);
       setPlaybookId(data.playbookId ?? LATER);
-      form.reset({ title: data.title, description: data.description });
+      form.reset({
+        title: data.title,
+        description: data.description,
+        why: data.why,
+      });
       setStep('form');
     } catch (failure) {
       if (!activeRef.current || controller.signal.aborted) return;
@@ -393,7 +402,7 @@ function CreateTask({
     setPlaybookId(LATER);
     setDraftFailure(undefined);
     setIdeaMissing(false);
-    form.reset({ title: '', description: idea.trim() });
+    form.reset({ title: '', description: idea.trim(), why: '' });
     setStep('form');
   }
   // Restore original text: back to the idea as written; the draft and any edits to it are dropped.
@@ -409,7 +418,7 @@ function CreateTask({
       return;
     setDraft(undefined);
     setPlaybookId(LATER);
-    form.reset({ title: '', description: '' });
+    form.reset({ title: '', description: '', why: '' });
     setStep('idea');
   }
   const submit = (event: React.FormEvent<HTMLFormElement>) =>
@@ -659,6 +668,21 @@ function CreateTask({
             />
             <FieldError errors={[form.formState.errors.title]} />
           </Field>
+          {draft && (
+            <Field>
+              <FieldLabel htmlFor='manual-task-why'>
+                {$t('taskDetail.whyTitle')}
+                <InfoTip>{$t('manualTask.whyHint')}</InfoTip>
+              </FieldLabel>
+              <Textarea
+                id='manual-task-why'
+                rows={2}
+                maxLength={TASK_WHY_MAX}
+                disabled={locked}
+                {...form.register('why')}
+              />
+            </Field>
+          )}
           <div {...dropFiles}>
             <Field data-invalid={Boolean(form.formState.errors.description)}>
               <FieldLabel htmlFor='manual-task-description'>

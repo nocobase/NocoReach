@@ -48,6 +48,7 @@ const answer = {
   title: 'Rewrite the pricing page title and opening',
   background:
     'The pricing page had 120 visits, down 35% on the period before. Signups fell 42% too.',
+  why: 'Fewer people reach the plans: visits fell 35%. Signups fell 42% as well.',
   steps: ['1. Rewrite the title', '- Rewrite the opening paragraph', ''],
   criteria: ['The new title is live', 'A person reviewed the change'],
   playbookId: 'optimize-page',
@@ -110,8 +111,40 @@ describe('Organize with AI drafts', () => {
         'Background: The pricing page had 120 visits, down 35% on the period before.\n\n' +
         'What to do:\n1. Rewrite the title\n2. Rewrite the opening paragraph\n\n' +
         'Completion criteria:\n- The new title is live\n- A person reviewed the change',
+      why: 'Fewer people reach the plans: visits fell 35%.',
       playbookId: 'optimize-page',
     });
+  });
+
+  it('keeps the Why short and falls back to the opening of the background', () => {
+    const options = {
+      playbookIds: [],
+      known: new Set(['120']),
+      idea: 'Fix the pricing page',
+      language: 'en-US',
+    };
+    // No usable Why: the grounded background, else the idea itself.
+    expect(
+      validateTaskDraft(
+        { ...answer, why: 'Up 99%.' },
+        { ...options, known: new Set(['120', '35']) },
+      ).why,
+    ).toBe('The pricing page had 120 visits, down 35% on the period before.');
+    expect(validateTaskDraft({ ...answer, why: undefined }, options).why).toBe(
+      'Fix the pricing page',
+    );
+    const long = validateTaskDraft(
+      {
+        ...answer,
+        why: `${'First sentence is long enough. '.repeat(8)}${'x'.repeat(400)}`,
+      },
+      options,
+    ).why;
+    expect(long.length).toBeLessThanOrEqual(300);
+    expect(long.endsWith('enough.')).toBe(true);
+    expect(
+      validateTaskDraft({ ...answer, why: 'y'.repeat(500) }, options).why,
+    ).toMatch(/^y{299}…$/);
   });
 
   it('writes the labels in the project language and drops a playbook the project lacks', () => {

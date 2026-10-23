@@ -235,6 +235,7 @@ function fixture(
         ? {
             title: `Simulated: ${idea.slice(0, 120)}`,
             background: `${LABEL} ${figures} This draft only restates the request; no model was called.`,
+            why: `${LABEL} ${figures || idea.slice(0, 160)}`,
             steps: [
               'Read the page and the data above and list what to change.',
               'Make the changes and note each one with the reason.',
@@ -249,6 +250,7 @@ function fixture(
         : {
             title: `【模拟】${idea.slice(0, 120)}`,
             background: `${LABEL}${figures}此草稿只复述了需求，未调用真实模型。`,
+            why: `${LABEL}${figures || idea.slice(0, 160)}`,
             steps: [
               '阅读页面和上述数据，列出要修改的地方。',
               '完成修改，并逐条写明原因。',

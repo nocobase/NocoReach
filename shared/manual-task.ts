@@ -11,12 +11,15 @@ export const TASK_MEDIA_TYPES = [
   'video/webm',
 ] as const;
 
+export const TASK_WHY_MAX = 300;
 export const ManualTaskInput = z
   .strictObject({
     projectId: z.string().regex(/^[1-9]\d{0,15}$/),
     requestId: z.uuid(),
     title: z.string().trim().min(1).max(200),
     description: z.string().trim().min(1).max(30000),
+    /** One or two plain sentences for the task page's Why card; stored as `evidence.why`. */
+    why: z.string().trim().min(1).max(TASK_WHY_MAX).optional(),
     playbookId: z
       .string()
       .regex(/^[a-z0-9-]{1,60}$/)
@@ -57,6 +60,8 @@ export type ManualTaskDraftInput = z.infer<typeof ManualTaskDraftInput>;
 export const ManualTaskDraft = z.object({
   title: z.string().min(1).max(200),
   description: z.string().min(1).max(30000),
+  /** Why the work matters in one or two sentences; empty when the answer gave nothing usable. */
+  why: z.string().max(TASK_WHY_MAX),
   playbookId: z.string().nullable(),
 });
 export type ManualTaskDraft = z.infer<typeof ManualTaskDraft>;

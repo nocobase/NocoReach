@@ -53,6 +53,7 @@
   "manualTask.draftBackground": "背景: {0}",
   "manualTask.draftWork": "実施内容:",
   "manualTask.draftCriteria": "完了条件:",
+  "manualTask.whyHint": "タスクページの「このタスクの理由」に表示されます。1～2 文で十分です。",
   "strategy.blockForbidden": "このセクションを表示する権限がありません。",
   "strategy.blockUnavailable": "このプロジェクトまたはセクションは利用できなくなりました。",
   "strategy.taskStatus": "対応待ち",

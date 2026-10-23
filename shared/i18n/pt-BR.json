@@ -53,6 +53,7 @@
   "manualTask.draftBackground": "Contexto: {0}",
   "manualTask.draftWork": "O que fazer:",
   "manualTask.draftCriteria": "Critérios de conclusão:",
+  "manualTask.whyHint": "Aparece na página da tarefa, em Por que esta tarefa. Uma ou duas frases bastam.",
   "strategy.blockForbidden": "Você não tem permissão para visualizar esta seção.",
   "strategy.blockUnavailable": "Este projeto ou esta seção não está mais disponível.",
   "strategy.taskStatus": "Aguardando você",

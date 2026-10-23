@@ -53,6 +53,7 @@
   "manualTask.draftBackground": "Hintergrund: {0}",
   "manualTask.draftWork": "Zu erledigen:",
   "manualTask.draftCriteria": "Abschlusskriterien:",
+  "manualTask.whyHint": "Wird auf der Aufgabenseite unter „Warum diese Aufgabe“ angezeigt. Ein oder zwei Sätze genügen.",
   "strategy.blockForbidden": "Sie haben keine Berechtigung, diesen Abschnitt anzuzeigen.",
   "strategy.blockUnavailable": "Dieses Projekt oder dieser Abschnitt ist nicht mehr verfügbar.",
   "strategy.taskStatus": "Wartet auf Sie",

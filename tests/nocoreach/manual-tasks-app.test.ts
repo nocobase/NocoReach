@@ -271,6 +271,7 @@ test('Organize with AI is authorized, bounded, saves nothing and reports a missi
     background: 'The title is vague. Visits fell 42% last month.',
     steps: ['1. Rewrite the title', '2. Rewrite the opening'],
     criteria: ['- The new title is live'],
+    why: 'Plans are hard to find. Visits fell 42% last month.',
     playbookId: 'optimize-page',
   };
   const complete = vi
@@ -281,6 +282,7 @@ test('Organize with AI is authorized, bounded, saves nothing and reports a missi
   const view = ManualTaskDraftView.parse((await ok.json()).data);
   expect(view).toMatchObject({
     title: answer.title,
+    why: 'Plans are hard to find.',
     playbookId: 'optimize-page',
   });
   expect(view.playbooks).toContainEqual({
@@ -367,6 +369,27 @@ test('Organize with AI is authorized, bounded, saves nothing and reports a missi
   expect((await draft(member, idea)).status).toBe(200);
   expect(complete).toHaveBeenCalledTimes(5);
   expect(await tasks()).toBe(before);
+
+  // The Why sentence is kept with the created task for its Why card.
+  expect(
+    (await create(admin, { ...input(), why: 'x'.repeat(301) })).status,
+  ).toBe(400);
+  const created = await create(admin, {
+    ...input(),
+    title: view.title,
+    description: view.description,
+    why: ` ${view.why} `,
+    playbookId: 'optimize-page',
+  });
+  expect(created.status).toBe(201);
+  const row = await connection
+    .repository('nrTasks')
+    .findOne({ filter: { id: (await created.json()).data.id } });
+  expect(row?.evidence).toMatchObject({
+    why: view.why,
+    suggestedPlaybook: 'optimize-page',
+    createdBy: { name: expect.any(String) },
+  });
   // Browser-only, like the other new task commands.
   const manifest = JSON.stringify(
     await (await admin.fetch('/cli/manifest')).json(),

@@ -295,6 +295,7 @@ export class ManualTasks {
               manualDigest: fingerprint,
               createdBy: { id: actor.id, name: actor.name },
               attachmentIds: input.attachmentIds,
+              ...(input.why ? { why: input.why } : {}),
               ...(input.playbookId
                 ? { suggestedPlaybook: input.playbookId }
                 : {}),

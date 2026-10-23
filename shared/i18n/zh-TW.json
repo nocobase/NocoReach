@@ -53,6 +53,7 @@
   "manualTask.draftBackground": "背景：{0}",
   "manualTask.draftWork": "要做的事：",
   "manualTask.draftCriteria": "完成標準：",
+  "manualTask.whyHint": "顯示在任務頁的「為什麼做」中，一兩句話即可。",
   "strategy.blockForbidden": "你沒有權限檢視此區塊。",
   "strategy.blockUnavailable": "此專案或區塊已不可用。",
   "strategy.taskStatus": "等待你處理",
