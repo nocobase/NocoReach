@@ -4,12 +4,55 @@
 
 - On Insights, every line of Current situation starts with its source mark in the same grey and size: brand logos (Google, Search Console, Discord, Slack, X) no longer show their brand colours beside the grey icons, which made the column look cluttered. `SourceLogo` has a `mono` option for this; Data sources and the other pages keep the brand colours.
 
+## Unreleased — Steadier tests in CI
+
+- Insights: a question sent, or the side panel opened, before the page has read the owner's conversations joins the day's conversation instead of starting a second one for the day; on a slow connection Send used to act as if the day had none.
+- The Bilibili, Xiaohongshu and YouTube connection panels act on the first click of a button that has just appeared (Read now, Disconnect and the rest), which could be ignored while the permission that showed it had not reached the handler yet.
+- `classic-import-app.test.ts` stops NocoReach's timers before counting imported rows: the analysis timer's catch-up wrote two extra snapshots when the test ran across second 10 of a minute.
+
+## Unreleased — Agent page details
+
+- Who does the work no longer shows a row of column headings (screen readers still read them); each row already says what it holds.
+- What went wrong, or how the last task ended, is a small line under the agent in its own row ("Last task 10-22 21:54 did not finish") instead of a line of body text below the row.
+
+## Unreleased — Task runs survive NocoReach restarts
+
+- A task run whose Runner lost its lease while NocoReach restarted (every deploy restarts it) is recorded as interrupted by the restart instead of blamed on the computer. NocoReach keeps the times it started (`nr-app-starts`) to tell the two apart.
+- The Agent step is started again once for each restart, as the system's Try again; the activity says so and the stage card says why it runs again. Review and publishing are never started again by themselves; an interrupted publish says the update interrupted it.
+- When the step could not start again, the card says the server was updating and offers Try again first; these runs no longer count toward "failed N times in a row". Technical details › Runs gives the restart time and the official reason.
+
+## Unreleased — The classic import keeps NocoReach's timers off half-imported data
+
+- While `pnpm nocobase app import-classic` writes, NocoReach's timers (sync, analysis and the rest) skip their firings, so none acts on a project before all its rows have arrived. The analysis timer used to catch up the day's analysis on partial data and write `daily-analysis:<id>` and `signals:<id>`, which could end up beside the classic rows with the same keys. Each import call renews a five-minute hold and the last one ends it; if the command stops midway, the timers run again five minutes after its last call.
+- The import first waits, up to 30 seconds, for background work already running, so `--replace` does not clear tables under a running sync or analysis; if the work is not done by then, the command stops before anything is cleared and asks to try again shortly.
+- A daily analysis the Scheduler fires during the import is recorded as cancelled in Settings › Automatic runs; the analysis timer catches the day up after the import.
+
+## Unreleased — The chat panel reads every data page
+
+- The chat panel's assistant has a read-only `query_data` tool covering every source a data page shows: Search Console (queries, pages, striking distance, rising and falling, countries and devices, one query or page in detail), GA4 traffic tables, site pages, the site audit and indexing, GitHub and GitHub trends, downloads, saved keywords with the site's rank, rank tracking, keyword suggestions, Trends, competitor activity, saved AI search lookups, Forum, Hacker News, Reddit, X, Discord, Slack, YouTube, Bilibili, Xiaohongshu and public web sources. It takes a period (or from/to), filters for keyword, page and country, a sort, a limit and an offset, and answers bounded rows with the page they come from, the data cutoff, the period and the one before it, the total and the next offset. Each source goes through the service method its page calls, so the numbers match the page, and is read only after the asking user's own permission for that page's action; a source they may not open answers accessDenied without stopping the others. Nothing is synced, inspected or bought: Trends reads the saved check instead of the page's view, indexing waits until its page has run the first inspection, and AI search lists saved lookups only.
+
+## Unreleased — Task page: one layout for every state
+
+- The task page has one skeleton in every state: a two-line header (the title with its T-number in grey and the status Tag on the right; then one grey line with the playbook's steps and where the task stands now, such as "Agent Change → Review and publish (you) → Live → Watch · Now: Waiting for you to start"), the card for what to do now and the activity on the left, and ✦ Why, Properties and Performance on the right, in that order. Below 1280px they stack as Why, Properties, now, Performance, Activity.
+- The long Why strip under the title is a ✦ Why card with the reason in a sentence or two and View evidence; while a change waits for review it reads Why this change, as on the website's demo card.
+- Four text styles only (page title, card title, body, grey secondary text) and one card shape (same radius, padding and spacing). Cards no longer hold boxes inside boxes: the before/after table, diffs, conflicts, reply drafts, the last change request and What changed are drawn with rules, tints and labels instead.
+- Start after review: the card's title and Confirm start share one row; the brief is plain text with Expand when long; the playbook is a full-width select with its description and View steps below; Notes (optional) is a full-width one-line field that grows as you type.
+- Activity and the message to the Agent are one card: the timeline, then a one-line field with Send.
+- The status Tag in the header is the one the task list and board show (`TaskStatusTag`).
+
+## Unreleased — The daily report waits up to ten minutes
+
+- The daily analysis gives its report call ten minutes instead of the provider's default four. A large project's report takes 65–140 seconds; on 2026-10-23 the model service ran about 2.6× slower and NocoBase's report was stopped at four minutes twice ("The call was stopped."), while the smaller Retool project finished. The short calls (style rewrite, judging one signal) keep the four-minute limit, and a project's run is now held for 30 minutes instead of 10 so a slow run is not started a second time.
+- A report stopped at its limit now says so in the reader's language ("The AI service gave no complete answer within 10 minutes") on Insights and in Automatic runs' history, instead of the provider's English text.
+- Automatic runs' history no longer repeats a failure as the Scheduler's summary ("项目 1：…") above the same failure named by project.
+
 ## Unreleased — A table's filters are a segmented control in its toolbar
 
 - Line tabs only switch a page's sections, under its header (2026-10-22 decision D1). What a table lists is chosen in its toolbar with the square grey segmented control, on the same row as its search: Website & product › Pages (All 658 | Blog 375 | Docs 199 …), Search performance (Close to page one | Queries | Pages | Rising …), its Index and Sitemaps, Traffic's reports, GitHub's and Downloads' tables, Keywords › AI suggestions, AI search's questions and Competitors › Domain lookup. They drew a second row of line tabs inside the card, which on Search performance sat right under the page's own tabs.
 - `DataTableTabs` draws that row: the segments (a `TabsList` with the new `segmented` variant, styled in styles.css like `Segmented`), its ⓘ, then `tools` (search and other filters) and `actions` at the right. A tab's description is its ⓘ (decision D5). The separate `DataTableToolbar` row under it is gone on those pages; on a narrow screen the row wraps.
 - Search performance's "Queries ranking 5–20…" line under the toolbar joins the Close to page one ⓘ (decision D5).
 - The same control for the other in-card choices: keyword details' Related keywords, Analysis rules' areas, and the "how to create" choice in New Skill and Add knowledge.
+
 ## Unreleased — Agents 1.0.0-beta.18 and the NocoBase framework it requires
 
 - Upgrade Agents to `1.0.0-beta.18`, Runner to `0.1.0-beta.15` and CLI Client to `0.1.0-beta.13`, with the framework versions of Default Template `1.0.0-beta.76`: App Server `3.0.0-beta.2`, App Client `4.0.0-beta.1`, i18n `2.0.0-beta.1`, Notification `2.0.0-beta.0` and the matching plugins. The template source is not merged; its marker stays `1.0.0-beta.68`. The application CLI release moves to `1.0.0-beta.69` so installed CLIs and runners fetch the new archives.

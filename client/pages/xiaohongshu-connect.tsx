@@ -1,5 +1,11 @@
 import { formatDateTime } from '#lib/format';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { $t, useMessageState, useNocoReachLocale } from '#i18n';
 import { collectorName, type CollectorChoice } from '#lib/collector-platforms';
@@ -106,7 +112,9 @@ export function XiaohongshuConnect({
     cancel: canCancel,
     disconnect: canDisconnect,
   });
-  useEffect(() => {
+  // A layout effect, not a passive one: a button appears in the commit that grants its permission, and a passive
+  // effect can run after the browser has already dispatched a click to it, so the handler would see the old denial.
+  useLayoutEffect(() => {
     accessRef.current = {
       connect: canConnect,
       test: canTest,
@@ -187,7 +195,8 @@ export function XiaohongshuConnect({
       return load();
     });
   }, [busy, load, refreshKey, setNotice]);
-  useEffect(() => {
+  // A layout effect for the same reason: Disconnect must not reach the aborted owner of the denial it replaces.
+  useLayoutEffect(() => {
     const owner = new AbortController();
     confirmationRef.current = owner;
     if (!canDisconnect) owner.abort();

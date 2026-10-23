@@ -66,7 +66,7 @@ export function ReplyDrafts({ items }: { items: ReplyDraft[] }): ReactElement {
       .catch(() => toast.error(() => $t('replyDrafts.notCopySelectTextCopy')));
   return (
     <div
-      className='flex min-w-0 max-w-full flex-col gap-2.5'
+      className='flex min-w-0 max-w-full flex-col divide-y'
       aria-label={$t('replyDrafts.replyDrafts')}
       role='list'
     >
@@ -74,16 +74,16 @@ export function ReplyDrafts({ items }: { items: ReplyDraft[] }): ReactElement {
         <section
           key={i}
           role='listitem'
-          className='min-w-0 max-w-full rounded-lg border bg-card p-3 text-sm'
+          className='min-w-0 max-w-full py-4 text-sm first:pt-0 last:pb-0'
           data-reply={i}
         >
-          <h4 className='font-medium leading-snug'>{d.title}</h4>
+          <h3 className='font-heading text-sm font-semibold'>{d.title}</h3>
           {d.asking ? (
-            <p className='mt-0.5 text-xs text-muted-foreground'>
+            <p className='mt-1 text-sm text-muted-foreground'>
               {$t('replyDrafts.asking', { 0: d.asking })}
             </p>
           ) : null}
-          <div className='mt-2 min-w-0 rounded-md bg-muted/50 px-3 py-2'>
+          <div className='mt-2 min-w-0 border-l-2 pl-3'>
             <Markdown content={d.reply} />
           </div>
           <div className='mt-2 flex flex-wrap items-center gap-2'>
@@ -102,7 +102,7 @@ export function ReplyDrafts({ items }: { items: ReplyDraft[] }): ReactElement {
               </Button>
             ) : null}
             {!none(d.refs) ? (
-              <span className='min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]'>
+              <span className='min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]'>
                 {$t('common.references', { 0: d.refs })}
               </span>
             ) : null}
@@ -110,7 +110,7 @@ export function ReplyDrafts({ items }: { items: ReplyDraft[] }): ReactElement {
           {!none(d.gap) ? (
             <div className='mt-2 min-w-0'>
               <Tag tone='amber'>{$t('replyDrafts.docsGap')}</Tag>
-              <p className='mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]'>
+              <p className='mt-1 whitespace-pre-wrap text-sm text-muted-foreground [overflow-wrap:anywhere]'>
                 {d.gap}
               </p>
             </div>

@@ -10,10 +10,12 @@ import { Delta } from '#components/reach/delta';
 import { InfoTip } from '#components/reach/info-tip';
 import { effectLine, type EffectResult } from '../effect-model';
 import type { TaskData } from '../task-execution-types';
+import { Card } from './layout';
+import { text } from './styles';
 
-// Performance, under the task's properties (2026-10-22 user request): each page the task is about, with its numbers.
-// Before the change goes live, the latest 28 days (or the 28 days before going live, once it has); from day 7 on,
-// before and after for day 7 or day 28. The full comparison stays on Results.
+// Performance, the card under the task's properties (2026-10-22 user request): each page the task is about, with its
+// numbers. Before the change goes live, the latest 28 days (or the 28 days before going live, once it has); from day 7
+// on, before and after for day 7 or day 28. The full comparison stays on Results.
 
 type PageNumbers = {
   page: string;
@@ -79,7 +81,7 @@ function Rows<T>({
       {items.length > SHOWN && (
         <button
           type='button'
-          className='nr-link self-start text-xs'
+          className='nr-link self-start text-sm'
           onClick={() => setAll((v) => !v)}
         >
           {all
@@ -125,39 +127,47 @@ export function TaskNumbers({
         })
       : $t('taskNumbers.comparedLater');
   return (
-    <section
+    <Card
       aria-label={$t('taskNumbers.title')}
-      className={cn('flex flex-col gap-2', className)}
-    >
-      <div className='flex items-center gap-2'>
-        <h2 className='m-0 flex flex-1 items-center gap-1 text-sm font-medium'>
+      title={
+        <>
           {$t('taskNumbers.title')}
           {note ? <InfoTip label={$t('common.info')}>{note}</InfoTip> : null}
-        </h2>
-        {result && (
+        </>
+      }
+      actions={
+        result && (
           <DaySwitch
             results={results}
             day={result.day}
             observeFrom={w.observeFrom}
             onPick={setPicked}
           />
+        )
+      }
+      className={className}
+    >
+      <div className='flex flex-col gap-2'>
+        {result ? (
+          <Compared
+            result={result}
+            observeFrom={w.observeFrom}
+            taskId={taskId}
+          />
+        ) : (
+          <Current
+            projectId={projectId}
+            taskId={taskId}
+            // Read again when the pages or going live change.
+            refresh={[
+              w.observeFrom,
+              w.page?.url,
+              ...(w.release?.pages || []),
+            ].join('\n')}
+          />
         )}
       </div>
-      {result ? (
-        <Compared result={result} observeFrom={w.observeFrom} taskId={taskId} />
-      ) : (
-        <Current
-          projectId={projectId}
-          taskId={taskId}
-          // Read again when the pages or going live change.
-          refresh={[
-            w.observeFrom,
-            w.page?.url,
-            ...(w.release?.pages || []),
-          ].join('\n')}
-        />
-      )}
-    </section>
+    </Card>
   );
 }
 
@@ -224,16 +234,14 @@ function Compared({
       }));
   return (
     <>
-      <p className='m-0 text-xs text-muted-foreground'>
+      <p className={text.muted}>
         {$t('taskNumbers.window', {
           0: $t(views ? 'common.viewCount' : 'common.searchClicks'),
           1: r.day,
         })}
       </p>
       {r.primary ? null : (
-        <p className='m-0 text-sm text-muted-foreground'>
-          {effectLine(r, observeFrom)}
-        </p>
+        <p className={text.muted}>{effectLine(r, observeFrom)}</p>
       )}
       {r.primary && (
         <Rows
@@ -241,7 +249,10 @@ function Compared({
           render={(row) => (
             <li
               key={row.page}
-              className='flex items-baseline gap-3 border-b py-1.5 text-sm last:border-b-0'
+              className={cn(
+                text.body,
+                'flex items-baseline gap-3 border-b py-1.5 last:border-b-0',
+              )}
             >
               <PageLink url={row.page} />
               <span className='ml-auto shrink-0 tabular-nums'>
@@ -253,7 +264,9 @@ function Compared({
         />
       )}
       {r.primary && r.byPage && (
-        <p className='m-0 flex items-baseline gap-3 border-t pt-1.5 text-sm font-medium'>
+        <p
+          className={cn(text.body, 'flex items-baseline gap-3 border-t pt-1.5')}
+        >
           <span className='min-w-0 flex-1'>
             {$t('taskNumbers.total', { 0: r.byPage.length })}
           </span>
@@ -324,22 +337,14 @@ function Current({
       </div>
     );
   if (current.failed || !n || !Array.isArray(n.pages))
-    return (
-      <p className='m-0 text-sm text-muted-foreground'>
-        {$t('taskNumbers.failed')}
-      </p>
-    );
+    return <p className={text.muted}>{$t('taskNumbers.failed')}</p>;
   if (!n.pages.length)
-    return (
-      <p className='m-0 text-sm text-muted-foreground'>
-        {$t('taskNumbers.noPages')}
-      </p>
-    );
+    return <p className={text.muted}>{$t('taskNumbers.noPages')}</p>;
   const clicks = Boolean(n.gscDays),
     views = !clicks && Boolean(n.ga4Days);
   return (
     <>
-      <p className='m-0 text-xs text-muted-foreground'>
+      <p className={text.muted}>
         {!n.range || (!clicks && !views)
           ? $t('taskNumbers.noData')
           : $t(
@@ -357,7 +362,10 @@ function Current({
         render={(p) => (
           <li
             key={p.page}
-            className='flex items-baseline gap-3 border-b py-1.5 text-sm last:border-b-0'
+            className={cn(
+              text.body,
+              'flex items-baseline gap-3 border-b py-1.5 last:border-b-0',
+            )}
           >
             <PageLink url={p.page} />
             <span className='ml-auto shrink-0 text-right tabular-nums'>
