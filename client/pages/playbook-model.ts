@@ -55,7 +55,8 @@ export function eventText(e:{action:string;note?:string;comment?:string;stageKey
   case 'requestStageChanges':return {who:$t('common.you'),text:$t('playbook.requestedChanges',{0:e.comment||''})};
   case 'editStageOutput':return {who:$t('common.you'),text:$t('playbook.editedContentDirectly')};
   case 'recordManual':return {who:$t('common.you'),text:$t('playbook.finishedThemselvesRecorded',{0:s})};
-  case 'retryStage':return {who:$t('common.you'),text:$t('playbook.retried',{0:s})};
+  // The system starts a step again once after NocoReach restarted under it (retryAfterRestart on the server).
+  case 'retryStage':return e.note==='serverRestart'?{who:$t('common.system'),text:$t('playbook.retriedAfterRestart',{0:s})}:{who:$t('common.you'),text:$t('playbook.retried',{0:s})};
   case 'confirmPublish':return {who:$t('common.you'),text:$t('common.confirmedPublished')};
   case 'comment':return {who:$t('common.you'),text:e.comment||''};
   case 'linkContent':return {who:$t('common.you'),text:$t('playbook.linkedPage')};

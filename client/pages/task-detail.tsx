@@ -88,6 +88,9 @@ type Failure={why:string;next:string;group?:string};
 // What went wrong with `run` and what to do: the official reason (the task's latest run arrives with its execution),
 // then NocoReach's own codes, then whatever the Agent itself said; never a bare code.
 function failureOf(run:Run,data:Data):Failure{
+ // NocoReach itself restarted while the run worked (every deploy restarts it): not the computer's doing (2026-10-22 user
+ // report). The step usually started again by itself; this shows when it could not (server/nocoreach/execution/restarts.ts).
+ if(run.restartedAt)return {why:$t('taskDetail.failureRestart'),next:$t('taskDetail.failureRestartNext'),group:'restart'};
  const copy=getFailureCopy(),reason=data.execution?.runId===run.id?data.execution.run.failureReason:undefined,group=reason?FAILURE_GROUP[reason]:undefined;
  if(group){const [why,next]=namedFailure(group,failedOn(run,data))||copy[group];return {why,next,group};}
  if(run.error==='invalid_agent_result'){const [why,next]=copy.invalid;return {why,next};}
@@ -442,7 +445,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   }
   const manualMark=<Button variant="ghost" disabled={busy} onClick={()=>void act('markMerged',{})}>{$t('taskDetail.publishedManually')}</Button>;
   if(r.state==='merging')return <StageCard label={progress} spinning title={$t('taskDetail.publishing')} sub={queued&&!data.agent?.online?<>{$t('taskDetail.agentComputerOfflinePublish')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>:$t('taskDetail.publishingHint')} actions={queued?manualMark:undefined}/>;
-  if(r.state==='merge_failed')return <StageCard title={$t('taskDetail.publishFailed')} sub={$t('taskDetail.publishFailedHint')} actions={<><Button disabled={busy} onClick={()=>void act('retryMerge',{})}>{$t('taskDetail.tryAgain')}</Button>{manualMark}</>}>{techLink}</StageCard>;
+  if(r.state==='merge_failed')return <StageCard title={$t('taskDetail.publishFailed')} sub={cur?.restartedAt?$t('taskDetail.publishRestartHint'):$t('taskDetail.publishFailedHint')} actions={<><Button disabled={busy} onClick={()=>void act('retryMerge',{})}>{$t('taskDetail.tryAgain')}</Button>{manualMark}</>}>{techLink}</StageCard>;
   const live=<Button variant={r.state==='verifying'?'ghost':'default'} disabled={busy} onClick={()=>void act('confirmLive',{})}>{$t('taskDetail.iConfirmLive')}</Button>;
   if(r.state==='verifying')return <StageCard label={progress} title={$t('taskDetail.waitingSiteUpdate')} sub={$t('taskDetail.waitingSiteUpdateHint',{0:r.lastCheckAt?$t('taskDetail.lastCheckedNotSeenYet',{0:when(r.lastCheckAt)}):''})} actions={live}><TargetRows data={data} r={r}/><PageLinks pages={r.pages}/><DriftNotice data={data} r={r}/></StageCard>;
   const [title,sub]=r.reason==='manual'?[$t('taskDetail.waitingConfirmLive'),$t('taskDetail.madeChangeYourselfConfirmOnce')]:r.reason==='cannot_verify'?[$t('taskDetail.publishedWaitingConfirmLive'),$t('taskDetail.changeNoTextCheckedWeb')]:[$t('taskDetail.changeNotSeenLiveAfter'),$t('taskDetail.siteMayNotHaveUpdated')];
@@ -485,11 +488,14 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    {!isActive&&!manual&&canRun&&<NeedsAgent data={data}/>}
    {approved&&source&&<Reveal label={$t('taskDetail.viewApprovedInput',{0:source.name})}><Reading><Markdown content={approved.content}/></Reading></Reveal>}</>:undefined;
   if(!canRun)return <StageCard title={displayStageName(stage)} sub={<>{$t('taskDetail.noWebsiteSourceRepositoryConnectedMessage')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/connections?source=repo')}>{$t('common.goDataSources')}</Button></>} actions={actions}>{body}</StageCard>;
-  if(cur?.status==='queued')return <StageCard label={progress} title={$t('taskDetail.agentWorking',{0:stage.name})} sub={agent?.online?$t('taskDetail.handedOffAgentStartingNow'):<>{$t('taskDetail.agentComputerOffline')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>} actions={actions}>{body}</StageCard>;
-  if(cur?.status==='running')return <StageCard label={progress} spinning title={<>{$t('taskDetail.agentWorking',{0:stage.name})}{cur.cancelRequested?$t('taskDetail.stoppingAside'):''}</>} sub={$t('taskDetail.agentWorkingFor',{0:since(cur.createdAt)})} actions={actions}>{body}</StageCard>;
+  // Started again by the system after NocoReach restarted (retryAfterRestart on the server): say why it runs again.
+  const restarted=cur?.autoRetry?<p className={text.muted}>{$t('taskDetail.restartRetried')}</p>:null;
+  if(cur?.status==='queued')return <StageCard label={progress} title={$t('taskDetail.agentWorking',{0:stage.name})} sub={agent?.online?$t('taskDetail.handedOffAgentStartingNow'):<>{$t('taskDetail.agentComputerOffline')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>} actions={actions}>{restarted}{body}</StageCard>;
+  if(cur?.status==='running')return <StageCard label={progress} spinning title={<>{$t('taskDetail.agentWorking',{0:stage.name})}{cur.cancelRequested?$t('taskDetail.stoppingAside'):''}</>} sub={$t('taskDetail.agentWorkingFor',{0:since(cur.createdAt)})} actions={actions}>{restarted}{body}</StageCard>;
   if(cur?.status==='failed'&&failure){
-   const {why,next,group}=failure,stageRuns=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
-   const streak=stageRuns.findIndex(r=>r.status!=='failed'),failures=streak<0?stageRuns.length:streak;
+   // Runs a NocoReach restart interrupted say nothing about the step, so the streak passes over them.
+   const {why,next,group}=failure,stageRuns=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0&&!r.restartedAt).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
+   const streak=stageRuns.findIndex(r=>r.status!=='failed'),failures=group==='restart'?0:streak<0?stageRuns.length:streak;
    return <StageCard title={$t('taskDetail.agentDidNotFinish')} actions={actions}>
     <dl className={cn(text.body,'grid gap-x-3 gap-y-1 sm:grid-cols-[auto_1fr]')}><dt className="text-muted-foreground">{$t('taskDetail.failureWhy')}</dt><dd>{why}{group==='toolLogin'&&agent?.online&&<span className='block'>{$t('taskDetail.failureOnlineMeans')}</span>}</dd><dt className="text-muted-foreground">{$t('taskDetail.failureNext')}</dt><dd>{next}</dd></dl>
     {failures>=2&&<p className="text-sm text-destructive">{$t('taskDetail.failureStreak',{0:failures})}</p>}

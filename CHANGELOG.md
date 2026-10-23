@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Task runs survive NocoReach restarts
+
+- A task run whose Runner lost its lease while NocoReach restarted (every deploy restarts it) is recorded as interrupted by the restart instead of blamed on the computer. NocoReach keeps the times it started (`nr-app-starts`) to tell the two apart.
+- The Agent step is started again once for each restart, as the system's Try again; the activity says so and the stage card says why it runs again. Review and publishing are never started again by themselves; an interrupted publish says the update interrupted it.
+- When the step could not start again, the card says the server was updating and offers Try again first; these runs no longer count toward "failed N times in a row". Technical details › Runs gives the restart time and the official reason.
+
 ## Unreleased — The classic import keeps NocoReach's timers off half-imported data
 
 - While `pnpm nocobase app import-classic` writes, NocoReach's timers (sync, analysis and the rest) skip their firings, so none acts on a project before all its rows have arrived. The analysis timer used to catch up the day's analysis on partial data and write `daily-analysis:<id>` and `signals:<id>`, which could end up beside the classic rows with the same keys. Each import call renews a five-minute hold and the last one ends it; if the command stops midway, the timers run again five minutes after its last call.

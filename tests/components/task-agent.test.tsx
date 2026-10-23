@@ -635,3 +635,101 @@ test('Try again stays the main action when retrying can help', () => {
     'bg-primary',
   );
 });
+
+// 2026-10-22 user report: each deploy restarted NocoReach and the card blamed a healthy Mac three times in a row.
+test('a run a NocoReach restart interrupted says so, keeps Try again first and is left out of the streak', () => {
+  const data = failedWithRemovedAgent();
+  data.work.agentId = 'codex';
+  data.agent!.agentId = 'codex';
+  data.runs = [
+    {
+      ...data.runs[0],
+      id: 'run-3',
+      createdAt: '2026-10-22T13:30:00Z',
+      restartedAt: '2026-10-22T13:42:00Z',
+    },
+    { ...data.runs[0], id: 'run-2', createdAt: '2026-10-22T13:10:00Z' },
+    {
+      ...data.runs[0],
+      id: 'run-1',
+      createdAt: '2026-10-22T12:50:00Z',
+      restartedAt: '2026-10-22T13:03:00Z',
+    },
+  ];
+  data.execution = {
+    runId: 'run-3',
+    run: {
+      failureReason: 'leaseExpired',
+      executions: [
+        { attempt: 1, runnerId: 'r1', runnerName: 'Office-Mac', tool: 'codex' },
+      ],
+    },
+    events: [],
+    truncated: false,
+    canInspect: true,
+  };
+  const view = mount(data);
+  expect(
+    screen.getByText(
+      'NocoReach 服务器当时正在更新，这次运行因此中断，与运行 Agent 的电脑无关。',
+    ),
+  ).toBeVisible();
+  expect(screen.getByText('再试一次即可，不需要检查那台电脑。')).toBeVisible();
+  expect(document.body).not.toHaveTextContent('Office-Mac');
+  expect(screen.queryByText(/已经连续/)).toBeNull();
+  expect(screen.getByRole('button', { name: '再试一次' })).toHaveClass(
+    'bg-primary',
+  );
+  view.unmount();
+
+  // A later failure of the computer's own counts only the runs the restarts did not interrupt.
+  data.runs = [
+    { ...data.runs[1], id: 'run-4', createdAt: '2026-10-22T14:00:00Z' },
+    ...data.runs,
+  ];
+  data.execution = { ...data.execution, runId: 'run-4' };
+  mount(data);
+  expect(screen.getByText(/^Office-Mac 中途断开了连接/)).toBeVisible();
+  expect(screen.getByText(/已经连续 2 次没做完/)).toBeVisible();
+});
+
+test('a step the system started again after a restart says why it runs again', () => {
+  const data = failedWithRemovedAgent();
+  data.work.agentId = 'codex';
+  data.agent!.agentId = 'codex';
+  data.agent!.online = true;
+  data.runs = [
+    {
+      ...data.runs[0],
+      id: 'run-2',
+      status: 'queued',
+      error: undefined,
+      createdAt: '2026-10-22T13:43:00Z',
+      autoRetry: { of: 'run-1', restartedAt: '2026-10-22T13:42:00Z' },
+    },
+    {
+      ...data.runs[0],
+      id: 'run-1',
+      createdAt: '2026-10-22T13:30:00Z',
+      restartedAt: '2026-10-22T13:42:00Z',
+    },
+  ];
+  data.work.history = [
+    {
+      at: '2026-10-22T13:43:00Z',
+      actor: 'system',
+      action: 'retryStage',
+      stageKey: 'analyze',
+      runId: 'run-2',
+      note: 'serverRestart',
+    },
+  ];
+  mount(data);
+  expect(
+    screen.getByText(
+      'NocoReach 服务器刚才在更新，上一次运行因此中断，已自动重新开始。',
+    ),
+  ).toBeVisible();
+  expect(screen.getByText('NocoReach 更新后自动重新开始“分析”')).toBeVisible();
+  expect(screen.queryByText(/重试“分析”/)).toBeNull();
+});
