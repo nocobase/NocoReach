@@ -7101,5 +7101,6 @@
   "opportunityTasks.created": "Đã tạo tác vụ: {0}. Mở từng tác vụ, đọc nội dung rồi nhấp \"Bắt đầu\".",
   "opportunityTasks.heading": "Tác vụ",
   "opportunityTasks.progressTag": "{0} tác vụ · {1} đã hoàn tất",
-  "opportunityTasks.sameOpportunity": "Cùng cơ hội cải thiện ({0})"
+  "opportunityTasks.sameOpportunity": "Cùng cơ hội cải thiện ({0})",
+  "opportunityTasks.taskCount": "{0} tác vụ"
 }

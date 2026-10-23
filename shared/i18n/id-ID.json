@@ -7101,5 +7101,6 @@
   "opportunityTasks.created": "Tugas dibuat: {0}. Buka masing-masing, baca, lalu klik \"Mulai\".",
   "opportunityTasks.heading": "Tugas",
   "opportunityTasks.progressTag": "{0} tugas · {1} selesai",
-  "opportunityTasks.sameOpportunity": "Peluang yang sama ({0})"
+  "opportunityTasks.sameOpportunity": "Peluang yang sama ({0})",
+  "opportunityTasks.taskCount": "{0} tugas"
 }

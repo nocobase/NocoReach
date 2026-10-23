@@ -7101,5 +7101,6 @@
   "opportunityTasks.created": "タスクを作成しました: {0} 件。それぞれ開いて内容を確認してから「開始」をクリックしてください。",
   "opportunityTasks.heading": "タスク",
   "opportunityTasks.progressTag": "タスク {0} 件 · 完了 {1}",
-  "opportunityTasks.sameOpportunity": "同じ改善機会（{0}）"
+  "opportunityTasks.sameOpportunity": "同じ改善機会（{0}）",
+  "opportunityTasks.taskCount": "タスク {0} 件"
 }

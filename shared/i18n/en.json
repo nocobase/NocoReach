@@ -7101,5 +7101,6 @@
   "opportunityTasks.created": "Tasks created: {0}. Open each one, read it, then click \"Start\".",
   "opportunityTasks.heading": "Tasks",
   "opportunityTasks.progressTag": "{0} tasks · {1} done",
-  "opportunityTasks.sameOpportunity": "Same opportunity ({0})"
+  "opportunityTasks.sameOpportunity": "Same opportunity ({0})",
+  "opportunityTasks.taskCount": "{0} tasks"
 }

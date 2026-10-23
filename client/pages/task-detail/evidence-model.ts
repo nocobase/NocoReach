@@ -1,15 +1,19 @@
 import { $t, $legacyText } from '#i18n';
 import type { ResultSource } from '../results/types.js';
 import type { TaskData } from '../task-execution-types.js';
+import { taskSignals } from '../../../shared/opportunity-parts.js';
 
 export type Signal = {
   key: string;
   source: string;
   title: string;
   facts: string[];
+  url?: string;
+  action?: string | null;
 };
 type Evidence = {
   insight?: { signalIds?: string[] };
+  part?: { signalIds?: string[] } | null;
   context?: { signals?: { items?: Signal[] } };
   handoff?: { playbook?: string; content?: string };
   resultSource?: ResultSource;
@@ -45,9 +49,10 @@ const plain = (text: string) =>
 /** The evidence a task carries: the signals it was made from, the brief, the owner's note and attachments. */
 export function taskEvidence(data: TaskData) {
   const ev = (data.task.evidence || {}) as Evidence;
-  const ids = new Set(ev.insight?.signalIds || []);
-  const signals = (ev.context?.signals?.items || []).filter((s) =>
-    ids.has(s.key),
+  // One of an opportunity's several tasks is there for its own place (shared/opportunity-parts.ts).
+  const signals = taskSignals(
+    { insight: ev.insight, part: ev.part },
+    ev.context?.signals?.items || [],
   );
   const brief = ev.handoff?.content || data.task.brief || '';
   const briefTitle = ev.handoff?.content

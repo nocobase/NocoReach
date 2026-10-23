@@ -7101,5 +7101,6 @@
   "opportunityTasks.created": "已建好 {0} 个任务，逐个打开看过后点“确定开始执行”。",
   "opportunityTasks.heading": "任务",
   "opportunityTasks.progressTag": "{0} 个任务 · 已完成 {1}",
-  "opportunityTasks.sameOpportunity": "同一机会（{0}）"
+  "opportunityTasks.sameOpportunity": "同一机会（{0}）",
+  "opportunityTasks.taskCount": "{0} 个任务"
 }

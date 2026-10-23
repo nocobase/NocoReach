@@ -266,12 +266,11 @@ export function TaskProperties({
                   {siblings.map((r) => (
                     <span
                       key={r.id}
-                      className='flex w-full min-w-0 items-center gap-2'
+                      className='flex w-full min-w-0 items-start gap-2'
                     >
                       <button
                         type='button'
-                        className='nr-link min-w-0 flex-1 truncate text-left'
-                        title={r.title}
+                        className='nr-link min-w-0 flex-1 text-left'
                         onClick={() => void navigate(`/actions/${r.id}`)}
                       >
                         {r.no ? `T-${r.no} ` : ''}

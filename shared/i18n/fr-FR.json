@@ -7101,5 +7101,6 @@
   "opportunityTasks.created": "Tâches créées : {0}. Ouvrez chacune d’elles, consultez-la, puis cliquez sur \"Démarrer\".",
   "opportunityTasks.heading": "Tâches",
   "opportunityTasks.progressTag": "{0} tâches · {1} terminées",
-  "opportunityTasks.sameOpportunity": "Même opportunité ({0})"
+  "opportunityTasks.sameOpportunity": "Même opportunité ({0})",
+  "opportunityTasks.taskCount": "{0} tâches"
 }

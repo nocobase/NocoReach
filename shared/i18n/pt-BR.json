@@ -7101,5 +7101,6 @@
   "opportunityTasks.created": "Tarefas criadas: {0}. Abra cada uma, revise e clique em \"Iniciar\".",
   "opportunityTasks.heading": "Tarefas",
   "opportunityTasks.progressTag": "{0} tarefas · {1} concluídas",
-  "opportunityTasks.sameOpportunity": "Mesma oportunidade ({0})"
+  "opportunityTasks.sameOpportunity": "Mesma oportunidade ({0})",
+  "opportunityTasks.taskCount": "{0} tarefas"
 }

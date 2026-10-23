@@ -7101,5 +7101,6 @@
   "opportunityTasks.created": "Tareas creadas: {0}. Abre cada una, revísala y haz clic en «Iniciar».",
   "opportunityTasks.heading": "Tareas",
   "opportunityTasks.progressTag": "{0} tareas · {1} completadas",
-  "opportunityTasks.sameOpportunity": "Misma oportunidad ({0})"
+  "opportunityTasks.sameOpportunity": "Misma oportunidad ({0})",
+  "opportunityTasks.taskCount": "{0} tareas"
 }

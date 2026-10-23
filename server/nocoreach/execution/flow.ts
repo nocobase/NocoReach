@@ -6,7 +6,7 @@ export type { StageKind, Stage, ChecklistItem, AgentMode } from '../../../shared
 import { languageOf } from './language';
 import { fail, text } from './model';
 import { memoryForAI } from './memory';
-import { ownSignalIds } from '../../../shared/opportunity-parts.js';
+import { taskSignals } from '../../../shared/opportunity-parts.js';
 
 // Flows (SPEC §6.0): Runner stages produce output for human review.
 // Review stages are human decisions; publish and observe are fixed system stages at the end of repository flows.
@@ -68,9 +68,7 @@ export function flowRunInput(project: any, task: any, w: { flow?: FlowSnapshot; 
   const insight = task?.evidence?.insight || null, part = task?.evidence?.part || null;
   // One of an opportunity's several tasks reads the changes about its own place, and the opportunity's changes that
   // name no page as background; the brief says which place it changes.
-  const own = new Set<string>(part ? ownSignalIds(task.evidence) : Array.isArray(insight?.signalIds) ? insight.signalIds : []);
-  const cited = new Set<string>(Array.isArray(insight?.signalIds) ? insight.signalIds : []);
-  const signals = (task?.evidence?.context?.signals?.items || []).filter((s: any) => own.has(s?.key) || (part && cited.has(s?.key) && !s?.url && s?.action !== 'reply')).slice(0, 20);
+  const signals = taskSignals(insight ? { ...task.evidence, signalKey: undefined } : null, (task?.evidence?.context?.signals?.items || []).filter(Boolean)).slice(0, 20);
   const { work, context, handoff, ...rest } = task?.evidence || {};
   return {
     project: memoryForAI(project),

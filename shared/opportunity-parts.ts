@@ -132,3 +132,19 @@ export function ownSignalIds(e?: PartEvidence | null): string[] {
     ...(typeof e?.signalKey === 'string' ? [e.signalKey] : []),
   ];
 }
+
+/**
+ * The cited changes a task reads (its brief's evidence, the Agent's input): a place's own changes plus the
+ * opportunity's changes without a page as background, or every change a task handed off as a whole was given.
+ */
+export function taskSignals<
+  S extends { key?: unknown; url?: unknown; action?: unknown },
+>(e: PartEvidence | null | undefined, items: S[]): S[] {
+  const own = new Set<unknown>(ownSignalIds(e));
+  if (!e?.part) return items.filter((s) => own.has(s.key));
+  const cited = new Set<unknown>(strings(e.insight?.signalIds));
+  return items.filter(
+    (s) =>
+      own.has(s.key) || (cited.has(s.key) && !s.url && s.action !== 'reply'),
+  );
+}

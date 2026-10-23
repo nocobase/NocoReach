@@ -65,7 +65,7 @@ export type OpportunityTask = {
 const ORDER: TaskStanding[] = ['done', 'review', 'doing', 'todo', 'closed'];
 export const standingOf = (t?: OpportunityTask): TaskStanding =>
   taskStanding({ work: t?.evidence?.work, status: t?.status });
-/** Where an opportunity's several tasks stand, in one tag: how many and how many are done. */
+/** Where an opportunity's several tasks stand, in one tag: how many, and how many are done (always two or more). */
 export function severalTag(states: TaskStanding[]): {
   tone: Tone;
   text: string;
@@ -78,7 +78,10 @@ export function severalTag(states: TaskStanding[]): {
         : states.includes('review')
           ? 'violet'
           : 'blue',
-    text: $t('opportunityTasks.progressTag', { 0: states.length, 1: done }),
+    // How many are done only once one is.
+    text: done
+      ? $t('opportunityTasks.progressTag', { 0: states.length, 1: done })
+      : $t('opportunityTasks.taskCount', { 0: states.length }),
   };
 }
 

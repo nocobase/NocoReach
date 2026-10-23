@@ -2,7 +2,12 @@
 // opportunity's changes point to, the hand-off that creates a task per place, and what each task's Agent reads.
 import assert from 'node:assert/strict';
 import { expect, it } from 'vitest';
-import { ownSignalIds, partsOf, splitOf } from '../../shared/opportunity-parts';
+import {
+  ownSignalIds,
+  partsOf,
+  splitOf,
+  taskSignals,
+} from '../../shared/opportunity-parts';
 import {
   planOf,
   scopeText,
@@ -110,6 +115,19 @@ it('an opportunity proposes one place per page, one for the replies, and none fo
   expect(
     ownSignalIds({ insight: { signalIds: ['a'] }, signalKey: 'b' }),
   ).toEqual(['a', 'b']);
+  // What a place's task reads (its Why and its Agent's input): its own changes and the ones without a page.
+  expect(
+    taskSignals(
+      {
+        part: { signalIds: ['rank:top15'] },
+        insight: { signalIds: card.signalIds },
+      },
+      signals,
+    ).map((s) => s.key),
+  ).toEqual(['rank:top15', 'site-clicks']);
+  expect(
+    taskSignals({ insight: { signalIds: card.signalIds } }, signals),
+  ).toHaveLength(signals.length);
 });
 
 it('each place gets its label, task title and the open task already changing it', () => {
