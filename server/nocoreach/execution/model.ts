@@ -97,6 +97,17 @@ export function boardState(w: Work): BoardState {
   if (w.stage === 'work') return w.results[w.step] && !w.results[w.step]?.rejectedAt ? 'review' : 'doing';
   return 'todo';
 }
+/**
+ * Where a task stands for people, closed apart (2026-10-23 user feedback: a cancelled task read "Completed · Closed"):
+ * a cancelled task, or one archived before it finished (including the old-workflow archive), is closed; one archived
+ * after finishing stays done. `boardState` keeps cancelled tasks in the board's done column; labels use this.
+ */
+export type TaskStanding = BoardState | 'closed';
+export function taskStanding(w: Work): TaskStanding {
+  if (w.cancelledAt) return 'closed';
+  const state = boardState(w);
+  return w.archivedAt && state !== 'done' ? 'closed' : state;
+}
 export function contentInput(v: any, domains: string[]) {
   let url: URL;
   try { url = new URL(text(v.url, 2000)); } catch { return fail(systemMessageText('taskExecution.enterFullPageUrl')); }
