@@ -6,9 +6,7 @@ import {
   chatFeedback,
   chatIsRunning,
   useChatScroll,
-  newConversationAgent,
   timelineOrder,
-  useAgentText,
   useChatAgents,
   useChatPanel,
   useConversation,
@@ -16,16 +14,22 @@ import {
   useConversationMessages,
   useChatStream,
   useChatController,
+  useChatApi,
   useSendMessage,
   type ChatTimelineItem,
 } from '@nocobase/app-plugin-agents/client/chat';
-import type { ConversationDetail } from '@nocobase/app-plugin-agents/shared/conversations';
+import type {
+  ConversationDetail,
+  MessageAttachment,
+  PageContext,
+} from '@nocobase/app-plugin-agents/shared/conversations';
 import { BotMessageSquareIcon, PaperclipIcon } from 'lucide-react';
 import {
   useCallback,
   useContext,
   useEffect,
   useMemo,
+  useEffectEvent,
   useRef,
   useState,
   type DragEvent,
@@ -33,6 +37,7 @@ import {
   type ReactNode,
 } from 'react';
 
+import { $t } from '#i18n';
 import { Button } from '#components/ui/button';
 import {
   Empty,
@@ -47,16 +52,31 @@ import { Spinner } from '#components/ui/spinner';
 import { cn } from 'cn';
 
 import { useOnlineChat } from '../../online-agent/context.js';
-import { RunnerChatChoice } from './agent-choice.js';
+import { useProject } from '../../pages/reach-data.js';
+import {
+  ONLINE_AGENT_ID,
+  ONLINE_CHAT_SCOPE,
+} from '../../../shared/online-agent.js';
+import { ChatAgentChoice } from './agent-choice.js';
 import { AgentNotice } from './agent-status.js';
 import { errorStatus, useChatTranslation } from './chat-i18n.js';
 import { LoadError } from './chat-ui.js';
 import { Composer } from './composer.js';
 import { LiveSteps, TurnAnnouncer } from './live-steps.js';
 import { MessageItem, PendingItem } from './message-item.js';
-import { runnerAgents } from './runner-agents.js';
+import {
+  chatAgents,
+  isOnlineAgent,
+  newChatAgent,
+  useChatAgentName,
+} from './chat-agents.js';
 
 const NO_ITEMS: readonly ChatTimelineItem[] = [];
+type Input = {
+  readonly content: string;
+  readonly context: PageContext | undefined;
+  readonly attachments?: readonly MessageAttachment[];
+};
 
 function noTimelineItems(): readonly ChatTimelineItem[] {
   return NO_ITEMS;
@@ -184,12 +204,10 @@ function ConversationBody({
   const chatController = useChatController();
   const [saveError, setSaveError] = useState<unknown>(null);
   const messages = useConversationMessages(conversationId);
-  const { mode, setRunnerPending } = useOnlineChat();
+  const online = useOnlineChat();
+  const { project } = useProject();
+  const chatApi = useChatApi();
   const hasPending = messages.pending.length > 0;
-  useEffect(() => {
-    setRunnerPending(hasPending);
-    return () => setRunnerPending(false);
-  }, [hasPending, setRunnerPending]);
   const useTimelineItems = extensions.useTimelineItems ?? noTimelineItems;
   const revision =
     messages.items.reduce(
@@ -200,11 +218,26 @@ function ConversationBody({
     conversationId ?? '',
     revision,
   );
-  // NocoReach's online chat has its own service; this panel only starts Runner conversations.
-  const runners = useMemo(() => runnerAgents(agents.data), [agents.data]);
-  const target = conversation
-    ? null
-    : newConversationAgent(runners, panel.newAgentId);
+  const offered = useMemo(
+    () => chatAgents(agents.data, online.enabled),
+    [agents.data, online.enabled],
+  );
+  const target = conversation ? null : newChatAgent(offered, panel.newAgentId);
+  // An online conversation off in Chat panel › Settings stays readable; its tools refuse anyway.
+  const onlineOff =
+    isOnlineAgent(conversation?.agent) &&
+    online.settings !== undefined &&
+    !online.enabled;
+  // The panel's copy of the switch may be older than an administrator's change, and nothing reads it before a send. The
+  // server's guard refuses a message or an approval while it is off, and the panel then reads it again, so it says the
+  // agent is off and offers no retry that would be refused again.
+  const onlineAgent = isOnlineAgent(conversation?.agent);
+  const refreshOnline = useEffectEvent(() => online.refresh());
+  const sendRefused =
+    onlineAgent && messages.pending.some((item) => item.status !== 'sending');
+  useEffect(() => {
+    if (sendRefused) refreshOnline();
+  }, [sendRefused]);
 
   const { selectConversation, resetSource, source, focusComposer } = panel;
   const created = useCallback(
@@ -224,31 +257,87 @@ function ConversationBody({
     onCreated: created,
   });
 
+  // A new online conversation is created first, with NocoReach's scope and the project the person is in, which the
+  // plugin's send cannot carry; the message follows once the panel holds the new conversation.
+  const [starting, setStarting] = useState<{
+    input: Input;
+    error?: unknown;
+  } | null>(null);
+  const startedRef = useRef(false);
+  const liveRef = useRef(true);
+  useEffect(
+    () => () => {
+      liveRef.current = false;
+    },
+    [],
+  );
+  const projectId = project ? String(project.id) : null;
+  const start = (input: Input): boolean => {
+    if (starting && !starting.error) return false;
+    setStarting({ input });
+    startedRef.current = false;
+    chatApi
+      .createConversation({
+        agentId: ONLINE_AGENT_ID,
+        source,
+        config: {
+          scope: [ONLINE_CHAT_SCOPE],
+          context: { variable: { projectId } },
+        },
+      })
+      .then(
+        (detail) => {
+          if (liveRef.current) created(detail);
+          // Left for another conversation while this one was created: its message went with the composer, so the
+          // empty conversation is archived rather than left in the history.
+          else
+            void chatApi
+              .updateConversation(detail.id, { archived: true })
+              .catch(() => {});
+        },
+        (error: unknown) => {
+          if (!liveRef.current) return;
+          setStarting({ input, error });
+          // Refused because the chat agent was turned off since the panel read its settings.
+          online.refresh();
+        },
+      );
+    return true;
+  };
+  // The composer was already cleared, so a message the plugin's send does not take stays here to be sent again.
+  const deliver = (input: Input) => {
+    if (send(input)) {
+      setStarting(null);
+      online.touch();
+    } else setStarting({ input, error: new Error('notSent') });
+  };
+  const deliverStarted = useEffectEvent(deliver);
+  useEffect(() => {
+    if (!starting || starting.error || !conversationId || startedRef.current)
+      return;
+    startedRef.current = true;
+    deliverStarted(starting.input);
+  }, [starting, conversationId]);
+
   // Viewed: tell the server the agent's latest replies were read.
   const { markRead } = actions;
   const unread = conversation !== null && !conversation.read;
   useEffect(() => {
-    if (
-      panel.open &&
-      mode === 'runner' &&
-      panel.view === 'chat' &&
-      unread &&
-      conversationId
-    )
+    if (panel.open && panel.view === 'chat' && unread && conversationId)
       markRead(conversationId);
-  }, [panel.open, panel.view, mode, unread, conversationId, markRead]);
+  }, [panel.open, panel.view, unread, conversationId, markRead]);
 
-  const text = useAgentText();
+  const nameOf = useChatAgentName();
   const names = useMemo(() => {
     const byId = new Map<string, string>();
-    for (const agent of agents.data ?? []) byId.set(agent.id, text.name(agent));
+    for (const agent of agents.data ?? []) byId.set(agent.id, nameOf(agent));
     for (const agent of [conversation?.agent, conversation?.fallbackFrom]) {
-      const name = agent ? text.name(agent) : null;
+      const name = agent ? nameOf(agent) : null;
       if (agent && name) byId.set(agent.id, name);
     }
     return byId;
-  }, [agents.data, conversation?.agent, conversation?.fallbackFrom, text]);
-  const ownName = conversation ? text.name(conversation.agent) : null;
+  }, [agents.data, conversation?.agent, conversation?.fallbackFrom, nameOf]);
+  const ownName = conversation ? nameOf(conversation.agent) : null;
   const agentName = (agentId: string | undefined): string =>
     (agentId ? names.get(agentId) : undefined) ??
     ownName ??
@@ -256,7 +345,7 @@ function ConversationBody({
   // A new conversation with no agent to go to yet (none chosen, no default) is not a deleted agent.
   const currentName =
     ownName ??
-    (target ? text.name(target) : null) ??
+    (target ? nameOf(target) : null) ??
     (conversation ? t('chat.agentGone') : t('chat.anyAgent'));
 
   const segments = chatMessageSegments(messages.items);
@@ -312,10 +401,17 @@ function ConversationBody({
               ? extensions.renderMessageExtra?.(segment.message)
               : null
           }
-          approvalDisabled={receiving}
+          approvalDisabled={receiving || onlineOff}
           onApproval={
             conversationId
-              ? (input) => chatController.approve(conversationId, input)
+              ? async (input) => {
+                  try {
+                    await chatController.approve(conversationId, input);
+                  } catch (error) {
+                    if (onlineAgent) online.refresh();
+                    throw error;
+                  }
+                }
               : undefined
           }
         />
@@ -380,23 +476,37 @@ function ConversationBody({
     feedback === 'waiting' ||
     feedback === 'thinking' ||
     feedback === 'stopping';
-  const feedbackNotice = feedback ? (
-    <div
-      role='status'
-      aria-live='polite'
-      className='flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground'
-      data-chat-feedback={feedback}
-    >
-      {busyFeedback ? (
-        <Spinner aria-hidden='true' className='shrink-0' />
-      ) : null}
-      {t(`chat.feedback.${feedback}`)}
-    </div>
-  ) : null;
+  // A stopped or interrupted online reply already ends with its saved notice saying so; the same line is not repeated.
+  const lastStatus = messages.items
+    .at(-1)
+    ?.parts.find(
+      (part) => part.type === 'data-notice' && part.id === 'execution-status',
+    );
+  const savedOutcome =
+    lastStatus?.type === 'data-notice' ? lastStatus.data.type : undefined;
+  const feedbackNotice =
+    feedback &&
+    !(
+      (feedback === 'cancelled' || feedback === 'failed') &&
+      savedOutcome === feedback
+    ) ? (
+      <div
+        role='status'
+        aria-live='polite'
+        className='flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground'
+        data-chat-feedback={feedback}
+      >
+        {busyFeedback ? (
+          <Spinner aria-hidden='true' className='shrink-0' />
+        ) : null}
+        {t(`chat.feedback.${feedback}`)}
+      </div>
+    ) : null;
 
   const empty =
     entries.length === 0 &&
     messages.pending.length === 0 &&
+    !starting &&
     !busyFeedback &&
     !running;
 
@@ -498,6 +608,27 @@ function ConversationBody({
                 className='flex min-w-0 flex-col gap-4 py-1'
               >
                 {entries.map((entry) => entry.node)}
+                {starting ? (
+                  <PendingItem
+                    message={{
+                      clientId: 'starting',
+                      ...starting.input,
+                      createdAt: '',
+                      status: starting.error ? 'failed' : 'sending',
+                    }}
+                    onRetry={
+                      online.settings && !online.enabled
+                        ? undefined
+                        : () =>
+                            // Created already, even while its detail loads: send again rather than create another.
+                            void (conversationId
+                              ? deliver(starting.input)
+                              : start(starting.input))
+                    }
+                    onDiscard={() => setStarting(null)}
+                    onCheck={() => {}}
+                  />
+                ) : null}
                 {messages.pending.map((message) => (
                   <PendingItem
                     key={message.clientId}
@@ -529,15 +660,18 @@ function ConversationBody({
                         clientId: message.clientId,
                       })
                     }
-                    onRetry={() =>
-                      void send({
-                        content: message.content,
-                        context: message.context,
-                        ...(message.attachments
-                          ? { attachments: message.attachments }
-                          : {}),
-                        clientId: message.clientId,
-                      })
+                    onRetry={
+                      onlineOff
+                        ? undefined
+                        : () =>
+                            void send({
+                              content: message.content,
+                              context: message.context,
+                              ...(message.attachments
+                                ? { attachments: message.attachments }
+                                : {}),
+                              clientId: message.clientId,
+                            })
                     }
                   />
                 ))}
@@ -610,8 +744,10 @@ function ConversationBody({
               `registry:${source}:${conversationId ?? 'new'}`,
             ) ||
             Boolean(conversation && !conversation.execution) ||
-            // Without a Runner target the server would pick the default agent, which may be the built-in online one.
-            (!conversation && target === null)
+            onlineOff ||
+            Boolean(starting && !starting.error) ||
+            // Without a target the server would pick its own default agent.
+            (!conversation && !conversationId && target === null)
           }
           running={running}
           stopping={stopping}
@@ -619,17 +755,27 @@ function ConversationBody({
             if (conversationId) actions.stop.mutate(conversationId);
           }}
           onSend={(content, context, attachments) => {
+            if (!conversationId && isOnlineAgent(target))
+              return start({ content, context, attachments });
             const accepted = send({ content, context, attachments });
+            if (accepted && isOnlineAgent(conversation?.agent)) online.touch();
             if (accepted) focusComposer();
             return accepted;
           }}
           registerAddFiles={registerAddFiles}
-          toolbar={<RunnerChatChoice />}
+          toolbar={<ChatAgentChoice disabled={hasPending || !!starting} />}
           notice={
-            conversation ? (
+            onlineOff ? (
+              <p
+                className='text-xs text-muted-foreground'
+                data-testid='chat-online-off'
+              >
+                {$t('onlineAgent.chatDisabled')}
+              </p>
+            ) : conversation ? (
               <AgentNotice conversation={conversation} />
             ) : target === null && agents.isSuccess ? (
-              runners.length > 0 ? (
+              offered.length > 0 ? (
                 <p
                   className='text-xs text-muted-foreground'
                   data-testid='chat-choose-agent'

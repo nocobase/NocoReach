@@ -19,17 +19,13 @@ const runnerAccess = routeAccess(agentsRoute);
 
 // One page for the AIs in NocoReach (2026-10-22 user decision): who does the work comes first, then four tabs, model
 // services, runtimes, local agents and usage. Model services, runtimes and usage are the Agents plugin's own pages,
-// which bring their own frame and heading, so every tab renders its own page below the tab bar. The chat agent's settings open as a dialog
-// over the page (`chat/new`, `chat/:onlineAgentId`).
+// which bring their own frame and heading, so every tab renders its own page below the tab bar. Chat panel › Settings
+// opens as a dialog over the page (`chat`).
 export default function AgentsPage() {
   const index = useMatch('/agents') !== null;
   const [refresh, setRefresh] = useState(0);
   const changed = () => setRefresh((value) => value + 1);
-  const context: AgentSettingsContext = {
-    refresh: changed,
-    saved: changed,
-    back: '/agents',
-  };
+  const context: AgentSettingsContext = { refresh: changed, back: '/agents' };
   return (
     <>
       <PageContainer className='pb-0'>

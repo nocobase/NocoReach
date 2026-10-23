@@ -5,9 +5,7 @@ import {
 import { agentsToken } from '@nocobase/app-plugin-agents/server/tokens';
 import type { Application } from '@nocobase/app-server/application';
 import {
-  ApiError,
   apiErrorHandler,
-  apiErrorStatusFromHttp,
   apiErrorResponses,
   apiValidator,
   dataResponse,
@@ -17,51 +15,37 @@ import {
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
-import { onlineAgentsToken } from '../providers/online-agents.js';
+import { onlineChatSettingsToken } from '../providers/online-agents.js';
 import { nocoReachToken } from '../providers/nocoreach.js';
 import { roleOf } from '../nocoreach/policy.js';
-import { authorizationToken, type AuthorizationEnv } from '@nocobase/app-plugin-authorization/server';
-import { OnlineAgentError } from '../online-agent/errors.js';
+import {
+  authorizationToken,
+  type AuthorizationEnv,
+} from '@nocobase/app-plugin-authorization/server';
+import {
+  OnlineAgentError,
+  onlineApiError,
+} from '../nocoreach/online-agent/errors.js';
+import { InsightThreads } from '../nocoreach/online-agent/threads.js';
+import { databaseManagerToken } from '@nocobase/db';
+import { onlineProjectId as projectId } from '../../shared/online-agent.js';
 
 const model = z.strictObject({
   modelService: z.string().min(1).max(100),
   model: z.string().min(1).max(200),
 });
-const definition = z.strictObject({
-  name: z.string().trim().min(1).max(80),
-  instructions: z.string().max(12000),
+const settings = z.strictObject({
   enabled: z.boolean(),
+  instructions: z.string().max(12000),
   model: model.nullable(),
   revision: z.number().int().min(0),
 });
-const id = z.strictObject({
-  id: z.string().regex(/^online-(?:[a-z]+-)?[a-zA-Z0-9-]{1,90}$/),
-});
-const message = z.strictObject({
-  requestId: z.uuid(),
-  revision: z.number().int().min(0),
-  text: z.string().trim().min(1).max(30000),
-});
-const projectId = z.string().regex(/^[1-9]\d{0,15}$/);
 // Asked from Insights: the analysis day, and the opportunity when asked from its line.
-const subject = z.strictObject({
-  kind: z.literal('insights'),
+const thread = z.strictObject({
+  projectId,
   day: z.iso.date(),
   opportunityId: z.string().min(1).max(100).optional(),
 });
-const createConversation = z
-  .strictObject({
-    requestId: z.uuid(),
-    agentId: z.string().min(1).max(100),
-    model: model.nullable().optional(),
-    projectId: projectId.nullable().default(null),
-    subject: subject.nullable().optional(),
-    text: z.string().trim().min(1).max(30000),
-  })
-  .refine((v) => !v.subject || v.projectId, {
-    message: 'A conversation asked from Insights belongs to a project',
-    path: ['projectId'],
-  });
 const endpoint = (operationId: string, summary: string) =>
   describeRoute({
     tags: ['Online Agents'],
@@ -74,7 +58,11 @@ const owner = (context: Pick<Context<AuthEnv>, 'get'>) =>
 
 export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
   const router = new Hono<AuthEnv & AuthorizationEnv>();
-  const service = () => app.container.resolve(onlineAgentsToken);
+  const store = () => app.container.resolve(onlineChatSettingsToken);
+  const threads = new InsightThreads(
+    app.container.resolve(databaseManagerToken),
+    app.container.resolve(agentsToken),
+  );
   const runtime = () => app.container.resolve(nocoReachToken);
   const agents = app.container.resolve(agentsToken);
   router.use(
@@ -103,14 +91,7 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
   });
   router.onError((error, context) =>
     apiErrorHandler(
-      error instanceof OnlineAgentError
-        ? new ApiError({
-            status: apiErrorStatusFromHttp(error.status),
-            domain: 'onlineAgent',
-            reason: error.code,
-            message: error.code,
-          })
-        : error,
+      error instanceof OnlineAgentError ? onlineApiError(error) : error,
       context,
     ),
   );
@@ -145,54 +126,51 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
     throw new OnlineAgentError('accessDenied', 403);
   };
   router.get(
-    '/onlineAgents/definitions',
+    '/onlineAgents/settings',
     endpoint(
-      'listOnlineAgents',
-      'List online agents and their model readiness',
+      'readOnlineChatSettings',
+      'Read Chat panel settings and whether its model is ready',
     ),
     async (context) => {
       await requireReader();
-      const definitions = await service().definitions();
-      const list = await Promise.all(
-        definitions.map(async (agent) => {
-          let ready = false;
-          if (agent.enabled)
-            try {
-              await service().resolveModel(agent.model);
-              ready = true;
-            } catch {
-              /* No model credentials leave the server. */
-            }
-          return { ...agent, ready };
-        }),
-      );
-      return context.json({ data: list });
-    },
-  );
-  router.post(
-    '/onlineAgents/definitions',
-    endpoint('createOnlineAgent', 'Create an online agent'),
-    apiValidator('json', definition),
-    async (context) => {
-      await admin(context);
-      return context.json({
-        data: await service().saveDefinition(context.req.valid('json')),
-      });
+      const value = await store().get();
+      let ready = false,
+        defaultModel = false;
+      try {
+        // The plugin lists its `online` agent only while a system default chat model exists, even when Chat panel ›
+        // Settings names a model of its own; without one the panel cannot offer the chat agent.
+        const { effectiveChat } = await agents.models.services.defaults();
+        defaultModel = !!effectiveChat;
+        if (effectiveChat) {
+          await agents.models.services.connectionFor(
+            value.model ?? effectiveChat,
+            'chat',
+          );
+          ready = true;
+        }
+      } catch {
+        /* No model credentials leave the server. */
+      }
+      return context.json({ data: { ...value, ready, defaultModel } });
     },
   );
   router.put(
-    '/onlineAgents/definitions/:id',
-    endpoint('updateOnlineAgent', 'Update an online agent at its revision'),
-    apiValidator('param', id),
-    apiValidator('json', definition),
+    '/onlineAgents/settings',
+    endpoint(
+      'updateOnlineChatSettings',
+      'Update Chat panel settings at their revision',
+    ),
+    apiValidator('json', settings),
     async (context) => {
       await admin(context);
-      return context.json({
-        data: await service().saveDefinition(
-          context.req.valid('json'),
-          context.req.valid('param').id,
-        ),
-      });
+      const value = context.req.valid('json');
+      if (value.enabled && value.model)
+        try {
+          await agents.models.services.connectionFor(value.model, 'chat');
+        } catch {
+          throw new OnlineAgentError('modelUnavailable');
+        }
+      return context.json({ data: await store().save(value) });
     },
   );
   router.get(
@@ -209,19 +187,6 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
     },
   );
   router.get(
-    '/onlineAgents/conversations',
-    endpoint(
-      'listOnlineConversations',
-      "List only the current person's online conversations",
-    ),
-    async (context) => {
-      const visible = [];
-      for (const conversation of await service().conversations(owner(context)))
-        if (await canRead(conversation.projectId)) visible.push(conversation);
-      return context.json({ data: visible });
-    },
-  );
-  router.get(
     '/onlineAgents/threads',
     endpoint(
       'listOnlineInsightThreads',
@@ -231,84 +196,36 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
     async (context) => {
       const { projectId: id } = context.req.valid('query');
       await project(id);
-      return context.json({
-        data: await service().threads(owner(context), id),
-      });
+      return context.json({ data: await threads.list(owner(context), id) });
     },
   );
   router.post(
-    '/onlineAgents/conversations',
+    '/onlineAgents/threads',
     endpoint(
-      'createOnlineConversation',
-      'Start an online conversation idempotently',
+      'startOnlineInsightThread',
+      "Start a conversation about a day's analysis; the browser sends its first message",
     ),
-    apiValidator('json', createConversation),
+    apiValidator('json', thread),
     async (context) => {
       const input = context.req.valid('json');
       await project(input.projectId);
-      return context.json({
-        data: await service().send(owner(context), input),
-      });
-    },
-  );
-  router.get(
-    '/onlineAgents/conversations/:id',
-    endpoint(
-      'readOnlineConversation',
-      'Read an owned online conversation and execution records',
-    ),
-    apiValidator('param', id),
-    async (context) => {
-      const conversation = await service().conversation(
-        context.req.valid('param').id,
-        owner(context),
-      );
-      await project(conversation.projectId);
-      return context.json({
-        data: {
-          conversation,
-          runs: await service().conversationRuns(conversation),
+      const auth = context.get('auth')!;
+      const id = await threads.start(
+        {
+          user: { id: owner(context) },
+          authorization: context.get('authz'),
+          credentials: auth,
         },
-      });
-    },
-  );
-  router.post(
-    '/onlineAgents/conversations/:id/messages',
-    endpoint(
-      'sendOnlineMessage',
-      'Queue another turn in an owned conversation',
-    ),
-    apiValidator('param', id),
-    apiValidator('json', message),
-    async (context) => {
-      const conversation = await service().conversation(
-        context.req.valid('param').id,
-        owner(context),
+        input.projectId,
+        {
+          kind: 'insights',
+          day: input.day,
+          ...(input.opportunityId
+            ? { opportunityId: input.opportunityId }
+            : {}),
+        },
       );
-      await project(conversation.projectId);
-      return context.json({
-        data: await service().send(owner(context), {
-          ...context.req.valid('json'),
-          conversationId: conversation.id,
-        }),
-      });
-    },
-  );
-  router.post(
-    '/onlineAgents/runs/:id/cancel',
-    endpoint('cancelOnlineConversationRun', 'Cancel an owned conversation run'),
-    apiValidator('param', id),
-    apiValidator('json', z.strictObject({})),
-    async (context) => {
-      const run = await service().run(context.req.valid('param').id);
-      if (run.ownerId !== owner(context))
-        throw new OnlineAgentError('runNotFound', 404);
-      const conversation = await service().conversation(
-        run.conversationId,
-        owner(context),
-      );
-      await project(conversation.projectId);
-      return context.json({ data: await service().cancel(run.id) });
+      return context.json({ data: { id } });
     },
   );
   return new Hono().route('/', router);

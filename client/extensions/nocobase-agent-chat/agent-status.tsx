@@ -1,7 +1,4 @@
-import {
-  AgentAvatar,
-  useAgentText,
-} from '@nocobase/app-plugin-agents/client/chat';
+import { AgentAvatar } from '@nocobase/app-plugin-agents/client/chat';
 import type {
   ChatAvailability,
   ConversationDetail,
@@ -13,6 +10,7 @@ import { AvailabilityDot as AgentAvailabilityDot } from '#components/agent-picke
 import { Alert, AlertDescription, AlertTitle } from '#components/ui/alert';
 import { cn } from 'cn';
 
+import { useChatAgentName } from './chat-agents.js';
 import { useAgentPickerLabels, useChatTranslation } from './chat-i18n.js';
 import { ChatTag, ModeTag } from './chat-ui.js';
 
@@ -49,7 +47,7 @@ export function AgentLine({
   readonly 'data-testid'?: string;
 }): ReactElement {
   const { t } = useChatTranslation();
-  const own = useAgentText().name(conversation.agent);
+  const own = useChatAgentName()(conversation.agent);
   const name = own ?? t('chat.agentGone');
   return (
     <p
@@ -79,7 +77,7 @@ export function AgentNotice({
   conversation,
 }: AgentNoticeProps): ReactElement | null {
   const { t } = useChatTranslation();
-  const name = useAgentText().name(conversation.agent) ?? t('chat.agentGone');
+  const name = useChatAgentName()(conversation.agent) ?? t('chat.agentGone');
   if (!conversation.execution)
     return (
       <Alert>

@@ -1,6 +1,4 @@
 import {
-  newConversationAgent,
-  useAgentText,
   useChatAgents,
   useChatPanel,
   useConversation,
@@ -15,190 +13,132 @@ import {
   DropdownMenuLabel,
 } from '#components/ui/dropdown-menu';
 import { useOnlineChat } from '../../online-agent/context.js';
-import {
-  OnlineApiError,
-  useOnlineResource,
-  type Agent,
-} from '../../online-agent/api.js';
+import { OnlineApiError } from '../../online-agent/api.js';
 import { OnlineConfirm, OnlineError } from '../../online-agent/controls.js';
 import { useAgentPickerLabels } from './chat-i18n.js';
-import { runnerAgents } from './runner-agents.js';
+import {
+  chatAgents,
+  isOnlineAgent,
+  newChatAgent,
+  useChatAgentName,
+} from './chat-agents.js';
 
-export function RunnerChatChoice() {
-  const [refresh, setRefresh] = useState(0);
-  const online = useOnlineResource<Agent[]>('definitions', refresh);
-  return (
-    <ChatAgentChoice
-      onlineAgents={online.data || []}
-      onlineLoading={online.loading}
-      onlineError={online.error}
-      retryOnline={() => setRefresh((value) => value + 1)}
-    />
-  );
-}
-
-/** One composer menu; transport-specific drafts and histories stay with their providers. */
-export function ChatAgentChoice({
-  onlineAgents,
-  onlineAgent,
-  disabled,
-  onlineLoading,
-  onlineError,
-  retryOnline,
-}: {
-  onlineAgents: Agent[];
-  onlineAgent?: Agent;
-  disabled?: boolean;
-  onlineLoading?: boolean;
-  onlineError?: unknown;
-  retryOnline?: () => void;
-}) {
+/**
+ * One composer menu: the online assistant (the plugin's native agent with NocoReach's tools) above the Runner agents,
+ * each group saying what its agents can do (2026-10-20 user decision).
+ */
+export function ChatAgentChoice({ disabled }: { disabled?: boolean }) {
   const chat = useOnlineChat();
   const panel = useChatPanel();
-  const runners = useChatAgents(panel.open);
+  const directory = useChatAgents(panel.open);
   const conversation = useConversation(panel.conversationId);
-  const text = useAgentText();
+  const nameOf = useChatAgentName();
   const labels = useAgentPickerLabels();
   const [pending, setPending] = useState<(() => void) | null>(null);
-  const runnerList = useMemo(() => runnerAgents(runners.data), [runners.data]);
-  const runner = panel.conversationId
+  const agents = useMemo(
+    () => chatAgents(directory.data, chat.enabled),
+    [directory.data, chat.enabled],
+  );
+  const online = agents.find((agent) => isOnlineAgent(agent));
+  const runners = agents.filter((agent) => !isOnlineAgent(agent));
+  const current = panel.conversationId
     ? conversation.data?.agent
-    : newConversationAgent(runnerList, panel.newAgentId);
-  const currentOnline =
-    onlineAgent || onlineAgents.find((item) => item.id === chat.agentId);
-  function selectOnline(id: string) {
-    const changed = chat.agentId !== id;
+    : newChatAgent(agents, panel.newAgentId);
+  function select(id: string) {
+    const changed = current?.id !== id;
     const apply = () => {
-      if (changed && chat.conversationId) {
-        chat.select(null);
-        chat.setDraft('');
-      }
-      chat.setAgentId(id);
-      chat.setMode('online');
-    };
-    if (changed && chat.conversationId && chat.draft.trim())
-      setPending(() => apply);
-    else apply();
-  }
-  function selectRunner(id: string) {
-    const changed = runner?.id !== id;
-    const apply = () => {
-      // On a new conversation, choosing the Runner keeps the draft and pinned context; leaving one starts fresh.
+      // On a new conversation, another agent keeps the draft and pinned context; leaving one starts fresh.
       if (!panel.conversationId)
         panel.selectConversation(null, id, { preserveComposer: true });
       else if (changed) panel.selectConversation(null, id);
       panel.setView('chat');
-      chat.setMode('runner');
     };
-    if (changed && panel.conversationId && chat.runnerDirty)
-      setPending(() => apply);
+    if (changed && panel.conversationId && chat.dirty) setPending(() => apply);
     else apply();
   }
   return (
     <>
       <AgentPicker
-        agents={runnerList}
-        value={chat.mode === 'online' ? null : runner?.id || null}
+        agents={runners}
+        value={current && !isOnlineAgent(current) ? current.id : null}
         shown={
-          chat.mode === 'online'
+          current
             ? {
-                name: currentOnline?.name || $t('common.onlineAgent'),
-                availability: currentOnline?.ready
-                  ? { online: true, reason: null, onlineRunners: 0 }
-                  : null,
-                mode: 'online',
-              }
-            : runner
-              ? {
-                  name: text.name(runner),
-                  availability: panel.conversationId
-                    ? conversation.data?.availability
-                    : 'availability' in runner
-                      ? runner.availability
+                name: nameOf(current),
+                availability:
+                  panel.conversationId && conversation.data
+                    ? conversation.data.availability
+                    : 'availability' in current
+                      ? current.availability
                       : null,
-                  mode: 'runner',
-                }
-              : undefined
+                mode: isOnlineAgent(current) ? 'online' : 'runner',
+              }
+            : undefined
         }
-        onSelect={selectRunner}
-        agentName={(item) => text.name(item)}
+        onSelect={select}
+        agentName={(item) => nameOf(item)}
         labels={labels}
         showMode={false}
         showHint={false}
-        disabled={disabled || !!chat.request || chat.runnerPending}
+        disabled={disabled}
         appearance='toolbar'
         className='h-7 shrink px-1.5 text-sm @md:px-2'
         data-testid='chat-agent-picker'
       >
         <DropdownMenuGroup>
-          {/* Each group says what its agents can do, so the choice is made by role (2026-10-20 user decision). */}
           <DropdownMenuLabel>
             {$t('common.onlineAgent')}
             <span className='block text-xs font-normal text-muted-foreground'>
               {$t('agentChoice.onlineHint')}
             </span>
           </DropdownMenuLabel>
-          {onlineAgents.filter((item) => item.enabled).length === 0 &&
-            !onlineLoading &&
-            !onlineError && (
+          {online ? (
+            <DropdownMenuItem onClick={() => select(online.id)}>
+              <AgentIdentity
+                name={$t('common.onlineAgent')}
+                availability={online.availability}
+                labels={labels}
+                nameClassName='whitespace-normal break-words'
+              />
+              {isOnlineAgent(current) && <CheckIcon />}
+            </DropdownMenuItem>
+          ) : chat.error ? (
+            // Chat panel › Settings could not be read: whether the assistant is on is unknown until a retry.
+            <OnlineError error={chat.error} retry={chat.refresh} />
+          ) : (
+            directory.isSuccess && (
               <DropdownMenuItem disabled>
-                {$t('onlineAgent.noAgents')}
-              </DropdownMenuItem>
-            )}
-          {onlineAgents
-            .filter((item) => item.enabled)
-            .map((agent) => (
-              <DropdownMenuItem
-                key={agent.id}
-                onClick={() => selectOnline(agent.id)}
-              >
-                <AgentIdentity
-                  name={agent.name}
-                  availability={
-                    agent.ready
-                      ? { online: true, reason: null, onlineRunners: 0 }
-                      : null
-                  }
-                  labels={labels}
-                  nameClassName='whitespace-normal break-words'
-                />
-                {!agent.ready && (
-                  <span className='text-xs text-muted-foreground'>
-                    {$t('onlineAgent.modelNotReady')}
-                  </span>
-                )}
-                {chat.mode === 'online' && chat.agentId === agent.id && (
-                  <CheckIcon />
+                {$t(
+                  chat.settings && !chat.settings.enabled
+                    ? 'onlineAgent.chatDisabled'
+                    : 'onlineAgent.unavailable',
                 )}
               </DropdownMenuItem>
-            ))}
-          {onlineLoading && (
-            <DropdownMenuItem disabled>{$t('common.loading')}</DropdownMenuItem>
+            )
           )}
-          <OnlineError error={onlineError} retry={retryOnline} />
           <DropdownMenuLabel>
             {$t('common.runnerAgent')}
             <span className='block text-xs font-normal text-muted-foreground'>
               {$t('agentChoice.runnerHint')}
             </span>
           </DropdownMenuLabel>
-          {runners.isSuccess && runnerList.length === 0 && (
+          {directory.isSuccess && runners.length === 0 && (
             <DropdownMenuItem disabled>{labels.empty}</DropdownMenuItem>
           )}
-          {runners.isLoading && (
+          {directory.isLoading && (
             <DropdownMenuItem disabled>{$t('common.loading')}</DropdownMenuItem>
           )}
-          {runners.isError && (
+          {directory.isError && (
             <OnlineError
               error={
-                runners.error instanceof Error && 'status' in runners.error
+                directory.error instanceof Error && 'status' in directory.error
                   ? new OnlineApiError(
-                      Number(runners.error.status),
+                      Number(directory.error.status),
                       'requestFailed',
                     )
-                  : runners.error
+                  : directory.error
               }
-              retry={() => void runners.refetch()}
+              retry={() => void directory.refetch()}
             />
           )}
         </DropdownMenuGroup>

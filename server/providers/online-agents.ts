@@ -1,52 +1,35 @@
 import type { Application } from '@nocobase/app-server/application';
 import { agentsToken } from '@nocobase/app-plugin-agents/server/tokens';
 import { databaseManagerToken } from '@nocobase/db';
-import { loggingToken } from '@nocobase/app-server/logging';
 import {
   createServiceToken,
   ServiceProvider,
 } from '@nocobase/service-provider';
-import { onlineErrorCode } from '../online-agent/errors.js';
-import { OnlineAgentService } from '../online-agent/service.js';
-import { createNocoReachOnlineHost } from '../nocoreach/online-agent/host.js';
+import { OnlineChatSettingsStore } from '../nocoreach/online-agent/settings.js';
+import { registerOnlineChat } from '../nocoreach/online-agent/register.js';
 import { nocoReachToken } from './nocoreach.js';
 
-export const onlineAgentsToken = createServiceToken<OnlineAgentService>(
-  'nocoreach/online-agents',
-);
+export const onlineChatSettingsToken =
+  createServiceToken<OnlineChatSettingsStore>('nocoreach/online-chat-settings');
+/** The online assistant runs on the Agents plugin's OnlineAgent; NocoReach contributes its tools, scope and settings. */
 export default class OnlineAgentsProvider extends ServiceProvider<Application> {
   readonly name = 'nocoreach/online-agents';
   override register() {
-    this.app.container.singleton(onlineAgentsToken, () => {
-      const agents = this.app.container.resolve(agentsToken);
-      const logger = this.app.container
-        .resolve(loggingToken)
-        .getLogger('online-agent');
-      return new OnlineAgentService(
-        this.app.container.resolve(databaseManagerToken),
-        agents.models,
-        createNocoReachOnlineHost(
-          () => this.app.container.resolve(nocoReachToken),
-          this.app.publicBasePath,
+    this.app.container.singleton(
+      onlineChatSettingsToken,
+      () =>
+        new OnlineChatSettingsStore(
+          this.app.container.resolve(databaseManagerToken),
         ),
-        (error) =>
-          logger.warn(
-            {
-              code: onlineErrorCode(error),
-            },
-            'Online chat execution failed',
-          ),
-      );
-    });
+    );
   }
   override async boot() {
-    await this.app.container.resolve(onlineAgentsToken).initialize();
-  }
-  override async start() {
-    await this.app.container.resolve(nocoReachToken).ready;
-    this.app.container.resolve(onlineAgentsToken).start();
-  }
-  override async shutdown() {
-    await this.app.container.resolve(onlineAgentsToken).stop();
+    const container = this.app.container;
+    registerOnlineChat(
+      container.resolve(agentsToken),
+      () => container.resolve(nocoReachToken),
+      () => container.resolve(onlineChatSettingsToken).get(),
+      this.app.publicBasePath,
+    );
   }
 }

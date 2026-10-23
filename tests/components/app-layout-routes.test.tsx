@@ -35,6 +35,10 @@ function I18n({ children }: { readonly children: ReactNode }) {
 vi.mock('../../client/pages/me.js', () => ({
   useMe: () => ({ me: undefined }),
 }));
+// The layout reads Chat panel › Settings; these tests have no API behind it.
+vi.mock('../../client/online-agent/api.js', () => ({
+  useOnlineResource: () => ({ loading: true, update: () => {} }),
+}));
 vi.mock('../../client/mock-integrations.js', () => ({
   MockIndicator: ({ fallback }: { fallback: ReactNode }) => fallback,
 }));

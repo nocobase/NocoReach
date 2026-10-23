@@ -63,7 +63,7 @@ export function Composer({
   registerAddFiles,
 }: ComposerProps): ReactElement {
   const location = useLocation();
-  const { setRunnerDirty } = useOnlineChat();
+  const { setDirty } = useOnlineChat();
   const panel = useChatPanel();
   // Upload completion must use the current model/executor and readiness, not a captured callback.
   const currentSendRef = useRef(onSend);
@@ -133,7 +133,7 @@ export function Composer({
       variant='page'
       inputClassName='min-h-20 max-h-40 px-3 py-3'
       disabled={disabled}
-      onDirtyChange={setRunnerDirty}
+      onDirtyChange={setDirty}
       running={running}
       stopping={stopping}
       notice={notice}

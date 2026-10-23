@@ -1,30 +1,25 @@
-import { useId, useRef, useState, type FormEvent } from 'react';
-import {
-  useParams,
-  useOutletContext,
-  useNavigate,
-  useLocation,
-  Link,
-} from 'react-router';
+import { useId, useState, type FormEvent } from 'react';
+import { useOutletContext, useNavigate, useLocation, Link } from 'react-router';
 import { $t } from '#i18n';
 import { toast } from '#lib/toast';
 import { RouteDialog } from '#components/route-dialog';
 import { Button } from '#components/ui/button';
-import { Input } from '#components/ui/input';
+import { Switch } from '#components/ui/switch';
 import { Textarea } from '#components/ui/textarea';
 import { Field, FieldLabel, FieldDescription } from '#components/ui/field';
 import { Skeleton } from '#components/ui/skeleton';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import type {
-  OnlineAgentDefinition,
+  OnlineChatSettings,
   OnlineModel,
 } from '../../shared/online-agent.js';
 import {
   useOnlineApi,
   useOnlineResource,
   OnlineApiError,
-  type Agent,
+  type OnlineSettings,
 } from './api.js';
+import { useOptionalOnlineChat } from './context.js';
 import { OnlineError, OnlineSelect, OnlineConfirm } from './controls.js';
 interface Catalog {
   services: {
@@ -36,29 +31,27 @@ interface Catalog {
 }
 export interface AgentSettingsContext {
   refresh(): void;
-  saved(agent: OnlineAgentDefinition): void;
   /** Where closing the dialog returns: the page it opened over. */
   back: string;
 }
-export default function EditOnlineAgent() {
-  const { onlineAgentId } = useParams(),
-    { can: canManage, isPending } = useBusinessAccess('nrOnline.manage');
+/** Chat panel › Settings: whether the online assistant answers, the model it uses and its instructions. */
+export default function ChatSettings() {
+  const { can: canManage, isPending } = useBusinessAccess('nrOnline.manage');
   const [reload, setReload] = useState(0);
-  const data = useOnlineResource<Agent[]>('definitions', reload);
+  const data = useOnlineResource<OnlineSettings>('settings', reload);
   const parent = useOutletContext<AgentSettingsContext>();
-  const agent = onlineAgentId
-    ? data.data?.find((item) => item.id === onlineAgentId)
-    : undefined;
+  const chat = useOptionalOnlineChat();
   const navigate = useNavigate(),
     location = useLocation();
   const close = () => {
     parent.refresh();
+    chat?.refresh();
     void navigate(`${parent.back}${location.search}`);
   };
-  if (!canManage || (onlineAgentId && (!agent || data.loading)))
+  if (!canManage || !data.data || data.loading)
     return (
       <RouteDialog
-        title={$t('onlineAgent.edit')}
+        title={$t('onlineAgent.settingsTitle')}
         footer={
           <Button variant='outline' onClick={close}>
             {$t('onlineAgent.close')}
@@ -70,12 +63,7 @@ export default function EditOnlineAgent() {
         ) : (
           <>
             <OnlineError
-              error={
-                data.error ||
-                (data.data && !agent
-                  ? new OnlineApiError(404, 'agentNotFound')
-                  : undefined)
-              }
+              error={data.error}
               retry={() => setReload((value) => value + 1)}
             />
             {(data.loading || isPending) && (
@@ -88,44 +76,39 @@ export default function EditOnlineAgent() {
       </RouteDialog>
     );
   return (
-    <AgentForm
-      key={`${onlineAgentId || 'new'}:${reload}`}
-      agent={agent}
+    <SettingsForm
+      key={`${data.data.revision}:${reload}`}
+      settings={data.data}
       reload={() => setReload((value) => value + 1)}
       close={close}
     />
   );
 }
-function AgentForm({
-  agent,
+function SettingsForm({
+  settings,
   reload,
   close,
 }: {
-  agent?: OnlineAgentDefinition;
+  settings: OnlineChatSettings;
   reload: () => void;
   close: () => void;
 }) {
-  const api = useOnlineApi(),
-    parent = useOutletContext<AgentSettingsContext>();
+  const api = useOnlineApi();
   const [catalogRevision, setCatalogRevision] = useState(0);
   const catalog = useOnlineResource<Catalog>('models', catalogRevision);
-  const [name, setName] = useState(agent?.name || ''),
-    [instructions, setInstructions] = useState(agent?.instructions || '');
-  const [model, setModel] = useState<OnlineModel | null>(agent?.model || null);
+  const [enabled, setEnabled] = useState(settings.enabled),
+    [instructions, setInstructions] = useState(settings.instructions);
+  const [model, setModel] = useState<OnlineModel | null>(settings.model);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>(),
-    [discard, setDiscard] = useState(false),
-    [submitted, setSubmitted] = useState(false);
-  const nameRef = useRef<HTMLInputElement>(null),
-    id = useId();
-  const nameError = submitted && !name.trim();
+    [discard, setDiscard] = useState(false);
+  const id = useId();
   const permanent =
-    error instanceof OnlineApiError && [401, 403, 404].includes(error.status);
+    error instanceof OnlineApiError && [401, 403].includes(error.status);
   const unchanged =
-    !!agent &&
-    name.trim() === agent.name &&
-    instructions === agent.instructions &&
-    JSON.stringify(model) === JSON.stringify(agent.model);
+    enabled === settings.enabled &&
+    instructions === settings.instructions &&
+    JSON.stringify(model) === JSON.stringify(settings.model);
   const values = [
     // The default is the daily analysis's model (Agent › Who does the work › Daily analysis › Settings); say which.
     {
@@ -155,39 +138,25 @@ function AgentForm({
   async function save(event: FormEvent) {
     event.preventDefault();
     if (busy || permanent || unchanged) return;
-    setSubmitted(true);
-    if (!name.trim()) {
-      nameRef.current?.focus();
-      return;
-    }
     setBusy(true);
     setError(undefined);
     try {
-      const saved = await api<OnlineAgentDefinition>(
-        agent ? `definitions/${agent.id}` : 'definitions',
-        {
-          name: name.trim(),
-          instructions,
-          model,
-          enabled: agent?.enabled ?? true,
-          revision: agent?.revision ?? 0,
-        },
-        agent ? 'PUT' : 'POST',
+      await api<OnlineChatSettings>(
+        'settings',
+        { enabled, instructions, model, revision: settings.revision },
+        'PUT',
       );
-      parent.saved(saved);
-      toast.success(() => $t('onlineAgent.saved', { 0: saved.name }));
+      toast.success(() => $t('onlineAgent.settingsSaved'));
       close();
     } catch (failure) {
       if ((failure as Error).name !== 'AbortError') setError(failure);
-      if (failure instanceof OnlineApiError && failure.status === 404)
-        parent.refresh();
     } finally {
       setBusy(false);
     }
   }
   return (
     <RouteDialog
-      title={$t(agent ? 'onlineAgent.edit' : 'onlineAgent.create')}
+      title={$t('onlineAgent.settingsTitle')}
       className='sm:max-w-2xl'
       beforeClose={() => !busy}
       footer={
@@ -221,32 +190,22 @@ function AgentForm({
             {$t('onlineAgent.reloadDiscard')}
           </Button>
         )}
-        <Field data-invalid={nameError || undefined}>
-          <FieldLabel htmlFor={`${id}-name`}>
-            {$t('onlineAgent.name')} <span aria-hidden='true'>*</span>
-          </FieldLabel>
-          <Input
-            id={`${id}-name`}
-            ref={nameRef}
-            autoFocus
-            required
-            maxLength={80}
-            value={name}
+        <Field orientation='horizontal'>
+          <Switch
+            id={`${id}-enabled`}
+            checked={enabled}
             disabled={busy}
-            aria-invalid={nameError}
-            aria-describedby={nameError ? `${id}-name-error` : undefined}
-            onChange={(event) => setName(event.target.value)}
+            onCheckedChange={setEnabled}
           />
-          {nameError && (
-            <p
-              id={`${id}-name-error`}
-              className='text-sm text-destructive'
-              role='alert'
-            >
-              {$t('onlineAgent.nameRequired')}
-            </p>
-          )}
+          <FieldLabel htmlFor={`${id}-enabled`}>
+            {$t('onlineAgent.enabledLabel')}
+          </FieldLabel>
         </Field>
+        <FieldDescription className='-mt-2'>
+          {$t('onlineAgent.enabledHelp')}
+        </FieldDescription>
+        {/* The plugin keeps a conversation's model and prompt from its start; only the switch reaches earlier ones. */}
+        <FieldDescription>{$t('onlineAgent.settingsNewOnly')}</FieldDescription>
         <OnlineSelect
           label={$t('onlineAgent.model')}
           value={modelValue || '__default__'}
@@ -292,9 +251,7 @@ function AgentForm({
         <OnlineConfirm
           open={discard}
           onClose={() => setDiscard(false)}
-          title={$t('onlineAgent.discardEditsTitle', {
-            0: agent?.name || name,
-          })}
+          title={$t('onlineAgent.discardSettingsTitle')}
           description={$t('onlineAgent.discardDescription')}
           action={$t('onlineAgent.reloadDiscard')}
           busy={false}

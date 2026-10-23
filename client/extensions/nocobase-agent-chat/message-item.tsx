@@ -23,6 +23,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
+import { $t } from '#i18n';
 import { Button } from '#components/ui/button';
 import { cn } from 'cn';
 import { ChatMarkdown } from './chat-markdown.js';
@@ -31,6 +32,7 @@ import { ConsultationCard } from './consultation-card.js';
 import { SentContext } from './context-chips.js';
 import { MessageAttachments } from './message-attachments.js';
 import { ReasoningPart } from './reasoning-part.js';
+import { executionStatusText } from '../../online-agent/status.js';
 
 function Time({
   at,
@@ -181,7 +183,9 @@ export function MessageItem({
         <div key={part.id ?? key} data-chat-part='notice'>
           {card ?? (
             <p className='text-xs text-muted-foreground'>
-              {extensions.newsText?.(part.data, t) ?? part.data.title}
+              {extensions.newsText?.(part.data, t) ??
+                executionStatusText(part) ??
+                part.data.title}
             </p>
           )}
         </div>
@@ -271,7 +275,9 @@ export function MessageItem({
             <p>{t('chat.approval.denied')}</p>
           ) : null}
           {part.state === 'output-error' ? (
-            <p role='alert'>{part.errorText}</p>
+            // The plugin's message projection replaces every tool error with one fixed English sentence, for the
+            // online agent and Runner agents alike, so its text carries nothing to show.
+            <p role='alert'>{$t('onlineAgent.toolFailed')}</p>
           ) : null}
         </div>
       );
@@ -409,7 +415,8 @@ export function MessageItem({
 
 export interface PendingItemProps {
   readonly message: PendingMessage;
-  readonly onRetry: () => void;
+  /** Left out when sending again would only be refused again. */
+  readonly onRetry?: () => void;
   readonly onDiscard: () => void;
   readonly onContinue?: () => void;
   readonly onCheck?: () => void;
@@ -483,10 +490,12 @@ export function PendingItem({
             <Button variant='ghost' size='xs' onClick={onDiscard}>
               {t('chat.pending.discard')}
             </Button>
-            <Button variant='outline' size='xs' onClick={onRetry}>
-              <RotateCcwIcon data-icon='inline-start' />
-              {t('chat.pending.retry')}
-            </Button>
+            {onRetry ? (
+              <Button variant='outline' size='xs' onClick={onRetry}>
+                <RotateCcwIcon data-icon='inline-start' />
+                {t('chat.pending.retry')}
+              </Button>
+            ) : null}
           </div>
         ) : null}
       </div>

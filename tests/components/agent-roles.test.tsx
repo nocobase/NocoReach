@@ -19,15 +19,17 @@ const state = vi.hoisted(() => ({
     models?: { value: string; label: string }[];
   }[],
   defaultModel: null as { modelService: string; model: string } | null,
-  online: [] as {
-    id: string;
-    name: string;
+  // Chat panel › Settings.
+  online: {} as {
     enabled: boolean;
     ready: boolean;
-    model?: { modelService: string; model: string } | null;
-    instructions?: string;
-    revision?: number;
-  }[],
+    defaultModel: boolean;
+    model: { modelService: string; model: string } | null;
+    instructions: string;
+    revision: number;
+  },
+  // Reading Chat panel › Settings failed.
+  onlineError: null as Error | null,
   runners: { options: [] as unknown[], loading: false, online: 0 },
   status: {
     revision: 3,
@@ -60,7 +62,9 @@ vi.mock('../../client/online-agent/api', () => ({
             defaultModel: state.defaultModel,
           },
         }
-      : { data: state.online },
+      : state.onlineError
+        ? { data: undefined, error: state.onlineError }
+        : { data: state.online },
 }));
 vi.mock('@nocobase/app-plugin-agents/client/kit', () => ({
   useRunnerOptions: () => state.runners,
@@ -100,17 +104,15 @@ beforeEach(() => {
     modelService: 'openai-compatible',
     model: 'deepseek-v4.1-flash',
   };
-  state.online = [
-    {
-      id: 'online',
-      name: 'Online Agent',
-      enabled: true,
-      ready: true,
-      model: null,
-      instructions: '',
-      revision: 2,
-    },
-  ];
+  state.onlineError = null;
+  state.online = {
+    enabled: true,
+    ready: true,
+    defaultModel: true,
+    model: null,
+    instructions: '',
+    revision: 2,
+  };
   state.runners = { options: [{ value: 'mac' }], loading: false, online: 1 };
   state.status = {
     revision: 3,
@@ -194,7 +196,7 @@ test('says which work cloud models and local agents do, with what each uses and 
   // One Settings button on every row.
   expect(
     within(row('对话栏')).getByRole('button', { name: '设置' }),
-  ).toHaveAttribute('href', '/agents/chat/online');
+  ).toHaveAttribute('href', '/agents/chat');
   for (const work of ['每日分析', '执行任务'])
     expect(
       within(row(work)).getByRole('button', { name: '设置' }),
@@ -326,35 +328,65 @@ test('a daily analysis that did not finish last time needs attention', async () 
   expect(detail('每日分析')).toHaveTextContent(/上次运行（.+）没有完成/);
 });
 
-test('a chat agent that is turned off is turned on from its row', async () => {
+test('a Chat panel that is turned off is turned on from its row', async () => {
   const user = userEvent.setup();
-  state.online = [
-    {
-      id: 'online',
-      name: 'Online Agent',
-      enabled: false,
-      ready: false,
-      model: null,
-      instructions: 'Be brief.',
-      revision: 2,
-    },
-  ];
+  state.online = {
+    enabled: false,
+    ready: false,
+    defaultModel: true,
+    model: null,
+    instructions: 'Be brief.',
+    revision: 2,
+  };
   mount();
   await waitFor(() =>
-    expect(detail('对话栏')).toHaveTextContent('Online Agent 已停用。'),
+    expect(detail('对话栏')).toHaveTextContent('对话 Agent 已停用。'),
   );
   await user.click(within(row('对话栏')).getByRole('button', { name: '启用' }));
   expect(state.onlineApi).toHaveBeenCalledWith(
-    'definitions/online',
-    {
-      name: 'Online Agent',
-      instructions: 'Be brief.',
-      model: null,
-      revision: 2,
-      enabled: true,
-    },
+    'settings',
+    { enabled: true, instructions: 'Be brief.', model: null, revision: 2 },
     'PUT',
   );
+});
+
+test('a Chat panel whose model cannot answer needs attention and opens its settings', async () => {
+  state.online = { ...state.online, ready: false };
+  mount();
+  await waitFor(() =>
+    expect(detail('对话栏')).toHaveTextContent('对话 Agent 用的模型不可用。'),
+  );
+  expect(
+    within(row('对话栏')).getByRole('button', { name: '设置' }),
+  ).toHaveAttribute('href', '/agents/chat');
+});
+
+test('a Chat panel without a system default chat model points to the daily analysis model', async () => {
+  // The plugin offers its online agent only while a system default chat model exists, even with a model of its own.
+  state.online = {
+    ...state.online,
+    model: { modelService: 'openai-compatible', model: 'deepseek-v4.1-pro' },
+    ready: false,
+    defaultModel: false,
+  };
+  mount();
+  await waitFor(() =>
+    expect(detail('对话栏')).toHaveTextContent(
+      '对话 Agent 还需要一个系统默认对话模型',
+    ),
+  );
+  expect(
+    within(row('对话栏')).getByRole('button', { name: '设置' }),
+  ).not.toHaveAttribute('href');
+});
+
+test('a Chat panel whose settings cannot be read needs attention', async () => {
+  state.onlineError = new Error('403');
+  mount();
+  await waitFor(() =>
+    expect(within(row('对话栏')).getByText('需要处理')).toBeVisible(),
+  );
+  expect(detail('对话栏')).toHaveTextContent('无法读取对话栏的设置。');
 });
 
 test('an offline default is replaced by an enabled agent that is online', async () => {

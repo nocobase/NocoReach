@@ -6,6 +6,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useEffectEvent,
   useState,
   type ReactNode,
 } from 'react';
@@ -17,19 +18,32 @@ import {
   X,
 } from 'lucide-react';
 import { resolveAppBase } from '@nocobase/app-client';
-import { useChatPanel } from '@nocobase/app-plugin-agents/client/chat';
+import {
+  appUIMessageText,
+  chatIsRunning,
+  useChatController,
+  useChatPanel,
+  useChatStream,
+  useConversation,
+  useConversationMessages,
+  useSendMessage,
+} from '@nocobase/app-plugin-agents/client/chat';
+import type { AppUIMessage } from '@nocobase/app-plugin-agents/shared/online-agent';
+import { toast } from '#lib/toast';
 import { cn } from '#lib/utils';
 import { ActorAvatar } from '#components/reach/actor';
 import { Button } from '#components/ui/button';
 import { MarkdownView } from '#components/markdown-view';
 import { useOptionalOnlineChat } from '../../online-agent/context';
-import { useOnlineApi, type ConversationDetail } from '../../online-agent/api';
-import { OnlineError } from '../../online-agent/controls';
+import { onlineError, useOnlineApi } from '../../online-agent/api';
+import { OnlineConfirm, OnlineError } from '../../online-agent/controls';
 import { parseQuote } from '../../online-agent/quote';
+import { executionStatusText } from '../../online-agent/status';
+import { useChatTranslation } from '../../extensions/nocobase-agent-chat/chat-i18n';
 import { useFreshData } from '../workspace-cache';
 import {
-  onlineRunActive,
-  type OnlineRun,
+  INSIGHTS_SOURCE,
+  ONLINE_AGENT_ID,
   type OnlineThread,
 } from '../../../shared/online-agent.js';
 import { oppNo, type Row } from './board';
@@ -37,7 +51,8 @@ import { oppNo, type Row } from './board';
 // One conversation a day on Insights (2026-10-22 user decision, after the questions under each opportunity and in the
 // side panel read as scattered): what is asked from Insights joins the day's conversation, shown under the day's
 // analysis with its own input. When the side panel opens, the same conversation moves there and the page keeps one line
-// pointing to it, so there is only ever one place to type. Only the owner's own conversations are read.
+// pointing to it, so there is only ever one place to type. Only the owner's own conversations are read; the Agents
+// plugin keeps them, and NocoReach's index says which project and day each is about.
 
 type Reference = { id: string; label: string };
 type InsightChat = {
@@ -50,12 +65,14 @@ type InsightChat = {
   reference: Reference | null;
   quote: (row: Row) => void;
   clearReference: () => void;
-  /** The day's latest conversation, read from the server while the page's list is still loading. */
-  dayThread: () => Promise<OnlineThread | undefined>;
-  /** Read the day's conversation again (after a message is sent). */
+  /** Counts the questions sent since the page opened, here or in the side panel. */
   version: number;
+  /** Starts the day's conversation, bound to the project, and lists it. */
+  start: () => Promise<string>;
   sent: () => void;
   openInPanel: () => void;
+  /** Opens one of the day's conversations in the side panel, as when a tool call there waits for approval. */
+  openThread: (id: string) => void;
 };
 const Context = createContext<InsightChat | null>(null);
 export const useInsightChat = () => useContext(Context);
@@ -98,23 +115,43 @@ export function InsightChatProvider({
   const threads = useMemo(() => view.data || [], [view.data]),
     current = threadsOf(threads, day).at(-1),
     docked = panel.open;
-  // Messages sent here or in the side panel: the day's conversation is read again.
+  // Messages sent here or in the side panel: the list is read again.
   const activity = chat?.activity ?? 0,
     version = sends + activity;
   useEffect(() => {
     if (activity) reload();
   }, [activity, reload]);
-  const answering = threads.some(
-    (t) => t.status === 'queued' || t.status === 'running',
-  );
+  // A question is listed only once the server has it, after `sent`'s read: read again as the day's reply starts and ends.
+  const replying = chatIsRunning(
+      useConversation(current?.id ?? null).data ?? null,
+    ),
+    replyingRef = useRef(replying);
   useEffect(() => {
-    if (!answering) return;
-    const timer = setTimeout(reload, 3000);
-    return () => clearTimeout(timer);
-  }, [answering, view.data, reload]);
-  // Where a question goes depends on whether the day already has a conversation. Until the list is read (a slow
-  // connection, a failed read, or a cached copy being refreshed), the page cannot tell, and acting as if there were none
-  // would start a second conversation for the day: the server is asked instead.
+    if (replyingRef.current === replying) return;
+    replyingRef.current = replying;
+    reload();
+  }, [replying, reload]);
+  // Another day's conversation still answering is followed on its own, as the day's is above: the list is read again
+  // only when its reply ends, since each read lists the owner's Insights conversations again on the server.
+  const answeringElsewhere = threads.filter(
+    (t) => t.running && t.id !== current?.id,
+  );
+  const startRef = useRef<Promise<string> | null>(null);
+  const start = () => {
+    // One conversation a day, even when two questions start it at once.
+    startRef.current ??= api<{ id: string }>('threads', {
+      projectId: String(projectId),
+      day,
+    })
+      .then(({ id }) => {
+        reload();
+        return id;
+      })
+      .finally(() => {
+        startRef.current = null;
+      });
+    return startRef.current;
+  };
   const known = !view.loading && view.data !== undefined;
   const dayThread = async () =>
     known
@@ -123,30 +160,52 @@ export function InsightChatProvider({
           await api<OnlineThread[]>(`threads?projectId=${projectId}`),
           day,
         ).at(-1);
-  const openInPanel = (draft = '') => {
-    if (!chat || !day) return;
-    const open = (thread: OnlineThread | undefined) => {
-      if (thread) chat.resume(thread.id, draft);
-      else
-        chat.open({
-          draft,
-          projectId: String(projectId),
-          subject: { kind: 'insights', day },
-        });
-    };
-    if (known) open(current);
-    // A failed read leaves what the page has.
-    else void dayThread().then(open, () => open(current));
+  const [pending, setPending] = useState<(() => void) | null>(null);
+  // Set when this page opens the side panel on a chosen conversation, so the docking effect below leaves it there.
+  const choseRef = useRef(false);
+  const openChat = (options: Parameters<typeof panel.openChat>[0]) => {
+    choseRef.current = true;
+    panel.openChat(options);
   };
-  // Opening the side panel here moves the day's conversation into it.
+  const openInPanel = (draft?: string, create = false, id = current?.id) => {
+    if (!chat || !day) return;
+    const open = (conversationId: string) => {
+      // Text typed in the panel is kept: a quote goes in only while the composer is empty, and moving to another
+      // conversation asks first.
+      if (!chat.dirty) openChat({ conversationId, draft, view: 'chat' });
+      else if (panel.conversationId === conversationId)
+        openChat({ conversationId, view: 'chat' });
+      else
+        setPending(
+          () => () => openChat({ conversationId, draft, view: 'chat' }),
+        );
+    };
+    if (id) open(id);
+    else if (create)
+      // Not opened on a blank chat: a question sent there would start a conversation outside the day.
+      void start().then(open, (error: unknown) => {
+        toast.error(() => onlineError(error));
+        chat.refresh();
+      });
+    else if (!known)
+      void dayThread().then(
+        (thread) => {
+          if (thread) open(thread.id);
+        },
+        (error: unknown) => toast.error(() => onlineError(error)),
+      );
+  };
+  // Opening the side panel here moves the day's conversation into it, unless this page opened it on another
+  // conversation; a day without one starts it with the first question.
   const wasDockedRef = useRef(docked),
     openRef = useRef(openInPanel);
   useEffect(() => {
     openRef.current = openInPanel;
   });
   useEffect(() => {
-    if (docked && !wasDockedRef.current) openRef.current();
+    if (docked && !wasDockedRef.current && !choseRef.current) openRef.current();
     wasDockedRef.current = docked;
+    choseRef.current = false;
   }, [docked]);
   const value: InsightChat = {
     threads,
@@ -159,19 +218,49 @@ export function InsightChatProvider({
         id: row.card.id,
         label: [oppNo(row.card), row.card.title].filter(Boolean).join(' '),
       };
-      if (docked) openInPanel(referenceText(r));
+      if (docked) openInPanel(referenceText(r), true);
       else setReference(r);
     },
     clearReference: () => setReference(null),
-    dayThread,
     version,
+    start,
     sent: () => {
       reload();
       setSends((n) => n + 1);
     },
-    openInPanel: () => openInPanel(),
+    openInPanel: () => openInPanel(undefined, true),
+    openThread: (id) => openInPanel(undefined, false, id),
   };
-  return <Context.Provider value={value}>{children}</Context.Provider>;
+  return (
+    <Context.Provider value={value}>
+      {children}
+      {answeringElsewhere.map((t) => (
+        <ReplyEnd key={t.id} id={t.id} ended={reload} />
+      ))}
+      <OnlineConfirm
+        open={!!pending}
+        onClose={() => setPending(null)}
+        title={$t('onlineAgent.discardDraftTitle')}
+        description={$t('onlineAgent.discardDraftDescription')}
+        action={$t('onlineAgent.discard')}
+        busy={false}
+        confirm={() => {
+          pending?.();
+          setPending(null);
+        }}
+      />
+    </Context.Provider>
+  );
+}
+
+/** Calls `ended` once the conversation's reply ends; the Agents plugin polls one conversation while it runs. */
+function ReplyEnd({ id, ended }: { id: string; ended: () => void }) {
+  const detail = useConversation(id).data;
+  const running = detail ? chatIsRunning(detail) : true;
+  useEffect(() => {
+    if (!running) ended();
+  }, [running, ended]);
+  return null;
 }
 
 /** Ask AI about an opportunity: it is quoted in the day's conversation, wherever that conversation is. */
@@ -192,11 +281,13 @@ export function QuoteOpportunity({ row }: { row: Row }) {
   );
 }
 
-const clock = (iso: string) =>
-  new Date(iso).toLocaleTimeString(getCurrentLocale(), {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+const clock = (iso: string | undefined) =>
+  iso
+    ? new Date(iso).toLocaleTimeString(getCurrentLocale(), {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '';
 const toolName = (name: string) =>
   name === 'project_data'
     ? $t('onlineAgent.readProject')
@@ -206,15 +297,65 @@ const toolName = (name: string) =>
         ? $t('strategy.toolDailyAnalysis')
         : name === 'task_list' || name === 'task_get'
           ? $t('strategy.toolTasks')
-          : name;
+          : name === 'task_execute'
+            ? $t('onlineAgent.executeTask')
+            : name;
+type ToolPart = {
+  type: string;
+  toolCallId?: string;
+  toolName?: string;
+  state?: string;
+};
+const toolParts = (message: AppUIMessage) =>
+  (message.parts as ToolPart[]).flatMap((part) =>
+    part.type === 'dynamic-tool' || part.type.startsWith('tool-')
+      ? [
+          {
+            id: part.toolCallId ?? '',
+            name: part.toolName ?? part.type.slice(5),
+            state: part.state,
+          },
+        ]
+      : [],
+  );
+type TurnView = {
+  id: string;
+  question: AppUIMessage;
+  answers: AppUIMessage[];
+};
+/** A question and the agent's messages after it. */
+const turnsOf = (messages: readonly AppUIMessage[]) =>
+  messages.reduce<TurnView[]>((turns, message) => {
+    if (message.role === 'user')
+      turns.push({ id: message.id, question: message, answers: [] });
+    else if (message.role === 'assistant') turns.at(-1)?.answers.push(message);
+    return turns;
+  }, []);
+
 /** One question and its answer: the quote above the question, the answer as Markdown, the data it read folded. */
-function Turn({ run }: { run: OnlineRun }) {
+function Turn({
+  turn,
+  active,
+  approve,
+}: {
+  turn: TurnView;
+  active: boolean;
+  approve: () => void;
+}) {
   const [open, setOpen] = useState(false),
-    { quote, question } = parseQuote(run.input),
-    tools = run.events.flatMap((e) => (e.type === 'toolCall' ? [e] : [])),
-    active = onlineRunActive(run);
+    { quote, question } = parseQuote(appUIMessageText(turn.question)),
+    tools = turn.answers.flatMap(toolParts),
+    output = turn.answers.map(appUIMessageText).filter(Boolean).join('\n\n'),
+    status = turn.answers
+      .flatMap((message) => message.parts)
+      .filter((part) => part.type === 'data-notice')
+      .filter((part) => ['cancelled', 'failed'].includes(part.data.type))
+      .map(executionStatusText)
+      .filter(Boolean)
+      .at(-1),
+    waiting = tools.some((tool) => tool.state === 'approval-requested');
   return (
-    <div className='flex flex-col gap-2' data-turn={run.id}>
+    <div className='flex flex-col gap-2' data-turn={turn.id}>
       <div className='flex justify-end'>
         <div className='max-w-[75%] rounded-xl rounded-tr-sm bg-primary/10 px-3.5 py-2 text-sm'>
           {quote && (
@@ -230,7 +371,8 @@ function Turn({ run }: { run: OnlineRun }) {
         <ActorAvatar type='agent' size='default' />
         <div className='flex min-w-0 flex-1 flex-col gap-2'>
           <p className='flex h-8 items-center gap-1.5 text-xs text-muted-foreground'>
-            {run.agentName} · {clock(run.createdAt)}
+            {$t('common.onlineAgent')} ·{' '}
+            {clock(turn.question.metadata?.createdAt)}
             {tools.length > 0 && (
               <button
                 type='button'
@@ -254,14 +396,29 @@ function Turn({ run }: { run: OnlineRun }) {
             </ul>
           )}
           <div className='w-full rounded-xl rounded-tl-sm border bg-card px-3.5 py-2.5 text-sm leading-relaxed text-card-foreground'>
-            {run.output ? (
-              <MarkdownView content={run.output} />
-            ) : (
+            {output ? (
+              <MarkdownView content={output} />
+            ) : !status ? (
               <p className='text-muted-foreground'>
                 {active
                   ? $t('strategy.threadAnswering')
                   : $t('strategy.threadNoAnswer')}
               </p>
+            ) : null}
+            {status && (
+              <p className={cn('text-muted-foreground', output && 'mt-2')}>
+                {status}
+              </p>
+            )}
+            {waiting && (
+              // Running a task is approved in the side panel, which shows what will run.
+              <button
+                type='button'
+                className='nr-link mt-1 text-xs'
+                onClick={approve}
+              >
+                {$t('strategy.approveInPanel')} ›
+              </button>
             )}
           </div>
         </div>
@@ -270,7 +427,7 @@ function Turn({ run }: { run: OnlineRun }) {
   );
 }
 
-/** A day's conversation, every turn in order; read again while an answer is being written. */
+/** A day's conversation, every turn in order. */
 export function DayConversation({
   day,
   folded = false,
@@ -292,57 +449,21 @@ function DayTurns({
   day: string;
   startFolded: boolean;
 }) {
-  const api = useOnlineApi();
-  const key = threadsOf(chat.threads, day)
-    .map((t) => t.id)
-    .join(',');
-  const [state, setState] = useState<{
-    key: string;
-    details: ConversationDetail[];
-  }>();
-  const version = chat.version;
-  useEffect(() => {
-    if (!key) return;
-    let live = true,
-      timer: ReturnType<typeof setTimeout> | undefined;
-    const load = async () => {
-      const list = await Promise.all(
-        key
-          .split(',')
-          .map((id) =>
-            api<ConversationDetail>(`conversations/${id}`).catch(() => null),
-          ),
-      );
-      if (!live) return;
-      const details = list.filter((d): d is ConversationDetail => !!d);
-      setState({ key, details });
-      if (details.some((d) => d.runs.some(onlineRunActive)))
-        timer = setTimeout(() => void load(), 1500);
-    };
-    void load();
-    return () => {
-      live = false;
-      clearTimeout(timer);
-    };
-  }, [key, version, api]);
-  const runs = (state?.key === key ? state.details : [])
-    .flatMap((d) => d.runs)
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const threads = threadsOf(chat.threads, day),
+    count = questionCount(chat.threads, day);
   // Today's starts folded to one line, so the day's analysis is what shows when Insights opens (2026-10-22 user
   // feedback); a question sent since then opens it.
   const [folded, setFolded] = useState(startFolded),
     endRef = useRef<HTMLDivElement>(null),
-    countRef = useRef(0),
     openedAtRef = useRef(chat.version);
-  // Only a question sent since the page opened unfolds it, not the turns read when it opens.
   useEffect(() => {
-    const previous = countRef.current;
-    countRef.current = runs.length;
-    if (runs.length <= previous || chat.version === openedAtRef.current) return;
+    if (chat.version === openedAtRef.current) return;
     setFolded(false);
     endRef.current?.scrollIntoView?.({ block: 'end', behavior: 'smooth' });
-  }, [runs.length, chat.version]);
-  if (!runs.length) return null;
+  }, [chat.version]);
+  // A conversation not counted yet (a long one, on its first read) may hold questions: it is not hidden.
+  const counted = threads.every((t) => t.turns !== null);
+  if (!threads.length || (!count && counted && folded)) return null;
   return (
     <div className='flex flex-col gap-4' data-day-conversation={day}>
       <button
@@ -352,81 +473,188 @@ function DayTurns({
         onClick={() => setFolded((f) => !f)}
       >
         <span className='inline-flex items-center gap-0.5'>
-          {$t('strategy.conversationTurns', { 0: runs.length })}
+          {$t('strategy.conversationTurns', { 0: count })}
           <ChevronDown
             className={cn('size-3.5', !folded && 'rotate-180')}
             aria-hidden='true'
           />
         </span>
       </button>
-      {!folded && runs.map((run) => <Turn key={run.id} run={run} />)}
+      {!folded &&
+        threads.map((thread) => (
+          <ThreadTurns
+            key={thread.id}
+            id={thread.id}
+            approve={() => chat.openThread(thread.id)}
+          />
+        ))}
       <div ref={endRef} />
     </div>
+  );
+}
+function ThreadTurns({ id, approve }: { id: string; approve: () => void }) {
+  const { t } = useChatTranslation();
+  const controller = useChatController();
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const loadingRef = useRef(false);
+  const detail = useConversation(id).data ?? null,
+    stream = useChatStream(detail?.execution ? id : null),
+    messages = useConversationMessages(id),
+    running =
+      chatIsRunning(detail) ||
+      stream?.status === 'submitted' ||
+      stream?.status === 'streaming',
+    turns = turnsOf(messages.items);
+  const loadOlder = async () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    setLoadingOlder(true);
+    try {
+      const token = controller.history(id).state.olderToken;
+      await controller.loadHistory(id, true);
+      // An in-flight refresh is joined by the controller. Honor this click once that read finishes.
+      const after = controller.history(id);
+      if (token && after.state.olderToken === token && !after.error)
+        await controller.loadHistory(id, true);
+    } finally {
+      loadingRef.current = false;
+      setLoadingOlder(false);
+    }
+  };
+  return (
+    <>
+      {messages.error && (
+        <OnlineError error={messages.error} retry={() => void loadOlder()} />
+      )}
+      {messages.hasMore && (
+        <div className='flex justify-center'>
+          <Button
+            variant='ghost'
+            size='xs'
+            disabled={loadingOlder || messages.loadingOlder}
+            onClick={() => void loadOlder()}
+          >
+            {t('chat.olderMessages')}
+          </Button>
+        </div>
+      )}
+      {turns.map((turn, index) => (
+        <Turn
+          key={turn.id}
+          turn={turn}
+          active={running && index === turns.length - 1}
+          approve={approve}
+        />
+      ))}
+    </>
   );
 }
 
 /** How many questions a day's conversation holds. */
 export const questionCount = (threads: OnlineThread[], day: string) =>
-  threadsOf(threads, day).reduce((n, t) => n + t.turns, 0);
+  threadsOf(threads, day).reduce((n, t) => n + (t.turns ?? 0), 0);
 
 /** The input for the day's conversation: the quoted opportunity above it, Enter to send. */
 export function Composer() {
   const chat = useInsightChat(),
     online = useOptionalOnlineChat();
-  if (!chat || !online || !chat.day || chat.docked) return null;
-  return <ComposerInput chat={chat} agentId={online.agentId} />;
+  if (!chat || !chat.day || chat.docked) return null;
+  if (online?.error)
+    return <OnlineError error={online.error} retry={online.refresh} />;
+  // Off in Chat panel › Settings: the day's conversation stays readable, and the page says why there is no input.
+  if (online?.settings && !online.enabled)
+    return (
+      <p className='self-center text-xs text-muted-foreground'>
+        {$t('onlineAgent.chatDisabled')}
+      </p>
+    );
+  if (!online?.enabled) return null;
+  return <ComposerInput chat={chat} />;
 }
-function ComposerInput({
-  chat,
-  agentId,
-}: {
-  chat: InsightChat;
-  agentId: string;
-}) {
-  const api = useOnlineApi();
+function ComposerInput({ chat }: { chat: InsightChat }) {
+  const online = useOptionalOnlineChat();
   const [text, setText] = useState(''),
-    [busy, setBusy] = useState(false),
+    [starting, setStarting] = useState<{ body: string; id?: string }>(),
+    [started, setStarted] = useState<{ day: string; id: string }>(),
     [error, setError] = useState<unknown>(),
     inputRef = useRef<HTMLTextAreaElement>(null);
   const reference = chat.reference;
   useEffect(() => {
     if (reference) inputRef.current?.focus();
   }, [reference]);
-  const current = threadsOf(chat.threads, chat.day).at(-1),
-    answering = current?.status === 'queued' || current?.status === 'running';
-  const send = async () => {
+  // The conversation started here stays this input's, even when the reloaded list's latest for the day is another.
+  const conversationId =
+    (started?.day === chat.day ? started.id : undefined) ??
+    threadsOf(chat.threads, chat.day).at(-1)?.id ??
+    null;
+  const detail = useConversation(conversationId).data ?? null,
+    stream = useChatStream(detail?.execution ? conversationId : null),
+    messages = useConversationMessages(conversationId),
+    answering =
+      chatIsRunning(detail) ||
+      stream?.status === 'submitted' ||
+      stream?.status === 'streaming' ||
+      messages.pending.some((m) => m.status === 'sending');
+  const failed = messages.pending.find((m) => m.status !== 'sending');
+  // This page's copy of Chat panel › Settings may be older than an administrator's change. The server's guard refuses
+  // a message while it is off; read the settings again, so the page says so.
+  const refreshOnline = useEffectEvent(() => online?.refresh());
+  useEffect(() => {
+    if (failed) refreshOnline();
+  }, [failed]);
+  const sendMessage = useSendMessage({
+    conversationId,
+    agentId: ONLINE_AGENT_ID,
+    source: INSIGHTS_SOURCE,
+    dispatch: messages.dispatch,
+    // The conversation is started before its first message, so the plugin never creates one here.
+    onCreated: () => {},
+  });
+  const deliver = (body: string) => {
+    if (!sendMessage({ content: body, context: undefined })) return false;
+    setText('');
+    chat.clearReference();
+    chat.sent();
+    return true;
+  };
+  // The day's first question starts the conversation, then is sent once this input holds it.
+  // Sent once, as the side panel does for its own new conversations.
+  const deliveredRef = useRef<string | null>(null);
+  const deliverStarted = useEffectEvent((body: string) => deliver(body));
+  useEffect(() => {
+    if (
+      !starting?.id ||
+      conversationId !== starting.id ||
+      deliveredRef.current === starting.id
+    )
+      return;
+    deliveredRef.current = starting.id;
+    setStarting(undefined);
+    deliverStarted(starting.body);
+  }, [starting, conversationId]);
+  const busy = !!starting || answering;
+  const send = () => {
     const question = text.trim();
-    if (!question || busy || answering) return;
+    if (!question || busy) return;
     const body = (reference ? referenceText(reference) : '') + question;
-    setBusy(true);
     setError(undefined);
-    try {
-      const thread = await chat.dayThread();
-      if (thread) {
-        const detail = await api<ConversationDetail>(
-          `conversations/${thread.id}`,
-        );
-        await api(`conversations/${thread.id}/messages`, {
-          requestId: crypto.randomUUID(),
-          revision: detail.conversation.revision,
-          text: body,
-        });
-      } else
-        await api('conversations', {
-          requestId: crypto.randomUUID(),
-          agentId,
-          projectId: String(chat.projectId),
-          subject: { kind: 'insights', day: chat.day },
-          text: body,
-        });
-      setText('');
-      chat.clearReference();
-      chat.sent();
-    } catch (failure) {
-      setError(failure);
-    } finally {
-      setBusy(false);
+    if (conversationId) {
+      deliver(body);
+      return;
     }
+    setStarting({ body });
+    const day = chat.day;
+    chat.start().then(
+      (id) => {
+        setStarted({ day, id });
+        setStarting({ body, id });
+      },
+      (failure: unknown) => {
+        setStarting(undefined);
+        setError(failure);
+        online?.refresh();
+      },
+    );
   };
   return (
     <div className='sticky bottom-3 z-10 flex flex-col gap-2 rounded-xl border bg-background p-2 shadow-sm focus-within:border-ring'>
@@ -460,7 +688,7 @@ function ComposerInput({
               !event.nativeEvent.isComposing
             ) {
               event.preventDefault();
-              void send();
+              send();
             }
           }}
           className='field-sizing-content max-h-40 flex-1 resize-none !min-h-9 !rounded-none !border-0 !bg-transparent !px-1.5 !py-1.5 !shadow-none outline-none'
@@ -468,13 +696,23 @@ function ComposerInput({
         <Button
           size='icon-sm'
           aria-label={$t('strategy.send')}
-          disabled={!text.trim() || busy || answering}
-          onClick={() => void send()}
+          disabled={!text.trim() || busy}
+          onClick={send}
         >
           <ArrowUp aria-hidden='true' />
         </Button>
       </div>
       {error !== undefined && <OnlineError error={error} />}
+      {failed && (
+        // A message the server did not take stays in the side panel, where it can be sent again.
+        <button
+          type='button'
+          className='nr-link self-start text-xs'
+          onClick={() => conversationId && chat.openThread(conversationId)}
+        >
+          {$t('strategy.sendFailed')} ›
+        </button>
+      )}
     </div>
   );
 }

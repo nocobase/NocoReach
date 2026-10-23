@@ -743,6 +743,7 @@ function setup(denied: string[] = []) {
   const { sources, calls } = fixture();
   let authorizations = 0;
   const tool = queryDataTool({
+    signal: new AbortController().signal,
     sources,
     projectId: '7',
     authorize: async () => {
@@ -753,8 +754,7 @@ function setup(denied: string[] = []) {
     link: (path) => `/main${path}`,
     site: 'example.test',
   });
-  const ask = async (args: Row) =>
-    (await tool.execute(args, new AbortController().signal)) as Answer;
+  const ask = async (args: Row) => (await tool.execute(args)) as Answer;
   return { ask, calls, authorizations: () => authorizations };
 }
 const required: Record<string, Row> = {
@@ -1035,14 +1035,14 @@ it('reads indexing only once checked, and reports errors without internals', asy
     },
   };
   const tool = queryDataTool({
+    signal: new AbortController().signal,
     sources: unchecked,
     projectId: '7',
     authorize: async () => undefined,
     allowed: async () => true,
     link: (path) => path,
   });
-  const ask = async (args: Row) =>
-    (await tool.execute(args, new AbortController().signal)) as Answer;
+  const ask = async (args: Row) => (await tool.execute(args)) as Answer;
   expect(await ask({ source: 'indexing' })).toMatchObject({
     available: false,
     reason: 'no_data_yet',
@@ -1065,6 +1065,7 @@ it('reads indexing only once checked, and reports errors without internals', asy
   await expect(ask({ source: 'nothing' })).rejects.toBeDefined();
 
   const revoked = queryDataTool({
+    signal: new AbortController().signal,
     sources,
     projectId: '7',
     authorize: async () => {
@@ -1073,12 +1074,13 @@ it('reads indexing only once checked, and reports errors without internals', asy
     allowed: async () => true,
     link: (path) => path,
   });
-  await expect(
-    revoked.execute({ source: 'forum' }, new AbortController().signal),
-  ).rejects.toThrow('accessDenied');
+  await expect(revoked.execute({ source: 'forum' })).rejects.toThrow(
+    'accessDenied',
+  );
   // Access revoked while the source was read stops the run instead of reading as a failed source.
   let checks = 0;
   const midway = queryDataTool({
+    signal: new AbortController().signal,
     sources,
     projectId: '7',
     authorize: async () => {
@@ -1088,7 +1090,7 @@ it('reads indexing only once checked, and reports errors without internals', asy
     allowed: async () => true,
     link: (path) => path,
   });
-  await expect(
-    midway.execute({ source: 'forum' }, new AbortController().signal),
-  ).rejects.toMatchObject({ status: 403 });
+  await expect(midway.execute({ source: 'forum' })).rejects.toMatchObject({
+    status: 403,
+  });
 });

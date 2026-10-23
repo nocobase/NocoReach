@@ -68,8 +68,7 @@ function mount(path = '/agents?view=saved') {
           },
           { path: 'models', element: <h1>Models page</h1> },
           { path: 'usage', element: <h1>Usage page</h1> },
-          { path: 'chat/new', Component: ChatDialog },
-          { path: 'chat/:onlineAgentId', Component: ChatDialog },
+          { path: 'chat', Component: ChatDialog },
         ],
       },
     ],
@@ -143,9 +142,9 @@ test('does not redirect before the permissions resolve', () => {
   expect(router.state.location.pathname).toBe('/agents');
 });
 
-test('opens the chat agent settings over the page and reads the overview again after a save', async () => {
+test('opens Chat panel settings over the page and reads the overview again after a save', async () => {
   const user = userEvent.setup();
-  mount('/agents/chat/online-default');
+  mount('/agents/chat');
   expect(screen.getByText('Who does the work')).toBeInTheDocument();
   expect(screen.getByRole('dialog')).toHaveTextContent('Back to /agents');
   expect(seen.refresh.at(-1)).toBe(0);

@@ -1,6 +1,5 @@
 import {
   chatIsRunning,
-  useAgentText,
   useChatAgents,
   useConversationActions,
   useConversationList,
@@ -50,6 +49,7 @@ import { Skeleton } from '#components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '#components/ui/tabs';
 import { cn } from 'cn';
 
+import { useChatAgentName } from './chat-agents.js';
 import { useChatTranslation } from './chat-i18n.js';
 import { ChatTag, LoadError, Pulse } from './chat-ui.js';
 
@@ -70,7 +70,7 @@ export function HistoryList({
   const { t } = useChatTranslation();
   const agents = useChatAgents();
   const sources = useConversationSources();
-  const agentText = useAgentText();
+  const agentName = useChatAgentName();
   const [text, setText] = useState('');
   const [q, setQ] = useState('');
   const [archived, setArchived] = useState(false);
@@ -92,7 +92,7 @@ export function HistoryList({
     { value: ALL, label: t('chat.history.allAgents') },
     ...(agents.data ?? []).map((agent) => ({
       value: agent.id,
-      label: agentText.name(agent),
+      label: agentName(agent),
     })),
   ];
   const sourceItems = [
@@ -251,7 +251,7 @@ function HistoryRow({
   const format = useFormatters();
   const actions = useConversationActions();
   const sources = useConversationSources();
-  const agentText = useAgentText();
+  const agentName = useChatAgentName();
   const shown = item.title?.trim() ? item.title : t('chat.untitled');
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(item.title ?? '');
@@ -327,7 +327,7 @@ function HistoryRow({
             </time>
             <span aria-hidden='true'>·</span>
             <span className='truncate'>
-              {agentText.name(item.agent) ?? t('chat.agentGone')}
+              {agentName(item.agent) ?? t('chat.agentGone')}
             </span>
             {item.source === 'panel' ? null : (
               <ChatTag tone='grey' className='ml-auto'>

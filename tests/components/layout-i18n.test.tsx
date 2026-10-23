@@ -28,6 +28,10 @@ vi.mock('../../client/components/inbox-header-button', () => ({
 }));
 // The demo-data indicator uses the authenticated NocoReach identity/API; its bilingual and failure states
 // are covered by mock-settings.test.tsx. This shell-only harness intentionally has neither provider.
+// The layout reads Chat panel › Settings; these tests have no API behind it.
+vi.mock('../../client/online-agent/api.js', () => ({
+  useOnlineResource: () => ({ loading: true, update: () => {} }),
+}));
 vi.mock('../../client/mock-integrations.js', () => ({
   MockIndicator: ({ fallback }: { fallback: ReactNode }) => fallback,
 }));

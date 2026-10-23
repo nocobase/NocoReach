@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { OnlineTool } from '../../online-agent/executor.js';
+import type { OnlineTool, OnlineToolSpec } from './tool.js';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { windowFor } from '../data-views.js';
 import { keywordSummary, summary as termSummary } from '../trends-source.js';
@@ -1314,7 +1314,7 @@ function compare(field: string, desc: boolean) {
   };
 }
 
-/** The answer the model reads must stay well under the executor's 24,000-character tool output limit. */
+/** Bound each tool result so a single data page does not fill the model's context. */
 const OUTPUT_LIMIT = 20000;
 
 async function answer(
@@ -1459,6 +1459,11 @@ forum (topics, unanswered, categories, daily), hackernews (stories, comments, da
 web_sources: public pages connected as sources (sources, items).
 A source the user may not open answers accessDenied; one not connected answers connected: false.`;
 
+export const queryDataSpec: OnlineToolSpec = {
+  description: DESCRIPTION,
+  input,
+};
+
 /**
  * `query_data`: every data page's source for the online agent, read through the service method that page calls, after
  * checking the asking user's permission for that page's action. Read only: nothing is synced, checked or bought.
@@ -1470,6 +1475,7 @@ export function queryDataTool({
   allowed,
   link,
   site,
+  signal,
 }: {
   sources: QuerySources;
   projectId: string;
@@ -1477,12 +1483,12 @@ export function queryDataTool({
   allowed: (resource: string, action: string) => Promise<boolean>;
   link: (path: string) => string;
   site?: string;
+  signal: AbortSignal;
 }): OnlineTool {
   return {
     name: 'query_data',
-    description: DESCRIPTION,
-    inputSchema: z.toJSONSchema(input),
-    async execute(args, signal) {
+    ...queryDataSpec,
+    async execute(args) {
       await authorize();
       const v = input.parse(args);
       if (

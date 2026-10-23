@@ -180,15 +180,14 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
   ]),
   group('nav-ai', nav('aiTeam'), Sparkles, 7, [
     // Agent: who does the work above four tabs (local agents, runtimes, model services, usage). The runtimes, model
-    // services and usage tabs are the Agents plugin's own pages under its own grants. The chat agent's settings open as
-    // a dialog over the page.
+    // services and usage tabs are the Agents plugin's own pages under its own grants. Chat panel › Settings opens as a
+    // dialog over the page.
     { ...page('agents', '/agents', () => import('./pages/agents/index.js'), { title: nav('agent'), icon: Bot, order: 1 }), children: [
       { ...page('runner-agents', 'runner', () => import('./pages/agents/runner.js')), authz: agentsRoute.authz },
       { ...runtimesRoute, path: 'runtimes', componentLoader: gated(withRuntimesSharing) },
       { ...modelsRoute, path: 'models', componentLoader: gated(modelsRoute.componentLoader) },
       { ...usageRoute, path: 'usage', componentLoader: gated(usageRoute.componentLoader) },
-      page('online-agent-new', 'chat/new', () => import('./online-agent/edit.js')),
-      page('online-agent-edit', 'chat/:onlineAgentId', () => import('./online-agent/edit.js')),
+      page('online-chat-settings', 'chat', () => import('./online-agent/edit.js')),
     ] },
     page('playbooks', '/playbooks', () => import('./pages/playbooks.js'), { title: nav('playbooks'), icon: Workflow, order: 3 }),
     page('skills', '/skills', () => import('./pages/skills.js'), { title: nav('skills'), icon: WandSparkles, order: 4 }),
@@ -253,7 +252,7 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
   // Old addresses.
   moved('flows-legacy', '/flows', '/playbooks'),
   moved('online-agents-legacy', '/agents/online', '/agents'),
-  moved('online-agent-new-legacy', '/agents/online/new', '/agents/chat/new'),
+  moved('online-agent-new-legacy', '/agents/online/new', '/agents/chat'),
   // Settings held the runtimes, model services and usage pages for one release (2026-10-22).
   moved('runtimes-legacy', '/runtimes', '/agents/runtimes'),
   moved('runtimes-connect-legacy', '/runtimes/connect', '/agents/runtimes/connect'),
