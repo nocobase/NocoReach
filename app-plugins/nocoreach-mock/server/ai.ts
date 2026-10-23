@@ -18,6 +18,7 @@ export const MOCK_AI_OPERATIONS = [
   'memory-draft',
   'memory-check',
   'competitor-suggest',
+  'task-draft',
 ] as const;
 export type MockAiOperation = (typeof MOCK_AI_OPERATIONS)[number];
 export const MOCK_AI_MODEL = {
@@ -212,6 +213,47 @@ function fixture(
               },
             ],
       };
+    // New task › Organize with AI: the idea restated, citing only the figures of the first page it was given.
+    case 'task-draft': {
+      if (empty) return {};
+      const idea = str(input.idea, 200).replace(/\s+/g, ' ').trim();
+      const english = !/[\u4e00-\u9fff]/.test(idea);
+      const page = list(input.pages)[0];
+      const period = object(input.period);
+      const count = (value: unknown) =>
+        typeof value === 'number' && Number.isFinite(value) ? value : 0;
+      const figures = page
+        ? english
+          ? `${str(page.title, 120) || str(page.url, 300)} had ${count(page.views)} visits and ${count(page.clicks)} search clicks from ${str(period.start, 10)} to ${str(period.end, 10)}.`
+          : `${str(page.title, 120) || str(page.url, 300)} 在 ${str(period.start, 10)} 至 ${str(period.end, 10)} 有 ${count(page.views)} 次访问、${count(page.clicks)} 次搜索点击。`
+        : '';
+      return english
+        ? {
+            title: `Simulated: ${idea.slice(0, 120)}`,
+            background: `${LABEL} ${figures} This draft only restates the request; no model was called.`,
+            steps: [
+              'Read the page and the data above and list what to change.',
+              'Make the changes and note each one with the reason.',
+              'Check the result against the completion criteria.',
+            ],
+            criteria: [
+              'Every change is listed with its reason.',
+              'A person has reviewed the changes.',
+            ],
+            playbookId: str(list(input.playbooks)[0]?.id, 60) || null,
+          }
+        : {
+            title: `【模拟】${idea.slice(0, 120)}`,
+            background: `${LABEL}${figures}此草稿只复述了需求，未调用真实模型。`,
+            steps: [
+              '阅读页面和上述数据，列出要修改的地方。',
+              '完成修改，并逐条写明原因。',
+              '按完成标准检查结果。',
+            ],
+            criteria: ['每处修改都写明了原因。', '修改经过人工审核。'],
+            playbookId: str(list(input.playbooks)[0]?.id, 60) || null,
+          };
+    }
   }
 }
 /** No network, SDK, credentials, Runner, or usage charge can be reached from this boundary. */

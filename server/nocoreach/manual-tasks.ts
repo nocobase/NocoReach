@@ -12,7 +12,10 @@ import { projectWork } from './execution/model.js';
 import type { TaskService } from './execution/service.js';
 import { roleOf } from './policy.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
+import { draftTask, relevantPages, type DraftPage } from './task-draft.js';
 import {
+  ManualTaskDraftInput,
+  ManualTaskDraftView,
   ManualTaskInput,
   ManualTaskView,
   TaskMediaView,
@@ -36,7 +39,28 @@ export interface TaskMediaRecord extends FileRecord {
   expiresAt: Date | string;
   deleting: boolean;
 }
+/** What a draft reads from the classic plugin. */
+interface DraftHost {
+  project(id: string): Promise<unknown>;
+  taskExecution: TaskService;
+  siteContent: {
+    list(
+      id: string,
+      range: string,
+    ): Promise<{
+      window?: { start?: string; end?: string } | null;
+      pages?: DraftPage[];
+    } | null>;
+  };
+  network: {
+    runProject<T>(id: string, fn: () => T): Promise<Awaited<T>>;
+  };
+}
 const ACCESS_PATH = '/uploads/task-media';
+// Organize with AI waits at most this long for the model and asks for at most this much text: the draft is a few
+// short paragraphs, and the person is waiting in the dialog.
+const DRAFT_TIMEOUT = 90_000;
+const DRAFT_OUTPUT_TOKENS = 4000;
 const EXPIRY = 24 * 60 * 60 * 1000;
 const UNLINKED_LIMIT = 20;
 
@@ -115,6 +139,7 @@ export async function validateTaskMedia(file: File): Promise<void> {
 export class ManualTasks {
   private readonly media: Repository<TaskMediaRecord>;
   private tails = new Map<string, Promise<void>>();
+  private drafting = new Set<string>();
   constructor(
     private readonly runtime: NocoReachRuntime,
     database: DatabaseManager,
@@ -151,7 +176,7 @@ export class ManualTasks {
   private async authorizeProject(
     actor: TaskCreator,
     projectId: string,
-    operation: 'create' | 'read',
+    operation: 'create' | 'read' | 'draft',
   ): Promise<void> {
     await this.runtime.ready;
     const root = await this.runtime.users.isRoot(actor.id);
@@ -160,7 +185,7 @@ export class ManualTasks {
     await this.runtime.legacy.db.access?.requireFor(
       actor.id,
       operation === 'read' ? 'nrTaskWork' : 'nrTasks',
-      operation === 'read' ? 'get' : 'createManual',
+      { read: 'get', create: 'createManual', draft: 'draftManual' }[operation],
       projectId,
     );
     // Projects are shared among NocoReach members, as all current task APIs are.
@@ -328,6 +353,76 @@ export class ManualTasks {
         throw error;
       }
     });
+  }
+
+  /**
+   * New task › Organize with AI: one model call turns a rough idea into a draft to edit. Nothing is saved. The model
+   * reads the project memory, its playbooks and, when this person may read Site & product › Pages, the pages the idea
+   * names with their synced figures; no data is fetched for it.
+   */
+  async draft(
+    actor: TaskCreator,
+    raw: ManualTaskDraftInput,
+  ): Promise<ManualTaskDraftView> {
+    const input = ManualTaskDraftInput.parse(raw);
+    await this.authorizeProject(actor, input.projectId, 'draft');
+    // One draft at a time per person: a second click must not pay for a second call.
+    if (this.drafting.has(actor.id))
+      denied(
+        'TASK_DRAFT_BUSY',
+        'A draft is already being written.',
+        'RESOURCE_EXHAUSTED',
+      );
+    this.drafting.add(actor.id);
+    try {
+      const host = this.runtime.plugin as unknown as DraftHost;
+      // The project's network and simulation scope, as the generic dispatcher gives every action.
+      return await host.network.runProject(input.projectId, async () => {
+        const [project, { playbooks }, pages] = await Promise.all([
+          host.project(input.projectId),
+          host.taskExecution.playbooks.list(input.projectId),
+          this.draftPages(host, input.projectId, input.idea),
+        ]);
+        const draft = await draftTask(
+          { idea: input.idea, project, playbooks, pages },
+          (system, prompt) =>
+            host.taskExecution.provider.complete(
+              system,
+              prompt,
+              'task-draft',
+              AbortSignal.timeout(DRAFT_TIMEOUT),
+              DRAFT_OUTPUT_TOKENS,
+            ),
+        );
+        return ManualTaskDraftView.parse({
+          ...draft,
+          playbooks: playbooks.map(({ id, name }) => ({ id, name })),
+        });
+      });
+    } finally {
+      this.drafting.delete(actor.id);
+    }
+  }
+
+  /** Read only: the saved pages and their synced figures, never a live fetch; none without the Pages grant. */
+  private async draftPages(host: DraftHost, projectId: string, idea: string) {
+    if (
+      !(await this.runtime.legacy.db.access?.allows(
+        'nrSiteContent',
+        'list',
+        projectId,
+      ))
+    )
+      return null;
+    try {
+      const view = await host.siteContent.list(projectId, '28');
+      return {
+        window: view?.window ?? null,
+        items: relevantPages(view?.pages ?? [], idea),
+      };
+    } catch {
+      return null;
+    }
   }
 
   async read(actor: TaskCreator, id: string): Promise<TaskMediaRecord> {
