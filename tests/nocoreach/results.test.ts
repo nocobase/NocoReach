@@ -216,22 +216,55 @@ describe('results availability gate', () => {
     Object.assign(artifactsOnly.evidence.work, { results: [] });
     expect(resultSummary(artifactsOnly, [])?.occurredAt).toBeNull();
   });
-  it('includes old Insights observation records, closed records and completed tasks; excludes unexecuted closed tasks', () => {
+  it('lists only work with an outcome: live, or finished even if archived after; never unfinished, waiting or simulated work', () => {
+    const work = (id: number, w: object, evidence: object = {}) => ({
+      id,
+      evidence: { ...evidence, work: { ...projectWork({}), ...w } },
+    });
+    const draft = { results: [{ id: 'a', createdAt: '2026-10-01T00:00:00Z' }] };
+    // Live work, also once archived or stopped after going live, and old Insights observation records.
     expect(resultSummary(task(1), [url])?.latest).toEqual(result);
     expect(
-      resultSummary(task(2, { archivedAt: '2026-10-12' }), [url])?.closed,
-    ).toBe(true);
-    expect(resultSummary({ id: 3, status: '已完成' }, [])?.status).toBe(
+      resultSummary(task(2, { archivedAt: '2026-10-12' }), [url]),
+    ).toMatchObject({ archived: true, closed: false });
+    expect(
+      resultSummary(task(3, { cancelledAt: '2026-10-13' }), [url]),
+    ).toMatchObject({ taskState: 'closed', closed: true });
+    expect(resultSummary({ id: 4, status: '已完成' }, [])?.status).toBe(
       'unavailable',
     );
+    // A finished delivery, archived afterwards, stays a completed delivery.
     expect(
-      resultSummary(
-        {
-          id: 4,
-          evidence: { work: { ...projectWork({}), archivedAt: '2026-10-12' } },
+      resultSummary(work(5, { stage: 'done', archivedAt: '2026-10-12' }), []),
+    ).toMatchObject({ taskState: 'done', archived: true, phase: 'delivered' });
+    // Archived before it finished (the old-workflow archive too), cancelled with a draft, or waiting for review: these
+    // stay in Tasks.
+    for (const t of [
+      work(6, { archivedAt: '2026-10-12' }),
+      work(7, { ...draft, stage: 'work', archivedAt: '2026-10-12' }),
+      work(8, { ...draft, stage: 'done', cancelledAt: '2026-10-12' }),
+      work(9, {
+        ...draft,
+        stage: 'flow',
+        stageIndex: 1,
+        flow: {
+          id: 'f',
+          name: 'Flow',
+          version: 1,
+          stages: [
+            { key: 's0', name: 'agent', kind: 'agent' },
+            { key: 's1', name: 'review', kind: 'review' },
+          ],
         },
-        [],
-      ),
+      }),
+    ])
+      expect(resultSummary(t, [])).toBeNull();
+    // Simulated work (the demo install) follows the same rule and says it is simulated.
+    expect(
+      resultSummary(work(10, { stage: 'done' }, { simulated: true }), []),
+    ).toMatchObject({ simulated: true, phase: 'delivered' });
+    expect(
+      resultSummary(work(11, { stage: 'work' }, { simulated: true }), []),
     ).toBeNull();
   });
   it('filters every row before pagination, keeps project filters and does not mutate task evidence', async () => {
@@ -403,34 +436,27 @@ describe('results dashboard', () => {
       );
   });
 
-  it('tells live, waiting-to-go-live and delivered work apart', () => {
+  it('tells live and delivered work apart, and leaves work still to go live out', () => {
     const phase = (task: object) => resultSummary(task, [])?.phase;
     expect(phase(live(1, '2026-10-01'))).toBe('live');
-    expect(
-      phase(
-        delivered(2, '2026-10-01', flow(1, ['agent', 'review', 'observe'])),
-      ),
-    ).toBe('pendingLive');
-    // A research flow has no page to watch; a closed or simulated release never goes live.
-    expect(
-      phase(delivered(3, '2026-10-01', flow(1, ['agent', 'review']))),
-    ).toBe('delivered');
-    expect(
-      phase(
-        delivered(4, '2026-10-01', {
-          ...flow(1, ['agent', 'review', 'observe']),
-          archivedAt: '2026-10-02',
-        }),
-      ),
-    ).toBe('delivered');
-    expect(
-      phase(
-        delivered(5, '2026-10-01', {
-          ...flow(1, ['agent', 'release', 'observe']),
-          release: { state: 'simulated', note: '', pages: [] },
-        }),
-      ),
-    ).toBe('delivered');
+    // A finished research flow has no page to watch.
+    expect(phase(delivered(3, '2026-10-01', { stage: 'done' }))).toBe(
+      'delivered',
+    );
+    // Waiting for review before going live, archived before going live, or a simulated release not yet live: not
+    // results yet.
+    for (const t of [
+      delivered(2, '2026-10-01', flow(1, ['agent', 'review', 'observe'])),
+      delivered(4, '2026-10-01', {
+        ...flow(1, ['agent', 'review', 'observe']),
+        archivedAt: '2026-10-02',
+      }),
+      delivered(5, '2026-10-01', {
+        ...flow(1, ['agent', 'release', 'observe']),
+        release: { state: 'simulated', note: '', pages: [] },
+      }),
+    ])
+      expect(resultSummary(t, [])).toBeNull();
   });
 
   it('counts, adds up and orders only the work of the chosen period', async () => {
@@ -441,10 +467,10 @@ describe('results dashboard', () => {
       from: '2026-09-01',
       to: '2026-10-15',
     });
-    expect(board.total).toBe(5);
+    // Task 4 still waits for review before going live, so it is not counted.
+    expect(board.total).toBe(4);
     expect(board.counts).toEqual({
       live: 3,
-      pendingLive: 1,
       delivered: 1,
       up: 1,
       down: 1,
@@ -477,10 +503,9 @@ describe('results dashboard', () => {
       nextDay: 7,
       nextDate: '2026-10-20',
     });
-    // Down first, then what waits for the viewer, then checks still to come, then the rest.
+    // Down first, then checks still to come, then the rest.
     expect(board.attention.map((item) => item.taskId)).toEqual([
       '2',
-      '4',
       '3',
       '1',
       '5',
@@ -502,18 +527,18 @@ describe('results dashboard', () => {
       ids = (r: { items: { taskId: string }[] }) =>
         r.items.map((i) => i.taskId);
     expect(ids(await listResults(s, '1', window))).toEqual([
-      '4',
       '3',
       '5',
       '1',
       '2',
     ]);
     expect(ids(await listResults(s, '1', { ...window, order: 'asc' }))).toEqual(
-      ['2', '1', '5', '3', '4'],
+      ['2', '1', '5', '3'],
     );
-    expect(
-      ids(await listResults(s, '1', { range: 'all', status: 'pendingLive' })),
-    ).toEqual(['4']);
+    // Waiting to go live is no longer a phase of Results.
+    await expect(
+      listResults(s, '1', { range: 'all', status: 'pendingLive' }),
+    ).rejects.toMatchObject({ status: 400 });
     // Delivered work has no comparison, so it is not a live result "without comparable data".
     expect(
       (await listResults(s, '1', { range: 'all', status: 'unavailable' }))

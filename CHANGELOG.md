@@ -7,6 +7,11 @@
 - Edit directly writes the body beside its live preview (side by side from 1024px, Write and Preview tabs below), and so do a document's Edit directly and a document written by hand with I'll do it myself.
 - The Agent's report is summary first: at most three plain lines (the article's `summary`, else the first paragraph of its notes), with the full report behind Full notes. The page change's What changed shows three lines with Expand. Article runs are now asked for a short reviewer summary that does not repeat the before and after title and description, and build runs for a release note of at most three lines.
 
+## Unreleased — Results lists only work with an outcome; a closed task never reads Completed
+
+- Results (the overview, All results, a result's drawer and the counts) lists only tasks that produced an outcome: their change went live, or their delivery finished (done, or its execution recorded), even if archived afterwards. Tasks cancelled before going live, work archived before it finished (including the old-workflow archive) and work still waiting for review, approval or publishing stay in Tasks. "Waiting to go live" is no longer a phase of Results; the Live card says how many more were delivered. Simulated work (the demo install) follows the same rule and stays marked as simulated.
+- A cancelled task, or one archived before it finished, reads Closed everywhere: the Results subtitle, Insights, Opportunities, and what the online assistant's task tools report. One archived after it finished reads "Completed · Archived". `taskStanding` on the server (`execution/model.ts`) and in `shared/task-pending.ts` apply the same rule.
+
 ## Unreleased — Current situation's marks in one grey
 
 - On Insights, every line of Current situation starts with its source mark in the same grey and size: brand logos (Google, Search Console, Discord, Slack, X) no longer show their brand colours beside the grey icons, which made the column look cluttered. `SourceLogo` has a `mono` option for this; Data sources and the other pages keep the brand colours.
