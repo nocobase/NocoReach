@@ -6214,6 +6214,7 @@
   "agentRoles.analysis": "Análise diária",
   "agentRoles.noModel": "Nenhum serviço de modelos conectado ainda.",
   "agentRoles.statusFailed": "Não foi possível ler o status do agente local.",
+  "agentRoles.chatStatusFailed": "Não foi possível ler as configurações do painel de conversa.",
   "agentRoles.noRuntime": "Ainda não há ambientes de execução.",
   "agentRoles.runtimesOffline": "Nenhum ambiente de execução está online; inicie o Runner nesse computador.",
   "agentRoles.defaultOffline": "O ambiente de execução de {0}, agente padrão do projeto, está offline. Não é possível executar tarefas.",

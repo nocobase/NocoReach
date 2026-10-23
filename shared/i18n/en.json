@@ -6247,6 +6247,7 @@
   "agentRoles.analysis": "Daily analysis",
   "agentRoles.noModel": "No model service is connected yet.",
   "agentRoles.statusFailed": "The local agent's status couldn't be read.",
+  "agentRoles.chatStatusFailed": "The chat panel's settings couldn't be read.",
   "agentRoles.noRuntime": "No runtime yet.",
   "agentRoles.runtimesOffline": "No runtime is online; start the Runner on that computer.",
   "agentRoles.defaultOffline": "The runtime of the project default {0} is offline, so tasks can't run.",

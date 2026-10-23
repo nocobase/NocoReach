@@ -36,12 +36,27 @@ describe('turnTools', () => {
     expect(build).toHaveBeenCalledTimes(2);
   });
 
-  it('builds again once a turn has expired', async () => {
+  it('keeps a turn while its tools are called and builds again once it has been idle', async () => {
     let now = 0;
     const build = vi.fn(async () => ({ tools }));
     const toolsOf = turnTools(build, () => now);
     await toolsOf(binding('a'));
-    now = 31 * 60_000;
+    now = 4 * 60_000;
+    await toolsOf(binding('a'));
+    now = 8 * 60_000;
+    await toolsOf(binding('a'));
+    expect(build).toHaveBeenCalledTimes(1);
+    now = 14 * 60_000;
+    await toolsOf(binding('a'));
+    expect(build).toHaveBeenCalledTimes(2);
+  });
+
+  it('drops a stopped turn', async () => {
+    const build = vi.fn(async () => ({ tools }));
+    const toolsOf = turnTools(build);
+    const abort = new AbortController();
+    await toolsOf({ ...binding('a'), signal: abort.signal });
+    abort.abort();
     await toolsOf(binding('a'));
     expect(build).toHaveBeenCalledTimes(2);
   });

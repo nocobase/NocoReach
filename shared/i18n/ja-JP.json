@@ -6214,6 +6214,7 @@
   "agentRoles.analysis": "日次分析",
   "agentRoles.noModel": "モデルサービスがまだ接続されていません。",
   "agentRoles.statusFailed": "ローカルエージェントの状態を読み取れませんでした。",
+  "agentRoles.chatStatusFailed": "チャットパネルの設定を読み取れませんでした。",
   "agentRoles.noRuntime": "実行環境がまだありません。",
   "agentRoles.runtimesOffline": "オンラインの実行環境がありません。実行環境のコンピューターで Runner を起動してください。",
   "agentRoles.defaultOffline": "プロジェクトのデフォルトエージェント {0} の実行環境がオフラインのため、タスクを実行できません。",

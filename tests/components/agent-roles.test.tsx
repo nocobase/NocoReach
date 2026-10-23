@@ -27,6 +27,8 @@ const state = vi.hoisted(() => ({
     instructions: string;
     revision: number;
   },
+  // Reading Chat panel › Settings failed.
+  onlineError: null as Error | null,
   runners: { options: [] as unknown[], loading: false, online: 0 },
   status: {
     revision: 3,
@@ -59,7 +61,9 @@ vi.mock('../../client/online-agent/api', () => ({
             defaultModel: state.defaultModel,
           },
         }
-      : { data: state.online },
+      : state.onlineError
+        ? { data: undefined, error: state.onlineError }
+        : { data: state.online },
 }));
 vi.mock('@nocobase/app-plugin-agents/client/kit', () => ({
   useRunnerOptions: () => state.runners,
@@ -99,6 +103,7 @@ beforeEach(() => {
     modelService: 'openai-compatible',
     model: 'deepseek-v4.1-flash',
   };
+  state.onlineError = null;
   state.online = {
     enabled: true,
     ready: true,
@@ -348,6 +353,15 @@ test('a Chat panel whose model cannot answer needs attention and opens its setti
   expect(
     within(row('对话栏')).getByRole('button', { name: '设置' }),
   ).toHaveAttribute('href', '/agents/chat');
+});
+
+test('a Chat panel whose settings cannot be read needs attention', async () => {
+  state.onlineError = new Error('403');
+  mount();
+  await waitFor(() =>
+    expect(within(row('对话栏')).getByText('需要处理')).toBeVisible(),
+  );
+  expect(detail('对话栏')).toHaveTextContent('无法读取对话栏的设置。');
 });
 
 test('an offline default is replaced by an enabled agent that is online', async () => {

@@ -6247,6 +6247,7 @@
   "agentRoles.analysis": "每日分析",
   "agentRoles.noModel": "还没有接入模型服务。",
   "agentRoles.statusFailed": "无法读取本地 Agent 的状态。",
+  "agentRoles.chatStatusFailed": "无法读取对话栏的设置。",
   "agentRoles.noRuntime": "还没有运行环境。",
   "agentRoles.runtimesOffline": "运行环境都不在线，请在那台电脑上启动 Runner。",
   "agentRoles.defaultOffline": "项目默认的 {0} 所在运行环境不在线，任务无法执行。",

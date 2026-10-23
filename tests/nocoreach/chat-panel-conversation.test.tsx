@@ -35,17 +35,14 @@ const state = vi.hoisted(() => {
     actions: { markRead, stop: {} },
     createConversation: vi.fn(),
     send: vi.fn(() => true),
-    // Chat panel › Settings as the server has it now, read again before an online message.
-    settings: vi.fn(async () => ({ enabled: true })),
+    // Messages the plugin's send did not get through, as the server's guard refusing one while the chat agent is off.
+    pending: [] as unknown[],
     items: [] as unknown[],
     composer: { current: null as ComposerProps | null },
   };
 });
 vi.mock('../../client/online-agent/context.js', () => ({
   useOnlineChat: () => state.online,
-}));
-vi.mock('../../client/online-agent/api.js', () => ({
-  useOnlineApi: () => state.settings,
 }));
 vi.mock('../../client/pages/reach-data.js', () => ({
   useProject: () => ({ project: { id: 7 } }),
@@ -77,7 +74,7 @@ vi.mock('@nocobase/app-plugin-agents/client/chat', async (importOriginal) => {
     useChatApi: () => ({ createConversation: state.createConversation }),
     useConversationMessages: () => ({
       items: state.items,
-      pending: [],
+      pending: state.pending,
       lastSeq: 0,
       hasMore: false,
       loaded: true,
@@ -127,7 +124,7 @@ beforeEach(() => {
   state.conversation = runnerChat;
   state.agents = [onlineAgent];
   state.composer.current = null;
-  state.settings.mockResolvedValue({ enabled: true });
+  state.pending = [];
   state.items = [];
 });
 
@@ -181,37 +178,34 @@ test('an online conversation stays readable but cannot be continued while the Ch
   expect(screen.getByTestId('chat-online-off')).toBeInTheDocument();
 });
 
-test('a message in an online conversation reads Chat panel › Settings first and is not sent once it is off', async () => {
+test('a message in an online conversation is sent at once, and one the guard refuses reads Chat panel › Settings again', async () => {
   state.conversation = { ...runnerChat, agent: onlineAgent };
-  render(<ConversationView conversationId='runner-chat' />);
-  await act(async () => void state.composer.current!.onSend('Hi', undefined));
-  expect(state.settings).toHaveBeenCalledWith('settings');
+  const view = render(<ConversationView conversationId='runner-chat' />);
+  let taken = false;
+  await act(async () => {
+    taken = state.composer.current!.onSend('Hi', undefined);
+  });
+  expect(taken).toBe(true);
   expect(state.send).toHaveBeenCalledOnce();
   expect(state.online.touch).toHaveBeenCalledOnce();
+  expect(state.online.refresh).not.toHaveBeenCalled();
 
-  // Turned off since the panel last read it: nothing is sent, and the panel reads the switch again.
-  state.send.mockClear();
-  state.settings.mockResolvedValue({ enabled: false });
-  await act(async () => void state.composer.current!.onSend('Hi', undefined));
-  expect(state.send).not.toHaveBeenCalled();
+  // Turned off since the panel last read it: the server refuses, and the panel reads the switch again.
+  state.pending = [{ clientId: 'c1', content: 'Hi', status: 'failed' }];
+  view.rerender(<ConversationView conversationId='runner-chat' />);
   expect(state.online.refresh).toHaveBeenCalledOnce();
-  expect(screen.getByText('Hi').closest('[data-status]')).toHaveAttribute(
-    'data-status',
-    'failed',
-  );
 });
 
-test('a message the plugin does not take after the switch check stays in the panel to be sent again', async () => {
+test('a message the plugin does not take stays in the composer', async () => {
   state.conversation = { ...runnerChat, agent: onlineAgent };
   state.send.mockReturnValueOnce(false);
   render(<ConversationView conversationId='runner-chat' />);
-  await act(async () => void state.composer.current!.onSend('Hi', undefined));
-  expect(state.send).toHaveBeenCalledOnce();
+  let taken = true;
+  await act(async () => {
+    taken = state.composer.current!.onSend('Hi', undefined);
+  });
+  expect(taken).toBe(false);
   expect(state.online.touch).not.toHaveBeenCalled();
-  expect(screen.getByText('Hi').closest('[data-status]')).toHaveAttribute(
-    'data-status',
-    'failed',
-  );
 });
 
 test('a stopped online reply says so once: its saved notice, not the feedback line too', () => {

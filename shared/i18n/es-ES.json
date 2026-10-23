@@ -6214,6 +6214,7 @@
   "agentRoles.analysis": "Análisis diario",
   "agentRoles.noModel": "Aún no hay ningún servicio de modelos conectado.",
   "agentRoles.statusFailed": "No se pudo leer el estado del agente local.",
+  "agentRoles.chatStatusFailed": "No se pudo leer la configuración del panel de chat.",
   "agentRoles.noRuntime": "Aún no hay ningún entorno de ejecución.",
   "agentRoles.runtimesOffline": "No hay ningún entorno de ejecución conectado; inicia Runner en el ordenador correspondiente.",
   "agentRoles.defaultOffline": "El entorno de ejecución de {0}, el agente predeterminado del proyecto, está desconectado, por lo que no se pueden ejecutar tareas.",

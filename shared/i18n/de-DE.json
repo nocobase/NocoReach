@@ -6214,6 +6214,7 @@
   "agentRoles.analysis": "Tägliche Analyse",
   "agentRoles.noModel": "Es ist noch kein Modelldienst verbunden.",
   "agentRoles.statusFailed": "Der Status des lokalen Agenten konnte nicht gelesen werden.",
+  "agentRoles.chatStatusFailed": "Die Einstellungen des Chatbereichs konnten nicht gelesen werden.",
   "agentRoles.noRuntime": "Noch keine Laufzeitumgebung vorhanden.",
   "agentRoles.runtimesOffline": "Keine Laufzeitumgebung ist online; starten Sie den Runner auf dem entsprechenden Computer.",
   "agentRoles.defaultOffline": "Die Laufzeitumgebung des Projektstandardagenten {0} ist offline. Aufgaben können daher nicht ausgeführt werden.",

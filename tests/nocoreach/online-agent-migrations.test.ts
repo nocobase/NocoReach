@@ -50,11 +50,10 @@ const insert = async (
 describeMigration('202610220001_create_insight_threads', {
   sources: migrations,
   up: async ({ expectCollection }) => {
-    await expectCollection('nrInsightThreads').toHaveIndex([
-      'ownerId',
-      'projectId',
-      'day',
-    ]);
+    await expectCollection('nrInsightThreads').toHaveIndex(
+      ['ownerId', 'projectId', 'day'],
+      { unique: true },
+    );
   },
 });
 

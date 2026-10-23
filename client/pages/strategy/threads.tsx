@@ -33,8 +33,8 @@ import { ActorAvatar } from '#components/reach/actor';
 import { Button } from '#components/ui/button';
 import { MarkdownView } from '#components/markdown-view';
 import { useOptionalOnlineChat } from '../../online-agent/context';
-import { useOnlineApi, type OnlineSettings } from '../../online-agent/api';
-import { OnlineError } from '../../online-agent/controls';
+import { useOnlineApi } from '../../online-agent/api';
+import { OnlineConfirm, OnlineError } from '../../online-agent/controls';
 import { parseQuote } from '../../online-agent/quote';
 import { useFreshData } from '../workspace-cache';
 import {
@@ -67,6 +67,8 @@ type InsightChat = {
   start: () => Promise<string>;
   sent: () => void;
   openInPanel: () => void;
+  /** Opens one of the day's conversations in the side panel, as when a tool call there waits for approval. */
+  openThread: (id: string) => void;
 };
 const Context = createContext<InsightChat | null>(null);
 export const useInsightChat = () => useContext(Context);
@@ -147,12 +149,25 @@ export function InsightChatProvider({
       });
     return startRef.current;
   };
-  const openInPanel = (draft?: string, create = false) => {
+  const [pending, setPending] = useState<(() => void) | null>(null);
+  const openInPanel = (draft?: string, create = false, id = current?.id) => {
     if (!chat || !day) return;
-    const open = (conversationId: string) =>
-      panel.openChat({ conversationId, draft, view: 'chat' });
-    if (current) open(current.id);
-    else if (create) void start().then(open, () => panel.openChat({ draft }));
+    const open = (conversationId: string) => {
+      // Text typed in the panel is kept: a quote goes in only while the composer is empty, and moving to another
+      // conversation asks first.
+      if (!chat.dirty) panel.openChat({ conversationId, draft, view: 'chat' });
+      else if (panel.conversationId === conversationId)
+        panel.openChat({ conversationId, view: 'chat' });
+      else
+        setPending(
+          () => () => panel.openChat({ conversationId, draft, view: 'chat' }),
+        );
+    };
+    if (id) open(id);
+    else if (create)
+      void start().then(open, () => {
+        if (!chat.dirty) panel.openChat({ draft });
+      });
   };
   // Opening the side panel here moves the day's conversation into it; a day without one starts it with the first question.
   const wasDockedRef = useRef(docked),
@@ -186,8 +201,25 @@ export function InsightChatProvider({
       setSends((n) => n + 1);
     },
     openInPanel: () => openInPanel(undefined, true),
+    openThread: (id) => openInPanel(undefined, false, id),
   };
-  return <Context.Provider value={value}>{children}</Context.Provider>;
+  return (
+    <Context.Provider value={value}>
+      {children}
+      <OnlineConfirm
+        open={!!pending}
+        onClose={() => setPending(null)}
+        title={$t('onlineAgent.discardDraftTitle')}
+        description={$t('onlineAgent.discardDraftDescription')}
+        action={$t('onlineAgent.discard')}
+        busy={false}
+        confirm={() => {
+          pending?.();
+          setPending(null);
+        }}
+      />
+    </Context.Provider>
+  );
 }
 
 /** Ask AI about an opportunity: it is quoted in the day's conversation, wherever that conversation is. */
@@ -400,7 +432,7 @@ function DayTurns({
           <ThreadTurns
             key={thread.id}
             id={thread.id}
-            approve={chat.openInPanel}
+            approve={() => chat.openThread(thread.id)}
           />
         ))}
       <div ref={endRef} />
@@ -447,10 +479,8 @@ export function Composer() {
 }
 function ComposerInput({ chat }: { chat: InsightChat }) {
   const panel = useChatPanel(),
-    online = useOptionalOnlineChat(),
-    api = useOnlineApi();
+    online = useOptionalOnlineChat();
   const [text, setText] = useState(''),
-    [checking, setChecking] = useState(false),
     [starting, setStarting] = useState<{ body: string; id?: string }>(),
     [error, setError] = useState<unknown>(),
     inputRef = useRef<HTMLTextAreaElement>(null);
@@ -469,7 +499,8 @@ function ComposerInput({ chat }: { chat: InsightChat }) {
       stream?.status === 'streaming' ||
       messages.pending.some((m) => m.status === 'sending');
   const failed = messages.pending.find((m) => m.status !== 'sending');
-  // Refused, perhaps because the chat agent was turned off a moment ago: read Chat panel › Settings again.
+  // This page's copy of Chat panel › Settings may be older than an administrator's change. The server's guard refuses
+  // a message while it is off; read the settings again, so the page says so.
   const refreshOnline = useEffectEvent(() => online?.refresh());
   useEffect(() => {
     if (failed) refreshOnline();
@@ -504,24 +535,12 @@ function ComposerInput({ chat }: { chat: InsightChat }) {
     setStarting(undefined);
     deliverStarted(starting.body);
   }, [starting, conversationId]);
-  const busy = !!starting || checking || answering;
+  const busy = !!starting || answering;
   const send = () => {
     const question = text.trim();
     if (!question || busy) return;
     const body = (reference ? referenceText(reference) : '') + question;
     setError(undefined);
-    // This page's copy of Chat panel › Settings may be older than an administrator's change; off, nothing is sent and
-    // the page says so. Unreadable, the server's guard decides.
-    setChecking(true);
-    void api<OnlineSettings>('settings')
-      .catch(() => null)
-      .then((current) => {
-        setChecking(false);
-        if (current && !current.enabled) online?.refresh();
-        else ask(body);
-      });
-  };
-  const ask = (body: string) => {
     if (conversationId) {
       deliver(body);
       return;
@@ -532,6 +551,7 @@ function ComposerInput({ chat }: { chat: InsightChat }) {
       (failure: unknown) => {
         setStarting(undefined);
         setError(failure);
+        online?.refresh();
       },
     );
   };

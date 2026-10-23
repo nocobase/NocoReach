@@ -87,8 +87,13 @@ export function variableProject(variable: unknown): string | null {
 }
 
 /** Turns whose tools are kept, and for how long: long enough for one turn's tool calls. */
-const TURNS_KEPT = 200;
-const TURN_TTL = 30 * 60_000;
+/**
+ * Turns whose tools are kept, and how long one is kept after its last tool call. The plugin says when a turn is
+ * cancelled but not when it finishes, so a finished turn's tools (with the pages and project data they read) go once
+ * idle this long.
+ */
+const TURNS_KEPT = 50;
+const TURN_IDLE = 5 * 60_000;
 /**
  * One model turn's tools, built once: paging through read_page or project_data reads what the turn already fetched,
  * and read_page's page limit holds for the whole turn. Each tool still rechecks access on every call.
@@ -100,16 +105,26 @@ export function turnTools(
   const turns = new Map<string, { at: number; tools: Promise<OnlineTool[]> }>();
   return (binding: OnlineBinding) => {
     const at = now();
-    // Oldest first: drop what expired or overflows.
+    // Least recently used first: drop what has been idle too long or overflows.
     for (const [key, turn] of turns)
-      if (at - turn.at > TURN_TTL || turns.size > TURNS_KEPT) turns.delete(key);
+      if (at - turn.at > TURN_IDLE || turns.size > TURNS_KEPT)
+        turns.delete(key);
       else break;
     const kept = turns.get(binding.turnId);
-    if (kept) return kept.tools;
+    if (kept) {
+      turns.delete(binding.turnId);
+      turns.set(binding.turnId, { at, tools: kept.tools });
+      return kept.tools;
+    }
     const tools = build(binding).then((value) => value.tools);
+    const forget = () => {
+      if (turns.get(binding.turnId)?.tools === tools)
+        turns.delete(binding.turnId);
+    };
     turns.set(binding.turnId, { at, tools });
-    // A refusal is not kept: the next call checks again.
-    tools.catch(() => turns.delete(binding.turnId));
+    // A refusal is not kept: the next call checks again. A stopped turn calls no more tools.
+    tools.catch(forget);
+    binding.signal.addEventListener('abort', forget, { once: true });
     return tools;
   };
 }

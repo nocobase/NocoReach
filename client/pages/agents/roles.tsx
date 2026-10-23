@@ -360,24 +360,30 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
             detail: $t('agentRoles.noModel'),
             action: addModel,
           }
-        : chatSettings && !chatSettings.enabled
+        : !chatSettings
           ? {
               state: 'attention',
-              detail: $t('agentRoles.chatOff'),
-              action: canManageChat
-                ? {
-                    label: $t('agentRoles.turnOn'),
-                    run: () => turnOn(chatSettings),
-                  }
-                : undefined,
+              detail: $t('agentRoles.chatStatusFailed'),
+              action: chatAction,
             }
-          : chatSettings && !chatSettings.ready
+          : !chatSettings.enabled
             ? {
                 state: 'attention',
-                detail: $t('agentRoles.chatModelOff'),
-                action: chatAction,
+                detail: $t('agentRoles.chatOff'),
+                action: canManageChat
+                  ? {
+                      label: $t('agentRoles.turnOn'),
+                      run: () => turnOn(chatSettings),
+                    }
+                  : undefined,
               }
-            : { state: 'ready', action: chatAction }),
+            : !chatSettings.ready
+              ? {
+                  state: 'attention',
+                  detail: $t('agentRoles.chatModelOff'),
+                  action: chatAction,
+                }
+              : { state: 'ready', action: chatAction }),
   };
 
   const options = status?.options || [];

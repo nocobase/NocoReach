@@ -6292,6 +6292,7 @@
   "agentRoles.analysis": "Analisis harian",
   "agentRoles.noModel": "Belum ada layanan model yang terhubung.",
   "agentRoles.statusFailed": "Status agen lokal tidak dapat dibaca.",
+  "agentRoles.chatStatusFailed": "Pengaturan panel percakapan tidak dapat dibaca.",
   "agentRoles.noRuntime": "Belum ada lingkungan eksekusi.",
   "agentRoles.runtimesOffline": "Tidak ada lingkungan eksekusi yang daring; jalankan Runner di komputer tersebut.",
   "agentRoles.defaultOffline": "Lingkungan eksekusi agen bawaan proyek {0} sedang luring, sehingga tugas tidak dapat dijalankan.",

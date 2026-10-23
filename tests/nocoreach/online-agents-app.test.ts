@@ -391,6 +391,41 @@ test('conversations asked from Insights are indexed by project and day and list 
       turns: 1,
     }),
   ]);
+  // Two tabs asking a new day's first question at once share one conversation.
+  const pair = await Promise.all(
+    [0, 1].map(
+      async () =>
+        (
+          await (
+            await send(admin, '/onlineAgents/threads', {
+              projectId,
+              day: '2026-10-22',
+            })
+          ).json()
+        ).data.id as string,
+    ),
+  );
+  expect(pair[1]).toBe(pair[0]);
+  // An archived day's conversation gives way to a new one.
+  expect(
+    (
+      await send(
+        admin,
+        `/agents/conversations/${pair[0]}`,
+        { archived: true },
+        'PATCH',
+      )
+    ).status,
+  ).toBe(200);
+  const fresh = (
+    await (
+      await send(admin, '/onlineAgents/threads', {
+        projectId,
+        day: '2026-10-22',
+      })
+    ).json()
+  ).data.id as string;
+  expect(fresh).not.toBe(pair[0]);
 
   const { user, client } = await member(
     testApp,

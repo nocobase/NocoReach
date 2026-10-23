@@ -6214,6 +6214,7 @@
   "agentRoles.analysis": "每日分析",
   "agentRoles.noModel": "還沒有串接模型服務。",
   "agentRoles.statusFailed": "無法讀取本地 Agent 的狀態。",
+  "agentRoles.chatStatusFailed": "無法讀取對話欄的設定。",
   "agentRoles.noRuntime": "還沒有執行環境。",
   "agentRoles.runtimesOffline": "執行環境都離線，請在那臺電腦上啟動 Runner。",
   "agentRoles.defaultOffline": "專案預設的 {0} 所在執行環境離線，任務無法執行。",

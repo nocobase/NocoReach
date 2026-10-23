@@ -51,7 +51,6 @@ import { Skeleton } from '#components/ui/skeleton';
 import { Spinner } from '#components/ui/spinner';
 import { cn } from 'cn';
 
-import { useOnlineApi, type OnlineSettings } from '../../online-agent/api.js';
 import { useOnlineChat } from '../../online-agent/context.js';
 import { useProject } from '../../pages/reach-data.js';
 import {
@@ -229,22 +228,9 @@ function ConversationBody({
     isOnlineAgent(conversation?.agent) &&
     online.settings !== undefined &&
     !online.enabled;
-  // The panel's copy of the switch may be older than an administrator's change. A message or an approval in an online
-  // conversation reads it again first, so the panel says the agent is off instead of failing at the server's guard.
-  const onlineApi = useOnlineApi();
+  // The panel's copy of the switch may be older than an administrator's change. The server's guard refuses a message
+  // or an approval while it is off, and the panel then reads it again, so it says the agent is off.
   const onlineAgent = isOnlineAgent(conversation?.agent);
-  const stillOn = async (): Promise<boolean> => {
-    // Unreadable: the server's guard decides.
-    const current = await onlineApi<OnlineSettings>('settings').catch(
-      () => null,
-    );
-    if (current && !current.enabled) {
-      online.refresh();
-      return false;
-    }
-    return true;
-  };
-  // A message the server refused anyway (switched off a moment before) also reads it again.
   const refreshOnline = useEffectEvent(() => online.refresh());
   const sendRefused =
     onlineAgent && messages.pending.some((item) => item.status !== 'sending');
@@ -306,21 +292,6 @@ function ConversationBody({
           if (liveRef.current) setStarting({ input, error });
         },
       );
-    return true;
-  };
-  // In an existing online conversation, the message waits for the switch to be read; off, it stays unsent.
-  const recheck = (input: Input): boolean => {
-    if (starting && !starting.error) return false;
-    startedRef.current = true;
-    setStarting({ input });
-    void stillOn().then((on) => {
-      if (!liveRef.current) return;
-      if (!on) {
-        setStarting({ input, error: new Error('chatDisabled') });
-        return;
-      }
-      deliver(input);
-    });
     return true;
   };
   // The composer was already cleared, so a message the plugin's send does not take stays here to be sent again.
@@ -424,8 +395,12 @@ function ConversationBody({
           onApproval={
             conversationId
               ? async (input) => {
-                  if (onlineAgent && !(await stillOn())) return;
-                  await chatController.approve(conversationId, input);
+                  try {
+                    await chatController.approve(conversationId, input);
+                  } catch (error) {
+                    if (onlineAgent) online.refresh();
+                    throw error;
+                  }
                 }
               : undefined
           }
@@ -633,7 +608,7 @@ function ConversationBody({
                     }}
                     onRetry={() =>
                       void (conversation
-                        ? recheck(starting.input)
+                        ? deliver(starting.input)
                         : start(starting.input))
                     }
                     onDiscard={() => setStarting(null)}
@@ -765,8 +740,6 @@ function ConversationBody({
           onSend={(content, context, attachments) => {
             if (!conversationId && isOnlineAgent(target))
               return start({ content, context, attachments });
-            if (conversationId && onlineAgent)
-              return recheck({ content, context, attachments });
             const accepted = send({ content, context, attachments });
             if (accepted && isOnlineAgent(conversation?.agent)) online.touch();
             if (accepted) focusComposer();

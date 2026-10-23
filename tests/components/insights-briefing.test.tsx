@@ -34,8 +34,12 @@ const fixture = vi.hoisted(() => ({
     enabled: boolean;
     settings: { enabled: boolean };
     refresh?: () => void;
+    /** The side panel's composer holds unsent text. */
+    dirty?: boolean;
   },
-  chatOnNow: true,
+  // Messages the plugin's send did not get through, as the server's guard refusing one while the chat agent is off.
+  pending: [] as unknown[],
+  panelConversationId: null as string | null,
   panelOpen: false,
   state: undefined as unknown as StrategyState,
   tasks: [] as unknown[],
@@ -112,14 +116,18 @@ vi.mock('@nocobase/app-plugin-agents/client/chat', async (original) => ({
   ...(await original<
     typeof import('@nocobase/app-plugin-agents/client/chat')
   >()),
-  useChatPanel: () => ({ open: fixture.panelOpen, openChat: fixture.openChat }),
+  useChatPanel: () => ({
+    open: fixture.panelOpen,
+    openChat: fixture.openChat,
+    conversationId: fixture.panelConversationId,
+  }),
   useConversation: (id: string | null) => ({
     data: id ? { id, execution: null, run: null } : undefined,
   }),
   useChatStream: () => undefined,
   useConversationMessages: (id: string | null) => ({
     items: (id && fixture.messages[id]) || [],
-    pending: [],
+    pending: id ? fixture.pending : [],
     dispatch: vi.fn(),
   }),
   useSendMessage:
@@ -137,7 +145,6 @@ vi.mock('../../client/online-agent/api', () => ({
       return { id: 't-new' };
     }
     if (path === 'threads?projectId=1') return fixture.threads;
-    if (path === 'settings') return { enabled: fixture.chatOnNow };
     throw new Error(`Unexpected ${path}`);
   },
 }));
@@ -290,7 +297,8 @@ beforeEach(() => {
     settings: { enabled: true },
     refresh: vi.fn(),
   };
-  fixture.chatOnNow = true;
+  fixture.pending = [];
+  fixture.panelConversationId = null;
   fixture.panelOpen = false;
   fixture.action.mockImplementation(
     (resource: string, action: string, options: { body?: object }) => {
@@ -867,19 +875,15 @@ it('a follow-up joins the day’s existing conversation', async () => {
   expect(fixture.posts).toEqual([]);
 });
 
-it('a question asked after the chat agent was turned off elsewhere is not sent', async () => {
+it('a question refused after the chat agent was turned off elsewhere reads Chat panel › Settings again', async () => {
   fixture.threads = [thread('t-day', '2026-10-21')];
   fixture.messages['t-day'] = [user('m1', 'First', '2026-10-21T10:00:00Z')];
-  fixture.chatOnNow = false;
+  fixture.pending = [
+    { clientId: 'c1', content: 'Still there?', status: 'failed' },
+  ];
   setup();
-  const input = await screen.findByRole('textbox', {
-    name: 'strategy.composerLabel',
-  });
-  fireEvent.change(input, { target: { value: 'Still there?' } });
-  fireEvent.click(screen.getByRole('button', { name: 'strategy.send' }));
-  // The page reads Chat panel › Settings again instead of sending.
+  // The server's guard refused it; the page reads the switch again, so it can say the agent is off.
   await waitFor(() => expect(fixture.chat.refresh).toHaveBeenCalledOnce());
-  expect(fixture.sent).toEqual([]);
 });
 
 it('while the chat agent is off the day’s conversation stays and the page says why there is no input', async () => {
@@ -958,6 +962,89 @@ it('with the side panel open the conversation moves there and the page gives it 
     draft: expect.stringMatching(
       /^\[Opportunity b\]\([^)]*\/opportunities\?item=b\)\n$/,
     ),
+    view: 'chat',
+  });
+});
+
+it('opening the day’s conversation in the side panel keeps text typed there', async () => {
+  fixture.threads = [thread('t-day', '2026-10-21')];
+  fixture.messages['t-day'] = [
+    user('m1', 'First', '2026-10-21T10:00:00Z'),
+    reply('m2', 'Answer'),
+  ];
+  fixture.chat = { ...fixture.chat, dirty: true };
+  fixture.panelConversationId = 'runner-1';
+  const view = setup();
+  await waitFor(() =>
+    expect(document.querySelector('[data-day-conversation]')).toBeTruthy(),
+  );
+  fixture.panelOpen = true;
+  view.rerender();
+  // Another conversation with a draft is in the panel: moving away from it asks first.
+  expect(await screen.findByText('onlineAgent.discardDraftTitle')).toBeTruthy();
+  expect(fixture.openChat).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'onlineAgent.discard' }));
+  expect(fixture.openChat).toHaveBeenCalledWith({
+    conversationId: 't-day',
+    draft: undefined,
+    view: 'chat',
+  });
+  // On the day's conversation, a quote does not replace the text being typed.
+  fixture.panelConversationId = 't-day';
+  view.rerender();
+  const b = await screen.findByRole('listitem', { name: 'Opportunity b' });
+  fireEvent.click(within(b).getByRole('button', { name: 'strategy.askAi' }));
+  expect(fixture.openChat).toHaveBeenLastCalledWith({
+    conversationId: 't-day',
+    view: 'chat',
+  });
+});
+
+it('a call waiting for approval opens its own conversation in the side panel', async () => {
+  fixture.threads = [
+    thread('t-early', '2026-10-21', { updatedAt: '2026-10-21T09:00:00Z' }),
+    thread('t-late', '2026-10-21'),
+  ];
+  fixture.messages['t-early'] = [
+    user('m1', 'Run the task', '2026-10-21T08:00:00Z'),
+    {
+      id: 'm2',
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool-task_execute',
+          toolCallId: 'call-1',
+          state: 'approval-requested',
+          input: {},
+        },
+      ],
+    },
+  ];
+  fixture.messages['t-late'] = [
+    user('m3', 'Later', '2026-10-21T10:00:00Z'),
+    reply('m4', 'Answer'),
+  ];
+  setup();
+  const conversation = await waitFor(() => {
+    const found = document.querySelector(
+      '[data-day-conversation="2026-10-21"]',
+    );
+    expect(found).toBeTruthy();
+    return found as HTMLElement;
+  });
+  fireEvent.click(
+    within(conversation).getByRole('button', {
+      name: /strategy.conversationTurns/,
+    }),
+  );
+  fireEvent.click(
+    await within(conversation).findByRole('button', {
+      name: /strategy.approveInPanel/,
+    }),
+  );
+  expect(fixture.openChat).toHaveBeenCalledWith({
+    conversationId: 't-early',
+    draft: undefined,
     view: 'chat',
   });
 });

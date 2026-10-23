@@ -11,8 +11,9 @@ const migration: MigrationDefinition = defineMigration({
       c.string('day', { length: 10 }).notNull();
       c.string('opportunityId', { length: 100 }).nullable();
       c.string('createdAt', { length: 40 }).notNull();
-      c.index(['ownerId', 'projectId', 'day'], {
-        name: 'ix_nr_insight_threads_owner',
+      // One conversation per person, project and analysis day, also when two processes start it at once.
+      c.unique(['ownerId', 'projectId', 'day'], {
+        name: 'uq_nr_insight_threads_day',
       });
     });
   },

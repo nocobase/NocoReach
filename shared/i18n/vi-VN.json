@@ -6292,6 +6292,7 @@
   "agentRoles.analysis": "Phân tích hằng ngày",
   "agentRoles.noModel": "Chưa kết nối dịch vụ mô hình nào.",
   "agentRoles.statusFailed": "Không đọc được trạng thái của tác nhân AI cục bộ.",
+  "agentRoles.chatStatusFailed": "Không đọc được cài đặt của khung trò chuyện.",
   "agentRoles.noRuntime": "Chưa có môi trường thực thi.",
   "agentRoles.runtimesOffline": "Không có môi trường thực thi nào trực tuyến; vui lòng khởi động Runner trên máy tính đó.",
   "agentRoles.defaultOffline": "Môi trường thực thi của tác nhân mặc định {0} đang ngoại tuyến nên không thể chạy tác vụ.",
