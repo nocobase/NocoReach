@@ -28,12 +28,13 @@ import {
   useSendMessage,
 } from '@nocobase/app-plugin-agents/client/chat';
 import type { AppUIMessage } from '@nocobase/app-plugin-agents/shared/online-agent';
+import { toast } from '#lib/toast';
 import { cn } from '#lib/utils';
 import { ActorAvatar } from '#components/reach/actor';
 import { Button } from '#components/ui/button';
 import { MarkdownView } from '#components/markdown-view';
 import { useOptionalOnlineChat } from '../../online-agent/context';
-import { useOnlineApi } from '../../online-agent/api';
+import { onlineError, useOnlineApi } from '../../online-agent/api';
 import { OnlineConfirm, OnlineError } from '../../online-agent/controls';
 import { parseQuote } from '../../online-agent/quote';
 import { useFreshData } from '../workspace-cache';
@@ -169,8 +170,10 @@ export function InsightChatProvider({
     };
     if (id) open(id);
     else if (create)
-      void start().then(open, () => {
-        if (!chat.dirty) panel.openChat({ draft });
+      // Not opened on a blank chat: a question sent there would start a conversation outside the day.
+      void start().then(open, (error: unknown) => {
+        toast.error(() => onlineError(error));
+        chat.refresh();
       });
   };
   // Opening the side panel here moves the day's conversation into it; a day without one starts it with the first question.
@@ -471,6 +474,8 @@ export function Composer() {
   const chat = useInsightChat(),
     online = useOptionalOnlineChat();
   if (!chat || !chat.day || chat.docked) return null;
+  if (online?.error)
+    return <OnlineError error={online.error} retry={online.refresh} />;
   // Off in Chat panel › Settings: the day's conversation stays readable, and the page says why there is no input.
   if (online?.settings && !online.enabled)
     return (
@@ -486,14 +491,18 @@ function ComposerInput({ chat }: { chat: InsightChat }) {
     online = useOptionalOnlineChat();
   const [text, setText] = useState(''),
     [starting, setStarting] = useState<{ body: string; id?: string }>(),
+    [started, setStarted] = useState<{ day: string; id: string }>(),
     [error, setError] = useState<unknown>(),
     inputRef = useRef<HTMLTextAreaElement>(null);
   const reference = chat.reference;
   useEffect(() => {
     if (reference) inputRef.current?.focus();
   }, [reference]);
+  // The conversation started here stays this input's, even when the reloaded list's latest for the day is another.
   const conversationId =
-    threadsOf(chat.threads, chat.day).at(-1)?.id ?? starting?.id ?? null;
+    (started?.day === chat.day ? started.id : undefined) ??
+    threadsOf(chat.threads, chat.day).at(-1)?.id ??
+    null;
   const detail = useConversation(conversationId).data ?? null,
     stream = useChatStream(detail?.execution ? conversationId : null),
     messages = useConversationMessages(conversationId),
@@ -550,8 +559,12 @@ function ComposerInput({ chat }: { chat: InsightChat }) {
       return;
     }
     setStarting({ body });
+    const day = chat.day;
     chat.start().then(
-      (id) => setStarting({ body, id }),
+      (id) => {
+        setStarted({ day, id });
+        setStarting({ body, id });
+      },
       (failure: unknown) => {
         setStarting(undefined);
         setError(failure);

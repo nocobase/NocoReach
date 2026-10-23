@@ -9,7 +9,7 @@ import {
   type OnlineSubject,
   type OnlineThread,
 } from '../../../shared/online-agent.js';
-import { conversationMissing } from './errors.js';
+import { conversationOrNull } from './errors.js';
 
 type Row = {
   conversationId: string;
@@ -26,6 +26,13 @@ type Row = {
 };
 /** Threads listed at most, newest first. */
 const LISTED = 200;
+const NEWEST = {
+  kind: 'sort' as const,
+  version: 1 as const,
+  items: [
+    { kind: 'field' as const, path: ['createdAt'], direction: 'desc' as const },
+  ],
+};
 /** Pages of the owner's Insights conversations read before falling back to reading them one by one. */
 const SUMMARY_PAGES = 5;
 /** Pages of 200 messages a count reads in one list. */
@@ -74,12 +81,11 @@ export class InsightThreads {
       filter: { ownerId, projectId, day },
     });
     if (!row) return null;
-    const detail = await this.agents.conversations
-      .get(ownerId, row.conversationId)
-      .catch((error: unknown) => {
-        if (conversationMissing(error)) return null;
-        throw error;
-      });
+    const detail = await conversationOrNull(
+      this.agents,
+      ownerId,
+      row.conversationId,
+    );
     if (detail && !detail.archivedAt) return row.conversationId;
     await this.repo().deleteMany({
       filter: { conversationId: row.conversationId },
@@ -152,12 +158,7 @@ export class InsightThreads {
     for (let i = 0; i < rest.length; i += READS_AT_ONCE)
       await Promise.all(
         rest.slice(i, i + READS_AT_ONCE).map(async (id) => {
-          const detail = await this.agents.conversations
-            .get(ownerId, id)
-            .catch((error: unknown) => {
-              if (conversationMissing(error)) return null;
-              throw error;
-            });
+          const detail = await conversationOrNull(this.agents, ownerId, id);
           if (detail && !detail.archivedAt) found.set(id, detail);
         }),
       );
@@ -195,13 +196,11 @@ export class InsightThreads {
     return complete ? turns : null;
   }
   async list(ownerId: string, projectId: string): Promise<OnlineThread[]> {
-    const rows: Row[] = [];
-    for await (const row of this.repo().findMany({
+    const listed: Row[] = await this.repo().findMany({
       filter: { ownerId, projectId },
-    }))
-      rows.push(row);
-    rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    const listed = rows.slice(0, LISTED);
+      sort: NEWEST,
+      limit: LISTED,
+    });
     const details = await this.summaries(
       ownerId,
       new Set(listed.map((row) => row.conversationId)),

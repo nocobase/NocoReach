@@ -12,13 +12,13 @@ import {
   defineApiRoutes,
   type AppApiRouteContribution,
 } from '@nocobase/app-server/router';
-import { Hono, type MiddlewareHandler } from 'hono';
+import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import {
   ONLINE_AGENT_ID,
   ONLINE_CHAT_SCOPE,
 } from '../../shared/online-agent.js';
 import {
-  conversationMissing,
+  conversationOrNull,
   OnlineAgentError,
   onlineApiError,
 } from '../nocoreach/online-agent/errors.js';
@@ -33,14 +33,14 @@ type Env = AuthEnv & AuthorizationEnv;
  * The plugin resolves the `nocoreach` scope, where Chat panel › Settings' switch, the person's role and their access to
  * the project are checked, only when a conversation is created; a saved conversation keeps its configuration. So a new
  * message or an approval in an online conversation checks them again here, as every tool call does. Runner
- * conversations pass untouched. Stop and reading stay open. Creating one without that scope is refused too. Register
- * before plugin routes.
+ * conversations pass untouched. Stop and reading stay open. Creating one without that scope, or changing a saved one's
+ * scopes to leave it out, is refused too. Register before plugin routes.
  */
 export const onlineChatGuard: AppApiRouteContribution<Application> =
   defineApiRoutes((app) => {
     const router = new Hono<Env>();
     const authenticate: MiddlewareHandler<AuthEnv> = async (context, next) => {
-      if (context.req.method !== 'POST') return next();
+      if (!['POST', 'PATCH'].includes(context.req.method)) return next();
       return app.container.resolve(authenticationToken).required()(
         context,
         next,
@@ -52,13 +52,8 @@ export const onlineChatGuard: AppApiRouteContribution<Application> =
       const auth = context.get('auth')!;
       const ownerId = String(auth.user.id);
       const id = context.req.param('conversationId')!;
-      const detail = await agents.conversations
-        .get(ownerId, id)
-        // Not the caller's or not there: the plugin answers with its own error.
-        .catch((error: unknown) => {
-          if (conversationMissing(error)) return null;
-          throw error;
-        });
+      // Not the caller's or not there: the plugin answers with its own error.
+      const detail = await conversationOrNull(agents, ownerId, id);
       if (detail?.agent?.id !== ONLINE_AGENT_ID) return next();
       const config = await agents.onlineAgent.configuration(
         {
@@ -94,28 +89,51 @@ export const onlineChatGuard: AppApiRouteContribution<Application> =
     };
     // The plugin takes scopes as optional, so a conversation with the online agent must name `nocoreach`: without it the
     // conversation skips NocoReach's prompt, the Chat panel switch, its model and the project check.
-    const requireScope: MiddlewareHandler<Env> = async (context, next) => {
-      if (context.req.method !== 'POST') return next();
-      const body = (await context.req.raw
+    const scopeRequired = () =>
+      onlineApiError(new OnlineAgentError('scopeRequired', 400));
+    const bodyOf = (context: Context) =>
+      context.req.raw
         .clone()
         .json()
         // Malformed: the plugin's validator answers.
-        .catch(() => null)) as {
+        .catch(() => null) as Promise<{
         agentId?: unknown;
         config?: { agentId?: unknown; scope?: unknown };
-      } | null;
+      } | null>;
+    const named = (scope: unknown) =>
+      Array.isArray(scope) && scope.includes(ONLINE_CHAT_SCOPE);
+    const requireScope: MiddlewareHandler<Env> = async (context, next) => {
+      if (context.req.method !== 'POST') return next();
+      const body = await bodyOf(context);
       if (!body || typeof body !== 'object') return next();
       // No agent named means the plugin's native one.
       const agentId = body.agentId ?? body.config?.agentId ?? ONLINE_AGENT_ID;
-      const scope = body.config?.scope;
-      if (
-        agentId !== ONLINE_AGENT_ID ||
-        (Array.isArray(scope) && scope.includes(ONLINE_CHAT_SCOPE))
-      )
+      if (agentId !== ONLINE_AGENT_ID || named(body.config?.scope))
         return next();
-      throw onlineApiError(new OnlineAgentError('scopeRequired', 400));
+      throw scopeRequired();
+    };
+    // The plugin resolves a saved conversation's configuration again when its scopes are changed, so an online one must
+    // keep `nocoreach` there too; leaving `scope` out keeps the saved scopes.
+    const keepScope: MiddlewareHandler<Env> = async (context, next) => {
+      if (context.req.method !== 'PATCH') return next();
+      const body = await bodyOf(context);
+      const scope =
+        body && typeof body === 'object' ? body.config?.scope : undefined;
+      if (scope === undefined || named(scope)) return next();
+      const detail = await conversationOrNull(
+        app.container.resolve(agentsToken),
+        String(context.get('auth')!.user.id),
+        context.req.param('conversationId')!,
+      );
+      if (detail?.agent?.id !== ONLINE_AGENT_ID) return next();
+      throw scopeRequired();
     };
     router.use('/agents/conversations', authenticate, requireScope);
+    router.use(
+      '/agents/conversations/:conversationId/config',
+      authenticate,
+      keepScope,
+    );
     for (const path of [
       '/agents/conversations/:conversationId/messages',
       '/agents/conversations/:conversationId/approval',

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiClientError, useApiClient } from '@nocobase/app-client';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
+import { $t } from '#i18n';
 import type { OnlineChatSettings } from '../../shared/online-agent.js';
 /**
  * Chat panel › Settings, with whether the model it uses can answer now and whether a system default chat model exists,
@@ -17,6 +18,27 @@ export class OnlineApiError extends Error {
   ) {
     super(code);
   }
+}
+const knownErrors = new Set([
+  'chatDisabled',
+  'modelUnavailable',
+  'revisionConflict',
+  'accessDenied',
+  'sessionChanged',
+]);
+/** What a failed online request says to the reader. */
+export function onlineError(error: unknown) {
+  if (error instanceof OnlineApiError) {
+    if (error.status === 401) return $t('common.sessionExpiredSignAgain');
+    if (error.status === 403) return $t('onlineAgent.accessDenied');
+    if (error.status === 404) return $t('onlineAgent.notFound');
+    return $t(
+      knownErrors.has(error.code)
+        ? `onlineAgent.${error.code}`
+        : 'onlineAgent.requestFailed',
+    );
+  }
+  return $t('onlineAgent.requestFailed');
 }
 /** Lives inside MeProvider's session + authorization boundary. No shared cache or global credentials. */
 export function useOnlineApi() {

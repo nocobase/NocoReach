@@ -31,8 +31,6 @@ describe('app client routes', () => {
         '/agents/models',
         '/agents/usage',
         '/agents/chat',
-        '/agents/chat/new',
-        '/agents/chat/:onlineAgentId',
         '/schedules',
         '/schedules/:scheduleId',
         '/schedules/:scheduleId/edit',

@@ -102,6 +102,9 @@ export function ChatAgentChoice({ disabled }: { disabled?: boolean }) {
               />
               {isOnlineAgent(current) && <CheckIcon />}
             </DropdownMenuItem>
+          ) : chat.error ? (
+            // Chat panel › Settings could not be read: whether the assistant is on is unknown until a retry.
+            <OnlineError error={chat.error} retry={chat.refresh} />
           ) : (
             directory.isSuccess && (
               <DropdownMenuItem disabled>

@@ -253,9 +253,6 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
   moved('flows-legacy', '/flows', '/playbooks'),
   moved('online-agents-legacy', '/agents/online', '/agents'),
   moved('online-agent-new-legacy', '/agents/online/new', '/agents/chat'),
-  // One online assistant since the Agents plugin runs it (2026-10-22): its settings replaced the per-agent dialogs.
-  moved('online-agent-new-moved', '/agents/chat/new', '/agents/chat'),
-  moved('online-agent-edit-moved', '/agents/chat/:onlineAgentId', '/agents/chat'),
   // Settings held the runtimes, model services and usage pages for one release (2026-10-22).
   moved('runtimes-legacy', '/runtimes', '/agents/runtimes'),
   moved('runtimes-connect-legacy', '/runtimes/connect', '/agents/runtimes/connect'),

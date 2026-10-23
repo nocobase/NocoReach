@@ -37,9 +37,8 @@ function threads(get: (id: string) => Promise<unknown>) {
   const database = {
     connection: () => ({
       repository: () => ({
-        findMany: async function* () {
-          yield* rows;
-        },
+        // Newest first, as `list` asks the database to sort them.
+        findMany: async () => [...rows].reverse(),
         updateMany: vi.fn(),
       }),
     }),

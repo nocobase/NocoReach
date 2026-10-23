@@ -33,9 +33,6 @@ import { SentContext } from './context-chips.js';
 import { MessageAttachments } from './message-attachments.js';
 import { ReasoningPart } from './reasoning-part.js';
 
-/** The only error text the OnlineAgent shows for a failed tool call, in English; its own detail never reaches the chat. */
-const ONLINE_TOOL_ERROR = 'The tool could not complete.';
-
 /** The OnlineAgent's end-of-reply notice, whose title the plugin writes in English; null for any other notice. */
 function executionStatusText(part: {
   readonly id?: string;
@@ -295,11 +292,9 @@ export function MessageItem({
             <p>{t('chat.approval.denied')}</p>
           ) : null}
           {part.state === 'output-error' ? (
-            <p role='alert'>
-              {part.errorText === ONLINE_TOOL_ERROR
-                ? $t('onlineAgent.toolFailed')
-                : part.errorText}
-            </p>
+            // The plugin's message projection replaces every tool error with one fixed English sentence, for the
+            // online agent and Runner agents alike, so its text carries nothing to show.
+            <p role='alert'>{$t('onlineAgent.toolFailed')}</p>
           ) : null}
         </div>
       );

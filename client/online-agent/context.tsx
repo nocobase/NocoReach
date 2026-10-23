@@ -5,6 +5,8 @@ import { useOnlineResource, type OnlineSettings } from './api.js';
 interface OnlineChatState {
   /** Chat panel › Settings, once read; undefined while loading or unreadable. */
   settings: OnlineSettings | undefined;
+  /** Why the settings could not be read, until a read succeeds; `refresh` reads them again. */
+  error: unknown;
   /** The online assistant may be chosen: Chat panel › Settings has it on. */
   enabled: boolean;
   refresh: () => void;
@@ -25,6 +27,7 @@ export function OnlineChatProvider({ children }: { children: ReactNode }) {
     <Context.Provider
       value={{
         settings: settings.data,
+        error: settings.data ? undefined : settings.error,
         enabled: settings.data?.enabled ?? false,
         refresh: () => setRefresh((n) => n + 1),
         dirty,

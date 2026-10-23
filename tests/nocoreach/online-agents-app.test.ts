@@ -239,11 +239,10 @@ test('online conversations take the nocoreach scope, its project tools and Chat 
 
   // Without a project only the task tools are offered.
   const unbound = await startOnline(admin, null);
+  const unboundId: string = (await unbound.json()).data.id;
   const unboundConfig = (
     await (
-      await admin.fetch(
-        `/agents/conversations/${(await unbound.json()).data.id}/config`,
-      )
+      await admin.fetch(`/agents/conversations/${unboundId}/config`)
     ).json()
   ).data;
   expect(unboundConfig.tool.sort()).toEqual(
@@ -276,6 +275,28 @@ test('online conversations take the nocoreach scope, its project tools and Chat 
       reason: 'scopeRequired',
     });
   }
+  // Nor can a saved online conversation drop the scope afterwards.
+  for (const scope of [[], ['other']]) {
+    const dropped = await send(
+      admin,
+      `/agents/conversations/${unboundId}/config`,
+      { config: { scope } },
+      'PATCH',
+    );
+    expect(dropped.status).toBe(400);
+    expect((await dropped.json()).error).toMatchObject({
+      domain: 'onlineAgent',
+      reason: 'scopeRequired',
+    });
+  }
+  const kept = await send(
+    admin,
+    `/agents/conversations/${unboundId}/config`,
+    { config: { scope: ['nocoreach'] } },
+    'PATCH',
+  );
+  expect(kept.status).toBe(200);
+  expect((await kept.json()).data.scope).toEqual(['nocoreach']);
 });
 
 test('creation and tools recheck project access and the Chat panel switch', async ({
