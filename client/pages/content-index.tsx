@@ -16,7 +16,7 @@ import { Card } from "#components/ui/card";
 import { Input } from "#components/ui/input";
 import { TabsTrigger } from "#components/ui/tabs";
 import { DataTable, useDataTable } from "#components/seo/data-table";
-import { DataTableTabs, DataTableToolbar } from "#components/seo/data-table-toolbar";
+import { DataTableTabs } from "#components/seo/data-table-toolbar";
 import { TablePagination } from "#components/seo/table-pagination";
 import { SortableHeader } from "#components/seo/sortable-header";
 import { taskRecords, useProject } from "./reach-data";
@@ -135,15 +135,14 @@ export default function ContentPage() {
       {data && data.summary.pages > 0 ? (
         <>
           <Card className="gap-0 py-0">
-            <DataTableTabs value={type} onValueChange={(v) => choose({ type: v })}>
+            <DataTableTabs value={type} onValueChange={(v) => choose({ type: v })} tools={<>
+              <label className="relative flex items-center"><Search className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" /><Input aria-label={$t('common.searchPages')} className="h-8 w-64 pl-8" placeholder={$t('contentIndex.searchTitleUrl')} value={query} onChange={(e) => choose({ query: e.target.value })} /></label>
+              {type === OUTSIDE && data.outsideSitemap && data.outsideSitemap.total > data.outsideSitemap.shown ? <span className='text-xs text-muted-foreground' data-outside-cap=''>{$t('contentIndex.outsideSitemapCapped', { 0: data.outsideSitemap.shown, 1: data.outsideSitemap.total })}</span> : null}
+            </>}>
               <TabsTrigger value="all">{$tj('common.allCount',{0:counts.all})}</TabsTrigger>
               {types.map((t) => <TabsTrigger key={t} value={t}>{getTypeLabels()[t] || t} {counts.by[t] || 0}</TabsTrigger>)}
               {counts.outside ? <TabsTrigger value={OUTSIDE}>{$t('contentIndex.outsideSitemapTab')} {counts.outside}</TabsTrigger> : null}
             </DataTableTabs>
-            <DataTableToolbar>
-              <label className="relative flex items-center"><Search className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" /><Input aria-label={$t('common.searchPages')} className="h-8 w-64 pl-8" placeholder={$t('contentIndex.searchTitleUrl')} value={query} onChange={(e) => choose({ query: e.target.value })} /></label>
-              {type === OUTSIDE && data.outsideSitemap && data.outsideSitemap.total > data.outsideSitemap.shown ? <span className='text-xs text-muted-foreground' data-outside-cap=''>{$t('contentIndex.outsideSitemapCapped', { 0: data.outsideSitemap.shown, 1: data.outsideSitemap.total })}</span> : null}
-            </DataTableToolbar>
             <DataTable
               table={table}
               isFiltered={Boolean(query) || type !== "all"}

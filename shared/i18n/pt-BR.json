@@ -2836,6 +2836,7 @@
   "aiSearch.model": "Modelo",
   "messages.modelServicesSetUpConfig": "Os serviços de modelos são configurados em config.yml (ai.llmServices); o NocoReach apenas lê essas configurações",
   "analysis.invalidModelResult": "O modelo não retornou nenhum resultado que pudesse ser interpretado",
+  "analysis.modelTimedOut": "O serviço de IA não deu uma resposta completa em {0} minutos",
   "aiQuestions.occurrenceMeasure": "",
   "messages.handingOffAgent": "Encaminhando para o agente…",
   "common.saving": "Salvando…",

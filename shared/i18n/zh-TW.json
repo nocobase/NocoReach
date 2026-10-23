@@ -2836,6 +2836,7 @@
   "aiSearch.model": "模型",
   "messages.modelServicesSetUpConfig": "模型服務在 config.yml 的 ai.llmServices 裡設定，NocoReach 唯讀",
   "analysis.invalidModelResult": "模型沒有返回可解析的結果",
+  "analysis.modelTimedOut": "AI 服務 {0} 分鐘內沒有給出完整結果",
   "aiQuestions.occurrenceMeasure": "次",
   "messages.handingOffAgent": "正在交給 Agent…",
   "common.saving": "正在儲存…",

@@ -2885,6 +2885,7 @@
   "aiSearch.model": "Mô hình",
   "messages.modelServicesSetUpConfig": "Dịch vụ mô hình được cấu hình trong config.yml (ai.llmServices); NocoReach chỉ đọc cấu hình này",
   "analysis.invalidModelResult": "Mô hình không trả về kết quả có thể phân tích cú pháp",
+  "analysis.modelTimedOut": "Dịch vụ AI không trả lời đầy đủ trong {0} phút",
   "aiQuestions.occurrenceMeasure": "",
   "messages.handingOffAgent": "Đang chuyển giao cho tác nhân AI…",
   "common.saving": "Đang lưu…",

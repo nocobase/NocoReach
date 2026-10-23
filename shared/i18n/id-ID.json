@@ -2885,6 +2885,7 @@
   "aiSearch.model": "Model",
   "messages.modelServicesSetUpConfig": "Layanan model diatur di config.yml (ai.llmServices); NocoReach hanya membacanya",
   "analysis.invalidModelResult": "Model tidak mengembalikan hasil yang dapat diurai",
+  "analysis.modelTimedOut": "Layanan AI tidak memberikan jawaban lengkap dalam {0} menit",
   "aiQuestions.occurrenceMeasure": "",
   "messages.handingOffAgent": "Menyerahkan ke agen…",
   "common.saving": "Menyimpan…",
