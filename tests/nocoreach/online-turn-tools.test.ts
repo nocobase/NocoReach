@@ -53,6 +53,26 @@ describe('turnTools', () => {
     expect(build).toHaveBeenCalledTimes(2);
   });
 
+  it('drops a finished turn once idle, with no later call to sweep it', async () => {
+    vi.useFakeTimers();
+    try {
+      const build = vi.fn(async () => ({ tools }));
+      const toolsOf = turnTools(build, () => 0);
+      await toolsOf(binding('a'));
+      vi.advanceTimersByTime(4 * 60_000);
+      await toolsOf(binding('a'));
+      vi.advanceTimersByTime(4 * 60_000);
+      await toolsOf(binding('a'));
+      expect(build).toHaveBeenCalledTimes(1);
+      // The clock the sweep reads stays still: only the turn's own timer can drop it.
+      vi.advanceTimersByTime(6 * 60_000);
+      await toolsOf(binding('a'));
+      expect(build).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('drops a stopped turn', async () => {
     const build = vi.fn(async () => ({ tools }));
     const toolsOf = turnTools(build);

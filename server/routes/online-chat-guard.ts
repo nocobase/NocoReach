@@ -46,15 +46,35 @@ export const onlineChatGuard: AppApiRouteContribution<Application> =
         next,
       );
     };
-    const authorizeOnline: MiddlewareHandler<Env> = async (context, next) => {
+    // Not the caller's or not there: the plugin answers with its own error. Runner conversations are known before the
+    // authorization context is built, so they skip it: only reading the online configuration needs it.
+    const online = new WeakSet<Request>();
+    const identify: MiddlewareHandler<AuthEnv> = async (context, next) => {
       if (context.req.method !== 'POST') return next();
+      const detail = await conversationOrNull(
+        app.container.resolve(agentsToken),
+        String(context.get('auth')!.user.id),
+        context.req.param('conversationId')!,
+      );
+      if (detail?.agent?.id === ONLINE_AGENT_ID) online.add(context.req.raw);
+      return next();
+    };
+    const authorize: MiddlewareHandler<AuthorizationEnv> = async (
+      context,
+      next,
+    ) => {
+      if (!online.has(context.req.raw)) return next();
+      return app.container.resolve(authorizationToken).middleware()(
+        context,
+        next,
+      );
+    };
+    const authorizeOnline: MiddlewareHandler<Env> = async (context, next) => {
+      if (!online.has(context.req.raw)) return next();
       const agents = app.container.resolve(agentsToken);
       const auth = context.get('auth')!;
       const ownerId = String(auth.user.id);
       const id = context.req.param('conversationId')!;
-      // Not the caller's or not there: the plugin answers with its own error.
-      const detail = await conversationOrNull(agents, ownerId, id);
-      if (detail?.agent?.id !== ONLINE_AGENT_ID) return next();
       const config = await agents.onlineAgent.configuration(
         {
           user: { id: ownerId },
@@ -76,16 +96,6 @@ export const onlineChatGuard: AppApiRouteContribution<Application> =
         throw error;
       }
       return next();
-    };
-    const authorize: MiddlewareHandler<AuthorizationEnv> = async (
-      context,
-      next,
-    ) => {
-      if (context.req.method !== 'POST') return next();
-      return app.container.resolve(authorizationToken).middleware()(
-        context,
-        next,
-      );
     };
     // The plugin takes scopes as optional, so a conversation with the online agent must name `nocoreach`: without it the
     // conversation skips NocoReach's prompt, the Chat panel switch, its model and the project check.
@@ -138,6 +148,6 @@ export const onlineChatGuard: AppApiRouteContribution<Application> =
       '/agents/conversations/:conversationId/messages',
       '/agents/conversations/:conversationId/approval',
     ])
-      router.use(path, authenticate, authorize, authorizeOnline);
+      router.use(path, authenticate, identify, authorize, authorizeOnline);
     return new Hono().route('/', router);
   });

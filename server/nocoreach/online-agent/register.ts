@@ -89,7 +89,7 @@ export function variableProject(variable: unknown): string | null {
 /**
  * Turns whose tools are kept, and how long one is kept after its last tool call. The plugin says when a turn is
  * cancelled but not when it finishes, so a finished turn's tools (with the pages and project data they read) go once
- * idle this long.
+ * idle this long, on a timer of their own: no later tool call is needed to free them.
  */
 const TURNS_KEPT = 50;
 const TURN_IDLE = 5 * 60_000;
@@ -105,27 +105,38 @@ export function turnTools(
 ) {
   const turns = new Map<
     string,
-    { at: number; signal: AbortSignal; tools: Promise<OnlineTool[]> }
+    {
+      at: number;
+      signal: AbortSignal;
+      tools: Promise<OnlineTool[]>;
+      timer: NodeJS.Timeout;
+    }
   >();
+  const drop = (key: string) => {
+    clearTimeout(turns.get(key)?.timer);
+    turns.delete(key);
+  };
   return (binding: OnlineBinding) => {
     const at = now();
     // Least recently used first: drop what has been idle too long or overflows.
     for (const [key, turn] of turns)
-      if (at - turn.at > TURN_IDLE || turns.size > TURNS_KEPT)
-        turns.delete(key);
+      if (at - turn.at > TURN_IDLE || turns.size > TURNS_KEPT) drop(key);
       else break;
     const kept = turns.get(binding.turnId);
     turns.delete(binding.turnId);
     if (kept?.signal === binding.signal) {
       turns.set(binding.turnId, { ...kept, at });
+      kept.timer.refresh();
       return kept.tools;
     }
+    clearTimeout(kept?.timer);
     const tools = build(binding).then((value) => value.tools);
     const forget = () => {
-      if (turns.get(binding.turnId)?.tools === tools)
-        turns.delete(binding.turnId);
+      if (turns.get(binding.turnId)?.tools === tools) drop(binding.turnId);
     };
-    turns.set(binding.turnId, { at, signal: binding.signal, tools });
+    const timer = setTimeout(forget, TURN_IDLE);
+    timer.unref();
+    turns.set(binding.turnId, { at, signal: binding.signal, tools, timer });
     // A refusal is not kept: the next call checks again. A stopped turn calls no more tools.
     tools.catch(forget);
     binding.signal.addEventListener('abort', forget, { once: true });

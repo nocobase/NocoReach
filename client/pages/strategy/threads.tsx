@@ -128,16 +128,11 @@ export function InsightChatProvider({
     replyingRef.current = replying;
     reload();
   }, [replying, reload]);
-  // Only another day's conversation still answering is polled, and slowly: the day's own reply is followed above, and
-  // each read lists the owner's Insights conversations again on the server.
-  const answeringElsewhere = threads.some(
+  // Another day's conversation still answering is followed on its own, as the day's is above: the list is read again
+  // only when its reply ends, since each read lists the owner's Insights conversations again on the server.
+  const answeringElsewhere = threads.filter(
     (t) => t.running && t.id !== current?.id,
   );
-  useEffect(() => {
-    if (!answeringElsewhere) return;
-    const timer = setTimeout(reload, 15000);
-    return () => clearTimeout(timer);
-  }, [answeringElsewhere, view.data, reload]);
   const startRef = useRef<Promise<string> | null>(null);
   const start = () => {
     // One conversation a day, even when two questions start it at once.
@@ -155,17 +150,23 @@ export function InsightChatProvider({
     return startRef.current;
   };
   const [pending, setPending] = useState<(() => void) | null>(null);
+  // Set when this page opens the side panel on a chosen conversation, so the docking effect below leaves it there.
+  const choseRef = useRef(false);
+  const openChat = (options: Parameters<typeof panel.openChat>[0]) => {
+    choseRef.current = true;
+    panel.openChat(options);
+  };
   const openInPanel = (draft?: string, create = false, id = current?.id) => {
     if (!chat || !day) return;
     const open = (conversationId: string) => {
       // Text typed in the panel is kept: a quote goes in only while the composer is empty, and moving to another
       // conversation asks first.
-      if (!chat.dirty) panel.openChat({ conversationId, draft, view: 'chat' });
+      if (!chat.dirty) openChat({ conversationId, draft, view: 'chat' });
       else if (panel.conversationId === conversationId)
-        panel.openChat({ conversationId, view: 'chat' });
+        openChat({ conversationId, view: 'chat' });
       else
         setPending(
-          () => () => panel.openChat({ conversationId, draft, view: 'chat' }),
+          () => () => openChat({ conversationId, draft, view: 'chat' }),
         );
     };
     if (id) open(id);
@@ -176,15 +177,17 @@ export function InsightChatProvider({
         chat.refresh();
       });
   };
-  // Opening the side panel here moves the day's conversation into it; a day without one starts it with the first question.
+  // Opening the side panel here moves the day's conversation into it, unless this page opened it on another
+  // conversation; a day without one starts it with the first question.
   const wasDockedRef = useRef(docked),
     openRef = useRef(openInPanel);
   useEffect(() => {
     openRef.current = openInPanel;
   });
   useEffect(() => {
-    if (docked && !wasDockedRef.current) openRef.current();
+    if (docked && !wasDockedRef.current && !choseRef.current) openRef.current();
     wasDockedRef.current = docked;
+    choseRef.current = false;
   }, [docked]);
   const value: InsightChat = {
     threads,
@@ -213,6 +216,9 @@ export function InsightChatProvider({
   return (
     <Context.Provider value={value}>
       {children}
+      {answeringElsewhere.map((t) => (
+        <ReplyEnd key={t.id} id={t.id} ended={reload} />
+      ))}
       <OnlineConfirm
         open={!!pending}
         onClose={() => setPending(null)}
@@ -227,6 +233,16 @@ export function InsightChatProvider({
       />
     </Context.Provider>
   );
+}
+
+/** Calls `ended` once the conversation's reply ends; the Agents plugin polls one conversation while it runs. */
+function ReplyEnd({ id, ended }: { id: string; ended: () => void }) {
+  const detail = useConversation(id).data;
+  const running = detail ? chatIsRunning(detail) : true;
+  useEffect(() => {
+    if (!running) ended();
+  }, [running, ended]);
+  return null;
 }
 
 /** Ask AI about an opportunity: it is quoted in the day's conversation, wherever that conversation is. */
@@ -487,8 +503,7 @@ export function Composer() {
   return <ComposerInput chat={chat} />;
 }
 function ComposerInput({ chat }: { chat: InsightChat }) {
-  const panel = useChatPanel(),
-    online = useOptionalOnlineChat();
+  const online = useOptionalOnlineChat();
   const [text, setText] = useState(''),
     [starting, setStarting] = useState<{ body: string; id?: string }>(),
     [started, setStarted] = useState<{ day: string; id: string }>(),
@@ -624,7 +639,7 @@ function ComposerInput({ chat }: { chat: InsightChat }) {
         <button
           type='button'
           className='nr-link self-start text-xs'
-          onClick={() => panel.openChat({ conversationId, view: 'chat' })}
+          onClick={() => conversationId && chat.openThread(conversationId)}
         >
           {$t('strategy.sendFailed')} ›
         </button>

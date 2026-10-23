@@ -29,14 +29,12 @@ const knownErrors = new Set([
 /** What a failed online request says to the reader. */
 export function onlineError(error: unknown) {
   if (error instanceof OnlineApiError) {
+    // A known code says more than its status: `chatDisabled` comes with 403.
+    if (knownErrors.has(error.code)) return $t(`onlineAgent.${error.code}`);
     if (error.status === 401) return $t('common.sessionExpiredSignAgain');
     if (error.status === 403) return $t('onlineAgent.accessDenied');
     if (error.status === 404) return $t('onlineAgent.notFound');
-    return $t(
-      knownErrors.has(error.code)
-        ? `onlineAgent.${error.code}`
-        : 'onlineAgent.requestFailed',
-    );
+    return $t('onlineAgent.requestFailed');
   }
   return $t('onlineAgent.requestFailed');
 }

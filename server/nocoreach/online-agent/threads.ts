@@ -143,7 +143,9 @@ export class InsightThreads {
   private async summaries(ownerId: string, ids: Set<string>) {
     const found = new Map<string, ConversationSummary>();
     let pageToken: string | undefined;
-    for (let page = 0; page < SUMMARY_PAGES && found.size < ids.size; page++) {
+    // A few conversations are read directly: the list holds every project's, so paging it would read far more.
+    const pages = ids.size > READS_AT_ONCE ? SUMMARY_PAGES : 0;
+    for (let page = 0; page < pages && found.size < ids.size; page++) {
       const { items, nextCursor } = await this.agents.conversations.list(
         ownerId,
         { source: INSIGHTS_SOURCE, pageSize: 100, pageToken },
@@ -229,7 +231,10 @@ export class InsightThreads {
         ...(row.opportunityId ? { opportunityId: row.opportunityId } : {}),
       },
       title: detail.title,
-      running: detail.execution?.status === 'running' || !!detail.run,
+      // As the client's `chatIsRunning` reads it, so Insights and the side panel agree on when a reply ends.
+      running: detail.execution
+        ? detail.execution.status === 'running'
+        : !!detail.run,
       read: detail.read,
       turns: counts[index] ?? null,
       updatedAt: detail.lastMessageAt,
