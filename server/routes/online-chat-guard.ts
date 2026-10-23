@@ -36,7 +36,7 @@ type Env = AuthEnv & AuthorizationEnv;
  * The plugin resolves the `nocoreach` scope, where Chat panel › Settings' switch, the person's role and their access to
  * the project are checked, only when a conversation is created; a saved conversation keeps its configuration. So a new
  * message or an approval in an online conversation checks them again here, as every tool call does. Runner
- * conversations pass untouched. Stop stays open; reading and config edits recheck project access even while chat is
+ * conversations pass untouched. Stop can still cancel; its returned detail, reading and config edits recheck access even while chat is
  * off. Lists omit conversations the owner can no longer read. Saved scopes and the project binding cannot be removed
  * to bypass these checks. Register before plugin routes.
  */
@@ -95,7 +95,10 @@ export const onlineChatGuard: AppApiRouteContribution<Application> =
       const host = app.container.resolve(nocoReachToken);
       await host.ready;
       try {
-        if (context.req.method === 'POST')
+        if (
+          context.req.method === 'POST' &&
+          /\/(messages|approval)$/.test(context.req.path)
+        )
           await onlineAuthorization(host, { ownerId, projectId }, () =>
             app.container.resolve(onlineChatSettingsToken).get(),
           )();
@@ -121,6 +124,13 @@ export const onlineChatGuard: AppApiRouteContribution<Application> =
         throw error;
       }
       return next();
+    };
+    const protectStopResult: MiddlewareHandler<Env> = async (context, next) => {
+      // The plugin still checks ownership and cancels first, even after project access is revoked.
+      await next();
+      if (context.req.method !== 'POST' || context.res.status !== 200) return;
+      // A successful cancellation must not double as an unauthorized history read.
+      await authorizeOnline(context, async () => {});
     };
     // The plugin takes scopes as optional, so a conversation with the online agent must name `nocoreach`: without it the
     // conversation skips NocoReach's prompt, the Chat panel switch, its model and the project check.
@@ -249,7 +259,16 @@ export const onlineChatGuard: AppApiRouteContribution<Application> =
       '/agents/conversations/:conversationId/messages',
       '/agents/conversations/:conversationId/events',
       '/agents/conversations/:conversationId/approval',
+      '/agents/conversations/:conversationId/markRead',
+      '/agents/conversations/:conversationId/finalize',
     ])
       router.use(path, authenticate, identify, authorize, authorizeOnline);
+    router.use(
+      '/agents/conversations/:conversationId/stop',
+      authenticate,
+      identify,
+      authorize,
+      protectStopResult,
+    );
     return new Hono().route('/', router);
   });

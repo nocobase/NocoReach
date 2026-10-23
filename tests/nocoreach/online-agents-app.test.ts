@@ -425,7 +425,15 @@ test('history rechecks project membership without depending on the Chat panel sw
   const { user, client } = await member(testApp, 'history-member@example.test');
   await legacy.db.access!.joinCreatedProject(user.id, firstId);
   await legacy.db.access!.joinCreatedProject(user.id, secondId);
-  scriptModel(testApp, [text('Private project answer')]);
+  scriptModel(testApp, [
+    text('Private project answer'),
+    toolCall('task_execute', {
+      projectId: firstId,
+      taskId: '999999',
+      command: 'startTask',
+      revision: 0,
+    }),
+  ]);
   const id = (await (await startOnline(client, firstId)).json()).data
     .id as string;
   const retained = (await (await startOnline(client, secondId)).json()).data
@@ -464,6 +472,13 @@ test('history rechecks project membership without depending on the Chat panel sw
     await store.save({ ...original, revision: (await store.get()).revision });
   });
   await store.save({ ...original, enabled: false });
+  for (const path of ['/markRead', '/finalize', '/stop'])
+    expect(
+      (await send(client, `/agents/conversations/${id}${path}`, {})).status,
+    ).toBe(200);
+  await store.save({ ...original, revision: (await store.get()).revision });
+  await ask(client, id, 'Wait for approval before starting');
+  await store.save({ ...(await store.get()), enabled: false });
   for (const path of ['', '/messages', '/config'])
     expect(
       (await client.fetch(`/agents/conversations/${id}${path}`)).status,
@@ -486,6 +501,17 @@ test('history rechecks project membership without depending on the Chat panel sw
       reason: 'accessDenied',
     });
   }
+  for (const path of ['/markRead', '/finalize']) {
+    const response = await send(
+      client,
+      `/agents/conversations/${id}${path}`,
+      {},
+    );
+    expect(response.status).toBe(403);
+    const payload = await response.json();
+    expect(payload.error.reason).toBe('accessDenied');
+    expect(payload.data).toBeUndefined();
+  }
   expect(
     (
       await send(
@@ -505,9 +531,21 @@ test('history rechecks project membership without depending on the Chat panel sw
   expect(
     (await client.fetch(`/agents/conversations/${retained}/messages`)).status,
   ).toBe(200);
-  expect(
-    (await send(client, `/agents/conversations/${id}/stop`, {})).status,
-  ).toBe(200);
+  const agents = container.resolve(agentsToken);
+  expect((await agents.conversations.get(user.id, id)).execution?.status).toBe(
+    'running',
+  );
+  const stopped = await send(client, `/agents/conversations/${id}/stop`, {});
+  expect(stopped.status).toBe(403);
+  expect((await stopped.json()).data).toBeUndefined();
+  await vi.waitFor(async () => {
+    expect(
+      (await agents.conversations.get(user.id, id)).execution,
+    ).toMatchObject({
+      status: 'idle',
+      outcome: 'cancelled',
+    });
+  });
   // A new request after rejoining restores the history, even with Chat panel still switched off.
   await legacy.db.access!.joinCreatedProject(user.id, firstId);
   const restored = await (
