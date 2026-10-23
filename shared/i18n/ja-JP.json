@@ -7007,6 +7007,7 @@
   "onlineAgent.discardSettingsTitle": "チャットパネルの設定の変更を破棄しますか？",
   "onlineAgent.enabledLabel": "チャットパネルでチャットエージェントを使えるようにする",
   "onlineAgent.enabledHelp": "オフにすると、誰もチャットエージェントとの会話を始めたり続けたりできません。これまでの会話は引き続き読めます。",
+  "onlineAgent.settingsNewOnly": "モデルと作業指示は保存後に始めた会話に適用され、それ以前の会話は開始時の設定のままです。オン・オフはすべての会話に適用されます。",
   "onlineAgent.executeTask": "タスクを実行",
   "strategy.approveInPanel": "サイドパネルでタスクの実行を承認",
   "strategy.sendFailed": "メッセージを送信できませんでした。サイドパネルで開いて再試行してください",

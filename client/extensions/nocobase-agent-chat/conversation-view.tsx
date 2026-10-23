@@ -319,19 +319,24 @@ function ConversationBody({
         setStarting({ input, error: new Error('chatDisabled') });
         return;
       }
-      setStarting(null);
-      if (send(input)) online.touch();
+      deliver(input);
     });
     return true;
   };
+  // The composer was already cleared, so a message the plugin's send does not take stays here to be sent again.
+  const deliver = (input: Input) => {
+    if (send(input)) {
+      setStarting(null);
+      online.touch();
+    } else setStarting({ input, error: new Error('notSent') });
+  };
+  const deliverStarted = useEffectEvent(deliver);
   useEffect(() => {
     if (!starting || starting.error || !conversationId || startedRef.current)
       return;
     startedRef.current = true;
-    setStarting(null);
-    send(starting.input);
-    online.touch();
-  }, [starting, conversationId, send, online]);
+    deliverStarted(starting.input);
+  }, [starting, conversationId]);
 
   // Viewed: tell the server the agent's latest replies were read.
   const { markRead } = actions;

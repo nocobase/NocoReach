@@ -7007,6 +7007,7 @@
   "onlineAgent.discardSettingsTitle": "Abandonner les modifications des paramètres du panneau de chat ?",
   "onlineAgent.enabledLabel": "Proposer l’agent de chat dans le panneau de chat",
   "onlineAgent.enabledHelp": "Désactivé, personne ne peut commencer ni poursuivre une conversation avec l’agent de chat ; les conversations précédentes restent lisibles.",
+  "onlineAgent.settingsNewOnly": "Le modèle et les instructions s’appliquent aux conversations commencées après l’enregistrement ; les précédentes gardent ceux de leur début. L’interrupteur s’applique à toutes les conversations.",
   "onlineAgent.executeTask": "Exécuter une tâche",
   "strategy.approveInPanel": "Approuver l’exécution de la tâche dans le panneau latéral",
   "strategy.sendFailed": "Le message n’a pas été envoyé. Ouvrez-le dans le panneau latéral pour réessayer",

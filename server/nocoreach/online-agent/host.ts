@@ -137,13 +137,22 @@ export function createNocoReachOnlineHost(
         return totals.length ? { ...snapshot, totals } : snapshot;
       },
     } satisfies Record<z.infer<typeof contextInput>['section'], unknown>;
+    // Each section is read once per turn, so following nextOffset pages through the same text.
+    const read = new Map<keyof typeof sections, Promise<unknown>>();
     tools.push({
       name: 'project_data',
       ...projectDataSpec,
       execute: async (args) => {
         await authorize();
         const input = contextInput.parse(args);
-        return pageData(await sections[input.section](), input.offset);
+        if (!read.has(input.section)) {
+          const value = Promise.resolve().then((): Promise<unknown> =>
+            sections[input.section](),
+          );
+          read.set(input.section, value);
+          value.catch(() => read.delete(input.section));
+        }
+        return pageData(await read.get(input.section), input.offset);
       },
     });
     tools.push(publicPageTool(plugin, projectId, authorize, binding.signal));

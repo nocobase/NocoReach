@@ -7007,6 +7007,7 @@
   "onlineAgent.discardSettingsTitle": "Bỏ các thay đổi trong cài đặt bảng chat?",
   "onlineAgent.enabledLabel": "Cung cấp tác nhân chat trong bảng chat",
   "onlineAgent.enabledHelp": "Khi tắt, không ai có thể bắt đầu hoặc tiếp tục trò chuyện với tác nhân chat; các cuộc trò chuyện trước vẫn đọc được.",
+  "onlineAgent.settingsNewOnly": "Mô hình và hướng dẫn áp dụng cho các cuộc trò chuyện bắt đầu sau khi lưu; các cuộc trò chuyện trước giữ nguyên thiết lập lúc bắt đầu. Công tắc áp dụng cho mọi cuộc trò chuyện.",
   "onlineAgent.executeTask": "Chạy tác vụ",
   "strategy.approveInPanel": "Duyệt chạy tác vụ trong bảng bên",
   "strategy.sendFailed": "Tin nhắn chưa được gửi. Mở trong bảng bên để thử lại",

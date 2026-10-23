@@ -201,6 +201,19 @@ test('a message in an online conversation reads Chat panel › Settings first an
   );
 });
 
+test('a message the plugin does not take after the switch check stays in the panel to be sent again', async () => {
+  state.conversation = { ...runnerChat, agent: onlineAgent };
+  state.send.mockReturnValueOnce(false);
+  render(<ConversationView conversationId='runner-chat' />);
+  await act(async () => void state.composer.current!.onSend('Hi', undefined));
+  expect(state.send).toHaveBeenCalledOnce();
+  expect(state.online.touch).not.toHaveBeenCalled();
+  expect(screen.getByText('Hi').closest('[data-status]')).toHaveAttribute(
+    'data-status',
+    'failed',
+  );
+});
+
 test('a stopped online reply says so once: its saved notice, not the feedback line too', () => {
   state.conversation = {
     ...runnerChat,

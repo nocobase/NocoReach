@@ -1,0 +1,48 @@
+// @vitest-environment node
+import { describe, expect, it, vi } from 'vitest';
+import { turnTools } from '../../server/nocoreach/online-agent/register.js';
+import type {
+  OnlineBinding,
+  OnlineTool,
+} from '../../server/nocoreach/online-agent/tool.js';
+
+const binding = (turnId: string): OnlineBinding => ({
+  ownerId: '1',
+  projectId: null,
+  turnId,
+  signal: new AbortController().signal,
+});
+const tools: OnlineTool[] = [];
+
+describe('turnTools', () => {
+  it('builds a turn’s tools once, so paging reads what the turn fetched', async () => {
+    const build = vi.fn(async () => ({ tools }));
+    const toolsOf = turnTools(build);
+    expect(await toolsOf(binding('a'))).toBe(tools);
+    await toolsOf(binding('a'));
+    expect(build).toHaveBeenCalledTimes(1);
+    await toolsOf(binding('b'));
+    expect(build).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not keep a refusal', async () => {
+    const build = vi
+      .fn<() => Promise<{ tools: OnlineTool[] }>>()
+      .mockRejectedValueOnce(new Error('chatDisabled'))
+      .mockResolvedValue({ tools });
+    const toolsOf = turnTools(build);
+    await expect(toolsOf(binding('a'))).rejects.toThrow('chatDisabled');
+    expect(await toolsOf(binding('a'))).toBe(tools);
+    expect(build).toHaveBeenCalledTimes(2);
+  });
+
+  it('builds again once a turn has expired', async () => {
+    let now = 0;
+    const build = vi.fn(async () => ({ tools }));
+    const toolsOf = turnTools(build, () => now);
+    await toolsOf(binding('a'));
+    now = 31 * 60_000;
+    await toolsOf(binding('a'));
+    expect(build).toHaveBeenCalledTimes(2);
+  });
+});

@@ -7007,6 +7007,7 @@
   "onlineAgent.discardSettingsTitle": "Discard your changes to the Chat panel settings?",
   "onlineAgent.enabledLabel": "Offer the chat agent in the Chat panel",
   "onlineAgent.enabledHelp": "When off, nobody can start or continue a conversation with the chat agent; earlier conversations stay readable.",
+  "onlineAgent.settingsNewOnly": "The model and instructions apply to conversations started after saving; earlier conversations keep the ones they started with. The switch applies to every conversation.",
   "onlineAgent.executeTask": "Run a task",
   "strategy.approveInPanel": "Approve running the task in the side panel",
   "strategy.sendFailed": "The message wasn’t sent. Open it in the side panel to try again",

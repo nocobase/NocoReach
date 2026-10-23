@@ -204,6 +204,8 @@ function SettingsForm({
         <FieldDescription className='-mt-2'>
           {$t('onlineAgent.enabledHelp')}
         </FieldDescription>
+        {/* The plugin keeps a conversation's model and prompt from its start; only the switch reaches earlier ones. */}
+        <FieldDescription>{$t('onlineAgent.settingsNewOnly')}</FieldDescription>
         <OnlineSelect
           label={$t('onlineAgent.model')}
           value={modelValue || '__default__'}

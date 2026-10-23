@@ -239,6 +239,19 @@ test('online conversations take the nocoreach scope, its project tools and Chat 
       })
     ).status,
   ).toBe(400);
+  // The online agent is reached only through NocoReach's scope: its prompt, switch, model and project check.
+  for (const body of [
+    { agentId: 'online' },
+    {},
+    { agentId: 'online', config: { scope: [] } },
+  ]) {
+    const refused = await send(admin, '/agents/conversations', body);
+    expect(refused.status).toBe(400);
+    expect((await refused.json()).error).toMatchObject({
+      domain: 'onlineAgent',
+      reason: 'scopeRequired',
+    });
+  }
 });
 
 test('creation and tools recheck project access and the Chat panel switch', async ({
@@ -349,6 +362,12 @@ test('conversations asked from Insights are indexed by project and day and list 
   });
   expect(started.status).toBe(200);
   const id = (await started.json()).data.id as string;
+  // One conversation a day: starting the day again, as another tab would, returns it.
+  const again = await send(admin, '/onlineAgents/threads', {
+    projectId,
+    day: '2026-10-21',
+  });
+  expect((await again.json()).data.id).toBe(id);
   const detail = (
     await (await admin.fetch(`/agents/conversations/${id}`)).json()
   ).data;

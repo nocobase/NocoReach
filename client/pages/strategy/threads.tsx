@@ -376,7 +376,9 @@ function DayTurns({
     setFolded(false);
     endRef.current?.scrollIntoView?.({ block: 'end', behavior: 'smooth' });
   }, [chat.version]);
-  if (!threads.length || (!count && folded)) return null;
+  // A conversation not counted yet (a long one, on its first read) may hold questions: it is not hidden.
+  const counted = threads.every((t) => t.turns !== null);
+  if (!threads.length || (!count && counted && folded)) return null;
   return (
     <div className='flex flex-col gap-4' data-day-conversation={day}>
       <button

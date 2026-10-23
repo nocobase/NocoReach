@@ -42,6 +42,20 @@ export class OnlineChatSettingsStore {
     };
   }
   async save(value: OnlineChatSettings): Promise<OnlineChatSettings> {
+    try {
+      return await this.write(value);
+    } catch (error) {
+      // Two first saves at once: the one whose record could not be created finds the other's.
+      if (
+        value.revision === 0 &&
+        !(error instanceof OnlineAgentError) &&
+        (await this.get()).revision !== 0
+      )
+        throw new OnlineAgentError('revisionConflict');
+      throw error;
+    }
+  }
+  private write(value: OnlineChatSettings): Promise<OnlineChatSettings> {
     return this.database.transaction(async (context) => {
       const current = await this.get(context);
       if (current.revision !== value.revision)

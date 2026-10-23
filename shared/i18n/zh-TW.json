@@ -7007,6 +7007,7 @@
   "onlineAgent.discardSettingsTitle": "捨棄對對話欄設定的修改？",
   "onlineAgent.enabledLabel": "在對話欄提供對話 Agent",
   "onlineAgent.enabledHelp": "停用後，任何人都不能和對話 Agent 開始或繼續對話；之前的對話仍可檢視。",
+  "onlineAgent.settingsNewOnly": "模型和工作說明只用於儲存後開始的對話；之前的對話沿用開始時的設定。開關對所有對話生效。",
   "onlineAgent.executeTask": "執行任務",
   "strategy.approveInPanel": "在右側確認是否執行任務",
   "strategy.sendFailed": "訊息沒有送出，在右側開啟後重試",

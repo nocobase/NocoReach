@@ -7007,6 +7007,7 @@
   "onlineAgent.discardSettingsTitle": "Buang perubahan pada pengaturan panel chat?",
   "onlineAgent.enabledLabel": "Tawarkan agen chat di panel chat",
   "onlineAgent.enabledHelp": "Saat nonaktif, tidak ada yang bisa memulai atau melanjutkan percakapan dengan agen chat; percakapan sebelumnya tetap bisa dibaca.",
+  "onlineAgent.settingsNewOnly": "Model dan instruksi berlaku untuk percakapan yang dimulai setelah disimpan; percakapan sebelumnya tetap memakai yang digunakan saat dimulai. Sakelar berlaku untuk semua percakapan.",
   "onlineAgent.executeTask": "Jalankan tugas",
   "strategy.approveInPanel": "Setujui menjalankan tugas di panel samping",
   "strategy.sendFailed": "Pesan tidak terkirim. Buka di panel samping untuk mencoba lagi",

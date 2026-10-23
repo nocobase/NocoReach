@@ -7007,6 +7007,7 @@
   "onlineAgent.discardSettingsTitle": "Descartar as alterações nas configurações do painel de chat?",
   "onlineAgent.enabledLabel": "Oferecer o agente de chat no painel de chat",
   "onlineAgent.enabledHelp": "Desativado, ninguém pode iniciar nem continuar uma conversa com o agente de chat; as conversas anteriores continuam visíveis.",
+  "onlineAgent.settingsNewOnly": "O modelo e as instruções valem para conversas iniciadas depois de salvar; as anteriores mantêm os que tinham ao começar. A ativação vale para todas as conversas.",
   "onlineAgent.executeTask": "Executar uma tarefa",
   "strategy.approveInPanel": "Aprove a execução da tarefa no painel lateral",
   "strategy.sendFailed": "A mensagem não foi enviada. Abra no painel lateral para tentar de novo",

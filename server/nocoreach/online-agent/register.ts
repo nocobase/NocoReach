@@ -22,7 +22,7 @@ import {
   TASK_TOOLS,
   type OnlineToolName,
 } from './host.js';
-import type { OnlineBinding } from './tool.js';
+import type { OnlineBinding, OnlineTool } from './tool.js';
 
 const projectId = z.string().regex(/^[1-9]\d{0,15}$/);
 /** The business variable of an online conversation: the project it belongs to, set when it is created. */
@@ -86,6 +86,34 @@ export function variableProject(variable: unknown): string | null {
   return parsed.success ? parsed.data.projectId : null;
 }
 
+/** Turns whose tools are kept, and for how long: long enough for one turn's tool calls. */
+const TURNS_KEPT = 200;
+const TURN_TTL = 30 * 60_000;
+/**
+ * One model turn's tools, built once: paging through read_page or project_data reads what the turn already fetched,
+ * and read_page's page limit holds for the whole turn. Each tool still rechecks access on every call.
+ */
+export function turnTools(
+  build: (binding: OnlineBinding) => Promise<{ tools: OnlineTool[] }>,
+  now: () => number = Date.now,
+) {
+  const turns = new Map<string, { at: number; tools: Promise<OnlineTool[]> }>();
+  return (binding: OnlineBinding) => {
+    const at = now();
+    // Oldest first: drop what expired or overflows.
+    for (const [key, turn] of turns)
+      if (at - turn.at > TURN_TTL || turns.size > TURNS_KEPT) turns.delete(key);
+      else break;
+    const kept = turns.get(binding.turnId);
+    if (kept) return kept.tools;
+    const tools = build(binding).then((value) => value.tools);
+    turns.set(binding.turnId, { at, tools });
+    // A refusal is not kept: the next call checks again.
+    tools.catch(() => turns.delete(binding.turnId));
+    return tools;
+  };
+}
+
 export function bindingOf(context: OnlineAgentToolContext): OnlineBinding {
   return {
     ownerId: context.user.id,
@@ -108,7 +136,9 @@ export function registerOnlineChat(
   basePath: string,
 ) {
   const online = agents.onlineAgent;
-  const build = createNocoReachOnlineHost(runtime, basePath, settings);
+  const toolsOf = turnTools(
+    createNocoReachOnlineHost(runtime, basePath, settings),
+  );
   for (const name of Object.keys(onlineToolSpecs) as OnlineToolName[]) {
     const spec = onlineToolSpecs[name];
     online.configurator.registerTool(name, {
@@ -125,8 +155,9 @@ export function registerOnlineChat(
         execute: async (input: unknown, { context }) => {
           const binding = bindingOf(context);
           try {
-            const { tools } = await build(binding);
-            const tool = tools.find((item) => item.name === name);
+            const tool = (await toolsOf(binding)).find(
+              (item) => item.name === name,
+            );
             if (!tool) throw new OnlineAgentError('toolUnavailable', 403);
             return jsonOf(await tool.execute(input));
           } catch (error) {

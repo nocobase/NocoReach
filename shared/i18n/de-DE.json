@@ -7007,6 +7007,7 @@
   "onlineAgent.discardSettingsTitle": "Änderungen an den Einstellungen des Chatbereichs verwerfen?",
   "onlineAgent.enabledLabel": "Chat-Agent im Chatbereich anbieten",
   "onlineAgent.enabledHelp": "Ausgeschaltet kann niemand eine Unterhaltung mit dem Chat-Agenten beginnen oder fortsetzen; frühere Unterhaltungen bleiben lesbar.",
+  "onlineAgent.settingsNewOnly": "Modell und Anweisungen gelten für Unterhaltungen, die nach dem Speichern beginnen; frühere Unterhaltungen behalten ihre ursprünglichen. Der Schalter gilt für alle Unterhaltungen.",
   "onlineAgent.executeTask": "Aufgabe ausführen",
   "strategy.approveInPanel": "Ausführung der Aufgabe in der Seitenleiste bestätigen",
   "strategy.sendFailed": "Die Nachricht wurde nicht gesendet. In der Seitenleiste öffnen und erneut versuchen",

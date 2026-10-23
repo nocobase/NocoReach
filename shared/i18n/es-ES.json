@@ -7007,6 +7007,7 @@
   "onlineAgent.discardSettingsTitle": "¿Descartar los cambios en la configuración del panel de chat?",
   "onlineAgent.enabledLabel": "Ofrecer el agente de chat en el panel de chat",
   "onlineAgent.enabledHelp": "Si está desactivado, nadie puede iniciar ni continuar una conversación con el agente de chat; las conversaciones anteriores siguen visibles.",
+  "onlineAgent.settingsNewOnly": "El modelo y las instrucciones se aplican a las conversaciones iniciadas después de guardar; las anteriores conservan los que tenían al empezar. El interruptor se aplica a todas las conversaciones.",
   "onlineAgent.executeTask": "Ejecutar una tarea",
   "strategy.approveInPanel": "Aprueba la ejecución de la tarea en el panel lateral",
   "strategy.sendFailed": "El mensaje no se envió. Ábrelo en el panel lateral para reintentar",

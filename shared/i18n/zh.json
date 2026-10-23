@@ -7007,6 +7007,7 @@
   "onlineAgent.discardSettingsTitle": "放弃对对话栏设置的修改？",
   "onlineAgent.enabledLabel": "在对话栏提供对话 Agent",
   "onlineAgent.enabledHelp": "停用后，任何人都不能和对话 Agent 开始或继续对话；之前的对话仍可查看。",
+  "onlineAgent.settingsNewOnly": "模型和工作说明只用于保存后开始的对话；之前的对话沿用开始时的设置。开关对所有对话生效。",
   "onlineAgent.executeTask": "执行任务",
   "strategy.approveInPanel": "在右侧确认是否执行任务",
   "strategy.sendFailed": "消息没有发出，在右侧打开后重试",
