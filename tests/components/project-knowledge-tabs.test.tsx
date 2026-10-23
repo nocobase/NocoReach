@@ -357,7 +357,7 @@ test('accepts a suggestion and shows its examples behind the ⓘ', async () => {
   const region = await screen.findByRole('region', { name: '更新建议' });
   expect(within(region).getByText('A CLI ships with it.')).toBeInTheDocument();
   expect(
-    within(region).getByText(/上次检查 10\/19，1 条建议/),
+    within(region).getByText(/上次检查 10-19，1 条建议/),
   ).toBeInTheDocument();
   await user.click(within(region).getByRole('button', { name: '补充' }));
   await waitFor(() =>

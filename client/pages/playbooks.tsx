@@ -4,6 +4,7 @@ import {useSearchParams} from 'react-router';
 import {ArrowDownIcon,ArrowUpIcon,MoreHorizontal,PencilIcon,PlusIcon,SparklesIcon,XIcon} from 'lucide-react';
 import {useBusinessAccess} from '#hooks/use-business-access';
 import {PageContainer,PageHeader} from '#components/reach/page';
+import {ListSkeleton} from '#components/reach/states';
 import {Tag} from '#components/reach/tag';
 import {Button} from '#components/ui/button';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter} from '#components/ui/dialog';
@@ -43,7 +44,7 @@ export default function PlaybooksPage(){
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
   {/* Playbooks as cards by category across the full width; one opens in a drawer to read or edit (UI review: no
       persistent side panel). A link to ?id= opens that playbook's drawer. */}
-  {!list?<p role="status" className="text-sm text-muted-foreground">{$t('playbooks.loadingPlaybooks')}</p>:<div className="flex flex-col gap-5">
+  {!list?<ListSkeleton rows={6} label={$t('playbooks.loadingPlaybooks')}/>:<div className="flex flex-col gap-5">
    {getCategories().map(([c,label])=>{const items=list.playbooks.filter(p=>p.category===c);return items.length?<section key={c} className="flex flex-col gap-2" aria-label={label}>
     <h2 className="text-sm font-medium text-muted-foreground">{label}</h2>
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{items.map(p=><button key={p.id} type="button" aria-current={selected?.id===p.id} onClick={()=>void pick(p.id)} className="flex flex-col gap-1 rounded-lg border bg-card p-3 text-left text-card-foreground transition-colors hover:border-ring aria-[current=true]:border-primary">

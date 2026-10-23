@@ -1,3 +1,4 @@
+import { formatDateTime } from '#lib/format';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -122,7 +123,7 @@ const validBvid = (s: string) => {
 };
 const stamp = (value: string | null) =>
   value && Number.isFinite(Date.parse(value))
-    ? new Date(value).toLocaleString(getCurrentLocale())
+    ? formatDateTime(value)
     : $t('common.unknown');
 
 function BilibiliForm({

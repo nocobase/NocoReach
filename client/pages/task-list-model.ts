@@ -1,3 +1,4 @@
+import { formatDate } from '#lib/format';
 import {localizeWorkSnapshots} from './playbook-snapshot';
 import { timestamp } from '../../shared/timestamps';
 import { $t } from '#i18n';
@@ -47,5 +48,5 @@ export function initials(name?:string){const p=String(name||'').trim().split(/\s
 export function ago(iso?:string,now=Date.now()){
  if(!iso)return '';let absolute:string|null;try{absolute=timestamp(iso);}catch{return '';}if(!absolute)return '';const t=Date.parse(absolute);const m=Math.max(0,Math.round((now-t)/60000));
  if(m<1)return $t('common.now');if(m<60)return $t('common.minAgo',{0:m});if(m<24*60)return $t('common.hAgo',{0:Math.round(m/60)});if(m<48*60)return $t('taskList.yesterday');
- const d=new Date(t);return `${d.getMonth()+1}/${d.getDate()}`;
+ return formatDate(t);
 }

@@ -6,6 +6,7 @@ import {Outlet,useLocation,useNavigate} from 'react-router';
 import {useUrlSearch} from '#hooks/use-url-search';
 import {BotIcon,KanbanIcon,ListIcon,SearchIcon} from 'lucide-react';
 import {Segmented} from '#components/reach/segmented';
+import {ListSkeleton} from '#components/reach/states';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {cn} from '#lib/utils';
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
@@ -114,7 +115,7 @@ export default function OptimizationWork(){
   </div>
   {!closed&&!done&&tasks.length>0&&<RuntimeNotice/>}
   {waiting&&<p role='status' className='text-sm text-muted-foreground'>{$t(isAdmin?'optimizationWork.waitingAdminScope':'optimizationWork.waitingMemberScope')}</p>}
-  {loading?<p role="status" className="text-sm text-muted-foreground">{$t('common.loadingTasks')}</p>:byAgent?<AgentBoard tasks={rows} agents={agents} onOpen={id=>navigate('/actions/'+id)}/>:board?<WorkBoard tasks={rows} busy={busy} list={false} agents={agents} onMove={(t,s,before)=>void move(t as Task,s,before)} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>
+  {loading?<ListSkeleton rows={6} label={$t('common.loadingTasks')}/>:byAgent?<AgentBoard tasks={rows} agents={agents} onOpen={id=>navigate('/actions/'+id)}/>:board?<WorkBoard tasks={rows} busy={busy} list={false} agents={agents} onMove={(t,s,before)=>void move(t as Task,s,before)} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>
    :rows.length?<TaskTable tasks={rows} closed={closed} agents={agents} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>:null}
   {!loading&&!tasks.length?<Empty className="min-h-48 border"><EmptyHeader><EmptyTitle>{$t('manualTask.emptyTitle')}</EmptyTitle><EmptyDescription>{$t('manualTask.createHint')}</EmptyDescription></EmptyHeader><EmptyContent><Button onClick={()=>void newTask()}>{$t('manualTask.newTask')}</Button></EmptyContent></Empty>:!loading&&!rows.length&&!board&&!byAgent&&<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{closed?$t('optimizationWork.noClosedTasks'):done?$t('optimizationWork.noFinishedTasksYet'):q||playbook||(!waiting&&owner)||agentFilter?$t('optimizationWork.noMatchingTasksTryAdjusting'):waiting?$t('optimizationWork.noWaitingTasks'):$t('optimizationWork.noTasksYetTasksCreated')}</p>}
   <Outlet/>

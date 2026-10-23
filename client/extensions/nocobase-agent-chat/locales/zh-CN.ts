@@ -2,6 +2,34 @@ import type { AgentChatLocale } from './en-US.js';
 
 const agentChatZhCN: AgentChatLocale = {
   chat: {
+    retrySaving: '重试保存',
+    contextFailed: '无法读取所选上下文或发送消息，请检查当前页面后重试。',
+    approval: {
+      request: '此工具需要你批准后才能执行。',
+      approve: '批准',
+      deny: '拒绝',
+      denied: '已拒绝执行工具。',
+      failed: '审批结果尚未确认，请刷新已保存消息后再试。',
+    },
+    feedback: {
+      sending: '正在发送…',
+      waiting: '等待 Agent 响应…',
+      thinking: '正在思考…',
+      stopping: '已请求停止，等待 Agent 确认结束…',
+      completed: '已完成。',
+      cancelled: '已取消。再次执行前请核对可能已完成的操作。',
+      failed: '响应失败。请先查看历史，再决定是否重新发送。',
+      unknown: '结果或历史保存尚未确认。请刷新历史后再决定是否重新发送。',
+      effectReview: '部分操作可能已完成，再次执行前请核对结果。',
+    },
+
+    executionFailed:
+      '执行失败。再次执行前请查看已保存历史，核对可能已完成的操作。',
+    historicalReadOnly: '历史会话仅供查看，请新建聊天以继续。',
+    connectionUnknown:
+      '连接已中断，结果待确认。请刷新已保存历史后决定是否再次发送。',
+    allowAnother: '允许再次发送（可能重复）',
+    refreshHistory: '刷新历史',
     title: 'Agent 对话',
     ask: '问 Agent',
     close: '关闭',
@@ -38,14 +66,20 @@ const agentChatZhCN: AgentChatLocale = {
       agentMissing: '已删除',
       agentArchived: '已归档',
       forbidden: '你无权使用',
+      noModel: '请先配置聊天模型',
       noRunner: '没有在线的运行环境',
       othersPersonal: '仅其他人的个人 Runner 可用',
+      modelUnavailable: '模型不可用',
     },
     mode: {
       online: '在线',
       runner: 'Runner',
       onlineHint: '在服务端秒级回答',
       runnerHint: '在运行环境中工作的编码 Agent',
+    },
+    reasoning: {
+      title: '推理过程',
+      thinking: '正在思考…',
     },
     reply: {
       writing: '正在输入…',
@@ -55,8 +89,10 @@ const agentChatZhCN: AgentChatLocale = {
       agentMissing: '{{name}} 已不存在',
       agentArchived: '{{name}} 已归档',
       forbidden: '你已无权使用 {{name}}',
+      noModel: '请先配置聊天模型',
       noRunner: '{{name}} 暂时没有在线的运行环境',
       othersPersonal: '{{name}} 仅在其他人的个人 Runner 上可用',
+      modelUnavailable: '{{name}} 的模型不可用，请联系管理员',
       kept: '消息已保存，它能回复时会处理。',
       fallback: '这条对话改用其他 Agent',
       usingDefault: '这条对话暂时由 {{name}} 代替 {{own}} 回答。',
@@ -72,15 +108,13 @@ const agentChatZhCN: AgentChatLocale = {
       switchedBack: '已切回 {{name}}。',
       runFailed: 'Agent 没有回复就停止了。',
       runFailedReason: 'Agent 没有回复就停止了：{{reason}}',
-      runCancelled: '已停止。',
+      runCancelled: '已请求取消。',
     },
     consultation: {
       title: '咨询了 {{name}}',
       question: '问题',
       answer: '回答',
       steps: '它的步骤',
-      plans_one: '提出了一个计划，等你确认。',
-      plans_other: '提出了 {{count}} 个计划，等你确认。',
       usage: '用了 {{input}} 个输入 token 和 {{output}} 个输出 token。',
       state: {
         running: '回答中…',
@@ -111,7 +145,7 @@ const agentChatZhCN: AgentChatLocale = {
       label: '发给 Agent 的消息',
       placeholder: '提问，或者描述要安排的工作…',
       hint: 'Enter 发送，Shift+Enter 换行',
-      runningHint: '现在发的消息会交给正在进行的工作一起处理',
+      runningHint: '正在执行，可以随时停止。',
       tooLong: '最多 {{max}} 个字。',
       send: '发送',
       stop: '停止',

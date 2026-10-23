@@ -380,6 +380,10 @@ describe('NocoReach semantic-key translations', () => {
         '每天提到产品的帖子',
       '关注度（每周，最高为 100）':
         '每周关注度',
+      '添加或移除竞品':
+        '管理竞品',
+      '暂无任务':
+        '没有任务',
     };
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(

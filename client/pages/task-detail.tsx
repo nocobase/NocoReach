@@ -1,3 +1,5 @@
+import { formatDateTime, formatDate } from '#lib/format';
+import { Skeleton } from '#components/ui/skeleton';
 import {matchesObservation} from '../../shared/result-comparison.js';
 import { mockSettingsAvailable } from '../../app-plugins/nocoreach-mock/client/index.js';
 import { localizeWorkSnapshots } from './playbook-snapshot';
@@ -96,7 +98,7 @@ function failureOf(run:Run,data:Data):Failure{
 const call=<T,>(projectId:number,taskId:string,action:string,body:object={})=>api.action<T>('nrTaskWork',action,{method:'POST',body:{projectId:String(projectId),taskId,...body},unwrap:'data'});
 // Tasks run by a playbook (new tasks, and tasks started with a flow) use this page; older step-plan tasks keep theirs.
 export function isPlaybookTask(d:Data){const w=d.work;return Boolean(w.playbook||w.flow)||(w.stage==='plan'&&!w.plan&&!w.simple);}
-const when=(iso?:string)=>iso&&!Number.isNaN(Date.parse(iso))?new Date(iso).toLocaleString(getCurrentLocale(),{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+const when=(iso?:string)=>iso&&!Number.isNaN(Date.parse(iso))?formatDateTime(iso):'';
 // Agent text often carries machine timestamps (2026-10-16T10:03:33.905Z); show them as the rest of the page does.
 const humanTimes=(text:string)=>text.replace(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})/g,m=>when(m)||m);
 const active=(r:Run)=>r.status==='queued'||r.status==='running';
@@ -114,7 +116,7 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
 }
 function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:string;initial:Data}){
  const {dirty,clear}=useTaskDraftStatus();
- const [storedData,setStoredData]=useState<Data>(initial),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[members,setMembers]=useState<Member[]>([]);
+ const [storedData,setStoredData]=useState<Data>(initial),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[members,setMembers]=useState<Member[]>([]),[membersLoaded,setMembersLoaded]=useState(false);
  const [resultParams]=useSearchParams();
  const data={...storedData,work:localizeWorkSnapshots(storedData.work)};
  const list=localizePlaybookList(rawPlaybooks);
@@ -127,7 +129,7 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
  // The playbook chosen in the start card; the header's steps follow it before the task starts.
  const [pick,setPick]=useState(w.playbookId||data.playbookDefault||'optimize-page');
  const [evidenceOpen,setEvidenceOpen]=useState(false),[pageOpen,setPageOpen]=useState(false);
- useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setRawPlaybooks).catch(()=>undefined);void call<Member[]>(projectId,taskId,'members').then(m=>setMembers(Array.isArray(m)?m:[])).catch(()=>undefined);},[projectId]);
+ useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setRawPlaybooks).catch(()=>undefined);void call<Member[]>(projectId,taskId,'members').then(m=>setMembers(Array.isArray(m)?m:[])).catch(()=>undefined).finally(()=>setMembersLoaded(true));},[projectId]);
  useEffect(()=>{if(!runActive&&!releasePolling)return;const t=setInterval(()=>{if(!pending.current)void call<Data>(projectId,taskId,'get').then(next=>{setStoredData(next);setError('');}).catch(()=>setError(() => ($t('taskDetail.runStatusTemporarilyUnavailableRetry'))));},2500);return()=>clearInterval(t);},[runActive, releasePolling, projectId, taskId, setError]);
  const update:Update=async(command,body={})=>{if(pending.current)return;pending.current=true;setBusy(true);setError('');const key=JSON.stringify([data.work.revision,command,body]);if(op.current.key!==key)op.current={key,id:crypto.randomUUID()};
   try{const d=await call<Data>(projectId,taskId,'advance',{revision:data.work.revision,requestId:op.current.id,command,...body});setStoredData(d);refreshNavBadges();return d;}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailed')));
@@ -155,7 +157,7 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
      {error&&<p role="alert" className="nr-error">{error}</p>}
      {w.cancelledAt||w.archivedAt?<ClosedCard w={w} update={update} busy={busy}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} pick={pick} setPick={setPick} update={update} busy={busy} projectId={projectId} taskId={taskId} onEvidence={()=>setEvidenceOpen(true)}/></TaskDraftScope>:done?<DoneCard data={data} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} list={list}/></TaskDraftScope>}
     </div>
-    <ActivityCard data={data} update={update} busy={busy} members={members}/>
+    <ActivityCard data={data} update={update} busy={busy} members={members} membersLoaded={membersLoaded}/>
    </div>
    <div className={cn('contents xl:flex xl:min-w-0 xl:flex-col',GAP)}>
     <WhyCard data={data} onEvidence={()=>setEvidenceOpen(true)}/>
@@ -530,7 +532,7 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
  </StageCard>;
  const replies=repliesOf(w,accepted?.content);
  if(replies.length)return <StageCard label={done} title={$t('taskDetail.replyDraftsAccepted')} sub={$t('taskDetail.copyReplyPostYourselfNocoreach')}><ReplyDrafts items={replies}/></StageCard>;
- return <StageCard label={done} title={done} sub={w.observeFrom?$t('taskDetail.trackingImpactSince',{0:new Date(w.observeFrom).toLocaleDateString(getCurrentLocale())}):undefined}>
+ return <StageCard label={done} title={done} sub={w.observeFrom?$t('taskDetail.trackingImpactSince',{0:formatDate(w.observeFrom)}):undefined}>
   {w.receipt?.note&&<p className={text.body}>{$tj('taskDetail.published',{0:w.receipt.note})}{w.receipt.url&&<> · <a className="nr-link" href={w.receipt.url} target="_blank" rel="noreferrer">{$t('common.openPage')}</a></>}</p>}
   {w.observeFrom&&<EffectList w={w}/>}
   {accepted&&!accepted.pr&&<><Reading><Markdown content={accepted.content}/></Reading>{accepted.report&&<ReportNotes report={accepted.report}/>}</>}
@@ -577,7 +579,7 @@ const RECENT=8;
 const getPlainEvents=():Record<string,string>=>({merged:$t('taskDetail.eventPublished'),markMerged:$t('taskDetail.publishedManually'),retryMerge:$t('taskDetail.eventPublishAgain'),prClosed:$t('taskDetail.unpublishedClosed'),revertOpened:$t('taskDetail.undoPrepared')});
 // What has happened: people's actions, each version the Agent delivered (open it here) and comments, then one line to
 // write to the Agent (2026-10-22 user decision: the activity and the message form one card).
-function ActivityCard({data,update,busy,members}:{data:Data;update:Update;busy:boolean;members:Member[]}){
+function ActivityCard({data,update,busy,members,membersLoaded}:{data:Data;update:Update;busy:boolean;members:Member[];membersLoaded:boolean}){
  const [message,setMessage,clearMessage]=useTaskDraft('comment',''),w=data.work,stages=w.flow?.stages||[],done=w.stage==='done',closed=Boolean(w.cancelledAt||w.archivedAt);
  const [all,setAll]=useState(false),[view,setView]=useState<Artifact>();
  const executor=getStageExecutor().agent;
@@ -592,10 +594,12 @@ function ActivityCard({data,update,busy,members}:{data:Data;update:Update;busy:b
  return <Card className="order-5" aria-label={$t('common.activity')} title={$t('common.activity')}>
   {hidden>0&&<Button variant="link" size="sm" className="h-auto font-normal self-start p-0" onClick={()=>setAll(true)}>{$t('taskDetail.showEarlier',{0:hidden})}</Button>}
   <ol className="flex flex-col gap-3">{shown.map(({e,t,i})=>{const who=t!.who===$t('common.you')?(e.actor&&people.get(e.actor))||$t('common.member'):t!.who;
-   if(e.action==='comment'||e.action==='requestStageChanges')return <li key={`${e.at}:${e.action}:${e.comment}`} className="flex items-start gap-2"><ActorAvatar type="user" name={who} size="xs"/><div className="flex min-w-0 flex-1 flex-col gap-0.5"><p className={cn(text.body,'flex flex-wrap items-center gap-x-2 gap-y-1')}><span data-actor="">{who}</span>{e.action==='requestStageChanges'&&<Tag tone="violet">{$t('taskDetail.requestChanges')}</Tag>}<time className="ml-auto text-muted-foreground">{when(e.at)}</time></p><p className={cn(text.body,'break-words whitespace-pre-wrap')}>{e.comment}</p></div></li>;
+   // Until the members load, a person's name is a placeholder bar, not "Member" that turns into the name (UI review 2026-10-22).
+   const pending=t!.who===$t('common.you')&&Boolean(e.actor)&&!membersLoaded,name=pending?<Skeleton className="inline-block h-3.5 w-16 align-middle"/>:who;
+   if(e.action==='comment'||e.action==='requestStageChanges')return <li key={`${e.at}:${e.action}:${e.comment}`} className="flex items-start gap-2">{pending?null:<ActorAvatar type="user" name={who} size="xs"/>}<div className="flex min-w-0 flex-1 flex-col gap-0.5"><p className={cn(text.body,'flex flex-wrap items-center gap-x-2 gap-y-1')}><span data-actor="">{name}</span>{e.action==='requestStageChanges'&&<Tag tone="violet">{$t('taskDetail.requestChanges')}</Tag>}<time className="ml-auto text-muted-foreground">{when(e.at)}</time></p><p className={cn(text.body,'break-words whitespace-pre-wrap')}>{e.comment}</p></div></li>;
    const artifact=e.action==='runSucceeded'&&e.artifactId?artifacts.get(e.artifactId):undefined;
    const line=artifact?$t('taskDetail.deliveredVersion',{0:artifact.version,1:nameOf(artifact.stepId)}):plain[e.action]||t!.text;
-   return <li key={`${e.at}:${e.action}:${e.runId||''}:${i}`} className={cn(text.muted,'flex items-start gap-2')}><span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center [&_svg]:size-3.5">{eventIcons[e.action]||<Play/>}</span><p className="min-w-0 flex-1 break-words"><span data-actor="" className="text-foreground">{e.action==='runSucceeded'?executor:who}</span> {line}{artifact&&<> <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>setView(artifact)}>{$t('common.view')}</Button></>}</p><time className="shrink-0">{when(e.at)}</time></li>;})}
+   return <li key={`${e.at}:${e.action}:${e.runId||''}:${i}`} className={cn(text.muted,'flex items-start gap-2')}><span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center [&_svg]:size-3.5">{eventIcons[e.action]||<Play/>}</span><p className="min-w-0 flex-1 break-words"><span data-actor="" className="text-foreground">{e.action==='runSucceeded'?executor:name}</span> {line}{artifact&&<> <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>setView(artifact)}>{$t('common.view')}</Button></>}</p><time className="shrink-0">{when(e.at)}</time></li>;})}
    {!rows.length&&<li className={text.muted}>{$t('taskDetail.noActivityYet')}</li>}</ol>
   {view&&<DocReader open onClose={()=>setView(undefined)} title={`${nameOf(view.stepId)} · ${$t('taskDetail.versionNumber',{0:view.version})}`} meta={when(view.createdAt)} content={view.pr||view.article?'':view.content}><VersionChange data={data} artifact={view} notes/></DocReader>}
   {composer&&<div className="flex items-end gap-2"><Textarea id="nr-composer" aria-label={$t('taskDetail.noteExecutor')} rows={1} className="max-h-40 min-h-8 resize-none py-1.5" value={message} disabled={busy} readOnly={done||closed} placeholder={$t('taskDetail.leaveNoteNextRunReads',{0:executor})} onChange={e=>{setMessage(e.target.value);}}/>{!done&&!closed&&<Button variant="outline" disabled={busy||!message.trim()} onClick={()=>void send()}>{$t('taskDetail.send')}</Button>}</div>}

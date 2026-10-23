@@ -193,3 +193,35 @@ test('invalid output and persistence failures remain possibly billed', async () 
     retryable: false,
   });
 });
+
+test('the daily report waits up to ten minutes and the other calls keep the default', async () => {
+  const f = fixture();
+  const timeout = vi.spyOn(AbortSignal, 'timeout');
+  try {
+    expect(await f.analysis.run('1', 'workflow')).toMatchObject({ ok: true });
+    expect(f.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(timeout).toHaveBeenCalledWith(10 * 60000);
+    expect(timeout).not.toHaveBeenCalledWith(4 * 60000);
+  } finally {
+    timeout.mockRestore();
+  }
+});
+
+test('a report stopped at its time limit says so in plain words and is not retried', async () => {
+  const f = fixture();
+  f.generate.mockRejectedValue(
+    Object.assign(new Error('The call was stopped.'), {
+      name: 'ModelError',
+      code: 'aborted',
+      status: null,
+    }),
+  );
+  expect(await f.analysis.run('1', 'workflow')).toMatchObject({
+    ok: false,
+    error: 'AI 服务 10 分钟内没有给出完整结果',
+    failureKind: 'billing_unknown',
+    retryable: false,
+  });
+});

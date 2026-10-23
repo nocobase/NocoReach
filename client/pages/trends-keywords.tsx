@@ -43,7 +43,7 @@ function Spark({ points }: { points: WatchedKeyword["points"] }) {
   if (vals.filter((v) => v !== null).length < 2) return <span className="text-muted-foreground">—</span>;
   const step = 110 / Math.max(vals.length - 1, 1);
   const line = vals.map((v, i) => (v === null ? null : `${(i * step).toFixed(1)},${(22 - (v / 100) * 20).toFixed(1)}`)).filter(Boolean).join(" ");
-  return <svg width="110" height="24" viewBox="0 0 110 24" aria-hidden="true" data-spark><polyline fill="none" stroke="var(--chart-1)" strokeWidth="1.5" points={line} /></svg>;
+  return <svg width="110" height="24" viewBox="0 0 110 24" aria-hidden="true" data-spark><polyline fill="none" stroke="var(--chart-3)" strokeWidth="1.5" points={line} /></svg>;
 }
 
 export function TrendKeywords({ projectId, view, onView, onRetry }: { projectId: number; view: KeywordWatch; onView: (v: KeywordWatch) => void; onRetry: (keywordId: string) => void }) {
@@ -142,7 +142,7 @@ function KeywordDetail({ projectId, k, place, onClose, onRemove, onRetry }: { pr
                   <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} minTickGap={32} fontSize={11} />
                   <YAxis domain={[0, 100]} allowDecimals={false} fontSize={11} width={32} />
                   <Tooltip />
-                  <Line isAnimationActive={false} type="linear" dataKey="value" name={$t('trendsKeywords.interest')} stroke="var(--chart-1)" strokeWidth={2} dot={false} connectNulls />
+                  <Line isAnimationActive={false} type="linear" dataKey="value" name={$t('trendsKeywords.interest')} stroke="var(--chart-3)" strokeWidth={2} dot={false} connectNulls />
                 </LineChart>
               </ResponsiveContainer>
             </div>

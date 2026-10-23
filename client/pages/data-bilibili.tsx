@@ -103,7 +103,7 @@ export default function DataBilibili() {
         ),
       ),
       dateColumn<BilibiliVideo>(
-        $t('collectorPage.publishedAt'),
+        $t('collectorPage.publishedDate'),
         published,
         (v) =>
           $t('collectorPage.collectedShort', { 0: shortDate(v.collectedAt) }),
