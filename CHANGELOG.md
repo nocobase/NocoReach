@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — The chat panel reads every data page
+
+- The chat panel's assistant has a read-only `query_data` tool covering every source a data page shows: Search Console (queries, pages, striking distance, rising and falling, countries and devices, one query or page in detail), GA4 traffic tables, site pages, the site audit and indexing, GitHub and GitHub trends, downloads, saved keywords with the site's rank, rank tracking, keyword suggestions, Trends, competitor activity, saved AI search lookups, Forum, Hacker News, Reddit, X, Discord, Slack, YouTube, Bilibili, Xiaohongshu and public web sources. It takes a period (or from/to), filters for keyword, page and country, a sort, a limit and an offset, and answers bounded rows with the page they come from, the data cutoff, the period and the one before it, the total and the next offset. Each source goes through the service method its page calls, so the numbers match the page, and is read only after the asking user's own permission for that page's action; a source they may not open answers accessDenied without stopping the others. Nothing is synced, inspected or bought: Trends reads the saved check instead of the page's view, indexing waits until its page has run the first inspection, and AI search lists saved lookups only.
+
 ## Unreleased — Task page: one layout for every state
 
 - The task page has one skeleton in every state: a two-line header (the title with its T-number in grey and the status Tag on the right; then one grey line with the playbook's steps and where the task stands now, such as "Agent Change → Review and publish (you) → Live → Watch · Now: Waiting for you to start"), the card for what to do now and the activity on the left, and ✦ Why, Properties and Performance on the right, in that order. Below 1280px they stack as Why, Properties, now, Performance, Activity.
