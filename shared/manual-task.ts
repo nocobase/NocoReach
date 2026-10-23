@@ -61,8 +61,10 @@ export const ManualTaskDraft = z.object({
 });
 export type ManualTaskDraft = z.infer<typeof ManualTaskDraft>;
 export const ManualTaskDraftView = ManualTaskDraft.extend({
-  /** The project's playbooks, for the Suggested playbook select. */
-  playbooks: z.array(z.object({ id: z.string(), name: z.string() })),
+  /** The project's playbooks, for the Suggested playbook select; `system` names are built-in text to translate. */
+  playbooks: z.array(
+    z.object({ id: z.string(), name: z.string(), system: z.boolean() }),
+  ),
 });
 export type ManualTaskDraftView = z.infer<typeof ManualTaskDraftView>;
 

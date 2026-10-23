@@ -233,17 +233,18 @@ export function groundedBackground(
   background: string,
   known: ReadonlySet<string>,
 ): string {
-  const sentences = background
-    .split(/(?<=[。！？!?；;])|\n+|(?<=[.])\s+/)
-    .map((sentence) => sentence.trim())
-    .filter(Boolean);
-  const kept = sentences.filter((sentence) =>
-    (sentence.match(NUMBER) ?? [])
-      .filter(cited)
-      .every((token) => known.has(normal(token))),
-  );
-  return kept
-    .join(kept.some((s) => /[\p{Script=Han}]/u.test(s)) ? '' : ' ')
+  // Sentences keep their own ending and spacing, so what is left reads as written in either language.
+  const sentences =
+    background.match(
+      /(?:[^。！？!?；;.\n]|\.(?!\s|$))+(?:[。！？!?；;]+|\.+|\n+|$)\s*/gu,
+    ) ?? [];
+  return sentences
+    .filter((sentence) =>
+      (sentence.match(NUMBER) ?? [])
+        .filter(cited)
+        .every((token) => known.has(normal(token))),
+    )
+    .join('')
     .trim();
 }
 

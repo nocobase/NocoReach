@@ -222,6 +222,10 @@ function fixture(
       const period = object(input.period);
       const count = (value: unknown) =>
         typeof value === 'number' && Number.isFinite(value) ? value : 0;
+      const ids = list(input.playbooks).map((p) => str(p.id, 60));
+      const playbookId = ids.includes('optimize-page')
+        ? 'optimize-page'
+        : ids[0] || null;
       const figures = page
         ? english
           ? `${str(page.title, 120) || str(page.url, 300)} had ${count(page.views)} visits and ${count(page.clicks)} search clicks from ${str(period.start, 10)} to ${str(period.end, 10)}.`
@@ -240,7 +244,7 @@ function fixture(
               'Every change is listed with its reason.',
               'A person has reviewed the changes.',
             ],
-            playbookId: str(list(input.playbooks)[0]?.id, 60) || null,
+            playbookId,
           }
         : {
             title: `【模拟】${idea.slice(0, 120)}`,
@@ -251,7 +255,7 @@ function fixture(
               '按完成标准检查结果。',
             ],
             criteria: ['每处修改都写明了原因。', '修改经过人工审核。'],
-            playbookId: str(list(input.playbooks)[0]?.id, 60) || null,
+            playbookId,
           };
     }
   }

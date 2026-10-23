@@ -396,7 +396,11 @@ export class ManualTasks {
         );
         return ManualTaskDraftView.parse({
           ...draft,
-          playbooks: playbooks.map(({ id, name }) => ({ id, name })),
+          playbooks: playbooks.map(({ id, name, system, edited }) => ({
+            id,
+            name,
+            system: Boolean(system && !edited),
+          })),
         });
       });
     } finally {

@@ -285,7 +285,8 @@ test('Organize with AI is authorized, bounded, saves nothing and reports a missi
   });
   expect(view.playbooks).toContainEqual({
     id: 'optimize-page',
-    name: expect.any(String),
+    name: '优化现有页面',
+    system: true,
   });
   // The project writes in Chinese; the figure the input lacked is gone.
   expect(view.description).toBe(

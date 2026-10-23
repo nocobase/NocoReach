@@ -20,7 +20,7 @@ import { Link, useNavigate, useLocation } from 'react-router';
 import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { SparklesIcon } from 'lucide-react';
 import { z } from 'zod';
-import { $t } from '#i18n';
+import { $legacyText, $t } from '#i18n';
 import { RouteDialog } from '#components/route-dialog';
 import { Button } from '#components/ui/button';
 import { Input } from '#components/ui/input';
@@ -552,10 +552,13 @@ function CreateTask({
               {$t('manualTask.fillManually')}
             </Button>
             {cancel}
+            {/* Wrapped: the footer pads its direct child buttons, which would hide the ⓘ. */}
             {!modelReady && (
-              <InfoTip className='self-center'>
-                <ModelSetup />
-              </InfoTip>
+              <span className='flex items-center'>
+                <InfoTip>
+                  <ModelSetup />
+                </InfoTip>
+              </span>
             )}
             <Button
               type='button'
@@ -609,6 +612,7 @@ function CreateTask({
                 id='manual-task-idea'
                 autoFocus
                 rows={6}
+                className='min-h-32'
                 maxLength={TASK_DRAFT_IDEA_MAX}
                 aria-required='true'
                 aria-invalid={ideaMissing}
@@ -685,7 +689,7 @@ function CreateTask({
                   { value: LATER, label: $t('manualTask.playbookLater') },
                   ...draft.playbooks.map((playbook) => ({
                     value: playbook.id,
-                    label: playbook.name,
+                    label: playbookName(playbook),
                   })),
                 ]}
                 value={playbookId}
@@ -701,7 +705,7 @@ function CreateTask({
                   </SelectItem>
                   {draft.playbooks.map((playbook) => (
                     <SelectItem key={playbook.id} value={playbook.id}>
-                      {playbook.name}
+                      {playbookName(playbook)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -713,6 +717,10 @@ function CreateTask({
     </RouteDialog>
   );
 }
+
+// Built-in playbooks are stored in their system wording, as localizePlaybook (playbook-model.ts) reads them.
+const playbookName = (playbook: ManualTaskDraftView['playbooks'][number]) =>
+  playbook.system ? $legacyText(playbook.name) : playbook.name;
 
 // Where a chat model is set up: a link for those who may change model services, the place's name for the others.
 function ModelSetup() {

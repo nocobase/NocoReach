@@ -368,8 +368,9 @@ const draftView = {
     'Background: /pricing had 120 visits.\n\nWhat to do:\n1. Rewrite the title.\n\nCompletion criteria:\n- The new title is live.',
   playbookId: 'optimize-page',
   playbooks: [
-    { id: 'optimize-page', name: 'Improve an existing page' },
-    { id: 'change-research', name: 'Research a change' },
+    // Built-in names arrive in their stored system wording and show translated.
+    { id: 'optimize-page', name: '优化现有页面', system: true },
+    { id: 'custom-1a2b3c4d', name: '我们自己的做法', system: false },
   ],
 };
 function writeIdea(text: string) {
@@ -407,7 +408,7 @@ it('turns a rough idea into an editable draft with AI and creates the edited tas
   // The suggested playbook is preselected and stays changeable.
   expect(
     screen.getByRole('combobox', { name: 'Suggested playbook' }),
-  ).toHaveTextContent('Improve an existing page');
+  ).toHaveTextContent('Improve existing page');
   fireEvent.change(screen.getByLabelText(/Task title/), {
     target: { value: 'Edited title' },
   });

@@ -222,6 +222,13 @@ describe('grounding never invents data', () => {
     ).toBe(
       '定价页在 2026-09-25 以来有 120 次访问，比上一期少 35%。共 3 个版本。',
     );
+    // Sentences keep their spacing, also beside Chinese text, and a decimal does not end a sentence.
+    expect(
+      groundedBackground(
+        '【注】Pricing had 120 visits. Conversion is 1.8% now; the plan names are unclear.\nSee v2.5 notes.',
+        known,
+      ),
+    ).toBe('【注】Pricing had 120 visits. the plan names are unclear.');
     const draft = validateTaskDraft(
       { ...answer, background: 'Traffic dropped by 60%.' },
       {
