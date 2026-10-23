@@ -7014,5 +7014,6 @@
   "strategy.approveInPanel": "Approuver l’exécution de la tâche dans le panneau latéral",
   "strategy.sendFailed": "Le message n’a pas été envoyé. Ouvrez-le dans le panneau latéral pour réessayer",
   "agentRoles.chatOff": "L’agent de chat est désactivé.",
-  "agentRoles.chatModelOff": "Le modèle de l’agent de chat n’est pas disponible."
+  "agentRoles.chatModelOff": "Le modèle de l’agent de chat n’est pas disponible.",
+  "agentRoles.chatNeedsDefault": "L’agent de chat a aussi besoin d’un modèle de chat par défaut du système. Choisissez-le dans Analyse quotidienne › Paramètres."
 }

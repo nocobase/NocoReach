@@ -34,6 +34,7 @@ const state = vi.hoisted(() => {
     markRead,
     actions: { markRead, stop: {} },
     createConversation: vi.fn(),
+    updateConversation: vi.fn(() => Promise.resolve({})),
     send: vi.fn(() => true),
     // Messages the plugin's send did not get through, as the server's guard refusing one while the chat agent is off.
     pending: [] as unknown[],
@@ -71,7 +72,10 @@ vi.mock('@nocobase/app-plugin-agents/client/chat', async (importOriginal) => {
     }),
     useConversationActions: () => state.actions,
     useChatAgents: () => ({ data: state.agents, isSuccess: true }),
-    useChatApi: () => ({ createConversation: state.createConversation }),
+    useChatApi: () => ({
+      createConversation: state.createConversation,
+      updateConversation: state.updateConversation,
+    }),
     useConversationMessages: () => ({
       items: state.items,
       pending: state.pending,
@@ -193,6 +197,47 @@ test('a message in an online conversation is sent at once, and one the guard ref
   // Turned off since the panel last read it: the server refuses, and the panel reads the switch again.
   state.pending = [{ clientId: 'c1', content: 'Hi', status: 'failed' }];
   view.rerender(<ConversationView conversationId='runner-chat' />);
+  expect(state.online.refresh).toHaveBeenCalledOnce();
+});
+
+test('a message refused while the Chat panel is off offers no retry, only discarding it', () => {
+  state.conversation = { ...runnerChat, agent: onlineAgent };
+  state.pending = [{ clientId: 'c1', content: 'Hi', status: 'failed' }];
+  const pendingButtons = (view: ReturnType<typeof render>) =>
+    view.container.querySelectorAll('[data-chat-message="pending"] button');
+  const on = render(<ConversationView conversationId='runner-chat' />);
+  // Another failure while it is on can be sent again.
+  expect(pendingButtons(on)).toHaveLength(2);
+  on.unmount();
+
+  state.online.settings = { enabled: false };
+  state.online.enabled = false;
+  const off = render(<ConversationView conversationId='runner-chat' />);
+  expect(pendingButtons(off)).toHaveLength(1);
+});
+
+test('a new online conversation left before it was created is archived, not left empty in the history', async () => {
+  state.conversation = null;
+  let resolve!: (value: { id: string }) => void;
+  state.createConversation.mockReturnValue(
+    new Promise((done) => (resolve = done)),
+  );
+  const view = render(<ConversationView conversationId={null} />);
+  act(() => void state.composer.current!.onSend('Hello', undefined));
+  view.unmount();
+  await act(async () => resolve({ id: 'online-chat' }));
+  expect(state.panel.selectConversation).not.toHaveBeenCalled();
+  expect(state.updateConversation).toHaveBeenCalledExactlyOnceWith(
+    'online-chat',
+    { archived: true },
+  );
+});
+
+test('a new online conversation the server refuses reads Chat panel › Settings again', async () => {
+  state.conversation = null;
+  state.createConversation.mockRejectedValue(new Error('chatDisabled'));
+  render(<ConversationView conversationId={null} />);
+  await act(async () => void state.composer.current!.onSend('Hi', undefined));
   expect(state.online.refresh).toHaveBeenCalledOnce();
 });
 

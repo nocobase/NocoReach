@@ -7014,5 +7014,6 @@
   "strategy.approveInPanel": "Setujui menjalankan tugas di panel samping",
   "strategy.sendFailed": "Pesan tidak terkirim. Buka di panel samping untuk mencoba lagi",
   "agentRoles.chatOff": "Agen chat dinonaktifkan.",
-  "agentRoles.chatModelOff": "Model agen chat tidak tersedia."
+  "agentRoles.chatModelOff": "Model agen chat tidak tersedia.",
+  "agentRoles.chatNeedsDefault": "Agen chat juga memerlukan model chat bawaan sistem. Pilih di Analisis harian › Pengaturan."
 }

@@ -163,7 +163,30 @@ test('online conversations take the nocoreach scope, its project tools and Chat 
   const projectId = String(project.id);
   const settings = (await (await admin.fetch('/onlineAgents/settings')).json())
     .data;
-  expect(settings).toMatchObject({ enabled: true, instructions: '' });
+  // No system default chat model here: the plugin does not offer its online agent, so the settings are not ready.
+  expect(settings).toMatchObject({
+    enabled: true,
+    instructions: '',
+    ready: false,
+    defaultModel: false,
+  });
+  const services = container.resolve(agentsToken).models.services;
+  const defaults = vi.spyOn(services, 'defaults').mockResolvedValue({
+    ...(await services.defaults()),
+    effectiveChat: { modelService: 'fixture', model: 'chat' },
+  });
+  const connection = vi
+    .spyOn(services, 'connectionFor')
+    .mockResolvedValue(
+      undefined as unknown as Awaited<
+        ReturnType<typeof services.connectionFor>
+      >,
+    );
+  expect(
+    (await (await admin.fetch('/onlineAgents/settings')).json()).data,
+  ).toMatchObject({ ready: true, defaultModel: true });
+  defaults.mockRestore();
+  connection.mockRestore();
   const saved = await send(
     admin,
     '/onlineAgents/settings',

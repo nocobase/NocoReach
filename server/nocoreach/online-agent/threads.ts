@@ -32,6 +32,8 @@ const SUMMARY_PAGES = 5;
 const COUNT_PAGES = 5;
 /** Conversations counted at once. */
 const COUNTS_AT_ONCE = 8;
+/** Conversations past the listed pages read at once. */
+const READS_AT_ONCE = 8;
 
 /**
  * Conversations asked from Insights. The Agents plugin keeps the conversations; this index says which project and
@@ -144,14 +146,21 @@ export class InsightThreads {
       if (!nextCursor) return found;
       pageToken = nextCursor;
     }
-    // Past the pages read: the rest one by one (archived ones are left out).
-    for (const id of ids)
-      if (!found.has(id)) {
-        const detail = await this.agents.conversations
-          .get(ownerId, id)
-          .catch(() => null);
-        if (detail && !detail.archivedAt) found.set(id, detail);
-      }
+    // Past the pages read: the rest read directly, a few at once (archived ones are left out). Only a conversation that
+    // is gone is left out; any other failure fails the list, as `open` keeps a row it could not read.
+    const rest = [...ids].filter((id) => !found.has(id));
+    for (let i = 0; i < rest.length; i += READS_AT_ONCE)
+      await Promise.all(
+        rest.slice(i, i + READS_AT_ONCE).map(async (id) => {
+          const detail = await this.agents.conversations
+            .get(ownerId, id)
+            .catch((error: unknown) => {
+              if (conversationMissing(error)) return null;
+              throw error;
+            });
+          if (detail && !detail.archivedAt) found.set(id, detail);
+        }),
+      );
     return found;
   }
   /**

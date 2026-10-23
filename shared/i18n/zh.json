@@ -7014,5 +7014,6 @@
   "strategy.approveInPanel": "在右侧确认是否执行任务",
   "strategy.sendFailed": "消息没有发出，在右侧打开后重试",
   "agentRoles.chatOff": "对话 Agent 已停用。",
-  "agentRoles.chatModelOff": "对话 Agent 用的模型不可用。"
+  "agentRoles.chatModelOff": "对话 Agent 用的模型不可用。",
+  "agentRoles.chatNeedsDefault": "对话 Agent 还需要一个系统默认对话模型，请在“每日分析 › 设置”中选择。"
 }

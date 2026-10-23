@@ -7014,5 +7014,6 @@
   "strategy.approveInPanel": "Ausführung der Aufgabe in der Seitenleiste bestätigen",
   "strategy.sendFailed": "Die Nachricht wurde nicht gesendet. In der Seitenleiste öffnen und erneut versuchen",
   "agentRoles.chatOff": "Der Chat-Agent ist ausgeschaltet.",
-  "agentRoles.chatModelOff": "Das Modell des Chat-Agenten ist nicht verfügbar."
+  "agentRoles.chatModelOff": "Das Modell des Chat-Agenten ist nicht verfügbar.",
+  "agentRoles.chatNeedsDefault": "Der Chat-Agent braucht außerdem ein Standard-Chatmodell des Systems. Lege es unter Tägliche Analyse › Einstellungen fest."
 }

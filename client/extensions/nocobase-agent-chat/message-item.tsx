@@ -437,7 +437,8 @@ export function MessageItem({
 
 export interface PendingItemProps {
   readonly message: PendingMessage;
-  readonly onRetry: () => void;
+  /** Left out when sending again would only be refused again. */
+  readonly onRetry?: () => void;
   readonly onDiscard: () => void;
   readonly onContinue?: () => void;
   readonly onCheck?: () => void;
@@ -511,10 +512,12 @@ export function PendingItem({
             <Button variant='ghost' size='xs' onClick={onDiscard}>
               {t('chat.pending.discard')}
             </Button>
-            <Button variant='outline' size='xs' onClick={onRetry}>
-              <RotateCcwIcon data-icon='inline-start' />
-              {t('chat.pending.retry')}
-            </Button>
+            {onRetry ? (
+              <Button variant='outline' size='xs' onClick={onRetry}>
+                <RotateCcwIcon data-icon='inline-start' />
+                {t('chat.pending.retry')}
+              </Button>
+            ) : null}
           </div>
         ) : null}
       </div>

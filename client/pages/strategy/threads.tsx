@@ -117,7 +117,6 @@ export function InsightChatProvider({
   useEffect(() => {
     if (activity) reload();
   }, [activity, reload]);
-  const answering = threads.some((t) => t.running);
   // A question is listed only once the server has it, after `sent`'s read: read again as the day's reply starts and ends.
   const replying = chatIsRunning(
       useConversation(current?.id ?? null).data ?? null,
@@ -128,11 +127,16 @@ export function InsightChatProvider({
     replyingRef.current = replying;
     reload();
   }, [replying, reload]);
+  // Only another day's conversation still answering is polled, and slowly: the day's own reply is followed above, and
+  // each read lists the owner's Insights conversations again on the server.
+  const answeringElsewhere = threads.some(
+    (t) => t.running && t.id !== current?.id,
+  );
   useEffect(() => {
-    if (!answering) return;
-    const timer = setTimeout(reload, 3000);
+    if (!answeringElsewhere) return;
+    const timer = setTimeout(reload, 15000);
     return () => clearTimeout(timer);
-  }, [answering, view.data, reload]);
+  }, [answeringElsewhere, view.data, reload]);
   const startRef = useRef<Promise<string> | null>(null);
   const start = () => {
     // One conversation a day, even when two questions start it at once.

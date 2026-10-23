@@ -7014,5 +7014,6 @@
   "strategy.approveInPanel": "Duyệt chạy tác vụ trong bảng bên",
   "strategy.sendFailed": "Tin nhắn chưa được gửi. Mở trong bảng bên để thử lại",
   "agentRoles.chatOff": "Tác nhân chat đang tắt.",
-  "agentRoles.chatModelOff": "Mô hình của tác nhân chat không khả dụng."
+  "agentRoles.chatModelOff": "Mô hình của tác nhân chat không khả dụng.",
+  "agentRoles.chatNeedsDefault": "Tác nhân chat cũng cần một mô hình chat mặc định của hệ thống. Hãy chọn trong Phân tích hằng ngày › Cài đặt."
 }

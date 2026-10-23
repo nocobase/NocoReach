@@ -377,13 +377,19 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
                     }
                   : undefined,
               }
-            : !chatSettings.ready
+            : !chatSettings.defaultModel
               ? {
                   state: 'attention',
-                  detail: $t('agentRoles.chatModelOff'),
-                  action: chatAction,
+                  detail: $t('agentRoles.chatNeedsDefault'),
+                  action: analysisSettings,
                 }
-              : { state: 'ready', action: chatAction }),
+              : !chatSettings.ready
+                ? {
+                    state: 'attention',
+                    detail: $t('agentRoles.chatModelOff'),
+                    action: chatAction,
+                  }
+                : { state: 'ready', action: chatAction }),
   };
 
   const options = status?.options || [];

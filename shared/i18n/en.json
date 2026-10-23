@@ -7014,5 +7014,6 @@
   "strategy.approveInPanel": "Approve running the task in the side panel",
   "strategy.sendFailed": "The message wasn’t sent. Open it in the side panel to try again",
   "agentRoles.chatOff": "The chat agent is turned off.",
-  "agentRoles.chatModelOff": "The chat agent’s model isn’t available."
+  "agentRoles.chatModelOff": "The chat agent’s model isn’t available.",
+  "agentRoles.chatNeedsDefault": "The chat agent also needs a system default chat model. Set one in Daily analysis › Settings."
 }

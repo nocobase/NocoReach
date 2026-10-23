@@ -228,8 +228,9 @@ function ConversationBody({
     isOnlineAgent(conversation?.agent) &&
     online.settings !== undefined &&
     !online.enabled;
-  // The panel's copy of the switch may be older than an administrator's change. The server's guard refuses a message
-  // or an approval while it is off, and the panel then reads it again, so it says the agent is off.
+  // The panel's copy of the switch may be older than an administrator's change, and nothing reads it before a send. The
+  // server's guard refuses a message or an approval while it is off, and the panel then reads it again, so it says the
+  // agent is off and offers no retry that would be refused again.
   const onlineAgent = isOnlineAgent(conversation?.agent);
   const refreshOnline = useEffectEvent(() => online.refresh());
   const sendRefused =
@@ -287,9 +288,18 @@ function ConversationBody({
       .then(
         (detail) => {
           if (liveRef.current) created(detail);
+          // Left for another conversation while this one was created: its message went with the composer, so the
+          // empty conversation is archived rather than left in the history.
+          else
+            void chatApi
+              .updateConversation(detail.id, { archived: true })
+              .catch(() => {});
         },
         (error: unknown) => {
-          if (liveRef.current) setStarting({ input, error });
+          if (!liveRef.current) return;
+          setStarting({ input, error });
+          // Refused because the chat agent was turned off since the panel read its settings.
+          online.refresh();
         },
       );
     return true;
@@ -606,11 +616,14 @@ function ConversationBody({
                       createdAt: '',
                       status: starting.error ? 'failed' : 'sending',
                     }}
-                    onRetry={() =>
-                      // Created already, even while its detail loads: send again rather than create another.
-                      void (conversationId
-                        ? deliver(starting.input)
-                        : start(starting.input))
+                    onRetry={
+                      online.settings && !online.enabled
+                        ? undefined
+                        : () =>
+                            // Created already, even while its detail loads: send again rather than create another.
+                            void (conversationId
+                              ? deliver(starting.input)
+                              : start(starting.input))
                     }
                     onDiscard={() => setStarting(null)}
                     onCheck={() => {}}
@@ -647,15 +660,18 @@ function ConversationBody({
                         clientId: message.clientId,
                       })
                     }
-                    onRetry={() =>
-                      void send({
-                        content: message.content,
-                        context: message.context,
-                        ...(message.attachments
-                          ? { attachments: message.attachments }
-                          : {}),
-                        clientId: message.clientId,
-                      })
+                    onRetry={
+                      onlineOff
+                        ? undefined
+                        : () =>
+                            void send({
+                              content: message.content,
+                              context: message.context,
+                              ...(message.attachments
+                                ? { attachments: message.attachments }
+                                : {}),
+                              clientId: message.clientId,
+                            })
                     }
                   />
                 ))}

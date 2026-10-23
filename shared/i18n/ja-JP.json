@@ -7014,5 +7014,6 @@
   "strategy.approveInPanel": "サイドパネルでタスクの実行を承認",
   "strategy.sendFailed": "メッセージを送信できませんでした。サイドパネルで開いて再試行してください",
   "agentRoles.chatOff": "チャットエージェントはオフです。",
-  "agentRoles.chatModelOff": "チャットエージェントのモデルを利用できません。"
+  "agentRoles.chatModelOff": "チャットエージェントのモデルを利用できません。",
+  "agentRoles.chatNeedsDefault": "チャットエージェントにはシステムの既定チャットモデルも必要です。日次分析 › 設定で選択してください。"
 }

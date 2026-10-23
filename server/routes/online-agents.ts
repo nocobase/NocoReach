@@ -134,19 +134,24 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
     async (context) => {
       await requireReader();
       const value = await store().get();
-      let ready = false;
+      let ready = false,
+        defaultModel = false;
       try {
-        const selected =
-          value.model ??
-          (await agents.models.services.defaults()).effectiveChat;
-        if (selected) {
-          await agents.models.services.connectionFor(selected, 'chat');
+        // The plugin lists its `online` agent only while a system default chat model exists, even when Chat panel ›
+        // Settings names a model of its own; without one the panel cannot offer the chat agent.
+        const { effectiveChat } = await agents.models.services.defaults();
+        defaultModel = !!effectiveChat;
+        if (effectiveChat) {
+          await agents.models.services.connectionFor(
+            value.model ?? effectiveChat,
+            'chat',
+          );
           ready = true;
         }
       } catch {
         /* No model credentials leave the server. */
       }
-      return context.json({ data: { ...value, ready } });
+      return context.json({ data: { ...value, ready, defaultModel } });
     },
   );
   router.put(

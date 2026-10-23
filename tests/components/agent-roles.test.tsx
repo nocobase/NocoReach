@@ -23,6 +23,7 @@ const state = vi.hoisted(() => ({
   online: {} as {
     enabled: boolean;
     ready: boolean;
+    defaultModel: boolean;
     model: { modelService: string; model: string } | null;
     instructions: string;
     revision: number;
@@ -107,6 +108,7 @@ beforeEach(() => {
   state.online = {
     enabled: true,
     ready: true,
+    defaultModel: true,
     model: null,
     instructions: '',
     revision: 2,
@@ -328,6 +330,7 @@ test('a Chat panel that is turned off is turned on from its row', async () => {
   state.online = {
     enabled: false,
     ready: false,
+    defaultModel: true,
     model: null,
     instructions: 'Be brief.',
     revision: 2,
@@ -353,6 +356,25 @@ test('a Chat panel whose model cannot answer needs attention and opens its setti
   expect(
     within(row('对话栏')).getByRole('button', { name: '设置' }),
   ).toHaveAttribute('href', '/agents/chat');
+});
+
+test('a Chat panel without a system default chat model points to the daily analysis model', async () => {
+  // The plugin offers its online agent only while a system default chat model exists, even with a model of its own.
+  state.online = {
+    ...state.online,
+    model: { modelService: 'openai-compatible', model: 'deepseek-v4.1-pro' },
+    ready: false,
+    defaultModel: false,
+  };
+  mount();
+  await waitFor(() =>
+    expect(detail('对话栏')).toHaveTextContent(
+      '对话 Agent 还需要一个系统默认对话模型',
+    ),
+  );
+  expect(
+    within(row('对话栏')).getByRole('button', { name: '设置' }),
+  ).not.toHaveAttribute('href');
 });
 
 test('a Chat panel whose settings cannot be read needs attention', async () => {
