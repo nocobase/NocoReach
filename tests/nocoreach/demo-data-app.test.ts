@@ -21,7 +21,7 @@ import { OnlineProvider } from '../../server/nocoreach/execution/provider';
 vi.setConfig({ testTimeout: 300000, hookTimeout: 300000 });
 // Play the demo Agent's runs back without the pauses a visitor sees.
 process.env.NOCOREACH_DEMO_AGENT_PACE = '0';
-const createDemoTest = (mode: 'off' | 'read-only' | 'observe' = 'observe') =>
+const createDemoTest = (enabled = true) =>
   createAppTest({
     createServer: createStandaloneServer,
     env: {
@@ -42,16 +42,16 @@ const createDemoTest = (mode: 'off' | 'read-only' | 'observe' = 'observe') =>
       secrets: { keys: [{ version: 1, key: randomBytes(32).toString('hex') }] },
       agents: { vectors: { store: false } },
       nocoreach: { publicDns: '' },
-      demoMode: { mode },
+      demoMode: { enabled },
     },
   });
-const test = createDemoTest('observe');
+const test = createDemoTest();
 const accountConflictTest = createDemoTest();
-const readOnlyTest = createDemoTest('read-only');
-const configurationTest = createDemoTest('read-only');
+const readOnlyTest = createDemoTest();
+const configurationTest = createDemoTest();
 // Its conversation stays queued, which would block the full cleanup other read-only tests make.
-const conversationTest = createDemoTest('read-only');
-const offTest = createDemoTest('off');
+const conversationTest = createDemoTest();
+const offTest = createDemoTest(false);
 
 const json = { 'Content-Type': 'application/json', origin: 'http://localhost' };
 
@@ -121,16 +121,12 @@ describe('read-only demo conversations', () => {
     };
     expect(
       (
-        await admin.fetch('/demoMode/configuration/writeRules', {
+        await admin.fetch('/demoMode/configuration/collections', {
           method: 'PUT',
           headers: json,
           body: JSON.stringify({
             expectedRevision: configuration.data.revision,
-            value: ['insert', 'update'].map((operation) => ({
-              capability: 'nocoreach.onlineConversations',
-              operation,
-              scope: 'demo-projects',
-            })),
+            value: ['nrOnlineAgentRecords'],
           }),
         })
       ).status,
@@ -200,7 +196,7 @@ describe('read-only demo lifecycle', () => {
     );
     await demo.whenIdle();
     expect(await demo.status()).toMatchObject({
-      mode: 'read-only',
+      enabled: true,
       present: true,
       state: 'ready',
       failure: null,
@@ -225,7 +221,7 @@ describe('read-only demo lifecycle', () => {
     ).toBe(200);
     await demo.whenIdle();
     expect(await demo.status()).toMatchObject({
-      mode: 'read-only',
+      enabled: true,
       present: true,
       language: 'en-US',
     });
@@ -263,18 +259,17 @@ describe('read-only demo lifecycle', () => {
     const configuration = (
       await (await admin.fetch('/demoMode/configuration')).json()
     ).data;
-    const configured = await admin.fetch('/demoMode/configuration/writeRules', {
-      method: 'PUT',
-      headers: json,
-      body: JSON.stringify({
-        expectedRevision: configuration.revision,
-        value: ['insert', 'update', 'delete'].map((operation) => ({
-          capability: 'nocoreach.knowledge',
-          operation,
-          scope: 'demo-projects',
-        })),
-      }),
-    });
+    const configured = await admin.fetch(
+      '/demoMode/configuration/collections',
+      {
+        method: 'PUT',
+        headers: json,
+        body: JSON.stringify({
+          expectedRevision: configuration.revision,
+          value: ['nrSnapshots'],
+        }),
+      },
+    );
     expect(configured.status).toBe(200);
     const added = await knowledge();
     expect(added.status).toBe(200);
@@ -285,27 +280,15 @@ describe('read-only demo lifecycle', () => {
       .map((row) => row.toJSON())
       .find((row) => projectWork(row).stage !== 'done')!;
     const work = projectWork(task);
-    const newRules = (await configured.json()).data;
+    const allowed = (await configured.json()).data;
     expect(
       (
-        await admin.fetch('/demoMode/configuration/writeRules', {
+        await admin.fetch('/demoMode/configuration/collections', {
           method: 'PUT',
           headers: json,
           body: JSON.stringify({
-            expectedRevision: newRules.revision,
-            value: [
-              ...newRules.rules,
-              {
-                capability: 'nocoreach.tasks',
-                operation: 'update',
-                scope: 'demo-projects',
-              },
-              ...['insert', 'update', 'delete'].map((operation) => ({
-                capability: 'nocoreach.taskWork',
-                operation,
-                scope: 'demo-projects',
-              })),
-            ],
+            expectedRevision: allowed.revision,
+            value: [...allowed.collections, 'nrTasks'],
           }),
         })
       ).status,
@@ -324,7 +307,7 @@ describe('read-only demo lifecycle', () => {
     });
     expect(commented.status).toBe(200);
 
-    // An opportunity creates a task only with explicit creation and snapshot capabilities.
+    // With tasks and snapshots writable, an opportunity can be handed off to a new task.
     const call = async (resource: string, action: string, body: object) =>
       admin.fetch(`/nocoreach/${resource}/${action}`, {
         method: 'POST',
@@ -342,36 +325,6 @@ describe('read-only demo lifecycle', () => {
       revision: state.revision,
       requestId: randomUUID(),
     };
-    expect((await call('nrStrategy', 'confirmDirection', handoff)).status).toBe(
-      400,
-    );
-    const before = (await (await admin.fetch('/demoMode/configuration')).json())
-      .data;
-    const rules = [
-      ...before.rules,
-      {
-        capability: 'nocoreach.taskCreation',
-        operation: 'insert',
-        scope: 'demo-projects',
-      },
-      ...['insert', 'update', 'delete'].map((operation) => ({
-        capability: 'nocoreach.opportunities',
-        operation,
-        scope: 'demo-projects',
-      })),
-    ];
-    expect(
-      (
-        await admin.fetch('/demoMode/configuration/writeRules', {
-          method: 'PUT',
-          headers: json,
-          body: JSON.stringify({
-            expectedRevision: before.revision,
-            value: rules,
-          }),
-        })
-      ).status,
-    ).toBe(200);
     const handed = await call('nrStrategy', 'confirmDirection', handoff);
     expect(handed.status).toBe(200);
     const createdId = String((await handed.json()).data.proposals[0].taskId);
@@ -473,7 +426,7 @@ describe('read-only demo lifecycle', () => {
     expect((await admin.fetch('/demoMode/data/clear', post())).status).toBe(
       200,
     );
-    expect((await demo.status()).mode).toBe('read-only');
+    expect((await demo.status()).enabled).toBe(true);
   });
 });
 
@@ -486,16 +439,12 @@ test('imports the demo through the API and clears all business data while preser
   const demo = testApp.application.container.resolve(demoDataToken);
   expect((await testApp.request('/demoMode/data')).status).toBe(401);
   const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
-  const own = await admin.fetch('/nocoreach/nrProjects/create', {
-    method: 'POST',
-    headers: json,
-    body: JSON.stringify({
-      name: 'Own project',
-      domain: 'own.example',
-      language: 'zh-CN',
-    }),
+  // A project made before the demo: requests are read-only in a demo, so it is made outside one.
+  await runtime.plugin.projects.create({
+    name: 'Own project',
+    domain: 'own.example',
+    language: 'zh-CN',
   });
-  expect(own.status).toBe(200);
 
   const before = await admin.fetch('/demoMode/data');
   expect(before.status).toBe(200);
@@ -1019,10 +968,9 @@ describe('demo configuration permissions', () => {
     expect(
       (
         await admin.fetch(
-          '/demoMode/configuration/writeRules',
-          put(revision, [
-            { capability: 'user', operation: 'update', scope: 'all' },
-          ]),
+          // Identity tables can never be opened to visitors.
+          '/demoMode/configuration/collections',
+          put(revision, ['user']),
         )
       ).status,
     ).toBe(400);

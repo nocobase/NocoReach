@@ -20,7 +20,10 @@ import { z } from 'zod';
 import { onlineAgentsToken } from '../providers/online-agents.js';
 import { nocoReachToken } from '../providers/nocoreach.js';
 import { roleOf } from '../nocoreach/policy.js';
-import { authorizationToken, type AuthorizationEnv } from '@nocobase/app-plugin-authorization/server';
+import {
+  authorizationToken,
+  type AuthorizationEnv,
+} from '@nocobase/app-plugin-authorization/server';
 import { OnlineAgentError } from '../online-agent/errors.js';
 
 const model = z.strictObject({
@@ -77,20 +80,6 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
   const service = () => app.container.resolve(onlineAgentsToken);
   const runtime = () => app.container.resolve(nocoReachToken);
   const agents = app.container.resolve(agentsToken);
-  // A read-only demo lets a conversation in a demo project be written, when its administrator allows it.
-  const demoWrite = <T>(projectId: string | null, run: () => Promise<T>) => {
-    const configuration = runtime().plugin.demoConfiguration;
-    return configuration
-      ? configuration.runWrites(
-          [
-            ['nocoreach.onlineConversations', 'insert'],
-            ['nocoreach.onlineConversations', 'update'],
-          ],
-          { projectId },
-          run,
-        )
-      : run();
-  };
   router.use(
     '/onlineAgents/*',
     app.container.resolve(authenticationToken).required(),
@@ -261,9 +250,7 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
       const input = context.req.valid('json');
       await project(input.projectId);
       return context.json({
-        data: await demoWrite(input.projectId, () =>
-          service().send(owner(context), input),
-        ),
+        data: await service().send(owner(context), input),
       });
     },
   );
@@ -303,12 +290,10 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
       );
       await project(conversation.projectId);
       return context.json({
-        data: await demoWrite(conversation.projectId, () =>
-          service().send(owner(context), {
-            ...context.req.valid('json'),
-            conversationId: conversation.id,
-          }),
-        ),
+        data: await service().send(owner(context), {
+          ...context.req.valid('json'),
+          conversationId: conversation.id,
+        }),
       });
     },
   );
@@ -327,9 +312,7 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
       );
       await project(conversation.projectId);
       return context.json({
-        data: await demoWrite(conversation.projectId, () =>
-          service().cancel(run.id),
-        ),
+        data: await service().cancel(run.id),
       });
     },
   );

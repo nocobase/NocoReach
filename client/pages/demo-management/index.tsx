@@ -17,15 +17,6 @@ const LABELS: Partial<Record<DemoLabelKind, Record<string, string>>> = {
     opportunities: 'demoData.counts.opportunities',
     knowledge: 'demoData.counts.knowledge',
   },
-  capability: {
-    'nocoreach.tasks': 'demoConfig.capabilityTasks',
-    'nocoreach.taskWork': 'demoConfig.capabilityTaskWorkflow',
-    'nocoreach.keywordCandidates': 'demoConfig.capabilityKeywordCandidates',
-    'nocoreach.knowledge': 'demoConfig.capabilityKnowledge',
-    'nocoreach.taskCreation': 'demoConfig.taskCreation',
-    'nocoreach.opportunities': 'demoConfig.opportunityHandoff',
-    'nocoreach.onlineConversations': 'demoConfig.capabilityOnlineConversations',
-  },
   adapter: {
     'dataset.model': 'demoConfig.adapterModel',
     'nocoreach.sources': 'demoConfig.adapterSources',
@@ -50,10 +41,6 @@ const CHAT_TOOLS: readonly DemoChatTool[] = [
 ];
 
 function label(kind: DemoLabelKind, id: string): string | undefined {
-  if (kind === 'scope')
-    return $t(
-      id === 'all' ? 'demoConfig.allRecords' : 'demoConfig.demoProjects',
-    );
   const key = LABELS[kind]?.[id];
   return key ? $t(key) : undefined;
 }
