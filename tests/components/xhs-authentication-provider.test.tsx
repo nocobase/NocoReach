@@ -204,7 +204,7 @@ for (const transition of [
           screen.getByRole('button', { name: 'Refresh official session' }),
         );
       }
-      await screen.findByText(`搜索：${network.session.session.id}`);
+      await screen.findByText(`搜索词：${network.session.session.id}`);
       const newDialog = await openDisconnect();
       const sessionReads = client.getSession.mock.calls.length;
       const requests = vi.mocked(xiaohongshuRequest).mock.calls.length;
@@ -250,7 +250,7 @@ it('still refreshes the official provider for a session conflict while the initi
   network.session = { user: { id: 'admin-b' }, session: { id: 'session-b' } };
   vi.mocked(xiaohongshuRequest).mockRejectedValueOnce(sessionConflict());
   await confirm(dialog);
-  await screen.findByText('搜索：session-b');
+  await screen.findByText('搜索词：session-b');
   expect(client.getSession).toHaveBeenCalledTimes(reads + 1);
   expect(screen.getByTestId('session')).toHaveTextContent('session-b');
   expect(changes).not.toHaveBeenCalled();

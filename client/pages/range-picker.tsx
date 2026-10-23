@@ -17,6 +17,7 @@ import {
 } from 'react-day-picker/locale';
 import { resolveLocale } from '../../shared/i18n/locales';
 import { Button } from '#components/ui/button';
+import { Segmented } from '#components/reach/segmented';
 import { Calendar } from '#components/ui/calendar';
 import {
   Popover,
@@ -136,32 +137,24 @@ export function RangePicker({ value, onChange, summary, options }: Props) {
       ? day.toLocaleDateString(localeCode, { dateStyle: 'medium' })
       : $t(missing);
   return (
-    <div
-      className='nr-range'
-      role='group'
-      aria-label={$t('rangePicker.dateRange')}
-    >
-      {getRanges()
-        .filter(([k]) => (options || defaultRanges).includes(k))
-        .map(([k, label]) => (
-          <button
-            key={k}
-            type='button'
-            aria-pressed={custom ? k === 'custom' : value.range === k}
-            onClick={() => {
-              if (k === 'custom') {
-                setCustom(true);
-                changeOpen(true);
-              } else {
-                setCustom(false);
-                changeOpen(false);
-                onChange({ range: k });
-              }
-            }}
-          >
-            {label}
-          </button>
-        ))}
+    <div className='nr-range'>
+      <Segmented
+        label={$t('rangePicker.dateRange')}
+        options={getRanges()
+          .filter(([k]) => (options || defaultRanges).includes(k))
+          .map(([k, label]) => ({ id: k, label }))}
+        value={custom ? 'custom' : value.range}
+        onChange={(k) => {
+          if (k === 'custom') {
+            setCustom(true);
+            changeOpen(true);
+          } else {
+            setCustom(false);
+            changeOpen(false);
+            onChange({ range: k });
+          }
+        }}
+      />
       {custom && (
         <Popover open={open} onOpenChange={changeOpen}>
           <PopoverTrigger

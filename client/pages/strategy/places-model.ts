@@ -1,7 +1,10 @@
 import { $t } from '#i18n';
 import { splitOf } from '../../../shared/opportunity-parts.js';
-import { taskClosed, taskState } from '../../../shared/task-pending.js';
-import type { TaskStanding } from '../task-state-tag';
+import {
+  taskStanding,
+  type TaskStanding,
+} from '../../../shared/task-pending.js';
+import type { Tone } from '#components/reach/tag';
 import type { Work } from '../task-execution-types';
 import { draftFromOpportunity, type StrategyState } from './model';
 import type { Row } from './board';
@@ -61,9 +64,23 @@ export type OpportunityTask = {
 };
 const ORDER: TaskStanding[] = ['done', 'review', 'doing', 'todo', 'closed'];
 export const standingOf = (t?: OpportunityTask): TaskStanding =>
-  taskClosed(t?.evidence?.work)
-    ? 'closed'
-    : taskState(t?.evidence?.work, t?.status);
+  taskStanding({ work: t?.evidence?.work, status: t?.status });
+/** Where an opportunity's several tasks stand, in one tag: how many and how many are done. */
+export function severalTag(states: TaskStanding[]): {
+  tone: Tone;
+  text: string;
+} {
+  const done = states.filter((t) => t === 'done').length;
+  return {
+    tone:
+      done === states.length
+        ? 'green'
+        : states.includes('review')
+          ? 'violet'
+          : 'blue',
+    text: $t('opportunityTasks.progressTag', { 0: states.length, 1: done }),
+  };
+}
 
 /** How many of an opportunity's tasks stand where: "Done 1 · In progress 2 · To do 3". */
 export function progressText(states: TaskStanding[]) {

@@ -88,7 +88,7 @@ export class LegacyWorkflows {
 /** One firing of a schedule as NocoReach ran it, kept so the Scheduler can ask after it (`inspect`) across restarts. */
 export interface ScheduledRun {
   readonly occurrenceId: string;
-  readonly status: 'pending' | 'running' | 'succeeded' | 'failed';
+  readonly status: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
   readonly acceptedAt: string;
   readonly updatedAt: string;
   readonly reason?: string;

@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import { Reveal } from '#components/reach/reveal';
 import { $t } from '#i18n';
 import type { ResultSource } from './types.js';
 import { Comparison } from './comparison.js';
@@ -36,13 +37,13 @@ export function ResultSourcePanel({ source }: { source: ResultSource }) {
         </a>
       ))}
       {source.observation ? (
-        <details>
-          <summary className='cursor-pointer'>{$t('results.evidence')}</summary>
+        // Opened like every "show more" on the site, not the browser's ▶ disclosure (UI review 2026-10-22).
+        <Reveal label={$t('results.evidence')}>
           <Comparison
             result={source.observation}
             observeFrom={source.observeFrom}
           />
-        </details>
+        </Reveal>
       ) : (
         <p>{$t('results.noSnapshot')}</p>
       )}

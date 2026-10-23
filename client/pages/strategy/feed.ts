@@ -1,19 +1,14 @@
 import { opportunityState, priorityRank, type Row } from './board';
 import type { StrategyState, WatchRecord } from './model';
-import {
-  taskClosed,
-  taskState,
-  type TaskState,
-  type TaskWork,
-} from '../../../shared/task-pending.js';
+import type { TaskWork } from '../../../shared/task-pending.js';
+import { taskStanding, type TaskStanding } from './task-standing';
 
 // Where each opportunity of Insights shows: in today's message or on an earlier day (briefing.tsx renders both).
 
 /** Days as yyyy-mm-dd, the way the analysis and the watch records date them. */
 export const dayOf = (iso?: string) => String(iso || '').slice(0, 10);
 export type Standing = ReturnType<typeof opportunityState>;
-/** Where the task an opportunity became stands now. */
-export type TaskStanding = TaskState | 'closed';
+export type { TaskStanding };
 export type Line = {
   row: Row;
   st: Standing;
@@ -58,19 +53,17 @@ export function feedOf(
     // Decided today: raised today, dismissed today or handed off today. One decided earlier stays on the day it was
     // raised, even when today's analysis lists it again (2026-10-22: T-27 and T-30 read as today's hand-offs beside
     // the three opportunities dismissed today).
-    const standing = (t: TaskInfo): TaskStanding =>
-        taskClosed(t.work) ? 'closed' : taskState(t.work, t.status),
-      task = row.taskId ? tasks.get(String(row.taskId)) : undefined,
+    const task = row.taskId ? tasks.get(String(row.taskId)) : undefined,
       several = st.state === 'task' && row.tasks.length > 1,
       line: Line = {
         row,
         st,
-        ...(task && st.state === 'task' ? { task: standing(task) } : {}),
+        ...(task && st.state === 'task' ? { task: taskStanding(task) } : {}),
         ...(several
           ? {
               tasks: row.tasks.map((t) => {
                 const info = tasks.get(String(t.taskId));
-                return info ? standing(info) : 'todo';
+                return info ? taskStanding(info) : 'todo';
               }),
             }
           : {}),

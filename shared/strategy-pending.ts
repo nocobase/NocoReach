@@ -191,7 +191,7 @@ export function todaySuggestions(state: StrategyState, limit = 5): Row[] {
     .slice(0, limit);
 }
 
-import { taskClosed, taskState, type PendingTask } from './task-pending.js';
+import { taskStanding, type PendingTask } from './task-pending.js';
 export function signalDisposition(
   s: { key: string },
   state: StrategyState,
@@ -213,15 +213,21 @@ export function signalDisposition(
   const linked = ids
     .map((id) => tasks.find((t) => t.id === id))
     .filter((t): t is PendingTask => Boolean(t))
-    .map((t) => ({
-      id: t.id,
-      no: t.evidence?.no,
-      state: taskClosed(t.evidence?.work)
-        ? ('closed' as const)
-        : taskState(t.evidence?.work, t.status) === 'done'
-          ? ('done' as const)
-          : ('open' as const),
-    }));
+    .map((t) => {
+      const standing = taskStanding({
+        work: t.evidence?.work,
+        status: t.status,
+      });
+      return {
+        id: t.id,
+        no: t.evidence?.no,
+        standing,
+        state:
+          standing === 'closed' || standing === 'done'
+            ? standing
+            : ('open' as const),
+      };
+    });
   const open = linked.find((t) => t.state === 'open'),
     last = linked
       .filter((t) => t.state !== 'open')
@@ -229,7 +235,13 @@ export function signalDisposition(
     earlier = last
       ? { id: last.id, no: last.no, state: last.state as 'done' | 'closed' }
       : undefined;
-  if (open) return { next: 'task' as const, taskId: open.id, taskNo: open.no };
+  if (open)
+    return {
+      next: 'task' as const,
+      taskId: open.id,
+      taskNo: open.no,
+      taskStanding: open.standing,
+    };
   const pending = rows.find(
     (r) => opportunityState(r, state).state === 'pending',
   );

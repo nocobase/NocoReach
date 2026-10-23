@@ -10,6 +10,11 @@ import {
   rowsFor,
   type Row,
 } from '../../../shared/strategy-pending.js';
+import {
+  taskStanding,
+  type TaskStanding,
+  type TaskWork,
+} from '../../../shared/task-pending.js';
 import type { OnlineTool } from '../../online-agent/executor.js';
 import { pageData } from './web-tool.js';
 
@@ -22,11 +27,36 @@ const input = z.strictObject({
   offset: z.number().int().min(0).default(0),
 });
 const dayOf = (iso?: string) => String(iso || '').slice(0, 10);
-// Where an opportunity stands now, in the words Insights and Opportunities use.
-function standing(row: Row, state: StrategyState) {
+/** A task as read from nrTasks, for where the task an opportunity became stands. */
+export type AgentTask = {
+  id: number | string;
+  status?: string;
+  evidence?: { work?: TaskWork | null } | null;
+};
+const TASK_STANDING: Record<TaskStanding, string> = {
+  todo: 'handed_off_to_agent',
+  doing: 'task_in_progress',
+  review: 'task_needs_confirmation',
+  done: 'task_done',
+  closed: 'task_closed',
+};
+// Where an opportunity stands now, in the words Insights and Opportunities use: a handed-off one by where its task
+// stands (2026-10-22: a done task's opportunity read "handed off"); handed_off_to_agent when its task is not known.
+function standing(
+  row: Row,
+  state: StrategyState,
+  tasks: ReadonlyMap<string, AgentTask>,
+) {
   const st = opportunityState(row, state);
   if (st.state === 'pending') return 'awaiting_decision';
-  if (st.state === 'task') return 'handed_off_to_agent';
+  if (st.state === 'task') {
+    const task = row.taskId ? tasks.get(String(row.taskId)) : undefined;
+    return TASK_STANDING[
+      task
+        ? taskStanding({ work: task.evidence?.work, status: task.status })
+        : 'todo'
+    ];
+  }
   if (st.reason === 'ignored') return 'dismissed';
   if (st.reason === 'replaced') return 'merged_into_a_later_opportunity';
   return 'expired';
@@ -55,7 +85,9 @@ export function analysisForAgent(
   state: StrategyState,
   day: string | undefined,
   link: (opportunityId: string) => string,
+  tasks: AgentTask[] = [],
 ) {
+  const taskById = new Map(tasks.map((t) => [String(t.id), t]));
   const batches = [state.insights, ...(state.insightHistory || [])].filter(
     (b): b is InsightBatch => Boolean(b?.generatedAt),
   );
@@ -76,7 +108,7 @@ export function analysisForAgent(
     return {
       no: card.no ? `O-${card.no}` : null,
       title: card.title,
-      status: row ? standing(row, state) : 'not_on_opportunities',
+      status: row ? standing(row, state, taskById) : 'not_on_opportunities',
       task: row?.taskNo ? `T-${row.taskNo}` : null,
       // An opportunity handed off one place at a time has a task per place.
       tasks: (row?.tasks || []).map((t) => ({
@@ -138,22 +170,26 @@ export function analysisForAgent(
   };
 }
 
-/** `daily_analysis`: the saved daily analysis, read after `authorize` checks the user may still see Insights. */
+/**
+ * `daily_analysis`: the saved daily analysis, read after `authorize` checks the user may still see Insights; the
+ * project's tasks (empty when the user may not list them) say where each handed-off opportunity's task stands.
+ */
 export function dailyAnalysisTool(
   read: () => Promise<StrategyState>,
   authorize: () => Promise<void>,
   link: (opportunityId: string) => string,
+  readTasks: () => Promise<AgentTask[]> = async () => [],
 ): OnlineTool {
   return {
     name: 'daily_analysis',
     description:
-      "Read the project's daily analysis shown on Insights: the notes of a day's analysis, the opportunities it raised and where each stands now (awaiting decision, handed off to agent with its tasks, one per place to change, dismissed, expired), its verdict on every change (do, watch, skip) with the reason, the opportunities awaiting a decision now, and the watches. Omit day for the latest analysis; `days` lists the earlier ones. Follow nextOffset to read everything. Link opportunities with their url.",
+      "Read the project's daily analysis shown on Insights: the notes of a day's analysis, the opportunities it raised and where each stands now (awaiting decision; handed off to agent with its task, or one task per place to change, then that task in progress, needing confirmation, done or closed; dismissed; expired), its verdict on every change (do, watch, skip) with the reason, the opportunities awaiting a decision now, and the watches. Omit day for the latest analysis; `days` lists the earlier ones. Follow nextOffset to read everything. Link opportunities with their url.",
     inputSchema: z.toJSONSchema(input),
     async execute(args) {
       await authorize();
       const value = input.parse(args);
       return pageData(
-        analysisForAgent(await read(), value.day, link),
+        analysisForAgent(await read(), value.day, link, await readTasks()),
         value.offset,
       );
     },

@@ -140,9 +140,11 @@ it('shows the proxy in plain words and how each data source of the project is re
   expect(await screen.findByText('使用中')).toBeVisible();
   expect(screen.getByText('proxy.corp.example:8080')).toBeVisible();
   expect(screen.getByText('需要，用户名 alice')).toBeVisible();
+  // What the table shows is the title's ⓘ, not a grey line under it.
+  expect(await screen.findByText('数据来源的访问方式')).toBeVisible();
   expect(
-    await screen.findByText(/项目“NocoBase”里各数据来源是否经过代理/),
-  ).toBeVisible();
+    screen.queryByText(/项目“NocoBase”里各数据来源是否经过代理/),
+  ).toBeNull();
   expect(
     await screen.findByRole('switch', { name: 'Google 经过代理' }),
   ).toBeChecked();

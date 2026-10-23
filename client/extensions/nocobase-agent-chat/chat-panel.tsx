@@ -70,7 +70,7 @@ function PanelFrame(): ReactElement | null {
           id={CHAT_PANEL_ID}
           {...marker}
           showCloseButton={false}
-          className='flex h-dvh max-h-dvh w-full max-w-none flex-col gap-0 rounded-none p-0 sm:max-w-none'
+          className='flex h-dvh min-w-0 max-h-dvh w-full max-w-none flex-col gap-0 rounded-none p-0 sm:max-w-none'
           data-testid='chat-panel'
           data-mode='mobile'
         >
@@ -93,7 +93,7 @@ function PanelFrame(): ReactElement | null {
       data-mode={expanded ? 'expanded' : wide ? 'docked' : 'floating'}
       data-testid='chat-panel'
       className={cn(
-        'flex min-h-0 flex-col bg-background',
+        'flex min-h-0 min-w-0 flex-col bg-background',
         expanded
           ? 'absolute inset-0 z-30'
           : wide
@@ -123,7 +123,7 @@ function PanelBody({ compact }: { compact: boolean }): ReactElement {
     <div
       ref={bodyRef}
       className={cn(
-        'flex min-h-0 flex-1 flex-col',
+        'flex min-h-0 min-w-0 flex-1 flex-col',
         expanded && 'mx-auto w-full max-w-3xl',
       )}
     >

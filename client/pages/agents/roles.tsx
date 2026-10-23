@@ -7,15 +7,33 @@ import {
   modelsRoute,
   runtimesRoute,
 } from '@nocobase/app-plugin-agents/client/routes';
+import type { ModelRef } from '@nocobase/app-plugin-agents/shared/models';
 import type { AgentView } from '@nocobase/app-plugin-agents/shared/agents';
 import { Check } from 'lucide-react';
 import { $t, $legacyText, getCurrentLocale, useMessageState } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { formatDateTime } from '#lib/format';
 import { Tag } from '#components/reach/tag';
+import { InfoTip } from '#components/reach/info-tip';
 import { InlineError } from '#components/reach/states';
 import { Button } from '#components/ui/button';
 import { Skeleton } from '#components/ui/skeleton';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '#components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '#components/ui/select';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import {
   useOnlineApi,
@@ -61,6 +79,14 @@ type AnalysisStatus = {
 };
 type Action =
   { label: string; to: string } | { label: string; run: () => Promise<void> };
+type Catalog = {
+  services: {
+    name: string;
+    title?: string;
+    models: { value: string; label: string }[];
+  }[];
+  defaultModel?: ModelRef | null;
+};
 type Row = {
   key: 'analysis' | 'chat' | 'execution';
   work: string;
@@ -117,18 +143,13 @@ function healthText(health: Extract<AgentHealth, { state: 'attention' }>) {
 
 /**
  * Who does which work in NocoReach, as the people running marketing meet it (2026-10-21 user decision): cloud models
- * (the Model services tab) run the daily analysis and answer in the chat panel; local agents
- * (a coding tool on a computer in the Runtimes tab) carry out tasks. Each row names the model or agent it uses, where
- * a local agent runs and who may use that computer, and a status read from how its latest work ended, not only from
- * whether it is set up, with the one action that fixes it.
+ * (the Model services tab) run the daily analysis and answer in the chat panel; local agents (a coding tool on a
+ * computer in the Runtimes tab) carry out tasks. Each row names the model or agent it uses, where a local agent runs
+ * and who may use that computer, and a status read from how its latest work ended, not only from whether it is set up.
+ * Every row has one Settings button for administrators, a dialog that changes what the row uses; while a row needs
+ * attention, the button is the fix instead (2026-10-22 user decision).
  */
-export function AgentRoles({
-  refresh: outer = 0,
-  localAgentsTo,
-}: {
-  refresh?: number;
-  localAgentsTo?: string;
-}) {
+export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
   const { project } = useProject();
   const { search } = useLocation();
   const client = useApiClient();
@@ -136,15 +157,14 @@ export function AgentRoles({
   const runners = useRunnerOptions();
   const [inner, setInner] = useState(0);
   const refresh = outer + inner;
-  const models = useOnlineResource<{ services: { name: string }[] }>(
-    'models',
-    refresh,
-  );
+  const models = useOnlineResource<Catalog>('models', refresh);
   const online = useOnlineResource<OnlineAgent[]>('definitions', refresh);
   const modelsPage = useCan(routeAccess(modelsRoute));
   const runtimesPage = useCan(routeAccess(runtimesRoute));
   const manageAgents = useCan(settings('agents.agents', 'manage'));
   const { can: canManageChat } = useBusinessAccess('nrOnline.manage');
+  const { can: canSetModel } = useBusinessAccess('nrOnlineAI.setModel');
+  const [dialog, setDialog] = useState<'analysis' | 'execution' | null>(null);
   const { can: canSaveDefault } = useBusinessAccess(
     'nrAgent.saveDefault',
     project?.id,
@@ -285,6 +305,13 @@ export function AgentRoles({
   // The daily analysis reports the model it runs on; a project on simulated data runs without a model service.
   const analysisModel = analysis?.model || undefined;
 
+  const analysisSettings: Action | undefined =
+    canSetModel && services.length
+      ? {
+          label: $t('agentRoles.settings'),
+          run: async () => setDialog('analysis'),
+        }
+      : undefined;
   const analysisRow: Row = {
     key: 'analysis',
     work: $t('agentRoles.analysis'),
@@ -304,12 +331,14 @@ export function AgentRoles({
               detail: $t('agentRoles.analysisFailed', {
                 0: formatDateTime(lastRun.at),
               }),
+              action: analysisSettings,
             }
           : {
               state: 'ready',
               where: lastRun?.at
                 ? $t('agentRoles.lastRun', { 0: formatDateTime(lastRun.at) })
                 : $t('agentRoles.notRunYet'),
+              action: analysisSettings,
             }),
   };
 
@@ -329,7 +358,13 @@ export function AgentRoles({
     key: 'chat',
     work: $t('agentRoles.chat'),
     does: $t('agentRoles.chatWork'),
-    uses: noModels ? undefined : chatAgent?.model?.model || analysisModel,
+    // The chat panel answers with its own model, else the default chat model (not the analysis's, which a project on
+    // simulated data replaces).
+    uses: noModels
+      ? undefined
+      : chatAgent?.model?.model ||
+        models.data?.defaultModel?.model ||
+        analysisModel,
     ...(modelsLoading || (online.data === undefined && !online.error)
       ? { state: 'loading' }
       : noModels
@@ -409,10 +444,14 @@ export function AgentRoles({
       };
     return undefined;
   };
-  // The project default is chosen in the Local agents tab.
-  const change: Action | undefined = localAgentsTo
-    ? { label: $t('agentRoles.change'), to: `${localAgentsTo}${search}` }
-    : undefined;
+  // The project default is chosen in this row's Settings dialog.
+  const change: Action | undefined =
+    canSaveDefault && options.length
+      ? {
+          label: $t('agentRoles.settings'),
+          run: async () => setDialog('execution'),
+        }
+      : undefined;
   // Where the chosen agent can run now: the computer by name for those who may see machines, else how many.
   const where = (() => {
     const r = status?.runners;
@@ -449,18 +488,20 @@ export function AgentRoles({
         where:
           [
             where,
-            health?.state === 'ok' && health.outcome === 'completed'
-              ? $t('agentRoles.lastTask', { 0: formatDateTime(health.at) })
+            // The latest task's outcome in the same small line as the computer, like Daily analysis's last run.
+            health?.state === 'ok'
+              ? $t(
+                  health.outcome === 'completed'
+                    ? 'agentRoles.lastTask'
+                    : 'agentRoles.lastTaskFailed',
+                  { 0: formatDateTime(health.at) },
+                )
               : health?.state === 'unknown'
                 ? $t('agentRoles.noTaskYet')
                 : '',
           ]
             .filter(Boolean)
             .join(' · ') || undefined,
-        detail:
-          health?.state === 'ok' && health.outcome === 'failed'
-            ? $t('agentRoles.lastTaskFailed')
-            : undefined,
         action: change,
       };
     if (runners.options.length === 0)
@@ -519,55 +560,60 @@ export function AgentRoles({
   const settled = [analysisRow, chatRow, executionRow].every(
     (row) => row.state !== 'loading',
   );
+  const refreshAll = () => setInner((value) => value + 1);
   return (
     <section
-      aria-label={$t('agentRoles.title')}
+      aria-labelledby='agent-roles-title'
       className='flex flex-col gap-4'
     >
       <div className='overflow-x-auto rounded-lg border bg-card'>
-        <table className='w-full min-w-[640px] text-sm'>
-          <caption className='px-4 pt-4 text-left text-base font-medium'>
-            {$t('agentRoles.title')}
-          </caption>
+        <h2
+          id='agent-roles-title'
+          className='border-b px-4 py-3 text-base font-medium'
+        >
+          {$t('agentRoles.title')}
+        </h2>
+        <table
+          aria-labelledby='agent-roles-title'
+          className='w-full min-w-[640px] table-fixed text-sm'
+        >
+          <colgroup>
+            <col className='w-[28%]' />
+            <col className='w-[44%]' />
+            <col className='w-[14%]' />
+            <col className='w-[14%]' />
+          </colgroup>
+          {/* Column headings for screen readers: each row already says what it holds (2026-10-22 user decision). */}
           <thead className='sr-only'>
-            <tr>
-              <th scope='col'>{$t('agentRoles.colWork')}</th>
-              <th scope='col'>{$t('agentRoles.colDoes')}</th>
-              <th scope='col'>{$t('agentRoles.colUses')}</th>
-              <th scope='col'>{$t('agentRoles.colStatus')}</th>
-              <th scope='col'>{$t('agentRoles.colActions')}</th>
+            <tr className='text-xs text-muted-foreground'>
+              <th scope='col' className='px-4 py-2 text-left font-normal'>
+                {$t('agentRoles.colWork')}
+              </th>
+              <th scope='col' className='px-4 py-2 text-left font-normal'>
+                {$t('agentRoles.colUses')}
+              </th>
+              <th scope='col' className='px-4 py-2 text-left font-normal'>
+                {$t('agentRoles.colStatus')}
+              </th>
+              <th scope='col' className='px-4 py-2 text-right font-normal'>
+                {$t('agentRoles.colActions')}
+              </th>
             </tr>
           </thead>
           <Group
             name={$t('agentRoles.cloud')}
             hint={$t('agentRoles.cloudHint')}
-            link={
-              modelsPage.can
-                ? { to: '/agents/models', label: $t('agentRoles.modelsLink') }
-                : undefined
-            }
           >
             <RoleRow row={analysisRow} busy={busy} />
             <RoleRow row={chatRow} busy={busy} />
           </Group>
           <Group
             name={$t('agentRoles.local')}
-            hint={$t('agentRoles.localHint')}
-            link={
-              runtimesPage.can
-                ? {
-                    to: '/agents/runtimes',
-                    label: $t('agentRoles.runtimesLink'),
-                  }
-                : undefined
-            }
+            hint={`${$t('agentRoles.localHint')}${$t('agentRoles.chatFootnote')}`}
           >
             <RoleRow row={executionRow} busy={busy} />
           </Group>
         </table>
-        <p className='border-t px-4 py-3 text-xs text-muted-foreground'>
-          {$t('agentRoles.chatFootnote')}
-        </p>
       </div>
       {error && <InlineError>{error}</InlineError>}
       {settled && steps.some((step) => !step.done) && (
@@ -613,6 +659,22 @@ export function AgentRoles({
           </ol>
         </div>
       )}
+      {dialog === 'analysis' && (
+        <AnalysisModelDialog
+          catalog={models.data}
+          projectId={projectId}
+          onClose={() => setDialog(null)}
+          onSaved={refreshAll}
+        />
+      )}
+      {dialog === 'execution' && status && (
+        <DefaultAgentDialog
+          status={status}
+          projectId={projectId}
+          onClose={() => setDialog(null)}
+          onSaved={refreshAll}
+        />
+      )}
     </section>
   );
 }
@@ -620,12 +682,10 @@ export function AgentRoles({
 function Group({
   name,
   hint,
-  link,
   children,
 }: {
   name: string;
   hint: string;
-  link?: { to: string; label: string };
   children: ReactNode;
 }) {
   return (
@@ -633,16 +693,15 @@ function Group({
       <tr>
         <th
           scope='rowgroup'
-          colSpan={5}
-          className='px-4 pt-4 pb-2 text-left font-normal'
+          colSpan={4}
+          className='border-t bg-muted/50 px-4 py-1.5 text-left text-xs font-normal text-muted-foreground'
         >
-          <span className='font-medium'>{name}</span>
-          <span className='ml-2 text-muted-foreground'>{hint}</span>
-          {link && (
-            <Link className='nr-link ml-2' to={link.to}>
-              {link.label}
-            </Link>
-          )}
+          <span className='inline-flex items-center gap-1'>
+            {name}
+            <InfoTip label={$t('common.what', { 0: name })}>
+              <p>{hint}</p>
+            </InfoTip>
+          </span>
         </th>
       </tr>
       {children}
@@ -654,25 +713,39 @@ function RoleRow({ row, busy }: { row: Row; busy: boolean }) {
   return (
     <>
       <tr className='border-t'>
-        <th scope='row' className='w-28 px-4 py-3 text-left font-normal'>
-          {row.work}
+        <th scope='row' className='px-4 py-3 text-left font-normal'>
+          <span className='block'>{row.work}</span>
+          <span className='block text-xs text-muted-foreground'>
+            {row.does}
+          </span>
         </th>
-        <td className='px-2 py-3 text-muted-foreground'>{row.does}</td>
-        <td className='px-2 py-3'>
+        <td className='px-4 py-3'>
           {row.state === 'loading' ? (
             <Skeleton className='h-4 w-32' />
           ) : (
             <>
-              <span className='block'>{row.uses || '—'}</span>
+              <span className='block truncate'>{row.uses || '—'}</span>
               {row.where && (
-                <span className='block text-xs text-muted-foreground'>
+                <span className='block truncate text-xs text-muted-foreground'>
                   {row.where}
+                </span>
+              )}
+              {/* What is wrong, in the row's own small type, not as a line of body text below the row. */}
+              {row.detail && (
+                <span
+                  className={
+                    row.state === 'attention'
+                      ? 'mt-1 block text-xs text-nr-ink-amber'
+                      : 'mt-1 block text-xs text-muted-foreground'
+                  }
+                >
+                  {row.detail}
                 </span>
               )}
             </>
           )}
         </td>
-        <td className='w-24 px-2 py-3'>
+        <td className='px-4 py-3'>
           {row.state === 'loading' ? (
             <Skeleton className='h-5 w-14' />
           ) : (
@@ -683,7 +756,7 @@ function RoleRow({ row, busy }: { row: Row; busy: boolean }) {
             </Tag>
           )}
         </td>
-        <td className='w-40 px-4 py-3 text-right'>
+        <td className='px-4 py-3 text-right'>
           {row.state !== 'loading' && row.action && (
             <ActionButton
               action={row.action}
@@ -693,22 +766,243 @@ function RoleRow({ row, busy }: { row: Row; busy: boolean }) {
           )}
         </td>
       </tr>
-      {row.detail && (
-        <tr>
-          <td />
-          <td
-            colSpan={4}
-            className={
-              row.state === 'attention'
-                ? 'px-2 pb-3 text-nr-ink-amber'
-                : 'px-2 pb-3 text-muted-foreground'
-            }
-          >
-            {row.detail}
-          </td>
-        </tr>
-      )}
     </>
+  );
+}
+
+const refOf = (value: string): ModelRef | null => {
+  try {
+    const ref = JSON.parse(value) as Partial<ModelRef>;
+    return typeof ref.modelService === 'string' && typeof ref.model === 'string'
+      ? { modelService: ref.modelService, model: ref.model }
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+// Daily analysis › Settings: the model it runs on, which is the Agents plugin's system default chat model.
+function AnalysisModelDialog({
+  catalog,
+  projectId,
+  onClose,
+  onSaved,
+}: {
+  catalog?: Catalog;
+  projectId?: number;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const items = (catalog?.services || []).flatMap((service) =>
+    service.models.map((model) => ({
+      value: JSON.stringify({ modelService: service.name, model: model.value }),
+      label: `${service.title || service.name} / ${model.label}`,
+    })),
+  );
+  const current = catalog?.defaultModel
+    ? JSON.stringify({
+        modelService: catalog.defaultModel.modelService,
+        model: catalog.defaultModel.model,
+      })
+    : '';
+  const [value, setValue] = useState(current);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useMessageState('');
+  async function save() {
+    const ref = refOf(value);
+    if (!ref || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api.action('nrOnlineAI', 'setModel', {
+        method: 'POST',
+        body: {
+          ...ref,
+          ...(projectId ? { projectId: String(projectId) } : {}),
+        },
+      });
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(() =>
+        e instanceof Error
+          ? $legacyText(e.message)
+          : $t('common.operationFailed'),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{$t('agentRoles.analysis')}</DialogTitle>
+          <DialogDescription>
+            {$t('agentRoles.analysisModelHint')}
+          </DialogDescription>
+        </DialogHeader>
+        <div className='flex flex-col gap-2 text-sm'>
+          <span className='text-muted-foreground'>
+            {$t('agentRoles.modelLabel')}
+          </span>
+          <Select
+            items={items}
+            value={value || null}
+            onValueChange={(next) => setValue(String(next ?? ''))}
+          >
+            <SelectTrigger
+              aria-label={$t('agentRoles.modelLabel')}
+              className='w-full'
+            >
+              <SelectValue className='truncate' />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {items.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <p className='text-xs text-muted-foreground'>
+            {$t('agentRoles.analysisTimeHint')}
+          </p>
+          {error && <InlineError>{error}</InlineError>}
+        </div>
+        <DialogFooter>
+          <Button variant='outline' onClick={onClose}>
+            {$t('common.cancel')}
+          </Button>
+          <Button
+            disabled={busy || !refOf(value) || value === current}
+            onClick={() => void save()}
+          >
+            {busy ? $t('common.saving') : $t('common.save')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// What each agent in the project default's list can do now, so nobody picks one that would fail.
+function optionState(option: Status['options'][number]) {
+  const health = option.health;
+  if (health?.state === 'attention')
+    return health.group === 'toolLogin'
+      ? $t('agentRoles.optionToolLogin')
+      : health.group === 'quota'
+        ? $t('agentRoles.optionQuota')
+        : health.group === 'model'
+          ? $t('agentRoles.optionModel')
+          : $t('agentRoles.optionSetup');
+  return option.online
+    ? $t('agentRoles.optionOnline')
+    : $t('agentRoles.optionOffline');
+}
+
+// Tasks › Settings: the project default local agent, which takes every task that names no agent.
+function DefaultAgentDialog({
+  status,
+  projectId,
+  onClose,
+  onSaved,
+}: {
+  status: Status;
+  projectId?: number;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const NONE = '__none__';
+  const items = [
+    { value: NONE, label: $t('runnerDefault.none') },
+    ...status.options.map((option) => ({
+      value: option.id,
+      label: `${option.name} · ${optionState(option)}`,
+    })),
+  ];
+  const current = status.agentId || NONE;
+  const [value, setValue] = useState(current);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useMessageState('');
+  async function save() {
+    if (busy || !projectId) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api.action('nrAgent', 'saveDefault', {
+        method: 'POST',
+        body: {
+          projectId: String(projectId),
+          revision: status.revision,
+          agentId: value === NONE ? null : value,
+        },
+      });
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(() =>
+        e instanceof Error
+          ? $legacyText(e.message)
+          : $t('runnerDefault.saveFailed'),
+      );
+      onSaved();
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{$t('agentRoles.execution')}</DialogTitle>
+          <DialogDescription>
+            {$t('agentRoles.defaultAgentHint')}
+          </DialogDescription>
+        </DialogHeader>
+        <div className='flex flex-col gap-2 text-sm'>
+          <span className='text-muted-foreground'>
+            {$t('runnerDefault.title')}
+          </span>
+          <Select
+            items={items}
+            value={value}
+            onValueChange={(next) => setValue(String(next ?? NONE))}
+          >
+            <SelectTrigger
+              aria-label={$t('runnerDefault.title')}
+              className='w-full'
+            >
+              <SelectValue className='truncate' />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {items.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          {error && <InlineError>{error}</InlineError>}
+        </div>
+        <DialogFooter>
+          <Button variant='outline' onClick={onClose}>
+            {$t('common.cancel')}
+          </Button>
+          <Button
+            disabled={busy || value === current}
+            onClick={() => void save()}
+          >
+            {busy ? $t('common.saving') : $t('common.save')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

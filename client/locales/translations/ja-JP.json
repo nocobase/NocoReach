@@ -7,19 +7,32 @@
     "analysisDescription": "すべてのプロジェクトの最新データを読み込み、AI が対象期間の分析結果と提案を「インサイト」と「改善機会」にまとめます。実行できなかった日の分は自動で再試行します。",
     "otherWork": "データ同期、順位追跡、トレンド、競合の動向などの自動処理は、各プロジェクトの「データの健全性」で確認できます。",
     "otherWorkLink": "データソースを開く",
+    "otherWorkLabel": "その他の自動処理",
     "dailyAt": "毎日 {{time}}",
-    "last": "前回",
-    "nextLabel": "次回",
     "notRunYet": "未実行",
     "pausedNext": "一時停止中（自動実行なし）",
     "today": "今日 {{time}}",
     "tomorrow": "明日 {{time}}",
     "yesterday": "昨日 {{time}}",
     "shownIn": "時刻は {{zone}} で表示しています",
-    "analyzed": "{{projects}}、{{items}}",
-    "projectCount_one": "{{count}} プロジェクト",
-    "projectCount_other": "{{count}} プロジェクト",
-    "allSkipped": "今日は分析済みのためスキップしました",
+    "timesLabel": "時刻について",
+    "columns": {
+      "name": "処理",
+      "time": "実行時刻",
+      "last": "前回の実行",
+      "next": "次回の実行",
+      "status": "ステータス",
+      "actions": "操作"
+    },
+    "about": "「{{name}}」について",
+    "summaryClean_one": "前回の実行は問題ありませんでした",
+    "summaryClean_other": "直近 {{count}} 回の実行はすべて問題ありません",
+    "summaryProblems_one": "直近 {{total}} 回の実行のうち {{count}} 回で問題が発生しました",
+    "summaryProblems_other": "直近 {{total}} 回の実行のうち {{count}} 回で問題が発生しました",
+    "projectFailed": "{{name}}：失敗",
+    "projectFailedBecause": "{{name}}：失敗（{{reason}}）",
+    "projectSkipped": "{{name}}：スキップ済み",
+    "allSkipped": "当日は分析済みのためスキップしました",
     "moreActions": "その他の操作",
     "details": "技術情報",
     "detailsHelp": "トラブルシューティング用の情報です。Scheduler プラグインでのタスクの状態を確認できます。通常の操作では必要ありません。",
@@ -46,8 +59,6 @@
     "noRunsTitle": "実行履歴はまだありません",
     "history": "実行履歴",
     "historyTitle": "{{name}} · 実行履歴",
-    "historyDescription": "自動実行の結果を新しい順に表示します。",
-    "noDescription": "説明はありません。",
     "refresh": "更新",
     "loading": "読み込み中…",
     "saving": "保存中…",
@@ -550,7 +561,9 @@
       "agentArchived": "アーカイブ済み",
       "forbidden": "利用権限がありません",
       "noRunner": "オンラインのランナーがありません",
-      "othersPersonal": "他のユーザーの個人用ランナーでのみ利用可能"
+      "othersPersonal": "他のユーザーの個人用ランナーでのみ利用可能",
+      "noModel": "先にチャットモデルを設定してください",
+      "modelUnavailable": "モデルを利用できません"
     },
     "mode": {
       "online": "オンライン",
@@ -571,7 +584,9 @@
       "kept": "メッセージは保存され、回答できるようになり次第、回答します。",
       "fallback": "ここで別のエージェントを使う",
       "usingDefault": "この会話では一時的に{{own}}の代わりに{{name}}を使用しています。",
-      "restore": "{{own}}に戻す"
+      "restore": "{{own}}に戻す",
+      "noModel": "先にチャットモデルを設定してください",
+      "modelUnavailable": "{{name}} のモデルを利用できません。管理者に連絡してください"
     },
     "notice": {
       "switchedToDefault": "{{own}}が復帰するまで、システムのデフォルトである{{name}}に切り替えました。",
@@ -580,15 +595,13 @@
       "switchedBack": "{{name}}に戻りました。",
       "runFailed": "エージェントが回答する前に停止しました。",
       "runFailedReason": "エージェントが回答する前に停止しました: {{reason}}",
-      "runCancelled": "停止しました。"
+      "runCancelled": "キャンセルを要求しました。"
     },
     "consultation": {
       "title": "{{name}}に相談しました",
       "question": "質問",
       "answer": "回答",
       "steps": "実行ステップ",
-      "plans_one": "確認用の計画を提案しました。",
-      "plans_other": "確認用の計画を{{count}}件提案しました。",
       "usage": "入力{{input}}トークン、出力{{output}}トークンを使用しました。",
       "state": {
         "running": "回答中…",
@@ -619,7 +632,7 @@
       "label": "エージェントへのメッセージ",
       "placeholder": "質問するか、整理したい作業を説明してください…",
       "hint": "Enterで送信、Shift+Enterで改行",
-      "runningHint": "今送信したメッセージは進行中の作業に追加されます",
+      "runningHint": "実行中です。この実行は停止できます。",
       "tooLong": "{{max}}文字以内で入力してください。",
       "send": "送信",
       "stop": "停止",
@@ -715,6 +728,35 @@
         "error": "エラー",
         "usage": "使用量"
       }
+    },
+    "retrySaving": "保存を再試行",
+    "contextFailed": "選択したコンテキストを読み取れないか、メッセージを送信できませんでした。現在のページを確認してから、もう一度お試しください。",
+    "approval": {
+      "request": "このツールは実行前に承認が必要です。",
+      "approve": "承認",
+      "deny": "拒否",
+      "denied": "ツールの実行は拒否されました。",
+      "failed": "承認がまだ確定していません。保存済みメッセージを更新してから再度お試しください。"
+    },
+    "feedback": {
+      "sending": "送信中…",
+      "waiting": "エージェントを待っています…",
+      "thinking": "考えています…",
+      "stopping": "停止を要求しました。エージェントの終了を待っています…",
+      "completed": "完了しました。",
+      "cancelled": "キャンセルしました。繰り返す前に、すでに完了している可能性のある操作を確認してください。",
+      "failed": "応答に失敗しました。再送信するか決める前に履歴を確認してください。",
+      "unknown": "結果または保存済み履歴が確定していません。再送信するか決める前に履歴を更新してください。",
+      "effectReview": "一部の操作は完了している可能性があります。繰り返す前に結果を確認してください。"
+    },
+    "executionFailed": "実行に失敗しました。繰り返す前に、保存済み履歴とすでに完了している可能性のある操作を確認してください。",
+    "historicalReadOnly": "この過去の会話は閲覧のみです。続けるには新しいチャットを開始してください。",
+    "connectionUnknown": "接続が中断され、結果は不明です。再送信する前に保存済み履歴を更新してください。",
+    "allowAnother": "もう一度送信を許可（重複の可能性あり）",
+    "refreshHistory": "履歴を更新",
+    "reasoning": {
+      "title": "推論",
+      "thinking": "考えています…"
     }
   },
   "agentSetup.title": "お使いのエージェントでNocoReachを使う",

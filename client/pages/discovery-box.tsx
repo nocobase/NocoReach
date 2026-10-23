@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from '#components/ui/dialog';
 import { Tag } from '#components/reach/tag';
+import { SourceLogo } from '#components/reach/source-logo';
 export type Finding = {
   source: string;
   label: string;
@@ -426,6 +427,10 @@ export function DiscoveryBox({
                                     }}
                                   />
                                 ) : null}
+                                <SourceLogo
+                                  source={f.registry || f.source}
+                                  size='sm'
+                                />
                                 <div>
                                   <strong>{f.label}</strong>
                                   <span className='nr-footnote'>

@@ -358,7 +358,11 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     'removeFile',
     'remove',
   ]),
-  'app.agents': ['nrOnline.manage', 'nrSchedules.manage'],
+  'app.agents': [
+    'nrOnline.manage',
+    'nrSchedules.manage',
+    'nrOnlineAI.setModel',
+  ],
   'app.settings': [
     ...list('nrProxyProfiles', [
       'list',

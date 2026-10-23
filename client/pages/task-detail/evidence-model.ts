@@ -71,6 +71,8 @@ export function whyText(data: TaskData): {
   text: string;
   fact?: string;
   more: number;
+  /** Where the line comes from, so a page that already shows the brief need not repeat it. */
+  from?: 'signal' | 'result' | 'brief';
 } {
   const { signals, brief, resultSource } = taskEvidence(data);
   if (signals.length) {
@@ -83,6 +85,7 @@ export function whyText(data: TaskData): {
       text,
       fact: fact && bare(text).includes(bare(fact)) ? '' : fact,
       more: signals.length - 1,
+      from: 'signal',
     };
   }
   if (resultSource)
@@ -91,7 +94,12 @@ export function whyText(data: TaskData): {
         0: resultSource.pages[0] || $t('results.title'),
       }),
       more: 0,
+      from: 'result',
     };
   const line = plain(brief);
-  return { text: line.length > 120 ? `${line.slice(0, 120)}…` : line, more: 0 };
+  return {
+    text: line.length > 120 ? `${line.slice(0, 120)}…` : line,
+    more: 0,
+    from: line ? 'brief' : undefined,
+  };
 }

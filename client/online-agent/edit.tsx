@@ -32,6 +32,7 @@ interface Catalog {
     title: string;
     models: { value: string; label: string }[];
   }[];
+  defaultModel?: OnlineModel | null;
 }
 export interface AgentSettingsContext {
   refresh(): void;
@@ -126,7 +127,15 @@ function AgentForm({
     instructions === agent.instructions &&
     JSON.stringify(model) === JSON.stringify(agent.model);
   const values = [
-    { value: '', label: $t('onlineAgent.defaultModel') },
+    // The default is the daily analysis's model (Agent › Who does the work › Daily analysis › Settings); say which.
+    {
+      value: '',
+      label: catalog.data?.defaultModel
+        ? $t('onlineAgent.sameAsAnalysis', {
+            0: catalog.data.defaultModel.model,
+          })
+        : $t('onlineAgent.defaultModel'),
+    },
     ...(catalog.data?.services.flatMap((service) =>
       service.models.map((item) => ({
         value: JSON.stringify({

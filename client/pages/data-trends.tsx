@@ -1,4 +1,6 @@
 import { $t, $tj, $legacyText } from "#i18n";
+import { chipButtonClass, chipClass } from '#components/reach/chip';
+import { cn } from '#lib/utils';
 import { usePageTab } from '#hooks/use-page-tab';
 // 趋势 (搜索): Google Trends once a week through DataForSEO. 产品与竞品: the product and its competitors over the past 12
 // months, each term's last four weeks against the four before, and the searches related to the product (rising ones new
@@ -116,7 +118,7 @@ export default function DataTrends() {
                 ))}
               </div>
               <Card className="gap-3 px-4">
-                <h2 className="text-sm font-semibold">{$t('dataTrends.interestWeeklyPeak100')}</h2>
+                <h2 className="flex items-center gap-1 text-sm font-semibold">{$t('dataTrends.interestWeeklyPeak100')}<InfoTip label={$t('common.info')}>{$t('dataTrends.interestNote')}</InfoTip></h2>
                 <div className="nr-chart-box" data-trends-chart>
                   <ResponsiveContainer width="100%" height={260}>
                     <LineChart data={chart} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
@@ -168,8 +170,8 @@ function Rivals({ projectId, view, onView }: { projectId: number; view: View; on
     const on = !id || draft.includes(id), canClick = Boolean(id) && choosing && !busy;
     const body = <><span className="size-2 shrink-0 rounded-full" style={{ background: on && color ? color : "transparent", border: on ? undefined : "1px dashed var(--muted-foreground)" }} />{name}</>;
     return canClick
-      ? <button key={id} type="button" aria-pressed={on} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs ${on ? "bg-card" : "border-dashed text-muted-foreground"}`} onClick={() => toggle(id!)}>{body}</button>
-      : <span key={id || name} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs ${on ? "bg-card" : "border-dashed text-muted-foreground"}`}>{body}</span>;
+      ? <button key={id} type="button" aria-pressed={on} className={cn(chipClass, chipButtonClass, !on && "border-dashed bg-transparent text-muted-foreground")} onClick={() => toggle(id!)}>{body}</button>
+      : <span key={id || name} className={cn(chipClass, !on && "border-dashed bg-transparent text-muted-foreground")}>{body}</span>;
   };
   return (
     <div className="space-y-1.5" data-rivals>

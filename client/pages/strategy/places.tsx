@@ -13,7 +13,7 @@ import {
 } from '#components/ui/dialog';
 import { cn } from '#lib/utils';
 import type { Playbook } from '../playbook-model';
-import { TaskStateTag } from '../task-state-tag';
+import { TaskStandingTag } from '../task-status-tag';
 import type { StrategyState } from './model';
 import { oppNo, type Row } from './board';
 import { request } from './service';
@@ -244,7 +244,7 @@ export function OpportunityTasks({
             >
               {t.record?.title || t.part?.label || '—'}
             </Link>
-            <TaskStateTag state={standingOf(t.record)} />
+            <TaskStandingTag state={standingOf(t.record)} />
           </li>
         ))}
       </ul>

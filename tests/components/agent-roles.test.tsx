@@ -12,7 +12,13 @@ import { setDictionary } from '../../client/i18n';
 import { AgentRoles } from '../../client/pages/agents/roles';
 
 const state = vi.hoisted(() => ({
-  services: [] as { name: string }[],
+  admin: true,
+  services: [] as {
+    name: string;
+    title?: string;
+    models?: { value: string; label: string }[];
+  }[],
+  defaultModel: null as { modelService: string; model: string } | null,
   online: [] as {
     id: string;
     name: string;
@@ -48,7 +54,12 @@ vi.mock('../../client/online-agent/api', () => ({
   useOnlineApi: () => state.onlineApi,
   useOnlineResource: (path: string) =>
     path === 'models'
-      ? { data: { services: state.services } }
+      ? {
+          data: {
+            services: state.services.map((s) => ({ models: [], ...s })),
+            defaultModel: state.defaultModel,
+          },
+        }
       : { data: state.online },
 }));
 vi.mock('@nocobase/app-plugin-agents/client/kit', () => ({
@@ -58,7 +69,7 @@ vi.mock('@nocobase/app-plugin-authorization/client', () => ({
   useCan: () => ({ can: true, isPending: false }),
 }));
 vi.mock('../../client/hooks/use-business-access', () => ({
-  useBusinessAccess: () => ({ can: true, isPending: false }),
+  useBusinessAccess: () => ({ can: state.admin, isPending: false }),
 }));
 vi.mock('../../client/pages/reach-data', () => ({
   useProject: () => ({ project: { id: 1, name: 'NocoBase' } }),
@@ -74,7 +85,21 @@ vi.mock('@nocobase/app-client', async (original) => ({
 
 beforeEach(() => {
   setDictionary(null);
-  state.services = [{ name: 'OpenAI-compatible' }];
+  state.admin = true;
+  state.services = [
+    {
+      name: 'openai-compatible',
+      title: 'OpenAI-compatible',
+      models: [
+        { value: 'deepseek-v4.1-flash', label: 'deepseek-v4.1-flash' },
+        { value: 'deepseek-v4.1-pro', label: 'deepseek-v4.1-pro' },
+      ],
+    },
+  ];
+  state.defaultModel = {
+    modelService: 'openai-compatible',
+    model: 'deepseek-v4.1-flash',
+  };
   state.online = [
     {
       id: 'online',
@@ -130,13 +155,19 @@ afterEach(() => cleanup());
 const mount = () =>
   render(
     <MemoryRouter>
-      <AgentRoles localAgentsTo='/agents/runner' />
+      <AgentRoles />
     </MemoryRouter>,
   );
+// A row is named by its work followed by the line under it.
 const row = (work: string) =>
-  screen.getByRole('rowheader', { name: work }).closest('tr')!;
+  screen
+    .getByRole('rowheader', { name: new RegExp(`^${work}`) })
+    .closest('tr')!;
 // A row's explanation sits on the line below it.
-const detail = (work: string) => row(work).nextElementSibling as HTMLElement;
+// What is wrong sits in the row's own Runs on cell, in small type (2026-10-22 user report: it was a line of body text
+// below the row).
+const detail = (work: string) =>
+  row(work).querySelectorAll('td')[0] as HTMLElement;
 
 test('says which work cloud models and local agents do, with what each uses and whether it works', async () => {
   mount();
@@ -155,18 +186,19 @@ test('says which work cloud models and local agents do, with what each uses and 
   expect(within(row('执行任务')).getByText(/mac · 团队共用/)).toBeVisible();
   expect(screen.getByRole('rowheader', { name: /云端模型/ })).toBeVisible();
   expect(screen.getByRole('rowheader', { name: /本地 Agent/ })).toBeVisible();
-  expect(screen.getByRole('link', { name: '模型服务' })).toHaveAttribute(
-    'href',
-    '/agents/models',
-  );
-  expect(screen.getByRole('link', { name: '运行环境' })).toHaveAttribute(
-    'href',
-    '/agents/runtimes',
-  );
-  expect(screen.getByText(/在对话栏里选了本地 Agent 时/)).toBeVisible();
+  // What each group means sits in its ⓘ.
+  expect(screen.getByRole('button', { name: '云端模型是什么' })).toBeVisible();
+  expect(
+    screen.getByRole('button', { name: '本地 Agent是什么' }),
+  ).toBeVisible();
+  // One Settings button on every row.
   expect(
     within(row('对话栏')).getByRole('button', { name: '设置' }),
   ).toHaveAttribute('href', '/agents/chat/online');
+  for (const work of ['每日分析', '执行任务'])
+    expect(
+      within(row(work)).getByRole('button', { name: '设置' }),
+    ).toBeVisible();
   expect(screen.queryByText('最快配置')).toBeNull();
 });
 
@@ -194,8 +226,8 @@ test('an online agent whose latest tasks failed because the tool is not signed i
     '最近 3 个任务都失败了：CheeseMacBook-Pro 上的 Claude Code 没有登录。请管理这台电脑的人登录 Claude Code，或换一个本地 Agent。',
   );
   expect(
-    within(row('执行任务')).getByRole('button', { name: '更换' }),
-  ).toHaveAttribute('href', '/agents/runner');
+    within(row('执行任务')).getByRole('button', { name: '设置' }),
+  ).toBeVisible();
 });
 
 test('a tool that is not signed in is not fixed by an agent with the same tool', async () => {
@@ -228,7 +260,7 @@ test('a tool that is not signed in is not fixed by an agent with the same tool',
   );
   expect(screen.queryByRole('button', { name: /改用/ })).toBeNull();
   expect(
-    within(row('执行任务')).getByRole('button', { name: '更换' }),
+    within(row('执行任务')).getByRole('button', { name: '设置' }),
   ).toBeVisible();
   view.unmount();
 
@@ -396,4 +428,123 @@ test('with no runtime yet, tasks and the setup point to adding one', async () =>
     within(row('执行任务')).getByRole('button', { name: '添加运行环境' }),
   ).toHaveAttribute('href', '/agents/runtimes/connect');
   expect(screen.getByText('最快配置')).toBeVisible();
+});
+
+test('Daily analysis › Settings changes the model the analysis runs on', async () => {
+  const user = userEvent.setup();
+  mount();
+  await waitFor(() =>
+    expect(within(row('每日分析')).getByText('正常')).toBeVisible(),
+  );
+  await user.click(
+    within(row('每日分析')).getByRole('button', { name: '设置' }),
+  );
+  const dialog = await screen.findByRole('dialog', { name: '每日分析' });
+  expect(
+    within(dialog).getByText(/对话栏没有单独选模型时，也用这个/),
+  ).toBeVisible();
+  expect(within(dialog).getByRole('button', { name: '保存' })).toBeDisabled();
+  await user.click(
+    within(dialog).getByRole('combobox', { name: '用哪个模型' }),
+  );
+  await user.click(
+    await screen.findByRole('option', {
+      name: 'OpenAI-compatible / deepseek-v4.1-pro',
+    }),
+  );
+  await user.click(within(dialog).getByRole('button', { name: '保存' }));
+  await waitFor(() =>
+    expect(state.action).toHaveBeenCalledWith('nrOnlineAI', 'setModel', {
+      method: 'POST',
+      body: {
+        modelService: 'openai-compatible',
+        model: 'deepseek-v4.1-pro',
+        projectId: '1',
+      },
+    }),
+  );
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
+
+test('Tasks › Settings picks the project default and says which agents can work', async () => {
+  const user = userEvent.setup();
+  state.status.options = [
+    { id: 'codex', name: 'Codex · GPT-6 Astra', tool: 'codex', online: true },
+    {
+      id: 'fable',
+      name: 'Claude · Fable 5.1',
+      tool: 'claude',
+      online: true,
+      health: {
+        state: 'attention',
+        group: 'toolLogin',
+        count: 2,
+        at: null,
+        runnerName: null,
+        tool: 'claude',
+      },
+    },
+    { id: 'idle', name: 'Claude · Haiku 4.5', tool: 'claude', online: false },
+  ];
+  mount();
+  await waitFor(() =>
+    expect(within(row('执行任务')).getByText('正常')).toBeVisible(),
+  );
+  await user.click(
+    within(row('执行任务')).getByRole('button', { name: '设置' }),
+  );
+  const dialog = await screen.findByRole('dialog', { name: '执行任务' });
+  await user.click(
+    within(dialog).getByRole('combobox', { name: '项目默认 Agent' }),
+  );
+  expect(
+    await screen.findByRole('option', { name: 'Codex · GPT-6 Astra · 在线' }),
+  ).toBeVisible();
+  expect(
+    screen.getByRole('option', { name: 'Claude · Fable 5.1 · 没登录' }),
+  ).toBeVisible();
+  expect(
+    screen.getByRole('option', { name: 'Claude · Haiku 4.5 · 不在线' }),
+  ).toBeVisible();
+  await user.click(
+    screen.getByRole('option', { name: 'Claude · Haiku 4.5 · 不在线' }),
+  );
+  await user.click(within(dialog).getByRole('button', { name: '保存' }));
+  await waitFor(() =>
+    expect(state.action).toHaveBeenCalledWith('nrAgent', 'saveDefault', {
+      method: 'POST',
+      body: { projectId: '1', revision: 3, agentId: 'idle' },
+    }),
+  );
+});
+
+test('members see the overview without Settings buttons', async () => {
+  state.admin = false;
+  mount();
+  await waitFor(() =>
+    expect(within(row('执行任务')).getByText('正常')).toBeVisible(),
+  );
+  expect(screen.queryByRole('button', { name: '设置' })).toBeNull();
+});
+
+test('a last task that did not finish is a small line in the row, and column headings are for screen readers', async () => {
+  state.status.options = [
+    {
+      id: 'codex',
+      name: 'Codex · GPT-6 Astra',
+      tool: 'codex',
+      online: true,
+      health: { state: 'ok', at: '2026-10-22T13:54:00Z', outcome: 'failed' },
+    },
+  ];
+  mount();
+  await waitFor(() =>
+    expect(within(row('执行任务')).getByText('正常')).toBeVisible(),
+  );
+  const line = within(row('执行任务')).getByText(/上次任务 .+ 没有完成/);
+  expect(line).toHaveClass('text-xs');
+  expect(screen.queryByText(/可以在任务页再试一次/)).toBeNull();
+  expect(
+    screen.getByRole('columnheader', { name: '工作' }).closest('thead'),
+  ).toHaveClass('sr-only');
 });

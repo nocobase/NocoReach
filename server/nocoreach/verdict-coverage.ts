@@ -10,17 +10,14 @@ import {
   opportunityState,
   rowsFor,
 } from '../../shared/strategy-pending.js';
-import {
-  taskClosed,
-  taskState,
-  type TaskWork,
-} from '../../shared/task-pending.js';
+import { taskStanding, type TaskWork } from '../../shared/task-pending.js';
 import { mergeCards, withoutIgnored } from './opportunity-board.js';
 import { ownSignalIds } from '../../shared/opportunity-parts.js';
 
 /** A task as read from nrTasks: its number, state and the pages it is about. */
 export type CoverTask = {
   id: number | string;
+  status?: string;
   evidence?: {
     no?: number;
     work?: (TaskWork & { page?: { url?: string } | null }) | null;
@@ -62,15 +59,14 @@ function taskPages(t: CoverTask) {
     .map(pageOf)
     .filter(Boolean);
 }
-const taskCover = (t: CoverTask | undefined, no?: number): Cover => ({
-  kind: 'task',
-  no: no ?? t?.evidence?.no,
-  state: taskClosed(t?.evidence?.work)
-    ? 'closed'
-    : taskState(t?.evidence?.work) === 'done'
-      ? 'done'
-      : 'open',
-});
+const taskCover = (t: CoverTask | undefined, no?: number): Cover => {
+  const s = taskStanding({ work: t?.evidence?.work, status: t?.status });
+  return {
+    kind: 'task',
+    no: no ?? t?.evidence?.no,
+    state: s === 'closed' || s === 'done' ? s : 'open',
+  };
+};
 
 /**
  * What already covers a change: a task (handed off from it, from an opportunity citing it, or about its page), an

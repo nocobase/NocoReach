@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Copy, Pencil, Plus, Sparkles, Loader2 } from 'lucide-react';
 import { $t, useMessageState } from '#i18n';
 import { Button } from '#components/ui/button';
+import { SourceLogo } from '#components/reach/source-logo';
 import { Input } from '#components/ui/input';
 import { Textarea } from '#components/ui/textarea';
 import {
@@ -600,6 +601,7 @@ export function AddRule({
                       aria-pressed={source === fields.source}
                       onClick={() => setFields({ ...fields, source })}
                     >
+                      <SourceLogo source={source} size='xs' />
                       {label(source)}
                     </Button>
                   ))}

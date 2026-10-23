@@ -85,7 +85,7 @@ class TrendsSource{
   if(!force&&s.lastRun&&Date.now()-Date.parse(s.lastRun.at)<WEEK-6*3600000)return {skipped:true};
   const now=new Date(businessNow(this.p,id,'dataforseo')).toISOString(),at=new Date().toISOString();let run,error='';
   this.runs.assertActive();try{run=await this.d4s.run(id,'trends',{terms:s.terms,locationCode:s.locationCode||0,requestKey:`trends-${id}-${Date.now()}`,retryUncertain:retry});if(run.status!=='completed')error=run.errorCode||systemMessageText('common.notComplete');}catch(e){error=e.message;}
-  await this.mutate(id,cur=>{if(!cur||JSON.stringify(cur.terms)!==JSON.stringify(s.terms))return cur;if(error)return {...cur,lastRun:{at,ok:false,errors:[error]}};
+  await this.mutate(id,cur=>{if(!cur||JSON.stringify(cur.terms)!==JSON.stringify(s.terms))return cur;if(error)return {...cur,lastRun:{at,ok:false,errors:[error],...(run?.status==='unknown'?{uncertain:true}:{})}};
    const r=run.result,seen={...(cur.risingSeen||{})},first=!cur.latest;for(const q of r.rising){const k=q.query.toLowerCase();if(!(k in seen))seen[k]=first?'':now;}
    return {...cur,latest:{at:now,...r},risingSeen:Object.fromEntries(Object.entries(seen).slice(-500)),lastRun:{at,ok:true,errors:[]}};});
   return {ok:!error,error};}
@@ -101,7 +101,7 @@ class TrendsSource{
   if(!force&&k.lastRun&&Date.now()-Date.parse(k.lastRun.at)<WEEK-6*3600000)return {skipped:true};
   const now=new Date(businessNow(this.p,id,'dataforseo')).toISOString(),at=new Date().toISOString();let run,error='';
   this.runs.assertActive();try{run=await this.d4s.run(id,'trends-keyword',{keyword:k.keyword,locationCode:s.locationCode||0,requestKey:`trends-kw-${id}-${kid}-${Date.now()}`,retryUncertain:retry});if(run.status!=='completed')error=run.errorCode||systemMessageText('common.notComplete');}catch(e){error=e.message;}
-  await this.mutate(id,cur=>{if(!cur)return cur;return {...cur,keywords:(cur.keywords||[]).map(x=>{if(x.id!==kid)return x;if(error)return {...x,lastRun:{at,ok:false,errors:[error]}};
+  await this.mutate(id,cur=>{if(!cur)return cur;return {...cur,keywords:(cur.keywords||[]).map(x=>{if(x.id!==kid)return x;if(error)return {...x,lastRun:{at,ok:false,errors:[error],...(run?.status==='unknown'?{uncertain:true}:{})}};
    const r=run.result,seen={...(x.risingSeen||{})},first=!x.latest;for(const q of r.rising){const key=q.query.toLowerCase();if(!(key in seen))seen[key]=first?'':now;}
    return {...x,latest:{at:now,...r},risingSeen:Object.fromEntries(Object.entries(seen).slice(-300)),lastRun:{at,ok:true,errors:[]}};})};});
   return {ok:!error,error};}
@@ -136,4 +136,4 @@ class TrendsSource{
    addKeyword:wrap((id,v)=>this.addKeyword(id,v)),removeKeyword:wrap((id,v)=>this.removeKeyword(id,v)),pick:wrap((id,v)=>this.pick(id,v))};
   this.p.app.resourceManager.define({name:'nrTrends',actions});this.p.app.acl.allow('nrTrends',Object.keys(actions),'loggedIn');}
 }
-export { TrendsSource, termsOf, specification, result, summary, keywordSpecification, keywordResult, LOCATIONS };
+export { TrendsSource, termsOf, specification, result, summary, keywordSummary, keywordSpecification, keywordResult, LOCATIONS };

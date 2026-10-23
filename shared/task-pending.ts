@@ -54,3 +54,13 @@ export function taskOwner(task: Pick<PendingTask, 'evidence'>): string | null {
 }
 export const taskClosed = (work?: TaskWork | null): boolean =>
   Boolean(work?.cancelledAt || work?.archivedAt);
+/**
+ * Where a task stands now, a cancelled or archived one closed: what Insights, Opportunities and the online agent say
+ * of the task an opportunity or a change was handed off as.
+ */
+export type TaskStanding = TaskState | 'closed';
+export const taskStanding = (task: {
+  work?: TaskWork | null;
+  status?: string;
+}): TaskStanding =>
+  taskClosed(task.work) ? 'closed' : taskState(task.work, task.status);

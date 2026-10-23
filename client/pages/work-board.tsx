@@ -11,7 +11,7 @@ import {getWorkColumns,workState,closeCommand,canReopen,closedWhen,isClosed,type
 import {stepOf,executorOf,getExecutorNames,ago} from './task-list-model';
 import {taskAgentOf,type AgentStatus} from './task-agents';
 import {FoundBy} from './found-by';
-import {TaskStateTag} from './task-state-tag';
+import {TaskStatusTag} from './task-status-tag';
 import {taskSource} from './task-source';
 import {WithInfo} from '#components/reach/info-tip';
 import {help} from './glossary';
@@ -36,7 +36,7 @@ function Executor({w,agents}:{w?:Work;agents?:AgentStatus}){
  const a=taskAgentOf(w,agents);if(!a)return <span className="truncate text-muted-foreground">{$t('taskAgents.unassigned')}</span>;
  return <span className="flex min-w-0 items-center gap-1.5" title={a.name}><span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full',a.online?'bg-nr-ink-green':'bg-muted-foreground/50')}/>
   <span className="truncate">{a.name}</span><span className="sr-only">{a.online?$t('taskDetail.agentOnline'):$t('taskDetail.agentOffline')}</span></span>;}
-function StatusTag({t}:{t:WorkCard}){const w=t.evidence?.work;return <TaskStateTag state={isClosed(w)?'closed':workState(w,t.status)}/>;}
+const StatusTag=({t}:{t:WorkCard})=><TaskStatusTag work={t.evidence?.work} status={t.status}/>;
 function StepCell({w,muted='—'}:{w?:Work;muted?:string}){const s=stepOf(w);if(!s)return <span className="text-muted-foreground">{muted}</span>;return s.tone?<Tag tone={s.tone}>{s.text}</Tag>:<span className="truncate text-muted-foreground">{s.text}</span>;}
 function Menu({t,busy,moves,onMove,onAction}:{t:WorkCard;busy?:boolean;moves?:{col:BoardState;siblings:WorkCard[]};onMove?:(t:WorkCard,state:BoardState,beforeId?:number)=>void;onAction?:Action}){
  const w=t.evidence?.work,index=moves?moves.siblings.findIndex(x=>x.id===t.id):-1,close=onAction&&closeCommand(w),reopen=onAction&&canReopen(w);
@@ -106,7 +106,7 @@ export function TaskTable({
           <col className='w-24' />
           <col className='w-10' />
         </colgroup>
-        <thead className='bg-muted/50 text-xs text-muted-foreground'>
+        <thead data-slot='table-header' className='text-xs text-muted-foreground'>
           <tr>
             {[
               $t('common.identifier'),

@@ -7,19 +7,32 @@
     "analysisDescription": "Lê os dados mais recentes de todos os projetos e usa IA para gerar observações e sugestões sobre o período em Insights e Oportunidades. Se a análise do dia não for concluída, uma nova tentativa será feita automaticamente.",
     "otherWork": "Sincronizações de dados, monitoramento de posições, tendências, atividades da concorrência e outras tarefas automáticas estão listadas por projeto em Saúde dos dados.",
     "otherWorkLink": "Abrir fontes de dados",
+    "otherWorkLabel": "Outras tarefas automáticas",
     "dailyAt": "Todos os dias às {{time}}",
-    "last": "Última execução",
-    "nextLabel": "Próxima execução",
     "notRunYet": "Ainda não houve execuções",
     "pausedNext": "Pausado, sem execuções automáticas",
     "today": "Hoje às {{time}}",
     "tomorrow": "Amanhã às {{time}}",
     "yesterday": "Ontem às {{time}}",
     "shownIn": "Horários no fuso {{zone}}",
-    "analyzed": "{{projects}} · {{items}}",
-    "projectCount_one": "{{count}} projeto",
-    "projectCount_other": "{{count}} projetos",
-    "allSkipped": "Análise ignorada: já realizada hoje",
+    "timesLabel": "Sobre estes horários",
+    "columns": {
+      "name": "Tarefa",
+      "time": "Agendamento",
+      "last": "Última execução",
+      "next": "Próxima execução",
+      "status": "Status",
+      "actions": "Ações"
+    },
+    "about": "Sobre “{{name}}”",
+    "summaryClean_one": "A última execução não teve problemas",
+    "summaryClean_other": "As últimas {{count}} execuções não tiveram problemas",
+    "summaryProblems_one": "{{count}} das últimas {{total}} execuções teve problemas",
+    "summaryProblems_other": "{{count}} das últimas {{total}} execuções tiveram problemas",
+    "projectFailed": "{{name}}: falhou",
+    "projectFailedBecause": "{{name}}: falhou ({{reason}})",
+    "projectSkipped": "{{name}}: ignorado",
+    "allSkipped": "Análise ignorada: já realizada nesse dia",
     "moreActions": "Mais ações",
     "details": "Detalhes técnicos",
     "detailsHelp": "Para diagnóstico de problemas: mostra como o plugin de agendamento vê esta tarefa. Não é necessário consultar no uso diário.",
@@ -46,8 +59,6 @@
     "noRunsTitle": "Ainda não houve execuções",
     "history": "Histórico de execuções",
     "historyTitle": "{{name}} · Histórico de execuções",
-    "historyDescription": "O resultado de cada execução automática, do mais recente para o mais antigo.",
-    "noDescription": "Sem descrição.",
     "refresh": "Atualizar",
     "loading": "Carregando…",
     "saving": "Salvando…",
@@ -550,7 +561,9 @@
       "agentArchived": "Arquivado",
       "forbidden": "Indisponível para você",
       "noRunner": "Nenhum Runner online",
-      "othersPersonal": "Disponível apenas nos Runners pessoais de outras pessoas"
+      "othersPersonal": "Disponível apenas nos Runners pessoais de outras pessoas",
+      "noModel": "Configure um modelo de chat primeiro",
+      "modelUnavailable": "Modelo indisponível"
     },
     "mode": {
       "online": "Online",
@@ -571,7 +584,9 @@
       "kept": "Suas mensagens ficam salvas e serão respondidas assim que possível.",
       "fallback": "Usar outro agente nesta conversa",
       "usingDefault": "Esta conversa usa temporariamente {{name}} no lugar de {{own}}.",
-      "restore": "Voltar para {{own}}"
+      "restore": "Voltar para {{own}}",
+      "noModel": "Configure um modelo de chat primeiro",
+      "modelUnavailable": "O modelo de {{name}} não está disponível; fale com um administrador"
     },
     "notice": {
       "switchedToDefault": "Esta conversa passou a usar {{name}}, o agente padrão do sistema, até {{own}} voltar.",
@@ -580,15 +595,13 @@
       "switchedBack": "De volta com {{name}}.",
       "runFailed": "O agente parou antes de responder.",
       "runFailedReason": "O agente parou antes de responder: {{reason}}",
-      "runCancelled": "Interrompido."
+      "runCancelled": "Cancelamento solicitado."
     },
     "consultation": {
       "title": "Consultou {{name}}",
       "question": "Pergunta",
       "answer": "Resposta",
       "steps": "Etapas realizadas",
-      "plans_one": "Propôs um plano para você confirmar.",
-      "plans_other": "Propôs {{count}} planos para você confirmar.",
       "usage": "Tokens usados: entrada: {{input}}; saída: {{output}}.",
       "state": {
         "running": "Respondendo…",
@@ -619,7 +632,7 @@
       "label": "Mensagem para o agente",
       "placeholder": "Faça uma pergunta ou descreva o trabalho que deseja organizar…",
       "hint": "Enter para enviar, Shift+Enter para uma nova linha",
-      "runningHint": "As mensagens enviadas agora serão incorporadas ao trabalho em andamento",
+      "runningHint": "Em andamento. Você pode parar esta execução.",
       "tooLong": "Limite de caracteres: {{max}}.",
       "send": "Enviar",
       "stop": "Parar",
@@ -715,6 +728,35 @@
         "error": "Erro",
         "usage": "Uso"
       }
+    },
+    "retrySaving": "Tentar salvar novamente",
+    "contextFailed": "Não foi possível ler o contexto selecionado ou enviar a mensagem. Verifique a página atual e tente novamente.",
+    "approval": {
+      "request": "Esta ferramenta precisa da sua aprovação antes de ser executada.",
+      "approve": "Aprovar",
+      "deny": "Recusar",
+      "denied": "A execução da ferramenta foi recusada.",
+      "failed": "A aprovação não foi confirmada. Atualize a mensagem salva antes de tentar novamente."
+    },
+    "feedback": {
+      "sending": "Enviando…",
+      "waiting": "Aguardando o agente…",
+      "thinking": "Pensando…",
+      "stopping": "Parada solicitada. Aguardando o agente terminar…",
+      "completed": "Concluído.",
+      "cancelled": "Cancelado. Verifique ações que talvez já tenham sido concluídas antes de repeti-las.",
+      "failed": "A resposta falhou. Verifique o histórico antes de decidir enviar novamente.",
+      "unknown": "O resultado ou o histórico salvo não está confirmado. Atualize o histórico antes de decidir enviar novamente.",
+      "effectReview": "Algumas ações podem ter sido concluídas. Verifique os resultados antes de repeti-las."
+    },
+    "executionFailed": "A execução falhou. Verifique o histórico salvo e ações que talvez já tenham sido concluídas antes de repeti-las.",
+    "historicalReadOnly": "Esta conversa antiga é somente leitura. Inicie um novo chat para continuar.",
+    "connectionUnknown": "Conexão interrompida. O resultado é desconhecido. Atualize o histórico salvo antes de enviar novamente.",
+    "allowAnother": "Permitir novo envio (pode duplicar)",
+    "refreshHistory": "Atualizar histórico",
+    "reasoning": {
+      "title": "Raciocínio",
+      "thinking": "Pensando…"
     }
   },
   "agentSetup.title": "Use o NocoReach no seu agente",

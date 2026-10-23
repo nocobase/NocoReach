@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { formatDateTime } from '#lib/format';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { $t, useMessageState, useNocoReachLocale } from '#i18n';
 import { collectorName, type CollectorChoice } from '#lib/collector-platforms';
@@ -11,6 +18,7 @@ import { xiaohongshuRequest } from './xiaohongshu-api';
 import { ListSkeleton } from '#components/reach/states';
 import { Button } from '#components/ui/button';
 import { confirmAction } from '#components/reach/confirm';
+import { InfoTip } from '#components/reach/info-tip';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { CollectorClear } from '#components/collector-clear';
 
@@ -104,7 +112,9 @@ export function XiaohongshuConnect({
     cancel: canCancel,
     disconnect: canDisconnect,
   });
-  useEffect(() => {
+  // A layout effect, not a passive one: a button appears in the commit that grants its permission, and a passive
+  // effect can run after the browser has already dispatched a click to it, so the handler would see the old denial.
+  useLayoutEffect(() => {
     accessRef.current = {
       connect: canConnect,
       test: canTest,
@@ -185,7 +195,8 @@ export function XiaohongshuConnect({
       return load();
     });
   }, [busy, load, refreshKey, setNotice]);
-  useEffect(() => {
+  // A layout effect for the same reason: Disconnect must not reach the aborted owner of the denial it replaces.
+  useLayoutEffect(() => {
     const owner = new AbortController();
     confirmationRef.current = owner;
     if (!canDisconnect) owner.abort();
@@ -311,6 +322,11 @@ export function XiaohongshuConnect({
     }
     return true;
   };
+  const scopeTip = (
+    <InfoTip className='ml-1'>
+      {$t('xiaohongshu.currentlySupportsSearchResultCollection')}
+    </InfoTip>
+  );
   return (
     <div className='grid gap-4' data-xiaohongshu-connect>
       {errorState}
@@ -393,9 +409,14 @@ export function XiaohongshuConnect({
           {canConnect && (
             <>
               <label className='nr-field'>
-                {$t('xiaohongshu.xiaohongshuSearchPhrase')}{' '}
-                <span aria-hidden='true' className='text-destructive'>
-                  *
+                <span className='inline-flex items-center gap-1'>
+                  {$t('xiaohongshu.xiaohongshuSearchPhrase')}
+                  <span aria-hidden='true' className='text-destructive'>
+                    *
+                  </span>
+                  <InfoTip>
+                    {$t('xiaohongshu.enterOnePhraseManualSearch')}
+                  </InfoTip>
                 </span>
                 <input
                   ref={queryInputRef}
@@ -414,9 +435,6 @@ export function XiaohongshuConnect({
                   {$t('xiaohongshu.errors.invalidQuery')}
                 </p>
               )}
-              <p className='nr-footnote'>
-                {$t('xiaohongshu.enterOnePhraseManualSearch')}
-              </p>
             </>
           )}
           <div className='nr-step-actions flex-wrap'>
@@ -484,7 +502,7 @@ export function XiaohongshuConnect({
             ·{' '}
             {data.verifiedAt
               ? $t('xiaohongshu.lastSuccessfulCollection', {
-                  0: new Date(data.verifiedAt).toLocaleString(locale),
+                  0: formatDateTime(data.verifiedAt),
                 })
               : $t('xiaohongshu.browserXiaohongshuLoginNotYet')}
           </p>
@@ -650,6 +668,7 @@ export function XiaohongshuConnect({
         <section className='grid gap-2'>
           <p className='nr-footnote'>
             {$t('collectorPage.savedSummary', { 0: data.total })}
+            {scopeTip}
           </p>
           <div className='nr-step-actions'>
             <Button
@@ -680,11 +699,9 @@ export function XiaohongshuConnect({
               ? 'xiaohongshu.saveConnectionChooseSearchNow'
               : 'xiaohongshu.noConfirmedNotesYetAsk',
           )}
+          {scopeTip}
         </p>
       )}
-      <p className='nr-footnote'>
-        {$t('xiaohongshu.currentlySupportsSearchResultCollection')}
-      </p>
     </div>
   );
 }
