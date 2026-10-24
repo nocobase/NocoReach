@@ -3602,6 +3602,7 @@
   "savedKeywords.changeTagsKeywords": "Ubah tag untuk {0} kata kunci",
   "taskDetail.leaveHistoricalNote": "Tinggalkan catatan pada tugas terdahulu ini",
   "taskDetail.leaveNoteNextRunReads": "Tinggalkan catatan untuk {0}; catatan akan dibaca pada eksekusi berikutnya",
+  "taskDetail.leaveNoteBeforeStart": "Tinggalkan catatan untuk {0}; dibaca saat tugas dimulai ({1})",
   "seoHandOff.draftReplies": "Buat draf balasan untuk {1} {2} di {0}",
   "seoHandOff.draftReplyUnansweredCopyThem": "{0} — {1}: Buat draf balasan untuk setiap item yang dipilih, lalu salin balasan setelah ditinjau",
   "taskDetail.noteExecutor": "Catatan untuk pelaksana",

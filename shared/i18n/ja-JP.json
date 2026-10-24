@@ -3526,6 +3526,7 @@
   "savedKeywords.changeTagsKeywords": "{0} 個のキーワードのタグを変更",
   "taskDetail.leaveHistoricalNote": "過去のタスクにメモを残す",
   "taskDetail.leaveNoteNextRunReads": "{0} にメモを残すと、次回の実行時に読み込まれます",
+  "taskDetail.leaveNoteBeforeStart": "{0} へのメモを残す。開始時に読み込まれます（{1}）",
   "seoHandOff.draftReplies": "{0} の {1} 件の{2}への返信を下書き",
   "seoHandOff.draftReplyUnansweredCopyThem": "{0} — {1}：選択した項目ごとに返信を下書きし、レビュー後に返信をコピーしてください",
   "taskDetail.noteExecutor": "実行担当者へのメモ",
