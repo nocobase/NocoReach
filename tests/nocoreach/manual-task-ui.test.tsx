@@ -13,14 +13,15 @@ import { TaskMedia } from '../../client/pages/task-detail/media.js';
 import { setDictionary } from '../../client/i18n/index.js';
 import english from '../../shared/i18n/en.json';
 
-const { request, navigate, state, confirm, warning, navigationGuard } =
+const { request, navigate, state, confirm, warning, navigationGuard, status } =
   vi.hoisted(() => ({
     navigationGuard: vi.fn(),
     request: vi.fn(),
     navigate: vi.fn(),
     confirm: vi.fn(),
     warning: vi.fn(),
-    state: { project: '1', session: 'session-1' },
+    status: vi.fn(),
+    state: { project: '1', session: 'session-1', configure: true },
   }));
 const testApi = { request };
 vi.mock('@nocobase/app-client', async (original) => ({
@@ -36,6 +37,15 @@ vi.mock('@nocobase/app-plugin-authentication/client', () => ({
 vi.mock('react-router', () => ({
   useNavigate: () => navigate,
   useLocation: () => ({ search: '?scope=waiting' }),
+  Link: ({ to, children }: { to: string; children: ReactNode }) => (
+    <a href={to}>{children}</a>
+  ),
+}));
+vi.mock('@nocobase/app-plugin-authorization/client', () => ({
+  useCan: () => ({ can: state.configure, isPending: false }),
+}));
+vi.mock('../../client/lib/nocoreach-api.js', () => ({
+  nocobaseClient: { action: status, wrapRequests: () => undefined },
 }));
 vi.mock('../../client/pages/reach-data.js', () => ({
   useProject: () => ({
@@ -48,13 +58,16 @@ vi.mock('../../client/components/route-dialog.js', () => ({
     children,
     footer,
     title,
+    description,
   }: {
     children: ReactNode;
     footer: ReactNode;
     title: ReactNode;
+    description: ReactNode;
   }) => (
     <div>
       <h1>{title}</h1>
+      <p>{description}</p>
       {children}
       {footer}
     </div>
@@ -71,9 +84,13 @@ vi.mock('../../client/lib/toast.js', () => ({ toast: { success: vi.fn() } }));
 beforeEach(() => {
   request.mockReset();
   navigate.mockReset();
+  confirm.mockReset();
   confirm.mockResolvedValue(true);
+  status.mockReset();
+  status.mockResolvedValue({ connected: true });
   state.project = '1';
   state.session = 'session-1';
+  state.configure = true;
   setDictionary(english);
 });
 afterEach(cleanup);
@@ -197,7 +214,11 @@ const record = {
   size: 7,
   contentUrl: '/main/uploads/task-media/file-1.png',
 };
+function manual() {
+  fireEvent.click(screen.getByRole('button', { name: 'Fill in manually' }));
+}
 function fill() {
+  if (!screen.queryByLabelText(/Task title/)) manual();
   fireEvent.change(screen.getByLabelText(/Task title/), {
     target: { value: 'Manual UI task' },
   });
@@ -216,6 +237,7 @@ it('validates required fields, submits once and reuses an immutable request afte
     .mockRejectedValueOnce(new Error('transport'))
     .mockResolvedValueOnce({ data: { id: '42', title: 'Manual UI task' } });
   render(<TaskCreatePage />);
+  manual();
   fireEvent.click(screen.getByRole('button', { name: 'Create', exact: true }));
   expect(
     await screen.findByText(english['manualTask.titleRequired']),
@@ -338,4 +360,213 @@ it('renders filenames as text and uses video controls without autoplay after met
   expect(video.controls).toBe(true);
   expect(video.autoplay).toBe(false);
   expect(video.src).not.toContain('blob:');
+});
+
+const draftView = {
+  title: 'Rewrite the pricing page title and opening',
+  description:
+    'Background: /pricing had 120 visits.\n\nWhat to do:\n1. Rewrite the title.\n\nCompletion criteria:\n- The new title is live.',
+  why: 'Fewer people reach the plans.',
+  playbookId: 'optimize-page',
+  playbooks: [
+    // Built-in names arrive in their stored system wording and show translated.
+    { id: 'optimize-page', name: '优化现有页面', system: true },
+    { id: 'custom-1a2b3c4d', name: '我们自己的做法', system: false },
+  ],
+};
+function writeIdea(text: string) {
+  fireEvent.change(screen.getByLabelText(/What you want done/), {
+    target: { value: text },
+  });
+}
+const organize = () =>
+  fireEvent.click(screen.getByRole('button', { name: 'Organize with AI' }));
+
+it('turns a rough idea into an editable draft with AI and creates the edited task', async () => {
+  request
+    .mockResolvedValueOnce({ data: draftView })
+    .mockResolvedValueOnce({ data: { id: '42', title: 'Edited title' } });
+  render(<TaskCreatePage />);
+  expect(screen.getByText(english['manualTask.ideaHint'])).toBeVisible();
+  expect(screen.queryByLabelText(/Task title/)).toBeNull();
+  writeIdea('  pricing page gets fewer visits, fix the title  ');
+  organize();
+  expect(await screen.findByLabelText(/Task title/)).toHaveValue(
+    draftView.title,
+  );
+  expect(request.mock.calls[0][0]).toMatchObject({
+    path: 'nocoreachTasks/draft',
+    method: 'POST',
+    json: {
+      projectId: '1',
+      idea: 'pricing page gets fewer visits, fix the title',
+    },
+    headers: { 'X-NocoReach-Task-Session': 'session-1' },
+  });
+  expect(screen.getByLabelText(/Description and completion/)).toHaveValue(
+    draftView.description,
+  );
+  // The suggested playbook is preselected and stays changeable.
+  expect(
+    screen.getByRole('combobox', { name: 'Suggested playbook' }),
+  ).toHaveTextContent('Improve existing page');
+  // The Why card's sentence is prefilled and editable.
+  const why = screen.getByRole('textbox', { name: 'Why this task' });
+  expect(why).toHaveValue(draftView.why);
+  fireEvent.change(why, { target: { value: '  Plans are hard to find.  ' } });
+  fireEvent.change(screen.getByLabelText(/Task title/), {
+    target: { value: 'Edited title' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Create', exact: true }));
+  await waitFor(() =>
+    expect(navigate).toHaveBeenCalledWith('/actions/42', { replace: true }),
+  );
+  expect(request.mock.calls[1][0].json).toMatchObject({
+    projectId: '1',
+    title: 'Edited title',
+    why: 'Plans are hard to find.',
+    description: draftView.description,
+    playbookId: 'optimize-page',
+    attachmentIds: [],
+  });
+});
+
+it('restores the original text after asking when the draft was edited', async () => {
+  request.mockResolvedValue({ data: draftView });
+  render(<TaskCreatePage />);
+  writeIdea('pricing page title');
+  organize();
+  await screen.findByLabelText(/Task title/);
+  // An untouched draft goes back at once.
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Restore original text' }),
+  );
+  expect(await screen.findByLabelText(/What you want done/)).toHaveValue(
+    'pricing page title',
+  );
+  expect(confirm).not.toHaveBeenCalled();
+  organize();
+  await screen.findByLabelText(/Task title/);
+  fireEvent.change(screen.getByLabelText(/Task title/), {
+    target: { value: 'My edit' },
+  });
+  confirm.mockResolvedValueOnce(false);
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Restore original text' }),
+  );
+  await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+  expect(screen.getByLabelText(/Task title/)).toHaveValue('My edit');
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Restore original text' }),
+  );
+  expect(await screen.findByLabelText(/What you want done/)).toHaveValue(
+    'pricing page title',
+  );
+  expect(screen.queryByLabelText(/Task title/)).toBeNull();
+});
+
+it('fills in manually with the idea as the description and no playbook', async () => {
+  request.mockResolvedValueOnce({ data: { id: '43', title: 'Manual' } });
+  render(<TaskCreatePage />);
+  writeIdea('Write a launch post');
+  manual();
+  expect(screen.getByLabelText(/Description and completion/)).toHaveValue(
+    'Write a launch post',
+  );
+  expect(screen.queryByLabelText('Suggested playbook')).toBeNull();
+  expect(screen.queryByLabelText('Why this task')).toBeNull();
+  expect(
+    screen.queryByRole('button', { name: 'Restore original text' }),
+  ).toBeNull();
+  fireEvent.change(screen.getByLabelText(/Task title/), {
+    target: { value: 'Manual' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Create', exact: true }));
+  await waitFor(() => expect(navigate).toHaveBeenCalled());
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(request.mock.calls[0][0].path).toBe('nocoreachTasks');
+  expect(request.mock.calls[0][0].json).not.toHaveProperty('playbookId');
+  expect(request.mock.calls[0][0].json).not.toHaveProperty('why');
+});
+
+it('asks for an idea before organizing', () => {
+  render(<TaskCreatePage />);
+  organize();
+  expect(screen.getByText(english['manualTask.ideaRequired'])).toBeVisible();
+  expect(request).not.toHaveBeenCalled();
+});
+
+it('shows where to set up a chat model, and manual creation still works', async () => {
+  status.mockResolvedValue({ connected: false });
+  render(<TaskCreatePage />);
+  writeIdea('Pricing page');
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Organize with AI' }),
+    ).toBeDisabled(),
+  );
+  expect(status).toHaveBeenCalledWith(
+    'nrOnlineAI',
+    'status',
+    expect.objectContaining({ body: { projectId: '1' } }),
+  );
+  // The explanation is an ⓘ beside the button, not a line of text.
+  expect(screen.queryByText(english['manualTask.noModel'])).toBeNull();
+  expect(screen.getByRole('button', { name: 'Info' })).toBeVisible();
+  manual();
+  expect(screen.getByLabelText(/Task title/)).toBeEnabled();
+});
+
+it('names Model services when the model goes missing, as a link only for those who manage it', async () => {
+  state.configure = false;
+  request.mockRejectedValueOnce(
+    new ApiClientError('No chat model', {
+      status: 409,
+      domain: 'nocoreach',
+      reason: 'TASK_DRAFT_NO_MODEL',
+      method: 'POST',
+      url: '/api/nocoreachTasks/draft',
+    }),
+  );
+  render(<TaskCreatePage />);
+  writeIdea('Pricing page');
+  organize();
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent(english['manualTask.modelSettingsPath']);
+  expect(alert.querySelector('a')).toBeNull();
+  expect(
+    screen.getByRole('button', { name: 'Organize with AI' }),
+  ).toBeDisabled();
+});
+
+it('keeps the idea when the draft is unusable or the call fails', async () => {
+  request
+    .mockRejectedValueOnce(
+      new ApiClientError('Unusable', {
+        status: 422,
+        domain: 'nocoreach',
+        reason: 'TASK_DRAFT_UNUSABLE',
+        method: 'POST',
+        url: '/api/nocoreachTasks/draft',
+      }),
+    )
+    .mockRejectedValueOnce(new Error('transport'));
+  render(<TaskCreatePage />);
+  writeIdea('Pricing page');
+  organize();
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    english['manualTask.draftUnusable'],
+  );
+  expect(screen.getByLabelText(/What you want done/)).toHaveValue(
+    'Pricing page',
+  );
+  organize();
+  await waitFor(() =>
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      english['manualTask.draftFailed'],
+    ),
+  );
+  expect(
+    screen.getByRole('button', { name: 'Organize with AI' }),
+  ).toBeEnabled();
 });
