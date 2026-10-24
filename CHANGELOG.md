@@ -6,6 +6,19 @@
 - The drawer is laid out in three parts instead of a block of text: facts as a short list (Status, Went live as a date, Changed pages with an external-link mark, Original task), then Data change with the 7-day / 28-day switch and refresh on its label row and the waiting note in a light box, then What was done with the summary as plain text (no Markdown markers). One text size throughout.
 - The comparison block (the result drawer, the task page's effect detail and a result's source panel) shows its outcome as a tag beside the windows, column headers aligned with their numbers, and every note in the same small grey text.
 
+## Unreleased — Articles reviewed as their readers see them
+
+- The article review card opens with a preview of the article: the title, the description as the lede and the body rendered with its headings, lists, tables, code and images, at a reading width and size like Medium or dev.to. Preview and Changes switch per language; Preview is first when the body changed or the article is new. Show before flips to the version the change was written from.
+- External https images load (no Content-Security-Policy restricts them, locally or on Studio) without sending the reviewer's address; relative images and links are read against the article's page on its site. An image that does not arrive shows its alternative text and Could not load. Markdown is rendered without raw HTML.
+- Edit directly writes the body beside its live preview (side by side from 1024px, Write and Preview tabs below), and so do a document's Edit directly and a document written by hand with I'll do it myself.
+- The Agent's report is summary first: at most three plain lines (the article's `summary`, else the first paragraph of its notes), with the full report behind Full notes. The page change's What changed shows three lines with Expand. Article runs are now asked for a short reviewer summary that does not repeat the before and after title and description, and build runs for a release note of at most three lines.
+
+## Unreleased — Task page: a failure notice, a short Why and copy without positions
+
+- A failed step shows one error notice: an icon and "The Agent could not finish this step", the reason in a sentence (with "failed N times in a row" as a short fact), what to do next, and Technical details. Its actions are Try again, Switch Agent (opens the Agent picker in Properties) and Message the Agent (focuses the activity composer). Completing an Agent's step by hand moved from the card to the ⋯ menu as "Complete this step manually", offered while the step is not running.
+- Tasks keep a short reason as `evidence.why` (plain text, at most 300 characters). Hand-offs send it as `why` (GitHub Hot's repositories send one built from the star counts); an opportunity's short reason is used when none is sent. The Why card shows it first, then the opportunity's reason, the first signal, the result, and otherwise the first sentence of the objective or brief (`firstSentence`: no "Goal:" label, links, list markers or Markdown, at most about 80 characters, cut at a word).
+- Copy no longer points at positions ("above", "below", "top right"): it names the place instead, such as Properties, Activity or Performance, in all ten languages.
+
 ## Unreleased — Results lists only work with an outcome; a closed task never reads Completed
 
 - Results (the overview, All results, a result's drawer and the counts) lists only tasks that produced an outcome: their change went live, or their delivery finished (done, or its execution recorded), even if archived afterwards. Tasks cancelled before going live, work archived before it finished (including the old-workflow archive) and work still waiting for review, approval or publishing stay in Tasks. "Waiting to go live" is no longer a phase of Results; the Live card says how many more were delivered. Simulated work (the demo install) follows the same rule and stays marked as simulated.
