@@ -488,6 +488,17 @@ test('the start card finds the article from the task page and links it as the ta
     revision: 5,
   });
   expect(commands[1].delivery).toBeUndefined();
+  // No separate note at the start (2026-10-24): instructions go in the activity's message box.
+  expect(commands[1]).not.toHaveProperty('note');
+});
+
+test('before the start, the message box is where the instructions go', () => {
+  mount(blogPageTask(), '/actions/32');
+  expect(screen.queryByText('补充说明（可选）')).toBeNull();
+  expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveAttribute(
+    'placeholder',
+    expect.stringContaining('开始执行时会读取'),
+  );
 });
 
 // T-33 on Studio (2026-10-21): the article is saved on the task; its page is built from the target's pattern.
