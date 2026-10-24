@@ -8,7 +8,7 @@ import { languageOf, forLanguage } from './language.js';
 import { GitHubSource } from './github-source.js';
 import { pageMeta, SiteContent } from './site-content.js';
 import { download } from './public-sources.js';
-import { memoryOf, memoryForAI } from './execution/memory.js';
+import { memoryForAI } from './execution/memory.js';
 import { plain } from './public-sources.js';
 import { json } from './knowledge-suggest.js';
 // 竞品动态 (SPEC §11 竞品, P2; 2026-10-04): up to five competitors a person lists (name, website, GitHub repository) are
@@ -21,8 +21,9 @@ const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status
 const DAY=86400000,WEEK=7*DAY,MAX=5,KNOWN=6000,EVENTS=400,TITLES=8,BURST=40,CANDIDATES=8;
 const hash=u=>createHash('sha1').update(String(u).replace(/\/$/,'')).digest('hex').slice(0,10);
 const str=(v,max)=>typeof v==='string'?v.trim().slice(0,max):'';
-// A refusal that only a changed setting cures (no sitemap, an invalid address, a missing or private repository, a refused
-// token); timeouts, rate limits and server errors may pass on their own. Data health offers Change instead of Retry.
+// A refusal that only a changed setting cures (an invalid address, a missing or private repository, a refused token);
+// timeouts, rate limits and server errors may pass on their own. Data health offers Change instead of Retry. A website
+// without a sitemap (422) is neither: see `noSitemap`.
 const settingsError=e=>Number(e?.status)>=400&&Number(e?.status)<500&&![408,429].includes(Number(e?.status));
 function siteOf(input){const raw=str(input,300);if(!raw)return '';let u;try{u=new URL(/^https?:\/\//i.test(raw)?raw:`https://${raw}`);}catch{fail(systemMessageText('competitorWatch.websiteUrlNotValidExample'));}
  if(!/\.[a-z]{2,}$/i.test(u.hostname))fail(systemMessageText('competitorWatch.websiteUrlNotValidExample'));return `https://${u.hostname.toLowerCase()}`;}
@@ -33,13 +34,24 @@ const SUGGEST=`你在帮一个营销团队找产品的主要竞品。输入 JSON
 只输出一个 json 代码块：{"competitors":[{"name":"","site":"","repo":"","reason":""}]}`;
 // A repository linked from a home page (github.com/<owner>/<repo>), skipping GitHub's own pages.
 function linkedRepo(html){for(const m of String(html||'').matchAll(/https?:\/\/(?:www\.)?github\.com\/([\w.-]+)\/([\w.-]+)/gi)){if(['sponsors','orgs','topics','features','about','marketplace','apps','settings','login'].includes(m[1].toLowerCase()))continue;return `${m[1]}/${m[2].replace(/\.git$/,'')}`;}return '';}
-// Names written in 记忆's 竞品 section, offered when adding.
-function memoryNames(project,list){const taken=new Set(list.map(c=>c.name.toLowerCase()));return [...new Set(String(memoryOf(project).competitors||'').split(/[\n,，、;；]/).map(s=>s.replace(/[（(].*$/,'').replace(/^[-*•\s]+/,'').split(/[:：]/)[0].trim()).filter(s=>s.length>=2&&s.length<=30&&!taken.has(s.toLowerCase())))].slice(0,8);}
+// Offered when adding one by hand: the candidates AI detect found and checked (each has a website or a repository), less
+// those already listed. Memory's competitors field is free text; splitting it on punctuation turned sentences into names.
+function suggestionsOf(s){const list=s?.list||[];return (s?.suggested?.candidates||[]).filter(c=>c.name&&(c.site||c.repo)&&!list.some(x=>x.name.toLowerCase()===c.name.toLowerCase()||(c.site&&x.site===c.site)||(c.repo&&x.repo===c.repo))).map(({name,site,repo})=>({name,site:site||'',repo:repo||''})).slice(0,CANDIDATES);}
+// A website without a readable sitemap is not something the person can fix: it is a note on that competitor's card, and
+// its GitHub repository is followed as usual.
+const noSitemap=t=>Boolean(t?.noSitemap);
+// The last run as Data health and the pages read it, from the competitors still listed and their own errors: removing or
+// correcting a competitor clears its errors at once instead of at the next weekly look.
+function runOf(at,list,track){const errors=[];let configError=false;for(const c of list||[]){const t=track?.[c.id]||{};
+  if(t.siteError&&!noSitemap(t)){errors.push(systemMessageText('messages.website', { 0: c.name, 1: t.siteError }));configError||=Boolean(t.siteConfig);}
+  if(t.repoError){errors.push(`${c.name} GitHub：${t.repoError}`);configError||=Boolean(t.repoConfig);}}
+ return {at,ok:!errors.length,errors:errors.slice(0,5),...(configError?{configError:true}:{})};}
+const withRun=s=>s?.lastRun?{...s,lastRun:runOf(s.lastRun.at,s.list,s.track)}:s;
 class CompetitorWatch{
  constructor(p,read=download){this.p=p;this.p.network?.bind(this,['add', 'suggest', 'edit', 'fillSites', 'look', 'check'], 'competitors');this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'competitors'}):read;this.checking=null;this.github=p.network?new GitHubSource(p,(url,init)=>p.network.fetch('competitors',url,{...init,signal:AbortSignal.timeout(20000)})):p.github;this.siteContent=p.network?new SiteContent(p,this.read):p.siteContent;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `competitors:${id}`;}
- async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}
+ async state(id){return withRun((await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null);}
  async mutate(id,fn){return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:this.key(id)},transaction});const row=await this.repo().findOne({filter:{key:this.key(id)},transaction});const state=await fn(row?.get('payload')||{list:[],track:{},events:[]});if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});else await this.repo().create({values:{key:this.key(id),payload:state},transaction});return state;});}
  own(project,site){return Boolean(site)&&(project.domains||[]).some(d=>site.endsWith(String(d).replace(/^www\./,'')));}
  // One competitor, or several ticked from AI 识别 (items), added together.
@@ -71,42 +83,43 @@ class CompetitorWatch{
  async edit(id,v){const c0=(await this.state(id))?.list?.find(c=>c.id===String(v.competitorId||''));if(!c0)fail(systemMessageText('competitorWatch.competitorNoLongerList'),404);
   const x={name:str(v.name,60),site:siteOf(v.site),repo:repoOf(v.repo)},project=await this.p.projects.get(id);if(!x.name)fail(systemMessageText('competitorWatch.enterCompetitorName'));if(!x.site&&!x.repo)fail(systemMessageText('competitorWatch.enterLeastWebsiteGithubRepository'));if(this.own(project,x.site))fail(systemMessageText('competitorWatch.projectOwnWebsite'));
   await this.mutate(id,s=>{if(s.list.some(c=>c.id!==c0.id&&(c.name.toLowerCase()===x.name.toLowerCase()||(x.site&&c.site===x.site)||(x.repo&&c.repo===x.repo))))fail(systemMessageText('competitorWatch.duplicatesAnotherCompetitorList'),409);
-   const old=s.track?.[c0.id]||{},track={...old,...(x.site!==c0.site?{known:undefined,pages:null,siteError:null}:{}),...(x.repo!==c0.repo?{stars:undefined,latestRelease:undefined,forks:undefined,repoError:null}:{})};
-   return {...s,list:s.list.map(c=>c.id===c0.id?{...c,...x,homepageTried:true}:c),track:{...(s.track||{}),[c0.id]:track}};});
+   const old=s.track?.[c0.id]||{},track={...old,...(x.site!==c0.site?{known:undefined,pages:null,siteError:null,siteConfig:undefined,noSitemap:undefined}:{}),...(x.repo!==c0.repo?{stars:undefined,latestRelease:undefined,forks:undefined,repoError:null,repoConfig:undefined}:{})};
+   return withRun({...s,list:s.list.map(c=>c.id===c0.id?{...c,...x,homepageTried:true}:c),track:{...(s.track||{}),[c0.id]:track}});});
   if(x.site!==c0.site||x.repo!==c0.repo)this.start(id,[c0.id]);this.changed(id);return this.status(id);}
  // Competitors kept with only a repository: the website GitHub lists for it fills in once, so 总览 can look it up.
  async fillSites(id){const s=await this.state(id),missing=(s?.list||[]).filter(c=>c.repo&&!c.site&&!c.homepageTried);if(!missing.length)return 0;const project=await this.p.projects.get(id),found={};
   for(const c of missing){try{const g=await this.github.gh(`/repos/${c.repo}`,this.p.github?.token?.(id)||undefined),site=g?.homepage?siteOf(g.homepage):'';if(site&&!this.own(project,site))found[c.id]=site;}catch{/* no website listed */}}
   await this.mutate(id,cur=>({...cur,list:cur.list.map(c=>missing.some(m=>m.id===c.id)?{...c,site:c.site||found[c.id]||'',homepageTried:true}:c)}));
   if(Object.keys(found).length){this.start(id,Object.keys(found));this.changed(id);}return Object.keys(found).length;}
- async remove(id,v){await this.mutate(id,s=>{const {[v.competitorId]:_gone,...track}=s.track||{};return {...s,list:s.list.filter(c=>c.id!==v.competitorId),track,events:(s.events||[]).filter(e=>e.competitorId!==v.competitorId)};});this.changed(id);return this.status(id);}
+ async remove(id,v){await this.mutate(id,s=>{const {[v.competitorId]:_gone,...track}=s.track||{};return withRun({...s,list:s.list.filter(c=>c.id!==v.competitorId),track,events:(s.events||[]).filter(e=>e.competitorId!==v.competitorId)});});this.changed(id);return this.status(id);}
  start(id,only){if(this.checking)return;this.checking=this.check(id,{force:true,only}).catch(()=>undefined).finally(()=>{this.checking=null;});}
  // One competitor: its sitemap against the pages seen before, its repository and releases.
- async look(id,c,old={}){const clock=businessNow(this.p,id,'competitors'),now=new Date(clock).toISOString(),track={...old,checkedAt:new Date().toISOString()},events=[],errors=[];let configErrors=0;const ev=(type,title,url,detail='')=>events.push({id:randomUUID().slice(0,10),competitorId:c.id,type,title:str(title,300),url,detail:str(detail,300),at:now});
+ async look(id,c,old={}){const clock=businessNow(this.p,id,'competitors'),now=new Date(clock).toISOString(),track={...old,checkedAt:new Date().toISOString()},events=[],errors=[];const ev=(type,title,url,detail='')=>events.push({id:randomUUID().slice(0,10),competitorId:c.id,type,title:str(title,300),url,detail:str(detail,300),at:now});
   if(c.site){try{const d=await this.siteContent.discover(c.site),truncated=d.warnings.some(w=>/只收录/.test(w)),first=!Array.isArray(old.known),known=new Set(old.known||[]),month=clock-30*DAY;
     const fresh=first?[]:d.pages.filter(p=>!known.has(hash(p.url))&&(!truncated||Date.parse(p.lastmod||0)>=month));
     if(fresh.length>BURST)ev('site',systemMessageText('messages.newUrlsWebsite', { 0: fresh.length }),c.site,systemMessageText('competitorWatch.manyOnceMayMeanRedesign'));
     else for(const [i,p] of fresh.entries()){let title='',description='';if(i<TITLES){try{const r=await this.read(p.url);({title,description}=pageMeta(String(r.text||''),p.url));}catch{/* the address is enough */}}ev('page',title||new URL(p.url).pathname,p.url,description);}
-    track.known=d.pages.map(p=>hash(p.url)).slice(0,KNOWN);track.pages=d.pages.length;track.siteError=null;}
-   catch(e){errors.push(systemMessageText('messages.website', { 0: c.name, 1: e.message }));track.siteError=e.message;if(settingsError(e))configErrors++;}}
+    track.known=d.pages.map(p=>hash(p.url)).slice(0,KNOWN);track.pages=d.pages.length;track.siteError=null;track.siteConfig=undefined;track.noSitemap=undefined;}
+   catch(e){if(Number(e?.status)===422){track.noSitemap=true;track.siteError=null;track.siteConfig=undefined;}
+    else{errors.push(systemMessageText('messages.website', { 0: c.name, 1: e.message }));track.siteError=e.message;track.siteConfig=settingsError(e)||undefined;track.noSitemap=undefined;}}}
   if(c.repo){const token=this.p.github?.token?.(id)||undefined;
    try{const r=await this.github.gh(`/repos/${c.repo}`,token);const day=now.slice(0,10);track.stars={...(old.stars||{}),[day]:r.stargazers_count};track.stars=Object.fromEntries(Object.entries(track.stars).sort(([a],[b])=>a.localeCompare(b)).slice(-120));track.forks=r.forks_count;track.description=str(r.description,200);
     const rel=(await this.github.gh(`/repos/${c.repo}/releases?per_page=5`,token)||[]).filter(x=>!x.draft).map(x=>({name:str(x.name||x.tag_name,120),tag:str(x.tag_name,60),url:x.html_url,publishedAt:x.published_at}));
     if(old.latestRelease!==undefined)for(const x of rel.filter(x=>x.publishedAt&&x.publishedAt>(old.latestRelease?.publishedAt||'')).reverse())ev('release',systemMessageText('messages.released', { 0: x.name }),x.url,x.name.includes(x.tag)?'':x.tag);
-    track.latestRelease=rel[0]||null;track.repoError=null;}
-   catch(e){errors.push(`${c.name} GitHub：${e.message}`);track.repoError=e.message;if(settingsError(e))configErrors++;}}
-  return {track,events,errors,configErrors};}
+    track.latestRelease=rel[0]||null;track.repoError=null;track.repoConfig=undefined;}
+   catch(e){errors.push(`${c.name} GitHub：${e.message}`);track.repoError=e.message;track.repoConfig=settingsError(e)||undefined;}}
+  return {track,events,errors};}
  async check(id,{force=false,only}={}){const s=await this.state(id);if(!s?.list?.length)return {events:0,errors:[]};const now=new Date().toISOString(),due=s.list.filter(c=>(!only||only.includes(c.id))&&(force||!s.track?.[c.id]?.checkedAt||Date.now()-Date.parse(s.track[c.id].checkedAt)>=WEEK-6*3600000));
   if(!due.length)return {events:0,errors:[]};const results={};for(const c of due)results[c.id]=await this.look(id,c,s.track?.[c.id]);
-  let count=0;const errors=Object.values(results).flatMap(r=>r.errors),configError=Object.values(results).some(r=>r.configErrors>0);
+  let count=0;const errors=Object.values(results).flatMap(r=>r.errors);
   await this.mutate(id,cur=>{const track={...(cur.track||{})},events=[...(cur.events||[])];for(const c of cur.list){const r=results[c.id];if(!r)continue;track[c.id]=r.track;events.unshift(...r.events);count+=r.events.length;}
-   return {...cur,track,events:events.slice(0,EVENTS),lastRun:{at:now,ok:!errors.length,errors:errors.slice(0,5),...(configError?{configError:true}:{})}};});
+   return {...cur,track,events:events.slice(0,EVENTS),lastRun:runOf(now,cur.list,track)};});
   return {events:count,errors};}
  // Stars now and a week before (the sample closest to seven days back, at least five days old).
  starsOf(t){const days=Object.entries(t?.stars||{}).sort(([a],[b])=>a.localeCompare(b));if(!days.length)return {stars:null,week:null};const [lastDay,now]=days.at(-1),before=days.filter(([d])=>Date.parse(lastDay)-Date.parse(d)>=5*DAY).at(-1);return {stars:now,week:before?now-before[1]:null};}
- async status(id){const s=await this.state(id)||{list:[],track:{},events:[]},project=await this.p.projects.get(id).catch(()=>({}));
-  return {connected:s.list.length>0,checking:Boolean(this.checking),max:MAX,suggestions:memoryNames(project,s.list),lastRun:s.lastRun||null,nextCheckAt:s.lastRun?new Date(Date.parse(s.lastRun.at)+WEEK).toISOString():null,
-   list:s.list.map(c=>{const t=s.track?.[c.id]||{};return {...c,checkedAt:t.checkedAt||null,pages:t.pages??null,...this.starsOf(t),latestRelease:t.latestRelease||null,errors:[t.siteError,t.repoError].filter(Boolean)};})};}
+ async status(id){const s=await this.state(id)||{list:[],track:{},events:[]};
+  return {connected:s.list.length>0,checking:Boolean(this.checking),max:MAX,suggestions:suggestionsOf(s),lastRun:s.lastRun||null,nextCheckAt:s.lastRun?new Date(Date.parse(s.lastRun.at)+WEEK).toISOString():null,
+   list:s.list.map(c=>{const t=s.track?.[c.id]||{};return {...c,checkedAt:t.checkedAt||null,pages:t.pages??null,...this.starsOf(t),latestRelease:t.latestRelease||null,errors:[noSitemap(t)?null:t.siteError,t.repoError].filter(Boolean),noSitemap:noSitemap(t)};})};}
  async view(id,v={}){const st=await this.status(id),s=await this.state(id);const since=businessNow(this.p,id,'competitors')-Number(v.days||90)*DAY;
   return {...st,events:(s?.events||[]).filter(e=>Date.parse(e.at)>=since).slice(0,200).map(e=>({...e,competitor:st.list.find(c=>c.id===e.competitorId)?.name||''})),
    notes:[systemMessageText('competitorWatch.checksWeeklyNewPagesWebsite'),systemMessageText('competitorWatch.lookUpKeywordsTrafficEstimates')]};}
@@ -115,4 +128,4 @@ class CompetitorWatch{
   const actions={status:wrap(id=>this.status(id)),view:wrap((id,v)=>this.view(id,v)),add:wrap((id,v)=>this.add(id,v)),suggest:wrap((id,v)=>this.suggest(id,v)),remove:wrap((id,v)=>this.remove(id,v)),edit:wrap((id,v)=>this.edit(id,v)),check:wrap(async id=>{if(this.checking)fail(systemMessageText('competitorWatch.checkingRefreshMoment'),409);this.checking=this.check(id,{force:true});try{const r=await this.checking;return {...r,...await this.status(id)};}finally{this.checking=null;}})};
   this.p.app.resourceManager.define({name:'nrCompetitors',actions});this.p.app.acl.allow('nrCompetitors',Object.keys(actions),'loggedIn');}
 }
-export { CompetitorWatch, siteOf, repoOf, memoryNames, linkedRepo };
+export { CompetitorWatch, siteOf, repoOf, suggestionsOf, linkedRepo };

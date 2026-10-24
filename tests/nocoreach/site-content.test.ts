@@ -28,6 +28,19 @@ test('discover follows robots and sitemap index, drops foreign URLs, and fails c
  await assert.rejects(new SiteContent({},async()=>{throw new Error('404');}).discover('https://ex.com'),e=>e.status===422&&/sitemap/.test(e.message));
  await assert.rejects(new SiteContent({},read).discover('http://ex.com'),e=>e.status===400);
 });
+
+test('discover tries the usual sitemap addresses only when nothing else was read',async()=>{
+ const urlset='<urlset><url><loc>https://ex.com/blog/one</loc></url></urlset>';
+ const run=async files=>{const asked=[];const d=await new SiteContent({},async u=>{asked.push(u);if(!(u in files))throw new Error('404');return {text:files[u],type:'application/xml',url:u};}).discover('https://ex.com').catch(e=>e);return {d,asked};};
+ // robots.txt names a sitemap that no longer opens: the usual addresses follow, WordPress's among them.
+ let {d,asked}=await run({'https://ex.com/robots.txt':'Sitemap: https://ex.com/old.xml','https://ex.com/wp-sitemap.xml':urlset});
+ assert.deepEqual(d.sitemaps,['https://ex.com/wp-sitemap.xml']);assert.deepEqual(asked,['https://ex.com/robots.txt','https://ex.com/old.xml','https://ex.com/sitemap.xml','https://ex.com/sitemap_index.xml','https://ex.com/sitemap-index.xml','https://ex.com/wp-sitemap.xml']);
+ // A site whose sitemap reads makes no extra requests.
+ ({d,asked}=await run({'https://ex.com/sitemap.xml':urlset}));
+ assert.deepEqual(asked,['https://ex.com/robots.txt','https://ex.com/sitemap.xml','https://ex.com/sitemap_index.xml']);
+ // None of them: still the clear 422.
+ ({d}=await run({}));assert.equal(d.status,422);
+});
 test('page metadata decodes numeric character references',()=>{
  const m=pageMeta('<title>It&#x27;s new</title><meta name="description" content="What&#x27;s on by default &#39;now&#39; &amp; later"><body></body>','https://ex.com/');
  assert.equal(m.title,"It's new");assert.equal(m.description,"What's on by default 'now' & later");

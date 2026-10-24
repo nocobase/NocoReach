@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Competitor activity: only problems the person can fix
+
+- Removing or editing a competitor clears its errors at once. Each competitor keeps its own errors, and the source's last run (Data health, the Activity tab) is derived from the competitors still listed, also when it is read, instead of waiting for the next weekly look. On Studio, Data health still showed Competitor activity failing with "Baserow website: No sitemap found" after Baserow had been removed.
+- A competitor's website without a readable sitemap is no longer a failure that asks to change settings: its card shows an ⓘ beside the website ("No sitemap was found, so new pages on the website cannot be followed for now. GitHub is followed as usual."), Data health stays healthy, and its GitHub repository is read as before. A wrong address, a missing or private repository and network or proxy problems remain failures with Change or Retry.
+- Before giving up on a sitemap, discovery also tries `/sitemap.xml`, `/sitemap_index.xml`, `/sitemap-index.xml` and `/wp-sitemap.xml` when the sitemaps robots.txt names do not open. A site whose sitemap reads makes no extra requests. This applies to Site & product › Pages too.
+- Add competitor no longer splits memory's free-text Competitors field on punctuation, which offered fragments such as "Codex 等）" or "部署" as names. It offers the competitors AI detect found and checked (each with a website or a repository), less those already listed, and a chip fills the name, website and repository; with none, the row is not shown. No other place splits memory text into a list: Trends, X and Hacker News split terms the person types into an input, and Trends takes competitor names from this list.
+
 ## Unreleased — Competitors: a lookup that did not complete is tried again the next day
 
 - Search & market › Competitors kept a site's failed DataForSEO lookup for 30 days, like a successful one: its error stayed in the site's drawer and its traffic stayed empty until the monthly refresh. On Studio, our own site still showed `Operator "$gte" is not supported for Field "createdAt" of type "datetime"` from a lookup on 2026-10-09, before the classic filter bridge learned datetime comparisons (#13); DataForSEO lookups have worked since. A site whose last lookup did not complete is now due again a day later, at the daily refresh or when the page is opened. Only the failed parts cost again: DataForSEO reuses completed runs, and an uncertain run still blocks its query for the reuse time.
