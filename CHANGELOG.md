@@ -8,6 +8,10 @@
 - The failure card says whose problem it is. For the computer's setup (a missing tool, a tool not signed in, the network, the runtime) it says that every Agent on that computer shares it and no longer offers Switch Agent; for a coding tool's sign-in, quota or model it suggests an Agent with another coding tool. After the same cause twice in a row it says "failed N times in a row for the same reason" and what to fix first, and Try again is no longer the main action. "Ask an engineer to check Technical details" is gone from run failures.
 - Agent › Who does the work reads how the task ended: a run the Agent itself failed counts as failed, not completed, and a missing tool or sign-in it reported shows on the Tasks row, which then offers Settings rather than another agent on the same computer.
 
+## Unreleased — Watching: the current value in the colour of its change
+
+- Opportunities › Watching shows each change's current value in the colour the analysis rule gave it (red for a drop that hurts, green for good news, also when the good news is a drop), in the Value column, without "Now" before it; the grey line under it still says where it started. Before #198 the colour came as a chip beside the title and the value was repeated in plain text; now it shows once. A change without a figure reads "—" in grey.
+
 ## Unreleased — Demo environment
 
 - Add a dedicated demo deployment enabled with `NOCOBASE_DEMO_MODE=true`, using the published Demo Mode plugin. Settings › Demo management provides one page for importing, resetting and clearing demo data, configuring daily resets and managing demo accounts; its menu and route are available only while Demo Mode is enabled. The same lifecycle operations are available through `demo-mode data status|import|clear|reset` in standalone installations.

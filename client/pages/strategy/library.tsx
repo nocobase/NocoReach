@@ -5,7 +5,7 @@ import {Link,useNavigate,useSearchParams} from 'react-router';
 import {ArrowRightIcon,ExternalLinkIcon,EyeIcon,LightbulbIcon,SearchIcon,Undo2Icon} from 'lucide-react';
 import {Tooltip,TooltipContent,TooltipTrigger} from '#components/ui/tooltip';
 import {PageContainer,PageHeader} from '#components/reach/page';
-import {Tag,type Tone} from '#components/reach/tag';
+import {Tag,TONE_CLASS,type Tone} from '#components/reach/tag';
 import {InfoTip} from '#components/reach/info-tip';
 import {EmptyState} from '#components/reach/states';
 import {formatDate} from '#lib/format';
@@ -123,9 +123,13 @@ type Watching={s:Signal;status:{reason?:string};days:number;record?:WatchRecord}
 // started), 判断条件 (what decides it) and 截止日期 (the day a verdict is due, with the days left). A change watched before
 // its record existed shows the AI's reason in grey and “下次分析确定”.
 const localDay=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
-function Values({w}:{w:Watching}){const now=chipOf(w.s)?.text||'—',start=w.record?.startChip?.text&&$legacyFragment(w.record.startChip.text);
+// The current value in the colour of its change (2026-10-24 user decision: colour without repeating it beside the title, as
+// before #198): the tone the analysis rule gave it, which knows when a drop is good news; a neutral one stays plain. No
+// "Now" before it: the column is the value, and the grey line under it says where it started.
+const inkOf=(tone:Tone)=>tone==='grey'||tone==='slate'?'text-foreground':TONE_CLASS[tone].split(' ')[1];
+function Values({w}:{w:Watching}){const chip=chipOf(w.s),now=chip?.text||'—',start=w.record?.startChip?.text&&$legacyFragment(w.record.startChip.text);
  const second=w.record?(w.days<=1?$t('strategy.startedToday'):start?(start===now?$t('strategy.startedUnchanged',{0:start}):$t('strategy.started',{0:start,1:short(w.record.since)})):''):'';
- return <><span className="block">{$t('strategy.now',{0:now})}</span>{second?<span className="block text-xs text-muted-foreground">{second}</span>:null}</>;}
+ return <><span className={cn('block font-medium',chip?inkOf(chip.tone):'text-muted-foreground')} data-tone={chip?.tone}>{now}</span>{second?<span className="block text-xs text-muted-foreground">{second}</span>:null}</>;}
 function Deadline({w}:{w:Watching}){const d=w.record?.decideBy;if(!d)return <span className="text-muted-foreground">{$t('strategy.setNextAnalysis')}</span>;
  const left=Math.round((Date.parse(d.slice(0,10))-Date.parse(localDay()))/86400000);
  return <><span className="block">{short(d)}</span><span className="block text-xs text-muted-foreground">{left>0?$t('strategy.daysLeft',{0:left}):$t('strategy.dueToday')}</span></>;}
