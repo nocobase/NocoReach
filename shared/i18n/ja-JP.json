@@ -4732,6 +4732,8 @@
   "taskDetail.actualModelNotReported": "実際のモデルは報告されていません",
   "taskDetail.unknownRunner": "不明なRunner",
   "taskDetail.sourceSnapshotRun": "この実行の資料スナップショット",
+  "taskDetail.postsAgentRead": "エージェントが読んだ投稿",
+  "taskDetail.moreTopics": "ほか {0} 件のトピック",
   "taskDetail.runNoRecordedEvents": "この実行にはイベントの記録がありません。",
   "taskDetail.sourceSource": "ソース: {source}",
   "taskDetail.viewCountRuns": "全 {count} 件の実行を表示",
