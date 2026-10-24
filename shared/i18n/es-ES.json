@@ -5141,6 +5141,9 @@
   "taskNumbers.beforeLiveViews": "28 días antes de publicar · vistas",
   "taskNumbers.position": "Pos. {0}",
   "taskDetail.propRelated": "Tareas relacionadas",
+  "taskDetail.relatedPrev": "Paso anterior · esta tarea se derivó de ella",
+  "taskDetail.relatedNext": "Paso siguiente · derivada de esta tarea",
+  "taskDetail.relatedSame": "Misma oportunidad {0} · tareas que cambian otros lugares",
   "taskSource.foundByAi": "Found by AI",
   "taskSource.foundBy": "Found by {0}",
   "taskSource.fromInsights": "Hallazgos › Situación actual",
@@ -7189,6 +7192,5 @@
   "opportunityTasks.created": "Tareas creadas: {0}. Abre cada una, revísala y haz clic en «Iniciar».",
   "opportunityTasks.heading": "Tareas",
   "opportunityTasks.progressTag": "{0} tareas · {1} completadas",
-  "opportunityTasks.sameOpportunity": "Misma oportunidad ({0})",
   "opportunityTasks.taskCount": "{0} tareas"
 }

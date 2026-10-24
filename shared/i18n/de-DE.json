@@ -5141,6 +5141,9 @@
   "taskNumbers.beforeLiveViews": "28 Tage vor der Onlinestellung · Aufrufe",
   "taskNumbers.position": "Pos. {0}",
   "taskDetail.propRelated": "Verknüpfte Aufgaben",
+  "taskDetail.relatedPrev": "Vorheriger Schritt · diese Aufgabe wurde daraus übergeben",
+  "taskDetail.relatedNext": "Nächster Schritt · aus dieser Aufgabe übergeben",
+  "taskDetail.relatedSame": "Gleiche Chance {0} · Aufgaben für andere Stellen",
   "taskSource.foundByAi": "Found by AI",
   "taskSource.foundBy": "Found by {0}",
   "taskSource.fromInsights": "Erkenntnisse › Aktuelle Situation",
@@ -7189,6 +7192,5 @@
   "opportunityTasks.created": "Aufgaben erstellt: {0}. Öffnen und lesen Sie jede einzelne und klicken Sie anschließend auf \"Starten\".",
   "opportunityTasks.heading": "Aufgaben",
   "opportunityTasks.progressTag": "{0} Aufgaben · {1} erledigt",
-  "opportunityTasks.sameOpportunity": "Gleiche Chance ({0})",
   "opportunityTasks.taskCount": "{0} Aufgaben"
 }

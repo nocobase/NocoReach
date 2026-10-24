@@ -5217,6 +5217,9 @@
   "taskNumbers.beforeLiveViews": "28 hari sebelum tayang · tayangan",
   "taskNumbers.position": "Posisi {0}",
   "taskDetail.propRelated": "Tugas terkait",
+  "taskDetail.relatedPrev": "Langkah sebelumnya · tugas ini diserahkan dari sini",
+  "taskDetail.relatedNext": "Langkah berikutnya · diserahkan dari tugas ini",
+  "taskDetail.relatedSame": "Peluang yang sama {0} · tugas untuk tempat lain",
   "taskSource.foundByAi": "Found by AI",
   "taskSource.foundBy": "Found by {0}",
   "taskSource.fromInsights": "Wawasan › Situasi terkini",
@@ -7189,6 +7192,5 @@
   "opportunityTasks.created": "Tugas dibuat: {0}. Buka masing-masing, baca, lalu klik \"Mulai\".",
   "opportunityTasks.heading": "Tugas",
   "opportunityTasks.progressTag": "{0} tugas · {1} selesai",
-  "opportunityTasks.sameOpportunity": "Peluang yang sama ({0})",
   "opportunityTasks.taskCount": "{0} tugas"
 }

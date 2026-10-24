@@ -5141,6 +5141,9 @@
   "taskNumbers.beforeLiveViews": "公開前 28 日 · 表示回数",
   "taskNumbers.position": "{0} 位",
   "taskDetail.propRelated": "関連タスク",
+  "taskDetail.relatedPrev": "前のステップ · このタスクの引き継ぎ元",
+  "taskDetail.relatedNext": "次のステップ · このタスクからの引き継ぎ先",
+  "taskDetail.relatedSame": "同じ機会 {0} · 他の箇所を変更するタスク",
   "taskSource.foundByAi": "Found by AI",
   "taskSource.foundBy": "Found by {0}",
   "taskSource.fromInsights": "インサイト › 現在の状況",
@@ -7189,6 +7192,5 @@
   "opportunityTasks.created": "タスクを作成しました: {0} 件。それぞれ開いて内容を確認してから「開始」をクリックしてください。",
   "opportunityTasks.heading": "タスク",
   "opportunityTasks.progressTag": "タスク {0} 件 · 完了 {1}",
-  "opportunityTasks.sameOpportunity": "同じ改善機会（{0}）",
   "opportunityTasks.taskCount": "タスク {0} 件"
 }

@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Related tasks in groups
+
+- The task page's Properties card lists related tasks in a section of their own below the properties, in groups: Previous step (this task was handed off from it), Same opportunity O-n (tasks changing other places), and Next step. Each task is one row (its number, its title on one line, its status tag) that opens it. A task is listed once, in its closest relation; empty groups and an empty section are left out. The previous and next steps now carry their number and status from the server too.
+
 ## Unreleased — Read an article full screen
 
 - The article review card has a Read full screen button beside Preview | Changes. It opens the article on a page of its own (`/actions/:taskId/article?lang=en&view=preview`), at reading width with nothing beside it, under a slim bar with Back to task, the languages, Preview | Changes, and the review's actions (Approve and publish, Request changes, Edit directly). Editing there uses the full width for the editor and its live preview. The page opens from its address or in a new tab, its trail reads Tasks › T-n › Article, and Back to task or Esc returns to the task where it was scrolled. Feedback and edits started on either page are the same drafts.
