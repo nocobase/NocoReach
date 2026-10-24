@@ -92,7 +92,7 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
       ? [
           'build 成功必须返回 pr：{url,number,branch,headSha,files:[{path,additions,deletions}],checks:{ok,summary},release,verifyText,pages:[string],changes:[{path,before,after,truncated?:boolean}],visibleChanges:[{page,label,before,after}]}。',
           'visibleChanges 给不看代码的负责人审核：用读者的话列出访客或搜索结果能看到的变化。page 是页面路径或 URL；label 说明是哪一处，如“搜索标题”“搜索描述”“页面开头”“新增链接”；before/after 是改动前后读者看到的文字，原来没有就写空字符串。最多 20 项，每段不超过 1000 字符；不写代码、标签或文件路径。读者看不到变化时返回空数组。',
-          'release 是发布说明；verifyText 是改动后可在公开页面找到的独特短句（最多 200 字符）；pages 是待验证的页面 URL。无法通过页面文字验证时，verifyText 返回空字符串、pages 返回空数组，并在 release 说明原因，不得编造。',
+          'release 是给负责人看的发布说明，最多三行，用读者能懂的话说改了什么，不写时间戳和规则名；verifyText 是改动后可在公开页面找到的独特短句（最多 200 字符）；pages 是待验证的页面 URL。无法通过页面文字验证时，verifyText 返回空字符串、pages 返回空数组，并在 release 说明原因，不得编造。',
           'changes 提供实际修改文本的前后对比，最多 10 个文件，正文合计不超过 40000 字符，截断时标记 truncated=true；二进制文件只列在 files。完整 JSON 不超过 90000 字符。',
         ]
       : []),
@@ -103,7 +103,9 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
           'article 成功必须返回 article:{slug?,status?,locales:{<语言>:{title?,description?,body?}},verifyText?,summary?}；verifyText 和 summary 都放在 article 里面。语言只能取 data.article.target.locales，字段只能取 data.article.target.fields 中该语言支持的字段。',
           'status 只能是 draft 或 published，仅在 data.article.target.status 为 true 时有效：新文章默认 draft，任务明确要求直接公开时才写 published；改写已有文章时不要改变状态，除非任务明确要求。提交前先用 JSON 解析器检查结果是合法 JSON。',
           '新文章必须给出 slug（小写字母、数字和连字符，最多 200 字符），以及第一个语言的 title 和 body。改写已有文章只返回实际修改的语言和字段，未修改的不要返回；body 必须是该语言的完整正文，不是片段。title 最多 300 字符，description 最多 2000 字符。',
-          'verifyText 是发布后能在页面上找到的独特短句，取自修改后的标题或正文原文，8-200 字符；没有合适的就省略。summary 一两句话说明改了什么。content 写给审核人的修改说明（Markdown），列出改动的语言、字段和理由。',
+          'verifyText 是发布后能在页面上找到的独特短句，取自修改后的标题或正文原文，8-200 字符；没有合适的就省略。',
+          'summary 必填，是审核人最先看到的说明：纯文本，最多三行，用读者能懂的话说这次改了什么；按审核意见修改时先说按意见做了什么，例如“按你的意见换了 5 张截图（NocoBase、Teable）；标题和摘要沿用上一版”。不要写时间戳、规则名、证据细节，也不要重复改前改后的标题和摘要，审核页会显示文章预览和逐项对比。',
+          'content 是完整的修改说明（Markdown），审核人需要时才展开：列出改动的语言、字段、理由和依据。',
         ]
       : []),
     ...(mode === 'merge'
