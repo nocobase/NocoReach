@@ -23,7 +23,8 @@ import {
 } from '../../../shared/article-publishing.js';
 import { Reveal } from '#components/reach/reveal';
 import { Tag } from '#components/reach/tag';
-import { GitBranch, Globe } from 'lucide-react';
+import { GitBranch, Globe, Maximize2 } from 'lucide-react';
+import { Link } from 'react-router';
 import { lineTabClass, lineTabListClass } from '#components/reach/line-tabs';
 import { Segmented } from '#components/reach/segmented';
 import { ChangeView } from '../change-view';
@@ -36,13 +37,18 @@ import type {
 } from '../task-execution-types';
 import { useTaskDraft } from './draft-store.js';
 import { AgentNotes } from './agent-notes.js';
-import { ArticlePreview, type ArticleText } from './article-preview.js';
+import { ArticlePreview } from './article-preview.js';
 import { localePageUrl } from './article-page.js';
 import { MarkdownEditor } from './markdown-editor.js';
 import { Notice } from './layout.js';
 import { text } from './styles.js';
 import {
   articleContext,
+  articleLanguages,
+  draftContent,
+  revisedText,
+  type ArticleLanguages,
+  type ArticleView,
   fieldChange,
   fieldLabel,
   focusSoon,
@@ -54,32 +60,6 @@ import {
 // The article an article step proposes, read as its readers will see it or field by field against the version it was
 // written from, and edited in place (a save is a new immutable version). Conflicts from a rebase are listed first, with
 // both versions.
-
-/** One language of the article as it reads after the change: the draft's fields over the version it was written from. */
-const revisedText = (
-  a: Pick<ArticleProposal, 'draft'>,
-  base: ArticleContent | null,
-  locale: string,
-): ArticleText => {
-  const draft = a.draft.locales[locale],
-    was = base?.locales[locale];
-  return {
-    title: draft?.title ?? was?.title ?? '',
-    description: draft?.description ?? was?.description ?? '',
-    body: draft?.body ?? was?.body ?? '',
-  };
-};
-
-/** How a changed language is read: as it will be, or its changes field by field against the version it was written from. */
-type View = 'preview' | 'changes';
-
-const draftContent = (
-  a: Pick<ArticleProposal, 'draft'>,
-): Partial<ArticleContent> => ({
-  slug: a.draft.slug,
-  status: a.draft.status,
-  locales: a.draft.locales,
-});
 
 // Where the article goes and what it becomes, as tags rather than a sentence (2026-10-24 user request, as the task
 // header's steps): the target by its own name with a mark for its kind, new or update, and the status it is published
@@ -267,53 +247,156 @@ function ConflictList({
   );
 }
 
+/** The article's languages as tabs, by name only (2026-10-24 user request: no change counts). */
+export function LanguageTabs({
+  locales,
+  tab,
+  onTab,
+}: {
+  locales: string[];
+  tab: string;
+  onTab: (locale: string) => void;
+}) {
+  return (
+    <div
+      className={lineTabListClass}
+      role='tablist'
+      aria-label={$t('articleTask.article')}
+    >
+      {locales.map((l) => (
+        <button
+          key={l}
+          type='button'
+          role='tab'
+          className={lineTabClass}
+          aria-selected={l === tab}
+          onClick={() => onTab(l)}
+        >
+          {localeName(l, getCurrentLocale())}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Two ways to read a changed language, Preview | Changes (2026-10-24 user request: the reader needs what it will be
+ * and what changed; a separate view of the earlier version, a text link for it and change counts on the tabs were
+ * noise).
+ */
+export function ViewSwitch({
+  value,
+  onChange,
+  className,
+}: {
+  value: ArticleView;
+  onChange: (view: ArticleView) => void;
+  className?: string;
+}) {
+  return (
+    <Segmented
+      label={$t('articleTask.viewAs')}
+      value={value}
+      onChange={(v) => onChange(v as ArticleView)}
+      options={[
+        { id: 'preview', label: $t('articleTask.viewPreview') },
+        { id: 'changes', label: $t('articleTask.viewChanges') },
+      ]}
+      className={className}
+    />
+  );
+}
+
+/** Which languages the article lacks: none written yet for a new article, none at all for a changed one. */
+export function MissingLanguages({
+  languages,
+}: {
+  languages: ArticleLanguages;
+}) {
+  const { locales, missing, isNew } = languages;
+  const names = (list: string[]) =>
+    joinNames(list.map((l) => localeName(l, getCurrentLocale())));
+  return missing.length > 0 ? (
+    <p className={text.muted}>
+      {isNew
+        ? $t('articleTask.onlyWrote', { 0: names(locales) })
+        : $t('articleTask.noVersion', { 0: names(missing) })}
+    </p>
+  ) : null;
+}
+
+/** One language of the article, as its readers will see it or as its changes field by field. */
+export function ArticleLanguage({
+  data,
+  article: a,
+  base,
+  tab,
+  view,
+}: {
+  data: TaskData;
+  article: ArticleProposal;
+  base: ArticleContent | null;
+  tab: string;
+  view: ArticleView;
+}) {
+  const draft = draftContent(a);
+  return (
+    <div role='tabpanel' className='flex flex-col gap-3'>
+      {view !== 'changes' ? (
+        <ArticlePreview
+          key={tab}
+          text={revisedText(a, base, tab)}
+          pageUrl={localePageUrl(
+            data,
+            a.targetId,
+            a.draft.slug || base?.slug || '',
+            tab,
+          )}
+        />
+      ) : (
+        ARTICLE_FIELDS.map((f) => {
+          const path = `${tab}.${f}`;
+          return a.changes.includes(path) ? (
+            // The diff's own first line names the field ("English · Title"), so no label above it.
+            <div key={path} className='flex min-w-0 flex-col gap-1'>
+              <ChangeView
+                changes={[
+                  fieldChange(path, valueAt(base, path), valueAt(draft, path)),
+                ]}
+              />
+            </div>
+          ) : (
+            <p key={path} className='text-sm text-muted-foreground'>
+              {$t(`articleTask.field.${f}`)} · {$t('articleTask.unchanged')}
+            </p>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
 export function ArticleReview({
   data,
   article: a,
   notes,
   settled = false,
+  readerTo,
 }: {
   data: TaskData;
   article: ArticleProposal;
   notes: string;
   /** Looking back at a delivered version rather than reviewing it: what review settled (conflicts, adoption) is left out. */
   settled?: boolean;
+  /** Where Read full screen opens the language and view being shown; left out where there is no reading page. */
+  readerTo?: (tab: string, view: ArticleView) => string;
 }) {
-  const { target, base } = articleContext(data, a);
-  const all = [
-    ...new Set([...(target?.locales || []), ...Object.keys(a.draft.locales)]),
-  ];
-  // A language with no text in the draft or the article is left out rather than shown as an empty tab, and the line
-  // under the tabs says which (2026-10-24 user report).
-  const written = (l: string) => {
-    const t = revisedText(a, base, l);
-    return Boolean(t.title || t.description || t.body);
-  };
-  const shown = all.filter(written),
-    locales = shown.length ? shown : all.slice(0, 1),
-    missing = all.filter((l) => !locales.includes(l));
-  const isNew = !a.articleId;
-  const changed = (l: string) => a.changes.some((c) => c.startsWith(`${l}.`));
-  const [tab, setTab] = useState(locales.find(changed) || locales[0]);
-  // Two ways to read a changed language, Preview | Changes (2026-10-24 user request: the reader needs what it will be
-  // and what changed; a separate view of the earlier version, a text link for it and change counts on the tabs were
-  // noise). Preview first when the language's body changed; Changes when only its title or description did. A new
-  // article, or a language the article did not have, has one version and no switch.
-  const [views, setViews] = useState<Record<string, View>>({});
-  const versions = !isNew && Boolean(base?.locales[tab]);
-  const view: View = !versions
-    ? 'preview'
-    : (views[tab] ??
-      (a.changes.includes(`${tab}.body`) ? 'preview' : 'changes'));
-  const draft = draftContent(a);
-  const names = (list: string[]) =>
-    joinNames(list.map((l) => localeName(l, getCurrentLocale())));
-  const pageUrl = localePageUrl(
-    data,
-    a.targetId,
-    a.draft.slug || base?.slug || '',
-    tab,
-  );
+  const languages = articleLanguages(data, a);
+  const { target, base, locales } = languages;
+  const [tab, setTab] = useState(locales.find(languages.changed) || locales[0]);
+  const [views, setViews] = useState<Record<string, ArticleView>>({});
+  const versions = languages.versions(tab);
+  const view = views[tab] ?? languages.defaultView(tab);
   return (
     <div className='flex flex-col gap-4'>
       <AgentNotes summary={a.draft.summary} notes={notes} />
@@ -342,75 +425,37 @@ export function ArticleReview({
         ) : null,
       )}
       <div className='flex flex-wrap items-end justify-between gap-x-4 gap-y-2'>
-        <div
-          className={lineTabListClass}
-          role='tablist'
-          aria-label={$t('articleTask.article')}
-        >
-          {locales.map((l) => (
-            <button
-              key={l}
-              type='button'
-              role='tab'
-              className={lineTabClass}
-              aria-selected={l === tab}
-              onClick={() => setTab(l)}
+        <LanguageTabs locales={locales} tab={tab} onTab={setTab} />
+        <div className='mb-1.5 flex items-center gap-1'>
+          {versions && (
+            <ViewSwitch
+              value={view}
+              onChange={(v) => setViews({ ...views, [tab]: v })}
+            />
+          )}
+          {readerTo && (
+            // The article on a page of its own, at reading width with nothing beside it (2026-10-24 user request).
+            <Button
+              variant='ghost'
+              size='icon'
+              aria-label={$t('articleTask.readFullScreen')}
+              title={$t('articleTask.readFullScreen')}
+              nativeButton={false}
+              render={<Link to={readerTo(tab, view)} />}
             >
-              {localeName(l, getCurrentLocale())}
-            </button>
-          ))}
+              <Maximize2 />
+            </Button>
+          )}
         </div>
-        {versions && (
-          <Segmented
-            label={$t('articleTask.viewAs')}
-            value={view}
-            onChange={(v) => setViews({ ...views, [tab]: v as View })}
-            options={[
-              { id: 'preview', label: $t('articleTask.viewPreview') },
-              { id: 'changes', label: $t('articleTask.viewChanges') },
-            ]}
-            className='mb-1.5'
-          />
-        )}
       </div>
-      {missing.length > 0 && (
-        <p className={text.muted}>
-          {isNew
-            ? $t('articleTask.onlyWrote', { 0: names(locales) })
-            : $t('articleTask.noVersion', { 0: names(missing) })}
-        </p>
-      )}
-      <div role='tabpanel' className='flex flex-col gap-3'>
-        {view !== 'changes' ? (
-          <ArticlePreview
-            key={tab}
-            text={revisedText(a, base, tab)}
-            pageUrl={pageUrl}
-          />
-        ) : (
-          ARTICLE_FIELDS.map((f) => {
-            const path = `${tab}.${f}`;
-            return a.changes.includes(path) ? (
-              // The diff's own first line names the field ("English · Title"), so no label above it.
-              <div key={path} className='flex min-w-0 flex-col gap-1'>
-                <ChangeView
-                  changes={[
-                    fieldChange(
-                      path,
-                      valueAt(base, path),
-                      valueAt(draft, path),
-                    ),
-                  ]}
-                />
-              </div>
-            ) : (
-              <p key={path} className='text-sm text-muted-foreground'>
-                {$t(`articleTask.field.${f}`)} · {$t('articleTask.unchanged')}
-              </p>
-            );
-          })
-        )}
-      </div>
+      <MissingLanguages languages={languages} />
+      <ArticleLanguage
+        data={data}
+        article={a}
+        base={base}
+        tab={tab}
+        view={view}
+      />
     </div>
   );
 }

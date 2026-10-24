@@ -24,6 +24,7 @@ import snowflake from './snowflake.js';
 import users from './users.js';
 import nocoreach from './nocoreach.js';
 import agents from './agents.js';
+import demoMode from './demo-mode.js';
 import nocoreachMock from './nocoreach-mock.js';
 
 const defaultConfigs: AppConfigFactory<{
@@ -49,6 +50,7 @@ const defaultConfigs: AppConfigFactory<{
   users: ReturnType<typeof users>;
   nocoreach: ReturnType<typeof nocoreach>;
   agents: ReturnType<typeof agents>;
+  demoMode: ReturnType<typeof demoMode>;
   nocoreachMock: ReturnType<typeof nocoreachMock>;
 }> = defaultAppConfigs({
   auth,
@@ -74,6 +76,7 @@ const defaultConfigs: AppConfigFactory<{
   nocoreach,
   agents,
   nocoreachMock,
+  demoMode,
 });
 
 export default defaultConfigs;

@@ -81,18 +81,22 @@ it('bundles the chosen marketing Skills at one pinned commit, within the library
   }
 });
 
-it('starts a fresh library with every built-in at the current version', async () => {
-  const { s, payload } = harness();
+it('reads fresh built-ins with summaries without persisting the library', async () => {
+  const { s, rows } = harness();
   const list = await s.list('1');
   expect(list.skills).toHaveLength(BUILT_IN_SKILLS.length);
   expect(list.skills.every((x: any) => x.builtIn && !x.enabled)).toBe(true);
   expect(list.skills.find((x: any) => x.name === 'seo-audit')).toMatchObject({
     source: expect.stringContaining('/skills/seo-audit'),
+    summaryKey: 'skillSummaries.seoAudit',
   });
-  expect(payload('nr-skills')).toMatchObject({
-    revision: 1,
-    builtIns: BUILT_IN_VERSION,
+  const skill = BUILT_IN_SKILLS.find((b) => b.id === 'seo-audit')!;
+  expect(await s.get('1', { skillId: skill.id })).toMatchObject({
+    skill: { summaryKey: skill.summary, description: skill.description },
+    body: skill.body,
+    files: skill.files,
   });
+  expect(rows).toEqual([]);
 });
 
 it('adds the newer built-ins to an existing library once, never over a Skill of the same name or a deleted one', async () => {
@@ -136,9 +140,9 @@ it('adds the newer built-ins to an existing library once, never over a Skill of 
   expect(payload('nr-skill:sk-imported').body).toBe('mine');
   expect(rows.some((r) => r.key === 'nr-skill:seo-audit')).toBe(false);
   expect(payload('nr-skills')).toMatchObject({
-    revision: 8,
-    builtIns: BUILT_IN_VERSION,
+    revision: 7,
   });
+  expect(payload('nr-skills')).not.toHaveProperty('builtIns');
   // Later writes keep the version, so a deleted marketing Skill is not added again.
   await s.remove({ skillId: 'ai-seo' });
   await s.setEnabled('1', { skillId: 'schema', enabled: true });
