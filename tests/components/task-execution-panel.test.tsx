@@ -227,3 +227,43 @@ test('a run a NocoReach restart interrupted names the restart and the official r
     ),
   ).toBeInTheDocument();
 });
+
+// 2026-10-24 user report on T-35: a fold called Source snapshot for this run only turned into Collapse; for a run
+// without forum topics it held a single grey line, opened out of view.
+test('a run without forum topics shows no source snapshot', async () => {
+  action.mockResolvedValue({
+    ...data,
+    sources: { capturedAt: run.createdAt, topics: [], warnings: [] },
+  });
+  mount();
+  await screen.findByText('缺少原帖正文', { exact: false });
+  expect(screen.queryByText('本次资料快照')).toBeNull();
+  expect(screen.queryByRole('region', { name: 'Agent 读到的帖子' })).toBeNull();
+  expect(document.body).not.toHaveTextContent('资料准备时间');
+});
+
+test('the posts a community reply read are a titled list, with the rest after five topics', async () => {
+  const user = userEvent.setup();
+  const topics = Array.from({ length: 7 }, (_, i) => ({
+    id: `t${i}`,
+    title: `Topic ${i + 1}`,
+    url: `https://forum.example.com/t/${i + 1}`,
+    complete: i !== 1,
+    posts: Array.from({ length: i + 2 }, () => ({})),
+    missing: [],
+  }));
+  action.mockResolvedValue({
+    ...data,
+    sources: { capturedAt: run.createdAt, topics, warnings: [] },
+  });
+  mount();
+  const section = await screen.findByRole('region', {
+    name: 'Agent 读到的帖子',
+  });
+  expect(section).toHaveTextContent('已提供 3 楼 · 资料不完整');
+  expect(screen.getByRole('link', { name: 'Topic 5' })).toBeVisible();
+  expect(screen.queryByRole('link', { name: 'Topic 6' })).toBeNull();
+  await user.click(screen.getByRole('button', { name: '还有 2 个话题' }));
+  expect(screen.getByRole('link', { name: 'Topic 7' })).toBeVisible();
+  expect(screen.queryByRole('button', { name: /个话题/ })).toBeNull();
+});

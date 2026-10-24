@@ -4759,6 +4759,8 @@
   "taskDetail.actualModelNotReported": "Actual model was not reported",
   "taskDetail.unknownRunner": "Unknown runner",
   "taskDetail.sourceSnapshotRun": "Source snapshot for this run",
+  "taskDetail.postsAgentRead": "Posts the Agent read",
+  "taskDetail.moreTopics": "{0} more topics",
   "taskDetail.runNoRecordedEvents": "This run has no recorded events.",
   "taskDetail.sourceSource": "Source: {source}",
   "taskDetail.viewCountRuns": "View all {count} runs",

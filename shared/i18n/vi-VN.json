@@ -4807,6 +4807,8 @@
   "taskDetail.actualModelNotReported": "Chưa báo cáo mô hình thực tế",
   "taskDetail.unknownRunner": "Runner không xác định",
   "taskDetail.sourceSnapshotRun": "Bản chụp nguồn dữ liệu cho lần chạy này",
+  "taskDetail.postsAgentRead": "Bài viết tác nhân AI đã đọc",
+  "taskDetail.moreTopics": "Thêm {0} chủ đề",
   "taskDetail.runNoRecordedEvents": "Lần chạy này chưa ghi nhận sự kiện nào.",
   "taskDetail.sourceSource": "Nguồn: {source}",
   "taskDetail.viewCountRuns": "Xem tất cả {count} lần chạy",
