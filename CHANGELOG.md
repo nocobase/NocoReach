@@ -4,6 +4,13 @@
 
 - Under a task's title, the playbook's steps are a row of tags joined by chevrons again, as before the one-layout change: done steps ticked in green, the current one outlined (violet for a person's step, blue for the Agent's), the rest grey. The grey "Now: …" text after them is gone, since the highlighted step says where the task stands. Nothing else in the header changed.
 
+## Unreleased — Opportunities' tables fit and sort
+
+- Opportunities › Handled no longer scrolls sideways: the actions column was too narrow for Restore, so the table overflowed its card, clipping the number and leaving a blank above Restore. Number, Where it went, First found and the actions have fixed widths; the title takes the rest, truncated with the full title on hover. On a phone the number and first found drop out, and a change's chip hides so its title shows.
+- Every Handled column except the title sorts, with the arrows the other tables use, and the sort is kept in the URL (`sort`, `order`). Where it went sorts in a meaningful order: pending, needs confirmation, in progress, handed off, done, closed, dismissed, expired, no action needed. Changes without a number or first-found day stay last.
+- Watching's deadline sorts too, soonest first; its other columns are free text. Switching tabs clears the sort.
+- Restore in Handled and in Watching's Recently ended is an undo arrow, explained on hover, instead of the word; not the refresh arrows, which read as refreshing the item.
+
 ## Unreleased — A result's drawer without follow-ups, in one text size
 
 - A result's drawer no longer offers Follow-ups or the full-width "Create follow-up" button (2026-10-23 user decision: the flow ran too long). The follow-up page, its routes, the `result-create` page permission, the `createFromResult` capability and the `nrStrategy:createFromResult` action are removed. Opportunities and tasks raised from a result before keep showing where they came from and keep working.
