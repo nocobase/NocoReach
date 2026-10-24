@@ -28,6 +28,7 @@ import {
   Newspaper,
   NotebookPen,
   Package,
+  DatabaseZap,
   Plug,
   Search,
   Slack,
@@ -112,7 +113,7 @@ const page = (
   path,
   auth: 'required',
   authz: { resource: { type: 'page', id: name }, action: 'access' },
-  componentLoader: gated(load, false, !['members', 'keys'].includes(name)),
+  componentLoader: gated(load, false, !['members', 'keys', 'demo-data'].includes(name)),
   ...(navigation ? { navigation } : {}),
 });
 
@@ -139,7 +140,9 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
   page('growth-overview', '/home', () => import('./pages/strategy/index.js'), { title: nav('insights'), icon: Sparkles, order: 1 }),
   page('opportunity-library', '/opportunities', () => import('./pages/strategy/library.js'), { title: nav('opportunities'), icon: Lightbulb, order: 2 }),
   {...page('action-center', '/actions', () => import('./pages/optimization-work.js'), { title: nav('tasks'), icon: ListTodo, order: 3 }), children:[{name:'task-create',path:'new',auth:'required',authz:{resource:{type:'page',id:'task-create'},action:'access'},componentLoader:gated(() => import('./pages/task-create.js'))}]},
-  page('task-work', '/actions/:taskId', () => import('./pages/task-work.js')),
+  // The article's reading page covers the task (RouteChildPage) at /actions/:taskId/article; it renders inside the task
+  // page, which already passed the gates.
+  { ...page('task-work', '/actions/:taskId', () => import('./pages/task-work.js')), children: [{ name: 'task-article', path: 'article', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/task-detail/article-reader.js') }] },
   // 成果 is a dashboard; 全部成果 covers it at /results/all. A result's drawer opens over whichever of the two it was
   // opened from, so it is declared under both.
   { ...page('result-list', '/results', () => import('./pages/results/index.js'), { title: nav('results'), icon: ChartNoAxesCombined, order: 3.5 }), children: [
@@ -232,6 +235,7 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
       ],
     },
     page('data-connections', '/connections', () => import('./pages/source-connections.js'), { title: nav('connections'), icon: Plug, order: 1 }),
+    page('demo-data', '/demo-data', () => import('./pages/demo-management/index.js'), { title: nav('demoData'), icon: DatabaseZap, order: 7 }),
     { ...page('proxy-profiles', '/proxy-profiles', () => import('./pages/network.js'), { title: nav('proxyProfiles'), icon: Globe2, order: 5 }), children: [
       { name: 'network-proxy', path: 'proxy', componentLoader: () => import('./pages/proxy-profiles/proxy-form.js') },
       { name: 'proxy-profile-new', path: 'new', componentLoader: () => import('./pages/proxy-profiles/edit.js') },

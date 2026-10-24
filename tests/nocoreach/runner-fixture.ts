@@ -1,6 +1,6 @@
 import type { Agents } from '@nocobase/app-plugin-agents/server/tokens';
 
-/** Discover through the public Runner protocol; enabling remains an explicit administrator action. */
+/** Report models through the Runner protocol and explicitly create disabled agents for each test to enable. */
 export async function discoverAgents(
   agents: Agents,
   actor: string,
@@ -37,13 +37,26 @@ export async function discoverAgents(
       },
     ],
   });
-  const discovered = (await agents.agents.list()).filter((agent) =>
-    models.includes(agent.model ?? ''),
-  );
-  return {
-    connected,
-    discovered: models.map((model) =>
-      discovered.find((agent) => agent.model === model)!,
-    ),
-  };
+  const existing = await agents.agents.list();
+  const discovered = [];
+  for (const model of models) {
+    const found = existing.find(
+      (agent) => agent.tool === 'claude' && agent.model === model,
+    );
+    if (found) {
+      discovered.push(found);
+      continue;
+    }
+    const created = await agents.agents.createFromAvailable(
+      { tool: 'claude', model, description: 'Contract test agent' },
+      actor,
+    );
+    discovered.push(
+      await agents.agents.update(created.id, actor, {
+        expectedRevision: created.revision,
+        enabled: false,
+      }),
+    );
+  }
+  return { connected, discovered };
 }

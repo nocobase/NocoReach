@@ -1,3 +1,4 @@
+import { StatusBadge } from '#components/status-badge';
 import { useMessageState, useNocoReachLocale, getCurrentLocale, $t, $legacyText } from "#i18n";
 import {useState,type ReactElement,type ReactNode} from 'react';
 import {Check,ChevronsUpDown,Plus} from 'lucide-react';
@@ -26,7 +27,7 @@ export function ProjectSwitcher():ReactElement{
    </DropdownMenuTrigger>
    <DropdownMenuContent align="start" className="w-72">
     {(projects||[]).map((p:Project)=><DropdownMenuItem key={p.id} onClick={()=>{if(Number(p.id)!==Number(project?.id))switchProject(Number(p.id));}} className="gap-3 py-1.5" data-project={p.id}>
-     <ProjectIcon projectId={p.id} name={p.name}/><span className="min-w-0 flex-1"><span className="block truncate font-medium">{p.name}</span><span className="block truncate text-xs text-muted-foreground">{p.domains?.join(', ')}</span></span>{Number(p.id)===Number(project?.id)?<Check className="size-4"/>:null}
+     <ProjectIcon projectId={p.id} name={p.name}/><span className="min-w-0 flex-1"><span className='flex min-w-0 items-center gap-1.5'><span className='truncate font-medium'>{p.name}</span>{p.demo?<StatusBadge size="sm">{$t('demoData.badge')}</StatusBadge>:null}</span><span className="block truncate text-xs text-muted-foreground">{p.domains?.join(', ')}</span></span>{Number(p.id)===Number(project?.id)?<Check className="size-4"/>:null}
     </DropdownMenuItem>)}
     {canCreate?<><DropdownMenuSeparator/>
     <DropdownMenuItem onClick={()=>setAdding(true)} className="gap-2 py-1.5"><Plus className="size-4"/>{$t('projectSwitcher.addProject')}</DropdownMenuItem></>:null}

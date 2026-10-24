@@ -32,6 +32,10 @@ import { AppThemeProvider } from '../../client/theme/index.ts';
 
 // The header's inbox button reads the in-app notification plugin's API, which these tests do not serve; it is
 // covered by tests/components/inbox.test.tsx.
+// The demo account switch reads the router, which the account menu's portal is rendered without here.
+vi.mock('@nocobase/app-plugin-demo-mode/client/account-menu', () => ({
+  DemoAccountMenu: () => null,
+}));
 vi.mock('../../client/components/inbox-header-button', () => ({
   InboxHeaderButton: () => null,
 }));
@@ -130,9 +134,7 @@ describe('application shell', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: 'Open account menu' }),
     );
-    expect(
-      await screen.findByText('NocoReach v1.0.0-beta.67'),
-    ).toBeVisible();
+    expect(await screen.findByText('NocoReach v1.0.0-beta.67')).toBeVisible();
     expect(screen.queryByText('v9.9.9')).not.toBeInTheDocument();
     expect(screen.queryByText('Studio host')).not.toBeInTheDocument();
   });

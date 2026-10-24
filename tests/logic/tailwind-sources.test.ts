@@ -44,8 +44,11 @@ describe('tailwind content sources', () => {
     expect(withClient.length).toBeGreaterThan(0);
 
     for (const plugin of withClient) {
+      const pluginRoot = realpathSync(
+        path.join(appRoot, 'node_modules/@nocobase', plugin),
+      );
       expect(
-        content.some((file) => file.includes(plugin)),
+        content.some((file) => file.startsWith(`${pluginRoot}${path.sep}`)),
         `${plugin} contributes no scanned files; its utility classes would be missing from the stylesheet`,
       ).toBe(true);
     }

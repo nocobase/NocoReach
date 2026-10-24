@@ -1,11 +1,18 @@
 import { NavigationGuardProvider } from '@nocobase/app-client';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { setDictionary } from '../../client/i18n';
 import { TaskDraftProvider } from '../../client/pages/task-detail/drafts';
 import { TaskDetail } from '../../client/pages/task-detail';
+import ArticleReaderPage from '../../client/pages/task-detail/article-reader';
 import type { TaskData } from '../../client/pages/task-execution-types';
 import spanish from '../../shared/i18n/es-ES.json';
 
@@ -206,6 +213,21 @@ test('a page change is reviewed as what readers see, with code kept in Technical
   expect(dialog).toHaveTextContent('#186');
   expect(dialog).toHaveTextContent('src/pages/ja/index.astro');
   expect(dialog).toHaveTextContent('yarn build reported 177 errors');
+});
+
+// 2026-10-24 user request: "Agent · Version 2" named the Agent that Properties already shows.
+test('the review card names the version, and says so when a person made it', () => {
+  const view = mount();
+  const card = screen.getByRole('region', { name: '等你处理' });
+  expect(card).toHaveTextContent('第 1 版');
+  expect(card).not.toHaveTextContent('Agent · 第');
+  view.unmount();
+  const edited = pageChange();
+  (edited.work.results[0] as { createdBy?: string }).createdBy = '1';
+  mount(edited);
+  expect(screen.getByRole('region', { name: '等你处理' })).toHaveTextContent(
+    '第 1 版 · 人工修改',
+  );
 });
 
 test('the header says why the task exists and opens the evidence', async () => {
@@ -789,6 +811,167 @@ function liveArticle(): TaskData {
   return data;
 }
 
+// 2026-10-24 user report: an article's review card asked for release notes, which no publishing target receives.
+test('an article review has no release notes to edit, and the live card none to show', async () => {
+  const user = userEvent.setup();
+  const data = liveArticle();
+  const [artifact] = data.work.results as NonNullable<
+    TaskData['work']['results'][number]
+  >[];
+  data.work.stage = 'flow';
+  data.work.stageIndex = 1;
+  delete data.work.release;
+  delete (artifact as { approvedAt?: string }).approvedAt;
+  const view = mount(data);
+  const card = screen.getByRole('region', { name: '等你处理' });
+  expect(
+    within(card).getByText('Top 12 Open Source No-Code AI Tools (2026)'),
+  ).toBeVisible();
+  expect(within(card).queryByRole('button', { name: /发布说明/ })).toBeNull();
+  action.mockImplementation((resource: string, command: string) =>
+    Promise.resolve(
+      command === 'advance'
+        ? data
+        : resource === 'nrPlaybooks'
+          ? { playbooks: [] }
+          : [],
+    ),
+  );
+  await user.click(within(card).getByRole('button', { name: '通过并发布' }));
+  const approve = action.mock.calls.find(([, c]) => c === 'advance');
+  expect(approve?.[2]?.body).toMatchObject({ command: 'approveStage' });
+  expect(approve?.[2]?.body).not.toHaveProperty('release');
+  view.unmount();
+  mount(liveArticle());
+  expect(
+    within(screen.getByRole('region', { name: '已完成' })).queryByRole(
+      'button',
+      {
+        name: /发布说明/,
+      },
+    ),
+  ).toBeNull();
+});
+
+// The task with its child route, as nocoreach-routes.ts declares it, and the address the router is at.
+function Where() {
+  const l = useLocation();
+  return <output data-testid='where'>{l.pathname + l.search}</output>;
+}
+function mountRoutes(data: TaskData, entry: string) {
+  return render(
+    <MemoryRouter initialEntries={[entry]}>
+      <NavigationGuardProvider>
+        <TaskDraftProvider>
+          <Routes>
+            <Route
+              path='/actions/:taskId'
+              element={<TaskDetail projectId={1} taskId='1' initial={data} />}
+            >
+              <Route path='article' element={<ArticleReaderPage />} />
+            </Route>
+          </Routes>
+          <Where />
+        </TaskDraftProvider>
+      </NavigationGuardProvider>
+    </MemoryRouter>,
+  );
+}
+// The reading page: the page that holds Back to task (the task page stays mounted, covered, underneath).
+const readerPage = () =>
+  screen.getByRole('button', { name: '返回任务' }).closest('section')!;
+function reviewArticle(): TaskData {
+  const data = liveArticle();
+  const [artifact] = data.work.results as NonNullable<
+    TaskData['work']['results'][number]
+  >[];
+  data.work.stage = 'flow';
+  data.work.stageIndex = 1;
+  delete data.work.release;
+  delete (artifact as { approvedAt?: string }).approvedAt;
+  return data;
+}
+
+// 2026-10-24 user request: the article on a page of its own, to read without the task around it.
+test('Read full screen opens the article on its own page, and Esc goes back to the task', async () => {
+  const user = userEvent.setup();
+  mountRoutes(reviewArticle(), '/actions/1');
+  const card = screen.getByRole('region', { name: '等你处理' });
+  await user.click(within(card).getByLabelText('全屏阅读'));
+  expect(screen.getByTestId('where')).toHaveTextContent(
+    '/actions/1/article?lang=en&view=changes',
+  );
+  const reader = readerPage();
+  expect(
+    within(reader).getByRole('button', { name: '通过并发布' }),
+  ).toBeVisible();
+  await user.keyboard('{Escape}');
+  expect(screen.getByTestId('where')).toHaveTextContent(/^\/actions\/1$/);
+});
+
+test.each([false, true])(
+  'the reading page opens from its address, follows its language and view, and approves (simulated: %s)',
+  async (simulated) => {
+    const user = userEvent.setup();
+    const data = reviewArticle();
+    data.task.evidence = { ...data.task.evidence, simulated };
+    action.mockImplementation((resource: string, command: string) =>
+      Promise.resolve(
+        command === 'advance'
+          ? data
+          : resource === 'nrPlaybooks'
+            ? { playbooks: [] }
+            : [],
+      ),
+    );
+    mountRoutes(data, '/actions/1/article?lang=en&view=preview');
+    const reader = readerPage();
+    expect(
+      within(reader).getByRole('heading', {
+        name: 'Top 12 Open Source No-Code AI Tools (2026)',
+      }),
+    ).toBeVisible();
+    expect(
+      within(reader).getByRole('button', { name: '预览' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    await user.click(within(reader).getByRole('button', { name: '改动' }));
+    expect(screen.getByTestId('where')).toHaveTextContent('view=changes');
+    await user.click(
+      within(reader).getByRole('button', {
+        name: simulated ? '通过并模拟发布' : '通过并发布',
+      }),
+    );
+    const approve = action.mock.calls.find(([, c]) => c === 'advance');
+    expect(approve?.[2]?.body).toMatchObject({
+      command: 'approveStage',
+      artifactId: 'artifact-1',
+    });
+    expect(approve?.[2]?.body).not.toHaveProperty('release');
+    await waitFor(() =>
+      expect(screen.getByTestId('where')).toHaveTextContent(/^\/actions\/1$/),
+    );
+  },
+);
+
+test.each(['page', 'article'])(
+  'a simulated %s review keeps its simulation action without mock settings',
+  (kind) => {
+    const data = kind === 'article' ? reviewArticle() : pageChange();
+    data.task.evidence = { ...data.task.evidence, simulated: true };
+    if (kind === 'page') delete data.work.results[0]!.pr;
+    mount(data);
+    const card = screen.getByRole('region', { name: '等你处理' });
+    expect(
+      within(card).getByRole('button', { name: '通过并模拟发布' }),
+    ).toBeVisible();
+    expect(
+      within(card).queryByRole('button', { name: '通过并发布' }),
+    ).toBeNull();
+    if (kind === 'page')
+      expect(card).toHaveTextContent('改动已完成，请检查后发布');
+  },
+);
+
 test('a live article names what changed on its card and shows each field before and after', async () => {
   const user = userEvent.setup();
   mount(liveArticle());
@@ -818,6 +1001,36 @@ test('a live article names what changed on its card and shows each field before 
   expect(reader).toHaveTextContent(
     'Top 12 Open Source No-Code AI Tools (2026)',
   );
+});
+
+// 2026-10-24 user report: a new article is not a set of changed fields.
+test('a new article that went live is named as one and opens as the article', async () => {
+  const user = userEvent.setup();
+  const data = liveArticle();
+  const [artifact] = data.work.results as NonNullable<
+    TaskData['work']['results'][number]
+  >[];
+  artifact.article = {
+    ...artifact.article!,
+    articleId: null,
+    baseKey: null,
+    baseVersion: null,
+    draft: {
+      slug: 'new-post',
+      locales: { en: { title: 'New post', description: 'D', body: 'Body' } },
+    },
+    changes: ['slug', 'en.title', 'en.description', 'en.body'],
+  } as typeof artifact.article;
+  mount(data);
+  const card = screen.getByRole('region', { name: '已完成' });
+  expect(card).toHaveTextContent('新文章');
+  expect(card).not.toHaveTextContent('改了');
+  await user.click(within(card).getByRole('button', { name: /查看文章/ }));
+  const dialog = await screen.findByRole('dialog', { name: '文章' });
+  expect(
+    within(dialog).getByRole('heading', { name: 'New post' }),
+  ).toBeVisible();
+  expect(within(dialog).queryByRole('button', { name: '改动' })).toBeNull();
 });
 
 test('a live page change names what readers see differently and opens it', async () => {
