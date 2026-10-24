@@ -476,6 +476,8 @@
   "projectKnowledge.characters": "{0} · {1} karakter",
   "projectKnowledge.charactersAdded": "{0} · {1} karakter · ditambahkan {2}",
   "skills.updated": "{0} · diperbarui {1}{2}",
+  "skills.updatedOn": "Diperbarui {0}{1}",
+  "skills.usedAtStep": "Langkah {0}: {1}",
   "dataX.likes": "{0} · {1} suka",
   "siteAudit.statusPageCount": "{0} · {1} halaman",
   "contentIndex.pagesDetailsReadPages": "{0} · {1} halaman · detail {2} halaman telah dibaca",

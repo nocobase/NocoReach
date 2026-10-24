@@ -476,6 +476,8 @@
   "projectKnowledge.characters": "{0} · {1} characters",
   "projectKnowledge.charactersAdded": "{0} · {1} characters · added {2}",
   "skills.updated": "{0} · updated {1}{2}",
+  "skills.updatedOn": "Updated {0}{1}",
+  "skills.usedAtStep": "Step {0}: {1}",
   "dataX.likes": "{0} · {1} likes",
   "siteAudit.statusPageCount": "{0} · {1} pages",
   "contentIndex.pagesDetailsReadPages": "{0} · {1} pages · details read for {2} pages",

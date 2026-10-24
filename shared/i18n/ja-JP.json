@@ -476,6 +476,8 @@
   "projectKnowledge.characters": "{0} · {1} 文字",
   "projectKnowledge.charactersAdded": "{0} · {1} 文字 · 追加 {2}",
   "skills.updated": "{0} · 更新 {1}{2}",
+  "skills.updatedOn": "更新 {0}{1}",
+  "skills.usedAtStep": "ステップ {0}：{1}",
   "dataX.likes": "{0} · いいね {1} 件",
   "siteAudit.statusPageCount": "{0} · {1} ページ",
   "contentIndex.pagesDetailsReadPages": "{0} · {1} ページ · 詳細読み込み済み {2} ページ",
