@@ -5,7 +5,6 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  '@nocobase/app-plugin-demo-mode@0.1.0-beta.1': 4cb64e87b23c7357d6d8ea4a77f46463aa667729c75ae48bd858fc7103da708e
   '@nocobase/app-plugin-scheduler@1.0.0-beta.19': a0f135f3d0596542aa6fbe6f0b550ac7967b3539a4dddb2ea9c8a7fad3cb3361
 
 importers:
@@ -41,7 +40,7 @@ importers:
         version: 1.0.0-beta.16(13f7633c0fc1157f50b0828d9a4f7937)
       '@nocobase/app-plugin-demo-mode':
         specifier: 0.1.0-beta.1
-        version: 0.1.0-beta.1(patch_hash=4cb64e87b23c7357d6d8ea4a77f46463aa667729c75ae48bd858fc7103da708e)(bdbacf530fa15fcd27b47842731de7be)
+        version: 0.1.0-beta.1(bdbacf530fa15fcd27b47842731de7be)
       '@nocobase/app-plugin-file':
         specifier: ^1.0.0-beta.26
         version: 1.0.0-beta.26(c7b35aa3508239abbbfa8991db345487)
@@ -9081,7 +9080,7 @@ snapshots:
       hono: 4.13.13
       zod: 4.6.5
 
-  '@nocobase/app-plugin-demo-mode@0.1.0-beta.1(patch_hash=4cb64e87b23c7357d6d8ea4a77f46463aa667729c75ae48bd858fc7103da708e)(bdbacf530fa15fcd27b47842731de7be)':
+  '@nocobase/app-plugin-demo-mode@0.1.0-beta.1(bdbacf530fa15fcd27b47842731de7be)':
     dependencies:
       '@base-ui/react': 1.8.0(@date-fns/tz@1.5.0)(@types/react@19.3.0)(date-fns@4.4.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@nocobase/app-cli': 1.0.0-beta.27(ffa5622d4a10392efa088d7c060673b2)

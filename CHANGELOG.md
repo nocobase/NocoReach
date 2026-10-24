@@ -2,21 +2,13 @@
 
 ## Unreleased — Demo Mode beta.1
 
-- Upgrade Demo Mode to `0.1.0-beta.1` and Agents to `1.0.0-beta.22`; retain the original eight-migration compatibility chain and existing demo data.
+- Use the unmodified published Demo Mode `0.1.0-beta.1` and Agents `1.0.0-beta.22`. Install from the registry with the frozen lockfile; no local plugin fixture or legacy migration patch is required.
 - Adopt the simplified Overview and Daily reset management page, removing obsolete chat tool and adapter label options. Preserve saved write policies, simulation overrides and schedules through the existing configuration APIs.
 - Use default-enabled integrated demo chat and server-declared local reads, including daily analysis and data queries, while keeping external work simulated and respecting explicit disabled overrides.
 
 ## Unreleased — Read-only Skills browsing
 
 - Render missing built-in Skills without persisting them during list, detail or Agent material reads, preventing Demo Mode write refusals when opening Playbooks. Preserve edited and deleted Skills and persist pending built-ins only during mutations or startup upgrades.
-
-## Unreleased — Published Demo Mode plugin
-
-- Document and verify the `nrKeywordRuns` demo write exception required by keyword detail market and SERP queries; correct the existing deployment configuration without resetting its dataset.
-
-- Replace the unpublished Demo Mode source fixture with the pinned registry release `0.1.0-beta.0` and align its required host dependencies. CI now uses the regular frozen lockfile without building or copying an upstream plugin fixture.
-- Retain the deployed pre-release Demo Mode migration chain through a versioned dependency patch so existing databases upgrade without deleting migration history; fresh installations use the same chain.
-- Preserve the existing demo dataset, generated content, database and storage; upgrading the dependency does not import, clear or reset demo data. Merge the latest main branch while retaining simulated task execution alongside restart recovery.
 
 ## Unreleased — Task page: a failure notice, a short Why and copy without positions
 

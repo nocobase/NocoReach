@@ -148,7 +148,6 @@
     "app-plugins/nocoreach-mock/tsconfig.json",
     "app-plugins/nocoreach-mock/tsconfig.build.json",
     "docs/MOCK-DATA.md",
-    "docs/DEMO-DATA.md",
     "pnpm-workspace.yaml",
     "patches"
   ],

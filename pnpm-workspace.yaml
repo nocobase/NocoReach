@@ -260,5 +260,4 @@ minimumReleaseAgeExclude:
   - '@nocobase/document-extractor@0.1.0-beta.0'
 # NocoReach-owned Scheduler extension. Upgrade this pin, the patch and the version in cli/build-scheduler-patch.mjs together.
 patchedDependencies:
-  '@nocobase/app-plugin-demo-mode@0.1.0-beta.1': patches/@nocobase__app-plugin-demo-mode@0.1.0-beta.1.patch
   '@nocobase/app-plugin-scheduler@1.0.0-beta.19': patches/@nocobase__app-plugin-scheduler@1.0.0-beta.19.patch
