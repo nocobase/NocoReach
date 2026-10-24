@@ -8,7 +8,7 @@ import bundled from './skills-bundled.json' with { type: 'json' };
 // `since` is the built-in version that introduced a Skill: an existing library gets the newer ones once (skills.ts).
 const BUILT_IN_VERSION=2;
 const OWN=[
- {id:'seo-title-description',name:'seo-title-description',description:systemMessageText('skillsBuiltin.useWhenWritingChangingWeb'),
+ {id:'seo-title-description',name:'seo-title-description',description:systemMessageText('skillsBuiltin.useWhenWritingChangingWeb'),summary:'skillsBuiltin.useWhenWritingChangingWeb',
   body:`# 页面标题与描述
 
 ## 先看现状
@@ -32,7 +32,7 @@ const OWN=[
 ## 交付时
 - 在修改说明里列出每个页面改前、改后的标题和描述。
 `,files:[]},
- {id:'docs-page-writing',name:'docs-page-writing',description:systemMessageText('skillsBuiltin.useWhenCreatingRewritingProduct'),
+ {id:'docs-page-writing',name:'docs-page-writing',description:systemMessageText('skillsBuiltin.useWhenCreatingRewritingProduct'),summary:'skillsBuiltin.useWhenCreatingRewritingProduct',
   body:`# 文档页写法
 
 ## 开头
@@ -54,7 +54,7 @@ const OWN=[
 - 第一次提到其他功能时链接到它的文档页；结尾列出相关页面。
 - 只链接仓库里确实存在的页面；不确定的写进修改说明。
 `,files:[]},
- {id:'research-report',name:'research-report',description:systemMessageText('skillsBuiltin.useWhenWritingResearchReports'),
+ {id:'research-report',name:'research-report',description:systemMessageText('skillsBuiltin.useWhenWritingResearchReports'),summary:'skillsBuiltin.useWhenWritingResearchReports',
   body:`# 调研报告
 
 按附带的 templates/report.md 的结构写。
@@ -89,10 +89,13 @@ const OWN=[
 ## 还缺什么
 -
 `}]},
-].map(s=>({...s,since:1}));
+].map(s=>({...s,since:1,originals:[systemMessageText(s.summary,{},'zh-CN'),systemMessageText(s.summary,{},'en-US')]}));
 // Version 2: marketing Skills from coreyhaines31/marketingskills (MIT), pinned by scripts/sync-marketing-skills.mjs. Each
 // keeps its upstream text, with the license and the source it came from.
-const MARKETING=bundled.skills.map(s=>({id:s.name,name:s.name,description:s.description,body:s.body,
+// `summary` is the i18n key of a built-in's short "when to use" in the UI language; `originals` are the stored descriptions
+// that count as unchanged (skills.ts shows the summary only for those). The Agent always gets the stored description.
+const camel=(name:string)=>name.replace(/-([a-z])/g,(_:string,c:string)=>c.toUpperCase());
+const MARKETING=bundled.skills.map(s=>({id:s.name,name:s.name,description:s.description,summary:`skillSummaries.${camel(s.name)}`,originals:[s.description],body:s.body,
  files:[...s.files,{path:'LICENSE.md',text:`${bundled.license}\n\nSource: ${bundled.source} (commit ${bundled.commit})\n`}],
  source:`${bundled.source}/tree/${bundled.commit}/skills/${s.name}`,since:2}));
 const BUILT_IN_SKILLS=[...OWN,...MARKETING];

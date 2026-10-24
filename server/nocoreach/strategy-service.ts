@@ -13,6 +13,8 @@ import * as periods from './evidence-period.js';
 import { projectId, requireAccess } from './policy.js';
 import { memoryForAI, MEMORY_SECTIONS } from './execution/memory.js';
 import { projectWork } from './execution/model.js';
+import { splitOf } from '../../shared/opportunity-parts.js';
+import { planOf, scopeText, taskPart } from './opportunity-hand-off.js';
 // Who created a task: it becomes the task's owner (2026-10-08).
 const creator=ctx=>{const u=ctx?.auth?.user;return u?.id!=null&&u.kind!=='service'?{createdBy:{id:String(u.id),name:String(u.nickname||u.username||u.id)}}:{};};
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -77,8 +79,6 @@ class StrategyService{
   const row=await this.row(id,transaction),state=row?.get('payload')||initial();
   if(typeof v.requestId!=='string'||!/^[-a-zA-Z0-9]{20,80}$/.test(v.requestId))fail(systemMessageText('strategy.invalidRequestIdMessage'));
   state.operations ||= [];
-  if(v.action==='createFromResult'&&state.resultSubmissions?.[v.requestId])return state;
-  if(v.action==='createFromResult'&&state.operations.includes(v.requestId))fail(systemMessageText('strategy.contentUpdatedAnotherWindowRefresh'),409);
   if(state.operations.includes(v.requestId))return state;
   if(v.action==='approve'&&state.proposals.find(p=>p.id===v.proposalId)?.taskId)return state;
   if(!Number.isInteger(v.revision)||v.revision!==state.revision)fail(systemMessageText('strategy.contentUpdatedAnotherWindowRefresh'),409);
@@ -132,48 +132,44 @@ class StrategyService{
   if(!key||!(state.insights?.evidence?.signals?.items||[]).some(s=>s.key===key))fail(systemMessageText('dailyAnalysis.changeNoLongerLatestAnalysis'),404);if(!['ignored','pending'].includes(v.status))fail(systemMessageText('strategy.invalidStatus'));
   state.signalMeta ||= {};const now=new Date().toISOString();if(v.status==='ignored'){state.signalMeta[key]={status:'ignored',at:now};watch.ignore(state,key,now);}else{delete state.signalMeta[key];watch.restore(state,key);}});}
  async reviewOpportunity(id,v){return this.mutate(id,v,async state=>{if(!board.allCards(state).some(c=>c.id===v.insightId))fail(systemMessageText('strategy.opportunityNotFound'),404);if(v.priority!==undefined&&!board.priorities.includes(v.priority))fail(systemMessageText('strategy.invalidPriority'));if(v.status!==undefined&&!board.statuses.includes(v.status))fail(systemMessageText('strategy.invalidStatus'));if(v.priority===undefined&&v.status===undefined)fail(systemMessageText('strategy.pickWhatAdjust'));state.opportunityMeta ||= {};const old=state.opportunityMeta[v.insightId]||{},at=new Date().toISOString();state.opportunityMeta[v.insightId]={...old,...(v.priority!==undefined?{priority:v.priority}:{}),...(v.status!==undefined?{status:v.status,...(v.status==='pending'?{restoredAt:at}:{ignoredAt:at})}:{}),reviewedAt:at};});}
+ // The places of an opportunity to hand off one by one (opportunity-hand-off.ts); empty when it is one task. Reads
+ // with the caller's transaction, if any.
+ async planFor(id,state,card,batch,ctx,transaction){
+  const signals=batch?.evidence?.signals?.items||[];if(card?.resultSource||!splitOf(card,signals).length)return [];
+  const site=await this.repo().findOne({filter:{key:`site-content:${id}`},transaction}).then(r=>r?.get('payload')||null,()=>null);
+  const ids=[...new Set(state.proposals.filter(p=>p.taskId&&p.insight?.id===card.id).map(p=>String(p.taskId)))];
+  const tasks=(await Promise.all(ids.map(t=>this.p.db.getRepository('nrTasks').findOne({filter:{id:t,projectId:id},transaction})))).filter(Boolean).map(t=>t.toJSON?t.toJSON():t);
+  let targets=[];try{targets=this.p.articleTargets?.list(String(id))?.targets||[];}catch{targets=[];}
+  return planOf({card,signals,site,proposals:state.proposals,tasks,targets,locale:ctx?.getCurrentLocale?.()||'zh-CN'});
+ }
+ // Hand off to agent on an opportunity with several places: what the confirmation dialog lists.
+ async handOffPlan(id,v,ctx){const state=await this.state(id);const batch=[state.insights,...(state.insightHistory||[])].find(b=>b?.items.some(i=>i.id===v.insightId));const card=batch?.items.find(i=>i.id===v.insightId);if(!card)fail(systemMessageText('strategy.opportunityNotFound'),404);return {parts:await this.planFor(id,state,card,batch,ctx)};}
  async confirmDirection(id,v,ctx){const fields=proposalInput(v),objective=text(v.objective,1000,true),context=await this.context(id);return this.mutate(id,v,async(state,transaction)=>{
   const batch=[state.insights,...(state.insightHistory||[])].find(b=>b?.items.some(i=>i.id===v.insightId));
   const insight=v.insightId?state.resultOpportunities?.find(i=>i.id===v.insightId)||batch?.items.find(i=>i.id===v.insightId):null;
   if(v.insightId&&!insight)fail(systemMessageText('strategy.opportunityNotExistCheckOpportunity'),409);
+  // An opportunity with several places becomes one task per place: the ones ticked in the dialog (`parts`), or every
+  // place without a task when none are named (a conversation's hand-off). Each task gets its place's title, page and
+  // playbook, and a brief that says it is one of several; its proposal keeps no copy of the evidence.
+  const plan=insight?await this.planFor(id,state,insight,batch,ctx,transaction):[];
+  if(plan.length){
+   if(v.parts!==undefined&&(!Array.isArray(v.parts)||v.parts.length>20||v.parts.some(k=>typeof k!=='string')))fail(systemMessageText('strategy.checkInputLength'));
+   const open=plan.filter(p=>!p.task),chosen=v.parts===undefined?open:open.filter(p=>v.parts.includes(p.key));
+   if(!chosen.length)fail(systemMessageText('opportunityTasks.nothingToHandOff'),409);
+   if(state.proposals.length+chosen.length>100)fail(systemMessageText('strategy.currentPilotSavesUp100'),409);
+   const locale=ctx?.getCurrentLocale?.()||'zh-CN',siblings=plan.filter(p=>p.task||chosen.includes(p)),{page:_page,...rest}=fields;
+   for(const part of chosen){const at=new Date().toISOString(),scope=scopeText(insight,part,siblings.filter(p=>p!==part),locale);
+    const proposal={...rest,title:part.title,brief:`${scope}\n\n${fields.brief}`.slice(0,20000),objective,id:randomUUID(),status:'approved',goalVersion:null,goal:null,insight,evidence:batch.evidence,part:taskPart(part),...(part.url?{page:part.url}:{}),createdAt:at};
+    const task=await this.createDirectionTask(id,proposal,{...v,playbookId:part.playbookId},ctx,transaction);
+    const {evidence:_evidence,...slim}=proposal;state.proposals.unshift({...slim,taskId:task.id,taskNo:task.get?.('evidence')?.no,approvedAt:at});}
+   return;
+  }
   if(state.proposals.length>=100)fail(systemMessageText('strategy.currentPilotSavesUp100'),409);
   const proposal={...fields,objective,id:randomUUID(),status:'approved',goalVersion:null,goal:null,insight:insight||null,evidence:insight?.resultSource?resultEvidence(insight.resultSource):insight?batch.evidence:context.evidence,...(insight?.resultSource?{resultSource:insight.resultSource}:{}),createdAt:new Date().toISOString()};
   const task=await this.createDirectionTask(id,proposal,v,ctx,transaction);
   state.proposals.unshift({...proposal,taskId:task.id,taskNo:task.get?.('evidence')?.no,approvedAt:new Date().toISOString()});
  });}
- async createDirectionTask(id,proposal,v,ctx,transaction){return this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:systemMessageText('messages.goal',{0:proposal.objective,1:proposal.brief},ctx?.getCurrentLocale?.()),status:systemMessageText('common.pending'),evidence:{source:systemMessageText('strategy.aiOpportunityActionConfirmedPerson'),objective:proposal.objective,...((proposal.why||whyInput(proposal.insight?.reason))?{why:proposal.why||whyInput(proposal.insight?.reason)}:{}),insight:proposal.insight,context:proposal.evidence,proposalId:proposal.id,...(proposal.signalKey?{signalKey:proposal.signalKey}:{}),...(proposal.page?{page:proposal.page}:{}),...(proposal.entry?{entry:proposal.entry}:{}),...(proposal.resultSource?{resultSource:proposal.resultSource}:{}),...creator(ctx),...(typeof v.playbookId==='string'&&/^[a-z0-9-]{1,60}$/.test(v.playbookId)?{suggestedPlaybook:v.playbookId}:{})}},transaction});}
- async createFromResult(id,v,ctx){
-  if(!['opportunity','task'].includes(v.kind))fail(systemMessageText('strategy.invalidStatus'));
-  const state=await this.mutate(id,{...v,action:'createFromResult'},async(state,transaction)=>{
-   const source=v.source;
-   if(!source||![7,28,null].includes(source.day)||!Number.isInteger(source.taskRevision)||!(source.computedAt===null||typeof source.computedAt==='string'))fail(systemMessageText('strategy.checkInputLength'));
-   const task=await this.p.taskExecution.task(id,String(source.taskId),transaction),w=projectWork(task);
-   const observation=source.day===null?null:w.observation?.results?.find(r=>r.day===source.day)||null;
-   if(w.revision!==source.taskRevision||(observation?.computedAt||null)!==source.computedAt||(!w.observeFrom&&source.day!==null)||(w.observeFrom&&source.day===null))fail(systemMessageText('strategy.contentUpdatedAnotherWindowRefresh'),409);
-   const {resultSummary}=await import('./execution/result-view.js');
-   const pages=this.p.taskExecution.effectPages(w);
-   if(!resultSummary(task,pages))fail(systemMessageText('strategy.opportunityNotFound'),404);
-   const resultSource={taskId:String(task.id),observeFrom:w.observeFrom||null,day:source.day,observation:observation?structuredClone(observation):null,pages:observation?[...observation.pages]:pages,capturedAt:new Date().toISOString()};
-   const fields=v.fields||{};
-   let target;
-   if(v.kind==='opportunity'){
-    const card=insightInput({...fields,signalIds:[],sources:[]});
-    state.resultOpportunities ||= [];
-    if(state.resultOpportunities.length>=100)fail(systemMessageText('strategy.currentPilotSavesUp100'),409);
-    target={...card,id:randomUUID(),resultSource,firstSeenAt:resultSource.capturedAt,updatedAt:resultSource.capturedAt,change:'new',sources:[...(observation?.gsc?['gsc']:[]),...(observation?.ga4?['ga4']:[])]};
-    state.resultOpportunities.unshift(target);
-   }else{
-    const fieldsChecked=proposalInput({title:fields.title,brief:fields.brief}),objective=text(fields.objective,1000,true);
-    if(fields.playbookId!==undefined&&(typeof fields.playbookId!=='string'||!/^[a-z0-9-]{1,60}$/.test(fields.playbookId)))fail(systemMessageText('strategy.checkInputLength'));
-    if(state.proposals.length>=100)fail(systemMessageText('strategy.currentPilotSavesUp100'),409);
-    const proposal={...fieldsChecked,objective,id:randomUUID(),status:'approved',goalVersion:null,goal:null,insight:null,evidence:resultEvidence(resultSource),resultSource,createdAt:resultSource.capturedAt};
-    target=await this.createDirectionTask(id,proposal,fields,ctx,transaction);
-    state.proposals.unshift({...proposal,taskId:target.id,taskNo:target.get?.('evidence')?.no,approvedAt:resultSource.capturedAt});
-   }
-   state.resultSubmissions ||= {};state.resultSubmissions[v.requestId]={kind:v.kind,id:String(target.id)};
-  });
-  return {...state.resultSubmissions[v.requestId],revision:state.revision};
- }
+ async createDirectionTask(id,proposal,v,ctx,transaction){return this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:systemMessageText('messages.goal',{0:proposal.objective,1:proposal.brief},ctx?.getCurrentLocale?.()),status:systemMessageText('common.pending'),evidence:{source:systemMessageText('strategy.aiOpportunityActionConfirmedPerson'),objective:proposal.objective,...((proposal.why||whyInput(proposal.insight?.reason))?{why:proposal.why||whyInput(proposal.insight?.reason)}:{}),insight:proposal.insight,context:proposal.evidence,proposalId:proposal.id,...(proposal.signalKey?{signalKey:proposal.signalKey}:{}),...(proposal.page?{page:proposal.page}:{}),...(proposal.part?{part:proposal.part}:{}),...(proposal.entry?{entry:proposal.entry}:{}),...(proposal.resultSource?{resultSource:proposal.resultSource}:{}),...creator(ctx),...(typeof v.playbookId==='string'&&/^[a-z0-9-]{1,60}$/.test(v.playbookId)?{suggestedPlaybook:v.playbookId}:{})}},transaction});}
  // Short task numbers (T-1, T-2 …): task record ids are long generated numbers, so each new task gets the next number
  // of its project when it is created — one hook for every place that creates tasks; kept in evidence.no.
  async numberTask(model,options){
@@ -218,10 +214,10 @@ class StrategyService{
   proposal.status='approved';proposal.taskId=task.id;proposal.taskNo=task.get?.('evidence')?.no;proposal.approvedAt=new Date().toISOString();
  });}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,systemMessageText('strategy.workspaceRequestNotCompleteEdits'));}};
-  this.p.app.resourceManager.define({name:'nrStrategy',actions:{createFromResult:wrap((id,v,c)=>this.createFromResult(id,v,c)),state:wrap(id=>this.state(id)),reviewOpportunity:wrap((id,v)=>this.reviewOpportunity(id,v)),saveInsights:wrap((id,v,c)=>this.saveInsights(id,v,c)),context:wrap(async(id,v,c)=>{const context=await this.context(id,v.periodDays),evidenceToken=randomUUID();await c.cache.set(`nr-analysis:${id}:${c.auth.user.id}:${evidenceToken}`,context,86400000);return {...context,evidenceToken};}),saveGoal:wrap((id,v,c)=>this.saveGoal(id,v,c)),saveProposal:wrap((id,v)=>this.saveProposal(id,v)),approve:wrap((id,v,c)=>this.approve(id,v,c)),confirmDirection:wrap((id,v,c)=>this.confirmDirection(id,v,c)),decideSignal:wrap((id,v)=>this.decideSignal(id,v)),badges:wrap((id,v,c)=>this.badges(id,c))}});
+  this.p.app.resourceManager.define({name:'nrStrategy',actions:{state:wrap(id=>this.state(id)),handOffPlan:wrap((id,v,c)=>this.handOffPlan(id,v,c)),reviewOpportunity:wrap((id,v)=>this.reviewOpportunity(id,v)),saveInsights:wrap((id,v,c)=>this.saveInsights(id,v,c)),context:wrap(async(id,v,c)=>{const context=await this.context(id,v.periodDays),evidenceToken=randomUUID();await c.cache.set(`nr-analysis:${id}:${c.auth.user.id}:${evidenceToken}`,context,86400000);return {...context,evidenceToken};}),saveGoal:wrap((id,v,c)=>this.saveGoal(id,v,c)),saveProposal:wrap((id,v)=>this.saveProposal(id,v)),approve:wrap((id,v,c)=>this.approve(id,v,c)),confirmDirection:wrap((id,v,c)=>this.confirmDirection(id,v,c)),decideSignal:wrap((id,v)=>this.decideSignal(id,v)),badges:wrap((id,v,c)=>this.badges(id,c))}});
   this.p.db.on('nrTasks.beforeCreate',(model,options)=>this.numberTask(model,options));
   this.p.app.on('afterStart',()=>this.numberAll().catch(e=>this.p.app.logger.warn('NocoReach opportunity numbers not filled',{message:e.message})));
-  this.p.app.acl.allow('nrStrategy',['createFromResult','state','context','reviewOpportunity','saveGoal','saveProposal','approve','confirmDirection','decideSignal','saveInsights','badges'],'loggedIn');
+  this.p.app.acl.allow('nrStrategy',['state','handOffPlan','context','reviewOpportunity','saveGoal','saveProposal','approve','confirmDirection','decideSignal','saveInsights','badges'],'loggedIn');
  }
 }
 export { StrategyService, goalInput, proposalInput, insightInput, evidenceFrom, projectMemory, memoryFields };

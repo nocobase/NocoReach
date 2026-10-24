@@ -231,3 +231,14 @@ it('does not expose rejected source credentials in diagnostics', () => {
     expect((error as Error).message).not.toContain('secret');
   }
 });
+
+it('asks article runs for a short summary the reviewer reads first, and keeps the details in content', () => {
+  const rules = resultRules('article').join('\n');
+  expect(rules).toContain('summary 必填');
+  expect(rules).toContain('最多三行');
+  expect(rules).toContain('不要重复改前改后的标题和摘要');
+  expect(rules).toContain('content 是完整的修改说明');
+  expect(resultRules('build').join('\n')).toContain(
+    'release 是给负责人看的发布说明，最多三行',
+  );
+});

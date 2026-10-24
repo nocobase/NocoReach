@@ -60,6 +60,7 @@ export class OnlineProvider {
     prompt: string,
     operation?: MockAiOperation,
     signal?: AbortSignal,
+    maxOutputTokens?: number,
   ): Promise<string> {
     if (this.p.mock?.enabled)
       return simulateAi(this.p.mock, operation, prompt, signal);
@@ -93,6 +94,7 @@ export class OnlineProvider {
       model,
       system,
       prompt,
+      ...(maxOutputTokens ? { maxOutputTokens } : {}),
       source: 'nocoreach',
       signal: signal ?? AbortSignal.timeout(240000),
     });

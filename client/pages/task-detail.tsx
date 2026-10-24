@@ -21,11 +21,12 @@ import { TaskNumbers } from './task-detail/task-numbers.js';
 import { Card, Clamped, Field } from './task-detail/layout.js';
 import { GAP, text } from './task-detail/styles.js';
 import { TaskStatusTag } from './task-status-tag';
+import { MarkdownEditor } from './task-detail/markdown-editor.js';
 import { hasTaskAgent } from './task-execution-types';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {createContext,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
-import {useNavigate,useSearchParams} from 'react-router';
+import {Outlet,useNavigate,useSearchParams} from 'react-router';
 import {useNavigationGuard,usePageBreadcrumb} from '@nocobase/app-client';
 import {Comparison} from './results/comparison.js';
 import {nocobaseClient as api,NocoReachHttpError} from "#lib/nocoreach-api";
@@ -43,6 +44,8 @@ import {cn} from '#lib/utils';
 import {Dialog,DialogContent,DialogHeader,DialogTitle} from '#components/ui/dialog';
 import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuCheckboxItem,DropdownMenuItem,DropdownMenuSeparator,DropdownMenuSub,DropdownMenuSubTrigger,DropdownMenuSubContent} from '#components/ui/dropdown-menu';
 import {TaskDraftScope,TaskDraftRecovery} from './task-detail/drafts.js';
+import {Checklist,RequestBox} from './task-detail/review-parts.js';
+import type {TaskPageContext} from './task-detail/reader-context.js';
 import {useTaskDraft,useTaskDraftStatus} from './task-detail/draft-store.js';
 import {DocReader,Markdown} from './doc-view';
 import {effectItems,effectLine,effectPages,type EffectResult} from './effect-model';
@@ -179,75 +182,38 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
   </div>
   <TechnicalDetails data={data} projectId={projectId} taskId={taskId} runs={runs}/>
   <EvidenceDialog open={evidenceOpen} onClose={()=>setEvidenceOpen(false)} data={data} projectId={projectId} taskId={taskId}/>
+  {/* The article's reading page (task-detail/article-reader.tsx) covers this page and keeps its scroll position. */}
+  <Outlet context={{data,update,busy,error,allowed:access.allowed,draftScope,crumb:no?`T-${no}`:data.task.title,heading} satisfies TaskPageContext}/>
   <Dialog open={pageOpen} onOpenChange={o=>{if(!o)setPageOpen(false);}}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>{$t('common.relatedPage')}</DialogTitle></DialogHeader><PageLinkEditor data={data} projectId={projectId} taskId={taskId} busy={busy} update={update}/></DialogContent></Dialog>
  </PageContainer></TaskActions.Provider></TaskAccess.Provider>;
 }
 // The header, two lines (2026-10-22 user decision): the title with its number in grey, the status and the task's menu;
-// then one grey line with the playbook's steps and where the task stands now.
+// then the playbook's steps, the current one highlighted.
 function TaskHeading({data,list,pick,busy,members,update,onPage}:{data:Data;list?:PlaybookList;pick:string;busy:boolean;members:Member[];update:Update;onPage:()=>void}){
  const no=(data.task.evidence as {no?:number}|undefined)?.no,w=data.work,started=Boolean(w.flow);
  const pb=started?undefined:list?.playbooks.find(x=>x.id===pick),stages=started?w.flow!.stages:pb?stagesFor(pb):[];
- const now=useNow(data);
  return <header className="flex flex-col gap-1.5">
   <div className="flex items-start justify-between gap-3">
    <h1 className={cn(text.title,'min-w-0 break-words')}>{no?<span className="mr-2 text-muted-foreground">T-{no}</span>:null}{data.task.title}</h1>
    <div className="flex shrink-0 items-center gap-1 pt-1.5"><TaskStatusTag work={w} status={(data.task as {status?:string}).status||''}/><MoreMenu data={data} busy={busy} members={members} update={update} onPage={onPage}/></div>
   </div>
-  {(stages.length>0||now)&&<div className={cn(text.muted,'flex flex-wrap items-baseline gap-x-1.5 gap-y-1')}>
-   {stages.length>0&&<StepBar stages={stages} w={w}/>}
-   {now&&<span data-now="">{stages.length>0&&<span aria-hidden="true">· </span>}{$t('taskDetail.nowState',{0:now})}</span>}
-  </div>}
+  {stages.length>0&&<StepBar stages={stages} w={w}/>}
  </header>;
 }
-// The playbook's steps as one line of text: the current one in the body colour, the others grey.
+// The playbook's steps as a row of tags, as before #241 (restored 2026-10-24 at the user's request): done ones ticked in
+// green, the current one outlined (violet for a person's step, blue for the Agent's), the rest grey.
 function StepBar({stages,w}:{stages:Stage[];w:Work}){
  const {self,owner}=useContext(TaskAccess),started=Boolean(w.flow),done=w.stage==='done',index=w.stageIndex||0,closed=Boolean(closedLabel(w));
  const label=(s:Stage)=>{const text=stageLabel(s);if(s.kind!=='review'||self)return text;
   // A space where a Latin owner name meets Chinese or Japanese text ("Super Admin" before the review step).
   if(!text.startsWith($t('common.you')))return `${text} · ${owner}`;const rest=text.slice($t('common.you').length);
   return `${owner}${/[A-Za-z0-9]$/.test(owner)&&/^[\u3040-\u30ff\u3400-\u9fff]/.test(rest)?' ':''}${rest}`;};
- return <ol className="nr-td-stepbar inline-flex flex-wrap items-baseline gap-x-1.5" aria-label={$t('common.progress')}>
-  {stages.map((s,i)=>{const st=!started?'todo':done||i<index?'done':i===index&&!closed?'current':'todo';return <li key={s.key} className="inline-flex items-baseline gap-x-1.5" data-state={st} aria-current={st==='current'?'step':undefined}>
-   {i>0&&<span aria-hidden="true">→</span>}
-   <span className={st==='current'?'text-foreground':undefined}>{label(s)}</span>
+ return <ol className="nr-td-stepbar flex flex-wrap items-center gap-1" aria-label={$t('common.progress')}>
+  {stages.map((s,i)=>{const st=!started?'todo':done||i<index?'done':i===index&&!closed?'current':'todo';return <li key={s.key} className="flex items-center gap-1" data-state={st} aria-current={st==='current'?'step':undefined}>
+   {i>0&&<ChevronRight className="size-3 text-muted-foreground" aria-hidden="true"/>}
+   <Tag tone={st==='done'?'green':st==='current'?(s.kind==='review'?'violet':'blue'):'grey'} icon={st==='done'?<Check/>:undefined} dot={st==='current'} className={st==='current'?'ring-1 ring-current':undefined}>{label(s)}</Tag>
   </li>;})}
  </ol>;
-}
-// Where the task stands, in a few words, after the steps: "Now: waiting for you to start".
-function useNow(data:Data):string{
- const {self,owner}=useContext(TaskAccess),w=data.work;
- if(isClosed(w))return closedWhen(w);
- if(!w.flow)return $t('taskDetail.nowConfirmStart');
- const r=w.release;
- if(w.stage==='done'){
-  if(r?.state==='simulated')return $t('taskDetail.simulatedRelease');
-  if(r?.state==='live')return effectItems(w).some(i=>!i.result)?$t('common.tracking'):$t('common.completed');
-  return $t('common.completed');
- }
- const stage=w.flow.stages[w.stageIndex||0];
- if(!stage)return '';
- const yours=(step:string)=>self?$t('taskDetail.nowYourStep',{0:step}):$t('taskDetail.nowOwnerStep',{0:owner,1:step});
- if(stage.kind==='agent'){
-  const cur=data.runs.filter(x=>x.stepId===stage.key&&x.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];
-  if(cur?.status==='running')return $t('taskDetail.agentWorking',{0:stage.name});
-  if(cur?.status==='queued')return $t('taskList.waitingAgentPickUp');
-  if(cur?.status==='failed')return $t('taskDetail.agentDidNotFinish');
-  return stageLabel(stage);
- }
- if(stage.kind==='review')return yours(stage.name);
- if(stage.kind==='publish')return yours($t('common.confirmPublish'));
- if(stage.kind==='release')switch(r?.state){
-  case 'merging':case 'publishing':return $t('taskDetail.publishing');
-  case 'merge_failed':return $t('taskDetail.publishFailed');
-  case 'publish_failed':return $t('articleTask.publishFailed');
-  case 'publish_conflict':return $t('articleTask.targetState.publishConflict');
-  case 'exporting':return $t('articleTask.targetState.exporting');
-  case 'verifying':return $t('taskDetail.waitingSiteUpdate');
-  case 'not_seen':case 'export_late':return $t('taskDetail.waitingConfirmLive');
-  default:return displayStageName(stage);
- }
- if(stage.kind==='observe')return $t('common.tracking');
- return displayStageName(stage);
 }
 // ✦ Why: the reason in a sentence or two, with the evidence behind it (2026-10-22 user decision, as the website's demo
 // card). While a change waits for review it answers why the change was made.
@@ -361,12 +327,6 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId,onEviden
   {attachments&&<Field label={$t('taskDetail.attachmentsDelivered')}><TaskMedia projectId={projectId} taskId={taskId}/></Field>}
  </StageCard>;
 }
-// Change feedback typed in the card itself, so it is never far from the result it is about.
-function RequestBox({executor,busy,onSend,onCancel}:{executor:string;busy:boolean;onSend:(text:string)=>Promise<boolean>;onCancel:()=>void}){
- const [value,setValue,clearValue]=useTaskDraft('request','');
- return <div className="flex flex-col gap-2"><Textarea autoFocus aria-label={$t('taskDetail.requestChanges')} rows={3} value={value} disabled={busy} placeholder={$t('taskDetail.writeFeedbackAfterSendRedoes',{0:executor})} onChange={e=>setValue(e.target.value)}/>
-  <div className="flex justify-end gap-2"><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{clearValue();onCancel();}}>{$t('common.cancel')}</Button><Button size="sm" disabled={busy||!value.trim()} onClick={()=>void onSend(value).then(ok=>{if(ok)clearValue();})}>{$t('taskDetail.sendRequestChanges')}</Button></div></div>;
-}
 // From the second version on: what was asked last time, above the version that answers it.
 function LastFeedback({w,stage,out}:{w:Work;stage:Stage;out:Artifact}){
  if(out.version<2)return null;
@@ -382,7 +342,7 @@ function ReportNotes({report}:{report:NonNullable<Artifact['report']>}){
 function PageChange({pr,content}:{pr?:PullRequestInfo;content:string}){
  const tech=useTechnicalDetails(),pages=pr?.pages||[];
  return <div className="flex flex-col gap-4">
-  {pr?.release&&<Field label={$t('taskDetail.whatChanged')}><p className={cn(text.body,'whitespace-pre-wrap')}>{humanTimes(pr.release)}</p></Field>}
+  {pr?.release&&<Field label={$t('taskDetail.whatChanged')}><Clamped long={pr.release.length>200||pr.release.split('\n').length>3}>{humanTimes(pr.release)}</Clamped></Field>}
   {pr?.visibleChanges?.length?<VisibleChanges items={pr.visibleChanges}/>:pr?<p className={text.muted}>{$t('taskDetail.noVisibleChanges')}</p>:<Reading><Markdown content={content}/></Reading>}
   {pr&&<div className={cn(text.body,'flex flex-wrap items-center gap-x-4 gap-y-2')}>
    {pr.previewUrl&&<a className="nr-link inline-flex items-center gap-1" href={pr.previewUrl} target="_blank" rel="noreferrer"><Globe className="size-4" aria-hidden="true"/>{$t('taskDetail.openPreviewPage')}</a>}
@@ -392,8 +352,10 @@ function PageChange({pr,content}:{pr?:PullRequestInfo;content:string}){
   </div>}
  </div>;
 }
-const Checklist=({stage,checked,setChecked,busy}:{stage:Stage;checked:string[];setChecked:(v:string[])=>void;busy:boolean})=>(stage.checklist||[]).length>0?<fieldset className={cn(text.body,'flex flex-col gap-2')}><legend className={cn(text.muted,'mb-2')}>{$t('taskDetail.confirmFollowing')}</legend>{stage.checklist!.map(c=><label key={c.key} className="flex items-center gap-2"><input type="checkbox" className="size-4 accent-primary" checked={checked.includes(c.key)} disabled={busy} onChange={e=>setChecked(e.target.checked?[...checked,c.key]:checked.filter(k=>k!==c.key))}/> {c.label}{c.required?'':$t('taskDetail.optional')}</label>)}</fieldset>:null;
 const ScopeConfirm=({pr,ok,setOk,busy}:{pr?:PullRequestInfo;ok:boolean;setOk:(v:boolean)=>void;busy:boolean})=>pr?.outOfScope?.length?<label className="flex items-start gap-2 text-sm text-destructive"><input type="checkbox" className="mt-0.5 size-4 accent-destructive" checked={ok} disabled={busy} onChange={e=>setOk(e.target.checked)}/> {$t('taskDetail.otherFilesChanged')}</label>:null;
+// The version under review, under the card's title: the Agent's own needs no name, since Properties shows the Agent
+// (2026-10-24 user request: "Agent · Version 2"); a version a person made says so, without assuming it was you.
+const versionLine=(out:{version:number;manual?:boolean;createdBy?:string})=>[$t('taskDetail.versionNumber',{0:out.version}),out.manual?$t('taskDetail.doneByHand'):out.createdBy&&out.createdBy!=='agent'?$t('taskDetail.editedByHand'):''].filter(Boolean).join(' · ');
 // The note that goes with a publish, folded until asked for.
 function ReleaseNote({value,onChange,busy,open}:{value:string;onChange:(v:string)=>void;busy:boolean;open:boolean}){
  return <Reveal label={$t('taskDetail.editReleaseNotes')} defaultOpen={open}><Field label={$t('taskDetail.releaseNotesGoPublishRecord')}><Textarea aria-label={$t('taskDetail.releaseNotes')} rows={3} value={value} disabled={busy} placeholder={$t('taskDetail.oneTwoSentencesWhatChanged')} onChange={e=>onChange(e.target.value)}/></Field></Reveal>;
@@ -422,27 +384,27 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  if(stage.kind==='review'&&stages[index+1]?.kind==='release'){
   const pr=out?.pr;
   if(!out)return <StageCard error title={displayStageName(stage)} sub={$t('taskDetail.noChangesViewRefreshTry')}/>;
-  const by=$t('taskDetail.artifactVersion',{0:getStageExecutor()[producer.kind],1:out.createdBy==='agent'?'':$t('taskDetail.recordedAside'),2:out.version});
-  // An article to publish to a target (article-review.tsx): read field by field, or edited as a new version.
+  const by=versionLine(out);
+  // An article to publish to a target (article-review.tsx): read field by field, or edited as a new version. It has no
+  // release note to write: no target receives one, and the task's record keeps the Agent's summary (2026-10-24).
   if(out.article){
    const missingChecks=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key));
    // A target removed after the draft was written cannot receive it: say so instead of offering a publish that fails.
    const articleTarget=out.article.targetId,targetGone=!(data.articleTargets||[]).some(t=>t.id===articleTarget);
    return <StageCard title={$t('articleTask.reviewTitle')} sub={by} at={out.createdAt}
-    actions={editing||!allowed?undefined:<>{!targetGone&&<Button disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote}})}><Rocket/>{$t((mockSettingsAvailable() || data.task.evidence?.simulated) ? 'taskDetail.simulatePublish' : 'taskDetail.publishLive')}</Button>}{requestButton}<Button ref={editButtonRef} variant='ghost' disabled={busy} onClick={()=>setEditing(true)}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
+    actions={editing||!allowed?undefined:<>{!targetGone&&<Button disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked})}><Rocket/>{$t((mockSettingsAvailable() || data.task.evidence?.simulated) ? 'taskDetail.approveAndSimulatePublish' : 'taskDetail.approveAndPublish')}</Button>}{requestButton}<Button ref={editButtonRef} variant='ghost' disabled={busy} onClick={()=>setEditing(true)}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
     {!editing&&request(getStageExecutor().agent)}
     {targetGone&&<p role='alert' className='text-sm text-destructive'>{$t('articles.targetMissing')}</p>}
     <LastFeedback w={w} stage={stage} out={out}/>
     {editing?<ArticleEditor data={data} article={out.article} draftKey={out.id} busy={busy} onCancel={()=>{setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}} onSave={async article=>{const d=await act('editArticleDraft',{artifactId:out.id,article});if(d){setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}return Boolean(d);}}/>:<>
-     <ArticleReview key={out.id} data={data} article={out.article} notes={out.content}/>
+     <ArticleReview key={out.id} data={data} article={out.article} notes={out.content} readerTo={(lang,view)=>`article?lang=${encodeURIComponent(lang)}&view=${view}`}/>
      <Checklist stage={stage} checked={checked} setChecked={setChecked} busy={busy}/>
-     <ReleaseNote value={relNote} onChange={setRelNote} busy={busy} open={Boolean(relNote)}/>
     </>}
    </StageCard>;
   }
   const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(pr?.outOfScope?.length&&!scopeOk);
   return <StageCard title={(pr||data.task.evidence?.simulated)?$t('taskDetail.pageChangeReady'):$t('taskDetail.madeChangeYourselfAfterConfirm')} sub={by} at={out.createdAt}
-   actions={<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote},...(pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}><Rocket/>{$t((mockSettingsAvailable()||data.task.evidence?.simulated) ? 'taskDetail.simulatePublish' : 'taskDetail.publishLive')}</Button>{requestButton}<InfoTip label={$t('taskDetail.aboutPublishing')}>{(mockSettingsAvailable()||data.task.evidence?.simulated)?$t('taskDetail.simulatedReleaseDescription'):$t('taskDetail.publishHint')}</InfoTip></>}>
+   actions={<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote},...(pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}><Rocket/>{$t((mockSettingsAvailable() || data.task.evidence?.simulated) ? 'taskDetail.approveAndSimulatePublish' : 'taskDetail.approveAndPublish')}</Button>{requestButton}<InfoTip label={$t('taskDetail.aboutPublishing')}>{(mockSettingsAvailable() || data.task.evidence?.simulated)?$t('taskDetail.simulatedReleaseDescription'):$t('taskDetail.publishHint')}</InfoTip></>}>
    {request(getStageExecutor().agent)}
    <LastFeedback w={w} stage={stage} out={out}/>
    <PageChange pr={pr} content={out.content}/>
@@ -475,14 +437,14 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  if(stage.kind==='review'){
   const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(out?.pr?.outOfScope?.length&&!scopeOk);
   const label=nextOptions.length&&next?$t('taskDetail.acceptHandAgent',{0:name(next)}):stages[index+1]?.kind==='agent'?$t('taskDetail.approveHand',{0:getStageExecutor().agent}):stages[index+1]?.kind==='publish'?$t('taskDetail.approvePublish'):$t('taskDetail.accept');
-  const by=$t('taskDetail.artifactVersion',{0:getStageExecutor()[producer.kind],1:out?.manual?$t('taskDetail.recordedAside'):'',2:out?.version});
+  const by=out?versionLine(out):'';
   if(!out)return <StageCard error title={displayStageName(stage)} sub={$t('taskDetail.nothingReviewRefreshTryAgain')}/>;
   return <StageCard title={$t('taskDetail.resultReady',{0:producer.name})} sub={by} at={out.createdAt}
    actions={editing?<><Button disabled={busy||!draft.trim()} onClick={()=>void act('editStageOutput',{artifactId:out.id,content:draft})}>{$t('taskDetail.saveChanges')}</Button><Button variant="ghost" onClick={()=>{setEditing(false);setDraft(w.results[index-1]?.content||'');}}>{$t('common.cancel')}</Button></>
     :<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,...(nextOptions.length&&next?{next}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}>{label}</Button>{requestButton}<Button variant="ghost" disabled={busy} onClick={()=>{setDraft(out.content);setEditing(true);}}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
    {!editing&&request(getStageExecutor()[producer.kind])}
    <LastFeedback w={w} stage={stage} out={out}/>
-   {editing?<Textarea className="field-sizing-fixed leading-6" aria-label={$t('taskDetail.editContent')} rows={18} value={draft} disabled={busy} onChange={e=>{setDraft(e.target.value);}}/>:<>
+   {editing?<MarkdownEditor aria-label={$t('taskDetail.editContent')} value={draft} disabled={busy} onChange={e=>{setDraft(e.target.value);}} preview={value=><Markdown content={value}/>}/>:<>
     {out.pr?<PageChange pr={out.pr} content={out.content}/>:(()=>{const r=repliesOf(w,out.content);return r.length?<ReplyDrafts items={r}/>:<Reading><Markdown content={out.content}/></Reading>;})()}
     <ScopeConfirm pr={out.pr} ok={scopeOk} setOk={setScopeOk} busy={busy}/>
     {out.report&&<ReportNotes report={out.report}/>}
@@ -506,7 +468,10 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    {failure&&<Button variant="ghost" disabled={busy} onClick={messageAgent}>{$t('taskDetail.messageAgent')}</Button>}
   </>:<><Button disabled={busy||!record.trim()} onClick={()=>void act('recordManual',{content:record})}>{$t('taskDetail.recordContinue')}</Button><Button variant="ghost" onClick={()=>{setManual(false);setRecord('');}}>{$t('common.cancel')}</Button></>;
   const recordLabel=readsOnly(stage)?(stage.mode==='analyze'?$t('taskDetail.analysisResult'):$t('taskDetail.plan')):$t('taskDetail.changeHistory');
-  const body=manual||(!isActive&&!manual&&canRun&&!hasTaskAgent(data)&&(agent?.options||[]).length!==1)||(approved&&source)?<>{manual&&<Field label={recordLabel} htmlFor={`${stage.key}-record`}><Textarea id={`${stage.key}-record`} aria-label={recordLabel} rows={4} value={record} disabled={busy} placeholder={readsOnly(stage)?(stage.mode==='analyze'?$t('taskDetail.writeAnalysisResult'):$t('taskDetail.whichFilesSectionsChangeWhat')):$t('taskDetail.prLinkWhichFilesContent')} onChange={e=>{setRecord(e.target.value);}}/></Field>}
+  const body=manual||(!isActive&&!manual&&canRun&&!hasTaskAgent(data)&&(agent?.options||[]).length!==1)||(approved&&source)?<>{manual&&<Field label={recordLabel} htmlFor={`${stage.key}-record`}>{readsOnly(stage)
+    // A document written by hand is written beside its rendering, as the Agent's documents are edited.
+    ?<MarkdownEditor id={`${stage.key}-record`} aria-label={recordLabel} value={record} disabled={busy} placeholder={stage.mode==='analyze'?$t('taskDetail.writeAnalysisResult'):$t('taskDetail.whichFilesSectionsChangeWhat')} onChange={e=>{setRecord(e.target.value);}} preview={value=><Markdown content={value}/>}/>
+    :<Textarea id={`${stage.key}-record`} aria-label={recordLabel} rows={4} value={record} disabled={busy} placeholder={$t('taskDetail.prLinkWhichFilesContent')} onChange={e=>{setRecord(e.target.value);}}/>}</Field>}
    {!isActive&&!manual&&canRun&&<NeedsAgent data={data}/>}
    {approved&&source&&<Reveal label={$t('taskDetail.viewApprovedInput',{0:source.name})}><Reading><Markdown content={approved.content}/></Reading></Reveal>}</>:undefined;
   if(!canRun)return <StageCard error title={displayStageName(stage)} sub={<>{$t('taskDetail.noWebsiteSourceRepositoryConnectedMessage')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/connections?source=repo')}>{$t('common.goDataSources')}</Button></>} actions={actions}>{body}</StageCard>;
@@ -560,7 +525,7 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
   <DriftNotice data={data} r={r}/>
   <EffectList w={w}/>
   <PageLinks pages={r.pages}/>
-  <Reveal label={$t('taskDetail.releaseNotes')}><p className={cn(text.body,'whitespace-pre-wrap')}>{r.note}</p></Reveal>
+  {r.note&&!r.article&&<Reveal label={$t('taskDetail.releaseNotes')}><p className={cn(text.body,'whitespace-pre-wrap')}>{r.note}</p></Reveal>}
  </StageCard>;
  const replies=repliesOf(w,accepted?.content);
  if(replies.length)return <StageCard label={done} title={$t('taskDetail.replyDraftsAccepted')} sub={$t('taskDetail.copyReplyPostYourselfNocoreach')}><ReplyDrafts items={replies}/></StageCard>;
@@ -584,10 +549,12 @@ function LiveChange({data,artifact}:{data:Data;artifact?:Artifact}){
  const a=artifact.article,visible=artifact.pr?.visibleChanges||[];
  const paths=a?(a.changes.length?a.changes:a.carried||[]):[];
  const labels=a?paths.map(fieldLabel):[...new Set(visible.map(v=>v.label))],count=a?paths.length:visible.length;
+ // A new article went live as a whole: it is named as one, not as fields it "changed" (2026-10-24 user report).
+ const created=Boolean(a&&!a.articleId);
  return <div className={cn(text.body,'flex flex-wrap items-center gap-x-2 gap-y-1')}>
-  {count>0&&<span>{$t('taskDetail.changedSummary',{0:count,1:joinNames(labels)})}</span>}
-  <Button variant='link' size='sm' className='h-auto font-normal p-0' onClick={()=>setOpen(true)}>{$t('taskDetail.viewChanges')}<ChevronRight/></Button>
-  <DocReader open={open} onClose={()=>setOpen(false)} title={$t('taskDetail.whatChanged')} meta={`${$t('taskDetail.versionNumber',{0:artifact.version})}${artifact.approvedAt?` · ${$t('taskDetail.approvedOn',{0:when(artifact.approvedAt)})}`:''}`} content=''><VersionChange data={data} artifact={artifact} notes={false}/></DocReader>
+  {created?<span>{$t('articleTask.newArticle')}</span>:count>0&&<span>{$t('taskDetail.changedSummary',{0:count,1:joinNames(labels)})}</span>}
+  <Button variant='link' size='sm' className='h-auto font-normal p-0' onClick={()=>setOpen(true)}>{created?$t('taskDetail.viewArticle'):$t('taskDetail.viewChanges')}<ChevronRight/></Button>
+  <DocReader open={open} onClose={()=>setOpen(false)} title={created?$t('articleTask.article'):$t('taskDetail.whatChanged')} meta={`${$t('taskDetail.versionNumber',{0:artifact.version})}${artifact.approvedAt?` · ${$t('taskDetail.approvedOn',{0:when(artifact.approvedAt)})}`:''}`} content=''><VersionChange data={data} artifact={artifact} notes={false}/></DocReader>
  </div>;
 }
 // Impact tracking (SPEC §8): day 7 and day 28 against the same number of days before going live.

@@ -311,6 +311,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     access.register([...runtime.legacy.resources.list(), ...taskCommandActions,
       { resource: 'nrKeys', action: 'manage' },
       { resource: 'nrTasks', action: 'createManual' },
+      { resource: 'nrTasks', action: 'draftManual' },
       { resource: 'nrOnline', action: 'read' },
       { resource: 'nrOnline', action: 'manage' },
       { resource: 'nrSchedules', action: 'manage' },

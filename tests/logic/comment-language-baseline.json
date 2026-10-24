@@ -3,7 +3,6 @@
   "client/components/reach/actor.tsx": 1,
   "client/components/reach/agent-card.tsx": 1,
   "client/components/reach/hand-off-slot.tsx": 6,
-  "client/components/reach/reveal.tsx": 1,
   "client/components/reach/step-chips.tsx": 2,
   "client/components/seo/data-table-toolbar.tsx": 2,
   "client/components/seo/sortable-header.tsx": 1,

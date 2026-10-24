@@ -92,7 +92,7 @@ function FailureAlert({
       <AlertDescription className='flex flex-col items-start gap-2'>
         <p>{value.message()}</p>
         {value.status === 401 ? (
-          <Link className='underline' to='/login'>
+          <Link className='nr-link' to='/login'>
             {$t('common.signAgain')}
           </Link>
         ) : ![403, 404].includes(value.status) && retry ? (

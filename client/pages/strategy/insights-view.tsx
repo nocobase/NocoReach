@@ -1,15 +1,13 @@
 import {signalDisposition} from '../../../shared/strategy-pending.js';
 import {WAITING_TASKS_URL} from '../task-waiting';
 import { $t, $tj, $legacyText, $legacyFragment, $legacyJsx } from "#i18n";
-import {useState,type ReactElement} from 'react';
+import {useLayoutEffect,useRef,useState,type ReactElement,type RefObject} from 'react';
 import {useNavigate} from 'react-router';
 import {BellIcon,ArrowRightIcon,BotIcon,ChevronRightIcon,SparklesIcon} from 'lucide-react';
 import {AiMark} from '#components/reach/actor';
 import {Button} from '#components/ui/button';
 import {Section} from '#components/reach/page';
-import {SourceLogo} from '#components/reach/source-logo';
 import {Tag,type Tone} from '#components/reach/tag';
-import {cn} from '#lib/utils';
 import {getSourceNames,type Row} from './board';
 import type {StrategyState,Signal,WatchRecord} from './model';
 import {type Work} from '../task-execution-types';
@@ -19,6 +17,7 @@ import {SectionHandOff} from '../section-hand-off';
 import {AllCheck,RowCheck,useSelection} from '#components/reach/hand-off-slot';
 import type {HandOffResult} from './hand-off';
 import {daysBetween,type Verdict} from './watch';
+import {isZero,situationLines} from './situation-lines';
 import {TASK_TAG,type TaskStanding} from './task-standing';
 // 洞察 building blocks (SPEC §5): numbers and changes first, one line each; no paragraphs.
 export type Metric={key:string;label:string;value:number|null;previous:number|null;complete:boolean;change:number|null};
@@ -77,31 +76,56 @@ export const percent=pct;
 // cards are the only big numbers on the page; this is a quiet list, one sentence per line with its numbers in bold, then
 // where it comes from. Lines to deal with (amber or red) come first with an amber dot; the rest are grey.
 export type AreaRow={key:string;title:string;meta?:string;url?:string|null;tag?:{tone:Tone;text:string}};
-export type AreaItem={key:string;text:string;values:string[];source:string;detail?:string;to:string;tone?:Tone;rows?:AreaRow[];total?:number;compare?:{label:string;now:string|number;before:string|number}[];handOff?:{playbookId:string;title:string}};
+export type AreaItem={key:string;text:string;values:string[];source:string;detail?:string;to:string;tone?:Tone;group?:'worse'|'handle'|'chance'|'voice';rows?:AreaRow[];total?:number;compare?:{label:string;now:string|number;before:string|number}[];handOff?:{playbookId:string;title:string}};
 export type Area={id:string;title:string;items:AreaItem[]};
-// Lines name their source in words, so its logo goes by the line's key (server: nrInsights:summary); every AI search line
-// is AI search's. Site audit sits under Website, as in Settings › Analysis rules.
-const LINE_SOURCE:Record<string,string>={striking:'gsc',ctr:'gsc',rank:'rank',trends:'trends',competitors:'competitors',saved:'keywords',audit:'site',stale:'site',forum:'discourse',discord:'discord',slack:'slack',x:'x'};
-const lineSource=(i:{area:string;key:string}):string|undefined=>i.area==='ai'?'ai-search':LINE_SOURCE[i.key];
+// Current situation names each line with a short noun label and puts its value on the right (2026-10-24 user-approved
+// design: no icons, no sentences with the number in the middle). The label goes by the line's stable key (server:
+// nrInsights:summary); a line without one, or without a value, keeps its sentence as the label.
+const SITUATION_LABEL:Record<string,string>={striking:'strategy.situationStriking',rank:'strategy.situationRank',trends:'strategy.situationTrends',answers:'strategy.situationAnswers',audit:'strategy.situationAudit',forum:'strategy.situationForum',discord:'strategy.situationDiscord',slack:'strategy.situationSlack',x:'strategy.situationX','brand-chat_gpt':'strategy.situationChatgpt','brand-google':'strategy.situationGoogleAi',hackernews:'strategy.situationHackerNews',reddit:'strategy.situationReddit',downloads:'strategy.situationDownloads',
+ 'rule-gsc-click-drop':'strategy.situationClickDrop','rule-competitor-release':'strategy.situationCompetitorRelease','rule-competitor-pages':'strategy.situationCompetitorPages','rule-ai-share':'strategy.situationAiShare','rule-github-rival-stars':'strategy.situationRivalStars','rule-gsc-low-ctr':'strategy.situationLowCtr','rule-ga4-low-conversion':'strategy.situationLowConversion','rule-site-stale':'strategy.situationStale','rule-site-thin':'strategy.situationThin','rule-ai-uncited':'strategy.situationAiUncited','rule-trends-rising':'strategy.situationRising','rule-hn-story':'strategy.situationHnStory','rule-x-hot':'strategy.situationXHot','rule-community-theme':'strategy.situationThemes','rule-github-referrer':'strategy.situationReferrer','rule-github-release':'strategy.situationRelease'};
+const situationValue=(i:{key:string;values:string[]})=>i.key==='rank'&&i.values.length===2?[`↑${i.values[0]}`,`↓${i.values[1]}`]:i.values;
+const NORMAL_SHOWN=6,SHOW_ALL_HEIGHT=24;
+// How many rows fit in the column beside the conversation. On wide screens it has the window's height and scrolls
+// inside (strategy/index.tsx, data-situation-column), and a scrollbar in a column this narrow looked broken (2026-10-24
+// user feedback), so the list shows what fits: `fit` rows with "Show all N" under them, `all` without. Undefined where
+// the column grows with its content (a phone, the folded line beside the side panel); NORMAL_SHOWN applies there.
+function useRowRoom(listRef:RefObject<HTMLElement|null>,ready:boolean):{fit:number;all:number}|undefined{
+ const [room,setRoom]=useState<{fit:number;all:number}>();
+ // Measured again when the column or the list changes size (the metric cards above and the fonts arrive after the list),
+ // from the elements as they are then.
+ useLayoutEffect(()=>{const first=listRef.current,firstBox=first?.closest<HTMLElement>('[data-situation-column]');if(!first||!firstBox||typeof ResizeObserver==='undefined')return;
+  const measure=()=>{const list=listRef.current,box=list?.closest<HTMLElement>('[data-situation-column]'),row=list?.querySelector('li')?.getBoundingClientRect().height;
+   if(!list||!box||!row||!/(auto|scroll)/.test(getComputedStyle(box).overflowY)){setRoom(undefined);return;}
+   const left=box.clientHeight-(list.getBoundingClientRect().top-box.getBoundingClientRect().top+box.scrollTop),next={fit:Math.floor((left-SHOW_ALL_HEIGHT)/row),all:Math.floor(left/row)};
+   setRoom(r=>r&&r.fit===next.fit&&r.all===next.all?r:next);};
+  measure();const observer=new ResizeObserver(measure);observer.observe(firstBox);observer.observe(first);return()=>observer.disconnect();},[listRef,ready]);
+ return room;}
 const sentence=(i:AreaItem)=>$legacyText(i.text).replace(/\{(\d+)\}/g,(_,k:string)=>i.values[Number(k)]??'');
 export function AreaList({areas,projectId,quiet=false}:{areas?:Area[];projectId:number;quiet?:boolean}):ReactElement|null{
- const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),all=(areas||[]).flatMap(a=>a.items.map(i=>({...i,area:a.id,attention:i.tone==='amber'||i.tone==='red'})));if(!all.length)return null;
- const items=[...all.filter(i=>i.attention),...all.filter(i=>!i.attention)],open=items.find(i=>`${i.area}:${i.key}`===openKey);
+ const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),[allNormal,setAllNormal]=useState(false),listRef=useRef<HTMLDivElement>(null),all=situationLines(areas),room=useRowRoom(listRef,quiet&&all.length>0);if(!all.length)return null;
+ const items=all,open=items.find(i=>`${i.area}:${i.key}`===openKey);
  // A line with something behind it opens its detail here; one without (AI 搜索还没查过) goes to its page.
  const go=(i:typeof items[number])=>{if(i.rows?.length||i.compare?.length)setOpenKey(`${i.area}:${i.key}`);else navigate(i.to);};
  const detail=open?<AttentionDetail key={openKey} item={open} projectId={projectId} onClose={()=>setOpenKey(undefined)}/>:null;
  // Quiet, beside the day's conversation on Insights (2026-10-21 user feedback: the column drew the eye from the
- // conversation): one plain line each, where it comes from on hover; all of them, since the column has the room
- // (2026-10-22). Two small groups, Needs attention then Normal, each line's numbers in medium weight, coloured for the
- // lines to deal with (a drop red, the rest amber); the numbers stay in their sentence, which reads wrong without them
- // ("21 up, 18 down this week"). Each line leads with its source's logo, bare as inside a button; a line with no
- // known source keeps the logo's room empty, so the sentences stay aligned.
- if(quiet){const ink=(i:typeof items[number],v:string)=>!i.attention?'text-foreground':i.tone==='red'||v.startsWith('↓')?'text-nr-ink-red':'text-nr-ink-amber',logo=(i:typeof items[number])=>{const s=lineSource(i);return s?<SourceLogo source={s} size='xs' mono className='mt-px text-muted-foreground'/>:<span aria-hidden='true' className='size-3.5 shrink-0'/>;};
-  const group=(label:string,list:typeof items)=>list.length?<section aria-label={label} className='flex flex-col'><h3 className='pb-0.5 text-[0.6875rem] font-medium text-muted-foreground'>{label}</h3><ul>{list.map(i=><li key={`${i.area}:${i.key}`}>
-   <button type='button' onClick={()=>go(i)} title={[$legacyText(i.source),i.detail?$legacyText(i.detail):''].filter(Boolean).join(' · ')} className={cn('flex w-full items-start gap-2 py-1 text-left text-xs hover:underline',i.attention?'text-foreground/80':'text-muted-foreground')} data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
-    {logo(i)}<span className='min-w-0 flex-1'>{$legacyJsx(i.text,Object.fromEntries(i.values.map((v,k)=>[k,<span key={k} className={cn('font-medium tabular-nums',ink(i,v))}>{v}</span>])))}</span>
-   </button></li>)}</ul></section>:null;
-  return <div aria-label={$t('strategy.whereThingsStand')} className='flex flex-col gap-3'>{group($t('strategy.situationGroupAttention'),items.filter(i=>i.attention))}{group($t('strategy.situationGroupNormal'),items.filter(i=>!i.attention))}
+ // conversation): one list in group order (getting worse, to handle, opportunities, share of voice), each row a short
+ // label and its value on the right in tabular figures, where it comes from on hover (2026-10-24 design,
+ // ui-references/insights-2026-10-22). Rows in the small size, as the metric cards' labels: at the conversation's size
+ // the column competed with it (2026-10-24 user feedback). No icons, logos or group captions: the colour of a count says
+ // its group (red getting worse, amber to handle, plain otherwise), so a caption only took room. A change is coloured by
+ // its direction as on the metric cards (up green, down red; a zero plain). A line without a label or a value keeps its
+ // sentence. The column has a window's height, so the lines past the ones to deal with and what fits wait behind "Show
+ // all N" (useRowRoom).
+ if(quiet){const ink=(i:typeof items[number],v:string)=>/^[↑↓]/.test(v)?isZero(v)?'text-foreground':v.startsWith('↑')?'text-nr-ink-green':'text-nr-ink-red':i.group==='worse'?'text-nr-ink-red':i.group==='handle'?'text-nr-ink-amber':i.group||!i.attention?'text-foreground':i.tone==='red'?'text-nr-ink-red':'text-nr-ink-amber';
+  const row=(i:typeof items[number])=>{const label=SITUATION_LABEL[i.key],value=i.values.length?situationValue(i):null;
+   return <li key={`${i.area}:${i.key}`}><button type='button' onClick={()=>go(i)} title={[$legacyText(i.source),i.detail?$legacyText(i.detail):''].filter(Boolean).join(' · ')} className='-mx-2 flex w-[calc(100%+var(--spacing)*4)] items-baseline gap-3 rounded-md px-2 py-[5px] text-left text-xs text-foreground/80 transition-colors hover:bg-muted' data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
+    <span className='min-w-0 flex-1'>{label&&value?$t(label):sentence(i)}</span>
+    {label&&value?<span className='flex shrink-0 gap-1.5 font-medium tabular-nums'>{value.map(v=><span key={v} className={ink(i,v)}>{v}</span>)}</span>:null}
+   </button></li>;};
+  const attention=items.filter(i=>i.attention),normal=items.filter(i=>!i.attention),normalRoom=!room?NORMAL_SHOWN:room.all>=items.length?normal.length:Math.max(0,room.fit-attention.length),shown=allNormal?items:[...attention,...normal.slice(0,normalRoom)];
+  return <div ref={listRef} aria-label={$t('strategy.whereThingsStand')} className='flex flex-col'>
+   <ul>{shown.map(row)}</ul>
+   {normal.length>normalRoom&&<button type='button' className='mt-1.5 self-start text-xs text-muted-foreground hover:text-foreground' aria-expanded={allNormal} onClick={()=>setAllNormal(v=>!v)}>{allNormal?$t('common.collapse'):$t('strategy.situationShowAll',{0:items.length})}</button>}
    {detail}</div>;}
  // Untitled: the block around it carries the heading and what it means.
  return <Section aria-label={$t('strategy.whereThingsStand')}><ul className="divide-y">{items.map(i=><li key={`${i.area}:${i.key}`}>

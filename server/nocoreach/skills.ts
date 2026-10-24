@@ -64,6 +64,12 @@ function parseLink(input){
 }
 // Runs fn over items, at most `limit` at a time, keeping their order.
 async function mapLimit(items,limit,fn){const out=new Array(items.length);let next=0;await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{while(next<items.length){const i=next++;out[i]=await fn(items[i],i);}}));return out;}
+// A product Skill that still has its original description (a built-in, or a copy imported under its name) gets its short
+// "when to use" key, which the page shows in the UI language; the Agent keeps the stored text. Escaped quotes are
+// ignored, as the first bundled community-marketing description kept them.
+const plain=t=>String(t||'').replace(/\\(["'])/g,'$1').trim();
+const SUMMARIES=new Map(BUILT_IN_SKILLS.map(b=>[b.name,{key:b.summary,originals:new Set(b.originals.map(plain))}]));
+const withSummary=s=>{const m=SUMMARIES.get(s.name);return m&&m.originals.has(plain(s.description))?{...s,summaryKey:m.key}:s;};
 const meta=(s,body,files)=>({...s,files:files.map(f=>({path:f.path,chars:f.text.length})),chars:sizeOf(body,files)});
 class Skills{
  constructor(plugin,read=download){this.p=plugin;this.read=read;this.p.network?.bind(this,['readProjectLink','importProjectLink']);}
@@ -90,9 +96,9 @@ class Skills{
  async content(skill){const saved=await this.snapshot(`nr-skill:${skill.id}`);if(saved)return saved;const builtin=skill.builtIn&&BUILT_IN_SKILLS.find(b=>b.id===skill.id);return builtin?{body:builtin.body,files:builtin.files}:{body:'',files:[]};}
  async enabledIds(id,tx){return (await this.snapshot(`nr-skills-enabled:${id}`,tx))?.ids||[];}
  async list(id){const [d,on]=await Promise.all([this.library(undefined,true),this.enabledIds(id)]);
-  return {revision:d.revision,skills:d.skills.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(s=>({...s,enabled:on.includes(s.id)}))};}
+  return {revision:d.revision,skills:d.skills.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(s=>({...withSummary(s),enabled:on.includes(s.id)}))};}
  async get(id,v){const d=await this.library(undefined,true),skill=d.skills.find(s=>s.id===v.skillId);if(!skill)fail(systemMessageText('skills.skillNotExistRefreshTry'),404);
-  const c=await this.content(skill);return {skill:{...skill,enabled:(await this.enabledIds(id)).includes(skill.id)},body:c.body,files:c.files};}
+  const c=await this.content(skill);return {skill:{...withSummary(skill),enabled:(await this.enabledIds(id)).includes(skill.id)},body:c.body,files:c.files};}
  // Every change rewrites the Skill's content and its line in the library under one lock.
  async change(skillId,fn){return this.lock(async tx=>{const d=await this.library(tx),i=d.skills.findIndex(s=>s.id===skillId);if(i<0)fail(systemMessageText('skills.skillNotExistRefreshTry'),404);
   const c=await this.snapshot(`nr-skill:${skillId}`,tx)||{body:'',files:[]};const next=fn({...d.skills[i]},{body:c.body,files:c.files},d.skills);

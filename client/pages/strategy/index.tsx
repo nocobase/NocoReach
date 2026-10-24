@@ -16,6 +16,7 @@ import {
   type SourceCard,
   type Area,
 } from './insights-view';
+import { situationLines } from './situation-lines';
 import {
   FoldedSituation,
   History,
@@ -27,7 +28,7 @@ import { dayOf, feedOf } from './feed';
 import { Composer, InsightChatProvider } from './threads';
 import { useOptionalOnlineChat } from '../../online-agent/context';
 import { useChatPanel } from '@nocobase/app-plugin-agents/client/chat';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { InfoTip } from '#components/reach/info-tip';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
@@ -52,6 +53,8 @@ import {
   HandOffNotice,
   type HandOffResult,
 } from './hand-off';
+import { OpportunityHandOffDialog } from './places';
+import { placesOf } from './places-model';
 import { localizeWorkSnapshots } from '../playbook-snapshot';
 import {
   playbookRequest,
@@ -140,7 +143,9 @@ function Insights({
     [generating, setGenerating] = useState(false),
     [analysis, setAnalysis] = useState<AnalysisStatus>(),
     [rawPlaybooks, setRawPlaybooks] = useState<PlaybookList>(),
-    [handed, setHanded] = useState<HandOffResult>();
+    [handed, setHanded] = useState<HandOffResult>(),
+    [handing, setHanding] = useState<Row>(),
+    navigate = useNavigate();
   const playbooks = localizePlaybookList(rawPlaybooks);
   const pendingRef = useRef(false),
     operationRef = useRef({ key: '', id: '' });
@@ -225,9 +230,15 @@ function Insights({
       .catch(() => undefined);
   }, [projectId]);
   const kindOf = (row: Row) => recommendedFor(row, playbooks?.playbooks)?.kind;
-  // 交给 Agent: the task is created and started; the page stays with a link to it (same as 机会).
-  const convert = (row: Row) =>
-    act(async () => {
+  // Hand off to agent: the task is created and its page opens. An opportunity with several places asks which ones
+  // first, then opens on Opportunities with its tasks (the same dialog as there).
+  const convert = (row: Row) => {
+    if (placesOf(row).length) {
+      setHanded(undefined);
+      setHanding(row);
+      return;
+    }
+    return act(async () => {
       setHanded(undefined);
       try {
         const r = await handOff(
@@ -245,6 +256,7 @@ function Insights({
         setError(() => $t('strategy.notHandOffOpportunityKept'));
       }
     });
+  };
   const review = (id: string, change: { priority?: string; status?: string }) =>
     act(async () => {
       try {
@@ -364,18 +376,15 @@ function Insights({
         </InfoTip>
       }
       request={summaryView}
-      empty={!summaryView.data?.areas.some((area) => area.items.length)}
+      empty={!situationLines(summaryView.data?.areas).length}
       emptyText={$t('strategy.noCurrentSituation')}
     >
       <AreaList quiet areas={summaryView.data?.areas} projectId={projectId} />
     </RequestBlock>
   );
-  const attention = (summaryView.data?.areas || []).reduce(
-    (n, area) =>
-      n +
-      area.items.filter((i) => i.tone === 'amber' || i.tone === 'red').length,
-    0,
-  );
+  const attention = situationLines(summaryView.data?.areas).filter(
+    (i) => i.attention,
+  ).length;
   // Earlier days above today, as in a conversation; the input for today's conversation at the bottom.
   const column = (
     <div className='flex min-w-0 flex-col gap-4 lg:h-full lg:min-h-0'>
@@ -451,6 +460,23 @@ function Insights({
         </p>
       )}
       <HandOffNotice result={handed} />
+      {handing && (
+        <OpportunityHandOffDialog
+          projectId={projectId}
+          state={state}
+          row={handing}
+          playbooks={playbooks?.playbooks}
+          onClose={() => setHanding(undefined)}
+          onDone={(r) => {
+            setHanding(undefined);
+            setState(r.state);
+            refreshNavBadges();
+            void navigate(
+              `/opportunities?tab=done&item=${encodeURIComponent(handing.card.id)}`,
+            );
+          }}
+        />
+      )}
       <AnalysisAlert
         status={analysis}
         busy={busy || generating}
@@ -477,8 +503,14 @@ function Insights({
           ) : (
             column
           )}
+          {/* Room on both sides for a row's hover background, which reaches past the text, so nothing scrolls sideways. */}
           {!docked && (
-            <div className='lg:min-h-0 lg:overflow-y-auto'>{situation}</div>
+            <div
+              data-situation-column
+              className='lg:-mx-2 lg:min-h-0 lg:overflow-x-hidden lg:overflow-y-auto lg:px-2'
+            >
+              {situation}
+            </div>
           )}
         </div>
       </div>
@@ -491,7 +523,7 @@ function Insights({
 // rule reads its own window (7, 14, 28 or 30 days); the 28 days belong to the metric cards, which say so.
 // The metric cards: each source's last 28 days against the 28 before (nrDataViews:overview).
 const METRIC_DAYS = 28;
-const subtleLink = 'underline underline-offset-4 hover:text-foreground';
+const subtleLink = 'nr-link-quiet';
 function HowAnalyzed({
   schedule,
   rulesLink,

@@ -133,7 +133,7 @@ function CompetitorDetail({ projectId, r, market, dataforseo, onClose }: { proje
               </ResponsiveContainer>
             </div>
           </section>
-        ) : !dataforseo || !r.domain ? <p className="text-sm text-muted-foreground">{!r.domain ? $t('competitorOverview.noWebsiteNoSearchData') : $t('competitorOverview.connectDataforseoSeeSearchTraffic')}</p> : <p className="text-sm text-muted-foreground">{$t('competitorOverview.searchDataStillLoading')}</p>}
+        ) : !dataforseo || !r.domain ? <p className="text-sm text-muted-foreground">{!r.domain ? $t('competitorOverview.noWebsiteNoSearchData') : $t('competitorOverview.connectDataforseoSeeSearchTraffic')}</p> : r.errors.length ? null : <p className="text-sm text-muted-foreground">{$t('competitorOverview.searchDataStillLoading')}</p>}
         {!r.own && r.searched ? (
           <section className="space-y-1" data-gap>
             <h3 className="text-sm font-semibold"><WithInfo help={$t('competitorOverview.keywordGapHelp')}>{$t('competitorOverview.keywordGapRankNot')}</WithInfo></h3>

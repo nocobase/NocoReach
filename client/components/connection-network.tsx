@@ -165,7 +165,7 @@ function ProxySwitch({
             </p>
             <Link
               to='/proxy-profiles'
-              className='mt-1 inline-block text-sm underline'
+              className='nr-link mt-1 inline-block text-sm'
             >
               {$t('network.viewAll')}
             </Link>
@@ -362,7 +362,7 @@ function NetworkChoice({
                 {$t('connectionNetwork.saveSelectionBeforeTestingConnection')}
               </p>
             )}
-            <Link to='/proxy-profiles' className='text-sm underline'>
+            <Link to='/proxy-profiles' className='nr-link text-sm'>
               {$t('connectionNetwork.manageProxyProfiles')}
             </Link>
           </>

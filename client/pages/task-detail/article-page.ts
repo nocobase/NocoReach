@@ -24,3 +24,21 @@ export function articlePageUrl(
   );
   return locale ? fill(pages[locale], encodeURIComponent(slug)) : '';
 }
+
+/**
+ * Where one language of an article is read on the site, for reading the article's relative links and images against:
+ * that language's page pattern, else the article's page in any language.
+ */
+export function localePageUrl(
+  data: TaskData,
+  targetId: string,
+  slug: string,
+  locale: string,
+): string {
+  const pattern = data.articleTargets?.find((t) => t.id === targetId)?.pages?.[
+    locale
+  ];
+  return pattern && slug
+    ? fill(pattern, encodeURIComponent(slug))
+    : articlePageUrl(data, targetId, slug);
+}

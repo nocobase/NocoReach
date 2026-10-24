@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { fail, text } from './model';
 import { validateFlow, type ChecklistItem } from './flow';
 import { memoryForAI } from './memory';
+import { playbookForActions } from '../../../shared/opportunity-parts';
 
 // 做法 (SPEC §6.0): how one kind of work is done — a few steps, all carried out by the Agent, with the person reviewing in
 // between. Steps: analyze (the Agent reads and writes a document, no repository change), change (the Agent changes the
@@ -30,7 +31,7 @@ export function normalize(p: any): Playbook {
   if (Array.isArray(p?.steps)) return withKind({ ...p, category: CATEGORIES.includes(p.category) ? p.category : 'optimize', next: Array.isArray(p.next) ? p.next : [] });
   const { kind, instructions, planFirst, checklist, ...rest } = p || {};
   const steps = kind === 'plan' ? [analyze(instructions || '', systemMessageText('common.analyze')), review(systemMessageText('common.review'), checklist || [], 'accept')]
-    : [...(planFirst ? [analyze(AGENT_PLAN_INSTRUCTION, systemMessageText('playbook.writePlan'), 'plan'), review(systemMessageText('playbook.reviewPlan'), [], 'approve-plan')] : []), change(instructions || ''), review(systemMessageText('playbook.reviewPublish'), checklist || [])];
+    : [...(planFirst ? [analyze(AGENT_PLAN_INSTRUCTION, systemMessageText('playbook.writePlan'), 'plan'), review(systemMessageText('playbook.reviewPlan'), [], 'approve-plan')] : []), change(instructions || ''), review(systemMessageText('common.review'), checklist || [])];
   return withKind({ ...rest, category: kind === 'plan' ? 'research' : 'optimize', steps, next: kind === 'plan' && Array.isArray(rest.next) ? rest.next : [] });
 }
 
@@ -57,7 +58,7 @@ export function validatePlaybook(v: any, known: string[]): Omit<Playbook, 'id' |
     return { key, name, kind: 'review', checklist };
   });
   const last = steps[steps.length - 1];
-  if (last.kind !== 'review') { let key = 'final-review'; while (used.has(key)) key += '-1'; steps.push(review(last.kind === 'change' ? systemMessageText('playbook.reviewPublish') : systemMessageText('common.review'), [], key)); }
+  if (last.kind !== 'review') { let key = 'final-review'; while (used.has(key)) key += '-1'; steps.push(review(systemMessageText('common.review'), [], key)); }
   const changes = steps.some(s => s.kind === 'change');
   if (v.next !== undefined && (!Array.isArray(v.next) || v.next.length > 3)) return fail(systemMessageText('playbook.pickUp3Continue'));
   const next = changes ? [] : [...new Set<string>((v.next || []).filter((x: unknown) => typeof x === 'string'))];
@@ -75,13 +76,7 @@ export function defaultPlaybookId(task: any): string {
   const insight = task?.evidence?.insight;
   const ids = new Set<string>(Array.isArray(insight?.signalIds) ? insight.signalIds : []);
   const actions = (task?.evidence?.context?.signals?.items || []).filter((s: any) => ids.has(s?.key)).map((s: any) => s.action);
-  if (actions.includes('optimize')) return 'optimize-page';
-  if (actions.includes('technical')) return 'tech-fix';
-  // Posts nobody answered: draft a reply to each (2026-10-08).
-  if (actions.includes('reply')) return 'community-reply';
-  if (actions.includes('create')) return 'content-outline';
-  if (actions.includes('distribute')) return 'release-notes';
-  return actions.length ? 'change-research' : 'optimize-page';
+  return playbookForActions(actions);
 }
 
 // 新建做法 with AI: one sentence becomes a draft (name, category, steps with instructions and review items). The draft is
@@ -90,7 +85,7 @@ export const DRAFT_SYSTEM = `你是 NocoReach 的做法设计助手，使用中�
 步骤只有三种：analyze（Agent 读资料、仓库和公开网页，写出一份文档，不改仓库）、change（Agent 修改网站源码仓库并开 PR）、review（人审核，可写 0–5 条审核时要确认的事项）。每个 analyze 或 change 之后都要紧跟一个 review；有 change 的做法最后一步是名为“看效果并发布”的 review。步骤一般 2–6 个，不要为了凑数加步骤。
 category 只能是 research（调研分析）、create（内容创作）、optimize（内容优化）、technical（网站技术）之一。name 不超过 12 个字，以动作开头，不与 existing 重名；description 一句话，不超过 40 个字；每个 analyze/change 的 instruction 写清 Agent 具体要做什么、产出什么，不超过 300 字；step name 不超过 8 个字。
 只输出一个 json 代码块：{"name":"","category":"","description":"","steps":[{"kind":"","name":"","instruction":"","checklist":[{"label":""}]}]}`;
-const firstJson = (raw: string) => { const fenced = [...String(raw || '').matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].map(m => m[1]); for (const b of [...fenced, String(raw || '').trim()]) { try { const d = JSON.parse(b); if (d && typeof d === 'object') return d; } catch { /* next */ } } return null; };
+export const firstJson = (raw: string) => { const fenced = [...String(raw || '').matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].map(m => m[1]); for (const b of [...fenced, String(raw || '').trim()]) { try { const d = JSON.parse(b); if (d && typeof d === 'object') return d; } catch { /* next */ } } return null; };
 export async function draftPlaybook(v: any, list: { playbooks: Playbook[] }, project: any, complete: (system: string, user: string) => Promise<string>) {
   const request = text(v?.request, 500);
   const input = JSON.stringify({ request, project: memoryForAI(project), existing: list.playbooks.map(p => p.name) });

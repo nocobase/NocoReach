@@ -81,18 +81,22 @@ it('bundles the chosen marketing Skills at one pinned commit, within the library
   }
 });
 
-it('starts a fresh library with every built-in at the current version', async () => {
-  const { s, payload } = harness();
+it('reads fresh built-ins with summaries without persisting the library', async () => {
+  const { s, rows } = harness();
   const list = await s.list('1');
   expect(list.skills).toHaveLength(BUILT_IN_SKILLS.length);
   expect(list.skills.every((x: any) => x.builtIn && !x.enabled)).toBe(true);
   expect(list.skills.find((x: any) => x.name === 'seo-audit')).toMatchObject({
     source: expect.stringContaining('/skills/seo-audit'),
+    summaryKey: 'skillSummaries.seoAudit',
   });
-  expect(payload('nr-skills')).toMatchObject({
-    revision: 1,
-    builtIns: BUILT_IN_VERSION,
+  const skill = BUILT_IN_SKILLS.find((b) => b.id === 'seo-audit')!;
+  expect(await s.get('1', { skillId: skill.id })).toMatchObject({
+    skill: { summaryKey: skill.summary, description: skill.description },
+    body: skill.body,
+    files: skill.files,
   });
+  expect(rows).toEqual([]);
 });
 
 it('adds the newer built-ins to an existing library once, never over a Skill of the same name or a deleted one', async () => {
@@ -136,9 +140,9 @@ it('adds the newer built-ins to an existing library once, never over a Skill of 
   expect(payload('nr-skill:sk-imported').body).toBe('mine');
   expect(rows.some((r) => r.key === 'nr-skill:seo-audit')).toBe(false);
   expect(payload('nr-skills')).toMatchObject({
-    revision: 8,
-    builtIns: BUILT_IN_VERSION,
+    revision: 7,
   });
+  expect(payload('nr-skills')).not.toHaveProperty('builtIns');
   // Later writes keep the version, so a deleted marketing Skill is not added again.
   await s.remove({ skillId: 'ai-seo' });
   await s.setEnabled('1', { skillId: 'schema', enabled: true });
@@ -225,4 +229,66 @@ it('names only built-in Skills in the built-in playbook steps, at most five each
     'site-architecture',
   ]);
   expect(step('release-notes').skills).toEqual(['launch']);
+});
+
+it('marks product Skills that keep their original description with a short summary key, and nothing else', async () => {
+  const at = '2026-10-01T00:00:00.000Z';
+  const row = (id: string, name: string, description: string) => ({
+    id,
+    name,
+    description,
+    createdAt: at,
+    updatedAt: at,
+    files: [],
+    chars: 1,
+  });
+  const original = (name: string) =>
+    bundled.skills.find((s) => s.name === name)!.description;
+  const community = original('community-marketing');
+  const { s } = harness({
+    'nr-skills': {
+      revision: 2,
+      builtIns: BUILT_IN_VERSION,
+      skills: [
+        // A copy imported under a built-in name, with the upstream text.
+        row('sk-1', 'seo-audit', original('seo-audit')),
+        // The first bundle kept escaped quotes in this one description.
+        row(
+          'community-marketing',
+          'community-marketing',
+          community.replace(/"/g, '\\"'),
+        ),
+        // Edited, so it shows as written.
+        row('sk-2', 'cro', 'Our own conversion checklist'),
+        // NocoReach's own built-in, stored in Chinese when the library was made.
+        row(
+          'research-report',
+          'research-report',
+          own.find((b: any) => b.name === 'research-report')!.description,
+        ),
+        row('sk-3', 'my-skill', 'Mine'),
+      ],
+    },
+    'nr-skill:sk-1': { body: 'audit body', files: [] },
+  });
+  const keys = Object.fromEntries(
+    (await s.list('1')).skills.map((x: any) => [x.name, x.summaryKey]),
+  );
+  expect(keys).toEqual({
+    'seo-audit': 'skillSummaries.seoAudit',
+    'community-marketing': 'skillSummaries.communityMarketing',
+    cro: undefined,
+    'research-report': 'skillsBuiltin.useWhenWritingResearchReports',
+    'my-skill': undefined,
+  });
+  expect((await s.get('1', { skillId: 'sk-1' })).skill.summaryKey).toBe(
+    'skillSummaries.seoAudit',
+  );
+  // The Agent always gets the stored description.
+  expect(await s.forAgent('1', ['seo-audit'])).toEqual([
+    expect.objectContaining({ description: original('seo-audit') }),
+  ]);
+  // The regenerated bundle keeps no escaped quotes.
+  expect(bundled.skills.some((x) => x.description.includes('\\"'))).toBe(false);
+  expect(community).toContain('"build a community,"');
 });

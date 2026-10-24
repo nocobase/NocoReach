@@ -269,7 +269,7 @@ function AgentForm({
         />
         <FieldDescription>
           {$t('onlineAgent.modelHelp')}{' '}
-          <Link className='underline' to='/agents/models'>
+          <Link className='nr-link-quiet' to='/agents/models'>
             {$t('onlineAgent.modelSettings')}
           </Link>
         </FieldDescription>

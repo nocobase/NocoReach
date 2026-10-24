@@ -537,19 +537,13 @@ it('the tiles show at most five numbers that have data, the summary names the on
     name: 'strategy.currentSituation',
   });
   expect(await within(situation).findByText('Pages indexed: 120')).toBeTruthy();
-  // Two groups, the lines to deal with first.
-  const attention = within(situation).getByRole('region', {
-      name: 'strategy.situationGroupAttention',
-    }),
-    normal = within(situation).getByRole('region', {
-      name: 'strategy.situationGroupNormal',
-    });
+  // One list without group captions, the lines to deal with first.
   expect(
-    attention.compareDocumentPosition(normal) &
-      Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
-  expect(within(attention).getByText(/Google interest/)).toBeTruthy();
-  expect(within(normal).getByText('Pages indexed: 120')).toBeTruthy();
+    within(situation)
+      .getAllByRole('listitem')
+      .map((l) => l.textContent),
+  ).toEqual(['Google interest ↓ 36%', 'Pages indexed: 120', 'Sitemap found']);
+  expect(within(situation).queryByRole('heading', { level: 3 })).toBeNull();
   // No Refresh beside the tiles; All data is gone.
   expect(within(tiles).queryByRole('button')).toBeNull();
   expect(screen.queryByText('strategy.allData')).toBeNull();
@@ -907,6 +901,15 @@ it('with the side panel open the conversation moves there and the page gives it 
           to: '/website',
           tone: 'amber',
         },
+        // Amber for the audit's warnings, but a zero: neither shown nor counted.
+        {
+          key: 'audit',
+          text: '{0} critical audit issues',
+          values: ['0'],
+          source: 'site',
+          to: '/website',
+          tone: 'amber',
+        },
       ],
     },
   ];
@@ -992,14 +995,19 @@ it('earlier days sit above today, folded, and show their conversation when opene
   ).toBeTruthy();
 });
 
-it('the current situation beside the day lists every line, those needing attention first, without a refresh of its own', async () => {
-  const item = (key: string, text: string, tone?: string) => ({
+it('the current situation lists a label and a value per line in group order, without a refresh of its own', async () => {
+  const item = (
+    key: string,
+    text: string,
+    values: string[] = [],
+    group?: string,
+  ) => ({
     key,
     text,
-    values: [],
+    values,
     source: 'site',
     to: '/website',
-    ...(tone ? { tone } : {}),
+    ...(group ? { group } : {}),
   });
   fixture.areas = [
     {
@@ -1007,9 +1015,21 @@ it('the current situation beside the day lists every line, those needing attenti
       title: 'Site',
       items: [
         item('a', 'Pages indexed: 120'),
-        item('stale', '54 pages not updated for a year', 'amber'),
+        item('rule-site-stale', 'Stale pages {0}', ['54'], 'handle'),
+        item('rule-gsc-click-drop', 'Pages losing clicks {0}', ['3'], 'worse'),
+        item('trends', 'Google interest {0}', ['↓ 56%'], 'voice'),
         item('c', 'Sitemap found'),
-        item('d', 'No critical audit issues'),
+        item('rank', '{0} up, {1} down this week', ['3', '0'], 'voice'),
+        item('x', 'X mentions {0}', ['58', '↑ 12%'], 'voice'),
+        item('striking', '{0} queries close to page one', ['5'], 'chance'),
+        // Lines whose numbers are all zero are left out: a count of zero, even with a change beside it.
+        item('audit', '{0} critical audit issues', ['0'], 'handle'),
+        item(
+          'hackernews',
+          'Hacker News mentions {0}',
+          ['0', '↓ 100%'],
+          'voice',
+        ),
       ],
     },
   ];
@@ -1018,28 +1038,49 @@ it('the current situation beside the day lists every line, those needing attenti
     name: 'strategy.currentSituation',
   });
   expect(
-    await within(situation).findByText('54 pages not updated for a year'),
+    await within(situation).findByText('strategy.situationStale'),
   ).toBeTruthy();
-  const lines = within(situation)
+  const rows = within(situation)
     .getAllByRole('listitem')
-    .map((l) => l.textContent);
-  expect(lines).toEqual([
-    '54 pages not updated for a year',
-    'Pages indexed: 120',
-    'Sitemap found',
-    'No critical audit issues',
+    .map((l) =>
+      [...l.querySelectorAll('button > span')].map((s) => s.textContent),
+    );
+  // Getting worse, to handle, opportunities, then share of voice and lines without a group; a known line reads as a
+  // short label with its value on the right, a line without a label keeps its sentence.
+  expect(rows).toEqual([
+    ['strategy.situationClickDrop', '3'],
+    ['strategy.situationStale', '54'],
+    ['strategy.situationStriking', '5'],
+    ['Pages indexed: 120'],
+    ['strategy.situationTrends', '↓ 56%'],
+    ['Sitemap found'],
+    ['strategy.situationRank', '↑3↓0'],
+    ['strategy.situationX', '58↑ 12%'],
   ]);
-  // Each line leads with its source's logo; a line with no known source has none.
+  // Getting worse and to handle need attention.
   expect(
-    within(situation)
-      .getAllByRole('listitem')
-      .map(
-        (l) =>
-          l
-            .querySelector('[data-slot="source-logo"]')
-            ?.getAttribute('data-source') ?? null,
+    [...situation.querySelectorAll('[data-attention]')].map(
+      (b) => (b as HTMLElement).dataset.item,
+    ),
+  ).toEqual(['rule-gsc-click-drop', 'rule-site-stale']);
+  // A count is red when getting worse, amber to handle, plain otherwise; a change is coloured by its direction, as on
+  // the metric cards (a zero plain).
+  const ink = (key: string) =>
+    [
+      ...situation.querySelectorAll(
+        `[data-item="${key}"] > span:last-child > span`,
       ),
-  ).toEqual(['site', null, null, null]);
+    ].map((v) => `${v.textContent} ${v.className}`);
+  expect(ink('rule-gsc-click-drop')).toEqual(['3 text-nr-ink-red']);
+  expect(ink('rule-site-stale')).toEqual(['54 text-nr-ink-amber']);
+  expect(ink('striking')).toEqual(['5 text-foreground']);
+  expect(ink('trends')).toEqual(['↓ 56% text-nr-ink-red']);
+  expect(ink('rank')).toEqual(['↑3 text-nr-ink-green', '↓0 text-foreground']);
+  expect(ink('x')).toEqual(['58 text-foreground', '↑ 12% text-nr-ink-green']);
+  // No icons or logos in the rows (the heading keeps its ⓘ).
+  expect(
+    situation.querySelector('li svg, li img, [data-slot="source-logo"]'),
+  ).toBeNull();
   expect(
     within(situation).queryByRole('button', { name: 'strategy.refreshBlock' }),
   ).toBeNull();
@@ -1047,6 +1088,121 @@ it('the current situation beside the day lists every line, those needing attenti
   expect(
     screen.getByRole('button', { name: 'strategy.updateAnalysis' }),
   ).toBeTruthy();
+});
+
+it('the current situation shows the lines to deal with and six more, the rest on Show all', async () => {
+  fixture.areas = [
+    {
+      id: 'site',
+      title: 'Site',
+      items: [
+        {
+          key: 'rule-site-stale',
+          text: 'Stale pages {0}',
+          values: ['54'],
+          source: 'site',
+          to: '/website',
+          group: 'handle',
+        },
+        ...Array.from({ length: 8 }, (_, k) => ({
+          key: `line-${k}`,
+          text: `Line ${k}`,
+          values: [],
+          source: 'site',
+          to: '/website',
+        })),
+      ],
+    },
+  ];
+  setup();
+  const situation = await screen.findByRole('region', {
+    name: 'strategy.currentSituation',
+  });
+  await within(situation).findByText('strategy.situationStale');
+  expect(within(situation).getAllByRole('listitem')).toHaveLength(7);
+  fireEvent.click(
+    within(situation).getByRole('button', {
+      name: 'strategy.situationShowAll:9',
+    }),
+  );
+  expect(within(situation).getAllByRole('listitem')).toHaveLength(9);
+  fireEvent.click(
+    within(situation).getByRole('button', { name: 'common.collapse' }),
+  );
+  expect(within(situation).getAllByRole('listitem')).toHaveLength(7);
+});
+
+it('the current situation shows only the rows its column has room for', async () => {
+  // jsdom has no layout: the column is 200px high and scrolls, each row 33px, the list at its top.
+  const getStyle = window.getComputedStyle.bind(window);
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  const spies = [
+    vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return this.hasAttribute('data-situation-column') ? 200 : 0;
+      }),
+    vi
+      .spyOn(Element.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: Element) {
+        return { top: 0, height: this.tagName === 'LI' ? 33 : 0 } as DOMRect;
+      }),
+    vi
+      .spyOn(window, 'getComputedStyle')
+      .mockImplementation((el, pseudo) =>
+        el.hasAttribute('data-situation-column')
+          ? ({ overflowY: 'auto' } as CSSStyleDeclaration)
+          : getStyle(el, pseudo),
+      ),
+  ];
+  try {
+    fixture.areas = [
+      {
+        id: 'site',
+        title: 'Site',
+        items: [
+          {
+            key: 'rule-site-stale',
+            text: 'Stale pages {0}',
+            values: ['54'],
+            source: 'site',
+            to: '/website',
+            group: 'handle',
+          },
+          ...Array.from({ length: 8 }, (_, k) => ({
+            key: `line-${k}`,
+            text: `Line ${k}`,
+            values: [],
+            source: 'site',
+            to: '/website',
+          })),
+        ],
+      },
+    ];
+    setup();
+    const situation = await screen.findByRole('region', {
+      name: 'strategy.currentSituation',
+    });
+    await within(situation).findByText('strategy.situationStale');
+    // (200 - 28 for Show all) / 33: five rows, the line to deal with and four more.
+    await waitFor(() =>
+      expect(within(situation).getAllByRole('listitem')).toHaveLength(5),
+    );
+    expect(
+      within(situation).getByRole('button', {
+        name: 'strategy.situationShowAll:9',
+      }),
+    ).toBeTruthy();
+  } finally {
+    spies.forEach((s) => s.mockRestore());
+    vi.unstubAllGlobals();
+  }
 });
 
 it('a handed-off opportunity says where its task stands now', async () => {
@@ -1070,4 +1226,130 @@ it('a handed-off opportunity says where its task stands now', async () => {
     return line!;
   });
   expect(handed.textContent).not.toContain('strategy.handedOffAgent');
+});
+
+it('an opportunity handed off as several tasks shows how many and how many are done, and opens the opportunity', async () => {
+  const handed = fixture.state.insights!.items.find((c) => c.id === 'handed')!;
+  const proposal = (taskId: number) => ({
+    id: `p${taskId}`,
+    title: '',
+    brief: '',
+    status: '',
+    goalVersion: null,
+    taskId,
+    taskNo: taskId,
+    insight: handed,
+  });
+  fixture.state.proposals = [proposal(7), proposal(6), proposal(5)];
+  fixture.tasks = [
+    {
+      id: 5,
+      status: '',
+      createdAt: '2026-10-21T09:00:00Z',
+      evidence: { work: { stage: 'done' } },
+    },
+    {
+      id: 6,
+      status: '',
+      createdAt: '2026-10-21T09:00:00Z',
+      evidence: {
+        work: {
+          stage: 'flow',
+          flow: { stages: [{ kind: 'agent' }] },
+          stageIndex: 0,
+        },
+      },
+    },
+    { id: 7, status: '', createdAt: '2026-10-21T09:00:00Z', evidence: {} },
+  ];
+  setup();
+  const group = await screen.findByRole('group', {
+    name: /strategy.decideCount/,
+  });
+  fireEvent.click(
+    within(group).getByRole('button', { name: /strategy.moreToDecide/ }),
+  );
+  const line = group.querySelector(
+    '[data-opportunity-id=handed]',
+  ) as HTMLElement;
+  await waitFor(() =>
+    expect(
+      within(line).getByText('opportunityTasks.progressTag:3,1'),
+    ).toBeTruthy(),
+  );
+  expect(
+    within(line)
+      .getByText('opportunityTasks.progressTag:3,1')
+      .closest('a')!
+      .getAttribute('href'),
+  ).toBe('/opportunities?item=handed');
+});
+
+it('handing off an opportunity with several places asks which ones first', async () => {
+  const items = fixture.state.insights!.evidence.signals!.items;
+  for (const key of ['top11', 'top15'])
+    items.push({
+      key,
+      type: 'change',
+      source: 'gsc',
+      title: key,
+      facts: [],
+      strength: 1,
+      actionable: true,
+      action: 'optimize',
+      url: `https://www.nocobase.com/en/blog/${key}`,
+    });
+  fixture.state.insights!.items[1] = card('b', {
+    priority: 'high',
+    signalIds: ['top11', 'top15'],
+  });
+  const action = fixture.action.getMockImplementation()!;
+  fixture.action.mockImplementation(
+    (resource: string, name: string, options: { body?: object }) =>
+      resource === 'nrStrategy' && name === 'handOffPlan'
+        ? Promise.resolve({
+            parts: ['top11', 'top15'].map((key) => ({
+              key: `page:nocobase.com/en/blog/${key}`,
+              kind: 'page',
+              url: `https://www.nocobase.com/en/blog/${key}`,
+              label: key,
+              title: `Update ${key}`,
+              playbookId: 'optimize-page',
+              signalIds: [key],
+            })),
+          })
+        : action(resource, name, options),
+  );
+  setup();
+  const line = (await decisionGroup(7)).querySelector(
+    '[data-opportunity-id=b]',
+  ) as HTMLElement;
+  fireEvent.click(
+    within(line).getByRole('button', { name: 'common.handOffAgent' }),
+  );
+  const dialog = await screen.findByRole('dialog');
+  expect(await within(dialog).findByText('Update top11')).toBeTruthy();
+  expect(
+    fixture.action.mock.calls.some(([, name]) => name === 'confirmDirection'),
+  ).toBe(false);
+  fireEvent.click(
+    within(dialog).getByRole('button', {
+      name: 'opportunityTasks.createTasks:2',
+    }),
+  );
+  await waitFor(() =>
+    expect(fixture.action).toHaveBeenCalledWith(
+      'nrStrategy',
+      'confirmDirection',
+      expect.objectContaining({
+        body: expect.objectContaining({
+          insightId: 'b',
+          parts: [
+            'page:nocobase.com/en/blog/top11',
+            'page:nocobase.com/en/blog/top15',
+          ],
+        }),
+      }),
+    ),
+  );
 });

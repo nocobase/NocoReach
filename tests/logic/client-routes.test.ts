@@ -102,7 +102,6 @@ describe('app client routes', () => {
       ),
     ).toEqual([
       { name: 'result-all-detail', authorizedAs: 'result-detail' },
-      { name: 'result-all-create', authorizedAs: 'result-create' },
       { name: 'runner-agents', authorizedAs: 'agents' },
       { name: 'runtimes', authorizedAs: 'runtimes' },
       { name: 'runtimes-connect', authorizedAs: 'runtimes' },

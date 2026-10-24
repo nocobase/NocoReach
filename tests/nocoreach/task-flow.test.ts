@@ -155,7 +155,7 @@ test('built-in playbooks: every step is the Agent or you, grouped by work; custo
  assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[a,{kind:'review',checklist:Array.from({length:11},(_,i)=>({label:'c'+i}))}]},ids),/最多 10 项/);
  assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[{kind:'review'},a]},ids),/第一步要由 Agent/);assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[a,{kind:'review'},{kind:'review'}]},ids),/要放在 Agent 的步骤之后/);
  const mixed=validatePlaybook({name:'竞品对比后补内容',category:'optimize',steps:[a,{kind:'review',checklist:[{label:'确认要补哪些'}]},c],next:['new-doc']},ids);
- assert.deepEqual(mixed.steps.map(s=>[s.kind,s.name]),[['analyze','分析'],['review','审核'],['change','修改'],['review','审核并发布']],'a review is added after the last change');
+ assert.deepEqual(mixed.steps.map(s=>[s.kind,s.name]),[['analyze','分析'],['review','审核'],['change','修改'],['review','审核']],'a review is added after the last change');
  assert.equal(mixed.kind,'build');assert.deepEqual(mixed.next,[],'a playbook that changes the repository is not handed on');
  assert.deepEqual(stagesFor(mixed).map(s=>s.kind),['agent','review','agent','review','release','observe']);
  assert.deepEqual(validatePlaybook({name:'只分析',category:'research',steps:[a]},ids).steps.map(s=>s.name),['分析','审核']);
@@ -276,7 +276,7 @@ test('AI drafts a playbook from one sentence; the draft is checked and not saved
  const {draftPlaybook}=__playbook;const list={playbooks:SYSTEM_PLAYBOOKS};let asked;
  const answer='```json\n'+JSON.stringify({name:'同步更新日志',category:'create',description:'新版本发布后同步中英文更新日志',steps:[{kind:'analyze',name:'整理',instruction:'读 Release 说明，按新增、改进、修复整理'},{kind:'review',checklist:[{label:'版本号正确'}]},{kind:'change',instruction:'写入中英文更新日志页面'}]})+'\n```';
  const r=await draftPlaybook({request:'每个新版本发布后同步更新日志'},list,{name:'Synthetic'},async(system,user)=>{asked={system,user};return answer;});
- assert.equal(r.draft.name,'同步更新日志');assert.deepEqual(r.draft.steps.map(s=>s.kind),['analyze','review','change','review']);assert.equal(r.draft.steps[3].name,'审核并发布');
+ assert.equal(r.draft.name,'同步更新日志');assert.deepEqual(r.draft.steps.map(s=>s.kind),['analyze','review','change','review']);assert.equal(r.draft.steps[3].name,'审核');
  assert.match(asked.system,/Agent/);assert.ok(JSON.parse(asked.user).existing.includes('优化现有页面'));
  await assert.rejects(draftPlaybook({request:'x'},list,{},async()=>'抱歉'),e=>e.status===422);
  await assert.rejects(draftPlaybook({request:'x'},list,{},async()=>'{"name":"x","category":"nope","steps":[]}'),e=>e.status===422&&/手动填写/.test(e.message));
@@ -451,7 +451,7 @@ test('publish: the Agent merges the reviewed commit, the system checks the live 
  let c=await claim(f);assert.equal(c.run.mode,'build');
  const change={path:'src/pages/cn/commercial.astro',before:'<h2>方案对比</h2>',after:'<h2>方案对比</h2>\n<a>立即体验 Demo</a>'};
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'Added the entry',pr:{url:'https://github.com/estheryo/website-test/pull/1',number:1,branch:'nocoreach/task-1',headSha:'abc1234',files:[{path:change.path,additions:1,deletions:0}],release:'在商业服务页新增体验入口',verifyText:'立即体验 Demo',pages:['/cn/commercial','javascript:alert(1)'],changes:[change,{path:'',before:'x',after:'y'}]}});
- d=await f.view();const out=output(d);assert.equal((await f.stage()).name,'审核并发布');assert.equal(out.pr.release,'在商业服务页新增体验入口');assert.deepEqual(out.pr.changes,[change]);
+ d=await f.view();const out=output(d);assert.equal((await f.stage()).name,'审核');assert.equal(out.pr.release,'在商业服务页新增体验入口');assert.deepEqual(out.pr.changes,[change]);
  // preview links reported by the Agent program for PRs waiting for review
  d=await f.command('approveStage',{stageKey:'review',artifactId:out.id,checked:[]});
  assert.equal((await f.stage()).kind,'release');assert.equal(d.work.release.state,'merging');assert.deepEqual(d.work.release.pages,['https://www.example.com/cn/commercial']);assert.equal(d.work.release.note,'在商业服务页新增体验入口');
@@ -692,7 +692,7 @@ test('demo runs the configured Agent and completes review without merging, publi
  const c=await claim(f);assert.equal(c.run.mode,'build');
  const change={path:'src/pages/cn/commercial.astro',before:'<h2>方案对比</h2>',after:'<h2>方案对比</h2>\n<a>立即体验 Demo</a>'};
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'Added the entry',pr:{url:'https://github.com/estheryo/website-test/pull/1',number:1,branch:'nocoreach/task-1',headSha:'abc1234',files:[{path:change.path,additions:1,deletions:0}],release:'在商业服务页新增体验入口',verifyText:'立即体验 Demo',pages:['/cn/commercial','javascript:alert(1)'],changes:[change,{path:'',before:'x',after:'y'}]}});
- let d=await f.view();const out=output(d);assert.equal((await f.stage()).name,'审核并发布');assert.equal(out.pr.release,'在商业服务页新增体验入口');assert.deepEqual(out.pr.changes,[change]);
+ let d=await f.view();const out=output(d);assert.equal((await f.stage()).name,'审核');assert.equal(out.pr.release,'在商业服务页新增体验入口');assert.deepEqual(out.pr.changes,[change]);
 
  d=await f.command('approveStage',{stageKey:'review',artifactId:out.id,checked:[]});
  assert.equal(d.work.stage,'done');
@@ -809,4 +809,20 @@ test('project default can be saved and cleared without changing repositories or 
   assert.equal(view.agent.agentId, 'shared-agent');
   assert.equal(view.agent.repo.repo, 'org/site');
   assert.equal((await f.s.agents.doc('2')).agentId, null);
+});
+
+test('a task handed off with other tasks of its opportunity lists them, and its numbers cover its own place only',async()=>{
+ // O-43 handed off one task per place (2026-10-22): T-41 is this task, T-42 is under way and T-43 was closed.
+ const top11='https://www.example.com/en/blog/top-11',top15='https://www.example.com/en/blog/top-15';
+ const signals=[{key:'rank:top11',url:top11,action:'optimize'},{key:'rank:top15',url:top15,action:'optimize'}];
+ const insight={id:'o43',no:43,target:top11,signalIds:['rank:top11','rank:top15']};
+ const f=fixture(undefined,{no:41,insight,part:{key:'page:example.com/en/blog/top-15',kind:'page',url:top15,label:'Top 15',signalIds:['rank:top15']},page:top15,context:{signals:{items:signals}}});
+ f.state.nrTasks.push({id:2,projectId:'1',title:'Update Top 11',status:'待处理',evidence:{no:42,insight,work:{stage:'flow',flow:{stages:[{kind:'agent'}]},stageIndex:0}}},{id:3,projectId:'1',title:'Reply to unanswered community posts',status:'待处理',evidence:{no:43,insight,work:{stage:'plan',archivedAt:'2026-10-22T00:00:00Z'}}},{id:4,projectId:'1',title:'Elsewhere',status:'待处理',evidence:{no:44,insight:{id:'o44'}}});
+ f.state.nrSnapshots.push({id:9401,key:'strategy:1',payload:{proposals:[{id:'p3',insight,taskId:3},{id:'p2',insight,taskId:2},{id:'p1',insight,taskId:1},{id:'p4',insight:{id:'o44'},taskId:4}]}});
+ const d=await f.view();
+ assert.deepEqual(d.related.map(r=>[r.relation,r.id,r.no,r.state]),[['sibling',2,42,'doing'],['sibling',3,43,'closed']]);
+ assert.deepEqual(f.s.numberPages(d.task,d.work),[top15],'not the opportunity\'s target or its other page');
+ // A task handed off as a whole still shows every page the opportunity cites.
+ const whole={...d.task,evidence:{...d.task.evidence,part:undefined,page:undefined}};
+ assert.deepEqual(f.s.numberPages(whole,d.work),[top11,top15]);
 });
