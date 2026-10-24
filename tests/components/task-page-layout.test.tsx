@@ -488,6 +488,17 @@ test('the start card finds the article from the task page and links it as the ta
     revision: 5,
   });
   expect(commands[1].delivery).toBeUndefined();
+  // No separate note at the start (2026-10-24): instructions go in the activity's message box.
+  expect(commands[1]).not.toHaveProperty('note');
+});
+
+test('before the start, the message box is where the instructions go', () => {
+  mount(blogPageTask(), '/actions/32');
+  expect(screen.queryByText('补充说明（可选）')).toBeNull();
+  expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveAttribute(
+    'placeholder',
+    expect.stringContaining('开始执行时会读取'),
+  );
 });
 
 // T-33 on Studio (2026-10-21): the article is saved on the task; its page is built from the target's pattern.
@@ -971,6 +982,42 @@ test.each(['page', 'article'])(
       expect(card).toHaveTextContent('改动已完成，请检查后发布');
   },
 );
+
+// 2026-10-24 user request: an article in several languages is reviewed in its primary one first, then translated.
+test('an article in two languages approves the primary to translate, and the card names the translation', () => {
+  const data = reviewArticle();
+  const delivery = {
+    kind: 'article' as const,
+    targetId: 'cms',
+    articleId: '7',
+    sourceKey: null,
+    locales: ['en', 'zh'],
+  };
+  data.work.delivery = delivery;
+  const view = mount(data);
+  const card = screen.getByRole('region', { name: '等你处理' });
+  expect(
+    within(card).getByRole('button', { name: '通过，开始翻译' }),
+  ).toBeVisible();
+  view.unmount();
+  const translating = reviewArticle();
+  translating.work.delivery = {
+    ...delivery,
+    translateFrom: { artifactId: 'artifact-1', at: '2026-10-24T00:00:00Z' },
+  };
+  translating.work.stageIndex = 0;
+  translating.runs = [
+    {
+      id: 'run-t',
+      status: 'running',
+      planVersion: 0,
+      stepId: translating.work.flow!.stages[0].key,
+      createdAt: '2026-10-24T00:01:00Z',
+    },
+  ];
+  mount(translating);
+  expect(screen.getAllByText('Agent 正在翻译中文')[0]).toBeVisible();
+});
 
 test('a live article names what changed on its card and shows each field before and after', async () => {
   const user = userEvent.setup();

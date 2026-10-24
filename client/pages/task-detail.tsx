@@ -13,8 +13,8 @@ import { DeliveryDialog, DeliverySummary } from './task-detail/article-start.js'
 import { PlaybookDrawer } from './task-detail/playbook-drawer.js';
 import { ArticleEditor, ArticleReview } from './task-detail/article-review.js';
 import { ConflictBody, DriftNotice, PendingButton, TargetRows } from './task-detail/article-release.js';
-import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, fieldLabel, joinNames, pageUrlsOf, publishingTitle, soleConflict, type ArticleFound, type DeliveryChoice } from './task-detail/article-model.js';
-import { matchArticle } from './article-targets-api';
+import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, fieldLabel, joinNames, pageUrlsOf, publishingTitle, soleConflict, translationPending, type ArticleFound, type DeliveryChoice } from './task-detail/article-model.js';
+import { matchArticle, localeName } from './article-targets-api';
 import { TaskMedia } from './task-detail/media.js';
 import { TaskProperties } from './task-detail/task-properties.js';
 import { TaskNumbers } from './task-detail/task-numbers.js';
@@ -280,7 +280,7 @@ async function withUsableAgent(data:Data,update:Update,command:string,body:objec
 // Before a task starts (2026-10-08 user decision: Hand off to agent only creates the task): what the Agent will get,
 // the playbook (the one suggested at hand-off preselected) and a note; nothing runs until Start.
 function StartCard({data,list,pick,setPick,update,busy,projectId,taskId,onEvidence}:{data:Data;list?:PlaybookList;pick:string;setPick:(id:string)=>void;update:Update;busy:boolean;projectId:number;taskId:string;onEvidence:()=>void}){
- const [note,setNote]=useTaskDraft('note',''),{allowed}=useContext(TaskAccess);
+ const {allowed}=useContext(TaskAccess);
  const {clear}=useTaskDraftStatus();
  const p=list?.playbooks.find(x=>x.id===pick),handoff=(data.task.evidence?.handoff as {playbook?:string;content?:string}|undefined),brief=handoff?.content||data.task.brief||'',briefTitle=handoff?.content?$t('taskDetail.documentDelivered',{0:handoff.playbook}):$t('taskDetail.whatAgentReceive');
  const options=data.agent?.options||[],only=options.length===1?options[0]:undefined,ready=hasTaskAgent(data)||Boolean(only);
@@ -301,7 +301,7 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId,onEviden
  const finding=found==='finding',delivery=defaultDelivery(data,pick,found==='finding'?undefined:found),current=choice||delivery,plan:{ready:boolean;unlink:boolean;link?:{targetId:string;articleId:string};delivery?:unknown}=articleChoice?deliveryPlan(data,current):{ready:true,unlink:false,delivery:undefined};
  const notice=found&&found!=='finding'&&!found.article?$t(found.unchecked?'articleTask.matchUnavailable':'articleTask.noArticleForPage'):undefined;
  const link=async(targetId:string,articleId:string)=>Boolean(await update('linkArticle',{targetId,articleId}));
- const start=async()=>{let revision=data.work.revision;if(!hasTaskAgent(data)&&only){const d=await update('setAgent',{agentId:only.id});if(!d)return;revision=d.work.revision;}if(plan.unlink){const d=await update('linkArticle',{targetId:null,revision});if(!d)return;revision=d.work.revision;}if(plan.link){const d=await update('linkArticle',{...plan.link,revision});if(!d)return;revision=d.work.revision;}const d=await update('startTask',{playbookId:pick,note,revision,...(plan.delivery?{delivery:plan.delivery}:{})});if(d)clear();};
+ const start=async()=>{let revision=data.work.revision;if(!hasTaskAgent(data)&&only){const d=await update('setAgent',{agentId:only.id});if(!d)return;revision=d.work.revision;}if(plan.unlink){const d=await update('linkArticle',{targetId:null,revision});if(!d)return;revision=d.work.revision;}if(plan.link){const d=await update('linkArticle',{...plan.link,revision});if(!d)return;revision=d.work.revision;}const d=await update('startTask',{playbookId:pick,revision,...(plan.delivery?{delivery:plan.delivery}:{})});if(d)clear();};
  const attachments=Array.isArray(data.task.evidence?.attachmentIds)&&data.task.evidence.attachmentIds.length>0;
  const briefText=brief.replace(/[#*>`_]/g,'').replace(/^[ \t]+/gm,'').replace(/\n{2,}/g,'\n').trim();
  // Top to bottom, every field the card's full width (2026-10-22 user decision): the brief as plain text, the playbook
@@ -322,7 +322,6 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId,onEviden
   </Field>
   {articleChoice&&<DeliverySummary data={data} choice={current} finding={finding} notice={notice} allowed={allowed} busy={busy} onChange={()=>setChoosing(true)}/>}
   {articleChoice&&<DeliveryDialog open={choosing} onClose={()=>setChoosing(false)} data={data} projectId={projectId} choice={current} found={found&&found!=='finding'?found.article:null} notice={notice} busy={busy} link={link} onSave={c=>setChoiceState({...c,playbook:pick})}/>}
-  <Field label={$t('taskDetail.notesOptional')} htmlFor={`${taskId}-note`}><Textarea id={`${taskId}-note`} aria-label={$t('taskDetail.additionalNotes')} rows={1} className="min-h-8 resize-none py-1.5" value={note} disabled={busy||!allowed} placeholder={$t('taskDetail.changeEnglishVersionKeepTechnical')} onChange={e=>setNote(e.target.value)}/></Field>
   <NeedsAgent data={data}/>
   {attachments&&<Field label={$t('taskDetail.attachmentsDelivered')}><TaskMedia projectId={projectId} taskId={taskId}/></Field>}
  </StageCard>;
@@ -391,8 +390,11 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    const missingChecks=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key));
    // A target removed after the draft was written cannot receive it: say so instead of offering a publish that fails.
    const articleTarget=out.article.targetId,targetGone=!(data.articleTargets||[]).some(t=>t.id===articleTarget);
-   return <StageCard title={$t('articleTask.reviewTitle')} sub={by} at={out.createdAt}
-    actions={editing||!allowed?undefined:<>{!targetGone&&<Button disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked})}><Rocket/>{$t((mockSettingsAvailable() || data.task.evidence?.simulated) ? 'taskDetail.approveAndSimulatePublish' : 'taskDetail.approveAndPublish')}</Button>}{requestButton}<Button ref={editButtonRef} variant='ghost' disabled={busy} onClick={()=>setEditing(true)}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
+   // In several languages the card says which round it is: the primary to approve, or the translations to publish.
+   const langs=w.delivery?.locales||[],translated=langs.length>1&&Boolean(w.delivery?.translateFrom);
+   const reviewTitle=translationPending(data)?$t('articleTask.reviewPrimaryTitle',{0:localeName(langs[0],getCurrentLocale())}):translated?$t('articleTask.reviewTranslatedTitle'):$t('articleTask.reviewTitle');
+   return <StageCard title={reviewTitle} sub={by} at={out.createdAt}
+    actions={editing||!allowed?undefined:<>{!targetGone&&<Button disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked})}><Rocket/>{$t(translationPending(data)?'articleTask.approveTranslate':(mockSettingsAvailable() || data.task.evidence?.simulated) ? 'taskDetail.approveAndSimulatePublish' : 'taskDetail.approveAndPublish')}</Button>}{requestButton}<Button ref={editButtonRef} variant='ghost' disabled={busy} onClick={()=>setEditing(true)}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
     {!editing&&request(getStageExecutor().agent)}
     {targetGone&&<p role='alert' className='text-sm text-destructive'>{$t('articles.targetMissing')}</p>}
     <LastFeedback w={w} stage={stage} out={out}/>
@@ -477,8 +479,11 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   if(!canRun)return <StageCard error title={displayStageName(stage)} sub={<>{$t('taskDetail.noWebsiteSourceRepositoryConnectedMessage')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/connections?source=repo')}>{$t('common.goDataSources')}</Button></>} actions={actions}>{body}</StageCard>;
   // Started again by the system after NocoReach restarted (retryAfterRestart on the server): say why it runs again.
   const restarted=cur?.autoRetry?<p className={text.muted}>{$t('taskDetail.restartRetried')}</p>:null;
-  if(cur?.status==='queued')return <StageCard label={progress} title={$t('taskDetail.agentWorking',{0:stage.name})} sub={agent?.online?$t('taskDetail.handedOffAgentStartingNow'):<>{$t('taskDetail.agentComputerOffline')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>} actions={actions}>{restarted}{body}</StageCard>;
-  if(cur?.status==='running')return <StageCard label={progress} spinning title={<>{$t('taskDetail.agentWorking',{0:stage.name})}{cur.cancelRequested?$t('taskDetail.stoppingAside'):''}</>} sub={$t('taskDetail.agentWorkingFor',{0:since(cur.createdAt)})} actions={actions}>{restarted}{body}</StageCard>;
+  // While the Agent translates an approved primary language into the others (2026-10-24), the card says so.
+  const translating=w.delivery?.translateFrom&&!w.release?w.delivery.locales?.slice(1)||[]:[];
+  const working=translating.length?$t('articleTask.translating',{0:joinNames(translating.map(l=>localeName(l,getCurrentLocale())))}):$t('taskDetail.agentWorking',{0:stage.name});
+  if(cur?.status==='queued')return <StageCard label={progress} title={working} sub={agent?.online?$t('taskDetail.handedOffAgentStartingNow'):<>{$t('taskDetail.agentComputerOffline')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>} actions={actions}>{restarted}{body}</StageCard>;
+  if(cur?.status==='running')return <StageCard label={progress} spinning title={<>{working}{cur.cancelRequested?$t('taskDetail.stoppingAside'):''}</>} sub={$t('taskDetail.agentWorkingFor',{0:since(cur.createdAt)})} actions={actions}>{restarted}{body}</StageCard>;
   if(cur?.status==='failed'&&failure){
    // Runs a NocoReach restart interrupted say nothing about the step, so the streak passes over them.
    const {why,next,group}=failure,stageRuns=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0&&!r.restartedAt).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
@@ -601,7 +606,7 @@ function ActivityCard({data,update,busy,members,membersLoaded}:{data:Data;update
    return <li key={`${e.at}:${e.action}:${e.runId||''}:${i}`} className={cn(text.muted,'flex items-start gap-2')}><span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center [&_svg]:size-3.5">{eventIcons[e.action]||<Play/>}</span><p className="min-w-0 flex-1 break-words"><span data-actor="" className="text-foreground">{e.action==='runSucceeded'?executor:name}</span> {line}{artifact&&<> <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>setView(artifact)}>{$t('common.view')}</Button></>}</p><time className="shrink-0">{when(e.at)}</time></li>;})}
    {!rows.length&&<li className={text.muted}>{$t('taskDetail.noActivityYet')}</li>}</ol>
   {view&&<DocReader open onClose={()=>setView(undefined)} title={`${nameOf(view.stepId)} · ${$t('taskDetail.versionNumber',{0:view.version})}`} meta={when(view.createdAt)} content={view.pr||view.article?'':view.content}><VersionChange data={data} artifact={view} notes/></DocReader>}
-  {composer&&<div className="flex items-end gap-2"><Textarea id="nr-composer" aria-label={$t('taskDetail.noteExecutor')} rows={1} className="max-h-40 min-h-8 resize-none py-1.5" value={message} disabled={busy} readOnly={done||closed} placeholder={$t('taskDetail.leaveNoteNextRunReads',{0:executor})} onChange={e=>{setMessage(e.target.value);}}/>{!done&&!closed&&<Button variant="outline" disabled={busy||!message.trim()} onClick={()=>void send()}>{$t('taskDetail.send')}</Button>}</div>}
+  {composer&&<div className="flex items-end gap-2"><Textarea id="nr-composer" aria-label={$t('taskDetail.noteExecutor')} rows={1} className="max-h-40 min-h-8 resize-none py-1.5" value={message} disabled={busy} readOnly={done||closed} placeholder={w.flow?$t('taskDetail.leaveNoteNextRunReads',{0:executor}):$t('taskDetail.leaveNoteBeforeStart',{0:executor,1:$t('taskDetail.changeEnglishVersionKeepTechnical')})} onChange={e=>{setMessage(e.target.value);}}/>{!done&&!closed&&<Button variant="outline" disabled={busy||!message.trim()} onClick={()=>void send()}>{$t('taskDetail.send')}</Button>}</div>}
  </Card>;
 }
 function PageLinkEditor({data,projectId,taskId,busy,update}:{data:Data;projectId:number;taskId:string;busy:boolean;update:Update}){

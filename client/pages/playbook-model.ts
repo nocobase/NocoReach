@@ -53,7 +53,8 @@ export function eventText(e:{action:string;note?:string;comment?:string;stageKey
   case 'runSucceeded':return {who:executor,text:$t('playbook.finishedDeliveredNewVersion')};
   case 'runFailed':return {who:$t('common.system'),text:$t('playbook.runNotCompleteRetried',{0:e.note?`（${$legacyText(e.note)}）`:''})};
   case 'flowWaiting':return {who:$t('common.system'),text:$t('playbook.nextStepNotStart',{0:$legacyText(e.note||"")})};
-  case 'approveStage':return {who:$t('common.you'),text:$t('playbook.approved',{0:s,1:e.note?$t('playbook.handedContinue',{0:e.note}):''})};
+  // A primary language approved before its translation (2026-10-24) says so instead of handing over.
+  case 'approveStage':return {who:$t('common.you'),text:e.note==='translate'?$t('articleTask.approvedPrimary'):$t('playbook.approved',{0:s,1:e.note?$t('playbook.handedContinue',{0:e.note}):''})};
   case 'requestStageChanges':return {who:$t('common.you'),text:$t('playbook.requestedChanges',{0:e.comment||''})};
   case 'editStageOutput':return {who:$t('common.you'),text:$t('playbook.editedContentDirectly')};
   case 'recordManual':return {who:$t('common.you'),text:$t('playbook.finishedThemselvesRecorded',{0:s})};
