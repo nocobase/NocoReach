@@ -30,7 +30,7 @@ export function normalize(p: any): Playbook {
   if (Array.isArray(p?.steps)) return withKind({ ...p, category: CATEGORIES.includes(p.category) ? p.category : 'optimize', next: Array.isArray(p.next) ? p.next : [] });
   const { kind, instructions, planFirst, checklist, ...rest } = p || {};
   const steps = kind === 'plan' ? [analyze(instructions || '', systemMessageText('common.analyze')), review(systemMessageText('common.review'), checklist || [], 'accept')]
-    : [...(planFirst ? [analyze(AGENT_PLAN_INSTRUCTION, systemMessageText('playbook.writePlan'), 'plan'), review(systemMessageText('playbook.reviewPlan'), [], 'approve-plan')] : []), change(instructions || ''), review(systemMessageText('playbook.reviewPublish'), checklist || [])];
+    : [...(planFirst ? [analyze(AGENT_PLAN_INSTRUCTION, systemMessageText('playbook.writePlan'), 'plan'), review(systemMessageText('playbook.reviewPlan'), [], 'approve-plan')] : []), change(instructions || ''), review(systemMessageText('common.review'), checklist || [])];
   return withKind({ ...rest, category: kind === 'plan' ? 'research' : 'optimize', steps, next: kind === 'plan' && Array.isArray(rest.next) ? rest.next : [] });
 }
 
@@ -57,7 +57,7 @@ export function validatePlaybook(v: any, known: string[]): Omit<Playbook, 'id' |
     return { key, name, kind: 'review', checklist };
   });
   const last = steps[steps.length - 1];
-  if (last.kind !== 'review') { let key = 'final-review'; while (used.has(key)) key += '-1'; steps.push(review(last.kind === 'change' ? systemMessageText('playbook.reviewPublish') : systemMessageText('common.review'), [], key)); }
+  if (last.kind !== 'review') { let key = 'final-review'; while (used.has(key)) key += '-1'; steps.push(review(systemMessageText('common.review'), [], key)); }
   const changes = steps.some(s => s.kind === 'change');
   if (v.next !== undefined && (!Array.isArray(v.next) || v.next.length > 3)) return fail(systemMessageText('playbook.pickUp3Continue'));
   const next = changes ? [] : [...new Set<string>((v.next || []).filter((x: unknown) => typeof x === 'string'))];

@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Review, then Publish
+
+- The step where a person approves a change is named Review instead of "Review and publish", and the step after it, where the system merges or writes to the CMS and confirms the page is live, is named Publish instead of "Live", in the task header, start card, Opportunities, Playbooks and the playbook editor's note. The flow and the number of clicks are unchanged.
+- The review card's button reads "Approve and publish" ("Approve and simulate publishing" in the demo) instead of "Publish".
+- Built-in playbooks name their final review step with `common.review`, as the system already did when it adds one. Tasks started before keep their stored names but show the new ones: `playbook-snapshot.ts` treats `playbook.reviewPublish` as `common.review`. Custom and edited playbooks keep their own step names.
+
 ## Unreleased — Competitor activity: only problems the person can fix
 
 - Removing or editing a competitor clears its errors at once. Each competitor keeps its own errors, and the source's last run (Data health, the Activity tab) is derived from the competitors still listed, also when it is read, instead of waiting for the next weekly look. On Studio, Data health still showed Competitor activity failing with "Baserow website: No sitemap found" after Baserow had been removed.

@@ -128,7 +128,7 @@ const work = (
           ]
         : []),
       withSkills(change(instructions), skills),
-      review(systemMessageText('playbook.reviewPublish')),
+      review(systemMessageText('common.review')),
     ],
     next: [],
     system: true,

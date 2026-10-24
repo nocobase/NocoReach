@@ -143,7 +143,7 @@ test('localizes proven built-in snapshot names without changing stored data or m
     'Review plan',
   );
   expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
-    'Review and publish',
+    'Review (you)→Publish',
   );
   await act(() => runtime.changeLanguage('zh-CN'));
   expect(screen.getByTestId('board')).toHaveTextContent('技术修复 · 制定方案');
@@ -359,7 +359,7 @@ test('legacy canonical task detail follows mounted language changes without rewr
   const runtime = await setup(data);
   expect(playbookCell()).toHaveTextContent('Technical fix');
   expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
-    'Review and publish',
+    'Review (you)→Publish',
   );
   await act(() => runtime.changeLanguage('zh-CN'));
   expect(playbookCell()).toHaveTextContent('技术修复');
@@ -415,11 +415,38 @@ test('closed task labels and an open output reader refresh their canonical stage
   );
 });
 
+// Review and publish became Review on 2026-10-24, with Publish as the step after it.
+test('snapshots stored with Review and publish show Review', () => {
+  for (const legacy of [false, true]) {
+    const data = task();
+    for (const stage of data.work.flow!.stages)
+      if (stage.kind === 'review' && stage.name === '审核')
+        stage.name = '审核并发布';
+    if (legacy) {
+      delete data.work.flow!.system;
+      delete data.work.flow!.edited;
+      delete data.work.playbook!.system;
+      delete data.work.playbook!.edited;
+    }
+    setDictionary(null);
+    const chinese = localizeWorkSnapshots(data.work).flow!.stages.map(
+      (s) => s.name,
+    );
+    expect(chinese).toContain('审核');
+    expect(chinese).not.toContain('审核并发布');
+    setDictionary(english);
+    expect(
+      localizeWorkSnapshots(data.work).flow!.stages.map((s) => s.name),
+    ).toContain('Review');
+    expect(data.work.flow!.stages.map((s) => s.name)).toContain('审核并发布');
+  }
+});
+
 test('snapshots stored with the step names used before 2026-10-22 show the current wording', () => {
   const renamed: Record<string, string> = {
     制定方案: '出方案',
     审核方案: '看方案',
-    审核并发布: '看效果并发布',
+    审核: '看效果并发布',
   };
   for (const legacy of [false, true]) {
     const data = task();

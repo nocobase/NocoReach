@@ -854,7 +854,7 @@ test.each([false, true])(
       });
       await user.click(
         screen.getByRole('button', {
-          name: simulated ? '模拟发布' : '发布上线',
+          name: simulated ? '通过并模拟发布' : '通过并发布',
           exact: true,
         }),
       );

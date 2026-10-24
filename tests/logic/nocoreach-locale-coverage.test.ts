@@ -79,7 +79,7 @@ describe('NocoReach semantic-key translations', () => {
         '需要调整步骤时，在“历史与执行记录”中编辑方案。',
       // Playbook step names in formal wording (2026-10-22), quoted.
       '有“Agent 修改”时，系统会在最后接上“上线 → 观察效果”；最后一步不是审核时会自动加上“看效果并发布”。':
-        '有“Agent 修改”时，系统会在最后接上“上线 → 观察效果”；最后一步不是审核时会自动加上“审核并发布”。',
+        '有“Agent 修改”时，系统会在最后接上“发布上线 → 观察效果”；最后一步不是审核时会自动加上“审核”。',
       '（不改仓库）': '（不修改仓库）',
       // Playbook step names in formal wording (2026-10-22).
       出方案: '制定方案',
