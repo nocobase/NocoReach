@@ -143,7 +143,7 @@ test('localizes proven built-in snapshot names without changing stored data or m
     'Review plan',
   );
   expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
-    'Review (you)→Publish',
+    'Review (you)Publish',
   );
   await act(() => runtime.changeLanguage('zh-CN'));
   expect(screen.getByTestId('board')).toHaveTextContent('技术修复 · 制定方案');
@@ -359,7 +359,7 @@ test('legacy canonical task detail follows mounted language changes without rewr
   const runtime = await setup(data);
   expect(playbookCell()).toHaveTextContent('Technical fix');
   expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
-    'Review (you)→Publish',
+    'Review (you)Publish',
   );
   await act(() => runtime.changeLanguage('zh-CN'));
   expect(playbookCell()).toHaveTextContent('技术修复');
