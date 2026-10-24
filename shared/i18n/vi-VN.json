@@ -3877,6 +3877,7 @@
   "packagesSource.pickNpmPypiDockerHub": "Vui lòng chọn npm, PyPI hoặc Docker Hub",
   "projectKnowledge.pickFile": "Vui lòng chọn tệp",
   "projects.pickChineseEnglish": "Vui lòng chọn tiếng Trung hoặc tiếng Anh",
+  "projects.pickContentLanguage": "Vui lòng chọn một ngôn ngữ trong danh sách",
   "keyword.pickKeywords": "Vui lòng chọn từ khóa",
   "taskExecution.pickContentChangeResearch": "Vui lòng chọn chỉnh sửa nội dung hoặc nghiên cứu",
   "playbook.pickCategory": "Vui lòng chọn danh mục",

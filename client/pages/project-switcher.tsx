@@ -1,4 +1,4 @@
-import { useMessageState, useNocoReachLocale, isChinese, $t, $legacyText } from "#i18n";
+import { useMessageState, useNocoReachLocale, getCurrentLocale, $t, $legacyText } from "#i18n";
 import {useState,type ReactElement,type ReactNode} from 'react';
 import {Check,ChevronsUpDown,Plus} from 'lucide-react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
@@ -10,6 +10,8 @@ import {Select,SelectContent,SelectItem,SelectTrigger,SelectValue} from '#compon
 import {ReachMark} from '#components/app-shell/brand';
 import {ProjectIcon,useProject,useProjects,type Project} from './reach-data';
 import {switchProject} from './current-project';
+import {contentLanguageName,contentLanguages} from './content-language';
+import type {SupportedLocale} from '../../shared/i18n/locales';
 import {useBusinessAccess} from '#hooks/use-business-access';
 // The project in the header: click to switch projects or add one (SPEC §3 多项目). Each project keeps its own data
 // sources, analysis, opportunities and tasks; switching reloads the Portal on the chosen project.
@@ -61,13 +63,13 @@ export function ProjectGate({children}:{children:ReactNode}):ReactNode{
 }
 function ProjectForm({footer,onBusy}:{footer:(submit:ReactElement)=>ReactElement;onBusy?:(busy:boolean)=>void}):ReactElement{
  // The language of what the AI writes for this project; the creator's UI language to start with (2026-10-07).
- const [name,setName]=useState(''),[domain,setDomain]=useState(''),[language,setLanguage]=useState<'zh-CN'|'en-US'>(isChinese()?'zh-CN':'en-US'),[busy,setBusy]=useState(false),[error,setError]=useMessageState('');
+ const [name,setName]=useState(''),[domain,setDomain]=useState(''),[language,setLanguage]=useState<SupportedLocale>(getCurrentLocale),[busy,setBusy]=useState(false),[error,setError]=useMessageState('');
  const working=(b:boolean)=>{setBusy(b);onBusy?.(b);};
  const create=async()=>{working(true);setError('');try{const p=await api.action<Project>('nrProjects','create',{method:'POST',body:{name,domain,language},unwrap:'data'});switchProject(Number(p.id),'/connections');}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('projectSwitcher.notCreatedTryAgain')));working(false);}};
  return <form className="space-y-3" onSubmit={e=>{e.preventDefault();void create();}}>
   <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t('common.projectName')}</span><Input aria-label={$t('common.projectName')} value={name} maxLength={60} placeholder={$t('projectSwitcher.nocobase')} onChange={e=>setName(e.target.value)} autoFocus/></label>
   <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t('common.websiteUrl')}</span><Input aria-label={$t('common.websiteUrl')} value={domain} placeholder="https://example.com" onChange={e=>setDomain(e.target.value)}/></label>
-  <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t('common.languageAiWrittenContent')}</span><Select value={language} onValueChange={v=>setLanguage(v as 'zh-CN'|'en-US')}><SelectTrigger className="w-full" aria-label={$t('common.languageAiWrittenContent')}><SelectValue>{(v:string)=>v==='zh-CN'?$t('common.chineseLanguage'):'English'}</SelectValue></SelectTrigger><SelectContent className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal"><SelectItem value="zh-CN">{$t('common.chineseLanguage')}</SelectItem><SelectItem value="en-US">English</SelectItem></SelectContent></Select></label>
+  <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t('common.languageAiWrittenContent')}</span><Select value={language} onValueChange={v=>setLanguage(v as SupportedLocale)}><SelectTrigger className="w-full" aria-label={$t('common.languageAiWrittenContent')}><SelectValue>{(v:string)=>contentLanguageName(v as SupportedLocale)}</SelectValue></SelectTrigger><SelectContent className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{contentLanguages.map(l=><SelectItem key={l} value={l}>{contentLanguageName(l)}</SelectItem>)}</SelectContent></Select></label>
   {error?<p role="alert" className="nr-error">{error}</p>:null}
   <p className="text-xs text-muted-foreground">{$t('projectSwitcher.afterCreatingProjectChooseTask')}</p>
   {footer(<Button type="submit" disabled={busy||!name.trim()||!domain.trim()}>{busy?$t('projectSwitcher.creating'):$t('projectSwitcher.createConnectData')}</Button>)}

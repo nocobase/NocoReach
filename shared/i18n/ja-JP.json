@@ -3801,6 +3801,7 @@
   "packagesSource.pickNpmPypiDockerHub": "npm、PyPI、Docker Hub のいずれかを選んでください",
   "projectKnowledge.pickFile": "ファイルを選んでください",
   "projects.pickChineseEnglish": "中国語または英語を選んでください",
+  "projects.pickContentLanguage": "一覧の言語から選んでください",
   "keyword.pickKeywords": "キーワードを選んでください",
   "taskExecution.pickContentChangeResearch": "コンテンツ変更または調査を選んでください",
   "playbook.pickCategory": "カテゴリを選んでください",
