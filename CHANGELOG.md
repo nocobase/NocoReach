@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Every Current situation line with items hands them to the Agent
+
+- In Insights › Current situation, every line that opens a list of items can hand the ticked ones to the Agent, as the existing lines could: the sixteen analysis rule lines, each with the playbook that fits it (Optimize page for pages, Competitor comparison for competitors, Content outline for AI answers, rising searches and recurring topics, Community reply for Hacker News and X posts, Release notes for your new releases, Change research for sites sending visits to your repository), and the ChatGPT and Google AI Overviews mention lines, whose ticked brands go to a competitor comparison.
+- A rule line's panel is titled as in the list ("Pages losing search clicks" rather than the rule's name).
+- Hand off to agent in a panel is greyed out until something is ticked, without the "Tick what to hand off below first" hint, which took focus when the panel opened and covered its description. This applies to every panel with that button: Current situation, Trends keywords, Audit performance, Competitor overview and the website reports.
+
 ## Unreleased — Watching: the current value in the colour of its change
 
 - Opportunities › Watching shows each change's current value in the colour the analysis rule gave it (red for a drop that hurts, green for good news, also when the good news is a drop), in the Value column, without "Now" before it; the grey line under it still says where it started. Before #198 the colour came as a chip beside the title and the value was repeated in plain text; now it shows once. A change without a figure reads "—" in grey.

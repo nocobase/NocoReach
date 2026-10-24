@@ -28,7 +28,7 @@ test('洞察 · 需要留意: one sentence per connected source with its numbers
   assert.equal(se.striking.total,3);
   assert.deepEqual(si.audit.rows.map(x=>[x.title,x.meta]),[['页面打不开','2 页 · 例如 https://e.com/a；https://e.com/b']]);assert.equal(si.audit.handOff.playbookId,'tech-fix');assert.match(si.audit.handOff.title,/\{0\}/);
   assert.equal(co.forum.total,2);assert.equal(co.forum.handOff.playbookId,'community-reply','posts nobody answered: draft replies (2026-10-08)');
-  assert.deepEqual(ai.answers.rows.map(x=>x.meta),['没提到：Claude']);assert.equal(ai['brand-chat_gpt'].rows[0].title,'x');assert.equal(ai['brand-chat_gpt'].rows[1].tag.text,'你');}
+  assert.deepEqual(ai.answers.rows.map(x=>x.meta),['没提到：Claude']);assert.equal(ai['brand-chat_gpt'].rows[0].title,'x');assert.equal(ai['brand-chat_gpt'].rows[1].tag.text,'你');assert.equal(ai['brand-chat_gpt'].handOff.playbookId,'competitor-compare');}
  assert.deepEqual(r.areas.map(a=>a.id),['search','ai','site','community']);
  const se=area('search');assert.deepEqual([se.striking.text,se.striking.values,se.striking.source],['{0} 个查询接近首页',['3'],'搜索表现']);assert.equal(se.ctr,undefined,'average CTR has no comparison to judge it by (2026-10-24)');assert.equal(se.rank.text,'本周排名 {0} 个上升、{1} 个下降');assert.deepEqual(se.rank.values,['1','1']);assert.equal(se.rank.source,'排名跟踪');assert.match(se.rank.detail,/跟踪 3 个词，2 个在前 10 名/);assert.equal(se.saved,undefined,'saved keywords are an inventory, not something to watch');
  const ai=area('ai');assert.equal(ai['brand-chat_gpt'].text,'ChatGPT 提到你 {0} 次');assert.deepEqual(ai['brand-chat_gpt'].values,['1,240']);assert.match(ai['brand-chat_gpt'].detail,/提及份额 20%，2 个回答里 1 个引用本站/);assert.equal(ai['brand-chat_gpt'].tone,'amber');assert.equal(ai.answers.text,'{0} 个问题里 AI 没提到你');assert.deepEqual(ai.answers.values,['1']);assert.match(ai.answers.detail,/近 30 天共问了 2 个/);
@@ -55,6 +55,8 @@ test('Current situation adds what the listed analysis rules find, counting what 
  assert.deepEqual([items['rule-github-release'].values,items['rule-github-release'].group,items['rule-github-release'].area],[['2'],'chance','site']);
  // Clicking a line lists what the rule found, with the rule's name and description.
  assert.equal(items['rule-x-hot'].rows[0].url,'https://x.com/1');assert.equal(items['rule-x-hot'].text,'X 上互动多的帖子');assert.equal(items['rule-x-hot'].source,'X');
+ // Every line that lists items can hand the ticked ones to the Agent, with the playbook that fits the rule.
+ assert.deepEqual(items['rule-x-hot'].handOff,{playbookId:'community-reply',title:'X 上互动多的帖子：{0}'});assert.equal(items['rule-github-release'].handOff.playbookId,'release-notes');
  // A rule that is switched off adds no line.
  const off=new InsightSummary({signals:{inputs:async()=>({inputs,coverage:{}})},analysisRules:{config:async()=>({rules:{'x-hot':{enabled:false}}})}});off.views={search:async()=>({connected:false})};
  const keys=(await off.summary('1')).areas.flatMap(a=>a.items.map(i=>i.key));assert.equal(keys.includes('rule-x-hot'),false);assert.equal(keys.includes('rule-github-release'),true,'the other rules still add their lines');
