@@ -6,8 +6,6 @@ import type {
 import { PageHeader, Section, SectionHeading } from '#components/reach/page';
 import { RefreshButton } from '#components/reach/refresh-button';
 import { Button } from '#components/ui/button';
-import { TabsList, TabsTrigger } from '#components/ui/tabs';
-import { usePageTab } from '#hooks/use-page-tab';
 import { cn } from '#lib/utils';
 
 // This module exports a stable plugin component map rather than a Fast Refresh boundary.
@@ -19,9 +17,7 @@ function Header({
   refreshDisabled,
   refreshing,
   onRefresh,
-  activeTabLabel,
 }: DemoSettingsHeaderProps): ReactElement {
-  usePageTab(activeTabLabel);
   return (
     <PageHeader
       title={title}
@@ -42,17 +38,6 @@ function Header({
 export const demoSettingsComponents: DemoSettingsComponents = {
   Header,
   Button,
-  TabsTrigger,
-  TabsList: ({ className, ...props }) => (
-    <TabsList
-      {...props}
-      variant='line'
-      className={cn(
-        'h-auto! max-w-full flex-wrap justify-start gap-y-3',
-        className,
-      )}
-    />
-  ),
   Card: ({ size: _size, ...props }) => <Section {...props} />,
   CardHeader: ({ className, ...props }) => (
     <div

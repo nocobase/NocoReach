@@ -212,8 +212,9 @@ describe('read-only demo conversations', () => {
 
 describe('read-only demo lifecycle', () => {
   const test = readOnlyTest;
-  test('allows an authorized demo import in read-only mode while protecting other writes', async ({
+  test('allows demo lifecycle operations while preserving the acting administrator and protecting other writes', async ({
     testApp,
+    connection,
   }) => {
     const runtime = testApp.application.container.resolve(nocoReachToken);
     await runtime.ready;
@@ -261,8 +262,15 @@ describe('read-only demo lifecycle', () => {
     await snapshots.create({
       values: { key: 'project:41', payload: { id: 41, name: 'Old project' } },
     });
+    const demoAdmin = await signIn(testApp, {
+      email: 'admin@nocobase.example',
+      password: 'Demo@2026',
+    });
+    const actingAdmin = await connection.repository('user').findOne({
+      filter: { email: 'admin@nocobase.example' },
+    });
     expect(
-      (await admin.fetch('/demoMode/data/reset', post('en-US'))).status,
+      (await demoAdmin.fetch('/demoMode/data/reset', post('en-US'))).status,
     ).toBe(200);
     await demo.whenIdle();
     expect(await demo.status()).toMatchObject({
@@ -270,6 +278,12 @@ describe('read-only demo lifecycle', () => {
       present: true,
       language: 'en-US',
     });
+    expect(
+      await connection.repository('user').findOne({
+        filter: { email: 'admin@nocobase.example' },
+      }),
+    ).toMatchObject({ id: actingAdmin!.id, disabledAt: null });
+    expect((await demoAdmin.fetch('/demoMode/configuration')).status).toBe(200);
     expect(
       (await runtime.plugin.projects.all()).map(
         (p: { name: string }) => p.name,
@@ -515,14 +529,20 @@ describe('read-only demo lifecycle', () => {
       ).status,
     ).toBe(400);
 
-    expect((await admin.fetch('/demoMode/data/clear', post())).status).toBe(
+    expect((await demoAdmin.fetch('/demoMode/data/clear', post())).status).toBe(
       200,
     );
     expect(await runtime.plugin.projects.all()).toEqual([]);
-    expect((await admin.fetch('/demoMode/data/clear', post())).status).toBe(
+    expect((await demoAdmin.fetch('/demoMode/data/clear', post())).status).toBe(
       200,
     );
     expect((await demo.status()).enabled).toBe(true);
+    expect((await demoAdmin.fetch('/demoMode/configuration')).status).toBe(200);
+    expect(
+      await connection
+        .repository('user')
+        .findOne({ filter: { id: actingAdmin!.id } }),
+    ).toMatchObject({ disabledAt: null });
   });
 });
 

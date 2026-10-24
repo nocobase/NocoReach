@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Demo Mode beta.2
+
+- Upgrade Demo Mode to beta.2 with App Client beta.3, Agents beta.23 and Jobs beta.4, retaining the shared i18n peer version.
+- Mount the plugin's single-page management view and remove obsolete tab slots and header state.
+- Verify that a demo administrator retains its identity, session and management access through reset and clear; use the plugin's account preservation directly without application compatibility code.
+
 ## Unreleased — Demo dependency upgrade compatibility
 
 - Keep host and mock plugin i18n peers on one version so App Client registrations share the same runtime and types.
