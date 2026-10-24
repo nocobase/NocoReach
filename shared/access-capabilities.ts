@@ -300,6 +300,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
       'saveProposal',
       'approve',
       'confirmDirection',
+      'handOffPlan',
       'decideSignal',
     ]),
     ...list('nrContentIndex', ['createWork', 'save']),

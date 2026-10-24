@@ -14,6 +14,7 @@ import { Sparkline, chipOf, percent, type MetricItem } from './insights-view';
 import { citedSignals, oppNo, taskNo, type Row } from './board';
 import { dayOf, type Day, type Feed, type Line } from './feed';
 import { TASK_TAG } from './task-standing';
+import { severalTag } from './places-model';
 import { handOffLabel } from './hand-off';
 import {
   DayConversation,
@@ -312,7 +313,7 @@ const END_SLOT = 'flex shrink-0 items-center justify-end gap-1 sm:min-w-36';
  * An opportunity already decided: its title and where it went. One dismissed or expired is dimmed as a whole, so the
  * handed-off ones and their tasks stand out (2026-10-22 visual polish).
  */
-function DecidedLine({ row, st, task }: Line) {
+function DecidedLine({ row, st, task, tasks }: Line) {
   return (
     <li
       data-opportunity-id={row.card.id}
@@ -332,7 +333,7 @@ function DecidedLine({ row, st, task }: Line) {
         </Link>
         <QuoteOpportunity row={row} />
         <span className={END_SLOT}>
-          <StatusTag row={row} st={st} task={task} />
+          <StatusTag row={row} st={st} task={task} tasks={tasks} />
         </span>
       </div>
     </li>
@@ -626,7 +627,16 @@ export function Today({
 }
 
 // Where a decided opportunity went; once handed off, where its task stands now (task-standing.ts).
-function StatusTag({ row, st, task }: Line) {
+function StatusTag({ row, st, task, tasks }: Line) {
+  // Several tasks, one per place: how many and how many are done; the tag opens the opportunity with its task list.
+  if (st.state === 'task' && tasks) {
+    const tag = severalTag(tasks);
+    return (
+      <Link to={itemLink(row)}>
+        <Tag tone={tag.tone}>{tag.text}</Tag>
+      </Link>
+    );
+  }
   if (st.state === 'task') {
     const [tone, text] = TASK_TAG[task ?? 'todo'];
     return (

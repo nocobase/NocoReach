@@ -1197,3 +1197,129 @@ it('a handed-off opportunity says where its task stands now', async () => {
   });
   expect(handed.textContent).not.toContain('strategy.handedOffAgent');
 });
+
+it('an opportunity handed off as several tasks shows how many and how many are done, and opens the opportunity', async () => {
+  const handed = fixture.state.insights!.items.find((c) => c.id === 'handed')!;
+  const proposal = (taskId: number) => ({
+    id: `p${taskId}`,
+    title: '',
+    brief: '',
+    status: '',
+    goalVersion: null,
+    taskId,
+    taskNo: taskId,
+    insight: handed,
+  });
+  fixture.state.proposals = [proposal(7), proposal(6), proposal(5)];
+  fixture.tasks = [
+    {
+      id: 5,
+      status: '',
+      createdAt: '2026-10-21T09:00:00Z',
+      evidence: { work: { stage: 'done' } },
+    },
+    {
+      id: 6,
+      status: '',
+      createdAt: '2026-10-21T09:00:00Z',
+      evidence: {
+        work: {
+          stage: 'flow',
+          flow: { stages: [{ kind: 'agent' }] },
+          stageIndex: 0,
+        },
+      },
+    },
+    { id: 7, status: '', createdAt: '2026-10-21T09:00:00Z', evidence: {} },
+  ];
+  setup();
+  const group = await screen.findByRole('group', {
+    name: /strategy.decideCount/,
+  });
+  fireEvent.click(
+    within(group).getByRole('button', { name: /strategy.moreToDecide/ }),
+  );
+  const line = group.querySelector(
+    '[data-opportunity-id=handed]',
+  ) as HTMLElement;
+  await waitFor(() =>
+    expect(
+      within(line).getByText('opportunityTasks.progressTag:3,1'),
+    ).toBeTruthy(),
+  );
+  expect(
+    within(line)
+      .getByText('opportunityTasks.progressTag:3,1')
+      .closest('a')!
+      .getAttribute('href'),
+  ).toBe('/opportunities?item=handed');
+});
+
+it('handing off an opportunity with several places asks which ones first', async () => {
+  const items = fixture.state.insights!.evidence.signals!.items;
+  for (const key of ['top11', 'top15'])
+    items.push({
+      key,
+      type: 'change',
+      source: 'gsc',
+      title: key,
+      facts: [],
+      strength: 1,
+      actionable: true,
+      action: 'optimize',
+      url: `https://www.nocobase.com/en/blog/${key}`,
+    });
+  fixture.state.insights!.items[1] = card('b', {
+    priority: 'high',
+    signalIds: ['top11', 'top15'],
+  });
+  const action = fixture.action.getMockImplementation()!;
+  fixture.action.mockImplementation(
+    (resource: string, name: string, options: { body?: object }) =>
+      resource === 'nrStrategy' && name === 'handOffPlan'
+        ? Promise.resolve({
+            parts: ['top11', 'top15'].map((key) => ({
+              key: `page:nocobase.com/en/blog/${key}`,
+              kind: 'page',
+              url: `https://www.nocobase.com/en/blog/${key}`,
+              label: key,
+              title: `Update ${key}`,
+              playbookId: 'optimize-page',
+              signalIds: [key],
+            })),
+          })
+        : action(resource, name, options),
+  );
+  setup();
+  const line = (await decisionGroup(7)).querySelector(
+    '[data-opportunity-id=b]',
+  ) as HTMLElement;
+  fireEvent.click(
+    within(line).getByRole('button', { name: 'common.handOffAgent' }),
+  );
+  const dialog = await screen.findByRole('dialog');
+  expect(await within(dialog).findByText('Update top11')).toBeTruthy();
+  expect(
+    fixture.action.mock.calls.some(([, name]) => name === 'confirmDirection'),
+  ).toBe(false);
+  fireEvent.click(
+    within(dialog).getByRole('button', {
+      name: 'opportunityTasks.createTasks:2',
+    }),
+  );
+  await waitFor(() =>
+    expect(fixture.action).toHaveBeenCalledWith(
+      'nrStrategy',
+      'confirmDirection',
+      expect.objectContaining({
+        body: expect.objectContaining({
+          insightId: 'b',
+          parts: [
+            'page:nocobase.com/en/blog/top11',
+            'page:nocobase.com/en/blog/top15',
+          ],
+        }),
+      }),
+    ),
+  );
+});

@@ -51,7 +51,10 @@ const frontmatter = (text) => {
   assert.ok(m, 'SKILL.md has no frontmatter');
   const field = (key) => {
     const v = new RegExp(`^${key}:\\s*(.*)$`, 'm').exec(m[1])?.[1].trim() ?? '';
-    return /^(['"]).*\1$/.test(v) ? v.slice(1, -1) : v;
+    // YAML quoting: a double-quoted value uses JSON-style escapes; a single-quoted one doubles its quotes.
+    if (/^".*"$/.test(v)) return JSON.parse(v);
+    if (/^'.*'$/.test(v)) return v.slice(1, -1).replace(/''/g, "'");
+    return v;
   };
   return {
     name: field('name'),
