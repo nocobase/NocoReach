@@ -5,6 +5,10 @@
 - Technical details › Runs no longer shows "Source snapshot for this run" for runs that read no forum posts (every run but community replies), where it opened a single grey line out of view. A run that read posts lists them under "Posts the Agent read": each topic with its post count and whether it was complete, the first five shown and "N more topics" for the rest.
 - Every fold (`Reveal`) keeps its label with a chevron once open instead of turning into a bare "Collapse", and scrolls what it opened into view. A live change without release notes no longer offers an empty Release notes fold.
 
+## Unreleased — Task header: the steps are tags again
+
+- Under a task's title, the playbook's steps are a row of tags joined by chevrons again, as before the one-layout change: done steps ticked in green, the current one outlined (violet for a person's step, blue for the Agent's), the rest grey. The grey "Now: …" text after them is gone, since the highlighted step says where the task stands. Nothing else in the header changed.
+
 ## Unreleased — Competitor activity: only problems the person can fix
 
 - Removing or editing a competitor clears its errors at once. Each competitor keeps its own errors, and the source's last run (Data health, the Activity tab) is derived from the competitors still listed, also when it is read, instead of waiting for the next weekly look. On Studio, Data health still showed Competitor activity failing with "Baserow website: No sitemap found" after Baserow had been removed.

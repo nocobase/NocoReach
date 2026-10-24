@@ -184,71 +184,32 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
  </PageContainer></TaskActions.Provider></TaskAccess.Provider>;
 }
 // The header, two lines (2026-10-22 user decision): the title with its number in grey, the status and the task's menu;
-// then one grey line with the playbook's steps and where the task stands now.
+// then the playbook's steps, the current one highlighted.
 function TaskHeading({data,list,pick,busy,members,update,onPage}:{data:Data;list?:PlaybookList;pick:string;busy:boolean;members:Member[];update:Update;onPage:()=>void}){
  const no=(data.task.evidence as {no?:number}|undefined)?.no,w=data.work,started=Boolean(w.flow);
  const pb=started?undefined:list?.playbooks.find(x=>x.id===pick),stages=started?w.flow!.stages:pb?stagesFor(pb):[];
- const now=useNow(data);
  return <header className="flex flex-col gap-1.5">
   <div className="flex items-start justify-between gap-3">
    <h1 className={cn(text.title,'min-w-0 break-words')}>{no?<span className="mr-2 text-muted-foreground">T-{no}</span>:null}{data.task.title}</h1>
    <div className="flex shrink-0 items-center gap-1 pt-1.5"><TaskStatusTag work={w} status={(data.task as {status?:string}).status||''}/><MoreMenu data={data} busy={busy} members={members} update={update} onPage={onPage}/></div>
   </div>
-  {(stages.length>0||now)&&<div className={cn(text.muted,'flex flex-wrap items-baseline gap-x-1.5 gap-y-1')}>
-   {stages.length>0&&<StepBar stages={stages} w={w}/>}
-   {now&&<span data-now="">{stages.length>0&&<span aria-hidden="true">· </span>}{$t('taskDetail.nowState',{0:now})}</span>}
-  </div>}
+  {stages.length>0&&<StepBar stages={stages} w={w}/>}
  </header>;
 }
-// The playbook's steps as one line of text: the current one in the body colour, the others grey.
+// The playbook's steps as a row of tags, as before #241 (restored 2026-10-24 at the user's request): done ones ticked in
+// green, the current one outlined (violet for a person's step, blue for the Agent's), the rest grey.
 function StepBar({stages,w}:{stages:Stage[];w:Work}){
  const {self,owner}=useContext(TaskAccess),started=Boolean(w.flow),done=w.stage==='done',index=w.stageIndex||0,closed=Boolean(closedLabel(w));
  const label=(s:Stage)=>{const text=stageLabel(s);if(s.kind!=='review'||self)return text;
   // A space where a Latin owner name meets Chinese or Japanese text ("Super Admin" before the review step).
   if(!text.startsWith($t('common.you')))return `${text} · ${owner}`;const rest=text.slice($t('common.you').length);
   return `${owner}${/[A-Za-z0-9]$/.test(owner)&&/^[\u3040-\u30ff\u3400-\u9fff]/.test(rest)?' ':''}${rest}`;};
- return <ol className="nr-td-stepbar inline-flex flex-wrap items-baseline gap-x-1.5" aria-label={$t('common.progress')}>
-  {stages.map((s,i)=>{const st=!started?'todo':done||i<index?'done':i===index&&!closed?'current':'todo';return <li key={s.key} className="inline-flex items-baseline gap-x-1.5" data-state={st} aria-current={st==='current'?'step':undefined}>
-   {i>0&&<span aria-hidden="true">→</span>}
-   <span className={st==='current'?'text-foreground':undefined}>{label(s)}</span>
+ return <ol className="nr-td-stepbar flex flex-wrap items-center gap-1" aria-label={$t('common.progress')}>
+  {stages.map((s,i)=>{const st=!started?'todo':done||i<index?'done':i===index&&!closed?'current':'todo';return <li key={s.key} className="flex items-center gap-1" data-state={st} aria-current={st==='current'?'step':undefined}>
+   {i>0&&<ChevronRight className="size-3 text-muted-foreground" aria-hidden="true"/>}
+   <Tag tone={st==='done'?'green':st==='current'?(s.kind==='review'?'violet':'blue'):'grey'} icon={st==='done'?<Check/>:undefined} dot={st==='current'} className={st==='current'?'ring-1 ring-current':undefined}>{label(s)}</Tag>
   </li>;})}
  </ol>;
-}
-// Where the task stands, in a few words, after the steps: "Now: waiting for you to start".
-function useNow(data:Data):string{
- const {self,owner}=useContext(TaskAccess),w=data.work;
- if(isClosed(w))return closedWhen(w);
- if(!w.flow)return $t('taskDetail.nowConfirmStart');
- const r=w.release;
- if(w.stage==='done'){
-  if(r?.state==='simulated')return $t('taskDetail.simulatedRelease');
-  if(r?.state==='live')return effectItems(w).some(i=>!i.result)?$t('common.tracking'):$t('common.completed');
-  return $t('common.completed');
- }
- const stage=w.flow.stages[w.stageIndex||0];
- if(!stage)return '';
- const yours=(step:string)=>self?$t('taskDetail.nowYourStep',{0:step}):$t('taskDetail.nowOwnerStep',{0:owner,1:step});
- if(stage.kind==='agent'){
-  const cur=data.runs.filter(x=>x.stepId===stage.key&&x.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];
-  if(cur?.status==='running')return $t('taskDetail.agentWorking',{0:stage.name});
-  if(cur?.status==='queued')return $t('taskList.waitingAgentPickUp');
-  if(cur?.status==='failed')return $t('taskDetail.agentDidNotFinish');
-  return stageLabel(stage);
- }
- if(stage.kind==='review')return yours(stage.name);
- if(stage.kind==='publish')return yours($t('common.confirmPublish'));
- if(stage.kind==='release')switch(r?.state){
-  case 'merging':case 'publishing':return $t('taskDetail.publishing');
-  case 'merge_failed':return $t('taskDetail.publishFailed');
-  case 'publish_failed':return $t('articleTask.publishFailed');
-  case 'publish_conflict':return $t('articleTask.targetState.publishConflict');
-  case 'exporting':return $t('articleTask.targetState.exporting');
-  case 'verifying':return $t('taskDetail.waitingSiteUpdate');
-  case 'not_seen':case 'export_late':return $t('taskDetail.waitingConfirmLive');
-  default:return displayStageName(stage);
- }
- if(stage.kind==='observe')return $t('common.tracking');
- return displayStageName(stage);
 }
 // ✦ Why: the reason in a sentence or two, with the evidence behind it (2026-10-22 user decision, as the website's demo
 // card). While a change waits for review it answers why the change was made.
