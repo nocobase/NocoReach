@@ -6,6 +6,10 @@
 - Every prompt for a project in a language other than Simplified Chinese ends with the same note the English projects had, naming the language. The English note is unchanged.
 - The daily analysis checks opportunity wording in two sets. Simplified Chinese, Traditional Chinese and Japanese keep the width rules (title 18, reason 30, a CJK character counting 1), with the vague words of each language. The other languages use the English limits (title 60 characters, reason 90 with a number, at most two sentences of suggestion); vague verbs are only checked in English.
 
+## Unreleased — Skill summaries in every UI language
+
+- Skills shows the 18 product Skills' "when to use" as a short summary in the UI language, in the list, in search and in the Skill drawer, whose ⓘ shows the original text the Agent reads. Names, bodies and the description the Agent gets stay unchanged; edited and custom Skills show as written. The sync script now unescapes quoted YAML descriptions, which removes stray backslashes from the bundled community-marketing description.
+
 ## Unreleased — Review, then Publish
 
 - The step where a person approves a change is named Review instead of "Review and publish", and the step after it, where the system merges or writes to the CMS and confirms the page is live, is named Publish instead of "Live", in the task header, start card, Opportunities, Playbooks and the playbook editor's note. The flow and the number of clicks are unchanged.
