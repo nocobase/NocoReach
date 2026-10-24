@@ -27,6 +27,8 @@ import { roleOf } from '../nocoreach/policy.js';
 import { authorizationToken, type AuthorizationEnv } from '@nocobase/app-plugin-authorization/server';
 import type { TaskCreator } from '../nocoreach/manual-tasks.js';
 import {
+  ManualTaskDraftInput,
+  ManualTaskDraftView,
   ManualTaskInput,
   ManualTaskView,
   TaskMediaView,
@@ -136,6 +138,34 @@ export const manualTaskRoutes = defineApiRoutes<Application>((app) => {
         },
         201,
       ),
+  );
+  routes.post(
+    '/nocoreachTasks/draft',
+    describeRoute({
+      tags: ['NocoReach Tasks'],
+      summary: 'Draft a manual task with AI',
+      operationId: 'draftManualTask',
+      description:
+        'Turns a rough idea into an editable task draft with one call to the chat model in Model services. Saves nothing; create the task with createManualTask. 409 without a chat model, 422 when the answer is unusable.',
+      responses: {
+        200: dataResponse(ManualTaskDraftView),
+        ...apiErrorResponses,
+        409: apiErrorResponse(409),
+        422: { description: "The model's answer was not a usable draft." },
+        429: apiErrorResponse(429),
+        503: apiErrorResponse(503),
+      },
+      // New task commands stay browser-only until classified (docs/DEVELOPMENT.md, Task execution).
+      ...cliRoute(false),
+    }),
+    apiValidator('json', ManualTaskDraftInput),
+    async (context) =>
+      context.json({
+        data: await service().draft(
+          creator(context),
+          context.req.valid('json'),
+        ),
+      }),
   );
   routes.post(
     '/nocoreachTasks/media',
