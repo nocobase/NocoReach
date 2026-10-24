@@ -21,6 +21,7 @@ import { TaskNumbers } from './task-detail/task-numbers.js';
 import { Card, Clamped, Field } from './task-detail/layout.js';
 import { GAP, text } from './task-detail/styles.js';
 import { TaskStatusTag } from './task-status-tag';
+import { MarkdownEditor } from './task-detail/markdown-editor.js';
 import { hasTaskAgent } from './task-execution-types';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {createContext,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
@@ -382,7 +383,7 @@ function ReportNotes({report}:{report:NonNullable<Artifact['report']>}){
 function PageChange({pr,content}:{pr?:PullRequestInfo;content:string}){
  const tech=useTechnicalDetails(),pages=pr?.pages||[];
  return <div className="flex flex-col gap-4">
-  {pr?.release&&<Field label={$t('taskDetail.whatChanged')}><p className={cn(text.body,'whitespace-pre-wrap')}>{humanTimes(pr.release)}</p></Field>}
+  {pr?.release&&<Field label={$t('taskDetail.whatChanged')}><Clamped long={pr.release.length>200||pr.release.split('\n').length>3}>{humanTimes(pr.release)}</Clamped></Field>}
   {pr?.visibleChanges?.length?<VisibleChanges items={pr.visibleChanges}/>:pr?<p className={text.muted}>{$t('taskDetail.noVisibleChanges')}</p>:<Reading><Markdown content={content}/></Reading>}
   {pr&&<div className={cn(text.body,'flex flex-wrap items-center gap-x-4 gap-y-2')}>
    {pr.previewUrl&&<a className="nr-link inline-flex items-center gap-1" href={pr.previewUrl} target="_blank" rel="noreferrer"><Globe className="size-4" aria-hidden="true"/>{$t('taskDetail.openPreviewPage')}</a>}
@@ -482,7 +483,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
     :<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,...(nextOptions.length&&next?{next}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}>{label}</Button>{requestButton}<Button variant="ghost" disabled={busy} onClick={()=>{setDraft(out.content);setEditing(true);}}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
    {!editing&&request(getStageExecutor()[producer.kind])}
    <LastFeedback w={w} stage={stage} out={out}/>
-   {editing?<Textarea className="field-sizing-fixed leading-6" aria-label={$t('taskDetail.editContent')} rows={18} value={draft} disabled={busy} onChange={e=>{setDraft(e.target.value);}}/>:<>
+   {editing?<MarkdownEditor aria-label={$t('taskDetail.editContent')} value={draft} disabled={busy} onChange={e=>{setDraft(e.target.value);}} preview={value=><Markdown content={value}/>}/>:<>
     {out.pr?<PageChange pr={out.pr} content={out.content}/>:(()=>{const r=repliesOf(w,out.content);return r.length?<ReplyDrafts items={r}/>:<Reading><Markdown content={out.content}/></Reading>;})()}
     <ScopeConfirm pr={out.pr} ok={scopeOk} setOk={setScopeOk} busy={busy}/>
     {out.report&&<ReportNotes report={out.report}/>}
@@ -506,7 +507,10 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    {failure&&<Button variant="ghost" disabled={busy} onClick={messageAgent}>{$t('taskDetail.messageAgent')}</Button>}
   </>:<><Button disabled={busy||!record.trim()} onClick={()=>void act('recordManual',{content:record})}>{$t('taskDetail.recordContinue')}</Button><Button variant="ghost" onClick={()=>{setManual(false);setRecord('');}}>{$t('common.cancel')}</Button></>;
   const recordLabel=readsOnly(stage)?(stage.mode==='analyze'?$t('taskDetail.analysisResult'):$t('taskDetail.plan')):$t('taskDetail.changeHistory');
-  const body=manual||(!isActive&&!manual&&canRun&&!hasTaskAgent(data)&&(agent?.options||[]).length!==1)||(approved&&source)?<>{manual&&<Field label={recordLabel} htmlFor={`${stage.key}-record`}><Textarea id={`${stage.key}-record`} aria-label={recordLabel} rows={4} value={record} disabled={busy} placeholder={readsOnly(stage)?(stage.mode==='analyze'?$t('taskDetail.writeAnalysisResult'):$t('taskDetail.whichFilesSectionsChangeWhat')):$t('taskDetail.prLinkWhichFilesContent')} onChange={e=>{setRecord(e.target.value);}}/></Field>}
+  const body=manual||(!isActive&&!manual&&canRun&&!hasTaskAgent(data)&&(agent?.options||[]).length!==1)||(approved&&source)?<>{manual&&<Field label={recordLabel} htmlFor={`${stage.key}-record`}>{readsOnly(stage)
+    // A document written by hand is written beside its rendering, as the Agent's documents are edited.
+    ?<MarkdownEditor id={`${stage.key}-record`} aria-label={recordLabel} value={record} disabled={busy} placeholder={stage.mode==='analyze'?$t('taskDetail.writeAnalysisResult'):$t('taskDetail.whichFilesSectionsChangeWhat')} onChange={e=>{setRecord(e.target.value);}} preview={value=><Markdown content={value}/>}/>
+    :<Textarea id={`${stage.key}-record`} aria-label={recordLabel} rows={4} value={record} disabled={busy} placeholder={$t('taskDetail.prLinkWhichFilesContent')} onChange={e=>{setRecord(e.target.value);}}/>}</Field>}
    {!isActive&&!manual&&canRun&&<NeedsAgent data={data}/>}
    {approved&&source&&<Reveal label={$t('taskDetail.viewApprovedInput',{0:source.name})}><Reading><Markdown content={approved.content}/></Reading></Reveal>}</>:undefined;
   if(!canRun)return <StageCard error title={displayStageName(stage)} sub={<>{$t('taskDetail.noWebsiteSourceRepositoryConnectedMessage')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/connections?source=repo')}>{$t('common.goDataSources')}</Button></>} actions={actions}>{body}</StageCard>;
