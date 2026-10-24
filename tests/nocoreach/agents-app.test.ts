@@ -466,6 +466,11 @@ test('protocol 11 Runner claims a task, returns its result once, and handles can
   );
   expect(payload.prompt.system).toContain('Never read, print or copy');
   expect(payload.prompt.system).toContain('不得跳过人工审核');
+  // Only what the step cannot do without fails it, and the task's own Skills come first (2026-10-24, T-35: a Skill
+  // installed on the computer asked for a missing CLI and the run threw its research away).
+  expect(payload.prompt.system).toContain('以这次任务提供的 Skills 为准');
+  expect(payload.prompt.system).toContain('missing_tool');
+  expect(payload.prompt.system).not.toContain('立即失败');
   expect(JSON.stringify(payload).length).toBeLessThan(30000);
   const mount = payload.mounts!.find(
     (mount) => mount.name === 'nocoreach-task-materials',

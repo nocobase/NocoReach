@@ -6,6 +6,7 @@ import { localizeWorkSnapshots } from './playbook-snapshot';
 import { reportDate } from './task-detail/material-notices.js';
 import { TechnicalDetails } from './task-detail/technical-details.js';
 import { useTechnicalDetails, type TechnicalTab } from './task-detail/technical-state.js';
+import { failureOf, failureStreak, sentences } from './task-detail/failure-model.js';
 import { EvidenceDialog } from './task-detail/evidence.js';
 import { taskEvidence, whyText } from './task-detail/evidence-model.js';
 import { VisibleChanges } from './task-detail/visible-changes.js';
@@ -22,7 +23,7 @@ import { Card, Clamped, Field } from './task-detail/layout.js';
 import { GAP, text } from './task-detail/styles.js';
 import { TaskStatusTag } from './task-status-tag';
 import { MarkdownEditor } from './task-detail/markdown-editor.js';
-import { hasTaskAgent } from './task-execution-types';
+import { hasTaskAgent, type PartialResult } from './task-execution-types';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {createContext,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
@@ -69,42 +70,10 @@ type Update=(command:string,body?:object)=>Promise<Data|undefined>;
 const TaskActions=createContext<{pickAgent:()=>void;messageAgent:()=>void;choosePage:()=>void;askManual:()=>void;manualAsk:number}>({pickAgent:()=>undefined,messageAgent:()=>undefined,choosePage:()=>undefined,askManual:()=>undefined,manualAsk:0});
 type Member={id:string;name:string};
 type Run=Data['runs'][number];
-// Why a run stopped, in the owner's words; the raw error and the transcript stay in Technical details.
-const getRunErrors = (): Record<string,string> => ({interrupted_or_unknown:$t('taskDetail.runInterruptedResultUnknown'),context_changed:$t('taskDetail.taskChangedBeforeRun'),cancelled:$t('taskDetail.stoppedCheckChangesAlreadyPushed'),no_changes:$t('taskDetail.agentNotChangeFiles'),no_repo:$t('taskDetail.noWebsiteSourceRepositoryConnected'),revert_failed:$t('taskDetail.revertPrNotOpened'),replaced_by_manual:$t('taskDetail.switchedDoing')});
-// The official run's failure reasons, grouped by what the owner can do about each (2026-10-19 user report: runs kept
-// failing as "agent_failed" with no reason, so retrying was all they could do).
-const FAILURE_GROUP:Record<string,string>={runnerOffline:'disconnected',leaseExpired:'disconnected',startTimeout:'disconnected',runnerUpgrade:'disconnected',toolAuth:'toolLogin',toolQuota:'quota',toolRateLimit:'quota',toolNetwork:'network',prepareNetwork:'network',idleTimeout:'stuck',stepLimit:'stuck',toolProcess:'stuck',contextOverflow:'tooLong',modelUnavailable:'model',queuedExpired:'notPicked',policyRefused:'notPicked',setupFailed:'setup',cliUnavailable:'setup',checkoutFailed:'setup',repoAccessDenied:'setup',repoAccessUnavailable:'setup',workspaceBusy:'setup',runnerDiskFull:'setup'};
-const getFailureCopy=():Record<string,[string,string]>=>({disconnected:[$t('taskDetail.failureDisconnected'),$t('taskDetail.failureDisconnectedNext')],toolLogin:[$t('taskDetail.failureToolLogin'),$t('taskDetail.failureToolLoginNext')],quota:[$t('taskDetail.failureQuota'),$t('taskDetail.failureQuotaNext')],network:[$t('taskDetail.failureNetwork'),$t('taskDetail.failureNetworkNext')],stuck:[$t('taskDetail.failureStuck'),$t('taskDetail.failureStuckNext')],tooLong:[$t('taskDetail.failureTooLong'),$t('taskDetail.failureTooLongNext')],model:[$t('taskDetail.failureModel'),$t('taskDetail.failureModelNext')],notPicked:[$t('taskDetail.failureNotPicked'),$t('taskDetail.failureNotPickedNext')],setup:[$t('taskDetail.failureSetup'),$t('taskDetail.failureSetupNext')],invalid:[$t('taskDetail.failureInvalidResult'),$t('taskDetail.failureInvalidResultNext')]});
-// Trying again cannot help these until someone signs in, fixes the setup or picks another Agent (2026-10-21 user
-// report: the card pushed Try again for a tool that was not signed in), so it stays available but not as the main action.
-const NO_RETRY=new Set(['toolLogin','setup','model']);
-const TOOL_NAMES:Record<string,string>={claude:'Claude Code',codex:'Codex',opencode:'OpenCode',pi:'Pi'};
-// The computer (unless this reader may not see it) and the coding tool of the run's latest attempt.
-function failedOn(run:Run,data:Data){
- const x=data.execution?.runId===run.id?data.execution.run.executions?.at(-1):undefined;
- return {machine:x&&!x.machineHidden?x.runnerName||'':'',tool:x?.tool?TOOL_NAMES[x.tool]||x.tool:''};
-}
-// The groups whose copy names the computer or the tool when the run says which; otherwise the general wording.
-function namedFailure(group:string,{machine,tool}:{machine:string;tool:string}):[string,string]|undefined{
- if(group==='toolLogin'&&(machine||tool))return [machine&&tool?$t('taskDetail.failureToolLoginOn',{0:machine,1:tool}):tool?$t('taskDetail.failureToolLoginTool',{0:tool}):$t('taskDetail.failureToolLoginMachine',{0:machine}),tool?$t('taskDetail.failureToolLoginToolNext',{0:tool}):$t('taskDetail.failureToolLoginNext')];
- if(group==='disconnected'&&machine)return [$t('taskDetail.failureDisconnectedOn',{0:machine}),$t('taskDetail.failureDisconnectedNext')];
- if(group==='network'&&machine)return [$t('taskDetail.failureNetworkOn',{0:machine}),$t('taskDetail.failureNetworkNext')];
- if(group==='quota'&&tool)return [$t('taskDetail.failureQuotaTool',{0:tool}),$t('taskDetail.failureQuotaNext')];
-}
-type Failure={why:string;next:string;group?:string};
-// What went wrong with `run` and what to do: the official reason (the task's latest run arrives with its execution),
-// then NocoReach's own codes, then whatever the Agent itself said; never a bare code.
-function failureOf(run:Run,data:Data):Failure{
- // NocoReach itself restarted while the run worked (every deploy restarts it): not the computer's doing (2026-10-22 user
- // report). The step usually started again by itself; this shows when it could not (server/nocoreach/execution/restarts.ts).
- if(run.restartedAt)return {why:$t('taskDetail.failureRestart'),next:$t('taskDetail.failureRestartNext'),group:'restart'};
- const copy=getFailureCopy(),reason=data.execution?.runId===run.id?data.execution.run.failureReason:undefined,group=reason?FAILURE_GROUP[reason]:undefined;
- if(group){const [why,next]=namedFailure(group,failedOn(run,data))||copy[group];return {why,next,group};}
- if(run.error==='invalid_agent_result'){const [why,next]=copy.invalid;return {why,next};}
- const known=getRunErrors()[run.error||''];if(known)return {why:known,next:$t('taskDetail.failureUnknownNext')};
- const said=run.errorDetail&&run.errorDetail!==run.error&&!/^[a-z_]+$/.test(run.errorDetail)?$legacyText(run.errorDetail):'';
- return {why:said?$t('taskDetail.failureAgentSaid',{0:said}):$t('taskDetail.failureUnknown'),next:$t('taskDetail.failureUnknownNext')};
-}
+// Why a run failed and what to do (task-detail/failure-model.ts). Trying again cannot help these until someone signs in,
+// fixes the setup or picks another Agent (2026-10-21 user report: the card pushed Try again for a tool that was not
+// signed in), so it stays available but not as the main action.
+const NO_RETRY=new Set(['toolLogin','setup','model','missingTool','toolSignIn']);
 const call=<T,>(projectId:number,taskId:string,action:string,body:object={})=>api.action<T>('nrTaskWork',action,{method:'POST',body:{projectId:String(projectId),taskId,...body},unwrap:'data'});
 // Tasks run by a playbook (new tasks, and tasks started with a flow) use this page; older step-plan tasks keep theirs.
 export function isPlaybookTask(d:Data){const w=d.work;return Boolean(w.playbook||w.flow)||(w.stage==='plan'&&!w.plan&&!w.simple);}
@@ -333,6 +302,19 @@ function LastFeedback({w,stage,out}:{w:Work;stage:Stage;out:Artifact}){
  const last=[...(w.history||[])].reverse().find(e=>e.action==='requestStageChanges'&&(!e.stageKey||e.stageKey===stage.key)&&e.comment);
  return last?<p className={cn(text.body,'whitespace-pre-wrap')}><span className="text-muted-foreground">{$t('taskDetail.lastFeedback')}</span>{last.comment}</p>:null;
 }
+// What a failed run got before it stopped (2026-10-24 user decision): kept for the owner to read or to finish the step
+// with by hand, and handed to the step's next run to continue from.
+function GotSoFar({partial,onUse}:{partial:PartialResult;onUse?:()=>void}){
+ const report=Array.isArray(partial.report?.sources)?partial.report:undefined,sources=report?.sources.length||0;
+ return <Reveal label={<>{$t('taskDetail.partialTitle')}{sources?<span className="font-normal text-muted-foreground">· {$t('taskDetail.partialSources',{0:sources})}</span>:null}</>}>
+  <div className="flex flex-col gap-3">
+   <Reading><Markdown content={partial.content}/></Reading>
+   {report&&<ReportNotes report={report}/>}
+   <p className={text.muted}>{$t('taskDetail.partialContinue')}</p>
+   {onUse&&<Button variant="outline" className="self-start" onClick={onUse}>{$t('taskDetail.partialUse')}</Button>}
+  </div>
+ </Reveal>;
+}
 // Sources and open questions the Agent reported, with machine timestamps made readable.
 function ReportNotes({report}:{report:NonNullable<Artifact['report']>}){
  return <Field label={$t('taskDetail.sourcesUncertainties')}><div className={cn(text.body,'flex flex-col gap-1')}><p className="text-muted-foreground">{humanTimes(reportDate(report.asOf))}</p>{report.sources.map(source=>source.material?<p key={`${source.material}:${source.title}`}>{source.title} · {$t('agentResult.material')}</p>:<a key={`${source.url}:${source.title}`} className="nr-link break-all" href={source.url} target="_blank" rel="noreferrer">{source.title||source.url}</a>)}{report.uncertainties.map((note,i)=><p key={i}>{humanTimes(note)}</p>)}</div></Field>;
@@ -460,11 +442,18 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   const approved=[...w.results.slice(0,index)].reverse().find(r=>r?.approvedAt&&!r.rejectedAt),source=approved?stages[w.results.indexOf(approved)]:undefined;
   const agent=data.agent,isActive=cur&&active(cur),canRun=Boolean(agent?.options?.some(a=>a.id===agent.agentId&&a.type==='demo'))||Boolean(agent?.repo)||withoutRepo(stage,stages)||w.delivery?.kind==='article';
   const failure=cur?.status==='failed'?failureOf(cur,data):undefined;
+  // How often the step failed in a row, and for the same cause (failure-model.ts): after the same cause twice the card
+  // says what to fix first and no longer suggests Try again (2026-10-24 user decision).
+  const {failures,same}=failure?failureStreak(data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))),failure.group,data):{failures:0,same:0},repeated=same>=2&&Boolean(failure?.fix);
+  const retry=cur?.status!=='running'&&cur?.status!=='queued'&&canRun&&<Button variant={failure&&(NO_RETRY.has(failure.group)||repeated)?'outline':'default'} disabled={busy||(!hasTaskAgent(data)&&(agent?.options||[]).length!==1)} onClick={()=>void withUsableAgent(data,update,'retryStage',{stageKey:stage.key})}>{cur?$t('taskDetail.tryAgain'):$t('taskDetail.handOffAgent')}</Button>;
+  // Every Agent on the computer meets a shared failure alike, so switching is not offered (2026-10-24 user decision).
+  const switchAgent=failure&&failure.group!=='restart'&&!failure.shared&&(agent?.options||[]).length>1&&<Button variant="outline" disabled={busy} onClick={pickAgent}>{$t('taskDetail.switchAgent')}</Button>;
   const actions=!manual?<>
-   {cur?.status!=='running'&&cur?.status!=='queued'&&canRun&&<Button variant={failure?.group&&NO_RETRY.has(failure.group)?'outline':'default'} disabled={busy||(!hasTaskAgent(data)&&(agent?.options||[]).length!==1)} onClick={()=>void withUsableAgent(data,update,'retryStage',{stageKey:stage.key})}>{cur?$t('taskDetail.tryAgain'):$t('taskDetail.handOffAgent')}</Button>}
+   {repeated&&switchAgent}
+   {retry}
    {cur?.status==='failed'&&cur.error==='invalid_agent_result'&&cur.mode==='plan'&&!cur.artifactId&&<Button variant='outline' disabled={busy} title={$t('agentResult.recoverHint')} onClick={()=>void act('recoverResult',{runId:cur.id})}>{$t('agentResult.recover')}</Button>}
    {isActive&&<Button variant="outline" disabled={busy||Boolean(cur.cancelRequested)} onClick={async()=>{if(await confirmAction({title:() => ($t('taskDetail.stopCurrentRun',{0:data.task.title})),description:() => ($t('taskDetail.stoppingNotUndoPushedChanges')),action:'common.stop'}))void update('cancelRun',{runId:cur.id});}}><Square/>{$t('common.stop')}</Button>}
-   {failure&&failure.group!=='restart'&&(agent?.options||[]).length>1&&<Button variant="outline" disabled={busy} onClick={pickAgent}>{$t('taskDetail.switchAgent')}</Button>}
+   {!repeated&&switchAgent}
    {failure&&<Button variant="ghost" disabled={busy} onClick={messageAgent}>{$t('taskDetail.messageAgent')}</Button>}
   </>:<><Button disabled={busy||!record.trim()} onClick={()=>void act('recordManual',{content:record})}>{$t('taskDetail.recordContinue')}</Button><Button variant="ghost" onClick={()=>{setManual(false);setRecord('');}}>{$t('common.cancel')}</Button></>;
   const recordLabel=readsOnly(stage)?(stage.mode==='analyze'?$t('taskDetail.analysisResult'):$t('taskDetail.plan')):$t('taskDetail.changeHistory');
@@ -480,16 +469,18 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   if(cur?.status==='queued')return <StageCard label={progress} title={$t('taskDetail.agentWorking',{0:stage.name})} sub={agent?.online?$t('taskDetail.handedOffAgentStartingNow'):<>{$t('taskDetail.agentComputerOffline')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>} actions={actions}>{restarted}{body}</StageCard>;
   if(cur?.status==='running')return <StageCard label={progress} spinning title={<>{$t('taskDetail.agentWorking',{0:stage.name})}{cur.cancelRequested?$t('taskDetail.stoppingAside'):''}</>} sub={$t('taskDetail.agentWorkingFor',{0:since(cur.createdAt)})} actions={actions}>{restarted}{body}</StageCard>;
   if(cur?.status==='failed'&&failure){
-   // Runs a NocoReach restart interrupted say nothing about the step, so the streak passes over them.
-   const {why,next,group}=failure,stageRuns=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0&&!r.restartedAt).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
-   const streak=stageRuns.findIndex(r=>r.status!=='failed'),failures=group==='restart'?0:streak<0?stageRuns.length:streak;
+   const {why,next,fix,group,shared}=failure,streak=repeated?$t('taskDetail.failureRepeated',{0:same}):failures>=2?$t('taskDetail.failureStreak',{0:failures}):'';
+   // What the run got before it stopped (TaskService.partialOf), read with the run the page holds in full; a step that
+   // only reads can be finished with it by hand.
+   const partial=data.execution?.runId===cur.id?data.partial:null,use=partial&&allowed&&readsOnly(stage)?()=>{setRecord(partial.content);setManual(true);}:undefined;
    // One notice (2026-10-23 user request): the reason in a sentence, how often it has happened, what helps; the
    // actions above do what the sentence suggests.
    return <StageCard error title={$t('taskDetail.agentDidNotFinish')} actions={actions}>
     <div className="flex flex-col gap-1">
-     <p className={text.body}>{why}{group==='toolLogin'&&agent?.online?<> {$t('taskDetail.failureOnlineMeans')}</>:null}{failures>=2?<span className="text-muted-foreground"> · {$t('taskDetail.failureStreak',{0:failures})}</span>:null}</p>
-     <p className={text.muted}>{next}</p>
+     <p className={text.body}>{sentences(why,group==='toolLogin'&&agent?.online&&$t('taskDetail.failureOnlineMeans'))}{streak?<span className="text-muted-foreground"> · {streak}</span>:null}</p>
+     <p className={text.muted}>{sentences(repeated?$t('taskDetail.failureRepeatedNext',{0:fix}):next,shared&&$t('taskDetail.failureSharedComputer'))}</p>
     </div>
+    {partial&&!manual&&<GotSoFar partial={partial} onUse={use}/>}
     {body}{techLink}</StageCard>;
   }
   return <StageCard title={displayStageName(stage)} sub={$t('taskDetail.stepDoneAgent',{0:stage.instruction})} actions={actions}>{body}</StageCard>;

@@ -5,13 +5,18 @@ import type { LegacyTransaction } from '../legacy/database.js';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { fail, text } from './model';
 import { TASK_SUBJECT } from './agents-runtime';
+import { AGENT_FAILURE_GROUP } from '../../../shared/run-failure.js';
 
+type Attention = 'toolLogin' | 'quota' | 'model' | 'setup' | 'missingTool' | 'toolSignIn';
 // Failures that last until someone acts: signs the coding tool in, tops up its quota, picks a model the account has or
 // fixes the computer's setup. Any other failure (a lost connection, a slow network, a stuck run) may pass on a retry.
-const NEEDS_ATTENTION: Record<string, 'toolLogin' | 'quota' | 'model' | 'setup'> = {
+const NEEDS_ATTENTION: Record<string, Attention> = {
   toolAuth: 'toolLogin', toolQuota: 'quota', modelUnavailable: 'model', setupFailed: 'setup', cliUnavailable: 'setup',
   checkoutFailed: 'setup', repoAccessDenied: 'setup', repoAccessUnavailable: 'setup', runnerDiskFull: 'setup',
 };
+// The same for what the Agent reports itself (shared/run-failure.ts): a tool the step needs is not installed on the
+// computer, or not signed in. A quota it reports may be a passing rate limit, so it is left out.
+const AGENT_ATTENTION: Record<string, Attention> = Object.fromEntries(Object.entries(AGENT_FAILURE_GROUP).filter(([, group]) => group === 'missingTool' || group === 'toolSignIn'));
 const HEALTH_RUNS = 10;
 
 export type RepoConfig = { repo: string; baseBranch: string; allowedPaths: string[]; contentCheck: boolean };
@@ -34,6 +39,7 @@ export function allowedPath(cfg: Pick<RepoConfig, 'allowedPaths'>, file: string)
 
 interface AgentHost {
   p: { agents: Agents };
+  key(kind: string, project: string, task: string, id?: string): string;
   snapshot(key: string, tx?: LegacyTransaction): Promise<unknown>;
   put(key: string, value: unknown, tx: LegacyTransaction): Promise<void>;
   lock<T>(project: string, task: string, callback: (tx: LegacyTransaction) => Promise<T>): Promise<T>;
@@ -77,15 +83,24 @@ export class AgentStore {
       .filter(r => r.status === 'completed' || r.status === 'failed');
     const latest = runs[0];
     if (!latest) return { state: 'unknown' };
-    const group = latest.status === 'failed' ? NEEDS_ATTENTION[latest.failureReason || ''] : undefined;
-    if (!group) return { state: 'ok', at: latest.finishedAt, outcome: latest.status };
+    const outcomes = await Promise.all(runs.map(r => this.outcome(r)));
+    const group = outcomes[0].group;
+    if (!group) return { state: 'ok', at: latest.finishedAt, outcome: outcomes[0].failed ? 'failed' : 'completed' };
     let count = 0;
-    for (const r of runs) {
-      if (r.status !== 'failed' || NEEDS_ATTENTION[r.failureReason || ''] !== group) break;
+    for (const o of outcomes) {
+      if (!o.failed || o.group !== group) break;
       count++;
     }
     const last = runForViewer(latest, viewer).executions?.at(-1);
     return { state: 'attention', group, count, at: latest.finishedAt, runnerName: last && !last.machineHidden ? last.runnerName : null, tool: last?.tool ?? latest.tool ?? null };
+  }
+  // How a task run ended for the task: a run the Agent itself reported failed (ok=false) completed for the Agents plugin
+  // (2026-10-24: the Agent page said the last task completed while the task page said it failed).
+  private async outcome(r: { status: string; failureReason?: string | null; subject?: { kind: string; id: string } | null }): Promise<{ failed: boolean; group?: Attention }> {
+    if (r.status === 'failed') return { failed: true, group: NEEDS_ATTENTION[r.failureReason || ''] };
+    const [project, task, id] = r.subject?.kind === TASK_SUBJECT ? String(r.subject.id).split(':') : [];
+    const own = id ? await this.s.snapshot(this.s.key('run', project, task, id)) as { status?: string; error?: string } | null : null;
+    return own?.status === 'failed' ? { failed: true, group: AGENT_ATTENTION[own.error || ''] } : { failed: false };
   }
   async taskAgent(agentId: unknown, actor: string, tx: LegacyTransaction, project?: string) {
     const proxy = this.s.p.demoAgent;
