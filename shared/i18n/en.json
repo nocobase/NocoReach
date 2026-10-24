@@ -3556,6 +3556,7 @@
   "savedKeywords.changeTagsKeywords": "Change tags of {0} keywords",
   "taskDetail.leaveHistoricalNote": "Leave a note on this historical task",
   "taskDetail.leaveNoteNextRunReads": "Leave a note for {0}; the next run reads it",
+  "taskDetail.leaveNoteBeforeStart": "Leave a note for {0}; it reads it when the task starts ({1})",
   "seoHandOff.draftReplies": "Draft replies to {1} {2} on {0}",
   "seoHandOff.draftReplyUnansweredCopyThem": "{0} — {1}: draft a reply for each selected item, then review and copy the replies",
   "taskDetail.noteExecutor": "Note to the executor",

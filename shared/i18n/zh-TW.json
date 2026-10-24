@@ -3528,6 +3528,7 @@
   "savedKeywords.changeTagsKeywords": "給 {0} 個關鍵字改標籤",
   "taskDetail.leaveHistoricalNote": "為歷史任務留言",
   "taskDetail.leaveNoteNextRunReads": "給 {0} 留言，下次執行時會讀取",
+  "taskDetail.leaveNoteBeforeStart": "給 {0} 留言，開始執行時會讀取（{1}）",
   "seoHandOff.draftReplies": "給{0}的 {1} 個{2}起草回覆",
   "seoHandOff.draftReplyUnansweredCopyThem": "{0} — {1}：為每筆選取的內容起草回覆，審核後複製回覆",
   "taskDetail.noteExecutor": "給執行者的話",

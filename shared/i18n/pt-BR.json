@@ -3528,6 +3528,7 @@
   "savedKeywords.changeTagsKeywords": "Alterar as etiquetas da seleção de palavras-chave (total: {0})",
   "taskDetail.leaveHistoricalNote": "Deixar uma observação nesta tarefa antiga",
   "taskDetail.leaveNoteNextRunReads": "Deixar uma observação para {0}; ela será lida na próxima execução",
+  "taskDetail.leaveNoteBeforeStart": "Deixe uma nota para {0}; ela será lida ao iniciar ({1})",
   "seoHandOff.draftReplies": "Elaborar respostas em {0}. Seleção: {2}; total: {1}",
   "seoHandOff.draftReplyUnansweredCopyThem": "{0} — {1}: elaborar uma resposta para cada item selecionado e copiar as respostas após a revisão",
   "taskDetail.noteExecutor": "Observação para o executor",

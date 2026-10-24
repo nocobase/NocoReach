@@ -3528,6 +3528,7 @@
   "savedKeywords.changeTagsKeywords": "Modifier les étiquettes de la sélection (mots-clés : {0})",
   "taskDetail.leaveHistoricalNote": "Laisser une note sur cette ancienne tâche",
   "taskDetail.leaveNoteNextRunReads": "Laissez une note à {0} ; elle sera lue lors de la prochaine exécution",
+  "taskDetail.leaveNoteBeforeStart": "Laissez un message à {0} ; il le lit au démarrage ({1})",
   "seoHandOff.draftReplies": "Rédiger des réponses pour la sélection sur {0} ({2} ; nombre : {1})",
   "seoHandOff.draftReplyUnansweredCopyThem": "{0} — {1} : rédigez une réponse pour chaque élément sélectionné, puis copiez les réponses après validation",
   "taskDetail.noteExecutor": "Note à la personne ou à l’agent chargé de l’exécution",

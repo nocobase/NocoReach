@@ -3556,6 +3556,7 @@
   "savedKeywords.changeTagsKeywords": "给 {0} 个关键词改标签",
   "taskDetail.leaveHistoricalNote": "为历史任务留言",
   "taskDetail.leaveNoteNextRunReads": "给 {0} 留言，下次运行时会读取",
+  "taskDetail.leaveNoteBeforeStart": "给 {0} 留言，开始执行时会读取（{1}）",
   "seoHandOff.draftReplies": "给{0}的 {1} 个{2}起草回复",
   "seoHandOff.draftReplyUnansweredCopyThem": "{0} — {1}：为每条选中内容起草回复，审核后复制去回复",
   "taskDetail.noteExecutor": "给执行者的话",
