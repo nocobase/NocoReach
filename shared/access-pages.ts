@@ -7,7 +7,6 @@ export const REACH_PAGES = [
   'task-work',
   'result-list',
   'result-detail',
-  'result-create',
   'opportunity-explore',
   'content-index',
   'website-performance',
