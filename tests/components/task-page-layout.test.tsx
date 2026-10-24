@@ -208,6 +208,21 @@ test('a page change is reviewed as what readers see, with code kept in Technical
   expect(dialog).toHaveTextContent('yarn build reported 177 errors');
 });
 
+// 2026-10-24 user request: "Agent · Version 2" named the Agent that Properties already shows.
+test('the review card names the version, and says so when a person made it', () => {
+  const view = mount();
+  const card = screen.getByRole('region', { name: '等你处理' });
+  expect(card).toHaveTextContent('第 1 版');
+  expect(card).not.toHaveTextContent('Agent · 第');
+  view.unmount();
+  const edited = pageChange();
+  (edited.work.results[0] as { createdBy?: string }).createdBy = '1';
+  mount(edited);
+  expect(screen.getByRole('region', { name: '等你处理' })).toHaveTextContent(
+    '第 1 版 · 人工修改',
+  );
+});
+
 test('the header says why the task exists and opens the evidence', async () => {
   const user = userEvent.setup();
   mount();
@@ -789,6 +804,48 @@ function liveArticle(): TaskData {
   return data;
 }
 
+// 2026-10-24 user report: an article's review card asked for release notes, which no publishing target receives.
+test('an article review has no release notes to edit, and the live card none to show', async () => {
+  const user = userEvent.setup();
+  const data = liveArticle();
+  const [artifact] = data.work.results as NonNullable<
+    TaskData['work']['results'][number]
+  >[];
+  data.work.stage = 'flow';
+  data.work.stageIndex = 1;
+  delete data.work.release;
+  delete (artifact as { approvedAt?: string }).approvedAt;
+  const view = mount(data);
+  const card = screen.getByRole('region', { name: '等你处理' });
+  expect(
+    within(card).getByText('Top 12 Open Source No-Code AI Tools (2026)'),
+  ).toBeVisible();
+  expect(within(card).queryByRole('button', { name: /发布说明/ })).toBeNull();
+  action.mockImplementation((resource: string, command: string) =>
+    Promise.resolve(
+      command === 'advance'
+        ? data
+        : resource === 'nrPlaybooks'
+          ? { playbooks: [] }
+          : [],
+    ),
+  );
+  await user.click(within(card).getByRole('button', { name: '通过并发布' }));
+  const approve = action.mock.calls.find(([, c]) => c === 'advance');
+  expect(approve?.[2]?.body).toMatchObject({ command: 'approveStage' });
+  expect(approve?.[2]?.body).not.toHaveProperty('release');
+  view.unmount();
+  mount(liveArticle());
+  expect(
+    within(screen.getByRole('region', { name: '已完成' })).queryByRole(
+      'button',
+      {
+        name: /发布说明/,
+      },
+    ),
+  ).toBeNull();
+});
+
 test('a live article names what changed on its card and shows each field before and after', async () => {
   const user = userEvent.setup();
   mount(liveArticle());
@@ -818,6 +875,36 @@ test('a live article names what changed on its card and shows each field before 
   expect(reader).toHaveTextContent(
     'Top 12 Open Source No-Code AI Tools (2026)',
   );
+});
+
+// 2026-10-24 user report: a new article is not a set of changed fields.
+test('a new article that went live is named as one and opens as the article', async () => {
+  const user = userEvent.setup();
+  const data = liveArticle();
+  const [artifact] = data.work.results as NonNullable<
+    TaskData['work']['results'][number]
+  >[];
+  artifact.article = {
+    ...artifact.article!,
+    articleId: null,
+    baseKey: null,
+    baseVersion: null,
+    draft: {
+      slug: 'new-post',
+      locales: { en: { title: 'New post', description: 'D', body: 'Body' } },
+    },
+    changes: ['slug', 'en.title', 'en.description', 'en.body'],
+  } as typeof artifact.article;
+  mount(data);
+  const card = screen.getByRole('region', { name: '已完成' });
+  expect(card).toHaveTextContent('新文章');
+  expect(card).not.toHaveTextContent('改了');
+  await user.click(within(card).getByRole('button', { name: /查看文章/ }));
+  const dialog = await screen.findByRole('dialog', { name: '文章' });
+  expect(
+    within(dialog).getByRole('heading', { name: 'New post' }),
+  ).toBeVisible();
+  expect(within(dialog).queryByRole('button', { name: '改动' })).toBeNull();
 });
 
 test('a live page change names what readers see differently and opens it', async () => {

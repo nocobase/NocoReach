@@ -1,5 +1,14 @@
 # NocoReach Changelog
 
+## Unreleased — A new article reads as one
+
+- The article review card opens with tags instead of a sentence and a tab with a diff block for the address and the status: the target by its own name (a mark tells a CMS from a Git repository), New article or Update article, and the status it is published with (Save as draft, Publish publicly, Make draft). A new article adds its address; a changed one names its title, and its address only when it changes. Other targets get the same row after "Also to". Conflicts and post-publish drift show a changed address or status inline.
+- Language tabs carry the language's name only, without a change count. A changed language is read as Preview or Changes, without the Show before link and its separate view of the earlier version; a new article, or a language the article did not have, has one version and no switch. Once live, a new article's card says "New article" with View article instead of listing changed fields.
+- A language with no text in the draft or the article is left out of the tabs, with a line under them: "Only English was written this time." for a new article, "This article has no Chinese version." for a changed one.
+- An article's review card no longer asks for release notes, and its live card shows none: no publishing target receives them (a Git target writes a fixed commit message), and the task's record keeps the Agent's summary. Page changes that open a pull request keep them.
+- In Chinese, Traditional Chinese and Japanese, the Published status reads as a state rather than as the verb.
+- Every review card's subtitle names the version only ("Version 2 · 10-16 18:29"), without "Agent", which Properties already shows; a version a person made adds "edited by hand" or "completed by hand".
+
 ## Unreleased — Current situation lists what is worth caring about, from the analysis rules
 
 - Insights › Current situation now lists, in this order, what is getting worse (red), what to handle (amber), opportunities and share of voice, each line only when its number is above zero. Besides its own lines it adds what sixteen analysis rules find in the saved data now, with the switches and thresholds of Settings › Analysis rules, so the list and the daily analysis use the same standard: pages losing search clicks, competitors with a new release or new site pages, AI platforms mentioning competitors more, competitor repositories gaining stars fast; pages with many impressions and few clicks, pages with many visits and few key events, pages with traffic not updated in a long time or with little content, AI platforms mentioning you without citing your site; related searches starting to rise, popular Hacker News posts, X posts with high engagement, topics the community keeps asking about, sites that doubled visits to your repository and your new releases. A line opens what its rule found. A rule switched off adds no line.
