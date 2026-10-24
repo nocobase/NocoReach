@@ -106,7 +106,8 @@ describe('NocoReach semantic-key translations', () => {
       '已交给Agent，马上开始。': '已交给 Agent，马上开始。',
       '帮你干活的 AI：在线 AI 每天分析数据、提出机会；所有任务交给Agent 去做。':
         '帮你干活的 AI：在线 AI 每天分析数据、提出机会；所有任务交给 Agent 去做。',
-      '接受，交给Agent“{0}”': '接受，交给 Agent“{0}”',
+      // Accept and start (2026-10-24): the hand-over starts the next task.
+      '接受，交给Agent“{0}”': '接受并开始{0}',
       '由Agent 执行，{0}。': '由 Agent 执行，{0}。',
       '私有仓库也可以：Agent 用执行任务那台电脑上的 GitHub 登录读取和推送，NocoReach 不保存 GitHub 凭据。不接仓库也能用Agent 做调研、关键词调研、内容大纲这类只写文档的任务。':
         '私有仓库也可以：Agent 用执行任务那台电脑上的 GitHub 登录读取和推送，NocoReach 不保存 GitHub 凭据。不接仓库也能用 Agent 做调研、关键词调研、内容大纲这类只写文档的任务。',

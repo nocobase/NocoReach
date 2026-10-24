@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Accept and start
+
+- Accepting a document with a next playbook (Continue with) now starts the new task: the button reads Accept and start "Write blog post", and the page goes to the new task with its Agent already working. It starts with what its start card would preselect: the playbook just chosen, the project's default Agent or the only one available, and the default publishing target or the article found from its page (`shared/task-start.ts`, used by both the start card and the server). The article review before publishing is unchanged.
+- When one of those cannot be decided — several Agents and no project default, no Agent at all, several publishing targets with none marked default, a target that is gone, an article not found from the page, or a change with no repository connected — the new task waits at Start after review and its card says it did not start automatically; the Agent, the article, the target or the repository is marked where it is chosen.
+- The old task's done card says "Handed over to T-44 Write blog post: …" with the new task's status, linked; Properties › Related tasks shows the same number and status for the task before and after in a chain.
+- Tasks handed off from an opportunity still wait for their owner to start them.
+
 ## Unreleased — Demo environment
 
 - Add a dedicated demo deployment enabled with `NOCOBASE_DEMO_MODE=true`, using the published Demo Mode plugin. Settings › Demo management provides one page for importing, resetting and clearing demo data, configuring daily resets and managing demo accounts; its menu and route are available only while Demo Mode is enabled. The same lifecycle operations are available through `demo-mode data status|import|clear|reset` in standalone installations.

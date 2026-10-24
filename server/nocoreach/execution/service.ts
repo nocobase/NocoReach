@@ -21,6 +21,7 @@ import { ArticleFlow } from './article-flow.js';
 import { STARTS_KEY, restartOf, withStart } from './restarts.js';
 import { ownSignalIds } from '../../../shared/opportunity-parts.js';
 import { taskStanding } from '../../../shared/task-pending.js';
+import { defaultDelivery, deliveryPlan, lookupMatters, pageUrlsOf, startAgent, startBlockers } from '../../../shared/task-start.js';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
 // Roles and what only 管理员 may change live with the server code (server/policy.js); the same relative path works from
 // the source and from dist/execution.
@@ -142,7 +143,9 @@ export class TaskService {
     const [runs, artifacts, reviews] = await Promise.all(['run', 'artifact', 'review'].map(k => this.list(k, project, taskId, tx)));
     const content=work.contentId?await this.snapshot(this.key('content',project,'index',work.contentId),tx):null;
     const linked = [work.prevTaskId || task.evidence?.handoff?.taskId, work.nextTaskId].filter(Boolean).map(String);
-    const related = [...(await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => ({ id: r.get('id'), title: r.get('title'), relation: String(r.get('id')) === String(work.nextTaskId) ? 'next' : 'prev' })), ...await this.siblings(project, task, tx)];
+    // The task before and after in a playbook chain, with its number and where it stands: the done card names the task a
+    // document was handed over to (2026-10-24).
+    const related = [...(await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => { const t = r.toJSON ? r.toJSON() : r; return { id: t.id, title: t.title, relation: String(t.id) === String(work.nextTaskId) ? 'next' : 'prev', ...(Number.isInteger(t.evidence?.no) ? { no: t.evidence.no } : {}), state: taskStanding({ work: t.evidence?.work, status: t.status }) }; }), ...await this.siblings(project, task, tx)];
     return { task, content, work, runs: runs.map(({ input, transcript: _transcript, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), articleBases: await this.articleFlow.bases(project, taskId, work, tx) };
   }
   // The other tasks handed off from the same opportunity (2026-10-22: one opportunity, a task per place to change), in
@@ -676,7 +679,8 @@ export class TaskService {
             if (typeof tx?.afterCommit === 'function') tx.afterCommit(save); else save();
           }
           if (v.next) {
-            // Hand-over: the accepted document becomes the brief of a new task with the next playbook (not started).
+            // Hand-over: the accepted document becomes the brief of a new task with the next playbook, started once this
+            // approval is committed (startHandedOver).
             if (w.stage !== 'done' || w.playbook?.kind !== 'plan' || !w.playbook.next.includes(v.next) || w.nextTaskId) return fail(systemMessageText('taskExecution.stepCannotHandedAnotherPlaybook'), 409);
             const p = await this.playbooks.get(project, v.next, tx), accepted = w.results[index - 1]!;
             const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: `${p.name}：${task.title}`.slice(0, 200), brief: systemMessageText('messages.taskBriefDocumentDeliveredTask', { 0: task.title, 1: accepted.content }).slice(0, 30000), status: systemMessageText('common.pending'), evidence: { source: systemMessageText('taskExecution.chainedTask'), insight: task.evidence?.insight || null, context: task.evidence?.context || null, ...foundBy(task.evidence), handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content }, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
@@ -793,7 +797,37 @@ export class TaskService {
       await this.save(task, w, tx); await this.put(opKey, { hash, at, actor }, tx);
       return this.view(project, taskId, tx);
     });
+    if (v.command === 'approveStage' && v.next && data.work?.nextTaskId) {
+      await this.startHandedOver(project, String(data.work.nextTaskId), actor, actorName);
+      return this.withAgent(project, await this.lock(project, taskId, tx => this.view(project, taskId, tx)), actor);
+    }
     return this.withAgent(project, data, actor);
+  }
+  // Accept and start (2026-10-24 user decision): the task an accepted document is handed over to starts at once with
+  // what its start card preselects (shared/task-start.ts): the playbook just chosen, the project's default Agent or the
+  // only one, and the default publishing target. It runs the start card's commands, each checked as usual, after the
+  // approval is committed; whatever cannot be decided leaves the task at Start after review, whose card says what is
+  // missing. Reads of Agents and targets stay outside the task lock. A failure here never undoes the approval.
+  private async startHandedOver(project: string, taskId: string, actor: string, actorName: string) {
+    try {
+      const task = await this.task(project, taskId), w = projectWork(task);
+      if (w.flow || w.plan || w.stage !== 'plan' || w.cancelledAt || w.archivedAt || !w.playbookId) return;
+      const p = await this.playbooks.get(project, w.playbookId), stages = stagesFor(p), first = stages[0];
+      const data = { task, work: w, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), agent: await this.agents.status(project, w.agentId, actor) };
+      const found = lookupMatters(data, p.id) ? await Promise.resolve(this.p.articleTargets.match(project, pageUrlsOf(data))).catch(() => ({ article: null, unchecked: true })) : undefined;
+      const changes = p.kind === 'build', needsRepository = first?.kind === 'agent' && !(first.mode === 'analyze' && !stages.some(changesRepo));
+      if (startBlockers(data, { playbookId: p.id, changes, needsRepository, simulated: Boolean(this.p.demoConfiguration?.enabled), found }).length) return;
+      const plan = changes && data.articleTargets.length ? deliveryPlan(data, defaultDelivery(data, p.id, found)) : { unlink: false, link: undefined, delivery: undefined };
+      let revision = w.revision;
+      const run = async (command: string, body: object = {}) => { revision = (await this.updateTask(project, { taskId, revision, requestId: randomUUID(), command, ...body }, actor, actorName)).work.revision; };
+      const agent = startAgent(data);
+      if (agent.save) await run('setAgent', { agentId: agent.save });
+      if (plan.unlink) await run('linkArticle', { targetId: null });
+      if (plan.link) await run('linkArticle', plan.link);
+      await run('startTask', { playbookId: p.id, ...(plan.delivery ? { delivery: plan.delivery } : {}) });
+    } catch (e: any) {
+      this.p.app?.logger?.warn?.('NocoReach could not start a handed-over task', { projectId: project, taskId, message: e?.message });
+    }
   }
   async claim(run: Run, opts: { runtimeRunId: string }): Promise<Run | null> {
     return this.lock(run.projectId, run.taskId, async tx => {

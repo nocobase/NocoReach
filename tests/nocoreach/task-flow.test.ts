@@ -201,7 +201,45 @@ test('document task: the Agent analyzes without changing the repository, a chang
  assert.match(child.title,/^新建文档页：/);assert.match(child.brief,/outline 2/);assert.equal(child.evidence.handoff.content,'outline 2');assert.equal(child.evidence.insight.id,'op');
  // The new task keeps who found the first one and where (2026-10-22).
  assert.deepEqual(child.evidence.createdBy,{id:'1',name:'王磊'});assert.equal(child.evidence.entry,'/main/data/community');
- const ch=await f.view(String(child.id));assert.equal(ch.playbookDefault,'new-doc');assert.equal(ch.task.status,'待处理');assert.deepEqual(ch.related.map(r=>[r.relation,String(r.id)]),[['prev','1']]);
+ // Accept and start (2026-10-24): the new task starts at once with the project's Agent and the repository, as its start
+ // card would have; the old task names it with where it stands.
+ const ch=await f.view(String(child.id));assert.equal(ch.playbookDefault,'new-doc');assert.equal(ch.task.status,'进行中');assert.deepEqual(ch.related.map(r=>[r.relation,String(r.id),r.state]),[['prev','1','done']]);
+ assert.equal(ch.work.playbook.id,'new-doc');assert.equal(ch.work.flow.stages[ch.work.stageIndex].kind,'agent');assert.equal(ch.work.humanOwnerId,'1');assert.equal(ch.work.agentId,undefined,'the project default, not saved on the task');
+ assert.deepEqual(ch.work.history.map(e=>e.action),['handoff','runQueued','startTask']);assert.equal(ch.runs.length,1);assert.equal(ch.runs[0].status,'queued');assert.equal(ch.runs[0].mode,'build');
+ assert.deepEqual(d.related.map(r=>[r.relation,String(r.id),r.state]),[['next',String(child.id),'doing']],'the response already shows it started');
+ child.evidence.no=44;assert.deepEqual((await f.view()).related.map(r=>[r.no,r.title,r.state]),[[44,child.title,'doing']]);
+ c=await claim(f);assert.equal(c.run.taskId,String(child.id));assert.equal(c.run.input.handoff,'outline 2','the accepted document is its brief');
+});
+// Accept and start (2026-10-24): whatever its start card could not preselect leaves the new task waiting there.
+const outlineAccepted=async(f,agentId)=>{
+ if(agentId)await f.command('setAgent',{agentId});
+ await f.command('startTask',{});const c=await claim(f);await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'outline'});
+ const d=await f.view();return f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts'],next:'new-doc'});
+};
+const outlineEvidence={insight:{id:'op',signalIds:['community-gap:q']},context:{signals:{items:signals}}};
+test('Accept and start: with several Agents and no project default the new task waits for one to be chosen; the approval stands',async()=>{
+ const f=fixture(undefined,outlineEvidence),plugin=f.s.p.agents;
+ plugin.definitions.set('other-agent',{...plugin.agent,id:'other-agent',name:'Other Agent'});
+ await f.s.agents.saveRepo('1',{repo:'estheryo/website',baseBranch:'main',revision:0});
+ const d=await outlineAccepted(f,'shared-agent');
+ assert.equal(d.work.stage,'done');assert.deepEqual(d.related.map(r=>[r.relation,r.state]),[['next','todo']]);
+ const id=d.work.nextTaskId;let ch=await f.view(id);
+ assert.equal(ch.task.status,'待处理');assert.equal(ch.work.flow,undefined);assert.equal(ch.runs.length,0);assert.equal(ch.work.playbookId,'new-doc');
+ assert.deepEqual(ch.work.history.map(e=>e.action),['handoff'],'nothing was half done');assert.equal(ch.work.agentId,undefined,'the first task\'s Agent is not carried over');
+ // Once someone chooses the Agent, the start card starts it as before.
+ await f.command('setAgent',{agentId:'other-agent'},id);ch=await f.command('startTask',{playbookId:'new-doc'},id);assert.equal(ch.runs[0].agentId,'other-agent');
+});
+test('Accept and start: a change with no repository connected waits; an unexpected failure leaves the task to start by hand',async()=>{
+ const f=fixture(undefined,outlineEvidence);await selectAgent(f);
+ let d=await outlineAccepted(f);assert.equal(d.work.stage,'done');
+ let ch=await f.view(d.work.nextTaskId);assert.equal(ch.task.status,'待处理');assert.equal(ch.work.flow,undefined);
+ const g=fixture(undefined,outlineEvidence);await connectAgent(g);const warned=[];g.s.p.app={logger:{warn:(m,v)=>warned.push([m,v])}};
+ await g.command('startTask',{});const c=await claim(g);await finish(g,{taskId:'1',runId:c.run.id,ok:true,content:'outline'});d=await g.view();
+ g.s.p.agents.runs.enqueue=async()=>{throw Error('agents unavailable');};
+ d=await g.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts'],next:'new-doc'});
+ assert.equal(d.work.stage,'done');assert.ok(d.work.nextTaskId);
+ ch=await g.view(d.work.nextTaskId);assert.equal(ch.task.status,'待处理');assert.equal(ch.work.flow,undefined,'the failed start was rolled back');
+ assert.equal(warned.length,1);assert.equal(warned[0][1].taskId,d.work.nextTaskId);assert.match(warned[0][1].message,/agents unavailable/);
 });
 test('sharing (2026-10-08): an Agent run carries the page\'s data summary; an accepted document goes into the knowledge base',async()=>{
  const f=fixture(undefined,{insight:{id:'op',signalIds:['community-gap:q']},context:{signals:{items:signals}}});const me=await connectAgent(f);
