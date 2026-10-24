@@ -1,31 +1,15 @@
 # NocoReach Changelog
 
-## Unreleased — Runner compatibility with Agents beta.23
+## Unreleased — Demo environment
 
-- Upgrade Runner to `0.1.0-beta.18` and CLI Client to `0.1.0-beta.15`, matching Agents beta.23's protocol for tool selection, detection requests and online capacity updates.
-- Advance the application CLI release to `1.0.0-beta.70` so existing installations and Runner caches download the updated client. Rebuild both distribution products with the application; deploy the server before upgrading installed runners.
-
-## Unreleased — Demo Mode beta.2
-
-- Upgrade Demo Mode to beta.2 with App Client beta.3, Agents beta.23 and Jobs beta.4, retaining the shared i18n peer version.
-- Mount the plugin's single-page management view and remove obsolete tab slots and header state.
-- Verify that a demo administrator retains its identity, session and management access through reset and clear; use the plugin's account preservation directly without application compatibility code.
-
-## Unreleased — Demo dependency upgrade compatibility
-
-- Keep host and mock plugin i18n peers on one version so App Client registrations share the same runtime and types.
-- Scope session cookie names to the complete application mount and preserve root-mounted API paths.
-- Adapt Runner integration fixtures to explicit Agent creation and browser checks to mount-scoped locale storage; cover the Runner repair migration without changing enabled status or configured models.
-
-## Unreleased — Demo Mode beta.1
-
-- Use the unmodified published Demo Mode `0.1.0-beta.1` and Agents `1.0.0-beta.22`. Install from the registry with the frozen lockfile; no local plugin fixture or legacy migration patch is required.
-- Adopt the simplified Overview and Daily reset management page, removing obsolete chat tool and adapter label options. Preserve saved write policies, simulation overrides and schedules through the existing configuration APIs.
-- Use default-enabled integrated demo chat and server-declared local reads, including daily analysis and data queries, while keeping external work simulated and respecting explicit disabled overrides.
-
-## Unreleased — Read-only Skills browsing
-
-- Render missing built-in Skills without persisting them during list, detail or Agent material reads, preventing Demo Mode write refusals when opening Playbooks. Preserve edited and deleted Skills and persist pending built-ins only during mutations or startup upgrades.
+- Add a dedicated demo deployment enabled with `NOCOBASE_DEMO_MODE=true`, using the published Demo Mode plugin. Settings › Demo management provides one page for importing, resetting and clearing demo data, configuring daily resets and managing demo accounts. The same lifecycle operations are available through `demo-mode data status|import|clear|reset` in standalone installations.
+- Provide Chinese and English datasets with two projects, connected data sources, site and market reports, opportunities, knowledge, tasks across execution and release states, conversations, inbox notifications and AI usage history. Reports follow consistent scenarios and dates relative to today; resets retain the selected language and refresh the data. Ordinary installations are not populated automatically.
+- Let visitors switch demo accounts from the account menu and try roles restricted to the demo projects, including a demo administrator. Reset and clear preserve the acting administrator's identity, session and management access; imports reject collisions with existing accounts.
+- Enforce read-only access by default, with administrator-configured collection write exceptions that still respect business permissions. Skills and Playbooks browsing does not persist missing built-ins or require a write exception, and preserves edited and deleted Skills.
+- Enable integrated demo chat with server-declared local reads and configurable policies. Simulate data collection, business analysis, Agent drafts and publishing after human review; demo project requests use local fixtures, tasks never dispatch to real Runners, and publishing records a simulated release. Disabled simulations refuse execution instead of falling back to external services.
+- Restrict imports, resets and clears to enabled demo deployments. Clear all project business data, including visitor additions, orphan records, attachments, credentials, conversations and task notifications, while retaining system accounts, configuration and the environment model. Failed imports use the same cleanup boundary.
+- Scope session cookies to the complete application mount and support root-mounted API paths.
+- Align Demo Mode `0.1.0-beta.2`, App Client `4.0.0-beta.3`, Agents `1.0.0-beta.23`, Jobs `0.1.0-beta.4`, Runner `0.1.0-beta.18` and CLI Client `0.1.0-beta.15`. Release the application CLI as `1.0.0-beta.70` so existing installations receive the compatible client. Rebuild the CLI and Runner distributions with the application and deploy the server before upgrading installed runners.
 
 ## Unreleased — Read an article full screen
 
@@ -380,44 +364,6 @@
 - Earlier analyses opened above today fold again with "Hide earlier analyses", offered both above them and just above today.
 - The day's conversation folds to one line ("Conversation · questions: N") so the day's analysis stays in view; a new question opens it again and scrolls to it.
 - The input has one frame instead of a field inside a box.
-
-## Unreleased — Shared sample generation
-
-- Extract the business sample generator and invoke it through the Demo Mode dataset's direct generation callback, preserving weighted progress and existing cleanup without changing core sample history or ordinary installation behavior.
-
-## Unreleased
-
-- Standardize generated demo administrators on `admin` / `Demo@2026` in both languages and hide the floating demo entry while retaining account-menu switching.
-
-- Adapt Demo management to the application header, line tabs, sections and buttons through the plugin's public component contract, retaining permission and draft protection.
-
-- Replace Settings › Demo management with the Demo Mode plugin's administration page, and switch demo accounts from the account menu; the floating guest entry is disabled.
-- Add a demo administrator account (`admin`, password `Demo@2026`) with a demo-owned copy of the administrator role, so visitors can try settings and the demo's own management.
-
-- Add configurable online demo chat with existing live models, explicit tool policies, owned general conversations, and execution-time policy checks.
-
-- Add an application-configured Demo Agent proxy for analysis and change drafts, scoped opportunity handoff in read-only mode, and simulated release after human review.
-
-## Unreleased — Demo data
-
-- Follow the current Demo Mode plugin: `NOCOBASE_DEMO_MODE` is a boolean (`true` for a demo deployment), and visitor writes are opened per collection on Visitor writes instead of per scoped capability; NocoReach no longer registers write capabilities.
-- Rewrite the demo's collected data as a scripted world in the imported language: a 57-page site with audit findings, about 95 search queries per language whose positions and clicks follow the demo's tasks and opportunities, GA4 visits allocated from source to browser so every report adds up, a repository with issues, pull requests, discussions, releases and star history, a forum, Slack and Discord channels, X, Hacker News and Reddit posts, packages, keyword research, competitors, backlinks, AI answers, trends, and Bilibili, Xiaohongshu and YouTube through a demo collector. Figures are relative to today and vary by date, so each reset reads as current.
-- Add demo page-change tasks in every release state (failed Agent run, awaiting review, merge failed, waiting for the site, not seen live, simulated release, live and observed) with run records, earlier online Agent conversations, inbox notifications with read states, and a month of business AI model usage. Clearing also removes inbox messages that link to tasks.
-- Adopt the simplified Demo Mode plugin: environment-owned models, one business cleanup contract, environment-wide Demo Agent routing and one managed reset schedule. Preserve the existing model binding through an upgrade migration and force online chat to the environment model.
-
-- Add permission-aware demo management with revision-safe daily scheduling, explicit table/operation/scope exceptions, and independent model/tool/Runner adapter switches.
-- Make demo freshness reproducible by date and route demo analysis through local simulation without real Runner dispatch or publication.
-
-- Deliver the demo plugin's published Skill through local package synchronization, including application dataset adaptation, reproducible freshness, cleanup boundaries, and model/tool/Runner simulation guidance.
-- Allow administrator imports, resets and clears in read-only demo mode while preserving authorization and concurrent request write protection.
-- Restrict full-instance clear/reset to enabled demo mode across HTTP, CLI and scheduled operations. Clear all project business data, including existing projects, orphan records, attachments and conversations, while preserving accounts and system configuration. Use the same business cleanup contract after failed imports.
-
-- Add Settings › Demo data for administrators: import a fictional demo (the NocoBase marketing team's two projects with connected sources, tasks in every state, results, opportunities and knowledge, plus five sign-ins with different roles and projects) in Chinese or English, then reset or clear it. Clearing removes all project business data and disables the imported demo accounts; administrator accounts and system configuration are retained.
-- Use the published `@nocobase/app-plugin-demo-mode` package for demo data and read-only mode.
-- Demo projects never reach outside services: their requests, public page reads included, are answered in process by the simulated deployment's fixtures and refused otherwise, Google, GitHub, community and search flows run through the production code, and their tasks are never sent to a Runner. The import adds a simulated `Demo model` as the default chat model, so online agents and business analysis answer from scripts.
-- Mark demo projects in the project switcher. Preserve the selected dataset language on reset, confirm imports that change the default model, and refresh workspace caches after completion.
-- Restrict demo accounts to demo projects, reject collisions with existing accounts, and resolve persisted demo markers before outbound requests in other processes. Retain the environment model when clearing the demo.
-- Add `demo-mode data status|import|clear|reset` commands with explicit change confirmation, an operation preview, and standalone package support.
 
 ## Unreleased — One conversation a day on Insights
 
