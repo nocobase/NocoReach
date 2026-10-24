@@ -1,4 +1,5 @@
 {
+  "nocoreach.nav.demoData": "デモ管理",
   "nocoreach.nav.apiKeys": "APIキー",
   "schedules": {
     "title": "自動実行",

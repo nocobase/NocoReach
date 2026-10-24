@@ -1,4 +1,5 @@
 {
+  "nocoreach.nav.demoData": "Quản lý bản demo",
   "nocoreach.nav.apiKeys": "Khóa API",
   "schedules": {
     "title": "Chạy tự động",

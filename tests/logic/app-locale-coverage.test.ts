@@ -69,12 +69,20 @@ function scan(source: string): {
     .split('\n')
     .filter((line) => !/^\s*(?:\/\/|\*)/u.test(line))
     .join('\n');
+  // Application-local shorthand may delegate t(key) to $t(`namespace.${key}`).
+  const localPrefix =
+    /const t\s*=\s*\(\s*(\w+)(?::\s*string)?\s*\)\s*=>\s*\$t\(\x60([\w.]+)\$\{\1\}\x60\)/u.exec(
+      code,
+    )?.[2] ?? '';
   const keys = new Set<string>();
   const prefixes = new Set<string>();
-  for (const match of code.matchAll(calledKey)) keys.add(match[1]);
+  for (const match of code.matchAll(calledKey))
+    keys.add(localPrefix + match[1]);
   for (const match of code.matchAll(namedKey)) keys.add(match[1]);
-  for (const match of code.matchAll(interpolatedKey)) prefixes.add(match[1]);
-  for (const match of code.matchAll(concatenatedKey)) prefixes.add(match[1]);
+  for (const match of code.matchAll(interpolatedKey))
+    prefixes.add(localPrefix + match[1]);
+  for (const match of code.matchAll(concatenatedKey))
+    prefixes.add(localPrefix + match[1]);
   return { keys, prefixes };
 }
 
@@ -121,6 +129,13 @@ describe('application translations', () => {
     expect([
       ...scan("t(\n  'projects.delete.title',\n  { name },\n)").keys,
     ]).toEqual(['projects.delete.title']);
+  });
+
+  it('resolves a local namespaced translation wrapper', () => {
+    expect([
+      ...scan("const t = (key: string) => $t(`demoConfig.${key}`); t('saved')")
+        .keys,
+    ]).toEqual(['demoConfig.saved']);
   });
 
   it('does not treat NocoReach $t() keys as framework locale keys', () => {

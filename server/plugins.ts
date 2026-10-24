@@ -19,6 +19,7 @@ import {
 } from '@nocobase/app-server/plugins';
 import scheduler from '@nocobase/app-plugin-scheduler/server';
 import file from '@nocobase/app-plugin-file/server';
+import demoMode from '@nocobase/app-plugin-demo-mode/server';
 
 const serverPlugins: AppServerPlugins = defineServerPlugins([
   authentication,
@@ -38,6 +39,7 @@ const serverPlugins: AppServerPlugins = defineServerPlugins([
   mail,
   agents,
   nocoreachMock,
+  demoMode,
 ]);
 
 export default serverPlugins;

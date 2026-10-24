@@ -20,7 +20,10 @@ import { z } from 'zod';
 import { onlineAgentsToken } from '../providers/online-agents.js';
 import { nocoReachToken } from '../providers/nocoreach.js';
 import { roleOf } from '../nocoreach/policy.js';
-import { authorizationToken, type AuthorizationEnv } from '@nocobase/app-plugin-authorization/server';
+import {
+  authorizationToken,
+  type AuthorizationEnv,
+} from '@nocobase/app-plugin-authorization/server';
 import { OnlineAgentError } from '../online-agent/errors.js';
 
 const model = z.strictObject({
@@ -308,7 +311,9 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
         owner(context),
       );
       await project(conversation.projectId);
-      return context.json({ data: await service().cancel(run.id) });
+      return context.json({
+        data: await service().cancel(run.id),
+      });
     },
   );
   return new Hono().route('/', router);

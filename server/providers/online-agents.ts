@@ -6,7 +6,7 @@ import {
   createServiceToken,
   ServiceProvider,
 } from '@nocobase/service-provider';
-import { onlineErrorCode } from '../online-agent/errors.js';
+import { OnlineAgentError, onlineErrorCode } from '../online-agent/errors.js';
 import { OnlineAgentService } from '../online-agent/service.js';
 import { createNocoReachOnlineHost } from '../nocoreach/online-agent/host.js';
 import { nocoReachToken } from './nocoreach.js';
@@ -36,6 +36,16 @@ export default class OnlineAgentsProvider extends ServiceProvider<Application> {
             },
             'Online chat execution failed',
           ),
+        () => {
+          const { plugin } = this.app.container.resolve(nocoReachToken);
+          if (!plugin.demoConfiguration?.enabled) return undefined;
+          const modelService = plugin.demoModels?.serviceName;
+          if (!modelService) throw new OnlineAgentError('modelUnavailable');
+          return plugin.demoConfiguration.chatModel({
+            modelService,
+            model: 'demo-chat',
+          });
+        },
       );
     });
   }
