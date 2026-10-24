@@ -72,6 +72,110 @@ const test = createAppTest({
   },
 });
 
+test('the distributed Runner accepts ACP registration and online tool and capacity updates', async ({
+  testApp,
+  connection,
+}) => {
+  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const agents = testApp.application.container.resolve(agentsToken);
+  const person = await connection
+    .repository('user')
+    .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } });
+  const runnerRoot = pathToFileURL(
+    createRequire(import.meta.url).resolve(
+      '@nocobase/agent-runner/package.json',
+    ),
+  );
+  // Use the installed Runner's parser; the server's parser can hide version skew.
+  const protocol = await import(
+    new URL('dist/protocol/index.js', runnerRoot).href
+  );
+  const { ApiClient } = await import(
+    new URL('dist/lib/http.js', runnerRoot).href
+  );
+  const { version } = JSON.parse(await readFile(runnerRoot, 'utf8'));
+  const registration = await agents.runners.createRegistrationToken(
+    String(person!.id),
+    { enabledTools: ['amp'], slots: 2, toolSlots: { amp: 1 } },
+  );
+  const options = {
+    server: `http://localhost${testApp.publicBasePath}`,
+    headers: { 'x-nocobase-protocol': String(protocol.PROTOCOL_VERSION) },
+    fetch: (input: string | URL | Request, init?: RequestInit) =>
+      testApp.fetch(new Request(input, init)),
+  };
+  const registered = await new ApiClient(options).post(
+    protocol.RUNNER_ROUTES.register,
+    {
+      registrationToken: registration.token,
+      name: 'Protocol compatibility Runner',
+      hostname: 'test',
+      os: 'linux',
+      arch: 'x64',
+      version,
+      protocolVersion: protocol.PROTOCOL_VERSION,
+      features: [],
+      tools: [{ kind: 'amp', authenticated: true }],
+    },
+    protocol.RegisterResponseSchema,
+  );
+  expect(registered).toMatchObject({
+    enabledTools: ['amp'],
+    slots: 2,
+    toolSlots: { amp: 1 },
+  });
+  const runner = new ApiClient({
+    ...options,
+    headers: {
+      ...options.headers,
+      'x-nocobase-runner-key': registered.runnerKey,
+    },
+  });
+  const heartbeat = (slots: number) =>
+    runner.post(
+      protocol.RUNNER_ROUTES.heartbeat,
+      {
+        version,
+        features: [],
+        tools: [],
+        active: [],
+        load: { slots, free: slots, capacitySource: 'online' },
+      },
+      protocol.HeartbeatResponseSchema,
+    );
+  expect(await heartbeat(2)).toMatchObject({
+    enabledTools: ['amp'],
+    capacity: { slots: 2, toolSlots: { amp: 1 } },
+  });
+  const changed = await admin.fetch(`/agents/runners/${registered.runnerId}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+      origin: 'http://localhost',
+    },
+    body: JSON.stringify({
+      enabledTools: ['codex'],
+      slots: 4,
+      toolSlots: { codex: 3 },
+      redetectTools: true,
+    }),
+  });
+  expect(changed.status).toBe(200);
+  const updated = await heartbeat(2);
+  expect(updated).toMatchObject({
+    enabledTools: ['codex'],
+    detectTools: true,
+    capacity: { slots: 4, toolSlots: { codex: 3 } },
+  });
+  expect(updated.compatibility).toBeUndefined();
+  expect(await heartbeat(4)).toMatchObject({ detectTools: false });
+  expect(await agents.runners.get(registered.runnerId)).toMatchObject({
+    slots: 4,
+    reportedSlots: 4,
+    capacitySource: 'online',
+  });
+});
+
 test('task assignment enqueues the selected official agent and keeps the project default', async ({
   testApp,
   connection,

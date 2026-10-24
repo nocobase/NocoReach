@@ -909,41 +909,68 @@ test('Read full screen opens the article on its own page, and Esc goes back to t
   expect(screen.getByTestId('where')).toHaveTextContent(/^\/actions\/1$/);
 });
 
-test('the reading page opens from its address, follows its language and view, and approves', async () => {
-  const user = userEvent.setup();
-  const data = reviewArticle();
-  action.mockImplementation((resource: string, command: string) =>
-    Promise.resolve(
-      command === 'advance'
-        ? data
-        : resource === 'nrPlaybooks'
-          ? { playbooks: [] }
-          : [],
-    ),
-  );
-  mountRoutes(data, '/actions/1/article?lang=en&view=preview');
-  const reader = readerPage();
-  expect(
-    within(reader).getByRole('heading', {
-      name: 'Top 12 Open Source No-Code AI Tools (2026)',
-    }),
-  ).toBeVisible();
-  expect(within(reader).getByRole('button', { name: '预览' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-  await user.click(within(reader).getByRole('button', { name: '改动' }));
-  expect(screen.getByTestId('where')).toHaveTextContent('view=changes');
-  await user.click(within(reader).getByRole('button', { name: '通过并发布' }));
-  const approve = action.mock.calls.find(([, c]) => c === 'advance');
-  expect(approve?.[2]?.body).toMatchObject({
-    command: 'approveStage',
-    artifactId: 'artifact-1',
-  });
-  await waitFor(() =>
-    expect(screen.getByTestId('where')).toHaveTextContent(/^\/actions\/1$/),
-  );
-});
+test.each([false, true])(
+  'the reading page opens from its address, follows its language and view, and approves (simulated: %s)',
+  async (simulated) => {
+    const user = userEvent.setup();
+    const data = reviewArticle();
+    data.task.evidence = { ...data.task.evidence, simulated };
+    action.mockImplementation((resource: string, command: string) =>
+      Promise.resolve(
+        command === 'advance'
+          ? data
+          : resource === 'nrPlaybooks'
+            ? { playbooks: [] }
+            : [],
+      ),
+    );
+    mountRoutes(data, '/actions/1/article?lang=en&view=preview');
+    const reader = readerPage();
+    expect(
+      within(reader).getByRole('heading', {
+        name: 'Top 12 Open Source No-Code AI Tools (2026)',
+      }),
+    ).toBeVisible();
+    expect(
+      within(reader).getByRole('button', { name: '预览' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    await user.click(within(reader).getByRole('button', { name: '改动' }));
+    expect(screen.getByTestId('where')).toHaveTextContent('view=changes');
+    await user.click(
+      within(reader).getByRole('button', {
+        name: simulated ? '通过并模拟发布' : '通过并发布',
+      }),
+    );
+    const approve = action.mock.calls.find(([, c]) => c === 'advance');
+    expect(approve?.[2]?.body).toMatchObject({
+      command: 'approveStage',
+      artifactId: 'artifact-1',
+    });
+    expect(approve?.[2]?.body).not.toHaveProperty('release');
+    await waitFor(() =>
+      expect(screen.getByTestId('where')).toHaveTextContent(/^\/actions\/1$/),
+    );
+  },
+);
+
+test.each(['page', 'article'])(
+  'a simulated %s review keeps its simulation action without mock settings',
+  (kind) => {
+    const data = kind === 'article' ? reviewArticle() : pageChange();
+    data.task.evidence = { ...data.task.evidence, simulated: true };
+    if (kind === 'page') delete data.work.results[0]!.pr;
+    mount(data);
+    const card = screen.getByRole('region', { name: '等你处理' });
+    expect(
+      within(card).getByRole('button', { name: '通过并模拟发布' }),
+    ).toBeVisible();
+    expect(
+      within(card).queryByRole('button', { name: '通过并发布' }),
+    ).toBeNull();
+    if (kind === 'page')
+      expect(card).toHaveTextContent('改动已完成，请检查后发布');
+  },
+);
 
 test('a live article names what changed on its card and shows each field before and after', async () => {
   const user = userEvent.setup();

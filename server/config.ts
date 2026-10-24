@@ -8,6 +8,10 @@ export function createAppConfig(
   context: ResolvedAppRuntimeConfigContext,
 ): AppConfig {
   const config = new AppConfig();
+  // Publish only the deployment flag so the client can omit demo-only routes.
+  config.defineSections(
+    new Map([['demoMode', { validators: [], public: ['enabled'] }]]),
+  );
   const configuredPath =
     context.configPath ?? context.environment.APP_CONFIG_FILE;
   // Deployment configuration stays beside the compiled code directory.

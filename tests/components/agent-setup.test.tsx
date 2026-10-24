@@ -41,6 +41,10 @@ vi.mock('@nocobase/app-plugin-authentication/client', () => ({
 vi.mock('../../client/layouts/components/language-switcher.js', () => ({
   LanguageSwitcher: () => <div role='menuitem'>Language</div>,
 }));
+// The demo account switch reads the router, which these menus are rendered without.
+vi.mock('@nocobase/app-plugin-demo-mode/client/account-menu', () => ({
+  DemoAccountMenu: () => null,
+}));
 vi.mock('../../client/pages/access/api.js', () => ({
   usePendingInvitationCount: () => fixture.invitations,
 }));

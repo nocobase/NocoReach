@@ -33,6 +33,7 @@ describe('app client routes', () => {
         '/agents/chat/new',
         '/agents/chat/:onlineAgentId',
         '/schedules',
+        '/demo-data',
         '/schedules/:scheduleId',
         '/schedules/:scheduleId/edit',
         '/proxy-profiles',

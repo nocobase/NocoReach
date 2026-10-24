@@ -21,7 +21,7 @@ export const opportunityEditionKey = (id: string) =>
   `demo-edition:${id}:${OPPORTUNITY_EDITION}`;
 const notice = '人工编写的虚构演示情景；指标、客户反馈和判断均不代表真实业务。';
 // Each brief has a distinct problem, evidence boundary and next action, rather than metric-only variants.
-const briefs = [
+export const briefs = [
   [
     'permissions',
     '补齐销售只能查看本人客户的权限示例',

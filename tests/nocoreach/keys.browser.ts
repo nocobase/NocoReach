@@ -73,8 +73,8 @@ try {
     locale: 'en-US',
   });
   await context.addInitScript(() => {
-    if (!localStorage.getItem('nocobase.locale'))
-      localStorage.setItem('nocobase.locale', 'en-US');
+    if (!localStorage.getItem('nocobase.locale:/main/'))
+      localStorage.setItem('nocobase.locale:/main/', 'en-US');
   });
   expect(
     (
@@ -301,7 +301,7 @@ try {
     await page.unroute('**/api/nocoreachKeys/list?*');
   }
   await page.evaluate(() => {
-    localStorage.setItem('nocobase.locale', 'zh-CN');
+    localStorage.setItem('nocobase.locale:/main/', 'zh-CN');
     localStorage.setItem('nocobase:main:theme:color-scheme', 'light');
     document.documentElement.classList.remove('dark');
   });
@@ -330,7 +330,7 @@ try {
     viewport: { width: 1440, height: 1000 },
   });
   await ownContext.addInitScript(() =>
-    localStorage.setItem('nocobase.locale', 'en-US'),
+    localStorage.setItem('nocobase.locale:/main/', 'en-US'),
   );
   expect(
     (

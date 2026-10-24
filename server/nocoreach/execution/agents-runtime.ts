@@ -14,7 +14,7 @@ import {
   type RunMachineViewer,
 } from '@nocobase/app-plugin-agents/server/tokens';
 import type { TaskBusiness } from './task-business.js';
-import { fail, projectWork, canApplyRun, type Run } from './model';
+import { fail, projectWork, canApplyRun, type Run, type RunEvent } from './model';
 import type { LegacyDatabase, LegacyTransaction } from '../legacy/database';
 
 import type { DatabaseConnection } from '@nocobase/db';
@@ -32,7 +32,13 @@ export { resultOf } from './agent-result';
 
 interface TaskTransport {
   readonly business: TaskBusiness;
-  readonly p: { readonly db: LegacyDatabase; readonly mock?: MockEngine };
+  readonly p: {
+    readonly db: LegacyDatabase;
+    readonly demoAgent?: import('@nocobase/app-plugin-demo-mode/server/tokens').DemoAgentProxy<import('../demo-data/demo-agent.js').DemoAgentInput, import('../demo-data/demo-agent.js').DemoAgentResult>;
+    readonly demoConfiguration?: import('@nocobase/app-plugin-demo-mode/server/tokens').DemoConfigurationService;
+    readonly mock?: MockEngine;
+    readonly demoProjects?: { recognize(projectId: string): Promise<boolean> };
+  };
   readonly agents: {
     doc(project: string, tx?: LegacyTransaction): Promise<AgentDoc>;
   };
@@ -55,6 +61,8 @@ interface TaskTransport {
     fn: (tx: LegacyTransaction) => Promise<T>,
   ): Promise<T>;
   claim(run: Run, options: { runtimeRunId: string }): Promise<Run | null>;
+  finish(run: Run, result?: { content: string; usage?: Run['usage'] }, error?: string): Promise<unknown>;
+  recordDemoEvent(run: Run, event: Omit<RunEvent, 'seq' | 'at'>): Promise<Run | null>;
   acceptAgentResult(
     project: string,
     runId: string,
@@ -381,6 +389,17 @@ export class TaskAgentsRuntime {
       return fail('Agent 已领取这一步，请等待结果或先停止', 409);
   }
   async enqueue(run: Run, tx: LegacyTransaction, taskAgentId?: string) {
+    if (this.tasks.p.demoConfiguration?.enabled) {
+      if (!['plan', 'build', 'article'].includes(run.mode || '') || !this.tasks.p.demoAgent)
+        throw new TaskAgentUnavailableError(systemMessageText('demoData.runnerUnavailable'));
+      if (!(await this.tasks.p.demoAgent.prepare())) throw new TaskAgentUnavailableError(systemMessageText('demoData.runnerUnavailable'));
+      run.demoAgentId = this.tasks.p.demoAgent.id;
+      run.agentName = this.tasks.p.demoAgent.title;
+      run.simulated = true;
+      run.model = { llmService: 'demo', model: 'demo-agent' };
+      tx.afterCommit(() => { void this.simulate(run).catch(() => undefined); });
+      return undefined;
+    }
     if (run.mode === 'merge' || run.mode === 'revert')
       this.tasks.p.mock?.guardExternal('task.publish');
     const config = await this.tasks.agents.doc(run.projectId, tx);
@@ -419,6 +438,71 @@ export class TaskAgentsRuntime {
       tx,
     );
     return result.runId;
+  }
+  /** Durable business simulation; no official Agent execution or publication receipt is fabricated. */
+  async simulate(run: Run): Promise<void> {
+    if (!run.simulated || run.status !== 'queued') return;
+    return this.tasks.p.demoConfiguration!.withFreshPolicy(() => this.simulateCurrent(run));
+  }
+  private async simulateCurrent(run: Run): Promise<void> {
+    const claimed = await this.tasks.claim(run, { runtimeRunId: `demo:${run.id}` });
+    if (!claimed) return;
+    let failure: string | undefined;
+    let result: { content: string; usage?: Run['usage'] } | undefined;
+    try {
+      await this.tasks.authorized(run.actor, run.projectId);
+      if (run.ownerId !== run.actor) await this.tasks.authorized(run.ownerId, run.projectId);
+      const proxy = this.tasks.p.demoAgent;
+      if (!proxy || (run.demoAgentId && run.demoAgentId !== proxy.id)) throw new Error('Demo Agent unavailable');
+      const planned = await proxy.execute(run);
+      // Played back like a Runner's report, one event at a time; stopping the task ends it between two events.
+      const pace = Number(process.env.NOCOREACH_DEMO_AGENT_PACE ?? 1);
+      for (const step of planned.steps) {
+        const wait = Math.max(0, step.pauseMs * (Number.isFinite(pace) ? pace : 1));
+        if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
+        const { pauseMs: _pause, ...event } = step;
+        if (!(await this.tasks.recordDemoEvent(claimed, event))) {
+          failure = 'cancelled';
+          break;
+        }
+      }
+      if (!failure) result = { content: planned.content, usage: planned.usage };
+    } catch { failure = failure || 'demo_simulation_unavailable'; }
+    await this.tasks.finish(claimed, result, failure);
+  }
+  /** A demo run's progress in the shape of an official run's, from the transcript its playback recorded. */
+  simulatedProgress(run: Run, viewer?: RunMachineViewer): TaskRunProgress {
+    const status = run.status === 'succeeded' ? 'completed' : run.status;
+    const metadata = {
+      id: run.id,
+      agentId: run.demoAgentId || 'demo',
+      agentType: 'demo',
+      status,
+      // One attempt on the in-process demo Agent, shaped like a Runner execution for the run header.
+      executions: run.startedAt
+        ? [
+            {
+              attempt: 1,
+              runnerId: 'demo',
+              runnerName: run.agentName || 'NocoReach Demo Agent',
+              tool: 'demo-agent',
+              modelService: 'demo',
+              model: 'demo-agent',
+            },
+          ]
+        : [],
+      startedAt: run.startedAt || null,
+      finishedAt: run.endedAt || null,
+      usage: run.usage || null,
+      failureReason: run.error || null,
+    } as unknown as TaskRunProgress['run'];
+    const canInspect = !viewer || viewer.seesMachines || [run.actor, run.ownerId].includes(viewer.userId);
+    return {
+      run: metadata,
+      events: canInspect ? ((run.transcript || []) as unknown as TaskRunProgress['events']) : [],
+      truncated: false,
+      canInspect,
+    };
   }
   async sync(run: Run & { pluginRunId?: string }) {
     if (!run.pluginRunId) return;
