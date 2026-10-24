@@ -3911,6 +3911,7 @@
   "packagesSource.pickNpmPypiDockerHub": "Pilih npm, PyPI, atau Docker Hub",
   "projectKnowledge.pickFile": "Pilih file",
   "projects.pickChineseEnglish": "Pilih bahasa Mandarin atau bahasa Inggris",
+  "projects.pickContentLanguage": "Pilih salah satu bahasa dalam daftar",
   "keyword.pickKeywords": "Pilih kata kunci",
   "taskExecution.pickContentChangeResearch": "Pilih perubahan konten atau riset",
   "playbook.pickCategory": "Pilih kategori",

@@ -3863,6 +3863,7 @@
   "packagesSource.pickNpmPypiDockerHub": "请选择 npm、PyPI 或 Docker Hub",
   "projectKnowledge.pickFile": "请选择一个文件",
   "projects.pickChineseEnglish": "请选择中文或英文",
+  "projects.pickContentLanguage": "请选择列表中的语言",
   "keyword.pickKeywords": "请选择关键词",
   "taskExecution.pickContentChangeResearch": "请选择内容修改或调研",
   "playbook.pickCategory": "请选择分类",
