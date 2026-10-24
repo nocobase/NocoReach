@@ -19,6 +19,10 @@ const cliPlugins: AppCliPlugins = defineCliPlugins([
     buildHooks: {
       afterBuild: [
         {
+          label: 'Preserve Demo Mode migration history',
+          command: ['node', 'cli/build-demo-migration-patch.mjs'],
+        },
+        {
           label: 'Include NocoReach Scheduler extension',
           command: ['node', 'cli/build-scheduler-patch.mjs'],
         },

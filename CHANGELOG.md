@@ -1,5 +1,17 @@
 # NocoReach Changelog
 
+## Unreleased — Read-only Skills browsing
+
+- Render missing built-in Skills without persisting them during list, detail or Agent material reads, preventing Demo Mode write refusals when opening Playbooks. Preserve edited and deleted Skills and persist pending built-ins only during mutations or startup upgrades.
+
+## Unreleased — Published Demo Mode plugin
+
+- Document and verify the `nrKeywordRuns` demo write exception required by keyword detail market and SERP queries; correct the existing deployment configuration without resetting its dataset.
+
+- Replace the unpublished Demo Mode source fixture with the pinned registry release `0.1.0-beta.0` and align its required host dependencies. CI now uses the regular frozen lockfile without building or copying an upstream plugin fixture.
+- Retain the deployed pre-release Demo Mode migration chain through a versioned dependency patch so existing databases upgrade without deleting migration history; fresh installations use the same chain.
+- Preserve the existing demo dataset, generated content, database and storage; upgrading the dependency does not import, clear or reset demo data. Merge the latest main branch while retaining simulated task execution alongside restart recovery.
+
 ## Unreleased — Task page: a failure notice, a short Why and copy without positions
 
 - A failed step shows one error notice: an icon and "The Agent could not finish this step", the reason in a sentence (with "failed N times in a row" as a short fact), what to do next, and Technical details. Its actions are Try again, Switch Agent (opens the Agent picker in Properties) and Message the Agent (focuses the activity composer). Completing an Agent's step by hand moved from the card to the ⋯ menu as "Complete this step manually", offered while the step is not running.

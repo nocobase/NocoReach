@@ -245,6 +245,28 @@ describe('read-only demo lifecycle', () => {
     });
     expect(await runtime.plugin.projects.all()).toHaveLength(2);
     const projectId = String((await runtime.plugin.projects.all())[0].id);
+    const snapshotBeforeReads = await runtime.plugin.db
+      .getRepository('nrSnapshots')
+      .find({});
+    for (const [resource, action] of [
+      ['nrPlaybooks', 'list'],
+      ['nrSkills', 'list'],
+      ['nrKnowledge', 'list'],
+      ['nrMemory', 'status'],
+    ]) {
+      const response = await admin.fetch(`/nocoreach/${resource}/${action}`, {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ projectId }),
+      });
+      expect(response.status).toBe(200);
+      expect((await response.json()).data).toBeDefined();
+    }
+    expect(
+      (await runtime.plugin.db.getRepository('nrSnapshots').find({})).map(
+        (row) => row.toJSON(),
+      ),
+    ).toEqual(snapshotBeforeReads.map((row) => row.toJSON()));
     const knowledge = () =>
       admin.fetch('/nocoreach/nrKnowledge/add', {
         method: 'POST',
@@ -266,11 +288,40 @@ describe('read-only demo lifecycle', () => {
         headers: json,
         body: JSON.stringify({
           expectedRevision: configuration.revision,
-          value: ['nrSnapshots'],
+          value: ['nrSnapshots', 'nrKeywordRuns'],
         }),
       },
     );
     expect(configured.status).toBe(200);
+    // Read-looking keyword endpoints persist provider results in the query cache.
+    const keywordInput = {
+      projectId,
+      keyword: 'nocobase tutorial',
+      locationCode: 2840,
+      language: 'en',
+    };
+    const keywordDetail = async (action: string) => {
+      const response = await admin.fetch(
+        `/nocoreach/nrKeywordDetail/${action}`,
+        {
+          method: 'POST',
+          headers: json,
+          body: JSON.stringify(keywordInput),
+        },
+      );
+      expect(response.status).toBe(200);
+      return (await response.json()).data;
+    };
+    const market = await keywordDetail('market');
+    expect(market.overview.status).toBe('ready');
+    expect(market.overview.item.monthlySearches).toHaveLength(12);
+    expect(market.related.status).toBe('ready');
+    expect(market.related.related.length).toBeGreaterThan(0);
+    const serp = await keywordDetail('serp');
+    expect(serp.status).toBe('ready');
+    expect(serp.items).toHaveLength(10);
+    expect((await keywordDetail('market')).overview).toEqual(market.overview);
+
     const added = await knowledge();
     expect(added.status).toBe(200);
     const tasks = await runtime.plugin.db
@@ -968,9 +1019,9 @@ describe('demo configuration permissions', () => {
     expect(
       (
         await admin.fetch(
-          // Identity tables can never be opened to visitors.
+          // Collection exceptions must name an existing logical collection.
           '/demoMode/configuration/collections',
-          put(revision, ['user']),
+          put(revision, ['nrMissingDemoCollection']),
         )
       ).status,
     ).toBe(400);

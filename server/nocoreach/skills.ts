@@ -71,26 +71,28 @@ class Skills{
  async snapshot(key,transaction){return (await this.repo().findOne({filter:{key},transaction}))?.get('payload')||null;}
  async put(key,payload,transaction){const row=await this.repo().findOne({filter:{key},transaction});if(row)await this.repo().update({filterByTk:row.id,values:{payload},transaction});else await this.repo().create({values:{key,payload},transaction});}
  lock(fn){return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:'nocoreach-skills'},transaction});return fn(transaction);});}
- // The library is created with the built-in Skills the first time it is read (inside the caller's lock if it has one). A
+ // Reads overlay missing built-ins without writing; mutations persist them inside the caller's lock. A
  // library made by an earlier version (`builtIns`, 1 when missing) gets the built-ins added since, once, unless a Skill
  // with the same name is already there; built-ins someone deleted are never restored.
- async library(transaction){
+ async library(transaction,readOnly=false){
   const d=await this.snapshot('nr-skills',transaction);if(d&&(d.builtIns||1)>=BUILT_IN_VERSION)return d;
   const seed=async tx=>{const again=await this.snapshot('nr-skills',tx),have=again?again.builtIns||1:0;if(again&&have>=BUILT_IN_VERSION)return again;
    const at=new Date().toISOString(),skills=again?[...again.skills]:[];
    for(const b of BUILT_IN_SKILLS){if(b.since<=have||skills.length>=MAX_SKILLS||skills.some(s=>s.id===b.id||s.name===b.name))continue;
-    await this.put(`nr-skill:${b.id}`,{body:b.body,files:b.files},tx);skills.push(meta({id:b.id,name:b.name,description:b.description,...(b.source?{source:b.source}:{}),builtIn:true,createdAt:at,updatedAt:at},b.body,b.files));}
-   const doc={...again,revision:(again?.revision||0)+1,skills,builtIns:BUILT_IN_VERSION};await this.put('nr-skills',doc,tx);return doc;};
-  return transaction?seed(transaction):this.lock(seed);
+    if(!readOnly)await this.put(`nr-skill:${b.id}`,{body:b.body,files:b.files},tx);skills.push(meta({id:b.id,name:b.name,description:b.description,...(b.source?{source:b.source}:{}),builtIn:true,createdAt:at,updatedAt:at},b.body,b.files));}
+   const doc={...again,revision:(again?.revision||0)+1,skills,builtIns:BUILT_IN_VERSION};if(!readOnly)await this.put('nr-skills',doc,tx);return doc;};
+  return transaction||readOnly?seed(transaction):this.lock(seed);
  }
  // At start, an existing library gets the built-ins added since its version, so a playbook step can name them before
- // anyone opens Skills. A fresh application stays empty until the library is first read (the classic import needs that).
+ // anyone opens Skills. A fresh application stays unpersisted until a mutation needs the library (the classic import needs that).
  async upgrade(){const d=await this.snapshot('nr-skills');if(d&&(d.builtIns||1)<BUILT_IN_VERSION)await this.library();}
+ // Only a library entry can resolve content, so intentionally removed built-ins stay removed.
+ async content(skill){const saved=await this.snapshot(`nr-skill:${skill.id}`);if(saved)return saved;const builtin=skill.builtIn&&BUILT_IN_SKILLS.find(b=>b.id===skill.id);return builtin?{body:builtin.body,files:builtin.files}:{body:'',files:[]};}
  async enabledIds(id,tx){return (await this.snapshot(`nr-skills-enabled:${id}`,tx))?.ids||[];}
- async list(id){const [d,on]=await Promise.all([this.library(),this.enabledIds(id)]);
+ async list(id){const [d,on]=await Promise.all([this.library(undefined,true),this.enabledIds(id)]);
   return {revision:d.revision,skills:d.skills.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(s=>({...s,enabled:on.includes(s.id)}))};}
- async get(id,v){const d=await this.library(),skill=d.skills.find(s=>s.id===v.skillId);if(!skill)fail(systemMessageText('skills.skillNotExistRefreshTry'),404);
-  const c=await this.snapshot(`nr-skill:${skill.id}`)||{body:'',files:[]};return {skill:{...skill,enabled:(await this.enabledIds(id)).includes(skill.id)},body:c.body,files:c.files};}
+ async get(id,v){const d=await this.library(undefined,true),skill=d.skills.find(s=>s.id===v.skillId);if(!skill)fail(systemMessageText('skills.skillNotExistRefreshTry'),404);
+  const c=await this.content(skill);return {skill:{...skill,enabled:(await this.enabledIds(id)).includes(skill.id)},body:c.body,files:c.files};}
  // Every change rewrites the Skill's content and its line in the library under one lock.
  async change(skillId,fn){return this.lock(async tx=>{const d=await this.library(tx),i=d.skills.findIndex(s=>s.id===skillId);if(i<0)fail(systemMessageText('skills.skillNotExistRefreshTry'),404);
   const c=await this.snapshot(`nr-skill:${skillId}`,tx)||{body:'',files:[]};const next=fn({...d.skills[i]},{body:c.body,files:c.files},d.skills);
@@ -187,10 +189,10 @@ class Skills{
  // What goes with a task: the Skills this step names (required), then the ones turned on in the project; within a budget,
  // what does not fit is listed by name. Skills deleted since the step named them are skipped.
  async forAgent(id,required=[]){
-  const d=await this.snapshot('nr-skills');if(!d)return [];const on=await this.enabledIds(id),want=[...new Set([...required.filter(x=>typeof x==='string'),...on])];
+  const d=await this.library(undefined,true);const on=await this.enabledIds(id),want=[...new Set([...required.filter(x=>typeof x==='string'),...on])];
   const out=[],seen=new Set();let used=0;
   // A step names a built-in by its id, which is also its name, so a Skill imported under that name stands in for it.
-  for(const sid of want){const s=d.skills.find(x=>x.id===sid)||d.skills.find(x=>x.name===sid);if(!s||seen.has(s.id))continue;seen.add(s.id);const c=await this.snapshot(`nr-skill:${s.id}`)||{body:'',files:[]};const size=sizeOf(c.body,c.files),fits=used+size<=AGENT_BUDGET;used+=fits?size:0;
+  for(const sid of want){const s=d.skills.find(x=>x.id===sid)||d.skills.find(x=>x.name===sid);if(!s||seen.has(s.id))continue;seen.add(s.id);const c=await this.content(s);const size=sizeOf(c.body,c.files),fits=used+size<=AGENT_BUDGET;used+=fits?size:0;
    out.push({name:s.name,description:s.description,required:required.includes(sid),...(fits?{body:c.body,files:c.files}:{omitted:true})});}
   return out;
  }

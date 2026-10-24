@@ -17,7 +17,7 @@ test('the library starts with the built-in Skills, off in every project, and is 
  const all=BUILT_IN_SKILLS.length;assert.equal(l.skills.length,all);assert.ok(l.skills.every(x=>x.enabled===false&&x.builtIn===true));
  assert.deepEqual(['docs-page-writing','research-report','seo-title-description'].map(n=>l.skills.some(x=>x.name===n)),[true,true,true]);
  assert.deepEqual(l.skills.find(x=>x.name==='research-report').files.map(f=>f.path),['templates/report.md']);assert.ok(l.skills.every(x=>!('body' in x)),'the list carries no body');
- await s.list('2');assert.equal(rows.filter(r=>r.key==='nr-skills').length,1,'seeded once');
+ await s.list('2');assert.equal(rows.length,0,'reading built-ins does not persist them');
  await s.setEnabled('1',{skillId:'research-report',enabled:true});assert.equal((await s.list('1')).skills.find(x=>x.name==='research-report').enabled,true);assert.equal((await s.list('2')).skills.find(x=>x.name==='research-report').enabled,false,'turned on per project');
  await s.remove({skillId:'research-report'});l=await s.list('1');assert.equal(l.skills.length,all-1,'built-in Skills can be deleted and do not come back');assert.ok(!rows.some(r=>r.key==='nr-skill:research-report'));
  // Several at once (ticked in the list); unknown ones are ignored, none known is an error.
@@ -100,4 +100,23 @@ test('填链接: GitHub repository, folder and SKILL.md links, or an https SKILL
  assert.deepEqual(res,{imported:['brand-voice'],skipped:[{name:'faq',reason:'已有同名的 Skill'},{name:'gone',reason:'仓库里没有找到这个 Skill'}]});
  const added=(await s.list('1')).skills.find(x=>x.name==='brand-voice');assert.equal(added.source,'https://github.com/acme/skills/tree/main/skills/brand-voice');assert.deepEqual(added.files.map(f=>f.path),['refs/words.md']);assert.equal(added.enabled,false);
  await assert.rejects(s.importLink({url:'https://github.com/acme/skills',paths:[]}),/至少选一个/);await assert.rejects(s.importLink({url:'https://example.com/a/SKILL.md',paths:['x']}),/GitHub/);
+});
+
+test('read-only skill lists, details and agent material never mutate an outdated library',async()=>{
+ const {s,rows}=harness();
+ await s.library();
+ const library=rows.find(r=>r.key==='nr-skills');
+ library.payload.builtIns=1;
+ const newer=BUILT_IN_SKILLS.filter(s=>s.since>1);
+ assert.ok(newer.length);
+ library.payload.skills=library.payload.skills.filter(s=>!newer.some(b=>b.id===s.id));
+ for(let i=rows.length-1;i>=0;i--)if(newer.some(b=>rows[i].key===`nr-skill:${b.id}`))rows.splice(i,1);
+ const before=structuredClone(rows);
+ s.put=async()=>{throw new Error('Read attempted a write');};
+ s.lock=async()=>{throw new Error('Read attempted a transaction');};
+ const list=await s.list('1');
+ assert.ok(list.skills.some(s=>s.id===newer[0].id));
+ assert.equal((await s.get('1',{skillId:newer[0].id})).body,newer[0].body);
+ assert.equal((await s.forAgent('1',[newer[0].id]))[0].body,newer[0].body);
+ assert.deepEqual(rows,before);
 });
