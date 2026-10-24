@@ -1,4 +1,5 @@
 import { $t, getCurrentLocale } from '#i18n';
+import { ownSignalIds } from '../../../shared/opportunity-parts.js';
 import type {
   ArticleContent,
   ArticleField,
@@ -36,22 +37,24 @@ export function pageUrlsOf(data: TaskData): string[] {
   const e = (data.task.evidence || {}) as {
     page?: unknown;
     signalKey?: unknown;
+    part?: { signalIds?: unknown } | null;
     insight?: { target?: unknown; signalIds?: unknown } | null;
     context?: { signals?: { items?: { key?: unknown; url?: unknown }[] } };
   };
-  // A change handed off on its own (Insights › Today's changes) names its page and change instead of an opportunity.
-  const ids = new Set([
-    ...(Array.isArray(e.insight?.signalIds)
-      ? (e.insight.signalIds as unknown[])
-      : []),
-    ...(typeof e.signalKey === 'string' ? [e.signalKey] : []),
-  ]);
+  // A change handed off on its own (Insights › Today's changes) names its page and change instead of an opportunity;
+  // one of an opportunity's several tasks looks only at its own place, never at the opportunity's other pages.
+  const ids = new Set<unknown>(ownSignalIds(e));
   const cited = (e.context?.signals?.items || [])
     .filter((s) => ids.has(s.key))
     .map((s) => s.url);
   return [
     ...new Set(
-      [data.work.page?.url, e.page, e.insight?.target, ...cited]
+      [
+        data.work.page?.url,
+        e.page,
+        e.part ? undefined : e.insight?.target,
+        ...cited,
+      ]
         .filter((u): u is string => typeof u === 'string')
         .map((u) => u.trim())
         .filter((u) => /^https?:\/\//i.test(u)),
