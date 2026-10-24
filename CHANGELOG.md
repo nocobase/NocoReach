@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Competitors: a lookup that did not complete is tried again the next day
+
+- Search & market › Competitors kept a site's failed DataForSEO lookup for 30 days, like a successful one: its error stayed in the site's drawer and its traffic stayed empty until the monthly refresh. On Studio, our own site still showed `Operator "$gte" is not supported for Field "createdAt" of type "datetime"` from a lookup on 2026-10-09, before the classic filter bridge learned datetime comparisons (#13); DataForSEO lookups have worked since. A site whose last lookup did not complete is now due again a day later, at the daily refresh or when the page is opened. Only the failed parts cost again: DataForSEO reuses completed runs, and an uncertain run still blocks its query for the reuse time.
+- A site's drawer no longer says "Search data is still loading." under the error when its lookup failed.
+
 ## Unreleased — A result's drawer without follow-ups, in one text size
 
 - A result's drawer no longer offers Follow-ups or the full-width "Create follow-up" button (2026-10-23 user decision: the flow ran too long). The follow-up page, its routes, the `result-create` page permission, the `createFromResult` capability and the `nrStrategy:createFromResult` action are removed. Opportunities and tasks raised from a result before keep showing where they came from and keep working.
