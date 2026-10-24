@@ -26,7 +26,7 @@ import { hasTaskAgent } from './task-execution-types';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {createContext,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
-import {useNavigate,useSearchParams} from 'react-router';
+import {Outlet,useNavigate,useSearchParams} from 'react-router';
 import {useNavigationGuard,usePageBreadcrumb} from '@nocobase/app-client';
 import {Comparison} from './results/comparison.js';
 import {nocobaseClient as api,NocoReachHttpError} from "#lib/nocoreach-api";
@@ -44,6 +44,8 @@ import {cn} from '#lib/utils';
 import {Dialog,DialogContent,DialogHeader,DialogTitle} from '#components/ui/dialog';
 import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuCheckboxItem,DropdownMenuItem,DropdownMenuSeparator,DropdownMenuSub,DropdownMenuSubTrigger,DropdownMenuSubContent} from '#components/ui/dropdown-menu';
 import {TaskDraftScope,TaskDraftRecovery} from './task-detail/drafts.js';
+import {Checklist,RequestBox} from './task-detail/review-parts.js';
+import type {TaskPageContext} from './task-detail/reader-context.js';
 import {useTaskDraft,useTaskDraftStatus} from './task-detail/draft-store.js';
 import {DocReader,Markdown} from './doc-view';
 import {effectItems,effectLine,effectPages,type EffectResult} from './effect-model';
@@ -180,6 +182,8 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
   </div>
   <TechnicalDetails data={data} projectId={projectId} taskId={taskId} runs={runs}/>
   <EvidenceDialog open={evidenceOpen} onClose={()=>setEvidenceOpen(false)} data={data} projectId={projectId} taskId={taskId}/>
+  {/* The article's reading page (task-detail/article-reader.tsx) covers this page and keeps its scroll position. */}
+  <Outlet context={{data,update,busy,error,allowed:access.allowed,draftScope,crumb:no?`T-${no}`:data.task.title,heading} satisfies TaskPageContext}/>
   <Dialog open={pageOpen} onOpenChange={o=>{if(!o)setPageOpen(false);}}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>{$t('common.relatedPage')}</DialogTitle></DialogHeader><PageLinkEditor data={data} projectId={projectId} taskId={taskId} busy={busy} update={update}/></DialogContent></Dialog>
  </PageContainer></TaskActions.Provider></TaskAccess.Provider>;
 }
@@ -323,12 +327,6 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId,onEviden
   {attachments&&<Field label={$t('taskDetail.attachmentsDelivered')}><TaskMedia projectId={projectId} taskId={taskId}/></Field>}
  </StageCard>;
 }
-// Change feedback typed in the card itself, so it is never far from the result it is about.
-function RequestBox({executor,busy,onSend,onCancel}:{executor:string;busy:boolean;onSend:(text:string)=>Promise<boolean>;onCancel:()=>void}){
- const [value,setValue,clearValue]=useTaskDraft('request','');
- return <div className="flex flex-col gap-2"><Textarea autoFocus aria-label={$t('taskDetail.requestChanges')} rows={3} value={value} disabled={busy} placeholder={$t('taskDetail.writeFeedbackAfterSendRedoes',{0:executor})} onChange={e=>setValue(e.target.value)}/>
-  <div className="flex justify-end gap-2"><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{clearValue();onCancel();}}>{$t('common.cancel')}</Button><Button size="sm" disabled={busy||!value.trim()} onClick={()=>void onSend(value).then(ok=>{if(ok)clearValue();})}>{$t('taskDetail.sendRequestChanges')}</Button></div></div>;
-}
 // From the second version on: what was asked last time, above the version that answers it.
 function LastFeedback({w,stage,out}:{w:Work;stage:Stage;out:Artifact}){
  if(out.version<2)return null;
@@ -354,7 +352,6 @@ function PageChange({pr,content}:{pr?:PullRequestInfo;content:string}){
   </div>}
  </div>;
 }
-const Checklist=({stage,checked,setChecked,busy}:{stage:Stage;checked:string[];setChecked:(v:string[])=>void;busy:boolean})=>(stage.checklist||[]).length>0?<fieldset className={cn(text.body,'flex flex-col gap-2')}><legend className={cn(text.muted,'mb-2')}>{$t('taskDetail.confirmFollowing')}</legend>{stage.checklist!.map(c=><label key={c.key} className="flex items-center gap-2"><input type="checkbox" className="size-4 accent-primary" checked={checked.includes(c.key)} disabled={busy} onChange={e=>setChecked(e.target.checked?[...checked,c.key]:checked.filter(k=>k!==c.key))}/> {c.label}{c.required?'':$t('taskDetail.optional')}</label>)}</fieldset>:null;
 const ScopeConfirm=({pr,ok,setOk,busy}:{pr?:PullRequestInfo;ok:boolean;setOk:(v:boolean)=>void;busy:boolean})=>pr?.outOfScope?.length?<label className="flex items-start gap-2 text-sm text-destructive"><input type="checkbox" className="mt-0.5 size-4 accent-destructive" checked={ok} disabled={busy} onChange={e=>setOk(e.target.checked)}/> {$t('taskDetail.otherFilesChanged')}</label>:null;
 // The version under review, under the card's title: the Agent's own needs no name, since Properties shows the Agent
 // (2026-10-24 user request: "Agent · Version 2"); a version a person made says so, without assuming it was you.
@@ -400,7 +397,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
     {targetGone&&<p role='alert' className='text-sm text-destructive'>{$t('articles.targetMissing')}</p>}
     <LastFeedback w={w} stage={stage} out={out}/>
     {editing?<ArticleEditor data={data} article={out.article} draftKey={out.id} busy={busy} onCancel={()=>{setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}} onSave={async article=>{const d=await act('editArticleDraft',{artifactId:out.id,article});if(d){setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}return Boolean(d);}}/>:<>
-     <ArticleReview key={out.id} data={data} article={out.article} notes={out.content}/>
+     <ArticleReview key={out.id} data={data} article={out.article} notes={out.content} readerTo={(lang,view)=>`article?lang=${encodeURIComponent(lang)}&view=${view}`}/>
      <Checklist stage={stage} checked={checked} setChecked={setChecked} busy={busy}/>
     </>}
    </StageCard>;

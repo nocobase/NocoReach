@@ -139,7 +139,9 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
   page('growth-overview', '/home', () => import('./pages/strategy/index.js'), { title: nav('insights'), icon: Sparkles, order: 1 }),
   page('opportunity-library', '/opportunities', () => import('./pages/strategy/library.js'), { title: nav('opportunities'), icon: Lightbulb, order: 2 }),
   {...page('action-center', '/actions', () => import('./pages/optimization-work.js'), { title: nav('tasks'), icon: ListTodo, order: 3 }), children:[{name:'task-create',path:'new',auth:'required',authz:{resource:{type:'page',id:'task-create'},action:'access'},componentLoader:gated(() => import('./pages/task-create.js'))}]},
-  page('task-work', '/actions/:taskId', () => import('./pages/task-work.js')),
+  // The article's reading page covers the task (RouteChildPage) at /actions/:taskId/article; it renders inside the task
+  // page, which already passed the gates.
+  { ...page('task-work', '/actions/:taskId', () => import('./pages/task-work.js')), children: [{ name: 'task-article', path: 'article', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/task-detail/article-reader.js') }] },
   // 成果 is a dashboard; 全部成果 covers it at /results/all. A result's drawer opens over whichever of the two it was
   // opened from, so it is declared under both.
   { ...page('result-list', '/results', () => import('./pages/results/index.js'), { title: nav('results'), icon: ChartNoAxesCombined, order: 3.5 }), children: [
