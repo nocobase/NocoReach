@@ -35,8 +35,9 @@ export function stagesFor(p:Pick<Playbook,'steps'>):Stage[]{
  const stages:Stage[]=p.steps.map(s=>s.kind==='review'?{key:s.key,name:s.name,kind:'review',checklist:s.checklist||[]}:{key:s.key,name:s.name,kind:'agent',mode:s.kind,instruction:s.instruction||'',...(s.skills?.length?{skills:s.skills}:{})});
  return p.steps.some(s=>s.kind==='change')?[...stages,{key:'release',name:$t('common.live'),kind:'release'},{key:'observe',name:$t('common.watch'),kind:'observe'}]:stages;
 }
-// How a step reads in a one-line preview: “Agent 分析”, “你看方案”, “上线”.
-export const stageName=(s:Stage)=>s.kind==='release'?$t('common.live'):s.kind==='observe'?$t('common.watch'):s.name;
+// How a step reads in a one-line preview: “Agent 分析”, “你看方案”, “发布上线”. The release step is named by the interface,
+// not by its stored name (Publish since 2026-10-24, so the step after Review says what the system does).
+export const stageName=(s:Stage)=>s.kind==='release'?$t('playbook.publishStage'):s.kind==='observe'?$t('common.watch'):s.name;
 export const stageLabel=(s:Stage)=>s.kind==='review'?$t('common.yourAction',{0:stageName(s)}):s.kind==='agent'?`Agent ${stageName(s)}`:stageName(s);
 // Same rule as the server's defaultPlaybookId: the actions of the signals an opportunity cites.
 export function recommendedPlaybookId(actions:(string|null)[]){if(actions.includes('optimize'))return 'optimize-page';if(actions.includes('technical'))return 'tech-fix';if(actions.includes('reply'))return 'community-reply';if(actions.includes('create'))return 'content-outline';if(actions.includes('distribute'))return 'release-notes';return actions.length?'change-research':'optimize-page';}
