@@ -186,7 +186,7 @@ const article = (changes: string[], locale: Record<string, string>) => ({
   changes,
 });
 
-it('opens a body change as it will read, with Compare beside it', async () => {
+it('opens a body change as it will read, with Changes beside it', async () => {
   render(
     <ArticleReview
       data={data}
@@ -205,7 +205,7 @@ it('opens a body change as it will read, with Compare beside it', async () => {
   );
   // Two ways to read it, and no separate view of the earlier version (2026-10-24 user request).
   expect(screen.queryByRole('button', { name: 'Before' })).toBeNull();
-  await userEvent.click(screen.getByRole('button', { name: 'Compare' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Changes' }));
   expect(screen.getByText(/old\.png/)).toBeInTheDocument();
   expect(screen.getByText(/new\.png/)).toBeInTheDocument();
 });
@@ -218,7 +218,7 @@ it('opens a title-only change field by field', () => {
       notes=''
     />,
   );
-  expect(screen.getByRole('button', { name: 'Compare' })).toHaveAttribute(
+  expect(screen.getByRole('button', { name: 'Changes' })).toHaveAttribute(
     'aria-pressed',
     'true',
   );

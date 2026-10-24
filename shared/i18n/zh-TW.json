@@ -6936,7 +6936,7 @@
   "articleTask.unchanged": "未修改",
   "articleTask.viewAs": "檢視方式",
   "articleTask.viewPreview": "預覽",
-  "articleTask.viewCompare": "對比",
+  "articleTask.viewChanges": "改動",
   "articleTask.previewEmpty": "這個語言還沒有正文",
   "articleTask.imageFailed": "無法載入",
   "markdownEditor.mode": "編輯方式",

@@ -145,7 +145,7 @@ it('reviews an article field by field against its source, per language', async (
     'aria-pressed',
     'true',
   );
-  await userEvent.click(screen.getByRole('button', { name: 'Compare' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Changes' }));
   const panel = screen.getByRole('tabpanel');
   expect(within(panel).getByText('新的中文正文')).toBeInTheDocument();
   expect(within(panel).getByText('中文正文')).toBeInTheDocument();
@@ -189,7 +189,7 @@ it('a new article shows its target, kind and status as tags, in the languages it
     'English',
   ]);
   expect(screen.getByText('Only English was written this time.')).toBeVisible();
-  expect(screen.queryByRole('button', { name: 'Compare' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Changes' })).toBeNull();
   expect(screen.queryByText('Address (slug)')).toBeNull();
   expect(screen.getByRole('heading', { name: 'Internal tools' })).toBeVisible();
 });

@@ -6970,7 +6970,7 @@
   "articleTask.unchanged": "未修改",
   "articleTask.viewAs": "查看方式",
   "articleTask.viewPreview": "预览",
-  "articleTask.viewCompare": "对比",
+  "articleTask.viewChanges": "改动",
   "articleTask.previewEmpty": "这个语言还没有正文",
   "articleTask.imageFailed": "无法加载",
   "markdownEditor.mode": "编辑方式",

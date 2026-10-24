@@ -70,8 +70,8 @@ const revisedText = (
   };
 };
 
-/** How a changed language is read: as it will be, or field by field against the version it was written from. */
-type View = 'preview' | 'compare';
+/** How a changed language is read: as it will be, or its changes field by field against the version it was written from. */
+type View = 'preview' | 'changes';
 
 const draftContent = (
   a: Pick<ArticleProposal, 'draft'>,
@@ -295,16 +295,16 @@ export function ArticleReview({
   const isNew = !a.articleId;
   const changed = (l: string) => a.changes.some((c) => c.startsWith(`${l}.`));
   const [tab, setTab] = useState(locales.find(changed) || locales[0]);
-  // Two ways to read a changed language, Preview | Compare (2026-10-24 user request: the reader needs what it will be
+  // Two ways to read a changed language, Preview | Changes (2026-10-24 user request: the reader needs what it will be
   // and what changed; a separate view of the earlier version, a text link for it and change counts on the tabs were
-  // noise). Preview first when the language's body changed; Compare when only its title or description did. A new
+  // noise). Preview first when the language's body changed; Changes when only its title or description did. A new
   // article, or a language the article did not have, has one version and no switch.
   const [views, setViews] = useState<Record<string, View>>({});
   const versions = !isNew && Boolean(base?.locales[tab]);
   const view: View = !versions
     ? 'preview'
     : (views[tab] ??
-      (a.changes.includes(`${tab}.body`) ? 'preview' : 'compare'));
+      (a.changes.includes(`${tab}.body`) ? 'preview' : 'changes'));
   const draft = draftContent(a);
   const names = (list: string[]) =>
     joinNames(list.map((l) => localeName(l, getCurrentLocale())));
@@ -367,7 +367,7 @@ export function ArticleReview({
             onChange={(v) => setViews({ ...views, [tab]: v as View })}
             options={[
               { id: 'preview', label: $t('articleTask.viewPreview') },
-              { id: 'compare', label: $t('articleTask.viewCompare') },
+              { id: 'changes', label: $t('articleTask.viewChanges') },
             ]}
             className='mb-1.5'
           />
@@ -381,7 +381,7 @@ export function ArticleReview({
         </p>
       )}
       <div role='tabpanel' className='flex flex-col gap-3'>
-        {view !== 'compare' ? (
+        {view !== 'changes' ? (
           <ArticlePreview
             key={tab}
             text={revisedText(a, base, tab)}

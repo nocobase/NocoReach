@@ -6970,7 +6970,7 @@
   "articleTask.unchanged": "Unchanged",
   "articleTask.viewAs": "View as",
   "articleTask.viewPreview": "Preview",
-  "articleTask.viewCompare": "Compare",
+  "articleTask.viewChanges": "Changes",
   "articleTask.previewEmpty": "No body in this language yet",
   "articleTask.imageFailed": "Could not load",
   "markdownEditor.mode": "Editor view",

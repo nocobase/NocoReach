@@ -6936,7 +6936,7 @@
   "articleTask.unchanged": "変更なし",
   "articleTask.viewAs": "表示方法",
   "articleTask.viewPreview": "プレビュー",
-  "articleTask.viewCompare": "比較",
+  "articleTask.viewChanges": "変更点",
   "articleTask.previewEmpty": "この言語の本文はまだありません",
   "articleTask.imageFailed": "読み込めません",
   "markdownEditor.mode": "編集表示",

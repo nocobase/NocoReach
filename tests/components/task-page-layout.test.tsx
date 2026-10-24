@@ -789,6 +789,48 @@ function liveArticle(): TaskData {
   return data;
 }
 
+// 2026-10-24 user report: an article's review card asked for release notes, which no publishing target receives.
+test('an article review has no release notes to edit, and the live card none to show', async () => {
+  const user = userEvent.setup();
+  const data = liveArticle();
+  const [artifact] = data.work.results as NonNullable<
+    TaskData['work']['results'][number]
+  >[];
+  data.work.stage = 'flow';
+  data.work.stageIndex = 1;
+  delete data.work.release;
+  delete (artifact as { approvedAt?: string }).approvedAt;
+  const view = mount(data);
+  const card = screen.getByRole('region', { name: '等你处理' });
+  expect(
+    within(card).getByText('Top 12 Open Source No-Code AI Tools (2026)'),
+  ).toBeVisible();
+  expect(within(card).queryByRole('button', { name: /发布说明/ })).toBeNull();
+  action.mockImplementation((resource: string, command: string) =>
+    Promise.resolve(
+      command === 'advance'
+        ? data
+        : resource === 'nrPlaybooks'
+          ? { playbooks: [] }
+          : [],
+    ),
+  );
+  await user.click(within(card).getByRole('button', { name: '通过并发布' }));
+  const approve = action.mock.calls.find(([, c]) => c === 'advance');
+  expect(approve?.[2]?.body).toMatchObject({ command: 'approveStage' });
+  expect(approve?.[2]?.body).not.toHaveProperty('release');
+  view.unmount();
+  mount(liveArticle());
+  expect(
+    within(screen.getByRole('region', { name: '已完成' })).queryByRole(
+      'button',
+      {
+        name: /发布说明/,
+      },
+    ),
+  ).toBeNull();
+});
+
 test('a live article names what changed on its card and shows each field before and after', async () => {
   const user = userEvent.setup();
   mount(liveArticle());
@@ -847,7 +889,7 @@ test('a new article that went live is named as one and opens as the article', as
   expect(
     within(dialog).getByRole('heading', { name: 'New post' }),
   ).toBeVisible();
-  expect(within(dialog).queryByRole('button', { name: '对比' })).toBeNull();
+  expect(within(dialog).queryByRole('button', { name: '改动' })).toBeNull();
 });
 
 test('a live page change names what readers see differently and opens it', async () => {

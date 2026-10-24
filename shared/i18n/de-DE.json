@@ -6936,7 +6936,7 @@
   "articleTask.unchanged": "Unverändert",
   "articleTask.viewAs": "Anzeigen als",
   "articleTask.viewPreview": "Vorschau",
-  "articleTask.viewCompare": "Vergleichen",
+  "articleTask.viewChanges": "Änderungen",
   "articleTask.previewEmpty": "In dieser Sprache gibt es noch keinen Text",
   "articleTask.imageFailed": "Konnte nicht geladen werden",
   "markdownEditor.mode": "Editoransicht",
