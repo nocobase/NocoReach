@@ -2,7 +2,7 @@
 
 ## Unreleased — A new article reads as one
 
-- The article review card states the address and the status after publishing on the target line ("Address internal-tool-builder · Status after publishing Draft") instead of a tab with a diff block for each; a changed article names only what changes ("Status after publishing Published → Draft"). Conflicts and post-publish drift show a changed address or status the same way.
+- The article review card opens with tags instead of a sentence and a tab with a diff block for the address and the status: the target by its own name (a mark tells a CMS from a Git repository), New article or Update article, and the status it is published with (Save as draft, Publish publicly, Make draft). A new article adds its address; a changed one names its title, and its address only when it changes. Other targets get the same row after "Also to". Conflicts and post-publish drift show a changed address or status inline.
 - A new article's language tabs carry no change count and it has no Changes view; once live, its card says "New article" with View article instead of listing changed fields.
 - A language with no text in the draft or the article is left out of the tabs, with a line under them: "Only English was written this time." for a new article, "This article has no Chinese version." for a changed one.
 - In Chinese, Traditional Chinese and Japanese, the Published status reads as a state rather than as the verb.

@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { $t, getCurrentLocale } from '#i18n';
 import { Button } from '#components/ui/button';
 import { Input } from '#components/ui/input';
@@ -22,6 +22,8 @@ import {
   type ArticleStatus,
 } from '../../../shared/article-publishing.js';
 import { Reveal } from '#components/reach/reveal';
+import { Tag } from '#components/reach/tag';
+import { GitBranch, Globe } from 'lucide-react';
 import { lineTabClass, lineTabListClass } from '#components/reach/line-tabs';
 import { Segmented } from '#components/reach/segmented';
 import { cn } from '#lib/utils';
@@ -77,67 +79,80 @@ const draftContent = (
   locales: a.draft.locales,
 });
 
-const statusText = (v?: string) =>
-  v
-    ? $t(
-        v === 'published'
-          ? 'articleTask.statusPublished'
-          : 'articleTask.statusDraft',
-      )
-    : '';
+// Where the article goes and what it becomes, as tags rather than a sentence (2026-10-24 user request, as the task
+// header's steps): the target by its own name with a mark for its kind, new or update, and the status it is published
+// with. A changed article names its address and status only when they change.
+const KIND_ICON: Record<string, ReactNode> = {
+  'git-files': <GitBranch aria-hidden='true' />,
+};
 
-/**
- * The article's address and status after publishing, as properties on one line (2026-10-24 user report: each was a
- * tab with a diff block, a wide green bar for one word). A new article states them; a changed one names only what
- * changes, as "Address old → new".
- */
-function articleFacts(
-  a: Pick<ArticleProposal, 'articleId' | 'draft' | 'changes'>,
-  base: Pick<ArticleContent, 'slug' | 'status'> | null,
-  withStatus: boolean,
-) {
-  const facts: { label: string; before?: string; after: string }[] = [];
-  if (!a.articleId) {
-    if (a.draft.slug)
-      facts.push({ label: $t('articleTask.address'), after: a.draft.slug });
-    // A new article without a status is created as a draft where the target keeps one.
-    const status = a.draft.status ?? (withStatus ? 'draft' : undefined);
-    if (status)
-      facts.push({
-        label: $t('articleTask.statusAfterPublish'),
-        after: statusText(status),
-      });
-    return facts;
-  }
-  if (a.changes.includes('slug'))
-    facts.push({
-      label: $t('articleTask.address'),
-      before: base?.slug,
-      after: a.draft.slug || '',
-    });
-  if (a.changes.includes('status'))
-    facts.push({
-      label: $t('articleTask.statusAfterPublish'),
-      before: statusText(base?.status),
-      after: statusText(a.draft.status),
-    });
-  return facts;
+type TargetTagsProps = {
+  /** Before the tags for another target than the primary ("Also to"). */
+  lead?: string;
+  name: string;
+  kind?: string;
+  isNew: boolean;
+  /** An existing article's title. */
+  title?: string;
+  slug?: string;
+  slugBefore?: string;
+  status?: string;
+  /** The status changes on an existing article (Make draft) rather than being set on a new one (Save as draft). */
+  statusChange?: boolean;
+  children?: ReactNode;
+};
+
+function TargetTags({
+  lead,
+  name,
+  kind,
+  isNew,
+  title,
+  slug,
+  slugBefore,
+  status,
+  statusChange = false,
+  children,
+}: TargetTagsProps) {
+  const published = status === 'published';
+  return (
+    <div className='flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 text-sm'>
+      {lead && <span className='text-muted-foreground'>{lead}</span>}
+      <Tag
+        tone='grey'
+        icon={KIND_ICON[kind || ''] ?? <Globe aria-hidden='true' />}
+      >
+        {name}
+      </Tag>
+      <Tag tone='grey'>
+        {isNew ? $t('articleTask.newArticle') : $t('articleTask.updateArticle')}
+      </Tag>
+      {status && (
+        <Tag tone={published ? 'green' : 'grey'}>
+          {$t(
+            statusChange
+              ? published
+                ? 'articleTask.toPublished'
+                : 'articleTask.toDraft'
+              : published
+                ? 'articleTask.asPublished'
+                : 'articleTask.asDraft',
+          )}
+        </Tag>
+      )}
+      {title && <span className='min-w-0 break-words'>{title}</span>}
+      {slug && (
+        <span className='min-w-0 break-all text-muted-foreground'>
+          {slugBefore && slugBefore !== slug ? `${slugBefore} → ` : ''}
+          {slug}
+        </span>
+      )}
+      {children}
+    </div>
+  );
 }
 
-function Facts({ facts }: { facts: ReturnType<typeof articleFacts> }) {
-  return facts.map((f) => (
-    <span key={f.label}>
-      {' · '}
-      {f.label}{' '}
-      <span className='text-foreground'>
-        {f.before ? `${f.before} → ` : ''}
-        {f.after}
-      </span>
-    </span>
-  ));
-}
-
-function TargetLine({
+function PrimaryTags({
   target,
   a,
   base,
@@ -146,32 +161,41 @@ function TargetLine({
   a: ArticleProposal;
   base: ArticleContent | null;
 }) {
-  const name = target?.name || a.targetId;
-  const title = base
-    ? base.locales[target?.locales[0] || '']?.title || base.slug
-    : '';
+  const isNew = !a.articleId;
   return (
-    <p className='text-sm text-muted-foreground'>
-      {a.articleId
-        ? $t('articleTask.updateLine', {
-            0: name,
-            1: title,
-            2: base?.slug || '',
-          })
-        : $t('articleTask.createLine', { 0: name })}
-      <Facts facts={articleFacts(a, base, Boolean(target?.status))} />
-    </p>
+    <TargetTags
+      name={target?.name || a.targetId}
+      kind={target?.kind}
+      isNew={isNew}
+      title={
+        isNew
+          ? undefined
+          : base?.locales[target?.locales[0] || '']?.title || undefined
+      }
+      // An existing article is named by its title; its address only when it changes.
+      slug={isNew || a.changes.includes('slug') ? a.draft.slug : undefined}
+      slugBefore={!isNew && a.changes.includes('slug') ? base?.slug : undefined}
+      // A new article without a status is created as a draft where the target keeps one.
+      status={
+        isNew
+          ? (a.draft.status ?? (target?.status ? 'draft' : undefined))
+          : a.changes.includes('status')
+            ? a.draft.status
+            : undefined
+      }
+      statusChange={!isNew}
+    />
   );
 }
 
 /**
- * One line per other target: update or new article, and what that target cannot hold. An update can be compared with
+ * One row per other target: update or new article, and what that target cannot hold. An update can be compared with
  * that target's own version, which may differ from the primary's.
  */
 function AlsoLines({ data, a }: { data: TaskData; a: ArticleProposal }) {
   return (a.also || []).map((x) => {
-    const name = nameOf(data, x.targetId),
-      base = x.baseKey ? data.articleBases?.[x.baseKey] || null : null;
+    const base = x.baseKey ? data.articleBases?.[x.baseKey] || null : null,
+      target = data.articleTargets?.find((t) => t.id === x.targetId);
     const left = x.skipped.map((p) =>
       p.includes('.') || p === 'status'
         ? fieldLabel(p)
@@ -181,23 +205,32 @@ function AlsoLines({ data, a }: { data: TaskData; a: ArticleProposal }) {
       fields = x.changes.filter((p) => p.includes('.'));
     return (
       <div key={x.targetId} className='flex min-w-0 flex-col gap-1'>
-        <p className='text-sm text-muted-foreground'>
-          {x.articleId
-            ? $t('articleTask.alsoUpdateLine', {
-                0: name,
-                1: x.title || x.slug,
-                2: x.slug,
-              })
-            : $t('articleTask.alsoCreateLine', { 0: name })}
-          {x.articleId && base && (
-            <Facts facts={articleFacts(x, base, false)} />
+        <TargetTags
+          lead={$t('articleTask.alsoTo')}
+          name={nameOf(data, x.targetId)}
+          kind={target?.kind}
+          isNew={!x.articleId}
+          title={x.articleId ? x.title || undefined : undefined}
+          slug={!x.articleId || x.changes.includes('slug') ? x.slug : undefined}
+          slugBefore={
+            x.articleId && x.changes.includes('slug') ? base?.slug : undefined
+          }
+          status={x.changes.includes('status') ? x.draft.status : undefined}
+          statusChange={Boolean(x.articleId)}
+        >
+          {left.length > 0 && (
+            <span className='text-muted-foreground'>
+              {$t('articleTask.skipped', { 0: joinNames(left) })}
+            </span>
           )}
-          {left.length > 0 &&
-            ` · ${$t('articleTask.skipped', { 0: joinNames(left) })}`}
-        </p>
+        </TargetTags>
         {x.articleId && base && fields.length > 0 && (
           <div className='border-l pl-3'>
-            <Reveal label={$t('articleTask.alsoChanges', { 0: name })}>
+            <Reveal
+              label={$t('articleTask.alsoChanges', {
+                0: nameOf(data, x.targetId),
+              })}
+            >
               <ChangeView
                 changes={fields.map((p) =>
                   fieldChange(p, valueAt(base, p), valueAt(draft, p)),
@@ -283,7 +316,7 @@ export function ArticleReview({
   return (
     <div className='flex flex-col gap-4'>
       <AgentNotes summary={a.draft.summary} notes={notes} />
-      <TargetLine target={target} a={a} base={base} />
+      <PrimaryTags target={target} a={a} base={base} />
       {!settled && !a.changes.length && a.carried?.length ? (
         <p className='text-sm text-muted-foreground'>
           {$t('articleTask.alreadyPublished', {

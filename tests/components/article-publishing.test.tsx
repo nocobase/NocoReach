@@ -92,6 +92,9 @@ beforeEach(() => {
   vi.mocked(playbookRequest).mockResolvedValue(PLAYBOOKS as never);
 });
 afterEach(() => setDictionary(null));
+// The target, new or update, and status tags at the top of the review card, in order.
+const tagTexts = (root: ParentNode = document) =>
+  [...root.querySelectorAll('[data-slot="tag"]')].map((t) => t.textContent);
 
 const target = {
   id: 'cms',
@@ -132,9 +135,8 @@ it('reviews an article field by field against its source, per language', async (
       notes='Rewrote the Chinese body.'
     />,
   );
-  expect(
-    screen.getByText('Publishes to NocoBase CMS · updates "Hello" (hello)'),
-  ).toBeInTheDocument();
+  expect(tagTexts()).toEqual(['NocoBase CMS', 'Update article']);
+  expect(screen.getByText('Hello')).toBeInTheDocument();
   const tabs = screen.getAllByRole('tab');
   expect(tabs.map((t) => t.textContent)).toEqual([
     'English',
@@ -157,9 +159,9 @@ it('reviews an article field by field against its source, per language', async (
   ).toBeInTheDocument();
 });
 
-// 2026-10-24 user report on T-39: the address and status were tabs with a diff block each, the new article's English
-// tab read "3 changes", and Chinese and Japanese were empty tabs.
-it('a new article states its address and status on one line, in the languages it has, without change counts', () => {
+// 2026-10-24 user report on T-39: the address and status were tabs with a diff block each (then one grey sentence),
+// the new article's English tab read "3 changes", and Chinese and Japanese were empty tabs.
+it('a new article shows its target, kind and status as tags, in the languages it has, without change counts', () => {
   render(
     <ArticleReview
       data={
@@ -184,14 +186,8 @@ it('a new article states its address and status on one line, in the languages it
       notes=''
     />,
   );
-  expect(
-    screen.getByText(
-      (_, el) =>
-        el?.tagName === 'P' &&
-        el.textContent ===
-          'Publishes to NocoBase CMS · new article · Address internal-tool-builder · Status after publishing Draft',
-    ),
-  ).toBeInTheDocument();
+  expect(tagTexts()).toEqual(['NocoBase CMS', 'New article', 'Save as draft']);
+  expect(screen.getByText('internal-tool-builder')).toBeInTheDocument();
   expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
     'English',
   ]);
@@ -201,7 +197,7 @@ it('a new article states its address and status on one line, in the languages it
   expect(screen.getByRole('heading', { name: 'Internal tools' })).toBeVisible();
 });
 
-it('a changed article names a changed status inline and leaves out a language it does not have', () => {
+it('a changed article tags a changed status and leaves out a language it does not have', () => {
   render(
     <ArticleReview
       data={
@@ -220,14 +216,9 @@ it('a changed article names a changed status inline and leaves out a language it
       notes=''
     />,
   );
-  expect(
-    screen.getByText(
-      (_, el) =>
-        el?.tagName === 'P' &&
-        el.textContent ===
-          'Publishes to NocoBase CMS · updates "Hello" (hello) · Status after publishing Published → Draft',
-    ),
-  ).toBeInTheDocument();
+  expect(tagTexts()).toEqual(['NocoBase CMS', 'Update article', 'Make draft']);
+  // An existing article is named by its title; its unchanged address is left out.
+  expect(screen.queryByText('hello')).toBeNull();
   expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
     'English (1 changes)',
   ]);
@@ -438,8 +429,8 @@ it('shows status changes as words in the review', () => {
       notes=''
     />,
   );
-  // On the target line, as a word: no tab or diff for one value.
-  expect(screen.getByText('Draft')).toBeInTheDocument();
+  // A tag at the top, as words: no tab or diff for one value.
+  expect(tagTexts()).toContain('Save as draft');
   expect(screen.queryByRole('tab', { name: 'Status' })).toBeNull();
 });
 
@@ -779,10 +770,16 @@ it('reviews the other targets: update or new, and what each cannot hold', () => 
       notes=''
     />,
   );
+  expect(tagTexts()).toEqual([
+    'NocoBase CMS',
+    'Update article',
+    'News',
+    'Update article',
+  ]);
+  expect(screen.getByText('Also to')).toBeInTheDocument();
+  expect(screen.getByText('Hello (news)')).toBeInTheDocument();
   expect(
-    screen.getByText(
-      'Also publishes to News · updates "Hello (news)" (hello) · Without: Chinese · Title, Japanese',
-    ),
+    screen.getByText('Without: Chinese · Title, Japanese'),
   ).toBeInTheDocument();
 });
 
