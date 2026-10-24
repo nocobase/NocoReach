@@ -268,17 +268,6 @@ export async function readResult(
       new Error(systemMessageText('strategy.opportunityNotFound')),
       { status: 404 },
     );
-  const state = (await service.snapshot(`strategy:${project}`)) || {
-    revision: 0,
-  };
-  const followUps = [
-    ...(state.resultOpportunities || [])
-      .filter((o) => o.resultSource.taskId === String(task.id))
-      .map((o) => ({ kind: 'opportunity', id: o.id, title: o.title })),
-    ...(state.proposals || [])
-      .filter((p) => p.taskId && p.resultSource?.taskId === String(task.id))
-      .map((p) => ({ kind: 'task', id: String(p.taskId), title: p.title })),
-  ];
   const receipt = work.receipt as { note?: string } | null;
   return {
     task: {
@@ -300,8 +289,6 @@ export async function readResult(
     observeFrom: work.observeFrom || null,
     pages,
     results: work.observation?.results || [],
-    followUps,
-    strategyRevision: state.revision,
   };
 }
 

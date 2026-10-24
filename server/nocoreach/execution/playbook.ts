@@ -90,7 +90,7 @@ export const DRAFT_SYSTEM = `你是 NocoReach 的做法设计助手，使用中�
 步骤只有三种：analyze（Agent 读资料、仓库和公开网页，写出一份文档，不改仓库）、change（Agent 修改网站源码仓库并开 PR）、review（人审核，可写 0–5 条审核时要确认的事项）。每个 analyze 或 change 之后都要紧跟一个 review；有 change 的做法最后一步是名为“看效果并发布”的 review。步骤一般 2–6 个，不要为了凑数加步骤。
 category 只能是 research（调研分析）、create（内容创作）、optimize（内容优化）、technical（网站技术）之一。name 不超过 12 个字，以动作开头，不与 existing 重名；description 一句话，不超过 40 个字；每个 analyze/change 的 instruction 写清 Agent 具体要做什么、产出什么，不超过 300 字；step name 不超过 8 个字。
 只输出一个 json 代码块：{"name":"","category":"","description":"","steps":[{"kind":"","name":"","instruction":"","checklist":[{"label":""}]}]}`;
-const firstJson = (raw: string) => { const fenced = [...String(raw || '').matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].map(m => m[1]); for (const b of [...fenced, String(raw || '').trim()]) { try { const d = JSON.parse(b); if (d && typeof d === 'object') return d; } catch { /* next */ } } return null; };
+export const firstJson = (raw: string) => { const fenced = [...String(raw || '').matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].map(m => m[1]); for (const b of [...fenced, String(raw || '').trim()]) { try { const d = JSON.parse(b); if (d && typeof d === 'object') return d; } catch { /* next */ } } return null; };
 export async function draftPlaybook(v: any, list: { playbooks: Playbook[] }, project: any, complete: (system: string, user: string) => Promise<string>) {
   const request = text(v?.request, 500);
   const input = JSON.stringify({ request, project: memoryForAI(project), existing: list.playbooks.map(p => p.name) });
