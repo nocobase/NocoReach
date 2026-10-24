@@ -12,7 +12,7 @@ for (const directory of [source, destination]) {
   const manifest = JSON.parse(
     readFileSync(path.join(directory, 'package.json'), 'utf8'),
   );
-  if (manifest.version !== '0.1.0-beta.0') {
+  if (manifest.version !== '0.1.0-beta.1') {
     throw new Error(
       'Review the Demo Mode migration compatibility patch before upgrading.',
     );

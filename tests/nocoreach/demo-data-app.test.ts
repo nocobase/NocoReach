@@ -8,7 +8,10 @@ import {
   DEFAULT_ADMIN_CREDENTIALS,
   signIn,
 } from '@nocobase/app-plugin-authentication/testing';
-import { demoDataToken } from '@nocobase/app-plugin-demo-mode/server/tokens';
+import {
+  demoDataToken,
+  demoConfigurationToken,
+} from '@nocobase/app-plugin-demo-mode/server/tokens';
 import { userManagementServiceToken } from '@nocobase/app-plugin-users/server/tokens';
 import { driveManagerToken } from '@nocobase/app-server/drive';
 import { createStandaloneServer } from '../../server/standalone';
@@ -57,15 +60,39 @@ const json = { 'Content-Type': 'application/json', origin: 'http://localhost' };
 
 describe('read-only demo conversations', () => {
   const test = conversationTest;
-  test('lets visitors talk to the online agent in demo projects only when the administrator allows it', async ({
+  test('enables integrated demo chat by default and preserves explicit disabled overrides', async ({
     testApp,
   }) => {
     const runtime = testApp.application.container.resolve(nocoReachToken);
     await runtime.ready;
     const demo = testApp.application.container.resolve(demoDataToken);
     const online = testApp.application.container.resolve(onlineAgentsToken);
-    await expect(online.resolveModel()).rejects.toMatchObject({
-      reason: 'DEMO_CHAT_DISABLED',
+    const demoConfiguration = testApp.application.container.resolve(
+      demoConfigurationToken,
+    );
+    const read = vi.fn(async () => 'local result');
+    const mock = vi.fn(async () => 'simulated result');
+    expect(
+      await demoConfiguration.runChatTool('daily_analysis', {
+        readOnly: true,
+        run: read,
+      }),
+    ).toBe('local result');
+    expect(
+      await demoConfiguration.runChatTool('query_data', {
+        readOnly: true,
+        run: read,
+      }),
+    ).toBe('local result');
+    expect(
+      await demoConfiguration.runChatTool('read_page', { run: read, mock }),
+    ).toBe('simulated result');
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(mock).toHaveBeenCalledTimes(1);
+
+    await expect(online.resolveModel()).resolves.toEqual({
+      modelService: demo.models.serviceName,
+      model: 'demo-chat',
     });
     const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
     const initial = await (await admin.fetch('/demoMode/configuration')).json();
@@ -162,6 +189,24 @@ describe('read-only demo conversations', () => {
         })
       ).status,
     ).toBe(403);
+    const current = (
+      await (await admin.fetch('/demoMode/configuration')).json()
+    ).data;
+    expect(
+      (
+        await admin.fetch('/demoMode/configuration/chat', {
+          method: 'PUT',
+          headers: json,
+          body: JSON.stringify({
+            expectedRevision: current.revision,
+            value: { enabled: false, tools: {} },
+          }),
+        })
+      ).status,
+    ).toBe(200);
+    await expect(online.resolveModel()).rejects.toMatchObject({
+      reason: 'DEMO_CHAT_DISABLED',
+    });
   });
 });
 

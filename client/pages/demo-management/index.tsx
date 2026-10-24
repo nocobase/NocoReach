@@ -1,6 +1,5 @@
 import {
   DemoModeSettings,
-  type DemoChatTool,
   type DemoLabelKind,
 } from '@nocobase/app-plugin-demo-mode/client/settings';
 import type { ReactElement } from 'react';
@@ -17,28 +16,7 @@ const LABELS: Partial<Record<DemoLabelKind, Record<string, string>>> = {
     opportunities: 'demoData.counts.opportunities',
     knowledge: 'demoData.counts.knowledge',
   },
-  adapter: {
-    'dataset.model': 'demoConfig.adapterModel',
-    'nocoreach.sources': 'demoConfig.adapterSources',
-    'nocoreach.runner': 'demoConfig.adapterRunner',
-  },
-  chatTool: {
-    task_list: 'demoConfig.chatTool.taskList',
-    task_get: 'demoConfig.chatTool.taskGet',
-    project_data: 'demoConfig.chatTool.projectData',
-    read_page: 'demoConfig.chatTool.readPage',
-    task_execute: 'demoConfig.chatTool.taskExecute',
-  },
 };
-
-/** The online Agent's tools (`server/nocoreach/online-agent/host.ts`): local reads, or simulated outside work. */
-const CHAT_TOOLS: readonly DemoChatTool[] = [
-  { id: 'task_list', policies: ['read'] },
-  { id: 'task_get', policies: ['read'] },
-  { id: 'project_data', policies: ['read'] },
-  { id: 'read_page', policies: ['mock'] },
-  { id: 'task_execute', policies: ['mock'] },
-];
 
 function label(kind: DemoLabelKind, id: string): string | undefined {
   const key = LABELS[kind]?.[id];
@@ -50,11 +28,7 @@ export default function DemoManagementPage(): ReactElement {
   useNocoReachLocale();
   return (
     <PageContainer>
-      <DemoModeSettings
-        label={label}
-        chatTools={CHAT_TOOLS}
-        components={demoSettingsComponents}
-      />
+      <DemoModeSettings label={label} components={demoSettingsComponents} />
     </PageContainer>
   );
 }

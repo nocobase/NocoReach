@@ -145,9 +145,13 @@ export function createNocoReachOnlineHost(
         execute: async (args, signal) => {
           await authorizeDemo();
           const configuration = plugin.demoConfiguration;
-          const readOnly = ['task_list', 'task_get', 'project_data'].includes(
-            tool.name,
-          );
+          const readOnly = [
+            'task_list',
+            'task_get',
+            'project_data',
+            'daily_analysis',
+            'query_data',
+          ].includes(tool.name);
           const runTool = () => tool.execute(args, signal);
           return configuration
             ? configuration.runChatTool(tool.name, {

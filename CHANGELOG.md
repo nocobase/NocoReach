@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Demo Mode beta.1
+
+- Upgrade Demo Mode to `0.1.0-beta.1` and Agents to `1.0.0-beta.22`; retain the original eight-migration compatibility chain and existing demo data.
+- Adopt the simplified Overview and Daily reset management page, removing obsolete chat tool and adapter label options. Preserve saved write policies, simulation overrides and schedules through the existing configuration APIs.
+- Use default-enabled integrated demo chat and server-declared local reads, including daily analysis and data queries, while keeping external work simulated and respecting explicit disabled overrides.
+
 ## Unreleased — Read-only Skills browsing
 
 - Render missing built-in Skills without persisting them during list, detail or Agent material reads, preventing Demo Mode write refusals when opening Playbooks. Preserve edited and deleted Skills and persist pending built-ins only during mutations or startup upgrades.
