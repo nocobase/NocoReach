@@ -70,8 +70,8 @@ const revisedText = (
   };
 };
 
-/** How a changed language is read: as it will be, as it was, or field by field. */
-type View = 'after' | 'before' | 'compare';
+/** How a changed language is read: as it will be, or field by field against the version it was written from. */
+type View = 'preview' | 'compare';
 
 const draftContent = (
   a: Pick<ArticleProposal, 'draft'>,
@@ -295,16 +295,16 @@ export function ArticleReview({
   const isNew = !a.articleId;
   const changed = (l: string) => a.changes.some((c) => c.startsWith(`${l}.`));
   const [tab, setTab] = useState(locales.find(changed) || locales[0]);
-  // One switch for the three ways to read a changed language, After | Before | Compare (2026-10-24 user request: a
-  // Preview | Changes switch plus a text link for the earlier version, and change counts on the tabs, read oddly).
-  // After first when the language's body changed; Compare when only its title or description did. A new article, or a
-  // language the article did not have, has one version and no switch.
+  // Two ways to read a changed language, Preview | Compare (2026-10-24 user request: the reader needs what it will be
+  // and what changed; a separate view of the earlier version, a text link for it and change counts on the tabs were
+  // noise). Preview first when the language's body changed; Compare when only its title or description did. A new
+  // article, or a language the article did not have, has one version and no switch.
   const [views, setViews] = useState<Record<string, View>>({});
-  const previous = base?.locales[tab] ? base.locales[tab] : null,
-    versions = !isNew && Boolean(previous);
+  const versions = !isNew && Boolean(base?.locales[tab]);
   const view: View = !versions
-    ? 'after'
-    : (views[tab] ?? (a.changes.includes(`${tab}.body`) ? 'after' : 'compare'));
+    ? 'preview'
+    : (views[tab] ??
+      (a.changes.includes(`${tab}.body`) ? 'preview' : 'compare'));
   const draft = draftContent(a);
   const names = (list: string[]) =>
     joinNames(list.map((l) => localeName(l, getCurrentLocale())));
@@ -366,8 +366,7 @@ export function ArticleReview({
             value={view}
             onChange={(v) => setViews({ ...views, [tab]: v as View })}
             options={[
-              { id: 'after', label: $t('articleTask.viewAfter') },
-              { id: 'before', label: $t('articleTask.viewBefore') },
+              { id: 'preview', label: $t('articleTask.viewPreview') },
               { id: 'compare', label: $t('articleTask.viewCompare') },
             ]}
             className='mb-1.5'
@@ -384,12 +383,8 @@ export function ArticleReview({
       <div role='tabpanel' className='flex flex-col gap-3'>
         {view !== 'compare' ? (
           <ArticlePreview
-            key={`${tab}:${view}`}
-            text={
-              view === 'before' && previous
-                ? previous
-                : revisedText(a, base, tab)
-            }
+            key={tab}
+            text={revisedText(a, base, tab)}
             pageUrl={pageUrl}
           />
         ) : (

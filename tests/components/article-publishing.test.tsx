@@ -141,7 +141,7 @@ it('reviews an article field by field against its source, per language', async (
   expect(tabs.map((t) => t.textContent)).toEqual(['English', 'Chinese']);
   expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
   // The body changed, so the article opens as its readers will see it; Changes compares field by field.
-  expect(screen.getByRole('button', { name: 'After' })).toHaveAttribute(
+  expect(screen.getByRole('button', { name: 'Preview' })).toHaveAttribute(
     'aria-pressed',
     'true',
   );
