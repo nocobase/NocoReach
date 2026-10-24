@@ -7,6 +7,7 @@ import type {
 } from '../../../shared/article-publishing.js';
 import { localeName, providerKey } from '../article-targets-api';
 import type {
+  ArticleProposal,
   Artifact,
   Release,
   ReleaseArticle,
@@ -168,6 +169,66 @@ export const fieldChange = (path: string, before: string, after: string) => {
       : v;
   return { path: fieldLabel(path), before: show(before), after: show(after) };
 };
+
+/** One language of the article as it reads after the change: the draft's fields over the version it was written from. */
+export const revisedText = (
+  a: Pick<ArticleProposal, 'draft'>,
+  base: ArticleContent | null,
+  locale: string,
+) => {
+  const draft = a.draft.locales[locale],
+    was = base?.locales[locale];
+  return {
+    title: draft?.title ?? was?.title ?? '',
+    description: draft?.description ?? was?.description ?? '',
+    body: draft?.body ?? was?.body ?? '',
+  };
+};
+
+export const draftContent = (
+  a: Pick<ArticleProposal, 'draft'>,
+): Partial<ArticleContent> => ({
+  slug: a.draft.slug,
+  status: a.draft.status,
+  locales: a.draft.locales,
+});
+
+/** How a changed language is read: as it will be, or its changes field by field against the version it was written from. */
+export type ArticleView = 'preview' | 'changes';
+
+/**
+ * The languages an article is reviewed in, shared by the review card and its reading page. A language with no text in
+ * the draft or the article is left out (2026-10-24 user report: empty tabs looked broken) and listed in `missing`. A
+ * changed language opens as a preview when its body changed, as its changes when only its title or description did; a
+ * new article, or a language the article did not have, has one version.
+ */
+export function articleLanguages(data: TaskData, a: ArticleProposal) {
+  const { target, base } = articleContext(data, a);
+  const all = [
+    ...new Set([...(target?.locales || []), ...Object.keys(a.draft.locales)]),
+  ];
+  const written = (l: string) => {
+    const t = revisedText(a, base, l);
+    return Boolean(t.title || t.description || t.body);
+  };
+  const shown = all.filter(written),
+    locales = shown.length ? shown : all.slice(0, 1);
+  const isNew = !a.articleId;
+  return {
+    target,
+    base,
+    locales,
+    missing: all.filter((l) => !locales.includes(l)),
+    isNew,
+    changed: (l: string) => a.changes.some((c) => c.startsWith(`${l}.`)),
+    versions: (l: string) => !isNew && Boolean(base?.locales[l]),
+    defaultView: (l: string): ArticleView =>
+      isNew || !base?.locales[l] || a.changes.includes(`${l}.body`)
+        ? 'preview'
+        : 'changes',
+  };
+}
+export type ArticleLanguages = ReturnType<typeof articleLanguages>;
 
 export function articleContext(
   data: TaskData,
