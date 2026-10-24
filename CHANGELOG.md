@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — A result's drawer without follow-ups, in one text size
+
+- A result's drawer no longer offers Follow-ups or the full-width "Create follow-up" button (2026-10-23 user decision: the flow ran too long). The follow-up page, its routes, the `result-create` page permission, the `createFromResult` capability and the `nrStrategy:createFromResult` action are removed. Opportunities and tasks raised from a result before keep showing where they came from and keep working.
+- The drawer is laid out in three parts instead of a block of text: facts as a short list (Status, Went live as a date, Changed pages with an external-link mark, Original task), then Data change with the 7-day / 28-day switch and refresh on its label row and the waiting note in a light box, then What was done with the summary as plain text (no Markdown markers). One text size throughout.
+- The comparison block (the result drawer, the task page's effect detail and a result's source panel) shows its outcome as a tag beside the windows, column headers aligned with their numbers, and every note in the same small grey text.
+
 ## Unreleased — New task: Organize with AI
 
 - Tasks › New task opens on one field, What you want done, with Organize with AI and Fill in manually. Organize with AI makes one call to the chat model in Model services (the one the daily analysis and the chat panel use, not a local agent) and fills the form for editing: a title starting with the action, a description in three labelled parts (Background, What to do, Completion criteria) in the project's AI language, and a Why this task sentence or two (checked like the background, kept as `evidence.why` for the task page's Why card) and a Suggested playbook preselected from the project's playbooks and kept as the task's suggested playbook. Restore original text goes back to what was written, asking first when the draft was edited; Fill in manually opens the form as before with the idea as its description. Nothing is created until Create; the task records "Found by <name>" as before.
