@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Task header: the steps are tags again
+
+- Under a task's title, the playbook's steps are a row of tags joined by chevrons again, as before the one-layout change: done steps ticked in green, the current one outlined (violet for a person's step, blue for the Agent's), the rest grey. The grey "Now: …" text after them is gone, since the highlighted step says where the task stands. Nothing else in the header changed.
+
 ## Unreleased — Competitor activity: only problems the person can fix
 
 - Removing or editing a competitor clears its errors at once. Each competitor keeps its own errors, and the source's last run (Data health, the Activity tab) is derived from the competitors still listed, also when it is read, instead of waiting for the next weekly look. On Studio, Data health still showed Competitor activity failing with "Baserow website: No sitemap found" after Baserow had been removed.
