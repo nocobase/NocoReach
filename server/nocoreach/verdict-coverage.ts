@@ -12,6 +12,7 @@ import {
 } from '../../shared/strategy-pending.js';
 import { taskStanding, type TaskWork } from '../../shared/task-pending.js';
 import { mergeCards, withoutIgnored } from './opportunity-board.js';
+import { ownSignalIds } from '../../shared/opportunity-parts.js';
 
 /** A task as read from nrTasks: its number, state and the pages it is about. */
 export type CoverTask = {
@@ -22,6 +23,7 @@ export type CoverTask = {
     work?: (TaskWork & { page?: { url?: string } | null }) | null;
     page?: unknown;
     signalKey?: unknown;
+    part?: { signalIds?: unknown } | null;
     insight?: { target?: unknown; signalIds?: unknown } | null;
     context?: { signals?: { items?: { key?: unknown; url?: unknown }[] } };
   } | null;
@@ -42,18 +44,14 @@ function pageOf(url: unknown) {
     return '';
   }
 }
+// One of an opportunity's several tasks is about its own place only, not the opportunity's other pages.
 function taskPages(t: CoverTask) {
   const e = t.evidence || {},
-    ids = new Set([
-      ...(Array.isArray(e.insight?.signalIds)
-        ? (e.insight.signalIds as unknown[])
-        : []),
-      ...(typeof e.signalKey === 'string' ? [e.signalKey] : []),
-    ]);
+    ids = new Set<unknown>(ownSignalIds(e));
   return [
     e.work?.page?.url,
     e.page,
-    e.insight?.target,
+    e.part ? undefined : e.insight?.target,
     ...(e.context?.signals?.items || [])
       .filter((s) => ids.has(s.key))
       .map((s) => s.url),
@@ -83,7 +81,8 @@ function coverOf(
     byId = new Map(tasks.map((t) => [String(t.id), t]));
   for (const p of state.proposals || []) {
     const cites =
-      p.signalKey === s.key || (p.insight?.signalIds || []).includes(s.key);
+      p.signalKey === s.key ||
+      (p.part?.signalIds || p.insight?.signalIds || []).includes(s.key);
     if (p.taskId && cites)
       return taskCover(byId.get(String(p.taskId)), p.taskNo);
   }

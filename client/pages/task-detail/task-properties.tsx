@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { ChevronDown, ExternalLink, Sparkles, UserSearch } from 'lucide-react';
 import { useTranslation } from '@nocobase/i18n/client';
 import { useNavigate } from 'react-router';
-import { $t } from '#i18n';
+import { $t, $tj } from '#i18n';
 import { formatDate, formatDateTime } from '#lib/format';
 import { cn } from '#lib/utils';
 import { ActorAvatar } from '#components/reach/actor';
@@ -20,6 +20,7 @@ import type { TaskData } from '../task-execution-types';
 import { AgentMenu } from './agent-menu';
 import { articlePageUrl } from './article-page';
 import { entryTitleKey, taskSource, type TaskSource } from '../task-source';
+import { TaskStandingTag } from '../task-status-tag';
 
 // The task's properties in their own card (2026-10-22 user request, as the sidebar of a Linear, Jira or GitHub issue):
 // one label and value per row, so the header keeps only what to read. In the right column from 1280px, in two columns
@@ -99,6 +100,11 @@ export function TaskProperties({
       ? articlePageUrl(data, article.targetId, article.slug)
       : '',
     started = w.history.find((h) => h.action === 'startTask')?.at;
+  // Related tasks: the one before and after in a playbook chain, then the other tasks of the same opportunity
+  // (2026-10-22: an opportunity is handed off one task per place to change).
+  const chain = (data.related || []).filter((r) => r.relation !== 'sibling'),
+    siblings = (data.related || []).filter((r) => r.relation === 'sibling'),
+    insight = taskSource(data.task).insight;
   const owner =
     allowed && members.length ? (
       <DropdownMenu>
@@ -225,7 +231,7 @@ export function TaskProperties({
         {(data.related || []).length > 0 && (
           <Row label={$t('taskDetail.propRelated')}>
             <span className='flex flex-col items-start gap-1'>
-              {data.related!.map((r) => (
+              {chain.map((r) => (
                 <button
                   key={r.id}
                   type='button'
@@ -238,6 +244,50 @@ export function TaskProperties({
                   {r.title}
                 </button>
               ))}
+              {siblings.length > 0 && (
+                <span
+                  className='flex w-full min-w-0 flex-col gap-1'
+                  data-same-opportunity=''
+                >
+                  <span className='text-muted-foreground'>
+                    {$tj('opportunityTasks.sameOpportunity', {
+                      0: insight?.id ? (
+                        <button
+                          type='button'
+                          className='nr-link'
+                          onClick={() =>
+                            void navigate(
+                              `/opportunities?item=${encodeURIComponent(insight.id!)}`,
+                            )
+                          }
+                        >
+                          {insight.no
+                            ? `O-${insight.no}`
+                            : $t('common.opportunity')}
+                        </button>
+                      ) : (
+                        $t('common.opportunity')
+                      ),
+                    })}
+                  </span>
+                  {siblings.map((r) => (
+                    <span
+                      key={r.id}
+                      className='flex w-full min-w-0 items-start gap-2'
+                    >
+                      <button
+                        type='button'
+                        className='nr-link min-w-0 flex-1 text-left'
+                        onClick={() => void navigate(`/actions/${r.id}`)}
+                      >
+                        {r.no ? `T-${r.no} ` : ''}
+                        {r.title}
+                      </button>
+                      {r.state && <TaskStandingTag state={r.state} />}
+                    </span>
+                  ))}
+                </span>
+              )}
             </span>
           </Row>
         )}

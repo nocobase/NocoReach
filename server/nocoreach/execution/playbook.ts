@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { fail, text } from './model';
 import { validateFlow, type ChecklistItem } from './flow';
 import { memoryForAI } from './memory';
+import { playbookForActions } from '../../../shared/opportunity-parts';
 
 // 做法 (SPEC §6.0): how one kind of work is done — a few steps, all carried out by the Agent, with the person reviewing in
 // between. Steps: analyze (the Agent reads and writes a document, no repository change), change (the Agent changes the
@@ -30,7 +31,7 @@ export function normalize(p: any): Playbook {
   if (Array.isArray(p?.steps)) return withKind({ ...p, category: CATEGORIES.includes(p.category) ? p.category : 'optimize', next: Array.isArray(p.next) ? p.next : [] });
   const { kind, instructions, planFirst, checklist, ...rest } = p || {};
   const steps = kind === 'plan' ? [analyze(instructions || '', systemMessageText('common.analyze')), review(systemMessageText('common.review'), checklist || [], 'accept')]
-    : [...(planFirst ? [analyze(AGENT_PLAN_INSTRUCTION, systemMessageText('playbook.writePlan'), 'plan'), review(systemMessageText('playbook.reviewPlan'), [], 'approve-plan')] : []), change(instructions || ''), review(systemMessageText('playbook.reviewPublish'), checklist || [])];
+    : [...(planFirst ? [analyze(AGENT_PLAN_INSTRUCTION, systemMessageText('playbook.writePlan'), 'plan'), review(systemMessageText('playbook.reviewPlan'), [], 'approve-plan')] : []), change(instructions || ''), review(systemMessageText('common.review'), checklist || [])];
   return withKind({ ...rest, category: kind === 'plan' ? 'research' : 'optimize', steps, next: kind === 'plan' && Array.isArray(rest.next) ? rest.next : [] });
 }
 
@@ -57,7 +58,7 @@ export function validatePlaybook(v: any, known: string[]): Omit<Playbook, 'id' |
     return { key, name, kind: 'review', checklist };
   });
   const last = steps[steps.length - 1];
-  if (last.kind !== 'review') { let key = 'final-review'; while (used.has(key)) key += '-1'; steps.push(review(last.kind === 'change' ? systemMessageText('playbook.reviewPublish') : systemMessageText('common.review'), [], key)); }
+  if (last.kind !== 'review') { let key = 'final-review'; while (used.has(key)) key += '-1'; steps.push(review(systemMessageText('common.review'), [], key)); }
   const changes = steps.some(s => s.kind === 'change');
   if (v.next !== undefined && (!Array.isArray(v.next) || v.next.length > 3)) return fail(systemMessageText('playbook.pickUp3Continue'));
   const next = changes ? [] : [...new Set<string>((v.next || []).filter((x: unknown) => typeof x === 'string'))];
@@ -75,13 +76,7 @@ export function defaultPlaybookId(task: any): string {
   const insight = task?.evidence?.insight;
   const ids = new Set<string>(Array.isArray(insight?.signalIds) ? insight.signalIds : []);
   const actions = (task?.evidence?.context?.signals?.items || []).filter((s: any) => ids.has(s?.key)).map((s: any) => s.action);
-  if (actions.includes('optimize')) return 'optimize-page';
-  if (actions.includes('technical')) return 'tech-fix';
-  // Posts nobody answered: draft a reply to each (2026-10-08).
-  if (actions.includes('reply')) return 'community-reply';
-  if (actions.includes('create')) return 'content-outline';
-  if (actions.includes('distribute')) return 'release-notes';
-  return actions.length ? 'change-research' : 'optimize-page';
+  return playbookForActions(actions);
 }
 
 // 新建做法 with AI: one sentence becomes a draft (name, category, steps with instructions and review items). The draft is

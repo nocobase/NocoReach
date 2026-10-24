@@ -6,9 +6,27 @@
 - Every prompt for a project in a language other than Simplified Chinese ends with the same note the English projects had, naming the language. The English note is unchanged.
 - The daily analysis checks opportunity wording in two sets. Simplified Chinese, Traditional Chinese and Japanese keep the width rules (title 18, reason 30, a CJK character counting 1), with the vague words of each language. The other languages use the English limits (title 60 characters, reason 90 with a number, at most two sentences of suggestion); vague verbs are only checked in English.
 
+## Unreleased — Review, then Publish
+
+- The step where a person approves a change is named Review instead of "Review and publish", and the step after it, where the system merges or writes to the CMS and confirms the page is live, is named Publish instead of "Live", in the task header, start card, Opportunities, Playbooks and the playbook editor's note. The flow and the number of clicks are unchanged.
+- The review card's button reads "Approve and publish" ("Approve and simulate publishing" in the demo) instead of "Publish".
+- Built-in playbooks name their final review step with `common.review`, as the system already did when it adds one. Tasks started before keep their stored names but show the new ones: `playbook-snapshot.ts` treats `playbook.reviewPublish` as `common.review`. Custom and edited playbooks keep their own step names.
+
+## Unreleased — Folds that say what they show and open into view
+
+- Technical details › Runs no longer shows "Source snapshot for this run" for runs that read no forum posts (every run but community replies), where it opened a single grey line out of view. A run that read posts lists them under "Posts the Agent read": each topic with its post count and whether it was complete, the first five shown and "N more topics" for the rest.
+- Every fold (`Reveal`) keeps its label with a chevron once open instead of turning into a bare "Collapse", and scrolls what it opened into view. A live change without release notes no longer offers an empty Release notes fold.
+
 ## Unreleased — Task header: the steps are tags again
 
 - Under a task's title, the playbook's steps are a row of tags joined by chevrons again, as before the one-layout change: done steps ticked in green, the current one outlined (violet for a person's step, blue for the Agent's), the rest grey. The grey "Now: …" text after them is gone, since the highlighted step says where the task stands. Nothing else in the header changed.
+
+## Unreleased — One opportunity, a task for each place to change
+
+- Hand off to agent on an opportunity whose changes point to several places (pages to improve or fix, a release to announce, community posts awaiting a reply) first lists one task per place, with its title ("Update Top 11 Open Source No-Code AI Tools"), page and playbook; untick the ones not to do now. One task is created per ticked place, and Opportunities shows the opportunity with its tasks instead of opening one of them. An opportunity with one place is handed off as one task, as before. The same rule applies on Opportunities, on Insights and to a hand-off asked for in a conversation (every place without a task).
+- The opportunity lists its tasks with their states and a count per state; on Insights its line reads "6 tasks · 1 done". Places that no open task changes yet can be handed off later from the opportunity.
+- A task's Related tasks list the other tasks of the same opportunity with their states, linked to the opportunity. Its brief starts by saying it is one of several tasks of the opportunity, the one place it changes and what the others change, and to keep one approach across them; its Agent reads the changes about its own place only. Its Performance and its article lookup use its own page only.
+- There are no parent tasks: the opportunity is the grouping, and the task list and board stay flat. Tasks handed off before this change keep their single task (T-34 stays as it is); its opportunity can hand off the places left.
 
 ## Unreleased — Competitor activity: only problems the person can fix
 

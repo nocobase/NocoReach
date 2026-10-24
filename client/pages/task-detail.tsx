@@ -391,7 +391,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    // A target removed after the draft was written cannot receive it: say so instead of offering a publish that fails.
    const articleTarget=out.article.targetId,targetGone=!(data.articleTargets||[]).some(t=>t.id===articleTarget);
    return <StageCard title={$t('articleTask.reviewTitle')} sub={by} at={out.createdAt}
-    actions={editing||!allowed?undefined:<>{!targetGone&&<Button disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote}})}><Rocket/>{$t(mockSettingsAvailable() ? 'taskDetail.simulatePublish' : 'taskDetail.publishLive')}</Button>}{requestButton}<Button ref={editButtonRef} variant='ghost' disabled={busy} onClick={()=>setEditing(true)}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
+    actions={editing||!allowed?undefined:<>{!targetGone&&<Button disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote}})}><Rocket/>{$t(mockSettingsAvailable() ? 'taskDetail.approveAndSimulatePublish' : 'taskDetail.approveAndPublish')}</Button>}{requestButton}<Button ref={editButtonRef} variant='ghost' disabled={busy} onClick={()=>setEditing(true)}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
     {!editing&&request(getStageExecutor().agent)}
     {targetGone&&<p role='alert' className='text-sm text-destructive'>{$t('articles.targetMissing')}</p>}
     <LastFeedback w={w} stage={stage} out={out}/>
@@ -404,7 +404,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   }
   const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(pr?.outOfScope?.length&&!scopeOk);
   return <StageCard title={pr?$t('taskDetail.pageChangeReady'):$t('taskDetail.madeChangeYourselfAfterConfirm')} sub={by} at={out.createdAt}
-   actions={<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote},...(pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}><Rocket/>{$t(mockSettingsAvailable() ? 'taskDetail.simulatePublish' : 'taskDetail.publishLive')}</Button>{requestButton}<InfoTip label={$t('taskDetail.aboutPublishing')}>{mockSettingsAvailable()?$t('taskDetail.simulatedReleaseDescription'):$t('taskDetail.publishHint')}</InfoTip></>}>
+   actions={<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote},...(pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}><Rocket/>{$t(mockSettingsAvailable() ? 'taskDetail.approveAndSimulatePublish' : 'taskDetail.approveAndPublish')}</Button>{requestButton}<InfoTip label={$t('taskDetail.aboutPublishing')}>{mockSettingsAvailable()?$t('taskDetail.simulatedReleaseDescription'):$t('taskDetail.publishHint')}</InfoTip></>}>
    {request(getStageExecutor().agent)}
    <LastFeedback w={w} stage={stage} out={out}/>
    <PageChange pr={pr} content={out.content}/>
@@ -525,7 +525,7 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
   <DriftNotice data={data} r={r}/>
   <EffectList w={w}/>
   <PageLinks pages={r.pages}/>
-  <Reveal label={$t('taskDetail.releaseNotes')}><p className={cn(text.body,'whitespace-pre-wrap')}>{r.note}</p></Reveal>
+  {r.note&&<Reveal label={$t('taskDetail.releaseNotes')}><p className={cn(text.body,'whitespace-pre-wrap')}>{r.note}</p></Reveal>}
  </StageCard>;
  const replies=repliesOf(w,accepted?.content);
  if(replies.length)return <StageCard label={done} title={$t('taskDetail.replyDraftsAccepted')} sub={$t('taskDetail.copyReplyPostYourselfNocoreach')}><ReplyDrafts items={replies}/></StageCard>;

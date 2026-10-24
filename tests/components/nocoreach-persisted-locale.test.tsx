@@ -378,7 +378,7 @@ it('keeps snapshot step names and event user text while translating explicit sys
       'Agent 分析',
     );
     expect(stageName({ key: 'release', name: '上线', kind: 'release' })).toBe(
-      $t('common.live'),
+      $t('playbook.publishStage'),
     );
     expect(stageName({ key: 'observe', name: '观察', kind: 'observe' })).toBe(
       $t('common.watch'),
