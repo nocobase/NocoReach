@@ -391,7 +391,10 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    const missingChecks=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key));
    // A target removed after the draft was written cannot receive it: say so instead of offering a publish that fails.
    const articleTarget=out.article.targetId,targetGone=!(data.articleTargets||[]).some(t=>t.id===articleTarget);
-   return <StageCard title={$t('articleTask.reviewTitle')} sub={by} at={out.createdAt}
+   // In several languages the card says which round it is: the primary to approve, or the translations to publish.
+   const langs=w.delivery?.locales||[],translated=langs.length>1&&Boolean(w.delivery?.translateFrom);
+   const reviewTitle=translationPending(data)?$t('articleTask.reviewPrimaryTitle',{0:localeName(langs[0],getCurrentLocale())}):translated?$t('articleTask.reviewTranslatedTitle'):$t('articleTask.reviewTitle');
+   return <StageCard title={reviewTitle} sub={by} at={out.createdAt}
     actions={editing||!allowed?undefined:<>{!targetGone&&<Button disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked})}><Rocket/>{$t(translationPending(data)?'articleTask.approveTranslate':mockSettingsAvailable() ? 'taskDetail.approveAndSimulatePublish' : 'taskDetail.approveAndPublish')}</Button>}{requestButton}<Button ref={editButtonRef} variant='ghost' disabled={busy} onClick={()=>setEditing(true)}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
     {!editing&&request(getStageExecutor().agent)}
     {targetGone&&<p role='alert' className='text-sm text-destructive'>{$t('articles.targetMissing')}</p>}

@@ -4,7 +4,7 @@
 
 - A publishing target's first language is its primary language: its card reads "Primary language English · other languages Chinese, Japanese", and its form has a Primary language choice that moves a language to the front.
 - The start card names the task's languages ("Languages: English (primary) · Chinese · Japanese"). Change lets the person pick this task's primary language and leave languages out; every language of the target is chosen by default.
-- With two or more languages, the Agent writes the primary one only, and change requests touch only it. Approving it ("Approve and translate") publishes nothing yet: the Agent translates it into the other languages ("The Agent is translating into Chinese, Japanese"), the translated version is reviewed with a tab per language, and one Approve and publish publishes them all. Before approval the review says which languages follow.
+- With two or more languages, the Agent writes the primary one only, and change requests touch only it. Its review card reads "The English version is ready; approve it to translate it", and approving it ("Approve and translate") publishes nothing yet: the Agent translates it into the other languages ("The Agent is translating into Chinese, Japanese"), the translated version ("The translations are ready; approve to publish them all") is reviewed with a tab per language, and one Approve and publish publishes them all. Before approval the review says which languages follow.
 - Tasks started before this, and tasks with one language, write every language at once as before.
 
 ## Unreleased — Read an article full screen

@@ -6959,6 +6959,8 @@
   "articleTask.pickArticle": "Choisissez l’article à modifier",
   "articleTask.headerArticle": "Article : {0}",
   "articleTask.reviewTitle": "La modification de l’article est prête à être publiée dès votre confirmation",
+  "articleTask.reviewPrimaryTitle": "La version en {0} est prête ; approuvez-la pour la traduire",
+  "articleTask.reviewTranslatedTitle": "Les traductions sont prêtes ; approuvez pour tout publier",
   "articleTask.onlyWrote": "Seule la version {0} a été rédigée cette fois.",
   "articleTask.noVersion": "Cet article n’a pas de version {0}.",
   "articleTask.unchanged": "Inchangé",

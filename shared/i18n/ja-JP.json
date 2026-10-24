@@ -6959,6 +6959,8 @@
   "articleTask.pickArticle": "変更する記事を選択",
   "articleTask.headerArticle": "記事: {0}",
   "articleTask.reviewTitle": "記事の変更は確認後に公開できます",
+  "articleTask.reviewPrimaryTitle": "{0}版ができました。承認すると他の言語に翻訳します",
+  "articleTask.reviewTranslatedTitle": "翻訳ができました。承認するとまとめて公開します",
   "articleTask.onlyWrote": "今回は{0}のみ作成しました。",
   "articleTask.noVersion": "この記事には{0}版がありません。",
   "articleTask.unchanged": "変更なし",

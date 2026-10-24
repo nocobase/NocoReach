@@ -6959,6 +6959,8 @@
   "articleTask.pickArticle": "Elige el artículo que quieres modificar",
   "articleTask.headerArticle": "Artículo: {0}",
   "articleTask.reviewTitle": "Los cambios del artículo están listos para publicarse en cuanto confirmes",
+  "articleTask.reviewPrimaryTitle": "La versión en {0} está lista; apruébala para traducirla",
+  "articleTask.reviewTranslatedTitle": "Las traducciones están listas; aprueba para publicarlas todas",
   "articleTask.onlyWrote": "Esta vez solo se escribió en {0}.",
   "articleTask.noVersion": "Este artículo no tiene versión en {0}.",
   "articleTask.unchanged": "Sin cambios",

@@ -6959,6 +6959,8 @@
   "articleTask.pickArticle": "Wählen Sie den zu ändernden Artikel aus",
   "articleTask.headerArticle": "Artikel: {0}",
   "articleTask.reviewTitle": "Die Artikeländerung ist bereit und wird nach Ihrer Bestätigung veröffentlicht",
+  "articleTask.reviewPrimaryTitle": "Die Version auf {0} ist fertig; nach der Freigabe wird übersetzt",
+  "articleTask.reviewTranslatedTitle": "Die Übersetzungen sind fertig; freigeben, um alle zu veröffentlichen",
   "articleTask.onlyWrote": "Diesmal wurde nur {0} geschrieben.",
   "articleTask.noVersion": "Dieser Artikel hat keine Version auf {0}.",
   "articleTask.unchanged": "Unverändert",

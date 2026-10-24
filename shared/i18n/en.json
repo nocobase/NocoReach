@@ -6993,6 +6993,8 @@
   "articleTask.pickArticle": "Pick the article to change",
   "articleTask.headerArticle": "Article: {0}",
   "articleTask.reviewTitle": "The article change is ready to publish once you confirm",
+  "articleTask.reviewPrimaryTitle": "The {0} version is ready; approve it to translate it",
+  "articleTask.reviewTranslatedTitle": "The translations are ready; approve to publish them all",
   "articleTask.onlyWrote": "Only {0} was written this time.",
   "articleTask.noVersion": "This article has no {0} version.",
   "articleTask.unchanged": "Unchanged",

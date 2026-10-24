@@ -7041,6 +7041,8 @@
   "articleTask.pickArticle": "Chọn bài viết cần sửa",
   "articleTask.headerArticle": "Bài viết: {0}",
   "articleTask.reviewTitle": "Thay đổi bài viết đã sẵn sàng để xuất bản sau khi bạn xác nhận",
+  "articleTask.reviewPrimaryTitle": "Bản {0} đã xong; duyệt để dịch sang các ngôn ngữ khác",
+  "articleTask.reviewTranslatedTitle": "Bản dịch đã xong; duyệt để xuất bản tất cả",
   "articleTask.onlyWrote": "Lần này chỉ viết bằng {0}.",
   "articleTask.noVersion": "Bài viết này không có bản {0}.",
   "articleTask.unchanged": "Không thay đổi",

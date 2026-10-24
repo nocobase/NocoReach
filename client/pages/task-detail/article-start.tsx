@@ -440,11 +440,13 @@ function LanguagePicker({
           value={primary}
           disabled={disabled}
           onChange={(e) =>
+            // The others keep the target's order; the language that was primary stays in, as one to translate.
             onChange([
               e.target.value,
-              ...chosen.slice(1).filter((l) => l !== e.target.value),
-              // The language that was primary stays in, as one to translate.
-              ...(primary !== e.target.value ? [primary] : []),
+              ...all.filter(
+                (l) =>
+                  l !== e.target.value && (l === primary || chosen.includes(l)),
+              ),
             ])
           }
         >

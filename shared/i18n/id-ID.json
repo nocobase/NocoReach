@@ -7041,6 +7041,8 @@
   "articleTask.pickArticle": "Pilih artikel yang akan diubah",
   "articleTask.headerArticle": "Artikel: {0}",
   "articleTask.reviewTitle": "Perubahan artikel siap diterbitkan setelah Anda mengonfirmasi",
+  "articleTask.reviewPrimaryTitle": "Versi {0} sudah siap; setujui untuk menerjemahkannya",
+  "articleTask.reviewTranslatedTitle": "Terjemahan sudah siap; setujui untuk menerbitkan semuanya",
   "articleTask.onlyWrote": "Kali ini hanya ditulis dalam {0}.",
   "articleTask.noVersion": "Artikel ini tidak memiliki versi {0}.",
   "articleTask.unchanged": "Tidak berubah",

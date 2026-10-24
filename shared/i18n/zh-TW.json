@@ -6959,6 +6959,8 @@
   "articleTask.pickArticle": "請選擇要修改的文章",
   "articleTask.headerArticle": "文章：{0}",
   "articleTask.reviewTitle": "文章改動已就緒，確認後發布",
+  "articleTask.reviewPrimaryTitle": "{0}版已寫好，通過後翻譯成其他語言",
+  "articleTask.reviewTranslatedTitle": "翻譯已完成，確認後一起發布",
   "articleTask.onlyWrote": "這次只寫了{0}。",
   "articleTask.noVersion": "這篇文章沒有{0}版本。",
   "articleTask.unchanged": "未修改",
