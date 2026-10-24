@@ -3443,7 +3443,6 @@
   "记忆更新了：{0}": "projectKnowledge.memoryUpdated",
   "记忆格式不对": "memory.invalidMemoryFormat",
   "记忆补充了：{0}": "projectKnowledge.addedMemory",
-  "记忆里写的竞品：": "competitorWatch.competitorsMemory",
   "论坛": "common.forum",
   "论坛主题无人回复": "analysisRules.forumTopicsWithoutReplies",
   "论坛地址": "community.forumUrl",
