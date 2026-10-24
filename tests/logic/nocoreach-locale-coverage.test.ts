@@ -353,6 +353,9 @@ describe('NocoReach semantic-key translations', () => {
       '关注度（每周，最高为 100）': '每周关注度',
       添加或移除竞品: '管理竞品',
       暂无任务: '没有任务',
+      // A failed run's kept content, not only a saved draft (2026-10-24).
+      '此内容仅已暂存，尚未通过任务验收。':
+        'Agent 没有做完这一步，这些内容还没有经过审核。',
     };
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(

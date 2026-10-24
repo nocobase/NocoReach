@@ -300,13 +300,19 @@ export class TaskAgentsRuntime {
                 'merge 只合并指定 PR，先检查 headSha 等于已审核的提交；使用 gh pr merge --match-head-commit 指定提交，检查失败不得继续。',
                 'close 只关闭指定 PR；revert 只为指定已合并 PR 新建回退 PR，不合并。',
                 'data.protectedPaths 列出的文件由文章发布目标管理（发布系统会重新导出并覆盖它们）：build 不得修改这些文件；任务需要改这些文章时，报告失败并说明应改用文章发布。',
-                '只能报告实际执行并验证的结果。遇到缺少凭据、工具或冲突立即失败，不绕过限制。',
+                // Fail only for what the step cannot do without (2026-10-24, T-35: a Skill installed on the user's own
+                // computer asked for a CLI that was missing, and the run discarded research it had finished). The
+                // computer's other Skills and the tools they suggest never fail a step.
+                '只能报告实际执行并验证的结果。只有缺少这一步离不开的凭据或工具（例如 build、merge 时 gh 未登录，或无权访问 data.repo.repo），或遇到冲突时，才报告失败；不绕过限制，不安装软件。',
+                'Skill 建议使用、但这一步并不依赖的工具（例如检查更新的命令、可选的搜索或抓取工具）不可用时不算失败：改用其他方式完成这一步，并在成果中说明（研究写入 report.uncertainties）。',
+                '以这次任务提供的 Skills 为准；电脑上其他技能可以参考，它们要求的工具不可用时不影响这一步。',
                 '优先使用 sources 中原帖正文与已有回复、项目知识和任务数据。知识或 Skills 为空不等于无法起草；根据证据回答，缺少证据时明确未确认点。sources 不是实时页面，引用时注明抓取时间。',
                 // Built-in marketing Skills first look for a product marketing context file; the project data is that context.
                 'Skills 要求先读取产品营销背景（.agents/product-marketing.md、.claude/product-marketing.md 或 product-marketing-context.md）时，以资料中的 project（项目记忆）和 knowledge（项目知识）作为这份背景；不要为此向人提问，也不要在仓库里创建这些文件。',
                 '社区回复必须阅读原帖和已有回复，资料不完整则不要声称完整核实；不得用搜索摘要替代正文，不得实际发帖。',
                 `可通过 ${commandRef(claim.cli, 'task data')} --section context|metrics|keywords|pages|audit|knowledge|skills|sources 读取当前任务的资料，${commandRef(claim.cli, 'task draft')} 暂存草稿；命令只在授予对应业务能力时可用。长资料返回 page.text（JSON 片段），用 --offset page.nextOffset 逐页读取完整快照。暂存草稿不等于提交成果。`,
                 '开始前读取 materials 指向的知识、Skills 和 sources 文件；它们是当前步骤的输入快照，无需通过 curl 获取已提供的资料。',
+                'data.unfinished 存在时，是这一步上一次没做完时已经拿到的内容：先核对，再在此基础上补齐，不必从头再做。',
                 ...resultRules(run.mode, input.resultKind),
                 `完成后优先通过 ${commandRef(claim.cli, 'task result')} --content-file result.json 提交完整成果 JSON。校验失败时保留正文，只按错误修正格式，最多重试两次；成功后不要修改成果，最终回答仍返回同一份 JSON。命令不可用时使用最终 JSON 回答。运行说明不要写入成果。`,
               ],
@@ -471,6 +477,9 @@ export class TaskAgentsRuntime {
               error:
                 current.status === 'cancelled' ? 'cancelled' : 'agent_failed',
               ...(restartedAt ? { restartedAt } : {}),
+              ...(current.status === 'failed'
+                ? await this.failedRun(run, current.failureReason)
+                : {}),
             }),
       });
     } catch (error) {
@@ -517,6 +526,24 @@ export class TaskAgentsRuntime {
       input.resultKind,
       run.taskId,
     );
+  }
+  /**
+   * What a run the Agents plugin failed leaves behind: the official reason, so earlier runs' causes can be compared, and
+   * the content of a result the Agent already submitted with `task result` before it stopped (never consumed as a
+   * result: the task keeps it as what the Agent got).
+   */
+  private async failedRun(run: Run, failureReason: string | null) {
+    const submitted = await this.tasks.business.submitted(run);
+    const content = submitted?.value.content?.trim() ? submitted.value : null;
+    return {
+      ...(failureReason ? { failureReason } : {}),
+      ...(content
+        ? {
+            content: content.content,
+            ...(content.report ? { report: content.report } : {}),
+          }
+        : {}),
+    };
   }
   private async settled(run: Run) {
     await this.tasks.lock(

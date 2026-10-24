@@ -351,12 +351,13 @@ export function TaskExecutionPanel({
               )}
             </>
           )}
-          {detail?.savedDraft && current?.status === 'failed' && (
-            <Reveal label={$t('taskDetail.unsubmittedCandidateDraft')}>
+          {/* The same content the task's failure card offers for its latest run (TaskService.partialOf). */}
+          {detail?.partial && current?.status === 'failed' && (
+            <Reveal label={$t('taskDetail.partialTitle')}>
               <p className='mb-3 text-sm text-muted-foreground'>
                 {$t('taskDetail.contentSavedCandidateNotPassed')}
               </p>
-              <Markdown content={detail.savedDraft.content} />
+              <Markdown content={detail.partial.content} />
             </Reveal>
           )}
           {detail?.sources &&
