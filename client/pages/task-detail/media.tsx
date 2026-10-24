@@ -80,7 +80,7 @@ export function TaskMedia({
               />
             )}
             <a
-              className='text-sm underline'
+              className='nr-link text-sm'
               href={file.contentUrl}
               target='_blank'
               rel='noreferrer'

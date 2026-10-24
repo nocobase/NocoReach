@@ -36,15 +36,13 @@ export function AuthField({
       <div className='flex items-center gap-2'>
         <FieldLabel htmlFor={id}>{label}</FieldLabel>
         {labelAside ? (
-          <span className='ml-auto text-sm [&_a]:underline-offset-4 [&_a:hover]:underline'>
-            {labelAside}
-          </span>
+          <span className='nr-quiet-links ml-auto text-sm'>{labelAside}</span>
         ) : null}
       </div>
       {children}
       {error ? <FieldError id={errorId(id)}>{error}</FieldError> : null}
       {below ? (
-        <div className='flex justify-end text-sm text-muted-foreground [&_a]:underline-offset-4 [&_a:hover]:text-foreground [&_a:hover]:underline'>
+        <div className='nr-quiet-links flex justify-end text-sm text-muted-foreground'>
           {below}
         </div>
       ) : null}

@@ -74,7 +74,7 @@ export const getCadenceText = (): Record<NonNullable<HealthItem['cadence']>,stri
 // and link there for whoever may open that page.
 function ScheduleNote({schedule}:{schedule:NonNullable<HealthItem['schedule']>}){
  const {can}=useCan({resource:{type:'page',id:'scheduler.schedules'},action:'access'});
- return <span className='nr-block nr-footnote'>{$t('dataHealth.dailyAnalysisAt',{0:schedule.time,1:timeZoneName(schedule.timezone,getCurrentLocale())})}{can?<> · <Link className='underline underline-offset-4' to='/schedules'>{$t('dataHealth.changeTime')}</Link></>:null}</span>;
+ return <span className='nr-block nr-footnote'>{$t('dataHealth.dailyAnalysisAt',{0:schedule.time,1:timeZoneName(schedule.timezone,getCurrentLocale())})}{can?<> · <Link className='nr-link-quiet' to='/schedules'>{$t('dataHealth.changeTime')}</Link></>:null}</span>;
 }
 // Each row checks its own retry action, as every other control does, and reports it, so Retry all counts only the rows
 // this person may retry.
