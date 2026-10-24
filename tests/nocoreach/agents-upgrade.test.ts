@@ -85,3 +85,81 @@ it('retires configured agents without losing run history and does not restore th
     await testDb.destroy();
   }
 });
+
+it('repairs legacy Runner markers and missing models without enabling agents or overwriting configured models', async () => {
+  const testDb = await createTestDatabase();
+  try {
+    const { connection, database } = testDb;
+    const migrator = createMigrator({
+      database,
+      directory: AGENTS_MIGRATIONS,
+      packageName: AGENTS_PACKAGE,
+    });
+    await migrator.upTo('202610280001_ag_explicit_runner_tools');
+    const now = new Date().toISOString();
+    const configured = [
+      { tool: 'codex', model: 'configured-model', effort: 'high' },
+    ];
+    for (const [id, source, modelEntries] of [
+      ['missing', 'runner', []],
+      ['configured', 'runner', configured],
+      ['system', 'system', []],
+    ] as const) {
+      await connection.query
+        .insertInto('agAgents')
+        .values({
+          id,
+          name: id,
+          type: 'runner',
+          source,
+          tool: 'codex',
+          model: 'legacy-model',
+          status: 'disabled',
+          ownerUserId: 'owner',
+          access: 'everyone',
+          modelEntries,
+          archivedAt: now,
+          deletedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .execute();
+    }
+    await migrator.upTo('202610290001_ag_repair_runner_agents');
+    const rows = await connection.repository('agAgents').findMany({});
+    const missing = rows.find((row) => row.id === 'missing')!;
+    expect(missing).toMatchObject({
+      status: 'disabled',
+      archivedAt: null,
+      deletedAt: null,
+      modelEntries: [
+        { tool: 'codex', model: 'legacy-model', effort: 'medium' },
+      ],
+    });
+    expect(rows.find((row) => row.id === 'configured')).toMatchObject({
+      status: 'disabled',
+      archivedAt: null,
+      deletedAt: null,
+      modelEntries: configured,
+    });
+    expect(rows.find((row) => row.id === 'system')).toMatchObject({
+      status: 'disabled',
+      archivedAt: now,
+      deletedAt: now,
+      modelEntries: [],
+    });
+    await migrator.rollback();
+    expect(
+      await connection
+        .repository('agAgents')
+        .findOne({ filter: { id: 'missing' } }),
+    ).toMatchObject({
+      status: 'disabled',
+      archivedAt: null,
+      deletedAt: null,
+      modelEntries: missing.modelEntries,
+    });
+  } finally {
+    await testDb.destroy();
+  }
+});

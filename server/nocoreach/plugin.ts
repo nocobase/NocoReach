@@ -28,6 +28,8 @@ import { CompetitorResearch } from './competitor-research.js';
 import { CompetitorWatch } from './competitor-watch.js';
 import { GitHubTrends } from './github-trends.js';
 import { SearchIndex } from './search-index.js';
+import type { DemoProjects } from './demo-data/upstream.js';
+import type { DemoDataService, DemoModels } from '@nocobase/app-plugin-demo-mode/server/tokens';
 import { DailyAnalysis } from './daily-analysis.js';
 import { DataHealth } from './data-health.js';
 import { DataViews, windowFor } from './data-views.js';
@@ -97,15 +99,21 @@ export class Connections{
  startedAt?: string;
  constructor(app,variables,{basePath,publicOrigin,browserCollectors=[],mock,startedAt}: {basePath:string;publicOrigin?:string;browserCollectors?:unknown;mock?:MockEngine;startedAt?:string}){this.startedAt=startedAt;this.publicOrigin=publicOrigin;this.mock=mock;this.browserCollectors=mock?.enabled?mockBrowserCollectors:browserCollectors;this.basePath=basePath;this.app=app;this.db=app.db;this.variables=variables;this.proxyProfiles=new ProxyProfiles(variables);this.network=new OutboundNetwork(this.proxyProfiles,mock);this.RETURN=`${basePath}/connections`;}
  mock?: MockEngine;
+ // The demo data's projects, answered in process, and its simulated model (demo-data/).
+ demoProjects?: DemoProjects;
+ demoModels?: DemoModels;
+ demoAgent?: import('@nocobase/app-plugin-demo-mode/server/tokens').DemoAgentProxy<import('./demo-data/demo-agent.js').DemoAgentInput, import('./demo-data/demo-agent.js').DemoAgentResult>;
+ demoConfiguration?: import('@nocobase/app-plugin-demo-mode/server/tokens').DemoConfigurationService;
+ demoData?: DemoDataService;
  env(key){return this.app.environment.getVariables()[key]||'';}
  async variable(name,value,secret=false){await this.variables.set(name,value,secret);}
- config(){if(this.mock?.enabled)return {clientId:'nocoreach-simulated.apps.googleusercontent.com',clientSecret:'mock-only-no-credential',redirectUri:(this.publicOrigin||'http://127.0.0.1')+CALLBACK_PATH()};const clientId=this.env(CONFIG+'CLIENT_ID'),clientSecret=this.env(CONFIG+'CLIENT_SECRET'),base=this.env(CONFIG+'BASE_URL');if(!clientId||!clientSecret||!base)throw Object.assign(new Error(systemMessageText('application.systemAdminNeedsSetUp')),{status:409});return {clientId,clientSecret,redirectUri:callbackUri(base)};}
+ config(id?){if(this.mock?.enabled||(id!==undefined&&this.demoProjects?.has(String(id))))return {clientId:'nocoreach-simulated.apps.googleusercontent.com',clientSecret:'mock-only-no-credential',redirectUri:(this.publicOrigin||'http://127.0.0.1')+CALLBACK_PATH()};const clientId=this.env(CONFIG+'CLIENT_ID'),clientSecret=this.env(CONFIG+'CLIENT_SECRET'),base=this.env(CONFIG+'BASE_URL');if(!clientId||!clientSecret||!base)throw Object.assign(new Error(systemMessageText('application.systemAdminNeedsSetUp')),{status:409});return {clientId,clientSecret,redirectUri:callbackUri(base)};}
  // Projects: project 1 in the original record, later ones in project:<id> (see projects.js).
  async project(id){return this.projects.get(String(id));}
  async projectIds(){return this.projects.ids();}
  async link(id){return this.db.getRepository('nrGoogleLinks').findOne({filter:{projectId:id}});}
  async metadata(id,values){const r=this.db.getRepository('nrGoogleLinks'),existing=await this.link(id);return existing?await r.update({filterByTk:existing.id,values}):await r.create({values:{projectId:id,...values}});}
- async token(id,signal){const refresh=this.env(secretKey(id));if(!refresh)throw Object.assign(new Error(systemMessageText('application.authorizeGoogleAccountFirst')),{status:409});const c=this.config();const tokens=await this.googleJson(id,g.GOOGLE_ENDPOINTS.token,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:c.clientId,client_secret:c.clientSecret,refresh_token:refresh,grant_type:'refresh_token'}),signal:signal?AbortSignal.any([signal,AbortSignal.timeout(20000)]):AbortSignal.timeout(20000)});if(!tokens.access_token)throw new Error('No access token');return tokens.access_token;}
+ async token(id,signal){const refresh=this.env(secretKey(id));if(!refresh)throw Object.assign(new Error(systemMessageText('application.authorizeGoogleAccountFirst')),{status:409});const c=this.config(id);const tokens=await this.googleJson(id,g.GOOGLE_ENDPOINTS.token,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:c.clientId,client_secret:c.clientSecret,refresh_token:refresh,grant_type:'refresh_token'}),signal:signal?AbortSignal.any([signal,AbortSignal.timeout(20000)]):AbortSignal.timeout(20000)});if(!tokens.access_token)throw new Error('No access token');return tokens.access_token;}
  async resources(id){const token=await this.token(id),analytics=[];let pageToken='';do{const url=new URL(g.GOOGLE_ENDPOINTS.analyticsAdmin+'/accountSummaries');url.searchParams.set('pageSize','200');if(pageToken)url.searchParams.set('pageToken',pageToken);const result=await this.googleJson(id,url,{...g.jsonRequest(token),signal:AbortSignal.timeout(20000)});for(const account of result.accountSummaries||[])for(const property of account.propertySummaries||[])analytics.push({id:property.property.replace('properties/',''),name:property.displayName});pageToken=result.nextPageToken||'';if(analytics.length>10000)throw new Error('Resource limit');}while(pageToken);const sites=await this.googleJson(id,g.GOOGLE_ENDPOINTS.searchConsole+'/sites',{...g.jsonRequest(token),signal:AbortSignal.timeout(20000)});return {analytics,searchConsole:(sites.siteEntry||[]).filter(s=>s.permissionLevel!=='siteUnverifiedUser').map(s=>({id:s.siteUrl,name:s.siteUrl}))};}
  googleFetch(id){return (url,init)=>this.network.fetch('google',url,init,String(id));}
  googleJson(id,url,init){return g.googleJson(url,init,this.googleFetch(id));}

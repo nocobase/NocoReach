@@ -3,7 +3,7 @@ import { systemMessageText } from '../../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import * as __policy from '../policy.js';
 import { randomUUID } from 'node:crypto';
-import { fail, text, digest, boardState, contentInput, projectWork, planInput, assertReview, makeArtifact, canApplyRun, type Work, type Run, type Artifact, type FileChange, type VisibleChange } from './model';
+import { fail, text, digest, boardState, contentInput, projectWork, planInput, assertReview, makeArtifact, canApplyRun, type Work, type Run, type RunEvent, type Artifact, type FileChange, type VisibleChange } from './model';
 import type { MockEngine } from '../../../app-plugins/nocoreach-mock/server/engine.js';
 import { OnlineProvider } from './provider';
 import { flowRunInput, type StageKind, type Stage, readsOnly, changesRepo } from './flow';
@@ -146,7 +146,7 @@ export class TaskService {
     const linked = [work.prevTaskId || task.evidence?.handoff?.taskId, work.nextTaskId].filter(Boolean).map(String);
     // The previous and next steps carry their number and where they stand too, as the opportunity's other tasks do.
     const related = [...(await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => ({ ...relatedTask(r), relation: String(r.get('id')) === String(work.nextTaskId) ? 'next' : 'prev' })), ...await this.siblings(project, task, tx)];
-    return { task, content, work, runs: runs.map(({ input, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), articleBases: await this.articleFlow.bases(project, taskId, work, tx) };
+    return { task, content, work, runs: runs.map(({ input, transcript: _transcript, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), articleBases: await this.articleFlow.bases(project, taskId, work, tx) };
   }
   // The other tasks handed off from the same opportunity (2026-10-22: one opportunity, a task per place to change), in
   // the order they were created, with where each stands.
@@ -166,11 +166,17 @@ export class TaskService {
   }
   async get(project: string, taskId: string, selectedRunId?: string, viewer?: {userId:string;seesMachines:boolean}) {
     const data = await this.withAgent(project, await this.lock(project, taskId, tx => this.view(project, taskId, tx)), viewer?.userId);
-    const runs = (data as {runs: Run[]}).runs.filter(r => r.pluginRunId).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    const runs = (data as {runs: Run[]}).runs.filter(r => r.pluginRunId || r.simulated).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     const run = selectedRunId ? runs.find(r => r.id === selectedRunId) : runs[0];
     if (selectedRunId && !run) return fail('运行不存在或不属于当前任务', 404);
     // Plugin reads happen outside the business transaction: SQLite has one connection.
-    if (run?.pluginRunId) {
+    if (run?.simulated) {
+      // The task view leaves transcripts out; the one selected is read in full.
+      const full: Run = await this.snapshot(this.key('run', project, taskId, run.id)) || run;
+      data.execution = { ...this.runtime.simulatedProgress(full, viewer), runId: run.id };
+      data.sources = null;
+      data.savedDraft = null;
+    } else if (run?.pluginRunId) {
       const detail = await this.runtime.progress(run.pluginRunId, viewer);
       data.execution = { ...detail, runId: run.id };
       if (run.status === 'failed' && !run.errorDetail && detail.businessFailure) run.errorDetail = detail.businessFailure;
@@ -217,9 +223,9 @@ export class TaskService {
     w.stageIndex = index; w.boardState = undefined;
     if (index >= stages.length) { w.stage = 'done'; return; }
     if (stages[index].kind === 'observe') { w.observeFrom = at; w.stage = 'done'; return; }
-    if (stages[index].kind === 'agent' && ((await this.agents.doc(project, tx)).repo || withoutRepo(w, stages[index]) || articleTask(w))) await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
+    if (stages[index].kind === 'agent' && (this.p.demoConfiguration?.enabled || ((await this.agents.doc(project, tx)).repo || withoutRepo(w, stages[index]) || articleTask(w)))) await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
     // A change you made yourself has no PR to merge: it waits for you to say it is live.
-    if (stages[index].kind === 'release' && this.simulated) {
+    if (stages[index].kind === 'release' && (this.simulated || task.evidence?.simulated)) {
       this.simulateRelease(w, actor, at);
       return;
     }
@@ -231,7 +237,7 @@ export class TaskService {
   // the repository runs without one (repo null): the Agent works from the material and public pages only.
   private async queueAgentRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string, extra: Partial<Run> = {}) {
     const index = w.stageIndex ?? 0, stage = w.flow!.stages[index], repo = (await this.agents.doc(project, tx)).repo || null;
-    if (!repo && !withoutRepo(w, stage) && !articleTask(w)) return fail(systemMessageText('taskExecution.connectRepositoryUnderDataSources'), 409);
+    if (!repo && !withoutRepo(w, stage) && !articleTask(w) && !(this.p.demoConfiguration?.enabled)) return fail(systemMessageText('taskExecution.connectRepositoryUnderDataSources'), 409);
     if (!w.humanOwnerId) return fail(systemMessageText('taskExecution.assignOwnerFirst'), 409);
     if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail(systemMessageText('taskExecution.runInProgress'), 409);
     const context = await this.p.project(project);
@@ -575,7 +581,7 @@ export class TaskService {
         if (v.agentId === null) {
           w.agentId = undefined; w.agentName = undefined;
         } else {
-          const agent = await this.agents.taskAgent(v.agentId, actor, tx);
+          const agent = await this.agents.taskAgent(v.agentId, actor, tx, project);
           w.agentId = agent.id; w.agentName = agent.name;
         }
         event.note = w.agentName || '';
@@ -764,7 +770,7 @@ export class TaskService {
         if (w.stage === 'done') return fail(systemMessageText('taskExecution.taskDoneArchived'), 409);
         for (const r of (await this.list('run', project, taskId, tx)) as Run[]) {
           if (r.status === 'queued') await this.put(this.key('run', project, taskId, r.id), { ...r, status: 'failed', error: 'cancelled', endedAt: at }, tx);
-          else if (r.status === 'running' && Boolean(r.pluginRunId)) await this.put(this.key('run', project, taskId, r.id), { ...r, cancelRequested: true }, tx);
+          else if (r.status === 'running' && (Boolean(r.pluginRunId) || r.simulated)) await this.put(this.key('run', project, taskId, r.id), { ...r, cancelRequested: true }, tx);
         }
         w.cancelledAt = at; w.cancelledBy = actor; w.boardState = undefined; event.note = optional(v.reason, 500) || undefined;
         const pr = [...w.results].reverse().find(a => a?.pr)?.pr, repo = (await this.agents.doc(project, tx)).repo;
@@ -807,11 +813,23 @@ export class TaskService {
       return fresh.status === 'running' ? fresh : null;
     });
   }
+  /** Appends one event to a running demo run's transcript; null once the run stopped or was asked to stop. */
+  async recordDemoEvent(run: Run, event: Omit<RunEvent, 'seq' | 'at'>): Promise<Run | null> {
+    return this.lock(run.projectId, run.taskId, async tx => {
+      const key = this.key('run', run.projectId, run.taskId, run.id), fresh: Run = await this.snapshot(key, tx);
+      if (!fresh || fresh.status !== 'running' || fresh.cancelRequested) return null;
+      const transcript = fresh.transcript || [];
+      fresh.transcript = [...transcript, { ...event, seq: transcript.length + 1, at: now() }].slice(-500);
+      await this.put(key, fresh, tx);
+      return fresh;
+    });
+  }
   async finish(run: Run, result?: { content: string; usage?: any; pr?: any; report?: any; article?: any }, error?: string, errorDetail?: string, restartedAt?: string) {
     return this.lock(run.projectId, run.taskId, async tx => {
       const key = this.key('run', run.projectId, run.taskId, run.id), fresh: Run = await this.snapshot(key, tx);
       if (!fresh || fresh.status !== 'running') return;
       const task = await this.task(run.projectId, run.taskId, tx), w = projectWork(task);
+      if (fresh.simulated) task.evidence = { ...task.evidence, simulated: true };
       const stale = !canApplyRun(w, fresh);
       fresh.endedAt = now(); fresh.status = result ? 'succeeded' : 'failed';
       if (result) {
@@ -842,6 +860,10 @@ export class TaskService {
         const rows = await this.repo('nrSnapshots').find({ filter: { key: { $startsWith: 'nr-task-run:' } }, sort: 'id', limit: 100, offset });
         for (const row of rows) {
           const r: Run = row.get('payload');
+          if (r.simulated && r.status === 'queued') await this.runtime.simulate(r);
+          // Local simulations have no external job to resume after a crash. Settle an interrupted claim.
+          if (r.simulated && r.status === 'running' && Date.now() - Date.parse(r.startedAt || r.createdAt) > 5 * 60000)
+            await this.finish(r, undefined, 'demo_simulation_interrupted');
           if (r.pluginRunId && !r.pluginSettled) await this.runtime.sync(r);
         }
         if (rows.length < 100) break;

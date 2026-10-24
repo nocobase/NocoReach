@@ -541,6 +541,42 @@ test("without an official reason, the Agent's own message or a plain fallback is
   expect(screen.queryByText(/已连续/)).toBeNull();
 });
 
+test('an environment Demo Agent can start without selecting or changing a real Runner', async () => {
+  const data = initial();
+  data.agent = {
+    repo: null,
+    online: true,
+    agentId: 'nocoreach.runner',
+    defaultAgentId: 'nocoreach.runner',
+    options: [
+      {
+        id: 'nocoreach.runner',
+        name: 'NocoReach Demo Agent',
+        type: 'demo',
+        online: true,
+      },
+    ],
+  };
+  advance.mockResolvedValue(data);
+  mount(data);
+  const start = await screen.findByRole('button', { name: '确定开始执行' });
+  expect(start).toBeEnabled();
+  await userEvent.click(start);
+  expect(action).toHaveBeenCalledWith(
+    'nrTaskWork',
+    'advance',
+    expect.objectContaining({
+      body: expect.objectContaining({ command: 'startTask' }),
+    }),
+  );
+  expect(
+    action.mock.calls.filter(
+      ([, command, options]) =>
+        command === 'advance' && options?.body?.command === 'setAgent',
+    ),
+  ).toHaveLength(0);
+});
+
 // 2026-10-21 user report: a run that failed because Claude Code was not signed in said "the coding tool on that
 // computer (such as Codex or Claude Code)" while the header showed the Agent online, and pushed Try again.
 test('a sign-in failure names the computer and the tool, and does not push Try again', () => {

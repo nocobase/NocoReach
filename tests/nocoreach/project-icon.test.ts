@@ -16,3 +16,8 @@ test('icon: tries www when the bare domain fails, keeps images only, caches a we
  const n=seen.length;await new ProjectIcon(p,read).get('1');assert.equal(seen.length,n,'cached');
  const none=await new ProjectIcon({...p,project:async()=>({id:1,domains:['y.dev']})},async()=>{throw new Error('x');}).get('1');assert.equal(none.dataUrl,null);
 });
+test('demo icon reads never fetch or write a cache while browsing',async()=>{
+ const forbidden=()=>{throw new Error('Unexpected demo side effect');};
+ const p={demoConfiguration:{enabled:true},project:async()=>({domains:['x.dev']}),db:{getRepository:()=>({findOne:async()=>null,create:forbidden,update:forbidden})}};
+ assert.deepEqual(await new ProjectIcon(p,forbidden).get('1'),{dataUrl:null,source:null});
+});

@@ -166,7 +166,7 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
                 >
                   <Rocket />
                   {$t(
-                    mockSettingsAvailable()
+                    mockSettingsAvailable() || data.task.evidence?.simulated
                       ? 'taskDetail.approveAndSimulatePublish'
                       : 'taskDetail.approveAndPublish',
                   )}

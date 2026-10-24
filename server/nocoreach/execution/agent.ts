@@ -47,13 +47,20 @@ export class AgentStore {
   }
   async status(project: string, taskAgentId?: string, actor?: string, viewer?: { seesMachines: boolean }) {
     const d = await this.doc(project), agents = this.s.p.agents;
+    const proxy = this.s.p.demoAgent;
+    if (proxy && this.s.p.demoConfiguration?.enabled) {
+      let online = false;
+      try { online = await proxy.prepare(); } catch { /* Disabled simulations never expose real runners. */ }
+      return { ...d, agentId: proxy.id, defaultAgentId: proxy.id, online,
+        options: online ? [{ id: proxy.id, name: proxy.title, type: 'demo', online: true, busy: 0 }] : [] };
+    }
     const conn = agents.tx.read();
     const options = await agents.agents.listActive(conn);
     const agentId = taskAgentId || d.agentId;
 
     // Call outside business transactions: model and actor eligibility checks open plugin reads.
     const availability = await agents.availability(conn, options, actor);
-    const choices = options.map(a => ({ id: a.id, name: a.name, type: 'runner', tool: a.modelEntries?.[0]?.tool ?? null, online: Boolean(availability.get(a.id)?.online), busy: availability.get(a.id)?.busy || 0 }));
+    const choices: { id: string; name: string; type: string; tool: string | null; online: boolean; busy: number }[] = options.map(a => ({ id: a.id, name: a.name, type: 'runner', tool: a.modelEntries?.[0]?.tool ?? null, online: Boolean(availability.get(a.id)?.online), busy: availability.get(a.id)?.busy || 0 }));
     const status = { ...d, agentId, defaultAgentId: d.agentId, options: choices, online: Boolean(choices.find(a => a.id === agentId)?.online) };
     if (!viewer || !actor) return status;
     // The Agent page also asks how each agent's latest tasks ended and where the chosen one runs (2026-10-21 user report:
@@ -80,7 +87,10 @@ export class AgentStore {
     const last = runForViewer(latest, viewer).executions?.at(-1);
     return { state: 'attention', group, count, at: latest.finishedAt, runnerName: last && !last.machineHidden ? last.runnerName : null, tool: last?.tool ?? latest.tool ?? null };
   }
-  async taskAgent(agentId: unknown, actor: string, tx: LegacyTransaction) {
+  async taskAgent(agentId: unknown, actor: string, tx: LegacyTransaction, project?: string) {
+    const proxy = this.s.p.demoAgent;
+    if (project && proxy && agentId === proxy.id && await proxy.prepare())
+      return { id: proxy.id, name: proxy.title, type: 'demo' as const };
     if (typeof agentId !== 'string' || !agentId.trim() || agentId.length > 100) return fail(systemMessageText('projectAi.selectTaskAgent'));
     const agents = this.s.p.agents;
     const agent = await agents.agents.findWorkable(tx.connection, agentId);
