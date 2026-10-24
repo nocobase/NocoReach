@@ -21,7 +21,7 @@ export function StepIcon({ kind }: { kind: StepKind }) {
   return <Icon className='size-3.5' />;
 }
 
-/** The steps in order, then Live and Track impact when a step changes the repository. */
+/** The steps in order, then Publish and Track impact when a step changes the repository. */
 export function PlaybookSteps({
   steps,
   skills = [],
@@ -31,7 +31,7 @@ export function PlaybookSteps({
 }) {
   const system = steps.some((s) => s.kind === 'change')
     ? [
-        [$t('common.live'), $t('playbooks.mergePrConfirmChangeLive')],
+        [$t('playbook.publishStage'), $t('playbooks.mergePrConfirmChangeLive')],
         [
           $t('playbooks.trackImpact'),
           $t('playbooks.compareDataBeforeGoingLive'),

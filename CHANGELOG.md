@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Review, then Publish
+
+- The step where a person approves a change is named Review instead of "Review and publish", and the step after it, where the system merges or writes to the CMS and confirms the page is live, is named Publish instead of "Live", in the task header, start card, Opportunities, Playbooks and the playbook editor's note. The flow and the number of clicks are unchanged.
+- The review card's button reads "Approve and publish" ("Approve and simulate publishing" in the demo) instead of "Publish".
+- Built-in playbooks name their final review step with `common.review`, as the system already did when it adds one. Tasks started before keep their stored names but show the new ones: `playbook-snapshot.ts` treats `playbook.reviewPublish` as `common.review`. Custom and edited playbooks keep their own step names.
+
 ## Unreleased — Folds that say what they show and open into view
 
 - Technical details › Runs no longer shows "Source snapshot for this run" for runs that read no forum posts (every run but community replies), where it opened a single grey line out of view. A run that read posts lists them under "Posts the Agent read": each topic with its post count and whether it was complete, the first five shown and "N more topics" for the rest.

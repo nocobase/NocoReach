@@ -1,4 +1,4 @@
-import { $legacyText } from '#i18n';
+import { $legacyText, $t } from '#i18n';
 import { systemMessageKey } from '../../shared/i18n/messages';
 import { SYSTEM_PLAYBOOKS, stagesFor } from '../../shared/playbook-catalog';
 import type { FlowSnapshot, PlaybookSnapshot } from './playbook-model';
@@ -12,21 +12,35 @@ const hasOrigin = (snapshot: Origin) =>
   'system' in snapshot || 'edited' in snapshot;
 // System copy is recognized by its message key, so a step stored under its older wording (Review and publish was
 // renamed in Chinese on 2026-10-22) still matches through the alias manifest. User-authored text has no key and must
-// match exactly.
+// match exactly. A built-in step whose key was replaced is the same step under the new key: Review and publish became
+// Review on 2026-10-24, with Publish as the step after it, so tasks started before show and match the new name.
+const REPLACED: Record<string, string> = {
+  'playbook.reviewPublish': 'common.review',
+};
+const stepKey = (value: string) => {
+  const key = systemMessageKey(value);
+  return key === undefined ? undefined : (REPLACED[key] ?? key);
+};
 const sameText = (a: string, b: string) => {
   if (a === b) return true;
-  const key = systemMessageKey(a);
-  return key !== undefined && key === systemMessageKey(b);
+  const key = stepKey(a);
+  return key !== undefined && key === stepKey(b);
 };
 const knownText = (list: string[]) => {
   const exact = new Set(list),
-    keys = new Set(list.map(systemMessageKey).filter(Boolean));
+    keys = new Set(list.map(stepKey).filter(Boolean));
   return {
     has: (value: string) =>
       exact.has(value) ||
-      (systemMessageKey(value) !== undefined &&
-        keys.has(systemMessageKey(value))),
+      (stepKey(value) !== undefined && keys.has(stepKey(value))),
   };
+};
+// A stored built-in step name in the reader's language, under its current name.
+const stepText = (value: string) => {
+  const key = systemMessageKey(value);
+  return key !== undefined && REPLACED[key]
+    ? $t(REPLACED[key])
+    : $legacyText(value);
 };
 const names = knownText(SYSTEM_PLAYBOOKS.map((p) => p.name));
 const stageNames = knownText(
@@ -105,7 +119,7 @@ function localizeFlowSnapshot(
     name: snapshotName(flow, canonicalLegacy),
     stages: flow.stages.map((stage) => ({
       ...stage,
-      name: stageNames.has(stage.name) ? $legacyText(stage.name) : stage.name,
+      name: stageNames.has(stage.name) ? stepText(stage.name) : stage.name,
     })),
   };
 }
