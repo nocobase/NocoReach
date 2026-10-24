@@ -2,7 +2,8 @@ import { useMessageState, $t, $tj, $legacyText, $legacyFragment } from "#i18n";
 import { usePageTab } from '#hooks/use-page-tab';
 import {useEffect,useState,type ReactNode} from 'react';
 import {Link,useNavigate,useSearchParams} from 'react-router';
-import {ArrowRightIcon,ExternalLinkIcon,EyeIcon,LightbulbIcon,SearchIcon} from 'lucide-react';
+import {ArrowRightIcon,ExternalLinkIcon,EyeIcon,LightbulbIcon,SearchIcon,Undo2Icon} from 'lucide-react';
+import {Tooltip,TooltipContent,TooltipTrigger} from '#components/ui/tooltip';
 import {PageContainer,PageHeader} from '#components/reach/page';
 import {Tag,type Tone} from '#components/reach/tag';
 import {InfoTip} from '#components/reach/info-tip';
@@ -148,7 +149,7 @@ function WatchList({items:all,ended,rows,busy,onOpen,onIgnore,onRestore,onOpport
    <ul className="divide-y rounded-lg border bg-card">{ended.map(w=><li key={w.key} className="flex flex-wrap items-center gap-3 px-4 py-2 text-sm" data-ended={w.ended!.outcome}>
     <span className="min-w-0 flex-1"><span className="block truncate">{$legacyText(w.startTitle)}</span>{w.ended!.reason?<span className="block truncate text-xs text-muted-foreground">{w.ended!.reason}</span>:null}</span>
     <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{$t('strategy.watchedDays',{0:daysBetween(w.since,w.ended!.at)})}</span>{outcome(w)}
-    {w.ended!.outcome==='ignored'?<Button size="sm" variant="ghost" disabled={busy} onClick={()=>onRestore(w.key)}>{$t('strategy.restore')}</Button>:null}
+    {w.ended!.outcome==='ignored'?<RestoreButton busy={busy} onClick={()=>onRestore(w.key)}/>:null}
    </li>)}</ul></section>:null}
  </div>;
 }
@@ -157,7 +158,9 @@ function WatchList({items:all,ended,rows,busy,onOpen,onIgnore,onRestore,onOpport
 type Settled={s:Signal;status:ReturnType<typeof statusOf>};
 /** A change's filter value: a handed-off one by where its open task stands, as its tag says. */
 const changeDest=(c:Settled):Dest=>c.status.next==='task'?(!c.status.task||c.status.task==='todo'?'task':c.status.task):c.status.ignored?'ignored':'skip';
-const RestoreButton=({busy,onClick}:{busy:boolean;onClick:()=>void})=><Button size="sm" variant="ghost" className="-my-1.5" disabled={busy} onClick={onClick}>{$t('strategy.restore')}</Button>;
+// Restore puts a dismissed item back (2026-10-24 user request: a mark instead of the word, and not the refresh arrows,
+// which read as refreshing it): an undo arrow, named and explained on hover.
+const RestoreButton=({busy,onClick}:{busy:boolean;onClick:()=>void})=><Tooltip><TooltipTrigger render={<Button size="icon-sm" variant="ghost" className="-my-1.5" aria-label={$t('strategy.restore')} disabled={busy} onClick={onClick}/>}><Undo2Icon/></TooltipTrigger><TooltipContent>{$t('strategy.restore')}</TooltipContent></Tooltip>;
 // Where-it-went order for sorting (2026-10-24 user request: every column but the title sorts): what waits for you first,
 // then work under way, done, closed, and what was dropped.
 const DEST_RANK:Record<Dest,number>={pending:0,review:1,doing:2,task:3,done:4,closed:5,ignored:6,expired:7,skip:8};
@@ -196,7 +199,7 @@ function DoneTable({rows,changes,busy,onOpen,onOpenChange,onRestore,onRestoreCha
     <th className="px-3 py-2 text-left font-medium">{$t('common.title')}</th>
     {head('dest',$t('strategy.whereWent'),'w-40 sm:w-56')}
     {head('found',$t('strategy.firstFound'),cn('w-28',hideOnPhone))}
-    <th className="w-20 px-2 py-2"><span className="sr-only">{$t('common.actions')}</span></th>
+    <th className="w-12 px-2 py-2"><span className="sr-only">{$t('common.actions')}</span></th>
    </tr></thead>
    <tbody>{lines.map(l=>{
     if(l.kind==='opp'){const r=l.row;return <tr key={l.key} data-opportunity-id={r.card.id} className={cn('cursor-pointer border-t transition-colors hover:bg-muted/40',r.state==='archived'&&'text-muted-foreground')} onClick={()=>onOpen(r)}>
