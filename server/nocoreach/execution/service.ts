@@ -19,6 +19,8 @@ import { CHECKPOINTS, compare, dateOf, pageKey, pageNumbers, shift, windows, typ
 import { listResults, readResult, resultBoard } from './result-view.js';
 import { ArticleFlow } from './article-flow.js';
 import { STARTS_KEY, restartOf, withStart } from './restarts.js';
+import { ownSignalIds } from '../../../shared/opportunity-parts.js';
+import { taskStanding } from '../../../shared/task-pending.js';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
 // Roles and what only 管理员 may change live with the server code (server/policy.js); the same relative path works from
 // the source and from dist/execution.
@@ -140,8 +142,18 @@ export class TaskService {
     const [runs, artifacts, reviews] = await Promise.all(['run', 'artifact', 'review'].map(k => this.list(k, project, taskId, tx)));
     const content=work.contentId?await this.snapshot(this.key('content',project,'index',work.contentId),tx):null;
     const linked = [work.prevTaskId || task.evidence?.handoff?.taskId, work.nextTaskId].filter(Boolean).map(String);
-    const related = (await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => ({ id: r.get('id'), title: r.get('title'), relation: String(r.get('id')) === String(work.nextTaskId) ? 'next' : 'prev' }));
+    const related = [...(await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => ({ id: r.get('id'), title: r.get('title'), relation: String(r.get('id')) === String(work.nextTaskId) ? 'next' : 'prev' })), ...await this.siblings(project, task, tx)];
     return { task, content, work, runs: runs.map(({ input, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), articleBases: await this.articleFlow.bases(project, taskId, work, tx) };
+  }
+  // The other tasks handed off from the same opportunity (2026-10-22: one opportunity, a task per place to change), in
+  // the order they were created, with where each stands.
+  private async siblings(project: string, task: any, tx?: any) {
+    const insight = task.evidence?.insight?.id;
+    if (typeof insight !== 'string') return [];
+    const strategy = await this.snapshot(`strategy:${project}`, tx);
+    const ids = [...new Set<string>([...(strategy?.proposals || [])].reverse().filter((p: any) => p.taskId && p.insight?.id === insight).map((p: any) => String(p.taskId)))].filter(id => id !== String(task.id));
+    const rows = (await Promise.all(ids.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean);
+    return rows.map((r: any) => { const t = r.toJSON ? r.toJSON() : r, w = t.evidence?.work; return { id: t.id, title: t.title, relation: 'sibling', ...(Number.isInteger(t.evidence?.no) ? { no: t.evidence.no } : {}), state: taskStanding({ work: w, status: t.status }) }; });
   }
   private async withAgent(project: string, data: any, actor?: string) {
     // Actor-specific Runner eligibility opens plugin reads of its own.
@@ -313,12 +325,13 @@ export class TaskService {
   // The pages a finished task changed: what was released, the published page and the linked page.
   effectPages(w: Work) { return [...new Set([...(w.release?.pages || []), w.receipt?.url || '', w.page?.url || ''].map(httpsUrl).filter(Boolean))].slice(0, 10); }
   // The pages the task page shows numbers for (2026-10-22): those the observation compares, then the page the task
-  // was handed off with, the opportunity's page and the cited changes' pages (as the article lookup reads them).
+  // was handed off with, the opportunity's page and the cited changes' pages (as the article lookup reads them). One of
+  // an opportunity's several tasks (handed off one place at a time) shows its own place only, never the others'.
   numberPages(task: any, w: Work) {
-    const e = task.evidence || {}, ids = new Set(Array.isArray(e.insight?.signalIds) ? e.insight.signalIds : []);
+    const e = task.evidence || {}, ids = new Set(ownSignalIds(e));
     const cited = (e.context?.signals?.items || []).filter((s: any) => ids.has(s?.key)).map((s: any) => s?.url);
     const pages = new Map<string, string>();
-    for (const u of [...this.effectPages(w), e.page, e.insight?.target, ...cited]) {
+    for (const u of [...this.effectPages(w), e.page, e.part ? undefined : e.insight?.target, ...cited]) {
       const url = typeof u === 'string' ? u.trim() : '';
       if (/^https?:\/\//i.test(url) && pageKey(url) && !pages.has(pageKey(url))) pages.set(pageKey(url), url);
     }

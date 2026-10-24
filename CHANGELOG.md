@@ -15,6 +15,13 @@
 
 - Under a task's title, the playbook's steps are a row of tags joined by chevrons again, as before the one-layout change: done steps ticked in green, the current one outlined (violet for a person's step, blue for the Agent's), the rest grey. The grey "Now: …" text after them is gone, since the highlighted step says where the task stands. Nothing else in the header changed.
 
+## Unreleased — One opportunity, a task for each place to change
+
+- Hand off to agent on an opportunity whose changes point to several places (pages to improve or fix, a release to announce, community posts awaiting a reply) first lists one task per place, with its title ("Update Top 11 Open Source No-Code AI Tools"), page and playbook; untick the ones not to do now. One task is created per ticked place, and Opportunities shows the opportunity with its tasks instead of opening one of them. An opportunity with one place is handed off as one task, as before. The same rule applies on Opportunities, on Insights and to a hand-off asked for in a conversation (every place without a task).
+- The opportunity lists its tasks with their states and a count per state; on Insights its line reads "6 tasks · 1 done". Places that no open task changes yet can be handed off later from the opportunity.
+- A task's Related tasks list the other tasks of the same opportunity with their states, linked to the opportunity. Its brief starts by saying it is one of several tasks of the opportunity, the one place it changes and what the others change, and to keep one approach across them; its Agent reads the changes about its own place only. Its Performance and its article lookup use its own page only.
+- There are no parent tasks: the opportunity is the grouping, and the task list and board stay flat. Tasks handed off before this change keep their single task (T-34 stays as it is); its opportunity can hand off the places left.
+
 ## Unreleased — Competitor activity: only problems the person can fix
 
 - Removing or editing a competitor clears its errors at once. Each competitor keeps its own errors, and the source's last run (Data health, the Activity tab) is derived from the competitors still listed, also when it is read, instead of waiting for the next weekly look. On Studio, Data health still showed Competitor activity failing with "Baserow website: No sitemap found" after Baserow had been removed.

@@ -27,7 +27,7 @@ import { dayOf, feedOf } from './feed';
 import { Composer, InsightChatProvider } from './threads';
 import { useOptionalOnlineChat } from '../../online-agent/context';
 import { useChatPanel } from '@nocobase/app-plugin-agents/client/chat';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { InfoTip } from '#components/reach/info-tip';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
@@ -52,6 +52,8 @@ import {
   HandOffNotice,
   type HandOffResult,
 } from './hand-off';
+import { OpportunityHandOffDialog } from './places';
+import { placesOf } from './places-model';
 import { localizeWorkSnapshots } from '../playbook-snapshot';
 import {
   playbookRequest,
@@ -140,7 +142,9 @@ function Insights({
     [generating, setGenerating] = useState(false),
     [analysis, setAnalysis] = useState<AnalysisStatus>(),
     [rawPlaybooks, setRawPlaybooks] = useState<PlaybookList>(),
-    [handed, setHanded] = useState<HandOffResult>();
+    [handed, setHanded] = useState<HandOffResult>(),
+    [handing, setHanding] = useState<Row>(),
+    navigate = useNavigate();
   const playbooks = localizePlaybookList(rawPlaybooks);
   const pendingRef = useRef(false),
     operationRef = useRef({ key: '', id: '' });
@@ -225,9 +229,15 @@ function Insights({
       .catch(() => undefined);
   }, [projectId]);
   const kindOf = (row: Row) => recommendedFor(row, playbooks?.playbooks)?.kind;
-  // 交给 Agent: the task is created and started; the page stays with a link to it (same as 机会).
-  const convert = (row: Row) =>
-    act(async () => {
+  // Hand off to agent: the task is created and its page opens. An opportunity with several places asks which ones
+  // first, then opens on Opportunities with its tasks (the same dialog as there).
+  const convert = (row: Row) => {
+    if (placesOf(row).length) {
+      setHanded(undefined);
+      setHanding(row);
+      return;
+    }
+    return act(async () => {
       setHanded(undefined);
       try {
         const r = await handOff(
@@ -245,6 +255,7 @@ function Insights({
         setError(() => $t('strategy.notHandOffOpportunityKept'));
       }
     });
+  };
   const review = (id: string, change: { priority?: string; status?: string }) =>
     act(async () => {
       try {
@@ -451,6 +462,23 @@ function Insights({
         </p>
       )}
       <HandOffNotice result={handed} />
+      {handing && (
+        <OpportunityHandOffDialog
+          projectId={projectId}
+          state={state}
+          row={handing}
+          playbooks={playbooks?.playbooks}
+          onClose={() => setHanding(undefined)}
+          onDone={(r) => {
+            setHanding(undefined);
+            setState(r.state);
+            refreshNavBadges();
+            void navigate(
+              `/opportunities?tab=done&item=${encodeURIComponent(handing.card.id)}`,
+            );
+          }}
+        />
+      )}
       <AnalysisAlert
         status={analysis}
         busy={busy || generating}

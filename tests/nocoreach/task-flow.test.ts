@@ -810,3 +810,19 @@ test('project default can be saved and cleared without changing repositories or 
   assert.equal(view.agent.repo.repo, 'org/site');
   assert.equal((await f.s.agents.doc('2')).agentId, null);
 });
+
+test('a task handed off with other tasks of its opportunity lists them, and its numbers cover its own place only',async()=>{
+ // O-43 handed off one task per place (2026-10-22): T-41 is this task, T-42 is under way and T-43 was closed.
+ const top11='https://www.example.com/en/blog/top-11',top15='https://www.example.com/en/blog/top-15';
+ const signals=[{key:'rank:top11',url:top11,action:'optimize'},{key:'rank:top15',url:top15,action:'optimize'}];
+ const insight={id:'o43',no:43,target:top11,signalIds:['rank:top11','rank:top15']};
+ const f=fixture(undefined,{no:41,insight,part:{key:'page:example.com/en/blog/top-15',kind:'page',url:top15,label:'Top 15',signalIds:['rank:top15']},page:top15,context:{signals:{items:signals}}});
+ f.state.nrTasks.push({id:2,projectId:'1',title:'Update Top 11',status:'待处理',evidence:{no:42,insight,work:{stage:'flow',flow:{stages:[{kind:'agent'}]},stageIndex:0}}},{id:3,projectId:'1',title:'Reply to unanswered community posts',status:'待处理',evidence:{no:43,insight,work:{stage:'plan',archivedAt:'2026-10-22T00:00:00Z'}}},{id:4,projectId:'1',title:'Elsewhere',status:'待处理',evidence:{no:44,insight:{id:'o44'}}});
+ f.state.nrSnapshots.push({id:9401,key:'strategy:1',payload:{proposals:[{id:'p3',insight,taskId:3},{id:'p2',insight,taskId:2},{id:'p1',insight,taskId:1},{id:'p4',insight:{id:'o44'},taskId:4}]}});
+ const d=await f.view();
+ assert.deepEqual(d.related.map(r=>[r.relation,r.id,r.no,r.state]),[['sibling',2,42,'doing'],['sibling',3,43,'closed']]);
+ assert.deepEqual(f.s.numberPages(d.task,d.work),[top15],'not the opportunity\'s target or its other page');
+ // A task handed off as a whole still shows every page the opportunity cites.
+ const whole={...d.task,evidence:{...d.task.evidence,part:undefined,page:undefined}};
+ assert.deepEqual(f.s.numberPages(whole,d.work),[top11,top15]);
+});
