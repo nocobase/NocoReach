@@ -59,6 +59,8 @@ export function TaskProperties({
   agentLocked,
   onOwner,
   onAgent,
+  agentPicker,
+  onAgentPicker,
   className,
 }: {
   data: TaskData;
@@ -70,6 +72,9 @@ export function TaskProperties({
   agentLocked?: string;
   onOwner: (userId: string) => void;
   onAgent: (agentId: string) => Promise<boolean>;
+  /** The Agent menu opened from elsewhere on the page (a failed step's Switch Agent). */
+  agentPicker?: boolean;
+  onAgentPicker?: (open: boolean) => void;
   className?: string;
 }) {
   const navigate = useNavigate(),
@@ -166,6 +171,8 @@ export function TaskProperties({
             data={data}
             busy={busy}
             locked={agentLocked}
+            open={agentPicker}
+            onOpenChange={onAgentPicker}
             bare
             onChange={onAgent}
           />

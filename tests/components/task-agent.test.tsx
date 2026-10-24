@@ -518,7 +518,7 @@ test('a failed run says why in plain words and what to do, from the official rea
   mount(data);
   expect(screen.getByText(/运行 Agent 的电脑中途断开了连接/)).toBeVisible();
   expect(screen.getByText(/确认那台电脑开着、联网/)).toBeVisible();
-  expect(screen.getByText(/已经连续 2 次没做完/)).toBeVisible();
+  expect(screen.getByText(/已连续 2 次没有完成/)).toBeVisible();
   expect(document.body).not.toHaveTextContent('agent_failed');
   expect(document.body).not.toHaveTextContent('leaseExpired');
 });
@@ -538,7 +538,7 @@ test("without an official reason, the Agent's own message or a plain fallback is
   expect(
     screen.getByText('这次运行没有完成，也没有留下具体原因。'),
   ).toBeVisible();
-  expect(screen.queryByText(/已经连续/)).toBeNull();
+  expect(screen.queryByText(/已连续/)).toBeNull();
 });
 
 // 2026-10-21 user report: a run that failed because Claude Code was not signed in said "the coding tool on that
@@ -568,20 +568,19 @@ test('a sign-in failure names the computer and the tool, and does not push Try a
   };
   const view = mount(data);
   expect(
-    screen.getByText('Office-Mac 上的 Claude Code 没有登录。'),
-  ).toBeVisible();
-  expect(
     screen.getByText(
-      '请管理这台电脑的人在上面登录 Claude Code，或在上方换一个 Agent。',
+      'Office-Mac 上的 Claude Code 没有登录。 Agent 显示“在线”，只说明这台电脑连上了 NocoReach。',
     ),
   ).toBeVisible();
   expect(
-    screen.getByText('Agent 显示“在线”，只说明这台电脑连上了 NocoReach。'),
+    screen.getByText('请管理这台电脑的人登录 Claude Code，然后再试一次。'),
   ).toBeVisible();
   const retry = screen.getByRole('button', { name: '再试一次' });
   expect(retry).toBeEnabled();
   expect(retry).not.toHaveClass('bg-primary');
-  expect(screen.getByRole('button', { name: '我自己完成' })).toBeVisible();
+  // The failure card offers another Agent and a message; doing the step by hand lives in the More menu.
+  expect(screen.getByRole('button', { name: '给 Agent 留言' })).toBeVisible();
+  expect(screen.queryByRole('button', { name: '我自己完成' })).toBeNull();
   view.unmount();
 
   // A reader who may not see the computer still learns which tool; without either, the general wording stays.
@@ -606,6 +605,43 @@ test('a sign-in failure names the computer and the tool, and does not push Try a
   expect(
     screen.getByText('那台电脑上的编码工具（如 Codex、Claude Code）没有登录。'),
   ).toBeVisible();
+});
+
+// 2026-10-23 user request: the failure card's own ways forward. Another Agent opens the Agent picker in Properties, a
+// message goes to the activity composer, and doing the step by hand is in the More menu, not on the card.
+test('a failed step offers another Agent and a message, and doing it by hand from the More menu', async () => {
+  const user = userEvent.setup();
+  const data = failedWithRemovedAgent();
+  data.work.agentId = 'codex';
+  data.agent!.agentId = 'codex';
+  data.agent!.options = [
+    { id: 'codex', name: 'NocoReach Codex', online: true },
+    { id: 'claude', name: 'Research Claude', online: true },
+  ];
+  const view = mount(data);
+  expect(screen.getByText('Agent 没能完成这一步')).toBeVisible();
+  await user.click(screen.getByRole('button', { name: '换一个 Agent' }));
+  expect(
+    await screen.findByRole('menuitemradio', { name: /Research Claude/ }),
+  ).toBeVisible();
+  await user.keyboard('{Escape}');
+  await user.click(screen.getByRole('button', { name: '给 Agent 留言' }));
+  expect(document.activeElement).toHaveAttribute('id', 'nr-composer');
+  await user.click(screen.getByRole('button', { name: '更多' }));
+  await user.click(
+    await screen.findByRole('menuitem', { name: '手动完成这一步' }),
+  );
+  expect(
+    await screen.findByRole('textbox', { name: '分析结果' }),
+  ).toBeVisible();
+  view.unmount();
+
+  // While the Agent works on the step, the More menu does not offer to take it over.
+  data.runs[0].status = 'running';
+  mount(data);
+  await user.click(screen.getByRole('button', { name: '更多' }));
+  await screen.findByRole('menuitem', { name: '技术细节' });
+  expect(screen.queryByRole('menuitem', { name: '手动完成这一步' })).toBeNull();
 });
 
 test('Try again stays the main action when retrying can help', () => {
@@ -676,7 +712,7 @@ test('a run a NocoReach restart interrupted says so, keeps Try again first and i
   ).toBeVisible();
   expect(screen.getByText('再试一次即可，不需要检查那台电脑。')).toBeVisible();
   expect(document.body).not.toHaveTextContent('Office-Mac');
-  expect(screen.queryByText(/已经连续/)).toBeNull();
+  expect(screen.queryByText(/已连续/)).toBeNull();
   expect(screen.getByRole('button', { name: '再试一次' })).toHaveClass(
     'bg-primary',
   );
@@ -690,7 +726,7 @@ test('a run a NocoReach restart interrupted says so, keeps Try again first and i
   data.execution = { ...data.execution, runId: 'run-4' };
   mount(data);
   expect(screen.getByText(/^Office-Mac 中途断开了连接/)).toBeVisible();
-  expect(screen.getByText(/已经连续 2 次没做完/)).toBeVisible();
+  expect(screen.getByText(/已连续 2 次没有完成/)).toBeVisible();
 });
 
 test('a step the system started again after a restart says why it runs again', () => {

@@ -318,7 +318,10 @@ test('confirms a failed agent manual draft once until its content changes', asyn
   ];
   mount(data);
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '我自己完成' }));
+  await user.click(screen.getByRole('button', { name: '更多' }));
+  await user.click(
+    await screen.findByRole('menuitem', { name: '手动完成这一步' }),
+  );
   const editor = screen.getByRole('textbox', { name: '分析结果' });
   await user.type(editor, 'Manual draft');
   vi.mocked(window.confirm).mockReturnValue(false);
