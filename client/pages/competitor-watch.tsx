@@ -23,8 +23,9 @@ import {confirmAction} from "#components/reach/confirm";
 import { formatCount, formatDate, formatDateTime, formatSigned } from '#lib/format';
 import { ConnectionError } from '#components/connection-error';
 
-export type Competitor = { id: string; name: string; site: string; repo: string; addedAt: string; checkedAt: string | null; pages: number | null; stars: number | null; week: number | null; latestRelease: { name: string; tag: string; url: string; publishedAt: string } | null; errors: string[] };
-export type CompetitorStatus = { connected: boolean; checking?: boolean; max: number; suggestions: string[]; lastRun: { at: string; ok: boolean; errors: string[] } | null; nextCheckAt: string | null; list: Competitor[] };
+export type Competitor = { id: string; name: string; site: string; repo: string; addedAt: string; checkedAt: string | null; pages: number | null; stars: number | null; week: number | null; latestRelease: { name: string; tag: string; url: string; publishedAt: string } | null; errors: string[]; noSitemap?: boolean };
+export type Suggestion = { name: string; site: string; repo: string };
+export type CompetitorStatus = { connected: boolean; checking?: boolean; max: number; suggestions: Suggestion[]; lastRun: { at: string; ok: boolean; errors: string[] } | null; nextCheckAt: string | null; list: Competitor[] };
 type Event = { id: string; competitorId: string; competitor: string; type: "page" | "release" | "site"; title: string; url: string; detail: string; at: string };
 type View = CompetitorStatus & { events: Event[]; notes: string[] };
 const call = <T,>(projectId: number, action: string, body: object = {}) => api.action<T>("nrCompetitors", action, { method: "POST", body: { projectId, ...body }, unwrap: "data" });
@@ -59,15 +60,16 @@ function SuggestList({ projectId, room, force = false, onAdded, onManual }: { pr
     </div>
   );
 }
-// Adding one competitor: a name (names written in 记忆 are offered), the website and/or the GitHub repository.
-function AddForm({ projectId, suggestions, onAdded, onCancel }: { projectId: number; suggestions: string[]; onAdded: (s: CompetitorStatus) => void; onCancel?: () => void }) {
+// Adding one competitor: a name, the website and/or the GitHub repository. Competitors AI detect found and checked are
+// offered; one fills all three fields.
+function AddForm({ projectId, suggestions, onAdded, onCancel }: { projectId: number; suggestions: Suggestion[]; onAdded: (s: CompetitorStatus) => void; onCancel?: () => void }) {
   const { can: canAdd } = useBusinessAccess('nrCompetitors.add', projectId);
   const [form, setForm] = useState({ name: "", site: "", repo: "" }), [busy, setBusy] = useState(false), [error, setError] = useMessageState("");
   const add = async () => { setBusy(true); setError(""); try { onAdded(await call<CompetitorStatus>(projectId, "add", form)); setForm({ name: "", site: "", repo: "" }); } catch (e) { setError(() => (e instanceof Error ? $legacyText(e.message) : $t('competitorWatch.notAddedTryAgain'))); } finally { setBusy(false); } };
   if (!canAdd) return null;
   return (
     <div className="flex flex-col gap-3" data-add-competitor>
-      {suggestions.length ? <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">{$t('competitorWatch.competitorsMemory')}{suggestions.map((s) => <button key={s} type="button" className="rounded border px-1.5 py-0.5 hover:bg-muted" onClick={() => setForm((f) => ({ ...f, name: s }))}>{s}</button>)}</p> : null}
+      {suggestions.length ? <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">{$t('competitorWatch.foundByAi')}{suggestions.map((s) => <button key={s.name} type="button" className="rounded border px-1.5 py-0.5 hover:bg-muted" onClick={() => setForm({ name: s.name, site: s.site, repo: s.repo ? `https://github.com/${s.repo}` : "" })}>{s.name}</button>)}</p> : null}
       <label className="nr-field">{$t('common.name')}<input aria-label={$t('common.competitorName')} value={form.name} maxLength={60} placeholder="Retool" onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
       <label className="nr-field">{$t('competitorWatch.website')}<input aria-label={$t('competitorWatch.competitorWebsite')} value={form.site} placeholder="https://retool.com" onChange={(e) => setForm({ ...form, site: e.target.value })} /></label>
       <label className="nr-field">{$t('competitorWatch.githubRepositoryOptional')}<input aria-label={$t('competitorWatch.competitorGithubRepository')} value={form.repo} placeholder="https://github.com/org/repo" onChange={(e) => setForm({ ...form, repo: e.target.value })} /></label>
@@ -106,7 +108,7 @@ function CompetitorCard({ c, projectId, onRemove, onSaved }: { c: Competitor; pr
         <EditForm projectId={projectId} c={c} onSaved={(s) => { setEditing(false); toast.success(() => ($t('competitorWatch.saved',{0:c.name}))); onSaved(s); }} onCancel={() => setEditing(false)} />
       </DialogContent></Dialog> : null}
       <div className="flex items-center gap-1"><h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{c.name}</h3>{canEdit&&<Button size="icon-xs" variant="ghost" aria-label={$t('competitorWatch.editItem',{0:c.name})} onClick={() => setEditing(true)}><Pencil className="text-muted-foreground" /></Button>}{canRemove&&<Button size="icon-xs" variant="ghost" aria-label={$t('competitorWatch.stopWatchingValue',{0:c.name})} onClick={onRemove}><Trash2 className="text-muted-foreground" /></Button>}</div>
-      <p className="flex flex-wrap gap-x-3 text-xs">{!c.site && canEdit ? <button type="button" className="nr-link inline-flex items-center gap-1" onClick={() => setEditing(true)}><Globe className="size-3" />{$t('competitorWatch.addWebsite')}</button> : null}{c.site ? <a className="nr-link inline-flex items-center gap-1" href={c.site} target="_blank" rel="noreferrer"><Globe className="size-3" />{host(c.site)}</a> : null}{c.repo ? <a className="nr-link inline-flex items-center gap-1" href={`https://github.com/${c.repo}`} target="_blank" rel="noreferrer"><Github className="size-3" />{c.repo}</a> : null}</p>
+      <p className="flex flex-wrap gap-x-3 text-xs">{!c.site && canEdit ? <button type="button" className="nr-link inline-flex items-center gap-1" onClick={() => setEditing(true)}><Globe className="size-3" />{$t('competitorWatch.addWebsite')}</button> : null}{c.site ? <span className="inline-flex items-center gap-1"><a className="nr-link inline-flex items-center gap-1" href={c.site} target="_blank" rel="noreferrer"><Globe className="size-3" />{host(c.site)}</a>{c.noSitemap ? <InfoTip label={$t('competitorWatch.noSitemapLabel')}>{c.repo ? $t('competitorWatch.noSitemapNoteGithub') : $t('competitorWatch.noSitemapNote')}</InfoTip> : null}</span> : null}{c.repo ? <a className="nr-link inline-flex items-center gap-1" href={`https://github.com/${c.repo}`} target="_blank" rel="noreferrer"><Github className="size-3" />{c.repo}</a> : null}</p>
       <p className="text-xs text-muted-foreground">{[c.pages != null ? $t('competitorWatch.pages',{0:formatCount(c.pages)}) : "", c.stars != null ? `Star ${k(c.stars)}${c.week != null ? $t('competitorWatch.lastWeek',{0:formatSigned(c.week)}) : ""}` : "", c.latestRelease ? $t('competitorWatch.latestRelease',{0:c.latestRelease.name}) : ""].filter(Boolean).join(" · ") || (c.checkedAt ? $t('competitorWatch.noDataRead') : $t('competitorWatch.checkingFirstTime'))}</p>
     </Card>
   );
