@@ -335,7 +335,7 @@ function ConnectionForm({
                 </Button>
               ) : null}
               {error === 'common.sessionExpiredSignAgain' ? (
-                <a className='underline' href={api.resolveUrl('/login')}>
+                <a className='nr-link' href={api.resolveUrl('/login')}>
                   {$t('common.signAgain')}
                 </a>
               ) : !blocked && (!data || stale) ? (

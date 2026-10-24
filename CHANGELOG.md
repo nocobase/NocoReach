@@ -1,5 +1,13 @@
 # NocoReach Changelog
 
+## Unreleased — Current situation reads as a list that fits its column; quiet links in grey text
+
+- Insights › Current situation is a plain list: each row is a short label on the left (Google interest, Pages not updated for a year, Rankings this week, Competitor updates · last 7 days, X mentions · last 7 days) and its value on the right in tabular figures, with no icons or logos. Only values that need attention are coloured (red for a drop, amber for counts); the rest stay grey. Rows are still buttons that open the source, with the detail on hover. The title is 14px semibold with its ⓘ. The Needs attention and Normal captions are gone: the lines to deal with come first, and their coloured values set them apart.
+- The list shows the rows its column has room for and puts the rest behind "Show all N", so the column no longer scrolls on its own: on wide screens it has the window's height, about ten rows at 720px and all fourteen at 860px. Collapse folds them again. The rows' hover background no longer makes the column scroll sideways.
+- A line whose values are all zero no longer counts as needing attention: "0 critical audit issues" was amber because the audit marks itself amber when it has warnings.
+- The logos added to Current situation in the icon tidy-up are gone again, and with them `SourceLogo`'s grey `mono` option, which only this list used. Data sources and the other pages keep their coloured logos.
+- Links have two styles in one place (`client/components/reach/reach.css`). `.nr-link` is the action link, blue on its own. `.nr-link-quiet` is a link inside grey text: one step darker than the text, no underline until hover, when it turns blue and underlined; `.nr-quiet-links` gives every link in a block that style. Both show a focus ring for the keyboard. The Insights subtitle ("Analyzed every day at 08:00 using your analysis rules.") uses the quiet style for both links, and links that were underlined grey or styled one by one now use one of the two: dialogs, empty states, field and alert descriptions and the sign-in pages use quiet links; standalone links such as Sign in again, Proxy profiles and links in Markdown results use action links.
+
 ## Unreleased — Folds that say what they show and open into view
 
 - Technical details › Runs no longer shows "Source snapshot for this run" for runs that read no forum posts (every run but community replies), where it opened a single grey line out of view. A run that read posts lists them under "Posts the Agent read": each topic with its post count and whether it was complete, the first five shown and "N more topics" for the rest.

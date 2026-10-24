@@ -477,8 +477,14 @@ function Insights({
           ) : (
             column
           )}
+          {/* Room on both sides for a row's hover background, which reaches past the text, so nothing scrolls sideways. */}
           {!docked && (
-            <div className='lg:min-h-0 lg:overflow-y-auto'>{situation}</div>
+            <div
+              data-situation-column
+              className='lg:-mx-2 lg:min-h-0 lg:overflow-x-hidden lg:overflow-y-auto lg:px-2'
+            >
+              {situation}
+            </div>
           )}
         </div>
       </div>
@@ -491,7 +497,7 @@ function Insights({
 // rule reads its own window (7, 14, 28 or 30 days); the 28 days belong to the metric cards, which say so.
 // The metric cards: each source's last 28 days against the 28 before (nrDataViews:overview).
 const METRIC_DAYS = 28;
-const subtleLink = 'underline underline-offset-4 hover:text-foreground';
+const subtleLink = 'nr-link-quiet';
 function HowAnalyzed({
   schedule,
   rulesLink,

@@ -32,8 +32,8 @@ export function RequestBlock({
    * visit): the title only names the region, and Retry shows only after a failure.
    */
   compact?: boolean;
-  /** A side block that should not draw the eye: a small grey heading, and Retry only after a failure (the page's own
-   * refresh reads it again). */
+  /** A side block (Insights' Current situation): its heading in 14px semibold with spacing doing the rest (2026-10-24
+   * user-approved design), and Retry only after a failure (the page's own refresh reads it again). */
   quiet?: boolean;
   request: RequestState;
   empty?: boolean;
@@ -114,7 +114,7 @@ export function RequestBlock({
           className={cn(
             'flex items-center gap-1',
             quiet
-              ? 'text-xs font-normal text-muted-foreground'
+              ? 'text-sm font-semibold text-foreground'
               : 'text-sm font-medium',
           )}
         >

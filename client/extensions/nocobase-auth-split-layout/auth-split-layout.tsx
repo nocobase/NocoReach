@@ -63,7 +63,7 @@ export function AuthSplitLayout({
           </div>
         </main>
         {footer ? (
-          <div className='text-center text-xs text-muted-foreground md:text-left [&_a]:underline [&_a]:underline-offset-4 [&_a:hover]:text-foreground'>
+          <div className='nr-quiet-links text-center text-xs text-muted-foreground md:text-left'>
             {footer}
           </div>
         ) : null}
