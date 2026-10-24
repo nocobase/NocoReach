@@ -498,7 +498,8 @@ test('an unexpected error while publishing keeps its name and message', async ()
     update.mockRestore();
   }
   const d = await f.view();
-  const detail = "TypeError: Cannot read properties of undefined (reading 'id')";
+  const detail =
+    "TypeError: Cannot read properties of undefined (reading 'id')";
   expect(d.work.release).toMatchObject({
     state: 'publish_failed',
     article: { error: 'unavailable', errorStep: 'write', errorDetail: detail },
@@ -1076,4 +1077,100 @@ test('several targets: verification waits for every export, and an overwrite on 
   expect(d.work.release.also[0].drift).toMatchObject({
     fields: [{ field: 'zh.body', current: '新闻编辑又改回了' }],
   });
+});
+
+// 2026-10-24 user request: the primary language first, the others translated once it is approved, and one Publish
+// for all of them.
+test('languages: the primary is written and approved first, then translated, and one publish writes every language', async () => {
+  const f = await fixture();
+  let d = await f.command('startTask', {
+    playbookId: 'blog-post',
+    delivery: { targetId: 'cms', locales: ['en', 'zh', 'fr'] },
+  });
+  // A language the target does not have is left out.
+  expect(d.work.delivery.locales).toEqual(['en', 'zh']);
+  let { run } = await claim(f);
+  expect(run.input.article.languages).toMatchObject({
+    primary: 'en',
+    others: ['zh'],
+    phase: 'primary',
+    write: ['en'],
+  });
+  // What the Agent writes beyond the primary is left for the translation.
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'New post',
+    article: {
+      slug: 'new-post',
+      locales: {
+        en: { title: 'A new post', body: 'Body of the new post' },
+        zh: { title: '新文章', body: '正文' },
+      },
+      summary: 'New post',
+    },
+  });
+  d = await f.view();
+  expect(Object.keys(review(d).article.draft.locales)).toEqual(['en']);
+  d = await f.command('approveStage', {
+    stageKey: d.work.flow.stages[d.work.stageIndex].key,
+    artifactId: review(d).id,
+    checked: [],
+  });
+  // Approving the primary publishes nothing yet: the Agent translates it.
+  expect(d.work.flow.stages[d.work.stageIndex].kind).toBe('agent');
+  expect(d.work.release).toBeUndefined();
+  expect(d.work.delivery.translateFrom).toMatchObject({
+    text: { title: 'A new post', body: 'Body of the new post' },
+    fields: ['title', 'body'],
+  });
+  ({ run } = await claim(f));
+  expect(run.input.article.languages).toMatchObject({
+    phase: 'translate',
+    write: ['zh'],
+    approved: { title: 'A new post', body: 'Body of the new post' },
+  });
+  // The translation adds the other language; the primary stays as approved.
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'Translated',
+    article: {
+      locales: {
+        en: { title: 'Changed while translating' },
+        zh: { title: '一篇新文章', body: '新文章的正文' },
+      },
+      summary: 'Translated into Chinese',
+    },
+  });
+  d = await f.view();
+  expect(review(d).article.draft).toMatchObject({
+    slug: 'new-post',
+    summary: 'Translated into Chinese',
+    locales: {
+      en: { title: 'A new post', body: 'Body of the new post' },
+      zh: { title: '一篇新文章', body: '新文章的正文' },
+    },
+  });
+  d = await f.command('approveStage', {
+    stageKey: d.work.flow.stages[d.work.stageIndex].key,
+    artifactId: review(d).id,
+    checked: [],
+  });
+  await f.settle();
+  expect(f.cms.state.rows.find((r) => r.slug === 'new-post')).toMatchObject({
+    title: 'A new post',
+    title_cn: '一篇新文章',
+    content_cn: '新文章的正文',
+  });
+});
+
+test('languages: a task started without them writes every language at once, as before', async () => {
+  const f = await fixture();
+  const d = await f.command('startTask', { playbookId: 'blog-post' });
+  expect(d.work.delivery.locales).toBeUndefined();
+  const { run } = await claim(f);
+  expect(run.input.article.languages).toBeUndefined();
 });

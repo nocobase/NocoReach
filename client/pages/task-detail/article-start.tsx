@@ -19,9 +19,18 @@ import type {
   ArticleMatch,
   ArticleSummary,
 } from '../../../shared/article-publishing.js';
-import { errorStatus, searchArticles } from '../article-targets-api';
+import {
+  errorStatus,
+  localeName,
+  searchArticles,
+} from '../article-targets-api';
 import type { TaskData } from '../task-execution-types';
-import { MAX_ALSO, REPO, type DeliveryChoice } from './article-model';
+import {
+  MAX_ALSO,
+  REPO,
+  choiceLocales,
+  type DeliveryChoice,
+} from './article-model';
 import { articlePageUrl } from './article-page';
 import { Field } from './layout';
 import { text } from './styles';
@@ -126,6 +135,7 @@ function DeliveryForm({
       target: choice.target,
       mode: choice.mode,
       also: choice.also,
+      ...(choice.locales ? { locales: choice.locales } : {}),
     }),
     [picked, setPicked] = useState(() => pickedOf(data, choice));
   const [q, setQ] = useState(''),
@@ -173,19 +183,27 @@ function DeliveryForm({
   };
   const save = async () => {
     if (!target) return done({ target: REPO, mode: 'new', also: [] });
-    const also = draft.also.filter((x) => x !== target);
-    if (draft.mode === 'new') return done({ target, mode: 'new', also });
+    const also = draft.also.filter((x) => x !== target),
+      locales = draft.locales ? { locales: draft.locales } : {};
+    if (draft.mode === 'new')
+      return done({ target, mode: 'new', also, ...locales });
     if (!article) return;
     if (linked?.articleId === article.id && linked.targetId === target)
-      return done({ target, mode: 'existing', also });
+      return done({ target, mode: 'existing', also, ...locales });
     if (found?.targetId === target && found.articleId === article.id)
-      return done({ target, mode: 'existing', also, article: found });
+      return done({
+        target,
+        mode: 'existing',
+        also,
+        article: found,
+        ...locales,
+      });
     // Any other article is saved on the task now, as picking one always was.
     setSaving(true);
     setError('');
     const ok = await link(target, article.id);
     setSaving(false);
-    if (ok) done({ target, mode: 'existing', also });
+    if (ok) done({ target, mode: 'existing', also, ...locales });
     else setError(() => $t('common.notSavedTryAgain'));
   };
   return (
@@ -199,6 +217,7 @@ function DeliveryForm({
             disabled={disabled}
             onChange={(e) =>
               setDraft({
+                // Another target has its own languages: start from all of them.
                 target: e.target.value,
                 mode: draft.mode,
                 // The new primary leaves the others; the repository takes no other target.
@@ -258,6 +277,15 @@ function DeliveryForm({
               <small>{$t('articleTask.alsoLimit', { 0: MAX_ALSO })}</small>
             )}
           </div>
+        )}
+        {target && (
+          <LanguagePicker
+            id={id}
+            all={targets.find((t) => t.id === target)?.locales || []}
+            chosen={choiceLocales(data, draft)}
+            disabled={disabled}
+            onChange={(locales) => setDraft({ ...draft, locales })}
+          />
         )}
         {target && (
           <div className='nr-td-start-field'>
@@ -379,6 +407,93 @@ function DeliveryForm({
 // Where the change goes, in one line (2026-10-21): the article found from the task's page, the one saved on the
 // task, a new article in the playbook's target, or the website repository. Change opens DeliveryDialog; when an
 // article still has to be picked, the line says why and Choose article opens the same dialog.
+/**
+ * The languages a task writes (2026-10-24): the primary, written and reviewed first, and the others, translated from
+ * it once it is approved. Every language of the target is chosen until the person changes it.
+ */
+function LanguagePicker({
+  id,
+  all,
+  chosen,
+  disabled,
+  onChange,
+}: {
+  id: string;
+  all: string[];
+  chosen: string[];
+  disabled: boolean;
+  onChange: (locales: string[]) => void;
+}) {
+  const ui = getCurrentLocale(),
+    primary = chosen[0] || all[0] || '',
+    others = all.filter((l) => l !== primary);
+  if (all.length < 2) return null;
+  return (
+    <div className='nr-td-start-field'>
+      <span id={`${id}-languages`}>{$t('articleTask.languages')}</span>
+      <label className='flex flex-wrap items-center gap-2 text-sm'>
+        <span className='text-muted-foreground'>
+          {$t('articleTask.primaryLanguage')}
+        </span>
+        <select
+          aria-label={$t('articleTask.primaryLanguage')}
+          value={primary}
+          disabled={disabled}
+          onChange={(e) =>
+            // The others keep the target's order; the language that was primary stays in, as one to translate.
+            onChange([
+              e.target.value,
+              ...all.filter(
+                (l) =>
+                  l !== e.target.value && (l === primary || chosen.includes(l)),
+              ),
+            ])
+          }
+        >
+          {all.map((l) => (
+            <option key={l} value={l}>
+              {localeName(l, ui)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div
+        role='group'
+        aria-labelledby={`${id}-languages`}
+        className='flex flex-wrap gap-x-4 gap-y-2'
+      >
+        {others.map((l) => {
+          const checked = chosen.includes(l);
+          return (
+            <div key={l} className='flex items-center gap-2'>
+              <Checkbox
+                id={`${id}-language-${l}`}
+                checked={checked}
+                disabled={disabled}
+                onCheckedChange={(on) =>
+                  onChange(
+                    on === true
+                      ? [
+                          primary,
+                          ...all.filter(
+                            (x) =>
+                              x !== primary && (x === l || chosen.includes(x)),
+                          ),
+                        ]
+                      : chosen.filter((x) => x !== l),
+                  )
+                }
+              />
+              <Label htmlFor={`${id}-language-${l}`}>{localeName(l, ui)}</Label>
+            </div>
+          );
+        })}
+      </div>
+      <small>{$t('articleTask.languagesHelp')}</small>
+    </div>
+  );
+}
+
 export function DeliverySummary({
   data,
   choice,
@@ -398,7 +513,8 @@ export function DeliverySummary({
 }) {
   const targets = data.articleTargets || [],
     name = (id: string) => targets.find((t) => t.id === id)?.name || id,
-    also = choice.target === REPO ? [] : choice.also;
+    also = choice.target === REPO ? [] : choice.also,
+    languages = choiceLocales(data, choice);
   const change = allowed && !finding && (
     <Button
       variant='link'
@@ -422,6 +538,20 @@ export function DeliverySummary({
       {also.length > 0 && (
         <p className={text.muted}>
           {$t('articleTask.alsoPublishesTo', { 0: names(data, also) })}
+        </p>
+      )}
+      {languages.length > 1 && (
+        <p className={text.muted} data-delivery-languages=''>
+          {$t('articleTask.languagesLine', {
+            0: [
+              $t('articleTask.primaryMark', {
+                0: localeName(languages[0], getCurrentLocale()),
+              }),
+              ...languages
+                .slice(1)
+                .map((l) => localeName(l, getCurrentLocale())),
+            ].join(' · '),
+          })}
         </p>
       )}
     </Field>

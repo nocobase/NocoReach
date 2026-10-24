@@ -1006,7 +1006,16 @@ it('defaults the start card to the playbook target, the repository, or the defau
   expect(
     deliveryPlan(d({}), { target: 'cms', mode: 'new', also: ['news', 'cms'] })
       .delivery,
-  ).toEqual({ targetId: 'cms', also: ['news'] });
+  ).toEqual({ targetId: 'cms', also: ['news'], locales: ['en', 'zh'] });
+  // The languages chosen at start go with it, primary first (2026-10-24).
+  expect(
+    deliveryPlan(d({}), {
+      target: 'cms',
+      mode: 'new',
+      also: [],
+      locales: ['zh', 'en'],
+    }).delivery,
+  ).toEqual({ targetId: 'cms', locales: ['zh', 'en'] });
 });
 
 it('decides where the change goes from the page: the article found, the repository, or a pick', () => {
@@ -1253,4 +1262,88 @@ it('links a saved article through its target page patterns, preferring the task 
   expect(screen.getByText('Hello')).toBeInTheDocument();
   expect(screen.queryByRole('link')).toBeNull();
   expect(screen.getByText('Also publishes to News')).toBeInTheDocument();
+});
+
+// 2026-10-24 user request: the primary language first, the others translated from it once it is approved.
+it('the start card names the languages, primary first, and the dialog changes the primary', async () => {
+  const d = {
+    ...data,
+    articleTargets: [{ ...target, locales: ['en', 'zh', 'ja'] }],
+    work: { article: undefined },
+  } as unknown as TaskData;
+  const view = render(
+    <DeliverySummary
+      data={d}
+      choice={{ target: 'cms', mode: 'new', also: [] }}
+      finding={false}
+      allowed
+      busy={false}
+      onChange={() => undefined}
+    />,
+  );
+  expect(
+    screen.getByText('Languages: English (primary) · Chinese · Japanese'),
+  ).toBeInTheDocument();
+  view.unmount();
+  const onSave = vi.fn();
+  const user = userEvent.setup();
+  render(
+    <DeliveryDialog
+      open
+      onClose={() => undefined}
+      data={d}
+      projectId={1}
+      choice={{ target: 'cms', mode: 'new', also: [] }}
+      busy={false}
+      link={async () => true}
+      onSave={onSave}
+    />,
+  );
+  const dialog = screen.getByRole('dialog');
+  await user.selectOptions(
+    within(dialog).getByLabelText('Primary language'),
+    'zh',
+  );
+  await user.click(within(dialog).getByRole('checkbox', { name: 'Japanese' }));
+  await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+  expect(onSave).toHaveBeenCalledWith(
+    expect.objectContaining({ target: 'cms', locales: ['zh', 'en'] }),
+  );
+});
+
+it('before the primary is approved, the review says which languages follow', () => {
+  render(
+    <ArticleReview
+      data={
+        {
+          articleTargets: [{ ...target, locales: ['en', 'zh'] }],
+          articleBases: {},
+          work: {
+            delivery: {
+              kind: 'article',
+              targetId: 'cms',
+              articleId: null,
+              sourceKey: null,
+              locales: ['en', 'zh'],
+            },
+          },
+        } as unknown as TaskData
+      }
+      article={{
+        targetId: 'cms',
+        articleId: null,
+        baseKey: null,
+        baseVersion: null,
+        draft: {
+          slug: 'post',
+          locales: { en: { title: 'Post', body: 'Body' } },
+        },
+        changes: ['slug', 'en.title', 'en.body'],
+      }}
+      notes=''
+    />,
+  );
+  expect(
+    screen.getByText('Chinese will be translated once English is approved.'),
+  ).toBeVisible();
 });

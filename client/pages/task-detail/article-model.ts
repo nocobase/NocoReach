@@ -26,6 +26,8 @@ export type DeliveryChoice = {
   also: string[];
   /** The article found from the task's page, linked when the task starts. */
   article?: ArticleMatch;
+  /** The languages the task writes, primary first; left out, every language of the target in its order. */
+  locales?: string[];
 };
 /** What the page lookup said: the article found, or none; `unchecked` when a target could not be asked. */
 export type ArticleFound = { article: ArticleMatch | null; unchecked: boolean };
@@ -101,11 +103,28 @@ export function defaultDelivery(
 }
 
 /** The start command's delivery and whether it can start yet; unlinks first when the saved article differs. */
+/**
+ * The languages a task writes, primary first (2026-10-24): the ones chosen at start that its target has, else every
+ * language of the target in the target's order. The first is written and reviewed first; the others are translated
+ * from it once it is approved.
+ */
+export function choiceLocales(data: TaskData, choice: DeliveryChoice) {
+  if (choice.target === REPO) return [];
+  const all =
+    (data.articleTargets || []).find((t) => t.id === choice.target)?.locales ||
+    [];
+  const chosen = (choice.locales || []).filter((l) => all.includes(l));
+  return chosen.length ? chosen : all;
+}
+
 export function deliveryPlan(data: TaskData, choice: DeliveryChoice) {
   const linked = data.work.article;
   if (choice.target === REPO)
     return { ready: true, unlink: Boolean(linked?.targetId), delivery: REPO };
-  const also = choice.also.filter((id) => id !== choice.target);
+  const also = choice.also.filter((id) => id !== choice.target),
+    chosen = choiceLocales(data, choice),
+    // One language is written as it always was; two or more are written primary first, then translated.
+    locales = chosen.length > 1 ? { locales: chosen } : {};
   if (choice.mode === 'existing') {
     const saved = Boolean(
         linked?.articleId && linked.targetId === choice.target,
@@ -121,7 +140,10 @@ export function deliveryPlan(data: TaskData, choice: DeliveryChoice) {
       link: found
         ? { targetId: found.targetId, articleId: found.articleId }
         : undefined,
-      delivery: also.length ? { also } : undefined,
+      delivery:
+        also.length || chosen.length > 1
+          ? { ...(also.length ? { also } : {}), ...locales }
+          : undefined,
     };
   }
   return {
@@ -130,7 +152,11 @@ export function deliveryPlan(data: TaskData, choice: DeliveryChoice) {
       linked?.articleId ||
       (linked?.targetId && linked.targetId !== choice.target),
     ),
-    delivery: { targetId: choice.target, ...(also.length ? { also } : {}) },
+    delivery: {
+      targetId: choice.target,
+      ...(also.length ? { also } : {}),
+      ...locales,
+    },
   };
 }
 
@@ -219,6 +245,10 @@ export function articleLanguages(data: TaskData, a: ArticleProposal) {
     base,
     locales,
     missing: all.filter((l) => !locales.includes(l)),
+    // The languages translated from the primary once it is approved (2026-10-24); none while or after translating.
+    pending: translationPending(data)
+      ? data.work.delivery!.locales!.slice(1)
+      : [],
     isNew,
     changed: (l: string) => a.changes.some((c) => c.startsWith(`${l}.`)),
     versions: (l: string) => !isNew && Boolean(base?.locales[l]),
@@ -229,6 +259,12 @@ export function articleLanguages(data: TaskData, a: ArticleProposal) {
   };
 }
 export type ArticleLanguages = ReturnType<typeof articleLanguages>;
+
+/** Whether the task's other languages are still to be translated from its primary one, which waits for approval. */
+export const translationPending = (data: TaskData) => {
+  const d = data.work?.delivery;
+  return Boolean(d?.locales && d.locales.length > 1 && !d.translateFrom);
+};
 
 export function articleContext(
   data: TaskData,

@@ -5,6 +5,13 @@
 - The start card no longer has its own optional note: the activity's message box serves the same purpose, and before the task starts its placeholder says the Agent reads it when the task starts. Existing tasks keep their note, and the server still accepts one.
 - What a run reads as the person's messages keeps those left before the start (the first five) with the latest five, oldest first and within 6,000 characters, so an instruction given at the start does not drop out as later messages pile up (`runNotes` in `execution/flow.ts`).
 
+## Unreleased — Articles in several languages: the primary first, then the translations
+
+- A publishing target's first language is its primary language: its card reads "Primary language English · other languages Chinese, Japanese", and its form has a Primary language choice that moves a language to the front.
+- The start card names the task's languages ("Languages: English (primary) · Chinese · Japanese"). Change lets the person pick this task's primary language and leave languages out; every language of the target is chosen by default.
+- With two or more languages, the Agent writes the primary one only, and change requests touch only it. Its review card reads "The English version is ready; approve it to translate it", and approving it ("Approve and translate") publishes nothing yet: the Agent translates it into the other languages ("The Agent is translating into Chinese, Japanese"), the translated version ("The translations are ready; approve to publish them all") is reviewed with a tab per language, and one Approve and publish publishes them all. Before approval the review says which languages follow.
+- Tasks started before this, and tasks with one language, write every language at once as before.
+
 ## Unreleased — Watching: the current value in the colour of its change
 
 - Opportunities › Watching shows each change's current value in the colour the analysis rule gave it (red for a drop that hurts, green for good news, also when the good news is a drop), in the Value column, without "Now" before it; the grey line under it still says where it started. Before #198 the colour came as a chip beside the title and the value was repeated in plain text; now it shows once. A change without a figure reads "—" in grey.
