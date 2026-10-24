@@ -1,16 +1,14 @@
 # NocoReach Changelog
 
-<<<<<<< HEAD
 ## Unreleased — Skills: playbooks as tags
 
 - Skills › Used in playbooks shows each playbook that names the Skill as a grey tag instead of a run of "Playbook · Step" text. Up to three show in full and the rest are counted as +N. Hovering over the cell lists the steps.
 - In a Skill's drawer, Used in playbooks moves from the footer sentence to its own line under When to use, as tags. A tag opens that playbook, and hovering over it names the step ("Step 1: …"). The footer keeps only the update date and the source.
-=======
+
 ## Unreleased — One place for instructions to the Agent
 
 - The start card no longer has its own optional note: the activity's message box serves the same purpose, and before the task starts its placeholder says the Agent reads it when the task starts. Existing tasks keep their note, and the server still accepts one.
 - What a run reads as the person's messages keeps those left before the start (the first five) with the latest five, oldest first and within 6,000 characters, so an instruction given at the start does not drop out as later messages pile up (`runNotes` in `execution/flow.ts`).
->>>>>>> origin/main
 
 ## Unreleased — Watching: the current value in the colour of its change
 
