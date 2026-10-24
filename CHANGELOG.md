@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Runner compatibility with Agents beta.23
+
+- Upgrade Runner to `0.1.0-beta.18` and CLI Client to `0.1.0-beta.15`, matching Agents beta.23's protocol for tool selection, detection requests and online capacity updates.
+- Advance the application CLI release to `1.0.0-beta.70` so existing installations and Runner caches download the updated client. Rebuild both distribution products with the application; deploy the server before upgrading installed runners.
+
 ## Unreleased — Demo Mode beta.2
 
 - Upgrade Demo Mode to beta.2 with App Client beta.3, Agents beta.23 and Jobs beta.4, retaining the shared i18n peer version.
