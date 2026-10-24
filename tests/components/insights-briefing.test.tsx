@@ -995,19 +995,19 @@ it('earlier days sit above today, folded, and show their conversation when opene
   ).toBeTruthy();
 });
 
-it('the current situation beside the day lists a label and a value per line, those needing attention first, without a refresh of its own', async () => {
+it('the current situation lists a label and a value per line in group order, without a refresh of its own', async () => {
   const item = (
     key: string,
     text: string,
     values: string[] = [],
-    tone?: string,
+    group?: string,
   ) => ({
     key,
     text,
     values,
     source: 'site',
     to: '/website',
-    ...(tone ? { tone } : {}),
+    ...(group ? { group } : {}),
   });
   fixture.areas = [
     {
@@ -1015,13 +1015,21 @@ it('the current situation beside the day lists a label and a value per line, tho
       title: 'Site',
       items: [
         item('a', 'Pages indexed: 120'),
-        item('stale', '{0} pages not updated for a year', ['54'], 'amber'),
-        item('trends', 'Google interest {0}', ['↓ 56%'], 'red'),
+        item('rule-site-stale', 'Stale pages {0}', ['54'], 'handle'),
+        item('rule-gsc-click-drop', 'Pages losing clicks {0}', ['3'], 'worse'),
+        item('trends', 'Google interest {0}', ['↓ 56%'], 'voice'),
         item('c', 'Sitemap found'),
-        item('rank', '{0} up, {1} down this week', ['3', '0']),
-        // Lines whose numbers are all zero are left out, also one flagged for the audit's warnings.
-        item('audit', '{0} critical audit issues', ['0'], 'amber'),
-        item('striking', '{0} queries close to page one', ['0']),
+        item('rank', '{0} up, {1} down this week', ['3', '0'], 'voice'),
+        item('x', 'X mentions {0}', ['58', '↑ 12%'], 'voice'),
+        item('striking', '{0} queries close to page one', ['5'], 'chance'),
+        // Lines whose numbers are all zero are left out: a count of zero, even with a change beside it.
+        item('audit', '{0} critical audit issues', ['0'], 'handle'),
+        item(
+          'hackernews',
+          'Hacker News mentions {0}',
+          ['0', '↓ 100%'],
+          'voice',
+        ),
       ],
     },
   ];
@@ -1037,31 +1045,38 @@ it('the current situation beside the day lists a label and a value per line, tho
     .map((l) =>
       [...l.querySelectorAll('button > span')].map((s) => s.textContent),
     );
-  // A known line reads as a short label with its value on the right; a line without a label keeps its sentence.
-  // The lines to deal with come first, told apart by their coloured values rather than a caption.
+  // Getting worse, to handle, opportunities, then share of voice and lines without a group; a known line reads as a
+  // short label with its value on the right, a line without a label keeps its sentence.
   expect(rows).toEqual([
+    ['strategy.situationClickDrop', '3'],
     ['strategy.situationStale', '54'],
-    ['strategy.situationTrends', '↓ 56%'],
+    ['strategy.situationStriking', '5'],
     ['Pages indexed: 120'],
+    ['strategy.situationTrends', '↓ 56%'],
     ['Sitemap found'],
     ['strategy.situationRank', '↑3↓0'],
+    ['strategy.situationX', '58↑ 12%'],
   ]);
+  // Getting worse and to handle need attention.
   expect(
     [...situation.querySelectorAll('[data-attention]')].map(
       (b) => (b as HTMLElement).dataset.item,
     ),
-  ).toEqual(['stale', 'trends']);
-  // Counts to deal with are amber; a change is coloured by its direction, as on the metric cards (a zero plain); the
-  // rest plain.
+  ).toEqual(['rule-gsc-click-drop', 'rule-site-stale']);
+  // A count is red when getting worse, amber to handle, plain otherwise; a change is coloured by its direction, as on
+  // the metric cards (a zero plain).
   const ink = (key: string) =>
     [
       ...situation.querySelectorAll(
         `[data-item="${key}"] > span:last-child > span`,
       ),
     ].map((v) => `${v.textContent} ${v.className}`);
-  expect(ink('stale')).toEqual(['54 text-nr-ink-amber']);
+  expect(ink('rule-gsc-click-drop')).toEqual(['3 text-nr-ink-red']);
+  expect(ink('rule-site-stale')).toEqual(['54 text-nr-ink-amber']);
+  expect(ink('striking')).toEqual(['5 text-foreground']);
   expect(ink('trends')).toEqual(['↓ 56% text-nr-ink-red']);
   expect(ink('rank')).toEqual(['↑3 text-nr-ink-green', '↓0 text-foreground']);
+  expect(ink('x')).toEqual(['58 text-foreground', '↑ 12% text-nr-ink-green']);
   // No icons or logos in the rows (the heading keeps its ⓘ).
   expect(
     situation.querySelector('li svg, li img, [data-slot="source-logo"]'),
@@ -1082,12 +1097,12 @@ it('the current situation shows the lines to deal with and six more, the rest on
       title: 'Site',
       items: [
         {
-          key: 'stale',
-          text: '{0} pages not updated for a year',
+          key: 'rule-site-stale',
+          text: 'Stale pages {0}',
           values: ['54'],
           source: 'site',
           to: '/website',
-          tone: 'amber',
+          group: 'handle',
         },
         ...Array.from({ length: 8 }, (_, k) => ({
           key: `line-${k}`,
@@ -1153,12 +1168,12 @@ it('the current situation shows only the rows its column has room for', async ()
         title: 'Site',
         items: [
           {
-            key: 'stale',
-            text: '{0} pages not updated for a year',
+            key: 'rule-site-stale',
+            text: 'Stale pages {0}',
             values: ['54'],
             source: 'site',
             to: '/website',
-            tone: 'amber',
+            group: 'handle',
           },
           ...Array.from({ length: 8 }, (_, k) => ({
             key: `line-${k}`,
