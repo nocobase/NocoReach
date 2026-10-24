@@ -172,7 +172,7 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
                   {$t(
                     translationPending(data)
                       ? 'articleTask.approveTranslate'
-                      : mockSettingsAvailable()
+                      : mockSettingsAvailable() || data.task.evidence?.simulated
                         ? 'taskDetail.approveAndSimulatePublish'
                         : 'taskDetail.approveAndPublish',
                   )}

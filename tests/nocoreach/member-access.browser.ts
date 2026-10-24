@@ -6,9 +6,11 @@ import { createWriteStream } from 'node:fs';
 import { mkdtemp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { chromium, expect } from '@playwright/test';
+import { chromium, expect as playwrightExpect } from '@playwright/test';
 import { DEFAULT_ADMIN_CREDENTIALS } from '@nocobase/app-plugin-authentication/testing';
 
+// Allow cold development routes to compile before checking their rendered content.
+const expect = playwrightExpect.configure({ timeout: 15000 });
 const root = resolve(import.meta.dirname, '../..');
 const directory = await mkdtemp(join(tmpdir(), 'pm453-members-'));
 const output = join(tmpdir(), 'PM-453-members-screenshots');
@@ -73,8 +75,8 @@ try {
     locale: 'en-US',
   });
   await context.addInitScript(() => {
-    if (!localStorage.getItem('nocobase.locale'))
-      localStorage.setItem('nocobase.locale', 'en-US');
+    if (!localStorage.getItem('nocobase.locale:/main/'))
+      localStorage.setItem('nocobase.locale:/main/', 'en-US');
   });
   expect(
     (
@@ -162,7 +164,7 @@ try {
     locale: 'en-US',
   });
   await memberContext.addInitScript(() => {
-    localStorage.setItem('nocobase.locale', 'en-US');
+    localStorage.setItem('nocobase.locale:/main/', 'en-US');
   });
   expect(
     (
@@ -369,7 +371,7 @@ try {
     locale: 'en-US',
   });
   await inviteeContext.addInitScript(() => {
-    localStorage.setItem('nocobase.locale', 'en-US');
+    localStorage.setItem('nocobase.locale:/main/', 'en-US');
   });
   expect(
     (
@@ -393,17 +395,14 @@ try {
     .getByRole('button', { name: 'Open account menu', exact: true })
     .click();
   await expect(
-    inviteePage.getByRole('menuitem', {
-      name: 'Your invitations',
-      exact: true,
-    }),
+    inviteePage.getByRole('menuitem', { name: /^Your invitations\b/ }),
   ).toBeVisible();
   await inviteePage.screenshot({
     path: join(output, 'existing-invitation-account-menu-en.png'),
     fullPage: true,
   });
   await inviteePage
-    .getByRole('menuitem', { name: 'Your invitations', exact: true })
+    .getByRole('menuitem', { name: /^Your invitations\b/ })
     .click();
   await expect(inviteePage).toHaveURL(`${origin}/main/member-invitations`);
   await expect(
@@ -446,7 +445,7 @@ try {
     locale: 'en-US',
   });
   await guestContext.addInitScript(() => {
-    localStorage.setItem('nocobase.locale', 'en-US');
+    localStorage.setItem('nocobase.locale:/main/', 'en-US');
   });
   const guest = await guestContext.newPage();
   await guest.goto(newLink);
@@ -529,7 +528,7 @@ try {
   await page.evaluate(() => {
     localStorage.setItem('nocobase:main:theme:color-scheme', 'light');
     document.documentElement.classList.remove('dark');
-    localStorage.setItem('nocobase.locale', 'zh-CN');
+    localStorage.setItem('nocobase.locale:/main/', 'zh-CN');
   });
   await page.reload();
   await expect(

@@ -85,6 +85,7 @@ const zhCN: AppResource = {
   'nocoreach.nav.settings': '设置',
   'nocoreach.nav.connections': '数据接入',
   'nocoreach.nav.proxyProfiles': '网络',
+  'nocoreach.nav.demoData': '演示管理',
   'nocoreach.nav.members': '成员与角色',
   'auth.platform': 'AI 增长运营平台',
   'auth.marketingTitleFirst': '从数据中发现机会，',

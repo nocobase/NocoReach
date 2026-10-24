@@ -58,6 +58,9 @@ export class LegacyCache {
   async del(key: string) {
     this.items.delete(key);
   }
+  clear() {
+    this.items.clear();
+  }
 }
 
 export interface LegacyUser {

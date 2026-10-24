@@ -1,4 +1,5 @@
 {
+  "nocoreach.nav.demoData": "Gestion de la démo",
   "nocoreach.nav.apiKeys": "Clés API",
   "schedules": {
     "title": "Exécutions automatiques",

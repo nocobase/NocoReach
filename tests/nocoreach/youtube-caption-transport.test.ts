@@ -19,7 +19,10 @@ it('cancels while DNS is pending without later opening a request', async () => {
   const selected = vi.fn();
   const controller = new AbortController();
   const result = download(url, 0, {
-    network: { selected } as unknown as OutboundNetwork,
+    network: {
+      selected,
+      inDemoProject: () => false,
+    } as unknown as OutboundNetwork,
     connection: 'youtube',
     signal: controller.signal,
   });
@@ -61,6 +64,7 @@ it('keeps one deadline through redirects and forwards cancellation to the select
     );
   const network = {
     selected: vi.fn(() => ({ url: 'http://proxy.example:8080' })),
+    inDemoProject: () => false,
     send,
   } as unknown as OutboundNetwork;
   const result = download(url, 0, {
