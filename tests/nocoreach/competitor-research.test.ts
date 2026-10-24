@@ -48,3 +48,16 @@ test('总览: our site first, competitors with a website looked up once (history
  // DataForSEO not verified: free columns only, nothing asked
  const none=setup({verified:false});v=await none.s.view('1');assert.equal(v.dataforseo,false);assert.equal(none.runs.length,0);assert.equal(v.sites[1].stars,35100);
 });
+
+test('总览: a lookup that did not complete is asked again after a day, not after a month; opening the page starts it',async()=>{
+ const {s,rows,runs}=setup();const run=s.d4s.run;let fail=true;
+ s.d4s.run=async(id,kind,v)=>{if(!fail||v.target!=='nocobase.com')return run(id,kind,v);runs.push([kind,v.target,v.locationCode]);return {status:'failed',errorCode:'Search data lookup failed'};};
+ await s.view('1');await s.running.get('1');
+ let own=(await s.view('1')).sites[0];assert.deepEqual(own.errors,['Search data lookup failed']);assert.equal(own.traffic,null);
+ const n=runs.length;await s.view('1');await s.refresh('1');assert.equal(runs.length,n,'not asked again within a day');
+ // A day later the page asks again, for the failed domain only.
+ rows[0].payload.domains['nocobase.com'].at=new Date(Date.now()-86400000).toISOString();fail=false;
+ const v=await s.view('1');assert.equal(v.refreshing,true);await s.running.get('1');
+ assert.deepEqual(runs.slice(n).map(r=>r.slice(0,2)),[['competitor-history','nocobase.com']]);
+ own=(await s.view('1')).sites[0];assert.deepEqual(own.errors,[]);assert.equal(own.traffic,1080);
+});
