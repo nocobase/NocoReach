@@ -232,17 +232,23 @@ export function TaskProperties({
           <Row label={$t('taskDetail.propRelated')}>
             <span className='flex flex-col items-start gap-1'>
               {chain.map((r) => (
-                <button
+                <span
                   key={r.id}
-                  type='button'
-                  className='nr-link text-left'
-                  onClick={() => void navigate(`/actions/${r.id}`)}
+                  className='flex w-full min-w-0 items-start gap-2'
                 >
-                  {r.relation === 'prev'
-                    ? $t('taskDetail.previous')
-                    : $t('taskDetail.next')}
-                  {r.title}
-                </button>
+                  <button
+                    type='button'
+                    className='nr-link min-w-0 flex-1 text-left'
+                    onClick={() => void navigate(`/actions/${r.id}`)}
+                  >
+                    {r.relation === 'prev'
+                      ? $t('taskDetail.previous')
+                      : $t('taskDetail.next')}
+                    {r.no ? `T-${r.no} ` : ''}
+                    {r.title}
+                  </button>
+                  {r.state && <TaskStandingTag state={r.state} />}
+                </span>
               ))}
               {siblings.length > 0 && (
                 <span
