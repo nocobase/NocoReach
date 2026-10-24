@@ -7,6 +7,10 @@
 - The old task's done card says "Handed over to T-44 Write blog post: …" with the new task's status, linked; Properties › Related tasks shows the same number and status for the task before and after in a chain.
 - Tasks handed off from an opportunity still wait for their owner to start them.
 
+## Unreleased — Watching: the current value in the colour of its change
+
+- Opportunities › Watching shows each change's current value in the colour the analysis rule gave it (red for a drop that hurts, green for good news, also when the good news is a drop), in the Value column, without "Now" before it; the grey line under it still says where it started. Before #198 the colour came as a chip beside the title and the value was repeated in plain text; now it shows once. A change without a figure reads "—" in grey.
+
 ## Unreleased — Demo environment
 
 - Add a dedicated demo deployment enabled with `NOCOBASE_DEMO_MODE=true`, using the published Demo Mode plugin. Settings › Demo management provides one page for importing, resetting and clearing demo data, configuring daily resets and managing demo accounts; its menu and route are available only while Demo Mode is enabled. The same lifecycle operations are available through `demo-mode data status|import|clear|reset` in standalone installations.
