@@ -3507,6 +3507,8 @@
   "playbooks.nameStep": "Tên bước {0}",
   "messages.stepInvalidType": "Bước {0} có loại không hợp lệ",
   "taskDetail.versionNumber": "Phiên bản {0}",
+  "taskDetail.editedByHand": "chỉnh sửa thủ công",
+  "taskDetail.doneByHand": "hoàn thành thủ công",
   "taskDetail.versionAuthor": "Phiên bản {0} · {1}",
   "taskDetail.versionAuthorDetail": "Phiên bản {0} · {1}{2}",
   "messages.stepProgress": "Bước {0}/{1}: {2}",

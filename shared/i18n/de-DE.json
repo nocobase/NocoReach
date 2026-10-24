@@ -3431,6 +3431,8 @@
   "playbooks.nameStep": "Name von Schritt {0}",
   "messages.stepInvalidType": "Schritt {0} hat einen ungültigen Typ",
   "taskDetail.versionNumber": "Version {0}",
+  "taskDetail.editedByHand": "manuell bearbeitet",
+  "taskDetail.doneByHand": "manuell erledigt",
   "taskDetail.versionAuthor": "Version {0} · {1}",
   "taskDetail.versionAuthorDetail": "Version {0} · {1}{2}",
   "messages.stepProgress": "Schritt {0}/{1}: {2}",

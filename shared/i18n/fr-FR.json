@@ -3431,6 +3431,8 @@
   "playbooks.nameStep": "Nom de l’étape {0}",
   "messages.stepInvalidType": "Le type de l’étape {0} est invalide",
   "taskDetail.versionNumber": "Version {0}",
+  "taskDetail.editedByHand": "modifié à la main",
+  "taskDetail.doneByHand": "terminé à la main",
   "taskDetail.versionAuthor": "Version {0} · {1}",
   "taskDetail.versionAuthorDetail": "Version {0} · {1}{2}",
   "messages.stepProgress": "Étape {0}/{1} : {2}",

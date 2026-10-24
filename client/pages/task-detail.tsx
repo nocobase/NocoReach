@@ -356,6 +356,9 @@ function PageChange({pr,content}:{pr?:PullRequestInfo;content:string}){
 }
 const Checklist=({stage,checked,setChecked,busy}:{stage:Stage;checked:string[];setChecked:(v:string[])=>void;busy:boolean})=>(stage.checklist||[]).length>0?<fieldset className={cn(text.body,'flex flex-col gap-2')}><legend className={cn(text.muted,'mb-2')}>{$t('taskDetail.confirmFollowing')}</legend>{stage.checklist!.map(c=><label key={c.key} className="flex items-center gap-2"><input type="checkbox" className="size-4 accent-primary" checked={checked.includes(c.key)} disabled={busy} onChange={e=>setChecked(e.target.checked?[...checked,c.key]:checked.filter(k=>k!==c.key))}/> {c.label}{c.required?'':$t('taskDetail.optional')}</label>)}</fieldset>:null;
 const ScopeConfirm=({pr,ok,setOk,busy}:{pr?:PullRequestInfo;ok:boolean;setOk:(v:boolean)=>void;busy:boolean})=>pr?.outOfScope?.length?<label className="flex items-start gap-2 text-sm text-destructive"><input type="checkbox" className="mt-0.5 size-4 accent-destructive" checked={ok} disabled={busy} onChange={e=>setOk(e.target.checked)}/> {$t('taskDetail.otherFilesChanged')}</label>:null;
+// The version under review, under the card's title: the Agent's own needs no name, since Properties shows the Agent
+// (2026-10-24 user request: "Agent · Version 2"); a version a person made says so, without assuming it was you.
+const versionLine=(out:{version:number;manual?:boolean;createdBy?:string})=>[$t('taskDetail.versionNumber',{0:out.version}),out.manual?$t('taskDetail.doneByHand'):out.createdBy&&out.createdBy!=='agent'?$t('taskDetail.editedByHand'):''].filter(Boolean).join(' · ');
 // The note that goes with a publish, folded until asked for.
 function ReleaseNote({value,onChange,busy,open}:{value:string;onChange:(v:string)=>void;busy:boolean;open:boolean}){
  return <Reveal label={$t('taskDetail.editReleaseNotes')} defaultOpen={open}><Field label={$t('taskDetail.releaseNotesGoPublishRecord')}><Textarea aria-label={$t('taskDetail.releaseNotes')} rows={3} value={value} disabled={busy} placeholder={$t('taskDetail.oneTwoSentencesWhatChanged')} onChange={e=>onChange(e.target.value)}/></Field></Reveal>;
@@ -384,7 +387,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  if(stage.kind==='review'&&stages[index+1]?.kind==='release'){
   const pr=out?.pr;
   if(!out)return <StageCard error title={displayStageName(stage)} sub={$t('taskDetail.noChangesViewRefreshTry')}/>;
-  const by=$t('taskDetail.artifactVersion',{0:getStageExecutor()[producer.kind],1:out.createdBy==='agent'?'':$t('taskDetail.recordedAside'),2:out.version});
+  const by=versionLine(out);
   // An article to publish to a target (article-review.tsx): read field by field, or edited as a new version. It has no
   // release note to write: no target receives one, and the task's record keeps the Agent's summary (2026-10-24).
   if(out.article){
@@ -437,7 +440,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  if(stage.kind==='review'){
   const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(out?.pr?.outOfScope?.length&&!scopeOk);
   const label=nextOptions.length&&next?$t('taskDetail.acceptHandAgent',{0:name(next)}):stages[index+1]?.kind==='agent'?$t('taskDetail.approveHand',{0:getStageExecutor().agent}):stages[index+1]?.kind==='publish'?$t('taskDetail.approvePublish'):$t('taskDetail.accept');
-  const by=$t('taskDetail.artifactVersion',{0:getStageExecutor()[producer.kind],1:out?.manual?$t('taskDetail.recordedAside'):'',2:out?.version});
+  const by=out?versionLine(out):'';
   if(!out)return <StageCard error title={displayStageName(stage)} sub={$t('taskDetail.nothingReviewRefreshTryAgain')}/>;
   return <StageCard title={$t('taskDetail.resultReady',{0:producer.name})} sub={by} at={out.createdAt}
    actions={editing?<><Button disabled={busy||!draft.trim()} onClick={()=>void act('editStageOutput',{artifactId:out.id,content:draft})}>{$t('taskDetail.saveChanges')}</Button><Button variant="ghost" onClick={()=>{setEditing(false);setDraft(w.results[index-1]?.content||'');}}>{$t('common.cancel')}</Button></>

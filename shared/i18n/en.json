@@ -3459,6 +3459,8 @@
   "playbooks.nameStep": "Name of step {0}",
   "messages.stepInvalidType": "Step {0} has an invalid type",
   "taskDetail.versionNumber": "Version {0}",
+  "taskDetail.editedByHand": "edited by hand",
+  "taskDetail.doneByHand": "completed by hand",
   "taskDetail.versionAuthor": "Version {0} · {1}",
   "taskDetail.versionAuthorDetail": "Version {0} · {1}{2}",
   "messages.stepProgress": "Step {0}/{1}: {2}",

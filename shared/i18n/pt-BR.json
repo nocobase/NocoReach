@@ -3431,6 +3431,8 @@
   "playbooks.nameStep": "Nome do passo {0}",
   "messages.stepInvalidType": "O passo {0} tem um tipo inválido",
   "taskDetail.versionNumber": "Versão {0}",
+  "taskDetail.editedByHand": "editado manualmente",
+  "taskDetail.doneByHand": "concluído manualmente",
   "taskDetail.versionAuthor": "Versão {0} · {1}",
   "taskDetail.versionAuthorDetail": "Versão {0} · {1}{2}",
   "messages.stepProgress": "Passo {0}/{1}: {2}",

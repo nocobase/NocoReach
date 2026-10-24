@@ -3459,6 +3459,8 @@
   "playbooks.nameStep": "第 {0} 步的名称",
   "messages.stepInvalidType": "第 {0} 步的类型无效",
   "taskDetail.versionNumber": "第 {0} 版",
+  "taskDetail.editedByHand": "人工修改",
+  "taskDetail.doneByHand": "人工完成",
   "taskDetail.versionAuthor": "第 {0} 版 · {1}",
   "taskDetail.versionAuthorDetail": "第 {0} 版 · {1}{2}",
   "messages.stepProgress": "第 {0}/{1} 步：{2}",

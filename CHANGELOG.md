@@ -7,6 +7,7 @@
 - A language with no text in the draft or the article is left out of the tabs, with a line under them: "Only English was written this time." for a new article, "This article has no Chinese version." for a changed one.
 - An article's review card no longer asks for release notes, and its live card shows none: no publishing target receives them (a Git target writes a fixed commit message), and the task's record keeps the Agent's summary. Page changes that open a pull request keep them.
 - In Chinese, Traditional Chinese and Japanese, the Published status reads as a state rather than as the verb.
+- Every review card's subtitle names the version only ("Version 2 · 10-16 18:29"), without "Agent", which Properties already shows; a version a person made adds "edited by hand" or "completed by hand".
 
 ## Unreleased — Current situation reads as a list that fits its column; quiet links in grey text
 

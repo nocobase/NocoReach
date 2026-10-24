@@ -208,6 +208,21 @@ test('a page change is reviewed as what readers see, with code kept in Technical
   expect(dialog).toHaveTextContent('yarn build reported 177 errors');
 });
 
+// 2026-10-24 user request: "Agent · Version 2" named the Agent that Properties already shows.
+test('the review card names the version, and says so when a person made it', () => {
+  const view = mount();
+  const card = screen.getByRole('region', { name: '等你处理' });
+  expect(card).toHaveTextContent('第 1 版');
+  expect(card).not.toHaveTextContent('Agent · 第');
+  view.unmount();
+  const edited = pageChange();
+  (edited.work.results[0] as { createdBy?: string }).createdBy = '1';
+  mount(edited);
+  expect(screen.getByRole('region', { name: '等你处理' })).toHaveTextContent(
+    '第 1 版 · 人工修改',
+  );
+});
+
 test('the header says why the task exists and opens the evidence', async () => {
   const user = userEvent.setup();
   mount();

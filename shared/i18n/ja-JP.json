@@ -3431,6 +3431,8 @@
   "playbooks.nameStep": "ステップ {0} の名前",
   "messages.stepInvalidType": "ステップ {0} の種類が無効です",
   "taskDetail.versionNumber": "バージョン {0}",
+  "taskDetail.editedByHand": "手動で編集",
+  "taskDetail.doneByHand": "手動で完了",
   "taskDetail.versionAuthor": "バージョン {0} · {1}",
   "taskDetail.versionAuthorDetail": "バージョン {0} · {1}{2}",
   "messages.stepProgress": "ステップ {0}/{1}: {2}",

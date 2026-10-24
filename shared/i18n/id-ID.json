@@ -3507,6 +3507,8 @@
   "playbooks.nameStep": "Nama langkah {0}",
   "messages.stepInvalidType": "Langkah {0} memiliki jenis yang tidak valid",
   "taskDetail.versionNumber": "Versi {0}",
+  "taskDetail.editedByHand": "diedit manual",
+  "taskDetail.doneByHand": "diselesaikan manual",
   "taskDetail.versionAuthor": "Versi {0} · {1}",
   "taskDetail.versionAuthorDetail": "Versi {0} · {1}{2}",
   "messages.stepProgress": "Langkah {0}/{1}: {2}",
