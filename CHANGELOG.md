@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — One place for instructions to the Agent
+
+- The start card no longer has its own optional note: the activity's message box serves the same purpose, and before the task starts its placeholder says the Agent reads it when the task starts. Existing tasks keep their note, and the server still accepts one.
+- What a run reads as the person's messages keeps those left before the start (the first five) with the latest five, oldest first and within 6,000 characters, so an instruction given at the start does not drop out as later messages pile up (`runNotes` in `execution/flow.ts`).
+
 ## Unreleased — Demo environment
 
 - Add a dedicated demo deployment enabled with `NOCOBASE_DEMO_MODE=true`, using the published Demo Mode plugin. Settings › Demo management provides one page for importing, resetting and clearing demo data, configuring daily resets and managing demo accounts; its menu and route are available only while Demo Mode is enabled. The same lifecycle operations are available through `demo-mode data status|import|clear|reset` in standalone installations.

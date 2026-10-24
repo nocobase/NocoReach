@@ -3602,6 +3602,7 @@
   "savedKeywords.changeTagsKeywords": "Đổi thẻ cho {0} từ khóa",
   "taskDetail.leaveHistoricalNote": "Để lại ghi chú cho tác vụ cũ này",
   "taskDetail.leaveNoteNextRunReads": "Để lại ghi chú cho {0}; lần chạy tiếp theo sẽ đọc ghi chú này",
+  "taskDetail.leaveNoteBeforeStart": "Để lại lời nhắn cho {0}; sẽ được đọc khi bắt đầu ({1})",
   "seoHandOff.draftReplies": "Soạn phản hồi cho {1} {2} trên {0}",
   "seoHandOff.draftReplyUnansweredCopyThem": "{0} — {1}: Soạn một phản hồi cho từng mục đã chọn, rồi sao chép các phản hồi sau khi xét duyệt",
   "taskDetail.noteExecutor": "Ghi chú cho bên thực hiện",
