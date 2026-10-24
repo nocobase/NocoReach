@@ -144,9 +144,9 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
   // opened from, so it is declared under both.
   { ...page('result-list', '/results', () => import('./pages/results/index.js'), { title: nav('results'), icon: ChartNoAxesCombined, order: 3.5 }), children: [
     { name: 'result-all', path: 'all', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/results/all.js'), children: [
-      { ...page('result-all-detail', ':taskId', () => import('./pages/results/detail.js')), authz: { resource: { type: 'page', id: 'result-detail' }, action: 'access' }, children: [{ ...page('result-all-create', 'create', () => import('./pages/results/create.js')), authz: { resource: { type: 'page', id: 'result-create' }, action: 'access' } }] },
+      { ...page('result-all-detail', ':taskId', () => import('./pages/results/detail.js')), authz: { resource: { type: 'page', id: 'result-detail' }, action: 'access' } },
     ] },
-    { ...page('result-detail', ':taskId', () => import('./pages/results/detail.js')), children: [page('result-create', 'create', () => import('./pages/results/create.js'))] },
+    page('result-detail', ':taskId', () => import('./pages/results/detail.js')),
   ] },
   page('opportunity-explore', '/home/explore', () => import('./pages/strategy/index.js')),
 

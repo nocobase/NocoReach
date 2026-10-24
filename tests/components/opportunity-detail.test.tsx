@@ -498,3 +498,49 @@ it('a change handed off on its own says in its detail where its task stands', as
   expect(detail.textContent).toContain('results.taskState.review');
   expect(detail.textContent).not.toContain('strategy.progress');
 });
+
+it('Handled sorts by number, where it went and first found, never by title', async () => {
+  // O-36 done (T-34), O-37 waiting for review (T-35).
+  fixture.state = {
+    ...state,
+    proposals: [
+      { id: 'p', insight: { id: 'o36' }, taskId: 7, taskNo: 34 },
+      { id: 'q', insight: { id: 'o37' }, taskId: 8, taskNo: 35 },
+    ],
+  };
+  fixture.tasks = [
+    { id: 7, status: 'todo', evidence: { no: 34, work: { stage: 'done' } } },
+    {
+      id: 8,
+      status: 'todo',
+      evidence: { no: 35, work: { boardState: 'review' } },
+    },
+  ];
+  show('/opportunities?tab=done');
+  const table = await screen.findByRole('table', { name: 'strategy.handled' });
+  const order = () =>
+    [...table.querySelectorAll('[data-opportunity-id]')].map((r) =>
+      r.getAttribute('data-opportunity-id'),
+    );
+  // Newest number first by default.
+  await waitFor(() => expect(order()).toEqual(['o37', 'o36']));
+  const header = (name: string) =>
+    screen.getByRole('button', {
+      name: new RegExp(`sortableHeader.sort.*${name}`),
+    });
+  expect(
+    screen.queryByRole('button', { name: /sortableHeader.sort.*common.title/ }),
+  ).toBeNull();
+  fireEvent.click(header('common.identifier'));
+  expect(order()).toEqual(['o36', 'o37']);
+  // Where it went: what waits for you before what is done.
+  fireEvent.click(header('strategy.whereWent'));
+  expect(order()).toEqual(['o37', 'o36']);
+  fireEvent.click(header('strategy.whereWent'));
+  expect(order()).toEqual(['o36', 'o37']);
+  expect(
+    table
+      .querySelector('th[aria-sort="descending"]')
+      ?.textContent?.includes('strategy.whereWent'),
+  ).toBe(true);
+});

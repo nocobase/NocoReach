@@ -23,8 +23,9 @@ import {
 } from '../../../shared/article-publishing.js';
 import { Reveal } from '#components/reach/reveal';
 import { lineTabClass, lineTabListClass } from '#components/reach/line-tabs';
+import { Segmented } from '#components/reach/segmented';
+import { cn } from '#lib/utils';
 import { ChangeView } from '../change-view';
-import { Markdown } from '../doc-view';
 import { localeName } from '../article-targets-api';
 import type {
   ArticleProposal,
@@ -32,6 +33,10 @@ import type {
   TaskData,
 } from '../task-execution-types';
 import { useTaskDraft } from './draft-store.js';
+import { AgentNotes } from './agent-notes.js';
+import { ArticlePreview, type ArticleText } from './article-preview.js';
+import { localePageUrl } from './article-page.js';
+import { MarkdownEditor } from './markdown-editor.js';
 import { Notice } from './layout.js';
 import { text } from './styles.js';
 import {
@@ -44,8 +49,24 @@ import {
   valueAt,
 } from './article-model';
 
-// The article an article step proposes, reviewed field by field against the version it was written from, and edited
-// in place (a save is a new immutable version). Conflicts from a rebase are listed first, with both versions.
+// The article an article step proposes, read as its readers will see it or field by field against the version it was
+// written from, and edited in place (a save is a new immutable version). Conflicts from a rebase are listed first, with
+// both versions.
+
+/** One language of the article as it reads after the change: the draft's fields over the version it was written from. */
+const revisedText = (
+  a: Pick<ArticleProposal, 'draft'>,
+  base: ArticleContent | null,
+  locale: string,
+): ArticleText => {
+  const draft = a.draft.locales[locale],
+    was = base?.locales[locale];
+  return {
+    title: draft?.title ?? was?.title ?? '',
+    description: draft?.description ?? was?.description ?? '',
+    body: draft?.body ?? was?.body ?? '',
+  };
+};
 
 const draftContent = (
   a: Pick<ArticleProposal, 'draft'>,
@@ -164,10 +185,25 @@ export function ArticleReview({
   const counts = (l: string) =>
     a.changes.filter((c) => c.startsWith(`${l}.`)).length;
   const [tab, setTab] = useState(locales.find((l) => counts(l)) || locales[0]);
+  // Preview first when the language's body changed or the article is new; field by field when only its title or
+  // description did (2026-10-23 user request).
+  const [views, setViews] = useState<Record<string, 'preview' | 'changes'>>({});
+  const [showBefore, setShowBefore] = useState(false);
+  const view =
+    views[tab] ??
+    (!a.articleId || a.changes.includes(`${tab}.body`) ? 'preview' : 'changes');
   const other = a.changes.filter((c) => !c.includes('.'));
   const draft = draftContent(a);
+  const previous = base?.locales[tab] ? base.locales[tab] : null,
+    pageUrl = localePageUrl(
+      data,
+      a.targetId,
+      a.draft.slug || base?.slug || '',
+      tab,
+    );
   return (
     <div className='flex flex-col gap-4'>
+      <AgentNotes summary={a.draft.summary} notes={notes} />
       <TargetLine target={target} a={a} base={base} />
       {!settled && !a.changes.length && a.carried?.length ? (
         <p className='text-sm text-muted-foreground'>
@@ -192,7 +228,6 @@ export function ArticleReview({
           />
         ) : null,
       )}
-      {notes && <Markdown content={notes} />}
       {other.length > 0 && (
         <ChangeView
           changes={other.map((p) =>
@@ -200,47 +235,100 @@ export function ArticleReview({
           )}
         />
       )}
-      <div
-        className={lineTabListClass}
-        role='tablist'
-        aria-label={$t('articleTask.article')}
-      >
-        {locales.map((l) => (
-          <button
-            key={l}
-            type='button'
-            role='tab'
-            className={lineTabClass}
-            aria-selected={l === tab}
-            onClick={() => setTab(l)}
-          >
-            {counts(l)
-              ? $t('articleTask.changeCount', {
-                  0: localeName(l, getCurrentLocale()),
-                  1: counts(l),
-                })
-              : localeName(l, getCurrentLocale())}
-          </button>
-        ))}
+      <div className='flex flex-wrap items-end justify-between gap-x-4 gap-y-2'>
+        <div
+          className={lineTabListClass}
+          role='tablist'
+          aria-label={$t('articleTask.article')}
+        >
+          {locales.map((l) => (
+            <button
+              key={l}
+              type='button'
+              role='tab'
+              className={lineTabClass}
+              aria-selected={l === tab}
+              onClick={() => setTab(l)}
+            >
+              {counts(l)
+                ? $t('articleTask.changeCount', {
+                    0: localeName(l, getCurrentLocale()),
+                    1: counts(l),
+                  })
+                : localeName(l, getCurrentLocale())}
+            </button>
+          ))}
+        </div>
+        <Segmented
+          label={$t('articleTask.viewAs')}
+          value={view}
+          onChange={(v) =>
+            setViews({ ...views, [tab]: v as 'preview' | 'changes' })
+          }
+          options={[
+            { id: 'preview', label: $t('articleTask.viewPreview') },
+            { id: 'changes', label: $t('articleTask.viewChanges') },
+          ]}
+          className='mb-1.5'
+        />
       </div>
       <div role='tabpanel' className='flex flex-col gap-3'>
-        {ARTICLE_FIELDS.map((f) => {
-          const path = `${tab}.${f}`;
-          return a.changes.includes(path) ? (
-            // The diff's own first line names the field ("English · Title"), so no label above it.
-            <div key={path} className='flex min-w-0 flex-col gap-1'>
-              <ChangeView
-                changes={[
-                  fieldChange(path, valueAt(base, path), valueAt(draft, path)),
-                ]}
-              />
-            </div>
-          ) : (
-            <p key={path} className='text-sm text-muted-foreground'>
-              {$t(`articleTask.field.${f}`)} · {$t('articleTask.unchanged')}
-            </p>
-          );
-        })}
+        {view === 'preview' ? (
+          <>
+            {previous && (
+              <p
+                className={cn(
+                  text.muted,
+                  'flex flex-wrap items-center gap-x-2',
+                )}
+              >
+                {showBefore
+                  ? $t('articleTask.previewBefore')
+                  : $t('articleTask.previewAfter')}
+                <Button
+                  variant='link'
+                  size='sm'
+                  className='h-auto p-0 font-normal'
+                  aria-pressed={showBefore}
+                  onClick={() => setShowBefore((v) => !v)}
+                >
+                  {showBefore
+                    ? $t('articleTask.showAfter')
+                    : $t('articleTask.showBefore')}
+                </Button>
+              </p>
+            )}
+            <ArticlePreview
+              key={`${tab}:${showBefore && previous ? 'before' : 'after'}`}
+              text={
+                showBefore && previous ? previous : revisedText(a, base, tab)
+              }
+              pageUrl={pageUrl}
+            />
+          </>
+        ) : (
+          ARTICLE_FIELDS.map((f) => {
+            const path = `${tab}.${f}`;
+            return a.changes.includes(path) ? (
+              // The diff's own first line names the field ("English · Title"), so no label above it.
+              <div key={path} className='flex min-w-0 flex-col gap-1'>
+                <ChangeView
+                  changes={[
+                    fieldChange(
+                      path,
+                      valueAt(base, path),
+                      valueAt(draft, path),
+                    ),
+                  ]}
+                />
+              </div>
+            ) : (
+              <p key={path} className='text-sm text-muted-foreground'>
+                {$t(`articleTask.field.${f}`)} · {$t('articleTask.unchanged')}
+              </p>
+            );
+          })
+        )}
       </div>
     </div>
   );
@@ -387,14 +475,14 @@ export function ArticleEditor({
   });
   return (
     <form
-      className='flex flex-col gap-4'
+      className='flex min-w-0 flex-col gap-4'
       noValidate
       onSubmit={(e) => {
         e.preventDefault();
         void save();
       }}
     >
-      <fieldset disabled={busy} className='flex flex-col gap-4'>
+      <fieldset disabled={busy} className='flex min-w-0 flex-col gap-4'>
         {create && (
           <Field data-invalid={Boolean(errors.slug)}>
             <FieldLabel htmlFor={`${id}-slug`} className={LABEL}>
@@ -439,7 +527,7 @@ export function ArticleEditor({
           </Field>
         )}
         {locales.map((l) => (
-          <fieldset key={l} className='flex flex-col gap-3'>
+          <fieldset key={l} className='flex min-w-0 flex-col gap-3'>
             <legend className={text.muted}>
               {localeName(l, getCurrentLocale())}
             </legend>
@@ -466,10 +554,26 @@ export function ArticleEditor({
                   </FieldLabel>
                   {f === 'title' ? (
                     <Input {...props} />
+                  ) : f === 'body' ? (
+                    // The body is written beside the article it makes (2026-10-23 user request, as dev.to does).
+                    <MarkdownEditor
+                      {...props}
+                      preview={(body) => (
+                        <ArticlePreview
+                          text={{ ...form.locales[l], body }}
+                          pageUrl={localePageUrl(
+                            data,
+                            a.targetId,
+                            form.slug || base?.slug || '',
+                            l,
+                          )}
+                        />
+                      )}
+                    />
                   ) : (
                     <Textarea
                       {...props}
-                      rows={f === 'body' ? 18 : 3}
+                      rows={3}
                       className='field-sizing-fixed'
                     />
                   )}

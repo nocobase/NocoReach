@@ -30,7 +30,7 @@ const test = createAppTest({
   },
 });
 
-test('results gate and manual follow-ups use real auth, project filters and atomic duplicate submission', async ({
+test('results gate uses real auth and project filters; opportunities raised from a result keep working', async ({
   testApp,
   request,
 }) => {
@@ -164,74 +164,50 @@ test('results gate and manual follow-ups use real auth, project filters and atom
       'evidence',
     ),
   ).toEqual(saved);
-  // This gate is also run before removing the Insights duplicate block.
-  const source = { taskId, taskRevision: 4, day: 7, computedAt: r.computedAt };
+  // Follow-ups from a result were removed (2026-10-23 user decision: the flow ran too long); opportunities raised that
+  // way before keep working: a fresh analysis does not expire them, Ignore and Restore count them, and Hand off
+  // carries their source to the task.
   const fields = {
-    signalKey: 'forged-result-signal',
     title: 'Investigate next steps',
     objective: 'Understand the change',
     brief: 'Investigate without automatic execution',
   };
-  const submission = {
-    requestId: randomUUID(),
-    revision: 0,
-    kind: 'task',
-    source,
-    fields,
+  const resultSource = {
+    taskId,
+    observeFrom: null,
+    day: 7,
+    observation: r,
+    pages: [],
+    capturedAt: new Date().toISOString(),
   };
-  const [first, second] = await Promise.all([
-    call('nrStrategy', 'createFromResult', submission),
-    call('nrStrategy', 'createFromResult', submission),
-  ]).then((responses) => Promise.all(responses.map((r) => json(r))));
-  expect(first.id).toBe(second.id);
-  expect(first.kind).toBe('task');
-  const created = await db
-    .getRepository('nrTasks')
-    .findOne({ filterByTk: first.id });
-  expect(created?.get('evidence').resultSource.observation).toEqual(r);
-  expect(created?.get('evidence').context.resultSource).toBeUndefined();
-  expect(projectWork(created?.toJSON()).stage).toBe('plan');
-  expect((await plugin.strategy.state(id)).proposals).toHaveLength(1);
-  expect(
-    (await plugin.strategy.state(id)).proposals[0].signalKey,
-  ).toBeUndefined();
-  const opportunityFields = {
-    title: 'Confirm the observation',
-    observation: 'Clicks changed',
-    meaning: 'Cause is unknown',
-    evidenceText: 'Day 7 local data',
-    limitation: 'No causal attribution',
-    suggestion: 'Investigate',
-    objective: 'Understand change',
-    source: 'search',
-    priority: 'medium',
-  };
-  const state = await plugin.strategy.state(id),
-    op = await json(
-      await call('nrStrategy', 'createFromResult', {
-        requestId: randomUUID(),
-        revision: state.revision,
-        kind: 'opportunity',
-        source,
-        fields: opportunityFields,
-      }),
-    );
-  expect((await plugin.strategy.state(id)).resultOpportunities[0].id).toBe(
-    op.id,
+  const op = { id: randomUUID() };
+  let current = await plugin.strategy.state(id);
+  await plugin.strategy.mutate(
+    id,
+    { requestId: randomUUID(), revision: current.revision },
+    async (state: { resultOpportunities?: object[] }) => {
+      state.resultOpportunities = [
+        {
+          id: op.id,
+          title: 'Confirm the observation',
+          observation: 'Clicks changed',
+          meaning: 'Cause is unknown',
+          evidenceText: 'Day 7 local data',
+          limitation: 'No causal attribution',
+          suggestion: 'Investigate',
+          objective: 'Understand change',
+          source: 'search',
+          priority: 'medium',
+          signalIds: [],
+          sources: ['gsc'],
+          resultSource,
+          firstSeenAt: resultSource.capturedAt,
+          updatedAt: resultSource.capturedAt,
+          change: 'new',
+        },
+      ];
+    },
   );
-  await json(
-    await call('nrStrategy', 'createFromResult', {
-      requestId: randomUUID(),
-      revision: 0,
-      kind: 'task',
-      source,
-      fields,
-    }),
-    409,
-  );
-  expect((await plugin.strategy.state(id)).proposals).toHaveLength(1);
-  const followUps = await json(await call('nrTaskWork', 'result', { taskId }));
-  expect(followUps.followUps).toHaveLength(2);
   // A fresh daily analysis must not expire a confirmed manual opportunity.
   plugin.strategy.context = async () => ({
     evidence: {
@@ -239,7 +215,7 @@ test('results gate and manual follow-ups use real auth, project filters and atom
       publicSources: [],
     },
   });
-  let current = await plugin.strategy.state(id);
+  current = await plugin.strategy.state(id);
   await json(
     await call('nrStrategy', 'saveInsights', {
       revision: current.revision,
@@ -294,28 +270,6 @@ test('results gate and manual follow-ups use real auth, project filters and atom
   expect(
     (await json(await call('nrStrategy', 'badges', {}))).opportunities,
   ).toBe(0);
-  const beforeInvalid = await plugin.strategy.state(id);
-  await json(
-    await call('nrStrategy', 'createFromResult', {
-      requestId: randomUUID(),
-      revision: beforeInvalid.revision,
-      kind: 'task',
-      source: { ...source, taskRevision: 0 },
-      fields,
-    }),
-    409,
-  );
-  await json(
-    await call('nrStrategy', 'createFromResult', {
-      requestId: randomUUID(),
-      revision: beforeInvalid.revision,
-      kind: 'task',
-      source,
-      fields: { ...fields, brief: '' },
-    }),
-    400,
-  );
-  expect(await plugin.strategy.state(id)).toEqual(beforeInvalid);
   const users = testApp.application.container.resolve(
     userAdministrationServiceToken,
   );
@@ -328,7 +282,6 @@ test('results gate and manual follow-ups use real auth, project filters and atom
   for (const [resource, action] of [
     ['nrTaskWork', 'results'],
     ['nrTaskWork', 'result'],
-    ['nrStrategy', 'createFromResult'],
   ]) {
     expect(
       (

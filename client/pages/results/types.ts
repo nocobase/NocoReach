@@ -36,8 +36,6 @@ export type ResultDetail = {
   observeFrom: string | null;
   pages: string[];
   results: EffectResult[];
-  followUps: { kind: string; id: string; title: string }[];
-  strategyRevision: number;
 };
 // What nrTaskWork:board returns (server/nocoreach/execution/result-view.ts resultBoard).
 export type BoardTotal = { before: number; after: number; tasks: number };
