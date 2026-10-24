@@ -1,11 +1,18 @@
 import { NavigationGuardProvider } from '@nocobase/app-client';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { setDictionary } from '../../client/i18n';
 import { TaskDraftProvider } from '../../client/pages/task-detail/drafts';
 import { TaskDetail } from '../../client/pages/task-detail';
+import ArticleReaderPage from '../../client/pages/task-detail/article-reader';
 import type { TaskData } from '../../client/pages/task-execution-types';
 import spanish from '../../shared/i18n/es-ES.json';
 
@@ -844,6 +851,98 @@ test('an article review has no release notes to edit, and the live card none to 
       },
     ),
   ).toBeNull();
+});
+
+// The task with its child route, as nocoreach-routes.ts declares it, and the address the router is at.
+function Where() {
+  const l = useLocation();
+  return <output data-testid='where'>{l.pathname + l.search}</output>;
+}
+function mountRoutes(data: TaskData, entry: string) {
+  return render(
+    <MemoryRouter initialEntries={[entry]}>
+      <NavigationGuardProvider>
+        <TaskDraftProvider>
+          <Routes>
+            <Route
+              path='/actions/:taskId'
+              element={<TaskDetail projectId={1} taskId='1' initial={data} />}
+            >
+              <Route path='article' element={<ArticleReaderPage />} />
+            </Route>
+          </Routes>
+          <Where />
+        </TaskDraftProvider>
+      </NavigationGuardProvider>
+    </MemoryRouter>,
+  );
+}
+// The reading page: the page that holds Back to task (the task page stays mounted, covered, underneath).
+const readerPage = () =>
+  screen.getByRole('button', { name: '返回任务' }).closest('section')!;
+function reviewArticle(): TaskData {
+  const data = liveArticle();
+  const [artifact] = data.work.results as NonNullable<
+    TaskData['work']['results'][number]
+  >[];
+  data.work.stage = 'flow';
+  data.work.stageIndex = 1;
+  delete data.work.release;
+  delete (artifact as { approvedAt?: string }).approvedAt;
+  return data;
+}
+
+// 2026-10-24 user request: the article on a page of its own, to read without the task around it.
+test('Read full screen opens the article on its own page, and Esc goes back to the task', async () => {
+  const user = userEvent.setup();
+  mountRoutes(reviewArticle(), '/actions/1');
+  const card = screen.getByRole('region', { name: '等你处理' });
+  await user.click(within(card).getByLabelText('全屏阅读'));
+  expect(screen.getByTestId('where')).toHaveTextContent(
+    '/actions/1/article?lang=en&view=changes',
+  );
+  const reader = readerPage();
+  expect(
+    within(reader).getByRole('button', { name: '通过并发布' }),
+  ).toBeVisible();
+  await user.keyboard('{Escape}');
+  expect(screen.getByTestId('where')).toHaveTextContent(/^\/actions\/1$/);
+});
+
+test('the reading page opens from its address, follows its language and view, and approves', async () => {
+  const user = userEvent.setup();
+  const data = reviewArticle();
+  action.mockImplementation((resource: string, command: string) =>
+    Promise.resolve(
+      command === 'advance'
+        ? data
+        : resource === 'nrPlaybooks'
+          ? { playbooks: [] }
+          : [],
+    ),
+  );
+  mountRoutes(data, '/actions/1/article?lang=en&view=preview');
+  const reader = readerPage();
+  expect(
+    within(reader).getByRole('heading', {
+      name: 'Top 12 Open Source No-Code AI Tools (2026)',
+    }),
+  ).toBeVisible();
+  expect(within(reader).getByRole('button', { name: '预览' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await user.click(within(reader).getByRole('button', { name: '改动' }));
+  expect(screen.getByTestId('where')).toHaveTextContent('view=changes');
+  await user.click(within(reader).getByRole('button', { name: '通过并发布' }));
+  const approve = action.mock.calls.find(([, c]) => c === 'advance');
+  expect(approve?.[2]?.body).toMatchObject({
+    command: 'approveStage',
+    artifactId: 'artifact-1',
+  });
+  await waitFor(() =>
+    expect(screen.getByTestId('where')).toHaveTextContent(/^\/actions\/1$/),
+  );
 });
 
 test('a live article names what changed on its card and shows each field before and after', async () => {
