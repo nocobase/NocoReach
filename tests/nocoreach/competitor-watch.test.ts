@@ -3,24 +3,25 @@
 import { test as __vitest_test, vi } from 'vitest';
 vi.setConfig({ testTimeout: 60000 });
 import assert from 'node:assert/strict';
-import { CompetitorWatch, siteOf, repoOf, memoryNames } from '../../server/nocoreach/competitor-watch.js';
+import { CompetitorWatch, siteOf, repoOf, suggestionsOf } from '../../server/nocoreach/competitor-watch.js';
 import { competitorSignals } from '../../server/nocoreach/signals.js';
 const test=__vitest_test;
 const DAY=86400000;
 function setup(){const rows=[];const repo={findOne:async({filter})=>{const r=rows.find(x=>x.key===filter.key);return r&&{id:r.id,get:()=>r.payload};},update:async({filterByTk,values})=>{rows.find(x=>x.id===filterByTk).payload=values.payload;},create:async({values})=>{rows.push({id:rows.length+1,...values});}};
  const site={pages:[{url:'https://retool.com/'},{url:'https://retool.com/pricing'}],warnings:[]},gh={stars:1000,releases:[{name:'v1.0',tag_name:'v1.0',html_url:'https://github.com/tooljet/tooljet/releases/v1.0',published_at:'2026-09-01T00:00:00Z'}]},calls=[];
  const p={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}},projectIds:async()=>['1'],
-  projects:{get:async()=>({id:1,name:'NocoBase',domains:['nocobase.com'],memory:{competitors:'- Retool（按人收费）\n- Appsmith：开源\nToolJet、Budibase'}})},
+  projects:{get:async()=>({id:1,name:'NocoBase',domains:['nocobase.com'],memory:{competitors:'常拿来对比的：直接用 Coding Agent（Claude Code、Codex 等），但每个项目从零开始，权限、审批、部署、运维和协作要自己补。AI 应用生成工具。'}})},
   siteContent:{discover:async origin=>{calls.push(['site',origin]);return site;}},
   github:{token:()=>'',gh:async path=>{calls.push(['gh',path]);if(path.endsWith('/releases?per_page=5'))return gh.releases;return {stargazers_count:gh.stars,forks_count:10,description:'Low-code'};}}};
  const w=new CompetitorWatch(p,async url=>({text:`<html><head><title>${url.split('/').pop()} page</title><meta name="description" content="about it"></head></html>`,type:'text/html'}));
  return {w,rows,site,gh,calls};}
 
-test('competitor list: website and/or GitHub, not your own site, at most five; names from 记忆 offered',async()=>{
+test('competitor list: website and/or GitHub, not your own site, at most five; only checked AI candidates offered, never memory fragments',async()=>{
  assert.equal(siteOf('retool.com/pricing'),'https://retool.com');assert.equal(repoOf('https://github.com/ToolJet/ToolJet'),'ToolJet/ToolJet');assert.equal(repoOf('appsmithorg/appsmith'),'appsmithorg/appsmith');assert.throws(()=>repoOf('https://gitlab.com/a'),/GitHub 仓库/);
- assert.deepEqual(memoryNames({memory:{competitors:'- Retool（按人收费）\n- Appsmith：开源\nToolJet、Budibase'}},[{name:'appsmith'}]),['Retool','ToolJet','Budibase']);
+ assert.deepEqual(suggestionsOf({list:[{name:'Appsmith',site:'https://appsmith.com',repo:''}],suggested:{candidates:[{name:'appsmith',site:'https://www.appsmith.com',repo:''},{name:'Retool',site:'https://retool.com',repo:'',reason:'x'},{name:'Budibase',site:'',repo:'Budibase/budibase'},{name:'Coding Agent',site:'',repo:''}]}}),
+  [{name:'Retool',site:'https://retool.com',repo:''},{name:'Budibase',site:'',repo:'Budibase/budibase'}],'listed names and candidates without a website or repository are left out');
  const {w}=setup();await assert.rejects(w.add('1',{name:'X'}),/至少填一个/);await assert.rejects(w.add('1',{name:'Own',site:'docs.nocobase.com'}),/本项目自己的网站/);
- const st=await w.add('1',{name:'Retool',site:'https://retool.com'});await w.checking;assert.deepEqual(st.list.map(c=>c.name),['Retool']);assert.deepEqual(st.suggestions,['Appsmith','ToolJet','Budibase']);
+ const st=await w.add('1',{name:'Retool',site:'https://retool.com'});await w.checking;assert.deepEqual(st.list.map(c=>c.name),['Retool']);assert.deepEqual(st.suggestions,[],'memory sentences are not split into names');
  await assert.rejects(w.add('1',{name:'retool',site:'retool.io'}),/已经在列表里/);
  for(const n of ['A1','B1','C1','D1'])await w.add('1',{name:n,repo:`org/${n}`}).then(()=>w.checking);await assert.rejects(w.add('1',{name:'F1',repo:'org/f'}),/最多关注 5 个/);
 });
@@ -45,12 +46,30 @@ test('weekly look: the first one records, later ones list new pages (titles read
  // failures are recorded per competitor, the rest still looked at
  w.p.siteContent.discover=async()=>{throw new Error('没有找到 sitemap');};for(const c of v.list)rows[0].payload.track[c.id].checkedAt=new Date(Date.now()-8*DAY).toISOString();
  const bad=await w.check('1');assert.deepEqual(bad.errors,['Retool 官网：没有找到 sitemap']);assert.deepEqual((await w.status('1')).list[0].errors,['没有找到 sitemap']);
- // An error without a status may pass on its own; a refusal such as a missing sitemap (422) is a setting to change.
+ // An error without a status may pass on its own; an invalid address (400) is a setting to change.
  assert.equal(rows[0].payload.lastRun.configError,undefined);
- w.p.siteContent.discover=async()=>{throw Object.assign(new Error('没有找到 sitemap'),{status:422});};for(const c of v.list)rows[0].payload.track[c.id].checkedAt=new Date(Date.now()-8*DAY).toISOString();
- await w.check('1');assert.equal(rows[0].payload.lastRun.configError,true);
+ w.p.siteContent.discover=async()=>{throw Object.assign(new Error('请填写完整的 https 网址'),{status:400});};for(const c of v.list)rows[0].payload.track[c.id].checkedAt=new Date(Date.now()-8*DAY).toISOString();
+ await w.check('1');assert.equal(rows[0].payload.lastRun.configError,true);assert.equal((await w.state('1')).lastRun.ok,false);
+ // A website without a sitemap (422) is a note on its card: no error, the source stays healthy, GitHub is still read.
+ w.p.siteContent.discover=async()=>{throw Object.assign(new Error('没有找到 sitemap。'),{status:422});};for(const c of v.list)rows[0].payload.track[c.id].checkedAt=new Date(Date.now()-8*DAY).toISOString();
+ const none=await w.check('1');assert.deepEqual(none.errors,[]);let st=await w.status('1');
+ assert.deepEqual(st.list.map(c=>[c.name,c.noSitemap,c.errors]),[['Retool',true,[]],['ToolJet',false,[]]]);assert.equal(st.lastRun.ok,true);assert.equal(st.lastRun.configError,undefined);
+ // Removing a competitor drops its error at once, without waiting for the next weekly look.
+ w.p.siteContent.discover=async()=>{throw Object.assign(new Error('请填写完整的 https 网址'),{status:400});};for(const c of v.list)rows[0].payload.track[c.id].checkedAt=new Date(Date.now()-8*DAY).toISOString();
+ await w.check('1');assert.equal((await w.state('1')).lastRun.ok,false);
  await w.remove('1',{competitorId:v.list[0].id});v=await w.view('1');assert.deepEqual(v.list.map(c=>c.name),['ToolJet']);assert.ok(v.events.every(e=>e.competitor==='ToolJet'));
+ st=await w.status('1');assert.deepEqual([st.lastRun.ok,st.lastRun.errors,st.lastRun.configError],[true,[],undefined]);assert.deepEqual(rows[0].payload.lastRun.errors,[]);
  assert.ok(calls.some(c=>c[0]==='gh'&&c[1]==='/repos/tooljet/tooljet'));
+});
+
+test('saved before the fix: the error of a competitor removed since no longer fails the source',async()=>{
+ const {w,rows}=setup();
+ rows.push({id:1,key:'competitors:1',payload:{list:[{id:'a',name:'NocoDB',site:'https://nocodb.com',repo:''},{id:'b',name:'Budibase',site:'https://budibase.com',repo:'Budibase/budibase'}],
+  track:{a:{checkedAt:'2026-10-22T15:30:00Z',pages:120},b:{checkedAt:'2026-10-22T15:30:00Z',pages:300,stars:{'2026-10-22':28000}}},events:[],
+  lastRun:{at:'2026-10-22T15:30:00Z',ok:false,configError:true,errors:['Baserow 官网：没有找到 sitemap。请确认网站提供了 sitemap.xml，或在 robots.txt 中声明 sitemap 地址。']}}});
+ const st=await w.status('1');
+ assert.deepEqual([st.lastRun.at,st.lastRun.ok,st.lastRun.errors,st.lastRun.configError],['2026-10-22T15:30:00Z',true,[],undefined]);
+ assert.deepEqual(st.list.map(c=>[c.name,c.noSitemap,c.errors]),[['NocoDB',false,[]],['Budibase',false,[]]]);
 });
 
 test('AI 识别: candidates from the online AI with websites opened and repositories looked up; own site and dead sites dropped; kept a week',async()=>{
