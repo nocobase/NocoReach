@@ -3,7 +3,8 @@
 ## Unreleased — A result's drawer without follow-ups, in one text size
 
 - A result's drawer no longer offers Follow-ups or the full-width "Create follow-up" button (2026-10-23 user decision: the flow ran too long). The follow-up page, its routes, the `result-create` page permission, the `createFromResult` capability and the `nrStrategy:createFromResult` action are removed. Opportunities and tasks raised from a result before keep showing where they came from and keep working.
-- The drawer reads in one text size: the summary, the page, "Observing since" as a date (not a raw timestamp) and Open original task; the 7-day / 28-day switch and the refresh share one row; the waiting note is grey text like the rest.
+- The drawer is laid out in three parts instead of a block of text: facts as a short list (Status, Went live as a date, Changed pages with an external-link mark, Original task), then Data change with the 7-day / 28-day switch and refresh on its label row and the waiting note in a light box, then What was done with the summary as plain text (no Markdown markers). One text size throughout.
+- The comparison block (the result drawer, the task page's effect detail and a result's source panel) shows its outcome as a tag beside the windows, column headers aligned with their numbers, and every note in the same small grey text.
 
 ## Unreleased — Results lists only work with an outcome; a closed task never reads Completed
 

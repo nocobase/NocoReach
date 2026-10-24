@@ -5213,6 +5213,8 @@
   "results.previous": "上一页",
   "results.next": "下一页",
   "results.originalTask": "查看原任务",
+  "results.pagesLabel": "改动的页面",
+  "results.whatWasDone": "做了什么",
   "results.noSummary": "原任务暂无调整摘要。",
   "results.noPages": "无关联页面",
   "results.observeFrom": "观察起点：{0}",

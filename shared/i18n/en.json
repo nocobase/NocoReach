@@ -5213,6 +5213,8 @@
   "results.previous": "Previous",
   "results.next": "Next",
   "results.originalTask": "View original task",
+  "results.pagesLabel": "Changed pages",
+  "results.whatWasDone": "What was done",
   "results.noSummary": "No adjustment summary on the original task.",
   "results.noPages": "No related pages",
   "results.observeFrom": "Observation start: {0}",

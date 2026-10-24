@@ -5261,6 +5261,8 @@
   "results.previous": "Sebelumnya",
   "results.next": "Berikutnya",
   "results.originalTask": "Lihat tugas asal",
+  "results.pagesLabel": "Halaman yang diubah",
+  "results.whatWasDone": "Yang dikerjakan",
   "results.noSummary": "Tidak ada ringkasan penyesuaian pada tugas asal.",
   "results.noPages": "Tidak ada halaman terkait",
   "results.observeFrom": "Awal pengamatan: {0}",

@@ -5185,6 +5185,8 @@
   "results.previous": "Précédent",
   "results.next": "Suivant",
   "results.originalTask": "Voir la tâche d’origine",
+  "results.pagesLabel": "Pages modifiées",
+  "results.whatWasDone": "Ce qui a été fait",
   "results.noSummary": "Aucun résumé des ajustements dans la tâche d’origine.",
   "results.noPages": "Aucune page associée",
   "results.observeFrom": "Début de l’observation : {0}",

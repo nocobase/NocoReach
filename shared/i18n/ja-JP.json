@@ -5185,6 +5185,8 @@
   "results.previous": "前へ",
   "results.next": "次へ",
   "results.originalTask": "元のタスクを表示",
+  "results.pagesLabel": "変更したページ",
+  "results.whatWasDone": "実施した内容",
   "results.noSummary": "元のタスクに調整内容の概要がありません。",
   "results.noPages": "関連ページなし",
   "results.observeFrom": "観察開始: {0}",

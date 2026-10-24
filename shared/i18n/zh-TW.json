@@ -5185,6 +5185,8 @@
   "results.previous": "上一頁",
   "results.next": "下一頁",
   "results.originalTask": "檢視原任務",
+  "results.pagesLabel": "改動的頁面",
+  "results.whatWasDone": "做了什麼",
   "results.noSummary": "原任務暫無調整摘要。",
   "results.noPages": "無關聯頁面",
   "results.observeFrom": "觀察起點：{0}",

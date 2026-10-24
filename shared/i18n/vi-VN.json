@@ -5261,6 +5261,8 @@
   "results.previous": "Trang trước",
   "results.next": "Trang sau",
   "results.originalTask": "Xem tác vụ gốc",
+  "results.pagesLabel": "Trang đã thay đổi",
+  "results.whatWasDone": "Đã làm gì",
   "results.noSummary": "Tác vụ gốc chưa có tóm tắt điều chỉnh.",
   "results.noPages": "Không có trang liên quan",
   "results.observeFrom": "Bắt đầu theo dõi: {0}",

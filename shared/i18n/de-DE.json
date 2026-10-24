@@ -5185,6 +5185,8 @@
   "results.previous": "Zurück",
   "results.next": "Weiter",
   "results.originalTask": "Ursprüngliche Aufgabe anzeigen",
+  "results.pagesLabel": "Geänderte Seiten",
+  "results.whatWasDone": "Was gemacht wurde",
   "results.noSummary": "Die ursprüngliche Aufgabe enthält keine Zusammenfassung der Anpassungen.",
   "results.noPages": "Keine zugehörigen Seiten",
   "results.observeFrom": "Beobachtungsbeginn: {0}",

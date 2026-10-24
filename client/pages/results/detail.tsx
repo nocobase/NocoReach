@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Segmented } from '#components/reach/segmented';
 import { RefreshButton } from '#components/reach/refresh-button';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router';
+import { ExternalLinkIcon } from 'lucide-react';
 import { $t } from '#i18n';
 import { RouteDrawer } from '#components/route-drawer';
 import { formatDate } from '#lib/format';
@@ -96,9 +97,9 @@ function Detail({ projectId, taskId }: { projectId: string; taskId: string }) {
       description={$t('results.description')}
       className='sm:max-w-2xl'
     >
-      {/* One text size: body text-sm, facts and notes in grey; the checkpoint switch and its refresh share a row
-          (2026-10-23 user feedback: sizes differed, and Follow-ups with its full-width button made the flow too long). */}
-      <div className='flex flex-col gap-5 text-sm'>
+      {/* Facts first, then what changed, then what was done (2026-10-23/24 user feedback: one size of text, and not a
+          paragraph dropped into the drawer). Labels as in an opportunity's drawer: small grey above or beside. */}
+      <div className='flex flex-col gap-6 text-sm'>
         {error && (
           <p role='alert'>
             {$t(data ? 'results.stale' : 'results.loadFailed')}
@@ -106,85 +107,121 @@ function Detail({ projectId, taskId }: { projectId: string; taskId: string }) {
         )}
         {data ? (
           <>
-            <p className='line-clamp-4 whitespace-pre-wrap'>
-              {plainSummary(data.task.summary) || $t('results.noSummary')}
-            </p>
-            <div className='flex flex-col gap-1'>
-              {data.pages.length ? (
-                data.pages.map((page) => (
-                  <a
-                    key={page}
-                    href={page}
-                    target='_blank'
-                    rel='noreferrer'
-                    className='nr-link break-all'
-                  >
-                    {page}
-                  </a>
-                ))
-              ) : (
-                <span className='text-muted-foreground'>
-                  {$t('results.noPages')}
-                </span>
+            <dl className='grid grid-cols-[6rem_minmax(0,1fr)] gap-x-3 gap-y-2'>
+              <dt className='text-muted-foreground'>
+                {$t('results.board.status')}
+              </dt>
+              <dd>
+                {[
+                  $t(`results.taskState.${data.task.state}`),
+                  data.task.archived ? $t('results.archived') : '',
+                  data.task.simulated ? $t('results.simulated') : '',
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </dd>
+              {data.observeFrom && (
+                <>
+                  <dt className='text-muted-foreground'>
+                    {$t('results.board.wentLive')}
+                  </dt>
+                  <dd>{formatDate(data.observeFrom)}</dd>
+                </>
               )}
-              <span className='text-muted-foreground'>
-                {$t('results.observeFrom', {
-                  0: data.observeFrom ? formatDate(data.observeFrom) : '—',
-                })}
-                {data.task.simulated ? ` · ${$t('results.simulated')}` : ''}
-              </span>
-              <Link
-                className='nr-link self-start'
-                to={`/actions/${taskId}?resultDay=${day}&resultQuery=${encodeURIComponent(location.search)}`}
-              >
-                {$t('results.originalTask')}
-              </Link>
-            </div>
-            <div className='flex items-center gap-3'>
-              <Segmented
-                label={$t('results.checkpoint')}
-                options={[7, 28].map((d) => ({
-                  id: String(d),
-                  label: $t('results.day', { 0: d }),
-                }))}
-                value={String(day)}
-                onChange={(d) => {
-                  const p = new URLSearchParams(params);
-                  p.set('day', d);
-                  setParams(p);
-                }}
-              />
-              <RefreshButton
-                className='ml-auto'
-                busy={loading}
-                label={$t('results.refresh')}
-                onClick={() => setRefresh((n) => n + 1)}
-              />
-            </div>
-            {result ? (
-              <Comparison result={result} observeFrom={data.observeFrom} />
-            ) : (
-              <p className='text-muted-foreground'>
-                {$t(
-                  data.observeFrom ? 'results.waiting' : 'results.unavailable',
-                )}
-                {data.observeFrom && (
-                  <>
-                    {' '}
-                    {$t('results.expected', {
-                      0: formatDate(
-                        new Date(
-                          Date.parse(
-                            data.observeFrom.slice(0, 10) + 'T00:00:00Z',
-                          ) +
-                            (day + 3) * 86400000,
-                        ).toISOString(),
-                      ),
-                    })}
-                  </>
-                )}
+              <dt className='text-muted-foreground'>
+                {$t('results.pagesLabel')}
+              </dt>
+              <dd className='flex min-w-0 flex-col gap-0.5'>
+                {data.pages.length
+                  ? data.pages.map((page) => (
+                      <a
+                        key={page}
+                        href={page}
+                        target='_blank'
+                        rel='noreferrer'
+                        className='nr-link inline-flex min-w-0 items-center gap-1'
+                      >
+                        <span className='truncate'>
+                          {page.replace(/^https?:\/\//, '')}
+                        </span>
+                        <ExternalLinkIcon
+                          aria-hidden='true'
+                          className='size-3.5 shrink-0'
+                        />
+                      </a>
+                    ))
+                  : $t('results.noPages')}
+              </dd>
+              <dt className='text-muted-foreground'>{$t('results.task')}</dt>
+              <dd>
+                <Link
+                  className='nr-link'
+                  to={`/actions/${taskId}?resultDay=${day}&resultQuery=${encodeURIComponent(location.search)}`}
+                >
+                  {$t('results.originalTask')}
+                </Link>
+              </dd>
+            </dl>
+            <section className='flex flex-col gap-2'>
+              <div className='flex items-center gap-3'>
+                <h3 className='text-xs font-medium text-muted-foreground'>
+                  {$t('results.change')}
+                </h3>
+                <Segmented
+                  label={$t('results.checkpoint')}
+                  className='ml-auto'
+                  options={[7, 28].map((d) => ({
+                    id: String(d),
+                    label: $t('results.day', { 0: d }),
+                  }))}
+                  value={String(day)}
+                  onChange={(d) => {
+                    const p = new URLSearchParams(params);
+                    p.set('day', d);
+                    setParams(p);
+                  }}
+                />
+                <RefreshButton
+                  busy={loading}
+                  label={$t('results.refresh')}
+                  onClick={() => setRefresh((n) => n + 1)}
+                />
+              </div>
+              {result ? (
+                <Comparison result={result} observeFrom={data.observeFrom} />
+              ) : (
+                <p className='rounded-lg bg-muted/50 px-3 py-2.5 text-muted-foreground'>
+                  {$t(
+                    data.observeFrom
+                      ? 'results.waiting'
+                      : 'results.unavailable',
+                  )}
+                  {data.observeFrom && (
+                    <>
+                      {' '}
+                      {$t('results.expected', {
+                        0: formatDate(
+                          new Date(
+                            Date.parse(
+                              data.observeFrom.slice(0, 10) + 'T00:00:00Z',
+                            ) +
+                              (day + 3) * 86400000,
+                          ).toISOString(),
+                        ),
+                      })}
+                    </>
+                  )}
+                </p>
+              )}
+            </section>
+            <section className='flex flex-col gap-1.5'>
+              <h3 className='text-xs font-medium text-muted-foreground'>
+                {$t('results.whatWasDone')}
+              </h3>
+              <p className='line-clamp-6 leading-relaxed whitespace-pre-wrap'>
+                {plainSummary(data.task.summary) || $t('results.noSummary')}
               </p>
-            )}
+            </section>
           </>
         ) : (
           !error && <p role='status'>{$t('common.loading')}</p>
