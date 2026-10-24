@@ -525,7 +525,7 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
   <DriftNotice data={data} r={r}/>
   <EffectList w={w}/>
   <PageLinks pages={r.pages}/>
-  <Reveal label={$t('taskDetail.releaseNotes')}><p className={cn(text.body,'whitespace-pre-wrap')}>{r.note}</p></Reveal>
+  {r.note&&<Reveal label={$t('taskDetail.releaseNotes')}><p className={cn(text.body,'whitespace-pre-wrap')}>{r.note}</p></Reveal>}
  </StageCard>;
  const replies=repliesOf(w,accepted?.content);
  if(replies.length)return <StageCard label={done} title={$t('taskDetail.replyDraftsAccepted')} sub={$t('taskDetail.copyReplyPostYourselfNocoreach')}><ReplyDrafts items={replies}/></StageCard>;

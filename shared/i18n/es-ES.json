@@ -4731,6 +4731,8 @@
   "taskDetail.actualModelNotReported": "No se ha indicado el modelo utilizado",
   "taskDetail.unknownRunner": "Runner desconocido",
   "taskDetail.sourceSnapshotRun": "Instantánea de las fuentes de esta ejecución",
+  "taskDetail.postsAgentRead": "Publicaciones que leyó el agente",
+  "taskDetail.moreTopics": "{0} temas más",
   "taskDetail.runNoRecordedEvents": "Esta ejecución no tiene eventos registrados.",
   "taskDetail.sourceSource": "Fuente: {source}",
   "taskDetail.viewCountRuns": "Ver las {count} ejecuciones",

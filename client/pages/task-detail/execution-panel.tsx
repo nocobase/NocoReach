@@ -1,5 +1,5 @@
 import { formatDateTime } from '#lib/format';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Bot, Clock3 } from 'lucide-react';
 import { $t, getCurrentLocale, $legacyText } from '#i18n';
@@ -359,50 +359,86 @@ export function TaskExecutionPanel({
               <Markdown content={detail.savedDraft.content} />
             </Reveal>
           )}
-          {detail?.sources && (
-            <Reveal label={$t('taskDetail.sourceSnapshotRun')}>
-              <div className='flex flex-col gap-2 text-sm'>
-                <p className='text-muted-foreground'>
-                  {$t('taskDetail.sourcesPrepared', {
-                    0: formatDateTime(detail.sources.capturedAt),
-                  })}
-                </p>
-                {detail.sources.topics.map((topic) => (
-                  <div key={topic.id}>
-                    <a
-                      className='underline break-all'
-                      href={topic.url}
-                      target='_blank'
-                      rel='noreferrer'
-                    >
-                      {topic.title || topic.url}
-                    </a>
-                    <p>
-                      {$t('taskDetail.postsProvided', {
-                        0: topic.posts.length,
-                        1: topic.complete
-                          ? $t('taskDetail.completeSources')
-                          : $t('taskDetail.incompleteSources'),
-                      })}
-                    </p>
-                    {topic.missing.map((warning) => (
-                      <p
-                        key={`${warning.code}:${warning.params?.post ?? ''}`}
-                        className='text-muted-foreground'
-                      >
-                        {materialNoticeText(warning)}
-                      </p>
-                    ))}
-                  </div>
-                ))}
-                {detail.sources.warnings.map((warning) => (
-                  <p key={warning.code}>{materialNoticeText(warning)}</p>
-                ))}
-              </div>
-            </Reveal>
-          )}
+          {detail?.sources &&
+            (detail.sources.topics.length > 0 ||
+              detail.sources.warnings.length > 0) && (
+              <SourcesRead sources={detail.sources} />
+            )}
         </>
       )}
+    </section>
+  );
+}
+
+// The forum posts a run was given (its sources.json), as a titled section of Technical details › Runs rather than a
+// fold inside the dialog (2026-10-24 user report: the fold opened a single grey line out of view). Every run has a
+// snapshot but only community replies carry topics, so a run without topics or warnings shows nothing. Long lists
+// show five topics until asked for the rest.
+function SourcesRead({
+  sources,
+}: {
+  sources: NonNullable<TaskData['sources']>;
+}) {
+  const [all, setAll] = useState(false),
+    id = useId();
+  const shown = all ? sources.topics : sources.topics.slice(0, 5);
+  return (
+    <section aria-labelledby={id} className='flex flex-col gap-2 text-sm'>
+      <h3 id={id} className='font-medium'>
+        {$t('taskDetail.postsAgentRead')}
+      </h3>
+      <p className='text-muted-foreground'>
+        {$t('taskDetail.sourcesPrepared', {
+          0: formatDateTime(sources.capturedAt),
+        })}
+      </p>
+      {shown.length > 0 && (
+        <ul className='flex flex-col gap-2'>
+          {shown.map((topic) => (
+            <li key={topic.id} className='flex min-w-0 flex-col gap-0.5'>
+              <a
+                className='nr-link break-all'
+                href={topic.url}
+                target='_blank'
+                rel='noreferrer'
+              >
+                {topic.title || topic.url}
+              </a>
+              <span className='text-muted-foreground'>
+                {$t('taskDetail.postsProvided', {
+                  0: topic.posts.length,
+                  1: topic.complete
+                    ? $t('taskDetail.completeSources')
+                    : $t('taskDetail.incompleteSources'),
+                })}
+              </span>
+              {topic.missing.map((warning) => (
+                <span
+                  key={`${warning.code}:${warning.params?.post ?? ''}`}
+                  className='text-muted-foreground'
+                >
+                  {materialNoticeText(warning)}
+                </span>
+              ))}
+            </li>
+          ))}
+        </ul>
+      )}
+      {!all && sources.topics.length > shown.length && (
+        <Button
+          variant='link'
+          size='sm'
+          className='h-auto self-start p-0 font-normal'
+          onClick={() => setAll(true)}
+        >
+          {$t('taskDetail.moreTopics', {
+            0: sources.topics.length - shown.length,
+          })}
+        </Button>
+      )}
+      {sources.warnings.map((warning) => (
+        <p key={warning.code}>{materialNoticeText(warning)}</p>
+      ))}
     </section>
   );
 }
