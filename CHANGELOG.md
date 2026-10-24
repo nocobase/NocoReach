@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Task header: the steps are tags again
+
+- Under a task's title, the playbook's steps are a row of tags joined by chevrons again, as before the one-layout change: done steps ticked in green, the current one outlined (violet for a person's step, blue for the Agent's), the rest grey. The grey "Now: …" text after them is gone, since the highlighted step says where the task stands. Nothing else in the header changed.
+
 ## Unreleased — New task: Organize with AI
 
 - Tasks › New task opens on one field, What you want done, with Organize with AI and Fill in manually. Organize with AI makes one call to the chat model in Model services (the one the daily analysis and the chat panel use, not a local agent) and fills the form for editing: a title starting with the action, a description in three labelled parts (Background, What to do, Completion criteria) in the project's AI language, and a Why this task sentence or two (checked like the background, kept as `evidence.why` for the task page's Why card) and a Suggested playbook preselected from the project's playbooks and kept as the task's suggested playbook. Restore original text goes back to what was written, asking first when the draft was edited; Fill in manually opens the form as before with the idea as its description. Nothing is created until Create; the task records "Found by <name>" as before.

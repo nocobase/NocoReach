@@ -221,6 +221,26 @@ test('the header says why the task exists and opens the evidence', async () => {
   expect(dialog).toHaveTextContent('行动目标：恢复 /ja 首页的自然搜索点击量');
 });
 
+// 2026-10-24 user request: the header's steps are tags again, as before #241, and the highlighted step says where the
+// task stands, with no "Now:" text after them.
+test('the header shows the steps as tags, done ones ticked and the current one highlighted', () => {
+  mount();
+  const steps = screen.getByRole('list', { name: '进度' });
+  const [first] = within(steps).getAllByRole('listitem');
+  expect(first).toHaveAttribute('data-state', 'done');
+  expect(first.querySelector('[data-slot="tag"]')).toHaveAttribute(
+    'data-tone',
+    'green',
+  );
+  const current = steps.querySelector('[aria-current="step"]');
+  expect(current).toHaveTextContent('看效果并发布');
+  expect(current?.querySelector('[data-slot="tag"]')).toHaveAttribute(
+    'data-tone',
+    'violet',
+  );
+  expect(document.body).not.toHaveTextContent('现在：');
+});
+
 test('activity lists deliveries and leaves failed runs to Technical details', async () => {
   const user = userEvent.setup();
   mount();
