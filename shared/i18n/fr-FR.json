@@ -476,6 +476,8 @@
   "projectKnowledge.characters": "{0} · Caractères : {1}",
   "projectKnowledge.charactersAdded": "{0} · Caractères : {1} · Ajout : {2}",
   "skills.updated": "{0} · mis à jour {1}{2}",
+  "skills.updatedOn": "Mis à jour {0}{1}",
+  "skills.usedAtStep": "Étape {0} : {1}",
   "dataX.likes": "{0} · Mentions J’aime : {1}",
   "siteAudit.statusPageCount": "{0} · Pages : {1}",
   "contentIndex.pagesDetailsReadPages": "{0} · Pages : {1} · Pages dont les détails ont été lus : {2}",

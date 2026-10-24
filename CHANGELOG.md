@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Skills: playbooks as tags
+
+- Skills › Used in playbooks shows each playbook that names the Skill as a grey tag instead of a run of "Playbook · Step" text. Up to three show in full and the rest are counted as +N. Hovering over the cell lists the steps.
+- In a Skill's drawer, Used in playbooks moves from the footer sentence to its own line under When to use, as tags. A tag opens that playbook, and hovering over it names the step ("Step 1: …"). The footer keeps only the update date and the source.
+
 ## Unreleased — Current situation reads as a list that fits its column; quiet links in grey text
 
 - Insights › Current situation is a plain list: each row is a short label on the left (Google interest, Pages not updated for a year, Rankings this week, Competitor updates · last 7 days, X mentions · last 7 days) and its value on the right in tabular figures, with no icons or logos, in the small size the metric cards' labels use (at the conversation's size the column competed with it). Counts that need attention are amber; a change is coloured by its direction as on the metric cards (up green, down red, a zero plain); the rest stay plain. Rows are still buttons that open the source, with the detail on hover. The title is 14px semibold with its ⓘ. The Needs attention and Normal captions are gone: the lines to deal with come first, and their coloured values set them apart.

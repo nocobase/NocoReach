@@ -476,6 +476,8 @@
   "projectKnowledge.characters": "{0} · {1} ký tự",
   "projectKnowledge.charactersAdded": "{0} · {1} ký tự · thêm {2}",
   "skills.updated": "{0} · cập nhật {1}{2}",
+  "skills.updatedOn": "Cập nhật {0}{1}",
+  "skills.usedAtStep": "Bước {0}: {1}",
   "dataX.likes": "{0} · {1} lượt thích",
   "siteAudit.statusPageCount": "{0} · {1} trang",
   "contentIndex.pagesDetailsReadPages": "{0} · {1} trang · đã đọc chi tiết {2} trang",

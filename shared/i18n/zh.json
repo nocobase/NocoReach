@@ -476,6 +476,8 @@
   "projectKnowledge.characters": "{0} · {1} 字",
   "projectKnowledge.charactersAdded": "{0} · {1} 字 · {2} 添加",
   "skills.updated": "{0} · {1} 更新{2}",
+  "skills.updatedOn": "{0} 更新{1}",
+  "skills.usedAtStep": "第 {0} 步：{1}",
   "dataX.likes": "{0} · {1} 赞",
   "siteAudit.statusPageCount": "{0} · {1} 页",
   "contentIndex.pagesDetailsReadPages": "{0} · {1} 页 · 已读取详情 {2} 页",
