@@ -14,7 +14,11 @@ import { Button } from '#components/ui/button';
 import { cn } from '#lib/utils';
 import { mockSettingsAvailable } from '../../../app-plugins/nocoreach-mock/client/index.js';
 import { getStageExecutor } from '../playbook-model';
-import { articleLanguages, type ArticleView } from './article-model';
+import {
+  articleLanguages,
+  translationPending,
+  type ArticleView,
+} from './article-model';
 import {
   ArticleEditor,
   ArticleLanguage,
@@ -166,9 +170,11 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
                 >
                   <Rocket />
                   {$t(
-                    mockSettingsAvailable()
-                      ? 'taskDetail.approveAndSimulatePublish'
-                      : 'taskDetail.approveAndPublish',
+                    translationPending(data)
+                      ? 'articleTask.approveTranslate'
+                      : mockSettingsAvailable()
+                        ? 'taskDetail.approveAndSimulatePublish'
+                        : 'taskDetail.approveAndPublish',
                   )}
                 </Button>
               )}

@@ -945,6 +945,42 @@ test('the reading page opens from its address, follows its language and view, an
   );
 });
 
+// 2026-10-24 user request: an article in several languages is reviewed in its primary one first, then translated.
+test('an article in two languages approves the primary to translate, and the card names the translation', () => {
+  const data = reviewArticle();
+  const delivery = {
+    kind: 'article' as const,
+    targetId: 'cms',
+    articleId: '7',
+    sourceKey: null,
+    locales: ['en', 'zh'],
+  };
+  data.work.delivery = delivery;
+  const view = mount(data);
+  const card = screen.getByRole('region', { name: '等你处理' });
+  expect(
+    within(card).getByRole('button', { name: '通过，开始翻译' }),
+  ).toBeVisible();
+  view.unmount();
+  const translating = reviewArticle();
+  translating.work.delivery = {
+    ...delivery,
+    translateFrom: { artifactId: 'artifact-1', at: '2026-10-24T00:00:00Z' },
+  };
+  translating.work.stageIndex = 0;
+  translating.runs = [
+    {
+      id: 'run-t',
+      status: 'running',
+      planVersion: 0,
+      stepId: translating.work.flow!.stages[0].key,
+      createdAt: '2026-10-24T00:01:00Z',
+    },
+  ];
+  mount(translating);
+  expect(screen.getAllByText('Agent 正在翻译中文')[0]).toBeVisible();
+});
+
 test('a live article names what changed on its card and shows each field before and after', async () => {
   const user = userEvent.setup();
   mount(liveArticle());

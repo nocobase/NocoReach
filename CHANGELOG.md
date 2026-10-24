@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Articles in several languages: the primary first, then the translations
+
+- A publishing target's first language is its primary language: its card reads "Primary language English · other languages Chinese, Japanese", and its form has a Primary language choice that moves a language to the front.
+- The start card names the task's languages ("Languages: English (primary) · Chinese · Japanese"). Change lets the person pick this task's primary language and leave languages out; every language of the target is chosen by default.
+- With two or more languages, the Agent writes the primary one only, and change requests touch only it. Approving it ("Approve and translate") publishes nothing yet: the Agent translates it into the other languages ("The Agent is translating into Chinese, Japanese"), the translated version is reviewed with a tab per language, and one Approve and publish publishes them all. Before approval the review says which languages follow.
+- Tasks started before this, and tasks with one language, write every language at once as before.
+
 ## Unreleased — Read an article full screen
 
 - The article review card has a Read full screen button beside Preview | Changes. It opens the article on a page of its own (`/actions/:taskId/article?lang=en&view=preview`), at reading width with nothing beside it, under a slim bar with Back to task, the languages, Preview | Changes, and the review's actions (Approve and publish, Request changes, Edit directly). Editing there uses the full width for the editor and its live preview. The page opens from its address or in a new tab, its trail reads Tasks › T-n › Article, and Back to task or Esc returns to the task where it was scrolled. Feedback and edits started on either page are the same drafts.

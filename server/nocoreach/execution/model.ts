@@ -34,7 +34,9 @@ export type Work = {
   playbookId?: string; playbook?: PlaybookSnapshot; prevTaskId?: string; nextTaskId?: string;
   // Article delivery: the article linked before start, and the choice frozen at start (article-flow.ts).
   article?: { targetId: string; articleId: string | null; slug: string; title: string; sourceKey: string | null; linkedAt: string };
-  delivery?: { kind: 'article'; targetId: string; articleId: string | null; sourceKey: string | null; also?: { targetId: string; articleId: string | null; sourceKey: string | null }[] };
+  // `locales`: the languages chosen at start, primary first (2026-10-24); the Agent writes the primary, and once a person
+  // approves it, `translateFrom` holds that approved version while the Agent translates it into the others.
+  delivery?: { kind: 'article'; targetId: string; articleId: string | null; sourceKey: string | null; also?: { targetId: string; articleId: string | null; sourceKey: string | null }[]; locales?: string[]; translateFrom?: { artifactId: string; at: string; by: string; draft: any; text: { title: string; description: string; body: string }; fields: string[] } };
 };
 export type Run = { errorDetail?: string; agentId?: string; agentName?: string; id: string; projectId: string; taskId: string; planVersion: number; stepId: string; baseArtifactId: string | null; baseRejectedAt?: string; ownerId: string; actor: string; inputVersion: 1; capabilitySnapshot: string[]; runtimeRunId?: string; pluginRunId?: string; pluginSettled?: boolean; cancelRequested?: boolean; mode?: 'plan' | 'build' | 'article' | 'merge' | 'close' | 'revert'; branch?: string; status: 'queued' | 'running' | 'succeeded' | 'failed'; createdAt: string; startedAt?: string; endedAt?: string; input: string; model: { llmService: string; model: string }; artifactId?: string; error?: string; usage?: { inputTokens?: number; outputTokens?: number }; flowStage?: number; restartedAt?: string; autoRetry?: { of: string; restartedAt: string }; };
 export function planInput(v: any): Plan {
