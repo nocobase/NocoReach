@@ -65,10 +65,7 @@ export default function SchedulesPage() {
             <InfoTip label={t('schedules.otherWorkLabel')} side='bottom'>
               <p>
                 {t('schedules.otherWork')}{' '}
-                <Link
-                  to='/connections?tab=health'
-                  className='text-foreground underline underline-offset-4'
-                >
+                <Link to='/connections?tab=health' className='nr-link-quiet'>
                   {t('schedules.otherWorkLink')}
                 </Link>
               </p>

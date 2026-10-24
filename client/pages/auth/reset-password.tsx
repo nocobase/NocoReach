@@ -56,7 +56,7 @@ export default function ResetPasswordPage(): ReactElement {
           disabled={!token}
           error={token ? reset.error?.message : t('auth.invalidResetLink')}
           footer={
-            <span className='flex flex-wrap justify-center gap-x-4 gap-y-2 [&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-primary'>
+            <span className='nr-quiet-links flex flex-wrap justify-center gap-x-4 gap-y-2'>
               <Link to='/login'>{t('auth.backToSignIn')}</Link>
               {!token || reset.error ? (
                 <Link to='/forgot-password'>
