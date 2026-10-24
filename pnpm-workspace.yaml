@@ -1,6 +1,10 @@
 packages:
   - 'app-plugins/*'
 
+# Keep the host and local plugins on one i18n context and App Client type identity.
+overrides:
+  react-i18next: '17.1.2'
+
 # Which dependencies may run install scripts: true compiles a native addon, false skips a script
 # the project does not need. A package left out here stops the install with ERR_PNPM_IGNORED_BUILDS.
 # pnpm 11 reads this from pnpm-workspace.yaml only; see https://pnpm.io/settings/build.

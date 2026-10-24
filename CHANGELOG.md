@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Demo dependency upgrade compatibility
+
+- Keep host and mock plugin i18n peers on one version so App Client registrations share the same runtime and types.
+- Scope session cookie names to the complete application mount and preserve root-mounted API paths.
+- Adapt Runner integration fixtures to explicit Agent creation and browser checks to mount-scoped locale storage; cover the Runner repair migration without changing enabled status or configured models.
+
 ## Unreleased — Demo Mode beta.1
 
 - Use the unmodified published Demo Mode `0.1.0-beta.1` and Agents `1.0.0-beta.22`. Install from the registry with the frozen lockfile; no local plugin fixture or legacy migration patch is required.

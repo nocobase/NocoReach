@@ -168,8 +168,34 @@ describe('application config', () => {
       env: { APP_BASE_PATH: '/crm/' },
     });
     expect(mounted.config.get('session.cookie.path')).toBe('/crm');
-    expect(mounted.config.get('session.cookie.name')).toBe('nocobase_session');
+    expect(mounted.config.get('session.cookie.name')).toBe(
+      'nocobase_session_%2Fcrm',
+    );
   });
+
+  it.each([
+    ['/', '', '/', 'nocobase_session_%2F'],
+    ['/crm/', '/crm', '/crm', 'nocobase_session_%2Fcrm'],
+    [
+      '/crm/support/',
+      '/crm/support',
+      '/crm/support',
+      'nocobase_session_%2Fcrm%2Fsupport',
+    ],
+  ])(
+    'isolates the complete public mount %s',
+    async (mount, base, cookiePath, cookieName) => {
+      const runtime = await resolveStandaloneAppRuntime(appRuntime, {
+        rootDir: templateRootDir,
+        configPath,
+        env: { APP_BASE_PATH: mount },
+      });
+      expect(runtime.config.get('app.publicBasePath')).toBe(base);
+      expect(runtime.config.get('app.publicApiUrl')).toBe(`${base}/api`);
+      expect(runtime.config.get('session.cookie.path')).toBe(cookiePath);
+      expect(runtime.config.get('session.cookie.name')).toBe(cookieName);
+    },
+  );
 
   it('loads only explicit env overrides and restores defaults on reload', async () => {
     const runtime = await resolveStandaloneAppRuntime(appRuntime, {
