@@ -8,8 +8,8 @@ import { DataForSeo } from './dataforseo.js';
 // the estimated organic traffic and ranking keywords month by month over the past year (historical_rank_overview); for
 // each competitor also the keywords it ranks for in the top 20 where we do not rank (domain_intersection, intersections
 // false, brand words left out) and its pages that draw the most search traffic (relevant_pages). About $0.04 a competitor
-// and $0.012 for us a month, inside the DataForSEO budget; a domain is queried when added and then every 30 days, an
-// uncertain run is not retried. The other columns reuse data already collected for free: Google Trends interest, GitHub
+// and $0.012 for us a month, inside the DataForSEO budget; a domain is queried when added and then every 30 days, a
+// lookup that did not complete again after a day, and an uncertain run is not retried. The other columns reuse data already collected for free: Google Trends interest, GitHub
 // stars, AI answers' share of mentions, new pages and releases. Traffic from other channels and audiences (Similarweb's
 // clickstream) is not available here.
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -23,6 +23,9 @@ const base=v=>{const m=marketOf(v),target=hostOf(v.target);if(!target)fail(syste
 const task=raw=>(Array.isArray(raw?.tasks)?raw.tasks[0]:null)||{};
 const failed=(raw,t)=>raw?.status_code!==20000||t.status_code!==20000;
 const cost=(raw,t)=>num(raw?.cost)??num(t.cost);
+// A domain is due with no data yet, data 30 days old, another market, or a lookup that did not complete a day ago. Only
+// the failed parts cost again: DataForSEO reuses completed runs, and an uncertain one blocks its query for the reuse time.
+const due=(d,mk)=>!d?.at||d.market!==mk||Date.now()-Date.parse(d.at)>=(d.errors?.length?DAY:MONTH);
 // The past year month by month: estimated organic traffic, ranking keywords, how many in the top 3 and top 10.
 const history={specification(v){const {target,m,request}=base(v),from=new Date(Date.now()-400*DAY).toISOString().slice(0,7)+'-01';
   return {kind:'competitor-history',target,...m,path:'dataforseo_labs/google/historical_rank_overview/live',request:{target,...request,date_from:from},estimatedUsd:0.012,reservationUsd:0.03,priceVersion:'official-list-2026-07'};},
@@ -54,10 +57,10 @@ class CompetitorResearch{
  // Who is compared: our site first, then each competitor in 竞品 (one without a website has only the free columns).
  async sites(id){const project=await this.p.projects.get(id),list=(await this.p.competitors?.state(id).catch(()=>null))?.list||[],ours=hostOf(project.domains?.[0]||'');
   return [{id:'own',name:project.name||ours,domain:ours,own:true},...list.map(c=>({id:c.id,name:c.name,domain:c.site?hostOf(c.site):'',repo:c.repo||'',own:false}))];}
- // Due: no data yet, data older than 30 days, or the market changed. Runs one project at a time, in the background.
+ // Looks up the domains that are due (see `due`). Runs one project at a time, in the background.
  refresh(id,{force=false}={}){if(this.running.has(id))return this.running.get(id);const job=this.update(id,{force}).catch(e=>{this.p.app?.logger?.warn?.('NocoReach competitor research failed',{projectId:id,message:e.message});}).finally(()=>this.running.delete(id));this.running.set(id,job);return job;}
  async update(id,{force=false}={}){if(!this.d4s.config(id)?.verifiedAt)return;const s=await this.state(id),market=marketOf(s?.market),sites=(await this.sites(id)).filter(x=>x.domain),ours=sites.find(x=>x.own)?.domain;
-  for(const site of sites){const old=s?.domains?.[site.domain],fresh=old?.at&&Date.now()-Date.parse(old.at)<MONTH&&old.market===`${market.locationCode}|${market.language}`;if(fresh&&!force)continue;
+  for(const site of sites){if(!force&&!due(s?.domains?.[site.domain],`${market.locationCode}|${market.language}`))continue;
    const now=new Date().toISOString(),run=async(kind,extra={})=>{try{const r=await this.d4s.run(id,kind,{target:site.domain,...market,...extra,requestKey:`${kind}-${id}-${site.id}-${Date.now()}`});return r.status==='completed'?{ok:true,result:r.result}:{ok:false,error:r.errorCode||systemMessageText('common.notComplete')};}catch(e){return {ok:false,error:e.message};}};
    const h=await run('competitor-history'),g=site.own||!ours?null:await run('competitor-gap',{ours}),pg=site.own?null:await run('competitor-pages');
    await this.mutate(id,cur=>{const prev=cur.domains?.[site.domain]||{};return {...cur,market,domains:{...(cur.domains||{}),[site.domain]:{at:now,market:`${market.locationCode}|${market.language}`,
@@ -66,7 +69,7 @@ class CompetitorResearch{
  // The comparison table and, per competitor, what its detail shows. (Not `rows`: NocoBase turns a body with `rows` into
  // a paged list and drops the rest.)
  async view(id){const dataforseo=Boolean(this.d4s.config(id)?.verifiedAt),s=await this.state(id)||{},market=marketOf(s.market),sites=await this.sites(id),mk=`${market.locationCode}|${market.language}`;
-  if(dataforseo&&!this.running.has(id)&&sites.some(x=>x.domain&&(!s.domains?.[x.domain]||s.domains[x.domain].market!==mk)))this.refresh(id);
+  if(dataforseo&&!this.running.has(id)&&sites.some(x=>x.domain&&due(s.domains?.[x.domain],mk)))this.refresh(id);
   const safe=async fn=>{try{return await fn();}catch{return null;}};
   const [trends,watch,gh,site,ai]=await Promise.all([safe(()=>this.p.trends?.status(id)),safe(()=>this.p.competitors?.status(id)),safe(()=>this.p.github?.status(id)),safe(()=>this.p.siteContent?.state(id)),safe(()=>this.p.aiSearch?.state(id))]);
   const cw=await safe(()=>this.p.competitors?.state(id)),since=Date.now()-30*DAY,events=(cw?.events||[]);
