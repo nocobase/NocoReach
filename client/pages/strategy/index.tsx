@@ -16,6 +16,7 @@ import {
   type SourceCard,
   type Area,
 } from './insights-view';
+import { situationLines } from './situation-lines';
 import {
   FoldedSituation,
   History,
@@ -375,18 +376,15 @@ function Insights({
         </InfoTip>
       }
       request={summaryView}
-      empty={!summaryView.data?.areas.some((area) => area.items.length)}
+      empty={!situationLines(summaryView.data?.areas).length}
       emptyText={$t('strategy.noCurrentSituation')}
     >
       <AreaList quiet areas={summaryView.data?.areas} projectId={projectId} />
     </RequestBlock>
   );
-  const attention = (summaryView.data?.areas || []).reduce(
-    (n, area) =>
-      n +
-      area.items.filter((i) => i.tone === 'amber' || i.tone === 'red').length,
-    0,
-  );
+  const attention = situationLines(summaryView.data?.areas).filter(
+    (i) => i.attention,
+  ).length;
   // Earlier days above today, as in a conversation; the input for today's conversation at the bottom.
   const column = (
     <div className='flex min-w-0 flex-col gap-4 lg:h-full lg:min-h-0'>

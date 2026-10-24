@@ -901,6 +901,15 @@ it('with the side panel open the conversation moves there and the page gives it 
           to: '/website',
           tone: 'amber',
         },
+        // Amber for the audit's warnings, but a zero: neither shown nor counted.
+        {
+          key: 'audit',
+          text: '{0} critical audit issues',
+          values: ['0'],
+          source: 'site',
+          to: '/website',
+          tone: 'amber',
+        },
       ],
     },
   ];
@@ -1009,8 +1018,10 @@ it('the current situation beside the day lists a label and a value per line, tho
         item('stale', '{0} pages not updated for a year', ['54'], 'amber'),
         item('trends', 'Google interest {0}', ['↓ 56%'], 'red'),
         item('c', 'Sitemap found'),
-        // Flagged for its warnings, but no critical issue: not something to deal with.
+        item('rank', '{0} up, {1} down this week', ['3', '0']),
+        // Lines whose numbers are all zero are left out, also one flagged for the audit's warnings.
         item('audit', '{0} critical audit issues', ['0'], 'amber'),
+        item('striking', '{0} queries close to page one', ['0']),
       ],
     },
   ];
@@ -1033,20 +1044,24 @@ it('the current situation beside the day lists a label and a value per line, tho
     ['strategy.situationTrends', '↓ 56%'],
     ['Pages indexed: 120'],
     ['Sitemap found'],
-    ['strategy.situationAudit', '0'],
+    ['strategy.situationRank', '↑3↓0'],
   ]);
   expect(
     [...situation.querySelectorAll('[data-attention]')].map(
       (b) => (b as HTMLElement).dataset.item,
     ),
   ).toEqual(['stale', 'trends']);
-  // Only the values to deal with are coloured: a drop red, a count amber, the rest plain.
-  const value = (key: string) =>
-    situation.querySelector(`[data-item="${key}"] > span:last-child`)!
-      .className;
-  expect(value('trends')).toContain('text-nr-ink-red');
-  expect(value('stale')).toContain('text-nr-ink-amber');
-  expect(value('audit')).toContain('text-foreground');
+  // Counts to deal with are amber; a change is coloured by its direction, as on the metric cards (a zero plain); the
+  // rest plain.
+  const ink = (key: string) =>
+    [
+      ...situation.querySelectorAll(
+        `[data-item="${key}"] > span:last-child > span`,
+      ),
+    ].map((v) => `${v.textContent} ${v.className}`);
+  expect(ink('stale')).toEqual(['54 text-nr-ink-amber']);
+  expect(ink('trends')).toEqual(['↓ 56% text-nr-ink-red']);
+  expect(ink('rank')).toEqual(['↑3 text-nr-ink-green', '↓0 text-foreground']);
   // No icons or logos in the rows (the heading keeps its ⓘ).
   expect(
     situation.querySelector('li svg, li img, [data-slot="source-logo"]'),

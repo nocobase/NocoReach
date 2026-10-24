@@ -8,7 +8,6 @@ import {AiMark} from '#components/reach/actor';
 import {Button} from '#components/ui/button';
 import {Section} from '#components/reach/page';
 import {Tag,type Tone} from '#components/reach/tag';
-import {cn} from '#lib/utils';
 import {getSourceNames,type Row} from './board';
 import type {StrategyState,Signal,WatchRecord} from './model';
 import {type Work} from '../task-execution-types';
@@ -18,6 +17,7 @@ import {SectionHandOff} from '../section-hand-off';
 import {AllCheck,RowCheck,useSelection} from '#components/reach/hand-off-slot';
 import type {HandOffResult} from './hand-off';
 import {daysBetween,type Verdict} from './watch';
+import {isZero,situationLines} from './situation-lines';
 import {TASK_TAG,type TaskStanding} from './task-standing';
 // 洞察 building blocks (SPEC §5): numbers and changes first, one line each; no paragraphs.
 export type Metric={key:string;label:string;value:number|null;previous:number|null;complete:boolean;change:number|null};
@@ -82,11 +82,8 @@ export type Area={id:string;title:string;items:AreaItem[]};
 // design: no icons, no sentences with the number in the middle). The label goes by the line's stable key (server:
 // nrInsights:summary); a line without one, or without a value, keeps its sentence as the label.
 const SITUATION_LABEL:Record<string,string>={striking:'strategy.situationStriking',ctr:'strategy.situationCtr',rank:'strategy.situationRank',trends:'strategy.situationTrends',competitors:'strategy.situationCompetitors',saved:'strategy.situationSaved',answers:'strategy.situationAnswers',audit:'strategy.situationAudit',stale:'strategy.situationStale',forum:'strategy.situationForum',discord:'strategy.situationDiscord',slack:'strategy.situationSlack',x:'strategy.situationX','brand-chat_gpt':'strategy.situationChatgpt','brand-google':'strategy.situationGoogleAi'};
-const situationValue=(i:{key:string;values:string[]})=>i.key==='rank'&&i.values.length===2?`↑${i.values[0]} ↓${i.values[1]}`:i.values[0];
-// A zero needs no attention: a line whose numbers are all zero counts as normal (the audit line, flagged for its
-// warnings, read "0 critical audit issues" under Needs attention).
-const isZero=(v:string)=>/^[↑↓+\-\s]*0+(\.0+)?\s*%?$/.test(v);
-const NORMAL_SHOWN=6,SHOW_ALL_HEIGHT=28;
+const situationValue=(i:{key:string;values:string[]})=>i.key==='rank'&&i.values.length===2?[`↑${i.values[0]}`,`↓${i.values[1]}`]:[i.values[0]];
+const NORMAL_SHOWN=6,SHOW_ALL_HEIGHT=24;
 // How many rows fit in the column beside the conversation. On wide screens it has the window's height and scrolls
 // inside (strategy/index.tsx, data-situation-column), and a scrollbar in a column this narrow looked broken (2026-10-24
 // user feedback), so the list shows what fits: `fit` rows with "Show all N" under them, `all` without. Undefined where
@@ -102,27 +99,29 @@ function useRowRoom(listRef:RefObject<HTMLElement|null>,ready:boolean):{fit:numb
  return room;}
 const sentence=(i:AreaItem)=>$legacyText(i.text).replace(/\{(\d+)\}/g,(_,k:string)=>i.values[Number(k)]??'');
 export function AreaList({areas,projectId,quiet=false}:{areas?:Area[];projectId:number;quiet?:boolean}):ReactElement|null{
- const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),[allNormal,setAllNormal]=useState(false),listRef=useRef<HTMLDivElement>(null),all=(areas||[]).flatMap(a=>a.items.map(i=>({...i,area:a.id,attention:(i.tone==='amber'||i.tone==='red')&&!(i.values.length>0&&i.values.every(isZero))}))),room=useRowRoom(listRef,quiet&&all.length>0);if(!all.length)return null;
+ const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),[allNormal,setAllNormal]=useState(false),listRef=useRef<HTMLDivElement>(null),all=situationLines(areas),room=useRowRoom(listRef,quiet&&all.length>0);if(!all.length)return null;
  const items=[...all.filter(i=>i.attention),...all.filter(i=>!i.attention)],open=items.find(i=>`${i.area}:${i.key}`===openKey);
  // A line with something behind it opens its detail here; one without (AI 搜索还没查过) goes to its page.
  const go=(i:typeof items[number])=>{if(i.rows?.length||i.compare?.length)setOpenKey(`${i.area}:${i.key}`);else navigate(i.to);};
  const detail=open?<AttentionDetail key={openKey} item={open} projectId={projectId} onClose={()=>setOpenKey(undefined)}/>:null;
  // Quiet, beside the day's conversation on Insights (2026-10-21 user feedback: the column drew the eye from the
  // conversation): one list, the lines to deal with first, each row a short label and its value on the right in
- // tabular figures, where it comes from on hover (2026-10-24 design, ui-references/insights-2026-10-22). No icons,
- // logos or group captions: the colour of a value says it needs attention (a drop red, the rest amber), so a caption
- // only took room (2026-10-24 user feedback). A line without a label or a value keeps its sentence. The column has a
- // window's height, so the normal lines past what fits wait behind "Show all N" (useRowRoom).
- if(quiet){const ink=(i:typeof items[number],v:string)=>!i.attention?'text-foreground':i.tone==='red'||v.startsWith('↓')?'text-nr-ink-red':'text-nr-ink-amber';
+ // tabular figures, where it comes from on hover (2026-10-24 design, ui-references/insights-2026-10-22). Rows in the
+ // small size, as the metric cards' labels: at the conversation's size the column competed with it (2026-10-24 user
+ // feedback). No icons, logos or group captions: the colour of a value says it needs attention (red for a drop, amber
+ // for a count), so a caption only took room. A change is coloured by its direction as on the metric cards (up green,
+ // down red; a zero plain). A line without a label or a value keeps its sentence. The column has a window's height,
+ // so the normal lines past what fits wait behind "Show all N" (useRowRoom).
+ if(quiet){const ink=(i:typeof items[number],v:string)=>/^[↑↓]/.test(v)?isZero(v)?'text-foreground':v.startsWith('↑')?'text-nr-ink-green':'text-nr-ink-red':!i.attention?'text-foreground':i.tone==='red'?'text-nr-ink-red':'text-nr-ink-amber';
   const row=(i:typeof items[number])=>{const label=SITUATION_LABEL[i.key],value=i.values.length?situationValue(i):null;
-   return <li key={`${i.area}:${i.key}`}><button type='button' onClick={()=>go(i)} title={[$legacyText(i.source),i.detail?$legacyText(i.detail):''].filter(Boolean).join(' · ')} className='-mx-2 flex w-[calc(100%+var(--spacing)*4)] items-baseline gap-3 rounded-md px-2 py-[7px] text-left text-sm text-foreground/80 transition-colors hover:bg-muted' data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
+   return <li key={`${i.area}:${i.key}`}><button type='button' onClick={()=>go(i)} title={[$legacyText(i.source),i.detail?$legacyText(i.detail):''].filter(Boolean).join(' · ')} className='-mx-2 flex w-[calc(100%+var(--spacing)*4)] items-baseline gap-3 rounded-md px-2 py-[5px] text-left text-xs text-foreground/80 transition-colors hover:bg-muted' data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
     <span className='min-w-0 flex-1'>{label&&value?$t(label):sentence(i)}</span>
-    {label&&value?<span className={cn('shrink-0 font-medium tabular-nums',ink(i,value))}>{value}</span>:null}
+    {label&&value?<span className='flex shrink-0 gap-1.5 font-medium tabular-nums'>{value.map(v=><span key={v} className={ink(i,v)}>{v}</span>)}</span>:null}
    </button></li>;};
   const attention=items.filter(i=>i.attention),normal=items.filter(i=>!i.attention),normalRoom=!room?NORMAL_SHOWN:room.all>=items.length?normal.length:Math.max(0,room.fit-attention.length),shown=allNormal?items:[...attention,...normal.slice(0,normalRoom)];
   return <div ref={listRef} aria-label={$t('strategy.whereThingsStand')} className='flex flex-col'>
    <ul>{shown.map(row)}</ul>
-   {normal.length>normalRoom&&<button type='button' className='mt-2 self-start text-[13px] text-muted-foreground hover:text-foreground' aria-expanded={allNormal} onClick={()=>setAllNormal(v=>!v)}>{allNormal?$t('common.collapse'):$t('strategy.situationShowAll',{0:items.length})}</button>}
+   {normal.length>normalRoom&&<button type='button' className='mt-1.5 self-start text-xs text-muted-foreground hover:text-foreground' aria-expanded={allNormal} onClick={()=>setAllNormal(v=>!v)}>{allNormal?$t('common.collapse'):$t('strategy.situationShowAll',{0:items.length})}</button>}
    {detail}</div>;}
  // Untitled: the block around it carries the heading and what it means.
  return <Section aria-label={$t('strategy.whereThingsStand')}><ul className="divide-y">{items.map(i=><li key={`${i.area}:${i.key}`}>
