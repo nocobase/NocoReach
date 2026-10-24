@@ -7,6 +7,11 @@
 - A task's Related tasks list the other tasks of the same opportunity with their states, linked to the opportunity. Its brief starts by saying it is one of several tasks of the opportunity, the one place it changes and what the others change, and to keep one approach across them; its Agent reads the changes about its own place only. Its Performance and its article lookup use its own page only.
 - There are no parent tasks: the opportunity is the grouping, and the task list and board stay flat. Tasks handed off before this change keep their single task (T-34 stays as it is); its opportunity can hand off the places left.
 
+## Unreleased — Competitors: a lookup that did not complete is tried again the next day
+
+- Search & market › Competitors kept a site's failed DataForSEO lookup for 30 days, like a successful one: its error stayed in the site's drawer and its traffic stayed empty until the monthly refresh. On Studio, our own site still showed `Operator "$gte" is not supported for Field "createdAt" of type "datetime"` from a lookup on 2026-10-09, before the classic filter bridge learned datetime comparisons (#13); DataForSEO lookups have worked since. A site whose last lookup did not complete is now due again a day later, at the daily refresh or when the page is opened. Only the failed parts cost again: DataForSEO reuses completed runs, and an uncertain run still blocks its query for the reuse time.
+- A site's drawer no longer says "Search data is still loading." under the error when its lookup failed.
+
 ## Unreleased — Opportunities' tables fit and sort
 
 - Opportunities › Handled no longer scrolls sideways: the actions column was too narrow for Restore, so the table overflowed its card, clipping the number and leaving a blank above Restore. Number, Where it went, First found and the actions have fixed widths; the title takes the rest, truncated with the full title on hover. On a phone the number and first found drop out, and a change's chip hides so its title shows.
