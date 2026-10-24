@@ -25,6 +25,7 @@ import {taskStanding,TASK_TAG,type TaskStanding} from './task-standing';
 import {playbookRequest,localizePlaybookList,type PlaybookList} from '../playbook-model';
 import {ResultSourcePanel} from '../results/source.js';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#components/ui/select';
+import {SortableHeader} from '#components/seo/sortable-header';
 // The same three groups as 洞察's 今天的变化 (2026-10-08 user request): 待处理, 观察中, 已处理.
 type Tab='pending'|'watch'|'done';
 const getTabs = (): [Tab,string][] => ([['pending',$t('common.pending')],['watch',$t('tasks.watchingTab',undefined)],['done',$t('strategy.handled')]]);
@@ -73,7 +74,7 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
  const cited=new Set(rows.flatMap(r=>citedSignals(r).map(x=>x.key)));
  const settled=judged.filter(x=>!cited.has(x.s.key)&&(x.status.next==='task'||x.status.verdict==='skip'||Boolean(x.status.ignored)));
  const watched=watching.find(x=>x.s.key===watchKey)||settled.find(x=>x.s.key===watchKey);
- function go(next:{tab?:string;item?:string}){const p=new URLSearchParams(params);for(const [k,v] of Object.entries(next)){if(v)p.set(k,v);else p.delete(k);}setParams(p,{replace:true});}
+ function go(next:{tab?:string;item?:string;sort?:string;order?:string}){const p=new URLSearchParams(params);for(const [k,v] of Object.entries(next)){if(v)p.set(k,v);else p.delete(k);}setParams(p,{replace:true});}
  async function decide(row:Row,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);setNotice(undefined);try{setState(await request<StrategyState>(project.id,'reviewOpportunity',{insightId:row.card.id,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');go({item:''});refreshNavBadges();}catch{setError(() => ($t('strategy.notSaveRefreshTryAgain')));}finally{setBusy(false);}}
  // 交给 Agent with the recommended 做法 and you as the owner; both can still change on the task before it starts.
  async function give(row:Row){if(!state||!project||busy)return;setBusy(true);setNotice(undefined);const pb=recommendedFor(row,playbooks?.playbooks);
@@ -85,7 +86,7 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
  return <PageContainer className="nr-page"><PageHeader title={$t('strategy.opportunitiesTitle',undefined)} description={$t('strategy.thingsWorthDoingWhatChanged')}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}
   <HandOffNotice result={notice}/>
-  <nav className="nr-tabs" aria-label={$t('strategy.opportunityCategory')}>{getTabs().map(([k,v])=><button key={k} aria-pressed={tab===k} onClick={()=>go({tab:k,item:''})}>{v}{state?` ${k==='pending'?pending.length:k==='watch'?watching.length:rows.length-pending.length+settled.length}`:''}</button>)}</nav>
+  <nav className="nr-tabs" aria-label={$t('strategy.opportunityCategory')}>{getTabs().map(([k,v])=><button key={k} aria-pressed={tab===k} onClick={()=>go({tab:k,item:'',sort:'',order:''})}>{v}{state?` ${k==='pending'?pending.length:k==='watch'?watching.length:rows.length-pending.length+settled.length}`:''}</button>)}</nav>
   {!state?<p role="status" className="text-sm text-muted-foreground">{$t('strategy.loadingOpportunities')}</p>:tab==='done'?<DoneTable rows={rows} changes={settled} busy={busy} onOpen={openRow} onOpenChange={setWatchKey} onRestore={r=>void decide(r,'pending')} onRestoreChange={k=>void decideWatch(k,'pending')}/>
   :tab==='watch'?<WatchList items={watching} ended={ended} rows={rows} busy={busy} onOpen={setWatchKey} onIgnore={k=>void decideWatch(k,'ignored')} onRestore={k=>void decideWatch(k,'pending')} onOpportunity={id=>go({tab:'pending',item:id})}/>
   :!pending.length?<EmptyState icon={<LightbulbIcon/>} title={$t('strategy.noPendingOpportunities')} description={$t('strategy.pendingAppearAfterAnalysis')}/>
@@ -121,13 +122,19 @@ function Values({w}:{w:Watching}){const now=chipOf(w.s)?.text||'—',start=w.rec
 function Deadline({w}:{w:Watching}){const d=w.record?.decideBy;if(!d)return <span className="text-muted-foreground">{$t('strategy.setNextAnalysis')}</span>;
  const left=Math.round((Date.parse(d.slice(0,10))-Date.parse(localDay()))/86400000);
  return <><span className="block">{short(d)}</span><span className="block text-xs text-muted-foreground">{left>0?$t('strategy.daysLeft',{0:left}):$t('strategy.dueToday')}</span></>;}
-function WatchList({items,ended,rows,busy,onOpen,onIgnore,onRestore,onOpportunity}:{items:Watching[];ended:WatchRecord[];rows:Item[];busy:boolean;onOpen:(key:string)=>void;onIgnore:(key:string)=>void;onRestore:(key:string)=>void;onOpportunity:(id:string)=>void}){
+function WatchList({items:all,ended,rows,busy,onOpen,onIgnore,onRestore,onOpportunity}:{items:Watching[];ended:WatchRecord[];rows:Item[];busy:boolean;onOpen:(key:string)=>void;onIgnore:(key:string)=>void;onRestore:(key:string)=>void;onOpportunity:(id:string)=>void}){
+ // The deadline sorts, soonest first, kept in the URL (2026-10-24, as Handled's columns); the other columns are free
+ // text. Without a sort the biggest changes come first. A change watched before its record existed has no deadline
+ // and stays last.
+ const [params,setParams]=useSearchParams(),byDeadline=params.get('sort')==='deadline',order=params.get('order')==='desc'?'desc':'asc';
+ const items=byDeadline?[...all].sort((a,b)=>{const x=a.record?.decideBy||'',y=b.record?.decideBy||'';if(!x||!y)return !x&&!y?0:!x?1:-1;const c=x.localeCompare(y);return order==='asc'?c:-c;}):all;
+ const sortDeadline=()=>{const p=new URLSearchParams(params);p.set('sort','deadline');p.set('order',byDeadline&&order==='asc'?'desc':'asc');setParams(p,{replace:true});};
  const outcome=(w:WatchRecord)=>{const e=w.ended!,row=e.opportunityId?rows.find(r=>r.card.id===e.opportunityId):undefined;
   return e.outcome==='opportunity'?(row?<button type="button" onClick={()=>onOpportunity(row.card.id)}><Tag tone="amber">{$tj('strategy.becameOpportunityValue',{0:row.card.no?` ${oppNo(row.card)}`:''})}</Tag></button>:<Tag tone="amber">{$t('strategy.becameOpportunity')}</Tag>)
    :e.outcome==='normal'?<Tag tone="grey">{$t('strategy.backNormal')}</Tag>:e.outcome==='ignored'?<Tag tone="slate">{$t('strategy.ignored')}</Tag>:<Tag tone="grey">{e.outcome==='expired'?$t('strategy.deadlineNoActionNeeded'):$t('common.noActionNeeded')}</Tag>;};
  return <div className="flex flex-col gap-3">
   {items.length?<div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[48rem] table-fixed border-collapse text-sm" aria-label={$t('tasks.watchingTab',undefined)}>
-   <thead data-slot="table-header" className="text-xs text-muted-foreground"><tr className="border-b"><th className="w-[36%] px-4 py-2 text-left font-normal"><span className="inline-flex items-center gap-1">{$t('common.change')}<InfoTip label={$t('strategy.howWatchingWorks')}><p>{$t('strategy.watchLifecycleHelp')} <Link className="nr-link" to="/rules">{$t('strategy.seeAnalysisRules')}</Link></p></InfoTip></span></th><th className="w-[17%] px-3 py-2 text-left font-normal">{$t('strategy.value')}</th><th className="px-3 py-2 text-left font-normal">{$t('strategy.decisionCondition')}</th><th className="w-28 px-3 py-2 text-left font-normal">{$t('strategy.deadline')}</th><th className="w-20 px-3 py-2"><span className="sr-only">{$t('common.actions')}</span></th></tr></thead>
+   <thead data-slot="table-header" className="text-xs text-muted-foreground"><tr className="border-b"><th className="w-[36%] px-4 py-2 text-left font-normal"><span className="inline-flex items-center gap-1">{$t('common.change')}<InfoTip label={$t('strategy.howWatchingWorks')}><p>{$t('strategy.watchLifecycleHelp')} <Link className="nr-link" to="/rules">{$t('strategy.seeAnalysisRules')}</Link></p></InfoTip></span></th><th className="w-[17%] px-3 py-2 text-left font-normal">{$t('strategy.value')}</th><th className="px-3 py-2 text-left font-normal">{$t('strategy.decisionCondition')}</th><th className="w-28 px-3 py-2 text-left font-normal" aria-sort={byDeadline?(order==='asc'?'ascending':'descending'):'none'}><SortableHeader label={$t('strategy.deadline')} help={false} column={{getIsSorted:()=>byDeadline?order:false,getToggleSortingHandler:()=>sortDeadline}}/></th><th className="w-20 px-3 py-2"><span className="sr-only">{$t('common.actions')}</span></th></tr></thead>
    <tbody>{items.map(w=>{return <tr key={w.s.key} className="cursor-pointer border-b last:border-0 hover:bg-muted/40" data-watch={w.s.key} onClick={()=>onOpen(w.s.key)}>
     <td className="px-4 py-2.5"><button type="button" className="block w-full min-w-0 text-left" onClick={e=>{e.stopPropagation();onOpen(w.s.key);}}><span className="block truncate font-medium">{titleOf(w.s)}</span>
      <span className="block truncate text-xs text-muted-foreground">{getSourceNames()[w.s.source]||w.s.source} · <span data-watched={w.days}>{watchedLabel(w.days)}</span></span></button></td>
@@ -151,35 +158,61 @@ type Settled={s:Signal;status:ReturnType<typeof statusOf>};
 /** A change's filter value: a handed-off one by where its open task stands, as its tag says. */
 const changeDest=(c:Settled):Dest=>c.status.next==='task'?(!c.status.task||c.status.task==='todo'?'task':c.status.task):c.status.ignored?'ignored':'skip';
 const RestoreButton=({busy,onClick}:{busy:boolean;onClick:()=>void})=><Button size="sm" variant="ghost" className="-my-1.5" disabled={busy} onClick={onClick}>{$t('strategy.restore')}</Button>;
+// Where-it-went order for sorting (2026-10-24 user request: every column but the title sorts): what waits for you first,
+// then work under way, done, closed, and what was dropped.
+const DEST_RANK:Record<Dest,number>={pending:0,review:1,doing:2,task:3,done:4,closed:5,ignored:6,expired:7,skip:8};
+type SortKey='no'|'dest'|'found';
+const SORT_KEYS:SortKey[]=['no','dest','found'];
+// Number and first found start newest first; where it went starts with what waits for you.
+const FIRST_ORDER:Record<SortKey,'asc'|'desc'>={no:'desc',dest:'asc',found:'desc'};
+type Line={key:string;no:number|null;rank:number;found:string|null}&({kind:'opp';row:Item}|{kind:'change';change:Settled});
 function DoneTable({rows,changes,busy,onOpen,onOpenChange,onRestore,onRestoreChange}:{rows:Item[];changes:Settled[];busy:boolean;onOpen:(r:Item)=>void;onOpenChange:(key:string)=>void;onRestore:(r:Item)=>void;onRestoreChange:(key:string)=>void}){
- const [q,setQ]=useState(''),[dest,setDest]=useState<Dest|''>('');
+ const [q,setQ]=useState(''),[dest,setDest]=useState<Dest|''>(''),[params,setParams]=useSearchParams();
+ // The sort lives in the URL like the other tables' (`sort`, `order`); by default the newest number first.
+ const asked=params.get('sort') as SortKey|null,sort:SortKey=asked&&SORT_KEYS.includes(asked)?asked:'no',order:'asc'|'desc'=params.get('order')==='asc'||params.get('order')==='desc'?params.get('order') as 'asc'|'desc':FIRST_ORDER[sort];
+ const setSort=(k:SortKey)=>{const p=new URLSearchParams(params);const next=k===sort?(order==='asc'?'desc':'asc'):FIRST_ORDER[k];p.set('sort',k);p.set('order',next);setParams(p,{replace:true});};
  const key=q.trim().toLowerCase().replace(/\s+/g,'');
  const match=(title:string,no?:number)=>!key||title.toLowerCase().includes(key)||Boolean(no&&[`o-${no}`,`o${no}`,String(no)].includes(key));
- const opps=rows.filter(r=>(key||destOf(r)!=='pending')&&(!dest||destOf(r)===dest)&&match(r.card.title,r.card.no))
-  .sort((a,b)=>(b.card.no||0)-(a.card.no||0)||String(b.firstSeenAt).localeCompare(String(a.firstSeenAt)));
- const shown=changes.filter(c=>(!dest||changeDest(c)===dest)&&match(titleOf(c.s)));
+ const lines:Line[]=[
+  ...rows.filter(r=>(key||destOf(r)!=='pending')&&(!dest||destOf(r)===dest)&&match(r.card.title,r.card.no)).map((row):Line=>({kind:'opp',row,key:row.card.id,no:row.card.no||null,rank:DEST_RANK[destOf(row)],found:row.firstSeenAt||null})),
+  ...changes.filter(c=>(!dest||changeDest(c)===dest)&&match(titleOf(c.s))).map((change):Line=>({kind:'change',change,key:change.s.key,no:null,rank:DEST_RANK[changeDest(change)],found:null})),
+ ];
+ // Missing values (a change has no number or first-found day) stay at the end whichever way the column sorts.
+ const value=(l:Line):number|string|null=>sort==='no'?l.no:sort==='dest'?l.rank:l.found;
+ lines.sort((a,b)=>{const x=value(a),y=value(b);if(x===null||y===null)return x===null&&y===null?0:x===null?1:-1;const c=x<y?-1:x>y?1:0;return (order==='asc'?c:-c)||(b.no||0)-(a.no||0);});
  const tag=(r:Item)=>{const d=destOf(r);return d==='pending'?<Tag tone="amber" dot>{$t('common.pending')}</Tag>:r.state==='task'?<Tag tone={TASK_TAG[r.task??'todo'][0]} dot>{taskLine(r)}</Tag>:<Tag tone="grey" dot>{d==='ignored'?$t('strategy.dismissed'):$t('strategy.expired')}</Tag>;};
  const changeTag=(c:Settled)=>{const d=changeDest(c),t=c.status.task??'todo';return c.status.next==='task'?<Tag tone={TASK_TAG[t][0]} dot>{`${TASK_TAG[t][1]()}${c.status.taskNo?` · ${taskNo(c.status.taskNo)}`:''}`}</Tag>:d==='ignored'?<Tag tone="grey" dot>{$t('strategy.dismissed')}</Tag>:<Tag tone="slate" dot>{$t('common.noActionNeeded')}</Tag>;};
+ const head=(k:SortKey,label:string,className:string)=><th className={cn('px-3 py-2 text-left font-medium',className)} aria-sort={sort===k?(order==='asc'?'ascending':'descending'):'none'}><SortableHeader label={label} help={false} column={{getIsSorted:()=>sort===k?order:false,getToggleSortingHandler:()=>()=>setSort(k)}}/></th>;
+ // Widths (2026-10-24 user feedback: the title took most of the row and the table scrolled sideways, clipping the
+ // number): the number, where it went, first found and the actions are fixed and the title takes the rest, truncated
+ // with its full text on hover. On a phone the number and first found drop out instead of the table scrolling.
+ const hideOnPhone='max-sm:hidden';
  return <div className="flex flex-col gap-3">
   <div className="flex flex-wrap items-center gap-2"><label className="relative flex min-w-48 flex-1 items-center sm:max-w-80"><SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" aria-hidden="true"/><input aria-label={$t('strategy.searchOpportunities')} value={q} onChange={e=>setQ(e.target.value)} placeholder={$t('strategy.searchTitleNumberLikeO')} className="w-full pl-8!"/></label>
    <Select value={dest||'all'} onValueChange={v=>setDest((v==='all'?'':v) as Dest|'')}><SelectTrigger className="w-full sm:w-40" aria-label={$t('strategy.filterWhereWent')}><SelectValue>{(v:string)=>getDestinations().find(([k])=>(k||'all')===v)?.[1]??v}</SelectValue></SelectTrigger><SelectContent className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{getDestinations().map(([k,v])=><SelectItem key={k||'all'} value={k||'all'}>{v}</SelectItem>)}</SelectContent></Select></div>
-  {opps.length||shown.length?<div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[40rem] table-fixed border-collapse text-sm" aria-label={$t('strategy.handled')}>
-   <colgroup><col className="w-20"/><col/><col className="w-48"/><col className="w-28"/><col className="w-12"/></colgroup>
-   <thead data-slot="table-header" className="text-xs text-muted-foreground"><tr>{[$t('common.identifier'),$t('common.title'),$t('strategy.whereWent'),$t('strategy.firstFound')].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}<th><span className="sr-only">{$t('common.actions')}</span></th></tr></thead>
-   <tbody>{opps.map(r=><tr key={r.card.id} data-opportunity-id={r.card.id} className={cn('cursor-pointer border-t transition-colors hover:bg-muted/40',r.state==='archived'&&'text-muted-foreground')} onClick={()=>onOpen(r)}>
-    <td className="px-3 py-2.5"><No row={r}/></td>
-    <td className="px-3 py-2.5"><button type="button" className="block w-full truncate text-left font-medium hover:underline" onClick={e=>{e.stopPropagation();onOpen(r);}}>{r.card.title}</button></td>
-    <td className="px-3 py-2.5">{tag(r)}</td>
-    <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">{day(r.firstSeenAt)}</td>
-    <td className="px-2 py-2.5 text-right" onClick={e=>e.stopPropagation()}>{r.state==='archived'&&<RestoreButton busy={busy} onClick={()=>onRestore(r)}/>}</td>
-   </tr>)}
-   {shown.map(c=>{const chip=chipOf(c.s);return <tr key={c.s.key} data-change={c.s.key} className="cursor-pointer border-t text-muted-foreground transition-colors hover:bg-muted/40" onClick={()=>onOpenChange(c.s.key)}>
-    <td className="px-3 py-2.5 text-xs">—</td>
-    <td className="px-3 py-2.5"><button type="button" className="flex w-full min-w-0 items-center gap-2 text-left hover:underline" onClick={e=>{e.stopPropagation();onOpenChange(c.s.key);}}><span className="truncate">{titleOf(c.s)}</span>{chip?<Tag tone={chip.tone}>{chip.text}</Tag>:null}</button></td>
-    <td className="px-3 py-2.5">{changeTag(c)}</td>
-    <td className="px-3 py-2.5 text-xs tabular-nums">—</td>
-    <td className="px-2 py-2.5 text-right" onClick={e=>e.stopPropagation()}>{c.status.ignored&&<RestoreButton busy={busy} onClick={()=>onRestoreChange(c.s.key)}/>}</td>
-   </tr>;})}</tbody></table></div>
+  {lines.length?<div className="overflow-hidden rounded-lg border bg-card"><table className="w-full table-fixed border-collapse text-sm" aria-label={$t('strategy.handled')}>
+   <thead data-slot="table-header" className="text-xs text-muted-foreground"><tr>
+    {head('no',$t('common.identifier'),cn('w-20',hideOnPhone))}
+    <th className="px-3 py-2 text-left font-medium">{$t('common.title')}</th>
+    {head('dest',$t('strategy.whereWent'),'w-40 sm:w-56')}
+    {head('found',$t('strategy.firstFound'),cn('w-28',hideOnPhone))}
+    <th className="w-20 px-2 py-2"><span className="sr-only">{$t('common.actions')}</span></th>
+   </tr></thead>
+   <tbody>{lines.map(l=>{
+    if(l.kind==='opp'){const r=l.row;return <tr key={l.key} data-opportunity-id={r.card.id} className={cn('cursor-pointer border-t transition-colors hover:bg-muted/40',r.state==='archived'&&'text-muted-foreground')} onClick={()=>onOpen(r)}>
+     <td className={cn('px-3 py-2.5',hideOnPhone)}><No row={r}/></td>
+     <td className="px-3 py-2.5"><button type="button" title={r.card.title} className="block w-full truncate text-left font-medium hover:underline" onClick={e=>{e.stopPropagation();onOpen(r);}}>{r.card.title}</button></td>
+     <td className="overflow-hidden px-3 py-2.5">{tag(r)}</td>
+     <td className={cn('px-3 py-2.5 text-xs text-muted-foreground tabular-nums',hideOnPhone)}>{day(r.firstSeenAt)}</td>
+     <td className="px-2 py-2.5 text-right" onClick={e=>e.stopPropagation()}>{r.state==='archived'&&<RestoreButton busy={busy} onClick={()=>onRestore(r)}/>}</td>
+    </tr>;}
+    const c=l.change,chip=chipOf(c.s);return <tr key={l.key} data-change={c.s.key} className="cursor-pointer border-t text-muted-foreground transition-colors hover:bg-muted/40" onClick={()=>onOpenChange(c.s.key)}>
+     <td className={cn('px-3 py-2.5 text-xs',hideOnPhone)}>—</td>
+     <td className="px-3 py-2.5"><button type="button" title={titleOf(c.s)} className="flex w-full min-w-0 items-center gap-2 text-left hover:underline" onClick={e=>{e.stopPropagation();onOpenChange(c.s.key);}}><span className="truncate">{titleOf(c.s)}</span>{chip?<Tag tone={chip.tone} className={hideOnPhone}>{chip.text}</Tag>:null}</button></td>
+     <td className="overflow-hidden px-3 py-2.5">{changeTag(c)}</td>
+     <td className={cn('px-3 py-2.5 text-xs tabular-nums',hideOnPhone)}>—</td>
+     <td className="px-2 py-2.5 text-right" onClick={e=>e.stopPropagation()}>{c.status.ignored&&<RestoreButton busy={busy} onClick={()=>onRestoreChange(c.s.key)}/>}</td>
+    </tr>;})}</tbody></table></div>
   :<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{key||dest?$t('strategy.nothingMatches'):$t('strategy.nothingHandledYetOpportunitiesHanded')}</p>}
  </div>;
 }
