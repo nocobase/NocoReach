@@ -56,7 +56,7 @@ function ErrorMessage({
                 ? youtubeErrorMessage(error)
                 : $t('youtube.requestFailed')}
         {status === 401 ? (
-          <a className='ml-2 underline' href={api.resolveUrl('/login')}>
+          <a className='nr-link ml-2' href={api.resolveUrl('/login')}>
             {$t('common.signAgain')}
           </a>
         ) : ![403, 404].includes(status) && retry ? (

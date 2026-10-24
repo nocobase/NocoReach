@@ -27,6 +27,14 @@
 .nr-muted{color:var(--muted-foreground)}
 .nr-footnote{font-size:var(--text-xs);line-height:var(--text-xs--line-height);color:var(--muted-foreground)}
 .nr-link{color:var(--primary);text-underline-offset:3px;cursor:pointer}.nr-link:hover{text-decoration:underline}
+/* Two link styles (2026-10-24 user decision: underlined links inside grey text looked cheap, blue ones too loud there).
+   .nr-link is the action link, blue, for a link that stands on its own ("See evidence on Opportunities →"). A link
+   inside a grey sentence is quiet: one step darker than the sentence and not underlined until hovered, when it turns
+   blue and underlined. .nr-link-quiet styles one link; .nr-quiet-links styles every link inside a block of text (the
+   description slots of dialogs, alerts, empty states and fields). Both show a focus ring for the keyboard. */
+.nr-link-quiet,.nr-quiet-links a:not(.nr-link,[data-slot=button]){color:var(--foreground);cursor:pointer;text-underline-offset:3px;border-radius:2px;transition:color .15s}
+.nr-link-quiet:hover,.nr-quiet-links a:not(.nr-link,[data-slot=button]):hover{color:var(--primary);text-decoration:underline}
+.nr-link:focus-visible,.nr-link-quiet:focus-visible,.nr-quiet-links a:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 
 /* Messages: what happened and what to do (§9.4, §11), in the red / green tag tints. */
 .nr-error,.nr-success,.nr-information{display:flex;flex-wrap:wrap;align-items:center;gap:calc(var(--spacing)*2);padding:calc(var(--spacing)*2) calc(var(--spacing)*3);border-radius:var(--radius);font-size:var(--text-sm);overflow-wrap:anywhere}

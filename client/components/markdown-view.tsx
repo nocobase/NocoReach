@@ -89,11 +89,7 @@ const components: Components = {
         </span>
       );
     return (
-      <MarkdownLink
-        href={href}
-        className='font-medium text-primary underline underline-offset-4'
-        {...props}
-      >
+      <MarkdownLink href={href} className='nr-link font-medium' {...props}>
         {children}
       </MarkdownLink>
     );

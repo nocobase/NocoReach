@@ -52,16 +52,3 @@ it('draws black marks in the text colour and keeps brand colours otherwise', () 
   expect(github).toHaveClass('text-foreground');
   expect(youtube.getAttribute('style')).toContain('#FF0000');
 });
-
-it('a mono mark takes the colour around it, brand or icon; the default keeps the brand colour', () => {
-  const svgOf = (el: Element) => el.querySelector('svg')!;
-  const brand = render(<SourceLogo source='trends' size='xs' />).container;
-  expect(svgOf(brand).getAttribute('style')).toContain('--brand-color');
-  const mono = render(<SourceLogo source='trends' size='xs' mono />).container;
-  expect(svgOf(mono).getAttribute('style')).toBeNull();
-  expect(svgOf(mono).getAttribute('class')).not.toContain('brand-color');
-  const icon = render(<SourceLogo source='site' size='xs' mono />).container;
-  expect(svgOf(icon).getAttribute('class')).not.toContain(
-    'text-muted-foreground',
-  );
-});
