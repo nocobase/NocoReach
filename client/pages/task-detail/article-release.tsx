@@ -7,6 +7,7 @@ import { Reveal } from '#components/reach/reveal';
 import { Tag, type Tone } from '#components/reach/tag';
 import { formatDateTime } from '#lib/format';
 import { ChangeView } from '../change-view';
+import { FieldDiff } from './article-field-diff.js';
 import { Notice } from './layout';
 import { text } from './styles';
 import type {
@@ -186,7 +187,7 @@ export function ConflictBody({
             <span className='text-sm text-muted-foreground'>
               {$t('articleTask.currentToDraft', { 0: name })}
             </span>
-            <ChangeView changes={[fieldChange(f.field, f.current, f.draft)]} />
+            <FieldDiff path={f.field} before={f.current} after={f.draft} />
           </div>
         ))}
         <p className='text-sm'>{$t('articleTask.conflictKept')}</p>
@@ -255,19 +256,29 @@ function LegDrift({ data, r }: { data: TaskData; r: Release }): ReactNode {
         1: d.fields.map((f) => fieldLabel(f.field)).join(', '),
       })}
     >
-      {d.fields.map((f) => (
-        <Reveal
-          key={f.field}
-          label={`${fieldLabel(f.field)} · ${$t('articleTask.compare')}`}
-        >
-          <span className='text-sm text-muted-foreground'>
-            {$t('articleTask.publishedToCurrent')}
-          </span>
-          <ChangeView
-            changes={[fieldChange(f.field, f.published, f.current)]}
+      {d.fields.map((f) =>
+        // The address and the status read inline; there is nothing to unfold for one word.
+        f.field === 'slug' || f.field === 'status' ? (
+          <FieldDiff
+            key={f.field}
+            path={f.field}
+            before={f.published}
+            after={f.current}
           />
-        </Reveal>
-      ))}
+        ) : (
+          <Reveal
+            key={f.field}
+            label={`${fieldLabel(f.field)} · ${$t('articleTask.compare')}`}
+          >
+            <span className='text-sm text-muted-foreground'>
+              {$t('articleTask.publishedToCurrent')}
+            </span>
+            <ChangeView
+              changes={[fieldChange(f.field, f.published, f.current)]}
+            />
+          </Reveal>
+        ),
+      )}
     </Notice>
   );
 }

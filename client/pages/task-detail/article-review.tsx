@@ -26,6 +26,7 @@ import { lineTabClass, lineTabListClass } from '#components/reach/line-tabs';
 import { Segmented } from '#components/reach/segmented';
 import { cn } from '#lib/utils';
 import { ChangeView } from '../change-view';
+import { FieldDiff } from './article-field-diff.js';
 import { localeName } from '../article-targets-api';
 import type {
   ArticleProposal,
@@ -76,6 +77,66 @@ const draftContent = (
   locales: a.draft.locales,
 });
 
+const statusText = (v?: string) =>
+  v
+    ? $t(
+        v === 'published'
+          ? 'articleTask.statusPublished'
+          : 'articleTask.statusDraft',
+      )
+    : '';
+
+/**
+ * The article's address and status after publishing, as properties on one line (2026-10-24 user report: each was a
+ * tab with a diff block, a wide green bar for one word). A new article states them; a changed one names only what
+ * changes, as "Address old → new".
+ */
+function articleFacts(
+  a: Pick<ArticleProposal, 'articleId' | 'draft' | 'changes'>,
+  base: Pick<ArticleContent, 'slug' | 'status'> | null,
+  withStatus: boolean,
+) {
+  const facts: { label: string; before?: string; after: string }[] = [];
+  if (!a.articleId) {
+    if (a.draft.slug)
+      facts.push({ label: $t('articleTask.address'), after: a.draft.slug });
+    // A new article without a status is created as a draft where the target keeps one.
+    const status = a.draft.status ?? (withStatus ? 'draft' : undefined);
+    if (status)
+      facts.push({
+        label: $t('articleTask.statusAfterPublish'),
+        after: statusText(status),
+      });
+    return facts;
+  }
+  if (a.changes.includes('slug'))
+    facts.push({
+      label: $t('articleTask.address'),
+      before: base?.slug,
+      after: a.draft.slug || '',
+    });
+  if (a.changes.includes('status'))
+    facts.push({
+      label: $t('articleTask.statusAfterPublish'),
+      before: statusText(base?.status),
+      after: statusText(a.draft.status),
+    });
+  return facts;
+}
+
+function Facts({ facts }: { facts: ReturnType<typeof articleFacts> }) {
+  return facts.map((f) => (
+    <span key={f.label}>
+      {' · '}
+      {f.label}{' '}
+      <span className='text-foreground'>
+        {f.before ? `${f.before} → ` : ''}
+        {f.after}
+      </span>
+    </span>
+  ));
+}
+
 function TargetLine({
   target,
   a,
@@ -97,7 +158,8 @@ function TargetLine({
             1: title,
             2: base?.slug || '',
           })
-        : $t('articleTask.createLine', { 0: name, 1: a.draft.slug || '' })}
+        : $t('articleTask.createLine', { 0: name })}
+      <Facts facts={articleFacts(a, base, Boolean(target?.status))} />
     </p>
   );
 }
@@ -115,7 +177,8 @@ function AlsoLines({ data, a }: { data: TaskData; a: ArticleProposal }) {
         ? fieldLabel(p)
         : localeName(p, getCurrentLocale()),
     );
-    const draft = draftContent(x);
+    const draft = draftContent(x),
+      fields = x.changes.filter((p) => p.includes('.'));
     return (
       <div key={x.targetId} className='flex min-w-0 flex-col gap-1'>
         <p className='text-sm text-muted-foreground'>
@@ -126,14 +189,17 @@ function AlsoLines({ data, a }: { data: TaskData; a: ArticleProposal }) {
                 2: x.slug,
               })
             : $t('articleTask.alsoCreateLine', { 0: name })}
+          {x.articleId && base && (
+            <Facts facts={articleFacts(x, base, false)} />
+          )}
           {left.length > 0 &&
             ` · ${$t('articleTask.skipped', { 0: joinNames(left) })}`}
         </p>
-        {x.articleId && base && x.changes.length > 0 && (
+        {x.articleId && base && fields.length > 0 && (
           <div className='border-l pl-3'>
             <Reveal label={$t('articleTask.alsoChanges', { 0: name })}>
               <ChangeView
-                changes={x.changes.map((p) =>
+                changes={fields.map((p) =>
                   fieldChange(p, valueAt(base, p), valueAt(draft, p)),
                 )}
               />
@@ -159,7 +225,7 @@ function ConflictList({
           <span className={text.muted}>
             {$t('articleTask.currentToDraft', { 0: targetName })}
           </span>
-          <ChangeView changes={[fieldChange(c.field, c.current, c.draft)]} />
+          <FieldDiff path={c.field} before={c.current} after={c.draft} />
         </div>
       ))}
     </Notice>
@@ -179,21 +245,34 @@ export function ArticleReview({
   settled?: boolean;
 }) {
   const { target, base } = articleContext(data, a);
-  const locales = [
+  const all = [
     ...new Set([...(target?.locales || []), ...Object.keys(a.draft.locales)]),
   ];
+  // A language with no text in the draft or the article is left out rather than shown as an empty tab, and the line
+  // under the tabs says which (2026-10-24 user report).
+  const written = (l: string) => {
+    const t = revisedText(a, base, l);
+    return Boolean(t.title || t.description || t.body);
+  };
+  const shown = all.filter(written),
+    locales = shown.length ? shown : all.slice(0, 1),
+    missing = all.filter((l) => !locales.includes(l));
+  const isNew = !a.articleId;
+  // A new article has nothing to compare against: its languages carry no change count and it opens as a preview only.
   const counts = (l: string) =>
-    a.changes.filter((c) => c.startsWith(`${l}.`)).length;
+    isNew ? 0 : a.changes.filter((c) => c.startsWith(`${l}.`)).length;
   const [tab, setTab] = useState(locales.find((l) => counts(l)) || locales[0]);
   // Preview first when the language's body changed or the article is new; field by field when only its title or
   // description did (2026-10-23 user request).
   const [views, setViews] = useState<Record<string, 'preview' | 'changes'>>({});
   const [showBefore, setShowBefore] = useState(false);
-  const view =
-    views[tab] ??
-    (!a.articleId || a.changes.includes(`${tab}.body`) ? 'preview' : 'changes');
-  const other = a.changes.filter((c) => !c.includes('.'));
+  const view = isNew
+    ? 'preview'
+    : (views[tab] ??
+      (a.changes.includes(`${tab}.body`) ? 'preview' : 'changes'));
   const draft = draftContent(a);
+  const names = (list: string[]) =>
+    joinNames(list.map((l) => localeName(l, getCurrentLocale())));
   const previous = base?.locales[tab] ? base.locales[tab] : null,
     pageUrl = localePageUrl(
       data,
@@ -228,13 +307,6 @@ export function ArticleReview({
           />
         ) : null,
       )}
-      {other.length > 0 && (
-        <ChangeView
-          changes={other.map((p) =>
-            fieldChange(p, valueAt(base, p), valueAt(draft, p)),
-          )}
-        />
-      )}
       <div className='flex flex-wrap items-end justify-between gap-x-4 gap-y-2'>
         <div
           className={lineTabListClass}
@@ -259,19 +331,28 @@ export function ArticleReview({
             </button>
           ))}
         </div>
-        <Segmented
-          label={$t('articleTask.viewAs')}
-          value={view}
-          onChange={(v) =>
-            setViews({ ...views, [tab]: v as 'preview' | 'changes' })
-          }
-          options={[
-            { id: 'preview', label: $t('articleTask.viewPreview') },
-            { id: 'changes', label: $t('articleTask.viewChanges') },
-          ]}
-          className='mb-1.5'
-        />
+        {!isNew && (
+          <Segmented
+            label={$t('articleTask.viewAs')}
+            value={view}
+            onChange={(v) =>
+              setViews({ ...views, [tab]: v as 'preview' | 'changes' })
+            }
+            options={[
+              { id: 'preview', label: $t('articleTask.viewPreview') },
+              { id: 'changes', label: $t('articleTask.viewChanges') },
+            ]}
+            className='mb-1.5'
+          />
+        )}
       </div>
+      {missing.length > 0 && (
+        <p className={text.muted}>
+          {isNew
+            ? $t('articleTask.onlyWrote', { 0: names(locales) })
+            : $t('articleTask.noVersion', { 0: names(missing) })}
+        </p>
+      )}
       <div role='tabpanel' className='flex flex-col gap-3'>
         {view === 'preview' ? (
           <>

@@ -820,6 +820,36 @@ test('a live article names what changed on its card and shows each field before 
   );
 });
 
+// 2026-10-24 user report: a new article is not a set of changed fields.
+test('a new article that went live is named as one and opens as the article', async () => {
+  const user = userEvent.setup();
+  const data = liveArticle();
+  const [artifact] = data.work.results as NonNullable<
+    TaskData['work']['results'][number]
+  >[];
+  artifact.article = {
+    ...artifact.article!,
+    articleId: null,
+    baseKey: null,
+    baseVersion: null,
+    draft: {
+      slug: 'new-post',
+      locales: { en: { title: 'New post', description: 'D', body: 'Body' } },
+    },
+    changes: ['slug', 'en.title', 'en.description', 'en.body'],
+  } as typeof artifact.article;
+  mount(data);
+  const card = screen.getByRole('region', { name: '已完成' });
+  expect(card).toHaveTextContent('新文章');
+  expect(card).not.toHaveTextContent('改了');
+  await user.click(within(card).getByRole('button', { name: /查看文章/ }));
+  const dialog = await screen.findByRole('dialog', { name: '文章' });
+  expect(
+    within(dialog).getByRole('heading', { name: 'New post' }),
+  ).toBeVisible();
+  expect(within(dialog).queryByRole('button', { name: '改动' })).toBeNull();
+});
+
 test('a live page change names what readers see differently and opens it', async () => {
   const user = userEvent.setup();
   const data = pageChange();

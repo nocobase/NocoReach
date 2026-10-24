@@ -549,10 +549,12 @@ function LiveChange({data,artifact}:{data:Data;artifact?:Artifact}){
  const a=artifact.article,visible=artifact.pr?.visibleChanges||[];
  const paths=a?(a.changes.length?a.changes:a.carried||[]):[];
  const labels=a?paths.map(fieldLabel):[...new Set(visible.map(v=>v.label))],count=a?paths.length:visible.length;
+ // A new article went live as a whole: it is named as one, not as fields it "changed" (2026-10-24 user report).
+ const created=Boolean(a&&!a.articleId);
  return <div className={cn(text.body,'flex flex-wrap items-center gap-x-2 gap-y-1')}>
-  {count>0&&<span>{$t('taskDetail.changedSummary',{0:count,1:joinNames(labels)})}</span>}
-  <Button variant='link' size='sm' className='h-auto font-normal p-0' onClick={()=>setOpen(true)}>{$t('taskDetail.viewChanges')}<ChevronRight/></Button>
-  <DocReader open={open} onClose={()=>setOpen(false)} title={$t('taskDetail.whatChanged')} meta={`${$t('taskDetail.versionNumber',{0:artifact.version})}${artifact.approvedAt?` · ${$t('taskDetail.approvedOn',{0:when(artifact.approvedAt)})}`:''}`} content=''><VersionChange data={data} artifact={artifact} notes={false}/></DocReader>
+  {created?<span>{$t('articleTask.newArticle')}</span>:count>0&&<span>{$t('taskDetail.changedSummary',{0:count,1:joinNames(labels)})}</span>}
+  <Button variant='link' size='sm' className='h-auto font-normal p-0' onClick={()=>setOpen(true)}>{created?$t('taskDetail.viewArticle'):$t('taskDetail.viewChanges')}<ChevronRight/></Button>
+  <DocReader open={open} onClose={()=>setOpen(false)} title={created?$t('articleTask.article'):$t('taskDetail.whatChanged')} meta={`${$t('taskDetail.versionNumber',{0:artifact.version})}${artifact.approvedAt?` · ${$t('taskDetail.approvedOn',{0:when(artifact.approvedAt)})}`:''}`} content=''><VersionChange data={data} artifact={artifact} notes={false}/></DocReader>
  </div>;
 }
 // Impact tracking (SPEC §8): day 7 and day 28 against the same number of days before going live.

@@ -157,6 +157,86 @@ it('reviews an article field by field against its source, per language', async (
   ).toBeInTheDocument();
 });
 
+// 2026-10-24 user report on T-39: the address and status were tabs with a diff block each, the new article's English
+// tab read "3 changes", and Chinese and Japanese were empty tabs.
+it('a new article states its address and status on one line, in the languages it has, without change counts', () => {
+  render(
+    <ArticleReview
+      data={
+        {
+          articleTargets: [{ ...target, status: true }],
+          articleBases: {},
+        } as unknown as TaskData
+      }
+      article={{
+        targetId: 'cms',
+        articleId: null,
+        baseKey: null,
+        baseVersion: null,
+        draft: {
+          slug: 'internal-tool-builder',
+          locales: {
+            en: { title: 'Internal tools', description: 'D', body: 'Body' },
+          },
+        },
+        changes: ['slug', 'status', 'en.title', 'en.description', 'en.body'],
+      }}
+      notes=''
+    />,
+  );
+  expect(
+    screen.getByText(
+      (_, el) =>
+        el?.tagName === 'P' &&
+        el.textContent ===
+          'Publishes to NocoBase CMS · new article · Address internal-tool-builder · Status after publishing Draft',
+    ),
+  ).toBeInTheDocument();
+  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
+    'English',
+  ]);
+  expect(screen.getByText('Only English was written this time.')).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Changes' })).toBeNull();
+  expect(screen.queryByText('Address (slug)')).toBeNull();
+  expect(screen.getByRole('heading', { name: 'Internal tools' })).toBeVisible();
+});
+
+it('a changed article names a changed status inline and leaves out a language it does not have', () => {
+  render(
+    <ArticleReview
+      data={
+        {
+          articleTargets: [{ ...target, status: true }],
+          articleBases: {
+            'base-1': { ...base, locales: { en: base.locales.en } },
+          },
+        } as unknown as TaskData
+      }
+      article={{
+        ...proposal,
+        draft: { status: 'draft', locales: { en: { body: 'New body' } } },
+        changes: ['status', 'en.body'],
+      }}
+      notes=''
+    />,
+  );
+  expect(
+    screen.getByText(
+      (_, el) =>
+        el?.tagName === 'P' &&
+        el.textContent ===
+          'Publishes to NocoBase CMS · updates "Hello" (hello) · Status after publishing Published → Draft',
+    ),
+  ).toBeInTheDocument();
+  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
+    'English (1 changes)',
+  ]);
+  expect(
+    screen.getByText('This article has no Chinese version.'),
+  ).toBeVisible();
+  expect(screen.queryByRole('tab', { name: 'Status' })).toBeNull();
+});
+
 it('lists the fields both sides changed after a rebase', () => {
   render(
     <ArticleReview
@@ -181,6 +261,22 @@ it('lists the fields both sides changed after a rebase', () => {
     ),
   ).toBeInTheDocument();
   expect(screen.getByText('编辑的版本')).toBeInTheDocument();
+});
+
+it('a conflict on the address reads inline, not as a diff', () => {
+  render(
+    <ArticleReview
+      data={data}
+      article={{
+        ...proposal,
+        conflicts: [
+          { field: 'slug', base: 'hello', current: 'hello-cms', draft: 'hi' },
+        ],
+      }}
+      notes=''
+    />,
+  );
+  expect(screen.getByText('hello-cms → hi', { exact: false })).toBeVisible();
 });
 
 it('edits a new article with validation on save and sends only what it fills in', async () => {
@@ -323,7 +419,7 @@ it('chooses draft or published for a target that stores a status, starting from 
   );
 });
 
-it('shows status changes as words in the review', async () => {
+it('shows status changes as words in the review', () => {
   render(
     <ArticleReview
       data={data}
@@ -342,8 +438,9 @@ it('shows status changes as words in the review', async () => {
       notes=''
     />,
   );
-  await userEvent.click(screen.getByRole('tab', { name: 'Status' }));
+  // On the target line, as a word: no tab or diff for one value.
   expect(screen.getByText('Draft')).toBeInTheDocument();
+  expect(screen.queryByRole('tab', { name: 'Status' })).toBeNull();
 });
 
 it('shows an overwrite after publishing with a comparison, and when it was restored', async () => {

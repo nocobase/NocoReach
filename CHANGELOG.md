@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — A new article reads as one
+
+- The article review card states the address and the status after publishing on the target line ("Address internal-tool-builder · Status after publishing Draft") instead of a tab with a diff block for each; a changed article names only what changes ("Status after publishing Published → Draft"). Conflicts and post-publish drift show a changed address or status the same way.
+- A new article's language tabs carry no change count and it has no Changes view; once live, its card says "New article" with View article instead of listing changed fields.
+- A language with no text in the draft or the article is left out of the tabs, with a line under them: "Only English was written this time." for a new article, "This article has no Chinese version." for a changed one.
+- In Chinese, Traditional Chinese and Japanese, the Published status reads as a state rather than as the verb.
+
 ## Unreleased — Review, then Publish
 
 - The step where a person approves a change is named Review instead of "Review and publish", and the step after it, where the system merges or writes to the CMS and confirms the page is live, is named Publish instead of "Live", in the task header, start card, Opportunities, Playbooks and the playbook editor's note. The flow and the number of clicks are unchanged.
