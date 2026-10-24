@@ -25,6 +25,7 @@ class ProjectIcon{
   for(const url of iconLinks(page.text,page.url||origin+'/').slice(0,4)){try{const r=await this.read(url);const type=String(r.type||'').split(';')[0].trim()||(/\.svg/i.test(url)?'image/svg+xml':/\.ico/i.test(url)?'image/x-icon':'');const body=r.body||Buffer.from(r.text||'');if(!IMAGE.test(type)||!body.length||body.length>MAX_BYTES)continue;return {dataUrl:`data:${type};base64,${body.toString('base64')}`,source:url};}catch{/* try the next icon */}}}
   return null;}
  async get(id){const project=await this.p.project(id),domain=host(project?.domains?.[0]);if(!domain)return {dataUrl:null};const s=await this.saved(id),now=Date.now();
+  if((this.p as {demoConfiguration?:{enabled:boolean}}).demoConfiguration?.enabled)return {dataUrl:null,source:null};
   const fresh=s&&s.domain===domain&&(s.dataUrl?now-Date.parse(s.fetchedAt)<WEEK:now-Date.parse(s.fetchedAt)<DAY);if(fresh)return {dataUrl:s.dataUrl||null,source:s.source||null};
   if(this.pending)return {dataUrl:s?.domain===domain?s.dataUrl||null:null};
   this.pending=this.fetchIcon(domain).then(r=>this.save(id,{domain,fetchedAt:new Date().toISOString(),dataUrl:r?.dataUrl||null,source:r?.source||null})).catch(()=>this.save(id,{domain,fetchedAt:new Date().toISOString(),dataUrl:s?.dataUrl||null,source:s?.source||null})).finally(()=>{this.pending=null;});

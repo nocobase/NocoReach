@@ -544,3 +544,72 @@ it('Handled sorts by number, where it went and first found, never by title', asy
       ?.textContent?.includes('strategy.whereWent'),
   ).toBe(true);
 });
+
+it('Watching colours the current value as its change, once, without a tag beside the title', async () => {
+  const watched = (
+    key: string,
+    title: string,
+    chip?: Signal['chip'],
+  ): Signal => ({
+    key,
+    type: 'change',
+    source: 'gsc',
+    title,
+    facts: [],
+    strength: 2,
+    actionable: false,
+    action: null,
+    ...(chip ? { chip } : {}),
+  });
+  const items = [
+    watched('w-drop', 'Trial conversion dipped', {
+      tone: 'red',
+      text: '↓ 18%',
+    }),
+    // A drop that is good news: the rule's tone, not the arrow, gives the colour.
+    watched('w-good', 'Bounce rate fell', { tone: 'green', text: '↓ 9%' }),
+    watched('w-none', 'Localised case study interest'),
+  ];
+  const review = {
+    verdict: 'watch',
+    reason: 'Too early',
+    waitingFor: 'A full week',
+    decideBy: '2026-10-30',
+  };
+  fixture.state = {
+    ...state,
+    insights: {
+      ...state.insights!,
+      evidence: {
+        ...state.insights!.evidence!,
+        signals: { computedAt: '', coverage: {}, missing: [], items },
+      },
+      signalReviews: Object.fromEntries(items.map((s) => [s.key, review])),
+    },
+  };
+  show('/opportunities?tab=watch');
+  const value = async (key: string) => {
+    const row = await waitFor(() => {
+      const r = document.querySelector(`[data-watch="${key}"]`);
+      expect(r).toBeTruthy();
+      return r!;
+    });
+    return row.querySelector('[data-start-now] > span')!;
+  };
+  const drop = await value('w-drop');
+  expect([drop.textContent, drop.className]).toEqual([
+    '↓ 18%',
+    expect.stringContaining('text-nr-ink-red'),
+  ]);
+  const good = await value('w-good');
+  expect(good.className).toContain('text-nr-ink-green');
+  const none = await value('w-none');
+  expect([none.textContent, none.className]).toEqual([
+    '—',
+    expect.stringContaining('text-muted-foreground'),
+  ]);
+  // The colour shows once: no "Now" before the value and no chip beside the title.
+  const row = document.querySelector('[data-watch="w-drop"]')!;
+  expect(row.textContent).not.toContain('strategy.now');
+  expect(row.querySelector('td')!.textContent).not.toContain('↓ 18%');
+});
