@@ -36,6 +36,8 @@ const active = (r: Run) => r.status === 'queued' || r.status === 'running';
 const withoutRepo = (w: Work, stage: Stage) => stage.kind === 'agent' && stage.mode === 'analyze' && !w.flow!.stages.some(changesRepo);
 // A task that delivers an article to a publishing target needs no repository for any step (article-flow.ts).
 const articleTask = (w: Work) => w.delivery?.kind === 'article';
+// A related task as the task page lists it: its title, number and where it stands.
+const relatedTask = (r: any) => { const t = r.toJSON ? r.toJSON() : r; return { id: t.id, title: t.title, ...(Number.isInteger(t.evidence?.no) ? { no: t.evidence.no } : {}), state: taskStanding({ work: t.evidence?.work, status: t.status }) }; };
 const ID = /^[1-9]\d{0,15}$/;
 const HOUR = 3600000;
 // What says where a task came from (who found it, from which page or change), carried into a task it hands off to.
@@ -142,7 +144,8 @@ export class TaskService {
     const [runs, artifacts, reviews] = await Promise.all(['run', 'artifact', 'review'].map(k => this.list(k, project, taskId, tx)));
     const content=work.contentId?await this.snapshot(this.key('content',project,'index',work.contentId),tx):null;
     const linked = [work.prevTaskId || task.evidence?.handoff?.taskId, work.nextTaskId].filter(Boolean).map(String);
-    const related = [...(await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => ({ id: r.get('id'), title: r.get('title'), relation: String(r.get('id')) === String(work.nextTaskId) ? 'next' : 'prev' })), ...await this.siblings(project, task, tx)];
+    // The previous and next steps carry their number and where they stand too, as the opportunity's other tasks do.
+    const related = [...(await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => ({ ...relatedTask(r), relation: String(r.get('id')) === String(work.nextTaskId) ? 'next' : 'prev' })), ...await this.siblings(project, task, tx)];
     return { task, content, work, runs: runs.map(({ input, transcript: _transcript, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), articleBases: await this.articleFlow.bases(project, taskId, work, tx) };
   }
   // The other tasks handed off from the same opportunity (2026-10-22: one opportunity, a task per place to change), in
@@ -153,7 +156,7 @@ export class TaskService {
     const strategy = await this.snapshot(`strategy:${project}`, tx);
     const ids = [...new Set<string>([...(strategy?.proposals || [])].reverse().filter((p: any) => p.taskId && p.insight?.id === insight).map((p: any) => String(p.taskId)))].filter(id => id !== String(task.id));
     const rows = (await Promise.all(ids.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean);
-    return rows.map((r: any) => { const t = r.toJSON ? r.toJSON() : r, w = t.evidence?.work; return { id: t.id, title: t.title, relation: 'sibling', ...(Number.isInteger(t.evidence?.no) ? { no: t.evidence.no } : {}), state: taskStanding({ work: w, status: t.status }) }; });
+    return rows.map((r: any) => ({ ...relatedTask(r), relation: 'sibling' }));
   }
   private async withAgent(project: string, data: any, actor?: string) {
     // Actor-specific Runner eligibility opens plugin reads of its own.

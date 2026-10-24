@@ -5218,6 +5218,9 @@
   "taskNumbers.beforeLiveViews": "28 ngày trước khi đưa vào hoạt động · lượt xem",
   "taskNumbers.position": "Vị trí {0}",
   "taskDetail.propRelated": "Tác vụ liên quan",
+  "taskDetail.relatedPrev": "Bước trước · nhiệm vụ này được chuyển từ đó",
+  "taskDetail.relatedNext": "Bước tiếp theo · được chuyển từ nhiệm vụ này",
+  "taskDetail.relatedSame": "Cùng cơ hội {0} · các nhiệm vụ sửa chỗ khác",
   "taskSource.foundByAi": "Found by AI",
   "taskSource.foundBy": "Found by {0}",
   "taskSource.fromInsights": "Nhận định › Tình hình hiện tại",
@@ -7218,6 +7221,5 @@
   "opportunityTasks.created": "Đã tạo tác vụ: {0}. Mở từng tác vụ, đọc nội dung rồi nhấp \"Bắt đầu\".",
   "opportunityTasks.heading": "Tác vụ",
   "opportunityTasks.progressTag": "{0} tác vụ · {1} đã hoàn tất",
-  "opportunityTasks.sameOpportunity": "Cùng cơ hội cải thiện ({0})",
   "opportunityTasks.taskCount": "{0} tác vụ"
 }

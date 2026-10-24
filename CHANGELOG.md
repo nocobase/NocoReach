@@ -12,6 +12,10 @@
 - With two or more languages, the Agent writes the primary one only, and change requests touch only it. Its review card reads "The English version is ready; approve it to translate it", and approving it ("Approve and translate") publishes nothing yet: the Agent translates it into the other languages ("The Agent is translating into Chinese, Japanese"), the translated version ("The translations are ready; approve to publish them all") is reviewed with a tab per language, and one Approve and publish publishes them all. Before approval the review says which languages follow.
 - Tasks started before this, and tasks with one language, write every language at once as before.
 
+## Unreleased — Related tasks in groups
+
+- The task page's Properties card lists related tasks in a section of their own below the properties, in groups: Previous step (this task was handed off from it), Same opportunity O-n (tasks changing other places), and Next step. Each task is one row (its number, its title on one line, its status tag) that opens it. A task is listed once, in its closest relation; empty groups and an empty section are left out. The previous and next steps now carry their number and status from the server too.
+
 ## Unreleased — Watching: the current value in the colour of its change
 
 - Opportunities › Watching shows each change's current value in the colour the analysis rule gave it (red for a drop that hurts, green for good news, also when the good news is a drop), in the Value column, without "Now" before it; the grey line under it still says where it started. Before #198 the colour came as a chip beside the title and the value was repeated in plain text; now it shows once. A change without a figure reads "—" in grey.

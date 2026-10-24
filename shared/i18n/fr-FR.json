@@ -5142,6 +5142,9 @@
   "taskNumbers.beforeLiveViews": "28 jours avant la mise en ligne · vues",
   "taskNumbers.position": "Pos. {0}",
   "taskDetail.propRelated": "Tâches liées",
+  "taskDetail.relatedPrev": "Étape précédente · cette tâche en a été transmise",
+  "taskDetail.relatedNext": "Étape suivante · transmise depuis cette tâche",
+  "taskDetail.relatedSame": "Même opportunité {0} · tâches sur d’autres endroits",
   "taskSource.foundByAi": "Found by AI",
   "taskSource.foundBy": "Found by {0}",
   "taskSource.fromInsights": "Enseignements › Situation actuelle",
@@ -7218,6 +7221,5 @@
   "opportunityTasks.created": "Tâches créées : {0}. Ouvrez chacune d’elles, consultez-la, puis cliquez sur \"Démarrer\".",
   "opportunityTasks.heading": "Tâches",
   "opportunityTasks.progressTag": "{0} tâches · {1} terminées",
-  "opportunityTasks.sameOpportunity": "Même opportunité ({0})",
   "opportunityTasks.taskCount": "{0} tâches"
 }

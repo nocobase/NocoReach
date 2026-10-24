@@ -5142,6 +5142,9 @@
   "taskNumbers.beforeLiveViews": "上線前 28 天 · 瀏覽量",
   "taskNumbers.position": "第 {0} 位",
   "taskDetail.propRelated": "相關任務",
+  "taskDetail.relatedPrev": "上一步 · 這個任務從它交接而來",
+  "taskDetail.relatedNext": "下一步 · 從這個任務交接出去",
+  "taskDetail.relatedSame": "同一機會 {0} · 改其他地方的任務",
   "taskSource.foundByAi": "Found by AI",
   "taskSource.foundBy": "Found by {0}",
   "taskSource.fromInsights": "洞察 › 目前狀況",
@@ -7218,6 +7221,5 @@
   "opportunityTasks.created": "已建好 {0} 個任務，逐一打開看過後點「確定開始執行」。",
   "opportunityTasks.heading": "任務",
   "opportunityTasks.progressTag": "{0} 個任務 · 已完成 {1}",
-  "opportunityTasks.sameOpportunity": "同一機會（{0}）",
   "opportunityTasks.taskCount": "{0} 個任務"
 }

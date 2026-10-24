@@ -66,8 +66,8 @@ function Where() {
   return <output data-testid='at'>{at.pathname + at.search}</output>;
 }
 
-it("lists the other tasks of the task's opportunity with where each stands, and links back to the opportunity", () => {
-  render(
+function mount(d: TaskData) {
+  return render(
     <MemoryRouter initialEntries={['/actions/41']}>
       <Routes>
         <Route
@@ -75,7 +75,7 @@ it("lists the other tasks of the task's opportunity with where each stands, and 
           element={
             <>
               <TaskProperties
-                data={data}
+                data={d}
                 members={[]}
                 allowed={false}
                 busy={false}
@@ -90,25 +90,73 @@ it("lists the other tasks of the task's opportunity with where each stands, and 
       </Routes>
     </MemoryRouter>,
   );
-  const group = document.querySelector(
-    '[data-same-opportunity]',
-  ) as HTMLElement;
-  expect(group.textContent).toContain('opportunityTasks.sameOpportunity:O-43');
+}
+
+it("lists the other tasks of the task's opportunity with where each stands, and links back to the opportunity", () => {
+  mount(data);
+  const group = document.querySelector('[data-related="same"]') as HTMLElement;
+  expect(group.textContent).toContain('taskDetail.relatedSame:O-43');
   for (const [title, tag] of [
-    ['T-34 Update the comparison pages', 'common.completed'],
-    ['T-42 Update Top 11', 'common.inProgress'],
-    ['T-43 Reply to unanswered community posts', 'common.closed'],
+    ['Update the comparison pages', 'common.completed'],
+    ['Update Top 11', 'common.inProgress'],
+    ['Reply to unanswered community posts', 'common.closed'],
   ]) {
-    const row = within(group).getByRole('button', { name: title })
-      .parentElement as HTMLElement;
+    const row = within(group).getByTitle(title);
     expect(row.textContent).toContain(tag);
   }
-  // No "Previous" or "Next": these are not a playbook chain.
-  expect(screen.queryByText(/taskDetail.previous|taskDetail.next/)).toBeNull();
-  fireEvent.click(
-    within(group).getByRole('button', { name: 'T-42 Update Top 11' }),
-  );
+  // No previous or next step: these are not a playbook chain.
+  expect(document.querySelector('[data-related="prev"]')).toBeNull();
+  expect(document.querySelector('[data-related="next"]')).toBeNull();
+  fireEvent.click(within(group).getByTitle('Update Top 11'));
   expect(screen.getByTestId('at').textContent).toBe('/actions/42');
   fireEvent.click(within(group).getByRole('button', { name: 'O-43' }));
   expect(screen.getByTestId('at').textContent).toBe('/opportunities?item=o43');
+});
+
+// 2026-10-24 user decision: T-37 was listed twice, as the previous step and under the same opportunity.
+it('lists a task once, in its closest relation, and leaves out empty groups', () => {
+  const view = mount({
+    ...data,
+    related: [
+      {
+        id: 37,
+        title: 'Add a FAQ page',
+        relation: 'prev',
+        no: 37,
+        state: 'done',
+      },
+      {
+        id: 37,
+        title: 'Add a FAQ page',
+        relation: 'sibling',
+        no: 37,
+        state: 'done',
+      },
+      {
+        id: 44,
+        title: 'Add FAQ markup',
+        relation: 'sibling',
+        no: 44,
+        state: 'doing',
+      },
+    ],
+  } as unknown as TaskData);
+  expect(screen.getAllByTitle('Add a FAQ page')).toHaveLength(1);
+  expect(
+    within(
+      document.querySelector('[data-related="prev"]') as HTMLElement,
+    ).getByTitle('Add a FAQ page'),
+  ).toBeInTheDocument();
+  expect(
+    within(
+      document.querySelector('[data-related="same"]') as HTMLElement,
+    ).getByTitle('Add FAQ markup'),
+  ).toBeInTheDocument();
+  expect(document.querySelector('[data-related="next"]')).toBeNull();
+  view.unmount();
+  // Nothing related: no section at all.
+  mount({ ...data, related: [] } as unknown as TaskData);
+  expect(
+    screen.queryByRole('region', { name: 'taskDetail.propRelated' }),
+  ).toBeNull();
 });

@@ -5170,6 +5170,9 @@
   "taskNumbers.beforeLiveViews": "28 days before going live · views",
   "taskNumbers.position": "#{0}",
   "taskDetail.propRelated": "Related tasks",
+  "taskDetail.relatedPrev": "Previous step · this task was handed off from it",
+  "taskDetail.relatedNext": "Next step · handed off from this task",
+  "taskDetail.relatedSame": "Same opportunity {0} · tasks changing other places",
   "taskSource.foundByAi": "Found by AI",
   "taskSource.foundBy": "Found by {0}",
   "taskSource.fromInsights": "Insights › Current situation",
@@ -7218,6 +7221,5 @@
   "opportunityTasks.created": "Tasks created: {0}. Open each one, read it, then click \"Start\".",
   "opportunityTasks.heading": "Tasks",
   "opportunityTasks.progressTag": "{0} tasks · {1} done",
-  "opportunityTasks.sameOpportunity": "Same opportunity ({0})",
   "opportunityTasks.taskCount": "{0} tasks"
 }
