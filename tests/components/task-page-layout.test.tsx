@@ -847,7 +847,7 @@ test('a new article that went live is named as one and opens as the article', as
   expect(
     within(dialog).getByRole('heading', { name: 'New post' }),
   ).toBeVisible();
-  expect(within(dialog).queryByRole('button', { name: '改动' })).toBeNull();
+  expect(within(dialog).queryByRole('button', { name: '对比' })).toBeNull();
 });
 
 test('a live page change names what readers see differently and opens it', async () => {

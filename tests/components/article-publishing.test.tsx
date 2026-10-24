@@ -138,17 +138,14 @@ it('reviews an article field by field against its source, per language', async (
   expect(tagTexts()).toEqual(['NocoBase CMS', 'Update article']);
   expect(screen.getByText('Hello')).toBeInTheDocument();
   const tabs = screen.getAllByRole('tab');
-  expect(tabs.map((t) => t.textContent)).toEqual([
-    'English',
-    'Chinese (1 changes)',
-  ]);
+  expect(tabs.map((t) => t.textContent)).toEqual(['English', 'Chinese']);
   expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
   // The body changed, so the article opens as its readers will see it; Changes compares field by field.
-  expect(screen.getByRole('button', { name: 'Preview' })).toHaveAttribute(
+  expect(screen.getByRole('button', { name: 'After' })).toHaveAttribute(
     'aria-pressed',
     'true',
   );
-  await userEvent.click(screen.getByRole('button', { name: 'Changes' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Compare' }));
   const panel = screen.getByRole('tabpanel');
   expect(within(panel).getByText('新的中文正文')).toBeInTheDocument();
   expect(within(panel).getByText('中文正文')).toBeInTheDocument();
@@ -192,7 +189,7 @@ it('a new article shows its target, kind and status as tags, in the languages it
     'English',
   ]);
   expect(screen.getByText('Only English was written this time.')).toBeVisible();
-  expect(screen.queryByRole('button', { name: 'Changes' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Compare' })).toBeNull();
   expect(screen.queryByText('Address (slug)')).toBeNull();
   expect(screen.getByRole('heading', { name: 'Internal tools' })).toBeVisible();
 });
@@ -220,7 +217,7 @@ it('a changed article tags a changed status and leaves out a language it does no
   // An existing article is named by its title; its unchanged address is left out.
   expect(screen.queryByText('hello')).toBeNull();
   expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
-    'English (1 changes)',
+    'English',
   ]);
   expect(
     screen.getByText('This article has no Chinese version.'),

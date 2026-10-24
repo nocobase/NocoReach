@@ -26,7 +26,6 @@ import { Tag } from '#components/reach/tag';
 import { GitBranch, Globe } from 'lucide-react';
 import { lineTabClass, lineTabListClass } from '#components/reach/line-tabs';
 import { Segmented } from '#components/reach/segmented';
-import { cn } from '#lib/utils';
 import { ChangeView } from '../change-view';
 import { FieldDiff } from './article-field-diff.js';
 import { localeName } from '../article-targets-api';
@@ -70,6 +69,9 @@ const revisedText = (
     body: draft?.body ?? was?.body ?? '',
   };
 };
+
+/** How a changed language is read: as it will be, as it was, or field by field. */
+type View = 'after' | 'before' | 'compare';
 
 const draftContent = (
   a: Pick<ArticleProposal, 'draft'>,
@@ -291,28 +293,27 @@ export function ArticleReview({
     locales = shown.length ? shown : all.slice(0, 1),
     missing = all.filter((l) => !locales.includes(l));
   const isNew = !a.articleId;
-  // A new article has nothing to compare against: its languages carry no change count and it opens as a preview only.
-  const counts = (l: string) =>
-    isNew ? 0 : a.changes.filter((c) => c.startsWith(`${l}.`)).length;
-  const [tab, setTab] = useState(locales.find((l) => counts(l)) || locales[0]);
-  // Preview first when the language's body changed or the article is new; field by field when only its title or
-  // description did (2026-10-23 user request).
-  const [views, setViews] = useState<Record<string, 'preview' | 'changes'>>({});
-  const [showBefore, setShowBefore] = useState(false);
-  const view = isNew
-    ? 'preview'
-    : (views[tab] ??
-      (a.changes.includes(`${tab}.body`) ? 'preview' : 'changes'));
+  const changed = (l: string) => a.changes.some((c) => c.startsWith(`${l}.`));
+  const [tab, setTab] = useState(locales.find(changed) || locales[0]);
+  // One switch for the three ways to read a changed language, After | Before | Compare (2026-10-24 user request: a
+  // Preview | Changes switch plus a text link for the earlier version, and change counts on the tabs, read oddly).
+  // After first when the language's body changed; Compare when only its title or description did. A new article, or a
+  // language the article did not have, has one version and no switch.
+  const [views, setViews] = useState<Record<string, View>>({});
+  const previous = base?.locales[tab] ? base.locales[tab] : null,
+    versions = !isNew && Boolean(previous);
+  const view: View = !versions
+    ? 'after'
+    : (views[tab] ?? (a.changes.includes(`${tab}.body`) ? 'after' : 'compare'));
   const draft = draftContent(a);
   const names = (list: string[]) =>
     joinNames(list.map((l) => localeName(l, getCurrentLocale())));
-  const previous = base?.locales[tab] ? base.locales[tab] : null,
-    pageUrl = localePageUrl(
-      data,
-      a.targetId,
-      a.draft.slug || base?.slug || '',
-      tab,
-    );
+  const pageUrl = localePageUrl(
+    data,
+    a.targetId,
+    a.draft.slug || base?.slug || '',
+    tab,
+  );
   return (
     <div className='flex flex-col gap-4'>
       <AgentNotes summary={a.draft.summary} notes={notes} />
@@ -355,25 +356,19 @@ export function ArticleReview({
               aria-selected={l === tab}
               onClick={() => setTab(l)}
             >
-              {counts(l)
-                ? $t('articleTask.changeCount', {
-                    0: localeName(l, getCurrentLocale()),
-                    1: counts(l),
-                  })
-                : localeName(l, getCurrentLocale())}
+              {localeName(l, getCurrentLocale())}
             </button>
           ))}
         </div>
-        {!isNew && (
+        {versions && (
           <Segmented
             label={$t('articleTask.viewAs')}
             value={view}
-            onChange={(v) =>
-              setViews({ ...views, [tab]: v as 'preview' | 'changes' })
-            }
+            onChange={(v) => setViews({ ...views, [tab]: v as View })}
             options={[
-              { id: 'preview', label: $t('articleTask.viewPreview') },
-              { id: 'changes', label: $t('articleTask.viewChanges') },
+              { id: 'after', label: $t('articleTask.viewAfter') },
+              { id: 'before', label: $t('articleTask.viewBefore') },
+              { id: 'compare', label: $t('articleTask.viewCompare') },
             ]}
             className='mb-1.5'
           />
@@ -387,39 +382,16 @@ export function ArticleReview({
         </p>
       )}
       <div role='tabpanel' className='flex flex-col gap-3'>
-        {view === 'preview' ? (
-          <>
-            {previous && (
-              <p
-                className={cn(
-                  text.muted,
-                  'flex flex-wrap items-center gap-x-2',
-                )}
-              >
-                {showBefore
-                  ? $t('articleTask.previewBefore')
-                  : $t('articleTask.previewAfter')}
-                <Button
-                  variant='link'
-                  size='sm'
-                  className='h-auto p-0 font-normal'
-                  aria-pressed={showBefore}
-                  onClick={() => setShowBefore((v) => !v)}
-                >
-                  {showBefore
-                    ? $t('articleTask.showAfter')
-                    : $t('articleTask.showBefore')}
-                </Button>
-              </p>
-            )}
-            <ArticlePreview
-              key={`${tab}:${showBefore && previous ? 'before' : 'after'}`}
-              text={
-                showBefore && previous ? previous : revisedText(a, base, tab)
-              }
-              pageUrl={pageUrl}
-            />
-          </>
+        {view !== 'compare' ? (
+          <ArticlePreview
+            key={`${tab}:${view}`}
+            text={
+              view === 'before' && previous
+                ? previous
+                : revisedText(a, base, tab)
+            }
+            pageUrl={pageUrl}
+          />
         ) : (
           ARTICLE_FIELDS.map((f) => {
             const path = `${tab}.${f}`;

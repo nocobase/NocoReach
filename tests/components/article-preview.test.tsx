@@ -186,7 +186,7 @@ const article = (changes: string[], locale: Record<string, string>) => ({
   changes,
 });
 
-it('opens a body change as a preview, with the version before it a click away', async () => {
+it('opens a body change as it will read, with Before and Compare in one switch', async () => {
   render(
     <ArticleReview
       data={data}
@@ -199,10 +199,14 @@ it('opens a body change as a preview, with the version before it a click away', 
     'src',
     'https://www.nocobase.com/en/blog/new.png',
   );
-  expect(screen.getByText('After the change')).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: 'Show before' }));
+  expect(screen.getByRole('button', { name: 'After' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await userEvent.click(screen.getByRole('button', { name: 'Before' }));
   expect(screen.getByRole('img', { name: 'Old screen' })).toBeInTheDocument();
-  expect(screen.getByText('Before the change')).toBeInTheDocument();
+  // No text links beside the switch (2026-10-24 user request).
+  expect(screen.queryByRole('button', { name: /Show/ })).toBeNull();
 });
 
 it('opens a title-only change field by field', () => {
@@ -213,7 +217,7 @@ it('opens a title-only change field by field', () => {
       notes=''
     />,
   );
-  expect(screen.getByRole('button', { name: 'Changes' })).toHaveAttribute(
+  expect(screen.getByRole('button', { name: 'Compare' })).toHaveAttribute(
     'aria-pressed',
     'true',
   );
