@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Folds that say what they show and open into view
+
+- Technical details › Runs no longer shows "Source snapshot for this run" for runs that read no forum posts (every run but community replies), where it opened a single grey line out of view. A run that read posts lists them under "Posts the Agent read": each topic with its post count and whether it was complete, the first five shown and "N more topics" for the rest.
+- Every fold (`Reveal`) keeps its label with a chevron once open instead of turning into a bare "Collapse", and scrolls what it opened into view. A live change without release notes no longer offers an empty Release notes fold.
+
 ## Unreleased — Articles reviewed as their readers see them
 
 - The article review card opens with a preview of the article: the title, the description as the lede and the body rendered with its headings, lists, tables, code and images, at a reading width and size like Medium or dev.to. Preview and Changes switch per language; Preview is first when the body changed or the article is new. Show before flips to the version the change was written from.

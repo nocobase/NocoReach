@@ -4707,6 +4707,8 @@
   "taskDetail.actualModelNotReported": "未報告實際模型",
   "taskDetail.unknownRunner": "未知 Runner",
   "taskDetail.sourceSnapshotRun": "本次資料快照",
+  "taskDetail.postsAgentRead": "Agent 讀到的貼文",
+  "taskDetail.moreTopics": "還有 {0} 個話題",
   "taskDetail.runNoRecordedEvents": "本次執行沒有事件記錄",
   "taskDetail.sourceSource": "來源：{source}",
   "taskDetail.viewCountRuns": "檢視全部 {count} 次執行",

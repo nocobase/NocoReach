@@ -4783,6 +4783,8 @@
   "taskDetail.actualModelNotReported": "Model aktual tidak dilaporkan",
   "taskDetail.unknownRunner": "Runner tidak dikenal",
   "taskDetail.sourceSnapshotRun": "Cuplikan sumber untuk eksekusi ini",
+  "taskDetail.postsAgentRead": "Postingan yang dibaca agen",
+  "taskDetail.moreTopics": "{0} topik lainnya",
   "taskDetail.runNoRecordedEvents": "Tidak ada peristiwa yang tercatat untuk eksekusi ini.",
   "taskDetail.sourceSource": "Sumber: {source}",
   "taskDetail.viewCountRuns": "Lihat semua {count} eksekusi",
