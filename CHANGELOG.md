@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Skill summaries in every UI language
+
+- Skills shows the 18 product Skills' "when to use" as a short summary in the UI language, in the list, in search and in the Skill drawer, whose ⓘ shows the original text the Agent reads. Names, bodies and the description the Agent gets stay unchanged; edited and custom Skills show as written. The sync script now unescapes quoted YAML descriptions, which removes stray backslashes from the bundled community-marketing description.
+
 ## Unreleased — Competitors: a lookup that did not complete is tried again the next day
 
 - Search & market › Competitors kept a site's failed DataForSEO lookup for 30 days, like a successful one: its error stayed in the site's drawer and its traffic stayed empty until the monthly refresh. On Studio, our own site still showed `Operator "$gte" is not supported for Field "createdAt" of type "datetime"` from a lookup on 2026-10-09, before the classic filter bridge learned datetime comparisons (#13); DataForSEO lookups have worked since. A site whose last lookup did not complete is now due again a day later, at the daily refresh or when the page is opened. Only the failed parts cost again: DataForSEO reuses completed runs, and an uncertain run still blocks its query for the reuse time.

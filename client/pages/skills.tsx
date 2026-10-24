@@ -15,7 +15,7 @@ import {Sheet,SheetContent,SheetHeader,SheetTitle} from '#components/ui/sheet';
 import {cn} from '#lib/utils';
 import {useProject,useUnsavedWarning} from './reach-data';
 import {playbookRequest,localizePlaybookList,type PlaybookList} from './playbook-model';
-import {skillRequest,readSkillFiles,skillFor,SKILL_NAME,type LinkRead,type Skill,type SkillList} from './skill-model';
+import {skillRequest,readSkillFiles,skillFor,skillSummary,SKILL_NAME,type LinkRead,type Skill,type SkillList} from './skill-model';
 import {confirmAction} from '#components/reach/confirm';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#components/ui/select';
 // Skills (SPEC §6.0): how a kind of work is done, as SKILL.md (name, when to use it, how) and files that come with it. One
@@ -34,7 +34,7 @@ export default function SkillsPage(){
  useEffect(load,[project?.id]);
  // Which 做法 steps name each Skill, from this project's playbooks.
  useEffect(()=>{if(!project)return;void playbookRequest<PlaybookList>('list',project.id).then(setRawPlaybooks).catch(()=>undefined);},[project?.id]);
- const visible=useMemo(()=>(list?.skills||[]).filter(s=>(!filter||(filter==='on')===s.enabled)&&(!q.trim()||`${s.name} ${s.description}`.toLowerCase().includes(q.trim().toLowerCase()))),[list,q,filter]);
+ const visible=useMemo(()=>(list?.skills||[]).filter(s=>(!filter||(filter==='on')===s.enabled)&&(!q.trim()||`${s.name} ${skillSummary(s)} ${s.description}`.toLowerCase().includes(q.trim().toLowerCase()))),[list,q,filter]);
  async function toggle(s:Skill,enabled:boolean){if(!project||!canEnable)return;setError('');setList(l=>l&&{...l,skills:l.skills.map(x=>x.id===s.id?{...x,enabled}:x)});
   try{await skillRequest('setEnabled',project.id,{skillId:s.id,enabled});setNotice(() => (enabled?$t('skills.enabledProject',{0:s.name}):$t('skills.turnedOffProject',{0:s.name})));}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.notChangedTryAgain')));load();}}
  // Built-in Skills remain editable; only untouched seed metadata is safe to translate.
@@ -55,7 +55,7 @@ export default function SkillsPage(){
     <thead data-slot="table-header" className="text-xs text-muted-foreground"><tr>{canRemove&&<th className="py-2 pr-0 pl-3"><input type="checkbox" aria-label={$t('common.select')} checked={allTicked} onChange={e=>setPicked(e.target.checked?visible.map(s=>s.id):[])}/></th>}{[$t('skills.nameWhenUse'),$t('skills.usedPlaybooks'),$t('skills.attachedFiles')].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}<th className="px-3 py-2 text-left font-medium"><WithInfo help={$t('skills.projectEnablementHelp')}>{$t('skills.currentProject')}</WithInfo></th></tr></thead>
     <tbody>{visible.map(s=><tr key={s.id} data-skill-id={s.id} className="cursor-pointer border-t transition-colors hover:bg-muted/40" onClick={()=>setOpen(s.id)}>
      {canRemove&&<td className="py-2.5 pr-0 pl-3" onClick={e=>e.stopPropagation()}><input type="checkbox" aria-label={$t('common.selectValue',{0:s.name})} checked={picked.includes(s.id)} onChange={e=>setPicked(e.target.checked?[...picked,s.id]:picked.filter(x=>x!==s.id))}/></td>}
-     <td className="px-3 py-2.5"><button type="button" className="block w-full truncate text-left font-mono font-medium hover:underline" onClick={e=>{e.stopPropagation();setOpen(s.id);}}>{s.name}</button><p className="truncate text-xs text-muted-foreground">{s.builtIn&&s.createdAt&&s.createdAt===s.updatedAt?$legacyText(s.description):s.description}</p></td>
+     <td className="px-3 py-2.5"><button type="button" className="block w-full truncate text-left font-mono font-medium hover:underline" onClick={e=>{e.stopPropagation();setOpen(s.id);}}>{s.name}</button><p className="truncate text-xs text-muted-foreground">{skillSummary(s)}</p></td>
      <td className="truncate px-3 py-2.5 text-xs text-muted-foreground" title={(usage[s.id]||[]).join('、')}>{(usage[s.id]||[]).join('、')||'—'}</td>
      <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">{s.files.length}</td>
      <td className="px-3 py-2.5" onClick={e=>e.stopPropagation()}><Switch aria-label={$t('skills.enableProjectValue',{0:s.name})} checked={s.enabled} disabled={!canEnable} onCheckedChange={v=>void toggle(s,v)}/></td></tr>)}</tbody></table></div>
@@ -151,7 +151,7 @@ function SkillDrawer({projectId,canEnable,canRemove,skill,usage,onClose,onToggle
     <label className="nr-field">{$t('skills.how')}<textarea rows={16} value={draft.body} className="font-mono text-xs" onChange={e=>setDraft({...draft,body:e.target.value})}/></label>
     <div className="flex gap-2"><Button size="sm" disabled={busy||!draft.name.trim()||!draft.description.trim()||!draft.body.trim()} onClick={()=>void act('edit',{name:draft.name.trim().toLowerCase(),description:draft.description,body:draft.body},() => ($t('skills.savedLaterTasksUseNew')))}>{$t('common.save')}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setDraft(null);setError('');}}>{$t('common.cancel')}</Button></div>
    </div>:<>
-    <div><h3 className="text-xs font-medium text-muted-foreground">{$t('skills.whenUse')}</h3><p className="mt-1 whitespace-pre-wrap text-sm">{skill.description}</p></div>
+    <div><h3 className="text-xs font-medium text-muted-foreground"><WithInfo help={skill.summaryKey?$t('skills.originalForAgent',{0:skill.description}):undefined}>{$t('skills.whenUse')}</WithInfo></h3><p className="mt-1 whitespace-pre-wrap text-sm">{skillSummary(skill)}</p></div>
     <div><h3 className="text-xs font-medium text-muted-foreground">{$t('skills.howSkillMdBody')}</h3><div className="mt-1 max-h-[50vh] overflow-y-auto whitespace-pre-wrap rounded-lg border bg-muted/30 p-3 font-mono text-xs leading-relaxed">{content?content.body:$t('common.loadingLoading')}</div></div>
    </>}
    <div className="flex flex-col gap-1.5"><h3 className="text-xs font-medium text-muted-foreground">{$t('skills.attachedFiles')}</h3>
