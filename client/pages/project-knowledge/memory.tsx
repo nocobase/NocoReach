@@ -17,6 +17,12 @@ import { Button } from '#components/ui/button';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { toast } from '#lib/toast';
+import type { SupportedLocale } from '../../../shared/i18n/locales';
+import {
+  contentLanguageName,
+  contentLanguageOf,
+  contentLanguages,
+} from '../content-language';
 import { help } from '../glossary';
 import {
   day,
@@ -472,11 +478,7 @@ function Row({
     </div>
   );
 }
-// AI 写的内容用的语言 (2026-10-07): the analysis, opportunities, task documents and 记忆 follow it. Saved at once.
-const getLanguageNames = (): Record<'zh-CN' | 'en-US', string> => ({
-  'zh-CN': $t('common.chineseLanguage'),
-  'en-US': 'English',
-});
+// AI content language (2026-10-07): the analysis, opportunities, task documents and Memory follow it. Saved at once.
 function LanguageSetting({
   context,
 }: {
@@ -484,9 +486,9 @@ function LanguageSetting({
 }): ReactElement {
   const { project, projectSaved } = context;
   const { can: canEdit } = useBusinessAccess('nrProjects.edit', project.id);
-  const value = project.language === 'en-US' ? 'en-US' : 'zh-CN',
+  const value = contentLanguageOf(project.language),
     [busy, setBusy] = useState(false);
-  async function change(next: 'zh-CN' | 'en-US') {
+  async function change(next: SupportedLocale) {
     if (!canEdit || next === value) return;
     setBusy(true);
     try {
@@ -496,7 +498,7 @@ function LanguageSetting({
       });
       projectSaved(() =>
         $t('projectKnowledge.changedAiWrittenContentUses', {
-          0: getLanguageNames()[next],
+          0: contentLanguageName(next),
         }),
       );
     } catch (e) {
@@ -514,24 +516,22 @@ function LanguageSetting({
       <Select
         value={value}
         disabled={busy || !canEdit}
-        onValueChange={(v) => void change(v as 'zh-CN' | 'en-US')}
+        onValueChange={(v) => void change(v as SupportedLocale)}
       >
         <SelectTrigger
           className='w-full sm:w-40'
           aria-label={$t('common.languageAiWrittenContent')}
         >
           <SelectValue>
-            {(v: string) => getLanguageNames()[v as 'zh-CN' | 'en-US'] ?? v}
+            {(v: string) => contentLanguageName(v as SupportedLocale)}
           </SelectValue>
         </SelectTrigger>
         <SelectContent className='w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal'>
-          {(Object.keys(getLanguageNames()) as ('zh-CN' | 'en-US')[]).map(
-            (k) => (
-              <SelectItem key={k} value={k}>
-                {getLanguageNames()[k]}
-              </SelectItem>
-            ),
-          )}
+          {contentLanguages.map((k) => (
+            <SelectItem key={k} value={k}>
+              {contentLanguageName(k)}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
       <InfoTip label={$t('common.info')}>
