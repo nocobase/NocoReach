@@ -36,7 +36,7 @@ test('discover tries the usual sitemap addresses only when nothing else was read
  let {d,asked}=await run({'https://ex.com/robots.txt':'Sitemap: https://ex.com/old.xml','https://ex.com/wp-sitemap.xml':urlset});
  assert.deepEqual(d.sitemaps,['https://ex.com/wp-sitemap.xml']);assert.deepEqual(asked,['https://ex.com/robots.txt','https://ex.com/old.xml','https://ex.com/sitemap.xml','https://ex.com/sitemap_index.xml','https://ex.com/sitemap-index.xml','https://ex.com/wp-sitemap.xml']);
  // A site whose sitemap reads makes no extra requests.
- ({d,asked}=await run({'https://ex.com/sitemap.xml':urlset}));
+ ({asked}=await run({'https://ex.com/sitemap.xml':urlset}));
  assert.deepEqual(asked,['https://ex.com/robots.txt','https://ex.com/sitemap.xml','https://ex.com/sitemap_index.xml']);
  // None of them: still the clear 422.
  ({d}=await run({}));assert.equal(d.status,422);

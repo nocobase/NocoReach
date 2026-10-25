@@ -12,7 +12,7 @@ export const STATE_TONE={todo:'grey',doing:'blue',review:'violet',attention:'amb
 const STATE_NAME_TONE:Record<string,Tone>={todo:'grey',ready:'grey',soon:'grey',pending:'grey',doing:'blue',running:'blue',queued:'grey',review:'violet',partial:'amber','needs-admin':'amber',attention:'amber',done:'green',connected:'green',succeeded:'green',planned:'slate',closed:'slate',error:'red',failed:'red'};
 export const stateToneOf=(state:string):Tone=>STATE_NAME_TONE[state]??'grey';
 export function Tag({tone,dot=false,icon,children,className,...props}:Omit<ComponentProps<'span'>,'children'>&{tone:Tone;dot?:boolean;icon?:ReactNode;children:ReactNode}):ReactElement{
- return <span data-slot="tag" data-tone={tone} className={cn('inline-flex w-fit shrink-0 items-center gap-1 rounded-full px-2 py-0 badge-text font-medium whitespace-nowrap [&_svg]:size-3 [&_svg]:shrink-0',TONE_CLASS[tone],className)} {...props}>
-  {icon??(dot?<span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-current"/>:null)}{children}
+ return <span data-slot='tag' data-tone={tone} className={cn('inline-flex w-fit shrink-0 items-center gap-1 rounded-full px-2 py-0 badge-text font-medium whitespace-nowrap [&_svg]:size-3 [&_svg]:shrink-0',TONE_CLASS[tone],className)} {...props}>
+  {icon??(dot?<span aria-hidden='true' className='size-1.5 shrink-0 rounded-full bg-current'/>:null)}{children}
  </span>;
 }

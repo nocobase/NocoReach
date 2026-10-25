@@ -1,4 +1,4 @@
-import { $t, getCurrentLocale, $legacyText } from "#i18n";
+import { $t, getCurrentLocale, $legacyText } from '#i18n';
 // What a metric or a concept means, shown in its ⓘ (user request 2026-10-04). One place, keyed by the name people see,
 // so the same word reads the same everywhere.
 export const getGlossary = (): Readonly<Record<string, string>> => ({
@@ -11,7 +11,7 @@ export const getGlossary = (): Readonly<Record<string, string>> => ({
   接近首页: $t('glossary.queriesWhoseBestPageRanks'),
   接近首页的查询: $t('glossary.queriesWhoseBestPageRanks'),
   本站排名: $t('glossary.averageGooglePositionOverLast'),
-  "Search Console 排名": $t('glossary.averagePositionOverLast28'),
+  'Search Console 排名': $t('glossary.averagePositionOverLast28'),
   本站点击: $t('glossary.actualClicksKeywordBroughtSite'),
   // GA4
   会话: $t('glossary.oneVisitCountsOneSession'),
@@ -41,19 +41,19 @@ export const getGlossary = (): Readonly<Record<string, string>> => ({
   估算流量: $t('glossary.monthlyClicksEstimatedRankingsSearch'),
   自然搜索流量: $t('glossary.monthlyOrganicSearchClicksEstimated'),
   排名关键词: $t('glossary.keywordsWebsiteRanksGoogleTop'),
-  "前 10": $t('glossary.rankingKeywordsTop10'),
-  "Google 关注度": $t('glossary.relativeInterestGoogleTrendsOver'),
-  "AI 提及份额": $t('glossary.latestAiSearchBrandCheck'),
-  "近 30 天": $t('glossary.newPagesFoundLast30'),
+  '前 10': $t('glossary.rankingKeywordsTop10'),
+  'Google 关注度': $t('glossary.relativeInterestGoogleTrendsOver'),
+  'AI 提及份额': $t('glossary.latestAiSearchBrandCheck'),
+  '近 30 天': $t('glossary.newPagesFoundLast30'),
   最新排名: $t('glossary.rankPageGoogleTop100'),
   // GitHub and packages
-  "新增 Star": $t('glossary.starsAddedMinusStarsRemoved'),
-  "Star 总数": $t('glossary.currentStarsRepository'),
-  "新增 Fork": $t('glossary.newForksSelectedPeriod'),
+  '新增 Star': $t('glossary.starsAddedMinusStarsRemoved'),
+  'Star 总数': $t('glossary.currentStarsRepository'),
+  '新增 Fork': $t('glossary.newForksSelectedPeriod'),
   仓库浏览: $t('glossary.timesRepositoryPagesViewedGithub'),
   克隆: $t('glossary.timesRepositoryClonedGitClone'),
   下载量: $t('glossary.combinedDailyDownloadsNpmPypi'),
-  "Docker 拉取": $t('glossary.dockerHubPublishesTotalPulls'),
+  'Docker 拉取': $t('glossary.dockerHubPublishesTotalPulls'),
   // Community
   新主题: $t('glossary.newForumTopicsSelectedPeriod'),
   回复: $t('glossary.repliesSelectedPeriodCountedLatest'),
@@ -65,7 +65,7 @@ export const getGlossary = (): Readonly<Record<string, string>> => ({
   // Trends and AI search
   相对热度: $t('glossary.googleTrendsRelativeValuePeak'),
   提及份额: $t('glossary.timesAiAnswersMentionShare'),
-  "AI 搜索量": $t('glossary.dataforseoEstimateHowOftenQuestion'),
+  'AI 搜索量': $t('glossary.dataforseoEstimateHowOftenQuestion'),
   // Lighthouse
   性能: $t('glossary.lighthouseScore010090'),
   无障碍: $t('glossary.lighthouseScore0100Whether'),
@@ -75,7 +75,7 @@ export const getGlossary = (): Readonly<Record<string, string>> => ({
   CLS: $t('glossary.howMuchLayoutJumpsWhile'),
   TBT: $t('glossary.totalTimeMainThreadBlocked'),
   FCP: $t('glossary.timeUntilFirstContentAppears'),
-  "Speed Index": $t('glossary.howFastPageContentShows'),
+  'Speed Index': $t('glossary.howFastPageContentShows'),
   TTI: $t('glossary.timeUntilPageRespondsSmoothly'),
   服务器响应: $t('glossary.timeFirstByteServerUnder'),
   执行者: $t('glossary.whoPerformsStepAgentsUse'),
@@ -84,8 +84,8 @@ export const getGlossary = (): Readonly<Record<string, string>> => ({
   知识库: $t('glossary.materialLookedUpWhenNeeded'),
   做法: $t('glossary.stepsKindWorkWhoStep'),
   Skills: $t('glossary.instructionsTeachAgentHowSomething'),
-  "Agent": $t('glossary.agentUsesRunnerResearchDocuments'),
-  "在线 AI": $t('glossary.modelServerNocobaseAiPlugin'),
+  'Agent': $t('glossary.agentUsesRunnerResearchDocuments'),
+  '在线 AI': $t('glossary.modelServerNocobaseAiPlugin'),
   数据健康: $t('glossary.whetherDataSourceLatestSync'),
   月度预算: $t('glossary.mostProjectDataforseoQueriesThrough'),
   结果不确定: $t('glossary.requestGotNoClearResult'),

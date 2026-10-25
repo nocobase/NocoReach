@@ -1,8 +1,8 @@
-import { useMessageState, $t, $legacyText } from "#i18n";
+import { useMessageState, $t, $legacyText } from '#i18n';
 import {useWorkspaceCache} from './workspace-cache';
 import {useEffect,useState} from 'react';
 import {useLocation} from 'react-router';
-import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {nocobaseClient as api} from '#lib/nocoreach-api';
 import {currentProjectId,rememberProject} from './current-project';
 import {confirmUnsavedLeave} from '#components/reach/confirm';
 import type {SupportedLocale} from '../../shared/i18n/locales';
@@ -25,7 +25,7 @@ export type ProjectList=Project[];
 // record (`nrSnapshots:list`) is gone: an empty list is the answer, and the page offers to create the first project.
 export async function loadProjects():Promise<Project[]>{const list=await api.action<Project[]>('nrProjects','list',{method:'POST',body:{},unwrap:'data'});if(!Array.isArray(list))throw new Error($t('reachData.dataResponseMalformedTryAgain'));return list;}
 export function useProjects(){const cache=useWorkspaceCache();const [list,setList]=useState<Project[]|undefined>(()=>cache.peek<Project[]>('projects')),[error,setError]=useMessageState('');
- useEffect(()=>{let active=true,sequence=0;const load=()=>{const request=++sequence;return cache.load('projects',loadProjects,true).then(r=>{if(active&&request===sequence){setList(r);setError('');}}).catch(e=>{if(active&&request===sequence)setError(() => ($legacyText(String(e))));});};void load();window.addEventListener('reach-project-saved',load);return()=>{active=false;window.removeEventListener('reach-project-saved',load);};},[]);
+ useEffect(()=>{let active=true,sequence=0;const load=()=>{const request=++sequence;return cache.load('projects',loadProjects,true).then(r=>{if(active&&request===sequence){setList(r);setError('');}}).catch(e=>{if(active&&request===sequence)setError(() => ($legacyText(String(e))));});};void load();const onSaved=()=>{void load();};window.addEventListener('reach-project-saved',onSaved);return()=>{active=false;window.removeEventListener('reach-project-saved',onSaved);};},[cache, setError]);
  return {projects:list,error};}
 // The project chosen in the header (kept in this browser); the first project when that one no longer exists.
 export function useProject(){
@@ -35,14 +35,15 @@ export function useProject(){
  const linkedProject=/^\/actions\/[^/]+\/?$/.test(location.pathname)?new URLSearchParams(location.search).get('projectId'):null;
  const wanted=linkedProject===null?currentProjectId():/^[1-9]\d{0,15}$/.test(linkedProject)?Number(linkedProject):NaN;
  const project=projects?.find(p=>Number(p.id)===wanted)||(linkedProject===null?projects?.[0]:undefined);
- useEffect(()=>{if(project&&Number(project.id)!==currentProjectId())rememberProject(Number(project.id));},[project?.id]);
+ const activeProjectId=project?.id;
+ useEffect(()=>{if(activeProjectId&&Number(activeProjectId)!==currentProjectId())rememberProject(Number(activeProjectId));},[activeProjectId]);
  const error=listError||(projects&&(!projects.length||(linkedProject!==null&&!project))?$t('reachData.projectDataNotFound'):'')||(!projects&&timedOut?$t('reachData.loadingProjectTimedOutReload'):'');
  return {record:project?{id:Number(project.id),key:'project',payload:project}:undefined,project,error};
 }
 export function ProjectIcon({projectId,name}:{projectId?:number;name?:string}){const cache=useWorkspaceCache();const [icon,setIcon]=useState<string|null>(()=>cache.peek<{dataUrl:string|null}>(`project-icon:${projectId}`)?.dataUrl??null),[broken,setBroken]=useState(false);
- useEffect(()=>{if(!projectId)return;let active=true;void cache.load(`project-icon:${projectId}`,()=>api.action<{dataUrl:string|null}>('nrProjectIcon','get',{method:'POST',body:{projectId:String(projectId)},unwrap:'data'})).then(r=>{if(active)setIcon(r?.dataUrl||null);}).catch(()=>undefined);return()=>{active=false;};},[projectId]);
- return icon&&!broken?<img src={icon} alt="" data-project-icon className="size-8 shrink-0 rounded-lg border border-border bg-white object-contain p-0.5" onError={()=>setBroken(true)}/>:<span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">{name?.slice(0,1)||'·'}</span>;}
-export function ProjectIdentity(){const {project,error}=useProject();return <div className="flex min-w-0 items-center gap-3" title={error||$t('common.currentProject')}><ProjectIcon projectId={project?.id} name={project?.name}/><div className="min-w-0"><div className="truncate text-sm font-semibold">{project?.name||(error?$t('common.notLoadProject'):$t('common.loadingProject'))}</div><div className="truncate text-xs text-muted-foreground">{project?.domains.join(', ')||$t('common.currentProject')}</div></div></div>;}
+ useEffect(()=>{if(!projectId)return;let active=true;void cache.load(`project-icon:${projectId}`,()=>api.action<{dataUrl:string|null}>('nrProjectIcon','get',{method:'POST',body:{projectId:String(projectId)},unwrap:'data'})).then(r=>{if(active)setIcon(r?.dataUrl||null);}).catch(()=>undefined);return()=>{active=false;};},[cache, projectId]);
+ return icon&&!broken?<img src={icon} alt='' data-project-icon className='size-8 shrink-0 rounded-lg border border-border bg-white object-contain p-0.5' onError={()=>setBroken(true)}/>:<span className='grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground'>{name?.slice(0,1)||'·'}</span>;}
+export function ProjectIdentity(){const {project,error}=useProject();return <div className='flex min-w-0 items-center gap-3' title={error||$t('common.currentProject')}><ProjectIcon projectId={project?.id} name={project?.name}/><div className='min-w-0'><div className='truncate text-sm font-semibold'>{project?.name||(error?$t('common.notLoadProject'):$t('common.loadingProject'))}</div><div className='truncate text-xs text-muted-foreground'>{project?.domains.join(', ')||$t('common.currentProject')}</div></div></div>;}
 // A link clicked with unsaved input is held while the application's dialog asks; if leaving is confirmed the same link
 // is clicked again and let through (UI review 2026-10-22: no browser confirm).
 export function useUnsavedWarning(dirty:boolean){

@@ -135,13 +135,13 @@ test('Reddit page counts threads first seen in the range, subreddits and visits 
 // before dates were read get them from one search without the past-month limit; the page counts by post date.
 test('post dates: advanced results, one backfill search for threads found earlier, counted by the day posted',async()=>{
  const spec=specification({term:'NocoBase'});assert.equal(spec.path,'serp/google/organic/live/advanced');assert.equal(spec.estimatedUsd,0.1);
- const {s,calls,repos}=service({reply:()=>serp([{type:'organic',url:'https://www.reddit.com/r/nocode/comments/old1/x/',title:'Old one',timestamp:'2023-05-02 10:00:00 +00:00'}])});
+ const {s,calls}=service({reply:()=>serp([{type:'organic',url:'https://www.reddit.com/r/nocode/comments/old1/x/',title:'Old one',timestamp:'2023-05-02 10:00:00 +00:00'}])});
  const now=Date.now(),at=n=>new Date(now-n*DAY).toISOString();
  await s.mutate('1',()=>({terms:['NocoBase'],status:'active',retainedFrom:at(10).slice(0,10),lastRun:{at:at(8),ok:true},posts:{old1:{id:'old1',subreddit:'nocode',title:'Old one',url:'https://www.reddit.com/r/nocode/comments/old1/x/',firstSeenAt:at(10),lastSeenAt:at(10),postedAt:null}}}));
  await s.check('1');assert.equal(calls.length,1);assert.equal(calls[0].search_param,undefined,'the backfill reads without the past-month limit');
- let st=await s.state('1');assert.equal(st.posts.old1.postedAt,'2023-05-02');assert.ok(st.datesReadAt);
+ const st=await s.state('1');assert.equal(st.posts.old1.postedAt,'2023-05-02');assert.ok(st.datesReadAt);
  await s.mutate('1',cur=>({...cur,lastRun:{...cur.lastRun,at:at(8)}}));await s.check('1');assert.equal(calls[1].search_param,'&tbs=qdr:m','afterwards, the past month again');
- const view=await s.view('1',{range:'28'},(end,range)=>({start:new Date(now-28*DAY).toISOString().slice(0,10),end,previousStart:new Date(now-56*DAY).toISOString().slice(0,10),previousEnd:new Date(now-29*DAY).toISOString().slice(0,10)}));
+ const view=await s.view('1',{range:'28'},(end,_range)=>({start:new Date(now-28*DAY).toISOString().slice(0,10),end,previousStart:new Date(now-56*DAY).toISOString().slice(0,10),previousEnd:new Date(now-29*DAY).toISOString().slice(0,10)}));
  assert.equal(view.kpis[0].label,'新帖子');assert.equal(view.kpis[0].value,0,'a thread posted in 2023 is not new, though found 10 days ago');
 });
 

@@ -104,7 +104,7 @@ export function XiaohongshuConnect({
     projectId,
   );
   const { session, refresh } = useAuthentication();
-  const locale = useNocoReachLocale();
+  useNocoReachLocale();
   const accessRef = useRef({
     connect: canConnect,
     test: canTest,

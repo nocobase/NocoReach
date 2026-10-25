@@ -1,7 +1,7 @@
-import { renderMessage, type Message, $t } from "#i18n";
+import { renderMessage, type Message, $t } from '#i18n';
 import {useEffect,type ReactElement} from 'react';
 import {useNavigate} from 'react-router';
-import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {nocobaseClient as api} from '#lib/nocoreach-api';
 import {request} from './service';
 import {draftFromOpportunity,type StrategyState} from './model';
 import {citedSignals,type Row} from './board';
@@ -27,7 +27,7 @@ export function handOffResult(row:Row,r:{taskId?:number;started:boolean},_kind?:
 // where the task waits for 确定开始执行. Only a hand-off that made no task stays here.
 export function HandOffNotice({result}:{result?:HandOffResult}):ReactElement|null{
  const navigate=useNavigate();
- useEffect(()=>{if(result?.taskId)navigate(`/actions/${result.taskId}`);},[result]);
+ useEffect(()=>{if(result?.taskId)void navigate(`/actions/${result.taskId}`);},[navigate, result]);
  if(!result||result.taskId)return null;
- return <p role="status" className={result.ok?'nr-success':'nr-error'}>{renderMessage(result.text)}</p>;
+ return <p role='status' className={result.ok?'nr-success':'nr-error'}>{renderMessage(result.text)}</p>;
 }

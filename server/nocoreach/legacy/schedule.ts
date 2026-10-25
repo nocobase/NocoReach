@@ -8,11 +8,12 @@
 // schedule's own row (`scheduleDefinitions`) — read-only, never written — so the service's retry and catch-up timer
 // stops when an administrator switches the schedule off, as it did for a disabled workflow.
 import type { DatabaseManager } from '@nocobase/db';
+import type { JsonObject } from '@nocobase/app-plugin-scheduler/server';
 
 import { legacyRecord, type LegacyDatabase, type LegacyRecord, type LegacyRepository } from './database.js';
 import { toFilter } from './filters.js';
 
-type Values = Record<string, any>;
+type Values = Record<string, unknown>;
 
 /** The classic `Instruction` the daily analysis subclasses: `new Instruction(workflow).run()` → `{ status, result }`. */
 export type LegacyInstruction = new (workflow?: unknown) => { run(...args: unknown[]): Promise<{ status: number; result?: unknown }> };
@@ -61,7 +62,7 @@ export class LegacyWorkflows {
         config: { mode: 0, repeat: row.cron, timezone: row.timezone },
       });
     const find = async (options: Values = {}) => {
-      const title = options.filter?.title;
+      const title = (options.filter as Values | undefined)?.title;
       const titles = typeof title === 'string' ? [title] : Object.keys(this.schedules);
       const out: LegacyRecord[] = [];
       for (const t of titles) {
@@ -92,7 +93,7 @@ export interface ScheduledRun {
   readonly acceptedAt: string;
   readonly updatedAt: string;
   readonly reason?: string;
-  readonly result?: Values;
+  readonly result?: JsonObject;
 }
 
 /** A run that has not finished this long after it last moved was cut off by a restart and will not report. */

@@ -1,5 +1,5 @@
 import './task-table.css';
-import { $t, $tj } from "#i18n";
+import { $t, $tj } from '#i18n';
 import {useState,type ReactElement} from 'react';
 import {MoreHorizontal} from 'lucide-react';
 import {ActorAvatar} from '#components/reach/actor';
@@ -24,26 +24,26 @@ export type WorkCard={id:number;title:string;brief:string;status:string;updatedA
 // The owner: the one set on the task, or whoever created it before anything happened on it (2026-10-08).
 const ownerOf=(t:WorkCard)=>t.evidence?.work?.humanOwnerName||t.evidence?.createdBy?.name||'';
 // The short task number (T-12); the long record id is never shown.
-const No=({t}:{t:WorkCard})=>t.evidence?.no?<span className="font-mono text-xs text-muted-foreground tabular-nums">T-{t.evidence.no}</span>:null;
+const No=({t}:{t:WorkCard})=>t.evidence?.no?<span className='font-mono text-xs text-muted-foreground tabular-nums'>T-{t.evidence.no}</span>:null;
 export type TaskAction='close'|'reopen';
 type Action=(task:WorkCard,action:TaskAction)=>void;
 const dot:Record<BoardState,string>={todo:'bg-nr-ink-grey',doing:'bg-nr-ink-blue',review:'bg-nr-ink-violet',done:'bg-nr-ink-green'};
 // Small parts shared by the table and the board (NocoProject look: dot pill, the shared actor avatar, executor as agent avatar + name).
-function Avatar({name}:{name?:string}){return name?<span title={name} className="inline-flex"><ActorAvatar type="user" name={name} size="sm"/></span>:<span className="text-muted-foreground">—</span>;}
+function Avatar({name}:{name?:string}){return name?<span title={name} className='inline-flex'><ActorAvatar type='user' name={name} size='sm'/></span>:<span className='text-muted-foreground'>—</span>;}
 // The Agent by name, as the task page header shows it (2026-10-21: a bare "Agent" told nothing); Unassigned when none.
 function Executor({w,agents}:{w?:Work;agents?:AgentStatus}){
- if(!agents)return w?.agentName?<span className="truncate">{w.agentName}</span>:<span className="text-muted-foreground">—</span>;
- const a=taskAgentOf(w,agents);if(!a)return <span className="truncate text-muted-foreground">{$t('taskAgents.unassigned')}</span>;
- return <span className="flex min-w-0 items-center gap-1.5" title={a.name}><span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full',a.online?'bg-nr-ink-green':'bg-muted-foreground/50')}/>
-  <span className="truncate">{a.name}</span><span className="sr-only">{a.online?$t('taskDetail.agentOnline'):$t('taskDetail.agentOffline')}</span></span>;}
+ if(!agents)return w?.agentName?<span className='truncate'>{w.agentName}</span>:<span className='text-muted-foreground'>—</span>;
+ const a=taskAgentOf(w,agents);if(!a)return <span className='truncate text-muted-foreground'>{$t('taskAgents.unassigned')}</span>;
+ return <span className='flex min-w-0 items-center gap-1.5' title={a.name}><span aria-hidden='true' className={cn('size-1.5 shrink-0 rounded-full',a.online?'bg-nr-ink-green':'bg-muted-foreground/50')}/>
+  <span className='truncate'>{a.name}</span><span className='sr-only'>{a.online?$t('taskDetail.agentOnline'):$t('taskDetail.agentOffline')}</span></span>;}
 const StatusTag=({t}:{t:WorkCard})=><TaskStatusTag work={t.evidence?.work} status={t.status}/>;
-function StepCell({w,muted='—'}:{w?:Work;muted?:string}){const s=stepOf(w);if(!s)return <span className="text-muted-foreground">{muted}</span>;return s.tone?<Tag tone={s.tone}>{s.text}</Tag>:<span className="truncate text-muted-foreground">{s.text}</span>;}
+function StepCell({w,muted='—'}:{w?:Work;muted?:string}){const s=stepOf(w);if(!s)return <span className='text-muted-foreground'>{muted}</span>;return s.tone?<Tag tone={s.tone}>{s.text}</Tag>:<span className='truncate text-muted-foreground'>{s.text}</span>;}
 function Menu({t,busy,moves,onMove,onAction}:{t:WorkCard;busy?:boolean;moves?:{col:BoardState;siblings:WorkCard[]};onMove?:(t:WorkCard,state:BoardState,beforeId?:number)=>void;onAction?:Action}){
  const w=t.evidence?.work,index=moves?moves.siblings.findIndex(x=>x.id===t.id):-1,close=onAction&&closeCommand(w),reopen=onAction&&canReopen(w);
  if(!moves&&!close&&!reopen)return null;
- return <DropdownMenu><DropdownMenuTrigger render={<Button size="icon-sm" variant="ghost" aria-label={$t('common.moreActions',{0:t.title})} disabled={busy} onClick={e=>e.stopPropagation()}/>}><MoreHorizontal/></DropdownMenuTrigger><DropdownMenuContent align="end">
-  {close&&<DropdownMenuItem onClick={()=>onAction!(t,'close')}>{$t('common.closeTask')}</DropdownMenuItem>}
-  {reopen&&<DropdownMenuItem onClick={()=>onAction!(t,'reopen')}>{$t('common.reopen')}</DropdownMenuItem>}
+ return <DropdownMenu><DropdownMenuTrigger render={<Button size='icon-sm' variant='ghost' aria-label={$t('common.moreActions',{0:t.title})} disabled={busy} onClick={e=>e.stopPropagation()}/>}><MoreHorizontal/></DropdownMenuTrigger><DropdownMenuContent align='end'>
+  {close&&<DropdownMenuItem onClick={()=>onAction(t,'close')}>{$t('common.closeTask')}</DropdownMenuItem>}
+  {reopen&&<DropdownMenuItem onClick={()=>onAction(t,'reopen')}>{$t('common.reopen')}</DropdownMenuItem>}
   {moves&&onMove&&<>{close&&<DropdownMenuSeparator/>}{Object.entries(getWorkColumns()).filter(([k])=>k!==moves.col).map(([k,v])=><DropdownMenuItem key={k} onClick={()=>onMove(t,k as BoardState)}>{$tj('workBoard.move',{0:v})}</DropdownMenuItem>)}
    <DropdownMenuSeparator/><DropdownMenuItem disabled={index===0} onClick={()=>onMove(t,moves.col,moves.siblings[index-1]?.id)}>{$t('common.moveUp')}</DropdownMenuItem><DropdownMenuItem disabled={index===moves.siblings.length-1} onClick={()=>onMove(t,moves.col,moves.siblings[index+2]?.id)}>{$t('common.moveDown')}</DropdownMenuItem></>}
  </DropdownMenuContent></DropdownMenu>;
@@ -60,18 +60,18 @@ export function WorkBoard({tasks:visible,busy,list,agents,onMove,onOpen,onAction
    className={cn('flex flex-col gap-2',mine&&'cursor-grab','rounded-lg border bg-card p-3 text-card-foreground transition-colors hover:border-ring',over===String(t.id)&&'border-t-2 border-t-primary')}
    onDragStart={e=>{if(!mine){e.preventDefault();return;}setDrag(t.id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',String(t.id));}} onDragEnd={()=>{setDrag(null);setOver('');}}
    onDragOver={e=>{if(drag!==null&&!busy){e.preventDefault();e.stopPropagation();setOver(String(t.id));}}} onDrop={e=>{e.preventDefault();e.stopPropagation();drop(col,t.id);}}>
-   <div className="flex min-w-0 items-center gap-2"><No t={t}/><FoundBy source={taskSource(t)} className="ml-auto"/></div>
-   <h3 className="-mt-1.5 m-0 text-sm font-medium leading-snug"><button type="button" className="line-clamp-3 text-left hover:underline" onClick={()=>onOpen(t.id)}>{t.title}</button></h3>
-   {s&&(s.tone?<Tag tone={s.tone}>{s.text}</Tag>:<span className="text-xs text-muted-foreground">{s.text}</span>)}
-   <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"><Avatar name={ownerOf(t)}/><span className="min-w-0 flex-1"><Executor w={w} agents={agents}/></span><span className="shrink-0">{ago(t.updatedAt)}</span>
+   <div className='flex min-w-0 items-center gap-2'><No t={t}/><FoundBy source={taskSource(t)} className='ml-auto'/></div>
+   <h3 className='-mt-1.5 m-0 text-sm font-medium leading-snug'><button type='button' className='line-clamp-3 text-left hover:underline' onClick={()=>onOpen(t.id)}>{t.title}</button></h3>
+   {s&&(s.tone?<Tag tone={s.tone}>{s.text}</Tag>:<span className='text-xs text-muted-foreground'>{s.text}</span>)}
+   <div className='flex min-w-0 items-center gap-2 text-xs text-muted-foreground'><Avatar name={ownerOf(t)}/><span className='min-w-0 flex-1'><Executor w={w} agents={agents}/></span><span className='shrink-0'>{ago(t.updatedAt)}</span>
     {mine?<Menu t={t} busy={busy} moves={{col,siblings}} onMove={move} onAction={onAction}/>:null}</div>
   </article>;}
- if(list)return <div className="flex flex-col gap-2">{visible.map(card)}</div>;
- return <div className="relative grid gap-3 overflow-x-auto pb-1 [grid-template-columns:repeat(4,minmax(15rem,1fr))]" aria-label={$t('workBoard.taskBoard')}>{(Object.keys(getWorkColumns()) as BoardState[]).map(key=>{const cards=visible.filter(t=>state(t)===key);
+ if(list)return <div className='flex flex-col gap-2'>{visible.map(card)}</div>;
+ return <div className='relative grid gap-3 overflow-x-auto pb-1 [grid-template-columns:repeat(4,minmax(15rem,1fr))]' aria-label={$t('workBoard.taskBoard')}>{(Object.keys(getWorkColumns()) as BoardState[]).map(key=>{const cards=visible.filter(t=>state(t)===key);
   return <section key={key} aria-label={getWorkColumns()[key]} className={cn('flex min-w-0 flex-col gap-2 rounded-lg bg-muted/50 p-2',over===key&&'ring-2 ring-primary')}
    onDragOver={e=>{if(drag!==null&&!busy){e.preventDefault();setOver(key);}}} onDrop={e=>{e.preventDefault();drop(key);}}>
-   <header className="flex items-center gap-2 px-1 py-1 text-sm font-medium"><span aria-hidden="true" className={cn('size-2 rounded-full',dot[key])}/><h2 className="m-0 text-sm font-medium">{getWorkColumns()[key]}</h2><span className="text-xs font-normal text-muted-foreground tabular-nums">{cards.length}</span></header>
-   {cards.map(card)}{!cards.length&&<p className="px-1 py-4 text-center text-xs text-muted-foreground">{$t('workBoard.noTasks')}</p>}
+   <header className='flex items-center gap-2 px-1 py-1 text-sm font-medium'><span aria-hidden='true' className={cn('size-2 rounded-full',dot[key])}/><h2 className='m-0 text-sm font-medium'>{getWorkColumns()[key]}</h2><span className='text-xs font-normal text-muted-foreground tabular-nums'>{cards.length}</span></header>
+   {cards.map(card)}{!cards.length&&<p className='px-1 py-4 text-center text-xs text-muted-foreground'>{$t('workBoard.noTasks')}</p>}
   </section>;})}</div>;
 }
 // Table: one row per task, the row opens the task; 关闭任务 / 重新打开 in the row menu. Closed tasks show where they stood.

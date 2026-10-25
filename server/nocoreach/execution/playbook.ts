@@ -150,7 +150,7 @@ export class PlaybookStore {
       const source = all.find(p => p.id === v.playbookId);
       if (!source) return fail(systemMessageText('playbook.playbookNotExistRefreshTry'), 404);
       if (mine.filter(p => !SYSTEM_PLAYBOOKS.some(b => b.id === p.id)).length >= 50) return fail(systemMessageText('playbook.up50CustomPlaybooks'), 409);
-      const { system, edited, ...rest } = structuredClone(source);
+      const { system: _system, edited: _edited, ...rest } = structuredClone(source);
       const p: Playbook = { ...rest, id: `custom-${randomUUID().slice(0, 8)}`, name: systemMessageText('messages.copy', { 0: source.name }).slice(0, 40), version: 1, updatedAt: at, copiedFrom: source.id };
       mine.push(p); return p;
     });

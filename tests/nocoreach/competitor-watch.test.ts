@@ -93,11 +93,11 @@ test('AI 识别: candidates from the online AI with websites opened and reposito
 });
 
 test('编辑: name, website and repository can be corrected; a new website starts afresh; a repository-only competitor gets the website GitHub lists',async()=>{
- const {w,rows,calls,gh}=setup();
+ const {w,rows,calls}=setup();
  await w.add('1',{name:'ToolJet',repo:'ToolJet/ToolJet'});await w.checking;let c=(await w.status('1')).list[0];assert.equal(c.site,'');
  await assert.rejects(w.edit('1',{competitorId:c.id,name:'ToolJet',site:'',repo:''}),/至少填一个/);await assert.rejects(w.edit('1',{competitorId:c.id,name:'ToolJet',site:'nocobase.com'}),/本项目自己的网站/);await assert.rejects(w.edit('1',{competitorId:'nope',name:'X',site:'x.com'}),/不在列表里/);
  await w.add('1',{name:'Retool',site:'https://retool.com'});await w.checking;await assert.rejects(w.edit('1',{competitorId:c.id,name:'retool',repo:'ToolJet/ToolJet'}),/重复/);
- calls.length=0;let st=await w.edit('1',{competitorId:c.id,name:'ToolJet',site:'tooljet.com/pricing',repo:'https://github.com/ToolJet/ToolJet'});await w.checking;
+ calls.length=0;const st=await w.edit('1',{competitorId:c.id,name:'ToolJet',site:'tooljet.com/pricing',repo:'https://github.com/ToolJet/ToolJet'});await w.checking;
  c=st.list.find(x=>x.id===c.id);assert.equal(c.site,'https://tooljet.com');assert.ok(calls.some(([k,v])=>k==='site'&&v==='https://tooljet.com'),'the new website is looked at at once');
  const s=rows[0].payload;assert.ok(!s.events.some(e=>e.competitorId===c.id&&e.type==='site'),'the first look at a new website records, it does not report every page as new');
  // repository only: the website GitHub lists fills in once

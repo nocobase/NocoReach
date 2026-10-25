@@ -1,12 +1,13 @@
 import type {GoalFields,SourceSummary,Opportunity,SourceReview,ActionDraft,Evidence} from '../../../shared/strategy-model.js';
 export type {GoalFields,Goal,Proposal,SourceSummary,Signal,Evidence,StrategyState,Opportunity,ActionDraft,SourceReview,SignalReview,WatchOutcome,WatchRecord,InsightBatch} from '../../../shared/strategy-model.js';
-import { $t } from "#i18n";
+import { $t } from '#i18n';
+const goalKeys = ['intent','audience','focus','progress'] as const;
 export const emptyGoal:GoalFields={intent:'',audience:'',focus:'',progress:''};
 export function parseDraft(text:string):{goal?:GoalFields;proposal?:{title:string;brief:string};proposals?:{title:string;brief:string}[];goalVersion?:number}|null{
  const blocks=[...text.matchAll(/```json\s*([\s\S]*?)```/g)];
  for(const block of blocks.reverse()){
-  try{const data=JSON.parse(block[1]);
-   if(data?.goal&&['intent','audience','focus','progress'].every(k=>typeof data.goal[k]==='string'&&data.goal[k].trim()&&data.goal[k].length<=2000))return {goal:Object.fromEntries(['intent','audience','focus','progress'].map(k=>[k,data.goal[k]])) as GoalFields};
+  try{const data=JSON.parse(block[1]) as {goal?:GoalFields;proposals?:{title:string;brief:string}[];proposal?:{title:string;brief:string};goalVersion?:number};
+   const goal=data?.goal;if(goal&&goalKeys.every(k=>typeof goal[k]==='string'&&goal[k].trim()&&goal[k].length<=2000))return {goal:Object.fromEntries(goalKeys.map(k=>[k,goal[k]])) as GoalFields};
    if(Array.isArray(data?.proposals)&&data.proposals.length>0&&data.proposals.length<=5&&data.proposals.every((p:{title?:unknown;brief?:unknown})=>typeof p.title==='string'&&p.title.trim()&&p.title.length<=200&&typeof p.brief==='string'&&p.brief.trim()&&p.brief.length<=20000))return {...(Number.isInteger(data.goalVersion)?{goalVersion:data.goalVersion}:{}),proposals:data.proposals.map((p:{title:string;brief:string})=>({title:p.title,brief:p.brief}))};
    if(typeof data?.proposal?.title==='string'&&data.proposal.title.trim()&&data.proposal.title.length<=200&&typeof data.proposal.brief==='string'&&data.proposal.brief.trim()&&data.proposal.brief.length<=20000)return {proposal:{title:data.proposal.title,brief:data.proposal.brief}};
   }catch{/* Incomplete model output is never treated as a confirmed draft. */}
@@ -25,8 +26,8 @@ export function parseDiscovery(text:string):{insights?:Omit<Opportunity,'id'>[];
  // Some providers return a complete JSON object followed by explanatory prose.
  const raw=text.trim();if(raw.startsWith('{')){let depth=0,quoted=false,escaped=false;for(let i=0;i<raw.length;i++){const c=raw[i];if(quoted){if(escaped)escaped=false;else if(c==='\\')escaped=true;else if(c==='"')quoted=false;}else if(c==='"')quoted=true;else if(c==='{')depth++;else if(c==='}'&&--depth===0){candidates.push(raw.slice(0,i+1));break;}}}
  for(const block of candidates.reverse())try{
-  const data=JSON.parse(block);
-  const valid=(v:Record<string,unknown>,limits:Record<string,number>)=>v&&Object.entries(limits).every(([k,max])=>typeof v[k]==='string'&&(v[k] as string).trim()&&(v[k] as string).length<=max);
+  const data=JSON.parse(block) as {insights?:Omit<Opportunity,'id'>[];sourceReviews?:SourceReview[];observations?:unknown[];actions?:ActionDraft[]};
+  const valid=(v:Record<string,unknown>,limits:Record<string,number>)=>v&&Object.entries(limits).every(([k,max])=>typeof v[k]==='string'&&(v[k]).trim()&&(v[k]).length<=max);
   if(Array.isArray(data.insights)&&data.insights.length<=12&&data.insights.every((v:Record<string,unknown>)=>valid(v,{title:200,observation:2000,meaning:2000,evidenceText:3000,limitation:2000,suggestion:3000,objective:1000})))return {insights:data.insights,sourceReviews:Array.isArray(data.sourceReviews)?data.sourceReviews:[],observations:Array.isArray(data.observations)?data.observations.filter((o:unknown)=>typeof o==='string').slice(0,4):[]};
   if(Array.isArray(data.actions)&&data.actions.length>0&&data.actions.length<=5&&data.actions.every((v:Record<string,unknown>)=>valid(v,{title:200,objective:1000,brief:20000})))return {actions:data.actions.map((v:ActionDraft)=>({title:v.title,objective:v.objective,brief:v.brief}))};
  }catch{/* Never treat incomplete streamed JSON as a reviewable result. */}

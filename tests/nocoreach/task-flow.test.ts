@@ -4,9 +4,7 @@ import { fakeAgents, selectAgent, claim, finish } from './agents-fixture';
 import { test as __vitest_test, vi } from 'vitest';
 vi.setConfig({ testTimeout: 60000 });
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import * as path from 'node:path';
 import { TaskService } from '../../server/nocoreach/execution/service.js';
 import { validateFlow, flowRunInput } from '../../server/nocoreach/execution/flow.js';
 import { SYSTEM_PLAYBOOKS, stagesFor, validatePlaybook, defaultPlaybookId, normalize } from '../../server/nocoreach/execution/playbook.js';
@@ -186,7 +184,7 @@ test('Runner task input: memory, cited signals only, earlier output, feedback, n
 // Saved ai stages keep their business input and execute only on an explicit retry.
 const connectAgent=async f=>{const me=await selectAgent(f);await f.s.agents.saveRepo('1',{repo:'estheryo/website',baseBranch:'main',revision:1});return me;};
 test('document task: the Agent analyzes without changing the repository, a change request reruns, acceptance hands over to a new build task',async()=>{
- let invoked=0;const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>{invoked++;return {content:'x'};}},{insight:{id:'op',signalIds:['community-gap:q']},context:{signals:{items:signals}},createdBy:{id:'1',name:'王磊'},entry:'/main/data/community'});const me=await connectAgent(f);
+ let invoked=0;const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>{invoked++;return {content:'x'};}},{insight:{id:'op',signalIds:['community-gap:q']},context:{signals:{items:signals}},createdBy:{id:'1',name:'王磊'},entry:'/main/data/community'});await connectAgent(f);
  let d=await f.view();assert.equal(d.playbookDefault,'content-outline');assert.equal(d.task.status,'待处理');
  d=await f.command('startTask',{note:'focus on blocks'});assert.equal(d.work.playbook.kind,'plan');assert.ok(d.runs[0].pluginRunId);assert.equal(d.task.status,'进行中');
  let c=await claim(f);assert.equal(c.run.mode,'plan','read-only for every Agent program version');assert.equal(c.run.input.step,'analyze');assert.equal(c.run.input.note,'focus on blocks');assert.deepEqual(c.run.capabilitySnapshot||['repo.read'],['repo.read']);
@@ -204,15 +202,15 @@ test('document task: the Agent analyzes without changing the repository, a chang
  const ch=await f.view(String(child.id));assert.equal(ch.playbookDefault,'new-doc');assert.equal(ch.task.status,'待处理');assert.deepEqual(ch.related.map(r=>[r.relation,String(r.id)]),[['prev','1']]);
 });
 test('sharing (2026-10-08): an Agent run carries the page\'s data summary; an accepted document goes into the knowledge base',async()=>{
- const f=fixture(undefined,{insight:{id:'op',signalIds:['community-gap:q']},context:{signals:{items:signals}}});const me=await connectAgent(f);
+ const f=fixture(undefined,{insight:{id:'op',signalIds:['community-gap:q']},context:{signals:{items:signals}}});await connectAgent(f);
  const asked=[],saved=[];f.s.p.taskData={forRun:async(project,v)=>{asked.push([project,v.url??null,v.taskId]);return '搜索（近 28 天）：点击 40';}};f.s.p.knowledge={forAgent:async()=>[],saveDelivery:async(project,v)=>{saved.push([project,v.taskId,v.title,v.text]);}};
- await f.command('startTask',{});let c=await claim(f);assert.equal(c.run.input.data,'搜索（近 28 天）：点击 40');assert.deepEqual(asked,[['1',null,'1']]);
+ await f.command('startTask',{});const c=await claim(f);assert.equal(c.run.input.data,'搜索（近 28 天）：点击 40');assert.deepEqual(asked,[['1',null,'1']]);
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'outline 1'});let d=await f.view();assert.deepEqual(saved,[],'not before it is accepted');
  d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts']});assert.equal(d.work.stage,'done');
  assert.deepEqual(saved,[['1','1','Synthetic task','outline 1']]);
 });
 test('without a repository: a document task still goes to the Agent; a playbook that changes the repository waits for one',async()=>{
- const f=fixture();const me=await selectAgent(f);
+ const f=fixture();await selectAgent(f);
  let d=await f.command('startTask',{playbookId:'competitor-compare'});assert.equal(d.runs[0].status,'queued');assert.ok(d.runs[0].pluginRunId);
  const c=await claim(f);assert.equal(c.run.mode,'plan');assert.equal(c.run.input.step,'analyze');assert.equal(c.run.input.repo,null,'the program analyses without a working copy');
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'report'});assert.equal((await f.stage()).key,'accept');
@@ -224,7 +222,7 @@ test('build task: Agent plan first, manual records until the Agent is connected,
  let d=await f.command('startTask',{playbookId:'tech-fix'});
  assert.equal((await f.stage()).key,'plan');assert.equal(d.runs.length,0,'a local Agent stage never starts by itself');assert.equal(d.task.status,'进行中');
  d=await f.command('recordManual',{stageKey:'plan',content:'Change docs/en/a.md intro'});assert.equal((await f.stage()).key,'approve-plan');
- d=await f.command('approveStage',{stageKey:'approve-plan',artifactId:output(d).id,checked:[]});assert.equal((await f.stage()).key,'build');
+ await f.command('approveStage',{stageKey:'approve-plan',artifactId:output(d).id,checked:[]});assert.equal((await f.stage()).key,'build');
  d=await f.command('recordManual',{stageKey:'build',content:'PR https://github.com/o/r/pull/1'});
  await assert.rejects(f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[],next:'new-doc'}),e=>e.status===409);
  d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[],release:{note:'Fixed the broken links'}});assert.equal((await f.stage()).kind,'release');
@@ -234,10 +232,10 @@ test('build task: Agent plan first, manual records until the Agent is connected,
 });
 
 test('messages reach the next run; the playbook is fixed once started; removed commands do not apply',async()=>{
- const f=fixture();const me=await connectAgent(f);
+ const f=fixture();await connectAgent(f);
  await assert.rejects(f.command('selectPlaybook',{playbookId:'missing'}),e=>e.status===404);
  let d=await f.command('selectPlaybook',{playbookId:'keyword-research'});assert.equal(d.playbookDefault,'keyword-research');
- d=await f.command('comment',{comment:'use last 90 days'});
+ await f.command('comment',{comment:'use last 90 days'});
  d=await f.command('startTask');assert.equal(d.work.playbook.id,'keyword-research');
  const c=await claim(f);assert.deepEqual(c.run.input.notes,['use last 90 days']);
  await assert.rejects(f.command('selectPlaybook',{playbookId:'new-doc'}),e=>e.status===409);
@@ -245,13 +243,13 @@ test('messages reach the next run; the playbook is fixed once started; removed c
  await assert.rejects(f.command('startFlow'),e=>e.status===400);
  await assert.rejects(f.command('startSimple',{scope:'x',kind:'content'}),e=>e.status===409);
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'report'});
- d=await f.view();d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts']});
+ d=await f.view();await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts']});
  await assert.rejects(f.command('comment',{comment:'late'}),e=>e.status===409);
 });
 
 test('playbooks: built-in ones are edited in place and restored; copies and new ones; next-step references; started tasks keep their snapshot',async()=>{
  const f=fixture();await connectAgent(f);
- let list=await f.s.playbooks.list('1');assert.equal(list.playbooks.length,12);
+ const list=await f.s.playbooks.list('1');assert.equal(list.playbooks.length,12);
  // A built-in playbook is edited where it is, marked as edited, and goes back to the original on restore.
  let r=await f.s.playbooks.save('1',{playbookId:'new-doc',revision:0,name:'新建文档页',category:'create',steps:[{kind:'change',instruction:'English only'}]});
  assert.equal(r.playbook.edited,true);assert.equal(r.playbook.system,true);assert.equal(r.playbook.version,4);assert.equal(r.playbooks.length,12);assert.equal(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,'English only');
@@ -297,7 +295,7 @@ test('repository settings use revision checks and task assignment rejects disabl
 
 test('build task with the local Agent: plan, approval, PR on the task branch only, change request on the same branch',async()=>{
  let invoked=0;const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>{invoked++;return {content:'x'};}});
- const me=await selectAgent(f);
+ await selectAgent(f);
  await f.s.agents.saveRepo('1',{repo:'estheryo/website',baseBranch:'main',allowedPaths:['content'],revision:1});
  let d=await f.command('startTask',{playbookId:'tech-fix'});
  assert.equal(d.runs[0].status,'queued');assert.ok(d.runs[0].pluginRunId);assert.equal(d.agent.repo.repo,'estheryo/website');
@@ -316,12 +314,12 @@ test('build task with the local Agent: plan, approval, PR on the task branch onl
  await finish(f,pr('https://github.com/estheryo/website/pull/3'));
  d=await f.view();assert.equal((await f.stage()).key,'review');assert.equal(output(d).pr.number,3);assert.deepEqual(output(d).pr.outOfScope,['src/pages/x.astro']);
  await assert.rejects(f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[]}),e=>e.status===409&&/超出允许范围/.test(e.message));
- d=await f.command('requestStageChanges',{stageKey:'review',artifactId:output(d).id,comment:'keep the original title'});
+ await f.command('requestStageChanges',{stageKey:'review',artifactId:output(d).id,comment:'keep the original title'});
  c=await claim(f);assert.equal(c.run.branch,'nocoreach/task-1');assert.deepEqual(c.run.input.feedback,['keep the original title']);assert.equal(c.run.input.rejectedDraft,'Opened PR');
 });
 
 test('stopping, manual takeover and interrupted Agent runs',async()=>{
- const f=fixture();const me=await selectAgent(f);
+ const f=fixture();await selectAgent(f);
  await f.s.agents.saveRepo('1',{repo:'estheryo/website',baseBranch:'main',revision:1});
  let d=await f.command('startTask',{playbookId:'tech-fix'});const queued=d.runs[0];
  d=await f.command('recordManual',{stageKey:'plan',content:'I will do it myself'});assert.equal(d.runs.find(r=>r.id===queued.id).error,'replaced_by_manual');assert.equal((await f.stage()).key,'approve-plan');
@@ -396,7 +394,7 @@ test('people and page: owner changes between runs, collaborators and linked page
  await assert.rejects(f.command('setCollaborators',{userIds:['2','404']}),e=>e.status===404);
  await assert.rejects(f.command('setCollaborators',{userIds:['3']}),e=>e.status===409&&/还没有加入/.test(e.message));
  d=await f.command('setCollaborators',{userIds:['2','2']});assert.deepEqual(d.work.collaborators,[{id:'2',name:'Lin'}]);
- const me=await connectAgent(f);
+ await connectAgent(f);
  d=await f.command('startTask',{playbookId:'change-research'});const run=d.runs.find(r=>r.status==='queued');assert.ok(run,'Agent run queued');
  assert.equal(JSON.parse(f.state.nrSnapshots.find(r=>r.key.endsWith(run.id)).payload.input).content.url,'https://example.com/docs/install','the run reads the linked page');
  await assert.rejects(f.command('setOwner',{userId:'2'}),e=>e.status===409);
@@ -432,7 +430,7 @@ test('notifications: the owner hears of a step waiting for them, becoming owner 
 });
 test('notifications: when the Agent finishes and the task waits for its owner, the owner hears which step',async()=>{
  const f=fixture();const told=[];f.s.p.notifications={taskEvents:async(task,w,events)=>{told.push(...events.map(e=>[e.kind,e.step||'']));}};
- const me=await connectAgent(f);await f.command('startTask',{playbookId:'change-research'});assert.deepEqual(told,[]);
+ await connectAgent(f);await f.command('startTask',{playbookId:'change-research'});assert.deepEqual(told,[]);
  const c=await claim(f);await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'report'});
  const d=await f.view();assert.equal(d.work.flow.stages[d.work.stageIndex].kind,'review');assert.deepEqual(told,[['waiting',d.work.flow.stages[d.work.stageIndex].name]]);
 });
@@ -444,10 +442,10 @@ test('a new task belongs to whoever created it; older tasks keep no owner',async
 });
 
 test('publish: the Agent merges the reviewed commit, the system checks the live page, then observation starts',async()=>{
- const f=fixture();const me=await selectAgent(f);
+ const f=fixture();await selectAgent(f);
  await f.s.agents.saveRepo('1',{repo:'https://github.com/estheryo/website-test',baseBranch:'main',revision:1});
  f.state.nrSnapshots.push({id:9100,key:'site-content:1',payload:{sites:[{origin:'https://www.example.com'}],pages:[{url:'https://www.example.com/cn/commercial',title:'商业服务',type:'page'}]}});
- let d=await f.command('startTask',{playbookId:'optimize-page'});assert.equal((await f.stage()).key,'build');
+ await f.command('startTask',{playbookId:'optimize-page'}); let d;assert.equal((await f.stage()).key,'build');
  let c=await claim(f);assert.equal(c.run.mode,'build');
  const change={path:'src/pages/cn/commercial.astro',before:'<h2>方案对比</h2>',after:'<h2>方案对比</h2>\n<a>立即体验 Demo</a>'};
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'Added the entry',pr:{url:'https://github.com/estheryo/website-test/pull/1',number:1,branch:'nocoreach/task-1',headSha:'abc1234',files:[{path:change.path,additions:1,deletions:0}],release:'在商业服务页新增体验入口',verifyText:'立即体验 Demo',pages:['/cn/commercial','javascript:alert(1)'],changes:[change,{path:'',before:'x',after:'y'}]}});
@@ -458,7 +456,7 @@ test('publish: the Agent merges the reviewed commit, the system checks the live 
  c=await claim(f);assert.equal(c.run.mode,'merge');assert.deepEqual(c.run.input.pr,{number:1,url:'https://github.com/estheryo/website-test/pull/1',headSha:'abc1234'});
  await finish(f,{taskId:'1',runId:c.run.id,ok:false,error:'head_changed',message:'PR 在你看过之后又有新的提交'});
  d=await f.view();assert.equal(d.work.release.state,'merge_failed');assert.match(d.work.release.error,/新的提交/);
- d=await f.command('retryMerge',{stageKey:'release'});c=await claim(f);
+ await f.command('retryMerge',{stageKey:'release'});c=await claim(f);
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,merged:{sha:'def5678'}});
  d=await f.view();assert.equal(d.work.release.state,'verifying');assert.equal(d.work.release.mergeSha,'def5678');
  const pages=[];let html='<html><body><h2>方案对比</h2></body></html>';const read=async url=>{pages.push(url);return {text:html};};
@@ -472,7 +470,7 @@ test('publish: the Agent merges the reviewed commit, the system checks the live 
  await assert.rejects(f.command('revertRelease'),e=>e.status===409,'one revert at a time');
  c=await claim(f);assert.equal(c.run.mode,'revert');assert.deepEqual(c.run.input.pr,{number:1,url:'https://github.com/estheryo/website-test/pull/1'});assert.equal(c.run.input.repo.repo,'estheryo/website-test');
  await finish(f,{taskId:'1',runId:c.run.id,ok:false,error:'revert_failed',message:'GitHub 没有开出回退 PR'});d=await f.view();assert.equal(d.work.revert.state,'failed');assert.match(d.work.revert.error,/没有开出/);
- d=await f.command('revertRelease');c=await claim(f);
+ await f.command('revertRelease');c=await claim(f);
  await assert.rejects(finish(f,{taskId:'1',runId:c.run.id,ok:true,pr:{url:'https://github.com/nocobase/website/pull/9',number:9}}),e=>e.status===400);
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,pr:{url:'https://github.com/estheryo/website-test/pull/2',number:2}});
  d=await f.view();assert.deepEqual([d.work.revert.state,d.work.revert.number,d.work.revert.url],['opened',2,'https://github.com/estheryo/website-test/pull/2']);assert.equal(d.work.stage,'done','the task stays done; observation continues');
@@ -480,11 +478,11 @@ test('publish: the Agent merges the reviewed commit, the system checks the live 
 });
 
 test('publish: not seen within a day asks you; you can wait longer, confirm it is live, or say you merged it yourself',async()=>{
- const f=fixture();const me=await selectAgent(f);
+ const f=fixture();await selectAgent(f);
  await f.s.agents.saveRepo('1',{repo:'estheryo/website-test',baseBranch:'main',revision:1});
- let d=await f.command('startTask',{playbookId:'blog-post'});let c=await claim(f);
+ await f.command('startTask',{playbookId:'blog-post'}); let d;let c=await claim(f);
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'Wrote it',pr:{url:'https://github.com/estheryo/website-test/pull/2',number:2,branch:'nocoreach/task-1',headSha:'abc1234',files:[],verifyText:'新文章',pages:['https://www.example.com/blog/new']}});
- d=await f.view();d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[]});
+ d=await f.view();await f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[]});
  c=await claim(f);await finish(f,{taskId:'1',runId:c.run.id,ok:false,error:'merge_failed',message:'GitHub 没有完成合并：checks pending'});
  d=await f.command('markMerged',{stageKey:'release'});assert.equal(d.work.release.state,'verifying');assert.equal(d.task.status,'进行中');
  const w=f.state.nrTasks[0].evidence.work.release;w.deadline=new Date(Date.now()-1).toISOString();w.nextCheckAt=w.deadline;
@@ -514,9 +512,9 @@ test('effect observation runs for finished tasks once the data covers the day, a
  const f=fixture();f.state.nrSyncPartitions=[];
  f.state.nrSnapshots.push({id:9300,key:'site-content:1',payload:{pages:[{url:'https://www.example.com/docs/install',title:'安装',type:'docs'}]}});
  f.s.p.link=async()=>({get:k=>({gscSiteUrl:'sc-domain:example.com',ga4PropertyId:'p1'})[k]});
- let d=await f.command('linkPage',{url:'https://www.example.com/docs/install'});
- d=await f.command('startTask',{playbookId:'optimize-page'});d=await f.command('recordManual',{stageKey:'build',content:'Rewrote the intro'});
- d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[]});d=await f.command('confirmLive',{stageKey:'release'});assert.equal(d.work.stage,'done');
+ await f.command('linkPage',{url:'https://www.example.com/docs/install'}); let d;
+ await f.command('startTask',{playbookId:'optimize-page'});d=await f.command('recordManual',{stageKey:'build',content:'Rewrote the intro'});
+ await f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[]});d=await f.command('confirmLive',{stageKey:'release'});assert.equal(d.work.stage,'done');
  f.state.nrTasks[0].evidence.work.observeFrom='2026-09-10T08:00:00Z';
  f.state.nrTasks.push({id:2,projectId:'1',title:'Another change',brief:'',status:'已完成',evidence:{work:{...structuredClone(f.state.nrTasks[0].evidence.work),observeFrom:'2026-09-14T08:00:00Z',observation:{results:[{day:7},{day:28}]}}}});
  let id=1;const add=(source,grain,resource,date,payload)=>f.state.nrSyncPartitions.push({id:id++,projectId:'1',source,grain,resource,date,payload});
@@ -550,9 +548,9 @@ test('the task page reads each page\'s numbers: the latest 28 days before going 
 });
 
 test('cancel and archive: a cancelled task stops, its PR is closed by the Agent, late results never apply; archive hides and restores',async()=>{
- const f=fixture();const me=await selectAgent(f);
+ const f=fixture();await selectAgent(f);
  await f.s.agents.saveRepo('1',{repo:'estheryo/website-test',baseBranch:'main',revision:1});
- let d=await f.command('startTask',{playbookId:'optimize-page'});let c=await claim(f);
+ await f.command('startTask',{playbookId:'optimize-page'}); let d;let c=await claim(f);
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'Changed',pr:{url:'https://github.com/estheryo/website-test/pull/4',number:4,branch:'nocoreach/task-1',headSha:'abc1234',files:[]}});
  await assert.rejects(f.command('archiveTask'),e=>e.status===409&&/先停止/.test(e.message));
  d=await f.command('cancelTask',{reason:'不做了'});assert.ok(d.work.cancelledAt);assert.equal(d.task.status,'已取消');assert.equal(d.work.prClose.state,'closing');
@@ -566,9 +564,9 @@ test('cancel and archive: a cancelled task stops, its PR is closed by the Agent,
 });
 
 test('cancelling stops a running Agent and its late result is kept only as a candidate; not-started tasks archive directly',async()=>{
- const f=fixture();const me=await selectAgent(f);
+ const f=fixture();await selectAgent(f);
  await f.s.agents.saveRepo('1',{repo:'estheryo/website-test',baseBranch:'main',revision:1});
- let d=await f.command('startTask',{playbookId:'optimize-page'});const c=await claim(f);
+ await f.command('startTask',{playbookId:'optimize-page'}); let d;const c=await claim(f);
  await f.command('cancelTask');await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'late',pr:{url:'https://github.com/estheryo/website-test/pull/5',number:5,branch:'nocoreach/task-1',headSha:'abc1234',files:[]}});
  d=await f.view();assert.equal(d.runs.find(r=>r.id===c.run.id).error,'candidate_only_context_changed');assert.equal(d.work.results[0],undefined);
  f.state.nrTasks.push({id:2,projectId:'1',title:'Not started',brief:'',status:'待处理',evidence:{}});
@@ -597,7 +595,7 @@ test('after go-live the observing task counts as done for you; release problems 
  assert.equal(boardState(w(at('release'),{release:{state:'merging'}})),'doing');assert.equal(boardState(w(at('release'),{release:{state:'merge_failed'}})),'review');
 });
 test('the project 知识库 comes with a claimed Agent run, included in the immutable input',async()=>{
- const f=fixture();const me=await connectAgent(f);let asked=0;f.s.p.knowledge={forAgent:async p=>{asked++;assert.equal(p,'1');return [{id:'k1',title:'Retool 对比',category:'competitor',text:'按人数收费'}];}};
+ const f=fixture();await connectAgent(f);let asked=0;f.s.p.knowledge={forAgent:async p=>{asked++;assert.equal(p,'1');return [{id:'k1',title:'Retool 对比',category:'competitor',text:'按人数收费'}];}};
  await f.command('startTask',{playbookId:'competitor-compare'});const c=await claim(f);
  assert.deepEqual(c.run.input.knowledge,[{id:'k1',title:'Retool 对比',category:'competitor',text:'按人数收费'}]);assert.equal(asked,1);
  const stored=f.state.nrSnapshots.find(r=>r.key.endsWith(c.run.id)).payload;assert.ok(JSON.stringify(stored).includes('按人数收费'),'the authorized input is reproducible');
@@ -610,7 +608,7 @@ test('Skills: a step names the Skills it uses; they and the ones turned on come 
  assert.throws(()=>validatePlaybook({name:'x',category:'optimize',steps:[{kind:'change',instruction:'y',skills:['a','b','c','d','e','f']}]},ids),/最多指定 5 个 Skill/);
  assert.throws(()=>validatePlaybook({name:'x',category:'optimize',steps:[{kind:'change',instruction:'y',skills:['../x']}]},ids),/Skill/);
  assert.deepEqual(validateFlow({name:'x',stages:stagesFor(p)}).stages[0].skills,['seo-title-description','sk-1a2b3c4d']);
- const f=fixture();const me=await connectAgent(f);const asked=[];f.s.p.skills={forAgent:async(project,required)=>{asked.push([project,required]);return [{name:'seo-title-description',description:'改标题时用',required:true,body:'标题 30–60 字符',files:[]}];}};
+ const f=fixture();await connectAgent(f);const asked=[];f.s.p.skills={forAgent:async(project,required)=>{asked.push([project,required]);return [{name:'seo-title-description',description:'改标题时用',required:true,body:'标题 30–60 字符',files:[]}];}};
  await f.s.playbooks.save('1',{playbookId:'optimize-page',revision:0,name:'优化现有页面',category:'optimize',steps:[{kind:'change',instruction:'优化',skills:['seo-title-description']}]});
  await f.command('startTask',{playbookId:'optimize-page'});const c=await claim(f);
  assert.deepEqual(c.run.input.stage.skills,['seo-title-description']);assert.deepEqual(asked,[['1',['seo-title-description']]]);assert.equal(c.run.input.skills[0].body,'标题 30–60 字符');

@@ -18,7 +18,7 @@ function specification(v){
 }
 function result(raw,spec){
  const parsed=parseResearch(raw,spec);
- if(parsed.result){parsed.result.items=parsed.result.items.filter(i=>spec.view!=='serp'||i.raw?.type==='organic').map(({raw,...i})=>i);}
+ if(parsed.result){parsed.result.items=parsed.result.items.filter(i=>spec.view!=='serp'||i.raw?.type==='organic').map(({raw: _raw,...i})=>i);}
  return parsed;
 }
 export { specification, result, markets, languages };

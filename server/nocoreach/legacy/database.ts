@@ -7,7 +7,7 @@
 // Locks: Postgres advisory locks become in-process locks by key, held until the transaction ends. NocoReach runs as
 // one process (Studio's host backend, a single standalone server), which is what makes that equivalent.
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { ConnectionCollections, DatabaseManager } from '@nocobase/db';
+import type { DatabaseConnection, DatabaseManager, FindManyOptions, RepositoryRecord } from '@nocobase/db';
 import type { IdGeneratorService } from '@nocobase/snowflake';
 import { toFilter, toSort } from './filters.js';
 import { timestamp } from '../../../shared/timestamps.js';
@@ -18,14 +18,14 @@ type Hook = (model: LegacyRecord, options: { transaction?: LegacyTransaction }) 
 
 /** What a classic transaction object was to the ported code: something passed along in `{ transaction }`. */
 export interface LegacyTransaction {
-  readonly connection: { collections: Pick<ConnectionCollections, 'get'>; repository(name: string): any; afterCommit?(fn: () => unknown): void };
+  readonly connection: Pick<DatabaseConnection, 'collections' | 'repository' | 'afterCommit'>;
   readonly held: (() => void)[];
   afterCommit(fn: () => unknown): void;
 }
 
 /** A classic record: the row's fields, plus `get(key)`, `set(key, value)` and `toJSON()`. */
 export type LegacyRecord = Values & {
-  get(key?: string): any;
+  get(key?: string): unknown;
   set(key: string, value: unknown): void;
   toJSON(): Values;
 };
@@ -151,7 +151,7 @@ export class LegacyDatabase {
   withConnection<T>(connection: LegacyTransaction['connection'], fn: () => Promise<T>): Promise<T> {
     return this.current.run({ connection, held: [], afterCommit: cb => {
       if (!connection.afterCommit) throw new Error('Outer transaction does not expose afterCommit');
-      connection.afterCommit(cb);
+      connection.afterCommit(async () => { await cb(); });
     } }, fn);
   }
 
@@ -163,7 +163,7 @@ export class LegacyDatabase {
     const after: (() => unknown)[] = [];
     try {
       return await this.locks.run(() =>
-        this.db.transaction(async (connection: any) => {
+        this.db.transaction(async (connection) => {
           const t: LegacyTransaction = {
             connection,
             held,
@@ -231,14 +231,14 @@ export class LegacyDatabase {
       const fieldTypes = new Map(collection?.fields?.map(field => [field.name, field.type]));
       return toFilter(options.filter as Values, options.filterByTk, fieldTypes);
     };
-    const read = async (options: Values) => {
+    const read = async (options: Values): Promise<FindManyOptions<RepositoryRecord>> => {
       const filter = await filterFor(options);
       const sort = toSort(options.sort);
       const fields = options.fields as string[] | undefined;
       return {
         ...(filter ? { filter } : {}),
         ...(sort ? { sort } : {}),
-        ...(fields?.length ? { select: (select: any) => select.fields(...fields) } : {}),
+        ...(fields?.length ? { select: (select) => select.fields(...fields) } : {}),
         ...(options.limit != null ? { limit: Number(options.limit) } : {}),
         ...(options.offset != null ? { offset: Number(options.offset) } : {}),
       };
@@ -265,8 +265,8 @@ export class LegacyDatabase {
           await hook(model, { transaction: options.transaction as LegacyTransaction });
         const plain: Values = { ...model.toJSON() };
         for (const k of ['createdAt', 'updatedAt']) plain[k] = timestamp(plain[k]);
-        const result = await target(options).createOne({ values: plain });
-        return legacyRecord(result.record as Values);
+        const result = await target(options).createOne({ values: plain as RepositoryRecord });
+        return legacyRecord(result.record);
       },
       update: async (options: Values) => {
         const filter = await filterFor(options);
@@ -274,7 +274,7 @@ export class LegacyDatabase {
         const values: Values = { ...(options.values as Values), updatedAt: new Date() };
         if (values.createdAt !== undefined) values.createdAt = timestamp(values.createdAt);
         delete values.id;
-        await target(options).updateMany({ filter, values });
+        await target(options).updateMany({ filter, values: values as RepositoryRecord });
         return find({ filter: options.filter, filterByTk: options.filterByTk, transaction: options.transaction });
       },
       destroy: async (options: Values) => {

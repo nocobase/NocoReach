@@ -69,7 +69,7 @@ class GitHubSource{
  token(id){return this.p.env?this.p.env(TOKEN(id)):'';}
  async gh(path,token,accept='application/vnd.github+json',withLink=false){const res=await this.request(API+path,{headers:{'Accept':accept,'X-GitHub-Api-Version':'2022-11-28','User-Agent':'NocoReach/0.1',...(token?{Authorization:`Bearer ${token}`}:{})}});if(res.ok){const body=await res.json();return withLink?{body,link:res.headers?.get?.('link')||null}:body;}
   // GitHub's own words go with the error, so 历史数据 can say what really happened.
-  let said='';try{said=String((await res.json())?.message||'').slice(0,160);}catch{said='';}const h=k=>res.headers?.get?.(k),why=said?`（GitHub：${said}）`:'';
+  let said;try{said=String((await res.json())?.message||'').slice(0,160);}catch{said='';}const h=k=>res.headers?.get?.(k),why=said?`（GitHub：${said}）`:'';
   if(res.status===404)fail(systemMessageText('githubSource.repositoryNotExistPrivate')+why,404);if(res.status===401)fail(systemMessageText('githubSource.tokenInvalidExpired')+why,401);
   if(res.status===429||(res.status===403&&(h('x-ratelimit-remaining')==='0'||/rate limit/i.test(said)))){const wait=Number(h('retry-after'))||Math.max(1,Number(h('x-ratelimit-reset'))-Math.floor(Date.now()/1000))||60;throw Object.assign(new Error(systemMessageText('githubSource.tooManyGithubRequestsTemporarily')+why),{status:429,retryAfter:wait});}
   if(res.status===403)fail(systemMessageText('githubSource.githubRejectedRequestsToken')+why,403);fail(systemMessageText('messages.githubStatusDetail', { 0: res.status, 1: why }),502);}
@@ -109,7 +109,7 @@ class GitHubSource{
  // starred, so the 2026-06 restriction of the stargazers list to admins and collaborators does not apply). Weeks come
  // newest first, 30 a page, at most 100 pages: week is the Sunday (UTC) it starts, days the seven daily counts.
  async starHistoryApi(repo,token,now=businessNow(this.p)){const days=new Map(),today=day(now);let total=0,page=1;
-  for(;page<=100;page++){let list;list=await this.retrying(()=>this.gh(`/repos/${repo}/stargazers/history?per_page=30&page=${page}`,token));
+  for(;page<=100;page++){const list=await this.retrying(()=>this.gh(`/repos/${repo}/stargazers/history?per_page=30&page=${page}`,token));
    for(const w of Array.isArray(list)?list:[]){const start=Number(w.week)*1000;if(!Number.isFinite(start))continue;(w.days||[]).forEach((n,i)=>{const d=day(start+i*86400000);if(n>0&&d<=today){days.set(d,(days.get(d)||0)+n);total+=n;}});}
    if(!Array.isArray(list)||list.length<30)break;await this.pause?.(300);}
   return {days,total,pages:page,capped:false,via:'history'};}
@@ -158,7 +158,7 @@ class GitHubSource{
   const byTag=new Map((a.releases||[]).map(r=>[r.tag,r]));for(const r of fresh)byTag.set(r.tag,r);
   return this.mutate(id,cur=>cur&&cur.repo===s.repo?{...cur,items,details:recentDetails(items,details,day(businessNow(this.p,id,'github'))),commits,team:[...team],members,membersAt:members===a.members?a.membersAt:started,releases:[...byTag.values()].sort((x,y)=>String(y.date).localeCompare(String(x.date))).slice(0,2000),issuesSince:started,commitsSince:started}:cur,ACTIVITY(id));}
  firstReal(s,now=businessNow(this.p)){return Object.entries(s.daily||{}).filter(([,v])=>!v.estimated).map(([d])=>d).sort()[0]||day(now);}
- running(days,firstReal,field){let cum=0;const est={},dates=[...days.keys()].sort();for(let d=dates[0];d&&d<firstReal;d=day(Date.parse(d)+86400000)){cum+=days.get(d)||0;est[d]=cum;}return {est,from:dates[0]||null};}
+ running(days,firstReal,_field){let cum=0;const est={},dates=[...days.keys()].sort();for(let d=dates[0];d&&d<firstReal;d=day(Date.parse(d)+86400000)){cum+=days.get(d)||0;est[d]=cum;}return {est,from:dates[0]||null};}
  async backfillStars(id){const s=await this.state(id),token=this.token(id);if(!s?.repo||!token)return null;if(s.starHistory?.complete)return s.starHistory;
   let r;try{r=await this.starHistoryApi(s.repo,token,businessNow(this.p,id,'github'));}catch(e){if(e.status===429)throw e;try{r=await this.readHistory('stars',s,token);}catch(old){throw Object.assign(new Error(systemMessageText('messages.readingStarListNotWork', { 0: e.message, 1: old.message })),{status:old.status});}}
   const firstReal=this.firstReal(s,businessNow(this.p,id,'github')),{est,from}=this.running(r.days,firstReal);

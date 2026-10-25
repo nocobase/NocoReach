@@ -2,10 +2,10 @@
 // NocoBase 3 accounts and their framework permission-set assignments; no business role is read from a snapshot.
 // User ids are strings in NocoBase 3 (classic used numbers). Reads join the caller's transaction (`LegacyDatabase.table`):
 // the task service looks members up while it holds one.
-import { legacyRecord, type LegacyRecord, type LegacyRepository } from './database.js';
+import { legacyRecord, type LegacyRecord, type LegacyRepository, type LegacyDatabase } from './database.js';
 
 type Values = Record<string, unknown>;
-type Tables = { table(name: string, transaction?: unknown): any };
+type Tables = Pick<LegacyDatabase, 'table'>;
 
 export class LegacyUsers implements LegacyRepository {
   constructor(private readonly db: Tables) {}
@@ -60,6 +60,7 @@ export class LegacyUsers implements LegacyRepository {
   async findOne(options: Values = {}): Promise<LegacyRecord | null> {
     const id = options.filterByTk ?? (options.filter as Values)?.id;
     if (id == null) return (await this.find({ limit: 1, transaction: options.transaction }))[0] || null;
+    if (typeof id !== 'string' && typeof id !== 'number') return null;
     const row = (await this.db.table('user', options.transaction).findOne({ filter: { id: String(id) } })) as
       | Values
       | undefined;

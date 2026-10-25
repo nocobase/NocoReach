@@ -84,7 +84,7 @@ class KeywordDetail{
   for(const r of rows){const q=String(r.keyword||'').toLowerCase();if(!q||!r.impressions)continue;
    if(q===self){const o=byPage.get(r.page)||{url:r.page,clicks:0,impressions:0,weight:0};o.clicks+=r.clicks;o.impressions+=r.impressions;o.weight+=r.position*r.impressions;byPage.set(r.page,o);}
    else if(words.length&&words.every(w=>q.includes(w))){const o=byQuery.get(q)||{query:r.keyword,clicks:0,impressions:0,weight:0,page:r.page,best:r.position};o.clicks+=r.clicks;o.impressions+=r.impressions;o.weight+=r.position*r.impressions;if(r.position<o.best){o.best=r.position;o.page=r.page;}byQuery.set(q,o);}}
-  const avg=({weight,best,...o})=>({...o,position:o.impressions?weight/o.impressions:null});
+  const avg=({weight,best: _best,...o})=>({...o,position:o.impressions?weight/o.impressions:null});
   const pages=[...byPage.values()].map(avg).sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions).slice(0,20);
   const key=u=>{try{const x=new URL(u);return bare(x.host)+x.pathname.replace(/\/+$/,'');}catch{return '';}},shown=new Set(pages.map(p=>key(p.url)));
   const mentions=(content?.pages||[]).filter(p=>{const text=`${p.title||''} ${decodeURIComponent(String(p.url||'')).replace(/[-_/]+/g,' ')}`.toLowerCase();return words.length&&words.every(w=>text.includes(w))&&!shown.has(key(p.url));})

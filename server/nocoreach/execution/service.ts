@@ -146,7 +146,7 @@ export class TaskService {
     const linked = [work.prevTaskId || task.evidence?.handoff?.taskId, work.nextTaskId].filter(Boolean).map(String);
     // The previous and next steps carry their number and where they stand too, as the opportunity's other tasks do.
     const related = [...(await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => ({ ...relatedTask(r), relation: String(r.get('id')) === String(work.nextTaskId) ? 'next' : 'prev' })), ...await this.siblings(project, task, tx)];
-    return { task, content, work, runs: runs.map(({ input, transcript: _transcript, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), articleBases: await this.articleFlow.bases(project, taskId, work, tx) };
+    return { task, content, work, runs: runs.map(({ input: _input, transcript: _transcript, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), articleBases: await this.articleFlow.bases(project, taskId, work, tx) };
   }
   // The other tasks handed off from the same opportunity (2026-10-22: one opportunity, a task per place to change), in
   // the order they were created, with where each stands.

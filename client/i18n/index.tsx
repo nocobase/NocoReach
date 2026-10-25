@@ -432,6 +432,7 @@ function renderJsx(text: string, vars: Vars): ReactNode {
   return text.split(/(\{\d+\})/).map((part, i) => {
     const m = part.match(/^\{(\d+)\}$/);
     return (
+      // eslint-disable-next-line @eslint-react/no-array-index-key -- Static translated text can repeat placeholders; fragments have positional identity.
       <Fragment key={i}>
         {m && m[1] in vars ? (vars[m[1]] as ReactNode) : part}
       </Fragment>

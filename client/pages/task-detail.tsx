@@ -23,13 +23,13 @@ import { GAP, text } from './task-detail/styles.js';
 import { TaskStatusTag } from './task-status-tag';
 import { MarkdownEditor } from './task-detail/markdown-editor.js';
 import { hasTaskAgent } from './task-execution-types';
-import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from '#i18n';
 import {createContext,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
 import {Outlet,useNavigate,useSearchParams} from 'react-router';
 import {useNavigationGuard,usePageBreadcrumb} from '@nocobase/app-client';
 import {Comparison} from './results/comparison.js';
-import {nocobaseClient as api,NocoReachHttpError} from "#lib/nocoreach-api";
+import {nocobaseClient as api,NocoReachHttpError} from '#lib/nocoreach-api';
 import {BookOpen,CirclePlay,Lock,Archive,ArchiveRestore,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitMerge,Globe,Search,ExternalLink,Users,Square,Undo2,Loader2,MoreHorizontal,Code2,ChevronRight,TriangleAlert,CircleCheck,Sparkles,CircleAlert,Hand} from 'lucide-react';
 import {ActorAvatar} from '#components/reach/actor';
 import {Tag} from '#components/reach/tag';
@@ -61,12 +61,12 @@ import {parseReplies,ReplyDrafts,REPLY_PLAYBOOK} from './reply-drafts';
 // Community reply drafts: the drafts as cards with Copy reply (reply-drafts.tsx); other documents as text.
 const repliesOf=(w:Work,content?:string)=>(w.playbook?.id===REPLY_PLAYBOOK||w.flow?.id===REPLY_PLAYBOOK)&&content?parseReplies(content):[];
 // Whether you can do this task's steps (2026-10-08): its owner and administrators can; other members read it and leave a message.
-const TaskAccess=createContext<{allowed:boolean;self:boolean;owner:string}>({allowed:true,self:true,owner:''});
+const TaskAccessContext=createContext<{allowed:boolean;self:boolean;owner:string}>({allowed:true,self:true,owner:''});
 type Update=(command:string,body?:object)=>Promise<Data|undefined>;
 // What the cards can ask of the rest of the page (2026-10-23 user request: actions instead of directions such as "change
 // the Agent above"): open the Agent picker in Properties, focus the message to the Agent, choose the related page, and
 // complete the current step by hand (asked from the task menu, carried out by the card that holds the form).
-const TaskActions=createContext<{pickAgent:()=>void;messageAgent:()=>void;choosePage:()=>void;askManual:()=>void;manualAsk:number}>({pickAgent:()=>undefined,messageAgent:()=>undefined,choosePage:()=>undefined,askManual:()=>undefined,manualAsk:0});
+const TaskActionsContext=createContext<{pickAgent:()=>void;messageAgent:()=>void;choosePage:()=>void;askManual:()=>void;manualAsk:number}>({pickAgent:()=>undefined,messageAgent:()=>undefined,choosePage:()=>undefined,askManual:()=>undefined,manualAsk:0});
 type Member={id:string;name:string};
 type Run=Data['runs'][number];
 // Why a run stopped, in the owner's words; the raw error and the transcript stay in Technical details.
@@ -114,9 +114,9 @@ const humanTimes=(text:string)=>text.replace(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?:
 const active=(r:Run)=>r.status==='queued'||r.status==='running';
 function since(iso:string){const m=Math.max(0,Math.round((Date.now()-Date.parse(iso))/60000));return Number.isNaN(m)||m<1?$t('taskDetail.under1Min'):$t('taskDetail.min',{0:m});}
 const pathOf=(u:string)=>{try{const x=new URL(u);return x.pathname+x.search;}catch{return u;}};
-const PageLinks=({pages}:{pages:string[]})=>pages.length?<ul className="nr-td-live-pages">{pages.map(u=><li key={u}><a className="nr-link" href={u} target="_blank" rel="noreferrer">{pathOf(u)}<ExternalLink aria-hidden="true"/></a></li>)}</ul>:null;
+const PageLinks=({pages}:{pages:string[]})=>pages.length?<ul className='nr-td-live-pages'>{pages.map(u=><li key={u}><a className='nr-link' href={u} target='_blank' rel='noreferrer'>{pathOf(u)}<ExternalLink aria-hidden='true'/></a></li>)}</ul>:null;
 // A long document is read at a comfortable line length inside the full-width card.
-const Reading=({children}:{children:ReactNode})=><div className="max-w-[45em] min-w-0">{children}</div>;
+const Reading=({children}:{children:ReactNode})=><div className='max-w-[45em] min-w-0'>{children}</div>;
 // Task page for the people who run marketing (2026-10-16 user decision): it answers three questions, each once —
 // why the task exists (header), what it needs from you now (the stage card, which changes with the step and becomes
 // the result after going live), and what has happened (activity). Developer material — pull requests, code, checks,
@@ -132,7 +132,7 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
  const list=localizePlaybookList(rawPlaybooks);
  // Keep the submitting instance mounted so its response updates the visible task revision.
  useNavigationGuard(()=>!busy);
- const pending=useRef(false),op=useRef({key:'',id:''});
+ const pendingRef=useRef(false),opRef=useRef({key:'',id:''});
  const w=data.work,runActive=data.runs.some(active);
  // An article release moves on in the background (publishing, export): keep the card current while it does.
  const releasePolling=w.release?.state==='publishing'||w.release?.state==='exporting';
@@ -142,13 +142,13 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
  const actions=useMemo(()=>({manualAsk,askManual:()=>setManualAsk(n=>n+1),choosePage:()=>setPageOpen(true),
   pickAgent:()=>{document.getElementById('task-agent-menu')?.scrollIntoView?.({block:'center'});setAgentPicker(true);},
   messageAgent:()=>{const box=document.getElementById('nr-composer');box?.scrollIntoView?.({block:'center'});box?.focus();}}),[manualAsk]);
- useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setRawPlaybooks).catch(()=>undefined);void call<Member[]>(projectId,taskId,'members').then(m=>setMembers(Array.isArray(m)?m:[])).catch(()=>undefined).finally(()=>setMembersLoaded(true));},[projectId]);
- useEffect(()=>{if(!runActive&&!releasePolling)return;const t=setInterval(()=>{if(!pending.current)void call<Data>(projectId,taskId,'get').then(next=>{setStoredData(next);setError('');}).catch(()=>setError(() => ($t('taskDetail.runStatusTemporarilyUnavailableRetry'))));},2500);return()=>clearInterval(t);},[runActive, releasePolling, projectId, taskId, setError]);
- const update:Update=async(command,body={})=>{if(pending.current)return;pending.current=true;setBusy(true);setError('');const key=JSON.stringify([data.work.revision,command,body]);if(op.current.key!==key)op.current={key,id:crypto.randomUUID()};
-  try{const d=await call<Data>(projectId,taskId,'advance',{revision:data.work.revision,requestId:op.current.id,command,...body});setStoredData(d);refreshNavBadges();return d;}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailed')));
+ useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setRawPlaybooks).catch(()=>undefined);void call<Member[]>(projectId,taskId,'members').then(m=>setMembers(Array.isArray(m)?m:[])).catch(()=>undefined).finally(()=>setMembersLoaded(true));},[projectId, taskId]);
+ useEffect(()=>{if(!runActive&&!releasePolling)return;const t=setInterval(()=>{if(!pendingRef.current)void call<Data>(projectId,taskId,'get').then(next=>{setStoredData(next);setError('');}).catch(()=>setError(() => ($t('taskDetail.runStatusTemporarilyUnavailableRetry'))));},2500);return()=>clearInterval(t);},[runActive, releasePolling, projectId, taskId, setError]);
+ const update:Update=async(command,body={})=>{if(pendingRef.current)return;pendingRef.current=true;setBusy(true);setError('');const key=JSON.stringify([data.work.revision,command,body]);if(opRef.current.key!==key)opRef.current={key,id:crypto.randomUUID()};
+  try{const d=await call<Data>(projectId,taskId,'advance',{revision:data.work.revision,requestId:opRef.current.id,command,...body});setStoredData(d);refreshNavBadges();return d;}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailed')));
    // A conflict means the page is behind the server (an Agent removed, another window's change): reload the task so
    // what it offers next is current. The message stays until the next command succeeds.
-   if(e instanceof NocoReachHttpError&&e.status===409)void call<Data>(projectId,taskId,'get').then(setStoredData).catch(()=>undefined);}finally{pending.current=false;setBusy(false);}};
+   if(e instanceof NocoReachHttpError&&e.status===409)void call<Data>(projectId,taskId,'get').then(setStoredData).catch(()=>undefined);}finally{pendingRef.current=false;setBusy(false);}};
  const index=w.stageIndex||0,stage=w.flow?.stages[index],started=Boolean(w.flow),done=w.stage==='done';
  const draftScope=!started?'start':JSON.stringify([w.flow?.id,w.flow?.version,index,stage?.key,w.results[index-1]?.id]);
  const runs=[...data.runs].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
@@ -160,42 +160,42 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
  // One skeleton for every state (2026-10-22 user decision): the two-line header, then the card for what to do now and
  // the activity on the left, and on the right why the task exists, its properties and its performance, always in that
  // order. Below 1280px the two columns become one: why, properties, now, performance, activity.
- return <TaskAccess.Provider value={access}><TaskActions.Provider value={actions}><PageContainer className="nr-task-page">
+ return <TaskAccessContext.Provider value={access}><TaskActionsContext.Provider value={actions}><PageContainer className='nr-task-page'>
   <TaskHeading data={data} list={list} pick={pick} busy={busy} members={members} update={update} onPage={()=>setPageOpen(true)}/>
   <div className={cn('flex flex-col xl:grid xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start',GAP)}>
    <div className={cn('contents xl:flex xl:min-w-0 xl:flex-col',GAP)}>
     <div className={cn('order-3 flex min-w-0 flex-col',GAP)}>
      {dirty&&<p role='status' className={cn(text.muted,'flex flex-wrap items-center gap-x-2')}>{$t('taskDetail.draftRetained')} <Button size='sm' variant='ghost' disabled={busy} onClick={()=>{void confirmAction({title:()=>($t('taskDetail.discardTaskDrafts',{0:data.task.title})),description:()=>($t('taskDetail.discardDraftWarning')),action:'taskDetail.discardDrafts'}).then(confirmed=>{if(confirmed)clear();});}}>{$t('taskDetail.discardDrafts')}</Button></p>}
      <TaskDraftRecovery activeScope={w.cancelledAt||w.archivedAt||done?undefined:draftScope}/>
-     {error&&<p role="alert" className="nr-error">{error}</p>}
+     {error&&<p role='alert' className='nr-error'>{error}</p>}
      {w.cancelledAt||w.archivedAt?<ClosedCard w={w} update={update} busy={busy}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} pick={pick} setPick={setPick} update={update} busy={busy} projectId={projectId} taskId={taskId} onEvidence={()=>setEvidenceOpen(true)}/></TaskDraftScope>:done?<DoneCard data={data} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} list={list}/></TaskDraftScope>}
     </div>
     <ActivityCard data={data} update={update} busy={busy} members={members} membersLoaded={membersLoaded}/>
    </div>
    <div className={cn('contents xl:flex xl:min-w-0 xl:flex-col',GAP)}>
     <WhyCard data={data} onEvidence={()=>setEvidenceOpen(true)}/>
-    <TaskProperties data={data} members={members} allowed={access.allowed} busy={busy} runActive={runActive} className="order-2"
+    <TaskProperties data={data} members={members} allowed={access.allowed} busy={busy} runActive={runActive} className='order-2'
      agentLocked={!access.allowed?$t('taskDetail.ownerAdminChange'):closedLabel(w)?$t('taskDetail.taskClosed'):w.stage==='done'?$t('taskDetail.taskDone'):runActive?$t('taskDetail.taskQueuedRunningWaitFinish'):undefined}
      onOwner={userId=>void update('setOwner',{userId})} onAgent={async agentId=>Boolean(await update('setAgent',{agentId}))} agentPicker={agentPicker} onAgentPicker={setAgentPicker}/>
-    <TaskNumbers data={data} projectId={projectId} taskId={taskId} className="order-4"/>
+    <TaskNumbers data={data} projectId={projectId} taskId={taskId} className='order-4'/>
    </div>
   </div>
   <TechnicalDetails data={data} projectId={projectId} taskId={taskId} runs={runs}/>
   <EvidenceDialog open={evidenceOpen} onClose={()=>setEvidenceOpen(false)} data={data} projectId={projectId} taskId={taskId}/>
   {/* The article's reading page (task-detail/article-reader.tsx) covers this page and keeps its scroll position. */}
   <Outlet context={{data,update,busy,error,allowed:access.allowed,draftScope,crumb:no?`T-${no}`:data.task.title,heading} satisfies TaskPageContext}/>
-  <Dialog open={pageOpen} onOpenChange={o=>{if(!o)setPageOpen(false);}}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>{$t('common.relatedPage')}</DialogTitle></DialogHeader><PageLinkEditor data={data} projectId={projectId} taskId={taskId} busy={busy} update={update}/></DialogContent></Dialog>
- </PageContainer></TaskActions.Provider></TaskAccess.Provider>;
+  <Dialog open={pageOpen} onOpenChange={o=>{if(!o)setPageOpen(false);}}><DialogContent className='sm:max-w-md'><DialogHeader><DialogTitle>{$t('common.relatedPage')}</DialogTitle></DialogHeader><PageLinkEditor data={data} projectId={projectId} taskId={taskId} busy={busy} update={update}/></DialogContent></Dialog>
+ </PageContainer></TaskActionsContext.Provider></TaskAccessContext.Provider>;
 }
 // The header, two lines (2026-10-22 user decision): the title with its number in grey, the status and the task's menu;
 // then the playbook's steps, the current one highlighted.
 function TaskHeading({data,list,pick,busy,members,update,onPage}:{data:Data;list?:PlaybookList;pick:string;busy:boolean;members:Member[];update:Update;onPage:()=>void}){
  const no=(data.task.evidence as {no?:number}|undefined)?.no,w=data.work,started=Boolean(w.flow);
  const pb=started?undefined:list?.playbooks.find(x=>x.id===pick),stages=started?w.flow!.stages:pb?stagesFor(pb):[];
- return <header className="flex flex-col gap-1.5">
-  <div className="flex items-start justify-between gap-3">
-   <h1 className={cn(text.title,'min-w-0 break-words')}>{no?<span className="mr-2 text-muted-foreground">T-{no}</span>:null}{data.task.title}</h1>
-   <div className="flex shrink-0 items-center gap-1 pt-1.5"><TaskStatusTag work={w} status={(data.task as {status?:string}).status||''}/><MoreMenu data={data} busy={busy} members={members} update={update} onPage={onPage}/></div>
+ return <header className='flex flex-col gap-1.5'>
+  <div className='flex items-start justify-between gap-3'>
+   <h1 className={cn(text.title,'min-w-0 break-words')}>{no?<span className='mr-2 text-muted-foreground'>T-{no}</span>:null}{data.task.title}</h1>
+   <div className='flex shrink-0 items-center gap-1 pt-1.5'><TaskStatusTag work={w} status={(data.task as {status?:string}).status||''}/><MoreMenu data={data} busy={busy} members={members} update={update} onPage={onPage}/></div>
   </div>
   {stages.length>0&&<StepBar stages={stages} w={w}/>}
  </header>;
@@ -203,14 +203,14 @@ function TaskHeading({data,list,pick,busy,members,update,onPage}:{data:Data;list
 // The playbook's steps as a row of tags, as before #241 (restored 2026-10-24 at the user's request): done ones ticked in
 // green, the current one outlined (violet for a person's step, blue for the Agent's), the rest grey.
 function StepBar({stages,w}:{stages:Stage[];w:Work}){
- const {self,owner}=useContext(TaskAccess),started=Boolean(w.flow),done=w.stage==='done',index=w.stageIndex||0,closed=Boolean(closedLabel(w));
+ const {self,owner}=useContext(TaskAccessContext),started=Boolean(w.flow),done=w.stage==='done',index=w.stageIndex||0,closed=Boolean(closedLabel(w));
  const label=(s:Stage)=>{const text=stageLabel(s,w);if(s.kind!=='review'||self)return text;
   // A space where a Latin owner name meets Chinese or Japanese text ("Super Admin" before the review step).
   if(!text.startsWith($t('common.you')))return `${text} · ${owner}`;const rest=text.slice($t('common.you').length);
   return `${owner}${/[A-Za-z0-9]$/.test(owner)&&/^[\u3040-\u30ff\u3400-\u9fff]/.test(rest)?' ':''}${rest}`;};
- return <ol className="nr-td-stepbar flex flex-wrap items-center gap-1" aria-label={$t('common.progress')}>
-  {stages.map((s,i)=>{const st=!started?'todo':done||i<index?'done':i===index&&!closed?'current':'todo';return <li key={s.key} className="flex items-center gap-1" data-state={st} aria-current={st==='current'?'step':undefined}>
-   {i>0&&<ChevronRight className="size-3 text-muted-foreground" aria-hidden="true"/>}
+ return <ol className='nr-td-stepbar flex flex-wrap items-center gap-1' aria-label={$t('common.progress')}>
+  {stages.map((s,i)=>{const st=!started?'todo':done||i<index?'done':i===index&&!closed?'current':'todo';return <li key={s.key} className='flex items-center gap-1' data-state={st} aria-current={st==='current'?'step':undefined}>
+   {i>0&&<ChevronRight className='size-3 text-muted-foreground' aria-hidden='true'/>}
    <Tag tone={st==='done'?'green':st==='current'?(s.kind==='review'?'violet':'blue'):'grey'} icon={st==='done'?<Check/>:undefined} dot={st==='current'} className={st==='current'?'ring-1 ring-current':undefined}>{label(s)}</Tag>
   </li>;})}
  </ol>;
@@ -225,17 +225,17 @@ function WhyCard({data,onEvidence}:{data:Data;onEvidence:()=>void}){
  if(!reason&&(!started||!hasEvidence))return null;
  const stage=w.flow?.stages[w.stageIndex||0],out=w.results[(w.stageIndex||0)-1];
  const title=w.stage!=='done'&&!isClosed(w)&&stage?.kind==='review'&&Boolean(out?.pr||out?.article)?$t('taskDetail.whyChangeTitle'):$t('taskDetail.whyTitle');
- return <Card className="order-1" aria-label={title} title={<><Sparkles aria-hidden="true" className="size-4 shrink-0 text-agent"/>{title}</>}>
-  {reason&&<div className="flex flex-col gap-1">
+ return <Card className='order-1' aria-label={title} title={<><Sparkles aria-hidden='true' className='size-4 shrink-0 text-agent'/>{title}</>}>
+  {reason&&<div className='flex flex-col gap-1'>
    <p className={cn(text.body,'leading-6')}>{reason}</p>
-   {(why.fact||why.more>0)&&<p className={cn(text.body,'leading-6')}>{why.fact}{why.more>0&&<span className="text-muted-foreground">{why.fact?' ':''}{$t('taskDetail.moreSignals',{0:why.more})}</span>}</p>}
+   {(why.fact||why.more>0)&&<p className={cn(text.body,'leading-6')}>{why.fact}{why.more>0&&<span className='text-muted-foreground'>{why.fact?' ':''}{$t('taskDetail.moreSignals',{0:why.more})}</span>}</p>}
   </div>}
-  {hasEvidence&&<Button variant="link" size="sm" className="h-auto font-normal self-start p-0" onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}
+  {hasEvidence&&<Button variant='link' size='sm' className='h-auto font-normal self-start p-0' onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}
  </Card>;
 }
 // Everything a task's owner rarely needs: Technical details for engineers, the linked page, collaborators, closing.
 function MoreMenu({data,busy,members,update,onPage}:{data:Data;busy:boolean;members:Member[];update:Update;onPage:()=>void}){
- const w=data.work,{allowed}=useContext(TaskAccess),{askManual}=useContext(TaskActions),tech=useTechnicalDetails(),cmd=allowed?closeCommand(w):null;
+ const w=data.work,{allowed}=useContext(TaskAccessContext),{askManual}=useContext(TaskActionsContext),tech=useTechnicalDetails(),cmd=allowed?closeCommand(w):null;
  // Completing an Agent's step by hand is an escape hatch, not a card action (2026-10-23 user request): offered while
  // the step waits, has failed or is queued, never while the Agent is working on it.
  const stage=w.flow&&w.stage!=='done'&&!isClosed(w)?w.flow.stages[w.stageIndex||0]:undefined;
@@ -244,14 +244,14 @@ function MoreMenu({data,busy,members,update,onPage}:{data:Data;busy:boolean;memb
  const hasCode=w.results.some(r=>r?.pr)||Boolean(w.release?.pr||w.revert?.url),technical=hasCode||data.runs.length>0;
  const collab=w.collaborators||[],collabIds=collab.map(c=>c.id),others=members.filter(m=>m.id!==w.humanOwnerId);
  if(!technical&&!allowed)return null;
- return <DropdownMenu><DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={$t('common.more')}><MoreHorizontal/></Button>}/>
-  <DropdownMenuContent align="end" className="w-auto min-w-40">
+ return <DropdownMenu><DropdownMenuTrigger render={<Button size='icon' variant='ghost' aria-label={$t('common.more')}><MoreHorizontal/></Button>}/>
+  <DropdownMenuContent align='end' className='w-auto min-w-40'>
    {technical&&<DropdownMenuItem onClick={()=>tech.open(hasCode?'result':'runs')}><Code2/>{$t('taskDetail.technicalDetails')}</DropdownMenuItem>}
    {manual&&<DropdownMenuItem disabled={busy} onClick={askManual}><Hand/>{$t('taskDetail.completeManually')}</DropdownMenuItem>}
    {allowed&&<DropdownMenuItem disabled={busy} onClick={onPage}><Link2/>{$t('common.relatedPage')}</DropdownMenuItem>}
    {allowed&&<DropdownMenuSub><DropdownMenuSubTrigger disabled={busy||!members.length}><Users/>{$t('taskDetail.collaborators')}</DropdownMenuSubTrigger>
-    <DropdownMenuSubContent>{others.map(m=><DropdownMenuCheckboxItem key={m.id} checked={collabIds.includes(m.id)} onCheckedChange={on=>void update('setCollaborators',{userIds:on?[...collabIds,m.id]:collabIds.filter(x=>x!==m.id)})}>{m.name}</DropdownMenuCheckboxItem>)}{others.length===0&&<p className="nr-td-muted nr-td-menu-empty">{$t('taskDetail.noOtherMembers')}</p>}</DropdownMenuSubContent></DropdownMenuSub>}
-   {cmd&&<><DropdownMenuSeparator/><DropdownMenuItem variant="destructive" disabled={busy} onClick={async()=>{if(cmd==='archiveTask'||(await confirmAction({title:() => ($t('common.closeTaskValueConfirmation',{0:data.task.title})),description:() => (getCloseConfirm()),action:'common.closeTask'})))void update(cmd);}}><Archive/>{$t('common.closeTask')}</DropdownMenuItem></>}
+    <DropdownMenuSubContent>{others.map(m=><DropdownMenuCheckboxItem key={m.id} checked={collabIds.includes(m.id)} onCheckedChange={on=>void update('setCollaborators',{userIds:on?[...collabIds,m.id]:collabIds.filter(x=>x!==m.id)})}>{m.name}</DropdownMenuCheckboxItem>)}{others.length===0&&<p className='nr-td-muted nr-td-menu-empty'>{$t('taskDetail.noOtherMembers')}</p>}</DropdownMenuSubContent></DropdownMenuSub>}
+   {cmd&&<><DropdownMenuSeparator/><DropdownMenuItem variant='destructive' disabled={busy} onClick={()=>{ void (async () => {if(cmd==='archiveTask'||(await confirmAction({title:() => ($t('common.closeTaskValueConfirmation',{0:data.task.title})),description:() => (getCloseConfirm()),action:'common.closeTask'})))void update(cmd);})(); }}><Archive/>{$t('common.closeTask')}</DropdownMenuItem></>}
   </DropdownMenuContent></DropdownMenu>;
 }
 // The one card that holds what the task needs from you now: its title, a grey line and the actions in one row that
@@ -260,16 +260,16 @@ function MoreMenu({data,busy,members,update,onPage}:{data:Data;busy:boolean;memb
 // `error` marks something that did not work (2026-10-23 user request: a failure read like any other text): a red mark
 // before the title and a red edge on the card.
 function StageCard({title,sub,at,children,actions,label=$t('common.needsAction'),spinning=false,error=false}:{title:ReactNode;sub?:ReactNode;at?:string;children?:ReactNode;actions?:ReactNode;label?:string;spinning?:boolean;error?:boolean}){
- const access=useContext(TaskAccess),time=at?when(at):'';
+ const access=useContext(TaskAccessContext),time=at?when(at):'';
  return <Card sticky className={cn('nr-td-now',error&&'border-destructive/40')} aria-label={label} data-error={error||undefined}
-  title={<>{spinning&&<Loader2 aria-hidden="true" className="size-4 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none"/>}{error&&<CircleAlert aria-hidden="true" className="size-4 shrink-0 text-destructive"/>}{title}</>}
+  title={<>{spinning&&<Loader2 aria-hidden='true' className='size-4 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none'/>}{error&&<CircleAlert aria-hidden='true' className='size-4 shrink-0 text-destructive'/>}{title}</>}
   sub={sub||time?<>{sub}{sub&&time?' · ':''}{time&&<time dateTime={at}>{time}</time>}</>:undefined}
-  actions={actions&&(access.allowed?actions:<p className={cn(text.muted,'flex items-center gap-1.5')} data-locked=""><Lock aria-hidden="true" className="size-3.5 shrink-0"/>{$t('taskDetail.reviewsLeaveCommentBelow',{0:access.owner})}</p>)}>
+  actions={actions&&(access.allowed?actions:<p className={cn(text.muted,'flex items-center gap-1.5')} data-locked=''><Lock aria-hidden='true' className='size-3.5 shrink-0'/>{$t('taskDetail.reviewsLeaveCommentBelow',{0:access.owner})}</p>)}>
   {children}
  </Card>;
 }
 // Shown in a card whose action needs an Agent when none can be used: the choice itself is in Properties.
-const NeedsAgent=({data}:{data:Data})=>hasTaskAgent(data)||(data.agent?.options||[]).length===1?null:<p className="text-sm text-nr-ink-red">{(data.agent?.options||[]).length?$t('taskDetail.chooseAgentFirst'):$t('taskDetail.noTeamAccessibleRunnerAgents')}</p>;
+const NeedsAgent=({data}:{data:Data})=>hasTaskAgent(data)||(data.agent?.options||[]).length===1?null:<p className='text-sm text-nr-ink-red'>{(data.agent?.options||[]).length?$t('taskDetail.chooseAgentFirst'):$t('taskDetail.noTeamAccessibleRunnerAgents')}</p>;
 // With no usable Agent saved on the task and exactly one available, that one is saved first, then `command` runs on
 // the revision the save returned (the same rule as Start).
 async function withUsableAgent(data:Data,update:Update,command:string,body:object={}){
@@ -280,7 +280,7 @@ async function withUsableAgent(data:Data,update:Update,command:string,body:objec
 // Before a task starts (2026-10-08 user decision: Hand off to agent only creates the task): what the Agent will get,
 // the playbook (the one suggested at hand-off preselected) and a note; nothing runs until Start.
 function StartCard({data,list,pick,setPick,update,busy,projectId,taskId,onEvidence}:{data:Data;list?:PlaybookList;pick:string;setPick:(id:string)=>void;update:Update;busy:boolean;projectId:number;taskId:string;onEvidence:()=>void}){
- const {allowed}=useContext(TaskAccess);
+ const {allowed}=useContext(TaskAccessContext);
  const {clear}=useTaskDraftStatus();
  const p=list?.playbooks.find(x=>x.id===pick),handoff=(data.task.evidence?.handoff as {playbook?:string;content?:string}|undefined),brief=handoff?.content||data.task.brief||'',briefTitle=handoff?.content?$t('taskDetail.documentDelivered',{0:handoff.playbook}):$t('taskDetail.whatAgentReceive');
  const options=data.agent?.options||[],only=options.length===1?options[0]:undefined,ready=hasTaskAgent(data)||Boolean(only);
@@ -308,16 +308,16 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId,onEviden
  // with its description, the article where the change goes, and the note.
  return <StageCard title={$t('taskDetail.startAfterReview')} sub={handoff?$t('taskDetail.taskHandedOverDocumentDelivered',{0:handoff.playbook}):$t('taskDetail.agentNotStartedReadBrief')}
   actions={<Button disabled={busy||!p||!ready||!plan.ready||finding} onClick={()=>void start()}>{$t('taskDetail.confirmStart')}</Button>}>
-  {briefText&&<Field label={briefTitle}><Clamped long={briefText.length>240||briefText.split('\n').length>3} extra={whyText(data).from==='brief'&&<Button variant="link" size="sm" className="h-auto font-normal p-0" onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}>{briefText}</Clamped></Field>}
+  {briefText&&<Field label={briefTitle}><Clamped long={briefText.length>240||briefText.split('\n').length>3} extra={whyText(data).from==='brief'&&<Button variant='link' size='sm' className='h-auto font-normal p-0' onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}>{briefText}</Clamped></Field>}
   <Field label={$t('common.playbook')} id={`${taskId}-playbook`}>
    <Select value={pick} disabled={busy||!list||!allowed} onValueChange={v=>{if(v!=null)setPick(String(v));}}>
-    <SelectTrigger className="w-full" aria-labelledby={`${taskId}-playbook`}><SelectValue>{(v:string)=>{const x=list?.playbooks.find(y=>y.id===v);return x?`${x.name}${x.id===data.playbookDefault?$t('taskDetail.recommended'):''}`:v;}}</SelectValue></SelectTrigger>
-    <SelectContent className="max-w-[min(var(--container-md),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">
+    <SelectTrigger className='w-full' aria-labelledby={`${taskId}-playbook`}><SelectValue>{(v:string)=>{const x=list?.playbooks.find(y=>y.id===v);return x?`${x.name}${x.id===data.playbookDefault?$t('taskDetail.recommended'):''}`:v;}}</SelectValue></SelectTrigger>
+    <SelectContent className='max-w-[min(var(--container-md),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal'>
      {getCategories().map(([k,label])=>{const items=(list?.playbooks||[]).filter(x=>x.category===k);return items.length?<SelectGroup key={k}><SelectLabel>{label}</SelectLabel>{items.map(x=><SelectItem key={x.id} value={x.id}>{x.name}{x.id===data.playbookDefault?$t('taskDetail.recommended'):''}</SelectItem>)}</SelectGroup>:null;})}
     </SelectContent>
    </Select>
    {/* View steps opens the playbook over the page (2026-10-21), so the choices made here stay. */}
-   {p&&<p className={text.muted}>{p.description}{p.description?' ':''}<Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>setViewing(true)}>{$t('taskDetail.viewSteps')}</Button></p>}
+   {p&&<p className={text.muted}>{p.description}{p.description?' ':''}<Button variant='link' size='sm' className='h-auto font-normal p-0 align-baseline' onClick={()=>setViewing(true)}>{$t('taskDetail.viewSteps')}</Button></p>}
    <PlaybookDrawer playbook={p} open={viewing} onClose={()=>setViewing(false)}/>
   </Field>
   {articleChoice&&<DeliverySummary data={data} choice={current} finding={finding} notice={notice} allowed={allowed} busy={busy} onChange={()=>setChoosing(true)}/>}
@@ -330,28 +330,28 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId,onEviden
 function LastFeedback({w,stage,out}:{w:Work;stage:Stage;out:Artifact}){
  if(out.version<2)return null;
  const last=[...(w.history||[])].reverse().find(e=>e.action==='requestStageChanges'&&(!e.stageKey||e.stageKey===stage.key)&&e.comment);
- return last?<p className={cn(text.body,'whitespace-pre-wrap')}><span className="text-muted-foreground">{$t('taskDetail.lastFeedback')}</span>{last.comment}</p>:null;
+ return last?<p className={cn(text.body,'whitespace-pre-wrap')}><span className='text-muted-foreground'>{$t('taskDetail.lastFeedback')}</span>{last.comment}</p>:null;
 }
 // Sources and open questions the Agent reported, with machine timestamps made readable.
 function ReportNotes({report}:{report:NonNullable<Artifact['report']>}){
- return <Field label={$t('taskDetail.sourcesUncertainties')}><div className={cn(text.body,'flex flex-col gap-1')}><p className="text-muted-foreground">{humanTimes(reportDate(report.asOf))}</p>{report.sources.map(source=>source.material?<p key={`${source.material}:${source.title}`}>{source.title} · {$t('agentResult.material')}</p>:<a key={`${source.url}:${source.title}`} className="nr-link break-all" href={source.url} target="_blank" rel="noreferrer">{source.title||source.url}</a>)}{report.uncertainties.map((note,i)=><p key={i}>{humanTimes(note)}</p>)}</div></Field>;
+ return <Field label={$t('taskDetail.sourcesUncertainties')}><div className={cn(text.body,'flex flex-col gap-1')}><p className='text-muted-foreground'>{humanTimes(reportDate(report.asOf))}</p>{report.sources.map(source=>source.material?<p key={`${source.material}:${source.title}`}>{source.title} · {$t('agentResult.material')}</p>:<a key={`${source.url}:${source.title}`} className='nr-link break-all' href={source.url} target='_blank' rel='noreferrer'>{source.title||source.url}</a>)}{report.uncertainties.map(note=><p key={note}>{humanTimes(note)}</p>)}</div></Field>;
 }
 // A page change as its owner reviews it: the Agent's summary, what visitors will see before and after, where to
 // look, and one line on the automatic checks. Code, branches and check output are in Technical details.
 function PageChange({pr,content}:{pr?:PullRequestInfo;content:string}){
  const tech=useTechnicalDetails(),pages=pr?.pages||[];
- return <div className="flex flex-col gap-4">
+ return <div className='flex flex-col gap-4'>
   {pr?.release&&<Field label={$t('taskDetail.whatChanged')}><Clamped long={pr.release.length>200||pr.release.split('\n').length>3}>{humanTimes(pr.release)}</Clamped></Field>}
   {pr?.visibleChanges?.length?<VisibleChanges items={pr.visibleChanges}/>:pr?<p className={text.muted}>{$t('taskDetail.noVisibleChanges')}</p>:<Reading><Markdown content={content}/></Reading>}
   {pr&&<div className={cn(text.body,'flex flex-wrap items-center gap-x-4 gap-y-2')}>
-   {pr.previewUrl&&<a className="nr-link inline-flex items-center gap-1" href={pr.previewUrl} target="_blank" rel="noreferrer"><Globe className="size-4" aria-hidden="true"/>{$t('taskDetail.openPreviewPage')}</a>}
-   {pages.map(u=><a key={u} className="nr-link inline-flex items-center gap-1" href={u} target="_blank" rel="noreferrer">{$t('common.openPage')} {pathOf(u)}<ExternalLink className="size-3" aria-hidden="true"/></a>)}
-   {pr.checks&&<span className="inline-flex items-center gap-1 text-muted-foreground">{pr.checks.ok?<CircleCheck className="size-4 text-nr-ink-green" aria-hidden="true"/>:<TriangleAlert className="size-4 text-nr-ink-amber" aria-hidden="true"/>}{pr.checks.ok?$t('taskDetail.checksPassed'):$t('taskDetail.checksNeedAttention')}</span>}
-   <Button variant="link" size="sm" className="h-auto font-normal p-0 text-muted-foreground" onClick={()=>tech.open('result')}><Code2/>{$t('taskDetail.technicalDetails')}</Button>
+   {pr.previewUrl&&<a className='nr-link inline-flex items-center gap-1' href={pr.previewUrl} target='_blank' rel='noreferrer'><Globe className='size-4' aria-hidden='true'/>{$t('taskDetail.openPreviewPage')}</a>}
+   {pages.map(u=><a key={u} className='nr-link inline-flex items-center gap-1' href={u} target='_blank' rel='noreferrer'>{$t('common.openPage')} {pathOf(u)}<ExternalLink className='size-3' aria-hidden='true'/></a>)}
+   {pr.checks&&<span className='inline-flex items-center gap-1 text-muted-foreground'>{pr.checks.ok?<CircleCheck className='size-4 text-nr-ink-green' aria-hidden='true'/>:<TriangleAlert className='size-4 text-nr-ink-amber' aria-hidden='true'/>}{pr.checks.ok?$t('taskDetail.checksPassed'):$t('taskDetail.checksNeedAttention')}</span>}
+   <Button variant='link' size='sm' className='h-auto font-normal p-0 text-muted-foreground' onClick={()=>tech.open('result')}><Code2/>{$t('taskDetail.technicalDetails')}</Button>
   </div>}
  </div>;
 }
-const ScopeConfirm=({pr,ok,setOk,busy}:{pr?:PullRequestInfo;ok:boolean;setOk:(v:boolean)=>void;busy:boolean})=>pr?.outOfScope?.length?<label className="flex items-start gap-2 text-sm text-destructive"><input type="checkbox" className="mt-0.5 size-4 accent-destructive" checked={ok} disabled={busy} onChange={e=>setOk(e.target.checked)}/> {$t('taskDetail.otherFilesChanged')}</label>:null;
+const ScopeConfirm=({pr,ok,setOk,busy}:{pr?:PullRequestInfo;ok:boolean;setOk:(v:boolean)=>void;busy:boolean})=>pr?.outOfScope?.length?<label className='flex items-start gap-2 text-sm text-destructive'><input type='checkbox' className='mt-0.5 size-4 accent-destructive' checked={ok} disabled={busy} onChange={e=>setOk(e.target.checked)}/> {$t('taskDetail.otherFilesChanged')}</label>:null;
 // The version under review, under the card's title: the Agent's own needs no name, since Properties shows the Agent
 // (2026-10-24 user request: "Agent · Version 2"); a version a person made says so, without assuming it was you.
 const versionLine=(out:{version:number;manual?:boolean;createdBy?:string})=>[$t('taskDetail.versionNumber',{0:out.version}),out.manual?$t('taskDetail.doneByHand'):out.createdBy&&out.createdBy!=='agent'?$t('taskDetail.editedByHand'):''].filter(Boolean).join(' · ');
@@ -361,10 +361,10 @@ function ReleaseNote({value,onChange,busy,open}:{value:string;onChange:(v:string
 }
 function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boolean;list?:PlaybookList}){
  const w=data.work,stages=w.flow!.stages,index=w.stageIndex||0,stage=stages[index];
- const navigate=useNavigate(),tech=useTechnicalDetails(),{allowed}=useContext(TaskAccess),{manualAsk,pickAgent,messageAgent}=useContext(TaskActions);const [manualOpen,setManual]=useTaskDraft('manual',false,false),[scopeOk,setScopeOk]=useState(false);
+ const navigate=useNavigate(),tech=useTechnicalDetails(),{allowed}=useContext(TaskAccessContext),{manualAsk,pickAgent,messageAgent}=useContext(TaskActionsContext);const [manualOpen,setManual]=useTaskDraft('manual',false,false),[scopeOk,setScopeOk]=useState(false);
  // Complete this step manually, asked from the task menu: opens the form here once per request, not again on remount.
- const handledAsk=useRef(manualAsk);
- useEffect(()=>{if(manualAsk!==handledAsk.current){handledAsk.current=manualAsk;setManual(true);}},[manualAsk,setManual]);
+ const handledAskRef=useRef(manualAsk);
+ useEffect(()=>{if(manualAsk!==handledAskRef.current){handledAskRef.current=manualAsk;setManual(true);}},[manualAsk,setManual]);
  const [checked,setChecked]=useState<string[]>([]),[editingOpen,setEditing]=useTaskDraft('editing',false,false),[draft,setDraft]=useTaskDraft('draft',w.results[index-1]?.content||''),[record,setRecord]=useTaskDraft('record',''),[note,setNote]=useTaskDraft('note',''),[url,setUrl]=useTaskDraft('url','');
  const [requestOpen,setRequest]=useTaskDraft('requesting',false,false);
  const editButtonRef=useRef<HTMLButtonElement>(null);
@@ -377,8 +377,8 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  const cur=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];
  const producer=stages[index-1],out=w.results[index-1];
  const request=(executor:string)=>requestOpen&&out?<RequestBox executor={executor} busy={busy} onCancel={()=>setRequest(false)} onSend={async comment=>Boolean(await act('requestStageChanges',{artifactId:out.id,comment}))}/>:null;
- const requestButton=<Button variant="outline" disabled={busy} onClick={()=>setRequest(!requestOpen)}>{$t('taskDetail.requestChanges')}</Button>;
- const techLinkTo=(tab:TechnicalTab)=><Button variant="link" size="sm" className="h-auto font-normal self-start p-0 text-muted-foreground" onClick={()=>tech.open(tab)}><Code2/>{$t('taskDetail.technicalDetails')}</Button>,techLink=techLinkTo('runs');
+ const requestButton=<Button variant='outline' disabled={busy} onClick={()=>setRequest(!requestOpen)}>{$t('taskDetail.requestChanges')}</Button>;
+ const techLinkTo=(tab:TechnicalTab)=><Button variant='link' size='sm' className='h-auto font-normal self-start p-0 text-muted-foreground' onClick={()=>tech.open(tab)}><Code2/>{$t('taskDetail.technicalDetails')}</Button>,techLink=techLinkTo('runs');
  const progress=$t('taskDetail.currentProgress');
  if(stage.kind==='review'&&stages[index+1]?.kind==='release'){
   const pr=out?.pr;
@@ -428,8 +428,8 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    if(r.state==='exporting')return <StageCard label={progress} title={$t('articleTask.exporting',{0:exportingNames(data,r)})} sub={$t('articleTask.exportingHint')} actions={act2?<Button variant='ghost' disabled={busy} onClick={()=>void act('confirmLive',{})}>{$t('taskDetail.iConfirmLive')}</Button>:undefined}>{rows}<PageLinks pages={r.pages}/><DriftNotice data={data} r={r}/></StageCard>;
    if(r.state==='export_late')return <StageCard title={$t('articleTask.exportLate')} sub={$t('articleTask.exportLateHint',{0:exportingNames(data,r)})} actions={act2?<><Button disabled={busy} onClick={()=>void act('confirmLive',{})}>{$t('taskDetail.iConfirmLive')}</Button><Button variant='outline' disabled={busy} onClick={()=>void act('waitLonger',{})}>{$t('common.waitAnother24Hours')}</Button></>:undefined}>{rows}<PageLinks pages={r.pages}/></StageCard>;
   }
-  const manualMark=<Button variant="ghost" disabled={busy} onClick={()=>void act('markMerged',{})}>{$t('taskDetail.publishedManually')}</Button>;
-  if(r.state==='merging')return <StageCard label={progress} spinning title={$t('taskDetail.publishing')} sub={queued&&!data.agent?.online?<>{$t('taskDetail.agentComputerOfflinePublish')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>:$t('taskDetail.publishingHint')} actions={queued?manualMark:undefined}/>;
+  const manualMark=<Button variant='ghost' disabled={busy} onClick={()=>void act('markMerged',{})}>{$t('taskDetail.publishedManually')}</Button>;
+  if(r.state==='merging')return <StageCard label={progress} spinning title={$t('taskDetail.publishing')} sub={queued&&!data.agent?.online?<>{$t('taskDetail.agentComputerOfflinePublish')} <Button variant='link' size='sm' className='h-auto font-normal p-0 align-baseline' onClick={()=>void navigate('/agents')}>{$t('common.manageAgents')}</Button></>:$t('taskDetail.publishingHint')} actions={queued?manualMark:undefined}/>;
   if(r.state==='merge_failed')return <StageCard error title={$t('taskDetail.publishFailed')} sub={cur?.restartedAt?$t('taskDetail.publishRestartHint'):$t('taskDetail.publishFailedHint')} actions={<><Button disabled={busy} onClick={()=>void act('retryMerge',{})}>{$t('taskDetail.tryAgain')}</Button>{manualMark}</>}>{techLink}</StageCard>;
   const live=<Button variant={r.state==='verifying'?'ghost':'default'} disabled={busy} onClick={()=>void act('confirmLive',{})}>{$t('taskDetail.iConfirmLive')}</Button>;
   if(r.state==='verifying')return <StageCard label={progress} title={$t('taskDetail.waitingSiteUpdate')} sub={$t('taskDetail.waitingSiteUpdateHint',{0:r.lastCheckAt?$t('taskDetail.lastCheckedNotSeenYet',{0:when(r.lastCheckAt)}):''})} actions={live}><TargetRows data={data} r={r}/><PageLinks pages={r.pages}/><DriftNotice data={data} r={r}/></StageCard>;
@@ -442,8 +442,8 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   const by=out?versionLine(out):'';
   if(!out)return <StageCard error title={displayStageName(stage)} sub={$t('taskDetail.nothingReviewRefreshTryAgain')}/>;
   return <StageCard title={$t('taskDetail.resultReady',{0:producer.name})} sub={by} at={out.createdAt}
-   actions={editing?<><Button disabled={busy||!draft.trim()} onClick={()=>void act('editStageOutput',{artifactId:out.id,content:draft})}>{$t('taskDetail.saveChanges')}</Button><Button variant="ghost" onClick={()=>{setEditing(false);setDraft(w.results[index-1]?.content||'');}}>{$t('common.cancel')}</Button></>
-    :<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,...(nextOptions.length&&next?{next}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}>{label}</Button>{requestButton}<Button variant="ghost" disabled={busy} onClick={()=>{setDraft(out.content);setEditing(true);}}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
+   actions={editing?<><Button disabled={busy||!draft.trim()} onClick={()=>void act('editStageOutput',{artifactId:out.id,content:draft})}>{$t('taskDetail.saveChanges')}</Button><Button variant='ghost' onClick={()=>{setEditing(false);setDraft(w.results[index-1]?.content||'');}}>{$t('common.cancel')}</Button></>
+    :<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,...(nextOptions.length&&next?{next}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}>{label}</Button>{requestButton}<Button variant='ghost' disabled={busy} onClick={()=>{setDraft(out.content);setEditing(true);}}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
    {!editing&&request(getStageExecutor()[producer.kind])}
    <LastFeedback w={w} stage={stage} out={out}/>
    {editing?<MarkdownEditor aria-label={$t('taskDetail.editContent')} value={draft} disabled={busy} onChange={e=>{setDraft(e.target.value);}} preview={value=><Markdown content={value}/>}/>:<>
@@ -452,8 +452,8 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
     {out.report&&<ReportNotes report={out.report}/>}
     <Checklist stage={stage} checked={checked} setChecked={setChecked} busy={busy}/>
     {nextOptions.length>0&&<Field label={$t('taskDetail.continue')} id={`${stage.key}-next`}><Select value={next||NONE} disabled={busy} onValueChange={v=>{if(v!=null)setNext(v===NONE?'':String(v));}}>
-     <SelectTrigger className="w-full" aria-labelledby={`${stage.key}-next`}><SelectValue>{(v:string)=>v===NONE?$t('taskDetail.notContinue'):name(v)}</SelectValue></SelectTrigger>
-     <SelectContent className="min-w-(--anchor-width)">{nextOptions.map(id=><SelectItem key={id} value={id}>{name(id)}</SelectItem>)}<SelectItem value={NONE}>{$t('taskDetail.notContinue')}</SelectItem></SelectContent>
+     <SelectTrigger className='w-full' aria-labelledby={`${stage.key}-next`}><SelectValue>{(v:string)=>v===NONE?$t('taskDetail.notContinue'):name(v)}</SelectValue></SelectTrigger>
+     <SelectContent className='min-w-(--anchor-width)'>{nextOptions.map(id=><SelectItem key={id} value={id}>{name(id)}</SelectItem>)}<SelectItem value={NONE}>{$t('taskDetail.notContinue')}</SelectItem></SelectContent>
     </Select></Field>}
    </>}
   </StageCard>;
@@ -465,10 +465,10 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   const actions=!manual?<>
    {cur?.status!=='running'&&cur?.status!=='queued'&&canRun&&<Button variant={failure?.group&&NO_RETRY.has(failure.group)?'outline':'default'} disabled={busy||(!hasTaskAgent(data)&&(agent?.options||[]).length!==1)} onClick={()=>void withUsableAgent(data,update,'retryStage',{stageKey:stage.key})}>{cur?$t('taskDetail.tryAgain'):$t('taskDetail.handOffAgent')}</Button>}
    {cur?.status==='failed'&&cur.error==='invalid_agent_result'&&cur.mode==='plan'&&!cur.artifactId&&<Button variant='outline' disabled={busy} title={$t('agentResult.recoverHint')} onClick={()=>void act('recoverResult',{runId:cur.id})}>{$t('agentResult.recover')}</Button>}
-   {isActive&&<Button variant="outline" disabled={busy||Boolean(cur.cancelRequested)} onClick={async()=>{if(await confirmAction({title:() => ($t('taskDetail.stopCurrentRun',{0:data.task.title})),description:() => ($t('taskDetail.stoppingNotUndoPushedChanges')),action:'common.stop'}))void update('cancelRun',{runId:cur.id});}}><Square/>{$t('common.stop')}</Button>}
-   {failure&&failure.group!=='restart'&&(agent?.options||[]).length>1&&<Button variant="outline" disabled={busy} onClick={pickAgent}>{$t('taskDetail.switchAgent')}</Button>}
-   {failure&&<Button variant="ghost" disabled={busy} onClick={messageAgent}>{$t('taskDetail.messageAgent')}</Button>}
-  </>:<><Button disabled={busy||!record.trim()} onClick={()=>void act('recordManual',{content:record})}>{$t('taskDetail.recordContinue')}</Button><Button variant="ghost" onClick={()=>{setManual(false);setRecord('');}}>{$t('common.cancel')}</Button></>;
+   {isActive&&<Button variant='outline' disabled={busy||Boolean(cur.cancelRequested)} onClick={()=>{ void (async () => {if(await confirmAction({title:() => ($t('taskDetail.stopCurrentRun',{0:data.task.title})),description:() => ($t('taskDetail.stoppingNotUndoPushedChanges')),action:'common.stop'}))void update('cancelRun',{runId:cur.id});})(); }}><Square/>{$t('common.stop')}</Button>}
+   {failure&&failure.group!=='restart'&&(agent?.options||[]).length>1&&<Button variant='outline' disabled={busy} onClick={pickAgent}>{$t('taskDetail.switchAgent')}</Button>}
+   {failure&&<Button variant='ghost' disabled={busy} onClick={messageAgent}>{$t('taskDetail.messageAgent')}</Button>}
+  </>:<><Button disabled={busy||!record.trim()} onClick={()=>void act('recordManual',{content:record})}>{$t('taskDetail.recordContinue')}</Button><Button variant='ghost' onClick={()=>{setManual(false);setRecord('');}}>{$t('common.cancel')}</Button></>;
   const recordLabel=readsOnly(stage)?(stage.mode==='analyze'?$t('taskDetail.analysisResult'):$t('taskDetail.plan')):$t('taskDetail.changeHistory');
   const body=manual||(!isActive&&!manual&&canRun&&!hasTaskAgent(data)&&(agent?.options||[]).length!==1)||(approved&&source)?<>{manual&&<Field label={recordLabel} htmlFor={`${stage.key}-record`}>{readsOnly(stage)
     // A document written by hand is written beside its rendering, as the Agent's documents are edited.
@@ -476,13 +476,13 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
     :<Textarea id={`${stage.key}-record`} aria-label={recordLabel} rows={4} value={record} disabled={busy} placeholder={$t('taskDetail.prLinkWhichFilesContent')} onChange={e=>{setRecord(e.target.value);}}/>}</Field>}
    {!isActive&&!manual&&canRun&&<NeedsAgent data={data}/>}
    {approved&&source&&<Reveal label={$t('taskDetail.viewApprovedInput',{0:source.name})}><Reading><Markdown content={approved.content}/></Reading></Reveal>}</>:undefined;
-  if(!canRun)return <StageCard error title={displayStageName(stage)} sub={<>{$t('taskDetail.noWebsiteSourceRepositoryConnectedMessage')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/connections?source=repo')}>{$t('common.goDataSources')}</Button></>} actions={actions}>{body}</StageCard>;
+  if(!canRun)return <StageCard error title={displayStageName(stage)} sub={<>{$t('taskDetail.noWebsiteSourceRepositoryConnectedMessage')} <Button variant='link' size='sm' className='h-auto font-normal p-0 align-baseline' onClick={()=>void navigate('/connections?source=repo')}>{$t('common.goDataSources')}</Button></>} actions={actions}>{body}</StageCard>;
   // Started again by the system after NocoReach restarted (retryAfterRestart on the server): say why it runs again.
   const restarted=cur?.autoRetry?<p className={text.muted}>{$t('taskDetail.restartRetried')}</p>:null;
   // While the Agent translates an approved primary language into the others (2026-10-24), the card says so.
   const translating=w.delivery?.translateFrom&&!w.release?w.delivery.locales?.slice(1)||[]:[];
   const working=translating.length?$t('articleTask.translating',{0:joinNames(translating.map(l=>localeName(l,getCurrentLocale())))}):$t('taskDetail.agentWorking',{0:stage.name});
-  if(cur?.status==='queued')return <StageCard label={progress} title={working} sub={agent?.online?$t('taskDetail.handedOffAgentStartingNow'):<>{$t('taskDetail.agentComputerOffline')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>} actions={actions}>{restarted}{body}</StageCard>;
+  if(cur?.status==='queued')return <StageCard label={progress} title={working} sub={agent?.online?$t('taskDetail.handedOffAgentStartingNow'):<>{$t('taskDetail.agentComputerOffline')} <Button variant='link' size='sm' className='h-auto font-normal p-0 align-baseline' onClick={()=>void navigate('/agents')}>{$t('common.manageAgents')}</Button></>} actions={actions}>{restarted}{body}</StageCard>;
   if(cur?.status==='running')return <StageCard label={progress} spinning title={<>{working}{cur.cancelRequested?$t('taskDetail.stoppingAside'):''}</>} sub={$t('taskDetail.agentWorkingFor',{0:since(cur.createdAt)})} actions={actions}>{restarted}{body}</StageCard>;
   if(cur?.status==='failed'&&failure){
    // Runs a NocoReach restart interrupted say nothing about the step, so the streak passes over them.
@@ -491,8 +491,8 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    // One notice (2026-10-23 user request): the reason in a sentence, how often it has happened, what helps; the
    // actions above do what the sentence suggests.
    return <StageCard error title={$t('taskDetail.agentDidNotFinish')} actions={actions}>
-    <div className="flex flex-col gap-1">
-     <p className={text.body}>{why}{group==='toolLogin'&&agent?.online?<> {$t('taskDetail.failureOnlineMeans')}</>:null}{failures>=2?<span className="text-muted-foreground"> · {$t('taskDetail.failureStreak',{0:failures})}</span>:null}</p>
+    <div className='flex flex-col gap-1'>
+     <p className={text.body}>{why}{group==='toolLogin'&&agent?.online?<> {$t('taskDetail.failureOnlineMeans')}</>:null}{failures>=2?<span className='text-muted-foreground'> · {$t('taskDetail.failureStreak',{0:failures})}</span>:null}</p>
      <p className={text.muted}>{next}</p>
     </div>
     {body}{techLink}</StageCard>;
@@ -512,7 +512,7 @@ function ClosedCard({w,update,busy}:{w:Work;update:Update;busy:boolean}){
  const pr=w.prClose,prLine=pr?{closing:$t('taskDetail.unpublishedClosing'),closed:$t('taskDetail.unpublishedClosed'),failed:$t('taskDetail.unpublishedCloseFailed')}[pr.state]:'';
  const at=w.cancelledAt||w.archivedAt;
  return <StageCard label={$t('common.status')} title={$t('taskDetail.closedValue',{0:closedWhen(w)})} sub={`${at?$t('taskDetail.closedValueMessage',{0:when(at)}):''}${canReopen(w)?'':$t('taskDetail.taskStoppedHalfwayCannotContinue')}`}
-  actions={canReopen(w)?<Button variant="outline" disabled={busy} onClick={()=>void update('unarchiveTask')}><ArchiveRestore/>{$t('common.reopen')}</Button>:undefined}>{prLine&&<p className={text.body}>{prLine}</p>}</StageCard>;
+  actions={canReopen(w)?<Button variant='outline' disabled={busy} onClick={()=>void update('unarchiveTask')}><ArchiveRestore/>{$t('common.reopen')}</Button>:undefined}>{prLine&&<p className={text.body}>{prLine}</p>}</StageCard>;
 }
 // After the task: the effect once a change is live, otherwise the accepted result itself.
 function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
@@ -523,7 +523,7 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
  const done=$t('common.completed');
  if(r?.state==='simulated')return <StageCard label={done} title={$t('taskDetail.simulatedRelease')} sub={$t('taskDetail.simulatedReleaseDescription')}><Field label={$t('taskDetail.releaseNotes')}><p className={cn(text.body,'whitespace-pre-wrap')}>{r.note}</p></Field></StageCard>;
  if(r?.state==='live')return <StageCard label={done} title={$t('taskDetail.live')} sub={$t('taskDetail.liveSince',{0:when(r.liveAt),1:(w.history||[]).some(e=>e.action==='live'&&e.actor==='system')?$t('taskDetail.sawChangeLive'):$t('common.confirmedLive')})}
-  actions={r.pr&&r.mergedAt&&canRevert&&(!w.revert||w.revert.state==='failed')?<Button variant="outline" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('taskDetail.undoChangeConfirm')),description:() => ($t('taskDetail.undoChangeDescription')),action:'taskDetail.revertChange'}))void update('revertRelease');}}><Undo2/>{$t('taskDetail.revertCurrentChange')}</Button>:undefined}>
+  actions={r.pr&&r.mergedAt&&canRevert&&(!w.revert||w.revert.state==='failed')?<Button variant='outline' disabled={busy} onClick={()=>{ void (async () => {if(await confirmAction({title:() => ($t('taskDetail.undoChangeConfirm')),description:() => ($t('taskDetail.undoChangeDescription')),action:'taskDetail.revertChange'}))void update('revertRelease');})(); }}><Undo2/>{$t('taskDetail.revertCurrentChange')}</Button>:undefined}>
   {w.revert&&<p className={w.revert.state==='failed'?'text-sm text-destructive':text.body} role={w.revert.state==='failed'?'alert':undefined} data-revert={w.revert.state}>{w.revert.state==='opening'?$t('taskDetail.undoPreparing'):w.revert.state==='opened'?$t('taskDetail.undoPrepared'):$t('taskDetail.undoFailed',{0:w.revert.error||$t('errors.unknownReason')})}</p>}
   <LiveChange data={data} artifact={shipped}/>
   <TargetRows data={data} r={r}/>
@@ -535,7 +535,7 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
  const replies=repliesOf(w,accepted?.content);
  if(replies.length)return <StageCard label={done} title={$t('taskDetail.replyDraftsAccepted')} sub={$t('taskDetail.copyReplyPostYourselfNocoreach')}><ReplyDrafts items={replies}/></StageCard>;
  return <StageCard label={done} title={done} sub={w.observeFrom?$t('taskDetail.trackingImpactSince',{0:formatDate(w.observeFrom)}):undefined}>
-  {w.receipt?.note&&<p className={text.body}>{$tj('taskDetail.published',{0:w.receipt.note})}{w.receipt.url&&<> · <a className="nr-link" href={w.receipt.url} target="_blank" rel="noreferrer">{$t('common.openPage')}</a></>}</p>}
+  {w.receipt?.note&&<p className={text.body}>{$tj('taskDetail.published',{0:w.receipt.note})}{w.receipt.url&&<> · <a className='nr-link' href={w.receipt.url} target='_blank' rel='noreferrer'>{$t('common.openPage')}</a></>}</p>}
   {w.observeFrom&&<EffectList w={w}/>}
   {accepted&&!accepted.pr&&<><Reading><Markdown content={accepted.content}/></Reading>{accepted.report&&<ReportNotes report={accepted.report}/>}</>}
  </StageCard>;
@@ -564,15 +564,15 @@ function LiveChange({data,artifact}:{data:Data;artifact?:Artifact}){
 }
 // Impact tracking (SPEC §8): day 7 and day 28 against the same number of days before going live.
 function EffectList({w}:{w:Work}){
- const items=effectItems(w),pages=effectPages(w),{choosePage}=useContext(TaskActions),{allowed}=useContext(TaskAccess);
- if(!pages.length)return <p className={cn(text.muted,'flex flex-wrap items-center gap-x-2')}>{$t('taskDetail.noRelatedPageNothingCompare')}{allowed&&<Button variant="link" size="sm" className="h-auto p-0 font-normal" onClick={choosePage}>{$t('taskDetail.chooseRelatedPage')}</Button>}</p>;
- return <ul className="flex flex-col gap-2">{items.map(i=>i.result?<EffectRow key={i.day} r={i.result} observeFrom={w.observeFrom}/>:<li key={i.day} className={text.muted}>{$tj('taskDetail.dayResultsAbout',{0:i.day,1:i.expected})}</li>)}</ul>;
+ const items=effectItems(w),pages=effectPages(w),{choosePage}=useContext(TaskActionsContext),{allowed}=useContext(TaskAccessContext);
+ if(!pages.length)return <p className={cn(text.muted,'flex flex-wrap items-center gap-x-2')}>{$t('taskDetail.noRelatedPageNothingCompare')}{allowed&&<Button variant='link' size='sm' className='h-auto p-0 font-normal' onClick={choosePage}>{$t('taskDetail.chooseRelatedPage')}</Button>}</p>;
+ return <ul className='flex flex-col gap-2'>{items.map(i=>i.result?<EffectRow key={i.day} r={i.result} observeFrom={w.observeFrom}/>:<li key={i.day} className={text.muted}>{$tj('taskDetail.dayResultsAbout',{0:i.day,1:i.expected})}</li>)}</ul>;
 }
 function EffectRow({r,observeFrom}:{r:EffectResult;observeFrom?:string}){
  const [open,setOpen]=useState(false),range=(x:{start:string;end:string})=>$t('common.range',{0:x.start.slice(5),1:x.end.slice(5)});
  const rows:[string,[number,number],string?][]=[...(r.gsc?[[$t('common.searchClicks'),r.gsc.clicks],[$t('common.searchImpressions'),r.gsc.impressions],[$t('common.ctr'),r.gsc.ctr,'%'],[$t('common.averagePosition'),r.gsc.position]] as [string,[number,number],string?][]:[]),...(r.ga4?[[$t('common.viewCount'),r.ga4.views],[$t('common.keyEvents'),r.ga4.conversions]] as [string,[number,number],string?][]:[])];
- return <li className={cn(text.body,'flex flex-col items-start gap-1')} data-c={r.conclusion}><span>{effectLine(r,observeFrom)}</span><Button variant="link" size="sm" className="h-auto font-normal p-0" onClick={()=>setOpen(v=>!v)}>{open?$t('common.collapse'):$t('taskDetail.seeNumbers')}</Button>
-  {open&&<div className="nr-td-effect-detail"><Comparison result={r} observeFrom={observeFrom}/>{(!r.coverage||!matchesObservation(r,observeFrom))&&<Reveal label={$t('results.legacy')}><p>{r.conclusion} · {r.change===null?'—':`${r.change*100}%`}</p><p className="text-muted-foreground">{$tj('taskDetail.beforeGoingLiveAfter',{0:range(r.baseline),1:range(r.after)})}</p><table><tbody>{rows.map(([k,[b,a],u])=><tr key={k}><th>{k}</th><td>{b}{u}</td><td>→</td><td>{a}{u}</td></tr>)}</tbody></table></Reveal>}</div>}</li>;
+ return <li className={cn(text.body,'flex flex-col items-start gap-1')} data-c={r.conclusion}><span>{effectLine(r,observeFrom)}</span><Button variant='link' size='sm' className='h-auto font-normal p-0' onClick={()=>setOpen(v=>!v)}>{open?$t('common.collapse'):$t('taskDetail.seeNumbers')}</Button>
+  {open&&<div className='nr-td-effect-detail'><Comparison result={r} observeFrom={observeFrom}/>{(!r.coverage||!matchesObservation(r,observeFrom))&&<Reveal label={$t('results.legacy')}><p>{r.conclusion} · {r.change===null?'—':`${r.change*100}%`}</p><p className='text-muted-foreground'>{$tj('taskDetail.beforeGoingLiveAfter',{0:range(r.baseline),1:range(r.after)})}</p><table><tbody>{rows.map(([k,[b,a],u])=><tr key={k}><th>{k}</th><td>{b}{u}</td><td>→</td><td>{a}{u}</td></tr>)}</tbody></table></Reveal>}</div>}</li>;
 }
 const eventIcons:Record<string,ReactNode>={merged:<GitMerge/>,live:<Globe/>,notSeen:<AlertCircle/>,retryMerge:<RotateCcw/>,markMerged:<GitMerge/>,confirmLive:<Globe/>,waitLonger:<RotateCcw/>,startTask:<CirclePlay/>,runSucceeded:<FileText/>,approveStage:<Check/>,editStageOutput:<Pencil/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setAgent:<Bot/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<BookOpen/>,revertRelease:<Undo2/>};
 // Run bookkeeping that only matters when something goes wrong; the stage card shows the current failure and
@@ -595,31 +595,33 @@ function ActivityCard({data,update,busy,members,membersLoaded}:{data:Data;update
  const shown=all?rows:rows.slice(-RECENT),hidden=rows.length-shown.length;
  async function send(){const d=await update('comment',{comment:message});if(d){clearMessage();}}
  const composer=(!done&&!closed)||Boolean(message);
- return <Card className="order-5" aria-label={$t('common.activity')} title={$t('common.activity')}>
-  {hidden>0&&<Button variant="link" size="sm" className="h-auto font-normal self-start p-0" onClick={()=>setAll(true)}>{$t('taskDetail.showEarlier',{0:hidden})}</Button>}
-  <ol className="flex flex-col gap-3">{shown.map(({e,t,i})=>{const who=t!.who===$t('common.you')?(e.actor&&people.get(e.actor))||$t('common.member'):t!.who;
+ return <Card className='order-5' aria-label={$t('common.activity')} title={$t('common.activity')}>
+  {hidden>0&&<Button variant='link' size='sm' className='h-auto font-normal self-start p-0' onClick={()=>setAll(true)}>{$t('taskDetail.showEarlier',{0:hidden})}</Button>}
+  <ol className='flex flex-col gap-3'>{shown.map(({e,t,i})=>{const who=t!.who===$t('common.you')?(e.actor&&people.get(e.actor))||$t('common.member'):t!.who;
    // Until the members load, a person's name is a placeholder bar, not "Member" that turns into the name (UI review 2026-10-22).
-   const pending=t!.who===$t('common.you')&&Boolean(e.actor)&&!membersLoaded,name=pending?<Skeleton className="inline-block h-3.5 w-16 align-middle"/>:who;
-   if(e.action==='comment'||e.action==='requestStageChanges')return <li key={`${e.at}:${e.action}:${e.comment}`} className="flex items-start gap-2">{pending?null:<ActorAvatar type="user" name={who} size="xs"/>}<div className="flex min-w-0 flex-1 flex-col gap-0.5"><p className={cn(text.body,'flex flex-wrap items-center gap-x-2 gap-y-1')}><span data-actor="">{name}</span>{e.action==='requestStageChanges'&&<Tag tone="violet">{$t('taskDetail.requestChanges')}</Tag>}<time className="ml-auto text-muted-foreground">{when(e.at)}</time></p><p className={cn(text.body,'break-words whitespace-pre-wrap')}>{e.comment}</p></div></li>;
+   const pending=t!.who===$t('common.you')&&Boolean(e.actor)&&!membersLoaded,name=pending?<Skeleton className='inline-block h-3.5 w-16 align-middle'/>:who;
+   if(e.action==='comment'||e.action==='requestStageChanges')return <li key={`${e.at}:${e.action}:${e.comment}`} className='flex items-start gap-2'>{pending?null:<ActorAvatar type='user' name={who} size='xs'/>}<div className='flex min-w-0 flex-1 flex-col gap-0.5'><p className={cn(text.body,'flex flex-wrap items-center gap-x-2 gap-y-1')}><span data-actor=''>{name}</span>{e.action==='requestStageChanges'&&<Tag tone='violet'>{$t('taskDetail.requestChanges')}</Tag>}<time className='ml-auto text-muted-foreground'>{when(e.at)}</time></p><p className={cn(text.body,'break-words whitespace-pre-wrap')}>{e.comment}</p></div></li>;
    const artifact=e.action==='runSucceeded'&&e.artifactId?artifacts.get(e.artifactId):undefined;
    const line=artifact?$t('taskDetail.deliveredVersion',{0:artifact.version,1:nameOf(artifact.stepId)}):plain[e.action]||t!.text;
-   return <li key={`${e.at}:${e.action}:${e.runId||''}:${i}`} className={cn(text.muted,'flex items-start gap-2')}><span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center [&_svg]:size-3.5">{eventIcons[e.action]||<Play/>}</span><p className="min-w-0 flex-1 break-words"><span data-actor="" className="text-foreground">{e.action==='runSucceeded'?executor:name}</span> {line}{artifact&&<> <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>setView(artifact)}>{$t('common.view')}</Button></>}</p><time className="shrink-0">{when(e.at)}</time></li>;})}
+   return <li key={`${e.at}:${e.action}:${e.runId||''}:${i}`} className={cn(text.muted,'flex items-start gap-2')}><span aria-hidden='true' className='flex h-5 w-5 shrink-0 items-center justify-center [&_svg]:size-3.5'>{eventIcons[e.action]||<Play/>}</span><p className='min-w-0 flex-1 break-words'><span data-actor='' className='text-foreground'>{e.action==='runSucceeded'?executor:name}</span> {line}{artifact&&<> <Button variant='link' size='sm' className='h-auto font-normal p-0 align-baseline' onClick={()=>setView(artifact)}>{$t('common.view')}</Button></>}</p><time className='shrink-0'>{when(e.at)}</time></li>;})}
    {!rows.length&&<li className={text.muted}>{$t('taskDetail.noActivityYet')}</li>}</ol>
   {view&&<DocReader open onClose={()=>setView(undefined)} title={`${nameOf(view.stepId)} · ${$t('taskDetail.versionNumber',{0:view.version})}`} meta={when(view.createdAt)} content={view.pr||view.article?'':view.content}><VersionChange data={data} artifact={view} notes/></DocReader>}
-  {composer&&<div className="flex items-end gap-2"><Textarea id="nr-composer" aria-label={$t('taskDetail.noteExecutor')} rows={1} className="max-h-40 min-h-8 resize-none py-1.5" value={message} disabled={busy} readOnly={done||closed} placeholder={w.flow?$t('taskDetail.leaveNoteNextRunReads',{0:executor}):$t('taskDetail.leaveNoteBeforeStart',{0:executor,1:$t('taskDetail.changeEnglishVersionKeepTechnical')})} onChange={e=>{setMessage(e.target.value);}}/>{!done&&!closed&&<Button variant="outline" disabled={busy||!message.trim()} onClick={()=>void send()}>{$t('taskDetail.send')}</Button>}</div>}
+  {composer&&<div className='flex items-end gap-2'><Textarea id='nr-composer' aria-label={$t('taskDetail.noteExecutor')} rows={1} className='max-h-40 min-h-8 resize-none py-1.5' value={message} disabled={busy} readOnly={done||closed} placeholder={w.flow?$t('taskDetail.leaveNoteNextRunReads',{0:executor}):$t('taskDetail.leaveNoteBeforeStart',{0:executor,1:$t('taskDetail.changeEnglishVersionKeepTechnical')})} onChange={e=>{setMessage(e.target.value);}}/>{!done&&!closed&&<Button variant='outline' disabled={busy||!message.trim()} onClick={()=>void send()}>{$t('taskDetail.send')}</Button>}</div>}
  </Card>;
 }
 function PageLinkEditor({data,projectId,taskId,busy,update}:{data:Data;projectId:number;taskId:string;busy:boolean;update:Update}){
  const page=data.work.page,[q,setQ]=useState(''),[hits,setHits]=useState<{url:string;title:string;type:string}[]>(),[editing,setEditing]=useState(!page),[focused,setFocused]=useState(false);
- useEffect(()=>{setEditing(!page);},[page?.url]);
+ const hasPage=Boolean(page);
+ // eslint-disable-next-line react-hooks/set-state-in-effect -- A newly linked page closes the editor; an unlinked page opens it.
+ useEffect(()=>{setEditing(!hasPage);},[hasPage,page?.url]);
  useEffect(()=>{if(!editing)return;const t=setTimeout(()=>{void call<{url:string;title:string;type:string}[]>(projectId,taskId,'pages',{q}).then(r=>setHits(Array.isArray(r)?r:[])).catch(()=>setHits([]));},250);return()=>clearTimeout(t);},[q,editing,projectId,taskId]);
  const path=(u:string)=>{try{return new URL(u).pathname;}catch{return u;}};
- return <div className="flex flex-col gap-2 text-sm">
-  {page&&!editing?<div className="nr-td-page"><a className="nr-link" href={page.url} target="_blank" rel="noreferrer">{page.title||path(page.url)}<ExternalLink aria-hidden="true"/></a><small>{path(page.url)}</small>
-   <div className="nr-td-row-actions"><Button size="sm" variant="ghost" disabled={busy} onClick={()=>setEditing(true)}>{$t('taskDetail.change')}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>void update('linkPage',{url:''})}>{$t('common.remove')}</Button></div></div>
-  :<><label className="nr-td-search"><Search aria-hidden="true"/><input aria-label={$t('common.searchPages')} value={q} placeholder={$t('taskDetail.searchPagesWebsiteContent')} onFocus={()=>setFocused(true)} onChange={e=>setQ(e.target.value)}/></label>
-   {hits&&(focused||q)&&(hits.length?<ul className="nr-td-hits">{hits.slice(0,6).map(h=><li key={h.url}><button type="button" disabled={busy} onClick={()=>void update('linkPage',{url:h.url}).then(d=>{if(d){setQ('');setEditing(false);}})}><b>{h.title||path(h.url)}</b><small>{path(h.url)}</small></button></li>)}</ul>:<p className="nr-td-muted">{q?$t('taskDetail.noMatchingPages'):$t('taskDetail.websiteContentNoPagesYet')}</p>)}
-   {page&&<Button size="sm" variant="ghost" className="self-start" onClick={()=>setEditing(false)}>{$t('common.cancel')}</Button>}</>}
-  {!page&&data.work.contentId&&<p className="nr-td-muted">{$t('taskDetail.linkedOldContentMappingPicking')}</p>}
+ return <div className='flex flex-col gap-2 text-sm'>
+  {page&&!editing?<div className='nr-td-page'><a className='nr-link' href={page.url} target='_blank' rel='noreferrer'>{page.title||path(page.url)}<ExternalLink aria-hidden='true'/></a><small>{path(page.url)}</small>
+   <div className='nr-td-row-actions'><Button size='sm' variant='ghost' disabled={busy} onClick={()=>setEditing(true)}>{$t('taskDetail.change')}</Button><Button size='sm' variant='ghost' disabled={busy} onClick={()=>void update('linkPage',{url:''})}>{$t('common.remove')}</Button></div></div>
+  :<><label className='nr-td-search'><Search aria-hidden='true'/><input aria-label={$t('common.searchPages')} value={q} placeholder={$t('taskDetail.searchPagesWebsiteContent')} onFocus={()=>setFocused(true)} onChange={e=>setQ(e.target.value)}/></label>
+   {hits&&(focused||q)&&(hits.length?<ul className='nr-td-hits'>{hits.slice(0,6).map(h=><li key={h.url}><button type='button' disabled={busy} onClick={()=>void update('linkPage',{url:h.url}).then(d=>{if(d){setQ('');setEditing(false);}})}><b>{h.title||path(h.url)}</b><small>{path(h.url)}</small></button></li>)}</ul>:<p className='nr-td-muted'>{q?$t('taskDetail.noMatchingPages'):$t('taskDetail.websiteContentNoPagesYet')}</p>)}
+   {page&&<Button size='sm' variant='ghost' className='self-start' onClick={()=>setEditing(false)}>{$t('common.cancel')}</Button>}</>}
+  {!page&&data.work.contentId&&<p className='nr-td-muted'>{$t('taskDetail.linkedOldContentMappingPicking')}</p>}
  </div>;
 }

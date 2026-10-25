@@ -1,6 +1,6 @@
 import {signalDisposition} from '../../../shared/strategy-pending.js';
 import {WAITING_TASKS_URL} from '../task-waiting';
-import { $t, $tj, $legacyText, $legacyFragment, $legacyJsx } from "#i18n";
+import { $t, $tj, $legacyText, $legacyFragment, $legacyJsx } from '#i18n';
 import {useLayoutEffect,useRef,useState,type ReactElement,type RefObject} from 'react';
 import {useNavigate} from 'react-router';
 import {BellIcon,ArrowRightIcon,BotIcon,ChevronRightIcon,SparklesIcon} from 'lucide-react';
@@ -35,7 +35,7 @@ export function chipOf(s:Signal):{tone:Tone;text:string}|null{
  if((x=m(/(\d+) 个主题无人回复/)))return {tone:'amber',text:$t('strategy.unanswered',{0:x[1]})};
  if((x=m(/(\d+) 个主题/)))return {tone:'amber',text:$t('strategy.topics',{0:x[1]})};
  if((x=m(/已 (\d+) 个月未更新/)))return {tone:'amber',text:$t('strategy.notUpdatedMonths',{0:x[1]})};
- if(/内容很短/.test(t))return {tone:'amber',text:(x=m(/正文约 (\d+) 字/,f))?$t('strategy.charactersBodyText',{0:x[1]}):$t('strategy.thinContent')};
+ if(/内容很短/.test(t)){const match=m(/正文约 (\d+) 字/,f);return {tone:'amber',text:match?$t('strategy.charactersBodyText',{0:match[1]}):$t('strategy.thinContent')};}
  if(/曝光多、点击少/.test(t))return {tone:'amber',text:$t('strategy.fewClicks')};
  if(/访问多但关键事件少/.test(t))return {tone:'amber',text:$t('strategy.fewKeyEvents')};
  if(/分类讨论增加/.test(t)&&(x=m(/近 14 天 (\d+) 个主题，此前 14 天 (\d+) 个/,f)))return {tone:'green',text:`↑ ${+x[2]?$t('strategy.multiplier',{0:((+x[1]/+x[2]).toFixed(1))}):$t('common.itemCount',{0:(x[1])})}`};
@@ -53,9 +53,9 @@ export function Sparkline({points,change}:{points:Point[];change?:number|null}):
  const min=Math.min(...v),max=Math.max(...v),span=max-min||1,step=100/(points.length-1);
  const xy=points.flatMap((p,i)=>p.value===null?[]:[[i*step,18-((p.value-min)/span)*16] as const]),d=xy.map(([x,y])=>`${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
  const colour=change==null||change===0?'var(--muted-foreground)':change>0?'var(--nr-ink-green)':'var(--nr-ink-red)',[lastX,lastY]=xy[xy.length-1];
- return <span className="relative block h-6 w-full" aria-hidden="true">
-  <svg viewBox="0 0 100 20" preserveAspectRatio="none" className="block size-full"><polygon points={`${xy[0][0].toFixed(1)},20 ${d} ${lastX.toFixed(1)},20`} fill={colour} fillOpacity="0.08"/><polyline points={d} fill="none" stroke={colour} strokeWidth="1.2" vectorEffect="non-scaling-stroke"/></svg>
-  <span className="absolute size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full" style={{left:`${lastX}%`,top:`${lastY*5}%`,background:colour}}/>
+ return <span className='relative block h-6 w-full' aria-hidden='true'>
+  <svg viewBox='0 0 100 20' preserveAspectRatio='none' className='block size-full'><polygon points={`${xy[0][0].toFixed(1)},20 ${d} ${lastX.toFixed(1)},20`} fill={colour} fillOpacity='0.08'/><polyline points={d} fill='none' stroke={colour} strokeWidth='1.2' vectorEffect='non-scaling-stroke'/></svg>
+  <span className='absolute size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full' style={{left:`${lastX}%`,top:`${lastY*5}%`,background:colour}}/>
  </span>;
 }
 // The page's numbers: search, visits and key events, then GitHub stars, downloads, forum topics, Hacker News and Reddit
@@ -105,7 +105,7 @@ export function AreaList({areas,projectId,quiet=false}:{areas?:Area[];projectId:
  const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),[allNormal,setAllNormal]=useState(false),listRef=useRef<HTMLDivElement>(null),all=situationLines(areas),room=useRowRoom(listRef,quiet&&all.length>0);if(!all.length)return null;
  const items=all,open=items.find(i=>`${i.area}:${i.key}`===openKey);
  // A line with something behind it opens its detail here; one without (AI 搜索还没查过) goes to its page.
- const go=(i:typeof items[number])=>{if(i.rows?.length||i.compare?.length)setOpenKey(`${i.area}:${i.key}`);else navigate(i.to);};
+ const go=(i:typeof items[number])=>{if(i.rows?.length||i.compare?.length)setOpenKey(`${i.area}:${i.key}`);else void navigate(i.to);};
  const detail=open?<AttentionDetail key={openKey} item={open} projectId={projectId} onClose={()=>setOpenKey(undefined)}/>:null;
  // Quiet, beside the day's conversation on Insights (2026-10-21 user feedback: the column drew the eye from the
  // conversation): one list in group order (getting worse, to handle, opportunities, share of voice), each row a short
@@ -128,14 +128,15 @@ export function AreaList({areas,projectId,quiet=false}:{areas?:Area[];projectId:
    {normal.length>normalRoom&&<button type='button' className='mt-1.5 self-start text-xs text-muted-foreground hover:text-foreground' aria-expanded={allNormal} onClick={()=>setAllNormal(v=>!v)}>{allNormal?$t('common.collapse'):$t('strategy.situationShowAll',{0:items.length})}</button>}
    {detail}</div>;}
  // Untitled: the block around it carries the heading and what it means.
- return <Section aria-label={$t('strategy.whereThingsStand')}><ul className="divide-y">{items.map(i=><li key={`${i.area}:${i.key}`}>
-  <button type="button" onClick={()=>go(i)} title={i.detail?$legacyText(i.detail):undefined} className="flex w-full items-start gap-2.5 py-2 text-left hover:opacity-80" data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
-   <span className={`mt-1.5 size-2 shrink-0 rounded-full ${i.attention?'bg-nr-ink-amber':'bg-muted-foreground/40'}`} aria-hidden="true"/>
-   <span className="min-w-0 flex-1">
-    <span className={`block text-sm ${i.attention?'':'text-muted-foreground'}`}>{$legacyJsx(i.text,Object.fromEntries(i.values.map((v,k)=>[k,<b key={k} className="font-semibold text-foreground tabular-nums">{v}</b>])))}</span>
-    <span className="block truncate text-xs text-muted-foreground">{[$legacyText(i.source),i.detail?$legacyText(i.detail):''].filter(Boolean).join(' · ')}</span>
+ return <Section aria-label={$t('strategy.whereThingsStand')}><ul className='divide-y'>{items.map(i=><li key={`${i.area}:${i.key}`}>
+  <button type='button' onClick={()=>go(i)} title={i.detail?$legacyText(i.detail):undefined} className='flex w-full items-start gap-2.5 py-2 text-left hover:opacity-80' data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
+   <span className={`mt-1.5 size-2 shrink-0 rounded-full ${i.attention?'bg-nr-ink-amber':'bg-muted-foreground/40'}`} aria-hidden='true'/>
+   <span className='min-w-0 flex-1'>
+    {/* eslint-disable-next-line @eslint-react/no-array-index-key -- Placeholder positions identify repeated values in one immutable signal. */}
+    <span className={`block text-sm ${i.attention?'':'text-muted-foreground'}`}>{$legacyJsx(i.text,Object.fromEntries(i.values.map((v,k)=>[k,<b key={k} className='font-semibold text-foreground tabular-nums'>{v}</b>])))}</span>
+    <span className='block truncate text-xs text-muted-foreground'>{[$legacyText(i.source),i.detail?$legacyText(i.detail):''].filter(Boolean).join(' · ')}</span>
    </span>
-   <ChevronRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true"/>
+   <ChevronRightIcon className='mt-0.5 size-4 shrink-0 text-muted-foreground' aria-hidden='true'/>
   </button></li>)}</ul>
   {detail}</Section>;
 }
@@ -148,18 +149,18 @@ function AttentionDetail({item,projectId,onClose}:{item:AreaItem;projectId:numbe
   brief:[$t('strategy.insightsWhereThingsStand',{0:text,1:$legacyText(item.source),2:item.detail?`，${$legacyText(item.detail)}`:''}),'',...ticked.map(r=>`- ${r.title}${r.meta?`（${$legacyText(r.meta)}）`:''}${r.url?`：${r.url}`:''}`),'',$t('strategy.suggestionCheckDataPagesItems')].join('\n').slice(0,20000)});
  return <DetailDrawer open onClose={onClose} title={text} description={[$legacyText(item.source),item.detail?$legacyText(item.detail):''].filter(Boolean).join(' · ')}
   actions={item.handOff&&list.length?<SectionHandOff projectId={projectId} disabled={!ticked.length} playbookId={item.handOff.playbookId} page={ticked.length===1&&ticked[0].url?ticked[0].url:undefined} label={ticked.length?$t('common.handOffAgentValue',{0:ticked.length}):$t('common.handOffAgent')} draft={draft}/>:undefined}
-  footer={<Button variant="outline" onClick={()=>navigate(item.to)}>{$t('strategy.see',{0:$legacyText(item.source)})}<ArrowRightIcon/></Button>}>
-  <div className="space-y-3 text-sm" data-attention-detail={item.key}>
-   {item.compare?.length?<table className="w-full text-sm" aria-label={$t('strategy.periodLast')}><thead className="text-xs text-muted-foreground"><tr className="border-b"><th className="py-1.5 text-left font-normal"></th><th className="py-1.5 text-right font-normal">{$t('strategy.period')}</th><th className="py-1.5 text-right font-normal">{$t('strategy.lastPeriod')}</th></tr></thead>
-    <tbody>{item.compare.map(c=><tr key={c.label} className="border-b last:border-0"><td className="py-1.5">{$legacyText(c.label)}</td><td className="py-1.5 text-right tabular-nums">{c.now}</td><td className="py-1.5 text-right tabular-nums text-muted-foreground">{c.before}</td></tr>)}</tbody></table>:null}
-   {list.length?<ul className="divide-y rounded-lg border">
-    {item.handOff?<li className="flex items-center gap-3 px-3 py-1.5 text-xs text-muted-foreground"><AllCheck selection={selection} count={list.length}/>{$t('common.select')}</li>:null}
-    {list.map(r=><li key={r.key} className="flex items-start gap-3 px-3 py-2" data-row={r.key}>
-     {item.handOff?<span className="pt-0.5"><RowCheck selection={selection} k={r.key} label={r.title}/></span>:null}
-     <span className="min-w-0 flex-1"><span className="flex items-center gap-2">{r.tag?<Tag tone={r.tag.tone}>{$legacyText(r.tag.text)}</Tag>:null}{r.url?<a className="nr-link truncate" href={r.url} target="_blank" rel="noreferrer">{r.title}</a>:<span className="truncate">{$legacyText(r.title)}</span>}</span>
-      {r.meta?<span className="block truncate text-xs text-muted-foreground">{$legacyText(r.meta)}</span>:null}</span>
-    </li>)}</ul>:item.compare?.length?null:<p className="text-muted-foreground">{$t('strategy.nothingListRightNow')}</p>}
-   {(item.total||0)>list.length?<p className="nr-footnote">{$t('strategy.firstListedHere',{0:item.total,1:list.length})}</p>:null}
+  footer={<Button variant='outline' onClick={()=>void navigate(item.to)}>{$t('strategy.see',{0:$legacyText(item.source)})}<ArrowRightIcon/></Button>}>
+  <div className='space-y-3 text-sm' data-attention-detail={item.key}>
+   {item.compare?.length?<table className='w-full text-sm' aria-label={$t('strategy.periodLast')}><thead className='text-xs text-muted-foreground'><tr className='border-b'><th className='py-1.5 text-left font-normal'></th><th className='py-1.5 text-right font-normal'>{$t('strategy.period')}</th><th className='py-1.5 text-right font-normal'>{$t('strategy.lastPeriod')}</th></tr></thead>
+    <tbody>{item.compare.map(c=><tr key={c.label} className='border-b last:border-0'><td className='py-1.5'>{$legacyText(c.label)}</td><td className='py-1.5 text-right tabular-nums'>{c.now}</td><td className='py-1.5 text-right tabular-nums text-muted-foreground'>{c.before}</td></tr>)}</tbody></table>:null}
+   {list.length?<ul className='divide-y rounded-lg border'>
+    {item.handOff?<li className='flex items-center gap-3 px-3 py-1.5 text-xs text-muted-foreground'><AllCheck selection={selection} count={list.length}/>{$t('common.select')}</li>:null}
+    {list.map(r=><li key={r.key} className='flex items-start gap-3 px-3 py-2' data-row={r.key}>
+     {item.handOff?<span className='pt-0.5'><RowCheck selection={selection} k={r.key} label={r.title}/></span>:null}
+     <span className='min-w-0 flex-1'><span className='flex items-center gap-2'>{r.tag?<Tag tone={r.tag.tone}>{$legacyText(r.tag.text)}</Tag>:null}{r.url?<a className='nr-link truncate' href={r.url} target='_blank' rel='noreferrer'>{r.title}</a>:<span className='truncate'>{$legacyText(r.title)}</span>}</span>
+      {r.meta?<span className='block truncate text-xs text-muted-foreground'>{$legacyText(r.meta)}</span>:null}</span>
+    </li>)}</ul>:item.compare?.length?null:<p className='text-muted-foreground'>{$t('strategy.nothingListRightNow')}</p>}
+   {(item.total||0)>list.length?<p className='nr-footnote'>{$t('strategy.firstListedHere',{0:item.total,1:list.length})}</p>:null}
   </div>
  </DetailDrawer>;
 }
@@ -195,28 +196,29 @@ export const watchedLabel=(days:number)=>days<=1?$t('strategy.watchingSinceToday
 // earlier days when there are some (how a watched change has been judged).
 export function ChangeDetail({signal:open,status:st,projectId,verdicts,watch,today,judging,error,onJudge,onDecide,onClose,onHandOff}:{signal:Signal;status:Status;projectId:number;verdicts?:Verdict[];watch?:WatchRecord;today?:string;judging?:boolean;error?:string;onJudge?:()=>void;onDecide?:(status:'ignored'|'pending')=>void;onClose:()=>void;onHandOff:(r:HandOffResult)=>void}):ReactElement{
  const navigate=useNavigate(),[handing,setHanding]=useState(false),page=pageOf(open);
+ const [openedAt]=useState(()=>new Date().toISOString());
  return <>
   {handing?null:<DetailDrawer open onClose={onClose} title={titleOf(open)} description={getSourceNames()[open.source]||open.source}
-   footer={<div className="flex w-full flex-wrap gap-2">
-    {st.next==='opportunity'?<Button onClick={()=>navigate(`/opportunities?item=${encodeURIComponent(st.row!.card.id)}`)}>{$t('strategy.viewOpportunity')}<ArrowRightIcon/></Button>
-     :st.next==='task'?<Button onClick={()=>navigate(`/actions/${st.taskId}`)}>{$t('strategy.viewTask')}<ArrowRightIcon/></Button>
-     :st.next==='judge'?<Button disabled={judging} onClick={onJudge}><SparklesIcon data-icon="inline-start"/>{judging?$t('strategy.aiJudgingLoading'):$t('strategy.askAiJudgeNow')}</Button>:null}
-    {(st.next==='hand'||st.next==='judge')&&open.actionable?<Button variant={st.next==='hand'&&st.verdict==='do'&&!st.ignored&&!st.dismissed?'default':'outline'} onClick={()=>setHanding(true)}><BotIcon data-icon="inline-start"/>{st.next==='hand'&&!(st.verdict==='do'&&!st.dismissed)?$t('strategy.handOffAgentAnyway'):$t('common.handOffAgent')}</Button>:null}
-    {onDecide&&st.next==='hand'&&!st.dismissed&&(st.verdict==='do'||st.verdict==='watch')?<Button variant="ghost" disabled={judging} onClick={()=>onDecide('ignored')}>{$t('common.ignore')}</Button>:null}
-    {onDecide&&st.ignored?<Button variant="outline" disabled={judging} onClick={()=>onDecide('pending')}>{$t('strategy.restore')}</Button>:null}
-    {page?<Button variant="outline" onClick={()=>navigate(page)}>{$t('strategy.viewData')}</Button>:null}</div>}>
-   <div className="space-y-3 text-sm">
-    <div className="flex flex-wrap items-center gap-2"><Tag tone={st.tone} dot>{st.label}</Tag>{(()=>{const c=chipOf(open);return c?<Tag tone={c.tone}>{c.text}</Tag>:null;})()}</div>
-    <section className="space-y-1"><h3 className="text-xs font-medium text-muted-foreground">{$t('strategy.data')}</h3><ul className="list-disc space-y-1 pl-5">{open.facts.map(f=><li key={f}>{$legacyText(f)}</li>)}</ul>{open.url?<p><a className="nr-link break-all" href={open.url} target="_blank" rel="noreferrer">{open.url}</a></p>:null}</section>
-    <section className="space-y-1"><h3 className="flex items-center gap-1 text-xs font-medium text-muted-foreground"><AiMark label={$t('strategy.aiVerdict')}/>{$t('strategy.aiVerdict')}</h3><p>{st.reason?`${st.label}：${st.reason}`:st.why}</p>{st.reason?<p className="text-xs text-muted-foreground">{st.why}</p>:null}</section>
-    {st.earlier?<p className="text-xs text-muted-foreground">{$t('strategy.handedOffAgentBefore')}<button type="button" className="nr-link" onClick={()=>navigate(`/actions/${st.earlier!.id}`)}>{st.earlier.no?`T-${st.earlier.no}`:$t('common.tasks')}</button>{$tj('strategy.changeStillThere',{0:st.earlier.state==='done'?$t('strategy.done'):$t('strategy.closed')})}</p>:null}
-    {watch&&st.verdict==='watch'&&!st.dismissed?<section className="space-y-1" data-watch-record=""><h3 className="text-xs font-medium text-muted-foreground">{$t('common.watch')}</h3>
-     <dl className="grid grid-cols-[5.5rem_1fr] gap-y-1"><dt className="text-muted-foreground">{$t('strategy.decisionCondition')}</dt><dd>{watch.waitingFor||'—'}</dd>
-      <dt className="text-muted-foreground">{$t('strategy.watchingSince')}</dt><dd>{$t('strategy.day',{0:watch.since.slice(5,10).replace('-','/'),1:daysBetween(watch.since,today||new Date().toISOString())})}</dd>
-      <dt className="text-muted-foreground">{$t('strategy.deadline')}</dt><dd>{watch.decideBy.slice(5).replace('-','/')}</dd>
-      <dt className="text-muted-foreground">{$t('strategy.startingValue')}</dt><dd><ul className="list-disc space-y-0.5 pl-4">{watch.startFacts.map(f=><li key={f}>{$legacyText(f)}</li>)}</ul></dd></dl></section>:null}
-    {verdicts&&verdicts.length>1?<section className="space-y-1" data-verdicts=""><h3 className="text-xs font-medium text-muted-foreground">{$t('strategy.verdictDay')}</h3><ul className="space-y-0.5">{verdicts.slice(0,14).map(v=><li key={v.day} className="grid grid-cols-[3.5rem_1fr] gap-2"><span className="tabular-nums text-muted-foreground">{v.day.slice(5).replace('-','/')}</span><span>{getVerdict()[v.verdict].label}：{v.reason}</span></li>)}</ul></section>:null}
-    {error?<p role="alert" className="nr-error">{error}</p>:null}
+   footer={<div className='flex w-full flex-wrap gap-2'>
+    {st.next==='opportunity'?<Button onClick={()=>void navigate(`/opportunities?item=${encodeURIComponent(st.row!.card.id)}`)}>{$t('strategy.viewOpportunity')}<ArrowRightIcon/></Button>
+     :st.next==='task'?<Button onClick={()=>void navigate(`/actions/${st.taskId}`)}>{$t('strategy.viewTask')}<ArrowRightIcon/></Button>
+     :st.next==='judge'?<Button disabled={judging} onClick={onJudge}><SparklesIcon data-icon='inline-start'/>{judging?$t('strategy.aiJudgingLoading'):$t('strategy.askAiJudgeNow')}</Button>:null}
+    {(st.next==='hand'||st.next==='judge')&&open.actionable?<Button variant={st.next==='hand'&&st.verdict==='do'&&!st.ignored&&!st.dismissed?'default':'outline'} onClick={()=>setHanding(true)}><BotIcon data-icon='inline-start'/>{st.next==='hand'&&!(st.verdict==='do'&&!st.dismissed)?$t('strategy.handOffAgentAnyway'):$t('common.handOffAgent')}</Button>:null}
+    {onDecide&&st.next==='hand'&&!st.dismissed&&(st.verdict==='do'||st.verdict==='watch')?<Button variant='ghost' disabled={judging} onClick={()=>onDecide('ignored')}>{$t('common.ignore')}</Button>:null}
+    {onDecide&&st.ignored?<Button variant='outline' disabled={judging} onClick={()=>onDecide('pending')}>{$t('strategy.restore')}</Button>:null}
+    {page?<Button variant='outline' onClick={()=>void navigate(page)}>{$t('strategy.viewData')}</Button>:null}</div>}>
+   <div className='space-y-3 text-sm'>
+    <div className='flex flex-wrap items-center gap-2'><Tag tone={st.tone} dot>{st.label}</Tag>{(()=>{const c=chipOf(open);return c?<Tag tone={c.tone}>{c.text}</Tag>:null;})()}</div>
+    <section className='space-y-1'><h3 className='text-xs font-medium text-muted-foreground'>{$t('strategy.data')}</h3><ul className='list-disc space-y-1 pl-5'>{open.facts.map(f=><li key={f}>{$legacyText(f)}</li>)}</ul>{open.url?<p><a className='nr-link break-all' href={open.url} target='_blank' rel='noreferrer'>{open.url}</a></p>:null}</section>
+    <section className='space-y-1'><h3 className='flex items-center gap-1 text-xs font-medium text-muted-foreground'><AiMark label={$t('strategy.aiVerdict')}/>{$t('strategy.aiVerdict')}</h3><p>{st.reason?`${st.label}：${st.reason}`:st.why}</p>{st.reason?<p className='text-xs text-muted-foreground'>{st.why}</p>:null}</section>
+    {st.earlier?<p className='text-xs text-muted-foreground'>{$t('strategy.handedOffAgentBefore')}<button type='button' className='nr-link' onClick={()=>void navigate(`/actions/${st.earlier!.id}`)}>{st.earlier.no?`T-${st.earlier.no}`:$t('common.tasks')}</button>{$tj('strategy.changeStillThere',{0:st.earlier.state==='done'?$t('strategy.done'):$t('strategy.closed')})}</p>:null}
+    {watch&&st.verdict==='watch'&&!st.dismissed?<section className='space-y-1' data-watch-record=''><h3 className='text-xs font-medium text-muted-foreground'>{$t('common.watch')}</h3>
+     <dl className='grid grid-cols-[5.5rem_1fr] gap-y-1'><dt className='text-muted-foreground'>{$t('strategy.decisionCondition')}</dt><dd>{watch.waitingFor||'—'}</dd>
+      <dt className='text-muted-foreground'>{$t('strategy.watchingSince')}</dt><dd>{$t('strategy.day',{0:watch.since.slice(5,10).replace('-','/'),1:daysBetween(watch.since,today||openedAt)})}</dd>
+      <dt className='text-muted-foreground'>{$t('strategy.deadline')}</dt><dd>{watch.decideBy.slice(5).replace('-','/')}</dd>
+      <dt className='text-muted-foreground'>{$t('strategy.startingValue')}</dt><dd><ul className='list-disc space-y-0.5 pl-4'>{watch.startFacts.map(f=><li key={f}>{$legacyText(f)}</li>)}</ul></dd></dl></section>:null}
+    {verdicts&&verdicts.length>1?<section className='space-y-1' data-verdicts=''><h3 className='text-xs font-medium text-muted-foreground'>{$t('strategy.verdictDay')}</h3><ul className='space-y-0.5'>{verdicts.slice(0,14).map(v=><li key={v.day} className='grid grid-cols-[3.5rem_1fr] gap-2'><span className='tabular-nums text-muted-foreground'>{v.day.slice(5).replace('-','/')}</span><span>{getVerdict()[v.verdict].label}：{v.reason}</span></li>)}</ul></section>:null}
+    {error?<p role='alert' className='nr-error'>{error}</p>:null}
    </div>
   </DetailDrawer>}
   {handing?<DraftHandOffDialog projectId={projectId} draft={changeDraft(open,st.reason)} playbookId={PLAYBOOK[open.action||'']||'optimize-page'} page={open.url||undefined} description={$t('strategy.changeDataGoTaskBrief')} onClose={onClose} onDone={r=>{onClose();onHandOff(r);}}/>:null}
@@ -225,7 +227,7 @@ export function ChangeDetail({signal:open,status:st,projectId,verdicts,watch,tod
 // Needs-you (§5.4 attention): one line, only when something waits.
 export function WaitingStrip({tasks,label}:{tasks:Task[];label:(w?:Work)=>string}):ReactElement|null{
  const navigate=useNavigate();if(!tasks.length)return null;
- return <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-nr-tint-amber px-3 py-2 text-sm text-nr-ink-amber"><BellIcon className="size-4 shrink-0" aria-hidden="true"/><b className="font-medium">{$tj('strategy.thingsNeed',{0:tasks.length})}</b>
-  {tasks.slice(0,2).map(t=><button key={t.id} type="button" className="min-w-0 max-w-[24rem] truncate underline-offset-4 hover:underline" onClick={()=>navigate(`/actions/${t.id}`)}>{t.title} · {label(t.evidence?.work)}</button>)}
-  <button type="button" className="ml-auto underline-offset-4 hover:underline" onClick={()=>navigate(WAITING_TASKS_URL)}>{$t('strategy.view')}</button></div>;
+ return <div role='status' className='flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-nr-tint-amber px-3 py-2 text-sm text-nr-ink-amber'><BellIcon className='size-4 shrink-0' aria-hidden='true'/><b className='font-medium'>{$tj('strategy.thingsNeed',{0:tasks.length})}</b>
+  {tasks.slice(0,2).map(t=><button key={t.id} type='button' className='min-w-0 max-w-[24rem] truncate underline-offset-4 hover:underline' onClick={()=>void navigate(`/actions/${t.id}`)}>{t.title} · {label(t.evidence?.work)}</button>)}
+  <button type='button' className='ml-auto underline-offset-4 hover:underline' onClick={()=>void navigate(WAITING_TASKS_URL)}>{$t('strategy.view')}</button></div>;
 }

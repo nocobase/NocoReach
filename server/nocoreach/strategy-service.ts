@@ -12,7 +12,6 @@ const localeOf=v=>typeof v?.locale==='string'&&/^en/i.test(v.locale)?'en-US':'zh
 import * as periods from './evidence-period.js';
 import { projectId, requireAccess } from './policy.js';
 import { memoryForAI, MEMORY_SECTIONS } from './execution/memory.js';
-import { projectWork } from './execution/model.js';
 import { splitOf } from '../../shared/opportunity-parts.js';
 import { planOf, scopeText, taskPart } from './opportunity-hand-off.js';
 // Who created a task: it becomes the task's owner (2026-10-08).
@@ -61,7 +60,7 @@ class StrategyService{
  async state(id){return (await this.row(id))?.get('payload')||initial();}
  async context(id,requestedDays=28){
   const days=periods.periodDays(requestedDays);
-  const project=await this.p.project(id);let snapshots=[],candidates=[],warnings=[];
+  const project=await this.p.project(id);let snapshots=[]; let candidates=[]; const warnings=[];
   try{snapshots=await this.p.sync.snapshots(id);}catch{warnings.push(systemMessageText('strategy.syncedDataNotAvailableRight'));}
   try{candidates=(await this.p.db.getRepository('nrKeywordCandidates').find({filter:{projectId:id},sort:'-createdAt',limit:20})).map(r=>r.toJSON());}catch{warnings.push(systemMessageText('strategy.keywordCandidatesNotAvailableRight'));}
   const evidence=evidenceFrom(snapshots,candidates,new Date().toISOString(),days);evidence.limitations.push(...warnings);
@@ -139,7 +138,7 @@ class StrategyService{
   const site=await this.repo().findOne({filter:{key:`site-content:${id}`},transaction}).then(r=>r?.get('payload')||null,()=>null);
   const ids=[...new Set(state.proposals.filter(p=>p.taskId&&p.insight?.id===card.id).map(p=>String(p.taskId)))];
   const tasks=(await Promise.all(ids.map(t=>this.p.db.getRepository('nrTasks').findOne({filter:{id:t,projectId:id},transaction})))).filter(Boolean).map(t=>t.toJSON?t.toJSON():t);
-  let targets=[];try{targets=this.p.articleTargets?.list(String(id))?.targets||[];}catch{targets=[];}
+  let targets;try{targets=this.p.articleTargets?.list(String(id))?.targets||[];}catch{targets=[];}
   return planOf({card,signals,site,proposals:state.proposals,tasks,targets,locale:ctx?.getCurrentLocale?.()||'zh-CN'});
  }
  // Hand off to agent on an opportunity with several places: what the confirmation dialog lists.

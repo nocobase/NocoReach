@@ -49,6 +49,7 @@ function Detail({ projectId, taskId }: { projectId: string; taskId: string }) {
     location = useLocation();
   useEffect(() => {
     let alive = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- A new remote result starts a loading cycle; completion is guarded below.
     setLoading(true);
     void api
       .action<ResultDetail>('nrTaskWork', 'result', {

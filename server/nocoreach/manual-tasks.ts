@@ -314,9 +314,7 @@ export class ManualTasks {
             });
             // Compare-and-set prevents two tasks or cleanup claiming the same file.
             // A failed link rolls task insertion and number allocation back together.
-            const media = tx.connection.repository(
-              'nrTaskMedia',
-            ) as Repository<TaskMediaRecord>;
+            const media = tx.connection.repository<TaskMediaRecord>('nrTaskMedia');
             for (const id of input.attachmentIds) {
               const file = await media.findOne({ filter: { id } });
               if (

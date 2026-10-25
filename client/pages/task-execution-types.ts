@@ -3,7 +3,7 @@ import type { ArticleDraft, ArticleSnapshot } from '../../shared/article-publish
 import {localizeWorkSnapshots} from './playbook-snapshot';
 import type { MaterialNotice } from './task-detail/material-notices.js';
 import type { AgentRunExecution, RunTranscriptEvent } from '#components/agent-run-history';
-import { $t } from "#i18n";
+import { $t } from '#i18n';
 import type { Plan } from './task-work-model';
 import type { FlowSnapshot, PlaybookSnapshot } from './playbook-model';
 export type Artifact = { report?:{kind:string;sources:TaskResultSource[];asOf:string;uncertainties:string[]}; id:string; stepId:string; planVersion:number; version:number; content:string; createdAt:string; createdBy:string; runId?:string; legacy?:boolean; manual?:boolean; approvedAt?:string; rejectedAt?:string; pr?:PullRequestInfo; article?:ArticleProposal };

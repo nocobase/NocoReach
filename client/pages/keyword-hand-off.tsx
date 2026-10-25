@@ -1,7 +1,7 @@
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
-import { type Message, useMessageState, $t, $tj, $legacyText } from "#i18n";
-import {useEffect,useRef,type ReactElement} from 'react';
-import {nocobaseClient as api} from "#lib/nocoreach-api";
+import { type Message, useMessageState, $t, $legacyText } from '#i18n';
+import {useEffect,useRef,useState,type ReactElement} from 'react';
+import {nocobaseClient as api} from '#lib/nocoreach-api';
 import {Button} from '#components/ui/button';
 import {Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle} from '#components/ui/dialog';
 import {request} from './strategy/service';
@@ -45,14 +45,14 @@ export async function createDraftTask(projectId:number,draft:TaskDraft,playbookI
 export const handOffKeywords=(projectId:number,rows:HandOffKeyword[])=>createDraftTask(projectId,keywordDraft(rows),rankedPage(rows)?'optimize-page':'content-outline',rankedPage(rows));
 // While the task is being created (a moment): what happens, or why it did not; the task page then opens.
 function Creating({error,onClose}:{error:string;onClose:()=>void}):ReactElement{
- return <Dialog open onOpenChange={o=>{if(!o&&error)onClose();}}><DialogContent className="sm:max-w-sm" showCloseButton={Boolean(error)}>
+ return <Dialog open onOpenChange={o=>{if(!o&&error)onClose();}}><DialogContent className='sm:max-w-sm' showCloseButton={Boolean(error)}>
   <DialogHeader><DialogTitle>{$t('common.handOffAgent')}</DialogTitle><DialogDescription>{error?$t('keywordHandOff.taskNotCreated'):$t('keywordHandOff.creatingTaskPageOpensNext')}</DialogDescription></DialogHeader>
-  {error?<><p role="alert" className="nr-error">{error}</p><DialogFooter><Button variant="outline" onClick={onClose}>{$t('keywordHandOff.close')}</Button></DialogFooter></>:null}
+  {error?<><p role='alert' className='nr-error'>{error}</p><DialogFooter><Button variant='outline' onClick={onClose}>{$t('keywordHandOff.close')}</Button></DialogFooter></>:null}
  </DialogContent></Dialog>;
 }
 // Runs once per hand-off (a second mount in development, or a second click, reuses the same request).
-function useCreate(create:(requestId:string)=>Promise<void>,onError:(e:unknown)=>void){const requestId=useRef(crypto.randomUUID()),ran=useRef(false);
- useEffect(()=>{if(ran.current)return;ran.current=true;void create(requestId.current).catch(onError);},[]);}
+function useCreate(create:(requestId:string)=>Promise<void>,onError:(e:unknown)=>void){const [requestId]=useState(()=>crypto.randomUUID()),ranRef=useRef(false);
+ useEffect(()=>{if(ranRef.current)return;ranRef.current=true;void create(requestId).catch(onError);},[create,onError,requestId]);}
 // 交给 Agent for keywords: the task is created at once and its page opens (no dialog to pick the 做法 any more).
 export function KeywordHandOffDialog({projectId,rows,onClose,onDone}:{projectId:number;rows:HandOffKeyword[];onClose:()=>void;onDone:(r:{taskId?:number;started:boolean;title:string})=>void}):ReactElement{
  const [error,setError]=useMessageState(''),draft=keywordDraft(rows),page=rankedPage(rows);

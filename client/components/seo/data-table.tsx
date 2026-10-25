@@ -1,4 +1,4 @@
-import { $t } from "#i18n";
+import { $t } from '#i18n';
 // Ported from every-app/open-seo db8bde1 src/client/components/table/DataTable.tsx (MIT).
 // Changes: NocoReach ui components and empty state, Chinese copy, no sticky-scroll container.
 import {
@@ -12,13 +12,13 @@ import {
   type Row,
   type Table as TanStackTable,
   type TableOptions,
-} from "@tanstack/react-table";
-import { useRef, type MouseEvent, type MutableRefObject, type ReactNode } from "react";
-import { Button } from "#components/ui/button";
-import { Checkbox } from "#components/ui/checkbox";
-import { Skeleton } from "#components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#components/ui/table";
-import { applyShiftRangeSelection, type SelectionAnchor } from "./table-selection";
+} from '@tanstack/react-table';
+import { useRef, type MouseEvent, type MutableRefObject, type ReactNode } from 'react';
+import { Button } from '#components/ui/button';
+import { Checkbox } from '#components/ui/checkbox';
+import { Skeleton } from '#components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '#components/ui/table';
+import { applyShiftRangeSelection, type SelectionAnchor } from './table-selection';
 
 type AppColumnMeta<TData> = {
   headerClassName?: string;
@@ -28,7 +28,7 @@ type AppColumnMeta<TData> = {
 // Read through a cast rather than a global ColumnMeta augmentation, which would leak into every table in the app.
 const metaOf = <TData,>(meta: unknown) => meta as AppColumnMeta<TData> | undefined;
 
-type UseDataTableOptions<TData> = Omit<TableOptions<TData>, "getCoreRowModel"> & {
+type UseDataTableOptions<TData> = Omit<TableOptions<TData>, 'getCoreRowModel'> & {
   withSorting?: boolean;
   withExpanded?: boolean;
   withPagination?: boolean;
@@ -36,6 +36,7 @@ type UseDataTableOptions<TData> = Omit<TableOptions<TData>, "getCoreRowModel"> &
 
 export function useDataTable<TData>(options: UseDataTableOptions<TData>) {
   const { withSorting, withExpanded, withPagination, ...tableOptions } = options;
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table intentionally exposes a mutable instance; this adapter is not compiler-memoized.
   return useReactTable({
     ...tableOptions,
     getCoreRowModel: getCoreRowModel(),
@@ -51,10 +52,10 @@ export function useSelectionAnchor(): MutableRefObject<SelectionAnchor | null> {
 
 export function makeSelectionColumn<TData>(anchorRef: MutableRefObject<SelectionAnchor | null>): ColumnDef<TData> {
   return {
-    id: "select",
+    id: 'select',
     size: 32,
     enableSorting: false,
-    meta: { headerClassName: "w-10", cellClassName: "w-10" },
+    meta: { headerClassName: 'w-10', cellClassName: 'w-10' },
     header: ({ table }) => (
       <Checkbox
         checked={table.getIsAllRowsSelected()}
@@ -125,7 +126,7 @@ export function DataTable<TData>({
   const columns = table.getVisibleLeafColumns();
   const rows = table.getRowModel().rows;
   return (
-    <div data-slot="table-card" className="[&_td:first-child]:pl-4 [&_td:last-child]:pr-4 [&_th:first-child]:pl-4 [&_th:last-child]:pr-4">
+    <div data-slot='table-card' className='[&_td:first-child]:pl-4 [&_td:last-child]:pr-4 [&_th:first-child]:pl-4 [&_th:last-child]:pr-4'>
       {toolbar}
       <Table>
         <TableHeader>
@@ -145,14 +146,14 @@ export function DataTable<TData>({
               <TableRow key={index} aria-hidden>
                 {columns.map((column) => (
                   <TableCell key={column.id}>
-                    <Skeleton className={column.id === "select" ? "size-4" : "h-4 w-full"} />
+                    <Skeleton className={column.id === 'select' ? 'size-4' : 'h-4 w-full'} />
                   </TableCell>
                 ))}
               </TableRow>
             ))
           ) : rows.length === 0 ? (
-            <TableRow className="hover:bg-transparent">
-              <TableCell colSpan={columns.length} className="whitespace-normal">
+            <TableRow className='hover:bg-transparent'>
+              <TableCell colSpan={columns.length} className='whitespace-normal'>
                 {/* An empty table says so in one muted sentence, like an empty card (UI review 2026-10-22). */}
                 {isFiltered ? (
                   <TableEmpty
@@ -160,7 +161,7 @@ export function DataTable<TData>({
                     description={$t('dataTable.changeClearFiltersSeeMore')}
                     action={
                       onClearFilters ? (
-                        <Button variant="outline" size="sm" onClick={onClearFilters}>
+                        <Button variant='outline' size='sm' onClick={onClearFilters}>
                           {$t('dataTable.clearFilters')}</Button>
                       ) : undefined
                     }
@@ -174,14 +175,14 @@ export function DataTable<TData>({
             rows.map((row) => (
               <TableRow
                 key={row.id}
-                data-state={row.getIsSelected() ? "selected" : undefined}
-                className={onRowClick ? "cursor-pointer" : undefined}
+                data-state={row.getIsSelected() ? 'selected' : undefined}
+                className={onRowClick ? 'cursor-pointer' : undefined}
                 onClick={onRowClick ? (event) => onRowClick(row, event) : undefined}
               >
                 {row.getVisibleCells().map((cell) => {
                   const meta = metaOf<TData>(cell.column.columnDef.meta)?.cellClassName;
                   return (
-                    <TableCell key={cell.id} className={typeof meta === "function" ? meta(row) : meta}>
+                    <TableCell key={cell.id} className={typeof meta === 'function' ? meta(row) : meta}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   );
@@ -198,10 +199,10 @@ export function DataTable<TData>({
 
 function TableEmpty({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
   return (
-    <div className="py-3 text-sm text-muted-foreground">
+    <div className='py-3 text-sm text-muted-foreground'>
       <p>{title}</p>
-      {description ? <p className="mt-1 text-xs">{description}</p> : null}
-      {action ? <div className="mt-3">{action}</div> : null}
+      {description ? <p className='mt-1 text-xs'>{description}</p> : null}
+      {action ? <div className='mt-3'>{action}</div> : null}
     </div>
   );
 }

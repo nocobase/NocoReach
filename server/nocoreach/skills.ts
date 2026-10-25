@@ -20,6 +20,7 @@ function cleanBody(v){const b=textOf(v).trim();if(!b)fail(systemMessageText('ski
 // A file's path inside the Skill folder: relative, no hidden or parent segments, and not SKILL.md itself.
 function cleanPath(v){
  const p=String(v||'').replace(/\\/g,'/').replace(/^\.?\/+/,'').trim();const parts=p.split('/');
+ // eslint-disable-next-line no-control-regex -- File paths must reject ASCII control characters.
  if(!p||p.length>200||parts.length>4||parts.some(s=>!s||s==='.'||s==='..'||s.startsWith('.')||/[\u0000-\u001f:*?"<>|]/.test(s)))fail(systemMessageText('messages.invalidFilePath', { 0: String(v||'').slice(0,80) }));
  if(p.toLowerCase()==='skill.md')fail(systemMessageText('skills.skillMdBodyCannotAttached'));return p;
 }
@@ -32,7 +33,7 @@ function cleanFiles(list,existing=[]){
 // name and description from a SKILL.md's frontmatter (plain, quoted and block values); the rest is the body. Other
 // frontmatter fields (allowed-tools and the like) are not kept.
 function parseSkillMd(raw){
- const text=textOf(raw).replace(/^﻿/,'');const m=/^---[ \t]*\n([\s\S]*?)\n---[ \t]*(?:\n|$)/.exec(text);if(!m)return {name:'',description:'',body:text.trim()};
+ const text=textOf(raw).replace(/^\uFEFF/,'');const m=/^---[ \t]*\n([\s\S]*?)\n---[ \t]*(?:\n|$)/.exec(text);if(!m)return {name:'',description:'',body:text.trim()};
  const out={},lines=m[1].split('\n');
  for(let i=0;i<lines.length;i++){
   const kv=/^([A-Za-z][\w-]*):[ \t]*(.*)$/.exec(lines[i]);if(!kv)continue;let value=kv[2].trim();const key=kv[1];

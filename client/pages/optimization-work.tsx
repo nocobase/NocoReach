@@ -1,13 +1,13 @@
 import {useMe} from './me';
 import {isWaitingTask} from './task-waiting';
-import { renderMessage, type Message, useMessageState, $t, $legacyText } from "#i18n";
-import {useEffect,useRef,useState} from 'react';
+import { renderMessage, type Message, useMessageState, $t, $legacyText } from '#i18n';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import {Outlet,useLocation,useNavigate} from 'react-router';
 import {useUrlSearch} from '#hooks/use-url-search';
 import {BotIcon,KanbanIcon,ListIcon,SearchIcon} from 'lucide-react';
 import {Segmented} from '#components/reach/segmented';
 import {ListSkeleton} from '#components/reach/states';
-import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {nocobaseClient as api} from '#lib/nocoreach-api';
 import {cn} from '#lib/utils';
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
 import {PageContainer,PageHeader} from '#components/reach/page';
@@ -36,8 +36,8 @@ function FilterSelect({label,value,options,onChange}:{label:string;value:string;
  // Base UI reports null when the chosen item leaves the list (an old link's playbook option, gone once another is
  // picked); that is not a choice.
  return <Select value={value||ANY} onValueChange={v=>{if(v==null)return;onChange(v===ANY?'':String(v));}}>
-  <SelectTrigger className="w-auto min-w-28" aria-label={label} data-value={value}><SelectValue>{(v:string)=>names.get(v===ANY?'':v)??v}</SelectValue></SelectTrigger>
-  <SelectContent className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">{options.map(([k,v])=><SelectItem key={k||ANY} value={k||ANY}>{v}</SelectItem>)}</SelectContent>
+  <SelectTrigger className='w-auto min-w-28' aria-label={label} data-value={value}><SelectValue>{(v:string)=>names.get(v===ANY?'':v)??v}</SelectValue></SelectTrigger>
+  <SelectContent className='w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal'>{options.map(([k,v])=><SelectItem key={k||ANY} value={k||ANY}>{v}</SelectItem>)}</SelectContent>
  </Select>;
 }
 // 任务 (SPEC §5, as NocoProject's issue list): a table by default, a board one click away; filters in one row. Finished
@@ -45,9 +45,10 @@ function FilterSelect({label,value,options,onChange}:{label:string;value:string;
 // keeps its 已完成 column.
 export default function OptimizationWork(){
  const {project,error:projectError}=useProject(),navigate=useNavigate();
+ const activeProjectId=project?.id;
  const {searchParams:params,search:q,inputProps,updateParams}=useUrlSearch();
  const [tasks,setTasks]=useState<Task[]>([]),[loading,setLoading]=useState(true),[error,setError]=useMessageState(''),[notice,setNotice]=useState<{text:Message;undo?:Task}>(),[busy,setBusy]=useState(false);
- const pending=useRef(false),generation=useRef(0),moveRequest=useRef({key:'',id:''});
+ const pendingRef=useRef(false),generationRef=useRef(0),moveRequestRef=useRef({key:'',id:''});
  const legacyClosed=params.get('scope')==='archived'||params.get('status')==='closed',closed=params.get('scope')==='closed'||legacyClosed;
  const {mine,isAdmin}=useMe(),waiting=params.get('scope')==='waiting';
  const legacyPlaybook=!params.has('playbookName');
@@ -56,28 +57,28 @@ export default function OptimizationWork(){
  // The project's Agents, to name each task's Agent and lay out By Agent; without them cards show the name saved on the task.
  const [agents,setAgents]=useState<AgentStatus>();
  const playbookOptions=playbookFilterOptions(tasks.map(t=>t.evidence?.work));
- async function load(){if(!project)return;const seq=++generation.current;setLoading(true);try{const rows=await taskRecords<Task>(project.id);if(seq===generation.current){setTasks(rows);setError('');}}catch{if(seq===generation.current)setError(() => ($t('optimizationWork.notLoadTasksTryAgain')));}finally{if(seq===generation.current)setLoading(false);}}
- useEffect(()=>{void load();return()=>{generation.current++;};},[project?.id]);
- useEffect(()=>{if(!project)return;const c=new AbortController();void Promise.resolve().then(()=>api.action<AgentStatus>('nrAgent','status',{method:'POST',body:{projectId:String(project.id)},signal:c.signal})).then(a=>{if(!c.signal.aborted)setAgents(a);},()=>undefined);return()=>c.abort();},[project?.id]);
- useEffect(()=>{const task=params.get('task');if(task)navigate('/actions/'+encodeURIComponent(task),{replace:true});},[params.get('task')]);
- function param(key:string,value:string){updateParams(p=>{if(p.get('status')==='closed')p.delete('status');if(p.get('scope')==='archived')p.set('scope','closed');if(key==='playbookName')p.delete('playbook');if(key==='scope'&&value==='waiting'){p.delete('status');p.delete('owner');}value?p.set(key,value):p.delete(key);},key==='q');}
+ const load = useCallback(async function load(){if(!activeProjectId)return;const seq=++generationRef.current;setLoading(true);try{const rows=await taskRecords<Task>(activeProjectId);if(seq===generationRef.current){setTasks(rows);setError('');}}catch{if(seq===generationRef.current)setError(() => ($t('optimizationWork.notLoadTasksTryAgain')));}finally{if(seq===generationRef.current)setLoading(false);}},[activeProjectId, setError]);
+ useEffect(()=>{void load();const generation=generationRef;return()=>{generation.current++;};},[load, project?.id]);
+ useEffect(()=>{if(!activeProjectId)return;const c=new AbortController();void Promise.resolve().then(()=>api.action<AgentStatus>('nrAgent','status',{method:'POST',body:{projectId:String(activeProjectId)},signal:c.signal})).then(a=>{if(!c.signal.aborted)setAgents(a);},()=>undefined);return()=>c.abort();},[activeProjectId]);
+ useEffect(()=>{const task=params.get('task');if(task)void navigate('/actions/'+encodeURIComponent(task),{replace:true});},[navigate, params]);
+ function param(key:string,value:string){updateParams(p=>{if(p.get('status')==='closed')p.delete('status');if(p.get('scope')==='archived')p.set('scope','closed');if(key==='playbookName')p.delete('playbook');if(key==='scope'&&value==='waiting'){p.delete('status');p.delete('owner');}if(value)p.set(key,value);else p.delete(key);},key==='q');}
  function saved(t:Task,d:TaskData){setTasks(rows=>rows.map(row=>row.id===t.id?{...row,...d.task,evidence:{...row.evidence,work:d.work}}:row));refreshNavBadges();}
  async function move(t:Task,target:BoardState,beforeId?:number){
-  if(!project||pending.current||beforeId===t.id)return;
+  if(!project||pendingRef.current||beforeId===t.id)return;
   if(target==='done'&&workState(t.evidence?.work,t.status)!=='done'&&!(await confirmAction({title:() => ($t('optimizationWork.confirmWorkDone')),description:() => ($t('optimizationWork.nothingPublishedCannotCompletedWithout')),action:'optimizationWork.markDone',destructive:false})))return;
-  pending.current=true;setBusy(true);setError('');setNotice(undefined);
+  pendingRef.current=true;setBusy(true);setError('');setNotice(undefined);
   const body={projectId:String(project.id),taskId:String(t.id),revision:t.evidence?.work?.revision||0,command:'moveWork',state:target,beforeId:beforeId?String(beforeId):undefined,confirm:target==='done'};
-  const key=JSON.stringify(body);if(moveRequest.current.key!==key)moveRequest.current={key,id:crypto.randomUUID()};
-  try{saved(t,await api.action<TaskData>('nrTaskWork','advance',{method:'POST',body:{...body,requestId:moveRequest.current.id},unwrap:'data'}));}
+  const key=JSON.stringify(body);if(moveRequestRef.current.key!==key)moveRequestRef.current={key,id:crypto.randomUUID()};
+  try{saved(t,await api.action<TaskData>('nrTaskWork','advance',{method:'POST',body:{...body,requestId:moveRequestRef.current.id},unwrap:'data'}));}
   catch(e){setError(() => ($t('optimizationWork.cardStaysPlaceIfThere',{0:e instanceof Error?$legacyText(e.message):$t('optimizationWork.positionNotSaved')})));}
-  finally{pending.current=false;setBusy(false);}
+  finally{pendingRef.current=false;setBusy(false);}
  }
  // 关闭任务 / 重新打开 (SPEC §6.2): closing a task under way asks first (the executor stops, an open PR is closed);
  // anything else is put away at once with an undo.
  async function command(t:Task,cmd:'cancelTask'|'archiveTask'|'unarchiveTask'){
-  if(!project||pending.current)return false;pending.current=true;setBusy(true);setError('');
+  if(!project||pendingRef.current)return false;pendingRef.current=true;setBusy(true);setError('');
   try{saved(t,await api.action<TaskData>('nrTaskWork','advance',{method:'POST',body:{projectId:String(project.id),taskId:String(t.id),revision:t.evidence?.work?.revision||0,requestId:crypto.randomUUID(),command:cmd},unwrap:'data'}));return true;}
-  catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailed')));return false;}finally{pending.current=false;setBusy(false);}
+  catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailed')));return false;}finally{pendingRef.current=false;setBusy(false);}
  }
  async function act(t:Task,action:TaskAction){
   if(action==='reopen'){if(await command(t,'unarchiveTask'))setNotice({text:() => $t('optimizationWork.reopened',{0:t.title})});return;}
@@ -99,25 +100,25 @@ export default function OptimizationWork(){
  const uniq=(xs:string[])=>[...new Set(xs.filter(Boolean))].sort();
  const location=useLocation();
  const newTask=()=>navigate({pathname:'/actions/new',search:location.search});
- return <PageContainer className="nr-page"><PageHeader title={$t('common.tasks')} description={$t('optimizationWork.workAgentOnlineAiPlaybook')} actions={tasks.length||loading?<Button onClick={()=>void newTask()}>{$t('manualTask.newTask')}</Button>:undefined}/>
-  {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}<Button disabled={busy} variant="outline" size="sm" onClick={()=>void load()}>{$t('common.reload')}</Button></p>}{notice&&<p role="status" className="nr-success">{renderMessage(notice.text)}{notice.undo&&<button type="button" disabled={busy} className="ml-auto underline-offset-4 hover:underline" onClick={()=>void undo(notice.undo!)}>{$t('optimizationWork.undo')}</button>}</p>}
-  <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label={$t('common.filter')}>
+ return <PageContainer className='nr-page'><PageHeader title={$t('common.tasks')} description={$t('optimizationWork.workAgentOnlineAiPlaybook')} actions={tasks.length||loading?<Button onClick={()=>void newTask()}>{$t('manualTask.newTask')}</Button>:undefined}/>
+  {(error||projectError)&&<p role='alert' className='nr-error'>{error||projectError}<Button disabled={busy} variant='outline' size='sm' onClick={()=>void load()}>{$t('common.reload')}</Button></p>}{notice&&<p role='status' className='nr-success'>{renderMessage(notice.text)}{notice.undo&&<button type='button' disabled={busy} className='ml-auto underline-offset-4 hover:underline' onClick={()=>void undo(notice.undo!)}>{$t('optimizationWork.undo')}</button>}</p>}
+  <div className='flex flex-wrap items-center gap-2' role='toolbar' aria-label={$t('common.filter')}>
    {/* The scopes filter this one list, so they are the toolbar's pick-one control, not tabs (2026-10-22 decision D1:
        line tabs only switch a page's sections; a table's filters are a segmented control in its toolbar). */}
    <Segmented label={$t('optimizationWork.scope')} options={([['waiting',$t('optimizationWork.waitingForMe'),waitingCount],['',$t('optimizationWork.current'),tasks.length-closedCount-doneCount],['done',$t('common.completed'),doneCount],['closed',$t('common.closed'),closedCount]] as const).map(([c,label,n])=>({id:c,label:<>{label} <span>{loading?'':n}</span></>,title:label}))} value={waiting?'waiting':closed?'closed':done?'done':''} onChange={c=>param('scope',c)}/>
-   <label className="relative flex min-w-48 flex-1 items-center sm:max-w-72"><SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" aria-hidden="true"/><input aria-label={$t('optimizationWork.searchTasks')} {...inputProps} placeholder={$t('optimizationWork.searchTitleNumber')} className="w-full pl-8!"/></label>
+   <label className='relative flex min-w-48 flex-1 items-center sm:max-w-72'><SearchIcon className='pointer-events-none absolute left-2.5 size-4 text-muted-foreground' aria-hidden='true'/><input aria-label={$t('optimizationWork.searchTasks')} {...inputProps} placeholder={$t('optimizationWork.searchTitleNumber')} className='w-full pl-8!'/></label>
    {/* One set of status choices: the scopes above (UI review 2026-10-22). The board's columns and the list's order
        already separate the statuses, so there is no separate status filter; an old ?status= link is ignored. */}
    <FilterSelect label={$t('optimizationWork.filterPlaybook')} value={playbookFilterValue(playbook,legacyPlaybook)} options={[['',$t('optimizationWork.playbooks')],...(legacyPlaybook&&playbook?[[playbookFilterValue(playbook,true),legacyPlaybookFilterLabel(playbookOptions,playbook)] as [string,string]]:[]),...playbookOptions.map(o=>[o.value,o.label] as [string,string])]} onChange={v=>param('playbookName',playbookOptions.find(o=>o.value===v)?.name||'')}/>
    {!waiting&&<FilterSelect label={$t('optimizationWork.filterOwner')} value={owner} options={[['',$t('optimizationWork.owner')],...uniq(tasks.map(ownerName)).map(n=>[n,n] as [string,string])]} onChange={v=>param('owner',v)}/>}
    {agents?.options?.length?<FilterSelect label={$t('optimizationWork.filterAgent')} value={agentFilter} options={[['',$t('optimizationWork.anyAgent')],...agents.options.map(a=>[a.id,a.name] as [string,string]),[UNASSIGNED,$t('taskAgents.unassigned')]]} onChange={v=>param('agent',v)}/>:null}
-   <div className="ml-auto inline-flex overflow-hidden rounded-md border" role="group" aria-label={$t('optimizationWork.view')}>{([['',$t('optimizationWork.list'),ListIcon],['board',$t('optimizationWork.board'),KanbanIcon],['agent',$t('optimizationWork.byAgent'),BotIcon]] as const).map(([k,label,Icon])=>{const off=(closed||done)&&k!=='',on=k===(board?'board':byAgent?'agent':'');return <button key={label} type="button" aria-label={label} title={off?$t('optimizationWork.finishedClosedTasksShownList'):label} disabled={off} aria-pressed={on} onClick={()=>{saveView(k);param('view',k);}} className={cn('inline-flex size-8 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40',on&&'bg-muted text-foreground')}><Icon className="size-4"/></button>;})}</div>
+   <div className='ml-auto inline-flex overflow-hidden rounded-md border' role='group' aria-label={$t('optimizationWork.view')}>{([['',$t('optimizationWork.list'),ListIcon],['board',$t('optimizationWork.board'),KanbanIcon],['agent',$t('optimizationWork.byAgent'),BotIcon]] as const).map(([k,label,Icon])=>{const off=(closed||done)&&k!=='',on=k===(board?'board':byAgent?'agent':'');return <button key={label} type='button' aria-label={label} title={off?$t('optimizationWork.finishedClosedTasksShownList'):label} disabled={off} aria-pressed={on} onClick={()=>{saveView(k);param('view',k);}} className={cn('inline-flex size-8 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40',on&&'bg-muted text-foreground')}><Icon className='size-4'/></button>;})}</div>
   </div>
   {!closed&&!done&&tasks.length>0&&<RuntimeNotice/>}
   {waiting&&<p role='status' className='text-sm text-muted-foreground'>{$t(isAdmin?'optimizationWork.waitingAdminScope':'optimizationWork.waitingMemberScope')}</p>}
-  {loading?<ListSkeleton rows={6} label={$t('common.loadingTasks')}/>:byAgent?<AgentBoard tasks={rows} agents={agents} onOpen={id=>navigate('/actions/'+id)}/>:board?<WorkBoard tasks={rows} busy={busy} list={false} agents={agents} onMove={(t,s,before)=>void move(t as Task,s,before)} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>
-   :rows.length?<TaskTable tasks={rows} closed={closed} agents={agents} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>:null}
-  {!loading&&!tasks.length?<Empty className="min-h-48 border"><EmptyHeader><EmptyTitle>{$t('manualTask.emptyTitle')}</EmptyTitle><EmptyDescription>{$t('manualTask.createHint')}</EmptyDescription></EmptyHeader><EmptyContent><Button onClick={()=>void newTask()}>{$t('manualTask.newTask')}</Button></EmptyContent></Empty>:!loading&&!rows.length&&!board&&!byAgent&&<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{closed?$t('optimizationWork.noClosedTasks'):done?$t('optimizationWork.noFinishedTasksYet'):q||playbook||(!waiting&&owner)||agentFilter?$t('optimizationWork.noMatchingTasksTryAdjusting'):waiting?$t('optimizationWork.noWaitingTasks'):$t('optimizationWork.noTasksYetTasksCreated')}</p>}
+  {loading?<ListSkeleton rows={6} label={$t('common.loadingTasks')}/>:byAgent?<AgentBoard tasks={rows} agents={agents} onOpen={id=>void navigate('/actions/'+id)}/>:board?<WorkBoard tasks={rows} busy={busy} list={false} agents={agents} onMove={(t,s,before)=>void move(t,s,before)} onOpen={id=>void navigate('/actions/'+id)} onAction={(t,c)=>void act(t,c)}/>
+   :rows.length?<TaskTable tasks={rows} closed={closed} agents={agents} onOpen={id=>void navigate('/actions/'+id)} onAction={(t,c)=>void act(t,c)}/>:null}
+  {!loading&&!tasks.length?<Empty className='min-h-48 border'><EmptyHeader><EmptyTitle>{$t('manualTask.emptyTitle')}</EmptyTitle><EmptyDescription>{$t('manualTask.createHint')}</EmptyDescription></EmptyHeader><EmptyContent><Button onClick={()=>void newTask()}>{$t('manualTask.newTask')}</Button></EmptyContent></Empty>:!loading&&!rows.length&&!board&&!byAgent&&<p className='rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground'>{closed?$t('optimizationWork.noClosedTasks'):done?$t('optimizationWork.noFinishedTasksYet'):q||playbook||(!waiting&&owner)||agentFilter?$t('optimizationWork.noMatchingTasksTryAdjusting'):waiting?$t('optimizationWork.noWaitingTasks'):$t('optimizationWork.noTasksYetTasksCreated')}</p>}
   <Outlet/>
  </PageContainer>;
 }

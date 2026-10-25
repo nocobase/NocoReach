@@ -122,6 +122,7 @@ export function contentInput(v: any, domains: string[]) {
   if (repository && !/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repository)) return fail(systemMessageText('taskExecution.enterRepositoryOwnerRepository'));
   if (!Array.isArray(v.paths) || v.paths.length > 20) return fail(systemMessageText('taskExecution.provideUp20RelativeFile'));
   const paths = [...new Set<string>(v.paths.map((p: unknown) => text(p, 1000)))];
+  // eslint-disable-next-line no-control-regex -- Control characters must be rejected in user-supplied paths.
   if (paths.some(p => p.startsWith('/') || p.includes('\\') || p.split('/').some(x => !x || x === '.' || x === '..') || /[\x00-\x1f:]/.test(p))) return fail(systemMessageText('taskExecution.filePathsRelativePathsInside'));
   if (paths.length && !repository) return fail(systemMessageText('taskExecution.specifyRepositoryBeforeEnteringFile'));
   return { id: digest(url.href), url: url.href, title: text(v.title, 300), repository, paths };

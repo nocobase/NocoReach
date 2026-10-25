@@ -1,5 +1,5 @@
-import { $t, $legacyText } from "#i18n";
-import {nocobaseClient as api} from "#lib/nocoreach-api";
+import { $t, $legacyText } from '#i18n';
+import {nocobaseClient as api} from '#lib/nocoreach-api';
 import {playbookForActions} from '../../shared/opportunity-parts.js';
 // 做法 (SPEC §6.0), mirrored from plugins/connections/server/execution/playbook.ts and flow.ts.
 export type StageKind='agent'|'review'|'publish'|'release'|'observe';
@@ -51,12 +51,12 @@ export function eventText(e:{action:string;note?:string;comment?:string;stageKey
  const s=stageName(e.stageKey);
  switch(e.action){
   case 'startTask':return {who:$t('common.you'),text:$t('playbook.startedTask',{0:e.note?$t('playbook.playbook',{0:e.note}):''})};
-  case 'selectPlaybook':return {who:$t('common.you'),text:$t('playbook.changedPlaybook',{0:(e.note||"")})};
-  case 'handoff':return {who:$t('common.system'),text:$t('playbook.handedOverTaskDocumentDelivered',{0:(e.note||"")})};
+  case 'selectPlaybook':return {who:$t('common.you'),text:$t('playbook.changedPlaybook',{0:(e.note||'')})};
+  case 'handoff':return {who:$t('common.system'),text:$t('playbook.handedOverTaskDocumentDelivered',{0:(e.note||'')})};
   case 'runQueued':return {who:executor,text:$t('playbook.started',{0:(e.note||$t('common.run'))})};
   case 'runSucceeded':return {who:executor,text:$t('playbook.finishedDeliveredNewVersion')};
   case 'runFailed':return {who:$t('common.system'),text:$t('playbook.runNotCompleteRetried',{0:e.note?`（${$legacyText(e.note)}）`:''})};
-  case 'flowWaiting':return {who:$t('common.system'),text:$t('playbook.nextStepNotStart',{0:$legacyText(e.note||"")})};
+  case 'flowWaiting':return {who:$t('common.system'),text:$t('playbook.nextStepNotStart',{0:$legacyText(e.note||'')})};
   // A primary language approved before its translation (2026-10-24) says so instead of handing over.
   case 'approveStage':return {who:$t('common.you'),text:e.note==='translate'?$t('articleTask.approvedPrimary'):$t('playbook.approved',{0:s,1:e.note?$t('playbook.handedContinue',{0:e.note}):''})};
   case 'requestStageChanges':return {who:$t('common.you'),text:$t('playbook.requestedChanges',{0:e.comment||''})};

@@ -126,7 +126,7 @@ test('signal-based analysis keeps only suggestions that cite a current signal an
 });
 test('opportunity decisions: ignore or restore only; ignored ones are not brought back by later analyses',async()=>{
  const {StrategyService}=__strategy_service;const {withoutIgnored}=__opportunity_board;
- const old={id:'old',title:'t',objective:'g',suggestion:'s',signalIds:['b','a']};let state={insights:{items:[old]}};
+ const old={id:'old',title:'t',objective:'g',suggestion:'s',signalIds:['b','a']};const state={insights:{items:[old]}};
  const service=new StrategyService({});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
  await assert.rejects(service.reviewOpportunity(1,{insightId:'old',status:'snoozed'}),/处理状态无效/);
  await assert.rejects(service.reviewOpportunity(1,{insightId:'old',status:'discussing'}),/处理状态无效/);

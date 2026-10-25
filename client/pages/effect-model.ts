@@ -1,4 +1,4 @@
-import { $t } from "#i18n";
+import { $t } from '#i18n';
 import { formatDate } from '#lib/format';
 import type {Work} from './task-execution-types';
 import { safeConclusion, metricValues, matchesObservation } from '../../shared/result-comparison.js';
@@ -16,7 +16,7 @@ export function effectLine(r:EffectResult,observeFrom?:string){
  return $t('effect.day',{0:r.day,1:getConclusionLabels()[r.conclusion],2:r.primary==='clicks'?$t('common.searchClicks'):$t('common.viewCount'),3:b,4:a,5:p>0?'+':'',6:p});
 }
 // Pages the observation compares: released pages, the published page and the linked page (same as the server).
-export function effectPages(w:Partial<Work>){const ok=(u?:string)=>{try{return u&&new URL(u).protocol==='https:'?u:'';}catch{return '';}};return [...new Set([...(w.release?.pages||[]),w.receipt?.url,w.page?.url].map(ok).filter(Boolean) as string[])];}
+export function effectPages(w:Partial<Work>){const ok=(u?:string)=>{try{return u&&new URL(u).protocol==='https:'?u:'';}catch{return '';}};return [...new Set([...(w.release?.pages||[]),w.receipt?.url,w.page?.url].map(ok).filter((value): value is string => Boolean(value)))];}
 // Each checkpoint: its result, or the day it is expected (Google data arrives about three days late).
 export function effectItems(w:Partial<Work>){
  if(!w.observeFrom)return [];

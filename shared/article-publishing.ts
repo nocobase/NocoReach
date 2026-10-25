@@ -300,7 +300,7 @@ export function slugFromPage(
     if (!page.startsWith(before) || !page.endsWith(after)) continue;
     const middle = page.slice(before.length, page.length - after.length);
     if (!middle || middle.includes('/')) continue;
-    let slug = middle;
+    let slug: string;
     try {
       slug = decodeURIComponent(middle);
     } catch {

@@ -192,7 +192,7 @@ class SyncService{
   try{return await this.collectFresh(id,controller.signal);}finally{flights.delete(controller);if(!flights.size)this.freshFlights.delete(key);}
  }
  async collectFresh(id,signal: AbortSignal){signal.throwIfAborted();const clock=(this.p as Connections).mock?.enabled?new Date((this.p as Connections).mock.context(String(id)).clock):new Date(),link=await this.link(id),token=await this.p.token(id,signal),la=calendarDateInTimeZone('America/Los_Angeles',clock),start=shift(la,-2);
-  let tz='UTC';try{tz=(await (this.p.googleJson?this.p.googleJson.bind(this.p,id):googleJson)(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${link.get('ga4PropertyId')}`,{...jsonRequest(token),signal:AbortSignal.any([signal,AbortSignal.timeout(30000)])})).timeZone||'UTC';}catch{tz='UTC';}
+  let tz;try{tz=(await (this.p.googleJson?this.p.googleJson.bind(this.p,id):googleJson)(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${link.get('ga4PropertyId')}`,{...jsonRequest(token),signal:AbortSignal.any([signal,AbortSignal.timeout(30000)])})).timeZone||'UTC';}catch{tz='UTC';}
   signal.throwIfAborted();
   const out={fetchedAt:new Date().toISOString(),ga4Resource:link.get('ga4PropertyId'),gscResource:link.get('gscSiteUrl'),gsc:[],ga4:[]};
   for(const source of ['gsc','ga4']){const end=shift(calendarDateInTimeZone(source==='ga4'?tz:'America/Los_Angeles',clock),-1);if(end<start)continue;
@@ -209,7 +209,7 @@ class SyncService{
  async fresh(id,source,cutoff){if(!cutoff)return [];const s=(await this.repo('nrSnapshots').findOne({filter:{key:`google-fresh:${id}`}}))?.get('payload');const link=await this.p.link(id).catch(()=>null);
   if(!s||!link||s.ga4Resource!==link.get('ga4PropertyId')||s.gscResource!==link.get('gscSiteUrl'))return [];return (s[source]||[]).filter(r=>r.date>cutoff);}
  async tick(){if(this.busy)return;const links=await this.repo('nrGoogleLinks').find({filter:{scheduleEnabled:true}});for(const link of links){if(link.get('nextSyncAt')&&Date.parse(link.get('nextSyncAt'))>Date.now())continue;try{await this.enqueue(link.get('projectId'),7,'scheduled');}catch(e){this.p.app.logger.warn('NocoReach scheduled enqueue skipped',{code:safeError(e)});}}
-  const deadline=Date.now()+25000;while(Date.now()<deadline&&await this.step()){}
+  const deadline=Date.now()+25000;while(Date.now()<deadline&&await this.step()){ /* Drain queued work until the time budget is used. */ }
   // Rebuild here after new data lands (and once after a restart) so page requests find it ready.
   // …and the default 搜索表现 and 访问 views (28 days), saved, so opening the page after new data or a restart is immediate.
   // 访问 asks GA4 live, so a failed build waits 15 minutes before the tick tries again.
@@ -229,7 +229,7 @@ class SyncService{
   // A build outside this transaction may be waiting for its connection. Sharing that promise
   // would deadlock; sharing results from inside it would also expose data that can roll back.
   const transaction=this.p.db.transactionContext?.();
-  let caches=this;
+  let caches={cache:this.cache,building:this.building};
   if(transaction){caches=this.transactionCaches.get(transaction);if(!caches){caches={cache:new Map(),building:new Map()};this.transactionCaches.set(transaction,caches);}}
   const {cache,building}=caches;
   if(cache.get(id)?.key===key)return cache.get(id).value;

@@ -159,7 +159,7 @@ export function taskTools(
         archived: Boolean(work.archivedAt),
         cancelled: Boolean(work.cancelledAt),
         playbookId,
-        agentId: agent.agentId,
+        agentId: agent.agentId as string | undefined,
         latestRun: work.latestRun,
         executable: reason === null,
         blockedReason: reason,

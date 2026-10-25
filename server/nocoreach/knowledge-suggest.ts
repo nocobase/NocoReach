@@ -34,7 +34,7 @@ class KnowledgeSuggest{
  async complete(system:string,user:string){const provider=this.p.taskExecution?.provider;if(!provider)fail(systemMessageText('knowledgeSuggest.onlineAiNotAvailable'),409);return provider.complete(system,user,'knowledge-suggest');}
  async memory(id){const row=await this.p.projects.row(id);return memoryOf(row?.get('payload'));}
  // Step one: read the material and suggest where it goes. Nothing is saved except the read text, kept for a day.
- async suggest(id,v){let text='',fileName='',source='',kind='text';
+ async suggest(id,v){let text,fileName='',source='',kind='text';
   if(v.url){const url=str(v.url,2000);
    const skill=await this.p.skills?.readLink({url},this.download).catch(()=>null);
    if(skill?.files)return {kind:'skill',source:skill.source,skill:{name:skill.name,description:skill.description,files:skill.files.length}};

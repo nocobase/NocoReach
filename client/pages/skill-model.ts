@@ -1,4 +1,4 @@
-import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {nocobaseClient as api} from '#lib/nocoreach-api';
 import {$t,$legacyText} from '#i18n';
 // Skills (SPEC §6.0), mirrored from plugins/connections/server/skills.js: one library for every project, turned on or off
 // per project; a 做法 step can name Skills it always uses.

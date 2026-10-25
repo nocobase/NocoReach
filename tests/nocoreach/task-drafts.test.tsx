@@ -276,8 +276,10 @@ test.each(['source', 'related', 'sidebar', 'breadcrumb', 'back-forward'])(
       await user.click(screen.getByRole('link', { name: '任务', exact: true }));
     expect(unload()).toBe(true);
     if (kind === 'related')
-      expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue(
-        '',
+      await waitFor(() =>
+        expect(
+          screen.getByRole('textbox', { name: '给执行者的话' }),
+        ).toHaveValue(''),
       );
     await user.click(screen.getByRole('button', { name: 'Back', exact: true }));
     expect(screen.getByRole('textbox', { name: '编辑内容' })).toHaveValue(
@@ -368,7 +370,7 @@ test('Results return preserves its filters and retains both task drafts', async 
     'Draft body',
   );
   await user.click(link);
-  expect(screen.getByText('Other page')).toBeInTheDocument();
+  expect(await screen.findByText('Other page')).toBeInTheDocument();
   expect(unload()).toBe(true);
   await user.click(screen.getByRole('button', { name: 'Back', exact: true }));
   expect(screen.getByRole('textbox', { name: '编辑内容' })).toHaveValue(

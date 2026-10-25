@@ -6,7 +6,7 @@ import { projectId, requireAccess } from './policy.js';
 // read (each is re-read weekly), so the audit is free and covers exactly the pages 内容 lists. Every issue type lists
 // the pages it affects and says whether it is a technical fix or a content change, for 交给 Agent.
 const key=u=>{try{const x=new URL(u);return `${x.host.toLowerCase().replace(/^www\./,'')}${x.pathname.replace(/\/+$/,'')||'/'}`;}catch{return '';}};
-const width=s=>[...String(s||'')].reduce((n,c)=>n+(/[\u0000-ÿ]/.test(c)?0.5:1),0);
+const width=s=>[...String(s||'')].reduce((n,c)=>n+(c.charCodeAt(0)<=255?0.5:1),0);
 // Issue types: severity (critical, warning, notice), what to do, and whether it is a technical (tech-fix) or content job.
 const TYPES={
  broken:{severity:'critical',title:systemMessageText('audit.pageNotLoad'),description:systemMessageText('audit.returns4Xx5Xx'),job:'tech'},

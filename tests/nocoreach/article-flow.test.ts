@@ -1154,7 +1154,7 @@ test('languages: the primary is written and approved first, then translated, and
       zh: { title: '一篇新文章', body: '新文章的正文' },
     },
   });
-  d = await f.command('approveStage', {
+  await f.command('approveStage', {
     stageKey: d.work.flow.stages[d.work.stageIndex].key,
     artifactId: review(d).id,
     checked: [],

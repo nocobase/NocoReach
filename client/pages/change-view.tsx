@@ -1,4 +1,4 @@
-import { $t, $tj } from "#i18n";
+import { $t, $tj } from '#i18n';
 import {useState} from 'react';
 import type {FileChange} from './task-execution-types';
 export type DiffLine={type:'same'|'add'|'del';text:string};
@@ -31,10 +31,11 @@ export function ChangeView({changes}:{changes:FileChange[]}){
  const [index,setIndex]=useState(0),c=changes[Math.min(index,changes.length-1)];
  if(!c)return null;
  const rows=hunks(lineDiff(c.before,c.after)),added=rows.filter(r=>r.type==='add').length,removed=rows.filter(r=>r.type==='del').length;
- return <div className="nr-change-view">
-  {changes.length>1&&<div className="nr-change-tabs" role="tablist" aria-label={$t('changeView.changedFiles')}>{changes.map((f,i)=><button key={f.path} type="button" role="tab" aria-selected={i===index} onClick={()=>setIndex(i)}>{f.path.split('/').slice(-2).join('/')}</button>)}</div>}
-  <div className="nr-change-head"><code>{c.path}</code><span><span className="nr-add">+{added}</span> <span className="nr-del">−{removed}</span>{!c.before?$t('changeView.newFile'):!c.after?$t('changeView.deleted'):''}</span></div>
-  <div className={'nr-change-body'+(prose(c.path)?' nr-change-prose':'')}>{rows.length?rows.map((r,i)=>r.type==='gap'?<div key={i} className="nr-change-gap">{$tj('changeView.unchangedLines',{0:r.count})}</div>:<div key={i} className="nr-change-line" data-type={r.type}><span aria-hidden="true">{r.type==='add'?'+':r.type==='del'?'−':''}</span><span>{r.text||' '}</span></div>):<p className="nr-td-muted">{$t('changeView.noChangesContent')}</p>}</div>
-  {c.truncated&&<p className="nr-td-muted">{$t('changeView.fileLongBeginningCompared')}</p>}
+ return <div className='nr-change-view'>
+  {changes.length>1&&<div className='nr-change-tabs' role='tablist' aria-label={$t('changeView.changedFiles')}>{changes.map((f,i)=><button key={f.path} type='button' role='tab' aria-selected={i===index} onClick={()=>setIndex(i)}>{f.path.split('/').slice(-2).join('/')}</button>)}</div>}
+  <div className='nr-change-head'><code>{c.path}</code><span><span className='nr-add'>+{added}</span> <span className='nr-del'>−{removed}</span>{!c.before?$t('changeView.newFile'):!c.after?$t('changeView.deleted'):''}</span></div>
+  {/* eslint-disable-next-line @eslint-react/no-array-index-key -- Diff rows are immutable line positions; duplicate text and gaps are valid. */}
+  <div className={'nr-change-body'+(prose(c.path)?' nr-change-prose':'')}>{rows.length?rows.map((r,i)=>r.type==='gap'?<div key={i} className='nr-change-gap'>{$tj('changeView.unchangedLines',{0:r.count})}</div>:<div key={i} className='nr-change-line' data-type={r.type}><span aria-hidden='true'>{r.type==='add'?'+':r.type==='del'?'−':''}</span><span>{r.text||' '}</span></div>):<p className='nr-td-muted'>{$t('changeView.noChangesContent')}</p>}</div>
+  {c.truncated&&<p className='nr-td-muted'>{$t('changeView.fileLongBeginningCompared')}</p>}
  </div>;
 }

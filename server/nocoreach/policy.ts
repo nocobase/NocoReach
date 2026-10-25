@@ -7,7 +7,7 @@ function secretKey(id){return `NOREACH_GOOGLE_REFRESH_${projectId(id)}`;}
 // Roles (2026-10-08): NocoBase root/admin users are always 管理员; anyone else is 管理员 or 成员 once an admin picks a role
 // in 设置 · 成员, and cannot use NocoReach before that (a NocoBase that allows sign-up must not open the data to strangers).
 const NOCOBASE_ADMIN=['root','admin'];
-async function roleOf(db,userId,currentRoles=[]){
+async function roleOf(db,userId,currentRoles=[]):Promise<'admin'|'member'|null>{
  if(db?.access)return db.access.role(String(userId),db.transactionContext()?.connection);
  if(!userId)return null;if(currentRoles.some(r=>NOCOBASE_ADMIN.includes(r)))return 'admin';if(!db?.getRepository)return null;
  const row=await db.getRepository('users').findOne({filterByTk:userId,appends:['roles']}),user=row?.toJSON?row.toJSON():row;

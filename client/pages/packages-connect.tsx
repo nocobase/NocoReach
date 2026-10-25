@@ -1,9 +1,9 @@
 import { formatDateTime } from '#lib/format';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import {ConnectionError,NetworkSettingsLink} from '#components/connection-error';
-import { translateSourceError, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
-import {useEffect,useState} from 'react';
-import {nocobaseClient as api} from "#lib/nocoreach-api";
+import { translateSourceError, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from '#i18n';
+import { useCallback,useEffect,useState} from 'react';
+import {nocobaseClient as api} from '#lib/nocoreach-api';
 import {Button} from '#components/ui/button';
 import {confirmAction} from '#components/reach/confirm';
 import {InfoTip} from '#components/reach/info-tip';
@@ -19,30 +19,30 @@ export function PackagesConnect({projectId,onChange}:{projectId:number;onChange:
  const {can:canSync}=useBusinessAccess('nrPackages.sync',projectId);
  const {can:canRemove}=useBusinessAccess('nrPackages.remove',projectId);
  const [status,setStatus]=useState<PackagesStatus>(),[registry,setRegistry]=useState('npm'),[name,setName]=useState(''),[preview,setPreview]=useState<Preview>(),[busy,setBusy]=useState(false),[error,setError]=useMessageState('');
- const load=()=>call<PackagesStatus>(projectId,'status').then(setStatus);
- useEffect(()=>{void load().catch(()=>setError(() => ($t('packages.notLoadDownloadStatus'))));},[projectId]);
+ const load=useCallback(()=>call<PackagesStatus>(projectId,'status').then(setStatus), [projectId]);
+ useEffect(()=>{void load().catch(()=>setError(() => ($t('packages.notLoadDownloadStatus'))));},[load, projectId, setError]);
  // The first read runs in the background; poll until it has finished.
- useEffect(()=>{if(!status?.syncing&&!(status?.connected&&!status.lastSync))return;const t=setInterval(()=>{void load().then(()=>onChange()).catch(()=>undefined);},5000);return()=>clearInterval(t);},[status?.syncing,status?.lastSync,status?.connected]);
+ useEffect(()=>{if(!status?.syncing&&!(status?.connected&&!status.lastSync))return;const t=setInterval(()=>{void load().then(()=>onChange()).catch(()=>undefined);},5000);return()=>clearInterval(t);},[status?.syncing, status?.lastSync, status?.connected, load, onChange]);
  async function run(fn:()=>Promise<PackagesStatus|void>){setBusy(true);setError('');try{const s=await fn();if(s){setStatus(s);onChange();}}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailedRetry')));}finally{setBusy(false);}}
- if(!status)return error?<ConnectionError message={error}/>:<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
+ if(!status)return error?<ConnectionError message={error}/>:<p role='status' className='nr-footnote'>{$t('common.loadingLoading')}</p>;
  return <>{error&&<ConnectionError message={error}/>}
-  {status.connected&&<div className="nr-guide-connected">
-   {status.packages.map(p=><div key={p.id} className="nr-package-row" data-package={p.id}><div><a className="nr-link" href={p.url} target="_blank" rel="noreferrer">{p.title||p.name}</a><span className="nr-footnote"> · {p.registryName}</span>
-    <p className="nr-footnote">{p.registry==='docker'?$t('packages.totalPullsRecordedDailyDifference',{0:n(p.pulls)}):p.downloads28!=null?$t('packages.downloadsLast28Days',{0:n(p.downloads28)}):$t('packages.readingDownloads')}{p.since?$t('packages.since',{0:p.since}):''}</p></div>
-    {canRemove&&<Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('packages.stopRecordingDownloads',{0:p.title||p.name})),description:() => ($t('packages.recordedDataDeletedToo')),action:'common.remove'}))void run(()=>call<PackagesStatus>(projectId,'remove',{id:p.id}));}}>{$t('common.remove')}</Button>}</div>)}
-   {status.lastSync?<p className="nr-footnote">{$tj('common.lastSyncedSyncsAutomaticallyEvery',{0:formatDateTime(status.lastSync.at)})}{status.lastSync.errors.map(e=><span key={e} className="nr-block">{$tj('common.partlyNotUpdated',{0:translateSourceError(e)})}</span>)}<NetworkSettingsLink messages={status.lastSync.errors}/></p>:<p role="status" className="nr-footnote">{$t('packages.readingDownloadsFirstTime')}</p>}
-   <div className="nr-step-actions">{canSync&&<Button size="sm" variant="outline" disabled={busy||status.syncing} onClick={()=>void run(()=>call<PackagesStatus>(projectId,'sync'))}>{busy?$t('common.syncing'):$t('common.syncNow')}</Button>}</div>
+  {status.connected&&<div className='nr-guide-connected'>
+   {status.packages.map(p=><div key={p.id} className='nr-package-row' data-package={p.id}><div><a className='nr-link' href={p.url} target='_blank' rel='noreferrer'>{p.title||p.name}</a><span className='nr-footnote'> · {p.registryName}</span>
+    <p className='nr-footnote'>{p.registry==='docker'?$t('packages.totalPullsRecordedDailyDifference',{0:n(p.pulls)}):p.downloads28!=null?$t('packages.downloadsLast28Days',{0:n(p.downloads28)}):$t('packages.readingDownloads')}{p.since?$t('packages.since',{0:p.since}):''}</p></div>
+    {canRemove&&<Button size='sm' variant='ghost' disabled={busy} onClick={()=>{ void (async () => {if(await confirmAction({title:() => ($t('packages.stopRecordingDownloads',{0:p.title||p.name})),description:() => ($t('packages.recordedDataDeletedToo')),action:'common.remove'}))void run(()=>call<PackagesStatus>(projectId,'remove',{id:p.id}));})(); }}>{$t('common.remove')}</Button>}</div>)}
+   {status.lastSync?<p className='nr-footnote'>{$tj('common.lastSyncedSyncsAutomaticallyEvery',{0:formatDateTime(status.lastSync.at)})}{status.lastSync.errors.map(e=><span key={e} className='nr-block'>{$tj('common.partlyNotUpdated',{0:translateSourceError(e)})}</span>)}<NetworkSettingsLink messages={status.lastSync.errors}/></p>:<p role='status' className='nr-footnote'>{$t('packages.readingDownloadsFirstTime')}</p>}
+   <div className='nr-step-actions'>{canSync&&<Button size='sm' variant='outline' disabled={busy||status.syncing} onClick={()=>void run(()=>call<PackagesStatus>(projectId,'sync'))}>{busy?$t('common.syncing'):$t('common.syncNow')}</Button>}</div>
   </div>}
   {!status.connected&&!canPreview&&!preview&&<p className='nr-footnote'>{$t('messages.notConnectedYet')}</p>}
   {canPreview&&<>
-  <h3 className="nr-guide-subtitle">{status.connected?$t('packages.addAnotherPackage'):$t('packages.connectPackage')}</h3>
-  <div className="nr-package-form">
-   <label className="nr-field">{$t('common.platform')}<select aria-label={$t('common.platform')} value={registry} disabled={busy} onChange={e=>{setRegistry(e.target.value);setPreview(undefined);}}>{registries.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></label>
-   <label className="nr-field">{$t('packages.packageNamePageUrl')}<input aria-label={$t('packages.packageNamePageUrl')} value={name} disabled={busy} placeholder={registry==='docker'?$t('packages.nocobaseNocobase'):registry==='pypi'?$t('packages.requests'):$t('packages.nocobaseClient')} onChange={e=>{setName(e.target.value);setPreview(undefined);}}/></label>
+  <h3 className='nr-guide-subtitle'>{status.connected?$t('packages.addAnotherPackage'):$t('packages.connectPackage')}</h3>
+  <div className='nr-package-form'>
+   <label className='nr-field'>{$t('common.platform')}<select aria-label={$t('common.platform')} value={registry} disabled={busy} onChange={e=>{setRegistry(e.target.value);setPreview(undefined);}}>{registries.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></label>
+   <label className='nr-field'>{$t('packages.packageNamePageUrl')}<input aria-label={$t('packages.packageNamePageUrl')} value={name} disabled={busy} placeholder={registry==='docker'?$t('packages.nocobaseNocobase'):registry==='pypi'?$t('packages.requests'):$t('packages.nocobaseClient')} onChange={e=>{setName(e.target.value);setPreview(undefined);}}/></label>
   </div>
-  <div className="nr-step-actions"><Button disabled={busy||!name.trim()} onClick={()=>void run(async()=>{setPreview(await call<Preview>(projectId,'preview',{registry,name}));})}>{busy&&!preview?$t('common.loadingLoading'):$t('common.read')}</Button></div>
+  <div className='nr-step-actions'><Button disabled={busy||!name.trim()} onClick={()=>void run(async()=>{setPreview(await call<Preview>(projectId,'preview',{registry,name}));})}>{busy&&!preview?$t('common.loadingLoading'):$t('common.read')}</Button></div>
   </>}
-  {preview&&<div className="nr-guide-preview"><p><strong>{preview.title}</strong> · {registries.find(([k])=>k===preview.registry)?.[1]}{preview.version?$t('packages.latest',{0:preview.version}):''}</p>{preview.description&&<p className="nr-footnote">{preview.description}</p>}
-   <p className="nr-footnote">{preview.registry==='docker'?$t('packages.totalPullsDockerHubGives',{0:n(preview.pulls)}):preview.recent7!=null?$t('packages.downloadsLast7Days',{0:n(preview.recent7)}):$t('packages.noDownloadsReadYetTries')}{preview.registry==='pypi'?<InfoTip className='ml-1'>{$t('packages.pypiProvidesDownloadsLast180')}</InfoTip>:null}</p>
-   <div className="nr-step-actions">{canAdd&&<Button disabled={busy} onClick={()=>void run(async()=>{const s=await call<PackagesStatus>(projectId,'add',{registry:preview.registry,name:preview.name});setPreview(undefined);setName('');return s;})}>{$t('common.confirmConnect')}</Button>}</div></div>}</>;
+  {preview&&<div className='nr-guide-preview'><p><strong>{preview.title}</strong> · {registries.find(([k])=>k===preview.registry)?.[1]}{preview.version?$t('packages.latest',{0:preview.version}):''}</p>{preview.description&&<p className='nr-footnote'>{preview.description}</p>}
+   <p className='nr-footnote'>{preview.registry==='docker'?$t('packages.totalPullsDockerHubGives',{0:n(preview.pulls)}):preview.recent7!=null?$t('packages.downloadsLast7Days',{0:n(preview.recent7)}):$t('packages.noDownloadsReadYetTries')}{preview.registry==='pypi'?<InfoTip className='ml-1'>{$t('packages.pypiProvidesDownloadsLast180')}</InfoTip>:null}</p>
+   <div className='nr-step-actions'>{canAdd&&<Button disabled={busy} onClick={()=>void run(async()=>{const s=await call<PackagesStatus>(projectId,'add',{registry:preview.registry,name:preview.name});setPreview(undefined);setName('');return s;})}>{$t('common.confirmConnect')}</Button>}</div></div>}</>;
 }

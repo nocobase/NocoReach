@@ -30,7 +30,7 @@ function specification(v){const term=String(v.term||'').trim();if(term.length<3|
  // $0.002 a page of 10 results, 10 pages, ×5 for the site: operator.
  return {kind:'reddit',view:'serp',target:term,path:'serp/google/organic/live/advanced',request:{keyword:`site:reddit.com "${term}"`,location_code:2840,language_code:'en',device:'desktop',depth:100,...(v.recent?{search_param:'&tbs=qdr:m'}:{})},recent:Boolean(v.recent),estimatedUsd:0.1,reservationUsd:0.15,priceVersion:'official-list-2026-10-09'};}
 // Threads among the results: organic links and Google's "discussions and forums" box.
-function result(raw,spec){const task=raw?.tasks?.[0],cost=Number.isFinite(raw?.cost)&&raw.cost>=0?raw.cost:null;
+function result(raw,_spec){const task=raw?.tasks?.[0],cost=Number.isFinite(raw?.cost)&&raw.cost>=0?raw.cost:null;
  const providerCode=Number.isInteger(raw?.status_code)?raw.status_code:null,taskCode=Number.isInteger(task?.status_code)?task.status_code:null;
  const taskId=typeof task?.id==='string'&&/^[a-zA-Z0-9_-]{1,128}$/.test(task.id)?task.id:null;
  const code=providerCode===20000?taskCode:providerCode;

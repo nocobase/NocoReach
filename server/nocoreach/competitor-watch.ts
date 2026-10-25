@@ -57,7 +57,7 @@ class CompetitorWatch{
  // One competitor, or several ticked from AI 识别 (items), added together.
  async add(id,v){const items=(Array.isArray(v.items)?v.items:[v]).map(x=>({name:str(x.name,60),site:siteOf(x.site),repo:repoOf(x.repo)}));if(!items.length)fail(systemMessageText('competitorWatch.pickCompetitorsAdd'));
   const project=await this.p.projects.get(id);for(const x of items){if(!x.name)fail(systemMessageText('competitorWatch.enterCompetitorName'));if(!x.site&&!x.repo)fail(systemMessageText('competitorWatch.enterLeastWebsiteGithubRepository'));if(this.own(project,x.site))fail(systemMessageText('competitorWatch.projectOwnWebsite'));}
-  const added=[];await this.mutate(id,s=>{let list=[...s.list];for(const x of items){if(list.length>=MAX)fail(systemMessageText('messages.watchUpCompetitors', { 0: MAX }),409);if(list.some(c=>c.name.toLowerCase()===x.name.toLowerCase()||(x.site&&c.site===x.site)||(x.repo&&c.repo===x.repo)))fail(items.length>1?systemMessageText('messages.alreadyList', { 0: x.name }):systemMessageText('competitorWatch.competitorAlreadyList'),409);
+  const added=[];await this.mutate(id,s=>{const list=[...s.list];for(const x of items){if(list.length>=MAX)fail(systemMessageText('messages.watchUpCompetitors', { 0: MAX }),409);if(list.some(c=>c.name.toLowerCase()===x.name.toLowerCase()||(x.site&&c.site===x.site)||(x.repo&&c.repo===x.repo)))fail(items.length>1?systemMessageText('messages.alreadyList', { 0: x.name }):systemMessageText('competitorWatch.competitorAlreadyList'),409);
    const c={id:randomUUID().slice(0,8),...x,addedAt:new Date().toISOString()};list.push(c);added.push(c);}return {...s,list};});
   this.start(id,added.map(c=>c.id));this.changed(id);return this.status(id);}
  // 趋势 and 竞品 › 总览 compare the product with this list: a change re-runs the comparison and looks up a new competitor.
@@ -70,7 +70,7 @@ class CompetitorWatch{
   const material=[];try{const {items}=await this.p.knowledge.list(id);for(const it of items.filter(x=>x.category==='competitor').slice(0,4)){const {text}=await this.p.knowledge.get(id,{itemId:it.id});material.push({title:it.title,text:String(text||'').slice(0,1500)});}}catch{/* no material */}
   let ai;try{ai=json(await provider.complete(forLanguage(SUGGEST,languageOf(project)),JSON.stringify({memory:memoryForAI(project),website:home,material,already:s.list.map(c=>c.name)}),'competitor-suggest'));}catch(e){aiFail(e,systemMessageText('competitorWatch.onlineAiNotAnswerTime'));}
   const seen=new Set(),out=[];for(const x of (Array.isArray(ai?.competitors)?ai.competitors:[]).slice(0,CANDIDATES*2)){const name=str(x?.name,60);if(!name||seen.has(name.toLowerCase()))continue;seen.add(name.toLowerCase());
-   let site='',repo='',html='';try{site=siteOf(x.site);}catch{site='';}if(this.own(project,site))continue;
+   let site,repo='',html='';try{site=siteOf(x.site);}catch{site='';}if(this.own(project,site))continue;
    if(site){try{html=String((await this.read(site)).text||'');}catch{site='';}}
    for(const r of [(()=>{try{return repoOf(x.repo);}catch{return '';}})(),linkedRepo(html)].filter(Boolean)){try{const g=await this.github.gh(`/repos/${r}`,this.p.github?.token?.(id)||undefined);repo=g.full_name||r;
     // A website that would not open (some block robots) is taken from the repository's own homepage instead.

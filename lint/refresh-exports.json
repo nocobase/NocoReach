@@ -1,0 +1,95 @@
+{
+  "client/components/reach/hand-off-slot.tsx": [
+    "useHandOffSources",
+    "useHandOffSource",
+    "useSelection",
+    "useTickedList"
+  ],
+  "client/components/reach/tag.tsx": [
+    "TONE_CLASS",
+    "TONE_DOT_CLASS",
+    "STATE_TONE",
+    "stateToneOf"
+  ],
+  "client/components/seo/data-table.tsx": [
+    "useDataTable",
+    "useSelectionAnchor",
+    "makeSelectionColumn"
+  ],
+  "client/components/seo/intent-badge.tsx": [
+    "INTENT_ORDER",
+    "getIntentLabels",
+    "toIntent"
+  ],
+  "client/components/seo/tag-chip.tsx": ["TAG_COLORS"],
+  "client/pages/change-view.tsx": ["lineDiff", "hunks"],
+  "client/pages/content-detail.tsx": ["tasksForPage", "activeTasks"],
+  "client/pages/data-github/tables.tsx": ["KIND"],
+  "client/pages/data-health.tsx": [
+    "healthText",
+    "getStateText",
+    "ago",
+    "loadHealth",
+    "needsAttention",
+    "sourceList",
+    "getCadenceText"
+  ],
+  "client/pages/data-parts.tsx": ["fmt", "duration", "metricGrid"],
+  "client/pages/doc-view.tsx": ["isLong"],
+  "client/pages/hand-off-bar.tsx": ["combineDrafts"],
+  "client/pages/keyword-hand-off.tsx": [
+    "keywordDraft",
+    "rankedPage",
+    "createDraftTask",
+    "handOffKeywords"
+  ],
+  "client/pages/keyword-research.tsx": ["getMonths", "lastTwelve"],
+  "client/pages/rank-tracking-tab.tsx": ["rankRequest"],
+  "client/pages/reach-data.tsx": [
+    "records",
+    "taskRecords",
+    "persist",
+    "loadProjects",
+    "useProjects",
+    "useProject",
+    "useUnsavedWarning"
+  ],
+  "client/pages/reply-drafts.tsx": ["REPLY_PLAYBOOK", "parseReplies"],
+  "client/pages/search-performance/history.tsx": ["coverageNotes"],
+  "client/pages/search-performance/more.tsx": [
+    "count",
+    "ctr",
+    "position",
+    "METRIC_LABEL",
+    "showMetric",
+    "breakdownName",
+    "useBreakdown",
+    "slices"
+  ],
+  "client/pages/site-content-connect.tsx": ["getTypeLabels"],
+  "client/pages/strategy/board.tsx": [
+    "reasonLine",
+    "sourceLabels",
+    "latestBatch",
+    "oppNo",
+    "taskNo",
+    "getSourceNames",
+    "sourcesOf"
+  ],
+  "client/pages/strategy/hand-off.tsx": [
+    "handOff",
+    "recommendedFor",
+    "handOffLabel",
+    "handOffResult"
+  ],
+  "client/pages/strategy/insights-view.tsx": [
+    "chipOf",
+    "titleOf",
+    "metricItems",
+    "percent",
+    "statusOf",
+    "watchedLabel"
+  ],
+  "client/pages/task-detail.tsx": ["isPlaybookTask"],
+  "client/pages/work-board.tsx": ["workTypeLabel", "executorLabel"]
+}

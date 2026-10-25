@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Restore actionable lint checks
+
+- Scope type-aware linting exceptions to an explicit inventory of existing untyped classic services and their tests. New source and typed compatibility adapters retain strict checks; legacy code still receives syntax and correctness checks.
+- Resolve Hook dependencies, asynchronous event handlers, typed adapter boundaries, unused bindings, and quote-style findings. Preserve explicit positional rendering and external synchronization where required; give editable playbook steps stable keys.
+- Add an independent lint CI job and require lint before both Studio deployment workflows. Add regressions for project reloads, polling cleanup, and the classic lint boundary.
+
 ## Unreleased — The translating step is named Translate
 
 - While an article's other languages are translated from its approved primary one, the Agent's step the task went back to reads Translate (Agent Translate) in the task's step tags, and the current step in Tasks and Tasks › By Agent says the Agent is translating. Once the translations come back for review, the step is named as before.

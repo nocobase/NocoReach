@@ -10,6 +10,20 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@c336a2788d9774dccfdeb4823a5058ccc9f07453 # v4.3.0; packageManager selects pnpm
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
   tests:
     runs-on: ubuntu-24.04
     timeout-minutes: 30

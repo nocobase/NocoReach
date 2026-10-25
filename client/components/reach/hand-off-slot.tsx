@@ -1,4 +1,4 @@
-import { $t } from "#i18n";
+import { $t } from '#i18n';
 import {Checkbox} from '#components/ui/checkbox';
 import {useEffect,useLayoutEffect,useState,useSyncExternalStore,type ReactElement,type ReactNode} from 'react';
 // 交给 Agent on a data page (2026-10-08 user decisions): the page's lists can be ticked, and once anything is ticked a bar
@@ -37,7 +37,7 @@ export function useHandOffSource(id:string,source:HandOffSource|null):void{
 }
 // Ticked rows of one list, by key; keys no longer listed (another range, a refresh) drop out.
 export function useSelection(keys:readonly string[]){
- const [picked,setPicked]=useState<ReadonlySet<string>>(new Set()),shown=new Set(keys);
+ const [picked,setPicked]=useState<ReadonlySet<string>>(()=>new Set()),shown=new Set(keys);
  const selected=[...picked].filter(k=>shown.has(k));
  const all=keys.length>0&&selected.length===keys.length;
  return {selected,size:selected.length,all,some:selected.length>0&&!all,
@@ -49,10 +49,10 @@ export function useSelection(keys:readonly string[]){
 export type Selection=ReturnType<typeof useSelection>;
 // The checkbox of one row, and the one that ticks a whole list (in its header row).
 export function RowCheck({selection,k,label}:{selection:Selection;k:string;label?:string}):ReactElement{
- return <Checkbox checked={selection.has(k)} onCheckedChange={on=>selection.toggle(k,Boolean(on))} onClick={e=>e.stopPropagation()} aria-label={label||$t('common.selectRow')} data-row-check=""/>;
+ return <Checkbox checked={selection.has(k)} onCheckedChange={on=>selection.toggle(k,Boolean(on))} onClick={e=>e.stopPropagation()} aria-label={label||$t('common.selectRow')} data-row-check=''/>;
 }
 export function AllCheck({selection,count}:{selection:Selection;count:number}):ReactElement{
- return <Checkbox checked={selection.all} indeterminate={selection.some} disabled={!count} onCheckedChange={on=>selection.toggleAll(Boolean(on))} aria-label={$t('common.select')} data-all-check=""/>;
+ return <Checkbox checked={selection.all} indeterminate={selection.some} disabled={!count} onCheckedChange={on=>selection.toggleAll(Boolean(on))} aria-label={$t('common.select')} data-all-check=''/>;
 }
 // A list whose rows can be ticked for 交给 Agent: its selection, registered as a source while the list is shown
 // (`rows` undefined: not shown). `source` turns the ticked rows into the task.

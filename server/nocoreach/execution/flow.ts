@@ -87,7 +87,7 @@ export function flowRunInput(project: any, task: any, w: { flow?: FlowSnapshot; 
   // One of an opportunity's several tasks reads the changes about its own place, and the opportunity's changes that
   // name no page as background; the brief says which place it changes.
   const signals = taskSignals(insight ? { ...task.evidence, signalKey: undefined } : null, (task?.evidence?.context?.signals?.items || []).filter(Boolean)).slice(0, 20);
-  const { work, context, handoff, ...rest } = task?.evidence || {};
+  const { work: _work, context: _context, handoff: _handoff, ...rest } = task?.evidence || {};
   return {
     project: memoryForAI(project),
     // What language the Agent writes its plan, report and notes in (server/language.js).

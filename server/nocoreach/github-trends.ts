@@ -46,7 +46,7 @@ class GitHubTrends{
  async mutate(id,fn){const key=KEY(id);return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key},transaction});const row=await this.repo().findOne({filter:{key},transaction});const state=await fn(row?.get('payload')||null);if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});else await this.repo().create({values:{key,payload:state},transaction});return state;});}
  token(id){return this.p.github?.token?.(String(id))||'';}
  headers(token,accept='application/vnd.github+json'){return {Accept:accept,'X-GitHub-Api-Version':'2022-11-28','User-Agent':'NocoReach/0.1',...(token?{Authorization:`Bearer ${token}`}:{})};}
- async json(id,url,token,init={}){const res=await this.request(url,{...init,headers:{...this.headers(token),...(init.headers||{})}},id);if(res.ok)return res.json();let said='';try{said=String((await res.json())?.message||'').slice(0,160);}catch{said='';}
+ async json(id,url,token,init={}){const res=await this.request(url,{...init,headers:{...this.headers(token),...(init.headers||{})}},id);if(res.ok)return res.json();let said;try{said=String((await res.json())?.message||'').slice(0,160);}catch{said='';}
   if(res.status===429||(res.status===403&&/rate limit/i.test(said)))throw Object.assign(new Error(systemMessageText('githubTrends.rateLimited')),{status:429,limited:true});
   fail(systemMessageText('messages.githubStatusDetail',{0:res.status,1:said?`（GitHub：${said}）`:''}),502);}
  // Search, spaced out under GitHub's limit (30 a minute with a token, 10 without).

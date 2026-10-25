@@ -1,22 +1,22 @@
 // Ported from every-app/open-seo db8bde1 src/client/components/table/tableSelection.ts (MIT): shift+click range selection.
-import type { MouseEvent, MutableRefObject } from "react";
-import type { Row, RowSelectionState, Table } from "@tanstack/react-table";
+import type { MouseEvent, MutableRefObject } from 'react';
+import type { Row, RowSelectionState, Table } from '@tanstack/react-table';
 
 export type SelectionAnchor = {
   id: string;
   selected: boolean;
 };
 
-type SelectionRow<T> = Pick<Row<T>, "id" | "getIsSelected">;
+type SelectionRow<T> = Pick<Row<T>, 'id' | 'getIsSelected'>;
 
-type SelectionTable<T> = Pick<Table<T>, "setRowSelection"> & {
+type SelectionTable<T> = Pick<Table<T>, 'setRowSelection'> & {
   getRowModel: () => {
     rows: SelectionRow<T>[];
   };
 };
 
 export function applyShiftRangeSelection<T>(
-  event: Pick<MouseEvent<HTMLElement>, "shiftKey" | "preventDefault">,
+  event: Pick<MouseEvent<HTMLElement>, 'shiftKey' | 'preventDefault'>,
   row: SelectionRow<T>,
   table: SelectionTable<T>,
   anchorRef: MutableRefObject<SelectionAnchor | null>,

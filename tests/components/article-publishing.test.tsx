@@ -7,7 +7,6 @@ import {
   within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
 import { NocoReachHttpError } from '../../client/lib/nocoreach-api';
 import { ArticleTargetsConnect } from '../../client/pages/article-targets-connect';
 import {

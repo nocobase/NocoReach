@@ -21,7 +21,7 @@ test('questions and Discord ids: question marks and question words in English an
 });
 
 test('Discord: token checked, servers and channels listed before saving; daily read with replies and forum posts',async()=>{
- const m1=ago(3),m2=ago(2.5),m3=ago(2);let after=[];
+ const m1=ago(3),m2=ago(2.5),m3=ago(2);const after=[];
  const {c,env,calls,rows}=setup([[/users\/@me\/guilds/,()=>({body:[{id:'g1',name:'NocoBase'}]})],[/users\/@me$/,()=>({body:{id:'app1',username:'nocoreach'}})],[/guilds\/g1\/channels/,()=>({body:[{id:'c1',name:'help',type:0,position:1},{id:'v1',name:'voice',type:2},{id:'f1',name:'questions',type:15,position:2}]})],
   [/channels\/c1\/messages/,u=>{after.push(new URL(u).searchParams.get('after'));return {body:after.length>1?[]:[{id:m3,type:19,content:'Use the SSO plugin',message_reference:{message_id:m1}},{id:m2,type:0,content:'What about LDAP?'},{id:m1,type:0,content:'How do I set up SSO?'},{id:ago(2.9),type:7,content:''}]};}],
   [/guilds\/g1\/threads\/active/,()=>({body:{threads:[{id:ago(4),parent_id:'f1',name:'插件安装失败怎么办？',message_count:0},{id:ago(1),parent_id:'other',name:'x',message_count:3}]}})],[/channels\/f1\/threads\/archived/,()=>({body:{threads:[{id:ago(40),parent_id:'f1',name:'old',message_count:1}]}})]]);
@@ -41,7 +41,7 @@ test('Discord: token checked, servers and channels listed before saving; daily r
 });
 
 test('Slack: internal app token, public channels joined when needed; threads count as replies; a revoked token says so',async()=>{
- const ts=d=>((Date.now()-d*DAY)/1000).toFixed(6);let joined=[];
+ const ts=d=>((Date.now()-d*DAY)/1000).toFixed(6);const joined=[];
  const {c,env}=setup([[/auth\.test/,()=>({body:{ok:true,user:'nocoreach',team:'NocoBase',url:'https://nocobase.slack.com/'}})],[/conversations\.list/,()=>({body:{ok:true,channels:[{id:'C1',name:'general',is_member:true,num_members:300},{id:'C2',name:'help',is_member:false,num_members:120}]}})],
   [/conversations\.join/,u=>{joined.push(new URL(u).searchParams.get('channel'));return {body:{ok:true}};}],
   [/conversations\.history/,u=>{const ch=new URL(u).searchParams.get('channel');return {body:{ok:true,has_more:false,messages:ch==='C2'?[{ts:ts(2),text:'怎么导入 Excel？',reply_count:0},{ts:ts(3),text:'How to upgrade?',reply_count:4},{ts:ts(2.1),subtype:'channel_join',text:'joined'}]:[{ts:ts(1),text:'Release 2.2 is out',reply_count:0}]}};}]]);

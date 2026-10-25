@@ -1,4 +1,4 @@
-import { $t } from "#i18n";
+import { $t } from '#i18n';
 export type Pair = {keyword:string;page:string;clicks:number|null;impressions:number|null;previous:number|null;previousImpressions:number|null;position:number|null};
 export type Opportunity = {keyword:string;clicks:number;impressions:number;previous:number;position:number;pages:Pair[];kind:string;reason:string;recommendation:string};
 export function opportunities(pairs:Pair[]):Opportunity[]{

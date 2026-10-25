@@ -39,6 +39,7 @@ jobs:
           STUDIO_CLI: ${{ runner.temp }}/studio-cli/node_modules/.bin/nb-studio
         run: node scripts/ci/deploy-studio.mjs --check-config
       - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
       - run: pnpm test --maxWorkers=2 --passWithNoTests=false
       - run: pnpm build --target linux-x64 --node-version 24 --tar
       - name: Install nb-studio

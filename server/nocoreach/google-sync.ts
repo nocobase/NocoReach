@@ -2,45 +2,45 @@
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { searchConsoleRows } from './gsc-response.js';
 import * as import_google_client from './google-client.js';
-const GSC_REPORTING_TIME_ZONE = "America/Los_Angeles";
+const GSC_REPORTING_TIME_ZONE = 'America/Los_Angeles';
 const WRITE_BATCH = 1e3;
 const commonMetrics = [
-  "activeUsers",
-  "totalUsers",
-  "newUsers",
-  "sessions",
-  "engagedSessions",
-  "keyEvents",
-  "eventCount",
-  "averageSessionDuration",
-  "userEngagementDuration",
-  "screenPageViews"
+  'activeUsers',
+  'totalUsers',
+  'newUsers',
+  'sessions',
+  'engagedSessions',
+  'keyEvents',
+  'eventCount',
+  'averageSessionDuration',
+  'userEngagementDuration',
+  'screenPageViews'
 ];
 const aiProviders = [
-  ["ChatGPT", /chatgpt|openai/i],
-  ["Perplexity", /perplexity/i],
-  ["Claude", /claude|anthropic/i],
-  ["Gemini", /gemini|bard\.google/i],
-  ["Microsoft Copilot", /copilot|bing\.com\/chat/i],
-  ["DeepSeek", /deepseek/i],
-  ["Kimi", /kimi|moonshot/i],
-  ["Qwen", /qwen|tongyi/i],
-  ["Doubao", /doubao/i],
-  ["Grok", /grok|x\.ai/i],
-  ["Mistral", /mistral/i],
-  ["Poe", /poe\.com/i],
-  ["You.com", /you\.com/i],
-  ["Phind", /phind/i]
+  ['ChatGPT', /chatgpt|openai/i],
+  ['Perplexity', /perplexity/i],
+  ['Claude', /claude|anthropic/i],
+  ['Gemini', /gemini|bard\.google/i],
+  ['Microsoft Copilot', /copilot|bing\.com\/chat/i],
+  ['DeepSeek', /deepseek/i],
+  ['Kimi', /kimi|moonshot/i],
+  ['Qwen', /qwen|tongyi/i],
+  ['Doubao', /doubao/i],
+  ['Grok', /grok|x\.ai/i],
+  ['Mistral', /mistral/i],
+  ['Poe', /poe\.com/i],
+  ['You.com', /you\.com/i],
+  ['Phind', /phind/i]
 ];
 function dateOnly(value) {
   return new Date(value).toISOString().slice(0, 10);
 }
 function calendarDateInTimeZone(timeZone, now = /* @__PURE__ */ new Date()) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
+  const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
   }).formatToParts(now);
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
@@ -55,12 +55,12 @@ function resolveRange(range, defaultWindowDays, timeZone, now) {
   const targetEnd = range.endDate || latestCompleteDate;
   const targetStart = range.startDate || addCalendarDays(targetEnd, -(defaultWindowDays - 1));
   if (!/^\d{4}-\d{2}-\d{2}$/.test(targetStart) || !/^\d{4}-\d{2}-\d{2}$/.test(targetEnd)) {
-    throw new Error("Sync dates must use YYYY-MM-DD");
+    throw new Error('Sync dates must use YYYY-MM-DD');
   }
-  if (targetStart > targetEnd) throw new Error("Sync start date cannot be after end date");
+  if (targetStart > targetEnd) throw new Error('Sync start date cannot be after end date');
   return { targetStart, targetEnd };
 }
-function resolveGa4SyncRange(range = {}, propertyTimeZone = "UTC", now = /* @__PURE__ */ new Date()) {
+function resolveGa4SyncRange(range = {}, propertyTimeZone = 'UTC', now = /* @__PURE__ */ new Date()) {
   return resolveRange(range, 3, propertyTimeZone, now);
 }
 function resolveGscSyncRange(range = {}, now = /* @__PURE__ */ new Date()) {
@@ -87,7 +87,7 @@ function integer(value) {
   return Math.round(numberValue(value));
 }
 function normalizeGaDate(value) {
-  const text = String(value ?? "");
+  const text = String(value ?? '');
   return /^\d{8}$/.test(text) ? `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}` : text;
 }
 function shortHash(value) {
@@ -99,30 +99,30 @@ function shortHash(value) {
     left = Math.imul(left, 16777619);
     right = Math.imul(right, 33) ^ code;
   }
-  return `${(left >>> 0).toString(16).padStart(8, "0")}${(right >>> 0).toString(16).padStart(8, "0")}`;
+  return `${(left >>> 0).toString(16).padStart(8, '0')}${(right >>> 0).toString(16).padStart(8, '0')}`;
 }
 function stringValue(value) {
-  return typeof value === "string" ? value : "";
+  return typeof value === 'string' ? value : '';
 }
 function referrerDomain(value) {
   try {
-    return new URL(value).hostname.replace(/^www\./, "");
+    return new URL(value).hostname.replace(/^www\./, '');
   } catch {
     return value;
   }
 }
 function classifySource(source, medium, channel, referrer) {
-  const text = [source, medium, channel, referrer].filter(Boolean).join(" ");
+  const text = [source, medium, channel, referrer].filter(Boolean).join(' ');
   const ai = aiProviders.find(([, pattern]) => pattern.test(text));
-  if (ai) return { sourceCategory: "ai", aiProvider: ai[0] };
+  if (ai) return { sourceCategory: 'ai', aiProvider: ai[0] };
   const normalized = channel.toLowerCase();
-  if (normalized.includes("organic search")) return { sourceCategory: "organic_search" };
-  if (normalized.includes("paid search")) return { sourceCategory: "paid_search" };
-  if (normalized.includes("social")) return { sourceCategory: "social" };
-  if (normalized.includes("email")) return { sourceCategory: "email" };
-  if (normalized.includes("referral")) return { sourceCategory: "referral" };
-  if (normalized.includes("direct") || source === "(direct)") return { sourceCategory: "direct" };
-  return { sourceCategory: "other" };
+  if (normalized.includes('organic search')) return { sourceCategory: 'organic_search' };
+  if (normalized.includes('paid search')) return { sourceCategory: 'paid_search' };
+  if (normalized.includes('social')) return { sourceCategory: 'social' };
+  if (normalized.includes('email')) return { sourceCategory: 'email' };
+  if (normalized.includes('referral')) return { sourceCategory: 'referral' };
+  if (normalized.includes('direct') || source === '(direct)') return { sourceCategory: 'direct' };
+  return { sourceCategory: 'other' };
 }
 function metricFields(values) {
   const sessions = integer(values.sessions);
@@ -144,22 +144,23 @@ function metricFields(values) {
   };
 }
 function contentMeta(page) {
-  if (!page) return { contentArea: "", locale: "" };
+  if (!page) return { contentArea: '', locale: '' };
   let pathname = page;
   try {
     pathname = new URL(page).pathname;
   } catch {
+    // Relative paths already have the pathname needed below.
   }
-  const segments = pathname.split("/").filter(Boolean);
-  const knownLocales = /* @__PURE__ */ new Set(["en", "cn", "zh-CN", "ja", "ru", "fr", "de", "es", "pt", "tr", "ko", "id"]);
-  const locale = knownLocales.has(segments[0]) ? segments[0] : "default";
+  const segments = pathname.split('/').filter(Boolean);
+  const knownLocales = /* @__PURE__ */ new Set(['en', 'cn', 'zh-CN', 'ja', 'ru', 'fr', 'de', 'es', 'pt', 'tr', 'ko', 'id']);
+  const locale = knownLocales.has(segments[0]) ? segments[0] : 'default';
   const normalized = pathname.toLowerCase();
-  let contentArea = "website";
-  if (normalized.includes("/docs") || /docs\.nocobase\./i.test(page)) contentArea = "docs";
-  else if (normalized.includes("/blog")) contentArea = "blog";
-  else if (normalized.includes("/solutions")) contentArea = "solutions";
-  else if (normalized.includes("/customer")) contentArea = "customer_story";
-  else if (normalized.includes("/plugins") || normalized.includes("/plugin")) contentArea = "plugins";
+  let contentArea = 'website';
+  if (normalized.includes('/docs') || /docs\.nocobase\./i.test(page)) contentArea = 'docs';
+  else if (normalized.includes('/blog')) contentArea = 'blog';
+  else if (normalized.includes('/solutions')) contentArea = 'solutions';
+  else if (normalized.includes('/customer')) contentArea = 'customer_story';
+  else if (normalized.includes('/plugins') || normalized.includes('/plugin')) contentArea = 'plugins';
   return { contentArea, locale };
 }
 function errorMessage(error) {
@@ -173,22 +174,22 @@ class GoogleDailySync {
     return this.options.db.getRepository(name);
   }
   async createRun(source, targetStart, targetEnd, requestMeta) {
-    const record = await this.repository("growthSyncRuns").create({
+    const record = await this.repository('growthSyncRuns').create({
       values: {
         source,
         startedAt: (/* @__PURE__ */ new Date()).toISOString(),
         windowStart: targetStart,
         windowEnd: targetEnd,
-        status: "running",
+        status: 'running',
         recordsRead: 0,
         recordsWritten: 0,
         requestMeta
       }
     });
-    return record.get("id");
+    return record.get('id');
   }
   async finishRun(runId, values) {
-    await this.repository("growthSyncRuns").update({
+    await this.repository('growthSyncRuns').update({
       filterByTk: runId,
       values: { ...values, finishedAt: (/* @__PURE__ */ new Date()).toISOString() }
     });
@@ -198,7 +199,7 @@ class GoogleDailySync {
     const repository = this.repository(resource);
     for (let index = 0; index < rows.length; index += WRITE_BATCH) {
       const chunk = rows.slice(index, index + WRITE_BATCH);
-      repository.collection.validate({ values: chunk, operation: "create" });
+      repository.collection.validate({ values: chunk, operation: 'create' });
       await repository.model.bulkCreate(chunk, { hooks: true, returning: false, transaction });
       written += chunk.length;
     }
@@ -212,68 +213,68 @@ class GoogleDailySync {
   async syncGa4(range = {}) {
     const { targetStart, targetEnd } = resolveGa4SyncRange(range, this.options.propertyTimeZone);
     const propertyId = this.options.propertyId;
-    if (!propertyId) throw new Error("GA4 property ID is not configured");
+    if (!propertyId) throw new Error('GA4 property ID is not configured');
     const reportSpecs = [
-      { type: "overview", dimensions: ["date"], metrics: commonMetrics },
+      { type: 'overview', dimensions: ['date'], metrics: commonMetrics },
       {
-        type: "source",
+        type: 'source',
         dimensions: [
-          "date",
-          "sessionDefaultChannelGroup",
-          "sessionSource",
-          "sessionMedium",
-          "sessionCampaignName",
-          "country",
-          "deviceCategory"
+          'date',
+          'sessionDefaultChannelGroup',
+          'sessionSource',
+          'sessionMedium',
+          'sessionCampaignName',
+          'country',
+          'deviceCategory'
         ],
         metrics: commonMetrics
       },
       {
-        type: "landing_page",
+        type: 'landing_page',
         dimensions: [
-          "date",
-          "landingPagePlusQueryString",
-          "sessionDefaultChannelGroup",
-          "sessionSource",
-          "sessionMedium",
-          "country",
-          "deviceCategory"
+          'date',
+          'landingPagePlusQueryString',
+          'sessionDefaultChannelGroup',
+          'sessionSource',
+          'sessionMedium',
+          'country',
+          'deviceCategory'
         ],
         metrics: commonMetrics
       },
       {
-        type: "geo_device",
-        dimensions: ["date", "country", "city", "deviceCategory", "browser", "operatingSystem", "language"],
+        type: 'geo_device',
+        dimensions: ['date', 'country', 'city', 'deviceCategory', 'browser', 'operatingSystem', 'language'],
         metrics: commonMetrics
       },
       {
-        type: "page",
-        dimensions: ["date", "hostName", "pagePath", "pageTitle"],
+        type: 'page',
+        dimensions: ['date', 'hostName', 'pagePath', 'pageTitle'],
         metrics: [
-          "activeUsers",
-          "totalUsers",
-          "newUsers",
-          "keyEvents",
-          "eventCount",
-          "userEngagementDuration",
-          "screenPageViews"
+          'activeUsers',
+          'totalUsers',
+          'newUsers',
+          'keyEvents',
+          'eventCount',
+          'userEngagementDuration',
+          'screenPageViews'
         ]
       },
       {
-        type: "referrer",
-        dimensions: ["date", "pageReferrer"],
+        type: 'referrer',
+        dimensions: ['date', 'pageReferrer'],
         metrics: [
-          "activeUsers",
-          "totalUsers",
-          "newUsers",
-          "keyEvents",
-          "eventCount",
-          "userEngagementDuration",
-          "screenPageViews"
+          'activeUsers',
+          'totalUsers',
+          'newUsers',
+          'keyEvents',
+          'eventCount',
+          'userEngagementDuration',
+          'screenPageViews'
         ]
       }
     ];
-    const runId = await this.createRun("ga4", targetStart, targetEnd, {
+    const runId = await this.createRun('ga4', targetStart, targetEnd, {
       propertyId,
       reportTypes: reportSpecs.map((item) => item.type)
     });
@@ -299,7 +300,7 @@ class GoogleDailySync {
                 metrics: spec.metrics.map((name) => ({ name })),
                 limit: String(limit),
                 offset: String(offset),
-                orderBys: [{ dimension: { dimensionName: "date" } }]
+                orderBys: [{ dimension: { dimensionName: 'date' } }]
               }), this.options.fetcher
             );
           } catch (error) {
@@ -318,11 +319,11 @@ class GoogleDailySync {
         const records = rows.map((row) => {
           const values = {};
           spec.dimensions.forEach((name, index) => {
-            var _a, _b;
-            values[name] = ((_b = (_a = row.dimensionValues) == null ? void 0 : _a[index]) == null ? void 0 : _b.value) || "";
+            let _a, _b;
+            values[name] = ((_b = (_a = row.dimensionValues) == null ? void 0 : _a[index]) == null ? void 0 : _b.value) || '';
           });
           spec.metrics.forEach((name, index) => {
-            var _a, _b;
+            let _a, _b;
             values[name] = numberValue((_b = (_a = row.metricValues) == null ? void 0 : _a[index]) == null ? void 0 : _b.value);
           });
           const periodDate = normalizeGaDate(values.date);
@@ -359,25 +360,25 @@ class GoogleDailySync {
             syncedAt: (/* @__PURE__ */ new Date()).toISOString()
           };
         });
-        await this.replaceWindow("growthWebDaily", {
+        await this.replaceWindow('growthWebDaily', {
           $and: [
             { periodDate: { $dateBetween: [targetStart, targetEnd] } },
             { grainType: { $eq: spec.type } },
             { property: { $eq: propertyId } }
           ]
         });
-        recordsWritten += await this.writeRows("growthWebDaily", records);
+        recordsWritten += await this.writeRows('growthWebDaily', records);
       }
       await this.finishRun(runId, {
-        status: "succeeded",
+        status: 'succeeded',
         recordsRead,
         recordsWritten,
         responseMeta: { reports: reportMeta }
       });
-      return { source: "ga4", targetStart, targetEnd, recordsRead, recordsWritten, reports: reportMeta };
+      return { source: 'ga4', targetStart, targetEnd, recordsRead, recordsWritten, reports: reportMeta };
     } catch (error) {
       await this.finishRun(runId, {
-        status: "failed",
+        status: 'failed',
         recordsRead,
         recordsWritten,
         errorMessage: errorMessage(error),
@@ -389,32 +390,32 @@ class GoogleDailySync {
   async syncGsc(range = {}) {
     const { targetStart, targetEnd } = resolveGscSyncRange(range);
     const siteUrl = this.options.siteUrl;
-    if (!siteUrl) throw new Error("Search Console site URL is not configured");
+    if (!siteUrl) throw new Error('Search Console site URL is not configured');
     const reportSpecs = [
       {
-        type: "overview",
-        dimensions: ["date"],
-        searchTypes: ["web", "image", "video", "news", "discover", "googleNews"]
+        type: 'overview',
+        dimensions: ['date'],
+        searchTypes: ['web', 'image', 'video', 'news', 'discover', 'googleNews']
       },
       {
-        type: "query_page",
-        dimensions: ["date", "query", "page", "country", "device"],
-        searchTypes: ["web", "image", "video", "news"],
+        type: 'query_page',
+        dimensions: ['date', 'query', 'page', 'country', 'device'],
+        searchTypes: ['web', 'image', 'video', 'news'],
         daily: true
       },
       {
-        type: "country_device",
-        dimensions: ["date", "country", "device"],
-        searchTypes: ["web", "image", "video", "news"]
+        type: 'country_device',
+        dimensions: ['date', 'country', 'device'],
+        searchTypes: ['web', 'image', 'video', 'news']
       },
       {
-        type: "country_device",
-        dimensions: ["date", "country"],
-        searchTypes: ["discover", "googleNews"]
+        type: 'country_device',
+        dimensions: ['date', 'country'],
+        searchTypes: ['discover', 'googleNews']
       },
-      { type: "appearance", dimensions: ["searchAppearance"], searchTypes: ["web"], daily: true }
+      { type: 'appearance', dimensions: ['searchAppearance'], searchTypes: ['web'], daily: true }
     ];
-    const runId = await this.createRun("gsc", targetStart, targetEnd, {
+    const runId = await this.createRun('gsc', targetStart, targetEnd, {
       siteUrl,
       reportTypes: reportSpecs.map((item) => item.type)
     });
@@ -441,7 +442,7 @@ class GoogleDailySync {
                     endDate: requestEnd,
                     dimensions: spec.dimensions,
                     type: searchType,
-                    dataState: this.options.dataState || "all",
+                    dataState: this.options.dataState || 'all',
                     aggregationType: spec.type === 'overview' && !['discover', 'googleNews'].includes(searchType) ? 'byProperty' : 'auto',
                     rowLimit,
                     startRow
@@ -468,11 +469,11 @@ class GoogleDailySync {
             const records = rows.map((row) => {
               const values = {};
               spec.dimensions.forEach((name, index) => {
-                var _a;
-                values[name] = ((_a = row.keys) == null ? void 0 : _a[index]) || "";
+                let _a;
+                values[name] = ((_a = row.keys) == null ? void 0 : _a[index]) || '';
               });
-              const page = values.page || "";
-              const queryFull = values.query || "";
+              const page = values.page || '';
+              const queryFull = values.query || '';
               const identity = {
                 grainType: spec.type,
                 searchType,
@@ -480,9 +481,9 @@ class GoogleDailySync {
                 query: queryFull.slice(0, 255),
                 queryFull,
                 page,
-                country: values.country || "",
-                device: (values.device || "").toLowerCase(),
-                searchAppearance: values.searchAppearance || ""
+                country: values.country || '',
+                device: (values.device || '').toLowerCase(),
+                searchAppearance: values.searchAppearance || ''
               };
               return {
                 ...identity,
@@ -501,7 +502,7 @@ class GoogleDailySync {
             });
             const written = await this.options.db.sequelize.transaction(async (transaction) => {
               await this.replaceWindow(
-                "growthSearchDaily",
+                'growthSearchDaily',
                 {
                   $and: [
                     { periodDate: { $dateBetween: [requestStart, requestEnd] } },
@@ -512,22 +513,22 @@ class GoogleDailySync {
                 },
                 transaction
               );
-              return this.writeRows("growthSearchDaily", records, transaction);
+              return this.writeRows('growthSearchDaily', records, transaction);
             });
             recordsWritten += written;
           }
         }
       }
       await this.finishRun(runId, {
-        status: "succeeded",
+        status: 'succeeded',
         recordsRead,
         recordsWritten,
         responseMeta: { reports: reportMeta }
       });
-      return { source: "gsc", targetStart, targetEnd, recordsRead, recordsWritten, reports: reportMeta };
+      return { source: 'gsc', targetStart, targetEnd, recordsRead, recordsWritten, reports: reportMeta };
     } catch (error) {
       await this.finishRun(runId, {
-        status: "failed",
+        status: 'failed',
         recordsRead,
         recordsWritten,
         errorMessage: errorMessage(error),

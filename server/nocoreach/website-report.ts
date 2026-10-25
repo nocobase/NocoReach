@@ -81,7 +81,7 @@ const exact=pairs=>({andGroup:{expressions:pairs.map(([fieldName,value])=>({filt
 function tableRows(name,report){const t=TABLES[name];const rows=rowsOf(report);
  if(name==='page'){const by=new Map();for(const r of rows){const k=r.pagePath;const o=by.get(k);if(!o){by.set(k,{key:k,dims:{pagePath:k},title:r.pageTitle,top:r.screenPageViews,...values(r)});continue;}
    for(const [f,v] of Object.entries(values(r)))o[f]=(o[f]||0)+v;if(r.screenPageViews>o.top){o.top=r.screenPageViews;o.title=r.pageTitle;}}
-  return [...by.values()].map(({top,...o})=>o).sort((a,b)=>b.views-a.views).slice(0,KEEP.page);}
+  return [...by.values()].map(({top: _top,...o})=>o).sort((a,b)=>b.views-a.views).slice(0,KEEP.page);}
  return rows.map(r=>{const dims=Object.fromEntries(t.dims.map(d=>[d,r[d]]));const o={key:t.dims.map(d=>r[d]).join('\u0001'),dims,...values(r)};
   if(name==='sourceMedium'){const ai=aiOf(`${r.sessionSource} ${r.sessionMedium}`);if(ai)o.ai=ai;}return o;}).slice(0,KEEP[name]||t.limit);}
 
@@ -119,7 +119,7 @@ class WebsiteReport{
   return done.flat();}
  // The property's time zone, kept a day. A failed lookup keeps the last known zone (or UTC, unconfirmed) for five minutes
  // only, so one timeout does not leave 今天 on the wrong hours for a day.
- async timeZone(id,property){const hit=this.zones.get(property);if(hit&&Date.now()-hit.at<hit.ttl)return hit.zone;let zone='UTC',confirmed=true,ok=true;
+ async timeZone(id,property){const hit=this.zones.get(property);if(hit&&Date.now()-hit.at<hit.ttl)return hit.zone;let zone,confirmed=true,ok=true;
   try{zone=(await this.json(id,`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${property}`,{...jsonRequest(await this.token(id)),signal:AbortSignal.timeout(20000)})).timeZone||'UTC';}
   catch(e){ok=false;zone=hit?.zone||'UTC';confirmed=Boolean(hit?.confirmed);this.p.app?.logger?.warn('NocoReach GA4 time zone lookup failed',{message:e?.message,code:e?.code,status:e?.status});}
   this.zones.set(property,{at:Date.now(),zone,confirmed,ttl:ok?24*HOUR:5*MIN});return zone;}
@@ -139,8 +139,8 @@ class WebsiteReport{
   const daily=rowsOf(dailyReport).map(r=>({period:r.dateRange,date:`${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)}`,...values(r)}));
   // With two date ranges and the date dimension GA4 answers every day of both ranges for each range, zeros outside
   // it: keep each range's own days, or the line runs over the other period's days at zero (UI review 2026-10-21).
-  const out={totals:{current:totals.current||null,previous:totals.previous||null},daily:daily.filter(r=>r.period==='current'&&inWindow(r.date,w.start)).map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),
-   previousDaily:daily.filter(r=>r.period==='previous'&&inWindow(r.date,w.previousStart,w.previousEnd)).map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),tables:{},missing:[],complete:reports.every(Boolean)};
+  const out={totals:{current:totals.current||null,previous:totals.previous||null},daily:daily.filter(r=>r.period==='current'&&inWindow(r.date,w.start)).map(({period: _period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),
+   previousDaily:daily.filter(r=>r.period==='previous'&&inWindow(r.date,w.previousStart,w.previousEnd)).map(({period: _period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),tables:{},missing:[],complete:reports.every(Boolean)};
   names.forEach((n,i)=>{if(tables[i])out.tables[n]=tableRows(n,tables[i]);else out.missing.push(n);});
   // A change report GA4 refuses only leaves that part out of the explanation.
   out.changes={};changeNames.forEach((n,i)=>{if(changeReports[i])out.changes[n]=changeRows(n,changeReports[i]);});
@@ -182,7 +182,7 @@ class WebsiteReport{
   const reached=confirmed?Math.min(hourNow,last+1):last+1,through=Math.max(0,reached-SETTLING_HOURS),sum=(name,upTo)=>hours.filter(s=>s.hour<upTo).reduce((n,s)=>n+(s[name]||0),0);
   // Users up to that hour, deduplicated by GA4 (adding up hours would count a returning visitor again), and today's
   // sources over the same hours, so they add up to no more than the sessions beside them.
-  let totals={today:null,yesterday:null,lastWeek:null},sources=[];
+  const totals={today:null,yesterday:null,lastWeek:null}; let sources=[];
   if(through>0){const hoursIn=[...new Set(Array.from({length:through},(_,h)=>[String(h),String(h).padStart(2,'0')]).flat())],upToHour={filter:{fieldName:'hour',inListFilter:{values:hoursIn}}};
    const [upTo,bySource]=await this.batch(id,property,[request([],['activeUsers','screenPageViews','sessions','keyEvents'],days,null,null,upToHour),
     request(['sessionSource','sessionMedium'],['sessions','activeUsers'],[range('today','today')],'sessions',10,upToHour)]);

@@ -52,7 +52,7 @@ export function parseReplies(content: string): ReplyDraft[] {
     for (const line of meta.split('\n')) {
       const m = line.match(/^\s*[-*]\s*([^：:]+)[：:]\s*(.*)$/);
       const key = m && FIELD[m[1].trim().toLowerCase()];
-      if (key && key !== 'reply' && key !== 'title') d[key] = m![2].trim();
+      if (key && key !== 'reply' && key !== 'title') d[key] = m[2].trim();
     }
     if (d.reply) out.push(d);
   }
@@ -72,7 +72,7 @@ export function ReplyDrafts({ items }: { items: ReplyDraft[] }): ReactElement {
     >
       {items.map((d, i) => (
         <section
-          key={i}
+          key={`${d.title}:${d.reply}`}
           role='listitem'
           className='min-w-0 max-w-full py-4 text-sm first:pt-0 last:pb-0'
           data-reply={i}

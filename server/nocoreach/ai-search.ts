@@ -112,7 +112,7 @@ class AiSearch{
  constructor(p){this.p=p;this.d4s=new DataForSeo(p,kinds);this.catalog=new Map();}
  // The model to ask for a provider, read from DataForSEO's free catalog (an unknown name is a billed failure).
  async modelName(id,slug){const hit=this.catalog.get(slug);if(hit&&Date.now()-hit.at<3600000)return hit.name;const c=this.d4s.config(id);
-  let names=[];try{const raw=await this.d4s.request(c,`ai_optimization/${slug}/llm_responses/models`);names=(raw?.tasks?.[0]?.result||[]).map(x=>x?.model_name).filter(x=>typeof x==='string');}catch{names=[];}
+  let names;try{const raw=await this.d4s.request(c,`ai_optimization/${slug}/llm_responses/models`);names=(raw?.tasks?.[0]?.result||[]).map(x=>x?.model_name).filter(x=>typeof x==='string');}catch{names=[];}
   const name=pickModel(slug,names);if(!name)error(systemMessageText('messages.notReadModelListNot', { 0: ({chat_gpt:'ChatGPT',claude:'Claude',gemini:'Gemini',perplexity:'Perplexity'})[slug] }),502);
   this.catalog.set(slug,{name,at:Date.now()});return name;}
  // One competitor on one platform (the page asks both platforms); the brand, market and own sites as for 品牌提及.

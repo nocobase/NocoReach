@@ -14,7 +14,7 @@ const add=(d,n)=>iso(Date.parse(d+'T00:00:00Z')+n*DAY);
 const dayCount=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/DAY)+1;
 const sum=(rows,k)=>rows.reduce((n,r)=>n+(Number.isFinite(r?.[k])?r[k]:0),0);
 const known=(rows,k)=>rows.some(r=>Number.isFinite(r?.[k]));
-const ratio=(a,b)=>a!=null&&b?a/b:null;
+
 const bot=x=>/\[bot\]$|-bot$/i.test(String(x||''));
 const median=list=>{const l=list.filter(Number.isFinite).sort((a,b)=>a-b);if(!l.length)return null;const m=Math.floor(l.length/2);return l.length%2?l[m]:(l[m-1]+l[m])/2;};
 const AI=/chatgpt|openai|perplexity|claude|anthropic|gemini|copilot|deepseek|kimi|moonshot|doubao|grok|poe\.com|you\.com|phind/i;

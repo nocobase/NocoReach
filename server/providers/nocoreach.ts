@@ -125,7 +125,7 @@ export function analysisCompletion(status: number, result: unknown): ScheduleExe
     ? { status: 'succeeded', result: { projects } }
     : {
         status: 'failed',
-        reason: failed.map(([id, r]) => `项目 ${id}：${String(r?.error ?? '分析失败')}`).join('；').slice(0, 500),
+        reason: failed.map(([id, r]) => `项目 ${id}：${(typeof r?.error === 'string' ? r.error : '分析失败')}`).join('；').slice(0, 500),
         result: { projects },
       };
 }
@@ -135,7 +135,7 @@ export function analysisObservation(run: ScheduledRun | null): ScheduleTargetObs
   if (run.status === 'succeeded' || run.status === 'failed' || run.status === 'cancelled')
     return {
       state: 'completed',
-      completion: { status: run.status, ...(run.reason ? { reason: run.reason } : {}), ...(run.result ? { result: run.result as JsonObject } : {}) },
+      completion: { status: run.status, ...(run.reason ? { reason: run.reason } : {}), ...(run.result ? { result: run.result } : {}) },
     };
   // Accepted or running, and silent since: the process that ran it was stopped, and it will not report.
   if (Date.now() - Date.parse(run.updatedAt) > STALE_RUN_MS)
@@ -354,7 +354,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     }, {
       list: async ({ identity, ids, search }) => {
         const context = access.authorization.for(identity);
-        const rows = await runtime.plugin.projects.list();
+        const rows = await runtime.plugin.projects.list() as { id: string | number; name: string }[];
         const result = [];
         for (const row of rows) {
           const id = String(row.id);
@@ -406,7 +406,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       await access.as(userId, async () => {
         for (const id of ids) {
           if (!await access.allows('nrProjects', 'list', id)) continue;
-          const row = await runtime.plugin.projects.row(id, undefined);
+          const row = await runtime.plugin.projects.row(id, undefined) as { get(key: 'payload'): { name: string } } | null;
           if (row) found.set(id, { title: row.get('payload').name, key: null, url: null });
         }
       });

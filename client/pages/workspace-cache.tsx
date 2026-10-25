@@ -335,7 +335,7 @@ export function useFreshData<T>(
     let active = true;
     const requestSequence = ++sequenceRef.current;
     // Synchronize the local snapshot with an explicitly selected external cache/key before its refresh resolves.
-    // eslint-disable-next-line react-hooks/set-state-in-effect, @eslint-react/set-state-in-effect
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setState({ cache, key, revision, data: cache.peek<T>(key), loading: true });
     const force = attemptRef.current !== attempt;
     attemptRef.current = attempt;
@@ -360,7 +360,7 @@ export function useFreshData<T>(
       active = false;
     };
     // Callers supply inline fetchers; the cache key, rather than function identity, defines the request.
-    // eslint-disable-next-line react-hooks/exhaustive-deps, @eslint-react/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cache, key, attempt, staleTime, retryDelay, expiresAt, revision]);
   const replace = useCallback(
     (data: T) => {

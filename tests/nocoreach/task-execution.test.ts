@@ -1,14 +1,11 @@
-import { fakeAgents, selectAgent, claim, finish } from './agents-fixture';
+import { fakeAgents } from './agents-fixture';
 // @ts-nocheck
 // Ported from the classic NocoReach unit tests (tests/unit/task-execution.test.cjs) with node:test replaced by vitest.
 import { test as __vitest_test, vi } from 'vitest';
 vi.setConfig({ testTimeout: 60000 });
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import * as path from 'node:path';
 import { TaskService } from '../../server/nocoreach/execution/service.js';
-import { projectWork } from '../../server/nocoreach/execution/model.js';
 const test=__vitest_test;
 function fixture(provider={prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>({content:'AI draft'})}){
  const state={nrTasks:[{id:1,projectId:'1',title:'Synthetic task',brief:'Supplied evidence only',status:'待处理',evidence:{reason:'original'}}],nrSnapshots:[],users:[{id:1,username:'tester',roles:[{name:'admin'}]}]};let sequence=100;

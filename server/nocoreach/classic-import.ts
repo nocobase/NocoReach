@@ -337,7 +337,7 @@ const BUSY_WAIT_MS = 30_000;
 export function registerClassicImport(nr: ImportRuntime) {
   const db = nr.legacy.db;
   const hold = nr.legacy.importHold;
-  const table = (name: string, t: unknown) => db.table(name, t) as ImportTable;
+  const table = (name: string, t: unknown) => db.table(name, t) as unknown as ImportTable;
   const counts = async () => {
     const out: Record<string, number> = {};
     for (const t of TARGET_TABLES)

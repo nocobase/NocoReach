@@ -2,11 +2,12 @@
 // (their HTTP actions), `acl.allow` (which of them answer without a session), `cronJobManager` (their timers),
 // `pm.get` (other plugins), `on('afterStart')`, `logger` and `environment.getVariables()`. Here they only collect what
 // the services register; the NocoReach provider starts the timers and the NocoReach route serves the actions.
+import type { LegacyContext } from './context.js';
 import type { Logger } from '@nocobase/logging';
 import type { LegacyDatabase } from './database.js';
 import type { LegacyVariables } from './variables.js';
 
-export type LegacyAction = (ctx: any, next: () => Promise<void>) => Promise<void>;
+export type LegacyAction = (ctx: LegacyContext, next: () => Promise<void>) => Promise<void>;
 
 /** The classic (winston) logger call shape the ported code uses: message first, then details. */
 export interface LegacyLogger {
@@ -22,7 +23,7 @@ export function legacyLogger(logger: Logger): LegacyLogger {
     (level: 'info' | 'warn' | 'error' | 'debug') =>
     (message: string, details?: unknown) => {
       if (details instanceof Error) logger[level]({ err: details }, message);
-      else if (details && typeof details === 'object') logger[level](details as object, message);
+      else if (details && typeof details === 'object') logger[level](details, message);
       else if (details !== undefined) logger[level]({ details }, message);
       else logger[level](message);
     };
@@ -127,7 +128,7 @@ export class LegacyApp {
     addJob(job: { cronTime: string; onTick: () => unknown; name?: string }): LegacyJob;
     removeJob(job: LegacyJob): void;
   };
-  readonly pm: { get(name: string): any };
+  readonly pm: { get(name: string): unknown };
   readonly environment: { getVariables(): Record<string, string> };
 
   constructor(

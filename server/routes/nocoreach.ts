@@ -117,9 +117,9 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
         // Public OAuth callbacks resolve their target only after validating the stored state/nonce.
         if (runtime.plugin.mock?.enabled && runtime.legacy.resources.level(params.resource, params.action) !== 'public' && !(params.resource === 'nrMembers' && params.action === 'me')) {
           await requireAccess(ctx);
-          await runtime.plugin.network.runProject(String((ctx.action.params.values as Record<string, unknown>)?.projectId || ''), () => fn(ctx, async () => {}));
+          await runtime.plugin.network.runProject(String((ctx.action.params.values as { projectId?: string | number })?.projectId || ''), () => fn(ctx, async () => {}));
         } else {
-          await runtime.plugin.network.run(String((ctx.action.params.values as Record<string, unknown>)?.projectId || ''), () => fn(ctx, async () => {}));
+          await runtime.plugin.network.run(String((ctx.action.params.values as { projectId?: string | number })?.projectId || ''), () => fn(ctx, async () => {}));
         }
         };
         if (session && !(params.resource === 'nrMembers' && params.action === 'me') && runtime.legacy.resources.level(params.resource, params.action) !== 'public') {

@@ -1,5 +1,5 @@
-import { getCurrentLocale, $t } from "#i18n";
-import {nocobaseClient as api} from "#lib/nocoreach-api";
+import { getCurrentLocale, $t } from '#i18n';
+import {nocobaseClient as api} from '#lib/nocoreach-api';
 import {useLocation,useNavigate} from 'react-router';
 import {currentProjectId} from './current-project';
 export const keywordRequest=<T,>(action:string,body:object={},headers?:Record<string,string>)=>api.action<T>('nrKeywords',action,{method:'POST',body:{projectId:String(currentProjectId()),...body},headers,unwrap:'data'});

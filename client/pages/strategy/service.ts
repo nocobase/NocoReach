@@ -1,4 +1,4 @@
-import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {nocobaseClient as api} from '#lib/nocoreach-api';
 import {type Evidence} from './model';
 export type Context={evidenceToken?:string;project:Record<string,unknown>;evidence:Evidence};
 export const request=<T,>(projectId:number,action:string,body:object={})=>api.action<T>('nrStrategy',action,{method:'POST',body:{...body,projectId:String(projectId)},unwrap:'data'});

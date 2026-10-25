@@ -14,7 +14,8 @@ import type { NotificationChannelConfig, NotificationService } from '@nocobase/a
 
 import { legacyRecord, type LegacyRecord, type LegacyRepository } from './database.js';
 
-type Values = Record<string, any>;
+type Values = Record<string, unknown>;
+const messageText = (value: unknown): string => typeof value === 'string' || typeof value === 'number' ? String(value) : '';
 
 /** The classic in-app channel NocoReach made for itself, and where the classic portal was mounted. */
 export const CLASSIC_IN_APP = 'nocoreach';
@@ -99,19 +100,19 @@ export class LegacyNotifications {
     const provider = this.channels()?.[channelName]?.provider;
     if (provider && EMAIL_PROVIDERS.has(provider)) {
       const to = (await Promise.all(ids.map((id) => this.users.findOne({ filterByTk: id }).catch(() => null))))
-        .map((u) => (u ? String(u.get('email') || '') : ''))
+        .map((u) => (u ? messageText(u.get('email')) : ''))
         .filter((e) => /^[^\s@]+@[^\s@]+$/.test(e));
       if (!to.length) return;
       const base = `${this.links.origin || ''}${this.links.basePath}`;
-      const text = String(message.text || '').split(CLASSIC_PORTAL).join(base);
-      await this.service().send({ idempotencyKey, source, messages: { [channelName]: { to: [...new Set(to)], subject: String(message.subject || '').slice(0, 200), text } } });
+      const text = messageText(message.text).split(CLASSIC_PORTAL).join(base);
+      await this.service().send({ idempotencyKey, source, messages: { [channelName]: { to: [...new Set(to)], subject: messageText(message.subject).slice(0, 200), text } } });
       return;
     }
     const channel = channelName === CLASSIC_IN_APP ? this.inAppChannel() : provider === 'in-app' ? channelName : undefined;
     if (!channel) throw new Error(`No enabled in-app notification channel for ${channelName} in config.yml`);
-    const title = String(message.title || '').trim().slice(0, 200);
-    const body = String(message.content || '').trim().slice(0, 2000) || title;
-    const path = this.route(message.options?.url);
+    const title = messageText(message.title).trim().slice(0, 200);
+    const body = messageText(message.content).trim().slice(0, 2000) || title;
+    const path = this.route((message.options as Values | undefined)?.url);
     await this.service().send({
       idempotencyKey,
       source,

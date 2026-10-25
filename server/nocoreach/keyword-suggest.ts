@@ -46,7 +46,7 @@ class KeywordSuggest{
  async inputs(id){const project=await this.p.projects.get(id);const site=await this.p.siteContent?.state(id).catch(()=>null);
   const pages=(site?.pages||[]).filter(p=>p.url).sort((a,b)=>Number(Boolean(b.title))-Number(Boolean(a.title))).slice(0,PAGES).map(p=>({url:p.url,title:str(p.title||'',120),type:p.type}));
   let home='';if(!pages.length&&project.domains?.[0]){try{home=plain(String((await this.read(`https://${project.domains[0]}/`)).text||'')).slice(0,3000);}catch{home='';}}
-  let queries=[];try{const snaps=await this.p.sync.snapshots(id);queries=(snaps.find(s=>s.key==='queries-28')?.payload||[]).slice().sort((a,b)=>b.impressions-a.impressions).slice(0,QUERIES).map(q=>({keyword:q.keyword,clicks:q.clicks,impressions:q.impressions,position:Math.round((q.position||0)*10)/10,page:q.page}));}catch{queries=[];}
+  let queries;try{const snaps=await this.p.sync.snapshots(id);queries=(snaps.find(s=>s.key==='queries-28')?.payload||[]).slice().sort((a,b)=>b.impressions-a.impressions).slice(0,QUERIES).map(q=>({keyword:q.keyword,clicks:q.clicks,impressions:q.impressions,position:Math.round((q.position||0)*10)/10,page:q.page}));}catch{queries=[];}
   const competitors=(await this.p.competitors?.state(id).catch(()=>null))?.list?.map(c=>c.name)||[];
   return {project,pages,home,queries,competitors};}
  // The AI's groups, cleaned: known groups, no duplicates, pages only from the site, the site's own numbers alongside.

@@ -25,6 +25,7 @@ export function repoInput(v: any): RepoConfig {
   if (!baseBranch || !BRANCH.test(baseBranch)) return fail(systemMessageText('agent.invalidBaseBranchName'));
   if (v?.allowedPaths !== undefined && (!Array.isArray(v.allowedPaths) || v.allowedPaths.length > 20)) return fail(systemMessageText('agent.up20FoldersAllowedChanges'));
   const allowedPaths = [...new Set<string>((v?.allowedPaths || []).map((p: unknown) => text(p, 200).replace(/^\/+|\/+$/g, '')))];
+  // eslint-disable-next-line no-control-regex -- Control characters must be rejected in user-supplied paths.
   if (allowedPaths.some(p => p.split('/').some(x => !x || x === '.' || x === '..') || /[\x00-\x1f\\:*?]/.test(p))) return fail(systemMessageText('agent.foldersRelativePathsInsideRepository'));
   return { repo, baseBranch, allowedPaths, contentCheck: v?.contentCheck !== false };
 }

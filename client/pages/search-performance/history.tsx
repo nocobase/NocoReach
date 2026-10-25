@@ -83,7 +83,7 @@ export function SearchHistory({
     askedRef.current.add(key);
     void submit();
     // Once per selected range. Polling must never enqueue work or bypass a paused/failed job.
-    // eslint-disable-next-line react-hooks/exhaustive-deps, @eslint-react/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [admin, durable, missing, key]);
   useEffect(() => {
     if (!running) return;
