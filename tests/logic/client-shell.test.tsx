@@ -113,13 +113,9 @@ describe('application shell', () => {
         name: 'Demo mode · Switch account',
       }),
     ).toBeVisible();
-    expect(
-      screen.getByText('Find the opportunities in your data.'),
-    ).toBeVisible();
-    // NocoReach's slogan; its name is emphasised, not a link to a site.
-    expect(
-      screen.getByText('puts them into action.', { exact: false }),
-    ).toHaveTextContent('NocoReach puts them into action.');
+    // NocoReach's slogan, as on the sign-in page.
+    expect(screen.getByText('AI finds growth opportunities.')).toBeVisible();
+    expect(screen.getByText('Agents put them into action.')).toBeVisible();
     // The template's name is gone and the version is in the account menu.
     expect(screen.queryByText('Default Template')).not.toBeInTheDocument();
     expect(screen.queryByText('Version unknown')).not.toBeInTheDocument();
@@ -240,11 +236,11 @@ describe('application shell', () => {
     ).toHaveAttribute('aria-pressed', 'true');
     // The footer keeps only its shield; focusing it shows the slogan.
     const footerIcon = screen.getByRole('img', {
-      name: 'Find the opportunities in your data. NocoReach puts them into action.',
+      name: 'AI finds growth opportunities. Agents put them into action.',
     });
     act(() => footerIcon.focus());
     expect(
-      await screen.findByText('NocoReach puts them into action.', {
+      await screen.findByText('Agents put them into action.', {
         selector: '[data-slot="tooltip-content"] span',
       }),
     ).toBeVisible();
@@ -260,7 +256,7 @@ describe('application shell', () => {
       ),
     );
     expect(
-      screen.queryByRole('img', { name: /puts them into action/ }),
+      screen.queryByRole('img', { name: /put them into action/ }),
     ).not.toBeInTheDocument();
   });
 

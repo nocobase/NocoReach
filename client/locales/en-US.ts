@@ -94,8 +94,8 @@ const enUS = {
   'nocoreach.nav.demoData': 'Demo management',
   'nocoreach.nav.members': 'Members & roles',
   'auth.platform': 'AI growth operations platform',
-  'auth.marketingTitleFirst': 'Find the opportunities in your data.',
-  'auth.marketingTitleSecond': 'NocoReach puts them into action.',
+  'auth.marketingTitleFirst': 'AI finds growth opportunities.',
+  'auth.marketingTitleSecond': 'Agents put them into action.',
   // Not shown since the sign-in title became the two-line slogan; kept because the locale type requires the key.
   'auth.marketingTitleThird': '',
   'auth.marketingDescription': 'Data collection, daily analysis and Agent execution in one platform.',
@@ -108,8 +108,8 @@ const enUS = {
   'navigation.brandApps': 'NocoReach applications',
   shell: {
     templateVersionUnknown: 'Version unknown',
-    buildFreely: 'Find the opportunities in your data.',
-    reliability: '<brand>NocoReach</brand> puts them into action.',
+    buildFreely: 'AI finds growth opportunities.',
+    reliability: 'Agents put them into action.',
   },
   app: {
     title: 'NocoReach',

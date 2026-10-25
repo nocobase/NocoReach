@@ -99,7 +99,7 @@ describe('application authentication pages', () => {
     expect(panel).toHaveClass('hidden', 'xl:block');
     expect(panel).toHaveTextContent('AI growth operations platform');
     expect(panel).toHaveTextContent(
-      'Find the opportunities in your data.NocoReach puts them into action.',
+      'AI finds growth opportunities.Agents put them into action.',
     );
     expect(panel).toHaveTextContent('Daily analysis');
     expect(panel).toHaveTextContent('Agent execution');

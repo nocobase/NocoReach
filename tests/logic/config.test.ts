@@ -159,6 +159,26 @@ describe('application config', () => {
     expect(runtime.config.publicValues().demoMode).toEqual({ enabled: true });
   });
 
+  it('gives only a demo deployment sign-in cookies a cross-site iframe keeps', async () => {
+    const path = 'auth.advanced.defaultCookieAttributes';
+    const defaults = await resolveStandaloneAppRuntime(appRuntime, {
+      rootDir: templateRootDir,
+      configPath,
+    });
+    expect(defaults.config.get(path)).toBeUndefined();
+
+    const demo = await resolveStandaloneAppRuntime(appRuntime, {
+      rootDir: templateRootDir,
+      configPath,
+      env: { NOCOBASE_DEMO_MODE: 'true' },
+    });
+    expect(demo.config.get(path)).toEqual({
+      sameSite: 'none',
+      secure: true,
+      partitioned: true,
+    });
+  });
+
   it('reloads a file-backed configuration explicitly', async () => {
     const runtime = await resolveStandaloneAppRuntime(appRuntime, {
       rootDir: templateRootDir,

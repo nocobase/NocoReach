@@ -242,8 +242,8 @@
   "auth.continueWith": "Continuer avec {provider}",
   "auth.about": "À propos de cette application",
   "auth.platform": "Plateforme d'opérations de croissance par IA",
-  "auth.marketingTitleFirst": "Trouvez les opportunités dans vos données.",
-  "auth.marketingTitleSecond": "NocoReach les met en œuvre.",
+  "auth.marketingTitleFirst": "L’IA trouve des opportunités de croissance.",
+  "auth.marketingTitleSecond": "Les agents les mettent en œuvre.",
   "auth.marketingTitleThird": "",
   "auth.marketingDescription": "Collecte des données, analyse quotidienne et exécution par des agents sur une seule plateforme.",
   "auth.frontend": "Analyse quotidienne",
@@ -263,8 +263,8 @@
   "status.routeFailedDescription": "La route {{label}} de {{packageName}} n'a pas pu être chargée.",
   "shell": {
     "templateVersionUnknown": "Version inconnue",
-    "buildFreely": "Trouvez les opportunités dans vos données.",
-    "reliability": "<brand>NocoReach</brand> les met en œuvre."
+    "buildFreely": "L’IA trouve des opportunités de croissance.",
+    "reliability": "Les agents les mettent en œuvre."
   },
   "home": {
     "platform": "NocoBase · Plateforme d'applications native IA",
