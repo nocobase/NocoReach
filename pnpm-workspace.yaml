@@ -267,6 +267,13 @@ minimumReleaseAgeExclude:
   - '@nocobase/agent-runner@0.1.0-beta.18'
   - '@nocobase/app-plugin-demo-mode@0.1.0-beta.2'
   - '@nocobase/jobs@0.1.0-beta.4'
+  # Demo Mode beta.3 and its authentication and Runner protocol companions.
+  - '@nocobase/app-plugin-demo-mode@0.1.0-beta.3'
+  - '@nocobase/app-plugin-authentication@2.0.0-beta.14'
+  - '@nocobase/app-plugin-agents@1.0.0-beta.24'
+  - '@nocobase/agent-protocol@0.1.0-beta.15'
+  - '@nocobase/agent-runner@0.1.0-beta.19'
+  - '@nocobase/app-cli-client@0.1.0-beta.16'
 # NocoReach-owned Scheduler extension. Upgrade this pin, the patch and the version in cli/build-scheduler-patch.mjs together.
 patchedDependencies:
   '@nocobase/app-plugin-scheduler@1.0.0-beta.19': patches/@nocobase__app-plugin-scheduler@1.0.0-beta.19.patch
