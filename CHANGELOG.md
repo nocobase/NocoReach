@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Preserve restart history during classic import
+
+- Treat application restart history as installation metadata: it no longer blocks a first classic import after the task timer fires, cannot be overwritten by imported snapshots, and survives replacement imports. Reproduce the timer firing explicitly in the import hold integration test to prevent intermittent CI failures.
+
 ## Unreleased — Translate into other languages
 
 - The playbook Sync language versions is now Translate into other languages ("Add the missing languages, or bring translations up to date with the source."), and its Agent step is named Translate: Agent Translate › Review › Publish › Watch. A repository page still opens a pull request.
