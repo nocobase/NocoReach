@@ -114,18 +114,13 @@ describe('shell translations', () => {
     expect(
       screen.getByRole('navigation', { name: 'Breadcrumb', hidden: true }),
     ).toHaveTextContent('Overview');
-    expect(
-      screen.getByText('Find the opportunities in your data.'),
-    ).toBeVisible();
+    expect(screen.getByText('AI finds growth opportunities.')).toBeVisible();
     await act(() => runtime.changeLanguage('zh-CN'));
     expect(
       screen.getByRole('navigation', { name: '面包屑', hidden: true }),
     ).toBeInTheDocument();
-    expect(screen.getByText('从数据中发现机会，')).toBeVisible();
-    // NocoReach's slogan; its name is emphasised, not a link to a site.
-    expect(
-      screen.getByText('帮你落地', { exact: false }),
-    ).toHaveTextContent('NocoReach 帮你落地');
+    expect(screen.getByText('AI 找出增长机会，')).toBeVisible();
+    expect(screen.getByText('交给 Agent 执行')).toBeVisible();
     expect(
       screen.getByRole('button', { name: '展开或收起导航' }),
     ).toHaveAttribute('title', '展开或收起导航');
