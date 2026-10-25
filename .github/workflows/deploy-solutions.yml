@@ -74,7 +74,7 @@ jobs:
         with:
           name: solutions-release-archive
           path: storage/exports
-      # Match NocoCRM's published CLI; later npm versions no longer contain it.
+      # beta.58 is the last published npm release containing the Studio CLI.
       - name: Install nb-studio
         run: npm install --prefix "$RUNNER_TEMP/studio-cli" --ignore-scripts --no-audit --no-fund @nocobase/studio-cli@1.0.0-beta.58
       - name: Deploy or request Studio approval
