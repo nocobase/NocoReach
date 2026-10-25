@@ -353,6 +353,11 @@ describe('NocoReach semantic-key translations', () => {
       '关注度（每周，最高为 100）': '每周关注度',
       添加或移除竞品: '管理竞品',
       暂无任务: '没有任务',
+      // Sync language versions became Translate into other languages (2026-10-25), for articles as well as pages.
+      同步多语言版本: '翻译成其他语言',
+      '把页面改动同步到其他语言版本。': '补上缺失的语言，或按原文更新译文。',
+      '把指定页面的最新改动同步到其他语言版本：内容保持一致，术语遵循项目记忆；缺失的语言版本按需新建。':
+        '把指定的页面或文章翻译成其他语言版本：补上缺失的语言，或按原文的最新内容更新已有译文。内容与原文一致，术语遵循项目记忆；原文不改。',
     };
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(

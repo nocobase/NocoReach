@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   ARTICLE_CAPABILITIES,
+  articleLocales,
   articleTargetSchema,
   TARGET_ID,
   type ArticleTarget,
@@ -335,6 +336,7 @@ export class ArticleTargets {
               slug: found.slug || hit.slug,
               title,
               url,
+              locales: articleLocales(found),
             },
             unchecked: false,
           };
@@ -349,6 +351,22 @@ export class ArticleTargets {
     if (!provider.capabilities.search) return [];
     try {
       return await provider.search(typeof q === 'string' ? q : '', 20);
+    } catch (error) {
+      if (error instanceof ArticleError)
+        throw Object.assign(new Error(providerErrorKey(error.code)), {
+          status: error.status,
+        });
+      throw error;
+    }
+  }
+  /** The languages an article has text in, for picking what to translate (read-only). */
+  async languages(id: string, targetId: string, articleId: string) {
+    try {
+      return {
+        locales: articleLocales(
+          await this.provider(id, targetId).get(articleId),
+        ),
+      };
     } catch (error) {
       if (error instanceof ArticleError)
         throw Object.assign(new Error(providerErrorKey(error.code)), {
@@ -384,6 +402,9 @@ export class ArticleTargets {
         targets: wrap((id) => this.list(id)),
         search: wrap((id, v) => this.search(id, scalar(v.targetId), v.q)),
         match: wrap((id, v) => this.match(id, v.urls)),
+        languages: wrap((id, v) =>
+          this.languages(id, scalar(v.targetId), scalar(v.articleId)),
+        ),
         saveTarget: wrap((id, v) => this.save(id, v), true),
         removeTarget: wrap((id, v) => this.remove(id, v), true),
         setDefaultTarget: wrap((id, v) => this.setDefault(id, v), true),
@@ -397,6 +418,7 @@ export class ArticleTargets {
         'targets',
         'search',
         'match',
+        'languages',
         'saveTarget',
         'removeTarget',
         'setDefaultTarget',
