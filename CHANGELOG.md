@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Translate into other languages
+
+- The playbook Sync language versions is now Translate into other languages ("Add the missing languages, or bring translations up to date with the source."), and its Agent step is named Translate: Agent Translate › Review › Publish › Watch. A repository page still opens a pull request.
+- For an article on a publishing target, the start card names the Article to translate (found from the task's page, or chosen in the dialog) and, as tags, "From English into Japanese". The dialog, Choose article and languages, takes an existing article only, without Also publish to: a Source language among the languages the article has, and Translate into, where the languages it lacks are ticked and marked Missing; with none missing, every other language is ticked, to bring them up to date. Whether a translation is out of date is not known, so those are ticked by hand. A target with one language says there is nothing to translate.
+- Starting it takes the article as it is published as the approved source (`delivery.translateFrom` with `published`), so the first run already translates: the Agent writes only the chosen languages, change requests stay translations, and one approval publishes them all. The source language is neither rewritten nor reviewed again.
+- `nrArticles:match` and the article saved on a task carry the languages it has text in, and `nrArticles:languages` reads them for an article picked by hand.
+
 ## Unreleased — Skills: playbooks as tags
 
 - Skills › Used in playbooks shows each playbook that names the Skill as a grey tag instead of a run of "Playbook · Step" text. Up to three show in full and the rest are counted as +N. Hovering over the cell lists the steps.

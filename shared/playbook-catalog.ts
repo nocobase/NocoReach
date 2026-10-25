@@ -103,6 +103,7 @@ const work = (
   instructions: string,
   skills: string[] = [],
   planFirst = false,
+  step = systemMessageText('common.modify'),
 ) =>
   withKind({
     id,
@@ -127,13 +128,23 @@ const work = (
             ),
           ]
         : []),
-      withSkills(change(instructions), skills),
+      withSkills(change(instructions, step), skills),
       review(systemMessageText('common.review')),
     ],
     next: [],
     system: true,
     version: 3,
   });
+
+// The playbook that translates a page or an article into other languages, and copies of it: an article task linked to
+// a publishing target starts in the translation phase, from the article as it is published (article-flow.ts).
+export const TRANSLATE_PLAYBOOK = 'sync-translations';
+export const translatesArticle = (
+  p?: Pick<Playbook, 'id' | 'copiedFrom'> | null,
+) =>
+  Boolean(
+    p && (p.id === TRANSLATE_PLAYBOOK || p.copiedFrom === TRANSLATE_PLAYBOOK),
+  );
 
 // The Agent's first step when a playbook asks for a plan: a concrete plan against the real repository, before any change.
 export const AGENT_PLAN_INSTRUCTION = systemMessageText(
@@ -231,12 +242,17 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
     systemMessageText('playbooks.optimizePageInstruction'),
     ['seo-title-description', 'seo-audit', 'copy-editing', 'cro'],
   ),
+  // Translate into other languages (2026-10-25, formerly Sync language versions): an article starts in the translation
+  // phase from the article as published, a repository page opens a pull request (translatesArticle).
   work(
-    'sync-translations',
+    TRANSLATE_PLAYBOOK,
     systemMessageText('playbooks.syncLanguageVersions'),
     'optimize',
     systemMessageText('playbooks.syncPageChangesOtherLanguage'),
     systemMessageText('playbooks.translationInstruction'),
+    [],
+    false,
+    systemMessageText('playbooks.translateStep'),
   ),
   work(
     'tech-fix',

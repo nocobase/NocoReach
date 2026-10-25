@@ -1174,3 +1174,157 @@ test('languages: a task started without them writes every language at once, as b
   const { run } = await claim(f);
   expect(run.input.article.languages).toBeUndefined();
 });
+
+test('translation: the published article is translated into the languages it lacks, the source is kept, one publish writes them', async () => {
+  const f = await fixture();
+  let d = await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  // The languages the article has text in (Japanese is empty).
+  expect(d.work.article.locales).toEqual(['en', 'zh']);
+  d = await f.command('startTask', { playbookId: 'sync-translations' });
+  expect(d.work.flow.stages.map((s) => s.kind)).toEqual([
+    'agent',
+    'review',
+    'release',
+    'observe',
+  ]);
+  // Without a choice: from the target's first language the article has into the one it lacks. The article as
+  // published stands in for an approved primary, so the first run already translates.
+  expect(d.work.delivery).toMatchObject({
+    kind: 'article',
+    targetId: 'cms',
+    articleId: '7',
+    locales: ['en', 'ja'],
+    translateFrom: {
+      artifactId: null,
+      published: true,
+      by: '1',
+      text: {
+        title: 'Hello',
+        description: 'Old summary',
+        body: '# Hello\n\nEnglish body',
+      },
+      fields: ['title', 'description', 'body'],
+    },
+  });
+  const { run } = await claim(f);
+  expect(run.mode).toBe('article');
+  expect(run.input.article.languages).toMatchObject({
+    primary: 'en',
+    others: ['ja'],
+    phase: 'translate',
+    write: ['ja'],
+    approved: { title: 'Hello', fields: ['title', 'description', 'body'] },
+  });
+  // What the Agent writes in the source language is left out: only the translation is proposed.
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'Translated into Japanese',
+    article: {
+      locales: {
+        en: { title: 'Changed while translating' },
+        ja: {
+          title: 'こんにちは',
+          description: '要約',
+          body: '# こんにちは\n\n本文',
+        },
+      },
+      summary: 'Translated into Japanese',
+    },
+  });
+  d = await f.view();
+  expect(review(d).article.draft.locales).toEqual({
+    ja: {
+      title: 'こんにちは',
+      description: '要約',
+      body: '# こんにちは\n\n本文',
+    },
+  });
+  expect([...review(d).article.changes].sort()).toEqual([
+    'ja.body',
+    'ja.description',
+    'ja.title',
+  ]);
+  d = await f.command('approveStage', {
+    stageKey: d.work.flow.stages[d.work.stageIndex].key,
+    artifactId: review(d).id,
+    checked: [],
+  });
+  // One approval publishes: there is no primary round to approve first.
+  expect(d.work.release.state).toBe('publishing');
+  await f.settle();
+  expect(f.cms.state.rows.find((r) => r.slug === 'hello')).toMatchObject({
+    title: 'Hello',
+    content: '# Hello\n\nEnglish body',
+    title_cn: '你好',
+    title_ja: 'こんにちは',
+    content_ja: '# こんにちは\n\n本文',
+  });
+});
+
+test('translation: chosen languages bring a translation up to date; changes requested stay a translation', async () => {
+  const f = await fixture();
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  // The other targets and the repository choice do not apply: a translation goes to the article's own target.
+  let d = await f.command('startTask', {
+    playbookId: 'sync-translations',
+    delivery: { locales: ['zh', 'en'], also: ['news'] },
+  });
+  expect(d.work.delivery.also).toBeUndefined();
+  expect(d.work.delivery.locales).toEqual(['zh', 'en']);
+  expect(d.work.delivery.translateFrom.text.title).toBe('你好');
+  let { run } = await claim(f);
+  expect(run.input.article.languages).toMatchObject({
+    phase: 'translate',
+    write: ['en'],
+  });
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'Updated the English translation',
+    article: {
+      locales: { en: { body: '# Hello\n\nUpdated English body' } },
+      summary: 'Updated English',
+    },
+  });
+  d = await f.view();
+  await f.command('requestStageChanges', {
+    stageKey: d.work.flow.stages[d.work.stageIndex].key,
+    artifactId: review(d).id,
+    comment: 'Keep the heading as it was',
+  });
+  ({ run } = await claim(f));
+  expect(run.input.article.languages).toMatchObject({
+    phase: 'translate',
+    write: ['en'],
+  });
+});
+
+test('translation: a new article, a source without text or nothing to translate stops the start', async () => {
+  const f = await fixture();
+  await expect(
+    f.command('startTask', {
+      playbookId: 'sync-translations',
+      delivery: { targetId: 'cms' },
+    }),
+  ).rejects.toMatchObject({ status: 409 });
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await expect(
+    f.command('startTask', {
+      playbookId: 'sync-translations',
+      delivery: { locales: ['ja', 'en'] },
+    }),
+  ).rejects.toMatchObject({ status: 409 });
+  await expect(
+    f.command('startTask', {
+      playbookId: 'sync-translations',
+      delivery: { locales: ['en'] },
+    }),
+  ).rejects.toMatchObject({ status: 400 });
+  expect((await f.view()).work.flow).toBeFalsy();
+  // Another playbook on the same article keeps the earlier behaviour: nothing is translated at start.
+  const d = await f.command('startTask', { playbookId: 'optimize-page' });
+  expect(d.work.delivery.translateFrom).toBeUndefined();
+});

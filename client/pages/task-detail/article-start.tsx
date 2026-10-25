@@ -1,6 +1,6 @@
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { ExternalLink } from 'lucide-react';
-import { $t, getCurrentLocale, useMessageState } from '#i18n';
+import { $t, $tj, getCurrentLocale, useMessageState } from '#i18n';
 import { cn } from '#lib/utils';
 import { Button } from '#components/ui/button';
 import { Checkbox } from '#components/ui/checkbox';
@@ -19,7 +19,9 @@ import type {
   ArticleMatch,
   ArticleSummary,
 } from '../../../shared/article-publishing.js';
+import { translationDefault } from '../../../shared/article-publishing.js';
 import {
+  articleLanguages,
   errorStatus,
   localeName,
   searchArticles,
@@ -29,6 +31,7 @@ import {
   MAX_ALSO,
   REPO,
   choiceLocales,
+  translationLocales,
   type DeliveryChoice,
 } from './article-model';
 import { articlePageUrl } from './article-page';
@@ -37,7 +40,8 @@ import { text } from './styles';
 
 // Where a task's change goes, chosen before it starts (docs/ARTICLE-PUBLISHING.md): a publishing target (an existing
 // article or a new one), or the website repository as a PR. Other targets can receive the same article: matched by
-// slug, updated there or created. The start card shows the choice in one line; Change opens it in a dialog.
+// slug, updated there or created. The start card shows the choice in one line; Change opens it in a dialog. A
+// translation (2026-10-25) takes an article that exists, and the languages to translate it from and into.
 
 type Picked = { targetId: string; id: string; title: string; slug: string };
 
@@ -84,6 +88,8 @@ export function DeliveryDialog({
   found?: ArticleMatch | null;
   /** Why the article has to be picked by hand (not found from the page, or the lookup failed). */
   notice?: string;
+  /** A translation playbook: an article that exists, the source language and the languages to write. */
+  translate?: boolean;
   busy: boolean;
   link: (targetId: string, articleId: string) => Promise<boolean>;
   onSave: (choice: DeliveryChoice) => void;
@@ -97,7 +103,13 @@ export function DeliveryDialog({
     >
       <DialogContent className='flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-lg'>
         <DialogHeader>
-          <DialogTitle>{$t('articleTask.chooseArticle')}</DialogTitle>
+          <DialogTitle>
+            {$t(
+              form.translate
+                ? 'articleTask.chooseTranslation'
+                : 'articleTask.chooseArticle',
+            )}
+          </DialogTitle>
         </DialogHeader>
         {open && <DeliveryForm {...form} onClose={onClose} />}
       </DialogContent>
@@ -112,6 +124,7 @@ function DeliveryForm({
   choice,
   found,
   notice,
+  translate = false,
   busy,
   link,
   onSave,
@@ -122,6 +135,7 @@ function DeliveryForm({
   choice: DeliveryChoice;
   found?: ArticleMatch | null;
   notice?: string;
+  translate?: boolean;
   busy: boolean;
   link: (targetId: string, articleId: string) => Promise<boolean>;
   onSave: (choice: DeliveryChoice) => void;
@@ -148,7 +162,9 @@ function DeliveryForm({
     error?: 'failed' | 'denied';
   }>();
   const target = draft.target === REPO ? undefined : draft.target;
-  const searching = Boolean(target && draft.mode === 'existing');
+  // A translation always changes an article that exists.
+  const mode = translate ? 'existing' : draft.mode;
+  const searching = Boolean(target && mode === 'existing');
   useEffect(() => {
     if (!searching || !target) return;
     const controller = new AbortController();
@@ -175,6 +191,50 @@ function DeliveryForm({
   }, [searching, target, q, projectId, attempt]);
   const current = result?.key === `${target}:${q}` ? result : undefined;
   const article = picked?.targetId === target ? picked : undefined;
+  // The languages the picked article has: known for the article found from the page or saved on the task, otherwise
+  // read from the target (unknown while reading or when the read fails: every language counts as present).
+  const known = !article
+    ? undefined
+    : found?.targetId === target && found?.articleId === article.id
+      ? found?.locales
+      : linked?.targetId === target && linked?.articleId === article.id
+        ? linked?.locales
+        : undefined;
+  const languagesKey =
+    translate && target && article && !known ? `${target}:${article.id}` : '';
+  const [read, setRead] = useState<{ key: string; locales?: string[] }>();
+  useEffect(() => {
+    if (!languagesKey || !target || !article) return;
+    const controller = new AbortController();
+    void articleLanguages(
+      projectId,
+      target,
+      article.id,
+      controller.signal,
+    ).then(
+      (r) => {
+        if (!controller.signal.aborted)
+          setRead({
+            key: languagesKey,
+            locales: Array.isArray(r?.locales) ? r.locales : undefined,
+          });
+      },
+      () => {
+        if (!controller.signal.aborted) setRead({ key: languagesKey });
+      },
+    );
+    return () => controller.abort();
+  }, [languagesKey, projectId, target, article]);
+  const present =
+    known ?? (read?.key === languagesKey ? read.locales : undefined);
+  const translation =
+    translate && target
+      ? translationLocales(
+          data,
+          { target, mode, also: [], locales: draft.locales },
+          present,
+        )
+      : [];
   const full = draft.also.length >= MAX_ALSO;
   const disabled = busy || saving;
   const done = (c: DeliveryChoice) => {
@@ -183,10 +243,13 @@ function DeliveryForm({
   };
   const save = async () => {
     if (!target) return done({ target: REPO, mode: 'new', also: [] });
-    const also = draft.also.filter((x) => x !== target),
-      locales = draft.locales ? { locales: draft.locales } : {};
-    if (draft.mode === 'new')
-      return done({ target, mode: 'new', also, ...locales });
+    const also = translate ? [] : draft.also.filter((x) => x !== target),
+      locales = translate
+        ? { locales: translation }
+        : draft.locales
+          ? { locales: draft.locales }
+          : {};
+    if (mode === 'new') return done({ target, mode: 'new', also, ...locales });
     if (!article) return;
     if (linked?.articleId === article.id && linked.targetId === target)
       return done({ target, mode: 'existing', also, ...locales });
@@ -239,7 +302,7 @@ function DeliveryForm({
             </option>
           </select>
         </label>
-        {target && targets.length > 1 && (
+        {target && !translate && targets.length > 1 && (
           <div className='nr-td-start-field'>
             <span id={`${id}-also`}>{$t('articleTask.alsoPublishTo')}</span>
             <div
@@ -278,7 +341,7 @@ function DeliveryForm({
             )}
           </div>
         )}
-        {target && (
+        {target && !translate && (
           <LanguagePicker
             id={id}
             all={targets.find((t) => t.id === target)?.locales || []}
@@ -291,29 +354,31 @@ function DeliveryForm({
           <div className='nr-td-start-field'>
             <span id={`${id}-article`}>{$t('articleTask.article')}</span>
             {notice && <small data-article-not-found=''>{notice}</small>}
-            <RadioGroup
-              aria-labelledby={`${id}-article`}
-              className='flex flex-wrap gap-4'
-              value={draft.mode}
-              disabled={disabled}
-              onValueChange={(v) =>
-                setDraft({ ...draft, mode: v as DeliveryChoice['mode'] })
-              }
-            >
-              <div className='flex items-center gap-2'>
-                <RadioGroupItem id={`${id}-new`} value='new' />
-                <Label htmlFor={`${id}-new`}>
-                  {$t('articleTask.newArticle')}
-                </Label>
-              </div>
-              <div className='flex items-center gap-2'>
-                <RadioGroupItem id={`${id}-existing`} value='existing' />
-                <Label htmlFor={`${id}-existing`}>
-                  {$t('articleTask.existingArticle')}
-                </Label>
-              </div>
-            </RadioGroup>
-            {draft.mode === 'existing' && (
+            {!translate && (
+              <RadioGroup
+                aria-labelledby={`${id}-article`}
+                className='flex flex-wrap gap-4'
+                value={draft.mode}
+                disabled={disabled}
+                onValueChange={(v) =>
+                  setDraft({ ...draft, mode: v as DeliveryChoice['mode'] })
+                }
+              >
+                <div className='flex items-center gap-2'>
+                  <RadioGroupItem id={`${id}-new`} value='new' />
+                  <Label htmlFor={`${id}-new`}>
+                    {$t('articleTask.newArticle')}
+                  </Label>
+                </div>
+                <div className='flex items-center gap-2'>
+                  <RadioGroupItem id={`${id}-existing`} value='existing' />
+                  <Label htmlFor={`${id}-existing`}>
+                    {$t('articleTask.existingArticle')}
+                  </Label>
+                </div>
+              </RadioGroup>
+            )}
+            {mode === 'existing' && (
               <div className='flex flex-col gap-2 text-sm'>
                 <p className={article ? '' : 'nr-td-muted'}>
                   {article
@@ -321,7 +386,11 @@ function DeliveryForm({
                         0: article.title,
                         1: article.slug,
                       })
-                    : $t('articleTask.pickArticle')}
+                    : $t(
+                        translate
+                          ? 'articleTask.pickArticleToTranslate'
+                          : 'articleTask.pickArticle',
+                      )}
                 </p>
                 <Input
                   aria-label={$t('articleTask.search')}
@@ -359,14 +428,17 @@ function DeliveryForm({
                           aria-pressed={article?.id === h.id}
                           className='aria-pressed:bg-muted'
                           disabled={disabled}
-                          onClick={() =>
+                          onClick={() => {
+                            // Another article has its own languages: start from its default.
+                            if (article?.id !== h.id && translate)
+                              setDraft({ ...draft, locales: undefined });
                             setPicked({
                               targetId: target,
                               id: h.id,
                               title: h.title || h.slug,
                               slug: h.slug,
-                            })
-                          }
+                            });
+                          }}
                         >
                           <b>{h.title || h.slug}</b>
                           <small>{h.slug}</small>
@@ -381,6 +453,16 @@ function DeliveryForm({
             )}
           </div>
         )}
+        {target && translate && (
+          <TranslationPicker
+            id={id}
+            all={targets.find((t) => t.id === target)?.locales || []}
+            present={article ? present : undefined}
+            chosen={translation}
+            disabled={disabled}
+            onChange={(locales) => setDraft({ ...draft, locales })}
+          />
+        )}
         {error && (
           <p role='alert' className='nr-error'>
             {error}
@@ -393,7 +475,9 @@ function DeliveryForm({
         </Button>
         <Button
           disabled={
-            disabled || Boolean(target && draft.mode === 'existing' && !article)
+            disabled ||
+            Boolean(target && mode === 'existing' && !article) ||
+            Boolean(target && translate && translation.length < 2)
           }
           onClick={() => void save()}
         >
@@ -494,6 +578,98 @@ function LanguagePicker({
   );
 }
 
+/**
+ * What a translation writes (2026-10-25): the source language, which the article must have, and the languages to
+ * translate it into, each marked Missing when the article lacks it. Choosing another source starts its default again.
+ */
+function TranslationPicker({
+  id,
+  all,
+  present,
+  chosen,
+  disabled,
+  onChange,
+}: {
+  id: string;
+  all: string[];
+  /** The languages the article has; unknown counts every language as present. */
+  present?: string[];
+  chosen: string[];
+  disabled: boolean;
+  onChange: (locales: string[]) => void;
+}) {
+  const ui = getCurrentLocale(),
+    from = chosen[0] || '',
+    to = chosen.slice(1),
+    sources = present ? all.filter((l) => present.includes(l)) : all;
+  if (all.length < 2)
+    return (
+      <p className={text.muted} data-translate-one-language=''>
+        {$t('articleTask.translateOneLanguage')}
+      </p>
+    );
+  return (
+    <>
+      <label className='nr-td-start-field'>
+        <span>{$t('articleTask.sourceLanguage')}</span>
+        <select
+          aria-label={$t('articleTask.sourceLanguage')}
+          value={from}
+          disabled={disabled}
+          onChange={(e) => {
+            const d = translationDefault(all, present, e.target.value);
+            onChange([d.from, ...d.to]);
+          }}
+        >
+          {sources.map((l) => (
+            <option key={l} value={l}>
+              {localeName(l, ui)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className='nr-td-start-field'>
+        <span id={`${id}-into`}>{$t('articleTask.translateInto')}</span>
+        <div
+          role='group'
+          aria-labelledby={`${id}-into`}
+          className='flex flex-wrap gap-x-4 gap-y-2'
+        >
+          {all
+            .filter((l) => l !== from)
+            .map((l) => {
+              const checked = to.includes(l);
+              return (
+                <div key={l} className='flex items-center gap-2'>
+                  <Checkbox
+                    id={`${id}-into-${l}`}
+                    checked={checked}
+                    disabled={disabled}
+                    onCheckedChange={(on) =>
+                      onChange([
+                        from,
+                        ...all.filter(
+                          (x) =>
+                            x !== from &&
+                            (x === l ? on === true : to.includes(x)),
+                        ),
+                      ])
+                    }
+                  />
+                  <Label htmlFor={`${id}-into-${l}`}>{localeName(l, ui)}</Label>
+                  {present && !present.includes(l) && (
+                    <Tag tone='amber'>{$t('articleTask.languageMissing')}</Tag>
+                  )}
+                </div>
+              );
+            })}
+        </div>
+        <small>{$t('articleTask.translateHelp')}</small>
+      </div>
+    </>
+  );
+}
+
 export function DeliverySummary({
   data,
   choice,
@@ -501,6 +677,7 @@ export function DeliverySummary({
   notice,
   allowed,
   busy,
+  translate = false,
   onChange,
 }: {
   data: TaskData;
@@ -509,12 +686,22 @@ export function DeliverySummary({
   notice?: string;
   allowed: boolean;
   busy: boolean;
+  /** A translation playbook: the article to translate and, in one line, from and into which languages. */
+  translate?: boolean;
   onChange: () => void;
 }) {
   const targets = data.articleTargets || [],
     name = (id: string) => targets.find((t) => t.id === id)?.name || id,
-    also = choice.target === REPO ? [] : choice.also,
-    languages = choiceLocales(data, choice);
+    also = choice.target === REPO || translate ? [] : choice.also,
+    languages = translate
+      ? translationLocales(data, choice)
+      : choiceLocales(data, choice),
+    ui = getCurrentLocale(),
+    toChange = $t(
+      translate
+        ? 'articleTask.articleToTranslate'
+        : 'articleTask.articleToChange',
+    );
   const change = allowed && !finding && (
     <Button
       variant='link'
@@ -540,32 +727,58 @@ export function DeliverySummary({
           {$t('articleTask.alsoPublishesTo', { 0: names(data, also) })}
         </p>
       )}
-      {languages.length > 1 && (
-        <p className={text.muted} data-delivery-languages=''>
-          {$t('articleTask.languagesLine', {
-            0: [
-              $t('articleTask.primaryMark', {
-                0: localeName(languages[0], getCurrentLocale()),
-              }),
-              ...languages
-                .slice(1)
-                .map((l) => localeName(l, getCurrentLocale())),
-            ].join(' · '),
-          })}
-        </p>
+      {translate && choice.target !== REPO ? (
+        languages.length > 1 ? (
+          <p
+            className={cn(text.muted, 'flex flex-wrap items-center gap-1')}
+            data-delivery-languages=''
+          >
+            {$tj('articleTask.translateLine', {
+              0: <Tag tone='grey'>{localeName(languages[0], ui)}</Tag>,
+              1: (
+                <span className='inline-flex flex-wrap gap-1'>
+                  {languages.slice(1).map((l) => (
+                    <Tag key={l} tone='grey'>
+                      {localeName(l, ui)}
+                    </Tag>
+                  ))}
+                </span>
+              ),
+            })}
+          </p>
+        ) : (
+          <p className={text.muted} data-translate-one-language=''>
+            {$t('articleTask.translateOneLanguage')}
+          </p>
+        )
+      ) : (
+        languages.length > 1 && (
+          <p className={text.muted} data-delivery-languages=''>
+            {$t('articleTask.languagesLine', {
+              0: [
+                $t('articleTask.primaryMark', {
+                  0: localeName(languages[0], getCurrentLocale()),
+                }),
+                ...languages
+                  .slice(1)
+                  .map((l) => localeName(l, getCurrentLocale())),
+              ].join(' · '),
+            })}
+          </p>
+        )
       )}
     </Field>
   );
   if (finding)
     return row(
-      $t('articleTask.articleToChange'),
+      toChange,
       <span className='text-muted-foreground'>
         {$t('articleTask.findingArticle')}
       </span>,
     );
   if (choice.target === REPO)
     return row($t('articleTask.changeVia'), $t('articleTask.repository'));
-  if (choice.mode === 'new')
+  if (choice.mode === 'new' && !translate)
     return row(
       $t('articleTask.newArticle'),
       $t('articleTask.publishesTo', { 0: name(choice.target) }),
@@ -573,9 +786,14 @@ export function DeliverySummary({
   const picked = pickedOf(data, choice);
   if (!picked)
     return row(
-      $t('articleTask.articleToChange'),
+      toChange,
       <span className='text-muted-foreground' data-article-not-found=''>
-        {notice || $t('articleTask.pickArticle')}
+        {notice ||
+          $t(
+            translate
+              ? 'articleTask.pickArticleToTranslate'
+              : 'articleTask.pickArticle',
+          )}
       </span>,
       allowed && (
         <Button variant='outline' size='sm' disabled={busy} onClick={onChange}>
@@ -588,7 +806,7 @@ export function DeliverySummary({
       ? choice.article.url
       : articlePageUrl(data, choice.target, picked.slug);
   return row(
-    $t('articleTask.articleToChange'),
+    toChange,
     <>
       {/^https?:\/\//i.test(url) ? (
         <a

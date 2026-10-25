@@ -318,7 +318,36 @@ export type ArticleMatch = {
   slug: string;
   title: string;
   url: string;
+  /** The languages the article has text in (articleLocales). */
+  locales?: string[];
 };
+
+/** The languages an article has text in: a title or a body. */
+export const articleLocales = (a: Pick<ArticleContent, 'locales'>) =>
+  Object.entries(a.locales || {})
+    .filter(([, f]) => Boolean(f?.title?.trim() || f?.body?.trim()))
+    .map(([l]) => l);
+
+/**
+ * What a translation translates by default (2026-10-25): from the target's first language the article has, into the
+ * languages it lacks; with none lacking, into all the others, to bring them up to date. `present` unknown (an article
+ * linked before languages were recorded) counts every language as present. `source` keeps a source already chosen.
+ */
+export function translationDefault(
+  targetLocales: string[],
+  present?: string[],
+  source?: string,
+) {
+  const has = (l: string) => !present || present.includes(l);
+  const from =
+    (source && targetLocales.includes(source) ? source : '') ||
+    targetLocales.find(has) ||
+    targetLocales[0] ||
+    '';
+  const others = targetLocales.filter((l) => l !== from),
+    missing = others.filter((l) => !has(l));
+  return { from, to: missing.length ? missing : others };
+}
 
 export const ARTICLE_TARGET_PRESETS: {
   [K in ArticleTargetKind]: Omit<

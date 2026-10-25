@@ -63,6 +63,20 @@ export const matchArticle = (
     },
   );
 
+/** The languages an article has text in (targets.ts languages), for choosing what a translation writes. */
+export const articleLanguages = (
+  projectId: number,
+  targetId: string,
+  articleId: string,
+  signal?: AbortSignal,
+) =>
+  api.action<{ locales: string[] }>('nrArticles', 'languages', {
+    method: 'POST',
+    body: { projectId: String(projectId), targetId, articleId },
+    unwrap: 'data',
+    signal,
+  });
+
 /** The semantic key the server attached to an error (`articles.stale`), if any. */
 export function errorKey(e: unknown) {
   return e instanceof NocoReachHttpError
