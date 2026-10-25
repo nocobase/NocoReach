@@ -999,6 +999,8 @@ test('an article in two languages approves the primary to translate, and the car
   expect(
     within(card).getByRole('button', { name: '通过，开始翻译' }),
   ).toBeVisible();
+  const steps = () => screen.getByRole('list', { name: '进度' });
+  expect(steps()).toHaveTextContent('Agent 修改');
   view.unmount();
   const translating = reviewArticle();
   translating.work.delivery = {
@@ -1017,6 +1019,12 @@ test('an article in two languages approves the primary to translate, and the car
   ];
   mount(translating);
   expect(screen.getAllByText('Agent 正在翻译中文')[0]).toBeVisible();
+  // The step tags name the step the task went back to for what it does now.
+  const current = within(steps())
+    .getAllByRole('listitem')
+    .find((li) => li.getAttribute('aria-current') === 'step');
+  expect(current).toHaveTextContent('Agent 翻译');
+  expect(steps()).not.toHaveTextContent('Agent 修改');
 });
 
 test('a live article names what changed on its card and shows each field before and after', async () => {

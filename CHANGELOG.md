@@ -7,6 +7,16 @@
 - Starting it takes the article as it is published as the approved source (`delivery.translateFrom` with `published`), so the first run already translates: the Agent writes only the chosen languages, change requests stay translations, and one approval publishes them all. The source language is neither rewritten nor reviewed again.
 - `nrArticles:match` and the article saved on a task carry the languages it has text in, and `nrArticles:languages` reads them for an article picked by hand.
 
+## Unreleased — The translating step is named Translate
+
+- While an article's other languages are translated from its approved primary one, the Agent's step the task went back to reads Translate (Agent Translate) in the task's step tags, and the current step in Tasks and Tasks › By Agent says the Agent is translating. Once the translations come back for review, the step is named as before.
+
+## Unreleased — AI content language: every UI language
+
+- A project's AI content language (Add new project, Project knowledge › Memory) offers the ten UI languages instead of Chinese and English, each named in itself as the account menu names it. A new project starts with the creator's UI language; Traditional Chinese no longer starts as Simplified Chinese. Projects without a language still write Chinese.
+- Every prompt for a project in a language other than Simplified Chinese ends with the same note the English projects had, naming the language. The English note is unchanged.
+- The daily analysis checks opportunity wording in two sets. Simplified Chinese, Traditional Chinese and Japanese keep the width rules (title 18, reason 30, a CJK character counting 1), with the vague words of each language. The other languages use the English limits (title 60 characters, reason 90 with a number, at most two sentences of suggestion); vague verbs are only checked in English.
+
 ## Unreleased — Skills: playbooks as tags
 
 - Skills › Used in playbooks shows each playbook that names the Skill as a grey tag instead of a run of "Playbook · Step" text. Up to three show in full and the rest are counted as +N. Hovering over the cell lists the steps.
