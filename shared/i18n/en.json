@@ -6972,6 +6972,7 @@
   "articleTask.translateAfter": "{0} will be translated once {1} is approved.",
   "articleTask.approveTranslate": "Approve and translate",
   "articleTask.translating": "The Agent is translating into {0}",
+  "articleTask.translateStep": "Translate",
   "articleTask.approvedPrimary": "approved the primary language and started the translation",
   "articleTask.updateArticle": "Update article",
   "articleTask.asDraft": "Save as draft",

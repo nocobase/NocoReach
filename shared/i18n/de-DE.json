@@ -6938,6 +6938,7 @@
   "articleTask.translateAfter": "{0} wird übersetzt, sobald {1} freigegeben ist.",
   "articleTask.approveTranslate": "Freigeben und übersetzen",
   "articleTask.translating": "Der Agent übersetzt in: {0}",
+  "articleTask.translateStep": "Übersetzen",
   "articleTask.approvedPrimary": "hat die Hauptsprache freigegeben und die Übersetzung gestartet",
   "articleTask.updateArticle": "Artikel aktualisieren",
   "articleTask.asDraft": "Als Entwurf speichern",

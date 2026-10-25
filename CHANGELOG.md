@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — The translating step is named Translate
+
+- While an article's other languages are translated from its approved primary one, the Agent's step the task went back to reads Translate (Agent Translate) in the task's step tags, and the current step in Tasks and Tasks › By Agent says the Agent is translating. Once the translations come back for review, the step is named as before.
+
 ## Unreleased — AI content language: every UI language
 
 - A project's AI content language (Add new project, Project knowledge › Memory) offers the ten UI languages instead of Chinese and English, each named in itself as the account menu names it. A new project starts with the creator's UI language; Traditional Chinese no longer starts as Simplified Chinese. Projects without a language still write Chinese.
