@@ -45,15 +45,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        studio: [cn, global]
-    environment: studio-${{ matrix.studio }}
+        include:
+          - studio: cn
+            server_variable: SOLUTIONS_CN_STUDIO_SERVER
+            app_url_variable: SOLUTIONS_CN_APP_URL
+            api_key_secret: SOLUTIONS_CN_STUDIO_API_KEY
+          - studio: global
+            server_variable: SOLUTIONS_GLOBAL_STUDIO_SERVER
+            app_url_variable: SOLUTIONS_GLOBAL_APP_URL
+            api_key_secret: SOLUTIONS_GLOBAL_STUDIO_API_KEY
     concurrency:
       group: studio-${{ matrix.studio }}-nocoreach
       cancel-in-progress: false
     env:
       STUDIO_APP_ID: nocoreach
-      NB_STUDIO_SERVER: ${{ vars.NB_STUDIO_SERVER }}
-      STUDIO_APP_URL: ${{ vars.STUDIO_APP_URL }}
+      NB_STUDIO_SERVER: ${{ vars[matrix.server_variable] }}
+      STUDIO_APP_URL: ${{ vars[matrix.app_url_variable] }}
       STUDIO_TARGET: linux-x64
       STUDIO_NODE_MAJOR: '24'
     steps:
@@ -67,7 +74,7 @@ jobs:
           node-version: '24'
       - name: Check deployment configuration
         env:
-          NB_STUDIO_API_KEY: ${{ secrets.NB_STUDIO_API_KEY }}
+          NB_STUDIO_API_KEY: ${{ secrets[matrix.api_key_secret] }}
           STUDIO_CLI: ${{ runner.temp }}/studio-cli/node_modules/.bin/nb-studio
         run: node scripts/ci/deploy-studio.mjs --check-config
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -79,6 +86,6 @@ jobs:
         run: npm install --prefix "$RUNNER_TEMP/studio-cli" --ignore-scripts --no-audit --no-fund @nocobase/studio-cli@1.0.0-beta.58
       - name: Deploy or request Studio approval
         env:
-          NB_STUDIO_API_KEY: ${{ secrets.NB_STUDIO_API_KEY }}
+          NB_STUDIO_API_KEY: ${{ secrets[matrix.api_key_secret] }}
           STUDIO_CLI: ${{ runner.temp }}/studio-cli/node_modules/.bin/nb-studio
         run: node scripts/ci/deploy-studio.mjs
