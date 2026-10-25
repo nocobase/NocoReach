@@ -145,16 +145,16 @@ function RunsTable({ records, onOpen }: { records: Record_[]; onOpen: (id: strin
   const rows = useMemo(() => records.filter((r) => (only === 'all' || r.strategy === only) && (r.finalUrl || r.url).toLowerCase().includes(query.trim().toLowerCase())), [records, only, query]);
   const columns = useMemo<ColumnDef<Record_>[]>(() => [
     makeSelectionColumn<Record_>(anchorRef),
-    helper.accessor((r) => r.finalUrl || r.url, { id: 'page', enableSorting: false, header: () => $t('common.page'), cell: ({ getValue, row }) => <button type='button' className={linkClass} title={getValue()} onClick={() => onOpen(row.original.id)}>{pathOf(getValue())}</button> }) as ColumnDef<Record_>,
-    helper.accessor('strategy', { enableSorting: false, header: () => $t('lighthouseCard.device'), cell: ({ getValue }) => deviceName(getValue()) }) as ColumnDef<Record_>,
+    helper.accessor((r) => r.finalUrl || r.url, { id: 'page', enableSorting: false, header: () => $t('common.page'), cell: ({ getValue, row }) => <button type='button' className={linkClass} title={getValue()} onClick={() => onOpen(row.original.id)}>{pathOf(getValue())}</button> }),
+    helper.accessor('strategy', { enableSorting: false, header: () => $t('lighthouseCard.device'), cell: ({ getValue }) => deviceName(getValue()) }),
     ...CATEGORIES.map((k, i) => helper.accessor((r) => r.scores?.[k] ?? undefined, {
       id: k, sortDescFirst: true, sortUndefined: 'last',
       header: ({ column }) => <SortableHeader column={column} label={getCategory()[k]} align='right' />,
       cell: ({ getValue, row }) => (row.original.scores ? <span className={cn('font-medium', ink(getValue() ?? null))}>{getValue() ?? '—'}</span> : i === 0 ? <Tag tone='grey'>{failure(row.original)}</Tag> : '—'),
       meta: right,
-    }) as ColumnDef<Record_>),
-    helper.accessor((r) => seconds(lcpOf(r)?.value), { id: 'lcp', sortUndefined: 'last', header: ({ column }) => <SortableHeader column={column} label='LCP' align='right' />, cell: ({ row }) => { const m = lcpOf(row.original); return m ? <span className={ink(m.score)}>{m.value}</span> : '—'; }, meta: right }) as ColumnDef<Record_>,
-    helper.accessor('createdAt', { sortDescFirst: true, header: ({ column }) => <SortableHeader column={column} label={$t('auditPerformance.checkedAt')} align='right' help={false} />, cell: ({ getValue }) => when(getValue()), meta: right }) as ColumnDef<Record_>,
+    })),
+    helper.accessor((r) => seconds(lcpOf(r)?.value), { id: 'lcp', sortUndefined: 'last', header: ({ column }) => <SortableHeader column={column} label='LCP' align='right' />, cell: ({ row }) => { const m = lcpOf(row.original); return m ? <span className={ink(m.score)}>{m.value}</span> : '—'; }, meta: right }),
+    helper.accessor('createdAt', { sortDescFirst: true, header: ({ column }) => <SortableHeader column={column} label={$t('auditPerformance.checkedAt')} align='right' help={false} />, cell: ({ getValue }) => when(getValue()), meta: right }),
   ], [onOpen, anchorRef]);
   const table = useDataTable({ data: rows, columns, withSorting: true, withPagination: true, enableRowSelection: (row) => row.original.status === 'completed', enableSortingRemoval: false, state: { pagination, rowSelection }, onPaginationChange: setPagination, onRowSelectionChange: setRowSelection, getRowId: (r) => r.id, initialState: { sorting: [{ id: 'createdAt', desc: true }] } });
   const ticked = table.getSelectedRowModel().rows.map((r) => r.original);

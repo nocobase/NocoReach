@@ -232,12 +232,12 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
   const columns = useMemo<ColumnDef<KeywordItem>[]>(
     () => [
       makeSelectionColumn<KeywordItem>(anchorRef),
-      helper.accessor('keyword', { header: ({ column }) => <SortableHeader column={column} label={$t('common.keywords')} />, cell: ({ getValue }) => <span className='block max-w-sm truncate font-medium' title={getValue()}>{getValue()}</span> }) as ColumnDef<KeywordItem>,
-      helper.accessor('volume', { sortUndefined: 'last', header: ({ column }) => <SortableHeader column={column} label={$t('common.monthlyVolume')} align='right' />, cell: ({ getValue }) => metric(getValue()), meta: right }) as ColumnDef<KeywordItem>,
-      helper.accessor('cpc', { sortUndefined: 'last', header: ({ column }) => <SortableHeader column={column} label='CPC' align='right' />, cell: ({ getValue }) => (getValue() == null ? '—' : `$${getValue()!.toFixed(2)}`), meta: right }) as ColumnDef<KeywordItem>,
-      helper.accessor('competition', { sortUndefined: 'last', header: ({ column }) => <SortableHeader column={column} label={$t('keywordResearch.competition')} align='right' />, cell: ({ getValue }) => (getValue() == null ? '—' : getValue()!.toFixed(2)), meta: right }) as ColumnDef<KeywordItem>,
-      helper.accessor('difficulty', { sortUndefined: 'last', header: ({ column }) => <SortableHeader column={column} label={$t('common.difficulty')} align='right' />, cell: ({ getValue }) => <ScoreBadge value={getValue()} />, meta: right }) as ColumnDef<KeywordItem>,
-      helper.accessor('intent', { enableSorting: false, header: () => <WithInfo help={help($t('common.intent'))}>{$t('common.intent')}</WithInfo>, cell: ({ getValue }) => <IntentBadge intent={getValue()} /> }) as ColumnDef<KeywordItem>,
+      helper.accessor('keyword', { header: ({ column }) => <SortableHeader column={column} label={$t('common.keywords')} />, cell: ({ getValue }) => <span className='block max-w-sm truncate font-medium' title={getValue()}>{getValue()}</span> }),
+      helper.accessor('volume', { sortUndefined: 'last', header: ({ column }) => <SortableHeader column={column} label={$t('common.monthlyVolume')} align='right' />, cell: ({ getValue }) => metric(getValue()), meta: right }),
+      helper.accessor('cpc', { sortUndefined: 'last', header: ({ column }) => <SortableHeader column={column} label='CPC' align='right' />, cell: ({ getValue }) => (getValue() == null ? '—' : `$${getValue()!.toFixed(2)}`), meta: right }),
+      helper.accessor('competition', { sortUndefined: 'last', header: ({ column }) => <SortableHeader column={column} label={$t('keywordResearch.competition')} align='right' />, cell: ({ getValue }) => (getValue() == null ? '—' : getValue()!.toFixed(2)), meta: right }),
+      helper.accessor('difficulty', { sortUndefined: 'last', header: ({ column }) => <SortableHeader column={column} label={$t('common.difficulty')} align='right' />, cell: ({ getValue }) => <ScoreBadge value={getValue()} />, meta: right }),
+      helper.accessor('intent', { enableSorting: false, header: () => <WithInfo help={help($t('common.intent'))}>{$t('common.intent')}</WithInfo>, cell: ({ getValue }) => <IntentBadge intent={getValue()} /> }),
       helper.display({ id: 'rank', header: () => <span title={$t('keywordResearch.averageGooglePositionOverLast')}>{$t('common.sitePosition')}</span>, cell: ({ row }) => { const r = rankOf(ranks, row.original.keyword); return r ? r.position.toFixed(1) : '—'; }, meta: right }),
     ],
     [anchorRef, ranks],

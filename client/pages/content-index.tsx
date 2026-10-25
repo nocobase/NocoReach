@@ -85,13 +85,13 @@ export default function ContentPage() {
           {row.original.outsideSitemap ? <span className='mt-0.5 inline-flex items-center gap-1' data-outside-sitemap=''><Tag tone='amber'>{$t('contentIndex.outsideSitemap')}</Tag><InfoTip label={$t('contentIndex.outsideSitemap')}>{$t('contentIndex.outsideSitemapHelp')}</InfoTip></span> : null}
         </div>
       ),
-    }) as ColumnDef<Row>,
-    helper.accessor((r) => r.lastmod?.slice(0, 10) || undefined, { id: 'lastmod', ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.updated')} />, cell: ({ getValue }) => <span className='tabular-nums'>{formatDate(getValue())}</span> }) as ColumnDef<Row>,
-    helper.accessor((r) => r.views ?? undefined, { id: 'views', ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.visits')} align='right' help={sampleHelp($t('contentIndex.pageViewsInRange', { 0: rangeLabel }))} />, cell: ({ row, getValue }) => row.original.ga4Untracked ? <span className='text-muted-foreground' title={$t('contentIndex.ga4UntrackedHelp')}>{$t('contentIndex.ga4Untracked')}</span> : fmt(getValue() ?? null), meta: right }) as ColumnDef<Row>,
-    helper.accessor((r) => change(r.views, r.previousViews), { id: 'viewsChange', ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.viewsChange')} align='right' help={$t('contentIndex.changeHelp')} />, cell: ({ row }) => <Change now={row.original.views} before={row.original.previousViews} />, meta: right }) as ColumnDef<Row>,
-    helper.accessor((r) => r.clicks ?? undefined, { id: 'clicks', ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('common.searchClicks')} align='right' help={sampleHelp($t('contentIndex.clicksPageGotGoogleSearch'))} />, cell: ({ getValue }) => fmt(getValue() ?? null), meta: right }) as ColumnDef<Row>,
-    helper.accessor((r) => change(r.clicks, r.previousClicks), { id: 'clicksChange', ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.clicksChange')} align='right' help={$t('contentIndex.changeHelp')} />, cell: ({ row }) => <Change now={row.original.clicks} before={row.original.previousClicks} />, meta: right }) as ColumnDef<Row>,
-    helper.accessor((r) => r.impressions ?? undefined, { id: 'impressions', ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('common.searchImpressions')} align='right' help={sampleHelp($t('contentIndex.timesPageAppearedGoogleSearch'))} />, cell: ({ getValue }) => fmt(getValue() ?? null), meta: right }) as ColumnDef<Row>,
+    }),
+    helper.accessor((r) => r.lastmod?.slice(0, 10) || undefined, { id: 'lastmod', ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.updated')} />, cell: ({ getValue }) => <span className='tabular-nums'>{formatDate(getValue())}</span> }),
+    helper.accessor((r) => r.views ?? undefined, { id: 'views', ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.visits')} align='right' help={sampleHelp($t('contentIndex.pageViewsInRange', { 0: rangeLabel }))} />, cell: ({ row, getValue }) => row.original.ga4Untracked ? <span className='text-muted-foreground' title={$t('contentIndex.ga4UntrackedHelp')}>{$t('contentIndex.ga4Untracked')}</span> : fmt(getValue() ?? null), meta: right }),
+    helper.accessor((r) => change(r.views, r.previousViews), { id: 'viewsChange', ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.viewsChange')} align='right' help={$t('contentIndex.changeHelp')} />, cell: ({ row }) => <Change now={row.original.views} before={row.original.previousViews} />, meta: right }),
+    helper.accessor((r) => r.clicks ?? undefined, { id: 'clicks', ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('common.searchClicks')} align='right' help={sampleHelp($t('contentIndex.clicksPageGotGoogleSearch'))} />, cell: ({ getValue }) => fmt(getValue() ?? null), meta: right }),
+    helper.accessor((r) => change(r.clicks, r.previousClicks), { id: 'clicksChange', ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.clicksChange')} align='right' help={$t('contentIndex.changeHelp')} />, cell: ({ row }) => <Change now={row.original.clicks} before={row.original.previousClicks} />, meta: right }),
+    helper.accessor((r) => r.impressions ?? undefined, { id: 'impressions', ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('common.searchImpressions')} align='right' help={sampleHelp($t('contentIndex.timesPageAppearedGoogleSearch'))} />, cell: ({ getValue }) => fmt(getValue() ?? null), meta: right }),
     helper.accessor('tasks', {
       enableSorting: false,
       header: () => $t('contentIndex.tasksProgress'),
@@ -106,7 +106,7 @@ export default function ContentPage() {
           {active.length > 1 ? <span className='mt-0.5 shrink-0 rounded bg-muted px-1.5 text-xs tabular-nums text-muted-foreground' aria-label={$t('contentIndex.moreActiveTasks', { 0: active.length - 1 })}>+{active.length - 1}</span> : null}
         </button>;
       },
-    }) as ColumnDef<Row>,
+    }),
   ], [sampleHelp, rangeLabel]);
   const table = useDataTable({
     data: rows,

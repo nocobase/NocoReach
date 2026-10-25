@@ -115,17 +115,17 @@ export default function SavedKeywords() {
             {row.original.tagIds.length ? <div className='flex flex-wrap gap-1'>{row.original.tagIds.map((id) => tagById.get(id)).filter(Boolean).map((t) => <TagChip key={t!.id} tag={t!} />)}</div> : null}
           </div>
         ),
-      }) as ColumnDef<Row>,
+      }),
       // Only the market the figures were looked up in; a keyword saved from AI suggestions or Search performance has none yet,
       // and its source is not a market (UI review 2026-10-21).
-      helper.accessor((r) => marketLabel(r.market), { id: 'market', enableSorting: false, header: () => $t('common.market'), cell: ({ row }) => <span className='text-muted-foreground'>{marketLabel(row.original.market)}</span> }) as ColumnDef<Row>,
-      helper.accessor((r) => r.metrics?.volume ?? undefined, { id: 'volume', sortUndefined: 'last', header: ({ column }) => <SortableHeader column={column} label={$t('common.monthlyVolume')} align='right' help={$t('savedKeywords.numbersTimeSavingKeywordsSaved',{0:help($t('common.monthlyVolume'))})} />, cell: ({ row }) => metric(row.original.metrics?.volume), meta: right }) as ColumnDef<Row>,
-      helper.accessor((r) => r.metrics?.difficulty ?? undefined, { id: 'difficulty', sortUndefined: 'last', header: ({ column }) => <SortableHeader column={column} label={$t('common.difficulty')} align='right' />, cell: ({ row }) => <ScoreBadge value={row.original.metrics?.difficulty ?? null} />, meta: right }) as ColumnDef<Row>,
-      helper.accessor((r) => r.metrics?.cpc ?? undefined, { id: 'cpc', sortUndefined: 'last', header: ({ column }) => <SortableHeader column={column} label='CPC' align='right' />, cell: ({ row }) => (row.original.metrics?.cpc == null ? '—' : `$${row.original.metrics.cpc.toFixed(2)}`), meta: right }) as ColumnDef<Row>,
+      helper.accessor((r) => marketLabel(r.market), { id: 'market', enableSorting: false, header: () => $t('common.market'), cell: ({ row }) => <span className='text-muted-foreground'>{marketLabel(row.original.market)}</span> }),
+      helper.accessor((r) => r.metrics?.volume ?? undefined, { id: 'volume', sortUndefined: 'last', header: ({ column }) => <SortableHeader column={column} label={$t('common.monthlyVolume')} align='right' help={$t('savedKeywords.numbersTimeSavingKeywordsSaved',{0:help($t('common.monthlyVolume'))})} />, cell: ({ row }) => metric(row.original.metrics?.volume), meta: right }),
+      helper.accessor((r) => r.metrics?.difficulty ?? undefined, { id: 'difficulty', sortUndefined: 'last', header: ({ column }) => <SortableHeader column={column} label={$t('common.difficulty')} align='right' />, cell: ({ row }) => <ScoreBadge value={row.original.metrics?.difficulty ?? null} />, meta: right }),
+      helper.accessor((r) => r.metrics?.cpc ?? undefined, { id: 'cpc', sortUndefined: 'last', header: ({ column }) => <SortableHeader column={column} label='CPC' align='right' />, cell: ({ row }) => (row.original.metrics?.cpc == null ? '—' : `$${row.original.metrics.cpc.toFixed(2)}`), meta: right }),
       helper.display({ id: 'intent', header: () => <WithInfo help={help($t('common.intent'))}>{$t('common.intent')}</WithInfo>, cell: ({ row }) => (row.original.metrics ? <IntentBadge intent={row.original.metrics.intent} /> : '—') }),
-      helper.accessor('rank', { sortUndefined: 'last', header: ({ column }) => <SortableHeader column={column} label={$t('common.sitePosition')} align='right' />, cell: ({ getValue }) => (getValue() == null ? '—' : Number(getValue()).toFixed(1)), meta: right }) as ColumnDef<Row>,
+      helper.accessor('rank', { sortUndefined: 'last', header: ({ column }) => <SortableHeader column={column} label={$t('common.sitePosition')} align='right' />, cell: ({ getValue }) => (getValue() == null ? '—' : Number(getValue()).toFixed(1)), meta: right }),
       helper.display({ id: 'page', header: () => $t('savedKeywords.page'), cell: ({ row }) => { const page = rankOf(ranks, row.original.keyword)?.page; return page ? (safeLink(page) ? <a className='block max-w-44 truncate text-primary hover:underline' href={safeLink(page)} target='_blank' rel='noreferrer' title={page}>{new URL(page).pathname}</a> : <span className='block max-w-44 truncate'>{page}</span>) : <span className='text-muted-foreground'>—</span>; } }),
-      helper.accessor('savedAt', { header: ({ column }) => <SortableHeader column={column} label={$t('savedKeywords.saved')} align='right' />, cell: ({ getValue }) => day(getValue()), meta: right }) as ColumnDef<Row>,
+      helper.accessor('savedAt', { header: ({ column }) => <SortableHeader column={column} label={$t('savedKeywords.saved')} align='right' />, cell: ({ getValue }) => day(getValue()), meta: right }),
     ],
     [anchorRef, ranks, tagById],
   );

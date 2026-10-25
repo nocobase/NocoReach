@@ -527,7 +527,7 @@ function ReportTable({
             cell: ({ row }) =>
               show(METRICS[key].of(row.original), METRICS[key].format),
             meta: right,
-          }) as ColumnDef<Row>,
+          }),
       ),
       ...(tab.queries
         ? [
@@ -542,7 +542,7 @@ function ReportTable({
               ),
               cell: ({ getValue }) => count(getValue()),
               meta: right,
-            }) as ColumnDef<Row>,
+            }),
           ]
         : []),
     ],

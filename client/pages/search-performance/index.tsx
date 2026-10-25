@@ -444,11 +444,11 @@ function StrikingTable({ projectId, period, rows, isFiltered, onClearFilters, on
   const columns = useMemo<ColumnDef<StrikingRow>[]>(
     () => [
       makeSelectionColumn<StrikingRow>(anchorRef),
-      strikingHelper.accessor('query', { enableSorting: false, header: () => $t('common.query'), cell: ({ row, getValue }) => <button type='button' className='block max-w-xs truncate text-left text-primary underline-offset-4 hover:underline' title={getValue()} onClick={() => onOpen(row.original)}>{getValue()}</button> }) as ColumnDef<StrikingRow>,
-      strikingHelper.accessor('page', { enableSorting: false, header: () => $t('common.page'), cell: ({ getValue }) => <PageLink url={getValue()} /> }) as ColumnDef<StrikingRow>,
-      strikingHelper.accessor('impressions', { header: ({ column }) => <SortableHeader column={column} label={$t('common.impressions')} align='right' />, cell: ({ getValue }) => count(getValue()), meta: right }) as ColumnDef<StrikingRow>,
-      strikingHelper.accessor('clicks', { header: ({ column }) => <SortableHeader column={column} label={$t('common.clicks')} align='right' />, cell: ({ getValue }) => count(getValue()), meta: right }) as ColumnDef<StrikingRow>,
-      strikingHelper.accessor('position', { header: ({ column }) => <SortableHeader column={column} label={$t('common.position')} align='right' />, cell: ({ getValue }) => position(getValue()), meta: right }) as ColumnDef<StrikingRow>,
+      strikingHelper.accessor('query', { enableSorting: false, header: () => $t('common.query'), cell: ({ row, getValue }) => <button type='button' className='block max-w-xs truncate text-left text-primary underline-offset-4 hover:underline' title={getValue()} onClick={() => onOpen(row.original)}>{getValue()}</button> }),
+      strikingHelper.accessor('page', { enableSorting: false, header: () => $t('common.page'), cell: ({ getValue }) => <PageLink url={getValue()} /> }),
+      strikingHelper.accessor('impressions', { header: ({ column }) => <SortableHeader column={column} label={$t('common.impressions')} align='right' />, cell: ({ getValue }) => count(getValue()), meta: right }),
+      strikingHelper.accessor('clicks', { header: ({ column }) => <SortableHeader column={column} label={$t('common.clicks')} align='right' />, cell: ({ getValue }) => count(getValue()), meta: right }),
+      strikingHelper.accessor('position', { header: ({ column }) => <SortableHeader column={column} label={$t('common.position')} align='right' />, cell: ({ getValue }) => position(getValue()), meta: right }),
     ],
     [anchorRef, onOpen],
   );
@@ -527,11 +527,11 @@ function DimensionTable({ projectId, period, data, dimension, isFiltered, onClea
         enableSorting: false,
         header: () => keyLabel,
         cell: ({ row, getValue }) => <button type='button' className='block max-w-xl truncate text-left text-primary underline-offset-4 hover:underline' title={getValue()} onClick={() => onOpen(row.original)}>{getValue()}</button>,
-      }) as ColumnDef<DimensionRow>,
-      dimensionHelper.accessor('clicks', { header: ({ column }) => <SortableHeader column={column} label={$t('common.clicks')} align='right' />, cell: ({ getValue }) => count(getValue()), meta: right }) as ColumnDef<DimensionRow>,
-      dimensionHelper.accessor('impressions', { header: ({ column }) => <SortableHeader column={column} label={$t('common.impressions')} align='right' />, cell: ({ getValue }) => count(getValue()), meta: right }) as ColumnDef<DimensionRow>,
-      dimensionHelper.accessor('ctr', { header: ({ column }) => <SortableHeader column={column} label={$t('common.ctr')} align='right' />, cell: ({ getValue }) => ctr(getValue()), meta: right }) as ColumnDef<DimensionRow>,
-      dimensionHelper.accessor('position', { header: ({ column }) => <SortableHeader column={column} label={$t('common.position')} align='right' />, cell: ({ getValue }) => position(getValue()), meta: right }) as ColumnDef<DimensionRow>,
+      }),
+      dimensionHelper.accessor('clicks', { header: ({ column }) => <SortableHeader column={column} label={$t('common.clicks')} align='right' />, cell: ({ getValue }) => count(getValue()), meta: right }),
+      dimensionHelper.accessor('impressions', { header: ({ column }) => <SortableHeader column={column} label={$t('common.impressions')} align='right' />, cell: ({ getValue }) => count(getValue()), meta: right }),
+      dimensionHelper.accessor('ctr', { header: ({ column }) => <SortableHeader column={column} label={$t('common.ctr')} align='right' />, cell: ({ getValue }) => ctr(getValue()), meta: right }),
+      dimensionHelper.accessor('position', { header: ({ column }) => <SortableHeader column={column} label={$t('common.position')} align='right' />, cell: ({ getValue }) => position(getValue()), meta: right }),
     ],
     [keyLabel, anchorRef, onOpen],
   );

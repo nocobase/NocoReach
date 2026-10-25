@@ -279,7 +279,7 @@ function BrandResults({ runs, errors, projectId, onHandOff }: { runs: Partial<Re
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
   const [handing, setHanding] = useState<QuestionRow[]>();
   const anchorRef = useSelectionAnchor();
-  const done = PLATFORMS.filter((p) => runs[p]?.status === 'completed' && runs[p]?.result).map((p) => runs[p]!);
+  const done = useMemo(() => PLATFORMS.filter((p) => runs[p]?.status === 'completed' && runs[p]?.result).map((p) => runs[p]!), [runs]);
   const all = useMemo(() => done.flatMap((r) => r.result!.questions.map((q, i) => ({ ...q, id: `${r.spec.platform}:${i}`, platform: r.spec.platform }))), [done]);
   const rows = useMemo(() => (uncitedOnly ? all.filter((q) => !q.ownCited) : all), [all, uncitedOnly]);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- A new result/filter starts on its first page without stale selections.
