@@ -34,6 +34,8 @@ vi.mock('../../client/lib/nocoreach-api', () => ({
     action: vi.fn(async (resource: string, action: string) => {
       if (resource === 'nrSkills' && action === 'list')
         return { revision: 1, skills: library };
+      if (resource === 'nrSkills' && action === 'get')
+        return { body: '# Audit', files: [] };
       if (resource === 'nrPlaybooks')
         return {
           revision: 1,
@@ -74,20 +76,46 @@ it('finds a step Skill by id, then by name', () => {
   expect(skillFor(library, 'gone')).toBeUndefined();
 });
 
-it('lists the playbook steps that use a Skill imported under a built-in name', async () => {
+it('lists the playbooks that use a Skill imported under a built-in name', async () => {
   render(
     <MemoryRouter>
       <SkillsPage />
     </MemoryRouter>,
   );
-  const row = (
-    await screen.findByRole('button', { name: 'seo-audit', exact: true })
-  ).closest('tr')!;
-  expect(within(row).getByText('Technical fix · Change')).toBeVisible();
-  const schema = screen
-    .getByRole('button', { name: 'schema', exact: true })
-    .closest('tr')!;
-  expect(within(schema).getByText('Technical fix · Change')).toBeVisible();
+  for (const name of ['seo-audit', 'schema']) {
+    const row = (
+      await screen.findByRole('button', { name, exact: true })
+    ).closest('tr')!;
+    // The playbook as a tag; the step it uses the Skill in on hover.
+    const tag = within(row).getByText('Technical fix');
+    expect(tag).toBeVisible();
+    expect(tag.closest('td')).toHaveAttribute(
+      'title',
+      'Technical fix · Change',
+    );
+  }
+});
+
+it('names the playbooks in the drawer as links, with the step on hover', async () => {
+  render(
+    <MemoryRouter>
+      <SkillsPage />
+    </MemoryRouter>,
+  );
+  await userEvent.click(
+    await screen.findByRole('button', { name: 'seo-audit', exact: true }),
+  );
+  const drawer = await screen.findByRole('region', {
+    name: $t('skills.skillDetails'),
+  });
+  const link = within(drawer).getByRole('link', { name: 'Technical fix' });
+  expect(link).toHaveAttribute('href', '/playbooks?id=tech-fix');
+  expect(link).toHaveAttribute(
+    'title',
+    $t('skills.usedAtStep', { 0: 1, 1: 'Change' }),
+  );
+  // The footer keeps only when it was updated.
+  expect(within(drawer).queryByText(/Technical fix · Change/)).toBeNull();
 });
 
 it('shows a step Skill named by a built-in name in the playbook steps', () => {

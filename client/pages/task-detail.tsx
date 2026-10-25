@@ -13,8 +13,8 @@ import { DeliveryDialog, DeliverySummary } from './task-detail/article-start.js'
 import { PlaybookDrawer } from './task-detail/playbook-drawer.js';
 import { ArticleEditor, ArticleReview } from './task-detail/article-review.js';
 import { ConflictBody, DriftNotice, PendingButton, TargetRows } from './task-detail/article-release.js';
-import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, fieldLabel, joinNames, pageUrlsOf, publishingTitle, soleConflict, type ArticleFound, type DeliveryChoice } from './task-detail/article-model.js';
-import { matchArticle } from './article-targets-api';
+import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, fieldLabel, joinNames, pageUrlsOf, publishingTitle, soleConflict, translationPending, type ArticleFound, type DeliveryChoice } from './task-detail/article-model.js';
+import { matchArticle, localeName } from './article-targets-api';
 import { TaskMedia } from './task-detail/media.js';
 import { TaskProperties } from './task-detail/task-properties.js';
 import { TaskNumbers } from './task-detail/task-numbers.js';
@@ -390,8 +390,11 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    const missingChecks=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key));
    // A target removed after the draft was written cannot receive it: say so instead of offering a publish that fails.
    const articleTarget=out.article.targetId,targetGone=!(data.articleTargets||[]).some(t=>t.id===articleTarget);
-   return <StageCard title={$t('articleTask.reviewTitle')} sub={by} at={out.createdAt}
-    actions={editing||!allowed?undefined:<>{!targetGone&&<Button disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked})}><Rocket/>{$t((mockSettingsAvailable() || data.task.evidence?.simulated) ? 'taskDetail.approveAndSimulatePublish' : 'taskDetail.approveAndPublish')}</Button>}{requestButton}<Button ref={editButtonRef} variant='ghost' disabled={busy} onClick={()=>setEditing(true)}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
+   // In several languages the card says which round it is: the primary to approve, or the translations to publish.
+   const langs=w.delivery?.locales||[],translated=langs.length>1&&Boolean(w.delivery?.translateFrom);
+   const reviewTitle=translationPending(data)?$t('articleTask.reviewPrimaryTitle',{0:localeName(langs[0],getCurrentLocale())}):translated?$t('articleTask.reviewTranslatedTitle'):$t('articleTask.reviewTitle');
+   return <StageCard title={reviewTitle} sub={by} at={out.createdAt}
+    actions={editing||!allowed?undefined:<>{!targetGone&&<Button disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked})}><Rocket/>{$t(translationPending(data)?'articleTask.approveTranslate':(mockSettingsAvailable() || data.task.evidence?.simulated) ? 'taskDetail.approveAndSimulatePublish' : 'taskDetail.approveAndPublish')}</Button>}{requestButton}<Button ref={editButtonRef} variant='ghost' disabled={busy} onClick={()=>setEditing(true)}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
     {!editing&&request(getStageExecutor().agent)}
     {targetGone&&<p role='alert' className='text-sm text-destructive'>{$t('articles.targetMissing')}</p>}
     <LastFeedback w={w} stage={stage} out={out}/>
@@ -476,8 +479,11 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   if(!canRun)return <StageCard error title={displayStageName(stage)} sub={<>{$t('taskDetail.noWebsiteSourceRepositoryConnectedMessage')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/connections?source=repo')}>{$t('common.goDataSources')}</Button></>} actions={actions}>{body}</StageCard>;
   // Started again by the system after NocoReach restarted (retryAfterRestart on the server): say why it runs again.
   const restarted=cur?.autoRetry?<p className={text.muted}>{$t('taskDetail.restartRetried')}</p>:null;
-  if(cur?.status==='queued')return <StageCard label={progress} title={$t('taskDetail.agentWorking',{0:stage.name})} sub={agent?.online?$t('taskDetail.handedOffAgentStartingNow'):<>{$t('taskDetail.agentComputerOffline')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>} actions={actions}>{restarted}{body}</StageCard>;
-  if(cur?.status==='running')return <StageCard label={progress} spinning title={<>{$t('taskDetail.agentWorking',{0:stage.name})}{cur.cancelRequested?$t('taskDetail.stoppingAside'):''}</>} sub={$t('taskDetail.agentWorkingFor',{0:since(cur.createdAt)})} actions={actions}>{restarted}{body}</StageCard>;
+  // While the Agent translates an approved primary language into the others (2026-10-24), the card says so.
+  const translating=w.delivery?.translateFrom&&!w.release?w.delivery.locales?.slice(1)||[]:[];
+  const working=translating.length?$t('articleTask.translating',{0:joinNames(translating.map(l=>localeName(l,getCurrentLocale())))}):$t('taskDetail.agentWorking',{0:stage.name});
+  if(cur?.status==='queued')return <StageCard label={progress} title={working} sub={agent?.online?$t('taskDetail.handedOffAgentStartingNow'):<>{$t('taskDetail.agentComputerOffline')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>} actions={actions}>{restarted}{body}</StageCard>;
+  if(cur?.status==='running')return <StageCard label={progress} spinning title={<>{working}{cur.cancelRequested?$t('taskDetail.stoppingAside'):''}</>} sub={$t('taskDetail.agentWorkingFor',{0:since(cur.createdAt)})} actions={actions}>{restarted}{body}</StageCard>;
   if(cur?.status==='failed'&&failure){
    // Runs a NocoReach restart interrupted say nothing about the step, so the streak passes over them.
    const {why,next,group}=failure,stageRuns=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0&&!r.restartedAt).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
