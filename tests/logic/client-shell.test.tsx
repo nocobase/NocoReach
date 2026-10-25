@@ -30,12 +30,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppRouter } from '../../client/routing/app-router.tsx';
 import { AppThemeProvider } from '../../client/theme/index.ts';
 
-// The header's inbox button reads the in-app notification plugin's API, which these tests do not serve; it is
-// covered by tests/components/inbox.test.tsx.
-// The demo account switch reads the router, which the account menu's portal is rendered without here.
-vi.mock('@nocobase/app-plugin-demo-mode/client/account-menu', () => ({
-  DemoAccountMenu: () => null,
+// The plugin owns account switching; the shell must keep its standalone entry in the header.
+vi.mock('@nocobase/app-plugin-demo-mode/client/menu', () => ({
+  DemoModeMenu: () => <button>Demo mode · Switch account</button>,
 }));
+// The header's inbox API is covered by tests/components/inbox.test.tsx.
 vi.mock('../../client/components/inbox-header-button', () => ({
   InboxHeaderButton: () => null,
 }));
@@ -108,6 +107,11 @@ describe('application shell', () => {
     ).not.toBeInTheDocument();
     expect(
       within(screen.getByRole('banner')).getByTestId('project-switcher'),
+    ).toBeVisible();
+    expect(
+      within(screen.getByRole('banner')).getByRole('button', {
+        name: 'Demo mode · Switch account',
+      }),
     ).toBeVisible();
     expect(
       screen.getByText('Find the opportunities in your data.'),

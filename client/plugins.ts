@@ -44,8 +44,7 @@ const clientPlugins: AppClientPlugins = defineClientPlugins([
     parent: 'nocoreach:nav-settings',
     navigation: false,
   }),
-  // The demo account switch sits in the account menu (layouts/components/user-menu.tsx).
-  demoMode({ accountSwitcher: 'menu', showFloatingAccountSwitcher: false }),
+  demoMode(),
 ]);
 
 export default clientPlugins;
