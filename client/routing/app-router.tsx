@@ -4,7 +4,6 @@ import {
   RequiredAuthentication,
 } from '@nocobase/app-plugin-authentication/client';
 import type { AppClientRegisteredRoute } from '@nocobase/app-client/plugins';
-import { readAppClientPublicConfig } from '@nocobase/app-client/runtime';
 import { useMemo, type ReactElement } from 'react';
 import { Navigate, Outlet, Route, Routes } from 'react-router';
 
@@ -23,24 +22,16 @@ export interface AppRouterProps {
 }
 
 export function AppRouter({ clientRoutes }: AppRouterProps): ReactElement {
-  const publicConfig = readAppClientPublicConfig() as {
-    demoMode?: { enabled?: boolean };
-  };
-  const demoModeEnabled = publicConfig.demoMode?.enabled === true;
   const routeGroups = useMemo(
     () => ({
       guest: clientRoutes.filter((route) => route.auth === 'guest'),
       optional: clientRoutes.filter((route) => route.auth === 'optional'),
       required: filterRouteTree(
         clientRoutes,
-        (route) =>
-          route.auth === 'required' &&
-          (route.packageName !== 'nocoreach' ||
-            route.name !== 'demo-data' ||
-            demoModeEnabled),
+        (route) => route.auth === 'required',
       ),
     }),
-    [clientRoutes, demoModeEnabled],
+    [clientRoutes],
   );
 
   return (

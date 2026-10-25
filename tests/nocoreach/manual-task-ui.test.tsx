@@ -115,6 +115,45 @@ it('allows correcting a draft after a definitive validation failure', async () =
   );
 });
 
+it('keeps a demo-refused task editable without inline failure or success navigation', async () => {
+  request
+    .mockRejectedValueOnce(
+      new ApiClientError('This is a demo. Changes cannot be saved.', {
+        status: 400,
+        domain: 'demoMode',
+        reason: 'DEMO_READ_ONLY',
+        method: 'POST',
+        url: '/api/nocoreachTasks',
+      }),
+    )
+    .mockResolvedValueOnce({ data: { id: '42', title: 'Edited task' } });
+  render(<TaskCreatePage />);
+  fill();
+  fireEvent.click(screen.getByRole('button', { name: 'Create', exact: true }));
+  await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Create', exact: true }),
+    ).toBeEnabled(),
+  );
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.getByLabelText(/Task title/)).toHaveValue('Manual UI task');
+  expect(screen.getByLabelText(/Task title/)).toBeEnabled();
+  expect(screen.getByLabelText(/Description and completion/)).toHaveValue(
+    'Completion criteria\nsecond line',
+  );
+  expect(navigate).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText(/Task title/), {
+    target: { value: 'Edited task' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Create', exact: true }));
+  await waitFor(() => expect(navigate).toHaveBeenCalled());
+  expect(request.mock.calls[1][0].json.title).toBe('Edited task');
+  expect(request.mock.calls[1][0].json.requestId).toBe(
+    request.mock.calls[0][0].json.requestId,
+  );
+});
+
 it('removes an already cleaned attachment after a failed discard and clears its error', async () => {
   request
     .mockResolvedValueOnce({ data: record })
@@ -569,4 +608,41 @@ it('keeps the idea when the draft is unusable or the call fails', async () => {
   expect(
     screen.getByRole('button', { name: 'Organize with AI' }),
   ).toBeEnabled();
+});
+
+it('clears an earlier draft error when Demo Mode refuses the next attempt', async () => {
+  request
+    .mockRejectedValueOnce(new Error('transport'))
+    .mockRejectedValueOnce(
+      new ApiClientError('This is a demo. Changes cannot be saved.', {
+        status: 400,
+        domain: 'demoMode',
+        reason: 'DEMO_READ_ONLY',
+        method: 'POST',
+        url: '/api/nocoreachTasks/draft',
+      }),
+    )
+    .mockResolvedValueOnce({ data: draftView });
+  render(<TaskCreatePage />);
+  writeIdea('Pricing page');
+  organize();
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    english['manualTask.draftFailed'],
+  );
+  organize();
+  await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Organize with AI' }),
+    ).toBeEnabled(),
+  );
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.getByLabelText(/What you want done/)).toHaveValue(
+    'Pricing page',
+  );
+  expect(navigate).not.toHaveBeenCalled();
+  organize();
+  expect(await screen.findByLabelText(/Task title/)).toHaveValue(
+    draftView.title,
+  );
 });

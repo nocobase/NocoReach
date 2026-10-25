@@ -17,7 +17,7 @@ import type {
   Opportunity,
   Signal,
 } from '../../../shared/strategy-model.js';
-import { ADMIN_ROLE, BUSINESS_MEMBER } from '../../access/service.js';
+import { BUSINESS_MEMBER } from '../../access/service.js';
 import type { RoleAccess } from '../../../shared/access-capabilities.js';
 import {
   CAPABILITIES,
@@ -53,7 +53,6 @@ const ROLE_KEYS = {
   editor: 'nr.demo-editor',
   community: 'nr.demo-community',
   viewer: 'nr.demo-viewer',
-  admin: 'nr.demo-admin',
 } as const;
 
 const ROLES: Record<keyof typeof ROLE_KEYS, RoleAccess> = {
@@ -106,9 +105,6 @@ const ROLES: Record<keyof typeof ROLE_KEYS, RoleAccess> = {
     ],
   },
   viewer: { scope: 'member', capabilities: ['view'] },
-  // Everything NocoReach's own administrator holds, settings and the demo's management included, as a role the
-  // demo owns: the built-in administrator role keeps its last assignment, so clearing could not disable this account.
-  admin: ADMIN_ROLE,
 };
 
 /** Who signs in, with which roles, and which demo projects they belong to. */
@@ -122,11 +118,9 @@ const PEOPLE: readonly {
   { person: 'content', roles: [BUSINESS_MEMBER], projects: ['main', 'second'] },
   { person: 'devrel', roles: [ROLE_KEYS.community], projects: ['main'] },
   { person: 'consultant', roles: [ROLE_KEYS.viewer], projects: ['main'] },
-  { person: 'admin', roles: [ROLE_KEYS.admin], projects: ['main', 'second'] },
 ];
 
-const demoPassword = (person: DemoPerson, username: string) =>
-  person === 'admin' ? 'Demo@2026' : `${username}123`;
+const demoPassword = (username: string) => `${username}123`;
 
 export const demoEmail = (username: string) => `${username}@nocobase.example`;
 
@@ -137,7 +131,7 @@ export function demoAccounts(language: string) {
     username: content.people[person].username,
     name: content.people[person].name,
     role: content.people[person].title,
-    password: demoPassword(person, content.people[person].username),
+    password: demoPassword(content.people[person].username),
   }));
 }
 
@@ -246,7 +240,7 @@ async function createPeople(
       username: spec.username,
       name: spec.name,
       email: demoEmail(spec.username),
-      password: demoPassword(person, spec.username),
+      password: demoPassword(spec.username),
       permissionSets: roles,
     });
     people[person] = id;

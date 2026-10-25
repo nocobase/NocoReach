@@ -69,14 +69,12 @@ export const EN_US: DemoContent = {
       name: 'Chloe Park',
       title: 'Implementation consultant',
     },
-    admin: { username: 'admin', name: 'Alex Reed', title: 'Administrator' },
   },
   roles: {
     growth: 'Growth lead',
     editor: 'Managing editor',
     community: 'Community and developer relations',
     viewer: 'Read-only observer',
-    admin: 'Demo administrator',
   },
   stories: [
     {
