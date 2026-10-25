@@ -205,5 +205,5 @@ export function TaskTable({
   );
 }
 // Kept for older callers: the playbook and step in words, and the executor in words.
-export function workTypeLabel(w?:Work){if(w)w=localizeWorkSnapshots(w);if(w?.flow){const name=(w.playbook?.name||w.flow.name||$t('common.playbook')),st=w.flow.stages[w.stageIndex||0];return w.stage==='done'?$t('workBoard.done',{0:name}):`${name} · ${st?stageName(st):''}`;}if(w?.kind||w?.plan)return w.kind==='research'?$t('common.researchAnalysis'):$t('workBoard.optimizePage');return $t('common.notStarted');}
+export function workTypeLabel(w?:Work){if(w)w=localizeWorkSnapshots(w);if(w?.flow){const name=(w.playbook?.name||w.flow.name||$t('common.playbook')),st=w.flow.stages[w.stageIndex||0];return w.stage==='done'?$t('workBoard.done',{0:name}):`${name} · ${st?stageName(st,w):''}`;}if(w?.kind||w?.plan)return w.kind==='research'?$t('common.researchAnalysis'):$t('workBoard.optimizePage');return $t('common.notStarted');}
 export function executorLabel(w?:Work){const e=executorOf(w);return e?getExecutorNames()[e]:'—';}

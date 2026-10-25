@@ -204,7 +204,7 @@ function TaskHeading({data,list,pick,busy,members,update,onPage}:{data:Data;list
 // green, the current one outlined (violet for a person's step, blue for the Agent's), the rest grey.
 function StepBar({stages,w}:{stages:Stage[];w:Work}){
  const {self,owner}=useContext(TaskAccess),started=Boolean(w.flow),done=w.stage==='done',index=w.stageIndex||0,closed=Boolean(closedLabel(w));
- const label=(s:Stage)=>{const text=stageLabel(s);if(s.kind!=='review'||self)return text;
+ const label=(s:Stage)=>{const text=stageLabel(s,w);if(s.kind!=='review'||self)return text;
   // A space where a Latin owner name meets Chinese or Japanese text ("Super Admin" before the review step).
   if(!text.startsWith($t('common.you')))return `${text} · ${owner}`;const rest=text.slice($t('common.you').length);
   return `${owner}${/[A-Za-z0-9]$/.test(owner)&&/^[\u3040-\u30ff\u3400-\u9fff]/.test(rest)?' ':''}${rest}`;};

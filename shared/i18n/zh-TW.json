@@ -6938,6 +6938,7 @@
   "articleTask.translateAfter": "{0}會在{1}通過後翻譯。",
   "articleTask.approveTranslate": "通過，開始翻譯",
   "articleTask.translating": "Agent 正在翻譯{0}",
+  "articleTask.translateStep": "翻譯",
   "articleTask.approvedPrimary": "通過了主語言，開始翻譯其他語言",
   "articleTask.updateArticle": "修改文章",
   "articleTask.asDraft": "存為草稿",

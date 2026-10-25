@@ -38,8 +38,12 @@ export function stagesFor(p:Pick<Playbook,'steps'>):Stage[]{
 }
 // How a step reads in a one-line preview: “Agent 分析”, “你看方案”, “发布上线”. The release step is named by the interface,
 // not by its stored name (Publish since 2026-10-24, so the step after Review says what the system does).
-export const stageName=(s:Stage)=>s.kind==='release'?$t('playbook.publishStage'):s.kind==='observe'?$t('common.watch'):s.name;
-export const stageLabel=(s:Stage)=>s.kind==='review'?$t('common.yourAction',{0:stageName(s)}):s.kind==='agent'?`Agent ${stageName(s)}`:stageName(s);
+// While an article's other languages are translated from its approved primary one (2026-10-24), the Agent's step the
+// task went back to is named Translate wherever the current step is named: the step tags, Tasks and Tasks › By Agent.
+type StepWork={flow?:{stages:Stage[]};stageIndex?:number;stage?:string;release?:unknown;delivery?:{translateFrom?:unknown}};
+export const translatingStage=(s:Stage,w?:StepWork)=>Boolean(w?.delivery?.translateFrom&&!w.release&&w.stage!=='done'&&s.kind==='agent'&&w.flow?.stages[w.stageIndex||0]?.key===s.key);
+export const stageName=(s:Stage,w?:StepWork)=>translatingStage(s,w)?$t('articleTask.translateStep'):s.kind==='release'?$t('playbook.publishStage'):s.kind==='observe'?$t('common.watch'):s.name;
+export const stageLabel=(s:Stage,w?:StepWork)=>s.kind==='review'?$t('common.yourAction',{0:stageName(s)}):s.kind==='agent'?`Agent ${stageName(s,w)}`:stageName(s);
 // Same rule as the server's defaultPlaybookId: the actions of the signals an opportunity cites.
 export const recommendedPlaybookId=(actions:(string|null)[])=>playbookForActions(actions);
 // What a task timeline says for each recorded event.
