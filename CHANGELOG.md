@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — The demo signs in inside the website
+
+- A demo deployment (`NOCOBASE_DEMO_MODE=true`) sets its sign-in cookies with `SameSite=None; Secure; Partitioned` (`auth.advanced.defaultCookieAttributes`), so the demo embedded in the website's NocoReach page keeps the session instead of returning to Sign in. Partitioned cookies stay with the embedding site; other deployments keep the default `SameSite=Lax` cookies.
+
 ## Unreleased — Translate into other languages
 
 - The playbook Sync language versions is now Translate into other languages ("Add the missing languages, or bring translations up to date with the source."), and its Agent step is named Translate: Agent Translate › Review › Publish › Watch. A repository page still opens a pull request.
