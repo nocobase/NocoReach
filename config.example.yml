@@ -11,7 +11,8 @@
 
 # Dedicated demo deployments only, with their own database and storage. NOCOBASE_DEMO_MODE enables this section.
 # Quick sign-in offers all enabled person accounts; anonymous home-page visitors enter an existing Super Admin.
-# Set quickSignIn to false to disable both. Daily reset is always enabled after the first generation.
+# Set quickSignIn to false to disable both. Its sign-in cookies are SameSite=None, Secure and Partitioned, so a
+# website can embed the demo in an iframe. Daily reset is always enabled after the first generation.
 # Its deployment-owned schedule ignores previously saved schedules and is read-only in Demo management.
 # NOCOBASE_DEMO_RESET_HOUR, NOCOBASE_DEMO_RESET_MINUTE, NOCOBASE_DEMO_RESET_TIMEZONE and
 # NOCOBASE_DEMO_RESET_LANGUAGE override these values. Restart after changes; defaults are 03:00 UTC, en-US.
