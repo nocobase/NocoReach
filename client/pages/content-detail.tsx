@@ -8,6 +8,8 @@ import {CartesianGrid,Legend,Line,LineChart,ReferenceLine,ResponsiveContainer,To
 import {Tag} from '#components/reach/tag';
 import {InfoTip} from '#components/reach/info-tip';
 import {DetailDrawer} from './detail-drawer';
+import {FoundBy} from './found-by';
+import {taskSource} from './task-source';
 import {useFreshData} from './workspace-cache';
 import {workState,type Work} from './task-execution-types';
 import {effectItems,effectLine,effectPages,monthDay} from './effect-model';
@@ -50,7 +52,7 @@ export function ContentDetail({projectId,googleScope,page,tasks,range,from,to,ra
    </section>
    <section className="space-y-2"><div className="flex items-center gap-1"><h3 className="text-sm font-semibold">{$t('contentDetail.tasksImpact')}</h3>{releases.length?<InfoTip label={$t('contentDetail.howImpactMeasured')}>{$tj('contentDetail.impactComparesEqualPeriodsBefore',{0:monthDay(releases[0].date)})}</InfoTip>:null}</div>
     {!linked.length?<p className="text-muted-foreground">{$t('contentDetail.noTaskChangedPageYet')}</p>:linked.map(t=>{const w=t.evidence!.work!,state=w.cancelledAt?null:workState(w,t.status),items=effectItems(w);return <div key={t.id} className="space-y-1 rounded-lg border border-border p-3" data-content-task={t.id}>
-     <div className="flex flex-wrap items-center gap-2"><Link className="nr-link font-medium" to={`/actions/${t.id}`}>{t.evidence?.no?`T-${t.evidence.no} `:''}{t.title}</Link>{state?<Tag tone={stateTone[state]}>{getStateNames()[state]}</Tag>:<Tag tone="slate">{$t('contentDetail.cancelled')}</Tag>}</div>
+     <div className="flex flex-wrap items-center gap-2"><Link className="nr-link font-medium" to={`/actions/${t.id}`}>{t.evidence?.no?`T-${t.evidence.no} `:''}{t.title}</Link>{state?<Tag tone={stateTone[state]}>{getStateNames()[state]}</Tag>:<Tag tone="slate">{$t('contentDetail.cancelled')}</Tag>}<FoundBy source={taskSource(t)} className="ml-auto"/></div>
      {w.observeFrom?<p className="nr-footnote">{$tj('contentDetail.live',{0:formatDate(new Date(w.observeFrom).toISOString().slice(0,10))})}</p>:null}
      {items.map(i=><p key={i.day} className="text-xs">{i.result?effectLine(i.result):$t('contentDetail.dayResultsExpected',{0:i.day,1:i.expected})}</p>)}
     </div>;})}

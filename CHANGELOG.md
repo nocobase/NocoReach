@@ -6,6 +6,12 @@
 - Every prompt for a project in a language other than Simplified Chinese ends with the same note the English projects had, naming the language. The English note is unchanged.
 - The daily analysis checks opportunity wording in two sets. Simplified Chinese, Traditional Chinese and Japanese keep the width rules (title 18, reason 30, a CJK character counting 1), with the vague words of each language. The other languages use the English limits (title 60 characters, reason 90 with a number, at most two sentences of suggestion); vague verbs are only checked in English.
 
+## Unreleased — Found by on every list of tasks
+
+- Tasks › By agent shows who found each task, as the board and the list do: "Found by AI" or "Found by <name>" beside the number on a card, under the title in the Up next rows.
+- Results says it too: under each task in All results and in the overview's Recent results, and as Source in a result's detail. Website & product › Pages shows it on each task of a page's detail.
+- The classifier moves to `shared/task-source.ts`, so the task pages and the server's result rows (`found`) say the same. Places that only list the tasks of one opportunity, a task's Related tasks (which share its source), the Insights reminder, the chat and notifications are left as they are.
+
 ## Unreleased — Skills: playbooks as tags
 
 - Skills › Used in playbooks shows each playbook that names the Skill as a grey tag instead of a run of "Playbook · Step" text. Up to three show in full and the rest are counted as +N. Hovering over the cell lists the steps.

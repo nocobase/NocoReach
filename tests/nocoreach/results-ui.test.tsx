@@ -438,3 +438,25 @@ it('says a result archived after it finished is archived, and never calls a stop
   expect(stopped).toHaveTextContent(english['results.taskState.closed']);
   expect(stopped).not.toHaveTextContent(english['results.taskState.done']);
 });
+it('says who found each task in All results', async () => {
+  action.mockResolvedValueOnce({
+    items: [
+      { ...row, found: { by: 'ai', via: 'opportunity' } },
+      {
+        ...row,
+        taskId: '12',
+        taskNo: 12,
+        title: 'Completed task B',
+        found: { by: 'person', via: 'newTask', name: 'Esther' },
+      },
+    ],
+    total: 2,
+  });
+  render(
+    <MemoryRouter>
+      <AllResultsPage />
+    </MemoryRouter>,
+  );
+  expect(await screen.findByText('Found by AI')).toBeInTheDocument();
+  expect(screen.getByText('Found by Esther')).toBeInTheDocument();
+});
