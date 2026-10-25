@@ -2240,7 +2240,6 @@
   "contentIndex.giveAiWebsiteAddressReads": "把官网地址交给 AI，它会读取 sitemap、识别博客与文档，并关联访问和搜索数据。不需要手动添加。",
   "dataSources.websiteSetupHelp": "读取网站的 sitemap，统计博客、文档和落地页各有多少页，确认后开始采集。文档站使用单独的域名时（如 docs.example.com），可以再添加一个网址。不需要仓库或密钥。",
   "playbooks.translationInstruction": "把指定的页面或文章翻译成其他语言版本：补上缺失的语言，或按原文的最新内容更新已有译文。内容与原文一致，术语遵循项目记忆；原文不改。",
-  "playbooks.translateStep": "翻译",
   "dataSources.forumSetupHelp": "支持 Discourse 论坛的公开分类，不需要账号。只读取帖子内容和互动数据，不保存用户名。首次同步约需一两分钟，在后台完成。",
   "playbooks.groupRecurringCommunityQuestionsSeparating": "把社区里反复出现的问题归类，区分文档能解决和需要产品修复的。",
   "messages.websitePerformanceSearchDataContent": "把网站表现、搜索数据与内容机会放在一起，从有依据的判断走向可执行的任务。",

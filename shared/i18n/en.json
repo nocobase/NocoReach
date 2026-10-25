@@ -2240,7 +2240,6 @@
   "contentIndex.giveAiWebsiteAddressReads": "Give AI your website address: it reads the sitemap, recognizes blog and docs pages, and links traffic and search data. Nothing to add by hand.",
   "dataSources.websiteSetupHelp": "Reads the website's sitemap and counts its blog, docs, and landing pages, then starts collecting once you confirm. If the docs are on a separate domain (such as docs.example.com), add it as a second URL. No repository or keys are needed.",
   "playbooks.translationInstruction": "Translate the given page or article into its other language versions: add the missing languages, or bring existing translations up to date with the latest source. Keep the content consistent with the source and follow the terminology in project memory; leave the source as it is.",
-  "playbooks.translateStep": "Translate",
   "dataSources.forumSetupHelp": "Supports public categories of Discourse forums; no account is needed. Only post content and engagement are read, never usernames. The first sync takes a minute or two in the background.",
   "playbooks.groupRecurringCommunityQuestionsSeparating": "Group recurring community questions, separating those docs can solve from those needing product fixes.",
   "messages.websitePerformanceSearchDataContent": "Website performance, search data, and content opportunities in one place, from evidence-based judgment to actionable tasks.",

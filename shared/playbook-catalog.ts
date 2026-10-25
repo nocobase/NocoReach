@@ -252,7 +252,7 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
     systemMessageText('playbooks.translationInstruction'),
     [],
     false,
-    systemMessageText('playbooks.translateStep'),
+    systemMessageText('articleTask.translateStep'),
   ),
   work(
     'tech-fix',

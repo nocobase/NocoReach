@@ -2289,7 +2289,6 @@
   "contentIndex.giveAiWebsiteAddressReads": "Cung cấp địa chỉ website cho AI: AI sẽ đọc sơ đồ website, nhận diện trang blog và tài liệu, rồi liên kết dữ liệu truy cập và tìm kiếm. Không cần thêm thủ công.",
   "dataSources.websiteSetupHelp": "Đọc sơ đồ website và đếm số trang blog, tài liệu và trang đích, rồi bắt đầu thu thập khi bạn xác nhận. Nếu tài liệu nằm trên tên miền riêng (như docs.example.com), hãy thêm URL thứ hai. Không cần kho mã hay khóa.",
   "playbooks.translationInstruction": "Dịch trang hoặc bài viết được chỉ định sang các phiên bản ngôn ngữ khác: bổ sung các ngôn ngữ còn thiếu, hoặc cập nhật bản dịch hiện có theo nội dung mới nhất của bản gốc. Giữ nội dung nhất quán với bản gốc, tuân theo thuật ngữ trong bộ nhớ dự án và không sửa bản gốc.",
-  "playbooks.translateStep": "Dịch",
   "dataSources.forumSetupHelp": "Hỗ trợ các danh mục công khai trên diễn đàn Discourse; không cần tài khoản. Chỉ đọc nội dung bài đăng và dữ liệu tương tác, không đọc tên người dùng. Lần đồng bộ đầu tiên mất khoảng một đến hai phút và chạy trong nền.",
   "playbooks.groupRecurringCommunityQuestionsSeparating": "Nhóm các câu hỏi lặp lại trong cộng đồng, tách riêng những câu có thể giải quyết bằng tài liệu và những câu cần sửa sản phẩm.",
   "messages.websitePerformanceSearchDataContent": "Tập hợp hiệu quả website, dữ liệu tìm kiếm và cơ hội cải thiện nội dung tại một nơi, từ nhận định dựa trên bằng chứng đến tác vụ có thể thực hiện.",

@@ -2238,7 +2238,6 @@
   "contentIndex.giveAiWebsiteAddressReads": "ウェブサイトのアドレスを AI に渡すと、サイトマップを読み取り、ブログやドキュメントのページを識別し、アクセスや検索のデータを関連付けます。手動で追加する必要はありません。",
   "dataSources.websiteSetupHelp": "サイトマップを読み取り、ブログ、ドキュメント、ランディングページの数を集計し、確認後に収集を開始します。ドキュメントが別ドメイン（docs.example.com など）にある場合は、2 つ目の URL として追加してください。リポジトリやキーは不要です。",
   "playbooks.translationInstruction": "指定されたページまたは記事を他の言語版に翻訳してください。足りない言語を追加するか、原文の最新の内容に合わせて既存の翻訳を更新します。内容は原文と一致させ、用語はプロジェクトメモリに従い、原文は変更しないでください。",
-  "playbooks.translateStep": "翻訳",
   "dataSources.forumSetupHelp": "Discourse フォーラムの公開カテゴリに対応しています。アカウントは不要です。投稿内容と反応のデータのみを読み取り、ユーザー名は取得しません。初回同期はバックグラウンドで行い、1～2 分ほどかかります。",
   "playbooks.groupRecurringCommunityQuestionsSeparating": "コミュニティで繰り返される質問を分類し、ドキュメントで解決できるものと製品の修正が必要なものを分けてください。",
   "messages.websitePerformanceSearchDataContent": "サイトのパフォーマンス、検索データ、コンテンツの改善機会を一か所に集約し、根拠に基づく判断を実行可能なタスクにつなげます。",

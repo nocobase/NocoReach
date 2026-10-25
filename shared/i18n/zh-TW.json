@@ -2238,7 +2238,6 @@
   "contentIndex.giveAiWebsiteAddressReads": "把官網位址交給 AI，它會讀取 sitemap、識別部落格與文件，並關聯流量和搜尋資料。不需要手動新增。",
   "dataSources.websiteSetupHelp": "讀取網站的 sitemap，統計部落格、文件和到達網頁各有多少頁，確認後開始擷取。文件站使用單獨的網域時（如 docs.example.com），可以再新增一個網址。不需要儲存庫或金鑰。",
   "playbooks.translationInstruction": "把指定的頁面或文章翻譯成其他語言版本：補上缺少的語言，或依原文的最新內容更新已有譯文。內容與原文一致，術語遵循專案記憶；原文不改。",
-  "playbooks.translateStep": "翻譯",
   "dataSources.forumSetupHelp": "支援 Discourse 論壇的公開分類，不需要帳號。僅讀取貼文內容和互動資料，不儲存使用者名稱。首次同步約需一兩分鐘，在背景完成。",
   "playbooks.groupRecurringCommunityQuestionsSeparating": "把社群裡反覆出現的問題歸類，區分文件能解決和需要產品修復的。",
   "messages.websitePerformanceSearchDataContent": "把網站表現、搜尋資料與內容機會放在一起，從有依據的判斷走向可執行的任務。",
