@@ -1,9 +1,5 @@
 # NocoReach Changelog
 
-## Unreleased — Preserve restart history during classic import
-
-- Treat application restart history as installation metadata: it no longer blocks a first classic import after the task timer fires, cannot be overwritten by imported snapshots, and survives replacement imports. Reproduce the timer firing explicitly in the import hold integration test to prevent intermittent CI failures.
-
 ## Unreleased — New slogan on the sign-in page and sidebar
 
 - The sign-in page title and the sidebar footer read "AI finds growth opportunities. / Agents put them into action." (AI 找出增长机会，/ 交给 Agent 执行), as on the website and in the intro film, in all ten UI languages. The sidebar's second line no longer carries the NocoReach name.
