@@ -269,6 +269,7 @@ minimumReleaseAgeExclude:
   - '@nocobase/jobs@0.1.0-beta.4'
   # Demo Mode beta.3 and its authentication and Runner protocol companions.
   - '@nocobase/app-plugin-demo-mode@0.1.0-beta.3'
+  - '@nocobase/app-plugin-demo-mode@0.2.0-beta.1'
   - '@nocobase/app-plugin-authentication@2.0.0-beta.14'
   - '@nocobase/app-plugin-agents@1.0.0-beta.24'
   - '@nocobase/agent-protocol@0.1.0-beta.15'
