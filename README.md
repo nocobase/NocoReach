@@ -4,132 +4,144 @@
 
 <h1 align="center">NocoReach</h1>
 
-<p align="center"><strong>Find the opportunities in your data. NocoReach puts them into action.</strong></p>
+<p align="center"><strong>AI finds growth opportunities. Agents put them into action.</strong></p>
 
 <p align="center">
-An AI growth operations platform.<br>
-Data collection, daily analysis and Agent execution in one platform.
+AI growth operations platform · Built on NocoBase Core<br>
+Data collection, daily analysis and agent execution, all in one place.
 </p>
 
 <p align="center">
-  <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja-JP.md">日本語</a>
+  <a href="https://solutions.nocobase.com/reach/"><strong>Try it online</strong></a> · <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja-JP.md">日本語</a>
 </p>
 
-> **Project status:** NocoReach is at an early stage, and its features and interface are still changing. Issues and pull requests are welcome.
+> **Project status:** NocoReach is in beta, and its features and interface are still changing. Issues and pull requests are welcome.
 
-![Insights: key metrics, today's changes and the AI's verdicts](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/insights-en.png)
+![Insights: the daily analysis and what needs your decision today](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/insights-en.webp)
 
-## Plenty of data, hard to act on
+## Your data holds many opportunities. Most were never found, and fewer got done.
 
-**Data is scattered.** Search data sits in Search Console and SEO tools, traffic in GA4, and user conversations across forums, social media and community chats. If the product is open source, there are GitHub stars and package downloads as well. Seeing the whole picture means switching between a dozen tabs.
+Until now, marketing teams exported data to spreadsheets every day, loaded it into BI to see the numbers, and assigned the work one item at a time, so only a few opportunities ever got attention.
 
-**Data alone does not tell you what to do next.** SEO platforms such as Ahrefs and Semrush have comprehensive data and present it as reports and metrics. What to do next, and what to do first, is still your call, and the work itself has to be arranged separately.
+NocoReach analyzes all of your data every day, finds what is worth doing and shows the evidence. Once you confirm, many tasks go to agents at once, and the impact is compared automatically after launch.
 
-**Data and execution are disconnected.** Open-source tools such as OpenSEO fetch the same data on demand at low cost, and can hand it to agents like Claude Code through MCP. They cover only SEO and AI search data, though, and the work happens in each person's local environment. The agent sees only what it is given that time, and there is no shared record of what was done or how it turned out.
+| Step                     | What happens                                                        |
+| ------------------------ | ------------------------------------------------------------------- |
+| 1. All data in one place | Site, search, AI search, community and competitors, synced daily    |
+| 2. Daily analysis        | AI weighs each of the day's changes and writes up those worth doing |
+| 3. Handed to agents      | Once you confirm, many tasks move at once                           |
+| 4. Your review           | Articles and page changes go live only once you approve             |
+| 5. Impact                | Compared automatically on days 7 and 28                             |
 
-## NocoReach: from data to execution on one platform
+## Every day, NocoReach finds what's worth doing
 
-NocoReach brings the whole growth operations loop onto a single platform:
+No waiting for the weekly report, no tour of a dozen dashboards. Every day at 09:00, NocoReach checks your data for changes against your analysis rules, and AI decides change by change whether it is worth acting on, with the evidence.
 
-```
-Data sources → Daily analysis → Opportunities → Tasks → Agent execution → Review and publish → Results
-```
+- **Rules find the changes.** 44 built-in rules cover search, traffic and conversions, content, community, product interest and usage, and competitors. Adjust them in a sentence, such as "Tell me when search clicks drop more than 20%."
+- **AI weighs each change.** With your project knowledge in mind, AI gives each change one of three verdicts (act on it, watch it, or no action needed) with its reasons and evidence.
+- **Opportunities, written up.** Changes worth acting on become opportunities for you to hand off or dismiss. Changes to watch get a condition and a deadline and are judged again then. A day with nothing new adds nothing.
 
-- **All data in one place.** More than 20 sources are supported, with more on the way. Search, website, GitHub, package downloads, community and AI search data are stored in the same database and analyzed together. NocoReach is open source, so if a source you need is missing, your agent can build it.
-- **Analysis that reaches a conclusion.** Every day, rules pick out what changed and the AI decides whether each change is worth acting on, with the evidence attached.
-- **Agents with the full context.** When working on a task, the agent reads the relevant metrics, keywords, pages, audit results, community posts and project knowledge directly. Nobody has to compile them by hand.
-- **Execution that lands in your repository.** The agent edits files in your website and docs repository and opens a pull request for you to review and merge.
-- **Results you can follow.** On day 7 and day 28 after going live, the data is compared automatically. Every task keeps a full record from evidence to execution to results.
+## Every opportunity comes with its evidence
 
-|                    | SEO platforms such as Ahrefs | Open-source tools such as OpenSEO | **NocoReach**                                                                                              |
-| ------------------ | ---------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Data coverage      | SEO and AI search            | SEO and AI search                 | 20+ sources: SEO, AI search, website, GitHub, community and more<br>Connect any other market data yourself |
-| What to do next    | You judge from reports       | You judge, or ask a local agent   | Daily analysis proposes opportunities with evidence                                                        |
-| Execution          | Outside the platform         | In each person's local agent      | An agent in the platform edits the repository and opens a PR                                               |
-| Review and results | Up to you                    | Up to you                         | Human review before publishing; automatic comparison on days 7 and 28                                      |
-| Deployment         | SaaS                         | Self-hosted                       | Self-hosted, full source code                                                                              |
+![Opportunities: what happened, why it matters, what to do](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/opportunities-en.webp)
 
-## Features
+- **What happened:** the page, the metric, how far it moved, and where the data came from.
+- **Why it matters:** what it means for your product, with its priority and the effort it takes.
+- **Not sure yet? Watch it:** a condition and a deadline. When it comes, the change becomes an opportunity or needs no action.
 
-### Data sources
+## Once you confirm, agents do the work
 
-| Website and product                                                                                                                               | Search and market                                                                                                                                            | Community                                                                                      |
-| ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| GA4 traffic and conversions<br>Website pages and site audit<br>GitHub stars, forks, traffic and Discussions<br>npm, PyPI and Docker Hub downloads | Google Search Console<br>Keyword research and rank tracking<br>Google Trends<br>Competitor activity and overview<br>AI search (ChatGPT, Google AI Overviews) | Discourse forums<br>Hacker News, Reddit, X<br>Discord, Slack<br>YouTube, Bilibili, Xiaohongshu |
+Each kind of work has a playbook: the steps the agent takes and where you review. 12 are built in, across research, content creation, content optimization and technical fixes. Change the built-in ones, or describe a new one in a sentence and AI drafts it.
 
-- **Discovery.** Enter your website address and the AI finds the docs site, GitHub repository and community forum you can connect. Nothing is connected until you confirm.
-- **Guided setup.** Each source explains what you need to prepare, answers common questions, and lists the signals it can reveal.
-- **Data health.** Sources that failed to sync or hold stale data are shown in one place.
+| Type                 | Built-in playbooks                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------- |
+| Research             | Change investigation, Competitor comparison, Keyword research, Community question summary               |
+| Content creation     | Draft community replies, Content topic and outline, New docs page, Write blog post, Write release notes |
+| Content optimization | Improve existing page, Translate into other languages                                                   |
+| Technical            | Technical fix                                                                                           |
 
-![Data sources](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/connections-en.png)
+Many tasks move at once. See tasks agent by agent: what each is working on, what comes next and what waits for you. Tasks come from the daily analysis (Found by AI) or from you.
 
-### Daily analysis and opportunities
+<p align="center">
+  <img src="https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/tasks-en.webp" width="600" alt="Tasks: each agent's work in progress and what waits for you">
+</p>
 
-- 34 built-in analysis rules turn the data into five kinds of signals: change, gap, timing, page performance and conversion.
-- The analysis runs on a schedule every day. Each change gets an AI verdict (worth doing, watch first, or no action needed) with the reason and evidence.
-- A change marked "watch first" must state the metric to watch, the condition for deciding and a deadline, and it is decided when the deadline arrives.
-- When there is nothing new, no suggestions are generated.
-- Rules can be switched on or off and their thresholds adjusted, and you can add your team's priorities.
+## Every change waits for your review
 
-![Opportunities: evidence, AI suggestion and playbook](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/opportunities-en.png)
+When the agent is done, it stops for you. Articles are previewed as readers will see them, and page changes show before and after. Approve and publish, request changes for the agent to make, or edit it yourself.
 
-### Tasks and agent execution
+![Review: article preview, approve and publish, request changes](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/review-en.webp)
 
-Every opportunity comes with its evidence: the data, the time window and the pages involved. If it is worth doing, turn it into a task; otherwise, ignore it.
+- **Community replies, drafted by the agent and posted by you.** The agent reads your docs and drafts a reply to each unanswered post. You copy it into the thread; NocoReach never posts for you.
+- **Request changes, and the agent makes them.** Write what should change, and the agent comes back with a new version for your review.
 
-Tasks follow playbooks. NocoReach ships with 12:
+## After launch, the impact is compared for you
 
-| Type      | Playbooks                                                                                               |
-| --------- | ------------------------------------------------------------------------------------------------------- |
-| Improve   | Improve existing page, Sync language versions                                                           |
-| Create    | New docs page, Write blog post, Write release notes, Content topic and outline, Draft community replies |
-| Research  | Keyword research, Change investigation, Competitor comparison, Community question summary               |
-| Technical | Technical fix (broken links, redirects, sitemaps, structured data)                                      |
+On days 7 and 28 after launch, NocoReach compares each changed page's search clicks and views with the same number of days before. Each result reads up, down, no clear change, or not enough data. It describes the data and does not claim causes.
 
-- **Online AI** handles research, plans and drafts.
-- **Changes to a repository are made by an agent.** Through a Runner on your computer or server, it uses coding tools such as Claude Code to read the repository, edit files, run checks and open a pull request. Each task has one branch and one pull request.
-- The agent can only change the directories you allow. The model used, the tools called and any denied actions are recorded on the task page.
+<p align="center">
+  <img src="https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/results-en.webp" width="700" alt="Results: how each change did after launch">
+</p>
 
-![Task board](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/tasks-en.png)
+## All your data, in one place
 
-### Review, publishing and results
+22 sources are supported, stored together and analyzed together every day. Each kind of data also has its own pages, and anything worth doing there goes straight to an agent.
 
-- People confirm the key steps: read the task brief before execution starts, review the plan when it is ready, and check the changes before publishing.
-- You review and merge pull requests. Community replies are drafted by the agent and posted by you; NocoReach never posts on its own.
-- After going live, NocoReach compares search clicks and page views of the changed pages before and after, and reports on day 7 and day 28: up, down, no clear change, or not enough data. It describes how the data moved and does not claim cause and effect.
-- Built for teams: administrators and members, an owner for every task, and in-app notifications for anything that needs your attention.
+| Category                | Sources                                                  |
+| ----------------------- | -------------------------------------------------------- |
+| Web analytics           | GA4                                                      |
+| Search                  | Search Console, Keywords & rankings, Google Trends       |
+| AI search               | ChatGPT, Google AI Overviews                             |
+| Site & docs             | Website content, Site audit                              |
+| Open source & downloads | GitHub repository, GitHub Traffic, npm, PyPI, Docker Hub |
+| Community               | Discourse, Discord, Slack, GitHub Discussions            |
+| Social & video          | X, Reddit, Hacker News, YouTube, Bilibili, Xiaohongshu   |
+| Competitors             | Competitor sites, Competitor GitHub, Competitor keywords |
+| Changes & publishing    | Website source (Git), Blog CMS                           |
 
-### AI search visibility
+Missing a source you need? NocoReach is open source: have a coding agent build it to your needs, and the daily analysis reads it like the rest.
 
-See whether ChatGPT and Google AI Overviews mention your product when answering related questions, which pages they cite, and how your share of voice compares with competitors. Questions where competitors are mentioned and you are not are the first content gaps to close.
+<p align="center">
+  <img src="https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/connect-en.webp" width="600" alt="Data sources: let the agent on your computer connect them all at once">
+</p>
 
-![AI search: brand mentions and share of voice](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/ai-search-en.png)
+- **Let an agent connect them all at once.** No need to connect sources one by one. Copy the instructions to Claude Code or Codex on your computer: it researches your site and repositories, proposes a plan, and connects everything once you confirm. Authorizations and tokens stay in your browser.
+- **Check the data before trusting the conclusions.** Data health lists the sources that failed to sync, fell behind or need authorizing again, each with its fix. When a sync fails, the daily analysis says which data its conclusions are missing.
+- **Cost limits.** Pay-per-query sources such as DataForSEO take a monthly budget and stop at it.
 
-### Playbooks, skills and project knowledge
+See something worth doing? Hand it off right there. Take AI search: it tracks how ChatGPT and Google AI Overviews answer questions in your field, which brands they mention and which sites they cite. Tick the questions where others appear and you don't, and hand them to an agent.
 
-- **Playbooks** define the steps for each kind of task and which steps need human review. Edit them or create your own.
-- **Skills** use the standard SKILL.md format, so Claude Code and similar tools can use them too. Import them from a GitHub link.
-- **Project knowledge** covers your brand, positioning, voice, terminology and writing rules, and goes to the agent with every task.
+<p align="center">
+  <img src="https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/aisearch-en.webp" width="700" alt="AI search: questions where others appear and you don't">
+</p>
 
-## Who it is for
+## NocoReach works the way you do
 
-- Anyone who wants AI to take a deeper part in marketing work;
-- Teams whose website, docs or blog live in a Git repository (Markdown, MDX), so the agent can edit them and open pull requests;
-- Open-source projects and developer products, whose GitHub, package download and technical community data can be analyzed together.
+- **Project knowledge.** Brand, product, audience, voice and no-go areas live in memory, read on every task; long documents go in the knowledge base, searched when needed. The feedback you give in reviews becomes suggested updates, written into memory once you confirm.
+- **Skills.** A Skill spells out how one kind of work is done, in the common SKILL.md format that Claude Code and other tools read. Import the marketing skills you need from a GitHub link.
+- **Models and agents.** The daily analysis runs on the cloud model you configure; Claude Code or Codex work on tasks on your computer or servers. Choose any models and agents, and see the usage any time.
 
-## Security and control
+| NocoReach handles                                                                              | You decide                                         |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Analyzing the data every day and proposing opportunities with evidence                         | Which opportunities to take on, and who owns them  |
+| Researching keywords, competitors and recurring community questions                            | Your brand, voice and what must not change         |
+| Changing pages, writing docs and articles, drafting community replies, fixing technical issues | Reviewing changes and deciding what gets published |
+| Comparing the impact on days 7 and 28 after launch                                             |                                                    |
 
-- **Self-hosted.** Run it on your own server. Data travels only between the services you connect.
-- **Encrypted secrets.** Credentials are stored encrypted on the server.
-- **Your choice of model.** NocoReach uses the models and API keys you configure.
-- **Cost limits.** Pay-per-query sources such as DataForSEO have a monthly budget.
-- **Server-side permissions.** Every action is checked against administrator and member permissions on the server.
-- **Network proxies.** Data collection can go through HTTP, HTTPS or SOCKS5 proxies.
-- Chinese and English interface, with multiple projects per instance.
+## Built on NocoBase Core
+
+NocoReach is built on [NocoBase Core](https://www.nocobase.com), open source and free. When you need something new, have a coding agent customize it to your needs: customization changes only the business part, and NocoBase keeps maintaining and upgrading the foundation.
+
+- **Open source and free.** The complete source code is in this repository.
+- **Self-hosted.** Run it on your own servers; the code and the data are yours. If your server cannot reach outside services directly, set up a proxy under Settings › Network.
+- **Your choice of models and agents.** No vendor lock-in: Claude Code, Codex and other coding tools, and the large models you prefer.
+- The interface comes in 10 languages, and one instance runs many projects.
 
 ## Getting started
 
-You need Node.js 24 and pnpm.
+Just want a look? [Try it online](https://solutions.nocobase.com/reach/): you're signed in to a demo account, and all the data is made up, so try anything.
+
+To run it on your own computer, you need Node.js 24 and pnpm:
 
 ```bash
 git clone https://github.com/nocobase/nocoreach.git
@@ -142,15 +154,11 @@ pnpm dev
 Open the address printed in the terminal and sign in with the initial administrator from `config.yml` (change the password before real use). Then:
 
 1. Create a project and enter your website address;
-2. Connect data sources under Settings → Data sources;
-3. In AI team, configure models, connect a Runner and choose the default agent;
+2. Connect data under Settings › Data sources, or copy the instructions to Claude Code or Codex on your computer and let it connect them all at once;
+3. Under AI team › Agent, configure the model for the daily analysis and connect the agents that run tasks;
 4. Open Insights to see the daily analysis.
 
-To try the product without any real accounts, start a demo environment with [simulated data](docs/MOCK-DATA.md). For production deployment, see [Build and deploy](docs/APP-TEMPLATE.md).
-
-## Built on NocoBase 3
-
-NocoReach is a [NocoBase 3](https://www.nocobase.com) application. Accounts, permissions, notifications, scheduled jobs, models and agent management come from NocoBase, so NocoReach can focus on growth operations. The complete source code is in this repository: change it yourself, or have an agent change it.
+To try it without real accounts, start a local demo with [simulated data](docs/MOCK-DATA.md). For production deployment, see [Build and deploy](docs/APP-TEMPLATE.md).
 
 ## Documentation
 
@@ -160,3 +168,5 @@ NocoReach is a [NocoBase 3](https://www.nocobase.com) application. Accounts, per
 | [Simulated data](docs/MOCK-DATA.md)      | Run a demo or test environment without real accounts |
 | [Build and deploy](docs/APP-TEMPLATE.md) | Configuration, builds and Docker deployment          |
 | [Changelog](CHANGELOG.md)                | What changed in each release                         |
+
+<p align="center"><strong>Find opportunities · Put them into action · Track the impact</strong></p>
