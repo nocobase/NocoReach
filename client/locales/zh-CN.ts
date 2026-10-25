@@ -88,8 +88,8 @@ const zhCN: AppResource = {
   'nocoreach.nav.demoData': '演示管理',
   'nocoreach.nav.members': '成员与角色',
   'auth.platform': 'AI 增长运营平台',
-  'auth.marketingTitleFirst': '从数据中发现机会，',
-  'auth.marketingTitleSecond': 'NocoReach 帮你落地',
+  'auth.marketingTitleFirst': 'AI 找出增长机会，',
+  'auth.marketingTitleSecond': '交给 Agent 执行',
   // Not shown since the sign-in title became the two-line slogan; kept because the locale type requires the key.
   'auth.marketingTitleThird': '',
   'auth.marketingDescription': '数据采集、每日分析和 Agent 执行在同一个平台完成。',
@@ -102,8 +102,8 @@ const zhCN: AppResource = {
   'navigation.brandApps': 'NocoReach 应用',
   shell: {
     templateVersionUnknown: '版本未知',
-    buildFreely: '从数据中发现机会，',
-    reliability: '<brand>NocoReach</brand> 帮你落地',
+    buildFreely: 'AI 找出增长机会，',
+    reliability: '交给 Agent 执行',
   },
   app: {
     title: 'NocoReach',

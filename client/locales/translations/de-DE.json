@@ -242,8 +242,8 @@
   "auth.continueWith": "Weiter mit {provider}",
   "auth.about": "Über diese Anwendung",
   "auth.platform": "KI-Plattform für Growth Operations",
-  "auth.marketingTitleFirst": "Entdecken Sie die Chancen in Ihren Daten.",
-  "auth.marketingTitleSecond": "NocoReach setzt sie um.",
+  "auth.marketingTitleFirst": "KI findet Wachstumschancen.",
+  "auth.marketingTitleSecond": "Agenten setzen sie um.",
   "auth.marketingTitleThird": "",
   "auth.marketingDescription": "Datenerfassung, tägliche Analyse und Ausführung durch Agenten auf einer Plattform.",
   "auth.frontend": "Tägliche Analyse",
@@ -263,8 +263,8 @@
   "status.routeFailedDescription": "Route {{label}} aus {{packageName}} konnte nicht geladen werden.",
   "shell": {
     "templateVersionUnknown": "Version unbekannt",
-    "buildFreely": "Entdecken Sie die Chancen in Ihren Daten.",
-    "reliability": "<brand>NocoReach</brand> setzt sie um."
+    "buildFreely": "KI findet Wachstumschancen.",
+    "reliability": "Agenten setzen sie um."
   },
   "home": {
     "platform": "NocoBase · KI-native Anwendungsplattform",

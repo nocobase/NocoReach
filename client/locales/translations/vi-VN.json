@@ -242,8 +242,8 @@
   "auth.continueWith": "Tiếp tục với {provider}",
   "auth.about": "Giới thiệu ứng dụng",
   "auth.platform": "Nền tảng vận hành tăng trưởng bằng AI",
-  "auth.marketingTitleFirst": "Tìm ra cơ hội trong dữ liệu của bạn.",
-  "auth.marketingTitleSecond": "NocoReach biến chúng thành hành động.",
+  "auth.marketingTitleFirst": "AI tìm ra cơ hội tăng trưởng.",
+  "auth.marketingTitleSecond": "Agent biến chúng thành hành động.",
   "auth.marketingTitleThird": "",
   "auth.marketingDescription": "Thu thập dữ liệu, phân tích hằng ngày và thực thi bằng agent trên cùng một nền tảng.",
   "auth.frontend": "Phân tích hằng ngày",
@@ -263,8 +263,8 @@
   "status.routeFailedDescription": "Không thể tải route {{label}} từ {{packageName}}.",
   "shell": {
     "templateVersionUnknown": "Không rõ phiên bản",
-    "buildFreely": "Tìm ra cơ hội trong dữ liệu của bạn.",
-    "reliability": "<brand>NocoReach</brand> biến chúng thành hành động."
+    "buildFreely": "AI tìm ra cơ hội tăng trưởng.",
+    "reliability": "Agent biến chúng thành hành động."
   },
   "home": {
     "platform": "NocoBase · Nền tảng ứng dụng AI-native",

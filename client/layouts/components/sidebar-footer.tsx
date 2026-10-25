@@ -1,5 +1,4 @@
 import { MockIndicator } from '../../mock-integrations.js';
-import { Trans } from 'react-i18next';
 import { useTranslation } from '@nocobase/i18n/client';
 import { ShieldCheck } from 'lucide-react';
 import type { ReactElement } from 'react';
@@ -12,26 +11,20 @@ import {
 } from '#components/ui/tooltip';
 
 /**
- * The application's sidebar footer: NocoReach's two-line slogan. In icon mode only the shield remains, and a tooltip
- * carries the same text. The version is in the account menu (2026-10-22: the template's name meant nothing to people
- * using NocoReach).
+ * The application's sidebar footer: NocoReach's two-line slogan, as on the sign-in page. In icon mode only the shield
+ * remains, and a tooltip carries the same text. The version is in the account menu (2026-10-22: the template's name
+ * meant nothing to people using NocoReach).
  */
 export function AppSidebarFooter(): ReactElement {
   const { t } = useTranslation();
   const { isMobile, state } = useSidebar();
   const iconOnly = state === 'collapsed' && !isMobile;
   const buildFreely = t('shell.buildFreely', {
-    defaultValue: 'Find the opportunities in your data.',
+    defaultValue: 'AI finds growth opportunities.',
   });
-  // The tooltip and the icon's accessible name have no link, so the brand's markup is dropped there.
   const reliability = t('shell.reliability', {
-    defaultValue: '<brand>NocoReach</brand> puts them into action.',
-  }).replace(/<\/?brand>/g, '');
-
-  // NocoReach's name, emphasised but not a link (the template linked NocoBase's site here).
-  const brandLink = (
-    <span className='font-medium text-sidebar-foreground'>NocoReach</span>
-  );
+    defaultValue: 'Agents put them into action.',
+  });
 
   return (
     <SidebarFooter className='shrink-0 border-t border-sidebar-border'>
@@ -70,16 +63,7 @@ export function AppSidebarFooter(): ReactElement {
           <p className='font-medium text-balance text-sidebar-foreground'>
             {buildFreely}
           </p>
-          <p className='text-balance text-muted-foreground'>
-            <Trans
-              t={t}
-              i18nKey='shell.reliability'
-              defaults='<brand>NocoReach</brand> puts them into action.'
-              components={{ brand: brandLink }}
-            >
-              {brandLink} puts them into action.
-            </Trans>
-          </p>
+          <p className='text-balance text-muted-foreground'>{reliability}</p>
         </div>
       </div>
     </SidebarFooter>
