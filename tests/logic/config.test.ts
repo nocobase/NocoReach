@@ -126,6 +126,39 @@ describe('application config', () => {
     ]);
   });
 
+  it('resolves the demo reset from deployment settings and publishes only the enabled flag', async () => {
+    const defaults = await resolveStandaloneAppRuntime(appRuntime, {
+      rootDir: templateRootDir,
+      configPath,
+    });
+    expect(defaults.config.get('demoMode.dailyReset')).toEqual({
+      hour: 3,
+      minute: 0,
+      timezone: 'UTC',
+      language: 'en-US',
+    });
+    expect(defaults.config.publicValues().demoMode).toEqual({ enabled: false });
+
+    const runtime = await resolveStandaloneAppRuntime(appRuntime, {
+      rootDir: templateRootDir,
+      configPath,
+      env: {
+        NOCOBASE_DEMO_MODE: 'true',
+        NOCOBASE_DEMO_RESET_HOUR: '4',
+        NOCOBASE_DEMO_RESET_MINUTE: '30',
+        NOCOBASE_DEMO_RESET_TIMEZONE: 'Asia/Shanghai',
+        NOCOBASE_DEMO_RESET_LANGUAGE: 'zh-CN',
+      },
+    });
+    expect(runtime.config.get('demoMode.dailyReset')).toEqual({
+      hour: 4,
+      minute: 30,
+      timezone: 'Asia/Shanghai',
+      language: 'zh-CN',
+    });
+    expect(runtime.config.publicValues().demoMode).toEqual({ enabled: true });
+  });
+
   it('reloads a file-backed configuration explicitly', async () => {
     const runtime = await resolveStandaloneAppRuntime(appRuntime, {
       rootDir: templateRootDir,

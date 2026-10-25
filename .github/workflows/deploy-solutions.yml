@@ -1,0 +1,91 @@
+name: Deploy releases to Solutions
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@c336a2788d9774dccfdeb4823a5058ccc9f07453 # v4.3.0; packageManager selects pnpm
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Check release version and main ancestry
+        run: node scripts/ci/deploy-studio.mjs --check-release
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test --maxWorkers=2 --passWithNoTests=false
+      - run: pnpm build --target linux-x64 --node-version 24 --tar
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: solutions-release-archive
+          path: storage/exports/dist.tar.gz
+          retention-days: 7
+          if-no-files-found: error
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - studio: cn
+            server_variable: SOLUTIONS_CN_STUDIO_SERVER
+            app_url_variable: SOLUTIONS_CN_APP_URL
+            api_key_secret: SOLUTIONS_CN_STUDIO_API_KEY
+          - studio: global
+            server_variable: SOLUTIONS_GLOBAL_STUDIO_SERVER
+            app_url_variable: SOLUTIONS_GLOBAL_APP_URL
+            api_key_secret: SOLUTIONS_GLOBAL_STUDIO_API_KEY
+    concurrency:
+      group: studio-${{ matrix.studio }}-nocoreach
+      cancel-in-progress: false
+    env:
+      STUDIO_APP_ID: nocoreach
+      NB_STUDIO_SERVER: ${{ vars[matrix.server_variable] }}
+      STUDIO_APP_URL: ${{ vars[matrix.app_url_variable] }}
+      STUDIO_TARGET: linux-x64
+      STUDIO_NODE_MAJOR: '24'
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Check deployment configuration
+        env:
+          NB_STUDIO_API_KEY: ${{ secrets[matrix.api_key_secret] }}
+          STUDIO_CLI: ${{ runner.temp }}/studio-cli/node_modules/.bin/nb-studio
+        run: node scripts/ci/deploy-studio.mjs --check-config
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: solutions-release-archive
+          path: storage/exports
+      # beta.58 is the last published npm release containing the Studio CLI.
+      - name: Install nb-studio
+        run: npm install --prefix "$RUNNER_TEMP/studio-cli" --ignore-scripts --no-audit --no-fund @nocobase/studio-cli@1.0.0-beta.58
+      - name: Deploy or request Studio approval
+        env:
+          NB_STUDIO_API_KEY: ${{ secrets[matrix.api_key_secret] }}
+          STUDIO_CLI: ${{ runner.temp }}/studio-cli/node_modules/.bin/nb-studio
+        run: node scripts/ci/deploy-studio.mjs

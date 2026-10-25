@@ -40,13 +40,7 @@ export const demoSettingsComponents: DemoSettingsComponents = {
   Button,
   Card: ({ size: _size, ...props }) => <Section {...props} />,
   CardHeader: ({ className, ...props }) => (
-    <div
-      {...props}
-      className={cn(
-        'grid min-w-0 gap-1 sm:has-[[data-slot=card-action]]:grid-cols-[minmax(0,1fr)_auto]',
-        className,
-      )}
-    />
+    <div {...props} className={cn('grid min-w-0 gap-1', className)} />
   ),
   CardTitle: ({ children, ...props }) => (
     <div {...props}>
@@ -59,21 +53,5 @@ export const demoSettingsComponents: DemoSettingsComponents = {
       className={cn('text-sm text-muted-foreground', className)}
     />
   ),
-  CardAction: ({ className, ...props }) => (
-    <div
-      {...props}
-      data-slot='card-action'
-      className={cn(
-        'flex flex-wrap items-center gap-2 sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:justify-self-end',
-        className,
-      )}
-    />
-  ),
   CardContent: (props: ComponentProps<'div'>) => <div {...props} />,
-  CardFooter: ({ className, ...props }) => (
-    <div
-      {...props}
-      className={cn('flex flex-wrap items-center gap-2 pt-4', className)}
-    />
-  ),
 };
