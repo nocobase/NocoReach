@@ -3865,6 +3865,7 @@
   "packagesSource.pickNpmPypiDockerHub": "Pick npm, PyPI, or Docker Hub",
   "projectKnowledge.pickFile": "Pick a file",
   "projects.pickChineseEnglish": "Pick Chinese or English",
+  "projects.pickContentLanguage": "Pick one of the listed languages",
   "keyword.pickKeywords": "Pick keywords",
   "taskExecution.pickContentChangeResearch": "Pick content change or research",
   "playbook.pickCategory": "Pick a category",
