@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — The translating step is named Translate
+
+- While an article's other languages are translated from its approved primary one, the Agent's step the task went back to reads Translate (Agent Translate) in the task's step tags, and the current step in Tasks and Tasks › By Agent says the Agent is translating. Once the translations come back for review, the step is named as before.
+
 ## Unreleased — Skills: playbooks as tags
 
 - Skills › Used in playbooks shows each playbook that names the Skill as a grey tag instead of a run of "Playbook · Step" text. Up to three show in full and the rest are counted as +N. Hovering over the cell lists the steps.

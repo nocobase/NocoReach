@@ -6937,6 +6937,7 @@
   "articleTask.translateAfter": "{0} se traducirá cuando se apruebe {1}.",
   "articleTask.approveTranslate": "Aprobar y traducir",
   "articleTask.translating": "El agente está traduciendo a: {0}",
+  "articleTask.translateStep": "Traducir",
   "articleTask.approvedPrimary": "aprobó el idioma principal e inició la traducción",
   "articleTask.updateArticle": "Actualizar artículo",
   "articleTask.asDraft": "Guardar como borrador",

@@ -7019,6 +7019,7 @@
   "articleTask.translateAfter": "{0} sẽ được dịch sau khi {1} được duyệt.",
   "articleTask.approveTranslate": "Duyệt và dịch",
   "articleTask.translating": "Tác nhân AI đang dịch sang {0}",
+  "articleTask.translateStep": "Dịch",
   "articleTask.approvedPrimary": "đã duyệt ngôn ngữ chính và bắt đầu dịch",
   "articleTask.updateArticle": "Cập nhật bài viết",
   "articleTask.asDraft": "Lưu dạng bản nháp",

@@ -7019,6 +7019,7 @@
   "articleTask.translateAfter": "{0} akan diterjemahkan setelah {1} disetujui.",
   "articleTask.approveTranslate": "Setujui dan terjemahkan",
   "articleTask.translating": "Agen sedang menerjemahkan ke {0}",
+  "articleTask.translateStep": "Terjemahkan",
   "articleTask.approvedPrimary": "menyetujui bahasa utama dan memulai terjemahan",
   "articleTask.updateArticle": "Perbarui artikel",
   "articleTask.asDraft": "Simpan sebagai draf",

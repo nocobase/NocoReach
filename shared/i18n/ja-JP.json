@@ -6937,6 +6937,7 @@
   "articleTask.translateAfter": "{1}の承認後に{0}へ翻訳します。",
   "articleTask.approveTranslate": "承認して翻訳",
   "articleTask.translating": "エージェントが{0}に翻訳しています",
+  "articleTask.translateStep": "翻訳",
   "articleTask.approvedPrimary": "主言語を承認し、翻訳を開始しました",
   "articleTask.updateArticle": "記事を更新",
   "articleTask.asDraft": "下書きとして保存",
