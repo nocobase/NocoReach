@@ -64,7 +64,9 @@ export default function DomainOverview({ embedded = false }: { embedded?: boolea
   const market = getMarkets().find((m) => String(m.locationCode) === params.get('loc') && m.language === params.get('lang')) ?? getMarkets()[0];
   const [form, setForm] = useState({ target: params.get('d') ?? '', market });
   const tab = params.get('tab') === 'pages' ? 'pages' : 'keywords';
-  useEffect(() => { if (!form.target && own[0]) setForm((f) => ({ ...f, target: own[0] })); }, [form?.target, own]);
+  const firstOwn = own[0];
+  // Prefill on a domain change while preserving a field the user deliberately clears.
+  useEffect(() => { if (firstOwn) setForm((f) => f.target ? f : ({ ...f, target: firstOwn })); }, [firstOwn]);
   const loadRecent = () => call<Recent[]>('list').then(setRecent).catch(() => setRecent([]));
   useEffect(() => {
     void keywordRequest<KeywordConnectionState>('status').then(setConnection).catch(() => setConnection({ configured: false, verifiedAt: null, monthlyBudgetUsd: 5 }));

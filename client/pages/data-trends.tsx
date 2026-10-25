@@ -6,7 +6,7 @@ import { usePageTab } from '#hooks/use-page-tab';
 // months, each term's last four weeks against the four before, and the searches related to the product (rising ones new
 // this week marked); picked searches go to the Agent as one content task. 关注的关键词 (2026-10-04): keywords added on
 // this page, each on its own line (trends-keywords.tsx).
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { ExternalLink, LoaderCircle, TrendingUp } from 'lucide-react';
@@ -155,7 +155,9 @@ export default function DataTrends() {
 function Rivals({ projectId, view, onView }: { projectId: number; view: View; onView: (v: View) => void }) {
   const navigate = useNavigate();
   const list = view.competitors ?? [], max = view.maxRivals ?? 4, terms = view.terms ?? [];
-  const included = list.filter((c) => c.included).map((c) => c.id);
+  // Preserve an unsaved choice when polling returns the same membership.
+  const includedKey = JSON.stringify(list.filter((c) => c.included).map((c) => c.id));
+  const included = useMemo(() => JSON.parse(includedKey) as string[], [includedKey]);
   const [draft, setDraft] = useState<string[]>(included);
   const [busy, setBusy] = useState(false);
   useEffect(() => setDraft(included), [included]);
