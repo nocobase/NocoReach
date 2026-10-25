@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Deploy releases to Solutions
+
+- Add a release-tag workflow that tests and builds one archive, then deploys it independently to the existing NocoReach apps on Solutions China and Solutions Global using dedicated repository variables and secrets. Keep the internal Studio and demo deployment triggers unchanged.
+- Reject release tags that do not match the application version, unmerged release commits, mismatched checkouts and demo release targets before uploading. Reuse Studio approval handling and active-release, checksum and health verification.
+
 ## Unreleased — The translating step is named Translate
 
 - While an article's other languages are translated from its approved primary one, the Agent's step the task went back to reads Translate (Agent Translate) in the task's step tags, and the current step in Tasks and Tasks › By Agent says the Agent is translating. Once the translations come back for review, the step is named as before.
