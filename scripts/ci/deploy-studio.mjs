@@ -123,6 +123,37 @@ export function validateConfig(env) {
     );
   }
 }
+export function validateRelease(env, version, execute = execFileSync) {
+  assert.equal(
+    deploymentApp(env),
+    'nocoreach',
+    'Release tags can only deploy the regular application',
+  );
+  assert(
+    ['push', 'workflow_dispatch'].includes(env.GITHUB_EVENT_NAME),
+    'Release deployment requires a tag push or manual dispatch',
+  );
+  assert(
+    typeof version === 'string' && /^\d+\.\d+\.\d+(?:-[\w.]+)?$/u.test(version),
+    'package.json has no release version',
+  );
+  assert.equal(
+    env.GITHUB_REF,
+    `refs/tags/v${version}`,
+    'Release tag must match package.json version',
+  );
+  const sha = execute('git', ['rev-parse', 'HEAD'], {
+    encoding: 'utf8',
+  }).trim();
+  assert.equal(sha, env.GITHUB_SHA, 'Checkout does not match release commit');
+  try {
+    execute('git', ['merge-base', '--is-ancestor', 'HEAD', 'origin/main'], {
+      stdio: 'pipe',
+    });
+  } catch {
+    throw new Error('Release commit must belong to origin/main');
+  }
+}
 export function validateHealth(health, appId) {
   assert.equal(health.ok, true, 'Health endpoint did not report ok=true');
   assert.equal(
@@ -349,13 +380,21 @@ async function main() {
       appendFileSync(process.env.GITHUB_STEP_SUMMARY, text);
   };
   try {
+    const releaseOnly = process.argv.includes('--check-release');
+    const releaseRef = process.env.GITHUB_REF?.startsWith('refs/tags/');
+    if (releaseOnly || releaseRef) {
+      const { version } = JSON.parse(readFileSync('package.json', 'utf8'));
+      validateRelease(process.env, version);
+      if (releaseOnly) return;
+    }
     validateConfig(process.env);
     assert(
-      process.env.GITHUB_REF === 'refs/heads/main' ||
+      releaseRef ||
+        process.env.GITHUB_REF === 'refs/heads/main' ||
         (deploymentApp(process.env) === 'nocoreach-demo' &&
           process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' &&
           process.env.GITHUB_REF?.startsWith('refs/heads/demo/')),
-      'Deploy production only from main; demo branches require manual demo deployment',
+      'Deploy only from main or a verified release tag; demo branches require manual demo deployment',
     );
     if (process.argv.includes('--check-config')) return;
     const sha = execFileSync('git', ['rev-parse', 'HEAD'], {
