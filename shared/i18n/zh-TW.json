@@ -3837,6 +3837,7 @@
   "packagesSource.pickNpmPypiDockerHub": "請選擇 npm、PyPI 或 Docker Hub",
   "projectKnowledge.pickFile": "請選擇一個檔案",
   "projects.pickChineseEnglish": "請選擇中文或英文",
+  "projects.pickContentLanguage": "請選擇清單中的語言",
   "keyword.pickKeywords": "請選擇關鍵字",
   "taskExecution.pickContentChangeResearch": "請選擇內容修改或調研",
   "playbook.pickCategory": "請選擇分類",
