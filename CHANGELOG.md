@@ -21,8 +21,8 @@
 
 ## Unreleased — Deploy releases to Solutions
 
-- Add a release-tag workflow that tests and builds one archive, then deploys it independently to the existing NocoReach apps on Solutions China and Solutions Global using dedicated repository variables and secrets. Keep the internal Studio and demo deployment triggers unchanged.
-- Reject release tags that do not match the application version, unmerged release commits, mismatched checkouts and demo release targets before uploading. Reuse Studio approval handling and active-release, checksum and health verification.
+- Add a release-tag workflow that tests and builds one archive, then deploys it independently to the existing `reach` apps on Solutions China and Solutions Global using dedicated repository variables and secrets. Build preflight and deployment use `reach`, fixing `APP_NOT_FOUND` from the former `nocoreach` target. Keep the internal Studio and demo deployment triggers unchanged.
+- Reject release tags that do not match the application version, unmerged release commits, mismatched checkouts and the internal `nocoreach-demo` target before uploading. Reuse Studio approval handling and active-release, checksum and health verification.
 
 ## Unreleased — The translating step is named Translate
 
