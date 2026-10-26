@@ -6,6 +6,7 @@ import { timestamp } from '../../shared/timestamps.js';
 // may be a Studio app whose SQLite nothing else reaches. Rows keep their ids and timestamps. Classic user ids (numbers)
 // become NocoBase 3 accounts (strings): matched by email, then by username, and the classic administrators that match
 // nobody become the person importing. Settings go into nrVariables, secrets sealed with this application's keys.
+import { STARTS_KEY } from './execution/restarts.js';
 import type { LegacyApp } from './legacy/app.js';
 import type { LegacyContext } from './legacy/context.js';
 import { toFilter } from './legacy/filters.js';
@@ -94,18 +95,19 @@ export const IMPORT_TABLES: Readonly<
 
 /**
  * Snapshots this application writes itself: the daily analysis schedule's marker and the record of each firing
- * (server/providers/nocoreach.ts), and the once-only data migrations' markers (`nr-migrations:*`), written at its first
- * start. The classic ones pointed at a classic workflow, or recorded the same migrations done on the classic side.
- * Neither is imported, counted as data, or cleared.
+ * (server/providers/nocoreach.ts), the once-only data migrations' markers (`nr-migrations:*`), and the deployment
+ * restart history. These belong to this installation: none is imported, counted as business data, or cleared.
  */
 export const isAppOwnedSnapshot = (key: unknown) =>
   typeof key === 'string' &&
-  (key === 'daily-analysis:workflow' ||
+  (key === STARTS_KEY ||
+    key === 'daily-analysis:workflow' ||
     key.startsWith('daily-analysis:occurrence:') ||
     key.startsWith('nr-migrations:'));
 
 const APP_OWNED_FILTER = {
   $or: [
+    { key: STARTS_KEY },
     { key: 'daily-analysis:workflow' },
     { key: { $startsWith: 'daily-analysis:occurrence:' } },
     { key: { $startsWith: 'nr-migrations:' } },
@@ -390,7 +392,7 @@ export function registerClassicImport(nr: ImportRuntime) {
         );
       if (total)
         await db.sequelize.transaction(async (t) => {
-          // The application's own schedule records stay: taken out, everything cleared, put back.
+          // The application's own runtime records stay: taken out, everything cleared, put back.
           const own = (
             await db
               .getRepository('nrSnapshots')
