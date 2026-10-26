@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Demo Mode HTTPS cookie defaults
+
+- Upgrade Demo Mode to `0.2.0-beta.2`, which supplies partitioned authentication cookie defaults for HTTPS demo deployments. Keep NocoReach's existing demo cookie configuration and companion package versions.
+
 ## Unreleased — Verify reused Studio releases on repeated deployments
 
 - Repeated deployments of the same commit accept Studio's explicit `reused` response after reading and verifying the stored release. Pin that release's checksum through deployment and final verification instead of comparing it with a newly rebuilt archive; fresh uploads still require the local archive's exact SHA-256. CI summaries distinguish the rebuilt archive from the reused release, and approval and health checks remain in place.

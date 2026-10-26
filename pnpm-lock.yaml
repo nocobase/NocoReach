@@ -42,8 +42,8 @@ importers:
         specifier: ^1.0.0-beta.16
         version: 1.0.0-beta.16(b001e203c3db6c2aede3c53444df43a7)
       '@nocobase/app-plugin-demo-mode':
-        specifier: 0.2.0-beta.1
-        version: 0.2.0-beta.1(c1d2c1a0addc764a721228acaba39218)
+        specifier: 0.2.0-beta.2
+        version: 0.2.0-beta.2(c1d2c1a0addc764a721228acaba39218)
       '@nocobase/app-plugin-file':
         specifier: ^1.0.0-beta.26
         version: 1.0.0-beta.26(a163d18c17b8dfe272fc4e8820529572)
@@ -1897,8 +1897,8 @@ packages:
       '@nocobase/app-server': ^3.0.0-beta.0
       '@nocobase/db': ^1.0.0-beta.21
 
-  '@nocobase/app-plugin-demo-mode@0.2.0-beta.1':
-    resolution: {integrity: sha512-wAvRCvgSXKJ/RStfs/nLA4g0C495bxknKe8pkKs0kSnOfdgFINtIl/btI+zee/qs9Bk5wLsonaAGJwOLBTKnvA==}
+  '@nocobase/app-plugin-demo-mode@0.2.0-beta.2':
+    resolution: {integrity: sha512-WIjgUxn53c5VbwpgUJC34dCHYfQirK52f00odBJ8TC+/ub01OTwm/3vNkd2DneAHaZl5Pg3ZmUt+hsk1c/Y06Q==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
       '@base-ui/react': ^1.6.0
@@ -9043,7 +9043,7 @@ snapshots:
       hono: 4.13.13
       zod: 4.6.5
 
-  '@nocobase/app-plugin-demo-mode@0.2.0-beta.1(c1d2c1a0addc764a721228acaba39218)':
+  '@nocobase/app-plugin-demo-mode@0.2.0-beta.2(c1d2c1a0addc764a721228acaba39218)':
     dependencies:
       '@base-ui/react': 1.8.0(@date-fns/tz@1.5.0)(@types/react@19.3.0)(date-fns@4.4.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@nocobase/app-cli': 1.0.0-beta.27(4fb751e1f3b93216751a23de54c5c3b0)
