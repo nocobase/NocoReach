@@ -1,9 +1,5 @@
 # NocoReach Changelog
 
-## Unreleased — Deploy Solutions releases to the existing reach apps
-
-- Correct the Solutions China and Global release workflow to target `reach`, the existing App ID behind `/reach/`, in both build preflight and deployment. The shared deployment script accepts `reach` for release tags while preserving the internal `nocoreach` and manually deployed `nocoreach-demo` targets. This fixes `APP_NOT_FOUND` deployments that left Solutions serving an older build; release identity, checksum, approval and health checks remain in place.
-
 ## Unreleased — Verify reused Studio releases on repeated deployments
 
 - Repeated deployments of the same commit accept Studio's explicit `reused` response after reading and verifying the stored release. Pin that release's checksum through deployment and final verification instead of comparing it with a newly rebuilt archive; fresh uploads still require the local archive's exact SHA-256. CI summaries distinguish the rebuilt archive from the reused release, and approval and health checks remain in place.
@@ -25,8 +21,8 @@
 
 ## Unreleased — Deploy releases to Solutions
 
-- Add a release-tag workflow that tests and builds one archive, then deploys it independently to the existing NocoReach apps on Solutions China and Solutions Global using dedicated repository variables and secrets. Keep the internal Studio and demo deployment triggers unchanged.
-- Reject release tags that do not match the application version, unmerged release commits, mismatched checkouts and demo release targets before uploading. Reuse Studio approval handling and active-release, checksum and health verification.
+- Add a release-tag workflow that tests and builds one archive, then deploys it independently to the existing `reach` apps on Solutions China and Solutions Global using dedicated repository variables and secrets. Build preflight and deployment use `reach`, fixing `APP_NOT_FOUND` from the former `nocoreach` target. Keep the internal Studio and demo deployment triggers unchanged.
+- Reject release tags that do not match the application version, unmerged release commits, mismatched checkouts and the internal `nocoreach-demo` target before uploading. Reuse Studio approval handling and active-release, checksum and health verification.
 
 ## Unreleased — The translating step is named Translate
 
