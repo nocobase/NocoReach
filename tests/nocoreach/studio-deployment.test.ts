@@ -98,7 +98,7 @@ function createReusedScenario(appId: string) {
   return scenario;
 }
 
-describe.each(['nocoreach', 'nocoreach-demo'])(
+describe.each(['nocoreach', 'nocoreach-demo', 'reach'])(
   'Studio deployment to %s',
   (appId) => {
     const scenario = () => createScenario(appId);

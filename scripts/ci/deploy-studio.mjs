@@ -81,7 +81,7 @@ export function parseEnvelope(text) {
 export function deploymentApp(env) {
   const appId = env.STUDIO_APP_ID ?? 'nocoreach';
   assert(
-    ['nocoreach', 'nocoreach-demo'].includes(appId),
+    ['nocoreach', 'nocoreach-demo', 'reach'].includes(appId),
     'Unsupported Studio application',
   );
   if (appId === 'nocoreach-demo')
@@ -124,10 +124,9 @@ export function validateConfig(env) {
   }
 }
 export function validateRelease(env, version, execute = execFileSync) {
-  assert.equal(
-    deploymentApp(env),
-    'nocoreach',
-    'Release tags can only deploy the regular application',
+  assert(
+    ['nocoreach', 'reach'].includes(deploymentApp(env)),
+    'Release tags can only deploy nocoreach or reach',
   );
   assert(
     ['push', 'workflow_dispatch'].includes(env.GITHUB_EVENT_NAME),

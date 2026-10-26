@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Deploy Solutions releases to the existing reach apps
+
+- Correct the Solutions China and Global release workflow to target `reach`, the existing App ID behind `/reach/`, in both build preflight and deployment. The shared deployment script accepts `reach` for release tags while preserving the internal `nocoreach` and manually deployed `nocoreach-demo` targets. This fixes `APP_NOT_FOUND` deployments that left Solutions serving an older build; release identity, checksum, approval and health checks remain in place.
+
 ## Unreleased — Verify reused Studio releases on repeated deployments
 
 - Repeated deployments of the same commit accept Studio's explicit `reused` response after reading and verifying the stored release. Pin that release's checksum through deployment and final verification instead of comparing it with a newly rebuilt archive; fresh uploads still require the local archive's exact SHA-256. CI summaries distinguish the rebuilt archive from the reused release, and approval and health checks remain in place.

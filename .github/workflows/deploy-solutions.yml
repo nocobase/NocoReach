@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  STUDIO_APP_ID: reach
+
 jobs:
   build:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -55,10 +58,9 @@ jobs:
             app_url_variable: SOLUTIONS_GLOBAL_APP_URL
             api_key_secret: SOLUTIONS_GLOBAL_STUDIO_API_KEY
     concurrency:
-      group: studio-${{ matrix.studio }}-nocoreach
+      group: studio-${{ matrix.studio }}-reach
       cancel-in-progress: false
     env:
-      STUDIO_APP_ID: nocoreach
       NB_STUDIO_SERVER: ${{ vars[matrix.server_variable] }}
       STUDIO_APP_URL: ${{ vars[matrix.app_url_variable] }}
       STUDIO_TARGET: linux-x64
