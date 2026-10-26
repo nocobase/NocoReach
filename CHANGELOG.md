@@ -5,6 +5,10 @@
 - Rewrite the English, Chinese and Japanese READMEs after the NocoReach page on the NocoBase website and the promo film: the film's short line over "AI growth operations platform · Built on NocoBase Core", before and after, the five-step loop, then daily analysis, opportunities, playbooks and tasks, review, results, data and the AI team, with Try it online links and NocoBase Core wording from the product definition. The comparison table and the repository-and-PR framing are gone.
 - Replace the README screenshots with the website's figures (fictional Acme data, the same as the film) as WebP, seven per language.
 
+## Unreleased — New slogan on the sign-in page and sidebar
+
+- The sign-in page title and the sidebar footer read "AI finds growth opportunities. / Agents put them into action." (AI 找出增长机会，/ 交给 Agent 执行), as on the website and in the intro film, in all ten UI languages. The sidebar's second line no longer carries the NocoReach name.
+
 ## Unreleased — The demo signs in inside the website
 
 - A demo deployment (`NOCOBASE_DEMO_MODE=true`) sets its sign-in cookies with `SameSite=None; Secure; Partitioned` (`auth.advanced.defaultCookieAttributes`), so the demo embedded in the website's NocoReach page keeps the session instead of returning to Sign in. Partitioned cookies stay with the embedding site; other deployments keep the default `SameSite=Lax` cookies.

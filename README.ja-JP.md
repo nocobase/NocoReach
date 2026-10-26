@@ -4,7 +4,7 @@
 
 <h1 align="center">NocoReach</h1>
 
-<p align="center"><strong>AI が成長の機会を見つけ、エージェントが実行に移す</strong></p>
+<p align="center"><strong>AI が成長の機会を見つけ、エージェントが実行します。</strong></p>
 
 <p align="center">
 AI グロース運用プラットフォーム · NocoBase Core で構築<br>
