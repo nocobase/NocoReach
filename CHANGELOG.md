@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Verify reused Studio releases on repeated deployments
+
+- Repeated deployments of the same commit accept Studio's explicit `reused` response after reading and verifying the stored release. Pin that release's checksum through deployment and final verification instead of comparing it with a newly rebuilt archive; fresh uploads still require the local archive's exact SHA-256. CI summaries distinguish the rebuilt archive from the reused release, and approval and health checks remain in place.
+
 ## Unreleased — New slogan on the sign-in page and sidebar
 
 - The sign-in page title and the sidebar footer read "AI finds growth opportunities. / Agents put them into action." (AI 找出增长机会，/ 交给 Agent 执行), as on the website and in the intro film, in all ten UI languages. The sidebar's second line no longer carries the NocoReach name.

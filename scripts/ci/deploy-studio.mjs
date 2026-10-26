@@ -241,6 +241,12 @@ export function deploymentState(data, appId, releaseId, deploymentId) {
     `Deployment stopped (${status}); ci-phase=deployment-poll; app=${diagnosticId(appId)}; release=${diagnosticId(releaseId)}; deployment=${diagnosticId(deploymentId)}. Inspect Studio deployment logs; no automatic retry or rollback.`,
   );
 }
+function verifyRelease(release, appId, releaseId, sha, checksum) {
+  assert(release?.id === releaseId, 'Release ID mismatch');
+  assert(release?.appId === appId, 'Wrong release app');
+  assert(release?.sourceCommit === sha, 'Deployed commit mismatch');
+  assert(release?.checksum === checksum, 'Release checksum mismatch');
+}
 export async function deploy({
   env,
   metadata,
@@ -254,7 +260,7 @@ export async function deploy({
   validateConfig(env);
   const appId = deploymentApp(env);
   summary(
-    `目标应用：${appId}\n\n访问地址：${env.STUDIO_APP_URL}\n\n提交：${metadata.sha}\n\nSHA-256：${metadata.sha256}\n\n`,
+    `目标应用：${appId}\n\n访问地址：${env.STUDIO_APP_URL}\n\n提交：${metadata.sha}\n\n本次构建包 SHA-256：${metadata.sha256}\n\n`,
   );
   summary('开始上传并请求部署；结果返回前，是否已被 Studio 接收尚不确定。\n\n');
   const uploaded = await cli([
@@ -277,11 +283,22 @@ export async function deploy({
     metadata.sha,
     'Uploaded commit mismatch',
   );
-  assert.equal(
-    uploaded.release?.checksum,
-    metadata.sha256,
-    'Uploaded checksum mismatch',
-  );
+  // Studio reuses the first release of an app/commit, even when rebuilding
+  // that commit produces different archive bytes. Pin its stored checksum.
+  const reused = uploaded.reused === true;
+  const checksum = reused ? uploaded.release.checksum : metadata.sha256;
+  if (reused) {
+    assert(
+      typeof checksum === 'string' && /^[a-f0-9]{64}$/u.test(checksum),
+      'Reused release has an invalid SHA-256 checksum',
+    );
+  } else {
+    assert.equal(
+      uploaded.release?.checksum,
+      checksum,
+      'Uploaded checksum mismatch',
+    );
+  }
   const result = uploaded.deployed;
   assert(result, 'Upload returned no deployment outcome');
   assert.equal(
@@ -296,6 +313,13 @@ export async function deploy({
     'Deployment response missing release ID',
   );
   summary(`Release：${diagnosticId(releaseId)}\n\n`);
+  if (reused) {
+    const release = await cli(['release', 'get', appId, releaseId, '--json']);
+    verifyRelease(release, appId, releaseId, metadata.sha, checksum);
+    summary(
+      `Studio 复用了同一提交的已有发布；后续校验使用该发布的 SHA-256：${checksum}，不使用本次重建包的校验值。\n\n`,
+    );
+  }
   if (result.request) {
     assert.equal(
       result.request.status,
@@ -330,21 +354,12 @@ export async function deploy({
     if (deploymentState(data, appId, releaseId, deploymentId) === 'succeeded') {
       assert.equal(
         data.release?.checksum,
-        metadata.sha256,
-        'Deployed bytes differ from verified archive',
+        checksum,
+        'Deployed bytes differ from verified release',
       );
       // The read contract exposes sourceCommit and checksum; health alone could be an old release.
       const release = await cli(['release', 'get', appId, releaseId, '--json']);
-      assert.equal(
-        release.sourceCommit,
-        metadata.sha,
-        'Deployed commit mismatch',
-      );
-      assert.equal(
-        release.checksum,
-        metadata.sha256,
-        'Release checksum mismatch',
-      );
+      verifyRelease(release, appId, releaseId, metadata.sha, checksum);
       const app = await cli(['app', 'get', appId, '--json']);
       assert.equal(
         app.app?.currentDeploymentId,
@@ -356,7 +371,11 @@ export async function deploy({
         appId,
         { health, summary, wait, now, deadline },
       );
-      summary('部署成功，发布提交与归档校验和一致，健康检查通过。\n\n');
+      summary(
+        reused
+          ? '部署成功，已验证复用发布的提交、校验和及当前部署，健康检查通过。\n\n'
+          : '部署成功，发布提交与归档校验和一致，健康检查通过。\n\n',
+      );
       return 'succeeded';
     }
     await wait(10000);

@@ -35,6 +35,7 @@ function createScenario(appId: string) {
     checksum: metadata.sha256,
   };
   const uploaded = {
+    reused: false,
     superseded: false,
     release,
     deployed: {
@@ -86,6 +87,15 @@ function createScenario(appId: string) {
       timeout: 20000,
     },
   };
+}
+
+function createReusedScenario(appId: string) {
+  const scenario = createScenario(appId);
+  scenario.uploaded.reused = true;
+  scenario.release.checksum = 'c'.repeat(64);
+  scenario.uploaded.release = { ...scenario.release };
+  scenario.deployment.release = { ...scenario.release };
+  return scenario;
 }
 
 describe.each(['nocoreach', 'nocoreach-demo'])(
@@ -143,6 +153,131 @@ describe.each(['nocoreach', 'nocoreach-demo'])(
         expect(options.health).not.toHaveBeenCalled();
       },
     );
+
+    describe('reused releases', () => {
+      it('verifies the stored release and pins its checksum instead of the rebuilt archive', async () => {
+        const { release, options } = createReusedScenario(appId);
+        await expect(deploy(options)).resolves.toBe('succeeded');
+        expect(
+          options.cli.mock.calls.slice(1, 4).map(([args]) => args),
+        ).toEqual([
+          ['release', 'get', appId, release.id, '--json'],
+          ['deploy', 'get', appId, 'deployment-1', '--json'],
+          ['release', 'get', appId, release.id, '--json'],
+        ]);
+        expect(options.health).toHaveBeenCalledWith(
+          `https://apps.example.com/${appId}/api/healthz`,
+          appId,
+        );
+        expect(options.summary).toHaveBeenCalledWith(
+          expect.stringContaining(
+            `已有发布；后续校验使用该发布的 SHA-256：${release.checksum}`,
+          ),
+        );
+        expect(options.summary).toHaveBeenLastCalledWith(
+          expect.stringContaining('已验证复用发布的提交、校验和及当前部署'),
+        );
+      });
+
+      it('verifies a reused release while leaving approval pending', async () => {
+        const { uploaded, options } = createReusedScenario(appId);
+        uploaded.deployed.deployment = null;
+        uploaded.deployed.request = { id: 'request-1', status: 'pending' };
+        await expect(deploy(options)).resolves.toBe('pending');
+        expect(options.cli).toHaveBeenLastCalledWith([
+          'release',
+          'get',
+          appId,
+          uploaded.release.id,
+          '--json',
+        ]);
+        expect(options.health).not.toHaveBeenCalled();
+        expect(options.summary).toHaveBeenLastCalledWith(
+          expect.stringContaining('等待 Studio 审批，尚未上线'),
+        );
+      });
+
+      it.each([false, undefined, 'true'])(
+        'requires an explicit reused=true before accepting another checksum: %s',
+        async (reused) => {
+          const { uploaded, options } = createReusedScenario(appId);
+          Object.assign(uploaded, { reused });
+          await expect(deploy(options)).rejects.toThrow(
+            'Uploaded checksum mismatch',
+          );
+          expect(options.cli).toHaveBeenCalledTimes(1);
+          expect(options.health).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each(['', null, 'secret-ticket\n::error::injected'])(
+        'rejects a malformed reused checksum without echoing it: %j',
+        async (checksum) => {
+          const { uploaded, options } = createReusedScenario(appId);
+          Object.assign(uploaded.release, { checksum });
+          await expect(deploy(options)).rejects.toThrow(
+            'Reused release has an invalid SHA-256 checksum',
+          );
+          expect(options.cli).toHaveBeenCalledTimes(1);
+          expect(options.summary.mock.calls.flat().join(' ')).not.toContain(
+            'secret-ticket',
+          );
+          expect(options.health).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each(['appId', 'sourceCommit'] as const)(
+        'rejects a reused upload with another %s',
+        async (key) => {
+          const { uploaded, options } = createReusedScenario(appId);
+          uploaded.release[key] = 'wrong';
+          await expect(deploy(options)).rejects.toThrow();
+          expect(options.cli).toHaveBeenCalledTimes(1);
+          expect(options.health).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each(['id', 'appId', 'sourceCommit', 'checksum'] as const)(
+        'rejects a stored release whose %s differs from the upload response',
+        async (key) => {
+          const { release, options } = createReusedScenario(appId);
+          release[key] = 'wrong';
+          await expect(deploy(options)).rejects.toThrow();
+          expect(options.cli).not.toHaveBeenCalledWith([
+            'deploy',
+            'get',
+            appId,
+            'deployment-1',
+            '--json',
+          ]);
+          expect(options.health).not.toHaveBeenCalled();
+        },
+      );
+
+      it('rejects deployed bytes that differ from the pinned reused release', async () => {
+        const { deployment, options } = createReusedScenario(appId);
+        deployment.release.checksum = metadata.sha256;
+        await expect(deploy(options)).rejects.toThrow(
+          'Deployed bytes differ from verified release',
+        );
+        expect(options.health).not.toHaveBeenCalled();
+      });
+
+      it.each(['id', 'appId', 'sourceCommit', 'checksum'] as const)(
+        'rechecks the pinned release %s after deployment',
+        async (key) => {
+          const { uploaded, release, deployment, options } =
+            createReusedScenario(appId);
+          options.cli
+            .mockResolvedValueOnce(uploaded)
+            .mockResolvedValueOnce({ ...release })
+            .mockResolvedValueOnce(deployment)
+            .mockResolvedValueOnce({ ...release, [key]: 'wrong' });
+          await expect(deploy(options)).rejects.toThrow();
+          expect(options.health).not.toHaveBeenCalled();
+        },
+      );
+    });
 
     it('rejects a superseded upload', async () => {
       const { uploaded, options } = scenario();
