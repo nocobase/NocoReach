@@ -190,10 +190,13 @@ export function deliveryPlan(
     chosen = translate
       ? translationLocales(data, choice)
       : choiceLocales(data, choice),
-    // Two or more are written primary first, then translated. A single one is sent too (2026-10-27): without it the
-    // server takes the target's first language as the primary and writes every language. A translation always names
-    // its source and the languages to write.
-    send = chosen.length > (translate ? 1 : 0),
+    // Two or more are written primary first, then translated. A single one the person chose out of several is sent
+    // too (2026-10-27): without it the server takes the target's first language as the primary and writes every
+    // language. A target with one language needs none. A translation always names its source and the languages to
+    // write.
+    send =
+      chosen.length > 1 ||
+      (!translate && chosen.length === 1 && Boolean(choice.locales?.length)),
     locales = send ? { locales: chosen } : {};
   if (choice.mode === 'existing' || translate) {
     const saved = Boolean(

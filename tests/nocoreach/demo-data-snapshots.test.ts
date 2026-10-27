@@ -57,6 +57,7 @@ const NON_SNAPSHOT_PREFIXES = new Set([
   'lock',
   'manual',
   'metadata',
+  'missing',
   'mock-google-run',
   'nocobase-editorial-v1',
   'nocoreach',
