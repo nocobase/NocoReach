@@ -605,7 +605,7 @@ test('a sign-in failure names the computer and the tool, and does not push Try a
   const view = mount(data);
   expect(
     screen.getByText(
-      'Office-Mac 上的 Claude Code 没有登录。 Agent 显示“在线”，只说明这台电脑连上了 NocoReach。',
+      'Office-Mac 上的 Claude Code 没有登录。Agent 显示“在线”，只说明这台电脑连上了 NocoReach。',
     ),
   ).toBeVisible();
   expect(

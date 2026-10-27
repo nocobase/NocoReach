@@ -52,11 +52,91 @@ const test = createDemoTest();
 const accountConflictTest = createDemoTest();
 const readOnlyTest = createDemoTest();
 const configurationTest = createDemoTest();
+const entryTest = createDemoTest();
 // Its conversation stays queued, which would block the full cleanup other read-only tests make.
 const conversationTest = createDemoTest();
 const offTest = createDemoTest(false);
 
 const json = { 'Content-Type': 'application/json', origin: 'http://localhost' };
+
+describe('demo visitor entry', () => {
+  const test = entryTest;
+  test('enters existing accounts before generation and keeps signed-in visitors on their account', async ({
+    testApp,
+  }) => {
+    const runtime = testApp.application.container.resolve(nocoReachToken);
+    await runtime.ready;
+    const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+    const specification = await (await admin.fetch('/swagger')).json();
+    expect(Object.keys(specification.paths)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('/demoMode/accounts/signInDefault'),
+      ]),
+    );
+    const users = testApp.application.container.resolve(
+      userManagementServiceToken,
+    );
+    const person = await users.create({
+      name: 'Existing visitor',
+      username: 'existingvisitor',
+      email: 'visitor@example.com',
+      password: 'original-visitor-password',
+    });
+    const accounts = await (await testApp.request('/demoMode/accounts')).json();
+    expect(
+      accounts.data.map((account: { username: string }) => account.username),
+    ).toEqual(
+      expect.arrayContaining([
+        DEFAULT_ADMIN_CREDENTIALS.username,
+        person.username,
+      ]),
+    );
+
+    const entered = await testApp.request('/demoMode/accounts/signInDefault', {
+      method: 'POST',
+      headers: json,
+    });
+    expect(entered.status).toBe(200);
+    expect(await entered.json()).toEqual({ data: { signedIn: true } });
+    const cookie = entered.headers
+      .getSetCookie()
+      .map((value) => value.split(';')[0])
+      .join('; ');
+    expect(
+      (await testApp.request('/demoMode/data', { headers: { cookie } })).status,
+    ).toBe(200);
+
+    const switched = await testApp.request(
+      '/demoMode/accounts/existingvisitor/signIn',
+      {
+        method: 'POST',
+        headers: { ...json, cookie },
+      },
+    );
+    expect(switched.status).toBe(200);
+    const visitorCookie = switched.headers
+      .getSetCookie()
+      .map((value) => value.split(';')[0])
+      .join('; ');
+    const retained = await testApp.request('/demoMode/accounts/signInDefault', {
+      method: 'POST',
+      headers: { ...json, cookie: visitorCookie },
+    });
+    expect(await retained.json()).toEqual({ data: { signedIn: false } });
+    const session = await (
+      await testApp.request('/auth/get-session', {
+        headers: { cookie: visitorCookie },
+      })
+    ).json();
+    expect(session.user.id).toBe(person.id);
+    await signIn(testApp, {
+      email: person.email,
+      password: 'original-visitor-password',
+    });
+    const demo = testApp.application.container.resolve(demoDataToken);
+    expect((await demo.status()).present).toBe(false);
+  });
+});
 
 describe('read-only demo conversations', () => {
   const test = conversationTest;
@@ -262,15 +342,11 @@ describe('read-only demo lifecycle', () => {
     await snapshots.create({
       values: { key: 'project:41', payload: { id: 41, name: 'Old project' } },
     });
-    const demoAdmin = await signIn(testApp, {
-      email: 'admin@nocobase.example',
-      password: 'Demo@2026',
-    });
     const actingAdmin = await connection.repository('user').findOne({
-      filter: { email: 'admin@nocobase.example' },
+      filter: { email: DEFAULT_ADMIN_CREDENTIALS.email },
     });
     expect(
-      (await demoAdmin.fetch('/demoMode/data/reset', post('en-US'))).status,
+      (await admin.fetch('/demoMode/data/reset', post('en-US'))).status,
     ).toBe(200);
     await demo.whenIdle();
     expect(await demo.status()).toMatchObject({
@@ -280,10 +356,10 @@ describe('read-only demo lifecycle', () => {
     });
     expect(
       await connection.repository('user').findOne({
-        filter: { email: 'admin@nocobase.example' },
+        filter: { email: DEFAULT_ADMIN_CREDENTIALS.email },
       }),
     ).toMatchObject({ id: actingAdmin!.id, disabledAt: null });
-    expect((await demoAdmin.fetch('/demoMode/configuration')).status).toBe(200);
+    expect((await admin.fetch('/demoMode/configuration')).status).toBe(200);
     expect(
       (await runtime.plugin.projects.all()).map(
         (p: { name: string }) => p.name,
@@ -529,15 +605,15 @@ describe('read-only demo lifecycle', () => {
       ).status,
     ).toBe(400);
 
-    expect((await demoAdmin.fetch('/demoMode/data/clear', post())).status).toBe(
+    expect((await admin.fetch('/demoMode/data/clear', post())).status).toBe(
       200,
     );
     expect(await runtime.plugin.projects.all()).toEqual([]);
-    expect((await demoAdmin.fetch('/demoMode/data/clear', post())).status).toBe(
+    expect((await admin.fetch('/demoMode/data/clear', post())).status).toBe(
       200,
     );
     expect((await demo.status()).enabled).toBe(true);
-    expect((await demoAdmin.fetch('/demoMode/configuration')).status).toBe(200);
+    expect((await admin.fetch('/demoMode/configuration')).status).toBe(200);
     expect(
       await connection
         .repository('user')
@@ -555,6 +631,16 @@ test('imports the demo through the API and clears all business data while preser
   const demo = testApp.application.container.resolve(demoDataToken);
   expect((await testApp.request('/demoMode/data')).status).toBe(401);
   const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  // An unrelated account named admin must survive generation and resets.
+  const users = testApp.application.container.resolve(
+    userManagementServiceToken,
+  );
+  const existingAccount = await users.create({
+    name: 'Existing account',
+    username: 'admin',
+    email: 'existing-account@example.com',
+    password: 'existing-account-password',
+  });
   // A project made before the demo: requests are read-only in a demo, so it is made outside one.
   await runtime.plugin.projects.create({
     name: 'Own project',
@@ -585,6 +671,15 @@ test('imports the demo through the API and clears all business data while preser
   const status = await demo.status();
   expect(status.failure).toBeNull();
   expect(status).toMatchObject({ present: true, language: 'zh-CN' });
+  expect(status.accounts).toHaveLength(5);
+  expect(status.accounts.map((account) => account.username)).not.toContain(
+    'admin',
+  );
+  expect(
+    (await runtime.plugin.db.access!.authorization.permissionSets.list()).map(
+      (permissionSet) => permissionSet.key,
+    ),
+  ).not.toContain('nr.demo-admin');
   const row = await connection
     .repository('demoModeDatasets')
     .findOne({ filter: { id: 'nocoreach' } });
@@ -905,7 +1000,7 @@ test('imports the demo through the API and clears all business data while preser
     .select(['email', 'disabledAt'])
     .where('email', 'like', '%@nocobase.example')
     .execute();
-  expect(people).toHaveLength(6);
+  expect(people).toHaveLength(5);
   expect(people.every((person) => person.disabledAt)).toBe(true);
   expect(
     (await runtime.plugin.agents.models.services.list()).map((s) => s.title),
@@ -935,17 +1030,21 @@ test('imports the demo through the API and clears all business data while preser
     'sophie',
     'henry',
     'chloe',
-    'admin',
   ]);
-  // The demo's administrator manages the demo itself: its configuration and its data.
-  const administrator = await signIn(testApp, {
-    email: 'admin@nocobase.example',
-    password: 'Demo@2026',
-  });
+  // The existing administrator keeps managing the demo after regeneration.
+  const administrator = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
   expect((await administrator.fetch('/demoMode/configuration')).status).toBe(
     200,
   );
   expect((await administrator.fetch('/demoMode/data')).status).toBe(200);
+  expect(await users.get(existingAccount.id)).toMatchObject({
+    username: 'admin',
+    disabledAt: null,
+  });
+  await signIn(testApp, {
+    email: 'existing-account@example.com',
+    password: 'existing-account-password',
+  });
   const grace = await signIn(testApp, {
     email: 'grace@nocobase.example',
     password: 'grace123',
@@ -987,8 +1086,8 @@ describe('existing account conflicts', () => {
     );
     const own = await users.create({
       name: 'Existing person',
-      username: 'admin',
-      email: 'admin@nocobase.example',
+      username: 'zhouning',
+      email: 'zhouning@nocobase.example',
       password: 'original-password-123',
     });
     const adminId = (await connection.query
@@ -1018,7 +1117,7 @@ describe('existing account conflicts', () => {
       disabledAt: null,
     });
     await signIn(testApp, {
-      email: 'admin@nocobase.example',
+      email: 'zhouning@nocobase.example',
       password: 'original-password-123',
     });
     expect(await runtime.plugin.projects.all()).toEqual([]);
@@ -1029,6 +1128,7 @@ describe('demo configuration permissions', () => {
   const test = configurationTest;
   test('enforces independent read/configure permissions and configuration versions through HTTP', async ({
     testApp,
+    connection,
   }) => {
     const runtime = testApp.application.container.resolve(nocoReachToken);
     await runtime.ready;
@@ -1077,10 +1177,43 @@ describe('demo configuration permissions', () => {
         .status,
     ).toBe(403);
     const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+    // A beta.2 deployment may have a disabled schedule saved beside its write and simulation policies.
+    await connection.query
+      .updateTable('demoModeConfiguration')
+      .set({
+        value: JSON.stringify({
+          schedule: {
+            enabled: false,
+            hour: 8,
+            minute: 15,
+            timezone: 'Asia/Shanghai',
+            language: 'zh-CN',
+          },
+          collections: ['nrTasks'],
+          mocks: { 'nocoreach.runner': false },
+        }),
+      })
+      .where('id', '=', 'default')
+      .execute();
     const before = (await (
       await admin.fetch('/demoMode/configuration')
     ).json()) as { data: { revision: number } };
+    expect(before.data).toMatchObject({
+      schedule: {
+        enabled: true,
+        hour: 3,
+        minute: 0,
+        timezone: 'UTC',
+        language: 'en-US',
+      },
+      collections: ['nrTasks'],
+      mocks: { 'nocoreach.runner': false },
+    });
     const revision = before.data.revision;
+    expect(
+      (await admin.fetch('/demoMode/configuration/schedule', put(revision, {})))
+        .status,
+    ).toBe(404);
     expect(
       (
         await admin.fetch(
@@ -1129,6 +1262,15 @@ describe('disabled demo environment', () => {
     const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
     expect((await admin.fetch('/demoMode/configuration')).status).toBe(404);
     expect((await admin.fetch('/demoMode/data')).status).toBe(404);
+    expect(
+      await (await testApp.request('/demoMode/accounts')).json(),
+    ).toMatchObject({ data: [] });
+    const entry = await testApp.request('/demoMode/accounts/signInDefault', {
+      method: 'POST',
+      headers: json,
+    });
+    expect(await entry.json()).toEqual({ data: { signedIn: false } });
+    expect(entry.headers.get('set-cookie')).toBeNull();
     const demo = testApp.application.container.resolve(demoDataToken);
     await expect(demo.importNow('admin')).rejects.toMatchObject({
       reason: 'DEMO_MODE_REQUIRED',

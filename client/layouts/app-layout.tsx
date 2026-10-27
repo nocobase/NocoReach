@@ -2,6 +2,7 @@ import { OnlineChatProvider } from '../online-agent/context.js';
 import { ChatProvider } from '@nocobase/app-plugin-agents/client/chat';
 import { ChatPanel } from '#extensions/nocobase-agent-chat/chat-panel';
 import { ChatHeaderButton } from '#extensions/nocobase-agent-chat/launchers';
+import { DemoModeMenu } from '@nocobase/app-plugin-demo-mode/client/menu';
 import { useSyncServerLocale } from '@nocobase/app-plugin-i18n/client';
 import { useRef, type ReactElement } from 'react';
 import type { AppClientRegisteredRoute } from '@nocobase/app-client/plugins';
@@ -77,7 +78,7 @@ export function AppLayout({ routes }: AppLayoutProps): ReactElement {
                   />
                 </AppSidebar>
                 <div className='app-brand-surface flex min-w-0 flex-1 flex-col'>
-                  <LayoutHeader className='sticky top-0 z-40 justify-between gap-1 sm:gap-2'>
+                  <LayoutHeader className='sticky top-0 z-40 h-auto min-h-16 flex-wrap justify-between gap-1 py-2 sm:h-16 sm:flex-nowrap sm:gap-2 sm:py-0'>
                     <div className='flex min-w-0 shrink-0 items-center gap-1 sm:shrink sm:gap-3'>
                       <AppSidebarToggle />
                       {/* NocoReach: below md the header has no room for the trail, so a page below another one puts its
@@ -92,13 +93,17 @@ export function AppLayout({ routes }: AppLayoutProps): ReactElement {
                     the page's heading has scrolled away instead of repeating it (see Breadcrumbs). */}
                       <Breadcrumbs denied={denied} scroller={contentRef} />
                     </div>
-                    {/* NocoReach: which project every page works on (classic portal header). The shell has no slot for an
-                  application control, so it sits here, before the template's own actions. */}
-                    {/* Compact brand/project marks keep all header actions reachable on phones. */}
-                    <div className='ml-auto flex min-w-0 items-center gap-1 sm:gap-2'>
-                      <ProjectSwitcher />
-                      <ChatHeaderButton />
+                    <div className='contents sm:ml-auto sm:flex sm:min-w-0 sm:items-center sm:gap-2'>
+                      {/* Demo Mode precedes the project switcher and gets its own phone row. */}
+                      <div className='order-first flex w-full justify-end empty:hidden sm:order-none sm:w-auto'>
+                        <DemoModeMenu />
+                      </div>
+                      {/* Compact project marks keep all header actions reachable on phones. */}
+                      <div className='ml-auto flex min-w-0 items-center gap-1 sm:ml-0 sm:gap-2'>
+                        <ProjectSwitcher />
+                      </div>
                     </div>
+                    <ChatHeaderButton />
                     <HeaderActions />
                   </LayoutHeader>
                   <div className='relative flex min-h-0 flex-1'>

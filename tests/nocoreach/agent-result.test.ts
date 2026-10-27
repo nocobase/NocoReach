@@ -242,3 +242,22 @@ it('asks article runs for a short summary the reviewer reads first, and keeps th
     'release 是给负责人看的发布说明，最多三行',
   );
 });
+
+// 2026-10-27 (T-47): the article was written in the project's language instead of the target's primary one.
+it('tells article runs the article language is the primary one, not the project language, and to rewrite when told so', () => {
+  const rules = resultRules('article').join('\n');
+  expect(rules).toContain(
+    '文章用哪种语言写只看 data.article.languages，和 data.language 无关',
+  );
+  expect(rules).toContain('data.language 是项目语言，只用于 content、summary');
+  expect(rules).toContain(
+    '以及主语言 data.article.languages.primary 的 title 和 body',
+  );
+  expect(rules).toContain('phase 为 all 时一次写 languages.write');
+  // The readable rejection is a writing instruction, not a setting to fix.
+  expect(rules).toContain('不是配置问题，也不要因此报告失败');
+  expect(rules).toContain('不受“保留正文、只修正格式”的限制');
+  expect(resultRules('plan').join('\n')).not.toContain(
+    'data.article.languages',
+  );
+});

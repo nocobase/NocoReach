@@ -80,6 +80,8 @@ const envelope = z.object({
 export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
   return [
     '最终回答必须是完整 JSON：{ok:boolean,content:string,pr?:object,merged?:{sha:string},error?:string,message?:string}。失败 ok=false；不要在 JSON 外加文字。',
+    // The codes say whose problem a failure is (shared/run-failure.ts); the task page turns them into what to do.
+    '失败时 error 写原因代码：missing_tool（电脑上缺少这一步离不开的工具）、tool_signed_out（这一步离不开的工具没有登录或没有权限）、quota_exhausted（额度用完或被限流），其他原因写 agent_failed；message 用负责人看得懂的一句话说明缺少什么、需要在电脑上做什么，不写命令输出。已经拿到的内容仍放在 content（研究可同时返回 report），负责人可以直接使用，再试时也会交给你接着做。',
     ...(typeof resultKind === 'string'
       ? [
           `本次成果类型是 ${String(resultKind)}。成功时 content 是完整 Markdown 正文，另必须返回 report:{kind:"${String(resultKind)}",sources:[{title,url}|{title,material}],asOf:string,uncertainties:[string]}。sources 只列实际读取的来源，asOf 写资料覆盖或抓取时间，不确定和未验证事项放 uncertainties，无则空数组。`,
@@ -102,10 +104,14 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
           'data.article.source 是当前源稿文件（JSON：id、slug、status 和 locales 下各语言的 title、description、body，body 为 Markdown），先完整读取，改写时在源稿基础上修改。data.article.action 为 create 时 source 为 null，是新文章。',
           'article 成功必须返回 article:{slug?,status?,locales:{<语言>:{title?,description?,body?}},verifyText?,summary?}；verifyText 和 summary 都放在 article 里面。语言只能取 data.article.target.locales，字段只能取 data.article.target.fields 中该语言支持的字段。',
           'status 只能是 draft 或 published，仅在 data.article.target.status 为 true 时有效：新文章默认 draft，任务明确要求直接公开时才写 published；改写已有文章时不要改变状态，除非任务明确要求。提交前先用 JSON 解析器检查结果是合法 JSON。',
-          '新文章必须给出 slug（小写字母、数字和连字符，最多 200 字符），以及第一个语言的 title 和 body。改写已有文章只返回实际修改的语言和字段，未修改的不要返回；body 必须是该语言的完整正文，不是片段。title 最多 300 字符，description 最多 2000 字符。',
+          '新文章必须给出 slug（小写字母、数字和连字符，最多 200 字符），以及主语言 data.article.languages.primary 的 title 和 body。改写已有文章只返回实际修改的语言和字段，未修改的不要返回；body 必须是该语言的完整正文，不是片段。title 最多 300 字符，description 最多 2000 字符。',
           'verifyText 是发布后能在页面上找到的独特短句，取自修改后的标题或正文原文，8-200 字符；没有合适的就省略。',
-          'data.article.languages 存在时只写它指定的语言：phase 为 primary 时只写主语言 languages.primary，其他语言（languages.others）在审核通过后再翻译，这次不要写、不要返回；按审核意见修改时也只改主语言。',
-          'phase 为 translate 时，languages.approved 是已经审核通过的主语言版本（title、description、body）：把它翻译成 languages.write 里的每种语言，只返回这些语言，不要改主语言。翻译要忠实于原意，保持段落、标题层级、Markdown、链接和图片不变，用当地读者习惯的说法，不要逐字硬译；产品名、代码和专有名词保持原样。改已有文章时只翻译 languages.approved.fields 列出的字段，新文章翻译全部字段。summary 写翻译了哪些语言，以及需要人留意的地方（如某个说法没有对应的本地用语）。',
+          // The article's language is never the project's (2026-10-27, T-47: with the project, the brief and the
+          // outline in Chinese, the Agent wrote a Chinese-only article for a target whose first language is English).
+          '文章用哪种语言写只看 data.article.languages，和 data.language 无关。data.language 是项目语言，只用于 content、summary 这些给审核人看的说明；任务标题和说明、大纲、上一步的成果、留言和资料用什么语言，都不改变文章的语言，需要时先理解其中的意思，再用文章的语言来写。locales 的键是语言代码，每种语言的 title、description、body 都要真的用这种语言写，例如 en 用英语、zh 用中文、ja 用日语。',
+          'phase 为 primary 时只写主语言 languages.primary，其他语言（languages.others）在审核通过后再翻译，这次不要写、不要返回；按审核意见修改时也只改主语言。phase 为 all 时一次写 languages.write 里需要的语言，新文章至少要有主语言。',
+          'task result 提示语言不符时（例如“新文章必须有英语（en）的标题和正文，这次只写了：中文（zh）”），说明文章写成了别的语言，不是配置问题，也不要因此报告失败：按提示用要求的语言重写标题、摘要和正文，再重新提交。这种情况不受“保留正文、只修正格式”的限制。',
+          'phase 为 translate 时，languages.approved 是要翻译的原文（title、description、body），即已经审核通过的主语言版本，或者翻译已发布文章时文章现在的原文：把它翻译成 languages.write 里的每种语言，只返回这些语言，不要改主语言。翻译要忠实于原意，保持段落、标题层级、Markdown、链接和图片不变，用当地读者习惯的说法，不要逐字硬译；产品名、代码和专有名词保持原样。改已有文章时只翻译 languages.approved.fields 列出的字段，新文章翻译全部字段。summary 写翻译了哪些语言，以及需要人留意的地方（如某个说法没有对应的本地用语）。',
           'summary 必填，是审核人最先看到的说明：纯文本，最多三行，用读者能懂的话说这次改了什么；按审核意见修改时先说按意见做了什么，例如“按你的意见换了 5 张截图（NocoBase、Teable）；标题和摘要沿用上一版”。不要写时间戳、规则名、证据细节，也不要重复改前改后的标题和摘要，审核页会显示文章预览和逐项对比。',
           'content 是完整的修改说明（Markdown），审核人需要时才展开：列出改动的语言、字段、理由和依据。',
         ]

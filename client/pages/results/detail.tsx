@@ -10,6 +10,7 @@ import { nocobaseClient as api, NocoReachHttpError } from '#lib/nocoreach-api';
 import { useProject } from '../reach-data.js';
 import type { ResultDetail } from './types.js';
 import { Comparison } from './comparison.js';
+import { FoundBy } from '../found-by.js';
 const withoutDay = (search: string) => {
   const params = new URLSearchParams(search);
   params.delete('day');
@@ -161,6 +162,17 @@ function Detail({ projectId, taskId }: { projectId: string; taskId: string }) {
                   {$t('results.originalTask')}
                 </Link>
               </dd>
+              {data.task.found &&
+                (data.task.found.by === 'ai' || data.task.found.name) && (
+                  <>
+                    <dt className='text-muted-foreground'>
+                      {$t('taskDetail.propSource')}
+                    </dt>
+                    <dd>
+                      <FoundBy source={data.task.found} className='text-sm' />
+                    </dd>
+                  </>
+                )}
             </dl>
             <section className='flex flex-col gap-2'>
               <div className='flex items-center gap-3'>

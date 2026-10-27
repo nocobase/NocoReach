@@ -1,9 +1,9 @@
 // @ts-nocheck
 import { randomUUID } from 'node:crypto';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
-import { supportsStatus, type ArticleSnapshot } from '../../../shared/article-publishing.js';
+import { ARTICLE_FIELDS, articleLocales, supportsStatus, translationDefault, type ArticleSnapshot } from '../../../shared/article-publishing.js';
 import type { ArticleTargets } from '../articles/targets.js';
-import { articlePages, verifyPhrase, type ArticleDelivery, type ArticleProposal, type PublishOutcome } from '../articles/delivery.js';
+import { articlePages, draftRejection, primaryOnly, verifyPhrase, type ArticleDelivery, type ArticleProposal, type PublishOutcome } from '../articles/delivery.js';
 import { ArticleError, providerErrorKey } from '../articles/provider.js';
 import { fail, projectWork, type Artifact, type Work } from './model';
 
@@ -161,8 +161,9 @@ export class ArticleFlow {
    * Decide at start: the linked article; else a new article on the chosen target (`{ targetId }`); with nothing chosen,
    * the playbook's target, or the default target for a blog post. `'repo'` keeps the pull request. `also` lists other
    * targets: a linked article's slug found there (pre-read) is updated, otherwise the article is created there.
+   * `translate` (a translation playbook) starts the linked article's translation instead (startTranslation).
    */
-  async startDelivery(project: string, taskId: string, w: Work, playbookId: string, changes: boolean, choice: any, tx: any, pre: any = {}) {
+  async startDelivery(project: string, taskId: string, w: Work, playbookId: string, changes: boolean, choice: any, tx: any, pre: any = {}, translate?: { by: string; at: string }) {
     if (!changes || choice === 'repo') return;
     const targets = this.targets(project);
     const linked = w.article?.targetId ? targets.find((t) => t.id === w.article.targetId) : undefined;
@@ -177,7 +178,8 @@ export class ArticleFlow {
       target = (entry && targets.find((t) => t.id === entry)) || (playbookId === 'blog-post' ? targets.find((t) => t.default) || targets[0] : undefined);
     }
     if (!target) return;
-    const ids = Array.isArray(choice?.also) ? [...new Set(choice.also.filter((x) => typeof x === 'string' && x !== target.id))] : [];
+    // A translation publishes to the article's own target only.
+    const ids = !translate && Array.isArray(choice?.also) ? [...new Set(choice.also.filter((x) => typeof x === 'string' && x !== target.id))] : [];
     if (ids.length > MAX_ALSO) return fail(systemMessageText('articles.tooManyTargets'), 400);
     if (ids.some((id) => !targets.some((t) => t.id === id))) return fail(systemMessageText('articles.targetMissing'), 409);
     // The slugs were looked up before the lock: they must still be the linked article's.
@@ -196,6 +198,29 @@ export class ArticleFlow {
     // task started before, or by a client that sends none) the Agent writes every language at once, as it always did.
     const locales = Array.isArray(choice?.locales) ? [...new Set<string>(choice.locales.filter((l: unknown) => typeof l === 'string' && target.locales.includes(l)))] : [];
     w.delivery = { kind: 'article', targetId: target.id, articleId: linked ? w.article.articleId || null : null, sourceKey: linked ? w.article.sourceKey || null : null, ...(also.length ? { also } : {}), ...(locales.length ? { locales } : {}) };
+    if (translate) await this.startTranslation(w, target, locales, translate, tx);
+  }
+  /**
+   * A translation (2026-10-25): the linked article as it is published stands in for an approved primary version, so the
+   * first run already translates (phase `translate`) and the source language is neither written nor reviewed again.
+   * `locales` is the source first, then the languages to write; without it, the source is the target's first language
+   * the article has, translated into the ones it lacks (all others when it lacks none).
+   */
+  private async startTranslation(w: Work, target: any, locales: string[], { by, at }: { by: string; at: string }, tx: any) {
+    const d = w.delivery!;
+    const source: ArticleSnapshot | null = d.articleId && d.sourceKey ? await this.s.snapshot(d.sourceKey, tx) : null;
+    if (!source) return fail(systemMessageText('articles.translateNeedsArticle'), 409);
+    const present = articleLocales(source),
+      fallback = translationDefault(target.locales, present);
+    const from = locales[0] || fallback.from,
+      to = locales.length ? locales.slice(1) : fallback.to;
+    if (!present.includes(from)) return fail(systemMessageText('articles.translateNoSource'), 409);
+    if (!to.length) return fail(systemMessageText('articles.translateNoLanguages'), 400);
+    const was = source.locales[from] || {};
+    const text = { title: was.title || '', description: was.description || '', body: was.body || '' };
+    // Every field the source has: whether a translation is out of date is not known, so all of it is translated.
+    const fields = ARTICLE_FIELDS.filter((f) => text[f].trim());
+    w.delivery = { ...d, locales: [from, ...to], translateFrom: { artifactId: null, at, by, draft: { locales: {} }, text, fields, published: true } };
   }
   /** Whether an approval of this version is of the primary language only, with other languages still to translate. */
   needsTranslation(w: Work, output: Artifact) {
@@ -227,9 +252,12 @@ export class ArticleFlow {
       ]),
     );
     // With languages chosen at start: the primary first, then, once it is approved, a translation of it into the others.
+    // Without them (a task started before 2026-10-24, or by a caller that sends none) every language is written at
+    // once (phase `all`), and the target's first language is named as the primary (2026-10-27): the Agent always
+    // knows which language the article is written in, whatever language the project, the brief or the outline use.
     const L = d.locales?.length ? d.locales : null, translating = Boolean(L && L.length > 1 && d.translateFrom);
-    const languages = L ? { primary: L[0], others: L.slice(1), phase: translating ? 'translate' : 'primary', write: translating ? L.slice(1) : [L[0]], ...(translating ? { approved: { ...d.translateFrom!.text, fields: d.translateFrom!.fields } } : {}) } : undefined;
-    return { target: { name: target.name, locales: target.locales, fields, status: supportsStatus(target) }, action: d.articleId ? 'update' : 'create', source: source ? { id: source.id, slug: source.slug, status: source.status, locales: source.locales } : null, ...(languages ? { languages } : {}) };
+    const languages = L ? { primary: L[0], others: L.slice(1), phase: translating ? 'translate' : 'primary', write: translating ? L.slice(1) : [L[0]], ...(translating ? { approved: { ...d.translateFrom!.text, fields: d.translateFrom!.fields } } : {}) } : { primary: target.locales[0], others: target.locales.slice(1), phase: 'all', write: target.locales };
+    return { target: { name: target.name, locales: target.locales, fields, status: supportsStatus(target) }, action: d.articleId ? 'update' : 'create', source: source ? { id: source.id, slug: source.slug, status: source.status, locales: source.locales } : null, languages };
   }
   /**
    * A Runner's article for the phase it was asked for: the primary language alone (other languages it wrote anyway are
@@ -248,30 +276,47 @@ export class ArticleFlow {
   async proposal(project: string, input: any, article: unknown): Promise<ArticleProposal> {
     const d = input.delivery;
     const base = d.sourceKey ? await this.s.snapshot(d.sourceKey) : null;
+    // Only the primary is kept in phase `primary`: an article in other languages only would otherwise read as empty.
+    const L = input?.article?.languages, wrong = L?.phase === 'primary' ? primaryOnly(L.primary, article) : undefined;
+    if (wrong) return fail(draftRejection(wrong), 422);
     let p: ArticleProposal;
     try {
-      p = this.need().proposal(project, { targetId: d.targetId, articleId: d.articleId, base, baseKey: d.sourceKey, draft: this.byPhase(input, article) });
+      p = this.need().proposal(project, { targetId: d.targetId, articleId: d.articleId, base, baseKey: d.sourceKey, draft: this.byPhase(input, article), primary: this.primaryOn(project, d, d.targetId) });
     } catch (error) {
-      if (error instanceof ArticleError) return fail(systemMessageText('articles.invalidDraft', { 0: error.message }), 422);
+      if (error instanceof ArticleError) return fail(draftRejection(error), 422);
       throw error;
     }
     if (!p.changes.length) return fail(systemMessageText('articles.noChanges'), 422);
-    if (d.also?.length) p.also = await this.alsoProposals(project, p, d.also.map((x) => ({ targetId: x.targetId, articleId: x.articleId, baseKey: x.sourceKey })), base, 422);
+    if (d.also?.length) p.also = await this.alsoProposals(project, d, p, d.also.map((x) => ({ targetId: x.targetId, articleId: x.articleId, baseKey: x.sourceKey })), base, 422);
     return p;
   }
+  /**
+   * The language a new article must have a title and body in (cleanDraft's `primary`, 2026-10-27): on the task's target,
+   * its primary language, whichever the person chose. Another target is checked once the article has every language:
+   * its own first language when the task writes it, else the first of the task's languages it has. A task started
+   * without languages keeps each target's own first language.
+   */
+  private primaryOn(project: string, d: any, targetId: string) {
+    const L: string[] = d?.locales || [];
+    if (!L.length) return undefined;
+    if (targetId === d.targetId) return L[0];
+    if (L.length > 1 && !d.translateFrom) return null;
+    const own = this.need().target(project, targetId).locales;
+    return L.includes(own[0]) ? own[0] : (L.find((l) => own.includes(l)) ?? own[0]);
+  }
   /** The proposals for the other targets, from the primary's draft. `source` is the primary's base. */
-  private async alsoProposals(project: string, primary: ArticleProposal, legs: any[], source: ArticleSnapshot | null, status: number, tx?: any) {
+  private async alsoProposals(project: string, d: any, primary: ArticleProposal, legs: any[], source: ArticleSnapshot | null, status: number, tx?: any) {
     const out = [];
     for (const l of legs) {
       const base = l.baseKey ? await this.s.snapshot(l.baseKey, tx) : null;
       try {
         out.push({
-          ...this.need().alsoProposal(project, { targetId: l.targetId, articleId: l.articleId, base, baseKey: l.baseKey, source, draft: primary.draft }),
+          ...this.need().alsoProposal(project, { targetId: l.targetId, articleId: l.articleId, base, baseKey: l.baseKey, source, draft: primary.draft, primary: this.primaryOn(project, d, l.targetId) }),
           ...(l.conflicts?.length ? { conflicts: l.conflicts } : {}),
           ...(l.carried?.length ? { carried: l.carried } : {}),
         });
       } catch (error) {
-        if (error instanceof ArticleError) return fail(systemMessageText('articles.invalidDraft', { 0: error.message }), status);
+        if (error instanceof ArticleError) return fail(draftRejection(error), status);
         throw error;
       }
     }
@@ -323,7 +368,8 @@ export class ArticleFlow {
         await s.put(sourceKey, pre.snapshot, tx);
       }
       const title = pre.snapshot ? pre.snapshot.locales[target.locales[0]]?.title || pre.snapshot.slug : '';
-      w.article = { targetId: target.id, articleId: v.articleId ? String(v.articleId) : null, slug: pre.snapshot?.slug || '', title: clip(title, 300), sourceKey, linkedAt: at };
+      // The languages it has text in, for a translation's choice of what to translate (2026-10-25).
+      w.article = { targetId: target.id, articleId: v.articleId ? String(v.articleId) : null, slug: pre.snapshot?.slug || '', title: clip(title, 300), sourceKey, linkedAt: at, ...(pre.snapshot ? { locales: articleLocales(pre.snapshot) } : {}) };
       event.note = w.article.title || target.name;
       return true;
     }
@@ -336,13 +382,13 @@ export class ArticleFlow {
       const base = a.baseKey ? await s.snapshot(a.baseKey, tx) : null;
       let next: ArticleProposal;
       try {
-        next = this.need().proposal(project, { targetId: a.targetId, articleId: a.articleId, base, baseKey: a.baseKey, draft: { ...v.article, ...(a.draft.verifyText && v.article?.verifyText === undefined ? { verifyText: a.draft.verifyText } : {}) } });
+        next = this.need().proposal(project, { targetId: a.targetId, articleId: a.articleId, base, baseKey: a.baseKey, draft: { ...v.article, ...(a.draft.verifyText && v.article?.verifyText === undefined ? { verifyText: a.draft.verifyText } : {}) }, primary: this.primaryOn(project, w.delivery, a.targetId) });
       } catch (error) {
-        if (error instanceof ArticleError) return fail(systemMessageText('articles.invalidDraft', { 0: error.message }), 400);
+        if (error instanceof ArticleError) return fail(draftRejection(error), 400);
         throw error;
       }
       if (a.carried) next.carried = a.carried;
-      if (a.also?.length) next.also = await this.alsoProposals(project, next, a.also, base, 400, tx);
+      if (a.also?.length) next.also = await this.alsoProposals(project, w.delivery, next, a.also, base, 400, tx);
       if (![next, ...(next.also || [])].some((l) => l.changes.length || l.carried?.length)) return fail(systemMessageText('articles.noChanges'), 409);
       const content = typeof v.content === 'string' && v.content.trim() ? v.content.trim().slice(0, 30000) : output.content;
       const artifact = { ...(await s.flowArtifactOf(project, taskId, producer.key, content, actor, at, tx)), article: { ...next, ...(a.conflicts ? { conflicts: a.conflicts } : {}) } };
@@ -409,15 +455,15 @@ export class ArticleFlow {
       const primary = await rebased(0);
       let next: ArticleProposal;
       try {
-        next = this.need().proposal(project, { targetId: old.targetId, articleId: primary.articleId, base: primary.base, baseKey: primary.baseKey, draft: old.draft });
+        next = this.need().proposal(project, { targetId: old.targetId, articleId: primary.articleId, base: primary.base, baseKey: primary.baseKey, draft: old.draft, primary: this.primaryOn(project, w.delivery, old.targetId) });
       } catch (error) {
-        if (error instanceof ArticleError) return fail(systemMessageText('articles.invalidDraft', { 0: error.message }), 409);
+        if (error instanceof ArticleError) return fail(draftRejection(error), 409);
         throw error;
       }
       if (primary.carried) next.carried = primary.carried;
       const others = [];
       for (let i = 1; i < legs.length; i++) others.push({ targetId: legs[i].targetId, ...(await rebased(i)) });
-      if (others.length) next.also = await this.alsoProposals(project, next, others, primary.base, 409, tx);
+      if (others.length) next.also = await this.alsoProposals(project, w.delivery, next, others, primary.base, 409, tx);
       const artifact = { ...(await s.flowArtifactOf(project, taskId, producer.key, approved.content, actor, at, tx)), article: { ...next, ...(primary.conflicts?.length ? { conflicts: primary.conflicts } : {}), rebasedFrom: approved.id } };
       await s.put(s.key('artifact', project, taskId, artifact.id), artifact, tx);
       w.results[index - 2] = artifact;

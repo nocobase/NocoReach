@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { NocoReachHttpError } from '../../client/lib/nocoreach-api';
 import { ArticleTargetsConnect } from '../../client/pages/article-targets-connect';
 import {
+  articleLanguages,
   articleRequest,
   searchArticles,
 } from '../../client/pages/article-targets-api';
@@ -30,6 +31,7 @@ import {
   conflictHeading,
   defaultDelivery,
   deliveryPlan,
+  translationLocales,
   pageUrlsOf,
   type DeliveryChoice,
 } from '../../client/pages/task-detail/article-model';
@@ -63,6 +65,7 @@ vi.mock('../../client/pages/article-targets-api', async (original) => ({
   >()),
   articleRequest: vi.fn(),
   searchArticles: vi.fn(),
+  articleLanguages: vi.fn(),
 }));
 vi.mock('../../client/pages/playbook-model', async (original) => ({
   ...(await original<typeof import('../../client/pages/playbook-model')>()),
@@ -314,6 +317,50 @@ it('edits a new article with validation on save and sends only what it fills in'
   expect(onSave).toHaveBeenCalledWith({
     slug: 'new-post',
     locales: { en: { title: 'New post', body: 'Body text' } },
+  });
+});
+
+// 2026-10-27: the language a new article must have is the task's primary one, as the server checks.
+it('asks a new article for the title and body of the primary language chosen at start', async () => {
+  const onSave = vi.fn(async () => true);
+  const user = userEvent.setup();
+  render(
+    <TaskDraftProvider>
+      <TaskDraftScope scope='1:1'>
+        <ArticleEditor
+          data={
+            {
+              ...data,
+              work: { delivery: { locales: ['zh', 'en'] } },
+            } as unknown as TaskData
+          }
+          article={{
+            ...proposal,
+            articleId: null,
+            baseKey: null,
+            baseVersion: null,
+            draft: { slug: 'new-post', locales: { zh: { title: '新文章' } } },
+            changes: ['zh.title', 'slug'],
+          }}
+          draftKey='a2'
+          busy={false}
+          onSave={onSave}
+          onCancel={vi.fn()}
+        />
+      </TaskDraftScope>
+    </TaskDraftProvider>,
+  );
+  await user.click(screen.getByRole('button', { name: 'Save' }));
+  expect(onSave).not.toHaveBeenCalled();
+  // Only the Chinese body is asked for; English is translated after approval.
+  expect(screen.getAllByText('Enter the body')).toHaveLength(1);
+  expect(screen.queryByText('Enter a title')).not.toBeInTheDocument();
+  const bodies = screen.getAllByRole('textbox', { name: /^Body/ });
+  await user.type(bodies[1], '中文正文');
+  await user.click(screen.getByRole('button', { name: 'Save' }));
+  expect(onSave).toHaveBeenCalledWith({
+    slug: 'new-post',
+    locales: { zh: { title: '新文章', body: '中文正文' } },
   });
 });
 
@@ -1016,6 +1063,21 @@ it('defaults the start card to the playbook target, the repository, or the defau
       locales: ['zh', 'en'],
     }).delivery,
   ).toEqual({ targetId: 'cms', locales: ['zh', 'en'] });
+  // A single chosen language goes too (2026-10-27): without it the server writes every language.
+  expect(
+    deliveryPlan(d({}), {
+      target: 'cms',
+      mode: 'new',
+      also: [],
+      locales: ['zh'],
+    }).delivery,
+  ).toEqual({ targetId: 'cms', locales: ['zh'] });
+  expect(
+    deliveryPlan(
+      { ...d({}), work: { article: { targetId: 'cms', articleId: '7' } } },
+      { target: 'cms', mode: 'existing', also: [], locales: ['zh'] },
+    ).delivery,
+  ).toEqual({ locales: ['zh'] });
 });
 
 it('decides where the change goes from the page: the article found, the repository, or a pick', () => {
@@ -1346,4 +1408,185 @@ it('before the primary is approved, the review says which languages follow', () 
   expect(
     screen.getByText('Chinese will be translated once English is approved.'),
   ).toBeVisible();
+});
+
+// 2026-10-25 user decision: Translate into other languages takes a published article and the languages it lacks,
+// shown as tags; the dialog chooses the source and the languages to write, marking the missing ones.
+const translation = (locales = ['en', 'zh', 'ja'], present?: string[]) =>
+  ({
+    ...data,
+    articleTargets: [{ ...target, locales }],
+    articlePlaybookTargets: {},
+    work: {
+      article: {
+        targetId: 'cms',
+        articleId: '7',
+        slug: 'hello',
+        title: 'Hello',
+        sourceKey: 'source-1',
+        ...(present ? { locales: present } : {}),
+      },
+    },
+  }) as unknown as TaskData;
+
+it('a translation starts from the article it lacks languages in, and the card says from and into which', () => {
+  const d = translation(['en', 'zh', 'ja'], ['en', 'zh']);
+  const choice = defaultDelivery(d, 'sync-translations', undefined, true);
+  expect(choice).toEqual({ target: 'cms', mode: 'existing', also: [] });
+  // Into the language it lacks; the source and the languages to write always go with the start.
+  expect(deliveryPlan(d, choice, true)).toMatchObject({
+    ready: true,
+    delivery: { locales: ['en', 'ja'] },
+  });
+  // Lacking none: every other language, to bring them up to date. Unknown languages count as present.
+  expect(
+    translationLocales(translation(['en', 'zh'], ['en', 'zh']), choice),
+  ).toEqual(['en', 'zh']);
+  expect(translationLocales(translation(['en', 'zh', 'ja']), choice)).toEqual([
+    'en',
+    'zh',
+    'ja',
+  ]);
+  // A new article cannot be translated: the linked target without an article is still an existing pick.
+  const unlinked = {
+    ...d,
+    work: { article: { targetId: 'cms', articleId: null } },
+  } as unknown as TaskData;
+  expect(
+    defaultDelivery(unlinked, 'sync-translations', undefined, true).mode,
+  ).toBe('existing');
+  expect(
+    deliveryPlan(unlinked, { target: 'cms', mode: 'existing', also: [] }, true)
+      .ready,
+  ).toBe(false);
+  render(
+    <DeliverySummary
+      data={d}
+      choice={choice}
+      finding={false}
+      allowed
+      busy={false}
+      translate
+      onChange={() => undefined}
+    />,
+  );
+  expect(screen.getByText('Article to translate')).toBeInTheDocument();
+  const line = document.querySelector('[data-delivery-languages]')!;
+  expect(line.textContent).toBe('From English into Japanese');
+  expect(tagTexts(line)).toEqual(['English', 'Japanese']);
+});
+
+it('the translation dialog chooses the source and the languages to write, marking the missing ones', async () => {
+  const d = translation(['en', 'zh', 'ja'], ['en', 'zh']);
+  const onSave = vi.fn();
+  const user = userEvent.setup();
+  render(
+    <DeliveryDialog
+      open
+      onClose={() => undefined}
+      data={d}
+      projectId={1}
+      choice={{ target: 'cms', mode: 'existing', also: [] }}
+      translate
+      busy={false}
+      link={async () => true}
+      onSave={onSave}
+    />,
+  );
+  const dialog = screen.getByRole('dialog');
+  expect(
+    within(dialog).getByText('Choose article and languages'),
+  ).toBeInTheDocument();
+  // An existing article only, and no other targets.
+  expect(within(dialog).queryByLabelText('New article')).toBeNull();
+  expect(within(dialog).queryByText('Also publish to')).toBeNull();
+  // The source is a language the article has; Japanese, which it lacks, is ticked and marked.
+  const source = within(dialog).getByLabelText('Source language');
+  expect(
+    [...source.querySelectorAll('option')].map((o) => o.textContent),
+  ).toEqual(['English', 'Chinese']);
+  expect(
+    within(dialog).getByRole('checkbox', { name: 'Japanese' }),
+  ).toBeChecked();
+  expect(
+    within(dialog).getByRole('checkbox', { name: 'Chinese' }),
+  ).not.toBeChecked();
+  expect(tagTexts(dialog)).toEqual(['Missing']);
+  await user.click(within(dialog).getByRole('checkbox', { name: 'Chinese' }));
+  await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+  expect(onSave).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      target: 'cms',
+      mode: 'existing',
+      also: [],
+      locales: ['en', 'zh', 'ja'],
+    }),
+  );
+  // Another source starts from its own default; with nothing left to write, Save waits.
+  await user.selectOptions(source, 'zh');
+  expect(
+    within(dialog).getByRole('checkbox', { name: 'English' }),
+  ).not.toBeChecked();
+  await user.click(within(dialog).getByRole('checkbox', { name: 'Japanese' }));
+  expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled();
+});
+
+it('an article picked by hand for a translation has its languages read, and a one-language target says why', async () => {
+  vi.mocked(searchArticles).mockResolvedValue([
+    { id: '9', slug: 'other', title: 'Other post' },
+  ] as never);
+  vi.mocked(articleLanguages).mockResolvedValue({ locales: ['zh'] } as never);
+  const user = userEvent.setup();
+  const view = render(
+    <DeliveryDialog
+      open
+      onClose={() => undefined}
+      data={translation(['en', 'zh', 'ja'], ['en', 'zh'])}
+      projectId={1}
+      choice={{ target: 'cms', mode: 'existing', also: [] }}
+      translate
+      busy={false}
+      link={async () => true}
+      onSave={() => undefined}
+    />,
+  );
+  const dialog = screen.getByRole('dialog');
+  await user.click(
+    await within(dialog).findByRole('button', { name: /Other post/ }),
+  );
+  await waitFor(() =>
+    expect(articleLanguages).toHaveBeenCalledWith(
+      1,
+      'cms',
+      '9',
+      expect.anything(),
+    ),
+  );
+  // Only Chinese has text: it is the source, and the two others are missing.
+  await waitFor(() => expect(tagTexts(dialog)).toEqual(['Missing', 'Missing']));
+  expect(within(dialog).getByLabelText('Source language')).toHaveValue('zh');
+  view.unmount();
+  render(
+    <DeliverySummary
+      data={translation(['en'], ['en'])}
+      choice={{ target: 'cms', mode: 'existing', also: [] }}
+      finding={false}
+      allowed
+      busy={false}
+      translate
+      onChange={() => undefined}
+    />,
+  );
+  expect(
+    screen.getByText(
+      'This publishing target has only one language, so there is nothing to translate.',
+    ),
+  ).toBeInTheDocument();
+  expect(
+    deliveryPlan(
+      translation(['en'], ['en']),
+      { target: 'cms', mode: 'existing', also: [] },
+      true,
+    ).ready,
+  ).toBe(false);
 });

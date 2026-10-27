@@ -9,6 +9,22 @@
 # i18n:
 #   defaultLocale: zh-CN
 
+# Dedicated demo deployments only, with their own database and storage. NOCOBASE_DEMO_MODE enables this section.
+# Quick sign-in offers all enabled person accounts; anonymous home-page visitors enter an existing Super Admin.
+# Set quickSignIn to false to disable both. Its sign-in cookies are SameSite=None, Secure and Partitioned, so a
+# website can embed the demo in an iframe. Daily reset is always enabled after the first generation.
+# Its deployment-owned schedule ignores previously saved schedules and is read-only in Demo management.
+# NOCOBASE_DEMO_RESET_HOUR, NOCOBASE_DEMO_RESET_MINUTE, NOCOBASE_DEMO_RESET_TIMEZONE and
+# NOCOBASE_DEMO_RESET_LANGUAGE override these values. Restart after changes; defaults are 03:00 UTC, en-US.
+# demoMode:
+#   enabled: false
+#   quickSignIn: true
+#   dailyReset:
+#     hour: 3
+#     minute: 0
+#     timezone: UTC
+#     language: en-US
+
 # Limits every /api request meets before its route, each off until set. bodyLimit refuses a larger body with 413
 # BODY_TOO_LARGE; a route may set its own, usually smaller, limit. timeout answers 503 REQUEST_TIMEOUT when a handler
 # has not produced its response in time; a streaming response that has started is not cut off. rateLimit allows max

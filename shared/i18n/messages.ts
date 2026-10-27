@@ -29,6 +29,11 @@ const currentSystemText = new Map<string, MessageKey>(
     'playbook.notChangeRepository',
     'playbook.writesDocumentWithoutChangingRepository',
     'playbook.changesRepositoryOpensPr',
+    // Translate into other languages (2026-10-25): the playbook formerly Sync language versions and its step.
+    'playbooks.syncLanguageVersions',
+    'playbooks.syncPageChangesOtherLanguage',
+    'playbooks.translationInstruction',
+    'articleTask.translateStep',
     // The daily report's time limit (2026-10-23): stored as Chinese text in a run's error, shown in the reader's language.
     'analysis.modelTimedOut',
   ].map((key) => [chinese[key as MessageKey], key as MessageKey]),

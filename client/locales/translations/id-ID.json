@@ -242,8 +242,8 @@
   "auth.continueWith": "Lanjutkan dengan {provider}",
   "auth.about": "Tentang aplikasi ini",
   "auth.platform": "Platform operasional pertumbuhan berbasis AI",
-  "auth.marketingTitleFirst": "Temukan peluang dalam data Anda.",
-  "auth.marketingTitleSecond": "NocoReach mewujudkannya.",
+  "auth.marketingTitleFirst": "AI menemukan peluang pertumbuhan.",
+  "auth.marketingTitleSecond": "Agen mewujudkannya.",
   "auth.marketingTitleThird": "",
   "auth.marketingDescription": "Pengumpulan data, analisis harian, dan eksekusi oleh agen dalam satu platform.",
   "auth.frontend": "Analisis harian",
@@ -263,8 +263,8 @@
   "status.routeFailedDescription": "Rute {{label}} dari {{packageName}} tidak dapat dimuat.",
   "shell": {
     "templateVersionUnknown": "Versi tidak diketahui",
-    "buildFreely": "Temukan peluang dalam data Anda.",
-    "reliability": "<brand>NocoReach</brand> mewujudkannya."
+    "buildFreely": "AI menemukan peluang pertumbuhan.",
+    "reliability": "Agen mewujudkannya."
   },
   "home": {
     "platform": "NocoBase · Platform aplikasi berbasis AI",

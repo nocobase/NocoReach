@@ -90,7 +90,8 @@ export function flowRunInput(project: any, task: any, w: { flow?: FlowSnapshot; 
   const { work, context, handoff, ...rest } = task?.evidence || {};
   return {
     project: memoryForAI(project),
-    // What language the Agent writes its plan, report and notes in (server/language.js).
+    // What language the Agent writes its plan, report and notes in (server/language.js). Never an article's own
+    // language: that is `article.languages` (article-flow.ts runInput), whatever this says.
     language: languageOf(project),
     task: { title: task?.title || '', brief: task?.brief || '' },
     playbook: w.playbook?.name || w.flow?.name || '',
