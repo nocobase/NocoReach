@@ -26,13 +26,10 @@ import { useProject } from './reach-data';
 import { ruleUnitLabel } from './analysis-rules/labels';
 import { getSourceNames } from './strategy/board';
 import { useBusinessAccess } from '#hooks/use-business-access';
-import {
-  SchemeManager,
-  AddRule,
-  type RuleDraft,
-} from './analysis-rules/schemes';
-import { RulesAssistant } from './analysis-rules/assistant';
-import type { Rule, Settings, View, Proposal } from './analysis-rules/types';
+import { SchemeManager, AddRule } from './analysis-rules/schemes';
+import type { Rule, Settings, View } from './analysis-rules/types';
+import { PageAiEntry } from '../online-agent/page-entry';
+import { usePageChange } from '../online-agent/page-changes';
 import { formatDateTime } from '#lib/format';
 
 const call = <T,>(action: string, projectId: number, body: object = {}) =>
@@ -107,14 +104,6 @@ export default function AnalysisRules(): ReactElement {
 }
 function RulesPage({ projectId }: { projectId: number }): ReactElement {
   const { can: canSave } = useBusinessAccess('nrAnalysisRules.save', projectId);
-  const { can: canPropose } = useBusinessAccess(
-    'nrAnalysisRules.propose',
-    projectId,
-  );
-  const { can: canApply } = useBusinessAccess(
-    'nrAnalysisRules.apply',
-    projectId,
-  );
   const { can: canAddRule } = useBusinessAccess(
     'nrAnalysisRules.addRule',
     projectId,
@@ -123,17 +112,12 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
     'nrAnalysisRules.updateRule',
     projectId,
   );
-  const { can: canDraft } = useBusinessAccess(
-    'nrAnalysisRules.draft',
-    projectId,
-  );
   const [view, setView] = useState<View>();
   const [error, setError] = useMessageState('');
   const [loadStatus, setLoadStatus] = useState<number>();
   const [saveError, setSaveError] = useMessageState('');
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string>();
-  const [manualRevision, setManualRevision] = useState(0);
   const [openArea, setOpenArea] = useState<string>();
   const selectedSchemeRef = useRef<string | undefined>(undefined);
   const aliveRef = useRef(true),
@@ -169,6 +153,8 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
   useEffect(() => {
     void load();
   }, [load]);
+  // A change confirmed in the chat panel shows here at once.
+  usePageChange('analysisRules', projectId, () => void load());
   const closeEditor = () => {
     setEditing(undefined);
     setSaveError('');
@@ -176,13 +162,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
   };
   const mutate = async (
     action:
-      | 'save'
-      | 'apply'
-      | 'rename'
-      | 'create'
-      | 'activate'
-      | 'addRule'
-      | 'updateRule',
+      'save' | 'rename' | 'create' | 'activate' | 'addRule' | 'updateRule',
     body: object,
   ) => {
     if (pendingRef.current || !view) return false;
@@ -199,7 +179,6 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
       setView(next);
       const added = next.rules.find((r) => r.id === next.addedRuleId);
       if (added) setOpenArea(areaOf(added.source));
-      if (action !== 'apply') setManualRevision((value) => value + 1);
       closeEditor();
       toast.success(() =>
         $t(
@@ -251,27 +230,6 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
     } catch (e) {
       if (aliveRef.current)
         setSaveError(() => errorText(e, $t('common.saveFailed')));
-    } finally {
-      pendingRef.current = false;
-      if (aliveRef.current) setBusy(false);
-    }
-  };
-  const propose = async (instruction: string) => {
-    if (pendingRef.current) return;
-    pendingRef.current = true;
-    setBusy(true);
-    try {
-      const fresh = await call<View>('view', projectId, {
-        schemeId: selectedSchemeRef.current,
-      });
-      if (!aliveRef.current) return;
-      setView(fresh);
-      const proposal = await call<Proposal>('propose', projectId, {
-        instruction,
-        schemeId: view?.schemeId,
-      });
-      if (!aliveRef.current) return;
-      return proposal;
     } finally {
       pendingRef.current = false;
       if (aliveRef.current) setBusy(false);
@@ -336,17 +294,35 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
         title={$t('analysisRules.analysisRules')}
         description={$t('analysisRules.pageHelp')}
         actions={
-          <RefreshButton
-            busy={busy}
-            disabled={Boolean(editing)}
-            onClick={() => {
-              setBusy(true);
-              setManualRevision((v) => v + 1);
-              void load().finally(() => {
-                if (aliveRef.current) setBusy(false);
-              });
-            }}
-          />
+          <>
+            {view ? (
+              <PageAiEntry
+                subject={{
+                  kind: 'page',
+                  page: 'analysisRules',
+                  item: view.schemeId,
+                }}
+                label={$t('analysisRules.aiEntry')}
+                description={$t('analysisRules.aiEntryHelp')}
+                presets={[
+                  $t('analysisRules.presetFewerSmall'),
+                  $t('analysisRules.presetCompetitorRelease'),
+                  $t('analysisRules.presetWhyFired'),
+                  $t('analysisRules.presetNotFired'),
+                ]}
+              />
+            ) : null}
+            <RefreshButton
+              busy={busy}
+              disabled={Boolean(editing)}
+              onClick={() => {
+                setBusy(true);
+                void load().finally(() => {
+                  if (aliveRef.current) setBusy(false);
+                });
+              }}
+            />
+          </>
         }
       />
       {error ? (
@@ -368,7 +344,6 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
             select={(id) => {
               selectedSchemeRef.current = id;
               setBusy(true);
-              setManualRevision((v) => v + 1);
               void load().finally(() => {
                 if (aliveRef.current) setBusy(false);
               });
@@ -378,24 +353,6 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
               return result || undefined;
             }}
           />
-          {canPropose ? (
-            <Section
-              // No grey second line naming the scheme (2026-10-22 decision D5): My schemes above marks the one shown.
-              title={$t('analysisRules.aiSectionTitle')}
-            >
-              <RulesAssistant
-                key={`${view.schemeId}:${manualRevision}`}
-                view={view}
-                busy={busy || Boolean(editing)}
-                propose={propose}
-                apply={
-                  canApply
-                    ? async (p) => Boolean(await mutate('apply', p))
-                    : undefined
-                }
-              />
-            </Section>
-          ) : null}
           <Section
             title={$t('analysisRules.rulesSectionTitle')}
             actions={
@@ -408,16 +365,6 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                     const result = await mutate(action, body);
                     return result || undefined;
                   }}
-                  draft={
-                    canDraft
-                      ? (instruction) =>
-                          call<{ draft: RuleDraft; revision: string }>(
-                            'draft',
-                            projectId,
-                            { schemeId: view.schemeId, instruction },
-                          )
-                      : undefined
-                  }
                 />
               ) : undefined
             }
@@ -505,9 +452,8 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                     {sourceName(g)}
                     <span className='text-xs font-normal text-muted-foreground tabular-nums'>
                       {$t('analysisRules.groupEnabled', {
-                        0: view.rules.filter(
-                          (r) => r.source === g && r.enabled,
-                        ).length,
+                        0: view.rules.filter((r) => r.source === g && r.enabled)
+                          .length,
                         1: view.rules.filter((r) => r.source === g).length,
                       })}
                     </span>
@@ -606,15 +552,6 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                                 execute={async (action, body) =>
                                   (await mutate(action, body)) || undefined
                                 }
-                                draft={
-                                  canDraft
-                                    ? (instruction) =>
-                                        call('draft', projectId, {
-                                          schemeId: view.schemeId,
-                                          instruction,
-                                        })
-                                    : undefined
-                                }
                               />
                             ) : null}
                             {canSave && r.params.length ? (
@@ -698,10 +635,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
               })}
               {/* Without a count the clause is left out rather than reading "— passed to the AI" (UI review E7). */}
               {last.passed != null ? (
-                <>
-                  {' '}
-                  · {$tj('analysisRules.passedAi', { 0: last.passed })}
-                </>
+                <> · {$tj('analysisRules.passedAi', { 0: last.passed })}</>
               ) : null}
               {last.analyzedAt ? (
                 <>

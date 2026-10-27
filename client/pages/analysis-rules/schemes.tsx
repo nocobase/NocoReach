@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Copy, Pencil, Plus, Sparkles, Loader2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Copy, Pencil, Plus, Loader2 } from 'lucide-react';
 import { $t, useMessageState } from '#i18n';
 import { Button } from '#components/ui/button';
 import { SourceLogo } from '#components/reach/source-logo';
@@ -320,15 +320,11 @@ export function AddRule({
   view,
   disabled,
   execute,
-  draft,
 }: {
   view: View;
   disabled: boolean;
   execute: Execute;
   rule?: Rule;
-  draft?: (
-    instruction: string,
-  ) => Promise<{ draft: RuleDraft; revision: string }>;
 }) {
   const [open, setOpen] = useState(false),
     [fields, setFields] = useState<RuleDraft>({
@@ -337,21 +333,10 @@ export function AddRule({
       condition: '',
       evidence: '',
     }),
-    [instruction, setInstruction] = useState(''),
-    [proposal, setProposal] = useState<RuleDraft>(),
     [error, setError] = useMessageState(''),
     [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({}),
-    [working, setWorking] = useState(false),
     [revision, setRevision] = useState('');
-  const triggerRef = useRef<HTMLElement | null>(null),
-    epochRef = useRef(0),
-    inflightRef = useRef(false);
-  useEffect(
-    () => () => {
-      ++epochRef.current;
-    },
-    [],
-  );
+  const triggerRef = useRef<HTMLElement | null>(null);
   const sources = [...new Set(view.rules.map((r) => r.source))];
   const label = (source: string) =>
     view.rules.find((r) => r.source === source)?.sourceName ||
@@ -359,39 +344,7 @@ export function AddRule({
     source;
   const close = () => {
     if (disabled) return;
-    ++epochRef.current;
-    inflightRef.current = false;
-    setWorking(false);
     setOpen(false);
-  };
-  const organize = async () => {
-    if (inflightRef.current || !draft) return;
-    if (!instruction.trim()) {
-      setError(() => $t('analysisRules.instructionRequired'));
-      return;
-    }
-    const request = ++epochRef.current;
-    inflightRef.current = true;
-    setWorking(true);
-    setError('');
-    setProposal(undefined);
-    try {
-      const result = await draft(instruction);
-      if (request === epochRef.current) {
-        if (result.revision !== revision) {
-          setError(() => $t('analysisRules.settingsChanged'));
-          return;
-        }
-        setProposal(result.draft);
-      }
-    } catch (e) {
-      if (request === epochRef.current) setError(() => errorText(e));
-    } finally {
-      if (request === epochRef.current) {
-        setWorking(false);
-        inflightRef.current = false;
-      }
-    }
   };
   const submit = async () => {
     const invalid = Object.fromEntries(
@@ -440,8 +393,6 @@ export function AddRule({
             },
           );
           setFieldErrors({});
-          setInstruction('');
-          setProposal(undefined);
           setError('');
           setRevision(view.revision);
           setOpen(true);
@@ -472,7 +423,7 @@ export function AddRule({
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              if (!working) void submit();
+              void submit();
             }}
             onInvalidCapture={(e) => {
               const element = e.target as HTMLInputElement;
@@ -485,88 +436,6 @@ export function AddRule({
             className='flex min-h-0 flex-col gap-4'
           >
             <div className='min-h-0 flex flex-col gap-4 overflow-y-auto pr-1'>
-              {draft ? (
-                <div className='flex flex-col gap-3 rounded-lg border bg-muted/30 p-3'>
-                  <label className='flex flex-col gap-2 text-sm'>
-                    <span>{$t('analysisSchemes.intent')}</span>
-                    <Textarea
-                      rows={2}
-                      maxLength={2000}
-                      disabled={working}
-                      value={instruction}
-                      onChange={(e) => {
-                        setInstruction(e.target.value);
-                        setProposal(undefined);
-                      }}
-                    />
-                  </label>
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    disabled={working}
-                    onClick={() => void organize()}
-                  >
-                    {working ? (
-                      <Loader2 className='size-4 animate-spin' />
-                    ) : (
-                      <Sparkles className='size-4' />
-                    )}
-                    {working
-                      ? $t('analysisSchemes.organizing')
-                      : $t('analysisSchemes.organize')}
-                  </Button>
-                  {proposal ? (
-                    <div
-                      className='flex flex-col gap-2 border-t pt-3'
-                      aria-live='polite'
-                    >
-                      <p className='text-sm font-medium'>
-                        {$t('analysisSchemes.reviewDraft')}
-                      </p>
-                      <dl className='flex flex-col gap-2 text-sm'>
-                        {[
-                          [$t('analysisSchemes.name'), proposal.name],
-                          [
-                            $t('analysisSchemes.source'),
-                            label(proposal.source),
-                          ],
-                          [$t('analysisSchemes.condition'), proposal.condition],
-                          [$t('analysisSchemes.evidence'), proposal.evidence],
-                        ].map(([key, value]) => (
-                          <div key={key}>
-                            <dt className='text-xs text-muted-foreground'>
-                              {key}
-                            </dt>
-                            <dd>{value}</dd>
-                          </div>
-                        ))}
-                      </dl>
-                      <p className='text-xs text-muted-foreground'>
-                        {$t('analysisSchemes.replaceHelp')}
-                      </p>
-                      <div className='flex gap-2'>
-                        <Button
-                          variant='outline'
-                          size='sm'
-                          onClick={() => {
-                            setFields(proposal);
-                            setProposal(undefined);
-                          }}
-                        >
-                          {$t('analysisSchemes.fill')}
-                        </Button>
-                        <Button
-                          variant='ghost'
-                          size='sm'
-                          onClick={() => setProposal(undefined)}
-                        >
-                          {$t('analysisSchemes.discard')}
-                        </Button>
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
               <label className='flex flex-col gap-2 text-sm'>
                 <span>{$t('analysisSchemes.name')} *</span>
                 <Input
@@ -657,7 +526,7 @@ export function AddRule({
               <Button variant='outline' disabled={disabled} onClick={close}>
                 {$t('common.cancel')}
               </Button>
-              <Button type='submit' disabled={disabled || working}>
+              <Button type='submit' disabled={disabled}>
                 {disabled ? <Loader2 className='size-4 animate-spin' /> : null}
                 {$t(rule ? 'common.save' : 'analysisSchemes.addConfirm')}
               </Button>
