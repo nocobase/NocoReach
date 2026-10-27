@@ -1,5 +1,13 @@
 # NocoReach Changelog
 
+## Unreleased — Task runs fail less on the computer's setup, and say what to do
+
+- The Agent's rules no longer fail a step for any missing credential, tool or conflict. A step fails only when it lacks a credential or tool it cannot do without (such as gh not signed in for a build or merge, or no access to the repository), or on a conflict; it still never bypasses limits or installs software. A tool a Skill suggests but the step does not need (an update check, an optional search backend) is worked around and noted in the result. The task's own Skills come first: other skills installed on the computer may be consulted, and a tool they ask for being unavailable does not fail the step. T-35 on Studio failed five times this way, for an `agent-reach check-update` that a personal Skill on the user's Mac asked for.
+- An Agent that cannot finish a step reports why with a code (`missing_tool`, `tool_signed_out`, `quota_exhausted`, otherwise `agent_failed`) and a one-line message for the owner, and keeps what it already got in `content`.
+- A failed run keeps that content (`nr-task-partial`, or a result it submitted with `task result` before the Agents plugin failed it, or else a draft it saved with `task draft`) and the official failure reason. The task's failure card offers it as "Unfinished, but here's what it got", with Finish this step with it for steps that only read, which opens Complete this step manually filled in. The step's next run receives it as `unfinished` and continues from it. Until now this content was dropped: T-35's last run had finished 14,722 characters of research with 30 sources.
+- The failure card says whose problem it is. For the computer's setup (a missing tool, a tool not signed in, the network, the runtime) it says that every Agent on that computer shares it and no longer offers Switch Agent; for a coding tool's sign-in, quota or model it suggests an Agent with another coding tool. After the same cause twice in a row it says "failed N times in a row for the same reason" and what to fix first, and Try again is no longer the main action. "Ask an engineer to check Technical details" is gone from run failures.
+- Agent › Who does the work reads how the task ended: a run the Agent itself failed counts as failed, not completed, and a missing tool or sign-in it reported shows on the Tasks row, which then offers Settings rather than another agent on the same computer.
+
 ## Unreleased — Demo Mode HTTPS cookie defaults
 
 - Upgrade Demo Mode to `0.2.0-beta.2`, which supplies partitioned authentication cookie defaults for HTTPS demo deployments. Keep NocoReach's existing demo cookie configuration and companion package versions.

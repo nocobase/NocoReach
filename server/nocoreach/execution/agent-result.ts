@@ -80,6 +80,8 @@ const envelope = z.object({
 export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
   return [
     '最终回答必须是完整 JSON：{ok:boolean,content:string,pr?:object,merged?:{sha:string},error?:string,message?:string}。失败 ok=false；不要在 JSON 外加文字。',
+    // The codes say whose problem a failure is (shared/run-failure.ts); the task page turns them into what to do.
+    '失败时 error 写原因代码：missing_tool（电脑上缺少这一步离不开的工具）、tool_signed_out（这一步离不开的工具没有登录或没有权限）、quota_exhausted（额度用完或被限流），其他原因写 agent_failed；message 用负责人看得懂的一句话说明缺少什么、需要在电脑上做什么，不写命令输出。已经拿到的内容仍放在 content（研究可同时返回 report），负责人可以直接使用，再试时也会交给你接着做。',
     ...(typeof resultKind === 'string'
       ? [
           `本次成果类型是 ${String(resultKind)}。成功时 content 是完整 Markdown 正文，另必须返回 report:{kind:"${String(resultKind)}",sources:[{title,url}|{title,material}],asOf:string,uncertainties:[string]}。sources 只列实际读取的来源，asOf 写资料覆盖或抓取时间，不确定和未验证事项放 uncertainties，无则空数组。`,
