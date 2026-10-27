@@ -451,7 +451,7 @@ for (const block of blocks) {
       if (block.kind === 'metrics')
         expect(
           sessionStorage.getItem(
-            'nr-cache:data-view:overview:1:{"range":"28"}',
+            'nr-cache:data-view:overview:1:{"range":"7"}',
           ),
         ).toBeNull();
 
@@ -471,7 +471,7 @@ for (const block of blocks) {
         expect(within(section).queryByText(known.metrics)).toBeNull();
         expect(
           sessionStorage.getItem(
-            'nr-cache:data-view:overview:1:{"range":"28"}',
+            'nr-cache:data-view:overview:1:{"range":"7"}',
           ),
         ).toBeNull();
         const later = Date.now() + GOOGLE_PROGRESS_CACHE_MS;
@@ -508,7 +508,7 @@ it.each([401, 403, 404])(
     fixture.session.session.id = 'session-b';
     view.rerender();
     await screen.findByText('12,345');
-    const key = 'nr-cache:data-view:overview:1:{"range":"28"}';
+    const key = 'nr-cache:data-view:overview:1:{"range":"7"}';
     const saved = sessionStorage.getItem(key);
     expect(saved).not.toBeNull();
     await act(async () =>
