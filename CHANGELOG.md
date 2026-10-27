@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Every Current situation line with items hands them to the Agent
+
+- In Insights › Current situation, every line that opens a list of items can hand the ticked ones to the Agent, as the existing lines could: the sixteen analysis rule lines, each with the playbook that fits it (Optimize page for pages, Competitor comparison for competitors, Content outline for AI answers, rising searches and recurring topics, Community reply for Hacker News and X posts, Release notes for your new releases, Change research for sites sending visits to your repository), and the ChatGPT and Google AI Overviews mention lines, whose ticked brands go to a competitor comparison.
+- A rule line's panel is titled as in the list ("Pages losing search clicks" rather than the rule's name).
+- Hand off to agent in a panel is greyed out until something is ticked, without the "Tick what to hand off below first" hint, which took focus when the panel opened and covered its description. This applies to every panel with that button: Current situation, Trends keywords, Audit performance, Competitor overview and the website reports.
+
 ## Unreleased — Articles are written in their own language
 
 - Every article run says which language the article is written in: the languages chosen at start or, with none chosen, the publishing target's first language as the primary, every language written at once as before. The Agent's rules keep the two languages apart: the project's language is for its notes, summary and reports; the article is written in its primary language whatever the project, the brief or the outline use (2026-10-27, T-47: a Chinese-only new article for a target whose first language is English).

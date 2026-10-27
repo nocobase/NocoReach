@@ -27,24 +27,26 @@ const ROWS=10,day=v=>String(v||'').slice(0,10);
 const rows=(list,map)=>({rows:list.slice(0,ROWS).map(map),total:list.length});
 const move=c=>`${c>=0?'↑':'↓'} ${Math.abs(Math.round(c*100))}%`;
 // The analysis rules Current situation lists, by the area and group they belong to and the page that has their data.
-// Each value counts what the rule found (pages, competitors, AI platforms, posts...), so the labels name that unit.
+// Each value counts what the rule found (pages, competitors, AI platforms, posts...), so the labels name that unit;
+// `playbook` is how its ticked items are handed to the Agent (2026-10-24 user feedback: every line that lists items
+// can hand them off).
 const RULE_LINES={
- 'gsc-click-drop':{area:'search',group:'worse',to:'/seo-opportunities'},
- 'competitor-release':{area:'search',group:'worse',to:'/research/domain'},
- 'competitor-pages':{area:'search',group:'worse',to:'/research/domain'},
- 'ai-share':{area:'ai',group:'worse',to:'/ai-search'},
- 'github-rival-stars':{area:'site',group:'worse',to:'/data/github'},
- 'gsc-low-ctr':{area:'search',group:'handle',to:'/seo-opportunities'},
- 'ga4-low-conversion':{area:'site',group:'handle',to:'/website/conversion'},
- 'site-stale':{area:'site',group:'handle',to:'/content'},
- 'site-thin':{area:'site',group:'handle',to:'/content'},
- 'ai-uncited':{area:'ai',group:'handle',to:'/ai-search'},
- 'trends-rising':{area:'search',group:'chance',to:'/trends'},
- 'hn-story':{area:'community',group:'chance',to:'/data/hackernews'},
- 'x-hot':{area:'community',group:'chance',to:'/data/x'},
- 'community-theme':{area:'community',group:'chance',to:'/data/community'},
- 'github-referrer':{area:'site',group:'chance',to:'/data/github'},
- 'github-release':{area:'site',group:'chance',to:'/data/github'},
+ 'gsc-click-drop':{area:'search',group:'worse',to:'/seo-opportunities',playbook:'optimize-page'},
+ 'competitor-release':{area:'search',group:'worse',to:'/research/domain',playbook:'competitor-compare'},
+ 'competitor-pages':{area:'search',group:'worse',to:'/research/domain',playbook:'competitor-compare'},
+ 'ai-share':{area:'ai',group:'worse',to:'/ai-search',playbook:'content-outline'},
+ 'github-rival-stars':{area:'site',group:'worse',to:'/data/github',playbook:'competitor-compare'},
+ 'gsc-low-ctr':{area:'search',group:'handle',to:'/seo-opportunities',playbook:'optimize-page'},
+ 'ga4-low-conversion':{area:'site',group:'handle',to:'/website/conversion',playbook:'optimize-page'},
+ 'site-stale':{area:'site',group:'handle',to:'/content',playbook:'optimize-page'},
+ 'site-thin':{area:'site',group:'handle',to:'/content',playbook:'optimize-page'},
+ 'ai-uncited':{area:'ai',group:'handle',to:'/ai-search',playbook:'content-outline'},
+ 'trends-rising':{area:'search',group:'chance',to:'/trends',playbook:'content-outline'},
+ 'hn-story':{area:'community',group:'chance',to:'/data/hackernews',playbook:'community-reply'},
+ 'x-hot':{area:'community',group:'chance',to:'/data/x',playbook:'community-reply'},
+ 'community-theme':{area:'community',group:'chance',to:'/data/community',playbook:'content-outline'},
+ 'github-referrer':{area:'site',group:'chance',to:'/data/github',playbook:'change-research'},
+ 'github-release':{area:'site',group:'chance',to:'/data/github',playbook:'release-notes'},
 };
 const SOURCE_NAME={gsc:systemMessageText('common.searchPerformance'),ga4:'GA4',site:systemMessageText('common.websiteContent'),github:'GitHub','github-traffic':'GitHub Traffic',discourse:systemMessageText('common.forum'),hackernews:'Hacker News',x:'X',trends:systemMessageText('dataTrends.trends'),competitors:systemMessageText('common.competitor'),'ai-search':systemMessageText('common.aiSearch')};
 class InsightSummary{
@@ -65,7 +67,7 @@ class InsightSummary{
   for(const b of s?.brands||[]){const r=b.result||{},me=(r.share||[]).find(x=>x.own),total=(r.share||[]).reduce((t,x)=>t+(x.mentions||0),0),cited=(r.questions||[]).filter(q=>q.ownCited).length;
    const name=PLATFORM[b.spec.platform]||b.spec.platform,sp=/[\w]$/.test(name)?' ':'';
    const share=(r.share||[]).filter(x=>x.mentions!==null).sort((x,y)=>y.mentions-x.mentions);
-   items.push({...rows(share,x=>({key:x.key,title:x.key,meta:`${n(x.mentions)} 次${total?` · 份额 ${Math.round(x.mentions/total*100)}%`:''}`,tag:x.own?{tone:'blue',text:systemMessageText('common.you')}:undefined})),key:`brand-${b.spec.platform}`,text:r.mentions==null?`${name}${sp}的提及还没有结果`:`${name}${sp}提到你 {0} 次`,values:r.mentions==null?[]:[n(r.mentions)],source:systemMessageText('common.aiSearch'),detail:[me&&total?systemMessageText('messages.shareVoice', { 0: Math.round(me.mentions/total*100) }):'',r.questions?.length?systemMessageText('messages.answersCiteSite', { 0: r.questions.length, 1: cited }):'',String(b.at).slice(0,10)].filter(Boolean).join('，'),to:'/ai-search',group:'voice',tone:me&&total&&me.mentions/total<0.3?'amber':'grey'});}
+   items.push({...rows(share,x=>({key:x.key,title:x.key,meta:`${n(x.mentions)} 次${total?` · 份额 ${Math.round(x.mentions/total*100)}%`:''}`,tag:x.own?{tone:'blue',text:systemMessageText('common.you')}:undefined})),handOff:{playbookId:'competitor-compare',title:`对比 ${name}${sp}回答里提到的这些品牌：{0}`},key:`brand-${b.spec.platform}`,text:r.mentions==null?`${name}${sp}的提及还没有结果`:`${name}${sp}提到你 {0} 次`,values:r.mentions==null?[]:[n(r.mentions)],source:systemMessageText('common.aiSearch'),detail:[me&&total?systemMessageText('messages.shareVoice', { 0: Math.round(me.mentions/total*100) }):'',r.questions?.length?systemMessageText('messages.answersCiteSite', { 0: r.questions.length, 1: cited }):'',String(b.at).slice(0,10)].filter(Boolean).join('，'),to:'/ai-search',group:'voice',tone:me&&total&&me.mentions/total<0.3?'amber':'grey'});}
   const asked=s?.answers||[],missing=asked.filter(a=>Object.values(a.models||{}).some(m=>!m.mentioned));
   if(asked.length)items.push({...rows(missing,a=>{const models=Object.entries(a.models||{}),no=models.filter(([,m])=>!m.mentioned).map(([k])=>MODEL[k]||k),cited=[...new Set(models.flatMap(([,m])=>(m.citations||[]).filter(c=>!c.own).map(c=>c.domain)))].slice(0,3);return {key:a.question,title:a.question,meta:`没提到：${no.join('、')}${cited.length?` · 引用了 ${cited.join('、')}`:''}`};}),handOff:{playbookId:'content-outline',title:'让 AI 回答这些问题时提到我们：{0}'},key:'answers',text:systemMessageText('insightSummary.aiLeavesOutQuestions'),values:[n(missing.length)],source:systemMessageText('common.aiSearch'),detail:systemMessageText('messages.askedLast30DaysCounted', { 0: asked.length }),to:'/ai-search?tab=ask',group:'handle',tone:missing.length?'amber':'green'});
   if(!items.length&&this.p.aiSearch?.d4s?.config(id)?.verifiedAt)items.push({key:'none',text:systemMessageText('insightSummary.aiSearchNotCheckedYet'),values:[],source:systemMessageText('common.aiSearch'),detail:systemMessageText('insightSummary.seeWhetherChatgptGoogleAi'),to:'/ai-search',group:'voice',tone:'grey'});
@@ -94,8 +96,8 @@ class InsightSummary{
   if(snapshot)inputs.ruleCatalog=snapshot.catalog;
   const catalog=snapshot?.catalog||RULES,by={},areas={};
   for(const s of computeAll(inputs,config).ranked){const rule=ruleOf(s.key,catalog);if(RULE_LINES[rule])(by[rule]||=[]).push(s);}
-  for(const [rule,list] of Object.entries(by)){const line=RULE_LINES[rule],meta=catalog.find(r=>r.id===rule)||RULES.find(r=>r.id===rule);
-   (areas[line.area]||=[]).push({key:`rule-${rule}`,group:line.group,text:meta?.label||rule,values:[n(list.reduce((t,s)=>t+(s.count||1),0))],source:SOURCE_NAME[meta?.source]||meta?.source||'',detail:meta?.description||'',to:line.to,
+  for(const [rule,list] of Object.entries(by)){const {area,group,to,playbook}=RULE_LINES[rule],meta=catalog.find(r=>r.id===rule)||RULES.find(r=>r.id===rule),label=meta?.label||rule;
+   (areas[area]||=[]).push({key:`rule-${rule}`,group,text:label,values:[n(list.reduce((t,s)=>t+(s.count||1),0))],source:SOURCE_NAME[meta?.source]||meta?.source||'',detail:meta?.description||'',to,handOff:{playbookId:playbook,title:`${label}：{0}`},
     ...rows(list,s=>({key:s.key,title:s.title,meta:s.facts?.[0],url:s.url||null,tag:s.chip}))});}
   return areas;}
  // Volumes the metric cards have no room for (they show five, and search, visits, key events and new stars come first):
