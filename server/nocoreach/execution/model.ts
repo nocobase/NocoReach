@@ -33,8 +33,11 @@ export type Work = {
   // The playbook chosen before start, its snapshot after start, and the tasks linked by a hand-over.
   playbookId?: string; playbook?: PlaybookSnapshot; prevTaskId?: string; nextTaskId?: string;
   // Article delivery: the article linked before start, and the choice frozen at start (article-flow.ts).
-  article?: { targetId: string; articleId: string | null; slug: string; title: string; sourceKey: string | null; linkedAt: string };
-  delivery?: { kind: 'article'; targetId: string; articleId: string | null; sourceKey: string | null; also?: { targetId: string; articleId: string | null; sourceKey: string | null }[] };
+  article?: { targetId: string; articleId: string | null; slug: string; title: string; sourceKey: string | null; linkedAt: string; locales?: string[] };
+  // `locales`: the languages chosen at start, primary first (2026-10-24); the Agent writes the primary, and once a person
+  // approves it, `translateFrom` holds that approved version while the Agent translates it into the others. A
+  // translation playbook (2026-10-25) sets `translateFrom` at start from the article as published (`published`).
+  delivery?: { kind: 'article'; targetId: string; articleId: string | null; sourceKey: string | null; also?: { targetId: string; articleId: string | null; sourceKey: string | null }[]; locales?: string[]; translateFrom?: { artifactId: string | null; at: string; by: string; draft: any; text: { title: string; description: string; body: string }; fields: string[]; published?: boolean } };
 };
 /** A transcript event of a demo run, as the demo Agent plays it back (`demo-data/demo-agent.ts`). */
 export type RunEvent = { seq: number; at: string; type: string; content?: string; tool?: string; input?: unknown; output?: unknown; meta?: Record<string, unknown> };

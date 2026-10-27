@@ -882,8 +882,14 @@ test('finds the article a task page belongs to, and says when a target could not
       slug: 'hello',
       title: '你好',
       url: 'https://example.com/cn/blog/hello/',
+      // The languages it has text in (Japanese is empty), for a translation's choice.
+      locales: ['en', 'zh'],
     },
     unchecked: false,
+  });
+  // The same languages read for an article picked by hand.
+  expect(await targets.languages('1', 'cms', '7')).toEqual({
+    locales: ['en', 'zh'],
   });
   // A page of the site that no target publishes, or a slug no article has: not found, and known to be so.
   expect(

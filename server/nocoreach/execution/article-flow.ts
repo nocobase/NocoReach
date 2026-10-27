@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { randomUUID } from 'node:crypto';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
-import { supportsStatus, type ArticleSnapshot } from '../../../shared/article-publishing.js';
+import { ARTICLE_FIELDS, articleLocales, supportsStatus, translationDefault, type ArticleSnapshot } from '../../../shared/article-publishing.js';
 import type { ArticleTargets } from '../articles/targets.js';
 import { articlePages, verifyPhrase, type ArticleDelivery, type ArticleProposal, type PublishOutcome } from '../articles/delivery.js';
 import { ArticleError, providerErrorKey } from '../articles/provider.js';
@@ -161,8 +161,9 @@ export class ArticleFlow {
    * Decide at start: the linked article; else a new article on the chosen target (`{ targetId }`); with nothing chosen,
    * the playbook's target, or the default target for a blog post. `'repo'` keeps the pull request. `also` lists other
    * targets: a linked article's slug found there (pre-read) is updated, otherwise the article is created there.
+   * `translate` (a translation playbook) starts the linked article's translation instead (startTranslation).
    */
-  async startDelivery(project: string, taskId: string, w: Work, playbookId: string, changes: boolean, choice: any, tx: any, pre: any = {}) {
+  async startDelivery(project: string, taskId: string, w: Work, playbookId: string, changes: boolean, choice: any, tx: any, pre: any = {}, translate?: { by: string; at: string }) {
     if (!changes || choice === 'repo') return;
     const targets = this.targets(project);
     const linked = w.article?.targetId ? targets.find((t) => t.id === w.article.targetId) : undefined;
@@ -177,7 +178,8 @@ export class ArticleFlow {
       target = (entry && targets.find((t) => t.id === entry)) || (playbookId === 'blog-post' ? targets.find((t) => t.default) || targets[0] : undefined);
     }
     if (!target) return;
-    const ids = Array.isArray(choice?.also) ? [...new Set(choice.also.filter((x) => typeof x === 'string' && x !== target.id))] : [];
+    // A translation publishes to the article's own target only.
+    const ids = !translate && Array.isArray(choice?.also) ? [...new Set(choice.also.filter((x) => typeof x === 'string' && x !== target.id))] : [];
     if (ids.length > MAX_ALSO) return fail(systemMessageText('articles.tooManyTargets'), 400);
     if (ids.some((id) => !targets.some((t) => t.id === id))) return fail(systemMessageText('articles.targetMissing'), 409);
     // The slugs were looked up before the lock: they must still be the linked article's.
@@ -192,7 +194,51 @@ export class ArticleFlow {
       }
       also.push({ targetId: id, articleId: found?.id || null, sourceKey });
     }
-    w.delivery = { kind: 'article', targetId: target.id, articleId: linked ? w.article.articleId || null : null, sourceKey: linked ? w.article.sourceKey || null : null, ...(also.length ? { also } : {}) };
+    // The languages chosen at start, primary first (2026-10-24): the target's own, in the order given. Without them (a
+    // task started before, or by a client that sends none) the Agent writes every language at once, as it always did.
+    const locales = Array.isArray(choice?.locales) ? [...new Set<string>(choice.locales.filter((l: unknown) => typeof l === 'string' && target.locales.includes(l)))] : [];
+    w.delivery = { kind: 'article', targetId: target.id, articleId: linked ? w.article.articleId || null : null, sourceKey: linked ? w.article.sourceKey || null : null, ...(also.length ? { also } : {}), ...(locales.length ? { locales } : {}) };
+    if (translate) await this.startTranslation(w, target, locales, translate, tx);
+  }
+  /**
+   * A translation (2026-10-25): the linked article as it is published stands in for an approved primary version, so the
+   * first run already translates (phase `translate`) and the source language is neither written nor reviewed again.
+   * `locales` is the source first, then the languages to write; without it, the source is the target's first language
+   * the article has, translated into the ones it lacks (all others when it lacks none).
+   */
+  private async startTranslation(w: Work, target: any, locales: string[], { by, at }: { by: string; at: string }, tx: any) {
+    const d = w.delivery!;
+    const source: ArticleSnapshot | null = d.articleId && d.sourceKey ? await this.s.snapshot(d.sourceKey, tx) : null;
+    if (!source) return fail(systemMessageText('articles.translateNeedsArticle'), 409);
+    const present = articleLocales(source),
+      fallback = translationDefault(target.locales, present);
+    const from = locales[0] || fallback.from,
+      to = locales.length ? locales.slice(1) : fallback.to;
+    if (!present.includes(from)) return fail(systemMessageText('articles.translateNoSource'), 409);
+    if (!to.length) return fail(systemMessageText('articles.translateNoLanguages'), 400);
+    const was = source.locales[from] || {};
+    const text = { title: was.title || '', description: was.description || '', body: was.body || '' };
+    // Every field the source has: whether a translation is out of date is not known, so all of it is translated.
+    const fields = ARTICLE_FIELDS.filter((f) => text[f].trim());
+    w.delivery = { ...d, locales: [from, ...to], translateFrom: { artifactId: null, at, by, draft: { locales: {} }, text, fields, published: true } };
+  }
+  /** Whether an approval of this version is of the primary language only, with other languages still to translate. */
+  needsTranslation(w: Work, output: Artifact) {
+    const d = w.delivery;
+    return Boolean(d?.locales && d.locales.length > 1 && !d.translateFrom && output.article);
+  }
+  /**
+   * The approved primary version, kept for the translation run: its draft (merged back under the translations) and the
+   * primary language's text as readers will see it, with the fields this version changed.
+   */
+  async approvePrimary(w: Work, output: Artifact, actor: string, at: string, tx: any) {
+    const d = w.delivery!, primary = d.locales![0], a: ArticleProposal = output.article;
+    const base = d.sourceKey ? await this.s.snapshot(d.sourceKey, tx) : null;
+    const draft = a.draft.locales?.[primary] || {}, was = base?.locales?.[primary] || {};
+    const text = { title: draft.title ?? was.title ?? '', description: draft.description ?? was.description ?? '', body: draft.body ?? was.body ?? '' };
+    // A new article translates every field; an update only the fields this version changed in the primary language.
+    const fields = d.articleId ? a.changes.filter((c) => c.startsWith(`${primary}.`)).map((c) => c.slice(primary.length + 1)) : ['title', 'description', 'body'].filter((f) => (text as any)[f]);
+    w.delivery = { ...d, translateFrom: { artifactId: output.id, at, by: actor, draft: a.draft, text, fields } };
   }
   /** What the Runner gets for an article step: the target's shape and the current source article. */
   async runInput(project: string, w: Work, tx: any) {
@@ -205,7 +251,23 @@ export class ArticleFlow {
         target.kind === 'nocobase-api' ? Object.keys(target.fields.locales[l] || {}) : target.kind === 'git-files' ? ['body', ...(target.format === 'frontmatter' ? (target.frontmatter ? ['title', 'description'] : []) : Object.keys(target.metadata?.keys[l] || {}))] : ['title', 'description', 'body'],
       ]),
     );
-    return { target: { name: target.name, locales: target.locales, fields, status: supportsStatus(target) }, action: d.articleId ? 'update' : 'create', source: source ? { id: source.id, slug: source.slug, status: source.status, locales: source.locales } : null };
+    // With languages chosen at start: the primary first, then, once it is approved, a translation of it into the others.
+    const L = d.locales?.length ? d.locales : null, translating = Boolean(L && L.length > 1 && d.translateFrom);
+    const languages = L ? { primary: L[0], others: L.slice(1), phase: translating ? 'translate' : 'primary', write: translating ? L.slice(1) : [L[0]], ...(translating ? { approved: { ...d.translateFrom!.text, fields: d.translateFrom!.fields } } : {}) } : undefined;
+    return { target: { name: target.name, locales: target.locales, fields, status: supportsStatus(target) }, action: d.articleId ? 'update' : 'create', source: source ? { id: source.id, slug: source.slug, status: source.status, locales: source.locales } : null, ...(languages ? { languages } : {}) };
+  }
+  /**
+   * A Runner's article for the phase it was asked for: the primary language alone (other languages it wrote anyway are
+   * left for the translation), or the approved primary version with the translations added (the primary as approved).
+   */
+  private byPhase(input: any, article: unknown) {
+    const L = input?.article?.languages, a = article && typeof article === 'object' ? (article as any) : null;
+    if (!L || !a || !a.locales || typeof a.locales !== 'object') return article;
+    if (L.phase === 'primary') return { ...a, locales: a.locales[L.primary] ? { [L.primary]: a.locales[L.primary] } : {} };
+    const approved = input.delivery?.translateFrom?.draft;
+    if (L.phase !== 'translate' || !approved) return article;
+    const written = Object.fromEntries((L.write as string[]).filter((l) => a.locales[l]).map((l) => [l, a.locales[l]]));
+    return { ...approved, ...(typeof a.summary === 'string' ? { summary: a.summary } : {}), locales: { ...approved.locales, ...written } };
   }
   /** Validate a Runner's article against the target; the artifact keeps the proposal and its base. */
   async proposal(project: string, input: any, article: unknown): Promise<ArticleProposal> {
@@ -213,7 +275,7 @@ export class ArticleFlow {
     const base = d.sourceKey ? await this.s.snapshot(d.sourceKey) : null;
     let p: ArticleProposal;
     try {
-      p = this.need().proposal(project, { targetId: d.targetId, articleId: d.articleId, base, baseKey: d.sourceKey, draft: article });
+      p = this.need().proposal(project, { targetId: d.targetId, articleId: d.articleId, base, baseKey: d.sourceKey, draft: this.byPhase(input, article) });
     } catch (error) {
       if (error instanceof ArticleError) return fail(systemMessageText('articles.invalidDraft', { 0: error.message }), 422);
       throw error;
@@ -286,7 +348,8 @@ export class ArticleFlow {
         await s.put(sourceKey, pre.snapshot, tx);
       }
       const title = pre.snapshot ? pre.snapshot.locales[target.locales[0]]?.title || pre.snapshot.slug : '';
-      w.article = { targetId: target.id, articleId: v.articleId ? String(v.articleId) : null, slug: pre.snapshot?.slug || '', title: clip(title, 300), sourceKey, linkedAt: at };
+      // The languages it has text in, for a translation's choice of what to translate (2026-10-25).
+      w.article = { targetId: target.id, articleId: v.articleId ? String(v.articleId) : null, slug: pre.snapshot?.slug || '', title: clip(title, 300), sourceKey, linkedAt: at, ...(pre.snapshot ? { locales: articleLocales(pre.snapshot) } : {}) };
       event.note = w.article.title || target.name;
       return true;
     }

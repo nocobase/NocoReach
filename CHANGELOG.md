@@ -8,20 +8,84 @@
 - The failure card says whose problem it is. For the computer's setup (a missing tool, a tool not signed in, the network, the runtime) it says that every Agent on that computer shares it and no longer offers Switch Agent; for a coding tool's sign-in, quota or model it suggests an Agent with another coding tool. After the same cause twice in a row it says "failed N times in a row for the same reason" and what to fix first, and Try again is no longer the main action. "Ask an engineer to check Technical details" is gone from run failures.
 - Agent › Who does the work reads how the task ended: a run the Agent itself failed counts as failed, not completed, and a missing tool or sign-in it reported shows on the Tasks row, which then offers Settings rather than another agent on the same computer.
 
+## Unreleased — Demo Mode HTTPS cookie defaults
+
+- Upgrade Demo Mode to `0.2.0-beta.2`, which supplies partitioned authentication cookie defaults for HTTPS demo deployments. Keep NocoReach's existing demo cookie configuration and companion package versions.
+
+## Unreleased — Verify reused Studio releases on repeated deployments
+
+- Repeated deployments of the same commit accept Studio's explicit `reused` response after reading and verifying the stored release. Pin that release's checksum through deployment and final verification instead of comparing it with a newly rebuilt archive; fresh uploads still require the local archive's exact SHA-256. CI summaries distinguish the rebuilt archive from the reused release, and approval and health checks remain in place.
+
+## Unreleased — New slogan on the sign-in page and sidebar
+
+- The sign-in page title and the sidebar footer read "AI finds growth opportunities. / Agents put them into action." (AI 找出增长机会，/ 交给 Agent 执行), as on the website and in the intro film, in all ten UI languages. The sidebar's second line no longer carries the NocoReach name.
+
+## Unreleased — The demo signs in inside the website
+
+- A demo deployment (`NOCOBASE_DEMO_MODE=true`) sets its sign-in cookies with `SameSite=None; Secure; Partitioned` (`auth.advanced.defaultCookieAttributes`), so the demo embedded in the website's NocoReach page keeps the session instead of returning to Sign in. Partitioned cookies stay with the embedding site; other deployments keep the default `SameSite=Lax` cookies.
+
+## Unreleased — Translate into other languages
+
+- The playbook Sync language versions is now Translate into other languages ("Add the missing languages, or bring translations up to date with the source."), and its Agent step is named Translate: Agent Translate › Review › Publish › Watch. A repository page still opens a pull request.
+- For an article on a publishing target, the start card names the Article to translate (found from the task's page, or chosen in the dialog) and, as tags, "From English into Japanese". The dialog, Choose article and languages, takes an existing article only, without Also publish to: a Source language among the languages the article has, and Translate into, where the languages it lacks are ticked and marked Missing; with none missing, every other language is ticked, to bring them up to date. Whether a translation is out of date is not known, so those are ticked by hand. A target with one language says there is nothing to translate.
+- Starting it takes the article as it is published as the approved source (`delivery.translateFrom` with `published`), so the first run already translates: the Agent writes only the chosen languages, change requests stay translations, and one approval publishes them all. The source language is neither rewritten nor reviewed again.
+- `nrArticles:match` and the article saved on a task carry the languages it has text in, and `nrArticles:languages` reads them for an article picked by hand.
+
+## Unreleased — Deploy releases to Solutions
+
+- Add a release-tag workflow that tests and builds one archive, then deploys it independently to the existing `reach` apps on Solutions China and Solutions Global using dedicated repository variables and secrets. Build preflight and deployment use `reach`, fixing `APP_NOT_FOUND` from the former `nocoreach` target. Keep the internal Studio and demo deployment triggers unchanged.
+- Reject release tags that do not match the application version, unmerged release commits, mismatched checkouts and the internal `nocoreach-demo` target before uploading. Reuse Studio approval handling and active-release, checksum and health verification.
+
+## Unreleased — The translating step is named Translate
+
+- While an article's other languages are translated from its approved primary one, the Agent's step the task went back to reads Translate (Agent Translate) in the task's step tags, and the current step in Tasks and Tasks › By Agent says the Agent is translating. Once the translations come back for review, the step is named as before.
+
+## Unreleased — AI content language: every UI language
+
+- A project's AI content language (Add new project, Project knowledge › Memory) offers the ten UI languages instead of Chinese and English, each named in itself as the account menu names it. A new project starts with the creator's UI language; Traditional Chinese no longer starts as Simplified Chinese. Projects without a language still write Chinese.
+- Every prompt for a project in a language other than Simplified Chinese ends with the same note the English projects had, naming the language. The English note is unchanged.
+- The daily analysis checks opportunity wording in two sets. Simplified Chinese, Traditional Chinese and Japanese keep the width rules (title 18, reason 30, a CJK character counting 1), with the vague words of each language. The other languages use the English limits (title 60 characters, reason 90 with a number, at most two sentences of suggestion); vague verbs are only checked in English.
+
+## Unreleased — Skills: playbooks as tags
+
+- Skills › Used in playbooks shows each playbook that names the Skill as a grey tag instead of a run of "Playbook · Step" text. Up to three show in full and the rest are counted as +N. Hovering over the cell lists the steps.
+- In a Skill's drawer, Used in playbooks moves from the footer sentence to its own line under When to use, as tags. A tag opens that playbook, and hovering over it names the step ("Step 1: …"). The footer keeps only the update date and the source.
+
+## Unreleased — One place for instructions to the Agent
+
+- The start card no longer has its own optional note: the activity's message box serves the same purpose, and before the task starts its placeholder says the Agent reads it when the task starts. Existing tasks keep their note, and the server still accepts one.
+- What a run reads as the person's messages keeps those left before the start (the first five) with the latest five, oldest first and within 6,000 characters, so an instruction given at the start does not drop out as later messages pile up (`runNotes` in `execution/flow.ts`).
+
+## Unreleased — Articles in several languages: the primary first, then the translations
+
+- A publishing target's first language is its primary language: its card reads "Primary language English · other languages Chinese, Japanese", and its form has a Primary language choice that moves a language to the front.
+- The start card names the task's languages ("Languages: English (primary) · Chinese · Japanese"). Change lets the person pick this task's primary language and leave languages out; every language of the target is chosen by default.
+- With two or more languages, the Agent writes the primary one only, and change requests touch only it. Its review card reads "The English version is ready; approve it to translate it", and approving it ("Approve and translate") publishes nothing yet: the Agent translates it into the other languages ("The Agent is translating into Chinese, Japanese"), the translated version ("The translations are ready; approve to publish them all") is reviewed with a tab per language, and one Approve and publish publishes them all. Before approval the review says which languages follow.
+- Tasks started before this, and tasks with one language, write every language at once as before.
+
+## Unreleased — Related tasks in groups
+
+- The task page's Properties card lists related tasks in a section of their own below the properties, in groups: Previous step (this task was handed off from it), Same opportunity O-n (tasks changing other places), and Next step. Each task is one row (its number, its title on one line, its status tag) that opens it. A task is listed once, in its closest relation; empty groups and an empty section are left out. The previous and next steps now carry their number and status from the server too.
+
 ## Unreleased — Watching: the current value in the colour of its change
 
 - Opportunities › Watching shows each change's current value in the colour the analysis rule gave it (red for a drop that hurts, green for good news, also when the good news is a drop), in the Value column, without "Now" before it; the grey line under it still says where it started. Before #198 the colour came as a chip beside the title and the value was repeated in plain text; now it shows once. A change without a figure reads "—" in grey.
 
 ## Unreleased — Demo environment
 
-- Add a dedicated demo deployment enabled with `NOCOBASE_DEMO_MODE=true`, using the published Demo Mode plugin. Settings › Demo management provides one page for importing, resetting and clearing demo data, configuring daily resets and managing demo accounts; its menu and route are available only while Demo Mode is enabled. The same lifecycle operations are available through `demo-mode data status|import|clear|reset` in standalone installations.
-- Provide Chinese and English datasets with two projects, connected data sources, site and market reports, opportunities, knowledge, tasks across execution and release states, conversations, inbox notifications and AI usage history. Reports follow consistent scenarios and dates relative to today; resets retain the selected language and refresh the data. Ordinary installations are not populated automatically.
-- Let visitors switch demo accounts from the account menu and try roles restricted to the demo projects, including a demo administrator. Reset and clear preserve the acting administrator's identity, session and management access; imports reject collisions with existing accounts.
+- Upgrade Demo Mode to `0.2.0-beta.1`. Move account switching to the plugin's standalone header menu to the left of the project switcher and remove the old avatar submenu, registration options and unused card action/footer adapters. Demo management now displays status, progress, scheduled resets and account links without data or language controls; data operations remain available through the CLI and API. Keep the existing companion plugin versions in this focused upgrade. The release's higher peer requirements are documented and verified against the pinned versions; their account and Agent migrations remain a separate coordinated upgrade.
+- New task no longer duplicates Demo Mode's read-only toast with an inline failure for Organize with AI or Create. Keep the input editable and restore the action buttons after refusal; validation, model and transport errors remain visible.
+- Upgrade Demo Mode to `0.1.0-beta.3`, Authentication to `2.0.0-beta.14`, Agents to `1.0.0-beta.24`, Runner to `0.1.0-beta.19` and CLI Client to `0.1.0-beta.16`. Release the application and CLI as `1.0.0-beta.71` so installed clients can receive the updated distribution. Use the plugin's public configuration and `demoModeRoutes` helper to omit Demo management outside demo deployments.
+- Daily reset is now deployment-managed and always enabled after generation. The management page displays the schedule without editing controls. Configure `NOCOBASE_DEMO_RESET_HOUR`, `NOCOBASE_DEMO_RESET_MINUTE`, `NOCOBASE_DEMO_RESET_TIMEZONE` and `NOCOBASE_DEMO_RESET_LANGUAGE` before restarting; defaults are 03:00 UTC and English, and previously saved schedules are ignored.
+- Quick sign-in now includes every enabled person account, including existing administrators before data generation. Anonymous home-page visitors enter an existing Super Admin automatically, while existing sessions, passwords and permissions are retained. The account menu preloads its entries even with the floating switcher hidden.
+- Add a dedicated demo deployment enabled with `NOCOBASE_DEMO_MODE=true`, using the published Demo Mode plugin. Settings › Demo management provides one page for importing, resetting and clearing demo data, viewing daily resets and switching system accounts; its menu and route are available only while Demo Mode is enabled. The same lifecycle operations are available through `demo-mode data status|import|clear|reset` in standalone installations.
+- Provide Chinese and English datasets with two projects, connected data sources, site and market reports, opportunities, knowledge, tasks across execution and release states, conversations, inbox notifications and AI usage history. Reports follow consistent scenarios and dates relative to today; manual resets retain the selected language and refresh the data; scheduled resets use the deployment language. Ordinary installations are not populated automatically.
+- Let visitors switch demo accounts from the account menu and try five business roles restricted to the demo projects. Use the existing Super Admin for administration instead of generating a second administrator account or the `nr.demo-admin` permission set. Reset and clear preserve the acting administrator's identity, session and management access; imports reject collisions with existing accounts.
 - Enforce read-only access by default, with administrator-configured collection write exceptions that still respect business permissions. Skills and Playbooks browsing does not persist missing built-ins or require a write exception, and preserves edited and deleted Skills.
 - Enable integrated demo chat with server-declared local reads and configurable policies. Simulate data collection, business analysis, Agent drafts and publishing after human review; demo project requests use local fixtures, tasks never dispatch to real Runners, and publishing records a simulated release. Disabled simulations refuse execution instead of falling back to external services.
 - Restrict imports, resets and clears to enabled demo deployments. Clear all project business data, including visitor additions, orphan records, attachments, credentials, conversations and task notifications, while retaining system accounts, configuration and the environment model. Failed imports use the same cleanup boundary.
 - Scope session cookies to the complete application mount and support root-mounted API paths.
-- Align Demo Mode `0.1.0-beta.2`, App Client `4.0.0-beta.3`, Agents `1.0.0-beta.23`, Jobs `0.1.0-beta.4`, Runner `0.1.0-beta.18` and CLI Client `0.1.0-beta.15`. Release the application CLI as `1.0.0-beta.70` so existing installations receive the compatible client. Rebuild the CLI and Runner distributions with the application and deploy the server before upgrading installed runners.
+- Keep App Client `4.0.0-beta.3` and Jobs `0.1.0-beta.4`. Rebuild the CLI and Runner distributions with the application and deploy the server before upgrading installed runners.
 
 ## Unreleased — Read an article full screen
 

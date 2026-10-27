@@ -596,11 +596,21 @@ function TargetsPanel({
             </CardHeader>
             <CardContent className='flex flex-col gap-1 text-sm text-muted-foreground'>
               <p>
-                {$t('articlePublishing.languages', {
-                  0: t.locales
-                    .map((l) => localeName(l, getCurrentLocale()))
-                    .join(getCurrentLocale().startsWith('zh') ? '、' : ', '),
-                })}
+                {/* The first language is the primary one, written and reviewed first; the others are translated
+                    from it (2026-10-24). */}
+                {t.locales.length > 1
+                  ? $t('articlePublishing.primaryLanguages', {
+                      0: localeName(t.locales[0], getCurrentLocale()),
+                      1: t.locales
+                        .slice(1)
+                        .map((l) => localeName(l, getCurrentLocale()))
+                        .join(
+                          getCurrentLocale().startsWith('zh') ? '、' : ', ',
+                        ),
+                    })
+                  : $t('articlePublishing.languages', {
+                      0: localeName(t.locales[0], getCurrentLocale()),
+                    })}
               </p>
               {t.kind !== 'git-files' && t.downstream && (
                 <p className='break-all'>
@@ -1117,6 +1127,46 @@ function EditCard({
                 </FieldDescription>
               </Field>
             )}
+            {Array.isArray(advanced?.locales) &&
+              advanced.locales.length > 1 && (
+                // The primary language is the first of the target's languages: choosing it moves it to the front.
+                <Field>
+                  <FieldLabel htmlFor={`${id}-primary`}>
+                    {$t('articleTask.primaryLanguage')}
+                  </FieldLabel>
+                  <select
+                    id={`${id}-primary`}
+                    value={String(advanced.locales[0])}
+                    onChange={(e) =>
+                      update({
+                        advanced: JSON.stringify(
+                          {
+                            ...advanced,
+                            locales: [
+                              e.target.value,
+                              ...(advanced.locales as string[]).filter(
+                                (l) => l !== e.target.value,
+                              ),
+                            ],
+                          },
+                          null,
+                          2,
+                        ),
+                        touched: true,
+                      })
+                    }
+                  >
+                    {(advanced.locales as string[]).map((l) => (
+                      <option key={l} value={l}>
+                        {localeName(l, getCurrentLocale())}
+                      </option>
+                    ))}
+                  </select>
+                  <FieldDescription>
+                    {$t('articlePublishing.primaryHelp')}
+                  </FieldDescription>
+                </Field>
+              )}
             <Field data-invalid={Boolean(errors.advanced)}>
               <FieldLabel htmlFor={`${id}-advanced`}>
                 {$t('articlePublishing.advanced')} *

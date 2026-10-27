@@ -313,9 +313,18 @@ export function MissingLanguages({
 }: {
   languages: ArticleLanguages;
 }) {
-  const { locales, missing, isNew } = languages;
+  const { locales, missing, isNew, pending } = languages;
   const names = (list: string[]) =>
     joinNames(list.map((l) => localeName(l, getCurrentLocale())));
+  if (pending.length)
+    return (
+      <p className={text.muted}>
+        {$t('articleTask.translateAfter', {
+          0: names(pending),
+          1: names(locales.slice(0, 1)),
+        })}
+      </p>
+    );
   return missing.length > 0 ? (
     <p className={text.muted}>
       {isNew

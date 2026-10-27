@@ -241,4 +241,29 @@ describe('task list step', () => {
     expect(stepOf(work('修改'))?.text).toBe('Agent 正在修改');
     expect(stepOf(work('修改', 'queued'))?.text).toBe('等 Agent 接手');
   });
+
+  // 2026-10-24: the Agent's step a task went back to for an article's translation is named Translate.
+  it('names the Agent step Translate while an article is translated', () => {
+    const translating = (w: Work, release?: object) =>
+      ({
+        ...w,
+        delivery: {
+          kind: 'article',
+          targetId: 'cms',
+          articleId: null,
+          sourceKey: null,
+          locales: ['en', 'zh'],
+          translateFrom: { artifactId: 'a1', at: '2026-10-24T00:00:00Z' },
+        },
+        ...(release ? { release } : {}),
+      }) as Work;
+    setDictionary(english);
+    expect(stepOf(translating(work('Change')))?.text).toBe('Agent: Translate');
+    setDictionary(null);
+    expect(stepOf(translating(work('修改')))?.text).toBe('Agent 正在翻译');
+    // Once the translations are approved and publishing, the step is itself again.
+    expect(
+      stepOf({ ...translating(work('修改'), { state: 'publishing' }) })?.text,
+    ).toBe('Agent 正在修改');
+  });
 });

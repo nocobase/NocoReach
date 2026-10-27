@@ -14,6 +14,7 @@ import { createAppTest } from '@nocobase/app-testing/server';
 import { expect, vi } from 'vitest';
 
 import { isAppOwnedSnapshot } from '../../server/nocoreach/classic-import.js';
+import { STARTS_KEY } from '../../server/nocoreach/execution/restarts.js';
 import {
   IMPORT_HOLD_LEASE_MS,
   type LegacyAction,
@@ -62,13 +63,16 @@ test('timers leave the data alone while the classic import runs, and work again 
 }) => {
   const app = testApp.application;
   const nr = app.container.resolve(nocoReachToken);
-  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
   // The test fires the timers itself, through the handler the provider gives the schedule executor.
-  nr.plugin.taskExecution.stop();
   await app.container
     .resolve(jobExecutorServiceToken)
     .getScheduleExecutor('nocoreach')
     .shutdown();
+  // Reproduce a task timer firing before import without depending on the wall-clock second during sign-in.
+  const taskCron = nr.legacy.jobs.find((job) => job.name === 'taskCron')!;
+  await nr.legacy.tick(taskCron);
+  nr.plugin.taskExecution.stop();
+  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
   const analysisCron = nr.legacy.jobs.find(
     (job) => job.name === 'analysisCron',
   )!;
@@ -112,8 +116,19 @@ test('timers leave the data alone while the classic import runs, and work again 
       .filter((key) => !isAppOwnedSnapshot(key))
       .sort();
 
+  const starts = await snapshot(STARTS_KEY);
+  expect(starts).toEqual({ starts: [expect.any(String)] });
   await call('begin', { replace: false });
-  await call('rows', { table: 'nrSnapshots', rows: classicRows });
+  expect(
+    await call('rows', {
+      table: 'nrSnapshots',
+      rows: [
+        ...classicRows,
+        { id: '102', key: STARTS_KEY, payload: { starts: [at] } },
+      ],
+    }),
+  ).toEqual({ inserted: 2, skipped: 1 });
+  expect(await snapshot(STARTS_KEY)).toEqual(starts);
 
   // Mid-import, project 1 exists with a retry due: the analysis timer's firing is skipped.
   expect(await nr.legacy.tick(analysisCron)).toBe(false);
@@ -157,6 +172,7 @@ test('timers leave the data alone while the classic import runs, and work again 
 
   // A CLI that stops after a call: the timers stay held for the lease, then run again.
   await call('begin', { replace: true });
+  expect(await snapshot(STARTS_KEY)).toEqual(starts);
   await call('rows', { table: 'nrSnapshots', rows: classicRows });
   expect(await nr.legacy.tick(analysisCron)).toBe(false);
   const clock = vi

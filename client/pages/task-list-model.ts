@@ -1,5 +1,6 @@
 import { formatDate } from '#lib/format';
 import {localizeWorkSnapshots} from './playbook-snapshot';
+import {stageName} from './playbook-model';
 import { timestamp } from '../../shared/timestamps';
 import { $t } from '#i18n';
 import type {Tone} from '#components/reach/tag';
@@ -30,7 +31,7 @@ export function stepOf(w?:Work):Step|null{
  if(st.kind==='agent'){const who='Agent',run=w.latestRun?.status;
   if(run==='failed')return {text:$t('taskList.runFailed',{0:who}),tone:'red'};
   if(run==='queued')return {text:$t('taskList.waitingAgentPickUp')};
-  return {text:$t('taskList.executorActivity',{0:who,1:st.name})};}
+  return {text:$t('taskList.executorActivity',{0:who,1:stageName(st,w)})};}
  if(st.kind==='review')return {text:st.name,tone:'amber'};
  if(st.kind==='publish')return {text:$t('common.confirmPublish'),tone:'amber'};
  if(st.kind==='release'){const s=w.release?.state;return s==='merge_failed'?{text:$t('taskList.mergeFailed'),tone:'red'}:s==='not_seen'?{text:$t('taskList.confirmLive'),tone:'amber'}:{text:s==='verifying'?$t('taskList.confirmingLive'):$t('taskList.merging')};}

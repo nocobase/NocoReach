@@ -8,6 +8,7 @@ import type { MockEngine } from '../../../app-plugins/nocoreach-mock/server/engi
 import { OnlineProvider } from './provider';
 import { flowRunInput, type StageKind, type Stage, readsOnly, changesRepo } from './flow';
 import { PlaybookStore, defaultPlaybookId, stagesFor, draftPlaybook } from './playbook';
+import { translatesArticle } from '../../../shared/playbook-catalog';
 import { AgentStore, allowedPath } from './agent';
 import { TaskAgentsRuntime } from './agents-runtime';
 import { TaskAgentUnavailableError } from './agent-error.js';
@@ -36,6 +37,8 @@ const active = (r: Run) => r.status === 'queued' || r.status === 'running';
 const withoutRepo = (w: Work, stage: Stage) => stage.kind === 'agent' && stage.mode === 'analyze' && !w.flow!.stages.some(changesRepo);
 // A task that delivers an article to a publishing target needs no repository for any step (article-flow.ts).
 const articleTask = (w: Work) => w.delivery?.kind === 'article';
+// A related task as the task page lists it: its title, number and where it stands.
+const relatedTask = (r: any) => { const t = r.toJSON ? r.toJSON() : r; return { id: t.id, title: t.title, ...(Number.isInteger(t.evidence?.no) ? { no: t.evidence.no } : {}), state: taskStanding({ work: t.evidence?.work, status: t.status }) }; };
 const ID = /^[1-9]\d{0,15}$/;
 const HOUR = 3600000;
 // What says where a task came from (who found it, from which page or change), carried into a task it hands off to.
@@ -142,7 +145,8 @@ export class TaskService {
     const [runs, artifacts, reviews] = await Promise.all(['run', 'artifact', 'review'].map(k => this.list(k, project, taskId, tx)));
     const content=work.contentId?await this.snapshot(this.key('content',project,'index',work.contentId),tx):null;
     const linked = [work.prevTaskId || task.evidence?.handoff?.taskId, work.nextTaskId].filter(Boolean).map(String);
-    const related = [...(await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => ({ id: r.get('id'), title: r.get('title'), relation: String(r.get('id')) === String(work.nextTaskId) ? 'next' : 'prev' })), ...await this.siblings(project, task, tx)];
+    // The previous and next steps carry their number and where they stand too, as the opportunity's other tasks do.
+    const related = [...(await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => ({ ...relatedTask(r), relation: String(r.get('id')) === String(work.nextTaskId) ? 'next' : 'prev' })), ...await this.siblings(project, task, tx)];
     return { task, content, work, runs: runs.map(({ input, transcript: _transcript, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), articleBases: await this.articleFlow.bases(project, taskId, work, tx) };
   }
   // The other tasks handed off from the same opportunity (2026-10-22: one opportunity, a task per place to change), in
@@ -153,7 +157,7 @@ export class TaskService {
     const strategy = await this.snapshot(`strategy:${project}`, tx);
     const ids = [...new Set<string>([...(strategy?.proposals || [])].reverse().filter((p: any) => p.taskId && p.insight?.id === insight).map((p: any) => String(p.taskId)))].filter(id => id !== String(task.id));
     const rows = (await Promise.all(ids.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean);
-    return rows.map((r: any) => { const t = r.toJSON ? r.toJSON() : r, w = t.evidence?.work; return { id: t.id, title: t.title, relation: 'sibling', ...(Number.isInteger(t.evidence?.no) ? { no: t.evidence.no } : {}), state: taskStanding({ work: w, status: t.status }) }; });
+    return rows.map((r: any) => ({ ...relatedTask(r), relation: 'sibling' }));
   }
   private async withAgent(project: string, data: any, actor?: string) {
     // Actor-specific Runner eligibility opens plugin reads of its own.
@@ -664,7 +668,7 @@ export class TaskService {
         w.note = typeof v.note === 'string' ? v.note.trim().slice(0, 3000) : '';
         if (!w.humanOwnerId) { await this.member(actor, tx); w.humanOwnerId = actor; w.humanOwnerName = actorName; }
         w.stage = 'flow'; w.step = 0; w.results = []; event.note = p.name;
-        await this.articleFlow.startDelivery(project, taskId, w, p.id, w.flow.stages.some(changesRepo), v.delivery, tx, articleRead);
+        await this.articleFlow.startDelivery(project, taskId, w, p.id, w.flow.stages.some(changesRepo), v.delivery, tx, articleRead, translatesArticle(p) ? { by: actor, at } : undefined);
         await this.enterFlowStage(project, taskId, task, w, 0, tx, actor, at);
       } else if (v.command === 'comment') {
         // A message for the executor; the next run reads the latest ones.
@@ -682,27 +686,36 @@ export class TaskService {
           if (output.pr?.outOfScope?.length && v.confirmOutOfScope !== true) return fail(systemMessageText('messages.confirmChangesOutsideAllowedScope', { 0: output.pr.outOfScope.join('、') }), 409);
           // Files a publishing target exports would be rewritten by its exporter: they are published as articles instead.
           if (output.pr?.protected?.length) return fail(systemMessageText('articles.protectedPaths', { 0: output.pr.protected.join('、') }), 409);
-          if (w.flow!.stages[index + 1]?.kind === 'release' && output.article) w.release = this.articleFlow.release(project, task, output, optional(v.release?.note, 2000));
-          else if (w.flow!.stages[index + 1]?.kind === 'release') {
-            const pr = output.pr, rel = v.release || {};
-            const base = { note: optional(rel.note, 2000) || pr?.release || task.title, pages: await this.releasePages(project, Array.isArray(rel.pages) ? rel.pages : pr?.pages || [], w, tx), ...(pr?.verifyText ? { verifyText: pr.verifyText } : {}) };
-            w.release = pr?.headSha ? { state: 'merging', pr: { number: pr.number, url: pr.url, headSha: pr.headSha }, ...base } : { state: 'not_seen', reason: 'manual', ...base };
-          }
-          w.results[index - 1] = { ...output, approvedAt: at, approvedBy: actor };
-          await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approve', checklist: checked, reviewerId: actor, at }, tx);
-          await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
-          // An accepted document (a 方案 or 调研 playbook) goes into the knowledge base as “Agent 交付” (2026-10-08), so the
-          // daily analysis and later tasks know it; saved once the approval is committed.
-          if (w.stage === 'done' && w.playbook?.kind === 'plan' && this.p.knowledge?.saveDelivery) {
-            const doc = w.results[index - 1]!, save = () => { void this.p.knowledge.saveDelivery(project, { taskId, title: task.title, text: doc.content }).catch(() => undefined); };
-            if (typeof tx?.afterCommit === 'function') tx.afterCommit(save); else save();
-          }
-          if (v.next) {
-            // Hand-over: the accepted document becomes the brief of a new task with the next playbook (not started).
-            if (w.stage !== 'done' || w.playbook?.kind !== 'plan' || !w.playbook.next.includes(v.next) || w.nextTaskId) return fail(systemMessageText('taskExecution.stepCannotHandedAnotherPlaybook'), 409);
-            const p = await this.playbooks.get(project, v.next, tx), accepted = w.results[index - 1]!;
-            const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: `${p.name}：${task.title}`.slice(0, 200), brief: systemMessageText('messages.taskBriefDocumentDeliveredTask', { 0: task.title, 1: accepted.content }).slice(0, 30000), status: systemMessageText('common.pending'), evidence: { source: systemMessageText('taskExecution.chainedTask'), insight: task.evidence?.insight || null, context: task.evidence?.context || null, ...foundBy(task.evidence), handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content }, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
-            w.nextTaskId = String(child.get ? child.get('id') : child.id); event.note = p.name; event.nextTaskId = w.nextTaskId;
+          // The primary language approved while others are to follow: the Agent translates it before anything is published
+          // (2026-10-24). The step goes back to the Agent; the translated version comes back here for one Publish of all.
+          if (w.flow!.stages[index + 1]?.kind === 'release' && this.articleFlow.needsTranslation(w, output)) {
+            await this.articleFlow.approvePrimary(w, output, actor, at, tx);
+            event.note = 'translate';
+            await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approvePrimary', checklist: checked, reviewerId: actor, at }, tx);
+            await this.enterFlowStage(project, taskId, task, w, index - 1, tx, actor, at);
+          } else {
+            if (w.flow!.stages[index + 1]?.kind === 'release' && output.article) w.release = this.articleFlow.release(project, task, output, optional(v.release?.note, 2000));
+            else if (w.flow!.stages[index + 1]?.kind === 'release') {
+              const pr = output.pr, rel = v.release || {};
+              const base = { note: optional(rel.note, 2000) || pr?.release || task.title, pages: await this.releasePages(project, Array.isArray(rel.pages) ? rel.pages : pr?.pages || [], w, tx), ...(pr?.verifyText ? { verifyText: pr.verifyText } : {}) };
+              w.release = pr?.headSha ? { state: 'merging', pr: { number: pr.number, url: pr.url, headSha: pr.headSha }, ...base } : { state: 'not_seen', reason: 'manual', ...base };
+            }
+            w.results[index - 1] = { ...output, approvedAt: at, approvedBy: actor };
+            await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approve', checklist: checked, reviewerId: actor, at }, tx);
+            await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
+            // An accepted document (a 方案 or 调研 playbook) goes into the knowledge base as “Agent 交付” (2026-10-08), so the
+            // daily analysis and later tasks know it; saved once the approval is committed.
+            if (w.stage === 'done' && w.playbook?.kind === 'plan' && this.p.knowledge?.saveDelivery) {
+              const doc = w.results[index - 1]!, save = () => { void this.p.knowledge.saveDelivery(project, { taskId, title: task.title, text: doc.content }).catch(() => undefined); };
+              if (typeof tx?.afterCommit === 'function') tx.afterCommit(save); else save();
+            }
+            if (v.next) {
+              // Hand-over: the accepted document becomes the brief of a new task with the next playbook (not started).
+              if (w.stage !== 'done' || w.playbook?.kind !== 'plan' || !w.playbook.next.includes(v.next) || w.nextTaskId) return fail(systemMessageText('taskExecution.stepCannotHandedAnotherPlaybook'), 409);
+              const p = await this.playbooks.get(project, v.next, tx), accepted = w.results[index - 1]!;
+              const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: `${p.name}：${task.title}`.slice(0, 200), brief: systemMessageText('messages.taskBriefDocumentDeliveredTask', { 0: task.title, 1: accepted.content }).slice(0, 30000), status: systemMessageText('common.pending'), evidence: { source: systemMessageText('taskExecution.chainedTask'), insight: task.evidence?.insight || null, context: task.evidence?.context || null, ...foundBy(task.evidence), handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content }, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
+              w.nextTaskId = String(child.get ? child.get('id') : child.id); event.note = p.name; event.nextTaskId = w.nextTaskId;
+            }
           }
         } else {
           const comment = text(v.comment, 3000); event.comment = comment;
