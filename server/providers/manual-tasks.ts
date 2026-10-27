@@ -30,6 +30,9 @@ export default class ManualTasksProvider extends ServiceProvider<Application> {
     );
   }
   public override async start(): Promise<void> {
+    // Task runs read the files attached to their task through the manual tasks service.
+    this.app.container.resolve(nocoReachToken).plugin.taskAttachments =
+      this.app.container.resolve(manualTasksToken);
     const clean = () => {
       if (this.pending) return;
       this.pending = this.app.container

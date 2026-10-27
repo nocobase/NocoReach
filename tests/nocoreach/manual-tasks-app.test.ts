@@ -15,6 +15,7 @@ import {
   ManualTaskDraftView,
   ManualTaskInput,
   TaskMediaView,
+  TASK_MEDIA_COUNT,
   TASK_MEDIA_LIMIT,
 } from '../../shared/manual-task.js';
 import { databaseManagerToken } from '@nocobase/db';
@@ -24,6 +25,7 @@ import { ManualTasks } from '../../server/nocoreach/manual-tasks.js';
 import { validateTaskMedia } from '../../server/nocoreach/manual-tasks.js';
 import type { TaskMediaRecord } from '../../server/nocoreach/manual-tasks.js';
 import { roleOf } from '../../server/nocoreach/policy.js';
+import { docx, xlsxBook } from './office-fixtures.js';
 import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
 
 vi.setConfig({ testTimeout: 120000, hookTimeout: 120000 });
@@ -119,14 +121,8 @@ test('manual create is authorized, strictly validated, atomic, idempotent and do
     { ...input(), requestId: 'invalid' },
     {
       ...input(),
-      attachmentIds: [
-        randomUUID(),
-        randomUUID(),
-        randomUUID(),
-        randomUUID(),
-        randomUUID(),
-        randomUUID(),
-      ],
+      // Eleven: one more than the ten files a task takes.
+      attachmentIds: Array.from({ length: 11 }, () => randomUUID()),
     },
   ])
     expect((await create(admin, invalid)).status).toBe(400);
@@ -219,6 +215,168 @@ test('manual create is authorized, strictly validated, atomic, idempotent and do
   const text = JSON.stringify(await manifest.json());
   expect(text).toContain('task create');
   expect(text).toContain('contentFile');
+});
+
+test('documents attach like media, download safely, feed the draft and reach the task runs', async ({
+  testApp,
+  connection,
+}) => {
+  const container = testApp.application.container;
+  const runtime = container.resolve(nocoReachToken);
+  const execution = (
+    runtime.plugin as unknown as { taskExecution: TaskService }
+  ).taskExecution;
+  execution.stop();
+  const manual = container.resolve(manualTasksToken);
+  expect(runtime.plugin.taskAttachments).toBe(manual);
+  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  await runtime.plugin.projects.create({
+    name: 'Document tests',
+    domain: 'documents.example.test',
+  });
+  const requestId = randomUUID();
+  const brief = docx(['Pricing brief', 'Pro plan costs 49 per month']);
+  const sent = async (file: File) => {
+    const response = await upload(admin, requestId, file);
+    expect(response.status).toBe(201);
+    return TaskMediaView.parse((await response.json()).data);
+  };
+  // Browsers report no type for some documents; the extension and content decide.
+  const word = await sent(new File([brief], 'brief.docx'));
+  expect(word.mimeType).toBe(
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  );
+  const sheet = await sent(
+    new File(
+      [
+        xlsxBook({
+          Plans: [
+            ['Plan', 'Price'],
+            ['Pro', 49],
+          ],
+        }),
+      ],
+      'plans.xlsx',
+    ),
+  );
+  const legacy = await upload(
+    admin,
+    requestId,
+    new File(['x'], 'old.xls', { type: 'application/vnd.ms-excel' }),
+  );
+  expect(legacy.status).toBe(400);
+  expect(await legacy.json()).toMatchObject({
+    error: { reason: 'TASK_MEDIA_LEGACY_FORMAT' },
+  });
+
+  // Documents download and never render in place.
+  const content = await testApp.fetch(
+    new Request(`http://localhost${word.contentUrl}`, {
+      headers: { cookie: admin.cookie },
+    }),
+  );
+  expect(content.status).toBe(200);
+  expect(content.headers.get('content-disposition')).toMatch(/^attachment;/);
+  expect(content.headers.get('content-security-policy')).toContain('sandbox');
+  expect(content.headers.get('x-content-type-options')).toBe('nosniff');
+  expect(Buffer.from(await content.arrayBuffer())).toEqual(brief);
+
+  // Organize with AI reads the documents' text as data.
+  const complete = vi.spyOn(execution.provider, 'complete').mockResolvedValue(
+    '```json\n' +
+      JSON.stringify({
+        title: 'Rework the pricing page from the brief',
+        background: 'The brief sets Pro at 49 per month.',
+        why: 'The page should match the brief.',
+        steps: ['Rewrite the plan section'],
+        criteria: ['The page shows the brief’s prices'],
+        playbookId: 'optimize-page',
+      }) +
+      '\n```',
+  );
+  const draft = (body: unknown, client = admin) =>
+    client.fetch('/nocoreachTasks/draft', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        origin: 'http://localhost',
+      },
+      body: JSON.stringify(body),
+    });
+  const ok = await draft({
+    projectId: '1',
+    idea: 'Follow the brief',
+    requestId,
+    attachmentIds: [word.id, sheet.id],
+  });
+  expect(ok.status).toBe(200);
+  expect((await ok.json()).data.description).toContain(
+    'The brief sets Pro at 49 per month.',
+  );
+  const prompt = JSON.parse(complete.mock.calls[0][1]);
+  expect(prompt.attachments).toEqual([
+    {
+      name: 'brief.docx',
+      text: expect.stringContaining('Pro plan costs 49 per month'),
+    },
+    { name: 'plans.xlsx', text: 'Plans\nPlan,Price\nPro,49' },
+  ]);
+  // Only the person's own unlinked files of this draft and session are read.
+  for (const body of [
+    { projectId: '1', idea: 'x', requestId, attachmentIds: [randomUUID()] },
+    {
+      projectId: '1',
+      idea: 'x',
+      requestId: randomUUID(),
+      attachmentIds: [word.id],
+    },
+    { projectId: '1', idea: 'x', attachmentIds: [word.id] },
+  ]) {
+    const refused = await draft(body);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({
+      error: { reason: 'TASK_MEDIA_READ_DENIED' },
+    });
+  }
+  const otherSession = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  expect(
+    (
+      await draft(
+        { projectId: '1', idea: 'x', requestId, attachmentIds: [word.id] },
+        otherSession,
+      )
+    ).status,
+  ).toBe(403);
+  expect(complete).toHaveBeenCalledTimes(1);
+
+  // Created, the task's runs receive the files from its own attachments only.
+  const created = await create(admin, {
+    ...input(),
+    requestId,
+    attachmentIds: [word.id, sheet.id],
+  });
+  expect(created.status).toBe(201);
+  const taskId = String((await created.json()).data.id);
+  const files = await manual.forAgent(connection, '1', taskId, [
+    word.id,
+    sheet.id,
+    randomUUID(),
+  ]);
+  expect(files.map(({ name, type }) => [name, type])).toEqual([
+    [
+      'brief.docx',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ],
+    [
+      'plans.xlsx',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ],
+  ]);
+  expect(await files[0].read!()).toEqual(brief);
+  expect(await manual.forAgent(connection, '1', '999999', [word.id])).toEqual(
+    [],
+  );
+  complete.mockRestore();
 });
 
 test('Organize with AI is authorized, bounded, saves nothing and reports a missing model or an unusable answer', async ({
@@ -615,9 +773,13 @@ test('private media enforces ownership, project, session, draft, limits and pers
   ).toBe(task.id);
   const quotaDraft = randomUUID();
   const uploads = await Promise.all(
-    Array.from({ length: 8 }, () => upload(admin, quotaDraft)),
+    Array.from({ length: TASK_MEDIA_COUNT + 3 }, () =>
+      upload(admin, quotaDraft),
+    ),
   );
-  expect(uploads.filter((response) => response.status === 201)).toHaveLength(5);
+  expect(uploads.filter((response) => response.status === 201)).toHaveLength(
+    TASK_MEDIA_COUNT,
+  );
   expect(uploads.filter((response) => response.status === 429)).toHaveLength(3);
   const service = testApp.application.container.resolve(manualTasksToken);
   const pending = await connection
@@ -908,7 +1070,7 @@ test('retries durable draft deletion claims before expiry and reclaims quota wit
   const taskCount = await connection
     .repository('nrTasks')
     .count({ filter: { projectId: '1' } });
-  for (let index = 0; index < 5; index++) {
+  for (let index = 0; index < TASK_MEDIA_COUNT; index++) {
     const response = await upload(admin, draft);
     expect(response.status).toBe(201);
     records.push(TaskMediaView.parse((await response.json()).data));
