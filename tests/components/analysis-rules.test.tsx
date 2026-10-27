@@ -58,7 +58,15 @@ vi.mock('../../client/online-agent/page-entry', () => ({
   ),
 }));
 let data: View;
+// The daily analysis workflow's schedule, as nrAnalysis:status returns it; null when there is none.
+let schedule: {
+  workflowId: number;
+  enabled: boolean;
+  cron: string | null;
+  timezone?: string;
+} | null;
 beforeEach(() => {
+  schedule = null;
   setDictionary(null);
   context.allowed = true;
   context.actions = null;
@@ -80,10 +88,12 @@ beforeEach(() => {
   action.mockReset();
   action.mockImplementation(
     async (
-      _resource: string,
+      resource: string,
       op: string,
       { body }: { body: Record<string, any> },
     ) => {
+      if (resource === 'nrAnalysis' && op === 'status')
+        return { running: false, last: null, runs: [], schedule };
       if (op === 'view') return structuredClone(data);
       if (op === 'save') {
         if (body.rules)
@@ -238,10 +248,14 @@ test('a change confirmed in the chat shows on the page without a reload', async 
   act(() => notifyPageChange('analysisRules', 1));
   await waitFor(() => expect(numbers()).toContain('50'));
   expect(calls('view')).toHaveLength(2);
+  // What the rules cover is in the ⓘ beside the title, not a grey line under it.
+  const rules = screen.getByRole('region', { name: '规则' });
+  expect(rules.querySelector('[data-rules-summary]')).toBeNull();
+  await userEvent.click(
+    within(rules).getByRole('button', { name: '规则是什么' }),
+  );
   expect(
-    within(screen.getByRole('region', { name: '规则' })).getByText(/^关注/, {
-      selector: '[data-rules-summary]',
-    }),
+    await screen.findByText(/^关注/, { selector: '[data-rules-summary]' }),
   ).toBeVisible();
   expect(screen.queryByText(/默认配置|已调整/)).not.toBeInTheDocument();
   expect(screen.queryByText(/当前关注 Search Console/)).not.toBeInTheDocument();
@@ -420,4 +434,45 @@ test('rename opens a prefilled modal, keeps failures editable, and renames the s
     name: '内容增长',
     storeRevision: 1,
   });
+});
+
+test('the rules ⓘ says when the daily analysis runs, from its workflow', async () => {
+  schedule = {
+    workflowId: 1,
+    enabled: true,
+    cron: '0 8 * * *',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  };
+  await start();
+  const rules = screen.getByRole('region', { name: '规则' });
+  await userEvent.click(
+    within(rules).getByRole('button', { name: '规则是什么' }),
+  );
+  expect(
+    await screen.findByText('每天 08:00 分析，修改从下一次分析生效。'),
+  ).toBeVisible();
+  const total = data.rules.length;
+  expect(screen.getByText(`已启用 ${total} / ${total} 条规则`)).toBeVisible();
+  expect(screen.queryByText(/9:00/)).not.toBeInTheDocument();
+  cleanup();
+  // A paused workflow says so; with no schedule the note leaves the time out.
+  schedule = { ...schedule, enabled: false };
+  await start();
+  await userEvent.click(
+    within(screen.getByRole('region', { name: '规则' })).getByRole('button', {
+      name: '规则是什么',
+    }),
+  );
+  expect(
+    await screen.findByText('每天的自动分析已暂停，修改从下一次分析生效。'),
+  ).toBeVisible();
+  cleanup();
+  schedule = null;
+  await start();
+  await userEvent.click(
+    within(screen.getByRole('region', { name: '规则' })).getByRole('button', {
+      name: '规则是什么',
+    }),
+  );
+  expect(await screen.findByText('修改从下一次分析生效。')).toBeVisible();
 });

@@ -1,13 +1,11 @@
 import { googleLocalFreshness } from '../../../shared/google-cache.js';
 import {
   useMessageState,
-  getCurrentLocale,
   translateSystemError,
   $t,
   $tj,
   $legacyText,
 } from '#i18n';
-import { timeZoneName } from '#lib/time-zone-name';
 import { rowsFor, type Row } from './board';
 import { signalDisposition } from '../../../shared/strategy-pending.js';
 import {
@@ -68,6 +66,7 @@ import {
   judgeMissing,
   type AnalysisStatus,
 } from './service';
+import { dailyAnalysisTime } from './schedule-time';
 import '../reach-workspace.css';
 import './strategy.css';
 type Task = {
@@ -550,16 +549,7 @@ function HowAnalyzed({
     ) : (
       text
     );
-  // The daily time from the workflow's cron ("0 9 * * *"), in its time zone, named only when it is not the browser's.
-  const [minute, hour] = String(schedule?.cron || '')
-      .trim()
-      .split(/\s+/),
-    time =
-      /^\d+$/.test(minute || '') && /^\d+$/.test(hour || '')
-        ? `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`
-        : null,
-    zone = schedule?.timezone,
-    local = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const time = dailyAnalysisTime(schedule);
   if (schedule && !schedule.enabled)
     return $tj('strategy.howAnalyzedPaused', {
       0: rules,
@@ -568,17 +558,7 @@ function HowAnalyzed({
   if (schedule && time)
     return $tj('strategy.howAnalyzedDaily', {
       0: rules,
-      1: toSchedules(
-        $t('strategy.everyDayAt', {
-          0:
-            zone && zone !== local
-              ? $t('strategy.timeInZone', {
-                  0: time,
-                  1: timeZoneName(zone, getCurrentLocale()),
-                })
-              : time,
-        }),
-      ),
+      1: toSchedules($t('strategy.everyDayAt', { 0: time })),
     });
   return $tj('strategy.howAnalyzedManual', { 0: rules });
 }

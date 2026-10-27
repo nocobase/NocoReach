@@ -63,7 +63,8 @@ export default function SiteAudit() {
   };
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={view === "issues" && report?.counts ? <InfoTip label={$t('common.aboutData')} side="bottom"><p>{$tj('siteAudit.pagesReadAgainWeeklyUp',{0:day(report.oldestRead),1:day(report.newestRead)})}</p><p>{$t('siteAudit.readOnlyNoCost')}</p></InfoTip> : undefined} title={$t('siteAudit.siteAudit')} description={view === "issues" ? $t('siteAudit.issuesHelp') : $t('siteAudit.performanceHelp')}
+      {/* One description for both tabs (2026-10-22 decision D3); Performance explains its check in its own ⓘ. */}
+      <PageHeader info={view === "issues" && report?.counts ? <InfoTip label={$t('common.aboutData')} side="bottom"><p>{$tj('siteAudit.pagesReadAgainWeeklyUp',{0:day(report.oldestRead),1:day(report.newestRead)})}</p><p>{$t('siteAudit.readOnlyNoCost')}</p></InfoTip> : undefined} title={$t('siteAudit.siteAudit')} description={$t('siteAudit.pageHelp')}
         actions={view === "issues" && report?.connected ? <RefreshButton busy={busy} label={$t('common.updateNow')} onClick={() => void recheck()} /> : undefined} />
       <Tabs value={view} onValueChange={(v) => choose(String(v))}>
         <TabsList variant="line" className="h-auto! justify-start">

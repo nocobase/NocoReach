@@ -11,6 +11,8 @@ import { LoaderCircleIcon, PencilIcon } from 'lucide-react';
 import { LongText } from '#components/long-text';
 import { AiMark } from '#components/reach/actor';
 import { InfoTip } from '#components/reach/info-tip';
+import { HeaderActions } from '#components/reach/page';
+import { RefreshButton } from '#components/reach/refresh-button';
 import { InlineError } from '#components/reach/states';
 import { Tag } from '#components/reach/tag';
 import { Button } from '#components/ui/button';
@@ -144,7 +146,8 @@ function MemoryUpdates({
     ) : null;
   const d = status.draft,
     c = status.lastCheck;
-  // When the AI last looked for updates, with the button to look now; the weekly routine itself is in the ⓘ.
+  // When the AI last looked for updates, read as every status line's "Updated" (2026-10-22 decision D2); the weekly
+  // routine is in the ⓘ, and Check now sits at the top right as every page's refresh does.
   const checkLine = status.aiReady ? (
     <span className='flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground'>
       <span>
@@ -165,15 +168,14 @@ function MemoryUpdates({
         {$t('projectKnowledge.weeklyCheckHelp')}
       </InfoTip>
       {canCheck ? (
-        <Button
-          size='xs'
-          variant='link'
-          className='h-auto px-0'
-          disabled={busy || Boolean(status.running)}
-          onClick={() => void updates.run('check')}
-        >
-          {$t('common.checkNow')}
-        </Button>
+        <HeaderActions>
+          <RefreshButton
+            busy={status.running === 'check'}
+            disabled={busy || Boolean(status.running)}
+            label={$t('common.checkNow')}
+            onClick={() => void updates.run('check')}
+          />
+        </HeaderActions>
       ) : null}
     </span>
   ) : (

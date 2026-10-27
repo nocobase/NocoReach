@@ -236,7 +236,9 @@ describe('下载量', () => {
     await userEvent.click(within(report).getByRole('tab', { name: '版本' }));
     expect(router.state.location.search).toBe('?tab=versions');
     expect(within(report).getByText('2.2.0-beta.1')).toBeTruthy();
-    await userEvent.click(within(report).getByRole('button', { name: 'beta' }));
+    await userEvent.click(
+      within(report).getByRole('button', { name: '测试版' }),
+    );
     expect(within(report).queryByText('2.0.0')).toBeNull();
     await userEvent.click(
       within(report).getByRole('tab', { name: 'Docker 标签' }),

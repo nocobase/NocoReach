@@ -57,9 +57,10 @@ function reposDraft(rows: Repo[], period: string): TaskDraft {
   };
 }
 
+// One series, so --chart-3, as every trend line and single-series chart (UI review 2026-10-23).
 function Spark({ weeks }: { weeks: Topic["weeks"] }) {
   const values = weeks.map((w) => w.count ?? 0), max = Math.max(1, ...values);
-  return <span className="inline-flex h-5 items-end gap-px" role="img" aria-label={$t('githubHot.weeklyNew')}>{values.map((v, i) => <span key={i} className="w-1.5 rounded-[1px] bg-primary/60" style={{ height: `${Math.max(8, (v / max) * 100)}%` }} />)}</span>;
+  return <span className="inline-flex h-5 items-end gap-px" role="img" aria-label={$t('githubHot.weeklyNew')}>{values.map((v, i) => <span key={i} className="w-1.5 rounded-[1px] bg-chart-3" style={{ height: `${Math.max(8, (v / max) * 100)}%` }} />)}</span>;
 }
 const Marks = ({ r }: { r: Repo }) => <>{r.own ? <Tag tone="blue">{$t('githubHot.ours')}</Tag> : null}{r.rival ? <Tag tone="amber">{$t('githubHot.rival')}</Tag> : null}{r.matched.slice(0, 2).map((t) => <Tag key={t} tone="grey">{t}</Tag>)}</>;
 function RepoName({ r }: { r: Repo }) {

@@ -21,6 +21,7 @@ import { PageContainer } from '#components/reach/page';
 import { EmptyState, ListSkeleton } from '#components/reach/states';
 import { confirmAction } from '#components/reach/confirm';
 import { Button } from '#components/ui/button';
+import { SortableHeader } from '#components/seo/sortable-header';
 import { Input } from '#components/ui/input';
 import { Badge } from '#components/ui/badge';
 import {
@@ -347,23 +348,31 @@ function Members() {
                   >
                     <TableHeader>
                       <TableRow>
-                        <TableHead>
-                          <Button
-                            variant='ghost'
-                            onClick={() => {
-                              setSortField('name');
-                              setSort(sort === 'asc' ? 'desc' : 'asc');
-                            }}
-                          >
-                            {$t(
-                              invites ? 'accessMembers.email' : 'members.name',
-                            )}{' '}
-                            {!invites || sortField === 'name'
+                        {/* Sortable headers are the shared SortableHeader, so they line up with the cells below as
+                            every other table's do (UI review 2026-10-23). */}
+                        <TableHead
+                          aria-sort={
+                            !invites || sortField === 'name'
                               ? sort === 'asc'
-                                ? '↑'
-                                : '↓'
-                              : null}
-                          </Button>
+                                ? 'ascending'
+                                : 'descending'
+                              : 'none'
+                          }
+                        >
+                          <SortableHeader
+                            label={$t(
+                              invites ? 'accessMembers.email' : 'members.name',
+                            )}
+                            help={false}
+                            column={{
+                              getIsSorted: () =>
+                                !invites || sortField === 'name' ? sort : false,
+                              getToggleSortingHandler: () => () => {
+                                setSortField('name');
+                                setSort(sort === 'asc' ? 'desc' : 'asc');
+                              },
+                            }}
+                          />
                         </TableHead>
                         <TableHead>
                           {$t(
@@ -377,21 +386,32 @@ function Members() {
                         )}
                         <TableHead>{$t('accessMembers.projects')}</TableHead>
                         {invites ? (
-                          <TableHead>
-                            <Button
-                              variant='ghost'
-                              onClick={() => {
-                                setSortField('expires');
-                                setSort(sort === 'asc' ? 'desc' : 'asc');
-                              }}
-                            >
-                              {$t('accessMembers.expires')}{' '}
-                              {sortField === 'expires'
+                          <TableHead
+                            aria-sort={
+                              sortField === 'expires'
                                 ? sort === 'asc'
-                                  ? '↓'
-                                  : '↑'
-                                : null}
-                            </Button>
+                                  ? 'descending'
+                                  : 'ascending'
+                                : 'none'
+                            }
+                          >
+                            {/* Expiry sorts latest first on the first click, as before. */}
+                            <SortableHeader
+                              label={$t('accessMembers.expires')}
+                              help={false}
+                              column={{
+                                getIsSorted: () =>
+                                  sortField === 'expires'
+                                    ? sort === 'asc'
+                                      ? 'desc'
+                                      : 'asc'
+                                    : false,
+                                getToggleSortingHandler: () => () => {
+                                  setSortField('expires');
+                                  setSort(sort === 'asc' ? 'desc' : 'asc');
+                                },
+                              }}
+                            />
                           </TableHead>
                         ) : null}
                         <TableHead>
