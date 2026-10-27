@@ -4,7 +4,12 @@ import {
   slugFromPage,
   type ArticleTarget,
 } from '../../shared/article-publishing.js';
-import { ArticleDelivery } from '../../server/nocoreach/articles/delivery.js';
+import {
+  ArticleDelivery,
+  cleanDraft,
+  DraftRejected,
+  draftRejection,
+} from '../../server/nocoreach/articles/delivery.js';
 import {
   readFrontmatter,
   writeFrontmatter,
@@ -18,6 +23,9 @@ import { ArticleTargets } from '../../server/nocoreach/articles/targets.js';
 import { networkFailure } from '../../server/nocoreach/outbound-network.js';
 import type { LegacyVariables } from '../../server/nocoreach/legacy/variables.js';
 import { fakeArticleApi, fakeGitHub, fakeNocoBase } from './article-fakes.js';
+import { $legacyText, setDictionary } from '../../client/i18n';
+import english from '../../shared/i18n/en.json';
+import traditional from '../../shared/i18n/zh-TW.json';
 
 const EXPORTER = { name: 'NocoBase-CMS', email: 'cms@example.com' };
 function variables() {
@@ -914,4 +922,159 @@ test('finds the article a task page belongs to, and says when a target could not
   expect(
     await offline.targets.match('1', ['https://www.example.com/en/blog/hello']),
   ).toEqual({ article: null, unchecked: true });
+});
+
+// 2026-10-27 (T-47): the Agent got `locale:en` back for a Chinese-only new article and took it for a setting to fix.
+describe('a draft the target cannot take is explained in words', () => {
+  const cms = {
+    ...ARTICLE_TARGET_PRESETS['nocobase-api'],
+    id: 'cms',
+    name: 'NocoBase CMS',
+  } as ArticleTarget;
+  const news = {
+    ...cms,
+    id: 'news',
+    name: 'News',
+    locales: ['en', 'zh'],
+    fields: {
+      ...ARTICLE_TARGET_PRESETS['nocobase-api'].fields,
+      locales: {
+        en: { title: 'title', description: 'description', body: 'content' },
+        zh: { body: 'content_cn' },
+      },
+    },
+  } as ArticleTarget;
+  const problem = (
+    target: ArticleTarget,
+    draft: unknown,
+    primary?: string | null,
+  ) => {
+    try {
+      cleanDraft(target, draft, true, primary);
+    } catch (error) {
+      expect(error).toBeInstanceOf(DraftRejected);
+      return {
+        code: (error as DraftRejected).message,
+        text: draftRejection(error as DraftRejected),
+      };
+    }
+    return null;
+  };
+  const post = (locales: unknown, more = {}) => ({
+    slug: 'agent-governance',
+    locales,
+    ...more,
+  });
+
+  test('a new article needs a title and body in its primary language, the first of the target unless the task chose another', () => {
+    expect(problem(cms, post({ zh: { title: '标题', body: '正文' } }))).toEqual(
+      {
+        code: 'missing:en',
+        text: '新文章必须有英语（en）的标题和正文，这次只写了：中文（zh）。',
+      },
+    );
+    expect(problem(cms, post({}))).toMatchObject({
+      text: '新文章必须有英语（en）的标题和正文，这次没有写任何语言。',
+    });
+    expect(problem(cms, post({ en: { body: 'Body' } }))).toMatchObject({
+      text: '新文章的英语（en）要同时有标题和正文，这次缺少 title。',
+    });
+    expect(
+      problem(cms, post({ zh: { title: '标题', body: '正文' } }), 'zh'),
+    ).toBeNull();
+    // Another target while the task's other languages are still to be translated.
+    expect(problem(news, post({ zh: { body: '正文' } }), null)).toBeNull();
+  });
+
+  test('languages, fields, the address and lengths the target cannot take', () => {
+    expect(
+      problem(cms, post({ fr: { title: 'Titre', body: 'Texte' } })),
+    ).toEqual({
+      code: 'locale:fr',
+      text: '发布目标“NocoBase CMS”没有法语（fr），只能写：英语（en）、中文（zh）、日语（ja）。',
+    });
+    expect(problem(cms, post({ English: { title: 'T', body: 'B' } }))).toEqual({
+      code: 'draft:locales.English',
+      text: '发布目标“NocoBase CMS”没有English，只能写：英语（en）、中文（zh）、日语（ja）。',
+    });
+    expect(
+      problem(
+        news,
+        post({ en: { title: 'T', body: 'B' }, zh: { title: '标题' } }),
+      ),
+    ).toEqual({
+      code: 'field:zh.title',
+      text: '发布目标“News”不保存中文（zh）的 title，请去掉这一项。',
+    });
+    expect(
+      problem(
+        cms,
+        post({ en: { title: 'T', body: 'B' } }, { slug: 'Agent Governance' }),
+      ),
+    ).toMatchObject({
+      code: 'draft:slug',
+      text: expect.stringMatching(/^新文章需要地址（slug）/),
+    });
+    expect(
+      problem(cms, post({ en: { title: 'T'.repeat(301), body: 'B' } })),
+    ).toEqual({
+      code: 'draft:locales.en.title',
+      text: '英语（en）的 title 太长，最多 300 个字符。',
+    });
+    expect(
+      problem(cms, { ...post({ en: { title: 'T', body: 'B' } }), tags: [] }),
+    ).toMatchObject({
+      code: 'draft:article',
+      text: expect.stringMatching(/^文章的 article 格式不对。/),
+    });
+  });
+
+  test('another target is named in front of its problem', () => {
+    const delivery = new ArticleDelivery({
+      target: (_project: string, id: string) => (id === 'news' ? news : cms),
+    } as unknown as ArticleTargets);
+    let error: unknown;
+    try {
+      delivery.alsoProposal('1', {
+        targetId: 'news',
+        articleId: null,
+        base: null,
+        baseKey: null,
+        source: null,
+        draft: post({ zh: { title: '标题', body: '正文' } }) as never,
+      });
+    } catch (e) {
+      error = e;
+    }
+    expect(draftRejection(error as DraftRejected)).toBe(
+      '发布到“News”时：新文章必须有英语（en）的标题和正文，这次只写了：中文（zh）。',
+    );
+  });
+
+  test('a person reading another language gets the message and the language names in it', () => {
+    const text = draftRejection(
+      new DraftRejected('missing:en', {
+        key: 'articles.draft.forTarget',
+        params: {
+          0: 'News',
+          1: {
+            key: 'articles.draft.needsPrimary',
+            params: { 0: '英语（en）', 1: '中文（zh）、日语（ja）' },
+          },
+        },
+      }),
+    );
+    try {
+      setDictionary(english, 'en-US');
+      expect($legacyText(text)).toBe(
+        'Publishing to “News”: A new article needs a title and body in English (en); this draft only has: Chinese (zh), Japanese (ja).',
+      );
+      setDictionary(traditional, 'zh-TW');
+      expect($legacyText(text)).toBe(
+        '發布到「News」時：新文章必須有英文（en）的標題和內文，這次只寫了：中文（zh）、日文（ja）。',
+      );
+    } finally {
+      setDictionary(null);
+    }
+  });
 });

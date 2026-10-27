@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import type { z } from 'zod';
 import {
   articleDraftSchema,
   ARTICLE_FIELDS,
   fill,
+  LOCALE,
   SLUG,
   supportsStatus,
   type ArticleContent,
@@ -10,6 +12,10 @@ import {
   type ArticleSnapshot,
   type ArticleTarget,
 } from '../../../shared/article-publishing.js';
+import {
+  systemMessageText,
+  type SystemMessage,
+} from '../../../shared/i18n/messages.js';
 import type { Divergence } from './downstream.js';
 import {
   applied,
@@ -90,32 +96,134 @@ export type AlsoProposal = Omit<ArticleProposal, 'also'> & {
   title: string;
 };
 
-/** Keep only the locales and fields the target maps, and drop a status the target has no field for. */
+/**
+ * A draft the target cannot take. The message is a short code for logs and tests (`missing:en`, `locale:fr`,
+ * `field:zh.description`, `slug`, `draft:<path>`); `problem` says the same in words the Agent can act on and a person
+ * can read (2026-10-27: T-47's Agent read `locale:en` as a setting to fix and gave up instead of writing English).
+ */
+export class DraftRejected extends ArticleError {
+  constructor(
+    code: string,
+    readonly problem: SystemMessage,
+  ) {
+    super('invalid', code);
+  }
+}
+const rejected = (code: string, key: string, ...params: unknown[]) =>
+  new DraftRejected(code, {
+    key: `articles.draft.${key}`,
+    params: Object.fromEntries(params.map((p, i) => [i, p])),
+  });
+/** What a rejected draft means, as server text: the problem in words, else the code. */
+export const draftRejection = (error: ArticleError) =>
+  error instanceof DraftRejected
+    ? systemMessageText(error.problem.key, error.problem.params)
+    : systemMessageText('articles.invalidDraft', { 0: error.message });
+
+// Languages are named in the language the server's messages are written in (Chinese), followed by the code the draft
+// uses in full-width brackets. The client reads such a list back into the reader's language (client/i18n/index.tsx).
+const names = new Intl.DisplayNames(['zh-CN'], { type: 'language' });
+function language(code: string) {
+  let name = '';
+  try {
+    if (LOCALE.test(code)) name = names.of(code) || '';
+  } catch {
+    /* not a language code */
+  }
+  return name && name !== code ? `${name}（${code}）` : code;
+}
+const languages = (codes: string[]) => codes.map(language).join('、');
+
+function schemaProblem(
+  issue: z.core.$ZodIssue | undefined,
+  target: ArticleTarget,
+) {
+  const path = (issue?.path || []).map(String),
+    code = `draft:${path.join('.') || 'article'}`;
+  if (path[0] === 'slug') return rejected(code, 'slug');
+  if (
+    path[0] === 'locales' &&
+    path.length === 2 &&
+    issue?.code === 'invalid_key'
+  )
+    return rejected(
+      code,
+      'otherLanguage',
+      target.name,
+      language(path[1]),
+      languages(target.locales),
+    );
+  if (path[0] === 'locales' && path.length === 3 && issue?.code === 'too_big')
+    return rejected(code, 'tooLong', language(path[1]), path[2], issue.maximum);
+  return rejected(code, 'format', path.join('.') || 'article');
+}
+
+/** A draft for the primary language alone (phase `primary`) that holds other languages only: written in the wrong one. */
+export function primaryOnly(primary: string, value: unknown) {
+  const locales = (value as { locales?: unknown } | null)?.locales;
+  if (!locales || typeof locales !== 'object' || primary in locales)
+    return undefined;
+  const written = Object.keys(locales);
+  return written.length
+    ? rejected(
+        `missing:${primary}`,
+        'primaryOnly',
+        language(primary),
+        languages(written),
+      )
+    : undefined;
+}
+
+/**
+ * Keep only the locales and fields the target maps, and drop a status the target has no field for. A new article needs
+ * a title and body in `primary`: the task's primary language, by default the target's first; null asks for none (another
+ * target while the task's other languages are still to be translated).
+ */
 export function cleanDraft(
   target: ArticleTarget,
   value: unknown,
   create: boolean,
+  primary: string | null = target.locales[0],
 ): ArticleDraft {
   const parsed = articleDraftSchema.safeParse(value);
-  if (!parsed.success)
-    throw new ArticleError(
-      'invalid',
-      `draft:${parsed.error.issues[0]?.path.join('.') || 'article'}`,
-    );
+  if (!parsed.success) throw schemaProblem(parsed.error.issues[0], target);
   const draft = parsed.data;
   for (const [locale, fields] of Object.entries(draft.locales)) {
     if (!target.locales.includes(locale))
-      throw new ArticleError('invalid', `locale:${locale}`);
+      throw rejected(
+        `locale:${locale}`,
+        'otherLanguage',
+        target.name,
+        language(locale),
+        languages(target.locales),
+      );
     for (const f of ARTICLE_FIELDS)
       if (fields[f] !== undefined && !mapped(target, locale, f))
-        throw new ArticleError('invalid', `field:${locale}.${f}`);
+        throw rejected(
+          `field:${locale}.${f}`,
+          'unmappedField',
+          target.name,
+          language(locale),
+          f,
+        );
   }
   if (create) {
-    if (!draft.slug || !SLUG.test(draft.slug))
-      throw new ArticleError('invalid', 'slug');
-    const first = draft.locales[target.locales[0]];
-    if (!first?.title?.trim() || !first.body?.trim())
-      throw new ArticleError('invalid', `locale:${target.locales[0]}`);
+    if (!draft.slug || !SLUG.test(draft.slug)) throw rejected('slug', 'slug');
+    const first = primary ? draft.locales[primary] : undefined;
+    if (primary && (!first?.title?.trim() || !first.body?.trim())) {
+      const code = `missing:${primary}`;
+      if (first?.title?.trim())
+        throw rejected(code, 'missingField', language(primary), 'body');
+      if (first?.body?.trim())
+        throw rejected(code, 'missingField', language(primary), 'title');
+      // What it wrote instead: the languages with any text.
+      const written = Object.keys(draft.locales).filter((l) =>
+        ARTICLE_FIELDS.some((f) => draft.locales[l][f]?.trim()),
+      );
+      throw written.length
+        ? rejected(code, 'needsPrimary', language(primary), languages(written))
+        : rejected(code, 'needsPrimaryNone', language(primary));
+    }
   }
   if (draft.status && !supportsStatus(target)) delete draft.status;
   // A new article is a draft unless someone chose to publish it, whatever the target's own default is.
@@ -247,10 +355,17 @@ export class ArticleDelivery {
       base: ArticleSnapshot | null;
       baseKey: string | null;
       draft: unknown;
+      /** The language a new article must have (cleanDraft); by default the target's first. */
+      primary?: string | null;
     },
   ): ArticleProposal {
     const target = this.target(project, input.targetId);
-    const draft = cleanDraft(target, input.draft, !input.articleId);
+    const draft = cleanDraft(
+      target,
+      input.draft,
+      !input.articleId,
+      input.primary === undefined ? target.locales[0] : input.primary,
+    );
     return {
       targetId: input.targetId,
       articleId: input.articleId,
@@ -270,6 +385,7 @@ export class ArticleDelivery {
       baseKey: string | null;
       source: ArticleSnapshot | null;
       draft: ArticleDraft;
+      primary?: string | null;
     },
   ): AlsoProposal {
     const target = this.target(project, input.targetId);
@@ -283,6 +399,11 @@ export class ArticleDelivery {
     try {
       p = this.proposal(project, { ...input, draft });
     } catch (error) {
+      if (error instanceof DraftRejected)
+        throw new DraftRejected(`${target.name}: ${error.message}`, {
+          key: 'articles.draft.forTarget',
+          params: { 0: target.name, 1: error.problem },
+        });
       if (error instanceof ArticleError)
         throw new ArticleError('invalid', `${target.name}: ${error.message}`);
       throw error;

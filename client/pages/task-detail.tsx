@@ -21,7 +21,8 @@ import { TaskProperties } from './task-detail/task-properties.js';
 import { TaskNumbers } from './task-detail/task-numbers.js';
 import { Card, Clamped, Field } from './task-detail/layout.js';
 import { GAP, text } from './task-detail/styles.js';
-import { TaskStatusTag } from './task-status-tag';
+import { TaskStatusTag, TaskStandingTag } from './task-status-tag';
+import { startAgent, startBlockers, type StartBlocker } from '../../shared/task-start.js';
 import { MarkdownEditor } from './task-detail/markdown-editor.js';
 import { hasTaskAgent, type PartialResult } from './task-execution-types';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
@@ -67,8 +68,9 @@ const TaskAccess=createContext<{allowed:boolean;self:boolean;owner:string}>({all
 type Update=(command:string,body?:object)=>Promise<Data|undefined>;
 // What the cards can ask of the rest of the page (2026-10-23 user request: actions instead of directions such as "change
 // the Agent above"): open the Agent picker in Properties, focus the message to the Agent, choose the related page, and
-// complete the current step by hand (asked from the task menu, carried out by the card that holds the form).
-const TaskActions=createContext<{pickAgent:()=>void;messageAgent:()=>void;choosePage:()=>void;askManual:()=>void;manualAsk:number}>({pickAgent:()=>undefined,messageAgent:()=>undefined,choosePage:()=>undefined,askManual:()=>undefined,manualAsk:0});
+// complete the current step by hand (asked from the task menu, carried out by the card that holds the form), and go to
+// the task an accepted document was handed over to.
+const TaskActions=createContext<{pickAgent:()=>void;messageAgent:()=>void;choosePage:()=>void;askManual:()=>void;manualAsk:number;handedOver:(taskId:string)=>void}>({pickAgent:()=>undefined,messageAgent:()=>undefined,choosePage:()=>undefined,askManual:()=>undefined,manualAsk:0,handedOver:()=>undefined});
 type Member={id:string;name:string};
 type Run=Data['runs'][number];
 // Why a run failed and what to do (task-detail/failure-model.ts). Trying again cannot help these until someone signs in,
@@ -108,10 +110,14 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
  const releasePolling=w.release?.state==='publishing'||w.release?.state==='exporting';
  // The playbook chosen in the start card; the header's steps follow it before the task starts.
  const [pick,setPick]=useState(w.playbookId||data.playbookDefault||'optimize-page');
- const [evidenceOpen,setEvidenceOpen]=useState(false),[pageOpen,setPageOpen]=useState(false),[agentPicker,setAgentPicker]=useState(false),[manualAsk,setManualAsk]=useState(0);
+ const [evidenceOpen,setEvidenceOpen]=useState(false),[pageOpen,setPageOpen]=useState(false),[agentPicker,setAgentPicker]=useState(false),[manualAsk,setManualAsk]=useState(0),[handedTo,setHandedTo]=useState<string>();
  const actions=useMemo(()=>({manualAsk,askManual:()=>setManualAsk(n=>n+1),choosePage:()=>setPageOpen(true),
   pickAgent:()=>{document.getElementById('task-agent-menu')?.scrollIntoView?.({block:'center'});setAgentPicker(true);},
-  messageAgent:()=>{const box=document.getElementById('nr-composer');box?.scrollIntoView?.({block:'center'});box?.focus();}}),[manualAsk]);
+  messageAgent:()=>{const box=document.getElementById('nr-composer');box?.scrollIntoView?.({block:'center'});box?.focus();},handedOver:setHandedTo}),[manualAsk]);
+ // Accept and start lands on the new task (2026-10-24 user report: the person stayed on the old one and could not tell
+ // whether the next one had started), once the request has settled so the page's leave guard lets it go.
+ const navigate=useNavigate();
+ useEffect(()=>{if(handedTo&&!busy)void navigate(`/actions/${handedTo}`);},[handedTo,busy,navigate]);
  useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setRawPlaybooks).catch(()=>undefined);void call<Member[]>(projectId,taskId,'members').then(m=>setMembers(Array.isArray(m)?m:[])).catch(()=>undefined).finally(()=>setMembersLoaded(true));},[projectId]);
  useEffect(()=>{if(!runActive&&!releasePolling)return;const t=setInterval(()=>{if(!pending.current)void call<Data>(projectId,taskId,'get').then(next=>{setStoredData(next);setError('');}).catch(()=>setError(() => ($t('taskDetail.runStatusTemporarilyUnavailableRetry'))));},2500);return()=>clearInterval(t);},[runActive, releasePolling, projectId, taskId, setError]);
  const update:Update=async(command,body={})=>{if(pending.current)return;pending.current=true;setBusy(true);setError('');const key=JSON.stringify([data.work.revision,command,body]);if(op.current.key!==key)op.current={key,id:crypto.randomUUID()};
@@ -248,12 +254,14 @@ async function withUsableAgent(data:Data,update:Update,command:string,body:objec
  return update(command,{...body,revision});
 }
 // Before a task starts (2026-10-08 user decision: Hand off to agent only creates the task): what the Agent will get,
-// the playbook (the one suggested at hand-off preselected) and a note; nothing runs until Start.
+// the playbook (the one suggested at hand-off preselected) and a note; nothing runs until Start. A task an accepted
+// document was handed over to is started with these defaults instead (2026-10-24) and shows this card only when one
+// of them needs a person.
 function StartCard({data,list,pick,setPick,update,busy,projectId,taskId,onEvidence}:{data:Data;list?:PlaybookList;pick:string;setPick:(id:string)=>void;update:Update;busy:boolean;projectId:number;taskId:string;onEvidence:()=>void}){
  const {allowed}=useContext(TaskAccess);
  const {clear}=useTaskDraftStatus();
  const p=list?.playbooks.find(x=>x.id===pick),handoff=(data.task.evidence?.handoff as {playbook?:string;content?:string}|undefined),brief=handoff?.content||data.task.brief||'',briefTitle=handoff?.content?$t('taskDetail.documentDelivered',{0:handoff.playbook}):$t('taskDetail.whatAgentReceive');
- const options=data.agent?.options||[],only=options.length===1?options[0]:undefined,ready=hasTaskAgent(data)||Boolean(only);
+ const options=data.agent?.options||[],agent=startAgent(data),ready=agent.ready;
  // With exactly one Agent available nothing needs choosing: it is saved on the task as the start is confirmed.
  // Article publishing (article-start.tsx): shown for playbooks that change something, when the project has a target.
  const articleChoice=Boolean(p?.kind==='build'&&data.articleTargets?.length);
@@ -272,13 +280,19 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId,onEviden
  const found:ArticleFound|'finding'|undefined=!lookupKey?undefined:lookup?.key===lookupKey?lookup.found:'finding';
  const finding=found==='finding',delivery=defaultDelivery(data,pick,found==='finding'?undefined:found,translate),current=choice||delivery,plan:{ready:boolean;unlink:boolean;link?:{targetId:string;articleId:string};delivery?:unknown}=articleChoice?deliveryPlan(data,current,translate):{ready:true,unlink:false,delivery:undefined};
  const notice=found&&found!=='finding'&&!found.article?$t(found.unchecked?'articleTask.matchUnavailable':'articleTask.noArticleForPage'):undefined;
+ // A task handed over from an accepted document starts by itself (startHandedOver in service.ts, with these same
+ // rules from shared/task-start.ts); one still waiting here has something only a person can settle: the sub line says
+ // so, and each item is marked where it is chosen (the Agent below, the article in its field, a target or repository).
+ const navigate=useNavigate(),st=p?stagesFor(p):[],first=st[0],demo=options.some(a=>a.id===data.agent?.agentId&&a.type==='demo');
+ const blockers:StartBlocker[]=handoff?.content&&p&&!finding?startBlockers(data,{playbookId:p.id,changes:p.kind==='build',translate,needsRepository:first?.kind==='agent'&&!withoutRepo(first,st),simulated:demo,found}):[];
+ const blocked=(b:StartBlocker,body:ReactNode)=>blockers.includes(b)?<p className="text-sm text-nr-ink-red" data-start-blocker={b}>{body}</p>:null;
  const link=async(targetId:string,articleId:string)=>Boolean(await update('linkArticle',{targetId,articleId}));
- const start=async()=>{let revision=data.work.revision;if(!hasTaskAgent(data)&&only){const d=await update('setAgent',{agentId:only.id});if(!d)return;revision=d.work.revision;}if(plan.unlink){const d=await update('linkArticle',{targetId:null,revision});if(!d)return;revision=d.work.revision;}if(plan.link){const d=await update('linkArticle',{...plan.link,revision});if(!d)return;revision=d.work.revision;}const d=await update('startTask',{playbookId:pick,revision,...(plan.delivery?{delivery:plan.delivery}:{})});if(d)clear();};
+ const start=async()=>{let revision=data.work.revision;if(agent.save){const d=await update('setAgent',{agentId:agent.save});if(!d)return;revision=d.work.revision;}if(plan.unlink){const d=await update('linkArticle',{targetId:null,revision});if(!d)return;revision=d.work.revision;}if(plan.link){const d=await update('linkArticle',{...plan.link,revision});if(!d)return;revision=d.work.revision;}const d=await update('startTask',{playbookId:pick,revision,...(plan.delivery?{delivery:plan.delivery}:{})});if(d)clear();};
  const attachments=Array.isArray(data.task.evidence?.attachmentIds)&&data.task.evidence.attachmentIds.length>0;
  const briefText=brief.replace(/[#*>`_]/g,'').replace(/^[ \t]+/gm,'').replace(/\n{2,}/g,'\n').trim();
  // Top to bottom, every field the card's full width (2026-10-22 user decision): the brief as plain text, the playbook
  // with its description, the article where the change goes, and the note.
- return <StageCard title={$t('taskDetail.startAfterReview')} sub={handoff?$t('taskDetail.taskHandedOverDocumentDelivered',{0:handoff.playbook}):$t('taskDetail.agentNotStartedReadBrief')}
+ return <StageCard title={$t('taskDetail.startAfterReview')} sub={handoff?$t(blockers.length?'taskDetail.handoffNotStarted':'taskDetail.taskHandedOverDocumentDelivered',{0:handoff.playbook}):$t('taskDetail.agentNotStartedReadBrief')}
   actions={<Button disabled={busy||!p||!ready||!plan.ready||finding} onClick={()=>void start()}>{$t('taskDetail.confirmStart')}</Button>}>
   {briefText&&<Field label={briefTitle}><Clamped long={briefText.length>240||briefText.split('\n').length>3} extra={whyText(data).from==='brief'&&<Button variant="link" size="sm" className="h-auto font-normal p-0" onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}>{briefText}</Clamped></Field>}
   <Field label={$t('common.playbook')} id={`${taskId}-playbook`}>
@@ -293,8 +307,11 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId,onEviden
    <PlaybookDrawer playbook={p} open={viewing} onClose={()=>setViewing(false)}/>
   </Field>
   {articleChoice&&<DeliverySummary data={data} choice={current} finding={finding} notice={notice} allowed={allowed} busy={busy} translate={translate} onChange={()=>setChoosing(true)}/>}
+  {blocked('chooseTarget',$t('taskDetail.startChooseTarget'))}
+  {blocked('targetGone',$t('articles.targetMissing'))}
   {articleChoice&&<DeliveryDialog open={choosing} onClose={()=>setChoosing(false)} data={data} projectId={projectId} choice={current} found={found&&found!=='finding'?found.article:null} notice={notice} translate={translate} busy={busy} link={link} onSave={c=>setChoiceState({...c,playbook:pick})}/>}
   <NeedsAgent data={data}/>
+  {blocked('noRepository',<>{$t('taskDetail.noWebsiteSourceRepositoryConnectedMessage')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>void navigate('/connections?source=repo')}>{$t('common.goDataSources')}</Button></>)}
   {attachments&&<Field label={$t('taskDetail.attachmentsDelivered')}><TaskMedia projectId={projectId} taskId={taskId}/></Field>}
  </StageCard>;
 }
@@ -346,7 +363,7 @@ function ReleaseNote({value,onChange,busy,open}:{value:string;onChange:(v:string
 }
 function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boolean;list?:PlaybookList}){
  const w=data.work,stages=w.flow!.stages,index=w.stageIndex||0,stage=stages[index];
- const navigate=useNavigate(),tech=useTechnicalDetails(),{allowed}=useContext(TaskAccess),{manualAsk,pickAgent,messageAgent}=useContext(TaskActions);const [manualOpen,setManual]=useTaskDraft('manual',false,false),[scopeOk,setScopeOk]=useState(false);
+ const navigate=useNavigate(),tech=useTechnicalDetails(),{allowed}=useContext(TaskAccess),{manualAsk,pickAgent,messageAgent,handedOver}=useContext(TaskActions);const [manualOpen,setManual]=useTaskDraft('manual',false,false),[scopeOk,setScopeOk]=useState(false);
  // Complete this step manually, asked from the task menu: opens the form here once per request, not again on remount.
  const handledAsk=useRef(manualAsk);
  useEffect(()=>{if(manualAsk!==handledAsk.current){handledAsk.current=manualAsk;setManual(true);}},[manualAsk,setManual]);
@@ -428,7 +445,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   if(!out)return <StageCard error title={displayStageName(stage)} sub={$t('taskDetail.nothingReviewRefreshTryAgain')}/>;
   return <StageCard title={$t('taskDetail.resultReady',{0:producer.name})} sub={by} at={out.createdAt}
    actions={editing?<><Button disabled={busy||!draft.trim()} onClick={()=>void act('editStageOutput',{artifactId:out.id,content:draft})}>{$t('taskDetail.saveChanges')}</Button><Button variant="ghost" onClick={()=>{setEditing(false);setDraft(w.results[index-1]?.content||'');}}>{$t('common.cancel')}</Button></>
-    :<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,...(nextOptions.length&&next?{next}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}>{label}</Button>{requestButton}<Button variant="ghost" disabled={busy} onClick={()=>{setDraft(out.content);setEditing(true);}}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
+    :<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,...(nextOptions.length&&next?{next}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})}).then(d=>{if(d&&nextOptions.length&&next&&d.work.nextTaskId)handedOver(String(d.work.nextTaskId));})}>{label}</Button>{requestButton}<Button variant="ghost" disabled={busy} onClick={()=>{setDraft(out.content);setEditing(true);}}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
    {!editing&&request(getStageExecutor()[producer.kind])}
    <LastFeedback w={w} stage={stage} out={out}/>
    {editing?<MarkdownEditor aria-label={$t('taskDetail.editContent')} value={draft} disabled={busy} onChange={e=>{setDraft(e.target.value);}} preview={value=><Markdown content={value}/>}/>:<>
@@ -510,7 +527,11 @@ function ClosedCard({w,update,busy}:{w:Work;update:Update;busy:boolean}){
 }
 // After the task: the effect once a change is live, otherwise the accepted result itself.
 function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
- const w=data.work,r=w.release,canRevert=Boolean(data.agent?.repo);
+ const w=data.work,r=w.release,canRevert=Boolean(data.agent?.repo),navigate=useNavigate();
+ // The task the accepted document was handed over to, linked with where it stands (2026-10-24 user report: after the
+ // hand-over the person could not find the new task or tell whether it had started).
+ const next=(data.related||[]).find(x=>x.relation==='next');
+ const handed=next?<p className={cn(text.body,'flex flex-wrap items-center gap-x-2 gap-y-1')} data-handed-over="">{$tj('taskDetail.handedOverTo',{0:<button type="button" className="nr-link text-left" onClick={()=>void navigate(`/actions/${next.id}`)}>{next.no?`T-${next.no} `:''}{next.title}</button>})}{next.state&&<TaskStandingTag state={next.state}/>}</p>:null;
  const accepted=[...w.results].reverse().find(x=>x?.approvedAt&&!x.rejectedAt);
  // The version that went live: an article release names its artifact; a merged change is the accepted one.
  const shipped=(r?.article?.artifactId&&w.results.find(x=>x?.id===r.article!.artifactId))||accepted||undefined;
@@ -527,8 +548,9 @@ function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
   {r.note&&!r.article&&<Reveal label={$t('taskDetail.releaseNotes')}><p className={cn(text.body,'whitespace-pre-wrap')}>{r.note}</p></Reveal>}
  </StageCard>;
  const replies=repliesOf(w,accepted?.content);
- if(replies.length)return <StageCard label={done} title={$t('taskDetail.replyDraftsAccepted')} sub={$t('taskDetail.copyReplyPostYourselfNocoreach')}><ReplyDrafts items={replies}/></StageCard>;
+ if(replies.length)return <StageCard label={done} title={$t('taskDetail.replyDraftsAccepted')} sub={$t('taskDetail.copyReplyPostYourselfNocoreach')}>{handed}<ReplyDrafts items={replies}/></StageCard>;
  return <StageCard label={done} title={done} sub={w.observeFrom?$t('taskDetail.trackingImpactSince',{0:formatDate(w.observeFrom)}):undefined}>
+  {handed}
   {w.receipt?.note&&<p className={text.body}>{$tj('taskDetail.published',{0:w.receipt.note})}{w.receipt.url&&<> · <a className="nr-link" href={w.receipt.url} target="_blank" rel="noreferrer">{$t('common.openPage')}</a></>}</p>}
   {w.observeFrom&&<EffectList w={w}/>}
   {accepted&&!accepted.pr&&<><Reading><Markdown content={accepted.content}/></Reading>{accepted.report&&<ReportNotes report={accepted.report}/>}</>}

@@ -6,6 +6,27 @@
 - Extend the historical absolute-timestamp migration for MySQL fresh installations and timestamp conversion without host-timezone decoding. Existing SQLite and PostgreSQL behavior is unchanged; installations that already ran it may review and repair the documented checksum drift without rerunning the migration.
 - Add database regression coverage and production-artifact verification for initialization, typed persistence, authentication, business writes and restart recovery.
 
+## Unreleased — Every Current situation line with items hands them to the Agent
+
+- In Insights › Current situation, every line that opens a list of items can hand the ticked ones to the Agent, as the existing lines could: the sixteen analysis rule lines, each with the playbook that fits it (Optimize page for pages, Competitor comparison for competitors, Content outline for AI answers, rising searches and recurring topics, Community reply for Hacker News and X posts, Release notes for your new releases, Change research for sites sending visits to your repository), and the ChatGPT and Google AI Overviews mention lines, whose ticked brands go to a competitor comparison.
+- A rule line's panel is titled as in the list ("Pages losing search clicks" rather than the rule's name).
+- Hand off to agent in a panel is greyed out until something is ticked, without the "Tick what to hand off below first" hint, which took focus when the panel opened and covered its description. This applies to every panel with that button: Current situation, Trends keywords, Audit performance, Competitor overview and the website reports.
+
+## Unreleased — Articles are written in their own language
+
+- Every article run says which language the article is written in: the languages chosen at start or, with none chosen, the publishing target's first language as the primary, every language written at once as before. The Agent's rules keep the two languages apart: the project's language is for its notes, summary and reports; the article is written in its primary language whatever the project, the brief or the outline use (2026-10-27, T-47: a Chinese-only new article for a target whose first language is English).
+- A new article needs a title and body in the task's primary language, whichever the person chose at start, instead of always the target's first; another target is checked once the translations are in. A new article with Chinese chosen as its primary on the NocoBase CMS no longer fails its first run.
+- A draft a target cannot take comes back in words, naming the languages: "A new article needs a title and body in English (en); this draft only has: Chinese (zh)." instead of `locale:en`, and likewise for a language the target does not take, a field it does not store, the address, lengths and the format, with the other target's name in front. The Agent is told to rewrite in the required language and submit again rather than report a setting to fix. The article editor and Review again show the same messages in the reader's language, and the editor asks for the primary language's title and body.
+- The start card and Accept and start send the languages chosen even when the person keeps only one of several: until now a single language was dropped, and the task wrote every language with the target's first as the primary.
+- Copy in all ten UI languages (`articles.draft.*`).
+
+## Unreleased — Accept and start
+
+- Accepting a document with a next playbook (Continue with) now starts the new task: the button reads Accept and start "Write blog post", and the page goes to the new task with its Agent already working. It starts with what its start card would preselect: the playbook just chosen, the project's default Agent or the only one available, and the default publishing target or the article found from its page (`shared/task-start.ts`, used by both the start card and the server). The article review before publishing is unchanged.
+- When one of those cannot be decided — several Agents and no project default, no Agent at all, several publishing targets with none marked default, a target that is gone, an article not found from the page, or a change with no repository connected — the new task waits at Start after review and its card says it did not start automatically; the Agent, the article, the target or the repository is marked where it is chosen.
+- The old task's done card says "Handed over to T-44 Write blog post: …" with the new task's status, linked.
+- Tasks handed off from an opportunity still wait for their owner to start them.
+
 ## Unreleased — Task runs fail less on the computer's setup, and say what to do
 
 - The Agent's rules no longer fail a step for any missing credential, tool or conflict. A step fails only when it lacks a credential or tool it cannot do without (such as gh not signed in for a build or merge, or no access to the repository), or on a conflict; it still never bypasses limits or installs software. A tool a Skill suggests but the step does not need (an update check, an optional search backend) is worked around and noted in the result. The task's own Skills come first: other skills installed on the computer may be consulted, and a tool they ask for being unavailable does not fail the step. T-35 on Studio failed five times this way, for an `agent-reach check-update` that a personal Skill on the user's Mac asked for.
@@ -51,6 +72,12 @@
 - A project's AI content language (Add new project, Project knowledge › Memory) offers the ten UI languages instead of Chinese and English, each named in itself as the account menu names it. A new project starts with the creator's UI language; Traditional Chinese no longer starts as Simplified Chinese. Projects without a language still write Chinese.
 - Every prompt for a project in a language other than Simplified Chinese ends with the same note the English projects had, naming the language. The English note is unchanged.
 - The daily analysis checks opportunity wording in two sets. Simplified Chinese, Traditional Chinese and Japanese keep the width rules (title 18, reason 30, a CJK character counting 1), with the vague words of each language. The other languages use the English limits (title 60 characters, reason 90 with a number, at most two sentences of suggestion); vague verbs are only checked in English.
+
+## Unreleased — Found by on every list of tasks
+
+- Tasks › By agent shows who found each task, as the board and the list do: "Found by AI" or "Found by <name>" beside the number on a card, under the title in the Up next rows.
+- Results says it too: under each task in All results and in the overview's Recent results, and as Source in a result's detail. Website & product › Pages shows it on each task of a page's detail.
+- The classifier moves to `shared/task-source.ts`, so the task pages and the server's result rows (`found`) say the same. Places that only list the tasks of one opportunity, a task's Related tasks (which share its source), the Insights reminder, the chat and notifications are left as they are.
 
 ## Unreleased — Skills: playbooks as tags
 
