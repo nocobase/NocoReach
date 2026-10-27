@@ -128,6 +128,8 @@
     "README.MD",
     "AGENTS.md",
     "CHANGELOG.md",
+    "changelog",
+    "scripts/fold-changelog.mjs",
     "docs/DEVELOPMENT.md",
     "docs/ACCESS-DEVELOPMENT.md",
     "docs/ACCESS-CUTOVER.md",
@@ -224,7 +226,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test --pass-with-no-tests"
+    "test:e2e": "playwright test --pass-with-no-tests",
+    "changelog:fold": "node scripts/fold-changelog.mjs"
   },
   "packageManager": "pnpm@11.7.0",
   "imports": {

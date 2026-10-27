@@ -217,6 +217,8 @@ test('ships relocated developer guidance with both mock and YouTube constraints'
     expect.arrayContaining([
       'AGENTS.md',
       'CHANGELOG.md',
+      'changelog/unreleased/README.md',
+      'scripts/fold-changelog.mjs',
       'docs/DEVELOPMENT.md',
     ]),
   );
