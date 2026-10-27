@@ -5,8 +5,7 @@
 // in a task-local install; otherwise resolve the installed @nocobase/db-postgres package.
 // Run: pnpm exec vitest run tests/nocoreach/postgres-timestamps.test.ts
 import { randomUUID } from 'node:crypto';
-import { createRequire } from 'node:module';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { writeFile } from 'node:fs/promises';
 import pg from 'pg';
 import type { Knex } from 'knex';
@@ -71,12 +70,11 @@ async function isolatedPostgres() {
 async function target(old = false) {
   const isolated = await isolatedPostgres();
   // The optional official driver may live in a task-local installation without changing app dependencies.
-  const driverUrl =
-    process.env.PM375_POSTGRES_DRIVER ??
-    pathToFileURL(
-      createRequire(import.meta.url).resolve('@nocobase/db-postgres'),
-    ).href;
-  const { postgresDriver } = (await import(/* @vite-ignore */ driverUrl)) as {
+  const { postgresDriver } = (
+    process.env.PM375_POSTGRES_DRIVER
+      ? await import(/* @vite-ignore */ process.env.PM375_POSTGRES_DRIVER)
+      : await import('@nocobase/db-postgres')
+  ) as {
     postgresDriver: DatabaseDriverDefinition;
   };
   const database = createDatabaseManager({
@@ -235,7 +233,7 @@ describe.runIf(Boolean(process.env.PM375_POSTGRES_HOST))(
           sources,
           config: reader(config),
         });
-      await expect(runner().latest()).rejects.toThrow(
+      await expect(runner().upTo(migration.name)).rejects.toThrow(
         /Historical NocoReach UTC default/,
       );
       expect(await rawTimes(db)).toEqual(before);
@@ -258,14 +256,16 @@ describe.runIf(Boolean(process.env.PM375_POSTGRES_HOST))(
         evidence: 'Synthetic verified source batch',
       });
       config.preflightOnly = true;
-      await expect(runner().latest()).rejects.toThrow(/preflight succeeded/);
+      await expect(runner().upTo(migration.name)).rejects.toThrow(
+        /preflight succeeded/,
+      );
       expect(await rawTimes(db)).toEqual(before);
       expect(await schema()).toEqual(beforeSchema);
       config.preflightOnly = false;
       const statements: string[] = [];
       const observe = ({ sql }: { sql: string }) => statements.push(sql);
       db.client.on('query', observe);
-      await runner().latest();
+      await runner().upTo(migration.name);
       db.client.off('query', observe);
       if (process.env.PM375_POSTGRES_COST_REPORT)
         await writeFile(
@@ -306,7 +306,7 @@ describe.runIf(Boolean(process.env.PM375_POSTGRES_HOST))(
       expect((await db.client.raw('SHOW TIME ZONE')).rows[0].TimeZone).toBe(
         'Australia/Melbourne',
       );
-      expect((await runner().latest()).executed).toHaveLength(0);
+      expect((await runner().upTo(migration.name)).executed).toHaveLength(0);
     });
 
     it('rolls back original data and DDL on injected SQL failure, then reruns successfully', async () => {

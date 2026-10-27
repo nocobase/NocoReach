@@ -122,9 +122,10 @@ export async function timePlan(context: MigrationContext) {
   // compile() preserves Connection naming but skips QueryAdapter's temporal projection/decoding.
   // Execute compiled SQL on the same transaction client; execute() also normalizes temporal values.
   const postgres = context.connection.dialect === 'postgres';
-  if (context.connection.dialect !== 'sqlite' && !postgres)
+  const mysql = context.connection.dialect === 'mysql';
+  if (context.connection.dialect !== 'sqlite' && !postgres && !mysql)
     throw new Error(
-      'Time migration supports SQLite and Postgres storage only',
+      'Time migration supports SQLite, Postgres and MySQL storage only',
     );
   const client = await context.connection.client<Knex>();
   if (postgres) {
@@ -189,7 +190,10 @@ export async function timePlan(context: MigrationContext) {
       .compile();
     const sql = postgres
       ? `SELECT k, ${fields.map((_, i) => `v${i}::text AS v${i}`).join(', ')} FROM (${compiled.sql}) AS time_raw`
-      : compiled.sql;
+      : mysql
+        // Preserve DATETIME wall values without mysql2's host-timezone Date decoding.
+        ? `SELECT k, ${fields.map((_, i) => `CAST(v${i} AS CHAR) AS v${i}`).join(', ')} FROM (${compiled.sql}) AS time_raw`
+        : compiled.sql;
     const rows = rawRows<Record<string, unknown>>(
       await client.raw(sql, compiled.parameters as Knex.RawBinding[]),
     );
@@ -276,14 +280,24 @@ export default defineMigration({
         'Time migration preflight succeeded; no changes made: ' +
           JSON.stringify(plan.audit),
       );
-    // All validation completes before the first write. Default migration transaction owns DDL and DML.
+    // All validation completes before the first write. MySQL DDL implicitly commits.
     // SQLite retains Z as text. Postgres old timestamp columns discard Z but store the UTC wall
     // value; the transaction-local UTC timezone above makes subsequent DDL recover that instant.
     const client = await context.connection.client<Knex>();
     for (const change of plan.changes) {
+      // MySQL DATETIME stores the normalized UTC wall value without an offset suffix.
+      const values =
+        context.connection.dialect === 'mysql'
+          ? Object.fromEntries(
+              Object.entries(change.values).map(([field, value]) => [
+                field,
+                value?.replace('T', ' ').replace(/Z$/, '') ?? null,
+              ]),
+            )
+          : change.values;
       const compiled = context.query
         .updateTable(change.table)
-        .set(change.values)
+        .set(values)
         .where('id', '=', change.id)
         .compile();
       await client.raw(compiled.sql, compiled.parameters as Knex.RawBinding[]);

@@ -146,7 +146,7 @@ pnpm dev
 3. 在“AI 团队”中配置模型、连接 Runner，并选择默认 Agent；
 4. 在“洞察”中查看每日分析结果。
 
-如果只想体验产品，可以使用[模拟数据](docs/MOCK-DATA.md)启动演示环境，无需任何真实账号。生产部署请参考[构建与部署](docs/APP-TEMPLATE.md)。
+如果只想体验产品，可以使用[模拟数据](docs/MOCK-DATA.md)启动演示环境，无需任何真实账号。生产部署请参考[构建与部署](docs/APP-TEMPLATE.md)；默认使用 SQLite，PostgreSQL 和 MySQL 的准备、配置与验证步骤见[多数据库部署](docs/DATABASE-DEPLOYMENT.zh-CN.md)。
 
 ## 基于 NocoBase 3
 
@@ -154,9 +154,10 @@ NocoReach 是一个 [NocoBase 3](https://www.nocobase.com) 应用。账号、权
 
 ## 文档
 
-| 文档                               | 内容                             |
-| ---------------------------------- | -------------------------------- |
-| [开发说明](docs/DEVELOPMENT.md)    | 代码结构与开发约定               |
-| [模拟数据](docs/MOCK-DATA.md)      | 无需真实账号，启动演示或测试环境 |
-| [构建与部署](docs/APP-TEMPLATE.md) | 配置、构建与 Docker 部署         |
-| [变更记录](CHANGELOG.md)           | 各版本的变更内容                 |
+| 文档                                              | 内容                                         |
+| ------------------------------------------------- | -------------------------------------------- |
+| [开发说明](docs/DEVELOPMENT.md)                   | 代码结构与开发约定                           |
+| [模拟数据](docs/MOCK-DATA.md)                     | 无需真实账号，启动演示或测试环境             |
+| [构建与部署](docs/APP-TEMPLATE.md)                | 配置、构建与 Docker 部署                     |
+| [多数据库部署](docs/DATABASE-DEPLOYMENT.zh-CN.md) | PostgreSQL、MySQL 的驱动、连接配置和部署验证 |
+| [变更记录](CHANGELOG.md)                          | 各版本的变更内容                             |

@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — PostgreSQL and MySQL deployments
+
+- Add PostgreSQL and MySQL drivers for development and compatibility tests, retaining SQLite as the default production dependency. Document promoting the selected driver before building and configuring a standalone, Docker or Studio deployment.
+- Extend the historical absolute-timestamp migration for MySQL fresh installations and timestamp conversion without host-timezone decoding. Existing SQLite and PostgreSQL behavior is unchanged; installations that already ran it may review and repair the documented checksum drift without rerunning the migration.
+- Add database regression coverage and production-artifact verification for initialization, typed persistence, authentication, business writes and restart recovery.
+
 ## Unreleased — Task runs fail less on the computer's setup, and say what to do
 
 - The Agent's rules no longer fail a step for any missing credential, tool or conflict. A step fails only when it lacks a credential or tool it cannot do without (such as gh not signed in for a build or merge, or no access to the repository), or on a conflict; it still never bypasses limits or installs software. A tool a Skill suggests but the step does not need (an update check, an optional search backend) is worked around and noted in the result. The task's own Skills come first: other skills installed on the computer may be consulted, and a tool they ask for being unavailable does not fail the step. T-35 on Studio failed five times this way, for an `agent-reach check-update` that a personal Skill on the user's Mac asked for.
