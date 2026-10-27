@@ -40,7 +40,7 @@ pnpm nocobase config init
 pnpm dev
 ```
 
-打开终端中显示的地址，用 `config.yml` 中的初始管理员登录，新建项目后在“设置 › 数据接入”中接入数据。生产部署请参考[构建与部署](docs/APP-TEMPLATE.md)。
+打开终端中显示的地址，用 `config.yml` 中的初始管理员登录，新建项目后在“设置 › 数据接入”中接入数据。生产部署请参考[构建与部署](docs/APP-TEMPLATE.md)；默认使用 SQLite，PostgreSQL 和 MySQL 的准备、配置与验证步骤见[多数据库部署](docs/DATABASE-DEPLOYMENT.zh-CN.md)。
 
 ## 许可证
 

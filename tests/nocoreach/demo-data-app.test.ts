@@ -815,7 +815,7 @@ test('imports the demo through the API and clears all business data while preser
       ownerId: 'test-owner',
       sessionId: 'test-session',
       projectId: 'missing',
-      draftId: 'old-draft',
+      draftId: randomUUID(),
       expiresAt: new Date(Date.now() + 60000),
       deleting: false,
     },

@@ -40,7 +40,7 @@ pnpm nocobase config init
 pnpm dev
 ```
 
-Open the address printed in the terminal, sign in with the initial administrator from `config.yml`, create a project and connect data under Settings › Data sources. For production deployment, see [Build and deploy](docs/APP-TEMPLATE.md).
+Open the address printed in the terminal, sign in with the initial administrator from `config.yml`, create a project and connect data under Settings › Data sources. For production deployment, see [Build and deploy](docs/APP-TEMPLATE.md). SQLite is the default; see [Multi-database deployment](docs/DATABASE-DEPLOYMENT.md) for PostgreSQL and MySQL preparation, configuration and verification.
 
 ## License
 

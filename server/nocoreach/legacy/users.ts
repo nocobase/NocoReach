@@ -3,6 +3,7 @@
 // User ids are strings in NocoBase 3 (classic used numbers). Reads join the caller's transaction (`LegacyDatabase.table`):
 // the task service looks members up while it holds one.
 import { legacyRecord, type LegacyRecord, type LegacyRepository } from './database.js';
+import { toSort } from './filters.js';
 
 type Values = Record<string, unknown>;
 type Tables = { table(name: string, transaction?: unknown): any };
@@ -49,7 +50,7 @@ export class LegacyUsers implements LegacyRepository {
   async find(options: Values = {}): Promise<LegacyRecord[]> {
     const rows = (await this.db.table('user', options.transaction).findMany({
       filter: { kind: 'person' },
-      sort: { kind: 'sort', version: 1, items: [{ kind: 'field', path: ['createdAt'], direction: 'asc' }] },
+      sort: toSort(options.sort || 'createdAt'),
       ...(options.limit != null ? { limit: Number(options.limit) } : {}),
       ...(options.offset != null ? { offset: Number(options.offset) } : {}),
     })) as Values[];
