@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components -- the card's result check is exported beside it */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
-import { $t, $legacyText } from '#i18n';
+import { $t, $legacyText, useMessageState } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { toast } from '#lib/toast';
 import { Tag } from '#components/reach/tag';
@@ -75,7 +75,7 @@ export function RuleProposalCard({
   const { can } = useBusinessAccess(`nrAnalysisRules.${action}`, projectId);
   const [view, setView] = useState<View>(),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState('');
+    [error, setError] = useMessageState('');
   const aliveRef = useRef(true);
   useEffect(() => {
     aliveRef.current = true;
@@ -144,7 +144,7 @@ export function RuleProposalCard({
       const failure = e as { status?: number; code?: string; message?: string };
       // Demo Mode explains its refusal in its own toast.
       if (failure.code !== 'DEMO_READ_ONLY')
-        setError(
+        setError(() =>
           failure.status === 409
             ? $t('analysisRules.settingsChanged')
             : $legacyText(failure.message || '') || $t('common.saveFailed'),

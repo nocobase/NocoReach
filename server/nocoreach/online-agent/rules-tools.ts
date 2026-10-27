@@ -222,7 +222,7 @@ export function analysisRulesTools({
     {
       name: 'propose_rule_changes',
       description:
-        'Propose one change to the analysis rules for the user to confirm: turn rules on or off and change their numbers (changes), add a rule described in words (newRule), or change a custom rule (editRule) — exactly one of the three. Nothing is saved: the user sees each change with its before and after and confirms it in the chat. Read analysis_rules first; a rejected proposal says what to fix.',
+        'Propose one change to the analysis rules for the user to confirm: turn rules on or off and change their numbers (changes), add a rule described in words (newRule), or change a custom rule (editRule) — exactly one of the three. Nothing is saved: the user sees each change with its before and after and confirms it in the chat. Read analysis_rules first; a rejected proposal says what to fix. In your reply, say briefly what the change trades off (what may be missed) and that it applies from the next daily analysis once confirmed.',
       inputSchema: z.toJSONSchema(proposeInput),
       async execute(args) {
         await authorize();
