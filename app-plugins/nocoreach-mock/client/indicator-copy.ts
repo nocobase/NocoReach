@@ -14,6 +14,22 @@ const zh = {
 };
 
 const translations: Record<string, typeof en> = {
+  ko: {
+    indicator: '데모 데이터',
+    indicatorBody: '이 프로젝트는 데모 데이터를 사용합니다.',
+    indicatorDisabled:
+      '데모 환경입니다. 이 프로젝트의 시뮬레이션은 일시 중지되었습니다.',
+    unknown: '시뮬레이션 상태를 확인할 수 없습니다',
+    retry: '다시 시도',
+  },
+  ru: {
+    indicator: 'Демоданные',
+    indicatorBody: 'В этом проекте используются демонстрационные данные.',
+    indicatorDisabled:
+      'Демонстрационная среда. Симуляция для этого проекта приостановлена.',
+    unknown: 'Не удалось проверить состояние симуляции',
+    retry: 'Повторить',
+  },
   'zh-hant': {
     indicator: '示範資料',
     indicatorBody: '此專案使用示範資料。',

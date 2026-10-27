@@ -15,6 +15,7 @@ import { TaskDetail } from '../../client/pages/task-detail';
 import ArticleReaderPage from '../../client/pages/task-detail/article-reader';
 import type { TaskData } from '../../client/pages/task-execution-types';
 import spanish from '../../shared/i18n/es-ES.json';
+import russian from '../../shared/i18n/ru-RU.json';
 
 const { action } = vi.hoisted(() => ({ action: vi.fn() }));
 vi.mock('../../client/lib/nocoreach-api', async (original) => {
@@ -189,6 +190,56 @@ test('unknown activity actors use a member label instead of claiming the current
   expect(
     within(activity).queryByText('Tú', { selector: '[data-actor]' }),
   ).toBeNull();
+});
+
+test('Russian activity keeps named actors separate from gender-neutral event states', async () => {
+  setDictionary(russian, 'ru-RU');
+  action.mockImplementation((resource: string, command: string) => {
+    if (resource === 'nrPlaybooks') return Promise.resolve({ playbooks: [] });
+    if (command === 'members')
+      return Promise.resolve([
+        { id: '1', name: 'Ирина' },
+        { id: '2', name: 'Иван' },
+      ]);
+    return Promise.resolve([]);
+  });
+  const data = pageChange();
+  data.work.history = [
+    { at: '2026-10-13T02:10:00Z', actor: '1', action: 'startTask' },
+    { at: '2026-10-13T02:11:00Z', actor: '2', action: 'editStageOutput' },
+    { at: '2026-10-13T02:12:00Z', actor: 'system', action: 'merged' },
+    {
+      at: '2026-10-13T02:14:00Z',
+      actor: 'system',
+      action: 'runSucceeded',
+      artifactId: 'artifact-1',
+    },
+  ];
+  mount(data);
+  const activity = screen.getByRole('region', {
+    name: russian['common.activity'],
+  });
+  const irina = await within(activity).findByText('Ирина', {
+    selector: '[data-actor]',
+  });
+  const ivan = await within(activity).findByText('Иван', {
+    selector: '[data-actor]',
+  });
+  expect(irina.closest('p')).toHaveTextContent('Ирина — задача запущена');
+  expect(ivan.closest('p')).toHaveTextContent(
+    'Иван — контент отредактирован напрямую',
+  );
+  const agentRows = within(activity)
+    .getAllByText(russian['common.localAgent'], { selector: '[data-actor]' })
+    .map((actor) => actor.closest('p'));
+  expect(agentRows).toHaveLength(2);
+  for (const row of agentRows) {
+    expect(row).toHaveTextContent(`${russian['common.localAgent']} — `);
+  }
+  expect(agentRows[0]).toHaveTextContent(russian['taskDetail.eventPublished']);
+  expect(
+    within(agentRows[1]!).getByRole('button', { name: russian['common.view'] }),
+  ).toBeVisible();
 });
 
 test('a page change is reviewed as what readers see, with code kept in Technical details', async () => {

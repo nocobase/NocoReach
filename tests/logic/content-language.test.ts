@@ -26,6 +26,8 @@ describe('project content languages', () => {
       'Deutsch',
       'Tiếng Việt',
       'Bahasa Indonesia',
+      '한국어',
+      'Русский',
     ]);
   });
 

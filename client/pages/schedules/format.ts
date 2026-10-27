@@ -9,6 +9,8 @@ import 'cronstrue/locales/fr';
 import 'cronstrue/locales/de';
 import 'cronstrue/locales/vi';
 import 'cronstrue/locales/id';
+import 'cronstrue/locales/ko';
+import 'cronstrue/locales/ru';
 import { resolveLocale } from '../../../shared/i18n/locales';
 
 import { formatDateTime } from '#lib/format';
@@ -74,6 +76,8 @@ export function useScheduleFormatting() {
             'de-DE': 'de',
             'vi-VN': 'vi',
             'id-ID': 'id',
+            'ko-KR': 'ko',
+            'ru-RU': 'ru',
           }[resolveLocale(locale)],
           use24HourTimeFormat: true,
         });

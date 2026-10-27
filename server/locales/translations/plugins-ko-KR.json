@@ -1,0 +1,182 @@
+{
+  "@nocobase/app-plugin-mail": {
+    "errors": {
+      "accessDenied": "메일 접근 권한이 필요합니다.",
+      "idempotencyConflict": "멱등성 키가 이미 다른 요청과 연결되어 있습니다.",
+      "invalidRequest": "메일 요청이 잘못되었습니다.",
+      "accountCredentialsInvalid": "메일함 인증에 실패했습니다. 로그인 이름과 비밀번호 또는 인증 코드를 확인하고 IMAP/SMTP가 활성화되어 있는지 확인하세요. Gmail 및 기타 서비스에는 앱 비밀번호가 필요할 수 있습니다.",
+      "requestFailed": "메일 요청을 완료할 수 없습니다.",
+      "providerRateLimited": "메일 서비스에 요청이 너무 많습니다. 나중에 다시 시도하세요.",
+      "providerUnavailable": "메일 서비스에 연결할 수 없습니다. 나중에 다시 시도하세요.",
+      "reauthorizationRequired": "이 메일 계정을 사용하려면 먼저 다시 연결해야 합니다.",
+      "syncRunNotFound": "메일 동기화 실행을 찾을 수 없습니다.",
+      "messageNotFound": "메일 메시지를 찾을 수 없습니다.",
+      "authorizationStateRequired": "메일 승인 상태가 필요합니다."
+    }
+  },
+  "@nocobase/app-plugin-agents": {
+    "access": {
+      "section": "에이전트 관리",
+      "businessSection": "에이전트 관리",
+      "businesses": {
+        "agents": {
+          "title": "에이전트와 스킬",
+          "description": "에이전트와 에이전트가 사용하는 스킬입니다.",
+          "actions": {
+            "edit": {
+              "title": "에이전트와 스킬 관리",
+              "description": "에이전트의 설정, 스킬과 변수를 변경하고 에이전트를 보관, 복원하거나 삭제하며 스킬을 편집합니다. 편집자의 권한을 초과하는 기능은 에이전트에게 부여할 수 없습니다.",
+              "related": "에이전트와 스킬 관리(내 소유 에이전트와 내가 만든 스킬)",
+              "relatedLabel": "내가 소유한 에이전트와 내가 만든 스킬",
+              "relatedHint": "내가 소유한 에이전트와 내가 만든 스킬",
+              "all": "에이전트와 스킬 관리(전체)"
+            }
+          }
+        }
+      },
+      "settings": {
+        "agents": {
+          "agents": "에이전트",
+          "runners": "실행 환경",
+          "prices": "모델 가격",
+          "services": "모델 서비스"
+        }
+      },
+      "actions": {
+        "read": "보기",
+        "manage": "관리"
+      },
+      "keyScopes": {
+        "agents": {
+          "title": "에이전트",
+          "description": "에이전트, 스킬과 실행을 조회하고 에이전트와 스킬을 변경하며 실행을 취소하거나 다시 시도합니다."
+        },
+        "runners": {
+          "title": "실행 환경",
+          "description": "Runner와 등록 토큰을 조회하고 Runner를 관리합니다."
+        },
+        "prices": {
+          "title": "모델 가격",
+          "description": "비용 추정에 사용되는 모델 가격을 조회하고 변경합니다."
+        },
+        "services": {
+          "title": "모델 서비스",
+          "description": "모델 서비스와 제공 모델을 조회합니다. 키는 표시하지 않습니다."
+        }
+      }
+    }
+  },
+  "@nocobase/app-plugin-authz-default-access": {
+    "resourceTitle": "기본 데이터 범위"
+  },
+  "@nocobase/app-plugin-authz-sharing-rules": {
+    "resourceTitle": "공유 규칙"
+  },
+  "@nocobase/app-plugin-authz-restriction-rules": {
+    "resourceTitle": "제한 규칙"
+  },
+  "@nocobase/app-plugin-authorization": {
+    "sections": {
+      "pages": "페이지 액세스",
+      "page": "페이지",
+      "business": "비즈니스 작업",
+      "administration": "시스템 및 도구",
+      "other": "기타"
+    },
+    "options": {
+      "defaultAndSharing": "기본 데이터 범위 사용",
+      "actions": {
+        "assign": "할당 관리",
+        "configure": "설정",
+        "inspect": "권한 검사",
+        "read": "읽기",
+        "create": "만들기",
+        "update": "업데이트",
+        "delete": "삭제",
+        "access": "접근 권한"
+      },
+      "settingsModules": {
+        "authorization": "권한"
+      },
+      "pages": {
+        "all": "모든 페이지",
+        "allDescription": "나중에 추가된 페이지를 포함하여 모든 페이지에 대한 액세스를 허용합니다."
+      },
+      "settings": {
+        "inspector": "권한 검사 도구",
+        "permission-sets": "권한 세트"
+      },
+      "subjectTypes": {
+        "authenticated": "로그인한 모든 사용자",
+        "authenticatedDescription": "유효한 로그인 세션이 있는 모든 사용자에게 적용됩니다.",
+        "user": "사용자"
+      },
+      "recordAccessPolicies": {
+        "allRecords": "모든 레코드",
+        "recordsIOwn": "내 소유 레코드",
+        "recordsICreated": "내가 만든 레코드",
+        "customFilter": "맞춤 필터",
+        "customFilterHint": "사용자 지정 필터 조건으로 레코드를 선택합니다."
+      }
+    }
+  },
+  "@nocobase/app-plugin-users": {
+    "invitationEmail": {
+      "subject": "{{inviter}}님의 {{app}} 초대",
+      "intro": "{{inviter}}님이 {{app}}에 초대했습니다.",
+      "summary": "다음 항목에도 참여하게 됩니다: {{items}}.",
+      "separator": ", ",
+      "action": "초대 수락",
+      "validity": "링크를 열어 이름과 비밀번호를 설정하세요. {{date}}까지 한 번만 사용할 수 있습니다.",
+      "fallback": "링크가 열리지 않으면 아래 주소를 복사하여 브라우저에 붙여넣으세요:"
+    }
+  },
+  "@nocobase/app-plugin-notification": {
+    "errors": {
+      "logsForbidden": "알림 로그 접근 권한이 필요합니다.",
+      "logNotFound": "알림 로그를 찾을 수 없습니다."
+    }
+  },
+  "@nocobase/app-plugin-notification-in-app": {
+    "channels": {
+      "inApp": "앱 내 알림"
+    },
+    "providers": {
+      "builtIn": "기본 제공"
+    },
+    "errors": {
+      "authenticationRequired": "인증이 필요합니다.",
+      "invalidPageToken": "pageToken은 이 목록이 반환한 토큰이 아닙니다.",
+      "notFound": "알림 메시지를 찾을 수 없습니다."
+    }
+  },
+  "@nocobase/app-plugin-notification-providers": {
+    "providers": {
+      "smtp": "SMTP",
+      "resend": "Resend",
+      "feishuWebhook": "Feishu 웹훅",
+      "dingtalkWebhook": "DingTalk 웹훅"
+    }
+  },
+  "@nocobase/app-plugin-scheduler": {
+    "nav": {
+      "automation": "자동화"
+    },
+    "authorization": {
+      "title": "일정",
+      "read": "읽기"
+    }
+  },
+  "@nocobase/app-plugin-demo-mode": {
+    "authorization": {
+      "title": "데모 데이터",
+      "read": "보기",
+      "manage": "생성 및 지우기",
+      "configuration": "데모 구성",
+      "configure": "설정"
+    },
+    "errors": {
+      "readOnly": "데모 환경에서는 변경 사항을 저장할 수 없습니다."
+    }
+  }
+}

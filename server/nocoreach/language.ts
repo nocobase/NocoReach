@@ -8,7 +8,7 @@ import { supportedLocales } from '../../shared/i18n/locales.js';
 // other language a note at the end names it and overrides the prompt's own instruction to write Chinese.
 const LANGUAGES=[...supportedLocales];
 // How the note names each language to the model.
-const NAMES={'en-US':'English','zh-TW':'Traditional Chinese','ja-JP':'Japanese','es-ES':'Spanish','pt-BR':'Brazilian Portuguese','fr-FR':'French','de-DE':'German','vi-VN':'Vietnamese','id-ID':'Indonesian'};
+const NAMES={'en-US':'English','zh-TW':'Traditional Chinese','ja-JP':'Japanese','es-ES':'Spanish','pt-BR':'Brazilian Portuguese','fr-FR':'French','de-DE':'German','vi-VN':'Vietnamese','id-ID':'Indonesian','ko-KR':'Korean','ru-RU':'Russian'};
 const languageOf=project=>project&&LANGUAGES.includes(project.language)?project.language:'zh-CN';
 const note=name=>`
 

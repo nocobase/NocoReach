@@ -14,6 +14,8 @@ import {
   de,
   vi,
   id,
+  ko,
+  ru,
 } from 'react-day-picker/locale';
 import { resolveLocale } from '../../shared/i18n/locales';
 import { Button } from '#components/ui/button';
@@ -72,6 +74,8 @@ export function RangePicker({ value, onChange, summary, options }: Props) {
     'de-DE': de,
     'vi-VN': vi,
     'id-ID': id,
+    'ko-KR': ko,
+    'ru-RU': ru,
   }[resolveLocale(localeCode)];
   // Two months side by side wherever the calendar lays its months out in a row.
   const wide = useMediaQuery('(min-width: 48rem)', true);
