@@ -202,7 +202,8 @@ export function Pager({
   );
 }
 export type AccessTab = 'members' | 'invitations' | 'roles';
-/** Members, pending invitations and roles share one page, switched by `?tab=`. */
+/** Members, pending invitations and roles share one page, switched by `?tab=`; its description covers the whole page
+ * and stays the same on every tab (2026-10-22 decision D3). */
 export function AccessHeader({
   tab,
   invitations,
@@ -227,11 +228,7 @@ export function AccessHeader({
     <>
       <PageHeader
         title={$t('accessMembers.title')}
-        description={$t(
-          tab === 'roles'
-            ? 'accessMembers.rolesDescription'
-            : 'accessMembers.membersDescription',
-        )}
+        description={$t('accessMembers.pageDescription')}
         actions={actions}
       />
       <nav

@@ -160,7 +160,7 @@ function ReleasesCard({ view }: { view: View }) {
           ))}
           {latest.map((it) => (
             <li key={it.id} className="flex items-baseline gap-2 border-b border-border py-1.5 last:border-0">
-              <Tag tone="slate">{it.kind === "pulls" ? "Docker" : it.kind === "assets" ? "Release" : REGISTRY[it.registry]}</Tag>
+              <Tag tone="slate">{it.kind === "pulls" ? "Docker" : it.kind === "assets" ? REGISTRY.github : REGISTRY[it.registry]}</Tag>
               <span className="min-w-0 flex-1 truncate tabular-nums">{it.latest!.version}<span className="ml-1.5 text-xs text-muted-foreground">{it.title}</span></span>
               <span className="shrink-0 text-xs text-muted-foreground" title={dateOf(it.latest!.published)}>{ago(it.latest!.published, end)}</span>
             </li>

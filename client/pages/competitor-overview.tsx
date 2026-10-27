@@ -79,11 +79,13 @@ export function CompetitorOverview({ projectId, onManage }: { projectId: number;
   // No competitors yet: the AI suggestions and the form from 动态; the table appears once one is added.
   if (rows.length <= 1) return <CompetitorWatchTab projectId={projectId} onListChange={(n) => { if (n) void load(); }} />;
   const open = rows.find((r) => r.id === openId);
+  // The status line reads "Updated" with the newest lookup (2026-10-22 decision D2); the ⓘ says it runs monthly.
+  const searchedAt = rows.reduce<string | null>((at, r) => (r.searched && r.checkedAt && (!at || r.checkedAt > at) ? r.checkedAt : at), null);
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="flex items-center gap-1 text-xs text-muted-foreground">
-          {view.refreshing ? <><LoaderCircle className="size-3.5 animate-spin" />{$t('competitorOverview.checkingSearchDataUsuallyMinute')}</> : view.dataforseo ? $t('competitorOverview.searchDataUpdatedMonthly',{0:$legacyText(view.marketLabel)}) : $t('competitorOverview.googleInterestStarsAiMentions')}
+          {view.refreshing ? <><LoaderCircle className="size-3.5 animate-spin" />{$t('competitorOverview.checkingSearchDataUsuallyMinute')}</> : view.dataforseo ? (searchedAt ? $t('competitorOverview.searchDataUpdatedAt',{0:formatDate(searchedAt)}) : $t('competitorOverview.searchDataUpdatedMonthly',{0:$legacyText(view.marketLabel)})) : $t('competitorOverview.googleInterestStarsAiMentions')}
           <NotesTip notes={view.notes} label={$t('competitorOverview.whereOverviewDataComes')} side="bottom" />
         </p>
         <div className="flex flex-wrap items-center gap-2">

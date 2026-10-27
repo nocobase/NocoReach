@@ -33,9 +33,10 @@ export type View = {
 export const REGISTRY: Record<Registry, string> = { npm: "npm", pypi: "PyPI", docker: "Docker Hub", github: "GitHub" };
 // What a figure counts: npm or PyPI downloads, Docker pulls, or GitHub release-file downloads.
 export const kindLabel = (it: Item) => (it.kind === "pulls" ? $t('dataDownloads.dockerPulls') : it.kind === "assets" ? $t('dataDownloads.releaseFiles') : $t('dataDownloads.registryDownloads', { 0: REGISTRY[it.registry] }));
+// Channels in words, as the dist-tags are (UI review 2026-10-23: "latest", "alpha" and "beta" stayed English beside the translated release channel).
 export const CHANNEL: Record<Channel, { label: () => string; tone: Tone }> = {
-  latest: { label: () => "latest", tone: "blue" }, release: { label: () => $t('dataDownloads.channelRelease'), tone: "green" }, line: { label: () => $t('dataDownloads.channelLine'), tone: "slate" },
-  alpha: { label: () => "alpha", tone: "violet" }, beta: { label: () => "beta", tone: "amber" }, rc: { label: () => "rc", tone: "orange" }, pre: { label: () => $t('dataDownloads.channelPre'), tone: "grey" }, other: { label: () => $t('dataDownloads.channelOther'), tone: "grey" },
+  latest: { label: () => $t('dataDownloads.latestVersion'), tone: "blue" }, release: { label: () => $t('dataDownloads.channelRelease'), tone: "green" }, line: { label: () => $t('dataDownloads.channelLine'), tone: "slate" },
+  alpha: { label: () => $t('dataDownloads.alphaTag'), tone: "violet" }, beta: { label: () => $t('dataDownloads.betaTag'), tone: "amber" }, rc: { label: () => $t('dataDownloads.rcTag'), tone: "orange" }, pre: { label: () => $t('dataDownloads.channelPre'), tone: "grey" }, other: { label: () => $t('dataDownloads.channelOther'), tone: "grey" },
 };
 
 export const num = (v: number | null | undefined, digits = 0) => formatCount(v, digits);

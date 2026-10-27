@@ -356,9 +356,14 @@ test('accepts a suggestion and shows its examples behind the ⓘ', async () => {
   await mountProjectKnowledge('/project/memory');
   const region = await screen.findByRole('region', { name: '更新建议' });
   expect(within(region).getByText('A CLI ships with it.')).toBeInTheDocument();
+  // The status line reads "Updated"; Check now is at the top right, not in the line.
   expect(
-    within(region).getByText(/上次检查 10-19，1 条建议/),
+    within(region).getByText('更新于 10-19 · 1 条建议'),
   ).toBeInTheDocument();
+  expect(
+    within(region).queryByRole('button', { name: '立即检查' }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '立即检查' })).toBeInTheDocument();
   await user.click(within(region).getByRole('button', { name: '补充' }));
   await waitFor(() =>
     expect(action).toHaveBeenCalledWith(

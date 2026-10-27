@@ -76,61 +76,64 @@ export default function SchedulesPage() {
         {error ? <Failure error={error} retry={refresh} /> : null}
         {!data && !error ? <Loading /> : null}
         {data?.data.length === 0 ? <EmptyState /> : null}
+        {/* In a card like every other table, Members and Network included (UI review 2026-10-23). */}
         {data?.data.length ? (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('schedules.columns.name')}</TableHead>
-                <TableHead>{t('schedules.columns.time')}</TableHead>
-                <TableHead>
-                  {otherZone ? (
-                    <span className='inline-flex items-center gap-1'>
-                      {t('schedules.columns.last')}
-                      <InfoTip label={t('schedules.timesLabel')}>
-                        <p>
-                          {t('schedules.shownIn', {
-                            zone: format.zone(format.timeZone),
-                          })}
-                        </p>
-                      </InfoTip>
+          <div className='rounded-lg border bg-card'>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t('schedules.columns.name')}</TableHead>
+                  <TableHead>{t('schedules.columns.time')}</TableHead>
+                  <TableHead>
+                    {otherZone ? (
+                      <span className='inline-flex items-center gap-1'>
+                        {t('schedules.columns.last')}
+                        <InfoTip label={t('schedules.timesLabel')}>
+                          <p>
+                            {t('schedules.shownIn', {
+                              zone: format.zone(format.timeZone),
+                            })}
+                          </p>
+                        </InfoTip>
+                      </span>
+                    ) : (
+                      t('schedules.columns.last')
+                    )}
+                  </TableHead>
+                  {/* Secondary: left out where the table would otherwise scroll sideways. */}
+                  <TableHead className='hidden xl:table-cell'>
+                    {t('schedules.columns.next')}
+                  </TableHead>
+                  <TableHead>{t('schedules.columns.status')}</TableHead>
+                  <TableHead>
+                    <span className='sr-only'>
+                      {t('schedules.columns.actions')}
                     </span>
-                  ) : (
-                    t('schedules.columns.last')
-                  )}
-                </TableHead>
-                {/* Secondary: left out where the table would otherwise scroll sideways. */}
-                <TableHead className='hidden xl:table-cell'>
-                  {t('schedules.columns.next')}
-                </TableHead>
-                <TableHead>{t('schedules.columns.status')}</TableHead>
-                <TableHead>
-                  <span className='sr-only'>
-                    {t('schedules.columns.actions')}
-                  </span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.data.map((schedule) => (
-                <ScheduleRow
-                  key={schedule.id}
-                  schedule={schedule}
-                  stamp={stamp}
-                  invalidated={refresh}
-                  changed={(next) => {
-                    if (next)
-                      replace({
-                        ...data,
-                        data: data.data.map((item) =>
-                          item.id === next.id ? next : item,
-                        ),
-                      });
-                    refresh();
-                  }}
-                />
-              ))}
-            </TableBody>
-          </Table>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.data.map((schedule) => (
+                  <ScheduleRow
+                    key={schedule.id}
+                    schedule={schedule}
+                    stamp={stamp}
+                    invalidated={refresh}
+                    changed={(next) => {
+                      if (next)
+                        replace({
+                          ...data,
+                          data: data.data.map((item) =>
+                            item.id === next.id ? next : item,
+                          ),
+                        });
+                      refresh();
+                    }}
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         ) : null}
         {data && (page > 1 || data.meta.total > data.meta.pageSize) ? (
           <nav
