@@ -326,7 +326,7 @@ function Insights({
       action: 'access',
     });
   const rows = rowsFor(state),
-    metrics = metricItems(overview.data?.cards),
+    metrics = metricItems(overview.data?.cards, METRIC_DAYS),
     feed = feedOf(
       state,
       rows,
@@ -520,9 +520,11 @@ function Insights({
 // The subtitle says how the insights are made, not how fresh each source is (2026-10-22 user decision: "data through
 // 10/18" beside today's analysis read as analysing stale data; freshness lives under Data sources › Data health): which
 // rules, and when the daily analysis runs, each a link to where it is set for those who may open it. No period: each
-// rule reads its own window (7, 14, 28 or 30 days); the 28 days belong to the metric cards, which say so.
-// The metric cards: each source's last 28 days against the 28 before (nrDataViews:overview).
-const METRIC_DAYS = 28;
+// rule reads its own window (7, 14, 28 or 30 days); the period belongs to the metric cards, which say so.
+// The metric cards: each source's last 7 days against the 7 before (nrDataViews:overview; 2026-10-27 user decision:
+// the analysis runs daily, so the cards show this week, a whole week against the one before). Each card opens its
+// page on the same 7 days.
+const METRIC_DAYS = 7;
 const subtleLink = 'nr-link-quiet';
 function HowAnalyzed({
   schedule,

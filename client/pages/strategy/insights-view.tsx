@@ -60,11 +60,12 @@ export function Sparkline({points,change}:{points:Point[];change?:number|null}):
 }
 // The page's numbers: search, visits and key events, then GitHub stars, downloads, forum topics, Hacker News and Reddit
 // when connected, each with its daily series and its data page. A metric without a value is left out by the caller.
-export type MetricItem={label:string;value:number|null;change:number|null;to:string;signed?:boolean;series?:Point[]};
-export function metricItems(cards?:SourceCard[]):MetricItem[]{
+// `days` is the cards' period; each card's page opens on it (?days=), so the numbers there match.
+export type MetricItem={label:string;value:number|null;previous?:number|null;change:number|null;to:string;signed?:boolean;series?:Point[]};
+export function metricItems(cards?:SourceCard[],days?:number):MetricItem[]{
  const by=new Map((cards||[]).map(c=>[c.id,c]));
  const item=(label:string,c:SourceCard|undefined,key:string,to:string,signed=false,series?:Point[]):MetricItem=>{const m=c?.metrics.find(x=>x.key===key);
-  return {label,value:m?.value??null,change:m?.change??null,to,signed,series:series||c?.seriesBy?.[key]||(c?.metrics[0]?.key===key?c.series:undefined)};};
+  return {label,value:m?.value??null,previous:m?.previous??null,change:m?.change??null,to:days?`${to}${to.includes('?')?'&':'?'}days=${days}`:to,signed,series:series||c?.seriesBy?.[key]||(c?.metrics[0]?.key===key?c.series:undefined)};};
  const gsc=by.get('gsc'),ga4=by.get('ga4');
  return [item($t('common.searchClicks'),gsc,'clicks','/seo-opportunities'),item($t('common.searchImpressions'),gsc,'impressions','/seo-opportunities'),item($t('strategy.sessions'),ga4,'sessions','/website'),item($t('common.keyEvents'),ga4,'conversions','/website/conversion'),
   ...([['github','stars',$t('common.newStars'),'/data/github',true],['packages','downloads',$t('common.downloads'),'/data/downloads',false],['discourse','topics',$t('strategy.newForumTopics'),'/data/community',false],['mentions','mentions',$t('common.hackerNewsMentions'),'/data/hackernews',false],['reddit','posts',$t('strategy.newRedditPosts'),'/data/reddit',false]] as const).flatMap(([id,key,label,to,signed])=>{const c=by.get(id);return c?[item(label,c,key,to,signed,c.series)]:[];})];
