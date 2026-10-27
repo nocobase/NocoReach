@@ -350,17 +350,95 @@ it('asks a new article for the title and body of the primary language chosen at 
       </TaskDraftScope>
     </TaskDraftProvider>,
   );
+  // Only Chinese is edited before its approval: English is translated from it, and says so once instead of as fields.
+  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
+    'Chinese',
+  ]);
+  expect(screen.getAllByRole('textbox', { name: /^Title/ })).toHaveLength(1);
+  expect(
+    screen.getByText('English will be translated once Chinese is approved.'),
+  ).toBeVisible();
   await user.click(screen.getByRole('button', { name: 'Save' }));
   expect(onSave).not.toHaveBeenCalled();
-  // Only the Chinese body is asked for; English is translated after approval.
   expect(screen.getAllByText('Enter the body')).toHaveLength(1);
   expect(screen.queryByText('Enter a title')).not.toBeInTheDocument();
   const bodies = screen.getAllByRole('textbox', { name: /^Body/ });
-  await user.type(bodies[1], '中文正文');
+  await user.type(bodies[0], '中文正文');
   await user.click(screen.getByRole('button', { name: 'Save' }));
   expect(onSave).toHaveBeenCalledWith({
     slug: 'new-post',
     locales: { zh: { title: '新文章', body: '中文正文' } },
+  });
+});
+
+// 2026-10-27 user report: the editor opened on empty English fields while the Chinese ones were further down.
+it('edits the languages written, one at a time from the one shown, and opens the one with an error on save', async () => {
+  const onSave = vi.fn(async () => true);
+  const user = userEvent.setup();
+  render(
+    <TaskDraftProvider>
+      <TaskDraftScope scope='1:1'>
+        <ArticleEditor
+          data={
+            {
+              ...data,
+              work: {
+                delivery: {
+                  locales: ['zh', 'en'],
+                  translateFrom: { artifactId: 'a0', at: '2026-10-27' },
+                },
+              },
+            } as unknown as TaskData
+          }
+          article={{
+            ...proposal,
+            articleId: null,
+            baseKey: null,
+            baseVersion: null,
+            draft: {
+              slug: 'new-post',
+              locales: {
+                zh: { title: '新文章', body: '中文正文' },
+                en: { title: 'New post', body: 'English body' },
+              },
+            },
+            changes: ['zh.title', 'zh.body', 'en.title', 'en.body', 'slug'],
+          }}
+          draftKey='a3'
+          tab='en'
+          busy={false}
+          onSave={onSave}
+          onCancel={vi.fn()}
+        />
+      </TaskDraftScope>
+    </TaskDraftProvider>,
+  );
+  const tab = (name: string) => screen.getByRole('tab', { name });
+  expect(tab('English')).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('textbox', { name: /^Title/ })).toHaveValue(
+    'New post',
+  );
+  await user.click(tab('Chinese'));
+  expect(screen.getByRole('textbox', { name: /^Title/ })).toHaveValue('新文章');
+  await user.clear(screen.getByRole('textbox', { name: /^Body/ }));
+  await user.click(tab('English'));
+  const title = screen.getByRole('textbox', { name: /^Title/ });
+  await user.clear(title);
+  await user.type(title, 'Edited');
+  await user.click(screen.getByRole('button', { name: 'Save' }));
+  expect(onSave).not.toHaveBeenCalled();
+  // The Chinese body is required: its language opens, with the field focused.
+  expect(tab('Chinese')).toHaveAttribute('aria-selected', 'true');
+  const body = screen.getByRole('textbox', { name: /^Body/ });
+  await waitFor(() => expect(body).toHaveFocus());
+  await user.type(body, '新的正文');
+  await user.click(screen.getByRole('button', { name: 'Save' }));
+  expect(onSave).toHaveBeenCalledWith({
+    slug: 'new-post',
+    locales: {
+      zh: { title: '新文章', body: '新的正文' },
+      en: { title: 'Edited', body: 'English body' },
+    },
   });
 });
 
@@ -389,6 +467,7 @@ it.each([
                 status,
                 locales: { en: { title: 'Hello', body: 'English body' } },
               },
+              changes: [],
             }}
             draftKey='status-edit'
             busy={false}

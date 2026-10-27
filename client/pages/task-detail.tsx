@@ -372,7 +372,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  const editButtonRef=useRef<HTMLButtonElement>(null);
  const manual=manualOpen||Boolean(record),editing=editingOpen||draft!==(w.results[index-1]?.content||'');
  const last=stages.slice(index+1).every(s=>s.kind==='observe'),nextOptions=w.playbook?.kind==='plan'&&last?w.playbook.next:[];
- const [next,setNext]=useState(nextOptions[0]||''),[relNote,setRelNote]=useTaskDraft('release',w.results[index-1]?.pr?.release||'');
+ const [next,setNext]=useState(nextOptions[0]||''),[articleTab,setArticleTab]=useState(''),[relNote,setRelNote]=useTaskDraft('release',w.results[index-1]?.pr?.release||'');
  const {clear}=useTaskDraftStatus();
  const act=async(command:string,body:object)=>{const result=await update(command,{stageKey:stage.key,...body});if(result&&['editStageOutput','recordManual','confirmPublish','approveStage','requestStageChanges'].includes(command))clear();return result;};
  const name=(id:string)=>list?.playbooks.find(p=>p.id===id)?.name||id;
@@ -400,8 +400,8 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
     {!editing&&request(getStageExecutor().agent)}
     {targetGone&&<p role='alert' className='text-sm text-destructive'>{$t('articles.targetMissing')}</p>}
     <LastFeedback w={w} stage={stage} out={out}/>
-    {editing?<ArticleEditor data={data} article={out.article} draftKey={out.id} busy={busy} onCancel={()=>{setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}} onSave={async article=>{const d=await act('editArticleDraft',{artifactId:out.id,article});if(d){setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}return Boolean(d);}}/>:<>
-     <ArticleReview key={out.id} data={data} article={out.article} notes={out.content} readerTo={(lang,view)=>`article?lang=${encodeURIComponent(lang)}&view=${view}`}/>
+    {editing?<ArticleEditor data={data} article={out.article} draftKey={out.id} tab={articleTab} busy={busy} onCancel={()=>{setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}} onSave={async article=>{const d=await act('editArticleDraft',{artifactId:out.id,article});if(d){setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}return Boolean(d);}}/>:<>
+     <ArticleReview key={out.id} data={data} article={out.article} notes={out.content} tab={articleTab} onTab={setArticleTab} readerTo={(lang,view)=>`article?lang=${encodeURIComponent(lang)}&view=${view}`}/>
      <Checklist stage={stage} checked={checked} setChecked={setChecked} busy={busy}/>
     </>}
    </StageCard>;

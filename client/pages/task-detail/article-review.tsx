@@ -43,7 +43,6 @@ import { MarkdownEditor } from './markdown-editor.js';
 import { Notice } from './layout.js';
 import { text } from './styles.js';
 import {
-  articleContext,
   articleLanguages,
   draftContent,
   revisedText,
@@ -391,6 +390,8 @@ export function ArticleReview({
   notes,
   settled = false,
   readerTo,
+  tab: asked,
+  onTab,
 }: {
   data: TaskData;
   article: ArticleProposal;
@@ -399,10 +400,18 @@ export function ArticleReview({
   settled?: boolean;
   /** Where Read full screen opens the language and view being shown; left out where there is no reading page. */
   readerTo?: (tab: string, view: ArticleView) => string;
+  /** The language last chosen, kept by the card so Edit directly opens on it. */
+  tab?: string;
+  onTab?: (tab: string) => void;
 }) {
   const languages = articleLanguages(data, a);
   const { target, base, locales } = languages;
-  const [tab, setTab] = useState(locales.find(languages.changed) || locales[0]);
+  const [own, setOwn] = useState(locales.find(languages.changed) || locales[0]);
+  const tab = asked && locales.includes(asked) ? asked : own;
+  const setTab = (l: string) => {
+    setOwn(l);
+    onTab?.(l);
+  };
   const [views, setViews] = useState<Record<string, ArticleView>>({});
   const versions = languages.versions(tab);
   const view = views[tab] ?? languages.defaultView(tab);
@@ -507,6 +516,7 @@ export function ArticleEditor({
   data,
   article: a,
   draftKey,
+  tab: asked,
   busy,
   onSave,
   onCancel,
@@ -515,18 +525,36 @@ export function ArticleEditor({
   article: ArticleProposal;
   /** The artifact version being edited. */
   draftKey: string;
+  /** The language the review was showing, to open on. */
+  tab?: string;
   busy: boolean;
   onSave: (article: ArticleDraft) => Promise<boolean>;
   onCancel: () => void;
 }) {
   const id = useId();
-  const { target, base } = articleContext(data, a);
+  const languages = articleLanguages(data, a);
+  const { target, base } = languages;
+  // Every language the article can have: the form keeps them all, so what is saved does not depend on what is shown.
   const locales = [
     ...new Set([...(target?.locales || []), ...Object.keys(a.draft.locales)]),
   ];
   // A new article needs a title and body in the task's primary language, as the server checks (cleanDraft).
   const chosen = data.work?.delivery?.locales?.[0],
     primary = chosen && target?.locales.includes(chosen) ? chosen : locales[0];
+  const create = !a.articleId;
+  // The languages edited are the ones the review shows, one at a time (2026-10-27 user report: the editor opened on
+  // empty fields for languages not written yet). While the primary waits for approval it is the only one, since the
+  // translation writes the others from it; a new article always has its primary.
+  const editable = languages.pending.length
+    ? [primary]
+    : locales.filter(
+        (l) => languages.locales.includes(l) || (create && l === primary),
+      );
+  const [tab, setTab] = useState(
+    asked && editable.includes(asked)
+      ? asked
+      : editable.find(languages.changed) || editable[0],
+  );
   // Kept in the task draft store: navigation asks before discarding it, like the other drafts on this page. One
   // draft per version, so an edit left on an older version never replaces a newer one.
   const [raw, setRaw, clear] = useTaskDraft(
@@ -543,7 +571,6 @@ export function ArticleEditor({
   };
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
-  const create = !a.articleId;
   function check(f: EditForm) {
     const e: Record<string, string> = {};
     if (create && !SLUG.test(f.slug)) e.slug = $t('articleTask.slugInvalid');
@@ -574,7 +601,12 @@ export function ArticleEditor({
     const e = check(form);
     setErrors(e);
     const first = Object.keys(e)[0];
-    if (first) return focusSoon(`${id}-${first}`);
+    if (first) {
+      // A field of another language opens that language first.
+      const l = first.split('.')[0];
+      if (editable.includes(l) && l !== tab) setTab(l);
+      return focusSoon(`${id}-${first}`);
+    }
     // Only what differs from the base is sent: unchanged fields stay the article's own.
     const draftLocales: ArticleDraft['locales'] = {};
     for (const l of locales)
@@ -663,9 +695,18 @@ export function ArticleEditor({
             <FieldDescription>{$t('articleTask.statusHelp')}</FieldDescription>
           </Field>
         )}
-        {locales.map((l) => (
-          <fieldset key={l} className='flex min-w-0 flex-col gap-3'>
-            <legend className={text.muted}>
+        <div className='flex min-w-0 flex-col gap-3'>
+          <LanguageTabs locales={editable} tab={tab} onTab={setTab} />
+          <MissingLanguages languages={languages} />
+        </div>
+        {editable.map((l) => (
+          // Every language stays in the form, so a field with an error in another one can be opened and focused.
+          <fieldset
+            key={l}
+            hidden={l !== tab}
+            className='flex min-w-0 flex-col gap-3'
+          >
+            <legend className='sr-only'>
               {localeName(l, getCurrentLocale())}
             </legend>
             {ARTICLE_FIELDS.map((f) => {
