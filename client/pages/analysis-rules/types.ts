@@ -67,15 +67,3 @@ export type Settings = {
   watchDays?: number;
   expectedRevision?: string;
 };
-export type Change = {
-  ruleId: string;
-  field: string;
-  before: number | boolean;
-  after: number | boolean;
-  reason: string;
-};
-export type Proposal = {
-  revision: string;
-  explanation: string;
-  changes: Change[];
-};

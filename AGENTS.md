@@ -28,6 +28,6 @@ Before implementing features or fixes, read the [application development Skill](
 
 ## Maintaining this guidance
 
-Keep this file limited to rules shared across tasks and pointers to further guidance. Update it only when those rules change, revising existing entries first. Maintain module constraints in the relevant topic, link to Skills for tutorials, and record significant changes in [CHANGELOG.md](CHANGELOG.md). Do not append version notes, debugging histories, or test logs here. `CLAUDE.md` only references this file.
+Keep this file limited to rules shared across tasks and pointers to further guidance. Update it only when those rules change, revising existing entries first. Maintain module constraints in the relevant topic, link to Skills for tutorials, and record significant changes in a note of their own in [changelog/unreleased/](changelog/unreleased/README.md), one file per pull request named after its branch; do not edit [CHANGELOG.md](CHANGELOG.md), which `pnpm changelog:fold` assembles from the notes. Do not append version notes, debugging histories, or test logs here. `CLAUDE.md` only references this file.
 
 Keep [development guidance](docs/DEVELOPMENT.md) in sync with code changes: capture confirmed, reusable lessons, revise or remove outdated rules, and maintain affected links. Prefer updating existing entries.
