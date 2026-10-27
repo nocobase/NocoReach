@@ -1063,6 +1063,21 @@ it('defaults the start card to the playbook target, the repository, or the defau
       locales: ['zh', 'en'],
     }).delivery,
   ).toEqual({ targetId: 'cms', locales: ['zh', 'en'] });
+  // A single chosen language goes too (2026-10-27): without it the server writes every language.
+  expect(
+    deliveryPlan(d({}), {
+      target: 'cms',
+      mode: 'new',
+      also: [],
+      locales: ['zh'],
+    }).delivery,
+  ).toEqual({ targetId: 'cms', locales: ['zh'] });
+  expect(
+    deliveryPlan(
+      { ...d({}), work: { article: { targetId: 'cms', articleId: '7' } } },
+      { target: 'cms', mode: 'existing', also: [], locales: ['zh'] },
+    ).delivery,
+  ).toEqual({ locales: ['zh'] });
 });
 
 it('decides where the change goes from the page: the article found, the repository, or a pick', () => {

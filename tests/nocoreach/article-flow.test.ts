@@ -1500,14 +1500,22 @@ test('Accept and start: a blog post handed over from an outline starts as a new 
   const d = await acceptOutline(f, 'blog-post');
   expect(d.work.stage).toBe('done');
   const child = await f.s.get('1', d.work.nextTaskId);
+  // The start card's languages: every language of the target, its first as the primary (2026-10-27).
   expect(child.work.delivery).toMatchObject({
     kind: 'article',
     targetId: 'cms',
     articleId: null,
+    locales: ['en', 'zh', 'ja'],
   });
   expect(child.runs).toEqual([
     expect.objectContaining({ status: 'queued', mode: 'article' }),
   ]);
+  const { run } = await claim(f);
+  expect(run.input.article.languages).toMatchObject({
+    primary: 'en',
+    phase: 'primary',
+    write: ['en'],
+  });
   expect(d.related).toEqual([
     expect.objectContaining({ relation: 'next', state: 'doing' }),
   ]);
