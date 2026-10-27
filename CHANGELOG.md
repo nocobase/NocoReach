@@ -5,6 +5,11 @@
 - The metric cards on Insights show the last 7 days against the 7 before ("Last 7 days vs the previous 7"), not 28: the analysis runs every day, so the cards show this week, a whole week against the one before. Each Google source still ends at its own last day with data.
 - A card opens its page on the same 7 days (`?days=7`), so the numbers there match the card.
 - When the week before had fewer than 10, the change is a count ("↑ 2") instead of a percentage ("↑ 200%" for 1 → 3), from zero too ("↑ 4" for 0 → 4, which had no comparison). The sparkline takes the same colour. Today's summary no longer names such a number among the ones that moved most.
+## Unreleased — Every Current situation line with items hands them to the Agent
+
+- In Insights › Current situation, every line that opens a list of items can hand the ticked ones to the Agent, as the existing lines could: the sixteen analysis rule lines, each with the playbook that fits it (Optimize page for pages, Competitor comparison for competitors, Content outline for AI answers, rising searches and recurring topics, Community reply for Hacker News and X posts, Release notes for your new releases, Change research for sites sending visits to your repository), and the ChatGPT and Google AI Overviews mention lines, whose ticked brands go to a competitor comparison.
+- A rule line's panel is titled as in the list ("Pages losing search clicks" rather than the rule's name).
+- Hand off to agent in a panel is greyed out until something is ticked, without the "Tick what to hand off below first" hint, which took focus when the panel opened and covered its description. This applies to every panel with that button: Current situation, Trends keywords, Audit performance, Competitor overview and the website reports.
 
 ## Unreleased — Articles are written in their own language
 

@@ -1251,6 +1251,68 @@ it('the current situation shows only the rows its column has room for', async ()
   }
 });
 
+it('a rule line opens its items titled as in the list, handed to the Agent once some are ticked, without a hint', async () => {
+  fixture.areas = [
+    {
+      id: 'search',
+      title: 'Search',
+      items: [
+        {
+          key: 'rule-gsc-click-drop',
+          text: 'Page search clicks falling',
+          values: ['2'],
+          source: 'Search performance',
+          to: '/seo-opportunities',
+          group: 'worse',
+          rows: [
+            {
+              key: 'gsc-click-drop:/a',
+              title: '/a clicks down 43%',
+              url: 'https://e.com/a',
+            },
+            {
+              key: 'gsc-click-drop:/b',
+              title: '/b clicks down 32%',
+              url: 'https://e.com/b',
+            },
+          ],
+          total: 2,
+          handOff: {
+            playbookId: 'optimize-page',
+            title: 'Page search clicks falling: {0}',
+          },
+        },
+      ],
+    },
+  ];
+  setup();
+  const situation = await screen.findByRole('region', {
+    name: 'strategy.currentSituation',
+  });
+  fireEvent.click(
+    await within(situation).findByText('strategy.situationClickDrop'),
+  );
+  const drawer = await screen.findByRole('dialog');
+  expect(
+    within(drawer).getByRole('heading', {
+      name: 'strategy.situationClickDrop',
+    }),
+  ).toBeTruthy();
+  const handOff = within(drawer).getByRole('button', {
+    name: 'common.handOffAgent',
+  });
+  expect((handOff as HTMLButtonElement).disabled).toBe(true);
+  expect(within(drawer).queryByRole('tooltip')).toBeNull();
+  fireEvent.click(within(drawer).getAllByRole('checkbox')[1]);
+  expect(
+    (
+      within(drawer).getByRole('button', {
+        name: /common.handOffAgent/,
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(false);
+});
+
 it('a handed-off opportunity says where its task stands now', async () => {
   fixture.tasks = [
     {
