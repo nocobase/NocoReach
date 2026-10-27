@@ -16,6 +16,7 @@ import {
   type OnlineConversation,
 } from '../../shared/online-agent.js';
 import { OnlineAgentError } from '../../server/online-agent/errors.js';
+import { toApply, type RuleProposal } from '../../shared/rule-proposal.js';
 import type { ModelEvent } from '@nocobase/app-plugin-agents/server/tokens';
 vi.setConfig({ testTimeout: 120000, hookTimeout: 120000 });
 afterEach(() => vi.restoreAllMocks());
@@ -693,8 +694,10 @@ test('online agents cannot be task executors and chat exposes scoped task tools'
   expect(stream).toHaveBeenCalledTimes(2);
   expect(stream.mock.calls[0][0].tools.map((tool) => tool.name).sort()).toEqual(
     [
+      'analysis_rules',
       'daily_analysis',
       'project_data',
+      'propose_rule_changes',
       'query_data',
       'read_page',
       'task_execute',
@@ -900,4 +903,189 @@ test('conversations asked from Insights keep their day and opportunity and list 
   await host.legacy.db.access!.joinCreatedProject(other.id, project);
   expect(await service.threads(other.id, project)).toEqual([]);
   expect(await service.threads(String(person!.id), project)).toHaveLength(1);
+});
+
+test('a conversation opened from Analysis rules reads the rules, and a proposal is saved only through the page action', async ({
+  testApp,
+}) => {
+  const service = testApp.application.container.resolve(onlineAgentsToken);
+  await service.stop();
+  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const host = testApp.application.container.resolve(nocoReachToken);
+  await host.ready;
+  const project = String(
+    (
+      await host.plugin.projects.create({
+        name: 'Rules chat',
+        domain: 'rules-chat.example.test',
+      })
+    ).id,
+  );
+  const rules = (
+    host.plugin as unknown as {
+      analysisRules: {
+        view(id: string): Promise<{
+          revision: string;
+          rules: { id: string; params: { key: string; value: number }[] }[];
+        }>;
+      };
+    }
+  ).analysisRules;
+  const dropPct = async () =>
+    (await rules.view(project)).rules
+      .find((r) => r.id === 'gsc-click-drop')!
+      .params.find((p) => p.key === 'dropPct')!.value;
+  vi.spyOn(service, 'resolveModel').mockResolvedValue({
+    modelService: 'test',
+    model: 'test-model',
+  });
+  const requests: { instructions: string; tools: string[] }[] = [];
+  let propose: unknown = {
+    changes: [
+      {
+        ruleId: 'gsc-click-drop',
+        field: 'dropPct',
+        after: 50,
+        reason: 'Only clear drops',
+      },
+    ],
+  };
+  vi.spyOn(service.models.gateway, 'stream').mockImplementation(
+    async function* (request) {
+      requests.push({
+        instructions: String(request.messages[0].content),
+        tools: request.tools!.map((tool) => tool.name),
+      });
+      if (!request.messages.some((message) => message.role === 'tool')) {
+        yield {
+          type: 'toolCall',
+          call: { id: 'p1', name: 'propose_rule_changes', args: propose },
+        };
+        yield { ...finish, reason: 'toolCalls' };
+        return;
+      }
+      yield { type: 'text', delta: 'Confirm it in the card.' };
+      yield finish;
+    },
+  );
+  const ask = async (client: Client, text: string) => {
+    const response = await post(client, '/onlineAgents/conversations', {
+      requestId: randomUUID(),
+      agentId: DEFAULT_ONLINE_AGENT,
+      projectId: project,
+      subject: { kind: 'page', page: 'analysisRules', item: 'default' },
+      text,
+    });
+    expect(response.status).toBe(200);
+    const { data } = (await response.json()) as { data: OnlineConversation };
+    service.start();
+    await service.idle();
+    await service.stop();
+    const run = await service.run(data.activeRunId);
+    const result = run.events.find(
+      (event) =>
+        event.type === 'toolResult' && event.name === 'propose_rule_changes',
+    ) as { output: string } | undefined;
+    return { conversation: data, output: JSON.parse(result!.output) };
+  };
+  // A page subject names a known page and belongs to a project.
+  for (const body of [
+    { projectId: project, subject: { kind: 'page', page: 'nowhere' } },
+    {
+      projectId: null,
+      subject: { kind: 'page', page: 'analysisRules', item: 'default' },
+    },
+  ])
+    expect(
+      (
+        await post(admin, '/onlineAgents/conversations', {
+          requestId: randomUUID(),
+          agentId: DEFAULT_ONLINE_AGENT,
+          text: 'Rules',
+          ...body,
+        })
+      ).status,
+    ).toBe(400);
+  const { conversation, output } = await ask(admin, 'Flag fewer small drops');
+  expect(conversation.subject).toEqual({
+    kind: 'page',
+    page: 'analysisRules',
+    item: 'default',
+  });
+  // The page and its rules are in the instructions; the rule tools are offered.
+  expect(requests[0].instructions).toContain('AI team › Analysis rules');
+  expect(requests[0].instructions).toContain('"id":"gsc-click-drop"');
+  expect(requests[0].tools).toEqual(
+    expect.arrayContaining(['analysis_rules', 'propose_rule_changes']),
+  );
+  const proposal = output.proposal as RuleProposal;
+  expect(proposal).toMatchObject({
+    kind: 'changes',
+    projectId: project,
+    schemeId: 'default',
+    changes: [
+      { ruleId: 'gsc-click-drop', field: 'dropPct', before: 30, after: 50 },
+    ],
+  });
+  // Proposing saved nothing.
+  expect(await dropPct()).toBe(30);
+  expect((await rules.view(project)).revision).toBe(proposal.revision);
+  // Conversations from a page are not Insights' questions.
+  expect(
+    (
+      await (
+        await admin.fetch(`/onlineAgents/threads?projectId=${project}`)
+      ).json()
+    ).data,
+  ).toEqual([]);
+  // A change the rules cannot take is rejected with what to fix, and still saves nothing.
+  propose = {
+    changes: [
+      { ruleId: 'gsc-click-drop', field: 'dropPct', after: 99, reason: 'x' },
+    ],
+  };
+  expect((await ask(admin, 'Only huge drops')).output).toMatchObject({
+    rejected: true,
+    reason: expect.stringContaining('5 to 90'),
+  });
+  // Confirm calls the page's own action against the proposal's revision; a second confirm is refused.
+  const confirm = (client: Client) =>
+    post(client, '/nocoreach/nrAnalysisRules/apply', {
+      projectId: project,
+      schemeId: proposal.schemeId,
+      revision: proposal.revision,
+      changes: toApply(proposal.changes!),
+    });
+  const member = await testApp.application.container
+    .resolve(userAdministrationServiceToken)
+    .create({
+      email: 'rules-member@example.com',
+      password: 'test-password-123',
+      name: 'Rules member',
+    });
+  await testApp.application.container
+    .resolve(authorizationToken)
+    .permissionSets.assign({
+      permissionSet: 'nr.member',
+      subject: { type: 'user', id: member.id },
+    });
+  await host.legacy.db.access!.joinCreatedProject(member.id, project);
+  const memberClient = await signIn(testApp, {
+    email: 'rules-member@example.com',
+    password: 'test-password-123',
+  });
+  // A member who may see but not change the rules gets no proposal, and the page action refuses them too.
+  propose = {
+    changes: [
+      { ruleId: 'gsc-click-drop', field: 'dropPct', after: 50, reason: 'x' },
+    ],
+  };
+  expect((await ask(memberClient, 'Flag fewer small drops')).output).toEqual({
+    accessDenied: true,
+  });
+  expect((await confirm(memberClient)).status).toBe(403);
+  expect(await dropPct()).toBe(30);
+  expect((await confirm(admin)).status).toBe(200);
+  expect(await dropPct()).toBe(50);
+  expect((await confirm(admin)).status).toBe(409);
 });

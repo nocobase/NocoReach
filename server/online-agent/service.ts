@@ -48,6 +48,7 @@ export class OnlineAgentService {
     private readonly prepare: (
       run: OnlineRun,
       signal: AbortSignal,
+      subject?: OnlineSubject | null,
     ) => Promise<ChatContext>,
     private readonly onError: (error: unknown) => void = () => {},
     private readonly environmentModel: () =>
@@ -137,7 +138,10 @@ export class OnlineAgentService {
   async threads(ownerId: string, projectId: string): Promise<OnlineThread[]> {
     const threads: OnlineThread[] = [];
     for (const conversation of await this.conversations(ownerId)) {
-      if (conversation.projectId !== projectId || !conversation.subject)
+      if (
+        conversation.projectId !== projectId ||
+        conversation.subject?.kind !== 'insights'
+      )
         continue;
       const runs = await this.conversationRuns(conversation),
         latest = runs.at(-1);
@@ -146,10 +150,11 @@ export class OnlineAgentService {
         id: conversation.id,
         subject: conversation.subject,
         question: runs[0].input.slice(0, 500),
-        answer: [...runs]
-          .reverse()
-          .find((r) => r.output)
-          ?.output.slice(0, 2000) ?? '',
+        answer:
+          [...runs]
+            .reverse()
+            .find((r) => r.output)
+            ?.output.slice(0, 2000) ?? '',
         status: latest.status,
         turns: runs.length,
         updatedAt: conversation.updatedAt,
@@ -403,8 +408,13 @@ export class OnlineAgentService {
       const agent = await this.definition(run.agentId);
       if (!agent.enabled) throw new OnlineAgentError('agentDisabled');
       const model = await this.resolveModel(run.model);
+      // Where the conversation was opened (Insights, a page's AI entry) shapes what the host tells the model.
+      const { subject } = await this.conversation(
+        run.conversationId,
+        run.ownerId,
+      );
       const context = await abortable(
-        this.prepare(run, abort.signal),
+        this.prepare(run, abort.signal, subject),
         abort.signal,
       );
       const check = context.authorize;

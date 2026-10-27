@@ -56,16 +56,27 @@ export interface OnlineRun {
   error: string | null;
   revision: number;
 }
-/** What a conversation started from: a day's analysis on Insights, and the opportunity it asked about, if any. */
-export interface OnlineSubject {
+/** A day's analysis on Insights, and the opportunity asked about, if any. */
+export interface OnlineInsightsSubject {
   kind: 'insights';
   day: string;
   opportunityId?: string;
 }
+/** The pages with an AI entry that opens the chat (`PageAiEntry`); the server reads each one's data for the AI. */
+export const ONLINE_PAGES = ['analysisRules', 'keywords'] as const;
+export type OnlinePage = (typeof ONLINE_PAGES)[number];
+/** A page's AI entry, and the row it was opened from (a keyword, a rule scheme), if any. */
+export interface OnlinePageSubject {
+  kind: 'page';
+  page: OnlinePage;
+  item?: string;
+}
+/** What a conversation started from. */
+export type OnlineSubject = OnlineInsightsSubject | OnlinePageSubject;
 /** A conversation asked from Insights, as Insights shows it: the first question and the latest answer. */
 export interface OnlineThread {
   id: string;
-  subject: OnlineSubject;
+  subject: OnlineInsightsSubject;
   question: string;
   answer: string;
   status: OnlineRunStatus;
