@@ -119,6 +119,16 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
     }
     if (followingRef.current) element.scrollTop = element.scrollHeight;
   }, [current, history]);
+  // A reply's parts can grow after it is drawn (a proposal card reading the rules): keep following the end.
+  useEffect(() => {
+    const element = transcriptRef.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      if (followingRef.current) element.scrollTop = element.scrollHeight;
+    });
+    for (const child of element.children) observer.observe(child);
+    return () => observer.disconnect();
+  }, [current, history]);
   useEffect(() => {
     if (chat.mode === 'online' && !history && !busy)
       composerRef.current?.focus();
@@ -400,15 +410,14 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
                 </EmptyHeader>
                 <EmptyContent>
                   <ul
-                    className='flex flex-wrap justify-center gap-2'
+                    className='flex w-full flex-col gap-2'
                     aria-label={$t('onlineAgent.suggestions')}
                   >
                     {chat.page.presets.map((preset) => (
-                      <li key={preset} className='max-w-full'>
+                      <li key={preset}>
                         <Button
                           variant='outline'
-                          size='sm'
-                          className='h-auto max-w-full rounded-full py-1.5 text-left whitespace-normal'
+                          className='h-auto w-full justify-start py-2 text-left font-normal whitespace-normal'
                           disabled={!ready || !!chat.request}
                           onClick={() => {
                             chat.setDraft(preset);

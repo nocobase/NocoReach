@@ -327,10 +327,11 @@ test('a proposed rule change shows its before and after, and Confirm saves it th
       <OnlineTranscript run={runWith({ proposal })} />
     </>,
   );
-  const card = await screen.findByRole('region', { name: '待确认的规则修改' });
+  const card = await screen.findByRole('region', { name: '规则修改' });
   await waitFor(() =>
     expect(card).toHaveAttribute('data-rule-proposal', 'pending'),
   );
+  expect(within(card).getByText('待确认')).toBeVisible();
   // The live rule names it; the old value is muted beside the new one.
   expect(within(card).getByText('页面搜索点击下降')).toBeVisible();
   expect(card).toHaveTextContent('30% → 改为 50%');
@@ -360,6 +361,7 @@ test('a proposed rule change shows its before and after, and Confirm saves it th
     unwrap: 'data',
   });
   expect(within(card).getByText('已保存')).toBeVisible();
+  expect(within(card).queryByText('待确认')).toBeNull();
   expect(within(card).queryByRole('button', { name: '确认修改' })).toBeNull();
   expect(success).toHaveBeenCalled();
   // The rules page reads its rules again.
@@ -369,7 +371,7 @@ test('a proposed rule change shows its before and after, and Confirm saves it th
 test('without the grant to change rules there is nothing to confirm', async () => {
   access.can = false;
   render(<OnlineTranscript run={runWith({ proposal })} />);
-  const card = await screen.findByRole('region', { name: '待确认的规则修改' });
+  const card = await screen.findByRole('region', { name: '规则修改' });
   await waitFor(() =>
     expect(card).toHaveAttribute('data-rule-proposal', 'pending'),
   );
@@ -381,7 +383,7 @@ test('a proposal the rules moved past is out of date, and a refused confirm read
   rules.revision = 'r9';
   value().value = 40;
   render(<OnlineTranscript run={runWith({ proposal })} />);
-  const card = await screen.findByRole('region', { name: '待确认的规则修改' });
+  const card = await screen.findByRole('region', { name: '规则修改' });
   await waitFor(() =>
     expect(card).toHaveAttribute('data-rule-proposal', 'outdated'),
   );
@@ -398,7 +400,7 @@ test('a proposal the rules moved past is out of date, and a refused confirm read
   });
   render(<OnlineTranscript run={runWith({ proposal })} />);
   const again = await screen.findByRole('region', {
-    name: '待确认的规则修改',
+    name: '规则修改',
   });
   await waitFor(() =>
     expect(again).toHaveAttribute('data-rule-proposal', 'pending'),
@@ -421,6 +423,6 @@ test('a rejected proposal stays a folded tool call', () => {
       run={runWith({ rejected: true, reason: 'Out of range' })}
     />,
   );
-  expect(screen.queryByRole('region', { name: '待确认的规则修改' })).toBeNull();
+  expect(screen.queryByRole('region', { name: '规则修改' })).toBeNull();
   expect(screen.getByText(/提出规则修改/)).toBeInTheDocument();
 });

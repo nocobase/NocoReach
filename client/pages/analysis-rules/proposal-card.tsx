@@ -160,24 +160,27 @@ export function RuleProposalCard({
     view?.rules.find((r) => r.source === source)?.sourceName ||
     fallback ||
     source;
+  const title = $t(
+    proposal.kind === 'newRule'
+      ? 'analysisRules.proposalNewRule'
+      : 'analysisRules.proposalTitle',
+  );
   return (
     <section
       className='flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4 text-sm text-card-foreground'
-      aria-label={$t('analysisRules.proposedChanges')}
+      aria-label={title}
       data-rule-proposal={state ?? 'loading'}
     >
       <div className='flex flex-wrap items-center gap-2'>
-        <h3 className='font-medium'>
-          {$t(
-            proposal.kind === 'newRule'
-              ? 'analysisRules.proposedRule'
-              : 'analysisRules.proposedChanges',
-          )}
-        </h3>
+        <h3 className='font-medium'>{title}</h3>
         {(view?.schemes?.length ?? 0) > 1 ? (
           <Tag tone='grey'>{proposal.schemeName}</Tag>
         ) : null}
-        {state === 'saved' ? (
+        {state === 'pending' ? (
+          <Tag tone='violet' dot>
+            {$t('analysisRules.proposalPending')}
+          </Tag>
+        ) : state === 'saved' ? (
           <Tag tone='green' dot>
             {$t('analysisRules.proposalSaved')}
           </Tag>
