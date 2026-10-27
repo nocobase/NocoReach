@@ -1,13 +1,11 @@
 import { googleLocalFreshness } from '../../../shared/google-cache.js';
 import {
   useMessageState,
-  getCurrentLocale,
   translateSystemError,
   $t,
   $tj,
   $legacyText,
 } from '#i18n';
-import { timeZoneName } from '#lib/time-zone-name';
 import { rowsFor, type Row } from './board';
 import { signalDisposition } from '../../../shared/strategy-pending.js';
 import {
@@ -68,6 +66,7 @@ import {
   judgeMissing,
   type AnalysisStatus,
 } from './service';
+import { dailyAnalysisTime } from './schedule-time';
 import '../reach-workspace.css';
 import './strategy.css';
 type Task = {
@@ -326,7 +325,7 @@ function Insights({
       action: 'access',
     });
   const rows = rowsFor(state),
-    metrics = metricItems(overview.data?.cards),
+    metrics = metricItems(overview.data?.cards, METRIC_DAYS),
     feed = feedOf(
       state,
       rows,
@@ -520,9 +519,11 @@ function Insights({
 // The subtitle says how the insights are made, not how fresh each source is (2026-10-22 user decision: "data through
 // 10/18" beside today's analysis read as analysing stale data; freshness lives under Data sources › Data health): which
 // rules, and when the daily analysis runs, each a link to where it is set for those who may open it. No period: each
-// rule reads its own window (7, 14, 28 or 30 days); the 28 days belong to the metric cards, which say so.
-// The metric cards: each source's last 28 days against the 28 before (nrDataViews:overview).
-const METRIC_DAYS = 28;
+// rule reads its own window (7, 14, 28 or 30 days); the period belongs to the metric cards, which say so.
+// The metric cards: each source's last 7 days against the 7 before (nrDataViews:overview; 2026-10-27 user decision:
+// the analysis runs daily, so the cards show this week, a whole week against the one before). Each card opens its
+// page on the same 7 days.
+const METRIC_DAYS = 7;
 const subtleLink = 'nr-link-quiet';
 function HowAnalyzed({
   schedule,
@@ -548,16 +549,7 @@ function HowAnalyzed({
     ) : (
       text
     );
-  // The daily time from the workflow's cron ("0 9 * * *"), in its time zone, named only when it is not the browser's.
-  const [minute, hour] = String(schedule?.cron || '')
-      .trim()
-      .split(/\s+/),
-    time =
-      /^\d+$/.test(minute || '') && /^\d+$/.test(hour || '')
-        ? `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`
-        : null,
-    zone = schedule?.timezone,
-    local = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const time = dailyAnalysisTime(schedule);
   if (schedule && !schedule.enabled)
     return $tj('strategy.howAnalyzedPaused', {
       0: rules,
@@ -566,17 +558,7 @@ function HowAnalyzed({
   if (schedule && time)
     return $tj('strategy.howAnalyzedDaily', {
       0: rules,
-      1: toSchedules(
-        $t('strategy.everyDayAt', {
-          0:
-            zone && zone !== local
-              ? $t('strategy.timeInZone', {
-                  0: time,
-                  1: timeZoneName(zone, getCurrentLocale()),
-                })
-              : time,
-        }),
-      ),
+      1: toSchedules($t('strategy.everyDayAt', { 0: time })),
     });
   return $tj('strategy.howAnalyzedManual', { 0: rules });
 }

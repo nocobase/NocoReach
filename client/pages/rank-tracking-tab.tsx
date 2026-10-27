@@ -10,7 +10,8 @@ import { Trash2, TrendingUp } from "lucide-react";
 import { RefreshButton } from '#components/reach/refresh-button';
 import { HeaderActions } from "#components/reach/page";
 import { toast } from "#lib/toast";
-import { EmptyState, ListSkeleton, InlineError } from "#components/reach/states";
+import { EmptyState, ListSkeleton } from "#components/reach/states";
+import { ConnectionError } from "#components/connection-error";
 import { Button } from "#components/ui/button";
 import { Card } from "#components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "#components/ui/dialog";
@@ -131,10 +132,11 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
       {/* The status line sits above the table, outside the card, as on every data page (UI review 2026-10-22). */}
       <p className="nr-footnote flex items-center">{$tj('rankTracking.checkedWeeklyGoogleDesktopTop',{0:status.keywords.length,1:status.lastRun ? $t('rankTracking.last',{0:day(status.lastRun.at)}) : ""})}<InfoTip label={$t('rankTracking.howRankTrackingWorks')} className="ml-1"><p>{$t('rankTracking.weeklyNote')}</p><p>{$t('rankTracking.checkNowReusesResultLast')}</p></InfoTip></p>
       <HeaderActions><RefreshButton busy={busy} label={busy ? $t('common.checking') : $t('common.updateNow')} onClick={() => void checkNow()} /></HeaderActions>
+      {/* A check that did not finish is said above the table, as on Competitors › Activity, not under 50 rows (UI review 2026-10-23). */}
+      {status.lastRun && !status.lastRun.ok ? <ConnectionError message={$t('rankTracking.lastCheckNotFinish',{0:$legacyText(status.lastRun.errors[0])})} /> : null}
       <Card className="gap-0 py-0">
         <DataTable table={table} empty={{ title: $t('rankTracking.noTrackedKeywordsYet') }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,[role=checkbox],a")) return; openKeyword(row.original.keyword, row.original); }} />
       </Card>
-      {status.lastRun && !status.lastRun.ok ? <InlineError>{$tj('rankTracking.lastCheckNotFinish',{0:$legacyText(status.lastRun.errors[0])})}</InlineError> : null}
       <HandOffNotice result={handed} />
       {handing ? <DraftHandOffDialog projectId={Number(currentProjectId())} draft={trackedDraft(handing)} playbookId={handing.some((r) => r.latest?.position || r.gsc) ? "optimize-page" : "content-outline"} page={trackedPage(handing)} description={$t('rankTracking.selectedKeywordsBecomeOneTask')} onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); setHanded(r); }} /> : null}
     </>

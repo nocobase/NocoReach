@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '#lib/utils';
+import { formatCount } from '#lib/format';
 import { Tag, type Tone } from '#components/reach/tag';
 import { ActorAvatar, AiMark } from '#components/reach/actor';
 import { Button } from '#components/ui/button';
@@ -35,6 +36,18 @@ const number = (i: MetricItem) =>
   `${i.signed && i.value! > 0 ? '+' : ''}${i.value!.toLocaleString(getCurrentLocale())}`;
 const arrow = (change: number) =>
   `${change >= 0 ? '↑' : '↓'} ${percent(change)}`;
+// Below 10 in the period before, a percentage says little (1 → 3 reads ↑ 200%): the change is the count instead,
+// "↑ 2" (2026-10-27 user decision).
+const SMALL_BASE = 10;
+const smallBase = (i: MetricItem) =>
+  i.previous != null && i.previous < SMALL_BASE && i.value != null;
+// A small base counts from zero too: 0 → 3 is "↑ 3", where a percentage has no answer.
+const rose = (i: MetricItem) =>
+  smallBase(i) ? i.value! >= i.previous! : (i.change ?? 0) >= 0;
+const changeText = (i: MetricItem) =>
+  smallBase(i)
+    ? `${rose(i) ? '↑' : '↓'} ${formatCount(Math.abs(i.value! - i.previous!))}`
+    : arrow(i.change!);
 /** The fold marker of a toggle: down when closed, up when open. */
 const Chevron = ({ open }: { open: boolean }) => (
   <ChevronDown
@@ -86,7 +99,7 @@ export function MetricTiles({
                 <span className='text-xl leading-7 font-medium tabular-nums sm:text-[1.375rem]'>
                   {number(i)}
                 </span>
-                {i.change == null ? (
+                {i.change == null && !smallBase(i) ? (
                   <span className='text-xs text-muted-foreground'>
                     {$t('strategy.noComparisonYet')}
                   </span>
@@ -94,14 +107,19 @@ export function MetricTiles({
                   <span
                     className={cn(
                       'text-xs font-medium tabular-nums',
-                      i.change >= 0 ? 'text-nr-ink-green' : 'text-nr-ink-red',
+                      rose(i) ? 'text-nr-ink-green' : 'text-nr-ink-red',
                     )}
                   >
-                    {arrow(i.change)}
+                    {changeText(i)}
                   </span>
                 )}
               </span>
-              {i.series && <Sparkline points={i.series} change={i.change} />}
+              {i.series && (
+                <Sparkline
+                  points={i.series}
+                  change={smallBase(i) ? i.value! - i.previous! : i.change}
+                />
+              )}
             </Link>
           ))}
         </div>
@@ -196,12 +214,13 @@ function Summary({
   watching: number;
 }) {
   const [open, setOpen] = useState(false);
-  // The key numbers (the tiles) that moved by 5% or more, the largest two first.
+  // The key numbers (the tiles) that moved by 5% or more, the largest two first; a number with a small base is left
+  // out, its percentage being noise.
   const notes = (batch?.observations || []).map((o) => $legacyText(o)),
     moved = metrics
       .filter((i) => i.value != null)
       .slice(0, 5)
-      .filter((i) => Math.abs(i.change ?? 0) >= 0.05)
+      .filter((i) => !smallBase(i) && Math.abs(i.change ?? 0) >= 0.05)
       .sort((a, b) => Math.abs(b.change!) - Math.abs(a.change!))
       .slice(0, 2);
   return (
@@ -218,7 +237,7 @@ function Summary({
           {moved.map((i) => (
             <Link key={i.label} to={i.to}>
               <Tag tone={i.change! >= 0 ? 'green' : 'red'}>
-                {i.label} {arrow(i.change!)}
+                {i.label} {changeText(i)}
               </Tag>
             </Link>
           ))}

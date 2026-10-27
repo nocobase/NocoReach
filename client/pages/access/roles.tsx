@@ -7,6 +7,7 @@ import { PageContainer } from '#components/reach/page';
 import { EmptyState, ListSkeleton } from '#components/reach/states';
 import { confirmAction } from '#components/reach/confirm';
 import { Button } from '#components/ui/button';
+import { SortableHeader } from '#components/seo/sortable-header';
 import { Input } from '#components/ui/input';
 import { Badge } from '#components/ui/badge';
 import { InfoTip } from '#components/reach/info-tip';
@@ -178,14 +179,26 @@ export default function Roles() {
               <Table aria-label={$t('accessMembers.roles')}>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>
-                      <Button variant='ghost' onClick={() => setSort(-sort)}>
-                        {$t('accessMembers.roleName')} {sort === 1 ? '↑' : '↓'}
-                      </Button>
+                    <TableHead
+                      aria-sort={sort === 1 ? 'ascending' : 'descending'}
+                    >
+                      <SortableHeader
+                        label={$t('accessMembers.roleName')}
+                        help={false}
+                        column={{
+                          getIsSorted: () => (sort === 1 ? 'asc' : 'desc'),
+                          getToggleSortingHandler: () => () => setSort(-sort),
+                        }}
+                      />
                     </TableHead>
                     <TableHead>{$t('accessMembers.projectScope')}</TableHead>
                     <TableHead>{$t('accessMembers.type')}</TableHead>
-                    <TableHead>{$t('accessMembers.actions')}</TableHead>
+                    {/* The row menu's column is unnamed, as on Members. */}
+                    <TableHead>
+                      <span className='sr-only'>
+                        {$t('accessMembers.actions')}
+                      </span>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

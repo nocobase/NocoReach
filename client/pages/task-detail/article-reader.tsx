@@ -234,6 +234,7 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
             data={data}
             article={article}
             draftKey={out.id}
+            tab={tab}
             busy={busy}
             onCancel={() => setEditing(false)}
             onSave={async (next) => {

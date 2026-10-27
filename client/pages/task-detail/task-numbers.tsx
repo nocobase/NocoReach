@@ -115,6 +115,7 @@ export function TaskNumbers({
   const w = data.work,
     results = w.observation?.results || [];
   const [picked, setPicked] = useState<number>();
+  const [legend, setLegend] = useState<string | null>(null);
   const result =
     results.find((x) => x.day === picked) || results.at(-1) || undefined;
   // Before the first checkpoint, when it comes is a note on the title (2026-10-22 decision D5), not a grey line.
@@ -126,13 +127,23 @@ export function TaskNumbers({
           1: expected(w.observeFrom, 7),
         })
       : $t('taskNumbers.comparedLater');
+  // What the numbers are ("last 28 days · search clicks · average position") joins it there too (UI review 2026-10-23).
+  const notes = [result ? null : legend, note].filter((t): t is string =>
+    Boolean(t),
+  );
   return (
     <Card
       aria-label={$t('taskNumbers.title')}
       title={
         <>
           {$t('taskNumbers.title')}
-          {note ? <InfoTip label={$t('common.info')}>{note}</InfoTip> : null}
+          {notes.length ? (
+            <InfoTip label={$t('common.info')}>
+              {notes.map((t) => (
+                <p key={t}>{t}</p>
+              ))}
+            </InfoTip>
+          ) : null}
         </>
       }
       actions={
@@ -158,6 +169,7 @@ export function TaskNumbers({
           <Current
             projectId={projectId}
             taskId={taskId}
+            onLegend={setLegend}
             // Read again when the pages or going live change.
             refresh={[
               w.observeFrom,
@@ -286,15 +298,17 @@ function Compared({
   );
 }
 
-// Before day 7: each page's numbers over 28 days; when the comparison comes is the title's ⓘ.
+// Before day 7: each page's numbers over 28 days; what they are and when the comparison comes are the title's ⓘ.
 function Current({
   projectId,
   taskId,
   refresh,
+  onLegend,
 }: {
   projectId: number;
   taskId: string;
   refresh: string;
+  onLegend: (legend: string | null) => void;
 }) {
   const [state, setState] = useState<{
     key: string;
@@ -325,6 +339,21 @@ function Current({
   }, [key, projectId, taskId]);
   const current = state?.key === key ? state : undefined;
   const n = current?.numbers;
+  const clicks = Boolean(n?.gscDays),
+    views = !clicks && Boolean(n?.ga4Days);
+  const legend =
+    n?.range && Array.isArray(n.pages) && n.pages.length && (clicks || views)
+      ? $t(
+          clicks
+            ? n.live
+              ? 'taskNumbers.beforeLiveClicks'
+              : 'taskNumbers.recentClicks'
+            : n.live
+              ? 'taskNumbers.beforeLiveViews'
+              : 'taskNumbers.recentViews',
+        )
+      : null;
+  useEffect(() => onLegend(legend), [legend, onLegend]);
   if (!current)
     return (
       <div
@@ -340,23 +369,9 @@ function Current({
     return <p className={text.muted}>{$t('taskNumbers.failed')}</p>;
   if (!n.pages.length)
     return <p className={text.muted}>{$t('taskNumbers.noPages')}</p>;
-  const clicks = Boolean(n.gscDays),
-    views = !clicks && Boolean(n.ga4Days);
   return (
     <>
-      <p className={text.muted}>
-        {!n.range || (!clicks && !views)
-          ? $t('taskNumbers.noData')
-          : $t(
-              clicks
-                ? n.live
-                  ? 'taskNumbers.beforeLiveClicks'
-                  : 'taskNumbers.recentClicks'
-                : n.live
-                  ? 'taskNumbers.beforeLiveViews'
-                  : 'taskNumbers.recentViews',
-            )}
-      </p>
+      {legend ? null : <p className={text.muted}>{$t('taskNumbers.noData')}</p>}
       <Rows
         items={n.pages}
         render={(p) => (

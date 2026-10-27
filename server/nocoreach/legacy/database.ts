@@ -10,6 +10,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { ConnectionCollections, DatabaseManager } from '@nocobase/db';
 import type { IdGeneratorService } from '@nocobase/snowflake';
 import { toFilter, toSort } from './filters.js';
+import { validateStringLengths } from './values.js';
 import { timestamp } from '../../../shared/timestamps.js';
 import type { ReachAccess } from '../../access/service.js';
 
@@ -222,12 +223,15 @@ export class LegacyDatabase {
 
   private repository(name: string): LegacyRepository {
     const target = (options: Values) => this.target(name, options);
-    const filterFor = async (options: Values) => {
-      if (!options.filter && options.filterByTk == null) return undefined;
+    const collectionFor = (options: Values) => {
       const t = (options.transaction as LegacyTransaction) || this.current.getStore();
       // Resolve metadata on the caller's connection too: using the root connection
       // inside a transaction can wait forever on SQLite's single connection.
-      const collection = await (t ? t.connection.collections : this.db.collections()).get(name);
+      return (t ? t.connection.collections : this.db.collections()).get(name);
+    };
+    const filterFor = async (options: Values) => {
+      if (!options.filter && options.filterByTk == null) return undefined;
+      const collection = await collectionFor(options);
       const fieldTypes = new Map(collection?.fields?.map(field => [field.name, field.type]));
       return toFilter(options.filter as Values, options.filterByTk, fieldTypes);
     };
@@ -265,6 +269,7 @@ export class LegacyDatabase {
           await hook(model, { transaction: options.transaction as LegacyTransaction });
         const plain: Values = { ...model.toJSON() };
         for (const k of ['createdAt', 'updatedAt']) plain[k] = timestamp(plain[k]);
+        validateStringLengths(await collectionFor(options), plain);
         const result = await target(options).createOne({ values: plain });
         return legacyRecord(result.record as Values);
       },
@@ -274,6 +279,7 @@ export class LegacyDatabase {
         const values: Values = { ...(options.values as Values), updatedAt: new Date() };
         if (values.createdAt !== undefined) values.createdAt = timestamp(values.createdAt);
         delete values.id;
+        validateStringLengths(await collectionFor(options), values);
         await target(options).updateMany({ filter, values });
         return find({ filter: options.filter, filterByTk: options.filterByTk, transaction: options.transaction });
       },

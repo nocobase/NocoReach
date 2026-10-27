@@ -1,0 +1,90 @@
+name: Database compatibility
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: databases-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  database:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        dialect: [sqlite, postgres, mysql]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: nocoreach-test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: nocoreach-test
+          MYSQL_ROOT_HOST: '%'
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval 5s --health-timeout 5s --health-retries 30
+    env:
+      NOCOBASE_TEST_DB_DIALECT: ${{ matrix.dialect }}
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: nocoreach-test
+      PGDATABASE: postgres
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: 3306
+      MYSQL_ADMIN_USER: root
+      MYSQL_ADMIN_PASSWORD: nocoreach-test
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@c336a2788d9774dccfdeb4823a5058ccc9f07453 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify migrations and business behavior
+        run: >-
+          pnpm exec vitest run tests/logic
+          tests/nocoreach/database-dialects.test.ts
+          tests/nocoreach/database-queries.test.ts
+          tests/nocoreach/legacy-date-filters.test.ts
+          tests/nocoreach/schedule-timezone-app.test.ts
+          tests/nocoreach/manual-tasks-app.test.ts
+          tests/nocoreach/project-access-app.test.ts
+          --maxWorkers=1 --testTimeout=120000 --hookTimeout=120000
+      - name: Verify demo import and business APIs
+        run: >-
+          pnpm exec vitest run tests/nocoreach/demo-data-app.test.ts
+          -t 'imports the demo through the API'
+          --maxWorkers=1
+      - name: Verify PostgreSQL timestamp upgrades
+        if: matrix.dialect == 'postgres'
+        run: pnpm exec vitest run tests/nocoreach/postgres-timestamps.test.ts --maxWorkers=1 --testTimeout=120000
+        env:
+          PM375_POSTGRES_HOST: 127.0.0.1
+          PM375_POSTGRES_PORT: 5432
+          PM375_POSTGRES_USER: postgres
+      - name: Include the selected production driver
+        if: matrix.dialect != 'sqlite'
+        run: pnpm add --save-prod "@nocobase/db-${NOCOBASE_TEST_DB_DIALECT}@0.1.0-beta.5"
+      - run: pnpm build --target linux-x64 --node-version 24 --tar
+      - name: Verify the production artifact and restart
+        run: pnpm exec vitest run tests/nocoreach/deployment-artifact.test.ts --maxWorkers=1
+        env:
+          NOCOREACH_TEST_DIST: '1'

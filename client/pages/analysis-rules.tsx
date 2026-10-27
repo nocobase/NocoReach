@@ -25,6 +25,8 @@ import { Textarea } from '#components/ui/textarea';
 import { useProject } from './reach-data';
 import { ruleUnitLabel } from './analysis-rules/labels';
 import { getSourceNames } from './strategy/board';
+import { analysisRequest, type AnalysisStatus } from './strategy/service';
+import { dailyAnalysisTime } from './strategy/schedule-time';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { SchemeManager, AddRule } from './analysis-rules/schemes';
 import type { Rule, Settings, View } from './analysis-rules/types';
@@ -123,7 +125,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
   const aliveRef = useRef(true),
     pendingRef = useRef(false),
     epochRef = useRef(0);
-  const headingRef = useRef<HTMLDivElement>(null);
+  const headingRef = useRef<HTMLElement>(null);
   useEffect(() => {
     aliveRef.current = true;
     return () => {
@@ -153,6 +155,21 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
   useEffect(() => {
     void load();
   }, [load]);
+  // The daily analysis workflow's schedule, for the time the rules run; without it the note leaves the time out.
+  const [schedule, setSchedule] = useState<AnalysisStatus['schedule']>(null);
+  useEffect(() => {
+    let live = true;
+    analysisRequest(projectId, 'status').then(
+      (status) => {
+        if (live) setSchedule(status?.schedule ?? null);
+      },
+      () => {},
+    );
+    return () => {
+      live = false;
+    };
+  }, [projectId]);
+  const scheduleTime = dailyAnalysisTime(schedule);
   // A change confirmed in the chat panel shows here at once.
   usePageChange('analysisRules', projectId, () => void load());
   const closeEditor = () => {
@@ -353,8 +370,40 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
               return result || undefined;
             }}
           />
+          {/* What the rules cover, how many are on and when they run sit in the title's ⓘ rather than as grey lines
+              under it (2026-10-22 decision D5); the time is the daily analysis workflow's, as Insights says it. */}
           <Section
+            ref={headingRef}
+            tabIndex={-1}
+            className='outline-none'
             title={$t('analysisRules.rulesSectionTitle')}
+            description={
+              <>
+                <p data-rules-summary=''>
+                  {$t(
+                    coverage
+                      ? 'analysisRules.conciseSummary'
+                      : 'analysisRules.conciseEmpty',
+                    {
+                      0: coverage,
+                    },
+                  )}
+                </p>
+                <p>
+                  {$t('analysisRules.enabledCount', {
+                    0: view.rules.filter((r) => r.enabled).length,
+                    1: view.rules.length,
+                  })}
+                </p>
+                <p data-rules-schedule=''>
+                  {schedule && !schedule.enabled
+                    ? $t('analysisRules.schedulePaused')
+                    : scheduleTime
+                      ? $t('analysisRules.scheduleDaily', { 0: scheduleTime })
+                      : $t('analysisRules.changesApplyNext')}
+                </p>
+              </>
+            }
             actions={
               canAddRule && view.schemes ? (
                 <AddRule
@@ -369,33 +418,11 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
               ) : undefined
             }
           >
-            <p className='text-sm text-muted-foreground' data-rules-summary=''>
-              {$t(
-                coverage
-                  ? 'analysisRules.conciseSummary'
-                  : 'analysisRules.conciseEmpty',
-                {
-                  0: coverage,
-                },
-              )}
-            </p>
-            <div
-              ref={headingRef}
-              tabIndex={-1}
-              className='flex flex-wrap justify-between gap-2 text-sm text-muted-foreground'
-            >
-              <span>
-                {$t('analysisRules.enabledCount', {
-                  0: view.rules.filter((r) => r.enabled).length,
-                  1: view.rules.length,
-                })}
-              </span>
-              <span>
-                {view.schemeId && view.schemeId !== view.activeSchemeId
-                  ? $t('analysisSchemes.editInactive')
-                  : $t('analysisRules.scheduleSummary')}
-              </span>
-            </div>
+            {view.schemeId && view.schemeId !== view.activeSchemeId ? (
+              <p className='text-sm text-muted-foreground'>
+                {$t('analysisSchemes.editInactive')}
+              </p>
+            ) : null}
             {!view.rules.length ? (
               <EmptyState
                 icon={<ListFilter />}
