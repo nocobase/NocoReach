@@ -5,7 +5,7 @@
 - Status lines read "Updated": the keyword detail's market estimate, Project knowledge › Memory (Check now moves to the top right) and Competitors › Overview (the monthly update stays in its ⓘ).
 - Task detail › Performance: what the numbers are (last 28 days · search clicks · average position) joins the title's ⓘ instead of a grey line.
 - Search performance › Index: the search box gives way first, so the filters and Export CSV stay on one row at 1440.
-- Downloads › Versions and releases: the alpha tag is translated, and GitHub release files are tagged GitHub like the other platforms.
+- Downloads: the alpha dist-tag and the Docker release channels (latest, alpha, beta, rc) are translated like beta and release already were, and GitHub release files are tagged GitHub like the other platforms.
 - Keywords › Rank tracking: a check that did not finish is said above the table, as on Competitors › Activity, not under it.
 - Members & roles: sortable headers are the shared sortable header, lined up with their cells; the Roles action column is unnamed, as on Members.
 - Automatic runs: the table sits in a card like every other table.
