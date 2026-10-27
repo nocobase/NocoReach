@@ -136,7 +136,13 @@ export type Opportunity = {
   objective: string;
   source: string;
 };
-export type ActionDraft = { title: string; objective: string; brief: string };
+export type ActionDraft = {
+  title: string;
+  objective: string;
+  brief: string;
+  /** What the task is about; the server titles it with the playbook (server/nocoreach/execution/task-title.ts). */
+  subject?: string;
+};
 export type SourceReview = { sourceId: string; reason: string; result: string };
 export type SignalReview = {
   verdict: 'do' | 'watch' | 'skip';

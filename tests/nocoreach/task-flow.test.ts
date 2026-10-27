@@ -918,3 +918,33 @@ test('a run the Agents plugin failed keeps its reason and the result it had subm
  await g.s.runtime.sync(await g.s.snapshot(g.s.key('run','1','1',other.id)));
  assert.deepEqual((await g.view()).partial,{content:'Draft so far',savedAt:'2026-10-24T02:00:00.000Z',draft:true});
 });
+
+// 2026-10-27 user report (T-49): a task handed off as "Write content about …" was started with Keyword research and
+// kept its title. An automatic title follows the playbook chosen before the start; a title a person wrote never does.
+test('an automatic title follows the playbook the task starts with, and a written one stays', async () => {
+  const auto = fixture(undefined, { autoTitle: { subject: 'ai governance framework', locale: 'zh-CN' }, suggestedPlaybook: 'content-outline' });
+  auto.state.nrTasks[0].title = '内容选题与大纲：ai governance framework';
+  await selectAgent(auto);
+  const d = await auto.command('startTask', { playbookId: 'keyword-research' });
+  assert.equal(auto.state.nrTasks[0].title, '关键词调研：ai governance framework');
+  assert.equal(d.task.title, '关键词调研：ai governance framework');
+  const events = d.work.history.map(e => e.action);
+  assert.deepEqual(events.slice(events.indexOf('startTask'), events.indexOf('startTask') + 2), ['startTask', 'retitle']);
+  assert.equal(d.work.history.find(e => e.action === 'retitle').note, '关键词调研：ai governance framework');
+  // The title's language is the one it was written in, whoever starts it.
+  const english = fixture(undefined, { autoTitle: { subject: 'ai governance framework', locale: 'en-US' } });
+  await selectAgent(english);
+  await english.command('startTask', { playbookId: 'keyword-research' });
+  assert.equal(english.state.nrTasks[0].title, 'Keyword research: ai governance framework');
+  // Started with the playbook it was titled by: nothing to record.
+  const same = fixture(undefined, { autoTitle: { subject: 'ai governance framework', locale: 'zh-CN' } });
+  same.state.nrTasks[0].title = '关键词调研：ai governance framework';
+  await selectAgent(same);
+  const kept = await same.command('startTask', { playbookId: 'keyword-research' });
+  assert.equal(kept.work.history.some(e => e.action === 'retitle'), false);
+  const written = fixture();
+  await selectAgent(written);
+  const w = await written.command('startTask', { playbookId: 'keyword-research' });
+  assert.equal(written.state.nrTasks[0].title, 'Synthetic task');
+  assert.equal(w.work.history.some(e => e.action === 'retitle'), false);
+});

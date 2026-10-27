@@ -52,7 +52,7 @@ import {useTaskDraft,useTaskDraftStatus} from './task-detail/draft-store.js';
 import {DocReader,Markdown} from './doc-view';
 import {effectItems,effectLine,effectPages,type EffectResult} from './effect-model';
 import {closeCommand,canReopen,closedWhen,getCloseConfirm,closedLabel,isClosed,type TaskData as Data,type Work,type Artifact,type PullRequestInfo} from './task-execution-types';
-import {playbookRequest,localizePlaybookList,getCategories,getStageExecutor,stageName as displayStageName,stageLabel,stagesFor,readsOnly,withoutRepo,eventText,type PlaybookList,type Stage} from './playbook-model';
+import {playbookRequest,localizePlaybook,localizePlaybookList,getCategories,getStageExecutor,stageName as displayStageName,stageLabel,stagesFor,readsOnly,withoutRepo,eventText,type PlaybookList,type Stage} from './playbook-model';
 import {translatesArticle} from '../../shared/playbook-catalog';
 import './strategy/strategy.css';
 import './reach-workspace.css';
@@ -168,9 +168,13 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
 function TaskHeading({data,list,pick,busy,members,update,onPage}:{data:Data;list?:PlaybookList;pick:string;busy:boolean;members:Member[];update:Update;onPage:()=>void}){
  const no=(data.task.evidence as {no?:number}|undefined)?.no,w=data.work,started=Boolean(w.flow);
  const pb=started?undefined:list?.playbooks.find(x=>x.id===pick),stages=started?w.flow!.stages:pb?stagesFor(pb):[];
+ // An automatic title follows the playbook chosen on the start card, as the steps do, and is saved so when the task
+ // starts (server task-title.ts); shown here only in the language it was written in, so the two read the same.
+ const auto=(data.task.evidence as {autoTitle?:{subject?:string;locale?:string}}|undefined)?.autoTitle;
+ const title=pb&&auto?.subject&&(auto.locale||'zh-CN')===getCurrentLocale()?$t('taskTitle.auto',{0:localizePlaybook(pb).name,1:auto.subject}).slice(0,200):data.task.title;
  return <header className="flex flex-col gap-1.5">
   <div className="flex items-start justify-between gap-3">
-   <h1 className={cn(text.title,'min-w-0 break-words')}>{no?<span className="mr-2 text-muted-foreground">T-{no}</span>:null}{data.task.title}</h1>
+   <h1 className={cn(text.title,'min-w-0 break-words')}>{no?<span className="mr-2 text-muted-foreground">T-{no}</span>:null}{title}</h1>
    <div className="flex shrink-0 items-center gap-1 pt-1.5"><TaskStatusTag work={w} status={(data.task as {status?:string}).status||''}/><MoreMenu data={data} busy={busy} members={members} update={update} onPage={onPage}/></div>
   </div>
   {stages.length>0&&<StepBar stages={stages} w={w}/>}

@@ -10,6 +10,7 @@ import { settleVerdicts } from './verdict-coverage.js';
 // The language a verdict's reason is written in: the project's analysis language, passed by daily analysis.
 const localeOf=v=>typeof v?.locale==='string'&&/^en/i.test(v.locale)?'en-US':'zh-CN';
 import * as periods from './evidence-period.js';
+import { playbookTitle, subjectInput } from './execution/task-title.js';
 import { projectId, requireAccess } from './policy.js';
 import { memoryForAI, MEMORY_SECTIONS } from './execution/memory.js';
 import { projectWork } from './execution/model.js';
@@ -34,7 +35,7 @@ function pageInput(v){if(typeof v!=='string'||!v.trim()||v.length>2000)return un
 // The task's short reason in one or two plain sentences (evidence.why, 2026-10-23): what the task page's Why card shows
 // first. Optional; Markdown and line breaks are flattened, and anything past 300 characters is dropped.
 const whyInput=v=>{if(typeof v!=='string')return '';const t=v.replace(/[*_`#>]/g,'').replace(/\s+/g,' ').trim();return t.length>300?'':t;};
-function proposalInput(v){const page=pageInput(v.page),why=whyInput(v.why);return {title:text(v.title,200,true),brief:text(v.brief,20000,true),...(why?{why}:{}),...(typeof v.signalKey==='string'&&v.signalKey.trim()?{signalKey:v.signalKey.trim().slice(0,200)}:{}),...(page?{page}:{}),...(typeof v.entry==='string'&&/^\/[\w\-/]{1,200}$/.test(v.entry)?{entry:v.entry}:{})};}
+function proposalInput(v){const page=pageInput(v.page),why=whyInput(v.why),subject=subjectInput(v.subject);return {title:text(v.title,200,true),brief:text(v.brief,20000,true),...(why?{why}:{}),...(subject?{subject}:{}),...(typeof v.signalKey==='string'&&v.signalKey.trim()?{signalKey:v.signalKey.trim().slice(0,200)}:{}),...(page?{page}:{}),...(typeof v.entry==='string'&&/^\/[\w\-/]{1,200}$/.test(v.entry)?{entry:v.entry}:{})};}
 function insightInput(v){return {...board.assessment(v),signalIds:(Array.isArray(v.signalIds)?v.signalIds:[]).filter(x=>typeof x==='string').slice(0,10).map(x=>x.slice(0,200)),title:text(v.title,200,true),...(typeof v.reason==='string'&&v.reason.trim()?{reason:v.reason.trim().slice(0,300)}:{}),observation:text(v.observation,2000,true),meaning:text(v.meaning,2000,true),evidenceText:text(v.evidenceText,3000,true),limitation:text(v.limitation,2000,true),suggestion:text(v.suggestion,3000,true),objective:text(v.objective,1000,true),source:['website','search','market','mixed'].includes(v.source)?v.source:'mixed'};}
 function initial(){return {revision:0,goal:null,goalHistory:[],proposals:[],operations:[]};}
 function resultEvidence(source){return {capturedAt:source.capturedAt,availableThrough:null,periodDays:source.day||28,searchQueries:[],pages:[],industryCandidates:[],limitations:[systemMessageText('results.sourceEvidenceOnly')]};}
@@ -140,7 +141,9 @@ class StrategyService{
   const ids=[...new Set(state.proposals.filter(p=>p.taskId&&p.insight?.id===card.id).map(p=>String(p.taskId)))];
   const tasks=(await Promise.all(ids.map(t=>this.p.db.getRepository('nrTasks').findOne({filter:{id:t,projectId:id},transaction})))).filter(Boolean).map(t=>t.toJSON?t.toJSON():t);
   let targets=[];try{targets=this.p.articleTargets?.list(String(id))?.targets||[];}catch{targets=[];}
-  return planOf({card,signals,site,proposals:state.proposals,tasks,targets,locale:ctx?.getCurrentLocale?.()||'zh-CN'});
+  // Each place's task is titled by its playbook (task-title.ts).
+  const playbooks=await this.p.taskExecution?.playbooks.list(String(id),transaction).then(l=>l.playbooks,()=>[])||[];
+  return planOf({card,signals,site,proposals:state.proposals,tasks,targets,playbooks,locale:ctx?.getCurrentLocale?.()||'zh-CN'});
  }
  // Hand off to agent on an opportunity with several places: what the confirmation dialog lists.
  async handOffPlan(id,v,ctx){const state=await this.state(id);const batch=[state.insights,...(state.insightHistory||[])].find(b=>b?.items.some(i=>i.id===v.insightId));const card=batch?.items.find(i=>i.id===v.insightId);if(!card)fail(systemMessageText('strategy.opportunityNotFound'),404);return {parts:await this.planFor(id,state,card,batch,ctx)};}
@@ -159,7 +162,7 @@ class StrategyService{
    if(state.proposals.length+chosen.length>100)fail(systemMessageText('strategy.currentPilotSavesUp100'),409);
    const locale=ctx?.getCurrentLocale?.()||'zh-CN',siblings=plan.filter(p=>p.task||chosen.includes(p)),{page:_page,...rest}=fields;
    for(const part of chosen){const at=new Date().toISOString(),scope=scopeText(insight,part,siblings.filter(p=>p!==part),locale);
-    const proposal={...rest,title:part.title,brief:`${scope}\n\n${fields.brief}`.slice(0,20000),objective,id:randomUUID(),status:'approved',goalVersion:null,goal:null,insight,evidence:batch.evidence,part:taskPart(part),...(part.url?{page:part.url}:{}),createdAt:at};
+    const proposal={...rest,title:part.title,subject:part.label,brief:`${scope}\n\n${fields.brief}`.slice(0,20000),objective,id:randomUUID(),status:'approved',goalVersion:null,goal:null,insight,evidence:batch.evidence,part:taskPart(part),...(part.url?{page:part.url}:{}),createdAt:at};
     const task=await this.createDirectionTask(id,proposal,{...v,playbookId:part.playbookId},ctx,transaction);
     const {evidence:_evidence,...slim}=proposal;state.proposals.unshift({...slim,taskId:task.id,taskNo:task.get?.('evidence')?.no,approvedAt:at});}
    return;
@@ -169,7 +172,13 @@ class StrategyService{
   const task=await this.createDirectionTask(id,proposal,v,ctx,transaction);
   state.proposals.unshift({...proposal,taskId:task.id,taskNo:task.get?.('evidence')?.no,approvedAt:new Date().toISOString()});
  });}
- async createDirectionTask(id,proposal,v,ctx,transaction){return this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:systemMessageText('messages.goal',{0:proposal.objective,1:proposal.brief},ctx?.getCurrentLocale?.()),status:systemMessageText('common.pending'),evidence:{source:systemMessageText('strategy.aiOpportunityActionConfirmedPerson'),objective:proposal.objective,...((proposal.why||whyInput(proposal.insight?.reason))?{why:proposal.why||whyInput(proposal.insight?.reason)}:{}),insight:proposal.insight,context:proposal.evidence,proposalId:proposal.id,...(proposal.signalKey?{signalKey:proposal.signalKey}:{}),...(proposal.page?{page:proposal.page}:{}),...(proposal.part?{part:proposal.part}:{}),...(proposal.entry?{entry:proposal.entry}:{}),...(proposal.resultSource?{resultSource:proposal.resultSource}:{}),...creator(ctx),...(typeof v.playbookId==='string'&&/^[a-z0-9-]{1,60}$/.test(v.playbookId)?{suggestedPlaybook:v.playbookId}:{})}},transaction});}
+ // A hand-off that names its subject gets an automatic title, "<playbook>: <subject>" in the request's language, and
+ // keeps the subject so another playbook chosen before the start retitles it (task-title.ts); without a playbook the
+ // title it was sent stays.
+ async createDirectionTask(id,proposal,v,ctx,transaction){const locale=ctx?.getCurrentLocale?.()||undefined,playbookId=typeof v.playbookId==='string'&&/^[a-z0-9-]{1,60}$/.test(v.playbookId)?v.playbookId:'';
+  const playbook=proposal.subject&&playbookId?await this.p.taskExecution?.playbooks.get(String(id),playbookId,transaction).catch(()=>null):null;
+  if(playbook)proposal.title=playbookTitle(playbook,proposal.subject,locale);
+  return this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:systemMessageText('messages.goal',{0:proposal.objective,1:proposal.brief},ctx?.getCurrentLocale?.()),status:systemMessageText('common.pending'),evidence:{source:systemMessageText('strategy.aiOpportunityActionConfirmedPerson'),objective:proposal.objective,...((proposal.why||whyInput(proposal.insight?.reason))?{why:proposal.why||whyInput(proposal.insight?.reason)}:{}),insight:proposal.insight,context:proposal.evidence,proposalId:proposal.id,...(proposal.signalKey?{signalKey:proposal.signalKey}:{}),...(proposal.page?{page:proposal.page}:{}),...(proposal.part?{part:proposal.part}:{}),...(proposal.entry?{entry:proposal.entry}:{}),...(proposal.resultSource?{resultSource:proposal.resultSource}:{}),...(proposal.subject?{autoTitle:{subject:proposal.subject,...(locale?{locale}:{})}}:{}),...creator(ctx),...(typeof v.playbookId==='string'&&/^[a-z0-9-]{1,60}$/.test(v.playbookId)?{suggestedPlaybook:v.playbookId}:{})}},transaction});}
  // Short task numbers (T-1, T-2 …): task record ids are long generated numbers, so each new task gets the next number
  // of its project when it is created — one hook for every place that creates tasks; kept in evidence.no.
  async numberTask(model,options){

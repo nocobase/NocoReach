@@ -27,6 +27,7 @@ import { DataTableToolbar } from "#components/seo/data-table-toolbar";
 import { TablePagination } from "#components/seo/table-pagination";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { DraftHandOffDialog, type TaskDraft } from "./keyword-hand-off";
+import { subjectOf } from './task-subject';
 import { DocReader } from "./doc-view";
 import { useProject } from "./reach-data";
 import { currentProjectId } from "./current-project";
@@ -264,6 +265,7 @@ function gapDraft(brand: string, competitor: string, rows: GapRow[]): TaskDraft 
   const lines = rows.slice(0, 30).map((q) => $t('aiSearch.questionEvidence', { 0: q.question, 1: getPlatform()[q.platform], 2: metric(q.volume), 3: q.sources.length ? $t('aiSearch.citedValueSuffix', { 0: [...new Set(q.sources.map((s) => s.domain))].slice(0, 5).join("、") }) : "", 4: q.excerpt ? $t('aiSearch.answerExcerpt', { 0: q.excerpt }) : "" }));
   return {
     title: (rows.length === 1 ? $t('aiSearch.aiRecommendsNot', { 0: head, 1: competitor, 2: brand }) : $t('aiSearch.aiRecommendsNotQuestions', { 0: head, 1: rows.length, 2: competitor, 3: brand })).slice(0, 200),
+    subject: subjectOf(head, rows.length, 'questions').slice(0, 160),
     objective: $t('aiSearch.getAiMentionWhenAnswering', { 0: brand }).slice(0, 1000),
     brief: [$t('aiSearch.aiAnswersMentionNot', { 0: competitor, 1: brand }), ...lines, "", $t('aiSearch.evidenceAiAnswerSamplesCollected'), $t('aiSearch.suggestionComparePagesCitedContent', { 0: competitor })].join("\n").slice(0, 20000),
   };
@@ -369,6 +371,7 @@ function brandDraft(rows: QuestionRow[], runs: BrandRun[]): TaskDraft {
   const lines = rows.slice(0, 30).map((q) => $t('aiSearch.questionEvidenceWithBrand',{0:q.question,1:getPlatform()[q.platform],2:metric(q.volume),3:q.ownCited ? $t('common.citesSite') : $t('aiSearch.notCiteSite'),4:q.sources.length ? $t('aiSearch.citedValueSuffix',{0:[...new Set(q.sources.map((s) => s.domain))].slice(0, 5).join("、")}) : "",5:q.excerpt ? $t('aiSearch.answerExcerpt',{0:q.excerpt}) : ""}));
   return {
     title: (rows.length === 1 ? $t('aiSearch.singleQuestionGoal',{0:head}) : $t('aiSearch.multipleQuestionsGoal',{0:head,1:rows.length})).slice(0, 200),
+    subject: subjectOf(head, rows.length, 'questions').slice(0, 160),
     objective: $t('aiSearch.aiMentionsCitesPagesWhen',{0:brand}).slice(0, 1000),
     brief: [$t('aiSearch.answersAiSearchMention',{0:brand}), ...lines, "", $t('aiSearch.evidenceAiAnswerSamplesCollected'), $t('aiSearch.multipleQuestionsAdvice')].join("\n").slice(0, 20000),
   };
@@ -520,6 +523,7 @@ function answerDraft(question: string, answers: AnswerRun[]): TaskDraft {
   const no = answers.filter((r) => !r.result!.mentioned).map((r) => MODEL[r.spec.model]);
   return {
     title: $t('common.getAiMentionUsWhen',{0:question}).slice(0, 200),
+    subject: question.slice(0, 160),
     objective: $t('aiSearch.mentionsUsCitesSiteWhen',{0:no.join("、"),1:question}).slice(0, 1000),
     brief: [$t('aiSearch.questionValue',{0:question}), "", $t('aiSearch.answersModel'), ...lines, "", $t('aiSearch.evidenceModelActuallyAskedThrough'), $t('aiSearch.singleQuestionAdvice')].join("\n").slice(0, 20000),
   };
