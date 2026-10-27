@@ -249,10 +249,35 @@ function translateDynamic(text: string, depth: number): string {
   return text;
 }
 
+// Server messages name languages in Chinese with their code in full-width brackets, several joined by the Chinese
+// enumeration comma (server/nocoreach/articles/delivery.ts); inside such a message they read in the reader's language.
+const LANGUAGE = '[^（）、]+（[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?）';
+const LANGUAGE_LIST = new RegExp(`^${LANGUAGE}(?:、${LANGUAGE})*$`);
+function languageList(text: string): string | undefined {
+  if (!LANGUAGE_LIST.test(text)) return undefined;
+  const cjk = currentLocale.startsWith('zh') || currentLocale === 'ja-JP';
+  let names: Intl.DisplayNames;
+  try {
+    names = new Intl.DisplayNames([currentLocale], { type: 'language' });
+  } catch {
+    return undefined;
+  }
+  return text
+    .split('、')
+    .map((part) => {
+      const code = part.slice(part.lastIndexOf('（') + 1, -1);
+      const name = names.of(code) || code;
+      return cjk ? `${name}（${code}）` : `${name} (${code})`;
+    })
+    .join(cjk ? '、' : ', ');
+}
+
 function resolve(text: string, depth = 0): string {
   const key = systemMessageKey(text);
   if (key) return $t(key);
   if (!dictionary || !CJK.test(text)) return text;
+  const languages = depth > 0 ? languageList(text) : undefined;
+  if (languages) return languages;
   // An entry may be empty on purpose: a Chinese measure word like " 位" has no English counterpart.
 
   if (depth > 3) return text;

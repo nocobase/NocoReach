@@ -100,11 +100,7 @@ export function TaskProperties({
       ? articlePageUrl(data, article.targetId, article.slug)
       : '',
     started = w.history.find((h) => h.action === 'startTask')?.at;
-  // Related tasks: the one before and after in a playbook chain, then the other tasks of the same opportunity
-  // (2026-10-22: an opportunity is handed off one task per place to change).
-  const chain = (data.related || []).filter((r) => r.relation !== 'sibling'),
-    siblings = (data.related || []).filter((r) => r.relation === 'sibling'),
-    insight = taskSource(data.task).insight;
+  const insight = taskSource(data.task).insight;
   const owner =
     allowed && members.length ? (
       <DropdownMenu>
@@ -228,76 +224,111 @@ export function TaskProperties({
             </a>
           </Row>
         )}
-        {(data.related || []).length > 0 && (
-          <Row label={$t('taskDetail.propRelated')}>
-            <span className='flex flex-col items-start gap-1'>
-              {chain.map((r) => (
-                <button
-                  key={r.id}
-                  type='button'
-                  className='nr-link text-left'
-                  onClick={() => void navigate(`/actions/${r.id}`)}
-                >
-                  {r.relation === 'prev'
-                    ? $t('taskDetail.previous')
-                    : $t('taskDetail.next')}
-                  {r.title}
-                </button>
-              ))}
-              {siblings.length > 0 && (
-                <span
-                  className='flex w-full min-w-0 flex-col gap-1'
-                  data-same-opportunity=''
-                >
-                  <span className='text-muted-foreground'>
-                    {$tj('opportunityTasks.sameOpportunity', {
-                      0: insight?.id ? (
-                        <button
-                          type='button'
-                          className='nr-link'
-                          onClick={() =>
-                            void navigate(
-                              `/opportunities?item=${encodeURIComponent(insight.id!)}`,
-                            )
-                          }
-                        >
-                          {insight.no
-                            ? `O-${insight.no}`
-                            : $t('common.opportunity')}
-                        </button>
-                      ) : (
-                        $t('common.opportunity')
-                      ),
-                    })}
-                  </span>
-                  {siblings.map((r) => (
-                    <span
-                      key={r.id}
-                      className='flex w-full min-w-0 items-start gap-2'
-                    >
-                      <button
-                        type='button'
-                        className='nr-link min-w-0 flex-1 text-left'
-                        onClick={() => void navigate(`/actions/${r.id}`)}
-                      >
-                        {r.no ? `T-${r.no} ` : ''}
-                        {r.title}
-                      </button>
-                      {r.state && <TaskStandingTag state={r.state} />}
-                    </span>
-                  ))}
-                </span>
-              )}
-            </span>
-          </Row>
-        )}
         {started && (
           <Row label={$t('taskDetail.propStarted')}>
             {formatDateTime(started)}
           </Row>
         )}
       </dl>
+      <RelatedTasks
+        related={data.related || []}
+        opportunity={
+          insight?.id
+            ? { id: insight.id, label: insight.no ? `O-${insight.no}` : '' }
+            : undefined
+        }
+        onOpen={(id) => void navigate(`/actions/${id}`)}
+        onOpportunity={(id) =>
+          void navigate(`/opportunities?item=${encodeURIComponent(id)}`)
+        }
+      />
     </Card>
+  );
+}
+
+type Related = NonNullable<TaskData['related']>[number];
+
+/**
+ * Related tasks below the properties, in groups (2026-10-24 user decision): the task this one was handed off from,
+ * the other tasks of the same opportunity, and the tasks handed off from this one. A task is listed once, in its
+ * closest relation (previous or next before the same opportunity); empty groups, and the section, are left out.
+ */
+function RelatedTasks({
+  related,
+  opportunity,
+  onOpen,
+  onOpportunity,
+}: {
+  related: Related[];
+  opportunity?: { id: string; label: string };
+  onOpen: (id: number) => void;
+  onOpportunity: (id: string) => void;
+}) {
+  const seen = new Set<string>();
+  const pick = (relation: Related['relation']) =>
+    related.filter((r) => {
+      if (r.relation !== relation || seen.has(String(r.id))) return false;
+      seen.add(String(r.id));
+      return true;
+    });
+  const prev = pick('prev'),
+    next = pick('next'),
+    same = pick('sibling');
+  if (!prev.length && !next.length && !same.length) return null;
+  const group = (caption: ReactNode, items: Related[], name: string) =>
+    items.length > 0 && (
+      <div className='flex flex-col gap-0.5' data-related={name}>
+        <p className='text-xs text-muted-foreground'>{caption}</p>
+        <ul className='flex flex-col'>
+          {items.map((r) => (
+            <li key={r.id}>
+              <button
+                type='button'
+                className='-mx-2 flex w-[calc(100%+1rem)] min-w-0 items-center gap-2 rounded-md px-2 py-1 text-left text-sm hover:bg-muted'
+                title={r.title}
+                onClick={() => onOpen(r.id)}
+              >
+                {r.no ? (
+                  <span className='shrink-0 text-muted-foreground tabular-nums'>
+                    T-{r.no}
+                  </span>
+                ) : null}
+                <span className='min-w-0 flex-1 truncate'>{r.title}</span>
+                {r.state && <TaskStandingTag state={r.state} />}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  return (
+    <section
+      aria-label={$t('taskDetail.propRelated')}
+      className='mt-3 flex flex-col gap-3 border-t pt-3'
+    >
+      <h3 className={cn(text.muted, 'font-normal')}>
+        {$t('taskDetail.propRelated')}
+      </h3>
+      {group($t('taskDetail.relatedPrev'), prev, 'prev')}
+      {group(
+        $tj('taskDetail.relatedSame', {
+          0: opportunity ? (
+            <button
+              type='button'
+              className='nr-link'
+              onClick={() => onOpportunity(opportunity.id)}
+            >
+              {opportunity.label || $t('common.opportunity')}
+            </button>
+          ) : (
+            $t('common.opportunity')
+          ),
+        }),
+        same,
+        'same',
+      )}
+      {group($t('taskDetail.relatedNext'), next, 'next')}
+    </section>
   );
 }
 

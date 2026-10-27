@@ -201,7 +201,45 @@ test('document task: the Agent analyzes without changing the repository, a chang
  assert.match(child.title,/^新建文档页：/);assert.match(child.brief,/outline 2/);assert.equal(child.evidence.handoff.content,'outline 2');assert.equal(child.evidence.insight.id,'op');
  // The new task keeps who found the first one and where (2026-10-22).
  assert.deepEqual(child.evidence.createdBy,{id:'1',name:'王磊'});assert.equal(child.evidence.entry,'/main/data/community');
- const ch=await f.view(String(child.id));assert.equal(ch.playbookDefault,'new-doc');assert.equal(ch.task.status,'待处理');assert.deepEqual(ch.related.map(r=>[r.relation,String(r.id)]),[['prev','1']]);
+ // Accept and start (2026-10-24): the new task starts at once with the project's Agent and the repository, as its start
+ // card would have; the old task names it with where it stands.
+ const ch=await f.view(String(child.id));assert.equal(ch.playbookDefault,'new-doc');assert.equal(ch.task.status,'进行中');assert.deepEqual(ch.related.map(r=>[r.relation,String(r.id),r.state]),[['prev','1','done']]);
+ assert.equal(ch.work.playbook.id,'new-doc');assert.equal(ch.work.flow.stages[ch.work.stageIndex].kind,'agent');assert.equal(ch.work.humanOwnerId,'1');assert.equal(ch.work.agentId,undefined,'the project default, not saved on the task');
+ assert.deepEqual(ch.work.history.map(e=>e.action),['handoff','runQueued','startTask']);assert.equal(ch.runs.length,1);assert.equal(ch.runs[0].status,'queued');assert.equal(ch.runs[0].mode,'build');
+ assert.deepEqual(d.related.map(r=>[r.relation,String(r.id),r.state]),[['next',String(child.id),'doing']],'the response already shows it started');
+ child.evidence.no=44;assert.deepEqual((await f.view()).related.map(r=>[r.no,r.title,r.state]),[[44,child.title,'doing']]);
+ c=await claim(f);assert.equal(c.run.taskId,String(child.id));assert.equal(c.run.input.handoff,'outline 2','the accepted document is its brief');
+});
+// Accept and start (2026-10-24): whatever its start card could not preselect leaves the new task waiting there.
+const outlineAccepted=async(f,agentId)=>{
+ if(agentId)await f.command('setAgent',{agentId});
+ await f.command('startTask',{});const c=await claim(f);await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'outline'});
+ const d=await f.view();return f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts'],next:'new-doc'});
+};
+const outlineEvidence={insight:{id:'op',signalIds:['community-gap:q']},context:{signals:{items:signals}}};
+test('Accept and start: with several Agents and no project default the new task waits for one to be chosen; the approval stands',async()=>{
+ const f=fixture(undefined,outlineEvidence),plugin=f.s.p.agents;
+ plugin.definitions.set('other-agent',{...plugin.agent,id:'other-agent',name:'Other Agent'});
+ await f.s.agents.saveRepo('1',{repo:'estheryo/website',baseBranch:'main',revision:0});
+ const d=await outlineAccepted(f,'shared-agent');
+ assert.equal(d.work.stage,'done');assert.deepEqual(d.related.map(r=>[r.relation,r.state]),[['next','todo']]);
+ const id=d.work.nextTaskId;let ch=await f.view(id);
+ assert.equal(ch.task.status,'待处理');assert.equal(ch.work.flow,undefined);assert.equal(ch.runs.length,0);assert.equal(ch.work.playbookId,'new-doc');
+ assert.deepEqual(ch.work.history.map(e=>e.action),['handoff'],'nothing was half done');assert.equal(ch.work.agentId,undefined,'the first task\'s Agent is not carried over');
+ // Once someone chooses the Agent, the start card starts it as before.
+ await f.command('setAgent',{agentId:'other-agent'},id);ch=await f.command('startTask',{playbookId:'new-doc'},id);assert.equal(ch.runs[0].agentId,'other-agent');
+});
+test('Accept and start: a change with no repository connected waits; an unexpected failure leaves the task to start by hand',async()=>{
+ const f=fixture(undefined,outlineEvidence);await selectAgent(f);
+ let d=await outlineAccepted(f);assert.equal(d.work.stage,'done');
+ let ch=await f.view(d.work.nextTaskId);assert.equal(ch.task.status,'待处理');assert.equal(ch.work.flow,undefined);
+ const g=fixture(undefined,outlineEvidence);await connectAgent(g);const warned=[];g.s.p.app={logger:{warn:(m,v)=>warned.push([m,v])}};
+ await g.command('startTask',{});const c=await claim(g);await finish(g,{taskId:'1',runId:c.run.id,ok:true,content:'outline'});d=await g.view();
+ g.s.p.agents.runs.enqueue=async()=>{throw Error('agents unavailable');};
+ d=await g.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts'],next:'new-doc'});
+ assert.equal(d.work.stage,'done');assert.ok(d.work.nextTaskId);
+ ch=await g.view(d.work.nextTaskId);assert.equal(ch.task.status,'待处理');assert.equal(ch.work.flow,undefined,'the failed start was rolled back');
+ assert.equal(warned.length,1);assert.equal(warned[0][1].taskId,d.work.nextTaskId);assert.match(warned[0][1].message,/agents unavailable/);
 });
 test('sharing (2026-10-08): an Agent run carries the page\'s data summary; an accepted document goes into the knowledge base',async()=>{
  const f=fixture(undefined,{insight:{id:'op',signalIds:['community-gap:q']},context:{signals:{items:signals}}});const me=await connectAgent(f);
@@ -825,4 +863,58 @@ test('a task handed off with other tasks of its opportunity lists them, and its 
  // A task handed off as a whole still shows every page the opportunity cites.
  const whole={...d.task,evidence:{...d.task.evidence,part:undefined,page:undefined}};
  assert.deepEqual(f.s.numberPages(whole,d.work),[top11,top15]);
+});
+
+// T-35 on Studio (2026-10-24): Codex finished its research, then failed the step for a tool a Skill on the computer
+// asked for, and the research was dropped. A failed run keeps what it got; the step's next run continues from it.
+test('a step the Agent could not finish keeps what it got and hands it to the next run',async()=>{
+ const f=fixture();
+ await selectAgent(f);
+ await f.command('startTask',{playbookId:'change-research'});
+ const {run}=await claim(f);
+ const report={kind:'research',sources:[{title:'Repo',url:'https://github.com/a/b'}],asOf:'2026-10-24',uncertainties:[]};
+ await finish(f,{runId:run.id,taskId:'1',ok:false,error:'missing_tool',message:'没有安装 gh',content:'# 研究\n已读完 22 个项目',report});
+ let d=await f.view();
+ assert.equal(d.runs[0].status,'failed');
+ assert.equal(d.runs[0].error,'missing_tool');
+ assert.equal(d.runs[0].errorDetail,'没有安装 gh');
+ assert.ok(d.runs[0].partialAt);
+ assert.equal(d.partial.content,'# 研究\n已读完 22 个项目');
+ assert.deepEqual(d.partial.report,report);
+ assert.equal(d.artifacts.length,0,'never a result to review');
+ d=await f.command('retryStage',{stageKey:'analyze'});
+ const next=await claim(f);
+ assert.equal(next.run.input.unfinished.content,'# 研究\n已读完 22 个项目');
+ // A run that failed without content passes the earlier content on; one someone stopped starts the step over.
+ await f.s.finish(await f.s.snapshot(f.s.key('run','1','1',next.run.id)),undefined,'agent_failed');
+ await f.command('retryStage',{stageKey:'analyze'});
+ const third=await claim(f);
+ assert.equal(third.run.input.unfinished.content,'# 研究\n已读完 22 个项目');
+ await f.s.finish(await f.s.snapshot(f.s.key('run','1','1',third.run.id)),undefined,'cancelled');
+ await f.command('retryStage',{stageKey:'analyze'});
+ assert.equal((await claim(f)).run.input.unfinished,undefined);
+});
+
+test('a run the Agents plugin failed keeps its reason and the result it had submitted',async()=>{
+ const f=fixture();
+ await selectAgent(f);
+ await f.command('startTask',{playbookId:'change-research'});
+ const {run}=await claim(f);
+ await f.s.lock('1','1',tx=>f.s.put(f.s.key('result','1','1',run.id),{value:{ok:true,content:'Submitted before the tool stopped',report:{kind:'research',sources:[],asOf:'',uncertainties:[]}},savedAt:new Date().toISOString()},tx));
+ const official=f.s.p.agents.records.get(run.pluginRunId);
+ official.status='failed';official.failureReason='idleTimeout';
+ await f.s.runtime.sync(await f.s.snapshot(f.s.key('run','1','1',run.id)));
+ const d=await f.view();
+ assert.equal(d.runs[0].failureReason,'idleTimeout');
+ assert.equal(d.partial.content,'Submitted before the tool stopped');
+ assert.equal(d.artifacts.length,0);
+ // A draft saved with `task draft` is what a run without kept content got.
+ const g=fixture();
+ await selectAgent(g);
+ await g.command('startTask',{playbookId:'change-research'});
+ const other=(await claim(g)).run;
+ await g.s.lock('1','1',tx=>g.s.put(g.s.key('draft','1','1',other.id),{content:'Draft so far',savedAt:'2026-10-24T02:00:00.000Z',runId:other.id},tx));
+ g.s.p.agents.records.get(other.pluginRunId).status='failed';
+ await g.s.runtime.sync(await g.s.snapshot(g.s.key('run','1','1',other.id)));
+ assert.deepEqual((await g.view()).partial,{content:'Draft so far',savedAt:'2026-10-24T02:00:00.000Z',draft:true});
 });

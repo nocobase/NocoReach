@@ -1,4 +1,5 @@
 import type { EffectResult } from '../effect-model.js';
+import type { TaskSource } from '../../../shared/task-source.js';
 export type { ResultSource } from '../../../shared/result-source.js';
 // Results lists only tasks with an outcome (server/nocoreach/execution/result-view.ts `hasOutcome`): live, the
 // observe stage started; delivered, finished without a page to watch.
@@ -7,6 +8,8 @@ export type ResultSummary = {
   taskId: string;
   taskNo: number | null;
   title: string;
+  /** Who found the task (Found by AI or Found by <name>). */
+  found?: TaskSource;
   /** Where its task stands: done, or closed once stopped after going live. */
   taskState: string;
   closed: boolean;
@@ -26,6 +29,7 @@ export type ResultDetail = {
     id: string;
     no: number | null;
     title: string;
+    found?: TaskSource;
     state: string;
     closed: boolean;
     archived: boolean;

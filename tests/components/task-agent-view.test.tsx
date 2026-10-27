@@ -87,7 +87,19 @@ function work(patch: Partial<Work> = {}): Work {
     ...patch,
   } as Work;
 }
-const task = (no: number, w: Work | undefined, updatedAt = '2026-10-20') => ({
+const task = (
+  no: number,
+  w: Work | undefined,
+  updatedAt = '2026-10-20',
+): {
+  id: number;
+  title: string;
+  brief: string;
+  status: string;
+  updatedAt: string;
+  taskKey?: string;
+  evidence: Record<string, unknown> & { no: number; work?: Work };
+} => ({
   id: no,
   title: `Task ${no}`,
   brief: '',
@@ -336,4 +348,38 @@ test('with no runtime online, one notice above the tasks says work will wait, in
     ).toHaveAttribute('href', '/agents/runtimes');
     cleanup();
   }
+});
+
+test('By agent cards and queued rows say who found the task, as the board does', async () => {
+  // T-37 came from an opportunity; a person handed off T-40 (queued); T-38 records no creator.
+  const tasks = studioTasks().map((t) =>
+    t.id === 37
+      ? { ...t, evidence: { ...t.evidence, insight: { id: 'o-41', no: 41 } } }
+      : t.id === 40
+        ? {
+            ...t,
+            taskKey: 'strategy:40',
+            evidence: { ...t.evidence, createdBy: { id: 'u9', name: '王磊' } },
+          }
+        : t,
+  );
+  fixture.tasks = tasks;
+  await mount('/actions?view=agent');
+  const codex = await screen.findByRole('region', {
+    name: 'Codex · GPT-6 Astra',
+  });
+  const card = codex.querySelector('[data-task-id="37"]') as HTMLElement;
+  // On the card's top line, beside the number.
+  expect(card.firstElementChild).toHaveTextContent('T-37Found by AI');
+  const queued = within(within(codex).getByRole('list')).getAllByRole(
+    'listitem',
+  );
+  expect(
+    queued.find((li) => li.textContent?.includes('T-40')),
+  ).toHaveTextContent('Found by 王磊');
+  expect(
+    (codex.querySelector('[data-task-id="38"]') as HTMLElement).querySelector(
+      '[data-found-by]',
+    ),
+  ).toBeNull();
 });

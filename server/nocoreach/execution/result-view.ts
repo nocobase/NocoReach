@@ -4,6 +4,7 @@ import {
   matchesObservation,
   metricValues,
 } from '../../../shared/result-comparison.js';
+import { taskSource } from '../../../shared/task-source.js';
 import { CHECKPOINTS, shift } from './effect.js';
 import { projectWork, taskStanding, type Work } from './model.js';
 
@@ -130,6 +131,8 @@ export function resultSummary(task: Task, pages: string[]) {
     taskId: String(task.id),
     taskNo: task.evidence?.no || null,
     title: task.title,
+    // Who found the task, as its card says (2026-10-25: Found by AI or Found by <name> wherever a task is listed).
+    found: taskSource(task),
     taskState: taskStanding(work),
     // Stopped after going live; archived after it finished.
     closed: Boolean(work.cancelledAt),
@@ -274,6 +277,7 @@ export async function readResult(
       id: String(task.id),
       no: summary.taskNo,
       title: task.title,
+      found: summary.found,
       state: summary.taskState,
       closed: summary.closed,
       archived: summary.archived,

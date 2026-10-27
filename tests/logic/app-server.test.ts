@@ -173,6 +173,18 @@ describe('app server', () => {
     expect(authConfig({} as never).account?.encryptOAuthTokens).toBe(true);
   });
 
+  it('lets the demo keep its sign-in cookies inside a cross-site iframe', () => {
+    const demo = authConfig({ env: { NOCOBASE_DEMO_MODE: 'true' } } as never);
+    expect(demo.advanced?.defaultCookieAttributes).toEqual({
+      sameSite: 'none',
+      secure: true,
+      partitioned: true,
+    });
+    for (const env of [{}, { NOCOBASE_DEMO_MODE: 'false' }]) {
+      expect(authConfig({ env } as never).advanced).toBeUndefined();
+    }
+  });
+
   it('represents the NocoBase application separately from its Hono router', () => {
     const app = createTestApp({
       publicBasePath: '/app-template-default',
@@ -697,6 +709,37 @@ describe('app server', () => {
       await expect(response.json()).resolves.toMatchObject({
         error: { status: 'NOT_FOUND', reason: 'ROUTE_NOT_FOUND' },
       });
+    }
+  });
+
+  it('signs the demo in with cookies a cross-site iframe keeps', async () => {
+    const app = trackCloseable(
+      await createInstalledStandaloneServer({
+        viteDevUrl: false,
+        // The demo seeds its sample data, whose Agent credentials are sealed with the secrets keys.
+        env: {
+          NOCOBASE_DEMO_MODE: 'true',
+          SECRETS_KEYS: `1:${'a'.repeat(64)}`,
+        },
+      }),
+    );
+    const baseUrl = `http://localhost${app.application.publicBasePath}`;
+    const signIn = await requestApp(
+      app,
+      `${baseUrl}/api/auth/sign-in/username`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username: 'nocobase', password: 'admin123' }),
+      },
+    );
+    expect(signIn.status).toBe(200);
+    const cookies = signIn.headers.getSetCookie();
+    expect(cookies.some((cookie) => /session_token=/u.test(cookie))).toBe(true);
+    for (const cookie of cookies) {
+      expect(cookie).toMatch(/;\s*SameSite=None/iu);
+      expect(cookie).toMatch(/;\s*Secure/iu);
+      expect(cookie).toMatch(/;\s*Partitioned/iu);
     }
   });
 

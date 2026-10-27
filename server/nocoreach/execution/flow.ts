@@ -63,6 +63,24 @@ export function validateFlow(v: any): { name: string; description: string; stage
 
 // 记忆 (项目知识) shared with the online AI and the Agent: section titles with their text (see memory.ts).
 // What a Runner stage reads: everything is material, the stage instruction says what to produce.
+// Messages the person left for the executor (the activity's message box): those left before the task started are
+// the start's own instructions (the start card's optional note until 2026-10-24) and stay, the first five of them,
+// with the latest five, oldest first and within 6,000 characters (over it, the older of the latest are left out).
+const NOTES_BUDGET = 6000;
+type Note = { action: 'comment'; comment: string; at?: string };
+export function runNotes(history: readonly { action?: unknown; comment?: unknown; at?: string }[]): string[] {
+  const comments = history.filter((e): e is Note => e?.action === 'comment' && typeof e.comment === 'string' && Boolean(e.comment));
+  const startedAt = history.find(e => e?.action === 'startTask')?.at;
+  const before = comments.filter(e => !startedAt || (e.at || '') <= startedAt).slice(0, 5);
+  const latest = comments.slice(-5).filter(e => !before.includes(e));
+  const kept = new Set<Note>();
+  let used = 0;
+  for (const e of [...before, ...latest.reverse()]) {
+    if (used + e.comment.length > NOTES_BUDGET && kept.size) continue;
+    kept.add(e); used += e.comment.length;
+  }
+  return comments.filter(e => kept.has(e)).map(e => e.comment);
+}
 export function flowRunInput(project: any, task: any, w: { flow?: FlowSnapshot; playbook?: { name: string }; results: ({ content: string; rejectedAt?: string } | null)[]; note?: string; history?: any[] }, index: number, content: unknown, reviews: any[]) {
   const stages = w.flow!.stages, stage = stages[index];
   const insight = task?.evidence?.insight || null, part = task?.evidence?.part || null;
@@ -72,13 +90,14 @@ export function flowRunInput(project: any, task: any, w: { flow?: FlowSnapshot; 
   const { work, context, handoff, ...rest } = task?.evidence || {};
   return {
     project: memoryForAI(project),
-    // What language the Agent writes its plan, report and notes in (server/language.js).
+    // What language the Agent writes its plan, report and notes in (server/language.js). Never an article's own
+    // language: that is `article.languages` (article-flow.ts runInput), whatever this says.
     language: languageOf(project),
     task: { title: task?.title || '', brief: task?.brief || '' },
     playbook: w.playbook?.name || w.flow?.name || '',
     note: w.note || '',
     // Messages the person left for the executor, and the document handed over by the task before this one.
-    notes: (w.history || []).filter(e => e?.action === 'comment' && e.comment).slice(-5).map(e => e.comment),
+    notes: runNotes(w.history || []),
     handoff: task?.evidence?.handoff?.content || null,
     evidence: insight ? { insight, signals, ...(part ? { part: { target: part.label, ...(part.url ? { url: part.url } : {}) } } : {}) } : rest,
     content: content || null,

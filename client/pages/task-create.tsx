@@ -334,7 +334,13 @@ function CreateTask({
       });
     } catch (failure) {
       if (activeRef.current) {
-        setError(true);
+        // Demo Mode already explains this refusal through its global toast.
+        setError(
+          !(
+            failure instanceof ApiClientError &&
+            failure.reason === 'DEMO_READ_ONLY'
+          ),
+        );
         const status =
           failure && typeof failure === 'object' && 'status' in failure
             ? failure.status
@@ -383,6 +389,7 @@ function CreateTask({
       if (!activeRef.current || controller.signal.aborted) return;
       const reason =
         failure instanceof ApiClientError ? failure.reason : undefined;
+      if (reason === 'DEMO_READ_ONLY') return;
       if (reason === 'TASK_DRAFT_NO_MODEL') setModelReady(false);
       setDraftFailure(
         reason === 'TASK_DRAFT_NO_MODEL'

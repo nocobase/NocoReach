@@ -65,7 +65,7 @@ export function placeOf(w: Work | undefined, hasAgent: boolean): Placed | null {
     run = w.latestRun?.status;
   if (!st) return null;
   if (st.kind === 'agent') {
-    if (run === 'running') return { lane: 'running', step: stageName(st) };
+    if (run === 'running') return { lane: 'running', step: stageName(st, w) };
     if (run === 'queued') return { lane: 'queued' };
     if (run === 'failed')
       return {

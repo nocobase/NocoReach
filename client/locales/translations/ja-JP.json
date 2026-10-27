@@ -242,8 +242,8 @@
   "auth.continueWith": "{provider} で続行",
   "auth.about": "このアプリケーションについて",
   "auth.platform": "AIグロース運用プラットフォーム",
-  "auth.marketingTitleFirst": "データから機会を見つけ、",
-  "auth.marketingTitleSecond": "NocoReachが実行に移します。",
+  "auth.marketingTitleFirst": "AI が成長の機会を見つけ、",
+  "auth.marketingTitleSecond": "エージェントが実行します。",
   "auth.marketingTitleThird": "",
   "auth.marketingDescription": "データ収集、毎日の分析、エージェントによる実行をひとつのプラットフォームで。",
   "auth.frontend": "毎日の分析",
@@ -263,8 +263,8 @@
   "status.routeFailedDescription": "{{packageName}} のルート {{label}} を読み込めませんでした。",
   "shell": {
     "templateVersionUnknown": "バージョン不明",
-    "buildFreely": "データから機会を見つけ、",
-    "reliability": "<brand>NocoReach</brand>が実行に移します。"
+    "buildFreely": "AI が成長の機会を見つけ、",
+    "reliability": "エージェントが実行します。"
   },
   "home": {
     "platform": "NocoBase · AI ネイティブなアプリケーションプラットフォーム",
