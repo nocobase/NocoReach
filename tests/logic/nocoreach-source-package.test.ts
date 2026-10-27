@@ -101,12 +101,10 @@ console.log(JSON.stringify({
 
 test('excludes private configuration, runtime state and verification outputs', () => {
   expect(
-    files.filter(
-      (file) =>
-        /(^|\/)(?:\.env(?:\.[^/]*)?|config\.(?:yml|toml)|storage|node_modules|test-results|playwright-report|coverage|\.git|test-credentials\.json|integration-fixtures\.json)(?:\/|$)/u.test(
-          file,
-        ) ||
-        (file.startsWith('.agents/') && !file.startsWith('.agents/rules/')),
+    files.filter((file) =>
+      /(^|\/)(?:\.env(?:\.[^/]*)?|config\.(?:yml|toml)|storage|node_modules|test-results|playwright-report|coverage|\.git|\.agents|test-credentials\.json|integration-fixtures\.json)(?:\/|$)/u.test(
+        file,
+      ),
     ),
   ).toEqual([]);
 });
@@ -222,15 +220,12 @@ test('ships relocated developer guidance with both mock and YouTube constraints'
       'changelog/unreleased/README.md',
       'scripts/fold-changelog.mjs',
       'docs/DEVELOPMENT.md',
-      '.agents/rules/nocoreach-server.md',
-      '.agents/rules/nocoreach-frontend.md',
-      '.agents/rules/outbound-networking.md',
-      '.agents/rules/task-execution.md',
-      '.agents/rules/build-and-deploy.md',
+      'docs/DATABASE-DEPLOYMENT.md',
+      'docs/DATABASE-DEPLOYMENT.zh-CN.md',
     ]),
   );
   const guidance = await readFile(
-    path.join(unpacked, '.agents/rules/nocoreach-server.md'),
+    path.join(unpacked, 'docs/DEVELOPMENT.md'),
     'utf8',
   );
   expect(guidance).toContain('### Simulated integrations');

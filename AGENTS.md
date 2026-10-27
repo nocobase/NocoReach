@@ -9,15 +9,15 @@
 
 Install dependencies with `pnpm install`; start development with `pnpm dev`. Installation synchronizes `.agents/skills/`; run `pnpm nocobase skills sync` if missing or stale. Synchronized Skills, `.claude/skills/`, and database Collection caches are generated; do not edit them manually.
 
-Before implementing features or fixes, read the [application development Skill](.agents/skills/nocobase-app-development/SKILL.md), then only the relevant references and plugin Skills. The following topic rules describe NocoReach's adaptations to the template; read only the files affected by the task. [Development guidance](docs/DEVELOPMENT.md) is the same index for contributors.
+Before implementing features or fixes, read the [application development Skill](.agents/skills/nocobase-app-development/SKILL.md), then only the relevant references and plugin Skills. The following documents describe NocoReach's adaptations to the template; read only the sections affected by the task.
 
-| Task                                                             | Project guidance                                            |
-| ---------------------------------------------------------------- | ----------------------------------------------------------- |
-| Pages, routes, copy, themes, identity caches                     | [Frontend](.agents/rules/nocoreach-frontend.md)             |
-| Business APIs, permissions, databases, sync, background services | [Backend and data](.agents/rules/nocoreach-server.md)       |
-| Data collection, OAuth, proxies, public fetching                 | [Outbound networking](.agents/rules/outbound-networking.md) |
-| Agents, Runners, task execution, results, review                 | [Task execution](.agents/rules/task-execution.md)           |
-| Dependencies, upgrades, builds, deployment, CLI distribution     | [Upgrades and releases](.agents/rules/build-and-deploy.md)  |
+| Task                                                             | Project guidance                                                   |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Pages, routes, copy, themes, identity caches                     | [Frontend](docs/DEVELOPMENT.md#frontend)                           |
+| Business APIs, permissions, databases, sync, background services | [Backend and data](docs/DEVELOPMENT.md#backend-and-data)           |
+| Data collection, OAuth, proxies, public fetching                 | [Outbound networking](docs/DEVELOPMENT.md#outbound-networking)     |
+| Agents, Runners, task execution, results, review                 | [Task execution](docs/DEVELOPMENT.md#task-execution)               |
+| Dependencies, upgrades, builds, deployment, CLI distribution     | [Upgrades and releases](docs/DEVELOPMENT.md#upgrades-and-releases) |
 
 ## Changes and validation
 
@@ -30,4 +30,4 @@ Before implementing features or fixes, read the [application development Skill](
 
 Keep this file limited to rules shared across tasks and pointers to further guidance. Update it only when those rules change, revising existing entries first. Maintain module constraints in the relevant topic, link to Skills for tutorials, and record significant changes in a note of their own in [changelog/unreleased/](changelog/unreleased/README.md), one file per pull request named after its branch; do not edit [CHANGELOG.md](CHANGELOG.md), which `pnpm changelog:fold` assembles from the notes. Do not append version notes, debugging histories, or test logs here. `CLAUDE.md` only references this file.
 
-Keep the relevant `.agents/rules/` file and [development index](docs/DEVELOPMENT.md) in sync with code changes: capture confirmed, reusable lessons, revise or remove outdated rules, and maintain affected links. Prefer updating existing entries.
+Keep [development guidance](docs/DEVELOPMENT.md) in sync with code changes: capture confirmed, reusable lessons, revise or remove outdated rules, and maintain affected links. Prefer updating existing entries.

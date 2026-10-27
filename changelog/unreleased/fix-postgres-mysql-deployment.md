@@ -4,4 +4,4 @@
 - Extend the historical absolute-timestamp migration for MySQL fresh installations and timestamp conversion without host-timezone decoding. Existing SQLite and PostgreSQL behavior is unchanged; installations that already ran it may review and repair the documented checksum drift without rerunning the migration.
 - Add database regression coverage and production-artifact verification for initialization, typed persistence, authentication, business writes and restart recovery.
 - Preserve case-insensitive classic filters, validate bounded strings before writes on every database, and make timestamp-tied lists deterministic. Verify native JSON filters, boolean encoding and transaction-scoped validation against all three engines.
-- Run the logic suite and demo import API regression in the three-engine CI matrix. Move application guidance into topic files under `.agents/rules/`, linked from AGENTS.md and the development index and included in the source package.
+- Run the logic suite and demo import API regression in the three-engine CI matrix. Document database query conventions and verification in the existing development guide.

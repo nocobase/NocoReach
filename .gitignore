@@ -15,7 +15,6 @@ coverage/
 /database.sqlite-wal
 /database.sqlite-shm
 /database/*/collections/
-/.agents/*
-!/.agents/rules/
+/.agents/
 /.claude/skills/
 *.log
