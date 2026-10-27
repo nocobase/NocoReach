@@ -81,6 +81,7 @@ export class Connections{
  agents: import('@nocobase/app-plugin-agents/server/tokens').Agents;
  taskExecution: TaskService;
  knowledge: Knowledge;
+ keywordSuggest: KeywordSuggest;
  skills: Skills;
  taskData: TaskData;
  strategy: StrategyService;

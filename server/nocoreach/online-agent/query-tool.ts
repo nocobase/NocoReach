@@ -763,16 +763,37 @@ const SOURCES: Record<string, Source> = {
     access: ['nrKeywordSuggest', 'view'],
     async read(s, q) {
       const v = obj(await call(s, 'keywordSuggest', 'view', q.id));
+      // How the list was made (seeds, real keywords found, minimum volume) and the groups dug from the chat.
+      const flat = ({ metrics, ...item }: Obj) => {
+        const { monthlySearches: _monthly, ...numbers } = obj(metrics);
+        return { ...item, ...numbers };
+      };
       return {
+        dataThrough: dateOf(v.at) || null,
         summary: {
           market: v.market ?? null,
           generatedAt: v.generatedAt ?? v.at ?? null,
+          seeds: v.seeds ?? [],
+          realKeywordsFound: obj(v.stats).found ?? null,
+          minimumMonthlyVolume: v.minVolume ?? null,
+          running: v.running ?? null,
+          lastError: obj(v.lastError).message ?? null,
+          groups: list(v.digs).map((d) => ({
+            id: d.id,
+            name: d.direction,
+            seeds: d.seeds,
+            keywords: list(d.items).length,
+            at: d.at,
+          })),
         },
         tables: {
-          suggestions: list(v.items).map(({ metrics, ...item }) => ({
-            ...item,
-            ...obj(metrics),
-          })),
+          suggestions: list(v.items).map(flat),
+          dugGroups: list(v.digs).flatMap((d) =>
+            list(d.items).map((item) => ({
+              ...flat(item),
+              dugFor: d.direction,
+            })),
+          ),
         },
       };
     },

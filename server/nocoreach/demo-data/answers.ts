@@ -124,56 +124,78 @@ function business(operation: string, input: Value, en: boolean): Value | null {
       };
     case 'daily-rewrite':
       return { rewrites: [] };
-    case 'keyword-suggest': {
-      const pages = list(input.pages);
-      const groups = en
-        ? [
-            [
-              'Product and features',
-              ['internal tool builder', 'open source low code platform'],
-            ],
-            [
-              'Use cases and problems',
-              ['customer data permissions', 'approval workflow example'],
-            ],
-            [
-              'Comparisons',
-              [
-                'spreadsheet vs database for teams',
-                'self-hosted crm alternative',
-              ],
-            ],
-          ]
-        : [
-            [
-              '产品与功能词',
-              ['internal tool builder', 'open source low code platform'],
-            ],
-            [
-              '使用场景与问题词',
-              ['customer data permissions', 'approval workflow example'],
-            ],
-            [
-              '对比与替代词',
-              [
-                'spreadsheet vs database for teams',
-                'self-hosted crm alternative',
-              ],
-            ],
-          ];
+    case 'keyword-seeds': {
+      const direction = str(input.direction, 60);
+      if (direction)
+        return {
+          seeds: [
+            direction,
+            `${direction} software`,
+            `${direction} tool`,
+            `${direction} open source`,
+            `best ${direction}`,
+          ],
+        };
       return {
-        groups: (groups as [string, string[]][]).map(([name, keywords], i) => ({
-          name,
-          keywords: keywords.map((keyword) => ({
+        seeds: [
+          'internal tool builder',
+          'low code platform',
+          'no code database',
+          'approval workflow',
+          'workflow automation',
+          'self hosted crm',
+          'role based access control',
+          'ai agent builder',
+          'airtable alternative',
+          'retool alternative',
+          'admin panel',
+          'inventory management system',
+        ],
+      };
+    }
+    case 'keyword-curate': {
+      // Picks from the looked-up candidates only, as the real model is told to; grouped by the words they use.
+      const pages = list(input.pages),
+        pick = Math.max(1, Number(input.pick) || 40);
+      const groupOf = (k: string) =>
+        /alternative|\bvs\b|versus|compare|替代|对比/.test(k)
+          ? 3
+          : /how|example|template|what is|教程|模板/.test(k)
+            ? 2
+            : /builder|platform|database|tool|software|系统|平台|工具/.test(k)
+              ? 1
+              : 4;
+      // A dig keeps to its direction: candidates sharing one of its words.
+      const words = str(input.direction, 60)
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 2);
+      const candidates = list(input.candidates).filter(
+        (c) =>
+          !words.length ||
+          words.some((w) => str(c.keyword, 80).toLowerCase().includes(w)),
+      );
+      return {
+        keywords: candidates.slice(0, pick).map((c) => {
+          const keyword = str(c.keyword, 80),
+            token = keyword.split(' ').find((w) => w.length > 3) ?? '';
+          const page = pages.find(
+            (p) =>
+              token &&
+              (str(p.url, 500).includes(token) ||
+                str(p.title, 120).toLowerCase().includes(token)),
+          );
+          return {
             keyword,
-            intent: 'informational',
+            group: groupOf(keyword.toLowerCase()),
+            relevance: c.position ? 3 : 2,
             reason: t(
-              '与现有文档主题一致，搜索意图明确。（演示建议）',
-              'Matches existing docs topics with a clear intent. (Demo suggestion.)',
+              `月搜索量 ${Number(c.volume) || 0}，难度 ${Number(c.difficulty) || 0}。（演示建议）`,
+              `${Number(c.volume) || 0} searches a month, difficulty ${Number(c.difficulty) || 0}. (Demo suggestion.)`,
             ),
-            page: str(pages[i % Math.max(1, pages.length)]?.url, 500),
-          })),
-        })),
+            page: str(page?.url, 500),
+          };
+        }),
       };
     }
     case 'ai-question-suggest':
@@ -313,6 +335,39 @@ const METRICS =
 const OPPORTUNITIES =
   /机会|建议|下一步|该做|opportunit|suggest|next step|what should/iu;
 
+const CONFIRM =
+  /^\s*(确认|好的?|可以|开始|查吧|yes|ok(ay)?|confirm|go( ahead)?|sure)(?=$|[\s，。,.!！])/iu;
+const DIG =
+  /挖|多找|对比词|竞品|市场|关键词|dig|more keywords|comparison|competitor|market/iu;
+const EXPLAIN = /怎么找|如何找|explain how|how (these|the) keywords/iu;
+
+/** What a Keywords › AI suggestions request asks keyword_dig for, from the row it was opened on or the prompt. */
+function digArguments(
+  request: DemoModelRequest,
+  prompt = request.prompt,
+): Record<string, unknown> {
+  const row = /on the keyword "([^"]{2,80})"/u.exec(request.system)?.[1];
+  if (/日本|japan/iu.test(prompt))
+    return { mode: 'list', market: { locationCode: 2392, language: 'ja' } };
+  if (/美国市场|US market|united states/iu.test(prompt))
+    return { mode: 'list', market: { locationCode: 2840, language: 'en' } };
+  if (/对比词|竞品|competitor|comparison/iu.test(prompt))
+    return { mode: 'group', direction: 'alternative' };
+  const quoted = /[“"「]([^”"」]{2,60})[”"」]/u.exec(prompt)?.[1];
+  const direction = quoted ?? row ?? 'workflow';
+  return { mode: 'group', direction, seeds: [direction] };
+}
+
+/** The user's request the last answer quoted a lookup cost for, if the last answer did. */
+function dugBefore(request: DemoModelRequest): string | undefined {
+  const earlier = request.messages.slice(0, -1);
+  const answer = [...earlier].reverse().find((m) => m.role === 'assistant');
+  if (!answer || !/\$\d/u.test(answer.content)) return undefined;
+  return [...earlier.slice(0, earlier.lastIndexOf(answer))]
+    .reverse()
+    .find((m) => m.role === 'user')?.content;
+}
+
 /** Business calls carry their operation as the tag; online agents ask in their own words and get tool-backed answers. */
 export function demoAnswers(): DemoAnswer[] {
   return [
@@ -324,6 +379,77 @@ export function demoAnswers(): DemoAnswer[] {
         JSON.stringify(
           business(request.tag!, inputOf(request.prompt), english(request)),
         ),
+    },
+    {
+      id: 'nocoreach-keywords-explain',
+      match: (request) =>
+        has(request, 'keyword_dig') &&
+        asks(request, EXPLAIN) &&
+        request.toolResults.length === 0,
+      reply: (request) =>
+        request.language === 'en'
+          ? "The AI first chose short seed words the way people search, from the project memory, the Search Console queries and the competitors. For each seed, DataForSEO returned the Google searches that contain it, and all seeds together returned searches on related topics. Only keywords searched at least 50 times a month in the market were kept; the AI then picked those closest to the product and ranked them by search volume, relevance, difficulty and the site's current position. (Demo answer.)"
+          : 'AI 先根据项目记忆、Search Console 里的查询和竞品，按用户的搜索习惯定了一组短的种子词。每个种子词从 DataForSEO 取包含它的 Google 搜索词，所有种子词再一起取相关话题的词；只保留目标市场月搜索量 50 以上的词，再由 AI 挑出和产品最相关的，按搜索量、相关度、难度和本站现在的排名排序。（演示回答）',
+    },
+    {
+      id: 'nocoreach-keywords-confirm',
+      match: (request) =>
+        has(request, 'keyword_dig') &&
+        request.toolResults.length === 0 &&
+        CONFIRM.test(request.prompt) &&
+        Boolean(dugBefore(request)),
+      // Earlier turns reach the model as their text: the request the cost was asked for is the user's message before.
+      reply: (request) => ({
+        toolCalls: [
+          {
+            name: 'keyword_dig',
+            arguments: {
+              ...digArguments(request, dugBefore(request)!),
+              confirm: true,
+            },
+          },
+        ],
+      }),
+    },
+    {
+      id: 'nocoreach-keywords-plan',
+      match: (request) =>
+        has(request, 'keyword_dig') &&
+        request.toolResults.length === 0 &&
+        asks(request, DIG),
+      reply: (request) => ({
+        toolCalls: [{ name: 'keyword_dig', arguments: digArguments(request) }],
+      }),
+    },
+    {
+      id: 'nocoreach-keywords-answer',
+      match: (request) =>
+        request.toolResults.some((result) => result.name === 'keyword_dig'),
+      reply: (request) => {
+        const en = request.language === 'en';
+        const result = object(
+          safeJson(
+            request.toolResults.find((r) => r.name === 'keyword_dig')!.content,
+          ),
+        );
+        if (result.error) return str(result.error, 400);
+        if (result.confirmed === false)
+          return en
+            ? `This lookup costs at most $${Number(result.maxCostUsd).toFixed(2)} from the DataForSEO budget (this month: $${Number(result.monthSpentUsd).toFixed(2)} of $${Number(result.monthlyBudgetUsd).toFixed(2)}). Reply "confirm" to run it.`
+            : `这次查询最多花费 $${Number(result.maxCostUsd).toFixed(2)}，从 DataForSEO 预算里扣（本月已用 $${Number(result.monthSpentUsd).toFixed(2)} / $${Number(result.monthlyBudgetUsd).toFixed(2)}）。回复“确认”开始查。`;
+        const group = object(result.group);
+        const lines = list(result.keywords)
+          .slice(0, 8)
+          .map((k) => `- ${str(k.keyword, 80)}: ${str(k.reason, 80)}`);
+        const head = group.name
+          ? en
+            ? `Added "From ${str(group.name, 60)}" to AI suggestions (keywords: ${Number(group.keywords) || 0}), each with real searches:`
+            : `已加到 AI 建议的“从 ${str(group.name, 60)} 挖”，共 ${Number(group.keywords) || 0} 个词，都有真实搜索量：`
+          : en
+            ? 'AI suggestions were found again for the new market:'
+            : 'AI 建议已按新市场重新找词：';
+        return [head, '', ...lines].join('\n');
+      },
     },
     {
       id: 'nocoreach-tasks-read',

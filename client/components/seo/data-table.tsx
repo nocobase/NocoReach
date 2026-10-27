@@ -18,6 +18,7 @@ import { Button } from "#components/ui/button";
 import { Checkbox } from "#components/ui/checkbox";
 import { Skeleton } from "#components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#components/ui/table";
+import { cn } from "#lib/utils";
 import { applyShiftRangeSelection, type SelectionAnchor } from "./table-selection";
 
 type AppColumnMeta<TData> = {
@@ -111,6 +112,7 @@ export function DataTable<TData>({
   toolbar,
   footer,
   onRowClick,
+  rowClassName,
 }: {
   table: TanStackTable<TData>;
   isLoading?: boolean;
@@ -121,6 +123,8 @@ export function DataTable<TData>({
   toolbar?: ReactNode;
   footer?: ReactNode;
   onRowClick?: (row: Row<TData>, event: MouseEvent<HTMLTableRowElement>) => void;
+  /** Extra classes for each body row, such as `group` for an action that shows while the row is hovered. */
+  rowClassName?: string;
 }) {
   const columns = table.getVisibleLeafColumns();
   const rows = table.getRowModel().rows;
@@ -175,7 +179,7 @@ export function DataTable<TData>({
               <TableRow
                 key={row.id}
                 data-state={row.getIsSelected() ? "selected" : undefined}
-                className={onRowClick ? "cursor-pointer" : undefined}
+                className={cn(onRowClick && "cursor-pointer", rowClassName) || undefined}
                 onClick={onRowClick ? (event) => onRowClick(row, event) : undefined}
               >
                 {row.getVisibleCells().map((cell) => {
