@@ -1,10 +1,7 @@
 import { $t, getCurrentLocale } from '#i18n';
-import { ownSignalIds } from '../../../shared/opportunity-parts.js';
-import {
-  translationDefault,
-  type ArticleContent,
-  type ArticleField,
-  type ArticleMatch,
+import type {
+  ArticleContent,
+  ArticleField,
 } from '../../../shared/article-publishing.js';
 import { localeName, providerKey } from '../article-targets-api';
 import type {
@@ -17,195 +14,21 @@ import type {
 
 // Shared by the article parts of the task page (article-start.tsx, article-review.tsx, article-release.tsx).
 
-/**
- * Where a task's change goes, chosen before it starts: a target (`mode` new or existing article) or the repository;
- * `also` lists other targets the same article goes to.
- */
-export type DeliveryChoice = {
-  target: string;
-  mode: 'new' | 'existing';
-  also: string[];
-  /** The article found from the task's page, linked when the task starts. */
-  article?: ArticleMatch;
-  /** The languages the task writes, primary first; left out, every language of the target in its order. */
-  locales?: string[];
-};
-/** What the page lookup said: the article found, or none; `unchecked` when a target could not be asked. */
-export type ArticleFound = { article: ArticleMatch | null; unchecked: boolean };
-
-/**
- * The pages a task is about, most specific first: the page linked on the task, the page it was handed off with, the
- * opportunity's target when it is an address, then the pages of the changes it cites or was handed off from.
- */
-export function pageUrlsOf(data: TaskData): string[] {
-  const e = (data.task.evidence || {}) as {
-    page?: unknown;
-    signalKey?: unknown;
-    part?: { signalIds?: unknown } | null;
-    insight?: { target?: unknown; signalIds?: unknown } | null;
-    context?: { signals?: { items?: { key?: unknown; url?: unknown }[] } };
-  };
-  // A change handed off on its own (Insights › Today's changes) names its page and change instead of an opportunity;
-  // one of an opportunity's several tasks looks only at its own place, never at the opportunity's other pages.
-  const ids = new Set<unknown>(ownSignalIds(e));
-  const cited = (e.context?.signals?.items || [])
-    .filter((s) => ids.has(s.key))
-    .map((s) => s.url);
-  return [
-    ...new Set(
-      [
-        data.work.page?.url,
-        e.page,
-        e.part ? undefined : e.insight?.target,
-        ...cited,
-      ]
-        .filter((u): u is string => typeof u === 'string')
-        .map((u) => u.trim())
-        .filter((u) => /^https?:\/\//i.test(u)),
-    ),
-  ].slice(0, 10);
-}
-export const REPO = 'repo';
+// The start defaults (where the change goes, the pages a task is about, the languages it writes) live in
+// shared/task-start.ts: the server starts a handed-over task with the same choice the start card preselects.
+export {
+  REPO,
+  choiceLocales,
+  defaultDelivery,
+  deliveryPlan,
+  pageUrlsOf,
+  presentLocales,
+  translationLocales,
+  type ArticleFound,
+  type DeliveryChoice,
+} from '../../../shared/task-start.js';
 /** A task publishes to its primary target and at most this many others (article-flow.ts). */
 export const MAX_ALSO = 4;
-
-/**
- * The default (2026-10-21: decided by where the page lives, not asked): the linked article; a playbook set to the
- * repository opens a pull request; a blog post is a new article in the playbook's target, then the default target.
- * Any other change goes to the article found from the task's page; when the page is known and no target holds it,
- * it is a page of the site itself and goes to the repository (unless the playbook names a target). Otherwise an
- * article is picked by hand.
- */
-export function defaultDelivery(
-  data: TaskData,
-  playbookId: string,
-  found?: ArticleFound,
-  /** A translation playbook: always an article that exists (2026-10-25). */
-  translate = false,
-): DeliveryChoice {
-  const targets = data.articleTargets || [],
-    linked = data.work.article,
-    entry = data.articlePlaybookTargets?.[playbookId];
-  if (linked?.targetId && targets.some((t) => t.id === linked.targetId))
-    return {
-      target: linked.targetId,
-      mode: linked.articleId || translate ? 'existing' : 'new',
-      also: [],
-    };
-  if (!targets.length || entry === REPO)
-    return { target: REPO, mode: 'new', also: [] };
-  const named = targets.find((t) => t.id === entry),
-    target = (named || targets.find((t) => t.default) || targets[0]).id;
-  if (playbookId === 'blog-post') return { target, mode: 'new', also: [] };
-  const article = found?.article;
-  if (article && targets.some((t) => t.id === article.targetId))
-    return { target: article.targetId, mode: 'existing', also: [], article };
-  if (found && !found.unchecked && !named && data.agent?.repo)
-    return { target: REPO, mode: 'new', also: [] };
-  return { target, mode: 'existing', also: [] };
-}
-
-/**
- * The languages a task writes, primary first (2026-10-24): the ones chosen at start that its target has, else every
- * language of the target in the target's order. The first is written and reviewed first; the others are translated
- * from it once it is approved.
- */
-export function choiceLocales(data: TaskData, choice: DeliveryChoice) {
-  if (choice.target === REPO) return [];
-  const all =
-    (data.articleTargets || []).find((t) => t.id === choice.target)?.locales ||
-    [];
-  const chosen = (choice.locales || []).filter((l) => all.includes(l));
-  return chosen.length ? chosen : all;
-}
-
-/** The languages the chosen article has, when known: the one found from the page, else the one saved on the task. */
-export function presentLocales(
-  data: TaskData,
-  choice: DeliveryChoice,
-): string[] | undefined {
-  if (choice.target === REPO) return undefined;
-  if (choice.article?.targetId === choice.target) return choice.article.locales;
-  const linked = data.work.article;
-  return linked?.articleId && linked.targetId === choice.target
-    ? linked.locales
-    : undefined;
-}
-
-/**
- * What a translation writes (2026-10-25), the source first: the languages chosen in the dialog, else the target's
- * first language the article has, into the ones it lacks (all the others when it lacks none). Empty when the target
- * has fewer than two languages.
- */
-export function translationLocales(
-  data: TaskData,
-  choice: DeliveryChoice,
-  present = presentLocales(data, choice),
-) {
-  if (choice.target === REPO) return [];
-  const all =
-      (data.articleTargets || []).find((t) => t.id === choice.target)
-        ?.locales || [],
-    chosen = (choice.locales || []).filter((l) => all.includes(l));
-  if (all.length < 2) return [];
-  // A choice is kept as made, even a source alone (nothing to write yet: the task cannot start).
-  if (chosen.length) return chosen;
-  const d = translationDefault(all, present);
-  return [d.from, ...d.to];
-}
-
-/** The start command's delivery and whether it can start yet; unlinks first when the saved article differs. */
-export function deliveryPlan(
-  data: TaskData,
-  choice: DeliveryChoice,
-  translate = false,
-) {
-  const linked = data.work.article;
-  if (choice.target === REPO)
-    return { ready: true, unlink: Boolean(linked?.targetId), delivery: REPO };
-  const also = translate
-      ? []
-      : choice.also.filter((id) => id !== choice.target),
-    chosen = translate
-      ? translationLocales(data, choice)
-      : choiceLocales(data, choice),
-    // One language is written as it always was; two or more are written primary first, then translated. A
-    // translation always names its source and the languages to write.
-    locales = chosen.length > 1 ? { locales: chosen } : {};
-  if (choice.mode === 'existing' || translate) {
-    const saved = Boolean(
-        linked?.articleId && linked.targetId === choice.target,
-      ),
-      found =
-        !saved && choice.article?.targetId === choice.target
-          ? choice.article
-          : undefined;
-    return {
-      ready: (saved || Boolean(found)) && (!translate || chosen.length > 1),
-      unlink: false,
-      // The found article is saved on the task as the start is confirmed.
-      link: found
-        ? { targetId: found.targetId, articleId: found.articleId }
-        : undefined,
-      delivery:
-        also.length || chosen.length > 1
-          ? { ...(also.length ? { also } : {}), ...locales }
-          : undefined,
-    };
-  }
-  return {
-    ready: true,
-    unlink: Boolean(
-      linked?.articleId ||
-      (linked?.targetId && linked.targetId !== choice.target),
-    ),
-    delivery: {
-      targetId: choice.target,
-      ...(also.length ? { also } : {}),
-      ...locales,
-    },
-  };
-}
 
 export function valueAt(
   c: Partial<ArticleContent> | null | undefined,

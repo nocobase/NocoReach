@@ -22,6 +22,7 @@ import { ArticleFlow } from './article-flow.js';
 import { STARTS_KEY, restartOf, withStart } from './restarts.js';
 import { ownSignalIds } from '../../../shared/opportunity-parts.js';
 import { taskStanding } from '../../../shared/task-pending.js';
+import { defaultDelivery, deliveryPlan, lookupMatters, pageUrlsOf, startAgent, startBlockers } from '../../../shared/task-start.js';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
 // Roles and what only 管理员 may change live with the server code (server/policy.js); the same relative path works from
 // the source and from dist/execution.
@@ -177,14 +178,34 @@ export class TaskService {
       data.execution = { ...this.runtime.simulatedProgress(full, viewer), runId: run.id };
       data.sources = null;
       data.savedDraft = null;
+      data.partial = run.status === 'failed' ? await this.partialOf(run) : null;
     } else if (run?.pluginRunId) {
       const detail = await this.runtime.progress(run.pluginRunId, viewer);
       data.execution = { ...detail, runId: run.id };
       if (run.status === 'failed' && !run.errorDetail && detail.businessFailure) run.errorDetail = detail.businessFailure;
       data.sources = await this.business.sources(run);
       data.savedDraft = await this.snapshot(this.key('draft', project, taskId, run.id)) || null;
+      data.partial = run.status === 'failed' ? await this.partialOf(run) : null;
     }
     return data;
+  }
+  // What a failed run got before it stopped: the content kept when it failed, else a draft it saved with `task draft`.
+  async partialOf(run: Run, tx?: any): Promise<{ content: string; report?: unknown; savedAt?: string; draft?: true } | null> {
+    const kept = run.partialAt ? await this.snapshot(this.key('partial', run.projectId, run.taskId, run.id), tx) : null;
+    if (kept?.content) return kept;
+    const draft = await this.snapshot(this.key('draft', run.projectId, run.taskId, run.id), tx);
+    return typeof draft?.content === 'string' && draft.content.trim() ? { content: draft.content, savedAt: draft.savedAt, draft: true } : null;
+  }
+  // What the step's latest failed runs got, for its next run to continue from (`unfinished` in the input). A run someone
+  // stopped, or one that succeeded, ends the search: the step starts over from there.
+  private async unfinished(runs: Run[], stepId: string, index: number, tx: any) {
+    const latest = runs.filter(r => r.stepId === stepId && r.flowStage === index && r.planVersion === 0).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    for (const r of latest) {
+      if (r.status !== 'failed' || r.error === 'cancelled' || r.error === 'replaced_by_manual') return null;
+      const got = await this.partialOf(r, tx);
+      if (got) return { content: got.content.slice(0, 30000), ...(got.savedAt ? { savedAt: got.savedAt } : {}) };
+    }
+    return null;
   }
   async authorized(actor: string, project: string) {
     if (!project) return fail(systemMessageText('taskExecution.executionAuthorizationExpired'), 403);
@@ -240,7 +261,8 @@ export class TaskService {
     const index = w.stageIndex ?? 0, stage = w.flow!.stages[index], repo = (await this.agents.doc(project, tx)).repo || null;
     if (!repo && !withoutRepo(w, stage) && !articleTask(w) && !(this.p.demoConfiguration?.enabled)) return fail(systemMessageText('taskExecution.connectRepositoryUnderDataSources'), 409);
     if (!w.humanOwnerId) return fail(systemMessageText('taskExecution.assignOwnerFirst'), 409);
-    if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail(systemMessageText('taskExecution.runInProgress'), 409);
+    const runs = await this.list('run', project, taskId, tx) as Run[];
+    if (runs.some(active)) return fail(systemMessageText('taskExecution.runInProgress'), 409);
     const context = await this.p.project(project);
     const content = await this.contentOf(project, w, tx);
     const reviews = await this.list('review', project, taskId, tx);
@@ -254,7 +276,8 @@ export class TaskService {
     const skills = await this.p.skills?.forAgent(project, stage.skills || []) || [];
     const resultKind = mode === 'plan' ? (w.playbookId === 'community-reply' ? 'communityReply' : w.playbookId === 'content-outline' ? 'content' : 'research') : undefined;
     const article = mode === 'article' ? { article: await this.articleFlow.runInput(project, w, tx), delivery: w.delivery } : {}, protectedPaths = mode === 'build' ? this.articleFlow.ownedTemplates(project) : [];
-    const input = serializeTaskInput({ resultKind, requiresRepository: !withoutRepo(w, stage) && !articleTask(w), ...flowRunInput(context, task, w, index, content, reviews), knowledge, skills, mode, step, repo: articleTask(w) ? null : repo, branch, taskId, title: task.title, ...(data ? { data } : {}), ...article, ...(protectedPaths.length ? { protectedPaths } : {}) });
+    const unfinished = await this.unfinished(runs, stage.key, index, tx);
+    const input = serializeTaskInput({ resultKind, requiresRepository: !withoutRepo(w, stage) && !articleTask(w), ...flowRunInput(context, task, w, index, content, reviews), knowledge, skills, mode, step, repo: articleTask(w) ? null : repo, branch, taskId, title: task.title, ...(data ? { data } : {}), ...article, ...(protectedPaths.length ? { protectedPaths } : {}), ...(unfinished ? { unfinished } : {}) });
     const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, baseRejectedAt: w.results[index]?.rejectedAt, ownerId: w.humanOwnerId, actor, inputVersion: 1, capabilitySnapshot: mode === 'plan' ? ['repo.read'] : mode === 'article' ? ['article.draft'] : ['repo.read', 'repo.write', 'pr.open'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'configured-agent' }, flowStage: index, mode, branch, ...extra };
     run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
     await this.put(this.key('run', project, taskId, run.id), run, tx);
@@ -688,7 +711,8 @@ export class TaskService {
               if (typeof tx?.afterCommit === 'function') tx.afterCommit(save); else save();
             }
             if (v.next) {
-              // Hand-over: the accepted document becomes the brief of a new task with the next playbook (not started).
+              // Hand-over: the accepted document becomes the brief of a new task with the next playbook, started once this
+              // approval is committed (startHandedOver).
               if (w.stage !== 'done' || w.playbook?.kind !== 'plan' || !w.playbook.next.includes(v.next) || w.nextTaskId) return fail(systemMessageText('taskExecution.stepCannotHandedAnotherPlaybook'), 409);
               const p = await this.playbooks.get(project, v.next, tx), accepted = w.results[index - 1]!;
               const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: `${p.name}：${task.title}`.slice(0, 200), brief: systemMessageText('messages.taskBriefDocumentDeliveredTask', { 0: task.title, 1: accepted.content }).slice(0, 30000), status: systemMessageText('common.pending'), evidence: { source: systemMessageText('taskExecution.chainedTask'), insight: task.evidence?.insight || null, context: task.evidence?.context || null, ...foundBy(task.evidence), handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content }, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
@@ -806,7 +830,37 @@ export class TaskService {
       await this.save(task, w, tx); await this.put(opKey, { hash, at, actor }, tx);
       return this.view(project, taskId, tx);
     });
+    if (v.command === 'approveStage' && v.next && data.work?.nextTaskId) {
+      await this.startHandedOver(project, String(data.work.nextTaskId), actor, actorName);
+      return this.withAgent(project, await this.lock(project, taskId, tx => this.view(project, taskId, tx)), actor);
+    }
     return this.withAgent(project, data, actor);
+  }
+  // Accept and start (2026-10-24 user decision): the task an accepted document is handed over to starts at once with
+  // what its start card preselects (shared/task-start.ts): the playbook just chosen, the project's default Agent or the
+  // only one, and the default publishing target. It runs the start card's commands, each checked as usual, after the
+  // approval is committed; whatever cannot be decided leaves the task at Start after review, whose card says what is
+  // missing. Reads of Agents and targets stay outside the task lock. A failure here never undoes the approval.
+  private async startHandedOver(project: string, taskId: string, actor: string, actorName: string) {
+    try {
+      const task = await this.task(project, taskId), w = projectWork(task);
+      if (w.flow || w.plan || w.stage !== 'plan' || w.cancelledAt || w.archivedAt || !w.playbookId) return;
+      const p = await this.playbooks.get(project, w.playbookId), stages = stagesFor(p), first = stages[0];
+      const data = { task, work: w, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), agent: await this.agents.status(project, w.agentId, actor) };
+      const found = lookupMatters(data, p.id) ? await Promise.resolve(this.p.articleTargets.match(project, pageUrlsOf(data))).catch(() => ({ article: null, unchecked: true })) : undefined;
+      const changes = p.kind === 'build', translate = changes && data.articleTargets.length > 0 && translatesArticle(p), needsRepository = first?.kind === 'agent' && !(first.mode === 'analyze' && !stages.some(changesRepo));
+      if (startBlockers(data, { playbookId: p.id, changes, translate, needsRepository, simulated: Boolean(this.p.demoConfiguration?.enabled), found }).length) return;
+      const plan = changes && data.articleTargets.length ? deliveryPlan(data, defaultDelivery(data, p.id, found, translate), translate) : { unlink: false, link: undefined, delivery: undefined };
+      let revision = w.revision;
+      const run = async (command: string, body: object = {}) => { revision = (await this.updateTask(project, { taskId, revision, requestId: randomUUID(), command, ...body }, actor, actorName)).work.revision; };
+      const agent = startAgent(data);
+      if (agent.save) await run('setAgent', { agentId: agent.save });
+      if (plan.unlink) await run('linkArticle', { targetId: null });
+      if (plan.link) await run('linkArticle', plan.link);
+      await run('startTask', { playbookId: p.id, ...(plan.delivery ? { delivery: plan.delivery } : {}) });
+    } catch (e: any) {
+      this.p.app?.logger?.warn?.('NocoReach could not start a handed-over task', { projectId: project, taskId, message: e?.message });
+    }
   }
   async claim(run: Run, opts: { runtimeRunId: string }): Promise<Run | null> {
     return this.lock(run.projectId, run.taskId, async tx => {
@@ -834,7 +888,7 @@ export class TaskService {
       return fresh;
     });
   }
-  async finish(run: Run, result?: { content: string; usage?: any; pr?: any; report?: any; article?: any }, error?: string, errorDetail?: string, restartedAt?: string) {
+  async finish(run: Run, result?: { content: string; usage?: any; pr?: any; report?: any; article?: any }, error?: string, errorDetail?: string, restartedAt?: string, failure: { failureReason?: string; partial?: { content: string; report?: unknown } } = {}) {
     return this.lock(run.projectId, run.taskId, async tx => {
       const key = this.key('run', run.projectId, run.taskId, run.id), fresh: Run = await this.snapshot(key, tx);
       if (!fresh || fresh.status !== 'running') return;
@@ -849,7 +903,11 @@ export class TaskService {
         fresh.artifactId = artifact.id; fresh.usage = result.usage;
         if (!stale) { w.results[run.flowStage ?? w.step] = artifact; w.boardState=undefined; }
         else fresh.error = 'candidate_only_context_changed';
-      } else { fresh.error = error || 'agent_failed'; fresh.errorDetail = errorDetail; if (restartedAt) fresh.restartedAt = restartedAt; }
+      } else {
+        fresh.error = error || 'agent_failed'; fresh.errorDetail = errorDetail; if (restartedAt) fresh.restartedAt = restartedAt;
+        if (failure.failureReason) fresh.failureReason = failure.failureReason;
+        if (failure.partial) { fresh.partialAt = now(); await this.put(this.key('partial', run.projectId, run.taskId, run.id), { ...failure.partial, savedAt: fresh.partialAt }, tx); }
+      }
       await this.put(key, fresh, tx); w.latestRun = { id: fresh.id, status: fresh.status };
       w.history.push({ at: now(), actor: 'system', action: result ? 'runSucceeded' : 'runFailed', runId: fresh.id, artifactId: fresh.artifactId, note: fresh.error });
       // A finished run hands over to the next stage; if it cannot start, the task waits for a retry.
@@ -949,7 +1007,9 @@ export class TaskService {
     if (r.mode === 'merge') return this.finishMerge(r, v);
     if (r.mode === 'close') return this.finishClose(r, v);
     if (r.mode === 'revert') return this.finishRevert(r, v);
-    if (!v.ok) { await this.finish(r, undefined, typeof v.error === 'string' && /^[a-z_]{1,40}$/.test(v.error) ? v.error : 'agent_failed', optional(v.message || v.error, 2000), optional(v.restartedAt, 40)); return { accepted: true }; }
+    // A failure keeps the official reason and whatever content the Agent already got (its final answer with ok=false, or
+    // a result it submitted before the run failed): the task page offers it, and the step's next run continues from it.
+    if (!v.ok) { await this.finish(r, undefined, typeof v.error === 'string' && /^[a-z_]{1,40}$/.test(v.error) ? v.error : 'agent_failed', optional(v.message || v.error, 2000), optional(v.restartedAt, 40), { failureReason: optional(v.failureReason, 40), partial: typeof v.content === 'string' && v.content.trim() ? { content: text(v.content, 30000), ...(v.report ? { report: v.report } : {}) } : undefined }); return { accepted: true }; }
     let pr: any;
     if (r.mode === 'build') {
       const repo = await this.validateAgentResult(r, v), p = v.pr || {};

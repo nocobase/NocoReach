@@ -70,6 +70,7 @@ export const PROJECT_SNAPSHOTS = new Set([
   'nr-task-draft',
   'nr-task-legacy',
   'nr-task-op',
+  'nr-task-partial',
   'nr-task-plan',
   'nr-task-review',
   'nr-task-result',
