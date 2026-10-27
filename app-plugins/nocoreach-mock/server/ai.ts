@@ -12,7 +12,8 @@ export const MOCK_AI_OPERATIONS = [
   'daily-judge',
   'daily-judge-many',
   'daily-rewrite',
-  'keyword-suggest',
+  'keyword-seeds',
+  'keyword-curate',
   'ai-question-suggest',
   'knowledge-suggest',
   'memory-draft',
@@ -111,9 +112,23 @@ function fixture(
     case 'content-source-map':
       return { mappings: [] };
     case 'analysis-rule-draft':
-      return {name:'Simulated rule',source:Array.isArray(input.sources)?input.sources[0]:'site',condition:'Review saved evidence for relevant changes.',evidence:'Require saved source URLs and timestamps.'};
+      return {
+        name: 'Simulated rule',
+        source: Array.isArray(input.sources) ? input.sources[0] : 'site',
+        condition: 'Review saved evidence for relevant changes.',
+        evidence: 'Require saved source URLs and timestamps.',
+      };
     case 'analysis-rule-evaluate':
-      return {results:Array.isArray(input.rules)?input.rules.map((r:unknown)=>({ruleId:object(r).id,status:'insufficient',reason:'Simulated evaluation; no live conclusion.',evidenceIds:[]})):[]};
+      return {
+        results: Array.isArray(input.rules)
+          ? input.rules.map((r: unknown) => ({
+              ruleId: object(r).id,
+              status: 'insufficient',
+              reason: 'Simulated evaluation; no live conclusion.',
+              evidenceIds: [],
+            }))
+          : [],
+      };
     case 'analysis-rules-propose':
       return {
         explanation: `${LABEL}此项目使用模拟模式，未调用真实模型。请手动调整规则参数。`,
@@ -128,35 +143,35 @@ function fixture(
     // The normal fixture passes style validation. An explicit rewrite remains a no-op; no live fallback.
     case 'daily-rewrite':
       return { rewrites: [] };
-    case 'keyword-suggest':
+    case 'keyword-seeds':
       return {
-        groups: empty
+        seeds: empty
           ? []
           : [
-              '产品与功能词',
-              '使用场景与问题词',
-              '对比与替代词',
-              '品类与行业词',
-            ].map((name, i) => ({
-              name,
-              keywords: [
-                'demo workflow',
-                'demo project dashboard',
-                'demo reporting',
-                'demo analytics',
-              ]
-                .slice(i, i + 1)
-                .map((keyword) => ({
-                  keyword,
-                  intent: 'informational',
-                  reason: `${LABEL}固定测试关键词 ${stamp}`,
-                  page: str(
-                    list(input.pages)[i % Math.max(1, list(input.pages).length)]
-                      ?.url,
-                    500,
-                  ),
-                })),
-            })),
+              'demo workflow',
+              'demo project dashboard',
+              'demo reporting',
+              'demo analytics',
+            ],
+      };
+    // Picks from the looked-up candidates only, numbering the four groups in turn.
+    case 'keyword-curate':
+      return {
+        keywords: empty
+          ? []
+          : list(input.candidates)
+              .slice(0, Math.max(1, Number(input.pick) || 40))
+              .map((candidate, i) => ({
+                keyword: str(candidate.keyword, 80),
+                group: (i % 4) + 1,
+                relevance: 2,
+                reason: `${LABEL}固定测试关键词 ${stamp}`,
+                page: str(
+                  list(input.pages)[i % Math.max(1, list(input.pages).length)]
+                    ?.url,
+                  500,
+                ),
+              })),
       };
     case 'ai-question-suggest':
       return {

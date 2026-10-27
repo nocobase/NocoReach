@@ -32,8 +32,15 @@ vi.mock('../../client/lib/nocoreach-api', () => ({
   nocobaseClient: {
     wrapRequests: () => {},
     action: vi.fn(async () => ({
-      dataforseo: false,
+      dataforseo: true,
+      at: '2026-10-27T08:00:00Z',
       market: { locationCode: 2840, language: 'en' },
+      seeds: ['seed one'],
+      stats: { found: 10, picked: 2, minVolume: 50 },
+      digs: [],
+      running: null,
+      maxUsd: 0.24,
+      minVolume: 50,
       items: [
         {
           id: 'product',
@@ -43,7 +50,7 @@ vi.mock('../../client/lib/nocoreach-api', () => ({
           intent: null,
           page: null,
           site: null,
-          metrics: null,
+          metrics: { volume: 90, difficulty: 10, cpc: null, intent: null },
         },
         {
           id: 'comparison',
@@ -53,7 +60,7 @@ vi.mock('../../client/lib/nocoreach-api', () => ({
           intent: null,
           page: null,
           site: null,
-          metrics: null,
+          metrics: { volume: 90, difficulty: 10, cpc: null, intent: null },
         },
       ],
     })),

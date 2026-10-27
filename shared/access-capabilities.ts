@@ -283,7 +283,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     'nrDomains.run',
     ...list('nrGitHubTrends', ['setTopics', 'refresh']),
     ...list('nrKeywordDetail', ['site', 'save', 'market', 'serp']),
-    ...list('nrKeywordSuggest', ['suggest', 'save', 'lookup']),
+    ...list('nrKeywordSuggest', ['suggest', 'save', 'estimate', 'seeds']),
     'nrLighthouse.run',
     ...list('nrRankTracking', ['add', 'remove', 'check']),
   ],
