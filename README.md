@@ -146,7 +146,7 @@ Open the address printed in the terminal and sign in with the initial administra
 3. In AI team, configure models, connect a Runner and choose the default agent;
 4. Open Insights to see the daily analysis.
 
-To try the product without any real accounts, start a demo environment with [simulated data](docs/MOCK-DATA.md). For production deployment, see [Build and deploy](docs/APP-TEMPLATE.md).
+To try the product without any real accounts, start a demo environment with [simulated data](docs/MOCK-DATA.md). For production deployment, see [Build and deploy](docs/APP-TEMPLATE.md). SQLite is the default; see [Multi-database deployment](docs/DATABASE-DEPLOYMENT.md) for PostgreSQL and MySQL preparation, configuration and verification.
 
 ## Built on NocoBase 3
 
@@ -154,9 +154,10 @@ NocoReach is a [NocoBase 3](https://www.nocobase.com) application. Accounts, per
 
 ## Documentation
 
-| Document                                 | Contents                                             |
-| ---------------------------------------- | ---------------------------------------------------- |
-| [Development guide](docs/DEVELOPMENT.md) | Code structure and conventions                       |
-| [Simulated data](docs/MOCK-DATA.md)      | Run a demo or test environment without real accounts |
-| [Build and deploy](docs/APP-TEMPLATE.md) | Configuration, builds and Docker deployment          |
-| [Changelog](CHANGELOG.md)                | What changed in each release                         |
+| Document                                                 | Contents                                                                           |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| [Development guide](docs/DEVELOPMENT.md)                 | Code structure and conventions                                                     |
+| [Simulated data](docs/MOCK-DATA.md)                      | Run a demo or test environment without real accounts                               |
+| [Build and deploy](docs/APP-TEMPLATE.md)                 | Configuration, builds and Docker deployment                                        |
+| [Multi-database deployment](docs/DATABASE-DEPLOYMENT.md) | PostgreSQL and MySQL drivers, connection configuration and deployment verification |
+| [Changelog](CHANGELOG.md)                                | What changed in each release                                                       |

@@ -135,6 +135,7 @@
     "docs/ACCESS-CUTOVER.md",
     "docs/MEMBERS.zh-CN.md",
     "docs/API-KEYS.zh-CN.md",
+    "docs/DATABASE-DEPLOYMENT.md",
     "docs/DATABASE-DEPLOYMENT.zh-CN.md",
     "CLAUDE.md",
     "playwright.config.ts",

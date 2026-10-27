@@ -1,5 +1,7 @@
 # 使用 PostgreSQL 或 MySQL 部署 NocoReach
 
+[English](DATABASE-DEPLOYMENT.md) | 中文
+
 NocoReach 默认使用 SQLite，也支持 PostgreSQL 和 MySQL。数据库回归测试使用 PostgreSQL 16、MySQL 8.4；其他版本需要在实际环境中另行验证。
 
 下面以新建数据库、单个 NocoReach 应用进程为例。更换数据库不会搬运已有数据；把 SQLite 文件复制到新服务器也不会导入 PostgreSQL 或 MySQL。已有系统切换数据库，需要单独安排数据迁移，并保留原数据库、`storage/` 和加密密钥的备份。
