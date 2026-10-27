@@ -1,10 +1,5 @@
 # NocoReach Changelog
 
-## Unreleased — README: the website's video and introduction
-
-- Shorten the English, Chinese and Japanese READMEs to what the NocoBase website's NocoReach page says: the slogan and category line, the intro video, the website's introduction and its five-step loop, one screenshot, and the basic installation. Link the online demo and the website page, and state the Apache-2.0 license.
-- Keep only the Insights screenshot (the website's figure, fictional Acme data, as WebP) and remove the older PNG screenshots.
-
 ## Unreleased — Accept and start
 
 - Accepting a document with a next playbook (Continue with) now starts the new task: the button reads Accept and start "Write blog post", and the page goes to the new task with its Agent already working. It starts with what its start card would preselect: the playbook just chosen, the project's default Agent or the only one available, and the default publishing target or the article found from its page (`shared/task-start.ts`, used by both the start card and the server). The article review before publishing is unchanged.
