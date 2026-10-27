@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Insights' metric cards cover the last 7 days
+
+- The metric cards on Insights show the last 7 days against the 7 before ("Last 7 days vs the previous 7"), not 28: the analysis runs every day, so the cards show this week, a whole week against the one before. Each Google source still ends at its own last day with data.
+- A card opens its page on the same 7 days (`?days=7`), so the numbers there match the card.
+- When the week before had fewer than 10, the change is a count ("↑ 2") instead of a percentage ("↑ 200%" for 1 → 3), from zero too ("↑ 4" for 0 → 4, which had no comparison). The sparkline takes the same colour. Today's summary no longer names such a number among the ones that moved most.
+
 ## Unreleased — Articles are written in their own language
 
 - Every article run says which language the article is written in: the languages chosen at start or, with none chosen, the publishing target's first language as the primary, every language written at once as before. The Agent's rules keep the two languages apart: the project's language is for its notes, summary and reports; the article is written in its primary language whatever the project, the brief or the outline use (2026-10-27, T-47: a Chinese-only new article for a target whose first language is English).

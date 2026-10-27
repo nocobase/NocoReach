@@ -250,10 +250,12 @@ const metric = (
   key: string,
   value: number | null,
   change: number | null = null,
+  previous: number | null = null,
 ) => ({
   key,
   value,
   change,
+  previous,
 });
 function BadgeProbe() {
   const insights = useNavBadge('insights');
@@ -519,7 +521,19 @@ it('the tiles show at most five numbers that have data, the summary names the on
   await within(tiles).findByText('1,200');
   expect(within(tiles).getAllByRole('link')).toHaveLength(5);
   // The cards say what their numbers and changes cover.
-  expect(within(tiles).getByText('strategy.metricWindow:28')).toBeTruthy();
+  expect(within(tiles).getByText('strategy.metricWindow:7')).toBeTruthy();
+  // Each card opens its page on the same 7 days.
+  expect(
+    within(tiles)
+      .getAllByRole('link')
+      .map((l) => l.getAttribute('href')),
+  ).toEqual([
+    '/seo-opportunities?days=7',
+    '/seo-opportunities?days=7',
+    '/website?days=7',
+    '/website/conversion?days=7',
+    '/data/github?days=7',
+  ]);
   // Downloads is the sixth number: it waits under All data, and is not named in the summary either.
   expect(within(tiles).queryByText('4,000')).toBeNull();
   expect(within(tiles).getByText('+30')).toBeTruthy();
@@ -547,6 +561,38 @@ it('the tiles show at most five numbers that have data, the summary names the on
   // No Refresh beside the tiles; All data is gone.
   expect(within(tiles).queryByRole('button')).toBeNull();
   expect(screen.queryByText('strategy.allData')).toBeNull();
+});
+
+it('a number with fewer than 10 in the week before shows its change as a count, and the summary leaves it out', async () => {
+  fixture.cards = [
+    {
+      id: 'gsc',
+      metrics: [
+        metric('clicks', 1200, -0.31, 1739),
+        metric('impressions', 54000, 0.02, 52941),
+      ],
+      series: [],
+    },
+    { id: 'github', metrics: [metric('stars', 3, 2, 1)], series: [] },
+    { id: 'discourse', metrics: [metric('topics', 4, null, 0)], series: [] },
+  ];
+  setup();
+  const tiles = await screen.findByRole('region', {
+    name: 'strategy.keyMetrics',
+  });
+  await within(tiles).findByText('1,200');
+  // 1 → 3 is "↑ 2", not "↑ 200%"; 0 → 4 is "↑ 4", where a percentage has no answer.
+  expect(within(tiles).getByText('↓ 31%')).toBeTruthy();
+  expect(within(tiles).getByText('↑ 2')).toBeTruthy();
+  expect(within(tiles).getByText('↑ 4')).toBeTruthy();
+  expect(within(tiles).queryByText('↑ 200%')).toBeNull();
+  expect(within(tiles).queryByText('strategy.noComparisonYet')).toBeNull();
+  const brief = screen.getByRole('group', { name: 'strategy.todayBrief' });
+  expect(
+    within(brief)
+      .getAllByRole('link')
+      .map((l) => l.textContent),
+  ).toEqual(['common.searchClicks ↓ 31%', 'strategy.watchingChip:1']);
 });
 
 it('the subtitle says how the insights are analyzed, linking the rules and the schedule', async () => {
