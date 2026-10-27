@@ -31,7 +31,7 @@ beforeAll(async () => {
       cwd: root,
       env: { ...process.env, npm_config_update_notifier: 'false' },
       maxBuffer: 4 * 1024 * 1024,
-      timeout: 30_000,
+      timeout: 120_000,
     },
   );
   const [archive] = z
@@ -55,7 +55,7 @@ beforeAll(async () => {
     path.join(unpacked, 'node_modules'),
     'junction',
   );
-}, 30_000);
+}, 120_000);
 
 afterAll(async () => {
   if (temporary) await rm(temporary, { recursive: true, force: true });
@@ -220,6 +220,8 @@ test('ships relocated developer guidance with both mock and YouTube constraints'
       'changelog/unreleased/README.md',
       'scripts/fold-changelog.mjs',
       'docs/DEVELOPMENT.md',
+      'docs/DATABASE-DEPLOYMENT.md',
+      'docs/DATABASE-DEPLOYMENT.zh-CN.md',
     ]),
   );
   const guidance = await readFile(

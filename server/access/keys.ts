@@ -279,6 +279,7 @@ export class ReachKeys {
       .where('targetId', '=', keyId)
       .where('action', 'in', ['key.create', 'key.rotate', 'key.revoke'])
       .orderBy('createdAt', 'desc')
+      .orderBy('id', 'desc')
       .limit(100)
       .execute();
   }
@@ -594,6 +595,7 @@ export class ReachKeys {
       .selectFrom('nrAccessEvents')
       .selectAll()
       .orderBy('createdAt', 'desc')
+      .orderBy('id', 'desc')
       .limit(limit)
       .execute();
   }
