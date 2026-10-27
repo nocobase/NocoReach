@@ -1,5 +1,13 @@
 # NocoReach Changelog
 
+## Unreleased — Articles are written in their own language
+
+- Every article run says which language the article is written in: the languages chosen at start or, with none chosen, the publishing target's first language as the primary, every language written at once as before. The Agent's rules keep the two languages apart: the project's language is for its notes, summary and reports; the article is written in its primary language whatever the project, the brief or the outline use (2026-10-27, T-47: a Chinese-only new article for a target whose first language is English).
+- A new article needs a title and body in the task's primary language, whichever the person chose at start, instead of always the target's first; another target is checked once the translations are in. A new article with Chinese chosen as its primary on the NocoBase CMS no longer fails its first run.
+- A draft a target cannot take comes back in words, naming the languages: "A new article needs a title and body in English (en); this draft only has: Chinese (zh)." instead of `locale:en`, and likewise for a language the target does not take, a field it does not store, the address, lengths and the format, with the other target's name in front. The Agent is told to rewrite in the required language and submit again rather than report a setting to fix. The article editor and Review again show the same messages in the reader's language, and the editor asks for the primary language's title and body.
+- The start card and Accept and start send the languages chosen even when the person keeps only one of several: until now a single language was dropped, and the task wrote every language with the target's first as the primary.
+- Copy in all ten UI languages (`articles.draft.*`).
+
 ## Unreleased — Accept and start
 
 - Accepting a document with a next playbook (Continue with) now starts the new task: the button reads Accept and start "Write blog post", and the page goes to the new task with its Agent already working. It starts with what its start card would preselect: the playbook just chosen, the project's default Agent or the only one available, and the default publishing target or the article found from its page (`shared/task-start.ts`, used by both the start card and the server). The article review before publishing is unchanged.

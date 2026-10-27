@@ -524,6 +524,9 @@ export function ArticleEditor({
   const locales = [
     ...new Set([...(target?.locales || []), ...Object.keys(a.draft.locales)]),
   ];
+  // A new article needs a title and body in the task's primary language, as the server checks (cleanDraft).
+  const chosen = data.work?.delivery?.locales?.[0],
+    primary = chosen && target?.locales.includes(chosen) ? chosen : locales[0];
   // Kept in the task draft store: navigation asks before discarding it, like the other drafts on this page. One
   // draft per version, so an edit left on an older version never replaces a newer one.
   const [raw, setRaw, clear] = useTaskDraft(
@@ -544,11 +547,10 @@ export function ArticleEditor({
   function check(f: EditForm) {
     const e: Record<string, string> = {};
     if (create && !SLUG.test(f.slug)) e.slug = $t('articleTask.slugInvalid');
-    const first = locales[0];
-    if (create && !f.locales[first]?.title.trim())
-      e[`${first}.title`] = $t('articleTask.titleRequired');
-    if (create && !f.locales[first]?.body.trim())
-      e[`${first}.body`] = $t('articleTask.bodyRequired');
+    if (create && !f.locales[primary]?.title.trim())
+      e[`${primary}.title`] = $t('articleTask.titleRequired');
+    if (create && !f.locales[primary]?.body.trim())
+      e[`${primary}.body`] = $t('articleTask.bodyRequired');
     for (const l of locales) {
       if (f.locales[l].title.length > ARTICLE_LIMITS.title)
         e[`${l}.title`] = $t('articleTask.tooLong', {
@@ -668,7 +670,7 @@ export function ArticleEditor({
             </legend>
             {ARTICLE_FIELDS.map((f) => {
               const key = `${l}.${f}`,
-                required = create && l === locales[0] && f !== 'description';
+                required = create && l === primary && f !== 'description';
               const props = {
                 value: form.locales[l][f],
                 onChange: (e: { target: { value: string } }) =>
