@@ -11,7 +11,13 @@ import { healthText, loadHealth, type HealthItem } from '../data-health';
 import { WAITING_TASKS_URL } from '../task-waiting';
 import type { Work } from '../task-execution-types';
 import { RequestBlock, type RequestState } from './request-block';
-import { Sparkline, chipOf, percent, type MetricItem } from './insights-view';
+import {
+  Sparkline,
+  analysisMetrics,
+  chipOf,
+  percent,
+  type MetricItem,
+} from './insights-view';
 import { citedSignals, oppNo, taskNo, type Row } from './board';
 import { dayOf, type Day, type Feed, type Line } from './feed';
 import { TASK_TAG } from './task-standing';
@@ -205,21 +211,18 @@ function Bubble({
 function Summary({
   batch,
   pending,
-  metrics,
   watching,
 }: {
   batch?: InsightBatch;
   pending: number;
-  metrics: MetricItem[];
   watching: number;
 }) {
   const [open, setOpen] = useState(false);
-  // The key numbers (the tiles) that moved by 5% or more, the largest two first; a number with a small base is left
-  // out, its percentage being noise.
-  const notes = (batch?.observations || []).map((o) => $legacyText(o)),
-    moved = metrics
-      .filter((i) => i.value != null)
-      .slice(0, 5)
+  // The key numbers that moved by 5% or more over the analysis's own period, the largest two first, from the figures
+  // it read (analysisMetrics), not the tiles; a number with a small base is left out, its percentage being noise.
+  const days = batch?.evidence?.periodDays,
+    notes = (batch?.observations || []).map((o) => $legacyText(o)),
+    moved = analysisMetrics(batch?.evidence)
       .filter((i) => !smallBase(i) && Math.abs(i.change ?? 0) >= 0.05)
       .sort((a, b) => Math.abs(b.change!) - Math.abs(a.change!))
       .slice(0, 2);
@@ -235,7 +238,13 @@ function Summary({
       {(moved.length > 0 || watching > 0) && (
         <div className='mt-1.5 flex flex-wrap gap-1.5'>
           {moved.map((i) => (
-            <Link key={i.label} to={i.to}>
+            <Link
+              key={i.label}
+              to={i.to}
+              title={
+                days ? $t('strategy.metricWindow', { 0: days }) : undefined
+              }
+            >
               <Tag tone={i.change! >= 0 ? 'green' : 'red'}>
                 {i.label} {changeText(i)}
               </Tag>
@@ -581,7 +590,6 @@ export function Today({
   state,
   rows,
   feed,
-  metrics,
   generating,
   projectId,
   tasks,
@@ -591,7 +599,6 @@ export function Today({
   state: StrategyState;
   rows: Row[];
   feed: Feed;
-  metrics: MetricItem[];
   generating: boolean;
   projectId: number;
   tasks: ReactNode;
@@ -620,7 +627,6 @@ export function Today({
         <Summary
           batch={batch}
           pending={feed.pending.length}
-          metrics={metrics}
           watching={watching}
         />
         {(feed.pending.length > 0 || feed.decided.length > 0) && (
