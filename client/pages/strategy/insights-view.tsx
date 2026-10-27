@@ -9,7 +9,7 @@ import {Button} from '#components/ui/button';
 import {Section} from '#components/reach/page';
 import {Tag,type Tone} from '#components/reach/tag';
 import {getSourceNames,type Row} from './board';
-import type {StrategyState,Signal,WatchRecord} from './model';
+import type {StrategyState,Signal,WatchRecord,Evidence,SourceSummary} from './model';
 import {type Work} from '../task-execution-types';
 import {DetailDrawer} from '../detail-drawer';
 import {DraftHandOffDialog,type TaskDraft} from '../keyword-hand-off';
@@ -69,6 +69,18 @@ export function metricItems(cards?:SourceCard[],days?:number):MetricItem[]{
  const gsc=by.get('gsc'),ga4=by.get('ga4');
  return [item($t('common.searchClicks'),gsc,'clicks','/seo-opportunities'),item($t('common.searchImpressions'),gsc,'impressions','/seo-opportunities'),item($t('strategy.sessions'),ga4,'sessions','/website'),item($t('common.keyEvents'),ga4,'conversions','/website/conversion'),
   ...([['github','stars',$t('common.newStars'),'/data/github',true],['packages','downloads',$t('common.downloads'),'/data/downloads',false],['discourse','topics',$t('strategy.newForumTopics'),'/data/community',false],['mentions','mentions',$t('common.hackerNewsMentions'),'/data/hackernews',false],['reddit','posts',$t('strategy.newRedditPosts'),'/data/reddit',false]] as const).flatMap(([id,key,label,to,signed])=>{const c=by.get(id);return c?[item(label,c,key,to,signed,c.series)]:[];})];
+}
+// The numbers a day's analysis read (its evidence: Search Console and GA4 over its own period against the period
+// before), for the chips of that day's message. They come from the analysis, not the tiles above, so the chips and the
+// notes the AI wrote from the same figures agree, and an earlier day keeps its own (2026-10-27 user report: the tiles
+// went to 7 days in #291 and the chips said "Search impressions ↑ 35%" beside notes reading -21.3% over 28 days). A
+// figure the evidence does not carry, or cannot compare, is left out rather than taken from another window.
+export function analysisMetrics(evidence?:Evidence):MetricItem[]{
+ const days=evidence?.periodDays;
+ const item=(label:string,source:SourceSummary|undefined,key:string,to:string):MetricItem=>{const m=source?.metrics?.[key],ok=Boolean(m?.comparable&&m.current!=null&&m.previous!=null);
+  return {label,value:ok?m!.current:null,previous:ok?m!.previous:null,change:ok&&m!.percent!=null?m!.percent/100:null,to:days?`${to}?days=${days}`:to};};
+ const search=evidence?.summary?.search,web=evidence?.summary?.web;
+ return [item($t('common.searchClicks'),search,'clicks','/seo-opportunities'),item($t('common.searchImpressions'),search,'impressions','/seo-opportunities'),item($t('strategy.sessions'),web,'sessions','/website'),item($t('common.keyEvents'),web,'conversions','/website/conversion')].filter(i=>i.value!=null);
 }
 export const percent=pct;
 // 当前状况 (was 各方面一览, then 需要留意 — 2026-10-08 user: “留意” read like the AI's 先观察): how things stand now, as

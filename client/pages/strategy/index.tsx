@@ -396,7 +396,6 @@ function Insights({
           state={state}
           rows={rows}
           feed={feed}
-          metrics={metrics}
           generating={generating}
           projectId={projectId}
           busy={busy || generating}

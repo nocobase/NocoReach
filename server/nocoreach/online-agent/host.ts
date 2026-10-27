@@ -229,7 +229,8 @@ export function createNocoReachOnlineHost(
   };
 }
 
-/** The key numbers of the last 28 days against the 28 before, as the Insights tiles show them; empty when unknown. */
+/** The key numbers of the last 28 days against the 28 before, the daily analysis's period (the Insights tiles show
+ * 7 days since #291); each total states its period. Empty when unknown. */
 async function metricTotals(
   plugin: NocoReachRuntime['plugin'],
   projectId: string,
