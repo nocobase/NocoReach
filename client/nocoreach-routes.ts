@@ -1,4 +1,5 @@
 import { agentsRoute, runtimesRoute, modelsRoute, usageRoute } from '@nocobase/app-plugin-agents/client/routes';
+import { demoModeRoutes } from '@nocobase/app-plugin-demo-mode/client';
 // NocoReach's business pages keep the classic portal paths (apps/portal/src/routes.tsx), so links inside them keep
 // working. The top menu is 洞察 → 机会 → 任务, 网站与产品, 搜索与市场, 社区, AI 团队 and 设置. Settings lists Members,
 // Roles, API keys and the other settings as peers. Business pages use
@@ -235,7 +236,9 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
       ],
     },
     page('data-connections', '/connections', () => import('./pages/source-connections.js'), { title: nav('connections'), icon: Plug, order: 1 }),
-    page('demo-data', '/demo-data', () => import('./pages/demo-management/index.js'), { title: nav('demoData'), icon: DatabaseZap, order: 7 }),
+    ...demoModeRoutes([
+      page('demo-data', '/demo-data', () => import('./pages/demo-management/index.js'), { title: nav('demoData'), icon: DatabaseZap, order: 7 }),
+    ]),
     { ...page('proxy-profiles', '/proxy-profiles', () => import('./pages/network.js'), { title: nav('proxyProfiles'), icon: Globe2, order: 5 }), children: [
       { name: 'network-proxy', path: 'proxy', componentLoader: () => import('./pages/proxy-profiles/proxy-form.js') },
       { name: 'proxy-profile-new', path: 'new', componentLoader: () => import('./pages/proxy-profiles/edit.js') },

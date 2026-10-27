@@ -14,13 +14,16 @@ import type {
 
 // Shared by the article parts of the task page (article-start.tsx, article-review.tsx, article-release.tsx).
 
-// The start defaults (where the change goes, the pages a task is about) live in shared/task-start.ts: the server
-// starts a handed-over task with the same choice the start card preselects.
+// The start defaults (where the change goes, the pages a task is about, the languages it writes) live in
+// shared/task-start.ts: the server starts a handed-over task with the same choice the start card preselects.
 export {
   REPO,
+  choiceLocales,
   defaultDelivery,
   deliveryPlan,
   pageUrlsOf,
+  presentLocales,
+  translationLocales,
   type ArticleFound,
   type DeliveryChoice,
 } from '../../../shared/task-start.js';
@@ -112,6 +115,10 @@ export function articleLanguages(data: TaskData, a: ArticleProposal) {
     base,
     locales,
     missing: all.filter((l) => !locales.includes(l)),
+    // The languages translated from the primary once it is approved (2026-10-24); none while or after translating.
+    pending: translationPending(data)
+      ? data.work.delivery!.locales!.slice(1)
+      : [],
     isNew,
     changed: (l: string) => a.changes.some((c) => c.startsWith(`${l}.`)),
     versions: (l: string) => !isNew && Boolean(base?.locales[l]),
@@ -122,6 +129,12 @@ export function articleLanguages(data: TaskData, a: ArticleProposal) {
   };
 }
 export type ArticleLanguages = ReturnType<typeof articleLanguages>;
+
+/** Whether the task's other languages are still to be translated from its primary one, which waits for approval. */
+export const translationPending = (data: TaskData) => {
+  const d = data.work?.delivery;
+  return Boolean(d?.locales && d.locales.length > 1 && !d.translateFrom);
+};
 
 export function articleContext(
   data: TaskData,

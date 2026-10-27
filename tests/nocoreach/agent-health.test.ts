@@ -26,7 +26,12 @@ const run = (
   executions: [execution('CheeseMacBook-Pro')],
 });
 
-function store(runs: ReturnType<typeof run>[]) {
+function store(
+  runs: (ReturnType<typeof run> & {
+    subject?: { kind: string; id: string };
+  })[],
+  taskRuns: Record<string, { status: string; error?: string }> = {},
+) {
   const list = vi.fn(async () => runs);
   const agents = {
     tx: { read: () => 'connection' },
@@ -49,7 +54,12 @@ function store(runs: ReturnType<typeof run>[]) {
   };
   const host = {
     p: { agents },
-    snapshot: async () => ({ revision: 1, agentId: 'claude', repo: null }),
+    key: (kind: string, project: string, task: string, id = '') =>
+      `nr-task-${kind}:${project}:${task}:${id}`,
+    snapshot: async (key: string) =>
+      key.startsWith('nr-task-run:')
+        ? (taskRuns[key] ?? null)
+        : { revision: 1, agentId: 'claude', repo: null },
     put: async () => undefined,
     lock: async () => undefined,
   };
@@ -112,6 +122,43 @@ describe('local agent health', () => {
     });
     expect(await store([]).store.health('claude', admin)).toEqual({
       state: 'unknown',
+    });
+  });
+
+  // T-35 (2026-10-24): an Agent that fails a step itself answers ok=false, so the Agents plugin records a completed run
+  // while the task says it failed.
+  it('reads how the task ended for a run the Agent itself failed', async () => {
+    const own = (id: string) => ({
+      ...run('completed'),
+      subject: { kind: 'nocoreachTask', id: `1:7:${id}` },
+    });
+    const missing = { status: 'failed', error: 'missing_tool' };
+    expect(
+      await store([own('a'), own('b'), own('c')], {
+        'nr-task-run:1:7:a': missing,
+        'nr-task-run:1:7:b': missing,
+        'nr-task-run:1:7:c': { status: 'succeeded' },
+      }).store.health('claude', admin),
+    ).toMatchObject({
+      state: 'attention',
+      group: 'missingTool',
+      count: 2,
+      runnerName: 'CheeseMacBook-Pro',
+    });
+    expect(
+      await store([own('a')], {
+        'nr-task-run:1:7:a': { status: 'failed', error: 'tool_signed_out' },
+      }).store.health('claude', admin),
+    ).toMatchObject({ state: 'attention', group: 'toolSignIn', count: 1 });
+    // Any other failure the Agent reports is the task's: the agent is fine, its last task did not finish.
+    expect(
+      await store([own('a')], {
+        'nr-task-run:1:7:a': { status: 'failed', error: 'agent_failed' },
+      }).store.health('claude', admin),
+    ).toEqual({
+      state: 'ok',
+      at: '2026-10-21T11:30:38.000Z',
+      outcome: 'failed',
     });
   });
 

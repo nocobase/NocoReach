@@ -50,7 +50,13 @@ export type AgentHealth =
   | { state: 'ok'; at: string | null; outcome: 'completed' | 'failed' }
   | {
       state: 'attention';
-      group: 'toolLogin' | 'quota' | 'model' | 'setup';
+      group:
+        | 'toolLogin'
+        | 'quota'
+        | 'model'
+        | 'setup'
+        | 'missingTool'
+        | 'toolSignIn';
       count: number;
       at: string | null;
       runnerName: string | null;
@@ -128,12 +134,27 @@ function healthText(health: Extract<AgentHealth, { state: 'attention' }>) {
         ? [$t('agentRoles.quota', { 0: anyTool }), $t('agentRoles.quotaNext')]
         : health.group === 'model'
           ? [$t('agentRoles.model', { 0: anyTool }), $t('agentRoles.modelNext')]
-          : [
-              machine
-                ? $t('agentRoles.setupOn', { 0: machine })
-                : $t('agentRoles.setup'),
-              $t('agentRoles.setupNext'),
-            ];
+          : // A tool the tasks need that the Agent reported missing or not signed in on the computer (2026-10-24).
+            health.group === 'missingTool'
+            ? [
+                machine
+                  ? $t('agentRoles.missingToolOn', { 0: machine })
+                  : $t('agentRoles.missingTool'),
+                $t('agentRoles.missingToolNext'),
+              ]
+            : health.group === 'toolSignIn'
+              ? [
+                  machine
+                    ? $t('agentRoles.toolSignInOn', { 0: machine })
+                    : $t('agentRoles.toolSignIn'),
+                  $t('agentRoles.toolSignInNext'),
+                ]
+              : [
+                  machine
+                    ? $t('agentRoles.setupOn', { 0: machine })
+                    : $t('agentRoles.setup'),
+                  $t('agentRoles.setupNext'),
+                ];
   const failed =
     health.count > 1
       ? $t('agentRoles.failedMany', { 0: health.count, 1: why })
@@ -429,7 +450,13 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
       agent.runners.team + agent.runners.mine > 0 &&
       !sameTool(agent.modelEntries?.[0]?.tool),
   );
+  // What the computer lacks (a tool, a sign-in, its setup) fails every agent on it alike, so no switch is offered
+  // (2026-10-24 user decision); the row keeps its Settings button.
+  const shared =
+    chosen?.health?.state === 'attention' &&
+    ['missingTool', 'toolSignIn', 'setup'].includes(chosen.health.group);
   const fix = (): Action | undefined => {
+    if (shared) return undefined;
     if (onlineOption && canSaveDefault)
       return {
         label: chosen
@@ -898,7 +925,11 @@ function optionState(option: Status['options'][number]) {
         ? $t('agentRoles.optionQuota')
         : health.group === 'model'
           ? $t('agentRoles.optionModel')
-          : $t('agentRoles.optionSetup');
+          : health.group === 'missingTool'
+            ? $t('agentRoles.optionMissingTool')
+            : health.group === 'toolSignIn'
+              ? $t('agentRoles.optionToolSignIn')
+              : $t('agentRoles.optionSetup');
   return option.online
     ? $t('agentRoles.optionOnline')
     : $t('agentRoles.optionOffline');

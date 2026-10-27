@@ -277,10 +277,10 @@ test('the old task names the task it was handed over to, with where it stands, i
   const line = card.querySelector('[data-handed-over]') as HTMLElement;
   expect(line.textContent).toBe(`已交给 T-44 ${NEXT_TITLE}进行中`);
   const properties = screen.getByRole('complementary', { name: '属性' });
-  const chain = within(properties).getByRole('button', {
-    name: `下一步：T-44 ${NEXT_TITLE}`,
-  });
-  expect(chain.parentElement!.textContent).toContain('进行中');
+  const next = properties.querySelector('[data-related="next"]') as HTMLElement;
+  expect(within(next).getByRole('button').textContent).toBe(
+    `T-44${NEXT_TITLE}进行中`,
+  );
   await user.click(
     within(line).getByRole('button', { name: `T-44 ${NEXT_TITLE}` }),
   );

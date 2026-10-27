@@ -33,7 +33,6 @@ describe('app client routes', () => {
         '/agents/chat/new',
         '/agents/chat/:onlineAgentId',
         '/schedules',
-        '/demo-data',
         '/schedules/:scheduleId',
         '/schedules/:scheduleId/edit',
         '/proxy-profiles',
@@ -87,7 +86,7 @@ describe('app client routes', () => {
     // in the browser and NocoReach's policy on every action — so each one opts out as well and no page checks a stored
     // grant. A page that does check one is a grant to migrate and to give out: list it here.
     expect(pages.slice(2)).not.toHaveLength(0);
-    for (const name of REACH_PAGES)
+    for (const name of REACH_PAGES.filter((name) => name !== 'demo-data'))
       expect(pages).toContainEqual({ name, authorizedAs: name });
     expect(
       pages.filter(

@@ -1,6 +1,7 @@
 import { formatDate } from '#lib/format';
 import { type Message, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useMemo,useState,type ReactElement} from 'react';
+import {Link} from 'react-router';
 import {segmentedItemClass,segmentedListClass} from '#components/reach/segmented';
 import {ExternalLinkIcon,FileIcon,PencilIcon,PlusIcon,SearchIcon,Trash2Icon,XIcon} from 'lucide-react';
 import {useBusinessAccess} from '#hooks/use-business-access';
@@ -21,7 +22,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#
 // Skills (SPEC §6.0): how a kind of work is done, as SKILL.md (name, when to use it, how) and files that come with it. One
 // library for every project; turned on here, a Skill goes with every task for the Agent to use when it fits. A 做法 step
 // can name Skills, and that step always uses them.
-type Usage=Record<string,string[]>;
+// Each Skill's uses, one per playbook step that names it (n counts from 1, as the playbook drawer numbers its steps).
+// Shown as the playbooks' tags in the list and the drawer (a drawer tag opens the playbook and names the step on
+// hover); sentences (the delete confirmations) name them as text.
+type Use={playbookId:string;playbook:string;n:number;step:string};
+type Usage=Record<string,Use[]>;
+const usesText=(uses:Use[])=>uses.map(u=>`${u.playbook} · ${u.step}`).join('、');
+const playbooksOf=(uses:Use[])=>[...new Map(uses.map(u=>[u.playbookId,u.playbook])).entries()];
 const day=(iso:string)=>formatDate(iso);
 export default function SkillsPage(){
  const {project,error:projectError}=useProject();
@@ -29,7 +36,7 @@ export default function SkillsPage(){
  const {can:canReadLink}=useBusinessAccess('nrSkills.readLink',project?.id??null),{can:canEnable}=useBusinessAccess('nrSkills.setEnabled',project?.id??null);
  const canAdd=canCreate||canImport||(canReadLink&&canImportLink);
  const [list,setList]=useState<SkillList>(),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[q,setQ]=useState(''),[filter,setFilter]=useState(''),[creating,setCreating]=useState(false),[open,setOpen]=useState<string|null>(null),[picked,setPicked]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[notice,setNotice]=useMessageState('');
- const usage:Usage={};for(const p of localizePlaybookList(rawPlaybooks)?.playbooks||[])for(const step of p.steps)for(const ref of step.skills||[]){const key=skillFor(list?.skills||[],ref)?.id??ref;(usage[key]||=[]).push(`${p.name} · ${step.name}`);}
+ const usage:Usage={};for(const p of localizePlaybookList(rawPlaybooks)?.playbooks||[])p.steps.forEach((step,i)=>{for(const ref of step.skills||[]){const key=skillFor(list?.skills||[],ref)?.id??ref;(usage[key]||=[]).push({playbookId:p.id,playbook:p.name,n:i+1,step:step.name});}});
  const load=()=>{if(project)void skillRequest<SkillList>('list',project.id).then(setList).catch(()=>setError(() => ($t('skills.notLoadSkillsRefreshTry'))));};
  useEffect(load,[project?.id]);
  // Which 做法 steps name each Skill, from this project's playbooks.
@@ -51,12 +58,12 @@ export default function SkillsPage(){
     <Select value={filter||'all'} onValueChange={v=>setFilter(v==='all'?'':String(v))}><SelectTrigger className="w-full sm:w-40" aria-label={$t('skills.filterEnabled')}><SelectValue>{(v:string)=>v==='on'?$t('skills.enabledInProject'):v==='off'?$t('common.off'):$t('skills.all')}</SelectValue></SelectTrigger><SelectContent className="w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal"><SelectItem value="all">{$t('skills.all')}</SelectItem><SelectItem value="on">{$t('skills.enabledInProject')}</SelectItem><SelectItem value="off">{$t('common.off')}</SelectItem></SelectContent></Select>
     {canRemove&&ticked.length>0&&<span className="ml-auto flex items-center gap-2 text-sm" role="group" aria-label={$t('skills.selectedSkills')}><span className="text-muted-foreground">{$tj('skills.selected',{0:ticked.length})}</span><Button size="sm" variant="ghost" disabled={busy} onClick={()=>setPicked([])}>{$t('common.clearSelection')}</Button><Button size="sm" variant="outline" className="text-destructive" disabled={busy} onClick={()=>void removeTicked()}><Trash2Icon/>{$t('skills.deleteSelected')}</Button></span>}</div>
    {!list?<p role="status" className="text-sm text-muted-foreground">{$t('common.loadingLoading')}</p>:visible.length?<div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[40rem] table-fixed border-collapse text-sm" aria-label="Skills">
-    <colgroup>{canRemove&&<col className="w-10"/>}<col/><col className="w-56"/><col className="w-20"/><col className="w-20"/></colgroup>
+    <colgroup>{canRemove&&<col className='w-10'/>}<col/><col className='w-64'/><col className='w-20'/><col className='w-20'/></colgroup>
     <thead data-slot="table-header" className="text-xs text-muted-foreground"><tr>{canRemove&&<th className="py-2 pr-0 pl-3"><input type="checkbox" aria-label={$t('common.select')} checked={allTicked} onChange={e=>setPicked(e.target.checked?visible.map(s=>s.id):[])}/></th>}{[$t('skills.nameWhenUse'),$t('skills.usedPlaybooks'),$t('skills.attachedFiles')].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}<th className="px-3 py-2 text-left font-medium"><WithInfo help={$t('skills.projectEnablementHelp')}>{$t('skills.currentProject')}</WithInfo></th></tr></thead>
     <tbody>{visible.map(s=><tr key={s.id} data-skill-id={s.id} className="cursor-pointer border-t transition-colors hover:bg-muted/40" onClick={()=>setOpen(s.id)}>
      {canRemove&&<td className="py-2.5 pr-0 pl-3" onClick={e=>e.stopPropagation()}><input type="checkbox" aria-label={$t('common.selectValue',{0:s.name})} checked={picked.includes(s.id)} onChange={e=>setPicked(e.target.checked?[...picked,s.id]:picked.filter(x=>x!==s.id))}/></td>}
      <td className="px-3 py-2.5"><button type="button" className="block w-full truncate text-left font-mono font-medium hover:underline" onClick={e=>{e.stopPropagation();setOpen(s.id);}}>{s.name}</button><p className="truncate text-xs text-muted-foreground">{skillSummary(s)}</p></td>
-     <td className="truncate px-3 py-2.5 text-xs text-muted-foreground" title={(usage[s.id]||[]).join('、')}>{(usage[s.id]||[]).join('、')||'—'}</td>
+     <td className='px-3 py-2.5' title={usesText(usage[s.id]||[])||undefined}><UsedIn uses={usage[s.id]||[]}/></td>
      <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">{s.files.length}</td>
      <td className="px-3 py-2.5" onClick={e=>e.stopPropagation()}><Switch aria-label={$t('skills.enableProjectValue',{0:s.name})} checked={s.enabled} disabled={!canEnable} onCheckedChange={v=>void toggle(s,v)}/></td></tr>)}</tbody></table></div>
    :<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{list.skills.length?$t('skills.noMatchingSkillsMessage'):$t('skills.noSkillsYetClickNew')}</p>}
@@ -125,7 +132,13 @@ function NewSkill({projectId,canCreate,canImport,canImportLink,canReadLink,onClo
 }
 // One Skill: turn it on here, read and edit SKILL.md in place, look at, add and remove its files, delete it. What an action
 // did is said in the drawer (the page behind it is covered); deleting closes it and the page says so.
-function SkillDrawer({projectId,canEnable,canRemove,skill,usage,onClose,onToggle,onChanged}:{projectId:number;canEnable:boolean;canRemove:boolean;skill:Skill|null;usage:string[];onClose:()=>void;onToggle:(v:boolean)=>void;onChanged:(msg:Message,closed?:boolean)=>void}):ReactElement{
+function UsedIn({uses}:{uses:Use[]}):ReactElement{
+ // Whole names, wrapping: three shown and the rest counted.
+ const playbooks=playbooksOf(uses);
+ if(!playbooks.length)return <span className='text-xs text-muted-foreground'>—</span>;
+ return <span className='flex flex-wrap gap-1'>{playbooks.slice(0,3).map(([id,name])=><Tag key={id} tone='grey'>{name}</Tag>)}{playbooks.length>3&&<Tag tone='grey'>+{playbooks.length-3}</Tag>}</span>;
+}
+function SkillDrawer({projectId,canEnable,canRemove,skill,usage,onClose,onToggle,onChanged}:{projectId:number;canEnable:boolean;canRemove:boolean;skill:Skill|null;usage:Use[];onClose:()=>void;onToggle:(v:boolean)=>void;onChanged:(msg:Message,closed?:boolean)=>void}):ReactElement{
  const {can:canEdit}=useBusinessAccess('nrSkills.edit'),{can:canAddFiles}=useBusinessAccess('nrSkills.addFiles'),{can:canRemoveFile}=useBusinessAccess('nrSkills.removeFile');
  const [content,setContent]=useState<{body:string;files:{path:string;text:string}[]}>(),[draft,setDraft]=useState<{name:string;description:string;body:string}|null>(null),[shown,setShown]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[done,setDone]=useMessageState('');
  const read=()=>{if(skill)void skillRequest<{body:string;files:{path:string;text:string}[]}>('get',projectId,{skillId:skill.id}).then(r=>setContent({body:r.body,files:r.files})).catch(()=>setError(() => ($t('skills.notLoadSkill'))));};
@@ -136,7 +149,7 @@ function SkillDrawer({projectId,canEnable,canRemove,skill,usage,onClose,onToggle
   try{await skillRequest(action,projectId,{skillId:skill.id,...body});setDraft(null);if(!closed)setDone(message);onChanged(message,closed);}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.retryFailure')));}finally{setBusy(false);}}
  async function addFiles(list:FileList|null){if(!list?.length)return;const r=await readSkillFiles(list,false);if(!r.files.length){setError(() => ($t('skills.filesNotTextFilesToo')));return;}
   await act('addFiles',{files:r.files},() => ($t('skills.filesAdded',{0:r.files.length,1:r.skipped.length?$t('skills.skippedValueSuffix',{0:r.skipped.length}):''})));}
- async function remove(){if(!skill)return;if(!(await confirmAction({title:() => ($t('skills.delete',{0:skill.name})),description:() => (usage.length?$t('skills.playbookStepsCannotUseAnymore',{0:usage.join('、')}):undefined),action:'common.delete'})))return;void act('remove',{},() => ($t('skills.deleted',{0:skill.name})),true);}
+ async function remove(){if(!skill)return;if(!(await confirmAction({title:() => ($t('skills.delete',{0:skill.name})),description:() => (usage.length?$t('skills.playbookStepsCannotUseAnymore',{0:usesText(usage)}):undefined),action:'common.delete'})))return;void act('remove',{},() => ($t('skills.deleted',{0:skill.name})),true);}
  return <Sheet open={Boolean(skill)} onOpenChange={o=>{if(!o)void (async()=>{if(draft&&!(await confirmAction({title:() => ($t('common.discardUnsavedChanges')),action:'playbooks.discard'})))return;onClose();})();}}><SheetContent className="w-full overflow-y-auto data-[side=right]:sm:max-w-2xl" aria-describedby={undefined}>
   <SheetHeader className="sr-only"><SheetTitle>{skill?.name||'Skill'}</SheetTitle></SheetHeader>
   {skill&&<div className="flex flex-col gap-4 pb-5 [&>*:not(:first-child)]:mx-5" aria-label={$t('skills.skillDetails')} role="region">
@@ -152,6 +165,7 @@ function SkillDrawer({projectId,canEnable,canRemove,skill,usage,onClose,onToggle
     <div className="flex gap-2"><Button size="sm" disabled={busy||!draft.name.trim()||!draft.description.trim()||!draft.body.trim()} onClick={()=>void act('edit',{name:draft.name.trim().toLowerCase(),description:draft.description,body:draft.body},() => ($t('skills.savedLaterTasksUseNew')))}>{$t('common.save')}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setDraft(null);setError('');}}>{$t('common.cancel')}</Button></div>
    </div>:<>
     <div><h3 className="text-xs font-medium text-muted-foreground"><WithInfo help={skill.summaryKey?$t('skills.originalForAgent',{0:skill.description}):undefined}>{$t('skills.whenUse')}</WithInfo></h3><p className="mt-1 whitespace-pre-wrap text-sm">{skillSummary(skill)}</p></div>
+    <div><h3 className='text-xs font-medium text-muted-foreground'>{$t('skills.usedPlaybooks')}</h3>{usage.length?<p className='mt-1.5 flex flex-wrap gap-1.5'>{playbooksOf(usage).map(([id,name])=><Link key={id} to={`/playbooks?id=${encodeURIComponent(id)}`} title={usage.filter(u=>u.playbookId===id).map(u=>$t('skills.usedAtStep',{0:u.n,1:u.step})).join('\n')} className='rounded-full hover:opacity-80'><Tag tone='grey'>{name}</Tag></Link>)}</p>:<p className='mt-1 text-sm text-muted-foreground'>{$t('skills.noPlaybookUsesYet')}</p>}</div>
     <div><h3 className="text-xs font-medium text-muted-foreground">{$t('skills.howSkillMdBody')}</h3><div className="mt-1 max-h-[50vh] overflow-y-auto whitespace-pre-wrap rounded-lg border bg-muted/30 p-3 font-mono text-xs leading-relaxed">{content?content.body:$t('common.loadingLoading')}</div></div>
    </>}
    <div className="flex flex-col gap-1.5"><h3 className="text-xs font-medium text-muted-foreground">{$t('skills.attachedFiles')}</h3>
@@ -162,7 +176,7 @@ function SkillDrawer({projectId,canEnable,canRemove,skill,usage,onClose,onToggle
     :<p className="text-xs text-muted-foreground">{content?$t('skills.noAttachedFilesTemplatesExamples'):''}</p>}
     {canAddFiles&&<label className={cn('flex w-fit cursor-pointer items-center gap-1 text-xs text-primary hover:underline',busy&&'pointer-events-none opacity-50')}><PlusIcon className="size-3.5"/>{$t('skills.addFiles')}<input type="file" multiple className="sr-only" aria-label={$t('skills.addAttachedFiles')} disabled={busy} onChange={e=>{void addFiles(e.target.files);e.target.value='';}}/></label>}
    </div>
-   <div className="flex items-start gap-2 border-t pt-3"><div className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-muted-foreground"><p>{$tj('skills.updated',{0:usage.length?$t('skills.usedPlaybooksValue',{0:usage.join('、')}):$t('skills.noPlaybookUsesYet'),1:day(skill.updatedAt),2:skill.builtIn?$t('skills.builtExample'):''})}</p>
+   <div className='flex items-start gap-2 border-t pt-3'><div className='flex min-w-0 flex-1 flex-col gap-1 text-xs text-muted-foreground'><p>{$tj('skills.updatedOn',{0:day(skill.updatedAt),1:skill.builtIn?$t('skills.builtExample'):''})}</p>
     {skill.source&&<a href={skill.source} target="_blank" rel="noopener noreferrer" className="flex w-fit max-w-full items-center gap-1 hover:underline"><ExternalLinkIcon className="size-3 shrink-0"/><span className="truncate">{$tj('common.source',{0:skill.source})}</span></a>}</div>
     {canRemove&&<Button size="sm" variant="ghost" className="text-destructive" disabled={busy} onClick={remove}><Trash2Icon/>{$t('common.delete')}</Button>}</div>
   </div>}

@@ -1,4 +1,4 @@
-import type { ArticleMatch } from './article-publishing.js';
+import { translationDefault, type ArticleMatch } from './article-publishing.js';
 import { ownSignalIds } from './opportunity-parts.js';
 
 // How a task starts when nobody has to choose: the start card preselects these, and a task handed over from an
@@ -18,6 +18,8 @@ export type DeliveryChoice = {
   also: string[];
   /** The article found from the task's page, linked when the task starts. */
   article?: ArticleMatch;
+  /** The languages the task writes, primary first; left out, every language of the target in its order. */
+  locales?: string[];
 };
 /** What the page lookup said: the article found, or none; `unchecked` when a target could not be asked. */
 export type ArticleFound = { article: ArticleMatch | null; unchecked: boolean };
@@ -27,9 +29,13 @@ export type StartContext = {
   task: { evidence?: Record<string, unknown> };
   work: {
     page?: { url?: string } | null;
-    article?: { targetId?: string; articleId?: string | null } | null;
+    article?: {
+      targetId?: string;
+      articleId?: string | null;
+      locales?: string[];
+    } | null;
   };
-  articleTargets?: { id: string; default?: boolean }[];
+  articleTargets?: { id: string; default?: boolean; locales?: string[] }[];
   articlePlaybookTargets?: Record<string, string>;
   agent?: {
     repo?: unknown;
@@ -82,6 +88,8 @@ export function defaultDelivery(
   data: StartContext,
   playbookId: string,
   found?: ArticleFound,
+  /** A translation playbook: always an article that exists (2026-10-25). */
+  translate = false,
 ): DeliveryChoice {
   const targets = data.articleTargets || [],
     linked = data.work.article,
@@ -89,7 +97,7 @@ export function defaultDelivery(
   if (linked?.targetId && targets.some((t) => t.id === linked.targetId))
     return {
       target: linked.targetId,
-      mode: linked.articleId ? 'existing' : 'new',
+      mode: linked.articleId || translate ? 'existing' : 'new',
       also: [],
     };
   if (!targets.length || entry === REPO)
@@ -118,13 +126,74 @@ export function lookupMatters(data: StartContext, playbookId: string) {
   );
 }
 
+/**
+ * The languages a task writes, primary first (2026-10-24): the ones chosen at start that its target has, else every
+ * language of the target in the target's order. The first is written and reviewed first; the others are translated
+ * from it once it is approved.
+ */
+export function choiceLocales(data: StartContext, choice: DeliveryChoice) {
+  if (choice.target === REPO) return [];
+  const all =
+    (data.articleTargets || []).find((t) => t.id === choice.target)?.locales ||
+    [];
+  const chosen = (choice.locales || []).filter((l) => all.includes(l));
+  return chosen.length ? chosen : all;
+}
+
+/** The languages the chosen article has, when known: the one found from the page, else the one saved on the task. */
+export function presentLocales(
+  data: StartContext,
+  choice: DeliveryChoice,
+): string[] | undefined {
+  if (choice.target === REPO) return undefined;
+  if (choice.article?.targetId === choice.target) return choice.article.locales;
+  const linked = data.work.article;
+  return linked?.articleId && linked.targetId === choice.target
+    ? linked.locales
+    : undefined;
+}
+
+/**
+ * What a translation writes (2026-10-25), the source first: the languages chosen in the dialog, else the target's
+ * first language the article has, into the ones it lacks (all the others when it lacks none). Empty when the target
+ * has fewer than two languages.
+ */
+export function translationLocales(
+  data: StartContext,
+  choice: DeliveryChoice,
+  present = presentLocales(data, choice),
+) {
+  if (choice.target === REPO) return [];
+  const all =
+      (data.articleTargets || []).find((t) => t.id === choice.target)
+        ?.locales || [],
+    chosen = (choice.locales || []).filter((l) => all.includes(l));
+  if (all.length < 2) return [];
+  // A choice is kept as made, even a source alone (nothing to write yet: the task cannot start).
+  if (chosen.length) return chosen;
+  const d = translationDefault(all, present);
+  return [d.from, ...d.to];
+}
+
 /** The start command's delivery and whether it can start yet; unlinks first when the saved article differs. */
-export function deliveryPlan(data: StartContext, choice: DeliveryChoice) {
+export function deliveryPlan(
+  data: StartContext,
+  choice: DeliveryChoice,
+  translate = false,
+) {
   const linked = data.work.article;
   if (choice.target === REPO)
     return { ready: true, unlink: Boolean(linked?.targetId), delivery: REPO };
-  const also = choice.also.filter((id) => id !== choice.target);
-  if (choice.mode === 'existing') {
+  const also = translate
+      ? []
+      : choice.also.filter((id) => id !== choice.target),
+    chosen = translate
+      ? translationLocales(data, choice)
+      : choiceLocales(data, choice),
+    // One language is written as it always was; two or more are written primary first, then translated. A
+    // translation always names its source and the languages to write.
+    locales = chosen.length > 1 ? { locales: chosen } : {};
+  if (choice.mode === 'existing' || translate) {
     const saved = Boolean(
         linked?.articleId && linked.targetId === choice.target,
       ),
@@ -133,13 +202,16 @@ export function deliveryPlan(data: StartContext, choice: DeliveryChoice) {
           ? choice.article
           : undefined;
     return {
-      ready: saved || Boolean(found),
+      ready: (saved || Boolean(found)) && (!translate || chosen.length > 1),
       unlink: false,
       // The found article is saved on the task as the start is confirmed.
       link: found
         ? { targetId: found.targetId, articleId: found.articleId }
         : undefined,
-      delivery: also.length ? { also } : undefined,
+      delivery:
+        also.length || chosen.length > 1
+          ? { ...(also.length ? { also } : {}), ...locales }
+          : undefined,
     };
   }
   return {
@@ -148,7 +220,11 @@ export function deliveryPlan(data: StartContext, choice: DeliveryChoice) {
       linked?.articleId ||
       (linked?.targetId && linked.targetId !== choice.target),
     ),
-    delivery: { targetId: choice.target, ...(also.length ? { also } : {}) },
+    delivery: {
+      targetId: choice.target,
+      ...(also.length ? { also } : {}),
+      ...locales,
+    },
   };
 }
 
@@ -174,8 +250,8 @@ export type StartBlocker =
 
 /**
  * What stops a task from starting with its defaults. `changes`: the playbook changes something, so its delivery is
- * chosen when the project has publishing targets; `needsRepository`: its first Agent step changes the website
- * repository; `simulated`: runs are simulated and need neither. Several targets with none marked default, a target
+ * chosen when the project has publishing targets; `translate`: it translates an existing article; `needsRepository`:
+ * its first Agent step changes the website repository; `simulated`: runs are simulated and need neither. Several targets with none marked default, a target
  * that is gone and an article not found from the page all wait for a person, as does an Agent nobody chose.
  */
 export function startBlockers(
@@ -183,12 +259,14 @@ export function startBlockers(
   {
     playbookId,
     changes,
+    translate = false,
     needsRepository,
     simulated = false,
     found,
   }: {
     playbookId: string;
     changes: boolean;
+    translate?: boolean;
     needsRepository: boolean;
     simulated?: boolean;
     found?: ArticleFound;
@@ -203,7 +281,7 @@ export function startBlockers(
   if (changes && targets.length) {
     if (linked?.targetId && !targets.some((t) => t.id === linked.targetId))
       out.push('targetGone');
-    const choice = defaultDelivery(data, playbookId, found);
+    const choice = defaultDelivery(data, playbookId, found, translate);
     repository = choice.target === REPO;
     const entry = data.articlePlaybookTargets?.[playbookId],
       clear =
@@ -213,7 +291,8 @@ export function startBlockers(
         choice.article?.targetId === choice.target ||
         linked?.targetId === choice.target;
     if (!clear) out.push('chooseTarget');
-    else if (!deliveryPlan(data, choice).ready) out.push('chooseArticle');
+    else if (!deliveryPlan(data, choice, translate).ready)
+      out.push('chooseArticle');
   }
   if (repository && needsRepository && !simulated && !data.agent?.repo)
     out.push('noRepository');

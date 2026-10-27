@@ -152,3 +152,24 @@ test('the page lookup is asked only when it can change the default', () => {
     lookupMatters(view({ articleTargets: [{ id: 'cms' }] }), 'new-doc'),
   ).toBe(false);
 });
+
+test('a translation needs an existing article and a target with another language to write', () => {
+  const translate = {
+    ...optimize,
+    playbookId: 'translate-article',
+    translate: true,
+  };
+  const targets = [{ id: 'cms', default: true, locales: ['en', 'zh'] }];
+  expect(
+    startBlockers(view({ articleTargets: targets }), {
+      ...translate,
+      found: { article: { ...article, locales: ['en'] }, unchecked: false },
+    }),
+  ).toEqual([]);
+  expect(
+    startBlockers(
+      view({ articleTargets: [{ id: 'cms', default: true, locales: ['en'] }] }),
+      { ...translate, found: { article, unchecked: false } },
+    ),
+  ).toEqual(['chooseArticle']);
+});

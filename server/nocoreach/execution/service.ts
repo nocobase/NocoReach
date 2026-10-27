@@ -8,6 +8,7 @@ import type { MockEngine } from '../../../app-plugins/nocoreach-mock/server/engi
 import { OnlineProvider } from './provider';
 import { flowRunInput, type StageKind, type Stage, readsOnly, changesRepo } from './flow';
 import { PlaybookStore, defaultPlaybookId, stagesFor, draftPlaybook } from './playbook';
+import { translatesArticle } from '../../../shared/playbook-catalog';
 import { AgentStore, allowedPath } from './agent';
 import { TaskAgentsRuntime } from './agents-runtime';
 import { TaskAgentUnavailableError } from './agent-error.js';
@@ -37,6 +38,8 @@ const active = (r: Run) => r.status === 'queued' || r.status === 'running';
 const withoutRepo = (w: Work, stage: Stage) => stage.kind === 'agent' && stage.mode === 'analyze' && !w.flow!.stages.some(changesRepo);
 // A task that delivers an article to a publishing target needs no repository for any step (article-flow.ts).
 const articleTask = (w: Work) => w.delivery?.kind === 'article';
+// A related task as the task page lists it: its title, number and where it stands.
+const relatedTask = (r: any) => { const t = r.toJSON ? r.toJSON() : r; return { id: t.id, title: t.title, ...(Number.isInteger(t.evidence?.no) ? { no: t.evidence.no } : {}), state: taskStanding({ work: t.evidence?.work, status: t.status }) }; };
 const ID = /^[1-9]\d{0,15}$/;
 const HOUR = 3600000;
 // What says where a task came from (who found it, from which page or change), carried into a task it hands off to.
@@ -143,9 +146,8 @@ export class TaskService {
     const [runs, artifacts, reviews] = await Promise.all(['run', 'artifact', 'review'].map(k => this.list(k, project, taskId, tx)));
     const content=work.contentId?await this.snapshot(this.key('content',project,'index',work.contentId),tx):null;
     const linked = [work.prevTaskId || task.evidence?.handoff?.taskId, work.nextTaskId].filter(Boolean).map(String);
-    // The task before and after in a playbook chain, with its number and where it stands: the done card names the task a
-    // document was handed over to (2026-10-24).
-    const related = [...(await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => { const t = r.toJSON ? r.toJSON() : r; return { id: t.id, title: t.title, relation: String(t.id) === String(work.nextTaskId) ? 'next' : 'prev', ...(Number.isInteger(t.evidence?.no) ? { no: t.evidence.no } : {}), state: taskStanding({ work: t.evidence?.work, status: t.status }) }; }), ...await this.siblings(project, task, tx)];
+    // The previous and next steps carry their number and where they stand too, as the opportunity's other tasks do.
+    const related = [...(await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => ({ ...relatedTask(r), relation: String(r.get('id')) === String(work.nextTaskId) ? 'next' : 'prev' })), ...await this.siblings(project, task, tx)];
     return { task, content, work, runs: runs.map(({ input, transcript: _transcript, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), articleBases: await this.articleFlow.bases(project, taskId, work, tx) };
   }
   // The other tasks handed off from the same opportunity (2026-10-22: one opportunity, a task per place to change), in
@@ -156,7 +158,7 @@ export class TaskService {
     const strategy = await this.snapshot(`strategy:${project}`, tx);
     const ids = [...new Set<string>([...(strategy?.proposals || [])].reverse().filter((p: any) => p.taskId && p.insight?.id === insight).map((p: any) => String(p.taskId)))].filter(id => id !== String(task.id));
     const rows = (await Promise.all(ids.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean);
-    return rows.map((r: any) => { const t = r.toJSON ? r.toJSON() : r, w = t.evidence?.work; return { id: t.id, title: t.title, relation: 'sibling', ...(Number.isInteger(t.evidence?.no) ? { no: t.evidence.no } : {}), state: taskStanding({ work: w, status: t.status }) }; });
+    return rows.map((r: any) => ({ ...relatedTask(r), relation: 'sibling' }));
   }
   private async withAgent(project: string, data: any, actor?: string) {
     // Actor-specific Runner eligibility opens plugin reads of its own.
@@ -176,14 +178,34 @@ export class TaskService {
       data.execution = { ...this.runtime.simulatedProgress(full, viewer), runId: run.id };
       data.sources = null;
       data.savedDraft = null;
+      data.partial = run.status === 'failed' ? await this.partialOf(run) : null;
     } else if (run?.pluginRunId) {
       const detail = await this.runtime.progress(run.pluginRunId, viewer);
       data.execution = { ...detail, runId: run.id };
       if (run.status === 'failed' && !run.errorDetail && detail.businessFailure) run.errorDetail = detail.businessFailure;
       data.sources = await this.business.sources(run);
       data.savedDraft = await this.snapshot(this.key('draft', project, taskId, run.id)) || null;
+      data.partial = run.status === 'failed' ? await this.partialOf(run) : null;
     }
     return data;
+  }
+  // What a failed run got before it stopped: the content kept when it failed, else a draft it saved with `task draft`.
+  async partialOf(run: Run, tx?: any): Promise<{ content: string; report?: unknown; savedAt?: string; draft?: true } | null> {
+    const kept = run.partialAt ? await this.snapshot(this.key('partial', run.projectId, run.taskId, run.id), tx) : null;
+    if (kept?.content) return kept;
+    const draft = await this.snapshot(this.key('draft', run.projectId, run.taskId, run.id), tx);
+    return typeof draft?.content === 'string' && draft.content.trim() ? { content: draft.content, savedAt: draft.savedAt, draft: true } : null;
+  }
+  // What the step's latest failed runs got, for its next run to continue from (`unfinished` in the input). A run someone
+  // stopped, or one that succeeded, ends the search: the step starts over from there.
+  private async unfinished(runs: Run[], stepId: string, index: number, tx: any) {
+    const latest = runs.filter(r => r.stepId === stepId && r.flowStage === index && r.planVersion === 0).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    for (const r of latest) {
+      if (r.status !== 'failed' || r.error === 'cancelled' || r.error === 'replaced_by_manual') return null;
+      const got = await this.partialOf(r, tx);
+      if (got) return { content: got.content.slice(0, 30000), ...(got.savedAt ? { savedAt: got.savedAt } : {}) };
+    }
+    return null;
   }
   async authorized(actor: string, project: string) {
     if (!project) return fail(systemMessageText('taskExecution.executionAuthorizationExpired'), 403);
@@ -239,7 +261,8 @@ export class TaskService {
     const index = w.stageIndex ?? 0, stage = w.flow!.stages[index], repo = (await this.agents.doc(project, tx)).repo || null;
     if (!repo && !withoutRepo(w, stage) && !articleTask(w) && !(this.p.demoConfiguration?.enabled)) return fail(systemMessageText('taskExecution.connectRepositoryUnderDataSources'), 409);
     if (!w.humanOwnerId) return fail(systemMessageText('taskExecution.assignOwnerFirst'), 409);
-    if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail(systemMessageText('taskExecution.runInProgress'), 409);
+    const runs = await this.list('run', project, taskId, tx) as Run[];
+    if (runs.some(active)) return fail(systemMessageText('taskExecution.runInProgress'), 409);
     const context = await this.p.project(project);
     const content = await this.contentOf(project, w, tx);
     const reviews = await this.list('review', project, taskId, tx);
@@ -253,7 +276,8 @@ export class TaskService {
     const skills = await this.p.skills?.forAgent(project, stage.skills || []) || [];
     const resultKind = mode === 'plan' ? (w.playbookId === 'community-reply' ? 'communityReply' : w.playbookId === 'content-outline' ? 'content' : 'research') : undefined;
     const article = mode === 'article' ? { article: await this.articleFlow.runInput(project, w, tx), delivery: w.delivery } : {}, protectedPaths = mode === 'build' ? this.articleFlow.ownedTemplates(project) : [];
-    const input = serializeTaskInput({ resultKind, requiresRepository: !withoutRepo(w, stage) && !articleTask(w), ...flowRunInput(context, task, w, index, content, reviews), knowledge, skills, mode, step, repo: articleTask(w) ? null : repo, branch, taskId, title: task.title, ...(data ? { data } : {}), ...article, ...(protectedPaths.length ? { protectedPaths } : {}) });
+    const unfinished = await this.unfinished(runs, stage.key, index, tx);
+    const input = serializeTaskInput({ resultKind, requiresRepository: !withoutRepo(w, stage) && !articleTask(w), ...flowRunInput(context, task, w, index, content, reviews), knowledge, skills, mode, step, repo: articleTask(w) ? null : repo, branch, taskId, title: task.title, ...(data ? { data } : {}), ...article, ...(protectedPaths.length ? { protectedPaths } : {}), ...(unfinished ? { unfinished } : {}) });
     const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, baseRejectedAt: w.results[index]?.rejectedAt, ownerId: w.humanOwnerId, actor, inputVersion: 1, capabilitySnapshot: mode === 'plan' ? ['repo.read'] : mode === 'article' ? ['article.draft'] : ['repo.read', 'repo.write', 'pr.open'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'configured-agent' }, flowStage: index, mode, branch, ...extra };
     run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
     await this.put(this.key('run', project, taskId, run.id), run, tx);
@@ -645,7 +669,7 @@ export class TaskService {
         w.note = typeof v.note === 'string' ? v.note.trim().slice(0, 3000) : '';
         if (!w.humanOwnerId) { await this.member(actor, tx); w.humanOwnerId = actor; w.humanOwnerName = actorName; }
         w.stage = 'flow'; w.step = 0; w.results = []; event.note = p.name;
-        await this.articleFlow.startDelivery(project, taskId, w, p.id, w.flow.stages.some(changesRepo), v.delivery, tx, articleRead);
+        await this.articleFlow.startDelivery(project, taskId, w, p.id, w.flow.stages.some(changesRepo), v.delivery, tx, articleRead, translatesArticle(p) ? { by: actor, at } : undefined);
         await this.enterFlowStage(project, taskId, task, w, 0, tx, actor, at);
       } else if (v.command === 'comment') {
         // A message for the executor; the next run reads the latest ones.
@@ -663,28 +687,37 @@ export class TaskService {
           if (output.pr?.outOfScope?.length && v.confirmOutOfScope !== true) return fail(systemMessageText('messages.confirmChangesOutsideAllowedScope', { 0: output.pr.outOfScope.join('、') }), 409);
           // Files a publishing target exports would be rewritten by its exporter: they are published as articles instead.
           if (output.pr?.protected?.length) return fail(systemMessageText('articles.protectedPaths', { 0: output.pr.protected.join('、') }), 409);
-          if (w.flow!.stages[index + 1]?.kind === 'release' && output.article) w.release = this.articleFlow.release(project, task, output, optional(v.release?.note, 2000));
-          else if (w.flow!.stages[index + 1]?.kind === 'release') {
-            const pr = output.pr, rel = v.release || {};
-            const base = { note: optional(rel.note, 2000) || pr?.release || task.title, pages: await this.releasePages(project, Array.isArray(rel.pages) ? rel.pages : pr?.pages || [], w, tx), ...(pr?.verifyText ? { verifyText: pr.verifyText } : {}) };
-            w.release = pr?.headSha ? { state: 'merging', pr: { number: pr.number, url: pr.url, headSha: pr.headSha }, ...base } : { state: 'not_seen', reason: 'manual', ...base };
-          }
-          w.results[index - 1] = { ...output, approvedAt: at, approvedBy: actor };
-          await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approve', checklist: checked, reviewerId: actor, at }, tx);
-          await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
-          // An accepted document (a 方案 or 调研 playbook) goes into the knowledge base as “Agent 交付” (2026-10-08), so the
-          // daily analysis and later tasks know it; saved once the approval is committed.
-          if (w.stage === 'done' && w.playbook?.kind === 'plan' && this.p.knowledge?.saveDelivery) {
-            const doc = w.results[index - 1]!, save = () => { void this.p.knowledge.saveDelivery(project, { taskId, title: task.title, text: doc.content }).catch(() => undefined); };
-            if (typeof tx?.afterCommit === 'function') tx.afterCommit(save); else save();
-          }
-          if (v.next) {
-            // Hand-over: the accepted document becomes the brief of a new task with the next playbook, started once this
-            // approval is committed (startHandedOver).
-            if (w.stage !== 'done' || w.playbook?.kind !== 'plan' || !w.playbook.next.includes(v.next) || w.nextTaskId) return fail(systemMessageText('taskExecution.stepCannotHandedAnotherPlaybook'), 409);
-            const p = await this.playbooks.get(project, v.next, tx), accepted = w.results[index - 1]!;
-            const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: `${p.name}：${task.title}`.slice(0, 200), brief: systemMessageText('messages.taskBriefDocumentDeliveredTask', { 0: task.title, 1: accepted.content }).slice(0, 30000), status: systemMessageText('common.pending'), evidence: { source: systemMessageText('taskExecution.chainedTask'), insight: task.evidence?.insight || null, context: task.evidence?.context || null, ...foundBy(task.evidence), handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content }, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
-            w.nextTaskId = String(child.get ? child.get('id') : child.id); event.note = p.name; event.nextTaskId = w.nextTaskId;
+          // The primary language approved while others are to follow: the Agent translates it before anything is published
+          // (2026-10-24). The step goes back to the Agent; the translated version comes back here for one Publish of all.
+          if (w.flow!.stages[index + 1]?.kind === 'release' && this.articleFlow.needsTranslation(w, output)) {
+            await this.articleFlow.approvePrimary(w, output, actor, at, tx);
+            event.note = 'translate';
+            await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approvePrimary', checklist: checked, reviewerId: actor, at }, tx);
+            await this.enterFlowStage(project, taskId, task, w, index - 1, tx, actor, at);
+          } else {
+            if (w.flow!.stages[index + 1]?.kind === 'release' && output.article) w.release = this.articleFlow.release(project, task, output, optional(v.release?.note, 2000));
+            else if (w.flow!.stages[index + 1]?.kind === 'release') {
+              const pr = output.pr, rel = v.release || {};
+              const base = { note: optional(rel.note, 2000) || pr?.release || task.title, pages: await this.releasePages(project, Array.isArray(rel.pages) ? rel.pages : pr?.pages || [], w, tx), ...(pr?.verifyText ? { verifyText: pr.verifyText } : {}) };
+              w.release = pr?.headSha ? { state: 'merging', pr: { number: pr.number, url: pr.url, headSha: pr.headSha }, ...base } : { state: 'not_seen', reason: 'manual', ...base };
+            }
+            w.results[index - 1] = { ...output, approvedAt: at, approvedBy: actor };
+            await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approve', checklist: checked, reviewerId: actor, at }, tx);
+            await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
+            // An accepted document (a 方案 or 调研 playbook) goes into the knowledge base as “Agent 交付” (2026-10-08), so the
+            // daily analysis and later tasks know it; saved once the approval is committed.
+            if (w.stage === 'done' && w.playbook?.kind === 'plan' && this.p.knowledge?.saveDelivery) {
+              const doc = w.results[index - 1]!, save = () => { void this.p.knowledge.saveDelivery(project, { taskId, title: task.title, text: doc.content }).catch(() => undefined); };
+              if (typeof tx?.afterCommit === 'function') tx.afterCommit(save); else save();
+            }
+            if (v.next) {
+              // Hand-over: the accepted document becomes the brief of a new task with the next playbook, started once this
+              // approval is committed (startHandedOver).
+              if (w.stage !== 'done' || w.playbook?.kind !== 'plan' || !w.playbook.next.includes(v.next) || w.nextTaskId) return fail(systemMessageText('taskExecution.stepCannotHandedAnotherPlaybook'), 409);
+              const p = await this.playbooks.get(project, v.next, tx), accepted = w.results[index - 1]!;
+              const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: `${p.name}：${task.title}`.slice(0, 200), brief: systemMessageText('messages.taskBriefDocumentDeliveredTask', { 0: task.title, 1: accepted.content }).slice(0, 30000), status: systemMessageText('common.pending'), evidence: { source: systemMessageText('taskExecution.chainedTask'), insight: task.evidence?.insight || null, context: task.evidence?.context || null, ...foundBy(task.evidence), handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content }, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
+              w.nextTaskId = String(child.get ? child.get('id') : child.id); event.note = p.name; event.nextTaskId = w.nextTaskId;
+            }
           }
         } else {
           const comment = text(v.comment, 3000); event.comment = comment;
@@ -815,9 +848,9 @@ export class TaskService {
       const p = await this.playbooks.get(project, w.playbookId), stages = stagesFor(p), first = stages[0];
       const data = { task, work: w, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), agent: await this.agents.status(project, w.agentId, actor) };
       const found = lookupMatters(data, p.id) ? await Promise.resolve(this.p.articleTargets.match(project, pageUrlsOf(data))).catch(() => ({ article: null, unchecked: true })) : undefined;
-      const changes = p.kind === 'build', needsRepository = first?.kind === 'agent' && !(first.mode === 'analyze' && !stages.some(changesRepo));
-      if (startBlockers(data, { playbookId: p.id, changes, needsRepository, simulated: Boolean(this.p.demoConfiguration?.enabled), found }).length) return;
-      const plan = changes && data.articleTargets.length ? deliveryPlan(data, defaultDelivery(data, p.id, found)) : { unlink: false, link: undefined, delivery: undefined };
+      const changes = p.kind === 'build', translate = changes && data.articleTargets.length > 0 && translatesArticle(p), needsRepository = first?.kind === 'agent' && !(first.mode === 'analyze' && !stages.some(changesRepo));
+      if (startBlockers(data, { playbookId: p.id, changes, translate, needsRepository, simulated: Boolean(this.p.demoConfiguration?.enabled), found }).length) return;
+      const plan = changes && data.articleTargets.length ? deliveryPlan(data, defaultDelivery(data, p.id, found, translate), translate) : { unlink: false, link: undefined, delivery: undefined };
       let revision = w.revision;
       const run = async (command: string, body: object = {}) => { revision = (await this.updateTask(project, { taskId, revision, requestId: randomUUID(), command, ...body }, actor, actorName)).work.revision; };
       const agent = startAgent(data);
@@ -855,7 +888,7 @@ export class TaskService {
       return fresh;
     });
   }
-  async finish(run: Run, result?: { content: string; usage?: any; pr?: any; report?: any; article?: any }, error?: string, errorDetail?: string, restartedAt?: string) {
+  async finish(run: Run, result?: { content: string; usage?: any; pr?: any; report?: any; article?: any }, error?: string, errorDetail?: string, restartedAt?: string, failure: { failureReason?: string; partial?: { content: string; report?: unknown } } = {}) {
     return this.lock(run.projectId, run.taskId, async tx => {
       const key = this.key('run', run.projectId, run.taskId, run.id), fresh: Run = await this.snapshot(key, tx);
       if (!fresh || fresh.status !== 'running') return;
@@ -870,7 +903,11 @@ export class TaskService {
         fresh.artifactId = artifact.id; fresh.usage = result.usage;
         if (!stale) { w.results[run.flowStage ?? w.step] = artifact; w.boardState=undefined; }
         else fresh.error = 'candidate_only_context_changed';
-      } else { fresh.error = error || 'agent_failed'; fresh.errorDetail = errorDetail; if (restartedAt) fresh.restartedAt = restartedAt; }
+      } else {
+        fresh.error = error || 'agent_failed'; fresh.errorDetail = errorDetail; if (restartedAt) fresh.restartedAt = restartedAt;
+        if (failure.failureReason) fresh.failureReason = failure.failureReason;
+        if (failure.partial) { fresh.partialAt = now(); await this.put(this.key('partial', run.projectId, run.taskId, run.id), { ...failure.partial, savedAt: fresh.partialAt }, tx); }
+      }
       await this.put(key, fresh, tx); w.latestRun = { id: fresh.id, status: fresh.status };
       w.history.push({ at: now(), actor: 'system', action: result ? 'runSucceeded' : 'runFailed', runId: fresh.id, artifactId: fresh.artifactId, note: fresh.error });
       // A finished run hands over to the next stage; if it cannot start, the task waits for a retry.
@@ -970,7 +1007,9 @@ export class TaskService {
     if (r.mode === 'merge') return this.finishMerge(r, v);
     if (r.mode === 'close') return this.finishClose(r, v);
     if (r.mode === 'revert') return this.finishRevert(r, v);
-    if (!v.ok) { await this.finish(r, undefined, typeof v.error === 'string' && /^[a-z_]{1,40}$/.test(v.error) ? v.error : 'agent_failed', optional(v.message || v.error, 2000), optional(v.restartedAt, 40)); return { accepted: true }; }
+    // A failure keeps the official reason and whatever content the Agent already got (its final answer with ok=false, or
+    // a result it submitted before the run failed): the task page offers it, and the step's next run continues from it.
+    if (!v.ok) { await this.finish(r, undefined, typeof v.error === 'string' && /^[a-z_]{1,40}$/.test(v.error) ? v.error : 'agent_failed', optional(v.message || v.error, 2000), optional(v.restartedAt, 40), { failureReason: optional(v.failureReason, 40), partial: typeof v.content === 'string' && v.content.trim() ? { content: text(v.content, 30000), ...(v.report ? { report: v.report } : {}) } : undefined }); return { accepted: true }; }
     let pr: any;
     if (r.mode === 'build') {
       const repo = await this.validateAgentResult(r, v), p = v.pr || {};

@@ -864,3 +864,57 @@ test('a task handed off with other tasks of its opportunity lists them, and its 
  const whole={...d.task,evidence:{...d.task.evidence,part:undefined,page:undefined}};
  assert.deepEqual(f.s.numberPages(whole,d.work),[top11,top15]);
 });
+
+// T-35 on Studio (2026-10-24): Codex finished its research, then failed the step for a tool a Skill on the computer
+// asked for, and the research was dropped. A failed run keeps what it got; the step's next run continues from it.
+test('a step the Agent could not finish keeps what it got and hands it to the next run',async()=>{
+ const f=fixture();
+ await selectAgent(f);
+ await f.command('startTask',{playbookId:'change-research'});
+ const {run}=await claim(f);
+ const report={kind:'research',sources:[{title:'Repo',url:'https://github.com/a/b'}],asOf:'2026-10-24',uncertainties:[]};
+ await finish(f,{runId:run.id,taskId:'1',ok:false,error:'missing_tool',message:'没有安装 gh',content:'# 研究\n已读完 22 个项目',report});
+ let d=await f.view();
+ assert.equal(d.runs[0].status,'failed');
+ assert.equal(d.runs[0].error,'missing_tool');
+ assert.equal(d.runs[0].errorDetail,'没有安装 gh');
+ assert.ok(d.runs[0].partialAt);
+ assert.equal(d.partial.content,'# 研究\n已读完 22 个项目');
+ assert.deepEqual(d.partial.report,report);
+ assert.equal(d.artifacts.length,0,'never a result to review');
+ d=await f.command('retryStage',{stageKey:'analyze'});
+ const next=await claim(f);
+ assert.equal(next.run.input.unfinished.content,'# 研究\n已读完 22 个项目');
+ // A run that failed without content passes the earlier content on; one someone stopped starts the step over.
+ await f.s.finish(await f.s.snapshot(f.s.key('run','1','1',next.run.id)),undefined,'agent_failed');
+ await f.command('retryStage',{stageKey:'analyze'});
+ const third=await claim(f);
+ assert.equal(third.run.input.unfinished.content,'# 研究\n已读完 22 个项目');
+ await f.s.finish(await f.s.snapshot(f.s.key('run','1','1',third.run.id)),undefined,'cancelled');
+ await f.command('retryStage',{stageKey:'analyze'});
+ assert.equal((await claim(f)).run.input.unfinished,undefined);
+});
+
+test('a run the Agents plugin failed keeps its reason and the result it had submitted',async()=>{
+ const f=fixture();
+ await selectAgent(f);
+ await f.command('startTask',{playbookId:'change-research'});
+ const {run}=await claim(f);
+ await f.s.lock('1','1',tx=>f.s.put(f.s.key('result','1','1',run.id),{value:{ok:true,content:'Submitted before the tool stopped',report:{kind:'research',sources:[],asOf:'',uncertainties:[]}},savedAt:new Date().toISOString()},tx));
+ const official=f.s.p.agents.records.get(run.pluginRunId);
+ official.status='failed';official.failureReason='idleTimeout';
+ await f.s.runtime.sync(await f.s.snapshot(f.s.key('run','1','1',run.id)));
+ const d=await f.view();
+ assert.equal(d.runs[0].failureReason,'idleTimeout');
+ assert.equal(d.partial.content,'Submitted before the tool stopped');
+ assert.equal(d.artifacts.length,0);
+ // A draft saved with `task draft` is what a run without kept content got.
+ const g=fixture();
+ await selectAgent(g);
+ await g.command('startTask',{playbookId:'change-research'});
+ const other=(await claim(g)).run;
+ await g.s.lock('1','1',tx=>g.s.put(g.s.key('draft','1','1',other.id),{content:'Draft so far',savedAt:'2026-10-24T02:00:00.000Z',runId:other.id},tx));
+ g.s.p.agents.records.get(other.pluginRunId).status='failed';
+ await g.s.runtime.sync(await g.s.snapshot(g.s.key('run','1','1',other.id)));
+ assert.deepEqual((await g.view()).partial,{content:'Draft so far',savedAt:'2026-10-24T02:00:00.000Z',draft:true});
+});

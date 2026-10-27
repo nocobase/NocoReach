@@ -6,6 +6,7 @@ import { localizeWorkSnapshots } from './playbook-snapshot';
 import { reportDate } from './task-detail/material-notices.js';
 import { TechnicalDetails } from './task-detail/technical-details.js';
 import { useTechnicalDetails, type TechnicalTab } from './task-detail/technical-state.js';
+import { failureOf, failureStreak, sentences } from './task-detail/failure-model.js';
 import { EvidenceDialog } from './task-detail/evidence.js';
 import { taskEvidence, whyText } from './task-detail/evidence-model.js';
 import { VisibleChanges } from './task-detail/visible-changes.js';
@@ -13,8 +14,8 @@ import { DeliveryDialog, DeliverySummary } from './task-detail/article-start.js'
 import { PlaybookDrawer } from './task-detail/playbook-drawer.js';
 import { ArticleEditor, ArticleReview } from './task-detail/article-review.js';
 import { ConflictBody, DriftNotice, PendingButton, TargetRows } from './task-detail/article-release.js';
-import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, fieldLabel, joinNames, pageUrlsOf, publishingTitle, soleConflict, type ArticleFound, type DeliveryChoice } from './task-detail/article-model.js';
-import { matchArticle } from './article-targets-api';
+import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, fieldLabel, joinNames, pageUrlsOf, publishingTitle, soleConflict, translationPending, type ArticleFound, type DeliveryChoice } from './task-detail/article-model.js';
+import { matchArticle, localeName } from './article-targets-api';
 import { TaskMedia } from './task-detail/media.js';
 import { TaskProperties } from './task-detail/task-properties.js';
 import { TaskNumbers } from './task-detail/task-numbers.js';
@@ -23,7 +24,7 @@ import { GAP, text } from './task-detail/styles.js';
 import { TaskStatusTag, TaskStandingTag } from './task-status-tag';
 import { startAgent, startBlockers, type StartBlocker } from '../../shared/task-start.js';
 import { MarkdownEditor } from './task-detail/markdown-editor.js';
-import { hasTaskAgent } from './task-execution-types';
+import { hasTaskAgent, type PartialResult } from './task-execution-types';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {createContext,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
@@ -52,6 +53,7 @@ import {DocReader,Markdown} from './doc-view';
 import {effectItems,effectLine,effectPages,type EffectResult} from './effect-model';
 import {closeCommand,canReopen,closedWhen,getCloseConfirm,closedLabel,isClosed,type TaskData as Data,type Work,type Artifact,type PullRequestInfo} from './task-execution-types';
 import {playbookRequest,localizePlaybookList,getCategories,getStageExecutor,stageName as displayStageName,stageLabel,stagesFor,readsOnly,withoutRepo,eventText,type PlaybookList,type Stage} from './playbook-model';
+import {translatesArticle} from '../../shared/playbook-catalog';
 import './strategy/strategy.css';
 import './reach-workspace.css';
 import './task-execution.css';
@@ -71,42 +73,10 @@ type Update=(command:string,body?:object)=>Promise<Data|undefined>;
 const TaskActions=createContext<{pickAgent:()=>void;messageAgent:()=>void;choosePage:()=>void;askManual:()=>void;manualAsk:number;handedOver:(taskId:string)=>void}>({pickAgent:()=>undefined,messageAgent:()=>undefined,choosePage:()=>undefined,askManual:()=>undefined,manualAsk:0,handedOver:()=>undefined});
 type Member={id:string;name:string};
 type Run=Data['runs'][number];
-// Why a run stopped, in the owner's words; the raw error and the transcript stay in Technical details.
-const getRunErrors = (): Record<string,string> => ({interrupted_or_unknown:$t('taskDetail.runInterruptedResultUnknown'),context_changed:$t('taskDetail.taskChangedBeforeRun'),cancelled:$t('taskDetail.stoppedCheckChangesAlreadyPushed'),no_changes:$t('taskDetail.agentNotChangeFiles'),no_repo:$t('taskDetail.noWebsiteSourceRepositoryConnected'),revert_failed:$t('taskDetail.revertPrNotOpened'),replaced_by_manual:$t('taskDetail.switchedDoing')});
-// The official run's failure reasons, grouped by what the owner can do about each (2026-10-19 user report: runs kept
-// failing as "agent_failed" with no reason, so retrying was all they could do).
-const FAILURE_GROUP:Record<string,string>={runnerOffline:'disconnected',leaseExpired:'disconnected',startTimeout:'disconnected',runnerUpgrade:'disconnected',toolAuth:'toolLogin',toolQuota:'quota',toolRateLimit:'quota',toolNetwork:'network',prepareNetwork:'network',idleTimeout:'stuck',stepLimit:'stuck',toolProcess:'stuck',contextOverflow:'tooLong',modelUnavailable:'model',queuedExpired:'notPicked',policyRefused:'notPicked',setupFailed:'setup',cliUnavailable:'setup',checkoutFailed:'setup',repoAccessDenied:'setup',repoAccessUnavailable:'setup',workspaceBusy:'setup',runnerDiskFull:'setup'};
-const getFailureCopy=():Record<string,[string,string]>=>({disconnected:[$t('taskDetail.failureDisconnected'),$t('taskDetail.failureDisconnectedNext')],toolLogin:[$t('taskDetail.failureToolLogin'),$t('taskDetail.failureToolLoginNext')],quota:[$t('taskDetail.failureQuota'),$t('taskDetail.failureQuotaNext')],network:[$t('taskDetail.failureNetwork'),$t('taskDetail.failureNetworkNext')],stuck:[$t('taskDetail.failureStuck'),$t('taskDetail.failureStuckNext')],tooLong:[$t('taskDetail.failureTooLong'),$t('taskDetail.failureTooLongNext')],model:[$t('taskDetail.failureModel'),$t('taskDetail.failureModelNext')],notPicked:[$t('taskDetail.failureNotPicked'),$t('taskDetail.failureNotPickedNext')],setup:[$t('taskDetail.failureSetup'),$t('taskDetail.failureSetupNext')],invalid:[$t('taskDetail.failureInvalidResult'),$t('taskDetail.failureInvalidResultNext')]});
-// Trying again cannot help these until someone signs in, fixes the setup or picks another Agent (2026-10-21 user
-// report: the card pushed Try again for a tool that was not signed in), so it stays available but not as the main action.
-const NO_RETRY=new Set(['toolLogin','setup','model']);
-const TOOL_NAMES:Record<string,string>={claude:'Claude Code',codex:'Codex',opencode:'OpenCode',pi:'Pi'};
-// The computer (unless this reader may not see it) and the coding tool of the run's latest attempt.
-function failedOn(run:Run,data:Data){
- const x=data.execution?.runId===run.id?data.execution.run.executions?.at(-1):undefined;
- return {machine:x&&!x.machineHidden?x.runnerName||'':'',tool:x?.tool?TOOL_NAMES[x.tool]||x.tool:''};
-}
-// The groups whose copy names the computer or the tool when the run says which; otherwise the general wording.
-function namedFailure(group:string,{machine,tool}:{machine:string;tool:string}):[string,string]|undefined{
- if(group==='toolLogin'&&(machine||tool))return [machine&&tool?$t('taskDetail.failureToolLoginOn',{0:machine,1:tool}):tool?$t('taskDetail.failureToolLoginTool',{0:tool}):$t('taskDetail.failureToolLoginMachine',{0:machine}),tool?$t('taskDetail.failureToolLoginToolNext',{0:tool}):$t('taskDetail.failureToolLoginNext')];
- if(group==='disconnected'&&machine)return [$t('taskDetail.failureDisconnectedOn',{0:machine}),$t('taskDetail.failureDisconnectedNext')];
- if(group==='network'&&machine)return [$t('taskDetail.failureNetworkOn',{0:machine}),$t('taskDetail.failureNetworkNext')];
- if(group==='quota'&&tool)return [$t('taskDetail.failureQuotaTool',{0:tool}),$t('taskDetail.failureQuotaNext')];
-}
-type Failure={why:string;next:string;group?:string};
-// What went wrong with `run` and what to do: the official reason (the task's latest run arrives with its execution),
-// then NocoReach's own codes, then whatever the Agent itself said; never a bare code.
-function failureOf(run:Run,data:Data):Failure{
- // NocoReach itself restarted while the run worked (every deploy restarts it): not the computer's doing (2026-10-22 user
- // report). The step usually started again by itself; this shows when it could not (server/nocoreach/execution/restarts.ts).
- if(run.restartedAt)return {why:$t('taskDetail.failureRestart'),next:$t('taskDetail.failureRestartNext'),group:'restart'};
- const copy=getFailureCopy(),reason=data.execution?.runId===run.id?data.execution.run.failureReason:undefined,group=reason?FAILURE_GROUP[reason]:undefined;
- if(group){const [why,next]=namedFailure(group,failedOn(run,data))||copy[group];return {why,next,group};}
- if(run.error==='invalid_agent_result'){const [why,next]=copy.invalid;return {why,next};}
- const known=getRunErrors()[run.error||''];if(known)return {why:known,next:$t('taskDetail.failureUnknownNext')};
- const said=run.errorDetail&&run.errorDetail!==run.error&&!/^[a-z_]+$/.test(run.errorDetail)?$legacyText(run.errorDetail):'';
- return {why:said?$t('taskDetail.failureAgentSaid',{0:said}):$t('taskDetail.failureUnknown'),next:$t('taskDetail.failureUnknownNext')};
-}
+// Why a run failed and what to do (task-detail/failure-model.ts). Trying again cannot help these until someone signs in,
+// fixes the setup or picks another Agent (2026-10-21 user report: the card pushed Try again for a tool that was not
+// signed in), so it stays available but not as the main action.
+const NO_RETRY=new Set(['toolLogin','setup','model','missingTool','toolSignIn']);
 const call=<T,>(projectId:number,taskId:string,action:string,body:object={})=>api.action<T>('nrTaskWork',action,{method:'POST',body:{projectId:String(projectId),taskId,...body},unwrap:'data'});
 // Tasks run by a playbook (new tasks, and tasks started with a flow) use this page; older step-plan tasks keep theirs.
 export function isPlaybookTask(d:Data){const w=d.work;return Boolean(w.playbook||w.flow)||(w.stage==='plan'&&!w.plan&&!w.simple);}
@@ -210,7 +180,7 @@ function TaskHeading({data,list,pick,busy,members,update,onPage}:{data:Data;list
 // green, the current one outlined (violet for a person's step, blue for the Agent's), the rest grey.
 function StepBar({stages,w}:{stages:Stage[];w:Work}){
  const {self,owner}=useContext(TaskAccess),started=Boolean(w.flow),done=w.stage==='done',index=w.stageIndex||0,closed=Boolean(closedLabel(w));
- const label=(s:Stage)=>{const text=stageLabel(s);if(s.kind!=='review'||self)return text;
+ const label=(s:Stage)=>{const text=stageLabel(s,w);if(s.kind!=='review'||self)return text;
   // A space where a Latin owner name meets Chinese or Japanese text ("Super Admin" before the review step).
   if(!text.startsWith($t('common.you')))return `${text} · ${owner}`;const rest=text.slice($t('common.you').length);
   return `${owner}${/[A-Za-z0-9]$/.test(owner)&&/^[\u3040-\u30ff\u3400-\u9fff]/.test(rest)?' ':''}${rest}`;};
@@ -288,13 +258,15 @@ async function withUsableAgent(data:Data,update:Update,command:string,body:objec
 // document was handed over to is started with these defaults instead (2026-10-24) and shows this card only when one
 // of them needs a person.
 function StartCard({data,list,pick,setPick,update,busy,projectId,taskId,onEvidence}:{data:Data;list?:PlaybookList;pick:string;setPick:(id:string)=>void;update:Update;busy:boolean;projectId:number;taskId:string;onEvidence:()=>void}){
- const [note,setNote]=useTaskDraft('note',''),{allowed}=useContext(TaskAccess);
+ const {allowed}=useContext(TaskAccess);
  const {clear}=useTaskDraftStatus();
  const p=list?.playbooks.find(x=>x.id===pick),handoff=(data.task.evidence?.handoff as {playbook?:string;content?:string}|undefined),brief=handoff?.content||data.task.brief||'',briefTitle=handoff?.content?$t('taskDetail.documentDelivered',{0:handoff.playbook}):$t('taskDetail.whatAgentReceive');
  const options=data.agent?.options||[],agent=startAgent(data),ready=agent.ready;
  // With exactly one Agent available nothing needs choosing: it is saved on the task as the start is confirmed.
  // Article publishing (article-start.tsx): shown for playbooks that change something, when the project has a target.
  const articleChoice=Boolean(p?.kind==='build'&&data.articleTargets?.length);
+ // Translate into other languages (2026-10-25): an existing article, from its source language into the ones chosen.
+ const translate=articleChoice&&translatesArticle(p);
  // A choice belongs to the playbook it was made for: another playbook starts again from its own default.
  const [choiceState,setChoiceState]=useState<DeliveryChoice&{playbook:string}>();
  const targetIds=(data.articleTargets||[]).map(t=>t.id);
@@ -306,16 +278,16 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId,onEviden
  useEffect(()=>{if(!lookupKey)return;const c=new AbortController();
   void matchArticle(projectId,pagesKey.split('\n'),c.signal).then(r=>{if(!c.signal.aborted)setLookup({key:lookupKey,found:r});},()=>{if(!c.signal.aborted)setLookup({key:lookupKey,found:{article:null,unchecked:true}});});return()=>c.abort();},[lookupKey,projectId,pagesKey]);
  const found:ArticleFound|'finding'|undefined=!lookupKey?undefined:lookup?.key===lookupKey?lookup.found:'finding';
- const finding=found==='finding',delivery=defaultDelivery(data,pick,found==='finding'?undefined:found),current=choice||delivery,plan:{ready:boolean;unlink:boolean;link?:{targetId:string;articleId:string};delivery?:unknown}=articleChoice?deliveryPlan(data,current):{ready:true,unlink:false,delivery:undefined};
+ const finding=found==='finding',delivery=defaultDelivery(data,pick,found==='finding'?undefined:found,translate),current=choice||delivery,plan:{ready:boolean;unlink:boolean;link?:{targetId:string;articleId:string};delivery?:unknown}=articleChoice?deliveryPlan(data,current,translate):{ready:true,unlink:false,delivery:undefined};
  const notice=found&&found!=='finding'&&!found.article?$t(found.unchecked?'articleTask.matchUnavailable':'articleTask.noArticleForPage'):undefined;
  // A task handed over from an accepted document starts by itself (startHandedOver in service.ts, with these same
  // rules from shared/task-start.ts); one still waiting here has something only a person can settle: the sub line says
  // so, and each item is marked where it is chosen (the Agent below, the article in its field, a target or repository).
  const navigate=useNavigate(),st=p?stagesFor(p):[],first=st[0],demo=options.some(a=>a.id===data.agent?.agentId&&a.type==='demo');
- const blockers:StartBlocker[]=handoff?.content&&p&&!finding?startBlockers(data,{playbookId:p.id,changes:p.kind==='build',needsRepository:first?.kind==='agent'&&!withoutRepo(first,st),simulated:demo,found}):[];
+ const blockers:StartBlocker[]=handoff?.content&&p&&!finding?startBlockers(data,{playbookId:p.id,changes:p.kind==='build',translate,needsRepository:first?.kind==='agent'&&!withoutRepo(first,st),simulated:demo,found}):[];
  const blocked=(b:StartBlocker,body:ReactNode)=>blockers.includes(b)?<p className="text-sm text-nr-ink-red" data-start-blocker={b}>{body}</p>:null;
  const link=async(targetId:string,articleId:string)=>Boolean(await update('linkArticle',{targetId,articleId}));
- const start=async()=>{let revision=data.work.revision;if(agent.save){const d=await update('setAgent',{agentId:agent.save});if(!d)return;revision=d.work.revision;}if(plan.unlink){const d=await update('linkArticle',{targetId:null,revision});if(!d)return;revision=d.work.revision;}if(plan.link){const d=await update('linkArticle',{...plan.link,revision});if(!d)return;revision=d.work.revision;}const d=await update('startTask',{playbookId:pick,note,revision,...(plan.delivery?{delivery:plan.delivery}:{})});if(d)clear();};
+ const start=async()=>{let revision=data.work.revision;if(agent.save){const d=await update('setAgent',{agentId:agent.save});if(!d)return;revision=d.work.revision;}if(plan.unlink){const d=await update('linkArticle',{targetId:null,revision});if(!d)return;revision=d.work.revision;}if(plan.link){const d=await update('linkArticle',{...plan.link,revision});if(!d)return;revision=d.work.revision;}const d=await update('startTask',{playbookId:pick,revision,...(plan.delivery?{delivery:plan.delivery}:{})});if(d)clear();};
  const attachments=Array.isArray(data.task.evidence?.attachmentIds)&&data.task.evidence.attachmentIds.length>0;
  const briefText=brief.replace(/[#*>`_]/g,'').replace(/^[ \t]+/gm,'').replace(/\n{2,}/g,'\n').trim();
  // Top to bottom, every field the card's full width (2026-10-22 user decision): the brief as plain text, the playbook
@@ -334,11 +306,10 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId,onEviden
    {p&&<p className={text.muted}>{p.description}{p.description?' ':''}<Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>setViewing(true)}>{$t('taskDetail.viewSteps')}</Button></p>}
    <PlaybookDrawer playbook={p} open={viewing} onClose={()=>setViewing(false)}/>
   </Field>
-  {articleChoice&&<DeliverySummary data={data} choice={current} finding={finding} notice={notice} allowed={allowed} busy={busy} onChange={()=>setChoosing(true)}/>}
+  {articleChoice&&<DeliverySummary data={data} choice={current} finding={finding} notice={notice} allowed={allowed} busy={busy} translate={translate} onChange={()=>setChoosing(true)}/>}
   {blocked('chooseTarget',$t('taskDetail.startChooseTarget'))}
   {blocked('targetGone',$t('articles.targetMissing'))}
-  {articleChoice&&<DeliveryDialog open={choosing} onClose={()=>setChoosing(false)} data={data} projectId={projectId} choice={current} found={found&&found!=='finding'?found.article:null} notice={notice} busy={busy} link={link} onSave={c=>setChoiceState({...c,playbook:pick})}/>}
-  <Field label={$t('taskDetail.notesOptional')} htmlFor={`${taskId}-note`}><Textarea id={`${taskId}-note`} aria-label={$t('taskDetail.additionalNotes')} rows={1} className="min-h-8 resize-none py-1.5" value={note} disabled={busy||!allowed} placeholder={$t('taskDetail.changeEnglishVersionKeepTechnical')} onChange={e=>setNote(e.target.value)}/></Field>
+  {articleChoice&&<DeliveryDialog open={choosing} onClose={()=>setChoosing(false)} data={data} projectId={projectId} choice={current} found={found&&found!=='finding'?found.article:null} notice={notice} translate={translate} busy={busy} link={link} onSave={c=>setChoiceState({...c,playbook:pick})}/>}
   <NeedsAgent data={data}/>
   {blocked('noRepository',<>{$t('taskDetail.noWebsiteSourceRepositoryConnectedMessage')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>void navigate('/connections?source=repo')}>{$t('common.goDataSources')}</Button></>)}
   {attachments&&<Field label={$t('taskDetail.attachmentsDelivered')}><TaskMedia projectId={projectId} taskId={taskId}/></Field>}
@@ -349,6 +320,19 @@ function LastFeedback({w,stage,out}:{w:Work;stage:Stage;out:Artifact}){
  if(out.version<2)return null;
  const last=[...(w.history||[])].reverse().find(e=>e.action==='requestStageChanges'&&(!e.stageKey||e.stageKey===stage.key)&&e.comment);
  return last?<p className={cn(text.body,'whitespace-pre-wrap')}><span className="text-muted-foreground">{$t('taskDetail.lastFeedback')}</span>{last.comment}</p>:null;
+}
+// What a failed run got before it stopped (2026-10-24 user decision): kept for the owner to read or to finish the step
+// with by hand, and handed to the step's next run to continue from.
+function GotSoFar({partial,onUse}:{partial:PartialResult;onUse?:()=>void}){
+ const report=Array.isArray(partial.report?.sources)?partial.report:undefined,sources=report?.sources.length||0;
+ return <Reveal label={<>{$t('taskDetail.partialTitle')}{sources?<span className="font-normal text-muted-foreground">· {$t('taskDetail.partialSources',{0:sources})}</span>:null}</>}>
+  <div className="flex flex-col gap-3">
+   <Reading><Markdown content={partial.content}/></Reading>
+   {report&&<ReportNotes report={report}/>}
+   <p className={text.muted}>{$t('taskDetail.partialContinue')}</p>
+   {onUse&&<Button variant="outline" className="self-start" onClick={onUse}>{$t('taskDetail.partialUse')}</Button>}
+  </div>
+ </Reveal>;
 }
 // Sources and open questions the Agent reported, with machine timestamps made readable.
 function ReportNotes({report}:{report:NonNullable<Artifact['report']>}){
@@ -408,8 +392,11 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    const missingChecks=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key));
    // A target removed after the draft was written cannot receive it: say so instead of offering a publish that fails.
    const articleTarget=out.article.targetId,targetGone=!(data.articleTargets||[]).some(t=>t.id===articleTarget);
-   return <StageCard title={$t('articleTask.reviewTitle')} sub={by} at={out.createdAt}
-    actions={editing||!allowed?undefined:<>{!targetGone&&<Button disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked})}><Rocket/>{$t((mockSettingsAvailable() || data.task.evidence?.simulated) ? 'taskDetail.approveAndSimulatePublish' : 'taskDetail.approveAndPublish')}</Button>}{requestButton}<Button ref={editButtonRef} variant='ghost' disabled={busy} onClick={()=>setEditing(true)}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
+   // In several languages the card says which round it is: the primary to approve, or the translations to publish.
+   const langs=w.delivery?.locales||[],translated=langs.length>1&&Boolean(w.delivery?.translateFrom);
+   const reviewTitle=translationPending(data)?$t('articleTask.reviewPrimaryTitle',{0:localeName(langs[0],getCurrentLocale())}):translated?$t('articleTask.reviewTranslatedTitle'):$t('articleTask.reviewTitle');
+   return <StageCard title={reviewTitle} sub={by} at={out.createdAt}
+    actions={editing||!allowed?undefined:<>{!targetGone&&<Button disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked})}><Rocket/>{$t(translationPending(data)?'articleTask.approveTranslate':(mockSettingsAvailable() || data.task.evidence?.simulated) ? 'taskDetail.approveAndSimulatePublish' : 'taskDetail.approveAndPublish')}</Button>}{requestButton}<Button ref={editButtonRef} variant='ghost' disabled={busy} onClick={()=>setEditing(true)}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
     {!editing&&request(getStageExecutor().agent)}
     {targetGone&&<p role='alert' className='text-sm text-destructive'>{$t('articles.targetMissing')}</p>}
     <LastFeedback w={w} stage={stage} out={out}/>
@@ -477,11 +464,18 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   const approved=[...w.results.slice(0,index)].reverse().find(r=>r?.approvedAt&&!r.rejectedAt),source=approved?stages[w.results.indexOf(approved)]:undefined;
   const agent=data.agent,isActive=cur&&active(cur),canRun=Boolean(agent?.options?.some(a=>a.id===agent.agentId&&a.type==='demo'))||Boolean(agent?.repo)||withoutRepo(stage,stages)||w.delivery?.kind==='article';
   const failure=cur?.status==='failed'?failureOf(cur,data):undefined;
+  // How often the step failed in a row, and for the same cause (failure-model.ts): after the same cause twice the card
+  // says what to fix first and no longer suggests Try again (2026-10-24 user decision).
+  const {failures,same}=failure?failureStreak(data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))),failure.group,data):{failures:0,same:0},repeated=same>=2&&Boolean(failure?.fix);
+  const retry=cur?.status!=='running'&&cur?.status!=='queued'&&canRun&&<Button variant={failure&&(NO_RETRY.has(failure.group)||repeated)?'outline':'default'} disabled={busy||(!hasTaskAgent(data)&&(agent?.options||[]).length!==1)} onClick={()=>void withUsableAgent(data,update,'retryStage',{stageKey:stage.key})}>{cur?$t('taskDetail.tryAgain'):$t('taskDetail.handOffAgent')}</Button>;
+  // Every Agent on the computer meets a shared failure alike, so switching is not offered (2026-10-24 user decision).
+  const switchAgent=failure&&failure.group!=='restart'&&!failure.shared&&(agent?.options||[]).length>1&&<Button variant="outline" disabled={busy} onClick={pickAgent}>{$t('taskDetail.switchAgent')}</Button>;
   const actions=!manual?<>
-   {cur?.status!=='running'&&cur?.status!=='queued'&&canRun&&<Button variant={failure?.group&&NO_RETRY.has(failure.group)?'outline':'default'} disabled={busy||(!hasTaskAgent(data)&&(agent?.options||[]).length!==1)} onClick={()=>void withUsableAgent(data,update,'retryStage',{stageKey:stage.key})}>{cur?$t('taskDetail.tryAgain'):$t('taskDetail.handOffAgent')}</Button>}
+   {repeated&&switchAgent}
+   {retry}
    {cur?.status==='failed'&&cur.error==='invalid_agent_result'&&cur.mode==='plan'&&!cur.artifactId&&<Button variant='outline' disabled={busy} title={$t('agentResult.recoverHint')} onClick={()=>void act('recoverResult',{runId:cur.id})}>{$t('agentResult.recover')}</Button>}
    {isActive&&<Button variant="outline" disabled={busy||Boolean(cur.cancelRequested)} onClick={async()=>{if(await confirmAction({title:() => ($t('taskDetail.stopCurrentRun',{0:data.task.title})),description:() => ($t('taskDetail.stoppingNotUndoPushedChanges')),action:'common.stop'}))void update('cancelRun',{runId:cur.id});}}><Square/>{$t('common.stop')}</Button>}
-   {failure&&failure.group!=='restart'&&(agent?.options||[]).length>1&&<Button variant="outline" disabled={busy} onClick={pickAgent}>{$t('taskDetail.switchAgent')}</Button>}
+   {!repeated&&switchAgent}
    {failure&&<Button variant="ghost" disabled={busy} onClick={messageAgent}>{$t('taskDetail.messageAgent')}</Button>}
   </>:<><Button disabled={busy||!record.trim()} onClick={()=>void act('recordManual',{content:record})}>{$t('taskDetail.recordContinue')}</Button><Button variant="ghost" onClick={()=>{setManual(false);setRecord('');}}>{$t('common.cancel')}</Button></>;
   const recordLabel=readsOnly(stage)?(stage.mode==='analyze'?$t('taskDetail.analysisResult'):$t('taskDetail.plan')):$t('taskDetail.changeHistory');
@@ -494,19 +488,24 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   if(!canRun)return <StageCard error title={displayStageName(stage)} sub={<>{$t('taskDetail.noWebsiteSourceRepositoryConnectedMessage')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/connections?source=repo')}>{$t('common.goDataSources')}</Button></>} actions={actions}>{body}</StageCard>;
   // Started again by the system after NocoReach restarted (retryAfterRestart on the server): say why it runs again.
   const restarted=cur?.autoRetry?<p className={text.muted}>{$t('taskDetail.restartRetried')}</p>:null;
-  if(cur?.status==='queued')return <StageCard label={progress} title={$t('taskDetail.agentWorking',{0:stage.name})} sub={agent?.online?$t('taskDetail.handedOffAgentStartingNow'):<>{$t('taskDetail.agentComputerOffline')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>} actions={actions}>{restarted}{body}</StageCard>;
-  if(cur?.status==='running')return <StageCard label={progress} spinning title={<>{$t('taskDetail.agentWorking',{0:stage.name})}{cur.cancelRequested?$t('taskDetail.stoppingAside'):''}</>} sub={$t('taskDetail.agentWorkingFor',{0:since(cur.createdAt)})} actions={actions}>{restarted}{body}</StageCard>;
+  // While the Agent translates an approved primary language into the others (2026-10-24), the card says so.
+  const translating=w.delivery?.translateFrom&&!w.release?w.delivery.locales?.slice(1)||[]:[];
+  const working=translating.length?$t('articleTask.translating',{0:joinNames(translating.map(l=>localeName(l,getCurrentLocale())))}):$t('taskDetail.agentWorking',{0:stage.name});
+  if(cur?.status==='queued')return <StageCard label={progress} title={working} sub={agent?.online?$t('taskDetail.handedOffAgentStartingNow'):<>{$t('taskDetail.agentComputerOffline')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>} actions={actions}>{restarted}{body}</StageCard>;
+  if(cur?.status==='running')return <StageCard label={progress} spinning title={<>{working}{cur.cancelRequested?$t('taskDetail.stoppingAside'):''}</>} sub={$t('taskDetail.agentWorkingFor',{0:since(cur.createdAt)})} actions={actions}>{restarted}{body}</StageCard>;
   if(cur?.status==='failed'&&failure){
-   // Runs a NocoReach restart interrupted say nothing about the step, so the streak passes over them.
-   const {why,next,group}=failure,stageRuns=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0&&!r.restartedAt).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
-   const streak=stageRuns.findIndex(r=>r.status!=='failed'),failures=group==='restart'?0:streak<0?stageRuns.length:streak;
+   const {why,next,fix,group,shared}=failure,streak=repeated?$t('taskDetail.failureRepeated',{0:same}):failures>=2?$t('taskDetail.failureStreak',{0:failures}):'';
+   // What the run got before it stopped (TaskService.partialOf), read with the run the page holds in full; a step that
+   // only reads can be finished with it by hand.
+   const partial=data.execution?.runId===cur.id?data.partial:null,use=partial&&allowed&&readsOnly(stage)?()=>{setRecord(partial.content);setManual(true);}:undefined;
    // One notice (2026-10-23 user request): the reason in a sentence, how often it has happened, what helps; the
    // actions above do what the sentence suggests.
    return <StageCard error title={$t('taskDetail.agentDidNotFinish')} actions={actions}>
     <div className="flex flex-col gap-1">
-     <p className={text.body}>{why}{group==='toolLogin'&&agent?.online?<> {$t('taskDetail.failureOnlineMeans')}</>:null}{failures>=2?<span className="text-muted-foreground"> · {$t('taskDetail.failureStreak',{0:failures})}</span>:null}</p>
-     <p className={text.muted}>{next}</p>
+     <p className={text.body}>{sentences(why,group==='toolLogin'&&agent?.online&&$t('taskDetail.failureOnlineMeans'))}{streak?<span className="text-muted-foreground"> · {streak}</span>:null}</p>
+     <p className={text.muted}>{sentences(repeated?$t('taskDetail.failureRepeatedNext',{0:fix}):next,shared&&$t('taskDetail.failureSharedComputer'))}</p>
     </div>
+    {partial&&!manual&&<GotSoFar partial={partial} onUse={use}/>}
     {body}{techLink}</StageCard>;
   }
   return <StageCard title={displayStageName(stage)} sub={$t('taskDetail.stepDoneAgent',{0:stage.instruction})} actions={actions}>{body}</StageCard>;
@@ -623,7 +622,7 @@ function ActivityCard({data,update,busy,members,membersLoaded}:{data:Data;update
    return <li key={`${e.at}:${e.action}:${e.runId||''}:${i}`} className={cn(text.muted,'flex items-start gap-2')}><span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center [&_svg]:size-3.5">{eventIcons[e.action]||<Play/>}</span><p className="min-w-0 flex-1 break-words"><span data-actor="" className="text-foreground">{e.action==='runSucceeded'?executor:name}</span> {line}{artifact&&<> <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>setView(artifact)}>{$t('common.view')}</Button></>}</p><time className="shrink-0">{when(e.at)}</time></li>;})}
    {!rows.length&&<li className={text.muted}>{$t('taskDetail.noActivityYet')}</li>}</ol>
   {view&&<DocReader open onClose={()=>setView(undefined)} title={`${nameOf(view.stepId)} · ${$t('taskDetail.versionNumber',{0:view.version})}`} meta={when(view.createdAt)} content={view.pr||view.article?'':view.content}><VersionChange data={data} artifact={view} notes/></DocReader>}
-  {composer&&<div className="flex items-end gap-2"><Textarea id="nr-composer" aria-label={$t('taskDetail.noteExecutor')} rows={1} className="max-h-40 min-h-8 resize-none py-1.5" value={message} disabled={busy} readOnly={done||closed} placeholder={$t('taskDetail.leaveNoteNextRunReads',{0:executor})} onChange={e=>{setMessage(e.target.value);}}/>{!done&&!closed&&<Button variant="outline" disabled={busy||!message.trim()} onClick={()=>void send()}>{$t('taskDetail.send')}</Button>}</div>}
+  {composer&&<div className="flex items-end gap-2"><Textarea id="nr-composer" aria-label={$t('taskDetail.noteExecutor')} rows={1} className="max-h-40 min-h-8 resize-none py-1.5" value={message} disabled={busy} readOnly={done||closed} placeholder={w.flow?$t('taskDetail.leaveNoteNextRunReads',{0:executor}):$t('taskDetail.leaveNoteBeforeStart',{0:executor,1:$t('taskDetail.changeEnglishVersionKeepTechnical')})} onChange={e=>{setMessage(e.target.value);}}/>{!done&&!closed&&<Button variant="outline" disabled={busy||!message.trim()} onClick={()=>void send()}>{$t('taskDetail.send')}</Button>}</div>}
  </Card>;
 }
 function PageLinkEditor({data,projectId,taskId,busy,update}:{data:Data;projectId:number;taskId:string;busy:boolean;update:Update}){
