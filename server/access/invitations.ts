@@ -45,6 +45,7 @@ const newest = {
   version: 1 as const,
   items: [
     { kind: 'field' as const, path: ['createdAt'], direction: 'desc' as const },
+    { kind: 'field' as const, path: ['id'], direction: 'desc' as const },
   ],
 };
 const status = (row: Offer) =>

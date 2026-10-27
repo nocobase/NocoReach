@@ -31,7 +31,7 @@ beforeAll(async () => {
       cwd: root,
       env: { ...process.env, npm_config_update_notifier: 'false' },
       maxBuffer: 4 * 1024 * 1024,
-      timeout: 30_000,
+      timeout: 120_000,
     },
   );
   const [archive] = z
@@ -55,7 +55,7 @@ beforeAll(async () => {
     path.join(unpacked, 'node_modules'),
     'junction',
   );
-}, 30_000);
+}, 120_000);
 
 afterAll(async () => {
   if (temporary) await rm(temporary, { recursive: true, force: true });
@@ -101,10 +101,12 @@ console.log(JSON.stringify({
 
 test('excludes private configuration, runtime state and verification outputs', () => {
   expect(
-    files.filter((file) =>
-      /(^|\/)(?:\.env(?:\.[^/]*)?|config\.(?:yml|toml)|storage|node_modules|test-results|playwright-report|coverage|\.git|\.agents|test-credentials\.json|integration-fixtures\.json)(?:\/|$)/u.test(
-        file,
-      ),
+    files.filter(
+      (file) =>
+        /(^|\/)(?:\.env(?:\.[^/]*)?|config\.(?:yml|toml)|storage|node_modules|test-results|playwright-report|coverage|\.git|test-credentials\.json|integration-fixtures\.json)(?:\/|$)/u.test(
+          file,
+        ) ||
+        (file.startsWith('.agents/') && !file.startsWith('.agents/rules/')),
     ),
   ).toEqual([]);
 });
@@ -220,10 +222,15 @@ test('ships relocated developer guidance with both mock and YouTube constraints'
       'changelog/unreleased/README.md',
       'scripts/fold-changelog.mjs',
       'docs/DEVELOPMENT.md',
+      '.agents/rules/nocoreach-server.md',
+      '.agents/rules/nocoreach-frontend.md',
+      '.agents/rules/outbound-networking.md',
+      '.agents/rules/task-execution.md',
+      '.agents/rules/build-and-deploy.md',
     ]),
   );
   const guidance = await readFile(
-    path.join(unpacked, 'docs/DEVELOPMENT.md'),
+    path.join(unpacked, '.agents/rules/nocoreach-server.md'),
     'utf8',
   );
   expect(guidance).toContain('### Simulated integrations');

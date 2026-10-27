@@ -63,16 +63,24 @@ const condition = (
       };
 
 // A `$like` pattern with % only at the ends.
-function like(path: string, pattern: string): FilterNode {
+function like(path: string, pattern: string, insensitive = false): FilterNode {
   const starts = pattern.startsWith('%'),
     ends = pattern.endsWith('%');
   const text = pattern.replace(/^%/, '').replace(/%$/, '');
   if (text.includes('%') || text.includes('_'))
     throw new Error(`Unsupported $like pattern: ${pattern}`);
-  if (starts && ends) return condition(path, '$includes', text);
-  if (ends) return condition(path, '$startsWith', text);
-  if (starts) return condition(path, '$endsWith', text);
-  return condition(path, '$eq', text);
+  const operator =
+    starts && ends
+      ? '$includes'
+      : ends
+        ? '$startsWith'
+        : starts
+          ? '$endsWith'
+          : '$eq';
+  return {
+    ...condition(path, operator, text),
+    ...(insensitive ? { mode: 'insensitive' as const } : {}),
+  };
 }
 
 // NocoBase 3 compares booleans with $isTruly/$isFalsy only; classic wrote `{ flag: true }` or `{ flag: { $eq: true } }`.
@@ -119,7 +127,7 @@ function field(
       for (const x of (v as unknown[]) || [])
         out.push(condition(path, '$ne', x));
     } else if (op === '$like' || op === '$iLike') {
-      out.push(like(path, String(v)));
+      out.push(like(path, String(v), op === '$iLike'));
     } else if ((op === '$eq' || op === '$ne') && typeof v === 'boolean') {
       out.push(bool(path, v, op === '$ne'));
     } else if (op === '$eq' && v === null) {
@@ -178,9 +186,11 @@ export function toFilter(
   return { kind: 'filter', version: 1, root: group('and', items) };
 }
 
-export function toSort(sort: unknown): SortAst | undefined {
-  const list = (Array.isArray(sort) ? sort : sort ? [sort] : []) as string[];
-  if (!list.length) return undefined;
+export function toSort(sort: unknown): SortAst {
+  const input = (Array.isArray(sort) ? sort : sort ? [sort] : []) as string[];
+  const list = [...input];
+  // Every bridged collection has an ID. Equal timestamps must not reshuffle pages.
+  if (!list.some((s) => s.replace(/^-/, '') === 'id')) list.push('id');
   return {
     kind: 'sort',
     version: 1,
