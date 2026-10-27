@@ -26,6 +26,7 @@ import { useOptionalOnlineChat } from '../../online-agent/context';
 import { useOnlineApi, type ConversationDetail } from '../../online-agent/api';
 import { OnlineError } from '../../online-agent/controls';
 import { parseQuote } from '../../online-agent/quote';
+import { toolCard, toolLabel } from '../../online-agent/tool-cards';
 import { useFreshData } from '../workspace-cache';
 import {
   onlineRunActive,
@@ -197,22 +198,22 @@ const clock = (iso: string) =>
     hour: '2-digit',
     minute: '2-digit',
   });
-const toolName = (name: string) =>
-  name === 'project_data'
-    ? $t('onlineAgent.readProject')
-    : name === 'read_page'
-      ? $t('onlineAgent.readPage')
-      : name === 'daily_analysis'
-        ? $t('strategy.toolDailyAnalysis')
-        : name === 'task_list' || name === 'task_get'
-          ? $t('strategy.toolTasks')
-          : name;
 /** One question and its answer: the quote above the question, the answer as Markdown, the data it read folded. */
 function Turn({ run }: { run: OnlineRun }) {
   const [open, setOpen] = useState(false),
     { quote, question } = parseQuote(run.input),
     tools = run.events.flatMap((e) => (e.type === 'toolCall' ? [e] : [])),
     active = onlineRunActive(run);
+  // What the AI proposed for confirmation (a rule change) shows here as in the side panel.
+  const results = new Map(
+      run.events.flatMap((e) =>
+        e.type === 'toolResult' ? [[e.id, e] as const] : [],
+      ),
+    ),
+    cards = tools.flatMap((t) => {
+      const card = toolCard(t.name, results.get(t.id));
+      return card ? [{ id: t.id, ...card }] : [];
+    });
   return (
     <div className='flex flex-col gap-2' data-turn={run.id}>
       <div className='flex justify-end'>
@@ -249,7 +250,7 @@ function Turn({ run }: { run: OnlineRun }) {
           {open && (
             <ul className='flex flex-wrap gap-x-3 text-xs text-muted-foreground'>
               {tools.map((t) => (
-                <li key={t.id}>{toolName(t.name)}</li>
+                <li key={t.id}>{toolLabel(t.name)}</li>
               ))}
             </ul>
           )}
@@ -264,6 +265,9 @@ function Turn({ run }: { run: OnlineRun }) {
               </p>
             )}
           </div>
+          {cards.map((card) => (
+            <card.Card key={card.id} run={run} output={card.output} />
+          ))}
         </div>
       </div>
     </div>

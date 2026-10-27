@@ -25,6 +25,7 @@ import {
   type AuthorizationEnv,
 } from '@nocobase/app-plugin-authorization/server';
 import { OnlineAgentError } from '../online-agent/errors.js';
+import { ONLINE_PAGES } from '../../shared/online-agent.js';
 
 const model = z.strictObject({
   modelService: z.string().min(1).max(100),
@@ -46,12 +47,20 @@ const message = z.strictObject({
   text: z.string().trim().min(1).max(30000),
 });
 const projectId = z.string().regex(/^[1-9]\d{0,15}$/);
-// Asked from Insights: the analysis day, and the opportunity when asked from its line.
-const subject = z.strictObject({
-  kind: z.literal('insights'),
-  day: z.iso.date(),
-  opportunityId: z.string().min(1).max(100).optional(),
-});
+// Asked from Insights: the analysis day, and the opportunity when asked from its line. Opened from a page's AI
+// entry: the page, and the row when opened from one.
+const subject = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('insights'),
+    day: z.iso.date(),
+    opportunityId: z.string().min(1).max(100).optional(),
+  }),
+  z.strictObject({
+    kind: z.literal('page'),
+    page: z.enum(ONLINE_PAGES),
+    item: z.string().trim().min(1).max(200).optional(),
+  }),
+]);
 const createConversation = z
   .strictObject({
     requestId: z.uuid(),
@@ -62,7 +71,8 @@ const createConversation = z
     text: z.string().trim().min(1).max(30000),
   })
   .refine((v) => !v.subject || v.projectId, {
-    message: 'A conversation asked from Insights belongs to a project',
+    message:
+      'A conversation asked from Insights or a page belongs to a project',
     path: ['projectId'],
   });
 const endpoint = (operationId: string, summary: string) =>

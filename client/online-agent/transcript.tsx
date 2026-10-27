@@ -11,6 +11,7 @@ import {
 import { OnlineApiError } from './api.js';
 import { OnlineError } from './controls.js';
 import { parseQuote } from './quote.js';
+import { toolCard, toolLabel } from './tool-cards.js';
 export function OnlineTranscript({ run }: { run: OnlineRun }) {
   // Markdown must see a complete text segment, not one renderer per streaming delta.
   const parts: Extract<OnlineEvent, { type: 'text' | 'toolCall' }>[] = [];
@@ -68,21 +69,20 @@ export function OnlineTranscript({ run }: { run: OnlineRun }) {
           />
           <span className='wrap-anywhere'>{run.agentName}</span>
         </p>
-        {parts.map((part, index) =>
-          part.type === 'text' ? (
-            <ChatMarkdown key={index} content={part.text} />
-          ) : (
+        {parts.map((part, index) => {
+          if (part.type === 'text')
+            return <ChatMarkdown key={index} content={part.text} />;
+          const card = toolCard(part.name, results.get(part.id));
+          if (card)
+            return <card.Card key={part.id} run={run} output={card.output} />;
+          return (
             <details
               key={part.id}
               className='min-w-0 text-sm text-muted-foreground'
             >
               <summary className='cursor-pointer rounded-sm py-1 wrap-anywhere focus-visible:outline-2 focus-visible:outline-ring'>
                 <WrenchIcon className='mx-1 inline size-4' aria-hidden='true' />
-                {part.name === 'project_data'
-                  ? $t('onlineAgent.readProject')
-                  : part.name === 'read_page'
-                    ? $t('onlineAgent.readPage')
-                    : part.name}
+                {toolLabel(part.name)}
                 {' · '}
                 {results.has(part.id)
                   ? $t(
@@ -107,8 +107,8 @@ export function OnlineTranscript({ run }: { run: OnlineRun }) {
                 )}
               </div>
             </details>
-          ),
-        )}
+          );
+        })}
         {!hasText && run.output && <ChatMarkdown content={run.output} />}
         {(active || run.status === 'cancelled' || run.status === 'failed') && (
           <p role='status' className='text-sm text-muted-foreground'>

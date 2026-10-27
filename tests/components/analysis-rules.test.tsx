@@ -14,6 +14,7 @@ import { setDictionary } from '#i18n';
 import english from '../../shared/i18n/en.json';
 import { RULES } from '../../server/nocoreach/analysis-rules';
 import type { View } from '#pages/analysis-rules/types';
+import { notifyPageChange } from '../../client/online-agent/page-changes';
 const { action, context, success } = vi.hoisted(() => ({
   action: vi.fn(),
   context: { allowed: true, actions: null as string[] | null, projectId: 1 },
@@ -37,20 +38,26 @@ vi.mock('#hooks/use-business-access', () => ({
 vi.mock('#pages/strategy/board', () => ({
   getSourceNames: () => ({ gsc: 'Search Console' }),
 }));
+// The entry itself is tested with the chat (tests/nocoreach/page-ai-entry.test.tsx); here, what the page gives it.
+vi.mock('../../client/online-agent/page-entry', () => ({
+  PageAiEntry: (props: {
+    label: string;
+    description?: string;
+    presets: string[];
+    subject: { page: string; item?: string };
+  }) => (
+    <button
+      type='button'
+      data-page={props.subject.page}
+      data-item={props.subject.item}
+      data-presets={props.presets.join('|')}
+      title={props.description}
+    >
+      {props.label}
+    </button>
+  ),
+}));
 let data: View;
-const proposal = () => ({
-  revision: data.revision,
-  explanation: '减少较小波动，但可能错过中等降幅。',
-  changes: [
-    {
-      ruleId: 'gsc-click-drop',
-      field: 'dropPct',
-      before: 30,
-      after: 50,
-      reason: '提高触发门槛',
-    },
-  ],
-});
 beforeEach(() => {
   setDictionary(null);
   context.allowed = true;
@@ -78,12 +85,6 @@ beforeEach(() => {
       { body }: { body: Record<string, any> },
     ) => {
       if (op === 'view') return structuredClone(data);
-      if (op === 'propose') return proposal();
-      if (op === 'apply') {
-        data.rules.find((r) => r.id === 'gsc-click-drop')!.params[0].value = 50;
-        data.revision = 'v2';
-        return structuredClone(data);
-      }
       if (op === 'save') {
         if (body.rules)
           data.rules = data.rules.map((r) => ({
@@ -108,13 +109,6 @@ const start = async () => {
   return ui;
 };
 const calls = (op: string) => action.mock.calls.filter((c) => c[1] === op);
-async function preview() {
-  await userEvent.click(
-    screen.getByRole('button', { name: '搜索点击下降超过 50% 再提醒我' }),
-  );
-  await userEvent.click(screen.getByRole('button', { name: '预览修改' }));
-  await screen.findByText('待确认的规则修改');
-}
 test('renders full catalog without native disclosures or truncated rule titles', async () => {
   const { container } = await start();
   expect(container.querySelectorAll('[data-rule]')).toHaveLength(RULES.length);
@@ -125,40 +119,6 @@ test('renders full catalog without native disclosures or truncated rule titles',
   expect(container.querySelector('[data-rule] h4')?.className).not.toContain(
     'truncate',
   );
-});
-test('AI preview is read-only; confirmation writes the reviewed changes and updates actual rule', async () => {
-  const { container } = await start();
-  await preview();
-  expect(calls('apply')).toHaveLength(0);
-  expect(calls('save')).toHaveLength(0);
-  await userEvent.click(screen.getByRole('button', { name: '确认修改' }));
-  await waitFor(() => expect(calls('apply')).toHaveLength(1));
-  expect(calls('apply')[0][2].body).toMatchObject({
-    projectId: 1,
-    revision: 'v1',
-    changes: [{ after: 50 }],
-  });
-  await waitFor(() =>
-    expect(
-      container.querySelector('[data-rule="gsc-click-drop"] [data-numbers]')
-        ?.textContent,
-    ).toContain('50'),
-  );
-  await waitFor(() =>
-    expect(screen.getByRole('textbox', { name: '调整要求' })).toHaveFocus(),
-  );
-});
-test('editing instruction invalidates preview and cancel never writes', async () => {
-  await start();
-  await preview();
-  fireEvent.change(screen.getByRole('textbox', { name: '调整要求' }), {
-    target: { value: '换一个要求' },
-  });
-  expect(screen.queryByRole('button', { name: '确认修改' })).toBeNull();
-  await preview();
-  await userEvent.click(screen.getByRole('button', { name: '取消' }));
-  expect(calls('apply')).toHaveLength(0);
-  expect(screen.getByRole('textbox', { name: '调整要求' })).toHaveFocus();
 });
 test('manual editing validates parameters, retains all rules, and a switch does not erase custom values', async () => {
   const { container } = await start();
@@ -189,90 +149,18 @@ test('read-only members see rules but no mutations', async () => {
   context.allowed = false;
   await start();
   expect(screen.queryByRole('switch')).toBeNull();
-  expect(screen.queryByRole('textbox', { name: '调整要求' })).toBeNull();
   expect(screen.queryByRole('button', { name: '调整参数' })).toBeNull();
 });
 test('a custom role can save rule settings without gaining AI or scheme actions', async () => {
   context.actions = ['nrAnalysisRules.save'];
   const { container } = await start();
-  expect(screen.queryByRole('textbox', { name: '调整要求' })).toBeNull();
   const rule = within(
     container.querySelector('[data-rule="gsc-click-drop"]')! as HTMLElement,
   );
   await userEvent.click(rule.getByRole('switch'));
   await waitFor(() => expect(calls('save')).toHaveLength(1));
   expect(calls('save')[0][2].body.projectId).toBe(1);
-  expect(calls('propose')).toHaveLength(0);
 });
-test('model failure retains request and provides retry without writing', async () => {
-  await start();
-  action.mockImplementation(async (_r, op) => {
-    if (op === 'view') return data;
-    if (op === 'propose') throw new Error('模型暂时不可用');
-  });
-  await userEvent.click(
-    screen.getByRole('button', { name: '搜索点击下降超过 50% 再提醒我' }),
-  );
-  await userEvent.click(screen.getByRole('button', { name: '预览修改' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('模型暂时不可用');
-  expect(screen.getByRole('textbox', { name: '调整要求' })).not.toHaveValue('');
-  expect(calls('apply')).toHaveLength(0);
-});
-test('conflict refreshes rules and never reports a save success', async () => {
-  await start();
-  await preview();
-  action.mockImplementation(async (_r, op) => {
-    if (op === 'apply')
-      throw Object.assign(new Error('规则已发生变化'), { status: 409 });
-    if (op === 'view') return { ...data, revision: 'new' };
-  });
-  await userEvent.click(screen.getByRole('button', { name: '确认修改' }));
-  await screen.findByText('规则已发生变化');
-  expect(success).not.toHaveBeenCalled();
-  expect(screen.queryByRole('button', { name: '确认修改' })).toBeNull();
-});
-test('switching project does not show a late preview from the old project', async () => {
-  const ui = await start();
-  let resolve: (v: unknown) => void = () => {};
-  action.mockImplementation(async (_r, op) =>
-    op === 'view'
-      ? data
-      : new Promise((r) => {
-          resolve = r;
-        }),
-  );
-  await userEvent.click(
-    screen.getByRole('button', { name: '搜索点击下降超过 50% 再提醒我' }),
-  );
-  await userEvent.click(screen.getByRole('button', { name: '预览修改' }));
-  await waitFor(() => expect(calls('propose')).toHaveLength(1));
-  context.projectId = 2;
-  ui.rerender(<AnalysisRules />);
-  await screen.findByText('规则');
-  resolve(proposal());
-  await waitFor(() =>
-    expect(screen.queryByRole('button', { name: '确认修改' })).toBeNull(),
-  );
-});
-
-test('manual no-op saves invalidate AI preview even when configuration revision is unchanged', async () => {
-  const { container } = await start();
-  await preview();
-  const previous = action.getMockImplementation()!;
-  action.mockImplementation(async (...args) =>
-    args[1] === 'save' ? structuredClone(data) : previous(...args),
-  );
-  const row = within(
-    container.querySelector('[data-rule="gsc-click-drop"]') as HTMLElement,
-  );
-  await userEvent.click(row.getByRole('button', { name: '调整参数' }));
-  await row.findByRole('spinbutton', { name: '下降至少 %' });
-  await userEvent.click(row.getByRole('button', { name: '保存' }));
-  await waitFor(() => expect(row.queryByRole('spinbutton')).toBeNull());
-  expect(screen.queryByRole('button', { name: '确认修改' })).toBeNull();
-  expect(calls('apply')).toHaveLength(0);
-});
-
 test('invalid watch days show validation and focus the field without saving', async () => {
   const { container } = await start();
   const section = within(
@@ -288,17 +176,31 @@ test('invalid watch days show validation and focus the field without saving', as
   expect(calls('save')).toHaveLength(0);
 });
 
-test('keeps observation period visible below the grouped rules', async () => {
+test('keeps observation period visible below the grouped rules, with no AI input on the page', async () => {
   const { container } = await start();
-  const area = screen.getByRole('region', { name: '用 AI 调整' });
-  expect(within(area).getByRole('textbox', { name: '调整要求' })).toBeVisible();
+  // The AI is in the chat panel (2026-10-27 user decision): the page keeps no request box or AI section.
+  expect(screen.queryByRole('region', { name: '用 AI 调整' })).toBeNull();
+  expect(container.querySelector('textarea')).toBeNull();
   expect(container.querySelector('[data-focus]')).toBeNull();
   expect(container.querySelector('[data-verdict-rules]')).toBeNull();
   expect(screen.getByText('信号观察期限：14 天')).toBeVisible();
-  expect(area.querySelector('[data-watch-days]')).toBeNull();
   expect(screen.queryByRole('button', { name: '高级设置' })).toBeNull();
   expect(calls('save')).toHaveLength(0);
   expect(data.focus).toBe('团队重点');
+});
+
+test('the AI entry opens the chat about the scheme in view, with the page prompts', async () => {
+  data.schemeId = 'second';
+  await start();
+  const entry = screen.getByRole('button', { name: '让 AI 帮你调规则' });
+  expect(entry).toHaveAttribute('data-page', 'analysisRules');
+  expect(entry).toHaveAttribute('data-item', 'second');
+  expect(entry.getAttribute('data-presets')?.split('|')).toEqual([
+    '少报一些小波动',
+    '加一条竞品发布新版本的规则',
+    '解释最近一次分析中规则为什么触发',
+    '哪些规则最近没有触发',
+  ]);
 });
 
 test('rules are tabbed by area; the area with an open editor cannot be left', async () => {
@@ -315,42 +217,32 @@ test('rules are tabbed by area; the area with an open editor cannot be left', as
     ).getByRole('button', { name: '调整参数' }),
   );
   await group.findByRole('spinbutton', { name: '下降至少 %' });
-  const others = screen
-    .getAllByRole('tab')
-    .filter((other) => other !== tab);
+  const others = screen.getAllByRole('tab').filter((other) => other !== tab);
   expect(others.length).toBeGreaterThan(0);
   for (const other of others) expect(other).toBeDisabled();
   expect(container.querySelectorAll('[data-rule]')).toHaveLength(RULES.length);
   expect(calls('save')).toHaveLength(0);
 });
 
-test('examples fill the request without submitting and can be changed', async () => {
-  await start();
-  await userEvent.click(screen.getByRole('button', { name: '换一组' }));
-  await userEvent.click(
-    screen.getByRole('button', { name: '只关注 GitHub 上明显增长的信号' }),
-  );
-  expect(screen.getByRole('textbox', { name: '调整要求' })).toHaveValue(
-    '只关注 GitHub 上明显增长的信号',
-  );
-  expect(calls('propose')).toHaveLength(0);
-  expect(calls('save')).toHaveLength(0);
-});
-
-test('rule summary describes coverage without redundant configuration labels', async () => {
+test('a change confirmed in the chat shows on the page without a reload', async () => {
   data.focus = '';
-  await start();
+  const { container } = await start();
+  const numbers = () =>
+    container.querySelector('[data-rule="gsc-click-drop"] [data-numbers]')
+      ?.textContent;
+  expect(numbers()).toContain('30');
+  data.rules.find((r) => r.id === 'gsc-click-drop')!.params[0].value = 50;
+  data.revision = 'v2';
+  // Another project's change is not this page's.
+  act(() => notifyPageChange('analysisRules', 2));
+  act(() => notifyPageChange('analysisRules', 1));
+  await waitFor(() => expect(numbers()).toContain('50'));
+  expect(calls('view')).toHaveLength(2);
   expect(
     within(screen.getByRole('region', { name: '规则' })).getByText(/^关注/, {
       selector: '[data-rules-summary]',
     }),
   ).toBeVisible();
-  await preview();
-  await userEvent.click(screen.getByRole('button', { name: '确认修改' }));
-  await within(screen.getByRole('region', { name: '规则' })).findByText(
-    /^关注/,
-    { selector: '[data-rules-summary]' },
-  );
   expect(screen.queryByText(/默认配置|已调整/)).not.toBeInTheDocument();
   expect(screen.queryByText(/当前关注 Search Console/)).not.toBeInTheDocument();
   expect(
@@ -442,168 +334,6 @@ test('scheme selection reloads its own rules and copy opens a modal with source 
   expect(action.mock.calls.some(([, op]) => op === 'create')).toBe(false);
 });
 
-test('AI organize requires review, preserves manual values, and persists only after final confirmation', async () => {
-  Object.assign(data, {
-    schemeId: 'default',
-    schemeName: '默认分析',
-    activeSchemeId: 'default',
-    storeRevision: 0,
-    schemes: [{ id: 'default', name: '默认分析', version: 1 }],
-  });
-  const previous = action.getMockImplementation()!;
-  action.mockImplementation(async (resource, op, options) => {
-    if (op === 'draft')
-      return {
-        revision: 'v1',
-        draft: {
-          name: 'AI 整理的规则',
-          source: 'gsc',
-          condition: '条件',
-          evidence: '证据',
-        },
-      };
-    if (op === 'addRule') return structuredClone(data);
-    return previous(resource, op, options);
-  });
-  render(<AnalysisRules />);
-  await userEvent.click(
-    await screen.findByRole('button', { name: '添加规则', exact: true }),
-  );
-  const dialog = screen.getByRole('dialog');
-  await userEvent.type(
-    within(dialog).getByRole('textbox', { name: /名称/ }),
-    '手动输入',
-  );
-  await userEvent.type(
-    within(dialog).getByRole('textbox', { name: '你想关注什么？' }),
-    '请整理搜索变化',
-  );
-  await userEvent.click(
-    within(dialog).getByRole('button', { name: '让 AI 帮忙整理' }),
-  );
-  await within(dialog).findByText('AI 整理的规则');
-  expect(within(dialog).getByRole('textbox', { name: /名称/ })).toHaveValue(
-    '手动输入',
-  );
-  expect(action.mock.calls.some(([, op]) => op === 'addRule')).toBe(false);
-  await userEvent.click(
-    within(dialog).getByRole('button', { name: '填入规则' }),
-  );
-  expect(within(dialog).getByRole('textbox', { name: /名称/ })).toHaveValue(
-    'AI 整理的规则',
-  );
-  await userEvent.click(
-    within(dialog).getByRole('button', { name: '添加到方案' }),
-  );
-  await waitFor(() =>
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
-  );
-  expect(action).toHaveBeenCalledWith(
-    'nrAnalysisRules',
-    'addRule',
-    expect.objectContaining({
-      body: expect.objectContaining({
-        schemeId: 'default',
-        expectedRevision: 'v1',
-        rule: {
-          name: 'AI 整理的规则',
-          source: 'gsc',
-          condition: '条件',
-          evidence: '证据',
-        },
-      }),
-    }),
-  );
-});
-
-test('closing the add modal discards a late model response', async () => {
-  Object.assign(data, {
-    schemeId: 'default',
-    schemeName: '默认分析',
-    activeSchemeId: 'default',
-    storeRevision: 0,
-    schemes: [{ id: 'default', name: '默认分析', version: 1 }],
-  });
-  let resolve!: (value: unknown) => void;
-  const previous = action.getMockImplementation()!;
-  action.mockImplementation((resource, op, options) =>
-    op === 'draft'
-      ? new Promise((r) => {
-          resolve = r;
-        })
-      : previous(resource, op, options),
-  );
-  render(<AnalysisRules />);
-  await userEvent.click(
-    await screen.findByRole('button', { name: '添加规则', exact: true }),
-  );
-  let dialog = screen.getByRole('dialog');
-  await userEvent.type(
-    within(dialog).getByRole('textbox', { name: '你想关注什么？' }),
-    '规则',
-  );
-  await userEvent.click(
-    within(dialog).getByRole('button', { name: '让 AI 帮忙整理' }),
-  );
-  await userEvent.click(within(dialog).getByRole('button', { name: '取消' }));
-  resolve({
-    revision: 'v1',
-    draft: {
-      name: '迟到结果',
-      source: 'gsc',
-      condition: '条件',
-      evidence: '证据',
-    },
-  });
-  await userEvent.click(
-    screen.getByRole('button', { name: '添加规则', exact: true }),
-  );
-  dialog = screen.getByRole('dialog');
-  expect(within(dialog).getByRole('textbox', { name: /名称/ })).toHaveValue('');
-  expect(within(dialog).queryByText('迟到结果')).not.toBeInTheDocument();
-});
-
-test('AI draft cannot advance a stale form revision after another editor changes rules', async () => {
-  Object.assign(data, {
-    schemeId: 'default',
-    schemeName: '默认分析',
-    activeSchemeId: 'default',
-    storeRevision: 0,
-    schemes: [{ id: 'default', name: '默认分析', version: 1 }],
-  });
-  const previous = action.getMockImplementation()!;
-  action.mockImplementation((resource, op, options) =>
-    op === 'draft'
-      ? Promise.resolve({
-          revision: 'newer-version',
-          draft: {
-            name: 'New',
-            source: 'gsc',
-            condition: 'Condition',
-            evidence: 'Evidence',
-          },
-        })
-      : previous(resource, op, options),
-  );
-  render(<AnalysisRules />);
-  await userEvent.click(
-    await screen.findByRole('button', { name: '添加规则', exact: true }),
-  );
-  const dialog = screen.getByRole('dialog');
-  await userEvent.type(
-    within(dialog).getByRole('textbox', { name: '你想关注什么？' }),
-    '规则',
-  );
-  await userEvent.click(
-    within(dialog).getByRole('button', { name: '让 AI 帮忙整理' }),
-  );
-  await within(dialog).findByRole('alert');
-  expect(
-    within(dialog).queryByRole('button', { name: '填入规则' }),
-  ).not.toBeInTheDocument();
-  expect(action.mock.calls.some(([, op]) => op === 'addRule')).toBe(false);
-});
-
 test('add-rule validation messages update when switching language without clearing the form', async () => {
   Object.assign(data, {
     schemeId: 'default',
@@ -617,23 +347,26 @@ test('add-rule validation messages update when switching language without cleari
     await screen.findByRole('button', { name: '添加规则', exact: true }),
   );
   const dialog = screen.getByRole('dialog');
+  // The dialog is the rule's form alone; describing a rule to the AI happens in the chat.
+  expect(within(dialog).queryByRole('button', { name: /AI/ })).toBeNull();
   await userEvent.type(
     within(dialog).getByRole('textbox', { name: /名称/ }),
     '保留名称',
   );
   await userEvent.click(
-    within(dialog).getByRole('button', { name: '让 AI 帮忙整理' }),
+    within(dialog).getByRole('button', { name: '添加到方案' }),
   );
-  expect(within(dialog).getByRole('alert')).toHaveTextContent(
-    '请填写 1–2000 字的调整要求。',
+  expect(within(dialog).getAllByRole('alert')[0]).toHaveTextContent(
+    '请填写此项',
   );
   act(() => setDictionary(english));
-  expect(within(dialog).getByRole('alert')).toHaveTextContent(
-    english['analysisRules.instructionRequired'],
+  expect(within(dialog).getAllByRole('alert')[0]).toHaveTextContent(
+    english['analysisSchemes.required'],
   );
   expect(within(dialog).getByRole('textbox', { name: /Name/ })).toHaveValue(
     '保留名称',
   );
+  expect(calls('addRule')).toHaveLength(0);
   act(() => setDictionary(null));
 });
 

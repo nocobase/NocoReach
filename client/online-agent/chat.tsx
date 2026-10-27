@@ -34,6 +34,7 @@ import {
   EmptyContent,
 } from '#components/ui/empty';
 import { useBusinessAccess } from '#hooks/use-business-access';
+import { ActorAvatar } from '#components/reach/actor';
 import { useProjects, useProject } from '../pages/reach-data.js';
 import {
   onlineRunActive,
@@ -103,12 +104,12 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
   const requested = chat.conversationId;
   const loadError =
     loadFailure?.id === requested ? loadFailure.error : undefined;
-  const canSend =
+  const ready =
     !busy &&
-    !!chat.draft.trim() &&
     (!requested || !!current) &&
     !loadError &&
     (chat.request || (eligible && !active));
+  const canSend = ready && !!chat.draft.trim();
   useLayoutEffect(() => {
     const element = transcriptRef.current;
     if (!element || !current) return;
@@ -117,6 +118,16 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
       followingRef.current = true;
     }
     if (followingRef.current) element.scrollTop = element.scrollHeight;
+  }, [current, history]);
+  // A reply's parts can grow after it is drawn (a proposal card reading the rules): keep following the end.
+  useEffect(() => {
+    const element = transcriptRef.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      if (followingRef.current) element.scrollTop = element.scrollHeight;
+    });
+    for (const child of element.children) observer.observe(child);
+    return () => observer.disconnect();
   }, [current, history]);
   useEffect(() => {
     if (chat.mode === 'online' && !history && !busy)
@@ -210,8 +221,9 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
     setDetail(undefined);
     composerRef.current?.focus();
   }
-  async function send() {
-    if (!canSend) return;
+  // A page entry's prompt is sent as it is clicked, as if typed (it stays in the composer if sending fails).
+  async function send(text = chat.draft) {
+    if (!ready || !text.trim()) return;
     setBusy(true);
     setError(undefined);
     // Preserve the exact request after an ambiguous failure, including its idempotency key and original revision.
@@ -223,7 +235,7 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
         ? {
             requestId: crypto.randomUUID(),
             revision: current.conversation.revision,
-            text: chat.draft.trim(),
+            text: text.trim(),
           }
         : {
             requestId: crypto.randomUUID(),
@@ -232,7 +244,7 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
             ...(chat.subject && chat.projectId
               ? { subject: chat.subject }
               : {}),
-            text: chat.draft.trim(),
+            text: text.trim(),
           },
     };
     chat.setRequest(request);
@@ -242,6 +254,7 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
         request.body,
       );
       chat.setRequest(null);
+      if (!current) chat.started(conversation.id);
       chat.select(conversation.id);
       chat.setDraft('');
       chat.touch();
@@ -384,7 +397,42 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
                 <Skeleton className='mt-3 h-16 w-3/4' />
               </div>
             )}
-            {!requested && (
+            {!requested && chat.page && (
+              <Empty data-page-opening=''>
+                <EmptyHeader>
+                  <EmptyMedia>
+                    <ActorAvatar type='agent' size='default' />
+                  </EmptyMedia>
+                  <EmptyTitle>{chat.page.label}</EmptyTitle>
+                  {chat.page.description && (
+                    <EmptyDescription>{chat.page.description}</EmptyDescription>
+                  )}
+                </EmptyHeader>
+                <EmptyContent>
+                  <ul
+                    className='flex w-full flex-col gap-2'
+                    aria-label={$t('onlineAgent.suggestions')}
+                  >
+                    {chat.page.presets.map((preset) => (
+                      <li key={preset}>
+                        <Button
+                          variant='outline'
+                          className='h-auto w-full justify-start py-2 text-left font-normal whitespace-normal'
+                          disabled={!ready || !!chat.request}
+                          onClick={() => {
+                            chat.setDraft(preset);
+                            void send(preset);
+                          }}
+                        >
+                          {preset}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </EmptyContent>
+              </Empty>
+            )}
+            {!requested && !chat.page && (
               <Empty>
                 <EmptyHeader>
                   <EmptyMedia variant='icon'>
