@@ -320,6 +320,50 @@ it('edits a new article with validation on save and sends only what it fills in'
   });
 });
 
+// 2026-10-27: the language a new article must have is the task's primary one, as the server checks.
+it('asks a new article for the title and body of the primary language chosen at start', async () => {
+  const onSave = vi.fn(async () => true);
+  const user = userEvent.setup();
+  render(
+    <TaskDraftProvider>
+      <TaskDraftScope scope='1:1'>
+        <ArticleEditor
+          data={
+            {
+              ...data,
+              work: { delivery: { locales: ['zh', 'en'] } },
+            } as unknown as TaskData
+          }
+          article={{
+            ...proposal,
+            articleId: null,
+            baseKey: null,
+            baseVersion: null,
+            draft: { slug: 'new-post', locales: { zh: { title: '新文章' } } },
+            changes: ['zh.title', 'slug'],
+          }}
+          draftKey='a2'
+          busy={false}
+          onSave={onSave}
+          onCancel={vi.fn()}
+        />
+      </TaskDraftScope>
+    </TaskDraftProvider>,
+  );
+  await user.click(screen.getByRole('button', { name: 'Save' }));
+  expect(onSave).not.toHaveBeenCalled();
+  // Only the Chinese body is asked for; English is translated after approval.
+  expect(screen.getAllByText('Enter the body')).toHaveLength(1);
+  expect(screen.queryByText('Enter a title')).not.toBeInTheDocument();
+  const bodies = screen.getAllByRole('textbox', { name: /^Body/ });
+  await user.type(bodies[1], '中文正文');
+  await user.click(screen.getByRole('button', { name: 'Save' }));
+  expect(onSave).toHaveBeenCalledWith({
+    slug: 'new-post',
+    locales: { zh: { title: '新文章', body: '中文正文' } },
+  });
+});
+
 it.each([
   { create: true, status: 'published' as const },
   { create: true, status: 'draft' as const },
