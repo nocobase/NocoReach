@@ -987,6 +987,44 @@ test.each(['page', 'article'])(
 );
 
 // 2026-10-24 user request: an article in several languages is reviewed in its primary one first, then translated.
+// 2026-10-27 user report: Edit directly opened on empty fields of a language the article did not have yet.
+test('Edit directly opens on the language the review shows, with only the written ones as tabs', async () => {
+  const user = userEvent.setup();
+  const data = reviewArticle();
+  data.articleTargets = [
+    { ...data.articleTargets![0], locales: ['en', 'zh', 'ja'] },
+  ] as TaskData['articleTargets'];
+  data.articleBases!['base-1'].locales.zh = {
+    title: '最受欢迎的开源无代码 AI 工具',
+    description: '',
+    body: '正文',
+  };
+  data.work.delivery = {
+    kind: 'article',
+    targetId: 'cms',
+    articleId: '7',
+    sourceKey: null,
+    locales: ['en', 'zh'],
+    translateFrom: { artifactId: 'artifact-0', at: '2026-10-27T00:00:00Z' },
+  };
+  mount(data);
+  const card = screen.getByRole('region', { name: '等你处理' });
+  await user.click(within(card).getByRole('tab', { name: '中文' }));
+  await user.click(within(card).getByRole('button', { name: '直接编辑' }));
+  expect(
+    within(card)
+      .getAllByRole('tab')
+      .map((t) => t.textContent),
+  ).toEqual(['英语', '中文']);
+  expect(within(card).getByRole('tab', { name: '中文' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  expect(within(card).getByRole('textbox', { name: /^标题/ })).toHaveValue(
+    '最受欢迎的开源无代码 AI 工具',
+  );
+});
+
 test('an article in two languages approves the primary to translate, and the card names the translation', () => {
   const data = reviewArticle();
   const delivery = {
