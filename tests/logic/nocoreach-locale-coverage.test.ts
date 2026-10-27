@@ -362,6 +362,10 @@ describe('NocoReach semantic-key translations', () => {
       '把页面改动同步到其他语言版本。': '补上缺失的语言，或按原文更新译文。',
       '把指定页面的最新改动同步到其他语言版本：内容保持一致，术语遵循项目记忆；缺失的语言版本按需新建。':
         '把指定的页面或文章翻译成其他语言版本：补上缺失的语言，或按原文的最新内容更新已有译文。内容与原文一致，术语遵循项目记忆；原文不改。',
+      // Memory's status line reads "Updated" with dot separators (2026-10-27, UI review D2).
+      '没有完成：{0}': ' · 没有完成：{0}',
+      '，{0} 条建议': ' · {0} 条建议',
+      '，没有要更新的': ' · 没有要更新的',
     };
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(

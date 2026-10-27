@@ -267,9 +267,10 @@ function IndexTable({ pages, tab, reason, onTab, onReason, onOpen, onHandOff }: 
   return (
     <Card className="gap-0 py-0" data-report="">
       <DataTableTabs value={tab} onValueChange={(v) => onTab(v as Tab)} actions={<Button variant="outline" size="sm" onClick={exportRows}><Download data-icon="inline-start" />{$t('common.exportCsv')}</Button>} tools={<>
-        <Input className="h-8 w-56" aria-label={$t('searchIndex.urlContains')} placeholder={$t('searchIndex.urlContains')} value={text} maxLength={500} onChange={(e) => { setText(e.target.value); setPagination((s) => ({ ...s, pageIndex: 0 })); }} />
+        {/* The search box gives way first, so the filters and Export CSV stay on one row at 1440 (UI review 2026-10-23). */}
+        <Input className="h-8 w-auto min-w-32 flex-1 basis-32 sm:max-w-56" aria-label={$t('searchIndex.urlContains')} placeholder={$t('searchIndex.urlContains')} value={text} maxLength={500} onChange={(e) => { setText(e.target.value); setPagination((s) => ({ ...s, pageIndex: 0 })); }} />
         <Select value={reason ?? "all"} onValueChange={(v) => onReason(!v || v === "all" ? undefined : String(v))}>
-          <SelectTrigger size="sm" className="w-56" aria-label={$t('searchIndex.reason')}><SelectValue>{(v: string) => (v === "all" ? $t('searchIndex.allReasons') : coverageName(v))}</SelectValue></SelectTrigger>
+          <SelectTrigger size="sm" className="w-48" aria-label={$t('searchIndex.reason')}><SelectValue>{(v: string) => (v === "all" ? $t('searchIndex.allReasons') : coverageName(v))}</SelectValue></SelectTrigger>
           <SelectContent><SelectItem value="all">{$t('searchIndex.allReasons')}</SelectItem>{(reason && !reasons.includes(reason) ? [...reasons, reason] : reasons).map((k) => <SelectItem key={k} value={k}>{coverageName(k)}</SelectItem>)}</SelectContent>
         </Select>
         <Select value={type} onValueChange={(v) => { setType(String(v || "all")); setPagination((s) => ({ ...s, pageIndex: 0 })); }}>

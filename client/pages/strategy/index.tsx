@@ -558,9 +558,7 @@ function HowAnalyzed({
   if (schedule && time)
     return $tj('strategy.howAnalyzedDaily', {
       0: rules,
-      1: toSchedules(
-        $t('strategy.everyDayAt', { 0: time }),
-      ),
+      1: toSchedules($t('strategy.everyDayAt', { 0: time })),
     });
   return $tj('strategy.howAnalyzedManual', { 0: rules });
 }

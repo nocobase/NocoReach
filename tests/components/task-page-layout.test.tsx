@@ -685,10 +685,9 @@ test('Performance lists each page: the latest 28 days before going live, then da
   const { unmount } = mount();
   let block = await screen.findByRole('region', { name: '数据表现' });
   expect(
-    await within(block).findByText('近 28 天 · 搜索点击 · 平均排名'),
-  ).toBeVisible();
-  expect(
-    within(block).getByRole('link', { name: '/en/blog/ai-agent-platforms' }),
+    await within(block).findByRole('link', {
+      name: '/en/blog/ai-agent-platforms',
+    }),
   ).toHaveAttribute('href', pages[0]);
   expect(block).toHaveTextContent('400 · 第 32 位');
   // Three pages, then the rest on request.
@@ -697,13 +696,17 @@ test('Performance lists each page: the latest 28 days before going live, then da
     within(block).getByRole('button', { name: '还有 1 个页面' }),
   );
   expect(within(block).getByText('/en/blog/workflow-tools')).toBeVisible();
-  // When the comparison comes is the title's ⓘ.
+  // What the numbers are and when the comparison comes are the title's ⓘ, not grey lines.
+  expect(block).not.toHaveTextContent('近 28 天 · 搜索点击 · 平均排名');
   expect(block).not.toHaveTextContent(
     '上线后在第 7 天、第 28 天和这些数字对比。',
   );
   await user.click(within(block).getByRole('button', { name: '说明' }));
   expect(
-    await screen.findByText('上线后在第 7 天、第 28 天和这些数字对比。'),
+    await screen.findByText('近 28 天 · 搜索点击 · 平均排名'),
+  ).toBeVisible();
+  expect(
+    screen.getByText('上线后在第 7 天、第 28 天和这些数字对比。'),
   ).toBeVisible();
   unmount();
   // Live with day 7: each page before and after, then all pages together; day 28 waits.
