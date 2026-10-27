@@ -497,30 +497,42 @@ function CreateTask({
       </Button>
       <ul className='mt-3 space-y-2'>
         {entries.map((entry) => (
-          <li key={entry.key} className='flex items-center gap-2 text-sm'>
-            <span className='min-w-0 flex-1 break-all'>{entry.file.name}</span>
-            <span role={entry.status === 'failed' ? 'alert' : 'status'}>
-              {$t(
-                entry.status === 'done'
-                  ? 'manualTask.uploaded'
-                  : entry.problem === 'legacy'
+          <li key={entry.key} className='text-sm'>
+            <div className='flex items-center gap-2'>
+              <span className='min-w-0 flex-1 break-all'>
+                {entry.file.name}
+              </span>
+              {entry.status !== 'failed' && (
+                <span role='status' className='shrink-0'>
+                  {$t(
+                    entry.status === 'done'
+                      ? 'manualTask.uploaded'
+                      : 'manualTask.uploading',
+                  )}
+                </span>
+              )}
+              <Button
+                type='button'
+                variant='ghost'
+                size='sm'
+                disabled={busy || Boolean(attempt)}
+                onClick={() => void remove(entry)}
+              >
+                {$t('common.remove')}
+              </Button>
+            </div>
+            {/* A failure explains itself under the name, which keeps its width. */}
+            {entry.status === 'failed' && (
+              <p role='alert' className='mt-0.5 text-destructive'>
+                {$t(
+                  entry.problem === 'legacy'
                     ? 'manualTask.legacyFormat'
                     : entry.problem === 'encoding'
                       ? 'manualTask.textEncoding'
-                      : entry.status === 'failed'
-                        ? 'manualTask.uploadFailed'
-                        : 'manualTask.uploading',
-              )}
-            </span>
-            <Button
-              type='button'
-              variant='ghost'
-              size='sm'
-              disabled={busy || Boolean(attempt)}
-              onClick={() => void remove(entry)}
-            >
-              {$t('common.remove')}
-            </Button>
+                      : 'manualTask.uploadFailed',
+                )}
+              </p>
+            )}
           </li>
         ))}
       </ul>

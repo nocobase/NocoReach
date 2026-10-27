@@ -246,8 +246,9 @@ function fixture(
       return english
         ? {
             title: `Simulated: ${idea.slice(0, 120)}`,
-            background: `${LABEL} ${figures}${attached} This draft only restates the request; no model was called.`,
-            why: `${LABEL} ${figures || idea.slice(0, 160)}`,
+            // An English draft keeps the marker in English alone.
+            background: `[Simulated] ${figures}${attached} This draft only restates the request; no model was called.`,
+            why: `[Simulated] ${figures || idea.slice(0, 160)}`,
             steps: [
               files.length
                 ? 'Read the attached files and the data above and list what to change.'

@@ -97,7 +97,7 @@ export function TaskMedia({
       {documents.length > 0 && (
         <>
           <AttachmentList
-            className='mb-4'
+            className={media.length ? 'mb-4' : undefined}
             locale={getCurrentLocale()}
             labels={documentLabels()}
             files={documents.map((file) => ({
@@ -134,36 +134,38 @@ export function TaskMedia({
           />
         </>
       )}
-      <ul className='space-y-4'>
-        {media.map((file) => (
-          <li key={file.id} className='space-y-2'>
-            <p className='break-all text-sm'>{file.filename}</p>
-            {file.mimeType.startsWith('video/') ? (
-              <video
-                controls
-                preload='metadata'
-                className='max-h-80 w-full rounded-lg'
-                src={file.contentUrl}
-              />
-            ) : (
-              <img
-                alt={file.filename}
-                loading='lazy'
-                className='max-h-80 max-w-full rounded-lg object-contain'
-                src={file.contentUrl}
-              />
-            )}
-            <a
-              className='nr-link text-sm'
-              href={file.contentUrl}
-              target='_blank'
-              rel='noreferrer'
-            >
-              {$t('manualTask.openFile')}
-            </a>
-          </li>
-        ))}
-      </ul>
+      {media.length > 0 && (
+        <ul className='space-y-4'>
+          {media.map((file) => (
+            <li key={file.id} className='space-y-2'>
+              <p className='break-all text-sm'>{file.filename}</p>
+              {file.mimeType.startsWith('video/') ? (
+                <video
+                  controls
+                  preload='metadata'
+                  className='max-h-80 w-full rounded-lg'
+                  src={file.contentUrl}
+                />
+              ) : (
+                <img
+                  alt={file.filename}
+                  loading='lazy'
+                  className='max-h-80 max-w-full rounded-lg object-contain'
+                  src={file.contentUrl}
+                />
+              )}
+              <a
+                className='nr-link text-sm'
+                href={file.contentUrl}
+                target='_blank'
+                rel='noreferrer'
+              >
+                {$t('manualTask.openFile')}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
     </Section>
   );
 }
