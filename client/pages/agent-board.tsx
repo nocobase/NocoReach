@@ -6,7 +6,9 @@ import { $t } from '#i18n';
 import { ActorAvatar } from '#components/reach/actor';
 import { Tag } from '#components/reach/tag';
 import { cn } from '#lib/utils';
+import { FoundBy } from './found-by';
 import { useMe } from './me';
+import { taskSource } from './task-source';
 import { stepOf } from './task-list-model';
 import {
   placeOf,
@@ -191,6 +193,7 @@ function AgentColumn({
                   onClick={() => onOpen(i.t.id)}
                 >
                   <Title t={i.t} />
+                  <FoundBy source={taskSource(i.t)} />
                   {c.online === false && (
                     <span className='rounded border px-1.5 text-xs text-muted-foreground'>
                       {$t('taskAgents.waitingForRuntime')}
@@ -257,6 +260,27 @@ function Title({ t }: { t: WorkCard }) {
   );
 }
 
+// A card's top lines, as on the board (2026-10-25 user request): the number with who found the task beside it, then
+// the title on one line.
+function CardTop({ t }: { t: WorkCard }) {
+  const found = <FoundBy source={taskSource(t)} className='ml-auto' />;
+  return (
+    <>
+      <span className='flex w-full min-w-0 items-center gap-2'>
+        {t.evidence?.no ? (
+          <span className='shrink-0 font-mono text-xs text-muted-foreground tabular-nums'>
+            T-{t.evidence.no}
+          </span>
+        ) : null}
+        {found}
+      </span>
+      <span className='w-full truncate text-sm font-medium' title={t.title}>
+        {t.title}
+      </span>
+    </>
+  );
+}
+
 // A task running or waiting: the title on one line, then what it is at (running) or what a person has to do and who.
 function Card({
   item: i,
@@ -280,7 +304,7 @@ function Card({
       )}
       onClick={() => onOpen(i.t.id)}
     >
-      <Title t={i.t} />
+      <CardTop t={i.t} />
       {ask ? (
         <span className='flex w-full min-w-0 items-center gap-1.5 text-xs'>
           <Tag tone={ask.tone === 'red' ? 'red' : 'grey'}>{ask.text}</Tag>

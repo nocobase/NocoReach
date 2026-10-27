@@ -47,6 +47,7 @@ import {
 import { ClippedLink } from './clipped-link.js';
 import { ResultsLoadError } from './states.js';
 import { ResultTag } from './status-tag.js';
+import { FoundBy } from '../found-by.js';
 import type {
   BoardChange,
   BoardTotal,
@@ -465,6 +466,7 @@ function RecentCard({ items }: { items: ResultSummary[] }) {
                       text={taskLabel(item)}
                       to={{ pathname: item.taskId, search: location.search }}
                     />
+                    {item.found && <FoundBy source={item.found} />}
                   </TableCell>
                   <TableCell className='tabular-nums'>
                     {item.phase === 'live' && item.occurredAt

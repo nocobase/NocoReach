@@ -128,6 +128,24 @@ describe('results availability gate', () => {
     expect(summary?.status).toBe('unavailable');
     expect(summary?.latest).toBeNull();
   });
+  it('says who found the task, as its card does', () => {
+    const ai = task(1, {});
+    ai.evidence = { ...ai.evidence, insight: { id: 'o-41', no: 41 } } as never;
+    expect(resultSummary(ai, [url])?.found).toMatchObject({
+      by: 'ai',
+      via: 'opportunity',
+    });
+    const person = task(2, {});
+    person.evidence = {
+      ...person.evidence,
+      origin: 'manual',
+      createdBy: { id: '9', name: '王磊' },
+    } as never;
+    expect(resultSummary(person, [url])?.found).toMatchObject({
+      by: 'person',
+      name: '王磊',
+    });
+  });
   it('uses the actual execution receipt date ahead of earlier deliverables and filters the UTC day inclusively', async () => {
     const t = task(1, {
       observeFrom: undefined,

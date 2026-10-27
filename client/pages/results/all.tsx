@@ -46,6 +46,7 @@ import {
   shortDate,
 } from './format.js';
 import { ClippedLink } from './clipped-link.js';
+import { FoundBy } from '../found-by.js';
 import { ResultsLoadError } from './states.js';
 import { ResultTag } from './status-tag.js';
 import type { ResultSummary } from './types.js';
@@ -354,10 +355,15 @@ function ResultsList({ projectId }: { projectId: string }) {
                         text={`${item.taskNo ? `T-${item.taskNo} · ` : ''}${item.title}`}
                         to={{ pathname: item.taskId, search: location.search }}
                       />
-                      <p className='text-xs text-muted-foreground'>
-                        {$t(`results.taskState.${item.taskState}`)}
-                        {item.archived ? ` · ${$t('results.archived')}` : ''}
-                        {item.simulated ? ` · ${$t('results.simulated')}` : ''}
+                      <p className='flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground'>
+                        <span>
+                          {$t(`results.taskState.${item.taskState}`)}
+                          {item.archived ? ` · ${$t('results.archived')}` : ''}
+                          {item.simulated
+                            ? ` · ${$t('results.simulated')}`
+                            : ''}
+                        </span>
+                        {item.found && <FoundBy source={item.found} />}
                       </p>
                     </TableCell>
                     <TableCell>
