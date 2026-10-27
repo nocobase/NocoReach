@@ -4,6 +4,7 @@ import type {
   OnlinePageSubject,
 } from '../../../shared/online-agent.js';
 import { rulesForAgent, type RulesService } from './rules-tools.js';
+import { keywordsPageContext } from './keyword-tool.js';
 
 export type PageContextInput = {
   plugin: NocoReachRuntime['plugin'];
@@ -27,6 +28,17 @@ export const rulesOf = (plugin: NocoReachRuntime['plugin']) =>
  * in between is seen. A page without its own entry here is named with the row it was opened from.
  */
 export const PAGE_CONTEXTS: Partial<Record<OnlinePage, PageContext>> = {
+  keywords: ({ plugin, projectId, subject, allowed }) =>
+    keywordsPageContext(
+      (
+        plugin as unknown as {
+          keywordSuggest: Parameters<typeof keywordsPageContext>[0];
+        }
+      ).keywordSuggest,
+      projectId,
+      subject.item,
+      allowed,
+    ),
   async analysisRules({ plugin, projectId, subject, allowed }) {
     if (!(await allowed('nrAnalysisRules', 'view')))
       return 'The user opened this conversation from AI team › Analysis rules but may not see the rules now; say so.';
