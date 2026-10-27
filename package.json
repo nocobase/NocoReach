@@ -1,7 +1,7 @@
 {
   "name": "nocoreach",
   "displayName": "nocoreach",
-  "version": "1.0.0-beta.71",
+  "version": "1.0.0-beta.72",
   "license": "Apache-2.0",
   "type": "module",
   "prettier": "@nocobase/dev-config/prettier",
@@ -207,7 +207,7 @@
     "@nocobase/app-plugin-mail": "^1.0.0-beta.16",
     "@nocobase/app-plugin-template-print": "0.0.2-beta.2",
     "@nocoreach/app-plugin-mock": "file:app-plugins/nocoreach-mock",
-    "@nocobase/app-plugin-demo-mode": "0.2.0-beta.1"
+    "@nocobase/app-plugin-demo-mode": "0.2.0-beta.2"
   },
   "scripts": {
     "postinstall": "nocobase skills sync",

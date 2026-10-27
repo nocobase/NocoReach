@@ -106,7 +106,8 @@ describe('NocoReach semantic-key translations', () => {
       '已交给Agent，马上开始。': '已交给 Agent，马上开始。',
       '帮你干活的 AI：在线 AI 每天分析数据、提出机会；所有任务交给Agent 去做。':
         '帮你干活的 AI：在线 AI 每天分析数据、提出机会；所有任务交给 Agent 去做。',
-      '接受，交给Agent“{0}”': '接受，交给 Agent“{0}”',
+      // Accept and start (2026-10-24): the hand-over starts the next task.
+      '接受，交给Agent“{0}”': '接受并开始{0}',
       '由Agent 执行，{0}。': '由 Agent 执行，{0}。',
       '私有仓库也可以：Agent 用执行任务那台电脑上的 GitHub 登录读取和推送，NocoReach 不保存 GitHub 凭据。不接仓库也能用Agent 做调研、关键词调研、内容大纲这类只写文档的任务。':
         '私有仓库也可以：Agent 用执行任务那台电脑上的 GitHub 登录读取和推送，NocoReach 不保存 GitHub 凭据。不接仓库也能用 Agent 做调研、关键词调研、内容大纲这类只写文档的任务。',
@@ -353,6 +354,9 @@ describe('NocoReach semantic-key translations', () => {
       '关注度（每周，最高为 100）': '每周关注度',
       添加或移除竞品: '管理竞品',
       暂无任务: '没有任务',
+      // A failed run's kept content, not only a saved draft (2026-10-24).
+      '此内容仅已暂存，尚未通过任务验收。':
+        'Agent 没有做完这一步，这些内容还没有经过审核。',
       // Sync language versions became Translate into other languages (2026-10-25), for articles as well as pages.
       同步多语言版本: '翻译成其他语言',
       '把页面改动同步到其他语言版本。': '补上缺失的语言，或按原文更新译文。',

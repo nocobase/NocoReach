@@ -58,6 +58,7 @@ function preflight(
       GITHUB_EVENT_NAME: 'push',
       GITHUB_REF: `refs/tags/v${version}`,
       GITHUB_SHA: sha,
+      STUDIO_APP_ID: 'reach',
       ...override,
     },
     encoding: 'utf8',
@@ -65,10 +66,18 @@ function preflight(
 }
 
 describe('Studio release preflight', () => {
-  it.each(['push', 'workflow_dispatch'])(
-    'checks an annotated release on main for %s without credentials or an archive',
-    (event) => {
-      const result = preflight({ GITHUB_EVENT_NAME: event });
+  it.each([
+    ['nocoreach', 'push'],
+    ['nocoreach', 'workflow_dispatch'],
+    ['reach', 'push'],
+    ['reach', 'workflow_dispatch'],
+  ])(
+    'checks an annotated release on main for %s / %s without credentials or an archive',
+    (appId, event) => {
+      const result = preflight({
+        STUDIO_APP_ID: appId,
+        GITHUB_EVENT_NAME: event,
+      });
       expect(result.stderr).toBe('');
       expect(result.status).toBe(0);
     },
@@ -109,19 +118,19 @@ describe('Studio release preflight', () => {
     );
   });
 
-  it('rejects demo targets even during manual release dispatch', () => {
+  it('rejects the internal demo target even during manual release dispatch', () => {
     const result = preflight({
       STUDIO_APP_ID: 'nocoreach-demo',
       GITHUB_EVENT_NAME: 'workflow_dispatch',
     });
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('only deploy the regular application');
+    expect(result.stderr).toContain('only deploy nocoreach or reach');
   });
 
   const deploymentConfig = {
     NB_STUDIO_SERVER: 'https://studio.example.com/main',
     NB_STUDIO_API_KEY: 'test-key',
-    STUDIO_APP_URL: 'https://apps.example.com/nocoreach/',
+    STUDIO_APP_URL: 'https://apps.example.com/reach/',
     STUDIO_TARGET: 'linux-x64',
     STUDIO_NODE_MAJOR: '24',
     STUDIO_CLI: '/unused/nb-studio',

@@ -1328,3 +1328,55 @@ test('translation: a new article, a source without text or nothing to translate 
   const d = await f.command('startTask', { playbookId: 'optimize-page' });
   expect(d.work.delivery.translateFrom).toBeUndefined();
 });
+
+// Accept and start (2026-10-24): an accepted outline handed over to a blog post starts at once, as a new article on the
+// default target; a new docs page with no page to find its article waits for a person to pick one.
+async function acceptOutline(f, next) {
+  await f.command('startTask', { playbookId: 'content-outline' });
+  const { run } = await claim(f);
+  expect(run.mode).toBe('plan');
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: '# Outline',
+  });
+  const d = await f.view();
+  return f.command('approveStage', {
+    stageKey: d.work.flow.stages[d.work.stageIndex].key,
+    artifactId: review(d).id,
+    checked: ['facts'],
+    next,
+  });
+}
+
+test('Accept and start: a blog post handed over from an outline starts as a new article on the default target', async () => {
+  const f = await fixture({ news: [] });
+  const d = await acceptOutline(f, 'blog-post');
+  expect(d.work.stage).toBe('done');
+  const child = await f.s.get('1', d.work.nextTaskId);
+  expect(child.work.delivery).toMatchObject({
+    kind: 'article',
+    targetId: 'cms',
+    articleId: null,
+  });
+  expect(child.runs).toEqual([
+    expect.objectContaining({ status: 'queued', mode: 'article' }),
+  ]);
+  expect(d.related).toEqual([
+    expect.objectContaining({ relation: 'next', state: 'doing' }),
+  ]);
+});
+
+test('Accept and start: a new docs page with no article found from its page waits at Start after review', async () => {
+  const f = await fixture();
+  const d = await acceptOutline(f, 'new-doc');
+  expect(d.work.stage).toBe('done');
+  const child = await f.s.get('1', d.work.nextTaskId);
+  expect(child.work.flow).toBeUndefined();
+  expect(child.work.delivery).toBeUndefined();
+  expect(child.runs).toEqual([]);
+  expect(d.related).toEqual([
+    expect.objectContaining({ relation: 'next', state: 'todo' }),
+  ]);
+});
