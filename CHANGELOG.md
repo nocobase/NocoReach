@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Accept and start
+
+- Accepting a document with a next playbook (Continue with) now starts the new task: the button reads Accept and start "Write blog post", and the page goes to the new task with its Agent already working. It starts with what its start card would preselect: the playbook just chosen, the project's default Agent or the only one available, and the default publishing target or the article found from its page (`shared/task-start.ts`, used by both the start card and the server). The article review before publishing is unchanged.
+- When one of those cannot be decided — several Agents and no project default, no Agent at all, several publishing targets with none marked default, a target that is gone, an article not found from the page, or a change with no repository connected — the new task waits at Start after review and its card says it did not start automatically; the Agent, the article, the target or the repository is marked where it is chosen.
+- The old task's done card says "Handed over to T-44 Write blog post: …" with the new task's status, linked.
+- Tasks handed off from an opportunity still wait for their owner to start them.
+
 ## Unreleased — Task runs fail less on the computer's setup, and say what to do
 
 - The Agent's rules no longer fail a step for any missing credential, tool or conflict. A step fails only when it lacks a credential or tool it cannot do without (such as gh not signed in for a build or merge, or no access to the repository), or on a conflict; it still never bypasses limits or installs software. A tool a Skill suggests but the step does not need (an update check, an optional search backend) is worked around and noted in the result. The task's own Skills come first: other skills installed on the computer may be consulted, and a tool they ask for being unavailable does not fail the step. T-35 on Studio failed five times this way, for an `agent-reach check-update` that a personal Skill on the user's Mac asked for.
