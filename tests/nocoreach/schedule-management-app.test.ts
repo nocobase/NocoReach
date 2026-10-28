@@ -162,3 +162,85 @@ test('daily schedule edits apply live, persist, preserve pause, and manual dispa
   expect(receipts[0].data).toEqual(receipts[1].data);
   expect(concurrent.every((response) => response.status === 200)).toBe(true);
 });
+
+test('Scheduler drains accepted manual runs and timing updates before closing', async ({
+  testApp,
+}) => {
+  const scheduler = testApp.application.container.resolve(
+    schedulerServiceToken,
+  );
+  const key = 'nocoreach.test-drain';
+  let releaseRun!: () => void;
+  let releaseTiming!: () => void;
+  const runBarrier = new Promise<void>((resolve) => {
+    releaseRun = resolve;
+  });
+  const timingBarrier = new Promise<void>((resolve) => {
+    releaseTiming = resolve;
+  });
+  const runStarted = vi.fn();
+  const timingStarted = vi.fn();
+  let blockTiming = false;
+  scheduler.registerTarget({
+    type: key,
+    title: 'Drain verification',
+    validate: () => ({ valid: true }),
+    async start() {
+      runStarted();
+      await runBarrier;
+      return { state: 'completed', outcome: 'succeeded' };
+    },
+  });
+  scheduler.defineSchedule({
+    key,
+    title: 'Drain verification',
+    schedule: { cron: '0 0 1 1 *', timezone: 'UTC' },
+    target: { type: key, config: {} },
+  });
+  scheduler.registerTimingResolver(key, async () => {
+    if (blockTiming) {
+      timingStarted();
+      await timingBarrier;
+    }
+    return { cron: '0 0 1 1 *', timezone: 'UTC' };
+  });
+  await scheduler.sync();
+  const run = scheduler.triggerSchedule(key, randomUUID());
+  blockTiming = true;
+  const refresh = scheduler.refreshSchedule(key);
+  try {
+    await vi.waitFor(() => {
+      expect(runStarted).toHaveBeenCalledOnce();
+      expect(timingStarted).toHaveBeenCalledOnce();
+    });
+    let drained = false;
+    const drain = scheduler.drain().then(() => {
+      drained = true;
+    });
+    await expect(scheduler.triggerSchedule(key, randomUUID())).rejects.toThrow(
+      'draining',
+    );
+    await expect(scheduler.refreshSchedule(key)).rejects.toThrow('draining');
+    expect(drained).toBe(false);
+    releaseTiming();
+    expect((await refresh)?.key).toBe(key);
+    expect(drained).toBe(false);
+    releaseRun();
+    const receipt = await run;
+    await drain;
+    const schedule = (await scheduler.list()).find((item) => item.key === key)!;
+    expect(await scheduler.listOccurrences(schedule.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: receipt.occurrenceId,
+          status: 'succeeded',
+        }),
+      ]),
+    );
+    await expect(scheduler.drain()).resolves.toBeUndefined();
+  } finally {
+    releaseTiming();
+    releaseRun();
+    await Promise.allSettled([run, refresh]);
+  }
+});

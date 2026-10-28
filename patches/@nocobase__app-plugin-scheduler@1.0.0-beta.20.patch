@@ -1,33 +1,29 @@
-diff --git a/dist/server/services/scheduler.d.ts b/dist/server/services/scheduler.d.ts
-index 8e13e9cb36a2b13d770b5e120dfe64458dda02fc..226b5daac59564e41e18957f31ae38a3e96be9b1 100644
---- a/dist/server/services/scheduler.d.ts
-+++ b/dist/server/services/scheduler.d.ts
-@@ -20,6 +20,9 @@ export declare class DefaultSchedulerService implements SchedulerService {
-     private readonly targets;
-     private readonly manifest;
-     constructor(store: ScheduleStore, occurrences: ScheduleOccurrenceStore, targets: ScheduleTargetRegistry);
-+    registerTimingResolver(key: string, resolve: () => Promise<{ cron: string; timezone: string }>): void;
-+    refreshSchedule(key: string): Promise<ScheduleListItem | undefined>;
-+    triggerSchedule(key: string, requestId: string): Promise<{ occurrenceId: string }>;
-     defineSchedule(definition: ScheduleDefinition): void;
-     registerTarget<TConfig extends JsonObject>(target: ScheduleTargetType<TConfig>): ScheduleTargetHandle;
-     list(): Promise<readonly ScheduleListItem[]>;
 diff --git a/dist/server/services/scheduler.js b/dist/server/services/scheduler.js
-index 9b9c81e06efb7bb2c29ec41eb9165263ed71aebf..1dbf45384fcbf840b7b13bc432a86ee0f939ee66 100644
 --- a/dist/server/services/scheduler.js
 +++ b/dist/server/services/scheduler.js
-@@ -6,6 +6,7 @@ export class DefaultSchedulerService {
-     occurrences;
+@@ -7,6 +7,8 @@
      targets;
+     lifecycle;
      manifest = [];
 +    timingResolvers = new Map();
-     constructor(store, occurrences, targets) {
-         this.store = store;
-         this.occurrences = occurrences;
-@@ -14,6 +15,34 @@ export class DefaultSchedulerService {
++    extensionOperations = new Set();
+     reconciliations = new Set();
+     writes = new Set();
+     drainErrors = [];
+@@ -31,6 +33,8 @@
+         return this.drainPromise;
+     }
+     async runDrain() {
++        // Finish accepted application operations before closing the executor they use.
++        await Promise.allSettled([...this.extensionOperations]);
+         const executor = Promise.resolve().then(() => this.lifecycle?.shutdownExecutor());
+         const [result] = await Promise.allSettled([
+             executor,
+@@ -71,6 +75,38 @@
+     }
      defineSchedule(definition) {
          this.manifest.push(Object.freeze({ definition: buildScheduleDefinition(definition) }));
-     }
++    }
 +    // NocoReach extension: application-owned settings, resolved on every sync.
 +    registerTimingResolver(key, resolve) {
 +        if (this.timingResolvers.has(key)) throw new Error('Duplicate timing resolver.');
@@ -43,23 +39,26 @@ index 9b9c81e06efb7bb2c29ec41eb9165263ed71aebf..1dbf45384fcbf840b7b13bc432a86ee0
 +        }) };
 +    }
 +    async refreshSchedule(key) {
-+        const entry = this.manifest.find((item) => item.definition.key === key);
-+        if (!entry) throw new Error('Schedule is not registered.');
-+        await this.store.reconcile([await this.resolvedEntry(entry)]);
-+        return (await this.list()).find((item) => item.key === key);
++        if (this.draining) throw new Error('The Scheduler is draining.');
++        return this.track(async () => {
++            const entry = this.manifest.find((item) => item.definition.key === key);
++            if (!entry) throw new Error('Schedule is not registered.');
++            await this.store.reconcile([await this.resolvedEntry(entry)]);
++            return (await this.list()).find((item) => item.key === key);
++        }, this.extensionOperations);
 +    }
 +    async triggerSchedule(key, requestId) {
++        if (this.draining) throw new Error('The Scheduler is draining.');
 +        // UUID input plus application and schedule scope give retries one occurrence.
 +        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId))
 +            throw new Error('A UUID requestId is required.');
 +        if (!this.manifest.some((item) => item.definition.key === key))
 +            throw new Error('Schedule is not registered.');
-+        return this.store.trigger(key, requestId);
-+    }
++        return this.track(() => this.store.trigger(key, requestId), this.extensionOperations);
+     }
      registerTarget(target) {
          this.targets.register(target);
-         const { type } = target;
-@@ -59,7 +88,7 @@ export class DefaultSchedulerService {
+@@ -122,7 +158,7 @@
          });
      }
      async sync(finalize = false) {
@@ -68,26 +67,27 @@ index 9b9c81e06efb7bb2c29ec41eb9165263ed71aebf..1dbf45384fcbf840b7b13bc432a86ee0
          const identities = new Set();
          for (const entry of manifest) {
              const identity = entry.definition.key;
-diff --git a/dist/server/store.d.ts b/dist/server/store.d.ts
-index cb102557f055bd7ef737c5791ac499430197408a..b7e247968f9e07648fdc28e65cbedc8332cc4ddd 100644
---- a/dist/server/store.d.ts
-+++ b/dist/server/store.d.ts
-@@ -95,6 +95,7 @@ export declare class ScheduleStore {
-      */
-     recordEvent(event: ScheduleEvent): Promise<void>;
-     list(): Promise<readonly ScheduleRecord[]>;
-+    trigger(key: string, requestId: string): Promise<{ occurrenceId: string }>;
-     setEnabled(id: string, enabled: boolean): Promise<void>;
-     /**
-      * Counts occurrences that reached the `succeeded` terminal state, per schedule.
+diff --git a/dist/server/services/scheduler.d.ts b/dist/server/services/scheduler.d.ts
+--- a/dist/server/services/scheduler.d.ts
++++ b/dist/server/services/scheduler.d.ts
+@@ -37,6 +37,9 @@
+     private runDrain;
+     private track;
+     constructor(store: ScheduleStore, occurrences: ScheduleOccurrenceStore, targets: ScheduleTargetRegistry, lifecycle?: SchedulerLifecycle | undefined);
++    registerTimingResolver(key: string, resolve: () => Promise<{ cron: string; timezone: string }>): void;
++    refreshSchedule(key: string): Promise<ScheduleListItem | undefined>;
++    triggerSchedule(key: string, requestId: string): Promise<{ occurrenceId: string }>;
+     defineSchedule(definition: ScheduleDefinition): void;
+     registerTarget<TConfig extends JsonObject>(target: ScheduleTargetType<TConfig>): ScheduleTargetHandle;
+     list(): Promise<readonly ScheduleListItem[]>;
 diff --git a/dist/server/store.js b/dist/server/store.js
-index f74865ea54eb03ab1904789ce7d504555e1c6149..fd525b4beb3bf1c798782076895b9515e5d9f627 100644
 --- a/dist/server/store.js
 +++ b/dist/server/store.js
-@@ -185,6 +185,21 @@ export class ScheduleStore {
+@@ -184,6 +184,21 @@
+                     : 'paused',
              };
          });
-     }
++    }
 +    // Manual dispatch uses the same job and occurrence protocol, without changing
 +    // enabled, nextRunAt or the scheduled-fire limit. Never installs another rule.
 +    async trigger(key, requestId) {
@@ -102,15 +102,24 @@ index f74865ea54eb03ab1904789ce7d504555e1c6149..fd525b4beb3bf1c798782076895b9515
 +        await job.execute({ jobId: occurrenceId, scheduledAt: this.now(),
 +            signal: new AbortController().signal });
 +        return { occurrenceId };
-+    }
+     }
      async setEnabled(id, enabled) {
          const definition = await this.database
-             .query()
+diff --git a/dist/server/store.d.ts b/dist/server/store.d.ts
+--- a/dist/server/store.d.ts
++++ b/dist/server/store.d.ts
+@@ -95,6 +95,7 @@
+      */
+     recordEvent(event: ScheduleEvent): Promise<void>;
+     list(): Promise<readonly ScheduleRecord[]>;
++    trigger(key: string, requestId: string): Promise<{ occurrenceId: string }>;
+     setEnabled(id: string, enabled: boolean): Promise<void>;
+     /**
+      * Counts occurrences that reached the `succeeded` terminal state, per schedule.
 diff --git a/dist/server/tokens.d.ts b/dist/server/tokens.d.ts
-index 804c19df9069741e8dba632c9b13f1503e27d197..340fbacd28a739f2abab014b5a1f30b0ae3d2052 100644
 --- a/dist/server/tokens.d.ts
 +++ b/dist/server/tokens.d.ts
-@@ -2,6 +2,13 @@ import type { ServiceToken } from '@nocobase/service-provider';
+@@ -2,6 +2,12 @@
  import type { JsonObject, ScheduleDefinition } from './schedules/define.js';
  import type { ScheduleTargetHandle, ScheduleTargetType } from './schedules/registry.js';
  export interface SchedulerService {
@@ -120,7 +129,6 @@ index 804c19df9069741e8dba632c9b13f1503e27d197..340fbacd28a739f2abab014b5a1f30b0
 +    refreshSchedule(key: string): Promise<import('./services/scheduler.js').ScheduleListItem | undefined>;
 +    /** Dispatch once through normal history/target handling; UUID retries are idempotent. */
 +    triggerSchedule(key: string, requestId: string): Promise<{ occurrenceId: string }>;
-+
      /**
-      * Registers what a schedule can point at: how its configuration is
-      * validated, how a firing starts, and — for anything that finishes later —
+      * Stops new reconciliation and drains this process's executor, inspections,
+      * event records and accepted completion reports before releasing subscriptions.

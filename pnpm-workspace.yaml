@@ -292,6 +292,15 @@ minimumReleaseAgeExclude:
   - '@nocobase/app-cli-client@0.1.0-beta.17'
   - '@nocobase/agent-protocol@0.1.0-beta.16'
   - '@nocobase/api-client@1.0.0-beta.6'
+  # Align the remaining NocoBase plugins and generated development skills.
+  - '@nocobase/app-plugin-api-keys@1.0.0-beta.19'
+  - '@nocobase/app-plugin-authz-default-access@1.0.0-beta.16'
+  - '@nocobase/app-plugin-authz-restriction-rules@1.0.0-beta.15'
+  - '@nocobase/app-plugin-authz-sharing-rules@1.0.0-beta.16'
+  - '@nocobase/app-plugin-database-explorer@1.0.0-beta.17'
+  - '@nocobase/app-plugin-mail@1.0.0-beta.17'
+  - '@nocobase/app-plugin-scheduler@1.0.0-beta.20'
+  - '@nocobase/app-skills@0.1.0-beta.53'
 # NocoReach-owned Scheduler extension. Upgrade this pin, the patch and the version in cli/build-scheduler-patch.mjs together.
 patchedDependencies:
-  '@nocobase/app-plugin-scheduler@1.0.0-beta.19': patches/@nocobase__app-plugin-scheduler@1.0.0-beta.19.patch
+  '@nocobase/app-plugin-scheduler@1.0.0-beta.20': patches/@nocobase__app-plugin-scheduler@1.0.0-beta.20.patch

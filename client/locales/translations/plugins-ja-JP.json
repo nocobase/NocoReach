@@ -64,38 +64,16 @@
     },
     "agents": {
       "title": "エージェント",
-      "description": "ランナーが報告するコーディングツールとモデルの組み合わせが、それぞれエージェントになります。プロジェクトマネージャーは、説明が適したエージェントに課題の各ステップを割り当てます。",
       "fromRunners": "実行環境から報告されたローカルエージェント",
-      "discovery": {
-        "selectAll": "すべての結果を選択",
-        "selectFirst": "先頭の{{limit}}件を選択",
-        "selectionCount": "{{count}} / {{limit}}グループを選択中",
-        "clearSelection": "選択を解除",
-        "new": "新たに検出 ({{count}})",
-        "ignored": "無視済み ({{count}})",
-        "search": "モデルまたはプロバイダーを検索",
-        "select": "{{name}}を選択",
-        "ignore": "無視",
-        "restore": "復元",
-        "ignoreSelected": "選択項目を無視",
-        "restoreSelected": "選択項目を復元",
-        "enabled": "有効なものを表示",
-        "disabled": "無効なものを表示",
-        "provider": "プロバイダーとランナー",
-        "saved": "検出設定を保存しました"
-      },
       "filterLabel": "表示するエージェント",
       "filters": {
         "all": "すべて {{count}}",
         "enabled": "有効 {{count}}",
-        "pending": "有効化待ち {{count}}",
         "unreported": "ランナーなし {{count}}"
       },
       "loadFailed": "エージェントを読み込めませんでした",
       "emptyTitle": "エージェントはまだありません",
-      "emptyDescription": "コーディングツールにログイン済みのランナーを接続してください。各モデルが有効化できるエージェントとしてここに表示されます。",
       "noneInFilter": "該当するエージェントはありません。",
-      "howToAdd": "ローカルエージェントを追加するには、実行環境にコーディングツールを入れてログインします。「新たに検出」に表示されたら、得意なことを書いて有効にします。",
       "goodAtMissing": "未記入",
       "columns": {
         "agent": "エージェント",
@@ -118,7 +96,6 @@
       },
       "state": {
         "enabled": "有効",
-        "pending": "有効化待ち",
         "disabled": "無効",
         "unreported": "ランナーなし"
       },
@@ -134,18 +111,13 @@
         "ultra": "超高"
       },
       "enable": {
-        "button": "記入して有効化",
-        "buttonFor": "{{name}}の情報を記入して有効化",
-        "title": "{{name}}を有効化",
         "reportedBy_one": "オンラインのランナー{{count}}台から報告: {{names}}。",
         "reportedBy_other": "オンラインのランナー{{count}}台から報告: {{names}}。",
         "noRunnerNow": "このエージェントを実行できるランナーは、現在オンラインではありません。",
         "goodAtHint": "プロジェクトマネージャーは、この説明を基にエージェントに割り当てる作業を判断します。得意な作業と苦手な作業を記入してください。",
         "goodAtRequired": "有効化する前に得意分野を記入してください。",
         "effortHint": "プロジェクトマネージャーは作業を割り当てる際に、この設定を変更できません。",
-        "personalOnly": "個人用ランナーにしかないため、プロジェクトマネージャーはその所有者が開始した課題でのみ作業を割り当てます。",
-        "submit": "有効化",
-        "done": "{{name}}を有効化しました"
+        "personalOnly": "個人用ランナーにしかないため、プロジェクトマネージャーはその所有者が開始した課題でのみ作業を割り当てます。"
       },
       "edit": {
         "button": "編集",

@@ -64,38 +64,16 @@
     },
     "agents": {
       "title": "Agent",
-      "description": "執行環境上報的每個「工具 · 模型」就是一個 agent。專案經理按「擅長什麼」把任務的每一步派給它們。",
       "fromRunners": "執行環境上報的本地 Agent",
-      "discovery": {
-        "selectAll": "全選目前結果",
-        "selectFirst": "選擇目前結果中的前 {{limit}} 組",
-        "selectionCount": "已選 {{count}} / {{limit}} 組",
-        "clearSelection": "清除所選",
-        "new": "新發現（{{count}}）",
-        "ignored": "已忽略（{{count}}）",
-        "search": "搜尋模型或服務商",
-        "select": "選擇 {{name}}",
-        "ignore": "忽略",
-        "restore": "恢復",
-        "ignoreSelected": "忽略所選",
-        "restoreSelected": "恢復所選",
-        "enabled": "顯示已啟用",
-        "disabled": "顯示已停用",
-        "provider": "服務商與執行環境",
-        "saved": "發現偏好已儲存"
-      },
       "filterLabel": "按狀態篩選",
       "filters": {
         "all": "全部 {{count}}",
         "enabled": "已啟用 {{count}}",
-        "pending": "待啟用 {{count}}",
         "unreported": "暫無執行環境 {{count}}"
       },
       "loadFailed": "無法載入 agent",
       "emptyTitle": "還沒有 agent",
-      "emptyDescription": "連線一個登入了程式開發工具的執行環境：它上報的每個模型都會出現在這裡，等你啟用。",
       "noneInFilter": "這裡沒有 agent。",
-      "howToAdd": "想加一個本地 Agent：在執行環境上裝好程式開發工具並登入，它會出現在「新發現」裡，寫好「擅長什麼」即可啟用。",
       "goodAtMissing": "還沒寫",
       "columns": {
         "agent": "Agent",
@@ -118,7 +96,6 @@
       },
       "state": {
         "enabled": "已啟用",
-        "pending": "待啟用",
         "disabled": "已停用",
         "unreported": "暫無執行環境"
       },
@@ -134,18 +111,13 @@
         "ultra": "極高"
       },
       "enable": {
-        "button": "填寫並啟用",
-        "buttonFor": "填寫並啟用 {{name}}",
-        "title": "啟用 {{name}}",
         "reportedBy_one": "由 {{count}} 個線上執行環境上報：{{names}}。",
         "reportedBy_other": "由 {{count}} 個線上執行環境上報：{{names}}。",
         "noRunnerNow": "現在沒有線上的執行環境有它。",
         "goodAtHint": "專案經理會依照這段說明決定交付哪些工作。請寫明它適合及不適合處理的工作。",
         "goodAtRequired": "先寫好擅長什麼，再啟用。",
         "effortHint": "專案經理交付工作時無法調整。",
-        "personalOnly": "只有個人執行環境能跑：只有這些執行環境的主人自己發起的任務，專案經理才會派給它。",
-        "submit": "啟用",
-        "done": "{{name}} 已啟用"
+        "personalOnly": "只有個人執行環境能跑：只有這些執行環境的主人自己發起的任務，專案經理才會派給它。"
       },
       "edit": {
         "button": "編輯",

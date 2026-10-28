@@ -1,6 +1,8 @@
-# Demo Mode beta.5 适配与部署记录
+# Demo Mode beta.5 首次部署记录
 
 2026-10-28，已将 `@nocobase/app-plugin-demo-mode@0.2.0-beta.5` 部署到 252 服务器的 [NocoReach 演示站](https://nocoreach.nfvd.net/main/)。部署使用原有 Docker Compose、独立演示数据库和持久化存储。
+
+本文保留首次部署的镜像、迁移与备份记录。后续补齐了插件翻译、升级了其余 NocoBase 配套包，并适配 Scheduler beta.20；最终 CI 结果和后续部署标识记录在 [PR #304](https://github.com/nocobase/NocoReach/pull/304)。下方版本表和验收结果仅对应首次部署。
 
 ## 适配内容
 
