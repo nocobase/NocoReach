@@ -246,13 +246,28 @@ function fixture(
           ? `${str(page.title, 120) || str(page.url, 300)} had ${count(page.views)} visits and ${count(page.clicks)} search clicks from ${str(period.start, 10)} to ${str(period.end, 10)}.`
           : `${str(page.title, 120) || str(page.url, 300)} 在 ${str(period.start, 10)} 至 ${str(period.end, 10)} 有 ${count(page.views)} 次访问、${count(page.clicks)} 次搜索点击。`
         : '';
+      // Attached documents: their names and the first line read from the first one.
+      const files = list(input.attachments);
+      const opening = str(files[0]?.text, 2000)
+        .split('\n')
+        .map((line) => line.trim())
+        .find(Boolean)
+        ?.slice(0, 160);
+      const attached = files.length
+        ? english
+          ? ` Attached: ${files.map((file) => str(file.name, 120)).join(', ')}; it opens with “${opening ?? ''}”.`
+          : `附件：${files.map((file) => str(file.name, 120)).join('、')}，开头是“${opening ?? ''}”。`
+        : '';
       return english
         ? {
             title: `Simulated: ${idea.slice(0, 120)}`,
-            background: `${LABEL} ${figures} This draft only restates the request; no model was called.`,
-            why: `${LABEL} ${figures || idea.slice(0, 160)}`,
+            // An English draft keeps the marker in English alone.
+            background: `[Simulated] ${figures}${attached} This draft only restates the request; no model was called.`,
+            why: `[Simulated] ${figures || idea.slice(0, 160)}`,
             steps: [
-              'Read the page and the data above and list what to change.',
+              files.length
+                ? 'Read the attached files and the data above and list what to change.'
+                : 'Read the page and the data above and list what to change.',
               'Make the changes and note each one with the reason.',
               'Check the result against the completion criteria.',
             ],
@@ -264,10 +279,12 @@ function fixture(
           }
         : {
             title: `【模拟】${idea.slice(0, 120)}`,
-            background: `${LABEL}${figures}此草稿只复述了需求，未调用真实模型。`,
+            background: `${LABEL}${figures}${attached}此草稿只复述了需求，未调用真实模型。`,
             why: `${LABEL}${figures || idea.slice(0, 160)}`,
             steps: [
-              '阅读页面和上述数据，列出要修改的地方。',
+              files.length
+                ? '阅读附件和上述数据，列出要修改的地方。'
+                : '阅读页面和上述数据，列出要修改的地方。',
               '完成修改，并逐条写明原因。',
               '按完成标准检查结果。',
             ],

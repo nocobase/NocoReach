@@ -346,7 +346,7 @@ it('preserves text paste and copied URLs, offers file picker/drop and reports up
   expect(
     screen.getByRole('button', { name: 'Create', exact: true }),
   ).toBeEnabled();
-  fireEvent.change(screen.getByLabelText('Upload images or videos'), {
+  fireEvent.change(screen.getByLabelText('Upload attachments'), {
     target: { files: [file('video/webm')] },
   });
   expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -645,4 +645,109 @@ it('clears an earlier draft error when Demo Mode refuses the next attempt', asyn
   expect(await screen.findByLabelText(/Task title/)).toHaveValue(
     draftView.title,
   );
+});
+
+const docx = (name = 'brief.docx', type = '') =>
+  new File(['PK'], name, { type });
+
+it('names legacy Office files before uploading and the server reason after', async () => {
+  request.mockRejectedValueOnce(
+    new ApiClientError('Text files must be UTF-8.', {
+      status: 400,
+      domain: 'nocoreach',
+      reason: 'TASK_MEDIA_TEXT_ENCODING',
+      method: 'POST',
+      url: '/api/nocoreachTasks/media',
+    }),
+  );
+  render(<TaskCreatePage />);
+  const picker = screen.getByLabelText('Upload attachments');
+  expect(picker).toHaveAttribute(
+    'accept',
+    expect.stringContaining('.docx,.xlsx,.pdf,.csv,.md,.markdown,.txt'),
+  );
+  fireEvent.change(picker, {
+    target: { files: [docx('old.xls', 'application/vnd.ms-excel')] },
+  });
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    english['manualTask.legacyFormat'],
+  );
+  expect(request).not.toHaveBeenCalled();
+  fireEvent.change(picker, {
+    target: { files: [new File(['a,b'], 'gbk.csv', { type: 'text/csv' })] },
+  });
+  await waitFor(() =>
+    expect(screen.getAllByRole('alert')[1]).toHaveTextContent(
+      english['manualTask.textEncoding'],
+    ),
+  );
+});
+
+it('uploads documents typed by extension and has the draft read them', async () => {
+  request
+    .mockResolvedValueOnce({
+      data: {
+        ...record,
+        id: 'doc-1',
+        filename: 'brief.docx',
+        mimeType:
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      },
+    })
+    .mockResolvedValueOnce({ data: draftView })
+    .mockResolvedValue({ data: { deleted: true } });
+  render(<TaskCreatePage />);
+  writeIdea('Use the brief');
+  // A browser may report no type for a document; its extension decides.
+  fireEvent.change(screen.getByLabelText('Upload attachments'), {
+    target: { files: [docx()] },
+  });
+  expect(
+    screen.getByRole('button', { name: 'Organize with AI' }),
+  ).toBeDisabled();
+  await screen.findByText('Uploaded');
+  organize();
+  await screen.findByLabelText(/Task title/);
+  expect(request.mock.calls[1][0]).toMatchObject({
+    path: 'nocoreachTasks/draft',
+    json: {
+      idea: 'Use the brief',
+      requestId: request.mock.calls[0][0].query.requestId,
+      attachmentIds: ['doc-1'],
+    },
+  });
+});
+
+it('shows documents as chips that download, beside media shown in place', async () => {
+  request.mockResolvedValueOnce({
+    data: [
+      record,
+      {
+        id: 'doc-1',
+        filename: 'brief.docx',
+        mimeType:
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        size: 2048,
+        contentUrl: '/main/uploads/task-media/doc-1.docx',
+      },
+    ],
+  });
+  const { container } = render(<TaskMedia projectId={1} taskId='42' />);
+  expect(await screen.findByText('brief.docx')).toBeVisible();
+  expect(
+    screen.getByRole('list', { name: english['manualTask.documents'] }),
+  ).toBeVisible();
+  const download = screen.getByRole('button', {
+    name: 'Download brief.docx',
+  });
+  expect(download).toHaveAttribute(
+    'href',
+    '/main/uploads/task-media/doc-1.docx',
+  );
+  expect(download).toHaveAttribute('download', 'brief.docx');
+  expect(container.querySelector('img')).toHaveAttribute(
+    'src',
+    record.contentUrl,
+  );
+  expect(container.querySelectorAll('img')).toHaveLength(1);
 });

@@ -24,7 +24,10 @@ import { resultOf, resultRules } from './agent-result';
 import { TaskAgentUnavailableError } from './agent-error.js';
 import {
   TASK_MATERIALS_MOUNT,
+  attachmentIdsOf,
+  attachmentPlan,
   taskMaterials,
+  type TaskAttachmentReader,
   type TaskInput,
 } from './task-materials';
 
@@ -38,6 +41,7 @@ interface TaskTransport {
     readonly demoConfiguration?: import('@nocobase/app-plugin-demo-mode/server/tokens').DemoConfigurationService;
     readonly mock?: MockEngine;
     readonly demoProjects?: { recognize(projectId: string): Promise<boolean> };
+    readonly taskAttachments?: TaskAttachmentReader;
   };
   readonly agents: {
     doc(project: string, tx?: LegacyTransaction): Promise<AgentDoc>;
@@ -203,7 +207,7 @@ export class TaskAgentsRuntime {
         return bundle?.offer ?? null;
       },
       bundle: async (conn, { runId }) =>
-        (await this.materials(conn, runId))?.bundle ?? null,
+        (await this.materials(conn, runId, true))?.bundle ?? null,
     });
     const unregisterSubject = this.agents.subjects.register({
       kind: TASK_SUBJECT,
@@ -352,17 +356,40 @@ export class TaskAgentsRuntime {
       unregisterBusiness();
     };
   }
-  private async materials(conn: DatabaseConnection, runId: string) {
+  /** The run's materials; the attachments' bytes are read only for the served bundle, not for the offer's hash. */
+  private async materials(
+    conn: DatabaseConnection,
+    runId: string,
+    withContent = false,
+  ) {
     const tx = { connection: conn };
     const key = await this.tasks.snapshot(materialsKey(runId), tx);
     if (typeof key !== 'string') return null;
     const run = (await this.tasks.snapshot(key, tx)) as Run | null;
-    return run
-      ? taskMaterials({
-          ...(JSON.parse(run.input) as TaskInput),
-          sources: await this.tasks.business.sources(run, tx),
-        })
-      : null;
+    if (!run) return null;
+    const input = JSON.parse(run.input) as TaskInput;
+    const ids = attachmentIdsOf(input);
+    const attachments =
+      ids.length && this.tasks.p.taskAttachments
+        ? await this.tasks.p.taskAttachments.forAgent(
+            conn,
+            run.projectId,
+            run.taskId,
+            ids,
+          )
+        : [];
+    let contents: Map<string, string> | undefined;
+    if (withContent) {
+      contents = new Map();
+      for (const { file, entry } of attachmentPlan(attachments))
+        if ('base64' in entry && file.read)
+          contents.set(file.id, (await file.read()).toString('base64'));
+    }
+    return taskMaterials(
+      { ...input, sources: await this.tasks.business.sources(run, tx) },
+      attachments,
+      contents,
+    );
   }
   private transaction(tx: LegacyTransaction): Tx {
     const events: AgentsEvent[] = [];

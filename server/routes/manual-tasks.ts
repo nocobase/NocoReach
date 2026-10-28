@@ -33,6 +33,7 @@ import {
   ManualTaskView,
   TaskMediaView,
   TASK_MEDIA_LIMIT,
+  isTaskDocument,
 } from '../../shared/manual-task.js';
 
 function creator(context: Pick<Context<AuthEnv>, 'get'>): TaskCreator {
@@ -288,14 +289,26 @@ export const taskMediaContentRoutes = defineRootRoutes<Application>((app) => {
       .read(creator(context), match[1]);
     if (file.ext !== (match[2] ?? '')) return context.notFound();
     const disk = app.container.resolve(driveManagerToken).use(file.disk);
-    context.header('Content-Type', file.mimeType);
+    // Documents are downloads, never shown in place; text keeps its encoding. Images and videos stay inline.
+    const document = isTaskDocument(file.mimeType);
+    context.header(
+      'Content-Type',
+      file.mimeType.startsWith('text/')
+        ? `${file.mimeType}; charset=utf-8`
+        : file.mimeType,
+    );
     context.header('Content-Length', String(file.size));
     context.header('X-Content-Type-Options', 'nosniff');
+    if (document)
+      context.header(
+        'Content-Security-Policy',
+        "default-src 'none'; sandbox",
+      );
     context.header('Cache-Control', 'private, no-store');
     context.header('Accept-Ranges', 'bytes');
     context.header(
       'Content-Disposition',
-      `inline; filename*=UTF-8''${encodeURIComponent(file.filename).replace(/['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)}`,
+      `${document ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(file.filename).replace(/['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)}`,
     );
     const range = context.req.header('Range');
     if (range) {

@@ -5,6 +5,7 @@ import { Worker } from 'node:worker_threads';
 export function documentText(
   extension: string,
   buffer: Buffer,
+  { timeoutMs = 120000 }: { timeoutMs?: number } = {},
 ): Promise<string> {
   const require = createRequire(import.meta.url);
   const modulePath = require.resolve(
@@ -44,7 +45,7 @@ export function documentText(
     const timer = setTimeout(() => {
       void worker.terminate();
       reject(new Error('Document parsing timed out'));
-    }, 120000);
+    }, timeoutMs);
     worker.once('message', (result: { text?: string; error?: boolean }) => {
       answered = true;
       clearTimeout(timer);

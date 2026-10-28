@@ -1,5 +1,9 @@
 import { createHash } from 'node:crypto';
-import type { DatabaseManager, Repository } from '@nocobase/db';
+import type {
+  DatabaseConnection,
+  DatabaseManager,
+  Repository,
+} from '@nocobase/db';
 import type { NocoBaseDriveManager } from '@nocobase/drive';
 import type {
   ServerFileRepositoryManager,
@@ -10,6 +14,7 @@ import type { NocoReachRuntime } from '../providers/nocoreach.js';
 import type { LegacyRecord } from './legacy/database.js';
 import { projectWork } from './execution/model.js';
 import type { TaskService } from './execution/service.js';
+import type { MaterialAttachment } from './execution/task-materials.js';
 import { roleOf } from './policy.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { draftTask, relevantPages, type DraftPage } from './task-draft.js';
@@ -21,8 +26,14 @@ import {
   TaskMediaView,
   TASK_MEDIA_COUNT,
   TASK_MEDIA_LIMIT,
-  TASK_MEDIA_TYPES,
+  isTaskDocument,
+  taskFileType,
 } from '../../shared/manual-task.js';
+import {
+  documentExcerpts,
+  documentProblem,
+  type DocumentSource,
+} from './task-documents.js';
 
 export interface TaskCreator {
   readonly id: string;
@@ -96,18 +107,49 @@ function view(row: LegacyRecord): ManualTaskView {
   });
 }
 
-/** Match bounded binary signatures, not the filename or caller-supplied MIME alone. */
-export async function validateTaskMedia(file: File): Promise<void> {
-  if (
-    !TASK_MEDIA_TYPES.some((type) => type === file.type) ||
-    !file.size ||
-    file.size > TASK_MEDIA_LIMIT
-  )
+/**
+ * Match bounded binary signatures, not the filename or caller-supplied MIME alone. Documents are typed by extension
+ * and checked by content; the returned file carries the type it is stored and served with.
+ */
+export async function validateTaskMedia(file: File): Promise<File> {
+  const type = taskFileType(file.name, file.type);
+  if (type === 'legacy')
+    denied(
+      'TASK_MEDIA_LEGACY_FORMAT',
+      'Save macro-enabled and legacy Office files as .docx or .xlsx.',
+      'INVALID_ARGUMENT',
+    );
+  if (!type || !file.size || file.size > TASK_MEDIA_LIMIT)
     denied(
       'TASK_MEDIA_INVALID',
       'Unsupported media type or size.',
       'INVALID_ARGUMENT',
     );
+  if (isTaskDocument(type)) {
+    const problem = documentProblem(
+      type as Parameters<typeof documentProblem>[0],
+      Buffer.from(await file.arrayBuffer()),
+    );
+    if (problem === 'macro')
+      denied(
+        'TASK_MEDIA_LEGACY_FORMAT',
+        'Save macro-enabled and legacy Office files as .docx or .xlsx.',
+        'INVALID_ARGUMENT',
+      );
+    if (problem === 'encoding')
+      denied(
+        'TASK_MEDIA_TEXT_ENCODING',
+        'Text files must be UTF-8.',
+        'INVALID_ARGUMENT',
+      );
+    if (problem)
+      denied(
+        'TASK_MEDIA_SIGNATURE',
+        'Media content does not match its type.',
+        'INVALID_ARGUMENT',
+      );
+    return file.type === type ? file : new File([file], file.name, { type });
+  }
   const bytes = Buffer.from(await file.slice(0, 64).arrayBuffer());
   const is = (offset: number, value: string) =>
     bytes.subarray(offset, offset + value.length).toString('latin1') === value;
@@ -127,12 +169,13 @@ export async function validateTaskMedia(file: File): Promise<void> {
       bytes.subarray(0, 4).equals(Buffer.from([26, 69, 223, 163])) &&
       bytes.includes(Buffer.from('webm')),
   };
-  if (!valid[file.type as keyof typeof valid])
+  if (!valid[type as keyof typeof valid])
     denied(
       'TASK_MEDIA_SIGNATURE',
       'Media content does not match its type.',
       'INVALID_ARGUMENT',
     );
+  return file;
 }
 
 /** Application-owned task creation; no execution or strategy state mutation. */
@@ -209,7 +252,7 @@ export class ManualTasks {
     file: File,
   ): Promise<TaskMediaView> {
     await this.authorize(actor, projectId);
-    await validateTaskMedia(file);
+    const stored = await validateTaskMedia(file);
     return this.serial(`upload:${actor.id}`, async () => {
       const pending = await this.media.count({
         filter: { ownerId: actor.id, taskId: null },
@@ -244,7 +287,7 @@ export class ManualTasks {
           delete: false,
         },
       });
-      const uploaded = await repository.uploadOne({ file });
+      const uploaded = await repository.uploadOne({ file: stored });
       const row = await this.media.findOne({
         filter: { id: uploaded.record.id },
       });
@@ -379,13 +422,14 @@ export class ManualTasks {
       const host = this.runtime.plugin as unknown as DraftHost;
       // The project's network and simulation scope, as the generic dispatcher gives every action.
       return await host.network.runProject(input.projectId, async () => {
-        const [project, { playbooks }, pages] = await Promise.all([
+        const [project, { playbooks }, pages, documents] = await Promise.all([
           host.project(input.projectId),
           host.taskExecution.playbooks.list(input.projectId),
           this.draftPages(host, input.projectId, input.idea),
+          this.draftDocuments(actor, input),
         ]);
         const draft = await draftTask(
-          { idea: input.idea, project, playbooks, pages },
+          { idea: input.idea, project, playbooks, pages, documents },
           (system, prompt) =>
             host.taskExecution.provider.complete(
               system,
@@ -407,6 +451,84 @@ export class ManualTasks {
     } finally {
       this.drafting.delete(actor.id);
     }
+  }
+
+  /**
+   * The text of the documents attached to this draft, for the model to read; images and videos are not read. Only
+   * the person's own unlinked files of this draft and session qualify, as for linking them at creation.
+   */
+  private async draftDocuments(
+    actor: TaskCreator,
+    input: ManualTaskDraftInput,
+  ) {
+    if (!input.attachmentIds.length) return [];
+    if (!input.requestId)
+      denied('TASK_MEDIA_READ_DENIED', 'File access denied.');
+    const sources: DocumentSource[] = [];
+    for (const id of input.attachmentIds) {
+      const file = await this.media.findOne({
+        filter: { id, deleting: false },
+      });
+      if (
+        !file ||
+        file.ownerId !== actor.id ||
+        file.sessionId !== actor.sessionId ||
+        file.projectId !== input.projectId ||
+        file.draftId !== input.requestId ||
+        file.taskId ||
+        new Date(file.expiresAt).getTime() <= Date.now()
+      )
+        denied('TASK_MEDIA_READ_DENIED', 'File access denied.');
+      const type = taskFileType(file.filename, file.mimeType);
+      if (type && type !== 'legacy' && isTaskDocument(type))
+        sources.push({
+          name: file.filename,
+          type,
+          read: () => this.bytes(file),
+        });
+    }
+    return documentExcerpts(sources);
+  }
+
+  /** The task's linked files for its runs' materials (TaskAttachmentReader), read on the run's connection. */
+  async forAgent(
+    connection: DatabaseConnection,
+    projectId: string,
+    taskId: string,
+    ids: readonly string[],
+  ): Promise<MaterialAttachment[]> {
+    const media = connection.repository<TaskMediaRecord>('nrTaskMedia');
+    const out: MaterialAttachment[] = [];
+    for (const id of ids) {
+      const file = await media.findOne({
+        filter: { id, projectId, taskId, deleting: false },
+      });
+      if (file)
+        out.push({
+          id: file.id,
+          name: file.filename,
+          type: file.mimeType,
+          size: Number(file.size),
+          read: () => this.bytes(file),
+        });
+    }
+    return out;
+  }
+
+  /** A stored file's bytes, at most the upload limit. */
+  async bytes(file: TaskMediaRecord): Promise<Buffer> {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of await this.drive
+      .use(file.disk)
+      .getStream(file.key)) {
+      const part = Buffer.from(chunk as Uint8Array);
+      size += part.length;
+      if (size > TASK_MEDIA_LIMIT)
+        throw new Error('Stored task file exceeds the upload limit.');
+      chunks.push(part);
+    }
+    return Buffer.concat(chunks);
   }
 
   /** Read only: the saved pages and their synced figures, never a live fetch; none without the Pages grant. */

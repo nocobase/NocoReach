@@ -46,9 +46,10 @@ import { toast } from '#lib/toast';
 import { useProject } from './reach-data.js';
 import {
   TASK_DRAFT_IDEA_MAX,
+  TASK_FILE_ACCEPT,
   TASK_MEDIA_COUNT,
   TASK_MEDIA_LIMIT,
-  TASK_MEDIA_TYPES,
+  taskFileType,
   TASK_WHY_MAX,
   type ManualTaskDraftView,
   type ManualTaskView,
@@ -60,6 +61,8 @@ type Entry = {
   key: string;
   file: File;
   status: 'uploading' | 'done' | 'failed';
+  /** Why it failed, when there is more to say than "upload failed". */
+  problem?: 'legacy' | 'encoding';
   record?: TaskMediaView;
   controller: AbortController;
 };
@@ -208,6 +211,7 @@ function CreateTask({
   async function addFiles(files: File[]) {
     if (!validScope || busy || attempt) return;
     for (const file of files) {
+      const type = taskFileType(file.name, file.type);
       const entry: Entry = {
         key: crypto.randomUUID(),
         file,
@@ -215,9 +219,12 @@ function CreateTask({
         status:
           entriesRef.current.length >= TASK_MEDIA_COUNT ||
           file.size > TASK_MEDIA_LIMIT ||
-          !TASK_MEDIA_TYPES.some((type) => type === file.type)
+          !type ||
+          type === 'legacy'
             ? 'failed'
             : 'uploading',
+        // Macro-enabled and legacy Office files are named before any upload.
+        ...(type === 'legacy' ? { problem: 'legacy' as const } : {}),
       };
       change([...entriesRef.current, entry]);
       if (entry.status === 'failed') continue;
@@ -250,12 +257,24 @@ function CreateTask({
               ),
             );
           },
-          () => {
+          (failure: unknown) => {
+            const reason =
+              failure instanceof ApiClientError ? failure.reason : undefined;
+            const problem =
+              reason === 'TASK_MEDIA_LEGACY_FORMAT'
+                ? ('legacy' as const)
+                : reason === 'TASK_MEDIA_TEXT_ENCODING'
+                  ? ('encoding' as const)
+                  : undefined;
             if (activeRef.current)
               change(
                 entriesRef.current.map((value) =>
                   value.key === entry.key
-                    ? { ...value, status: 'failed' }
+                    ? {
+                        ...value,
+                        status: 'failed',
+                        ...(problem ? { problem } : {}),
+                      }
                     : value,
                 ),
               );
@@ -360,7 +379,7 @@ function CreateTask({
   };
   // One model call; the draft fills the form and nothing is saved until Create.
   async function organize() {
-    if (drafting || busy || !validScope) return;
+    if (drafting || busy || blocked || !validScope) return;
     const text = idea.trim();
     setIdeaMissing(!text);
     if (!text) return;
@@ -372,7 +391,15 @@ function CreateTask({
       const { data } = await api.request<{ data: ManualTaskDraftView }>({
         path: 'nocoreachTasks/draft',
         method: 'POST',
-        json: { projectId: scope.projectId, idea: text },
+        // The documents among the uploaded files are read for the draft.
+        json: {
+          projectId: scope.projectId,
+          idea: text,
+          requestId: scope.requestId,
+          attachmentIds: entriesRef.current.flatMap((entry) =>
+            entry.record ? [entry.record.id] : [],
+          ),
+        },
         headers,
         signal: controller.signal,
       });
@@ -444,14 +471,14 @@ function CreateTask({
     return allowed;
   }
   const locked = busy || Boolean(attempt) || !validScope;
-  // Images and videos attach to the draft in either step, by paste or drop on the text or with the button.
+  // Images, videos and documents attach to the draft in either step, by paste or drop on the text or with the button.
   const media = (
     <>
       <input
         ref={pickerRef}
         type='file'
         multiple
-        accept={TASK_MEDIA_TYPES.join(',')}
+        accept={TASK_FILE_ACCEPT}
         className='sr-only'
         aria-label={$t('manualTask.upload')}
         onChange={(event) => {
@@ -470,26 +497,42 @@ function CreateTask({
       </Button>
       <ul className='mt-3 space-y-2'>
         {entries.map((entry) => (
-          <li key={entry.key} className='flex items-center gap-2 text-sm'>
-            <span className='min-w-0 flex-1 break-all'>{entry.file.name}</span>
-            <span role={entry.status === 'failed' ? 'alert' : 'status'}>
-              {$t(
-                entry.status === 'done'
-                  ? 'manualTask.uploaded'
-                  : entry.status === 'failed'
-                    ? 'manualTask.uploadFailed'
-                    : 'manualTask.uploading',
+          <li key={entry.key} className='text-sm'>
+            <div className='flex items-center gap-2'>
+              <span className='min-w-0 flex-1 break-all'>
+                {entry.file.name}
+              </span>
+              {entry.status !== 'failed' && (
+                <span role='status' className='shrink-0'>
+                  {$t(
+                    entry.status === 'done'
+                      ? 'manualTask.uploaded'
+                      : 'manualTask.uploading',
+                  )}
+                </span>
               )}
-            </span>
-            <Button
-              type='button'
-              variant='ghost'
-              size='sm'
-              disabled={busy || Boolean(attempt)}
-              onClick={() => void remove(entry)}
-            >
-              {$t('common.remove')}
-            </Button>
+              <Button
+                type='button'
+                variant='ghost'
+                size='sm'
+                disabled={busy || Boolean(attempt)}
+                onClick={() => void remove(entry)}
+              >
+                {$t('common.remove')}
+              </Button>
+            </div>
+            {/* A failure explains itself under the name, which keeps its width. */}
+            {entry.status === 'failed' && (
+              <p role='alert' className='mt-0.5 text-destructive'>
+                {$t(
+                  entry.problem === 'legacy'
+                    ? 'manualTask.legacyFormat'
+                    : entry.problem === 'encoding'
+                      ? 'manualTask.textEncoding'
+                      : 'manualTask.uploadFailed',
+                )}
+              </p>
+            )}
           </li>
         ))}
       </ul>
@@ -578,7 +621,7 @@ function CreateTask({
             )}
             <Button
               type='button'
-              disabled={drafting || !modelReady || !validScope}
+              disabled={drafting || blocked || !modelReady || !validScope}
               onClick={() => void organize()}
             >
               <SparklesIcon />

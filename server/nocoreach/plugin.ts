@@ -98,6 +98,8 @@ export class Connections{
  xiaohongshu?: XiaohongshuSource;
  /** When this application instance started; see execution/restarts.ts. */
  startedAt?: string;
+ /** The files attached to a task, for its runs' materials; set by the manual tasks provider. */
+ taskAttachments?: import('./execution/task-materials.js').TaskAttachmentReader;
  constructor(app,variables,{basePath,publicOrigin,browserCollectors=[],mock,startedAt}: {basePath:string;publicOrigin?:string;browserCollectors?:unknown;mock?:MockEngine;startedAt?:string}){this.startedAt=startedAt;this.publicOrigin=publicOrigin;this.mock=mock;this.browserCollectors=mock?.enabled?mockBrowserCollectors:browserCollectors;this.basePath=basePath;this.app=app;this.db=app.db;this.variables=variables;this.proxyProfiles=new ProxyProfiles(variables);this.network=new OutboundNetwork(this.proxyProfiles,mock);this.RETURN=`${basePath}/connections`;}
  mock?: MockEngine;
  // The demo data's projects, answered in process, and its simulated model (demo-data/).

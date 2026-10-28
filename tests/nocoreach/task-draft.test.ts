@@ -299,3 +299,46 @@ describe('grounding never invents data', () => {
     expect(TASK_DRAFT_SYSTEM).toContain('不要写没有依据的数字目标');
   });
 });
+
+describe('attached documents', () => {
+  it('reads their text as data, allows their figures and notes cut or unreadable files', async () => {
+    const complete = vi.fn(async () =>
+      fenced({
+        ...answer,
+        background: 'The brief sets Pro at 49 a month. Competitors charge 99.',
+      }),
+    );
+    const draft = await draftTask(
+      sources({
+        idea: 'Do what the brief says',
+        pages: null,
+        documents: [
+          {
+            name: 'brief.docx',
+            text: 'Pro plan: 49 a month',
+            truncated: true,
+            unreadable: false,
+          },
+          { name: 'scan.pdf', text: '', truncated: false, unreadable: true },
+        ],
+      }),
+      complete,
+    );
+    const input = JSON.parse(
+      (complete.mock.calls[0] as unknown as [string, string])[1],
+    );
+    expect(input.attachments).toEqual([
+      { name: 'brief.docx', text: 'Pro plan: 49 a month', truncated: true },
+    ]);
+    expect(
+      (complete.mock.calls[0] as unknown as [string, string])[0],
+    ).toContain('attachments');
+    // 49 is in the brief; 99 is in no input.
+    expect(draft.description).toMatch(
+      /^Background: The brief sets Pro at 49 a month\.\n\n/,
+    );
+    expect(draft.description).toMatch(
+      /\n\nNote: brief\.docx is long; only its first part was read for this draft\.\nNote: the text of scan\.pdf could not be read\.$/,
+    );
+  });
+});
