@@ -1,7 +1,8 @@
 import { $t, getCurrentLocale } from '#i18n';
-import type {
-  ArticleContent,
-  ArticleField,
+import {
+  inPlaceLocales,
+  type ArticleContent,
+  type ArticleField,
 } from '../../../shared/article-publishing.js';
 import { localeName, providerKey } from '../article-targets-api';
 import type {
@@ -93,10 +94,107 @@ export const draftContent = (
 export type ArticleView = 'preview' | 'changes';
 
 /**
+ * How a task in several languages writes the ones after its primary (2026-10-28, T-53): those the article already has
+ * are updated in place with the primary's changes, the others translated in full (article-flow.ts runInput).
+ * `unchanged` lists the ones a version leaves as they were.
+ */
+export function otherLanguages(data: TaskData, a?: ArticleProposal) {
+  const w = data.work,
+    L = w?.delivery?.locales || [],
+    write = L.slice(1),
+    update = inPlaceLocales(w?.delivery, w?.article?.locales);
+  return {
+    primary: L[0] || '',
+    write,
+    update,
+    translate: write.filter((l) => !update.includes(l)),
+    unchanged: a
+      ? write.filter((l) => !a.changes.some((c) => c.startsWith(`${l}.`)))
+      : [],
+  };
+}
+
+/**
+ * Which round a version under review is: the primary to approve (`pending`), the other languages to publish (`after`),
+ * or a version of those that changed none of them (`nothing`; T-53 read "Translation done" with Chinese and Japanese
+ * untouched). The card and the reading page share its title and actions.
+ */
+export function reviewRound(
+  data: TaskData,
+  a: ArticleProposal,
+  simulated = false,
+) {
+  const plan = otherLanguages(data, a),
+    after =
+      plan.write.length > 0 && Boolean(data.work?.delivery?.translateFrom),
+    nothing = after && plan.unchanged.length === plan.write.length,
+    names = (list: string[]) =>
+      joinNames(list.map((l) => localeName(l, getCurrentLocale()))),
+    primary = localeName(plan.primary, getCurrentLocale()),
+    updating = plan.update.length > 0;
+  const title = translationPending(data)
+    ? $t(
+        updating
+          ? 'articleTask.reviewPrimaryUpdateTitle'
+          : 'articleTask.reviewPrimaryTitle',
+        { 0: primary },
+      )
+    : nothing
+      ? $t('articleTask.languagesNotChangedTitle', { 0: names(plan.write) })
+      : after && updating
+        ? plan.translate.length
+          ? $t('articleTask.reviewUpdatedTranslatedTitle', {
+              0: primary,
+              1: names(plan.update),
+              2: names(plan.translate),
+            })
+          : $t('articleTask.reviewUpdatedTitle', {
+              0: primary,
+              1: names(plan.update),
+            })
+        : after
+          ? $t('articleTask.reviewTranslatedTitle')
+          : $t('articleTask.reviewTitle');
+  return {
+    ...plan,
+    after,
+    nothing,
+    title,
+    /** Approve's label in place of Approve and publish, if any. */
+    approve: translationPending(data)
+      ? $t(
+          updating
+            ? 'articleTask.approveUpdate'
+            : 'articleTask.approveTranslate',
+        )
+      : nothing
+        ? $t(
+            simulated
+              ? 'articleTask.simulatePublishOnly'
+              : 'articleTask.publishOnly',
+            { 0: primary },
+          )
+        : undefined,
+    /** Update again or Translate again, and the feedback it sends with the change request. */
+    again: $t(
+      updating ? 'articleTask.updateAgain' : 'articleTask.translateAgain',
+    ),
+    againComment: $t(
+      updating
+        ? 'articleTask.updateAgainComment'
+        : 'articleTask.translateAgainComment',
+      { 0: names(plan.write), 1: primary },
+    ),
+    hint: $t('articleTask.languagesNotChangedHint', { 0: names(plan.write) }),
+  };
+}
+
+/**
  * The languages an article is reviewed in, shared by the review card and its reading page. A language with no text in
  * the draft or the article is left out (2026-10-24 user report: empty tabs looked broken) and listed in `missing`. A
  * changed language opens as a preview when its body changed, as its changes when only its title or description did; a
- * new article, or a language the article did not have, has one version.
+ * new article, or a language the article did not have, has one version. A version that updated other languages in
+ * place opens on the first of them, as its changes: their edits are what is left to check (2026-10-28).
  */
 export function articleLanguages(data: TaskData, a: ArticleProposal) {
   const { target, base } = articleContext(data, a);
@@ -110,22 +208,39 @@ export function articleLanguages(data: TaskData, a: ArticleProposal) {
   const shown = all.filter(written),
     locales = shown.length ? shown : all.slice(0, 1);
   const isNew = !a.articleId;
+  const plan = otherLanguages(data, a),
+    after =
+      plan.write.length > 0 && Boolean(data.work?.delivery?.translateFrom),
+    changed = (l: string) => a.changes.some((c) => c.startsWith(`${l}.`)),
+    edited = (l: string) =>
+      after && plan.update.includes(l) && Boolean(base?.locales[l]);
   return {
     target,
     base,
     locales,
     missing: all.filter((l) => !locales.includes(l)),
-    // The languages translated from the primary once it is approved (2026-10-24); none while or after translating.
+    // The languages written from the primary once it is approved (2026-10-24); none while or after writing them.
     pending: translationPending(data)
       ? data.work.delivery!.locales!.slice(1)
       : [],
+    /** Of `pending`, the ones updated in place rather than translated. */
+    pendingUpdate: translationPending(data) ? plan.update : [],
+    /** The languages written after the primary once it was approved, and the ones this version left as they were. */
+    written: after ? plan.write : [],
+    unchanged: after ? plan.unchanged : [],
+    first:
+      locales.find((l) => edited(l) && changed(l)) ||
+      locales.find(changed) ||
+      locales[0],
     isNew,
-    changed: (l: string) => a.changes.some((c) => c.startsWith(`${l}.`)),
+    changed,
     versions: (l: string) => !isNew && Boolean(base?.locales[l]),
     defaultView: (l: string): ArticleView =>
-      isNew || !base?.locales[l] || a.changes.includes(`${l}.body`)
-        ? 'preview'
-        : 'changes',
+      !isNew && edited(l)
+        ? 'changes'
+        : isNew || !base?.locales[l] || a.changes.includes(`${l}.body`)
+          ? 'preview'
+          : 'changes',
   };
 }
 export type ArticleLanguages = ReturnType<typeof articleLanguages>;
