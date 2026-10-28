@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDown, Plus, Trash2 } from 'lucide-react';
-import { $t, $legacyText, useMessageState } from '#i18n';
+import { $t, $legacyText, getCurrentLocale, useMessageState } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { cn } from '#lib/utils';
 import { Tag } from '#components/reach/tag';
@@ -347,9 +347,21 @@ export function EditGroupsDialog({
             {$t('keywordSuggestions.newGroupHint', {
               0: direction || '…',
             })}
-            {estimate
-              ? ` ${$t('keywordSuggestions.seedsCost', { 0: upTo(estimate.maxUsd) })} · ${$t('keywordSuggestions.seedsMonth', { 0: estimate.monthUsd.toFixed(2), 1: estimate.budgetUsd.toFixed(2) })}`
-              : ''}
+            {estimate ? (
+              <>
+                {/^(zh|ja)/.test(getCurrentLocale()) ? '' : ' '}
+                {$t('keywordSuggestions.seedsCost', {
+                  0: upTo(estimate.maxUsd),
+                })}
+                {' · '}
+                <span className='whitespace-nowrap'>
+                  {$t('keywordSuggestions.seedsMonth', {
+                    0: estimate.monthUsd.toFixed(2),
+                    1: estimate.budgetUsd.toFixed(2),
+                  })}
+                </span>
+              </>
+            ) : null}
           </p>
         ) : null}
         {over && estimate ? (

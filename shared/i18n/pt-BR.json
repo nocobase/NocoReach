@@ -7468,5 +7468,7 @@
   "keywordSuggestions.saveAndExpand": "Salvar e expandir · até ${0}",
   "keywordSuggestions.expanding": "Expandindo palavras-chave na direção “{0}”",
   "keywordSuggest.keywordNotThere": "Esta palavra-chave não está mais entre as não selecionadas; recarregue a página",
-  "keywordSuggestions.whereAiSuggestionsCome": "De onde vêm as sugestões da IA"
+  "keywordSuggestions.whereAiSuggestionsCome": "De onde vêm as sugestões da IA",
+  "keywordSuggestions.notPickedReason.direction": "Fora da direção do grupo",
+  "keywordSuggestions.notPickedShort.direction": "Fora da direção"
 }

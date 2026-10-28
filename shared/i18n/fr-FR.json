@@ -7468,5 +7468,7 @@
   "keywordSuggestions.saveAndExpand": "Enregistrer et élargir · jusqu’à ${0}",
   "keywordSuggestions.expanding": "Élargissement des mots-clés vers « {0} »",
   "keywordSuggest.keywordNotThere": "Ce mot-clé ne figure plus parmi les non retenus ; rechargez la page",
-  "keywordSuggestions.whereAiSuggestionsCome": "Origine des suggestions de l’IA"
+  "keywordSuggestions.whereAiSuggestionsCome": "Origine des suggestions de l’IA",
+  "keywordSuggestions.notPickedReason.direction": "Hors de la direction du groupe",
+  "keywordSuggestions.notPickedShort.direction": "Hors direction"
 }

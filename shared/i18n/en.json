@@ -7468,5 +7468,7 @@
   "keywordSuggestions.saveAndExpand": "Save and expand · up to ${0}",
   "keywordSuggestions.expanding": "Expanding keywords in the direction “{0}”",
   "keywordSuggest.keywordNotThere": "This keyword is no longer among those not picked; reload the page",
-  "keywordSuggestions.whereAiSuggestionsCome": "Where AI suggestions come from"
+  "keywordSuggestions.whereAiSuggestionsCome": "Where AI suggestions come from",
+  "keywordSuggestions.notPickedReason.direction": "Outside this group's direction",
+  "keywordSuggestions.notPickedShort.direction": "Off direction"
 }

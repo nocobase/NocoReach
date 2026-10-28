@@ -145,6 +145,7 @@ const REASONS: Record<string, string> = {
   brand: "another company's brand search",
   intent: 'the search intent does not fit',
   weaker: 'related, but less worth doing than those picked',
+  direction: "outside the group's direction",
   duplicate: 'means the same as another keyword',
   removed: 'the user removed it before',
   unreviewed: 'ranked too low among the candidates to be shown to the AI',

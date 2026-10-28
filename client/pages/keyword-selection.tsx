@@ -60,8 +60,12 @@ const call = <T,>(projectId: number, action: string, body: object = {}) =>
     body: { projectId, ...body },
     unwrap: 'data',
   });
-/** A month's searches added up, compactly in the reader's language (186K in English, in ten-thousands in Chinese). */
+/**
+ * A month's searches added up, as the volume column writes them below ten thousand (6,500) and compactly in the reader's
+ * language above (186K in English, in ten-thousands in Chinese).
+ */
 const total = (n: number) => {
+  if (n < 10000) return metric(n);
   const locale = getCurrentLocale(),
     text = new Intl.NumberFormat(locale, {
       notation: 'compact',
@@ -402,7 +406,7 @@ export function NotPickedDialog({
             />
             <div className='min-h-0 flex-1 overflow-auto rounded-lg border'>
               <table className='w-full text-sm'>
-                <thead className='sticky top-0 bg-muted/60 text-left text-xs text-muted-foreground backdrop-blur'>
+                <thead className='sticky top-0 bg-muted/60 text-left text-xs whitespace-nowrap text-muted-foreground backdrop-blur'>
                   <tr>
                     <th className='px-3 py-2 font-medium'>
                       {$t('common.keywords')}
@@ -423,13 +427,13 @@ export function NotPickedDialog({
                   {shown.map((c) => (
                     <tr key={c.keyword} className='border-t'>
                       <td className='px-3 py-2'>{c.keyword}</td>
-                      <td className='px-3 py-2 text-right tabular-nums'>
+                      <td className='px-3 py-2 text-right whitespace-nowrap tabular-nums'>
                         {metric(c.volume)}
                       </td>
                       <td className='px-3 py-2 text-right'>
                         <ScoreBadge value={c.difficulty} />
                       </td>
-                      <td className='px-3 py-2 text-muted-foreground'>
+                      <td className='px-3 py-2 whitespace-nowrap text-muted-foreground'>
                         {c.reason === 'duplicate' && c.duplicateOf
                           ? $t('keywordSuggestions.duplicateOf', {
                               0: c.duplicateOf,

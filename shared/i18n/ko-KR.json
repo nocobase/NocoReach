@@ -7470,5 +7470,7 @@
   "keywordSuggestions.saveAndExpand": "저장 후 확장 · 최대 ${0}",
   "keywordSuggestions.expanding": "“{0}” 방향으로 키워드를 확장하는 중",
   "keywordSuggest.keywordNotThere": "이 키워드는 더 이상 선택하지 않은 목록에 없습니다. 페이지를 새로고침하세요",
-  "keywordSuggestions.whereAiSuggestionsCome": "AI 제안의 출처"
+  "keywordSuggestions.whereAiSuggestionsCome": "AI 제안의 출처",
+  "keywordSuggestions.notPickedReason.direction": "이번 방향과 무관",
+  "keywordSuggestions.notPickedShort.direction": "방향 외"
 }

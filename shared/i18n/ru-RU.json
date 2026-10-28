@@ -7486,5 +7486,7 @@
   "keywordSuggestions.saveAndExpand": "Сохранить и расширить · до ${0}",
   "keywordSuggestions.expanding": "Расширяем ключевые слова по направлению «{0}»",
   "keywordSuggest.keywordNotThere": "Этого слова уже нет среди невыбранных; обновите страницу",
-  "keywordSuggestions.whereAiSuggestionsCome": "Откуда берутся предложения ИИ"
+  "keywordSuggestions.whereAiSuggestionsCome": "Откуда берутся предложения ИИ",
+  "keywordSuggestions.notPickedReason.direction": "Вне направления группы",
+  "keywordSuggestions.notPickedShort.direction": "Не по направлению"
 }

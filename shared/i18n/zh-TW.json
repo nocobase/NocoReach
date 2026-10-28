@@ -7468,5 +7468,7 @@
   "keywordSuggestions.saveAndExpand": "儲存並拓展 · 最多 ${0}",
   "keywordSuggestions.expanding": "正在按「{0}」方向拓展關鍵詞",
   "keywordSuggest.keywordNotThere": "這個詞已經不在沒選的列表裡了，請重新整理頁面",
-  "keywordSuggestions.whereAiSuggestionsCome": "AI 建議怎麼來的"
+  "keywordSuggestions.whereAiSuggestionsCome": "AI 建議怎麼來的",
+  "keywordSuggestions.notPickedReason.direction": "和這次的方向無關",
+  "keywordSuggestions.notPickedShort.direction": "方向無關"
 }

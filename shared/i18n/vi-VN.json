@@ -7468,5 +7468,7 @@
   "keywordSuggestions.saveAndExpand": "Lưu và mở rộng · tối đa ${0}",
   "keywordSuggestions.expanding": "Đang mở rộng từ khóa theo hướng “{0}”",
   "keywordSuggest.keywordNotThere": "Từ khóa này không còn trong danh sách không chọn; hãy tải lại trang",
-  "keywordSuggestions.whereAiSuggestionsCome": "Nguồn đề xuất của AI"
+  "keywordSuggestions.whereAiSuggestionsCome": "Nguồn đề xuất của AI",
+  "keywordSuggestions.notPickedReason.direction": "Nằm ngoài hướng của nhóm",
+  "keywordSuggestions.notPickedShort.direction": "Lệch hướng"
 }

@@ -7468,5 +7468,7 @@
   "keywordSuggestions.saveAndExpand": "Simpan dan perluas · maks. ${0}",
   "keywordSuggestions.expanding": "Memperluas kata kunci ke arah “{0}”",
   "keywordSuggest.keywordNotThere": "Kata kunci ini sudah tidak ada di daftar yang tidak dipilih; muat ulang halaman",
-  "keywordSuggestions.whereAiSuggestionsCome": "Sumber saran AI"
+  "keywordSuggestions.whereAiSuggestionsCome": "Sumber saran AI",
+  "keywordSuggestions.notPickedReason.direction": "Di luar arah grup ini",
+  "keywordSuggestions.notPickedShort.direction": "Di luar arah"
 }

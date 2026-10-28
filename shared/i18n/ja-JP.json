@@ -7468,5 +7468,7 @@
   "keywordSuggestions.saveAndExpand": "保存して拡張 · 最大 ${0}",
   "keywordSuggestions.expanding": "「{0}」の方向にキーワードを広げています",
   "keywordSuggest.keywordNotThere": "このキーワードはもう未選択の一覧にありません。ページを再読み込みしてください",
-  "keywordSuggestions.whereAiSuggestionsCome": "AIの提案の情報源"
+  "keywordSuggestions.whereAiSuggestionsCome": "AIの提案の情報源",
+  "keywordSuggestions.notPickedReason.direction": "今回の方向と関係がない",
+  "keywordSuggestions.notPickedShort.direction": "方向外"
 }

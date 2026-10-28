@@ -31,6 +31,34 @@ function inputOf(prompt: string): Value {
   }
 }
 
+/**
+ * A direction as an English market searches it: a group named in Chinese (Self-hosting and open source) gets English search words,
+ * as the real model is told to choose seeds in the market's language.
+ */
+const DIRECTION_WORDS: [RegExp, string][] = [
+  [/自托管|私有部署|自建/u, 'self hosted'],
+  [/开源/u, 'open source'],
+  [/审批/u, 'approval workflow'],
+  [/权限/u, 'permissions'],
+  [/工作流|流程/u, 'workflow automation'],
+  [/客户|销售|crm/iu, 'crm'],
+  [/内部工具|后台/u, 'internal tools'],
+  [/表格|excel/iu, 'spreadsheet'],
+  [/门户/u, 'portal'],
+  [/智能体|ai/iu, 'ai agent'],
+  [/看板/u, 'kanban boards'],
+  [/排期|日程|调度/u, 'team scheduling'],
+  [/协作/u, 'collaboration'],
+  [/任务/u, 'task management'],
+];
+const searchedAs = (direction: string): string[] => {
+  if (!/\p{Script=Han}/u.test(direction)) return [direction];
+  const found = DIRECTION_WORDS.filter(([w]) => w.test(direction)).map(
+    ([, words]) => words,
+  );
+  return found.length ? found : [direction];
+};
+
 /** What each business operation answers, written for people to read in the demo. */
 function business(operation: string, input: Value, en: boolean): Value | null {
   const t = (zh: string, enText: string) => (en ? enText : zh);
@@ -138,20 +166,17 @@ function business(operation: string, input: Value, en: boolean): Value | null {
       const direction = str(input.direction, 60);
       if (direction)
         return {
-          seeds: [
-            direction,
-            `${direction} software`,
-            `${direction} tool`,
-            `${direction} open source`,
-            `best ${direction}`,
-          ].map((seed) => ({
-            seed,
-            from: ['direction'],
-            why: t(
-              `围绕这次的方向“${direction}”`,
-              `Around the direction "${direction}"`,
-            ),
-          })),
+          seeds: searchedAs(direction)
+            .flatMap((words) => [words, `${words} software`, `best ${words}`])
+            .slice(0, 6)
+            .map((seed) => ({
+              seed,
+              from: ['direction'],
+              why: t(
+                `围绕这次的方向“${direction}”`,
+                `Around the direction "${direction}"`,
+              ),
+            })),
         };
       const seeds = crm
         ? [
@@ -252,68 +277,146 @@ function business(operation: string, input: Value, en: boolean): Value | null {
             : rival(k) && !/alternative|\bvs\b|替代|对比/.test(k)
               ? 'brand'
               : '';
-      const why = (k: string, position: number) =>
-        /alternative|\bvs\b|替代|对比/.test(k)
-          ? t(
-              `在找 ${rival(k) ?? '竞品'} 替代的人，对比页正好接住`,
-              `People replacing ${rival(k) ?? 'a competitor'}; a comparison page wins them`,
-            )
-          : /self.?hosted|open source|开源|私有部署|自建/.test(k)
-            ? t(
-                `想自己部署的团队在找，正对 ${product} 开源可私有部署`,
-                `Teams who want to host it themselves; ${product} is open source`,
-              )
-            : /crm|客户|销售/.test(k)
-              ? t(
-                  '想自己搭 CRM 的团队在找，可以用 CRM 方案页接住',
-                  'Teams building their own CRM; the CRM solution page fits',
-                )
-              : /approval|workflow|automation|审批|工作流|自动化|流程/.test(k)
-                ? t(
-                    '审批和工作流是核心功能，适合写方案页',
-                    'Approvals and workflows are core features; worth a solution page',
-                  )
-                : /rbac|permission|access|权限/.test(k)
-                  ? t(
-                      '权限是核心能力，适合写教程带出产品',
-                      'Permissions are a core strength; a tutorial can feature them',
-                    )
-                  : /\bai\b|agent|llm|大模型/.test(k)
-                    ? t(
-                        `正对 ${product} 的 AI 员工，适合写场景文章`,
-                        `Matches ${product}'s AI employees; worth a use-case article`,
-                      )
-                    : /internal|admin|内部|后台/.test(k)
-                      ? t(
-                          '产品主打场景：搭内部工具和后台',
-                          'The main use case: building internal tools and admin panels',
-                        )
-                      : /inventory|ticket|dashboard|project|进销存|工单|看板|项目/.test(
-                            k,
-                          )
-                        ? t(
-                            '具体业务场景，能用产品搭出来，适合写方案页',
-                            'A concrete business case the product can build; worth a solution page',
-                          )
-                        : /what is|how|template|什么是|区别|模板|教程/.test(k)
-                          ? t(
-                              '问题型搜索，适合写科普文章带出产品',
-                              'A question people ask; an explainer can introduce the product',
-                            )
-                          : /low code|no code|低代码|无代码/.test(k)
-                            ? t(
-                                '产品品类词，选型阶段的人在搜',
-                                'The product category, searched while choosing a tool',
-                              )
-                            : position
-                              ? t(
-                                  '本站已有排名，补强页面就能往前走',
-                                  'The site already ranks; a stronger page moves it up',
-                                )
-                              : t(
-                                  '和产品方向相关，适合补一篇内容',
-                                  'Close to the product; worth a page of its own',
-                                );
+      const brand = (k: string) => {
+        const name = rival(k);
+        return name ? name[0].toUpperCase() + name.slice(1) : '';
+      };
+      // What the searcher wants first (a tutorial, a price, a template, a choice), then the product area it touches.
+      const REASONS: [RegExp, (k: string) => [string, string]][] = [
+        [
+          /alternative|替代/,
+          (k) => [
+            `在找 ${brand(k) || '竞品'} 的替代方案，对比页正好接住`,
+            `People replacing ${brand(k) || 'a competitor'}; a comparison page wins them`,
+          ],
+        ],
+        [
+          /\bvs\b|versus|compare|comparison|区别|对比/,
+          () => [
+            '在比较几种做法，对比文章可以讲清各自适合什么',
+            'People weighing options; a comparison explains which fits when',
+          ],
+        ],
+        [
+          /pricing|price|cost|价格/,
+          () => [
+            `在比价格，方案页写清 ${product} 开源免费和企业版的区别`,
+            `People checking prices; say what is free in ${product} and what is not`,
+          ],
+        ],
+        [
+          /tutorial|guide|how to|教程/,
+          () => [
+            '想照着做的人在找教程，文档能接住',
+            'People following steps; a guide in the docs catches them',
+          ],
+        ],
+        [
+          /template|example|模板/,
+          () => [
+            '想要现成的模板，给一个能直接用的就能留住',
+            'People who want a ready template; one that works keeps them',
+          ],
+        ],
+        [
+          /what is|什么是/,
+          () => [
+            '刚了解这个概念的人，科普文章可以顺带介绍产品',
+            'People new to the idea; an explainer can introduce the product',
+          ],
+        ],
+        [
+          /self.?hosted|on.?prem|私有部署|自建/,
+          () => [
+            `要把数据留在自己服务器上的团队，${product} 可私有部署`,
+            `Teams keeping data on their own servers; ${product} self-hosts`,
+          ],
+        ],
+        [
+          /open source|开源/,
+          () => [
+            `要开源方案的团队，${product} 的源码和插件都开放`,
+            `Teams who want open source; ${product}'s code and plugins are open`,
+          ],
+        ],
+        [
+          /crm|客户|销售/,
+          () => [
+            '想按自己的流程搭 CRM 的团队，CRM 方案页能接住',
+            'Teams building a CRM their way; the CRM solution page fits',
+          ],
+        ],
+        [
+          /approval|审批/,
+          () => [
+            '审批流是核心功能，适合写方案页带出产品',
+            'Approvals are a core feature; worth a solution page',
+          ],
+        ],
+        [
+          /workflow|automation|工作流|自动化|流程/,
+          () => [
+            '工作流是核心功能，适合用真实场景讲清楚',
+            'Workflows are a core feature; show them on a real case',
+          ],
+        ],
+        [
+          /rbac|permission|access|权限/,
+          () => [
+            '权限是核心能力，适合写教程带出产品',
+            'Permissions are a core strength; a tutorial can feature them',
+          ],
+        ],
+        [
+          /\bai\b|agent|llm|大模型/,
+          () => [
+            `正对 ${product} 的 AI 员工，适合写场景文章`,
+            `Matches ${product}'s AI employees; worth a use-case article`,
+          ],
+        ],
+        [
+          /internal|admin|内部|后台/,
+          () => [
+            '产品主打场景：搭内部工具和后台',
+            'The main use case: building internal tools and admin panels',
+          ],
+        ],
+        [
+          /project|task|kanban|sprint|schedul|workload|gantt|项目|任务|看板|排期/,
+          () => [
+            `正对 ${product} 的主要功能，功能页能接住`,
+            `On ${product}'s main features; a feature page catches it`,
+          ],
+        ],
+        [
+          /inventory|ticket|dashboard|进销存|工单/,
+          () => [
+            '具体业务场景，能用产品搭出来，适合写方案页',
+            'A concrete business case the product can build; worth a solution page',
+          ],
+        ],
+        [
+          /low code|no code|低代码|无代码/,
+          () => [
+            '产品品类词，选型阶段的人在搜',
+            'The product category, searched while choosing a tool',
+          ],
+        ],
+      ];
+      const why = (k: string, position: number) => {
+        const [zh, en] =
+          REASONS.find(([w]) => w.test(k))?.[1](k) ??
+          (position
+            ? [
+                '本站已有排名，补强页面就能往前走',
+                'The site already ranks; a stronger page moves it up',
+              ]
+            : [
+                '和产品方向相关，适合补一篇内容',
+                'Close to the product; worth a page of its own',
+              ]);
+        return t(zh, en);
+      };
       // The same search with other filler words: "workflow automation tools" and "workflow automation software".
       const core = (k: string) =>
         k
@@ -326,7 +429,9 @@ function business(operation: string, input: Value, en: boolean): Value | null {
           .sort()
           .join(' ');
       // A dig keeps to its direction: candidates sharing one of its words.
-      const words = str(input.direction, 60)
+      const direction = str(input.direction, 60);
+      const words = (direction ? searchedAs(direction) : [])
+        .join(' ')
         .toLowerCase()
         .split(/\s+/)
         .filter((w) => w.length > 2);
@@ -338,15 +443,20 @@ function business(operation: string, input: Value, en: boolean): Value | null {
           brand: [],
           intent: [],
           weaker: [],
+          direction: [],
           duplicate: [],
         };
-      for (const c of candidates) {
+      // The most searched of a set of duplicates is the one kept.
+      const ordered = [...candidates].sort(
+        (a, b) => (Number(b.volume) || 0) - (Number(a.volume) || 0),
+      );
+      for (const c of ordered) {
         const keyword = str(c.keyword, 80),
           k = keyword.toLowerCase(),
           n = Number(c.i) || 0,
           reason = leftOut(k);
         if (words.length && !words.some((w) => k.includes(w))) {
-          skipped.unrelated.push(n);
+          skipped.direction.push(n);
           continue;
         }
         if (reason) {

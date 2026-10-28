@@ -7468,5 +7468,7 @@
   "keywordSuggestions.saveAndExpand": "保存并拓展 · 最多 ${0}",
   "keywordSuggestions.expanding": "正在按“{0}”方向拓展关键词",
   "keywordSuggest.keywordNotThere": "这个词已经不在没选的列表里了，请刷新页面",
-  "keywordSuggestions.whereAiSuggestionsCome": "AI 建议怎么来的"
+  "keywordSuggestions.whereAiSuggestionsCome": "AI 建议怎么来的",
+  "keywordSuggestions.notPickedReason.direction": "和这次的方向无关",
+  "keywordSuggestions.notPickedShort.direction": "方向无关"
 }

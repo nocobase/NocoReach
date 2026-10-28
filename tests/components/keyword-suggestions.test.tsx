@@ -266,10 +266,7 @@ test('the results summary follows the tab: count, monthly searches added up, ave
   const summary = document.querySelector(
     '[data-selection-summary]',
   ) as HTMLElement;
-  const volume = new Intl.NumberFormat(getCurrentLocale(), {
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).format(6500);
+  const volume = new Intl.NumberFormat(getCurrentLocale()).format(6500);
   expect(summary.textContent).toContain(
     $t('keywordSuggestions.summaryKeywords', { 0: 3 }),
   );
