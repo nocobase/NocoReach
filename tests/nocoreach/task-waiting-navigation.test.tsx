@@ -234,3 +234,48 @@ test('owner fallback and lifecycle transitions match the original home rules', (
   task.evidence.work.cancelledAt = '2026-10-13';
   expect(isWaitingTask(task, mine)).toBe(false);
 });
+
+// 2026-10-28 user request: a snoozed task leaves Needs you and Current for a Snoozed list of its own, soonest first.
+test('snoozed tasks have their own list, with what each waits for and its day, and leave Needs you and Current', async () => {
+  const snoozed = (id: number, day: string, reason: string) => {
+    const t = makeTask(id, 'review');
+    t.evidence.work = {
+      ...t.evidence.work,
+      snooze: {
+        until: `${day}T01:00:00Z`,
+        day,
+        reason,
+        at: '2026-10-28T13:05:00Z',
+        by: 'me',
+      },
+    };
+    return t;
+  };
+  tasks.push(
+    snoozed(8, '2099-11-25', 'the pricing review'),
+    snoozed(9, '2099-11-11', 'the permissions docs'),
+  );
+  try {
+    await setup('/actions?scope=waiting&view=list');
+    await assertWaiting();
+    expect(screen.queryByText('Fixture task 8')).not.toBeInTheDocument();
+    const scope = (name: RegExp) => screen.getByRole('button', { name });
+    expect(scope(/^待我处理/)).toHaveTextContent('2');
+    expect(scope(/^当前/)).toHaveTextContent('5');
+    expect(scope(/^已延后/)).toHaveTextContent('2');
+    await userEvent.click(scope(/^当前/));
+    expect(screen.queryByText('Fixture task 9')).not.toBeInTheDocument();
+    await userEvent.click(scope(/^已延后/));
+    expect(screen.getByTestId('url')).toHaveTextContent('scope=snoozed');
+    const rows = screen.getAllByRole('row').slice(1);
+    expect(rows.map((r) => r.textContent)).toEqual([
+      expect.stringContaining('the permissions docs'),
+      expect.stringContaining('the pricing review'),
+    ]);
+    expect(rows[0]).toHaveTextContent('Fixture task 9');
+    expect(screen.getByRole('columnheader', { name: '在等什么' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: '延后到' })).toBeTruthy();
+  } finally {
+    tasks.splice(-2, 2);
+  }
+});

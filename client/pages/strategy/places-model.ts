@@ -62,7 +62,14 @@ export type OpportunityTask = {
   status?: string;
   evidence?: { no?: number; work?: Work | null };
 };
-const ORDER: TaskStanding[] = ['done', 'review', 'doing', 'todo', 'closed'];
+const ORDER: TaskStanding[] = [
+  'done',
+  'review',
+  'doing',
+  'todo',
+  'snoozed',
+  'closed',
+];
 export const standingOf = (t?: OpportunityTask): TaskStanding =>
   taskStanding({ work: t?.evidence?.work, status: t?.status });
 /** Where an opportunity's several tasks stand, in one tag: how many, and how many are done (always two or more). */
@@ -92,6 +99,7 @@ export function progressText(states: TaskStanding[]) {
     review: $t('common.needsConfirmation'),
     doing: $t('common.inProgress'),
     todo: $t('common.pending'),
+    snoozed: $t('common.snoozed'),
     closed: $t('common.closed'),
   };
   return ORDER.map((s) => [s, states.filter((x) => x === s).length] as const)

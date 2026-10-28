@@ -20,6 +20,7 @@ import { CHECKPOINTS, compare, dateOf, pageKey, pageNumbers, shift, windows, typ
 import { listResults, readResult, resultBoard } from './result-view.js';
 import { ArticleFlow } from './article-flow.js';
 import { playbookTitle, retitle } from './task-title.js';
+import { KEEPS_SNOOZE, snoozeInstant } from './snooze.js';
 import { STARTS_KEY, restartOf, withStart } from './restarts.js';
 import { ownSignalIds } from '../../../shared/opportunity-parts.js';
 import { taskStanding } from '../../../shared/task-pending.js';
@@ -559,6 +560,8 @@ export class TaskService {
         task.title = title;
         after.push({ at, actor: 'system', action: 'retitle', note: title });
       };
+      // Acting on a snoozed task's card ends the snooze (2026-10-28), recorded before what was done.
+      if (w.snooze && !KEEPS_SNOOZE.includes(v.command)) { w.snooze = null; w.history.push({ at, actor, action: 'snoozeEnded' }); }
       if (typeof v.stageKey === 'string') event.stageKey = v.stageKey.slice(0, 40);
       if (v.command === 'moveWork') {
         if (!['todo','doing','review','done'].includes(v.state)) return fail(systemMessageText('taskExecution.invalidWorkState'));
@@ -667,6 +670,19 @@ export class TaskService {
         if (!['verification','done'].includes(w.stage) || !w.receipt?.note || !['met', 'unmet', 'inconclusive'].includes(v.outcome)) return fail(systemMessageText('taskExecution.recordRunPickVerificationVerdict'), 409);
         w.boardState=undefined; event.previous = w.verification; w.verification = { outcome: v.outcome, note: text(v.note, 10000), at, actor };
         if (v.outcome !== 'inconclusive') w.stage = 'done';
+      } else if (v.command === 'snoozeTask') {
+        // Put aside until a day (snooze.ts): not once finished or closed, nor while an Agent run is queued or running.
+        const runs: Run[] = await this.list('run', project, taskId, tx);
+        if (w.stage === 'done' || w.cancelledAt || w.archivedAt || runs.some(active)) return fail(systemMessageText('taskExecution.cannotSnooze'), 409);
+        const day = typeof v.day === 'string' ? v.day : '', until = snoozeInstant(day, await this.snoozeZone());
+        if (!until || until.getTime() <= Date.now()) return fail(systemMessageText('taskExecution.snoozeDayFuture'));
+        const reason = typeof v.reason === 'string' ? v.reason.trim().slice(0, 500) : '';
+        event.action = w.snooze ? 'snoozeChanged' : 'snoozeTask'; event.note = day;
+        if (reason && reason !== (w.snooze?.reason || '')) event.comment = reason;
+        w.snooze = { until: until.toISOString(), day, ...(reason ? { reason } : {}), at, by: actor, byName: actorName };
+      } else if (v.command === 'unsnoozeTask') {
+        if (!w.snooze) return fail(systemMessageText('taskExecution.notSnoozed'), 409);
+        event.note = w.snooze.day; w.snooze = null;
       } else if (v.command === 'selectPlaybook') {
         if (w.stage !== 'plan' || w.plan || w.flow) return fail(systemMessageText('taskExecution.taskStartedPlaybookCannotChange'), 409);
         const p = await this.playbooks.get(project, v.playbookId, tx); w.playbookId = p.id; event.note = p.name;
@@ -1093,6 +1109,35 @@ export class TaskService {
     return { id: String(u.id), name };
   }
   // The project's tasks, newest first, for everyone with a role (the tables themselves are for NocoBase admins).
+  /** The daily analysis's time zone, which snoozed tasks come back in (snooze.ts). */
+  async snoozeZone(): Promise<string | undefined> {
+    const zone = (await this.p.analysis?.workflow?.().catch(() => null))?.get?.('config')?.timezone;
+    return typeof zone === 'string' && zone ? zone : undefined;
+  }
+  // Every minute, and so after any restart: the snoozed tasks whose day has come go back to where they were, and each
+  // owner gets one message in the app and by email (snooze.ts).
+  async wakeSnoozed(now = new Date()) {
+    let woke = 0;
+    for (const project of (await this.p.projectIds()).map(String)) {
+      const due = (await this.tasks(project)).filter((t: any) => { const s = t.evidence?.work?.snooze; return s?.until && Date.parse(s.until) <= now.getTime(); });
+      for (const row of due) {
+        const taskId = String(row.id);
+        await this.lock(project, taskId, async tx => {
+          const task = await this.task(project, taskId, tx), w = projectWork(task), snooze = w.snooze;
+          if (!snooze || Date.parse(snooze.until) > now.getTime()) return;
+          w.snooze = null;
+          const finished = w.stage === 'done' || w.cancelledAt || w.archivedAt;
+          if (!finished) w.history.push({ at: now.toISOString(), actor: 'system', action: 'snoozeDue', note: snooze.day });
+          await this.save(task, w, tx);
+          if (finished || !w.humanOwnerId || !this.p.notifications?.snoozeDue) return;
+          const send = () => { void this.p.notifications.snoozeDue({ ...task, evidence: { ...task.evidence, work: w } }, w, snooze).catch(() => undefined); };
+          if (typeof tx?.afterCommit === 'function') tx.afterCommit(send); else send();
+          woke++;
+        });
+      }
+    }
+    return woke;
+  }
   async tasks(project: string) {
     const rows: any[] = [];
     for (let offset = 0; ; offset += 200) {

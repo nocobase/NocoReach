@@ -15,6 +15,7 @@ import * as __playbook from '../../server/nocoreach/execution/playbook.js';
 import * as __members from '../../server/nocoreach/members.js';
 import * as __effect from '../../server/nocoreach/execution/effect.js';
 import * as __model from '../../server/nocoreach/execution/model.js';
+import * as __snooze from '../../server/nocoreach/execution/snooze.js';
 const test=__vitest_test;
 
 const signals=[{key:'gsc-low-ctr:/a',action:'optimize'},{key:'community-gap:q',action:'create'},{key:'github-release',action:'distribute'},{key:'gsc-site-impressions',action:null}];
@@ -979,4 +980,71 @@ test('a research task hands on to its playbook\'s current next steps, or to the 
   await assert.rejects(g.command('approveStage', { stageKey: 'accept', artifactId: output(d).id, checked: ['facts'], next: 'blog-post' }), e => e.status === 409);
   d = await g.command('approveStage', { stageKey: 'accept', artifactId: output(d).id, checked: ['facts'], next: 'new-doc' });
   assert.ok(d.work.nextTaskId);
+});
+
+// 2026-10-28 user request: Snooze a task until a day (execution/snooze.ts), as Gmail does.
+const snoozeDayIn = days => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+test('snoozing puts a task aside until a day, a new day or Unsnooze changes it, and acting on its card ends it', async () => {
+  const f = fixture();
+  const { taskStanding } = __model;
+  let d = await f.command('snoozeTask', { day: snoozeDayIn(7), reason: 'the permissions docs' });
+  assert.equal(d.work.snooze.day, snoozeDayIn(7));
+  assert.equal(d.work.snooze.reason, 'the permissions docs');
+  assert.ok(Date.parse(d.work.snooze.until) > Date.now());
+  assert.equal(taskStanding(d.work), 'snoozed');
+  assert.deepEqual(d.work.history.at(-1), { ...d.work.history.at(-1), action: 'snoozeTask', note: snoozeDayIn(7), comment: 'the permissions docs' });
+  d = await f.command('snoozeTask', { day: snoozeDayIn(14), reason: 'the permissions docs' });
+  assert.equal(d.work.history.at(-1).action, 'snoozeChanged');
+  assert.equal(d.work.history.at(-1).comment, undefined, 'the same reason is not repeated');
+  // Only a day after today.
+  await assert.rejects(f.command('snoozeTask', { day: '2020-01-01' }));
+  await assert.rejects(f.command('snoozeTask', { day: 'soon' }));
+  d = await f.command('unsnoozeTask');
+  assert.equal(d.work.snooze, null);
+  assert.equal(d.work.history.at(-1).action, 'unsnoozeTask');
+  await assert.rejects(f.command('unsnoozeTask'), e => e.status === 409);
+  // A comment keeps it; starting the task ends it, recorded before the start.
+  await f.command('snoozeTask', { day: snoozeDayIn(7) });
+  d = await f.command('comment', { comment: 'still waiting' });
+  assert.ok(d.work.snooze);
+  await selectAgent(f);
+  d = await f.command('startTask', { playbookId: 'change-research' });
+  assert.equal(d.work.snooze, null);
+  const actions = d.work.history.map(e => e.action);
+  assert.ok(actions.includes('snoozeEnded') && actions.indexOf('snoozeEnded') < actions.indexOf('startTask'));
+  // Not while an Agent run is queued, nor once closed.
+  await assert.rejects(f.command('snoozeTask', { day: snoozeDayIn(7) }), e => e.status === 409);
+  await f.command('cancelTask');
+  await assert.rejects(f.command('snoozeTask', { day: snoozeDayIn(7) }), e => e.status === 409);
+});
+
+test('a snoozed task comes back on its day once, and its owner gets one message', async () => {
+  const f = fixture();
+  const sent = [];
+  f.s.p.projectIds = async () => ['1'];
+  f.s.p.notifications = { snoozeDue: async (task, w, snooze) => { sent.push({ title: task.title, owner: w.humanOwnerId, reason: snooze.reason }); return 1; } };
+  await f.command('snoozeTask', { day: snoozeDayIn(7), reason: 'the permissions docs' });
+  // Not due yet.
+  assert.equal(await f.s.wakeSnoozed(), 0);
+  const work = f.state.nrTasks[0].evidence.work;
+  work.humanOwnerId = '1';
+  work.snooze.until = new Date(Date.now() - 60000).toISOString();
+  assert.equal(await f.s.wakeSnoozed(), 1);
+  const d = await f.view();
+  assert.equal(d.work.snooze, null);
+  assert.equal(d.work.history.at(-1).action, 'snoozeDue');
+  assert.equal(d.work.history.at(-1).actor, 'system');
+  assert.deepEqual(sent, [{ title: 'Synthetic task', owner: '1', reason: 'the permissions docs' }]);
+  // Checked again, after a restart for instance: nothing more.
+  assert.equal(await f.s.wakeSnoozed(), 0);
+  assert.equal(sent.length, 1);
+});
+
+test('a snooze comes back at 09:00 of its day in the daily analysis time zone', () => {
+  const { snoozeInstant } = __snooze;
+  assert.equal(snoozeInstant('2026-11-11', 'Asia/Shanghai').toISOString(), '2026-11-11T01:00:00.000Z');
+  assert.equal(snoozeInstant('2026-11-11', 'America/Los_Angeles').toISOString(), '2026-11-11T17:00:00.000Z');
+  assert.equal(snoozeInstant('2026-03-08', 'America/New_York').toISOString(), '2026-03-08T13:00:00.000Z', 'after the change to daylight saving');
+  assert.equal(snoozeInstant('2026-11-31', 'UTC'), null);
+  assert.equal(snoozeInstant('next week', 'UTC'), null);
 });

@@ -1261,3 +1261,116 @@ test('an automatic title follows the playbook chosen on the start card', async (
   await pick('关键词调研');
   expect(heading()).toHaveTextContent('给工作流自动化博客页改标题');
 });
+
+// 2026-10-28 user request: Snooze a task, as Gmail does, from the ⋯ menu; while snoozed the page names it first.
+test('Snooze… puts the task aside until a day with what it waits for', async () => {
+  const user = userEvent.setup();
+  const commands: Record<string, unknown>[] = [];
+  const data = pageChange();
+  action.mockImplementation(
+    (
+      resource: string,
+      command: string,
+      init?: { body?: Record<string, unknown> },
+    ) => {
+      if (resource === 'nrPlaybooks') return Promise.resolve({ playbooks: [] });
+      if (command === 'members')
+        return Promise.resolve([{ id: '1', name: 'Super Admin' }]);
+      if (command === 'advance') {
+        commands.push(init!.body!);
+        return Promise.resolve(data);
+      }
+      return Promise.resolve([]);
+    },
+  );
+  mount(data);
+  await user.click(screen.getByRole('button', { name: '更多' }));
+  await user.click(await screen.findByRole('menuitem', { name: '延后…' }));
+  const dialog = await screen.findByRole('dialog', { name: '延后任务' });
+  expect(dialog).toHaveTextContent('到那天回到“待确认”');
+  expect(
+    within(dialog).getByRole('button', { name: '2 周后' }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  expect(dialog).toHaveTextContent('上午 9 点回来，并提醒 Super Admin');
+  await user.type(
+    within(dialog).getByRole('textbox', { name: '在等什么' }),
+    '等权限文档写好',
+  );
+  await user.click(within(dialog).getByRole('button', { name: '延后' }));
+  const day = new Date(Date.now() + 14 * 86400000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  expect(commands).toEqual([
+    expect.objectContaining({
+      command: 'snoozeTask',
+      day: `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`,
+      reason: '等权限文档写好',
+    }),
+  ]);
+});
+
+test('a snoozed task says so first, keeps its card, and can be unsnoozed', async () => {
+  const user = userEvent.setup();
+  const commands: Record<string, unknown>[] = [];
+  const data = pageChange();
+  data.work.snooze = {
+    until: '2099-11-11T01:00:00Z',
+    day: '2099-11-11',
+    reason: '等权限文档写好',
+    at: '2026-10-28T13:05:00Z',
+    by: '1',
+    byName: 'Super Admin',
+  };
+  data.work.history = [
+    ...data.work.history,
+    {
+      at: '2026-10-28T13:05:00Z',
+      actor: '1',
+      action: 'snoozeTask',
+      note: '2099-11-11',
+      comment: '等权限文档写好',
+    },
+  ];
+  action.mockImplementation(
+    (
+      resource: string,
+      command: string,
+      init?: { body?: Record<string, unknown> },
+    ) => {
+      if (resource === 'nrPlaybooks') return Promise.resolve({ playbooks: [] });
+      if (command === 'members')
+        return Promise.resolve([{ id: '1', name: 'Super Admin' }]);
+      if (command === 'advance') {
+        commands.push(init!.body!);
+        return Promise.resolve(data);
+      }
+      return Promise.resolve([]);
+    },
+  );
+  mount(data);
+  const heading = screen.getByRole('heading', { level: 1 }).parentElement!;
+  expect(heading).toHaveTextContent('已延后');
+  const card = screen.getByRole('region', { name: '已延后' });
+  expect(card).toHaveTextContent('已延后到 2099 年 11 月 11 日');
+  expect(card).toHaveTextContent('等权限文档写好 · Super Admin 10-28 延后');
+  // The stage card stays, to act on.
+  expect(screen.getByRole('region', { name: '等你处理' })).toBeVisible();
+  expect(screen.getByRole('region', { name: '动态' })).toHaveTextContent(
+    '把任务延后到 2099-11-11：等权限文档写好',
+  );
+  // Snooze… is not offered again: the row changes the day.
+  await user.click(screen.getByRole('button', { name: '更多' }));
+  expect(screen.queryByRole('menuitem', { name: '延后…' })).toBeNull();
+  await user.keyboard('{Escape}');
+  await user.click(within(card).getByRole('button', { name: '改日期' }));
+  const change = await screen.findByRole('dialog', { name: '改延后日期' });
+  // The dialog opens on the day and reason the snooze has.
+  expect(change).toHaveTextContent('等权限文档写好');
+  await user.click(within(change).getByRole('button', { name: '取消' }));
+  await vi.waitFor(() =>
+    expect(screen.queryByRole('dialog', { name: '改延后日期' })).toBeNull(),
+  );
+  await user.click(within(card).getByRole('button', { name: '取消延后' }));
+  expect(commands).toEqual([
+    expect.objectContaining({ command: 'unsnoozeTask' }),
+  ]);
+});

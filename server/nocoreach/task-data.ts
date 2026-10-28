@@ -25,6 +25,8 @@ function taskState(task,w){
  if(w.stage==='done')return w.observeFrom?'已上线，效果观察结束':systemMessageText('common.completed');
  if(stage?.kind==='observe')return '已上线，正在观察效果';
  if(w.archivedAt)return systemMessageText('common.closed');
+ // Snoozed (execution/snooze.ts): what it waits for, and the day it comes back.
+ if(w.snooze)return systemMessageText('messages.snoozedState',{0:w.snooze.day,1:w.snooze.reason||''});
  if(!w.flow)return '还没开始';
  return `进行中：${stage?.name||''}`;}
 class TaskData{

@@ -12,6 +12,7 @@ import {
 } from '../../../shared/playbook-catalog.js';
 import type { Artifact, Release, Run, RunEvent } from '../execution/model.js';
 import { projectWork } from '../execution/model.js';
+import { snoozeInstant } from '../execution/snooze.js';
 import { demoContent, type DemoPerson } from './content.js';
 import type { DemoHost } from './host.js';
 import { t, type L } from './world/script/types.js';
@@ -50,9 +51,47 @@ interface ChangeTask {
   /** Why the Agent or the release failed. */
   error?: L;
   comments: readonly (readonly [DemoPerson, L])[];
+  /** Snoozed (2026-10-28): put aside for this many days, waiting for something outside NocoReach. */
+  snooze?: { days: number; reason: L };
 }
 
 const CHANGES: ChangeTask[] = [
+  {
+    key: 'permissions-roles-snoozed',
+    path: '/docs/permissions',
+    owner: 'content',
+    state: 'ready',
+    age: 4,
+    title: t(
+      '权限文档补充按角色配置的示例',
+      'Add per-role examples to the permissions docs',
+    ),
+    brief: t(
+      '“按角色设置权限”的搜索在上升，但文档只有字段说明。补一段按销售、客服两种角色配置的示例。',
+      'Searches for "role-based permissions" are rising, but the docs only list the fields. Add an example that sets up two roles, sales and support.',
+    ),
+    label: t('权限文档示例', 'Permissions docs example'),
+    before: t(
+      '字段：角色、数据范围、操作权限。',
+      'Fields: role, data scope, actions.',
+    ),
+    after: t(
+      '示例：销售只看自己的客户；客服能看全部工单，但不能删除。',
+      'Example: sales see only their own customers; support see every ticket but cannot delete one.',
+    ),
+    note: t(
+      '权限文档补充按角色配置的示例',
+      'Permissions docs gain per-role examples',
+    ),
+    comments: [],
+    snooze: {
+      days: 10,
+      reason: t(
+        '等新版权限功能发布，示例要按新界面截图。',
+        'Waiting for the new permissions release, so the example shows the new screens.',
+      ),
+    },
+  },
   {
     key: 'fix-trigger-link',
     path: '/docs/workflow/triggers',
@@ -602,6 +641,29 @@ function build(
         action: 'simulatedRelease',
         note: text(change.note),
       });
+  }
+  // Put aside until a day (execution/snooze.ts), the latest thing that happened to it.
+  if (change.snooze) {
+    const day = new Date(now + change.snooze.days * DAY)
+        .toISOString()
+        .slice(0, 10),
+      snoozedAt = at(0.5);
+    work.snooze = {
+      until: (snoozeInstant(day) ?? new Date(`${day}T09:00:00Z`)).toISOString(),
+      day,
+      reason: text(change.snooze.reason),
+      at: snoozedAt,
+      by: owner,
+      byName: content.people[change.owner].name,
+    };
+    work.history.push({
+      at: snoozedAt,
+      actor: owner,
+      actorName: content.people[change.owner].name,
+      action: 'snoozeTask',
+      note: day,
+      comment: text(change.snooze.reason),
+    });
   }
   return {
     work,
