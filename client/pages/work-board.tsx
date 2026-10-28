@@ -96,7 +96,12 @@ export function TaskTable({
   const editable = useEditable();
   // Keep all columns on wide containers; task-table.css prioritizes the title and actions below that.
   return (
-    <div className='nr-task-table relative overflow-x-auto rounded-lg border bg-card'>
+    <div
+      className={cn(
+        'nr-task-table relative overflow-x-auto rounded-lg border bg-card',
+        snoozed && 'nr-task-table-snoozed',
+      )}
+    >
       <table
         className='w-full table-fixed border-collapse text-sm'
         aria-label={$t('workBoard.taskList')}
@@ -175,7 +180,7 @@ export function TaskTable({
                 {snoozed && w?.snooze ? (
                   <>
                     <td className='px-3 py-2.5'>
-                      <span className='line-clamp-2 break-words'>
+                      <span className='line-clamp-2 break-words whitespace-normal'>
                         {w.snooze.reason || EMPTY}
                       </span>
                     </td>

@@ -524,6 +524,7 @@ export class TaskService {
       await this.p.db.access.requireFor(actor, 'nrTaskWork', 'execute', project);
     // Read plugin state outside the business lock (SQLite may have a single connection).
     // Recheck ownership, revision, current stage and run eligibility under the lock below.
+    const snoozeZone = v.command === 'snoozeTask' ? await this.snoozeZone() : undefined;
     const recoveryRequest = v as { command?: string; runId?: string; stageKey?: string };
     let recoverySummary: string | null = null;
     if (recoveryRequest.command === 'recoverResult') {
@@ -674,7 +675,7 @@ export class TaskService {
         // Put aside until a day (snooze.ts): not once finished or closed, nor while an Agent run is queued or running.
         const runs: Run[] = await this.list('run', project, taskId, tx);
         if (w.stage === 'done' || w.cancelledAt || w.archivedAt || runs.some(active)) return fail(systemMessageText('taskExecution.cannotSnooze'), 409);
-        const day = typeof v.day === 'string' ? v.day : '', until = snoozeInstant(day, await this.snoozeZone());
+        const day = typeof v.day === 'string' ? v.day : '', until = snoozeInstant(day, snoozeZone);
         if (!until || until.getTime() <= Date.now()) return fail(systemMessageText('taskExecution.snoozeDayFuture'));
         const reason = typeof v.reason === 'string' ? v.reason.trim().slice(0, 500) : '';
         event.action = w.snooze ? 'snoozeChanged' : 'snoozeTask'; event.note = day;
@@ -1109,7 +1110,7 @@ export class TaskService {
     return { id: String(u.id), name };
   }
   // The project's tasks, newest first, for everyone with a role (the tables themselves are for NocoBase admins).
-  /** The daily analysis's time zone, which snoozed tasks come back in (snooze.ts). */
+  /** The daily analysis's time zone, which snoozed tasks come back in (snooze.ts); read outside the task lock. */
   async snoozeZone(): Promise<string | undefined> {
     const zone = (await this.p.analysis?.workflow?.().catch(() => null))?.get?.('config')?.timezone;
     return typeof zone === 'string' && zone ? zone : undefined;
