@@ -1373,4 +1373,136 @@ test('a snoozed task says so first, keeps its card, and can be unsnoozed', async
   expect(commands).toEqual([
     expect.objectContaining({ command: 'unsnoozeTask' }),
   ]);
+
+// 2026-10-28 user report (T-52): a message sent from Activity while a version waited for review only reached the next
+// run, and only Request changes made the Agent revise. Activity's message box is now where changes are asked for, and
+// every review card's Request changes takes the person there.
+function underReview(kind: string): TaskData {
+  if (kind === 'page change') return pageChange();
+  if (kind === 'document') {
+    const data = pageChange();
+    data.work.flow!.stages = data.work.flow!.stages.slice(0, 2);
+    delete data.work.results[0]!.pr;
+    return data;
+  }
+  const data = reviewArticle();
+  const delivery = {
+    kind: 'article' as const,
+    targetId: 'cms',
+    articleId: '7',
+    sourceKey: null,
+    locales: ['en', 'zh'],
+  };
+  // The primary language first, then the translations to publish.
+  if (kind === 'primary language') data.work.delivery = delivery;
+  if (kind === 'translation')
+    data.work.delivery = {
+      ...delivery,
+      translateFrom: { artifactId: 'artifact-0', at: '2026-10-27T00:00:00Z' },
+    };
+  return data;
+}
+test.each([
+  ['page change', '改动已完成，请检查后发布'],
+  ['article', '文章改动已就绪，确认后发布'],
+  ['primary language', '英语版已写好，通过后翻译成其他语言'],
+  ['translation', '翻译已完成，确认后一起发布'],
+  ['document', '修改已完成，请审核'],
+])(
+  'a %s under review goes back to the Agent with the message written in Activity',
+  async (kind, title) => {
+    const user = userEvent.setup();
+    const data = underReview(kind);
+    const comment = '标题里不要写年份，突出免费试用';
+    const revising = structuredClone(data);
+    revising.work.revision++;
+    revising.work.stageIndex = 0;
+    revising.work.results = [
+      { ...data.work.results[0]!, rejectedAt: '2026-10-28T02:20:00Z' },
+    ];
+    revising.work.history = [
+      ...(data.work.history || []),
+      {
+        at: '2026-10-28T02:20:00Z',
+        actor: '1',
+        action: 'requestStageChanges',
+        stageKey: 'review',
+        artifactId: 'artifact-1',
+        comment,
+      },
+    ];
+    revising.runs = [
+      {
+        id: 'run-3',
+        status: 'queued',
+        planVersion: 0,
+        stepId: 'change',
+        createdAt: '2026-10-28T02:20:00Z',
+      },
+    ];
+    action.mockImplementation((resource: string, command: string) =>
+      Promise.resolve(
+        command === 'advance'
+          ? revising
+          : command === 'get'
+            ? revising
+            : resource === 'nrPlaybooks'
+              ? { playbooks: [] }
+              : command === 'members'
+                ? [{ id: '1', name: 'Super Admin' }]
+                : [],
+      ),
+    );
+    mount(data);
+    const card = screen.getByRole('region', { name: '等你处理' });
+    expect(card).toHaveTextContent(title);
+    // The card has no box of its own: its button puts the cursor in Activity's.
+    await user.click(within(card).getByRole('button', { name: '提修改意见' }));
+    const box = screen.getByRole('textbox', { name: '给执行者的话' });
+    expect(box).toHaveFocus();
+    expect(within(card).queryByRole('textbox')).toBeNull();
+    expect(box).toHaveAttribute(
+      'placeholder',
+      '写修改意见，发送后 Agent 会按意见重新修改',
+    );
+    await user.type(box, comment);
+    await user.click(screen.getByRole('button', { name: '发送意见' }));
+    await waitFor(() => expect(box).toHaveValue(''));
+    const sent = action.mock.calls
+      .filter(([, c]) => c === 'advance')
+      .map(([, , options]) => options.body);
+    expect(sent).toEqual([
+      expect.objectContaining({
+        command: 'requestStageChanges',
+        stageKey: 'review',
+        artifactId: 'artifact-1',
+        comment,
+        revision: data.work.revision,
+      }),
+    ]);
+    // The Agent starts on it, and Activity shows the request once, as a change request.
+    expect(screen.getByRole('region', { name: '当前进度' })).toBeVisible();
+    const activity = screen.getByRole('region', { name: '动态' });
+    expect(within(activity).getAllByText(comment)).toHaveLength(1);
+    expect(within(activity).getByText('提修改意见')).toBeVisible();
+  },
+);
+
+test('Request changes on the reading page goes back to the task, into the message box', async () => {
+  const user = userEvent.setup();
+  mountRoutes(reviewArticle(), '/actions/1/article?lang=en&view=preview');
+  await user.click(
+    within(readerPage()).getByRole('button', { name: '提修改意见' }),
+  );
+  await waitFor(() =>
+    expect(screen.getByTestId('where')).toHaveTextContent(/^\/actions\/1$/),
+  );
+  await waitFor(() =>
+    expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveFocus(),
+  );
+  expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveAttribute(
+    'placeholder',
+    '写修改意见，发送后 Agent 会按意见重新修改',
+  );
+  expect(action.mock.calls.some(([, c]) => c === 'advance')).toBe(false);
 });

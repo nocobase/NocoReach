@@ -13,7 +13,6 @@ import { RouteChildPage } from '#components/route-child-page';
 import { Button } from '#components/ui/button';
 import { cn } from '#lib/utils';
 import { mockSettingsAvailable } from '../../../app-plugins/nocoreach-mock/client/index.js';
-import { getStageExecutor } from '../playbook-model';
 import {
   articleLanguages,
   translationPending,
@@ -29,7 +28,7 @@ import {
 import { useTaskDraft, useTaskDraftStatus } from './draft-store.js';
 import { TaskDraftScope } from './drafts.js';
 import type { TaskPageContext } from './reader-context.js';
-import { Checklist, RequestBox } from './review-parts.js';
+import { Checklist } from './review-parts.js';
 import { text } from './styles.js';
 
 // The article on a page of its own (2026-10-24 user request, as Ghost's full-screen preview and Notion's "open as
@@ -57,7 +56,7 @@ export default function ArticleReaderPage(): ReactElement {
 }
 
 function Reader({ context }: { context: TaskPageContext }): ReactElement {
-  const { data, update, busy, error, allowed } = context;
+  const { data, update, busy, error, allowed, requestChanges } = context;
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const w = data.work,
@@ -74,17 +73,16 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
     ? w.results[index - 1]
     : [...w.results].reverse().find((r) => r?.article);
   const [editing, setEditing] = useTaskDraft('editing', false, false);
-  const [requesting, setRequesting] = useTaskDraft('requesting', false, false);
   const [checked, setChecked] = useState<string[]>([]);
   const { clear } = useTaskDraftStatus();
   const back = () => void navigate('..', { relative: 'path' });
-  // After an approval or a change request the task moves on: go back once the command has settled, since the task
-  // page holds navigation while one is in flight.
+  // After an approval the task moves on: go back once the command has settled, since the task page holds navigation
+  // while one is in flight.
   const [leave, setLeave] = useState(false);
   useEffect(() => {
     if (leave && !busy) void navigate('..', { relative: 'path' });
   }, [leave, busy, navigate]);
-  // Esc returns to the task, except while editing (the edit is kept as a draft either way) or typing feedback.
+  // Esc returns to the task, except while editing (the edit is kept as a draft either way) or typing in a field.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented || editing) return;
@@ -178,10 +176,15 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
                   )}
                 </Button>
               )}
+              {/* Feedback is written in the task's Activity, the one place for it (2026-10-28 user decision): back to
+                  the task, with the cursor in its message box. */}
               <Button
                 variant='outline'
                 disabled={busy}
-                onClick={() => setRequesting(!requesting)}
+                onClick={() => {
+                  requestChanges();
+                  back();
+                }}
               >
                 {$t('taskDetail.requestChanges')}
               </Button>
@@ -213,21 +216,6 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
           <p role='alert' className='text-sm text-destructive'>
             {$t('articles.targetMissing')}
           </p>
-        )}
-        {requesting && actions && (
-          <RequestBox
-            executor={getStageExecutor().agent}
-            busy={busy}
-            onCancel={() => setRequesting(false)}
-            onSend={async (comment) => {
-              const d = await act('requestStageChanges', {
-                artifactId: out.id,
-                comment,
-              });
-              if (d) setLeave(true);
-              return Boolean(d);
-            }}
-          />
         )}
         {editing && reviewing ? (
           <ArticleEditor
