@@ -266,49 +266,162 @@ function business(operation: string, input: Value, en: boolean): Value | null {
       };
     }
     case 'keyword-curate': {
-      // Picks from the looked-up candidates only, as the real model is told to; grouped by the words they use.
+      // Picks from the looked-up candidates only, as the real model is told to; grouped by the words they use. Each
+      // pick says why it is worth doing (not its volume or difficulty, which the table shows), and every candidate left
+      // out gets one of the reasons the real model gives, by its number.
       const pages = list(input.pages),
-        pick = Math.max(1, Number(input.pick) || 40);
+        pick = Math.max(1, Number(input.pick) || 40),
+        product =
+          str(object(input.memory)['项目'], 40) || t('产品', 'the product');
       const groupOf = (k: string) =>
         /alternative|\bvs\b|versus|compare|替代|对比/.test(k)
           ? 3
-          : /how|example|template|what is|教程|模板/.test(k)
+          : /how|example|template|what is|教程|模板|什么是|区别/.test(k)
             ? 2
             : /builder|platform|database|tool|software|系统|平台|工具/.test(k)
               ? 1
               : 4;
+      const rival = (k: string) =>
+        /\b(airtable|retool|n8n|notion|slack|zapier|飞书|钉钉|企业微信)\b/u.exec(
+          k,
+        )?.[1];
+      const leftOut = (k: string) =>
+        /\bfree\b|download|\bjobs?\b|salary|course|免费|下载|招聘|课程/.test(k)
+          ? 'intent'
+          : /docker|kubernetes|helm|\bport\b|backup|pagination|rest api|one to many|deduplicate|端口|备份|分页|一对多|去重/.test(
+                k,
+              )
+            ? 'unrelated'
+            : rival(k) && !/alternative|\bvs\b|替代|对比/.test(k)
+              ? 'brand'
+              : '';
+      const why = (k: string, position: number) =>
+        /alternative|\bvs\b|替代|对比/.test(k)
+          ? t(
+              `在找 ${rival(k) ?? '竞品'} 替代的人，对比页正好接住`,
+              `People replacing ${rival(k) ?? 'a competitor'}; a comparison page wins them`,
+            )
+          : /self.?hosted|open source|开源|私有部署|自建/.test(k)
+            ? t(
+                `想自己部署的团队在找，正对 ${product} 开源可私有部署`,
+                `Teams who want to host it themselves; ${product} is open source`,
+              )
+            : /crm|客户|销售/.test(k)
+              ? t(
+                  '想自己搭 CRM 的团队在找，可以用 CRM 方案页接住',
+                  'Teams building their own CRM; the CRM solution page fits',
+                )
+              : /approval|workflow|automation|审批|工作流|自动化|流程/.test(k)
+                ? t(
+                    '审批和工作流是核心功能，适合写方案页',
+                    'Approvals and workflows are core features; worth a solution page',
+                  )
+                : /rbac|permission|access|权限/.test(k)
+                  ? t(
+                      '权限是核心能力，适合写教程带出产品',
+                      'Permissions are a core strength; a tutorial can feature them',
+                    )
+                  : /\bai\b|agent|llm|大模型/.test(k)
+                    ? t(
+                        `正对 ${product} 的 AI 员工，适合写场景文章`,
+                        `Matches ${product}'s AI employees; worth a use-case article`,
+                      )
+                    : /internal|admin|内部|后台/.test(k)
+                      ? t(
+                          '产品主打场景：搭内部工具和后台',
+                          'The main use case: building internal tools and admin panels',
+                        )
+                      : /inventory|ticket|dashboard|project|进销存|工单|看板|项目/.test(
+                            k,
+                          )
+                        ? t(
+                            '具体业务场景，能用产品搭出来，适合写方案页',
+                            'A concrete business case the product can build; worth a solution page',
+                          )
+                        : /what is|how|template|什么是|区别|模板|教程/.test(k)
+                          ? t(
+                              '问题型搜索，适合写科普文章带出产品',
+                              'A question people ask; an explainer can introduce the product',
+                            )
+                          : /low code|no code|低代码|无代码/.test(k)
+                            ? t(
+                                '产品品类词，选型阶段的人在搜',
+                                'The product category, searched while choosing a tool',
+                              )
+                            : position
+                              ? t(
+                                  '本站已有排名，补强页面就能往前走',
+                                  'The site already ranks; a stronger page moves it up',
+                                )
+                              : t(
+                                  '和产品方向相关，适合补一篇内容',
+                                  'Close to the product; worth a page of its own',
+                                );
+      // The same search with other filler words: "workflow automation tools" and "workflow automation software".
+      const core = (k: string) =>
+        k
+          .replace(
+            /\b(software|tools?|platforms?|systems?|apps?)\b|系统|工具|平台/gu,
+            ' ',
+          )
+          .split(/\s+/u)
+          .filter(Boolean)
+          .sort()
+          .join(' ');
       // A dig keeps to its direction: candidates sharing one of its words.
       const words = str(input.direction, 60)
         .toLowerCase()
         .split(/\s+/)
         .filter((w) => w.length > 2);
-      const candidates = list(input.candidates).filter(
-        (c) =>
-          !words.length ||
-          words.some((w) => str(c.keyword, 80).toLowerCase().includes(w)),
-      );
-      return {
-        keywords: candidates.slice(0, pick).map((c) => {
-          const keyword = str(c.keyword, 80),
-            token = keyword.split(' ').find((w) => w.length > 3) ?? '';
-          const page = pages.find(
-            (p) =>
-              token &&
-              (str(p.url, 500).includes(token) ||
-                str(p.title, 120).toLowerCase().includes(token)),
-          );
-          return {
-            keyword,
-            group: groupOf(keyword.toLowerCase()),
-            relevance: c.position ? 3 : 2,
-            reason: t(
-              `月搜索量 ${Number(c.volume) || 0}，难度 ${Number(c.difficulty) || 0}。（演示建议）`,
-              `${Number(c.volume) || 0} searches a month, difficulty ${Number(c.difficulty) || 0}. (Demo suggestion.)`,
-            ),
-            page: str(page?.url, 500),
-          };
-        }),
-      };
+      const candidates = list(input.candidates);
+      const picked: Value[] = [],
+        cores = new Map<string, number>(),
+        skipped: Record<string, unknown[]> = {
+          unrelated: [],
+          brand: [],
+          intent: [],
+          weaker: [],
+          duplicate: [],
+        };
+      for (const c of candidates) {
+        const keyword = str(c.keyword, 80),
+          k = keyword.toLowerCase(),
+          n = Number(c.i) || 0,
+          reason = leftOut(k);
+        if (words.length && !words.some((w) => k.includes(w))) {
+          skipped.unrelated.push(n);
+          continue;
+        }
+        if (reason) {
+          skipped[reason].push(n);
+          continue;
+        }
+        const same = cores.get(core(k));
+        if (same) {
+          skipped.duplicate.push([n, same]);
+          continue;
+        }
+        if (picked.length >= pick) {
+          skipped.weaker.push(n);
+          continue;
+        }
+        cores.set(core(k), n);
+        const token = keyword.split(' ').find((w) => w.length > 3) ?? '';
+        const page = pages.find(
+          (p) =>
+            token &&
+            (str(p.url, 500).includes(token) ||
+              str(p.title, 120).toLowerCase().includes(token)),
+        );
+        picked.push({
+          keyword,
+          group: groupOf(k),
+          relevance: c.position ? 3 : 2,
+          reason: why(k, Number(c.position) || 0),
+          page: str(page?.url, 500),
+        });
+      }
+      return { keywords: picked, skipped };
     }
     case 'ai-question-suggest':
       return {

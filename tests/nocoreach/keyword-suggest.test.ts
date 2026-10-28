@@ -34,7 +34,7 @@ const curated=extra=>'```json\n'+JSON.stringify({keywords:[
  {keyword:'approval workflow software',group:2,relevance:2,reason:'审批流是高频需求',page:'https://x.com/workflow'},
  {keyword:'internal tool builder nocobase',group:1,relevance:3,reason:'搜索量不到 50'},
  {keyword:'build your own crm without code',group:1,relevance:3,reason:'AI 自己想的词'},
- {keyword:'crm for startups',group:'品类与行业词',relevance:1,reason:'沾边'},
+ {keyword:'crm for startups',group:'品类与行业词',relevance:2,reason:'创业团队要的 CRM'},
  ...(extra||[])]})+'\n```';
 function setup({budget=5,seeds=SEEDS,curate=curated(),verified=true,ai=true}={}){const runs=memory(),snaps=memory(),prompts=[],stored=[];
  const env={NOREACH_DATAFORSEO_1:verified?JSON.stringify({login:'l',password:'p',budget,verifiedAt:'t'}):''};
@@ -134,6 +134,7 @@ test('a dig adds a group named after its direction, without the keywords the lis
  const v=await s.view('1');assert.equal(v.digs.length,1);const dig=v.digs[0];
  assert.equal(dig.direction,'approval workflow');assert.deepEqual(dig.items.map(i=>i.keyword),['approval workflow example']);assert.equal(dig.items[0].dig,dig.id);assert.equal(built.group.id,dig.id);
  assert.equal(v.items.length,4,'the list itself is unchanged');
+ assert.equal(dig.found,2,'a group counts what it brought that the list did not have: picked + not picked');assert.equal(dig.picked,1);assert.equal(dig.notPicked,undefined,'the records stay on the server');
  await s.keep('1',{ids:[dig.items[0].id,v.items[0].id]});
  assert.deepEqual(stored.map(e=>[e.keyword,e.payload.source,e.payload.item.volume,e.payload.spec.locationCode,e.payload.retrievedAt===dig.at||e.payload.retrievedAt===v.at]),[['open source low code platform','AI 建议',3600,2840,true],['approval workflow example','AI 建议',210,2840,true]]);
  // Rebuilt in the same market the group stays; in another market it goes.
@@ -281,4 +282,46 @@ test('dug groups get a short name in the reader\'s language: new digs when the c
  assert.equal(v.digs.find(d=>d.id==='old1').name,'审批流');
  const two=v.digs.find(d=>d.id==='old2');assert.equal(two.name,undefined,'a name too long is not used, never cut');assert.ok(two.nameTriedAt);
  const asked=names.length;v=await s.view('1','en-US');assert.equal(v.naming,false);assert.equal(names.length,asked,'not tried again within the hour');
+});
+
+test('Selection rules: every keyword found but not picked is kept with why; the page gets the counts, the list comes on its own, and one can be added back',async()=>{
+ fetchFor();
+ const curate=input=>{const n=k=>input.candidates.find(c=>c.keyword===k)?.i;
+  return '```json\n'+JSON.stringify({keywords:[
+   {keyword:'open source low code platform',group:4,relevance:3,reason:'正对产品品类'},
+   {keyword:'retool alternative',group:3,relevance:3,reason:'竞品用户在找替代'},
+   {keyword:'crm for startups',group:4,relevance:1,reason:'沾边'}],
+   skipped:{unrelated:[n('no code database')],duplicate:[[n('retool alternative open source'),n('retool alternative')]],brand:[999]}})+'\n```';};
+ const {s,prompts}=setup({curate});await finish(s,{});
+ const ask=prompts.find(x=>x.tag==='keyword-curate');
+ assert.ok(ask.input.candidates.every((c,i)=>c.i===i+1),'candidates are numbered, so reasons cost a number each');
+ assert.match(ask.system,/skipped\.duplicate/);assert.match(ask.system,/不要复述搜索量和难度/);
+ const v=await s.view('1');
+ assert.equal(v.notPicked,undefined,'the records stay on the server');
+ assert.deepEqual(v.items.map(i=>i.keyword).sort(),['open source low code platform','retool alternative'],'one marked as merely close is not picked');
+ assert.deepEqual({...v.selection,reasons:undefined},{seeds:3,directions:0,found:9,picked:2,notPicked:7,recorded:true,reasons:undefined,pick:40,digPick:20});
+ assert.deepEqual(Object.fromEntries(v.selection.reasons.map(r=>[r.reason,r.count])),{weaker:5,unrelated:1,duplicate:1},'shown to the AI without a reason: weaker than those picked; an unknown number is ignored');
+ assert.deepEqual(v.selection.reasons.find(r=>r.reason==='weaker').examples,['crm for startups','internal tool builder'],'two examples, the most searched');
+ const list=await s.notPicked('1');assert.equal(list.recorded,true);assert.equal(list.items.length,7);assert.equal(list.items[0].keyword,'crm for startups','the most searched first');
+ assert.deepEqual(list.items.find(c=>c.keyword==='retool alternative open source'),{keyword:'retool alternative open source',volume:390,difficulty:24,intent:'commercial',reason:'duplicate',duplicateOf:'retool alternative',run:'list'});
+ // Add to suggestions: into the group the person picks, as theirs, and the numbers still add up.
+ await s.addItems('1',{keyword:'no code database',group:'产品与功能词'});const v2=await s.view('1');
+ const added=v2.items.find(i=>i.keyword==='no code database');
+ assert.equal(added.group,'产品与功能词');assert.equal(added.by,'person');assert.equal(added.reason,'');assert.equal(added.metrics.volume,2900);
+ assert.deepEqual([v2.selection.found,v2.selection.picked,v2.selection.notPicked],[9,3,6]);
+ assert.ok(!(await s.notPicked('1')).items.some(c=>c.keyword==='no code database'));
+ await assert.rejects(s.addItems('1',{keyword:'no code database',group:'产品与功能词'}),/不在没选的列表里/);
+ await assert.rejects(s.addItems('1',{keyword:'approval workflow example',group:'nope'}),/这组已经不在了/);
+ // A keyword the person removed is found again but not offered to the AI: removed by you.
+ await s.removeItems('1',{ids:[v2.items.find(i=>i.keyword==='retool alternative').id]});await finish(s,{seeds:SEEDS});
+ assert.equal((await s.notPicked('1')).items.find(c=>c.keyword==='retool alternative').reason,'removed');
+});
+
+test('Selection rules for a list found before reasons were kept: the totals it has, no reasons and no list',async()=>{
+ const {s,snaps}=setup({ai:false});
+ snaps.rows.push({id:99,key:'keyword-suggest:1',payload:{version:2,at:'2026-10-20T00:00:00.000Z',market:{locationCode:2840,language:'en'},seeds:['a','b'],stats:{found:120,picked:30,minVolume:50},
+  items:[{id:'x',keyword:'x',group:'产品与功能词',metrics:{volume:100,difficulty:20}}],digs:[{id:'d1',direction:'crm',name:'CRM',seeds:['crm'],at:'2026-10-21T00:00:00.000Z',found:40,items:[{id:'y',keyword:'y',metrics:{volume:90}}]}]}});
+ const v=await s.view('1');
+ assert.deepEqual(v.selection,{seeds:2,directions:1,found:160,picked:31,notPicked:129,recorded:false,reasons:[],pick:40,digPick:20});
+ assert.deepEqual(await s.notPicked('1'),{recorded:false,items:[]});
 });
