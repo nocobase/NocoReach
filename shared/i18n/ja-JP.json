@@ -2612,6 +2612,7 @@
   "searchPerformance.changesNotCompared": "変化は未比較",
   "syncPanel.pauseJob": "ジョブを一時停止",
   "workBoard.noTasks": "タスクはありません",
+  "workBoard.olderDone": "それ以前に完了した {0} 件はリストで →",
   "messages.noContentYet": "コンテンツはまだありません",
   "strategy.noComparisonYet": "比較はまだありません",
   "strategy.noDataYet": "データはまだありません",

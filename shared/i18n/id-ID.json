@@ -2669,6 +2669,7 @@
   "searchPerformance.changesNotCompared": "Perubahan belum dibandingkan",
   "syncPanel.pauseJob": "Jeda pekerjaan",
   "workBoard.noTasks": "Tidak ada tugas",
+  "workBoard.olderDone": "{0} selesai lebih awal, lihat di daftar →",
   "messages.noContentYet": "Belum ada konten",
   "strategy.noComparisonYet": "Belum ada perbandingan",
   "strategy.noDataYet": "Belum ada data",

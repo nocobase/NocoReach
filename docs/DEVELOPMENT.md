@@ -199,6 +199,8 @@ See [online task help](ONLINE-TASKS.zh-CN.md) for user instructions. Online task
 
 - A task a hand-off creates is titled "<playbook>: <subject>" (`server/nocoreach/execution/task-title.ts`). Every Hand off to agent sends a `subject` with its draft: what the task is about, without what to do with it (`client/pages/task-subject.ts`; places of an opportunity use their label, chained tasks the subject of the task they come from). `createDirectionTask` builds the title in the request's language and keeps `evidence.autoTitle` (`subject`, `locale`). Choosing another playbook before the start retitles it: the heading previews it, and `selectPlaybook` or `startTask` saves it and records `retitle`. A draft without a subject keeps the title it was sent, and a task without `autoTitle` (New task, older tasks) is never retitled.
 
+- The board's Done column (`client/pages/board-done.ts`) keeps a finished task while it is watched (live, with a page and an effect checkpoint to come) or for 7 days after it finished. A task finishes at its last effect reading once watched, the day it went live when it had no page, and otherwise at its last history event that is not about the task rather than its work (comments, owner, collaborators, page, Agent, archive, retitle) or a reorder within Done. The rest are counted for the column's last line, which opens the Done list.
+
 ### Enqueueing, selection, and retries
 
 - `server/nocoreach/execution/agents-runtime.ts` registers the `nocoreachTask` subject. Enqueue official runs inside the business transaction, emit events after commit, and synchronize results through `pluginRunId`. Keep review, revision, and cancellation checks in business services.

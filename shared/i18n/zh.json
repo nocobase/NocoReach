@@ -2614,6 +2614,7 @@
   "searchPerformance.changesNotCompared": "暂不比较变化",
   "syncPanel.pauseJob": "暂停任务",
   "workBoard.noTasks": "没有任务",
+  "workBoard.olderDone": "更早完成的 {0} 个，在列表里看 →",
   "messages.noContentYet": "暂无内容",
   "strategy.noComparisonYet": "暂无对比",
   "strategy.noDataYet": "暂无数据",
