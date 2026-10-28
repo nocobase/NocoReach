@@ -439,6 +439,73 @@ test('active chat polls until completion and ignores Ctrl+Enter during compositi
   expect(api).toHaveBeenCalledTimes(2);
 });
 
+test('a read error replaces a conversation not yet loaded, sits above the composer for a loaded one, and clears on the next read', async () => {
+  const detail = {
+    conversation: {
+      id: 'history',
+      agentId: 'online-default',
+      projectId: '1',
+      revision: 0,
+    },
+    runs: [
+      {
+        id: 'answer',
+        agentName: 'Online',
+        model: { model: 'Fixture' },
+        status: 'running',
+        input: 'Question',
+        events: [{ type: 'text', text: 'Partial answer' }],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      },
+    ],
+  };
+  let poll: () => void = () => {};
+  const original = globalThis.setTimeout;
+  vi.spyOn(globalThis, 'setTimeout').mockImplementation(
+    (callback, delay, ...args) => {
+      if (delay !== 2000) return original(callback, delay, ...args);
+      poll = callback as () => void;
+      return 0 as never;
+    },
+  );
+  const unreachable = new OnlineApiError(503, 'unavailable');
+  api.mockRejectedValue(unreachable);
+  mount();
+  fireEvent.click(screen.getByText('History entry'));
+  const log = screen.getByRole('log');
+  expect(log).toContainElement(await screen.findByRole('alert'));
+  api.mockResolvedValue(detail);
+  await act(async () => poll());
+  await within(log).findByText('Partial answer');
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  // NocoReach restarting mid-reply: the transcript stays, and the error shows between it and the composer.
+  api.mockRejectedValue(unreachable);
+  await act(async () => poll());
+  const alert = await screen.findByRole('alert');
+  expect(log).not.toContainElement(alert);
+  expect(within(log).getByText('Partial answer')).toBeVisible();
+  expect(
+    log.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(
+    alert.compareDocumentPosition(
+      screen.getByRole('textbox', { name: '消息' }),
+    ) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(
+    within(alert).getByRole('button', { name: '重试', exact: true }),
+  ).toBeEnabled();
+  api.mockResolvedValue({
+    ...detail,
+    runs: [{ ...detail.runs[0], status: 'completed' }],
+  });
+  await act(async () => poll());
+  await waitFor(() =>
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument(),
+  );
+  expect(within(log).getByText('Partial answer')).toBeVisible();
+});
+
 test.each(
   [401, 403, 404].flatMap((status) =>
     (['send', 'cancel'] as const).map((operation) => ({ status, operation })),
