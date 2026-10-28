@@ -14,6 +14,7 @@ import {
 } from './kit.js';
 import {
   daysAgo,
+  annualDemand,
   growth,
   hourShare,
   level,
@@ -671,6 +672,7 @@ function queryDay(world: World, query: Query, date: string, today: string) {
     query.impressions *
       level(query.changes, ago) *
       growth(ago) *
+      annualDemand(date, !world.main) *
       seasonal *
       s.jitter(`impj:${key}`, 0.18),
   );
@@ -718,7 +720,7 @@ function searchCells(world: World, b: Json, dims: string[]): SearchCell[] {
   const regions = world.analytics.regions;
   const cells: SearchCell[] = [];
   if (type === 'discover' || type === 'googlenews') {
-    if (type === 'googlenews' || !world.main) return [];
+    if (type === 'googlenews') return [];
     for (const date of days) {
       const ago = daysAgo(date, today);
       const blog = world.site.pages.filter((p) => p.path.startsWith('/blog'));
@@ -1114,7 +1116,7 @@ function sitemaps(world: World, index: string | null) {
   const children = [
     entry('sitemap-pages.xml', 210, 1, counts.pages),
     entry('sitemap-docs.xml', 210, 1, counts.docs, { warnings: '1' }),
-    ...(world.main ? [entry('sitemap-blog.xml', 120, 2, counts.blog)] : []),
+    entry('sitemap-blog.xml', 120, 2, counts.blog),
   ];
   if (index !== null)
     return json(
