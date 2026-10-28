@@ -80,6 +80,33 @@ it.each(['ACME', 'ACME CRM'])(
     expect(String(reply)).not.toMatch(/NocoBase|低代码/);
   },
 );
+it.each(['ACME', 'ACME CRM'])(
+  'keeps %s keyword seeds scoped and compatible with proposal provenance',
+  async (project) => {
+    const input = request({
+      tag: 'keyword-seeds',
+      prompt: JSON.stringify({ project }),
+    });
+    const reply = await demoAnswers()
+      .find((answer) => answer.match(input))
+      ?.reply(input);
+    const result = JSON.parse(String(reply)) as {
+      seeds: { seed: string; from: string[]; why: string }[];
+    };
+    expect(result.seeds.length).toBeGreaterThan(4);
+    expect(
+      result.seeds.every(
+        (seed) => seed.from.includes('memory') && seed.why.includes(project),
+      ),
+    ).toBe(true);
+    expect(result.seeds.map((seed) => seed.seed)).toContain(
+      project === 'ACME' ? 'project management' : 'sales pipeline',
+    );
+    expect(JSON.stringify(result)).not.toMatch(
+      /nocobase|low code|internal tool builder/i,
+    );
+  },
+);
 it('routes demo projects to their adapter even when the default model is real, without fallback', async () => {
   const generate = vi.fn();
   const defaults = vi.fn(async () => ({
