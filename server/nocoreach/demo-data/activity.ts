@@ -12,7 +12,10 @@ import {
 } from '../../../shared/playbook-catalog.js';
 import type { Artifact, Release, Run, RunEvent } from '../execution/model.js';
 import { projectWork } from '../execution/model.js';
+import { snoozeInstant } from '../execution/snooze.js';
 import { demoContent, type DemoPerson } from './content.js';
+import { ACME_STORIES, ACME_DISCUSSIONS } from './acme-content.js';
+import { CRM_STORIES } from './crm-content.js';
 import type { DemoHost } from './host.js';
 import { t, type L } from './world/script/types.js';
 
@@ -50,276 +53,225 @@ interface ChangeTask {
   /** Why the Agent or the release failed. */
   error?: L;
   comments: readonly (readonly [DemoPerson, L])[];
+  /** Snoozed (2026-10-28): put aside for this many days, waiting for something outside NocoReach. */
+  snooze?: { days: number; reason: L };
 }
 
 const CHANGES: ChangeTask[] = [
-  {
-    key: 'fix-trigger-link',
-    path: '/docs/workflow/triggers',
-    owner: 'devrel',
-    state: 'failed',
-    age: 2,
-    title: t(
-      '修复工作流触发器文档里的失效链接',
-      'Fix the broken link in the workflow triggers docs',
+  [
+    22,
+    'failed',
+    'fix-sync-example',
+    t('失败后重试即可。', 'Retry after a failure.'),
+    t(
+      '先核对事件编号与已处理记录，再重放失败事件。',
+      'Check event IDs and processed records before replaying failed events.',
     ),
-    brief: t(
-      '网站审计发现触发器文档链接到已删除的 /docs/workflow/loops-old。找到替代页面并更新链接。',
-      'The site audit found the triggers page links to the removed /docs/workflow/loops-old. Find the replacement page and update the link.',
+  ],
+  [
+    1,
+    'ready',
+    'home-project-management',
+    t('让工作更高效。', 'Work more efficiently.'),
+    t(
+      'ACME 项目管理：把任务、排期和团队协作放在一起。',
+      'ACME project management: tasks, schedules and teamwork together.',
     ),
-    label: t('相关链接', 'Related link'),
-    before: t('循环节点（旧版）', 'Loop node (old)'),
-    after: t('循环与分支节点', 'Loops and branches'),
-    note: t('', ''),
-    error: t(
-      '仓库里没有找到 /docs/workflow/loops-old 的替代页面，Agent 没有做任何修改。请先在任务说明里写明新的目标页面，再交给 Agent。',
-      'No replacement for /docs/workflow/loops-old was found in the repository, so the Agent changed nothing. Name the new target page in the brief, then hand it back.',
+  ],
+  [
+    2,
+    'merge_failed',
+    'pricing-guests',
+    t('选择适合团队的方案。', 'Choose a plan for your team.'),
+    t(
+      '先核对成员、客户访客与报表需求，再确认适用方案。',
+      'Review members, client guests and reporting needs before confirming a plan.',
     ),
-    comments: [
-      [
-        'devrel',
-        t(
-          '应该是合并到「循环与分支」那一页了，我去确认一下路径。',
-          'It was probably merged into the loops and branches page; I will check the path.',
-        ),
-      ],
-    ],
-  },
-  {
-    key: 'home-self-hosting',
-    path: '/',
-    owner: 'growth',
-    state: 'ready',
-    age: 3,
-    title: t(
-      '首页首屏写明「可私有部署」',
-      'Say "self-hostable" in the home page hero',
+  ],
+  [
+    5,
+    'verifying',
+    'timeline-baseline',
+    t('依赖变化会更新所有日期。', 'Dependency changes update every date.'),
+    t(
+      '检查下游影响，固定里程碑由负责人确认，保留基准日期。',
+      'Inspect downstream impact; owners confirm fixed milestones while retaining baselines.',
     ),
-    brief: t(
-      '「私有部署 低代码」「开源低代码」的点击率低于同排名的平均水平，首屏没有回答数据放在哪里的问题。在副标题里写明可以私有部署。',
-      'Clicks on "self hosted no code" and "open source low code" trail the usual rate for their position; the hero never says where data lives. Say it can be self-hosted in the subtitle.',
+  ],
+  [
+    21,
+    'not_seen',
+    'approval-version',
+    t('客户回复后完成验收。', 'Complete acceptance after a client reply.'),
+    t(
+      '客户明确确认具体附件版本后才完成验收。',
+      'Complete acceptance only after explicit confirmation of the exact attachment version.',
     ),
-    label: t('首页副标题', 'Home page subtitle'),
-    before: t(
-      '先设计数据结构，再拼装页面、权限与工作流。',
-      'Design the data first, then assemble pages, permissions and workflows.',
+  ],
+  [
+    15,
+    'simulated',
+    'handover-checklist',
+    t('发送交接通知即可完成。', 'Sending the handover notice completes it.'),
+    t(
+      '核对未决事项与附件，接收人确认后才完成交接。',
+      'Check pending decisions and attachments; complete after recipient confirmation.',
     ),
-    after: t(
-      '先设计数据结构，再拼装页面、权限与工作流——部署在你自己的服务器上，数据不出内网。',
-      'Design the data first, then assemble pages, permissions and workflows — on your own servers, with data that never leaves your network.',
+  ],
+  [
+    6,
+    'live',
+    'guest-permissions',
+    t('客户可以查看项目。', 'Clients can view projects.'),
+    t(
+      '访客仅查看获邀项目，撤销后核对旧链接与附件访问。',
+      'Guests see invited projects only; check old links and attachment access after revocation.',
     ),
+  ],
+].map(([index, state, key, before, after], i) => {
+  const story = ACME_STORIES[index as number];
+  return {
+    key: key as string,
+    path: story.path,
+    owner:
+      i === 1 ? 'growth' : i === 0 || i === 3 || i === 4 ? 'devrel' : 'content',
+    state: state as ChangeState,
+    age: 3 + i * 3,
+    title: t(`更新页面：${story.title.zh}`, `Update page: ${story.title.en}`),
+    brief: story.brief,
+    label: t('页面说明', 'Page explanation'),
+    before: before as L,
+    after: after as L,
     note: t(
-      '首页副标题补充私有部署说明',
-      'Home subtitle now mentions self-hosting',
+      '演示页面修订，保留原稿供复核。',
+      'Demo page revision; retain the original for review.',
     ),
-    comments: [
-      [
-        'growth',
-        t(
-          '副标题别超过两行，手机上看一下。',
-          'Keep the subtitle to two lines; check it on a phone.',
-        ),
-      ],
-      [
-        'editor',
-        t(
-          '「数据不出内网」比「安全」更具体，保留。',
-          '"Data never leaves your network" is more concrete than "secure"; keep it.',
-        ),
-      ],
-    ],
-  },
-  {
-    key: 'pricing-environments',
-    path: '/pricing',
-    owner: 'content',
-    state: 'merge_failed',
-    age: 6,
-    title: t(
-      '价格页补充开发和测试环境的计费问答',
-      'Add the development and test environment question to pricing',
+    error:
+      i === 0
+        ? t(
+            '缺少重复同步事件的测试样例，模拟执行停止，未修改页面。',
+            'Duplicate sync event fixtures are missing; the simulated run stopped without changing the page.',
+          )
+        : t(
+            '审核后页面发生变化，需要重新核对差异。',
+            'The page changed after review; reconcile the differences.',
+          ),
+    comments: story.comments,
+    // Snoozed (execution/snooze.ts): acceptance waits for the client's reply.
+    ...(key === 'approval-version'
+      ? {
+          snooze: {
+            days: 10,
+            reason: t(
+              '等客户确认附件版本，再确认页面上线。',
+              'Waiting for the client to confirm the attachment version before confirming the page is live.',
+            ),
+          },
+        }
+      : {}),
+  };
+});
+
+const CRM_CHANGES: ChangeTask[] = [
+  [
+    19,
+    'failed',
+    t('回传失败后重试即可。', 'Retry a failed callback.'),
+    t(
+      '按事件编号核对已处理记录，再从确认点重放。',
+      'Check processed event IDs before replaying from the confirmed checkpoint.',
     ),
-    brief: t(
-      '社区和售前反复问开发、测试环境是否另行计费。在价格页常见问题里加一条，答案以销售确认的口径为准。',
-      'The community and pre-sales keep asking whether development and test environments are billed. Add it to the pricing questions, worded as sales confirmed.',
+  ],
+  [
+    15,
+    'ready',
+    t('提交即预约成功。', 'Submission confirms your booking.'),
+    t(
+      '我们已收到预约请求，时间以确认邮件中的时区为准。',
+      'We received your request; the confirmation email specifies the meeting time and zone.',
     ),
-    label: t('价格页常见问题', 'Pricing questions'),
-    before: t(
-      '开发、测试环境是否另行计费，以及商业插件能否单独购买，请在采购前与销售确认。',
-      'Ask sales before purchase whether development and test environments are billed separately and whether commercial plugins can be bought one by one.',
+  ],
+  [
+    6,
+    'merge_failed',
+    t('托管版按席位计费。', 'Hosting is billed per seat.'),
+    t(
+      '托管按席位报价；数据迁移和培训范围在确认单中单列。',
+      'Hosting is quoted per seat; migration and training scope are listed separately in the confirmation.',
     ),
-    after: t(
-      '每份授权包含一套生产环境和两套开发或测试环境；商业插件能否单独购买，请向销售确认。',
-      'Each licence covers one production and two development or test environments; ask sales whether commercial plugins can be bought one by one.',
+  ],
+  [
+    0,
+    'verifying',
+    t('直接上传完整表格。', 'Upload the complete sheet.'),
+    t(
+      '先试导二十行，逐组确认重复项并保留来源行号。',
+      'Rehearse twenty rows, review duplicate groups and preserve source row IDs.',
     ),
-    note: t('价格页新增环境计费问答', 'Pricing adds the environments question'),
-    error: t(
-      '合并失败：审核之后 docs/pricing.mdx 又被其他改动修改，分支有冲突。',
-      'Merge failed: docs/pricing.mdx changed after review and the branch now conflicts.',
+  ],
+  [
+    3,
+    'not_seen',
+    t(
+      '修改报价后重新发送附件。',
+      'Resend the attachment after changing the quote.',
     ),
-    comments: [
-      [
-        'content',
-        t(
-          '销售确认了「两套开发或测试环境」的说法。',
-          'Sales confirmed the "two development or test environments" wording.',
-        ),
-      ],
-      [
-        'growth',
-        t(
-          '价格页昨天刚改过版式，可能冲突了。',
-          'The pricing layout changed yesterday; that may conflict.',
-        ),
-      ],
-    ],
-  },
-  {
-    key: 'docker-ports',
-    path: '/docs/installation/docker',
-    owner: 'devrel',
-    state: 'verifying',
-    age: 4,
-    title: t(
-      'Docker 安装文档加入端口冲突的排查步骤',
-      'Add port-conflict troubleshooting to the Docker guide',
+    t(
+      '标记旧版作废，审核折扣，再发送带版本号的新附件。',
+      'Mark the old version superseded, review the discount and send a versioned attachment.',
     ),
-    brief: t(
-      '论坛和 Discord 本周有三次「13000 端口被占用」的提问。在安装文档的排查部分加入查看和修改端口映射的步骤。',
-      "Three forum and Discord questions this week were about port 13000 being taken. Add checking and changing the port mapping to the guide's troubleshooting.",
+  ],
+  [
+    9,
+    'simulated',
+    t(
+      '客户转交后所有任务自动转交。',
+      'All tasks transfer automatically with the account.',
     ),
-    label: t('排查步骤', 'Troubleshooting steps'),
-    before: t(
-      '依次检查容器状态、端口占用、应用日志和数据库连接。',
-      'Check container status, port conflicts, the application log and the database connection in turn.',
+    t(
+      '客户与任务分别核对负责人，接收人确认后再撤销旧访问权限。',
+      'Check account and task owners separately; revoke old access after the recipient confirms.',
     ),
-    after: t(
-      '依次检查容器状态、端口占用、应用日志和数据库连接。端口被占用时，把 docker-compose.yml 里的 13000:80 改成 8080:80 等空闲端口。',
-      'Check container status, port conflicts, the application log and the database connection in turn. If the port is taken, change 13000:80 in docker-compose.yml to a free port such as 8080:80.',
+  ],
+  [
+    4,
+    'live',
+    t('隐藏其他销售的菜单即可。', 'Hide other reps’ menu entries.'),
+    t(
+      '列表、详情链接和导出都应执行客户数据范围限制。',
+      'Enforce account scope on lists, direct links and exports.',
     ),
+  ],
+].map(([index, state, before, after], i) => {
+  const story = CRM_STORIES[index as number];
+  return {
+    key: `${story.key}-page`,
+    path: story.path,
+    owner: i === 1 ? 'growth' : 'content',
+    state: state as ChangeState,
+    age: 3 + i * 3,
+    title: t(`更新页面：${story.title.zh}`, `Update page: ${story.title.en}`),
+    brief: story.brief,
+    label: t('页面说明', 'Page explanation'),
+    before: before as L,
+    after: after as L,
     note: t(
-      'Docker 文档补充端口冲突排查',
-      'Docker guide adds port-conflict steps',
+      '演示页面内容修订，保留原稿供核对。',
+      'Demo page revision; keep the previous copy for review.',
     ),
-    comments: [
-      [
-        'devrel',
-        t(
-          '合并好了，等文档站重新构建。',
-          'Merged; waiting for the docs site to rebuild.',
-        ),
-      ],
-    ],
-  },
-  {
-    key: 'api-paging-example',
-    path: '/docs/api/pagination',
-    owner: 'devrel',
-    state: 'not_seen',
-    age: 8,
-    title: t(
-      '分页文档补充完整的翻页示例代码',
-      'Add a complete paging example to the pagination docs',
-    ),
-    brief: t(
-      '「API 只返回 20 条」的搜索有点击但停留很短，页面只有一句说明。补一段按 meta.totalPage 循环读取的示例。',
-      '"API only returns 20 records" gets clicks but short visits; the page has one sentence. Add an example that loops up to meta.totalPage.',
-    ),
-    label: t('示例代码', 'Example code'),
-    before: t(
-      '列表接口默认 pageSize 为 20。',
-      'List endpoints default to pageSize 20.',
-    ),
-    after: t(
-      '列表接口默认 pageSize 为 20。读取全部数据时，从第 1 页开始请求，直到 page 等于 meta.totalPage。',
-      'List endpoints default to pageSize 20. To read everything, request from page 1 until page equals meta.totalPage.',
-    ),
-    note: t('分页文档补充翻页示例', 'Pagination docs add a paging example'),
-    comments: [
-      [
-        'devrel',
-        t(
-          'PR 合并了，但线上页面看起来还是旧的，可能 CDN 缓存没刷新。',
-          'The PR merged but the live page still looks old; the CDN cache may not have refreshed.',
-        ),
-      ],
-    ],
-  },
-  {
-    key: 'crm-funnel',
-    path: '/solutions/crm',
-    owner: 'growth',
-    state: 'simulated',
-    age: 10,
-    title: t(
-      'CRM 方案页补充销售漏斗的配置说明',
-      'Explain the sales funnel setup on the CRM solution page',
-    ),
-    brief: t(
-      '「自建 CRM」点击上升，但方案页没有说明漏斗怎么配置。补充看板按阶段展示、图表按阶段统计金额的步骤。',
-      '"Self hosted CRM" clicks are rising but the page never explains the funnel. Add the kanban-by-stage and amount-by-stage chart steps.',
-    ),
-    label: t('销售漏斗', 'Sales funnel'),
-    before: t(
-      '用看板区块按阶段展示商机。',
-      'A kanban block shows deals by stage.',
-    ),
-    after: t(
-      '用看板区块按阶段展示商机，再用图表区块按阶段统计金额；阶段字段需要设为单选。',
-      'A kanban block shows deals by stage and a chart block sums amounts by stage; make the stage field a single select.',
-    ),
-    note: t(
-      'CRM 方案页补充漏斗配置步骤',
-      'CRM page adds the funnel setup steps',
-    ),
-    comments: [
-      [
-        'growth',
-        t(
-          '演示环境里模拟发布了，内容没问题。',
-          'Published as a simulation in the demo; the content is fine.',
-        ),
-      ],
-    ],
-  },
-  {
-    key: 'relations-cascade',
-    path: '/docs/data-modeling/relations',
-    owner: 'content',
-    state: 'live',
-    age: 9,
-    title: t(
-      '关系字段文档写清删除时的级联规则',
-      'Explain deletion cascades in the relation fields docs',
-    ),
-    brief: t(
-      '「一对多 多对多 关系」排名在第二页，读者常问删除客户时联系人会不会一起删。补充级联、置空和禁止删除三种选择。',
-      '"One to many vs many to many" sits on page two, and readers ask whether deleting an account deletes its contacts. Explain cascade, set null and restrict.',
-    ),
-    label: t('删除规则', 'Deletion rules'),
-    before: t(
-      '删除客户时可以选择级联或禁止。',
-      'Deleting a customer can cascade or be refused.',
-    ),
-    after: t(
-      '删除客户时有三种选择：级联删除联系人、把联系人的客户字段置空，或在还有联系人时禁止删除。',
-      'Deleting a customer offers three choices: delete its contacts too, clear their customer field, or refuse while contacts remain.',
-    ),
-    note: t(
-      '关系字段文档补充三种删除规则',
-      'Relations docs explain three deletion rules',
-    ),
-    comments: [
-      [
-        'content',
-        t(
-          '线上已经看到新段落，开始观察排名。',
-          'The new section is live; watching the ranking now.',
-        ),
-      ],
-    ],
-  },
-];
+    error:
+      i === 0
+        ? t(
+            '找不到回传重放的测试数据，模拟执行停止，未修改页面。',
+            'Callback replay fixtures were missing; the simulated run stopped without changing the page.',
+          )
+        : t(
+            '审核后目标页面发生变化，需要重新核对差异。',
+            'The target page changed after review; reconcile the differences.',
+          ),
+    comments: story.comments,
+  };
+});
 
 const stages = stagesFor(
   SYSTEM_PLAYBOOKS.find((p) => p.id === 'optimize-page')!,
@@ -343,6 +295,9 @@ function build(
   const lang = context.language === 'en-US' ? 'en' : 'zh';
   const text = (value: L) => value[lang];
   const content = demoContent(context.language);
+  const story = (
+    origin.endsWith('crm.acme.example') ? content.secondTasks : content.stories
+  ).find((s) => s.path === change.path)!;
   const now = context.clock.now.getTime();
   const at = (days: number, hours = 0) =>
     new Date(now - days * DAY + hours * HOUR).toISOString();
@@ -386,15 +341,32 @@ function build(
     action: 'comment',
     comment: text(comment),
   }));
+  work.history.unshift({
+    at: at(change.age, 0.1),
+    actor: owner,
+    actorName: content.people[change.owner].name,
+    action: 'startTask',
+    note: work.flow!.name,
+  });
   const runId = randomUUID();
   const started = change.age - 0.2;
+  const usage = {
+    inputTokens: Math.round(
+      (failed ? 3400 : 9200) +
+        context.clock.sample(`input:${change.key}`) * 12000,
+    ),
+    outputTokens: Math.round(
+      (failed ? 120 : 1300) +
+        context.clock.sample(`output:${change.key}`) * 1900,
+    ),
+  };
   const transcript: RunEvent[] = [
     { seq: 1, at: at(started), type: 'status', content: 'running' },
     {
       seq: 2,
       at: at(started, 0.01),
       type: 'thinking',
-      content: text(change.brief),
+      content: story.caseStudy.decision,
     },
     {
       seq: 3,
@@ -408,7 +380,11 @@ function build(
       at: at(started, 0.03),
       type: 'toolResult',
       tool: 'WebFetch',
-      output: text(change.before),
+      output: {
+        before: text(change.before),
+        evidence: story.caseStudy.evidence,
+        limits: story.caseStudy.limitation,
+      },
     },
     ...(failed
       ? [
@@ -417,15 +393,14 @@ function build(
             at: at(started, 0.05),
             type: 'toolUse',
             tool: 'Bash',
-            input: { command: 'grep -rn "loops-old" docs/' },
+            input: { command: `rg --files docs${change.path}` },
           },
           {
             seq: 6,
             at: at(started, 0.06),
             type: 'toolResult',
             tool: 'Bash',
-            output:
-              'docs/workflow/triggers.mdx:41: [循环节点（旧版）](/docs/workflow/loops-old)',
+            output: text(change.error!),
           },
           {
             seq: 7,
@@ -449,20 +424,25 @@ function build(
             at: at(started, 0.06),
             type: 'toolResult',
             tool: 'Write',
-            output: 'ok',
+            output: {
+              saved: true,
+              after: text(change.after),
+              checks: story.caseStudy.checks,
+              simulated: true,
+            },
           },
           {
             seq: 7,
             at: at(started, 0.08),
             type: 'text',
-            content: text(change.after),
+            content: `${text(change.after)}\n\n${story.caseStudy.checks}\n\n${story.caseStudy.limitation}`,
           },
         ]),
     {
       seq: 8,
       at: at(started, 0.09),
       type: 'usage',
-      meta: { inputTokens: 18_400, outputTokens: 2_150 },
+      meta: usage,
     },
   ];
   const run: Run = {
@@ -488,7 +468,7 @@ function build(
     demoAgentId: 'nocoreach.runner',
     agentName: 'NocoReach Demo Agent',
     transcript,
-    usage: { inputTokens: 18_400, outputTokens: 2_150 },
+    usage,
     ...(failed
       ? { error: 'agent_failed', errorDetail: text(change.error!) }
       : {}),
@@ -501,9 +481,19 @@ function build(
     runId,
     note: stages[0].name,
   });
-  const number = 3100 + CHANGES.indexOf(change) * 7;
+  work.history.push({
+    at: run.startedAt!,
+    actor: 'system',
+    action: 'runStarted',
+    runId,
+  });
+  const changes = origin.endsWith('crm.acme.example') ? CRM_CHANGES : CHANGES;
+  const repository = origin.endsWith('crm.acme.example')
+    ? 'acme/crm'
+    : 'acme/acme';
+  const number = 3100 + changes.indexOf(change) * 7;
   const pr = {
-    url: `https://github.com/nocobase/nocobase/pull/${number}`,
+    url: `https://github.com/${repository}/pull/${number}`,
     number,
     branch: `nocoreach/task-${change.key}`,
     files: [
@@ -540,13 +530,46 @@ function build(
       createdAt: at(started, 0.1),
       createdBy: 'agent',
       runId,
-      content: `${content.notice}**${text(change.label)}**\n\n- ${lang === 'zh' ? '修改前' : 'Before'}：${text(change.before)}\n- ${lang === 'zh' ? '修改后' : 'After'}：${text(change.after)}`,
+      content: `${content.notice}# ${text(change.title)}\n\n**${text(change.label)}**\n\n| ${lang === 'zh' ? '修改前' : 'Before'} | ${lang === 'zh' ? '修改后' : 'After'} |\n| --- | --- |\n| ${text(change.before)} | ${text(change.after)} |\n\n${story.caseStudy.document}\n\n## ${lang === 'zh' ? '复核清单与边界' : 'Review checklist and limits'}\n\n${story.caseStudy.checks}\n\n${story.caseStudy.limitation}`,
       pr,
       ...(index > 1
         ? { approvedAt: at(change.age - 1.5), approvedBy: owner }
         : {}),
     };
     work.results = [artifact];
+    run.artifactId = artifact.id;
+    work.history.push({
+      at: artifact.createdAt,
+      actor: 'system',
+      action: 'runSucceeded',
+      runId,
+      artifactId: artifact.id,
+      stageKey: stages[0].key,
+    });
+    if (artifact.approvedAt)
+      work.history.push({
+        at: artifact.approvedAt,
+        actor: owner,
+        action: 'approveStage',
+        stageKey: stages[1].key,
+        artifactId: artifact.id,
+      });
+  } else {
+    work.history.push(
+      {
+        at: run.endedAt!,
+        actor: 'system',
+        action: 'runFailed',
+        runId,
+        note: text(change.error!),
+      },
+      {
+        at: at(started, 0.2),
+        actor: owner,
+        action: 'comment',
+        comment: text(change.error!),
+      },
+    );
   }
   if (index >= 2) {
     const release: Release = {
@@ -595,6 +618,19 @@ function build(
       work.history.push({ at: at(3), actor: 'system', action: 'live' });
     }
     work.release = release;
+    if (release.mergedAt)
+      work.history.push({
+        at: release.mergedAt,
+        actor: owner,
+        action: 'merged',
+        note: `#${number}`,
+      });
+    if (release.state === 'not_seen')
+      work.history.push({
+        at: release.lastCheckAt!,
+        actor: 'system',
+        action: 'notSeen',
+      });
     if (change.state === 'simulated')
       work.history.push({
         at: at(change.age - 2),
@@ -603,12 +639,45 @@ function build(
         note: text(change.note),
       });
   }
+  // Put aside until a day (execution/snooze.ts), the latest thing that happened to it.
+  if (change.snooze) {
+    const day = new Date(now + change.snooze.days * DAY)
+        .toISOString()
+        .slice(0, 10),
+      snoozedAt = at(0.5);
+    work.snooze = {
+      until: (snoozeInstant(day) ?? new Date(`${day}T09:00:00Z`)).toISOString(),
+      day,
+      reason: text(change.snooze.reason),
+      at: snoozedAt,
+      by: owner,
+      byName: content.people[change.owner].name,
+    };
+    work.history.push({
+      at: snoozedAt,
+      actor: owner,
+      actorName: content.people[change.owner].name,
+      action: 'snoozeTask',
+      note: day,
+      comment: text(change.snooze.reason),
+    });
+  }
+  work.history.sort((a: { at: string }, b: { at: string }) =>
+    a.at.localeCompare(b.at),
+  );
   return {
     work,
     artifact,
     runs: [run],
     createdAt: at(change.age),
-    updatedAt: at(Math.max(0, change.age - 2.5)),
+    updatedAt: [
+      at(Math.max(0, change.age - 2.5)),
+      ...work.history.map((entry: { at: string }) => entry.at),
+      work.release?.lastCheckAt || '',
+      work.release?.mergedAt || '',
+    ]
+      .sort()
+      .at(-1)!,
   };
 }
 
@@ -624,7 +693,9 @@ export async function writeChangeTasks(
   const lang = context.language === 'en-US' ? 'en' : 'zh';
   const repo = host.db.getRepository('nrSnapshots');
   await host.db.sequelize.transaction(async (transaction: unknown) => {
-    for (const change of CHANGES) {
+    for (const change of domain === 'crm.acme.example'
+      ? CRM_CHANGES
+      : CHANGES) {
       const built = build(
         context,
         people,
@@ -637,7 +708,7 @@ export async function writeChangeTasks(
           projectId,
           taskKey: `nocoreach-demo:${projectId}:${change.key}`,
           title: change.title[lang],
-          brief: `${content.notice}${change.brief[lang]}`,
+          brief: `${content.notice}${(domain === 'crm.acme.example' ? content.secondTasks : content.stories).find((story) => story.path === change.path)!.brief}\n\n${lang === 'zh' ? '本轮页面改动' : 'Page change in this run'}: ${change.before[lang]} → ${change.after[lang]}`,
           status: {
             failed: '进行中',
             ready: '待确认',
@@ -691,103 +762,38 @@ interface Conversation {
   turns: readonly Exchange[];
 }
 
-const CONVERSATIONS: Conversation[] = [
-  {
-    person: 'admin',
-    age: 1,
-    title: t(
-      '这周自然搜索为什么涨了？',
-      'Why did organic search grow this week?',
-    ),
+const CONVERSATIONS: Conversation[] = [0, 1, 3, 9].map((index, i) => {
+  const story = ACME_STORIES[index];
+  return {
+    person: i === 3 ? 'growth' : 'admin',
+    age: 1 + i * 2,
+    title: ACME_DISCUSSIONS[index].title,
     turns: [
+      { ask: ACME_DISCUSSIONS[index].title, answer: story.brief },
       {
-        ask: t(
-          '这周自然搜索点击为什么涨了？',
-          'Why did organic search clicks grow this week?',
-        ),
-        answer: t(
-          '主要来自三处：入门指南改写后点击比之前高出约三成；「自建 CRM」「开源 CRM」排名上升，CRM 方案页点击增加；《在工作流里调用 AI》在 Hacker News 讨论后仍有长尾流量。图表指南是例外：展示增加，但排名下降，点击反而少了。',
-          'Three places: the rewritten getting-started guide earns about 30% more clicks; "self hosted CRM" and "open source CRM" moved up, lifting the CRM page; the AI workflows post keeps a tail after its Hacker News thread. The charts guide is the exception: more impressions, a worse position, fewer clicks.',
-        ),
-      },
-      {
-        ask: t(
-          '图表指南下一步怎么处理？',
-          'What should we do with the charts guide?',
-        ),
-        answer: t(
-          '先对比排在它前面的页面：它们都有完整的时间对比示例和截图。建议补一个「本周与上周对比」的完整例子，并补上图片说明，再观察 7 天。',
-          'Compare the pages above it: they all show a complete period comparison with screenshots. Add a full this-week-versus-last-week example and image alt text, then watch for seven days.',
-        ),
+        ask: t('下一步先验证什么？', 'What should we verify next?'),
+        answer: i === 2 ? t('', '') : story.comments[1][1],
+        ...(i === 2 ? { failed: 'modelNetwork' } : {}),
       },
     ],
-  },
-  {
-    person: 'admin',
-    age: 4,
-    title: t(
-      '起草一条多角色权限的社区回复',
-      'Draft a community reply on combined roles',
-    ),
+  };
+});
+
+const CRM_CONVERSATIONS: Conversation[] = [0, 6, 9, 12].map((index, i) => {
+  const story = CRM_STORIES[index];
+  return {
+    person: i === 3 ? 'growth' : 'admin',
+    age: 1 + i * 2,
+    title: story.title,
     turns: [
+      { ask: story.brief, answer: story.draft ?? story.comments[0][1] },
       {
-        ask: t(
-          '帮我回复论坛里「两个角色的权限会覆盖吗」这个帖子。',
-          'Help me answer the forum thread "Do two roles override each other?"',
-        ),
-        answer: t(
-          '可以这样回复：多个角色的权限取并集，所以「报表查看」角色能看全部客户时，销售也就能看到全部。建议让「报表查看」只开放图表页面，不给客户表的查看权限；需要严格隔离时，让用户切换角色使用。',
-          'You could reply: permissions from several roles add up, so if "report viewer" can see every customer, the rep can too. Give "report viewer" only the chart pages without view access to customers; for strict separation, let users switch roles.',
-        ),
+        ask: t('下一步先验证什么？', 'What should we verify next?'),
+        answer: story.comments[1][1],
       },
     ],
-  },
-  {
-    person: 'admin',
-    age: 6,
-    title: t('Gridline 最近在做什么？', 'What has Gridline been doing lately?'),
-    turns: [
-      {
-        ask: t(
-          '竞品 Gridline 最近在做什么？',
-          'What has our competitor Gridline been doing lately?',
-        ),
-        answer: t(
-          'Gridline 的自然搜索流量过去一年基本持平，但 AI 回答里的提及份额最高（约 45%），常被推荐为「最接近 Airtable」的选择。它的 CRM 模板页在「小团队客户管理」相关问题里被引用最多。',
-          'Gridline\'s organic traffic is roughly flat over the year, but it has the largest share of AI mentions (about 45%) and is often recommended as "closest to Airtable". Its CRM template is cited most in small-team customer management questions.',
-        ),
-      },
-      {
-        ask: t(
-          '把它的 CRM 模板和我们的对比一下。',
-          'Compare its CRM template with ours.',
-        ),
-        answer: t('', ''),
-        failed: 'modelNetwork',
-      },
-    ],
-  },
-  {
-    person: 'growth',
-    age: 2,
-    title: t(
-      '哪些机会值得这周做？',
-      'Which opportunities are worth doing this week?',
-    ),
-    turns: [
-      {
-        ask: t(
-          '机会列表里哪些值得这周做？',
-          'Which opportunities are worth doing this week?',
-        ),
-        answer: t(
-          '优先三条：备份教程补恢复演练（有社区事故佐证）、Docker 首次启动排障路线图（本周三次相关提问）、销售只能看本人客户的权限示例（「CRM 数据权限」28 天 2,140 次展示）。AI 热词那条建议继续搁置。',
-          'Three first: restore drills for the backup guide (backed by a community incident), a Docker first-start troubleshooting map (three questions this week), and the own-customers permission example (2,140 impressions in 28 days for "CRM data permissions"). Keep the AI buzzword one parked.',
-        ),
-      },
-    ],
-  },
-];
+  };
+});
 
 /** Earlier online Agent conversations for the importer and the growth lead, answered as the demo model would. */
 export async function writeConversations(
@@ -796,6 +802,7 @@ export async function writeConversations(
   projectId: string,
   people: Partial<Record<DemoPerson, string>>,
   model: { modelService: string; model: string } | null,
+  which: 'main' | 'second' = 'main',
 ): Promise<void> {
   const lang = context.language === 'en-US' ? 'en' : 'zh';
   const now = context.clock.now.getTime();
@@ -809,7 +816,9 @@ export async function writeConversations(
     revision: number;
     payload: string;
   }>('nrOnlineAgentRecords');
-  for (const conversation of CONVERSATIONS) {
+  for (const conversation of which === 'main'
+    ? CONVERSATIONS
+    : CRM_CONVERSATIONS) {
     const ownerId =
       conversation.person === 'admin'
         ? context.actorId
@@ -904,6 +913,7 @@ export async function writeNotifications(
   context: DemoImportContext,
   projectId: string,
   people: Partial<Record<DemoPerson, string>>,
+  which: 'main' | 'second' = 'main',
 ): Promise<string[]> {
   const lang = context.language === 'en-US' ? 'en' : 'zh';
   const now = context.clock.now.getTime();
@@ -933,7 +943,7 @@ export async function writeNotifications(
         '"{task}" failed to publish and needs you',
       ),
       '',
-      'pricing-environments',
+      'pricing-guests',
     ],
     [
       'admin',
@@ -944,7 +954,7 @@ export async function writeNotifications(
         '"{task}" waits for you to check and publish',
       ),
       '',
-      'home-self-hosting',
+      'home-project-management',
     ],
     [
       'admin',
@@ -952,13 +962,16 @@ export async function writeNotifications(
       false,
       t('{task}：Agent 没有完成', 'The Agent did not finish "{task}"'),
       '',
-      'fix-trigger-link',
+      'fix-sync-example',
     ],
     [
       'admin',
       30,
       true,
-      t('论坛有 3 个话题还没人回复', '3 forum topics have no reply yet'),
+      t(
+        '社区有新的实施讨论待复核',
+        'New implementation discussions need review',
+      ),
       '/data/community',
     ],
     [
@@ -966,8 +979,8 @@ export async function writeNotifications(
       52,
       true,
       t(
-        '每日分析发现 8 个新机会',
-        'The daily analysis found 8 new opportunities',
+        '每日分析发现新的协作机会',
+        'The daily analysis found new collaboration opportunities',
       ),
       '/opportunities',
     ],
@@ -975,7 +988,10 @@ export async function writeNotifications(
       'admin',
       76,
       true,
-      t('NocoCRM 的 Google 授权已过期', "NocoCRM's Google sign-in has expired"),
+      t(
+        '项目的 Google 历史数据同步完成',
+        "The project's Google history finished syncing",
+      ),
       '/website',
     ],
     [
@@ -987,7 +1003,7 @@ export async function writeNotifications(
         '"{task}" waits for you to check and publish',
       ),
       '',
-      'home-self-hosting',
+      'home-project-management',
     ],
     [
       'growth',
@@ -995,7 +1011,7 @@ export async function writeNotifications(
       true,
       t('{editor} 评论了：{task}', '{editor} commented on "{task}"'),
       '',
-      'home-self-hosting',
+      'home-project-management',
     ],
     [
       'content',
@@ -1006,7 +1022,7 @@ export async function writeNotifications(
         '"{task}" failed to publish and needs you',
       ),
       '',
-      'pricing-environments',
+      'pricing-guests',
     ],
     [
       'devrel',
@@ -1017,7 +1033,7 @@ export async function writeNotifications(
         '"{task}" was not seen live after release',
       ),
       '',
-      'api-paging-example',
+      'approval-version',
     ],
     [
       'devrel',
@@ -1028,7 +1044,7 @@ export async function writeNotifications(
         '"{task}" merged, waiting for the site to update',
       ),
       '',
-      'docker-ports',
+      'timeline-baseline',
     ],
   ];
   const editor = demoContent(context.language).people.editor.name;
@@ -1039,7 +1055,12 @@ export async function writeNotifications(
   for (const [person, hours, read, title, path, key] of items) {
     const userId = person === 'admin' ? context.actorId : people[person];
     if (!userId) continue;
-    const target = key ? task(key) : null;
+    const index = key ? CHANGES.findIndex((change) => change.key === key) : -1;
+    const targetKey =
+      which === 'second' && index >= 0 ? CRM_CHANGES[index].key : key;
+    const target = targetKey ? task(targetKey) : null;
+    if (key && !target) continue;
+    if (which === 'second' && person === 'devrel') continue;
     const route = target?.path ?? path;
     const at = new Date(now - hours * HOUR).toISOString();
     const id = randomUUID();
@@ -1053,7 +1074,7 @@ export async function writeNotifications(
         title: title[lang]
           .replace('{task}', target?.title ?? '')
           .replace('{editor}', editor),
-        body: target?.title ?? title[lang],
+        body: `${demoContent(context.language).projects[which].name}: ${target?.title ?? title[lang]}`,
         actionUrl: null,
         readAt: read ? new Date(now - (hours - 1) * HOUR).toISOString() : null,
         createdAt: at,
@@ -1111,16 +1132,18 @@ export async function writeActivity(
   projectId: string,
   domain: string,
   people: Partial<Record<DemoPerson, string>>,
+  which: 'main' | 'second' = 'main',
 ): Promise<void> {
   await writeChangeTasks(host, context, projectId, domain, people);
   // Earlier conversations ran on the demo's own simulated model, never the global default.
   const service = host.demoModels?.serviceName;
   const model = service ? { modelService: service, model: 'demo-chat' } : null;
-  await writeConversations(host, context, projectId, people, model);
+  await writeConversations(host, context, projectId, people, model, which);
   // Tracked, so a failed import removes them with its other writes.
   await context.track(
     'notificationInAppItems',
-    await writeNotifications(host, context, projectId, people),
+    await writeNotifications(host, context, projectId, people, which),
   );
-  await context.track('agModelUsage', await writeUsage(host, context, model));
+  if (which === 'main')
+    await context.track('agModelUsage', await writeUsage(host, context, model));
 }

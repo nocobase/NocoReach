@@ -1119,6 +1119,150 @@ test('an article in two languages approves the primary to translate, and the car
   expect(steps()).not.toHaveTextContent('Agent 修改');
 });
 
+// 2026-10-28 (T-53): an existing article's other languages get the primary's changes in place, and a version that
+// changed none of them read "Translation done".
+function updatingArticle(round: 'primary' | 'writing' | 'updated' | 'none') {
+  const data = reviewArticle();
+  data.articleTargets = [
+    { ...data.articleTargets![0], locales: ['en', 'zh'] },
+  ] as TaskData['articleTargets'];
+  data.articleBases!['base-1'].locales.zh = {
+    title: '有 GitHub 星标最多的 11 个开源无代码 AI 工具',
+    description: '星标最多的工具。',
+    body: '正文',
+  };
+  data.work.article = {
+    targetId: 'cms',
+    articleId: '7',
+    slug: 'top-11-github-open-source-no-code-ai-tools',
+    title: 'Top 11 Open Source No-Code AI Tools with the Most GitHub Stars',
+    sourceKey: 'base-1',
+    locales: ['en', 'zh'],
+  };
+  data.work.delivery = {
+    kind: 'article',
+    targetId: 'cms',
+    articleId: '7',
+    sourceKey: 'base-1',
+    locales: ['en', 'zh'],
+    ...(round === 'primary'
+      ? {}
+      : {
+          translateFrom: {
+            artifactId: 'artifact-0',
+            at: '2026-10-28T13:23:00Z',
+          },
+        }),
+  };
+  if (round === 'writing') {
+    data.work.stageIndex = 0;
+    data.work.history = [
+      ...(data.work.history || []),
+      {
+        at: '2026-10-28T13:23:00Z',
+        actor: '1',
+        action: 'approveStage',
+        stageKey: 'review',
+        note: 'update',
+      },
+    ];
+    data.runs = [
+      {
+        id: 'run-u',
+        status: 'running',
+        planVersion: 0,
+        stepId: data.work.flow!.stages[0].key,
+        createdAt: '2026-10-28T13:23:30Z',
+      },
+    ];
+  }
+  if (round === 'updated') {
+    const article = data.work.results[0]!.article!;
+    article.draft.locales.zh = {
+      title: '最受欢迎的 12 个开源无代码 AI 工具（2026）',
+    };
+    article.changes = [...article.changes, 'zh.title'];
+  }
+  return data;
+}
+
+test('an update of an existing article says so at each round, and opens on the edited language as its changes', async () => {
+  let view = mount(updatingArticle('primary'));
+  let card = screen.getByRole('region', { name: '等你处理' });
+  expect(card).toHaveTextContent(
+    '英语版已改好，通过后按同样的改动更新其他语言',
+  );
+  expect(card).toHaveTextContent('中文会在英语通过后按同样的改动更新。');
+  expect(
+    within(card).getByRole('button', { name: '通过，更新其他语言' }),
+  ).toBeVisible();
+  view.unmount();
+  view = mount(updatingArticle('writing'));
+  expect(
+    screen.getAllByText('Agent 正在按英语的改动更新中文')[0],
+  ).toBeVisible();
+  const current = within(screen.getByRole('list', { name: '进度' }))
+    .getAllByRole('listitem')
+    .find((li) => li.getAttribute('aria-current') === 'step');
+  expect(current).toHaveTextContent('Agent 更新其他语言');
+  expect(
+    screen.getAllByText(/通过了主语言，开始按改动更新其他语言/)[0],
+  ).toBeVisible();
+  view.unmount();
+  mount(updatingArticle('updated'));
+  card = screen.getByRole('region', { name: '等你处理' });
+  expect(card).toHaveTextContent('已按英语的改动更新中文，确认后一起发布');
+  expect(within(card).getByRole('tab', { name: '中文' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  expect(within(card).getByRole('button', { name: '改动' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  expect(card).toHaveTextContent('最受欢迎的 12 个开源无代码 AI 工具（2026）');
+  expect(card).toHaveTextContent('摘要 · 未修改');
+  expect(
+    within(card).getByRole('button', { name: '通过并发布' }),
+  ).toBeVisible();
+});
+
+test('a version that changed none of the other languages says so and offers Update again first', async () => {
+  const user = userEvent.setup();
+  const data = updatingArticle('none');
+  action.mockImplementation((resource: string, command: string) =>
+    Promise.resolve(
+      command === 'advance'
+        ? data
+        : resource === 'nrPlaybooks'
+          ? { playbooks: [] }
+          : [],
+    ),
+  );
+  mount(data);
+  const card = screen.getByRole('region', { name: '等你处理' });
+  expect(card).toHaveTextContent('中文没有改动');
+  expect(card).not.toHaveTextContent('翻译已完成');
+  expect(card).toHaveTextContent(
+    'Agent 交回的版本里中文和原来一样。可以让 Agent 再做一次，或在动态里写下要怎么改。',
+  );
+  expect(
+    within(card)
+      .getAllByRole('button')
+      .map((b) => b.textContent)
+      .filter((t) =>
+        ['重新更新', '提修改意见', '只发布英语', '直接编辑'].includes(t || ''),
+      ),
+  ).toEqual(['重新更新', '提修改意见', '只发布英语', '直接编辑']);
+  await user.click(within(card).getByRole('button', { name: '重新更新' }));
+  const again = action.mock.calls.find(([, c]) => c === 'advance');
+  expect(again?.[2]?.body).toMatchObject({
+    command: 'requestStageChanges',
+    artifactId: 'artifact-1',
+    comment: '上一版没有改动中文，请按英语的改动重新更新。',
+  });
+});
+
 test('a live article names what changed on its card and shows each field before and after', async () => {
   const user = userEvent.setup();
   mount(liveArticle());
@@ -1262,6 +1406,119 @@ test('an automatic title follows the playbook chosen on the start card', async (
   expect(heading()).toHaveTextContent('给工作流自动化博客页改标题');
 });
 
+// 2026-10-28 user request: Snooze a task, as Gmail does, from the ⋯ menu; while snoozed the page names it first.
+test('Snooze… puts the task aside until a day with what it waits for', async () => {
+  const user = userEvent.setup();
+  const commands: Record<string, unknown>[] = [];
+  const data = pageChange();
+  action.mockImplementation(
+    (
+      resource: string,
+      command: string,
+      init?: { body?: Record<string, unknown> },
+    ) => {
+      if (resource === 'nrPlaybooks') return Promise.resolve({ playbooks: [] });
+      if (command === 'members')
+        return Promise.resolve([{ id: '1', name: 'Super Admin' }]);
+      if (command === 'advance') {
+        commands.push(init!.body!);
+        return Promise.resolve(data);
+      }
+      return Promise.resolve([]);
+    },
+  );
+  mount(data);
+  await user.click(screen.getByRole('button', { name: '更多' }));
+  await user.click(await screen.findByRole('menuitem', { name: '延后…' }));
+  const dialog = await screen.findByRole('dialog', { name: '延后任务' });
+  expect(dialog).toHaveTextContent('到那天回到“待确认”');
+  expect(
+    within(dialog).getByRole('button', { name: '2 周后' }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  expect(dialog).toHaveTextContent('上午 9 点回来，并提醒 Super Admin');
+  await user.type(
+    within(dialog).getByRole('textbox', { name: '在等什么' }),
+    '等权限文档写好',
+  );
+  await user.click(within(dialog).getByRole('button', { name: '延后' }));
+  const day = new Date(Date.now() + 14 * 86400000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  expect(commands).toEqual([
+    expect.objectContaining({
+      command: 'snoozeTask',
+      day: `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`,
+      reason: '等权限文档写好',
+    }),
+  ]);
+});
+
+test('a snoozed task says so first, keeps its card, and can be unsnoozed', async () => {
+  const user = userEvent.setup();
+  const commands: Record<string, unknown>[] = [];
+  const data = pageChange();
+  data.work.snooze = {
+    until: '2099-11-11T01:00:00Z',
+    day: '2099-11-11',
+    reason: '等权限文档写好',
+    at: '2026-10-28T13:05:00Z',
+    by: '1',
+    byName: 'Super Admin',
+  };
+  data.work.history = [
+    ...data.work.history,
+    {
+      at: '2026-10-28T13:05:00Z',
+      actor: '1',
+      action: 'snoozeTask',
+      note: '2099-11-11',
+      comment: '等权限文档写好',
+    },
+  ];
+  action.mockImplementation(
+    (
+      resource: string,
+      command: string,
+      init?: { body?: Record<string, unknown> },
+    ) => {
+      if (resource === 'nrPlaybooks') return Promise.resolve({ playbooks: [] });
+      if (command === 'members')
+        return Promise.resolve([{ id: '1', name: 'Super Admin' }]);
+      if (command === 'advance') {
+        commands.push(init!.body!);
+        return Promise.resolve(data);
+      }
+      return Promise.resolve([]);
+    },
+  );
+  mount(data);
+  const heading = screen.getByRole('heading', { level: 1 }).parentElement!;
+  expect(heading).toHaveTextContent('已延后');
+  const card = screen.getByRole('region', { name: '已延后' });
+  expect(card).toHaveTextContent('已延后到 2099 年 11 月 11 日');
+  expect(card).toHaveTextContent('等权限文档写好 · Super Admin 10-28 延后');
+  // The stage card stays, to act on.
+  expect(screen.getByRole('region', { name: '等你处理' })).toBeVisible();
+  expect(screen.getByRole('region', { name: '动态' })).toHaveTextContent(
+    '把任务延后到 2099-11-11：等权限文档写好',
+  );
+  // Snooze… is not offered again: the row changes the day.
+  await user.click(screen.getByRole('button', { name: '更多' }));
+  expect(screen.queryByRole('menuitem', { name: '延后…' })).toBeNull();
+  await user.keyboard('{Escape}');
+  await user.click(within(card).getByRole('button', { name: '改日期' }));
+  const change = await screen.findByRole('dialog', { name: '改延后日期' });
+  // The dialog opens on the day and reason the snooze has.
+  expect(change).toHaveTextContent('等权限文档写好');
+  await user.click(within(change).getByRole('button', { name: '取消' }));
+  await vi.waitFor(() =>
+    expect(screen.queryByRole('dialog', { name: '改延后日期' })).toBeNull(),
+  );
+  await user.click(within(card).getByRole('button', { name: '取消延后' }));
+  expect(commands).toEqual([
+    expect.objectContaining({ command: 'unsnoozeTask' }),
+  ]);
+});
+
 // 2026-10-28 user report (T-52): a message sent from Activity while a version waited for review only reached the next
 // run, and only Request changes made the Agent revise. Activity's message box is now where changes are asked for, and
 // every review card's Request changes takes the person there.
@@ -1283,11 +1540,15 @@ function underReview(kind: string): TaskData {
   };
   // The primary language first, then the translations to publish.
   if (kind === 'primary language') data.work.delivery = delivery;
-  if (kind === 'translation')
+  if (kind === 'translation') {
     data.work.delivery = {
       ...delivery,
       translateFrom: { artifactId: 'artifact-0', at: '2026-10-27T00:00:00Z' },
     };
+    const article = data.work.results[0]!.article!;
+    article.draft.locales.zh = { title: '最受欢迎的开源无代码 AI 工具' };
+    article.changes = [...article.changes, 'zh.title'];
+  }
   return data;
 }
 test.each([

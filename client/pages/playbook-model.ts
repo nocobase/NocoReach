@@ -1,7 +1,9 @@
 import { $t, $legacyText } from "#i18n";
 import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {formatDate} from '#lib/format';
 import {playbookForActions} from '../../shared/opportunity-parts.js';
 import {SYSTEM_PLAYBOOKS} from '../../shared/playbook-catalog.js';
+import {inPlaceLocales} from '../../shared/article-publishing.js';
 // 做法 (SPEC §6.0), mirrored from plugins/connections/server/execution/playbook.ts and flow.ts.
 export type StageKind='agent'|'review'|'publish'|'release'|'observe';
 export type ChecklistItem={key:string;label:string;required:boolean};
@@ -47,9 +49,11 @@ export function stagesFor(p:Pick<Playbook,'steps'>):Stage[]{
 // not by its stored name (Publish since 2026-10-24, so the step after Review says what the system does).
 // While an article's other languages are translated from its approved primary one (2026-10-24), the Agent's step the
 // task went back to is named Translate wherever the current step is named: the step tags, Tasks and Tasks › By Agent.
-type StepWork={flow?:{stages:Stage[]};stageIndex?:number;stage?:string;release?:unknown;delivery?:{translateFrom?:unknown}};
+// It is Update other languages when the article already has some of them and they get the primary's changes in place
+// (2026-10-28).
+type StepWork={flow?:{stages:Stage[]};stageIndex?:number;stage?:string;release?:unknown;delivery?:{articleId?:string|null;locales?:string[];translateFrom?:{published?:boolean}|null};article?:{locales?:string[]}};
 export const translatingStage=(s:Stage,w?:StepWork)=>Boolean(w?.delivery?.translateFrom&&!w.release&&w.stage!=='done'&&s.kind==='agent'&&w.flow?.stages[w.stageIndex||0]?.key===s.key);
-export const stageName=(s:Stage,w?:StepWork)=>translatingStage(s,w)?$t('articleTask.translateStep'):s.kind==='release'?$t('playbook.publishStage'):s.kind==='observe'?$t('common.watch'):s.name;
+export const stageName=(s:Stage,w?:StepWork)=>translatingStage(s,w)?$t(inPlaceLocales(w!.delivery,w!.article?.locales).length?'articleTask.updateStep':'articleTask.translateStep'):s.kind==='release'?$t('playbook.publishStage'):s.kind==='observe'?$t('common.watch'):s.name;
 export const stageLabel=(s:Stage,w?:StepWork)=>s.kind==='review'?$t('common.yourAction',{0:stageName(s)}):s.kind==='agent'?`Agent ${stageName(s,w)}`:stageName(s);
 // Same rule as the server's defaultPlaybookId: the actions of the signals an opportunity cites.
 export const recommendedPlaybookId=(actions:(string|null)[])=>playbookForActions(actions);
@@ -61,13 +65,20 @@ export function eventText(e:{action:string;note?:string;comment?:string;stageKey
   // An automatic title that followed the playbook chosen before the start (server task-title.ts).
   case 'retitle':return {who:$t('common.system'),text:$t('playbook.retitled',{0:e.note||''})};
   case 'selectPlaybook':return {who:$t('common.you'),text:$t('playbook.changedPlaybook',{0:(e.note||"")})};
+  // Snooze (2026-10-28, server execution/snooze.ts): the day and what it waits for, a new day, ended by hand, by acting
+  // on the task, or come back on its day.
+  case 'snoozeTask':return {who:$t('common.you'),text:e.comment?$t('playbook.snoozedBecause',{0:formatDate(e.note),1:e.comment}):$t('playbook.snoozed',{0:formatDate(e.note)})};
+  case 'snoozeChanged':return {who:$t('common.you'),text:e.comment?$t('playbook.snoozeChangedBecause',{0:formatDate(e.note),1:e.comment}):$t('playbook.snoozeChanged',{0:formatDate(e.note)})};
+  case 'unsnoozeTask':return {who:$t('common.you'),text:$t('playbook.unsnoozed')};
+  case 'snoozeEnded':return {who:$t('common.you'),text:$t('playbook.snoozeEnded')};
+  case 'snoozeDue':return {who:$t('common.system'),text:$t('playbook.snoozeDue')};
   case 'handoff':return {who:$t('common.system'),text:$t('playbook.handedOverTaskDocumentDelivered',{0:(e.note||"")})};
   case 'runQueued':return {who:executor,text:$t('playbook.started',{0:(e.note||$t('common.run'))})};
   case 'runSucceeded':return {who:executor,text:$t('playbook.finishedDeliveredNewVersion')};
   case 'runFailed':return {who:$t('common.system'),text:$t('playbook.runNotCompleteRetried',{0:e.note?`（${$legacyText(e.note)}）`:''})};
   case 'flowWaiting':return {who:$t('common.system'),text:$t('playbook.nextStepNotStart',{0:$legacyText(e.note||"")})};
   // A primary language approved before its translation (2026-10-24) says so instead of handing over.
-  case 'approveStage':return {who:$t('common.you'),text:e.note==='translate'?$t('articleTask.approvedPrimary'):$t('playbook.approved',{0:s,1:e.note?$t('playbook.handedContinue',{0:e.note}):''})};
+  case 'approveStage':return {who:$t('common.you'),text:e.note==='translate'?$t('articleTask.approvedPrimary'):e.note==='update'?$t('articleTask.approvedPrimaryUpdate'):$t('playbook.approved',{0:s,1:e.note?$t('playbook.handedContinue',{0:e.note}):''})};
   case 'requestStageChanges':return {who:$t('common.you'),text:$t('playbook.requestedChanges',{0:e.comment||''})};
   case 'editStageOutput':return {who:$t('common.you'),text:$t('playbook.editedContentDirectly')};
   case 'recordManual':return {who:$t('common.you'),text:$t('playbook.finishedThemselvesRecorded',{0:s})};

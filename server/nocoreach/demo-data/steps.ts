@@ -5,18 +5,15 @@ import type {
   DemoStep,
 } from '@nocobase/app-plugin-demo-mode/server/tokens';
 
-import type { DemoStory } from '../demo-content.js';
+import type { DemoTaskStory } from './editorial.js';
+import { historyBounds } from '../search-history.js';
 import { DomainService } from '../domain-service.js';
 import { Lighthouse } from '../lighthouse.js';
 import { secretKey } from '../policy.js';
-import { number as numberOpportunities } from '../opportunity-board.js';
 import { projectWork, type Artifact } from '../execution/model.js';
-import { windows, type EffectResult } from '../execution/effect.js';
-import type {
-  StrategyState,
-  Opportunity,
-  Signal,
-} from '../../../shared/strategy-model.js';
+import { compare, type Partition } from '../execution/effect.js';
+import { opportunityHistory } from './opportunities.js';
+import { taskHistory } from './task-history.js';
 import { BUSINESS_MEMBER } from '../../access/service.js';
 import type { RoleAccess } from '../../../shared/access-capabilities.js';
 import {
@@ -122,7 +119,7 @@ const PEOPLE: readonly {
 
 const demoPassword = (username: string) => `${username}123`;
 
-export const demoEmail = (username: string) => `${username}@nocobase.example`;
+export const demoEmail = (username: string) => `${username}@acme.example`;
 
 /** The accounts the demo page lists before and after an import. */
 export function demoAccounts(language: string) {
@@ -151,7 +148,7 @@ export function demoSteps(host: DemoHost, language: string): DemoStep[] {
     },
     {
       key: 'second-project',
-      weight: 2,
+      weight: 8,
       run: (context) =>
         connectSources(host, data(context).projects!.second, context, 'second'),
     },
@@ -170,14 +167,17 @@ export function demoSteps(host: DemoHost, language: string): DemoStep[] {
     },
     {
       key: 'activity',
-      run: (context) =>
-        writeActivity(
-          host,
-          context,
-          data(context).projects!.main,
-          content.projects.main.domain,
-          data(context).people ?? {},
-        ),
+      run: async (context) => {
+        for (const which of ['main', 'second'] as const)
+          await writeActivity(
+            host,
+            context,
+            data(context).projects![which],
+            content.projects[which].domain,
+            data(context).people ?? {},
+            which,
+          );
+      },
     },
   ];
 }
@@ -206,7 +206,7 @@ async function createProjects(
         description: spec.description,
         audience: spec.audience,
         market: spec.market,
-        createdAt: context.clock.isoAgo(key === 'main' ? 120 : 9),
+        createdAt: context.clock.isoAgo(key === 'main' ? 180 : 120),
         demo: { dataset: 'nocoreach', language: context.language },
       }),
       undefined,
@@ -266,30 +266,30 @@ const MARKETS = {
   'zh-CN': {
     locationCode: 2702,
     language: 'zh-CN',
-    seeds: ['内部工具', '工作流自动化', 'NocoBase'],
+    seeds: ['项目管理', '团队协作', 'ACME'],
     tracked: [
-      '开源低代码',
-      '自建crm',
-      'crm 数据权限',
-      '工作流引擎 开源',
-      'docker compose postgres',
-      'nocobase',
+      '项目管理软件',
+      'Excel 导入任务',
+      '项目看板',
+      '团队排期',
+      'ACME vs Nimbus',
+      'acme',
     ],
-    question: '有哪些可以私有部署的开源无代码平台？',
+    question: 'ACME 如何管理任务、排期和客户协作？',
   },
   'en-US': {
     locationCode: 2840,
     language: 'en',
-    seeds: ['internal tools', 'workflow automation', 'NocoBase'],
+    seeds: ['project management', 'team collaboration', 'ACME'],
     tracked: [
-      'open source low code',
-      'self hosted crm',
-      'crm data permissions',
-      'airtable alternative',
-      'docker compose postgres',
-      'nocobase',
+      'project management software',
+      'import tasks from Excel',
+      'kanban boards',
+      'team scheduling',
+      'ACME vs Nimbus',
+      'acme',
     ],
-    question: 'Which open-source no-code platforms can be self-hosted?',
+    question: 'How does ACME manage tasks, schedules and client collaboration?',
   },
 } as const;
 
@@ -305,9 +305,38 @@ async function connectSources(
   const spec = content.projects[which];
   const origin = `https://${spec.domain}`;
   const slug = spec.domain.split('.')[0];
-  const repository = `${slug}/${slug}`;
+  const repository = which === 'main' ? 'acme/acme' : 'acme/crm';
   const skipped: string[] = [...(data(context).skipped ?? [])];
-  const market = MARKETS[context.language === 'en-US' ? 'en-US' : 'zh-CN'];
+  const en = context.language === 'en-US';
+  const market =
+    which === 'main'
+      ? MARKETS[en ? 'en-US' : 'zh-CN']
+      : {
+          ...MARKETS[en ? 'en-US' : 'zh-CN'],
+          seeds: en
+            ? ['sales pipeline', 'crm import', 'ACME CRM']
+            : ['销售漏斗', 'CRM 导入', 'ACME CRM'],
+          tracked: en
+            ? [
+                'acme crm',
+                'open source crm',
+                'sales pipeline management',
+                'import contacts from excel crm',
+                'crm for small sales team',
+                'quote approval workflow',
+              ]
+            : [
+                'acme crm',
+                '开源crm',
+                '销售漏斗 管理',
+                'crm 导入 excel',
+                '小团队 crm',
+                '报价单 审批',
+              ],
+          question: en
+            ? 'How does ACME CRM handle account imports and sales handovers?'
+            : 'ACME CRM 如何处理客户导入与销售交接？',
+        };
   const phases: [string, () => Promise<unknown>][] = [
     [
       'google',
@@ -328,17 +357,23 @@ async function connectSources(
           ga4PropertyId: catalog.ga4PropertyId,
           gscSiteUrl: catalog.gscSiteUrl,
           status: 'ready_for_sync',
-          authorizedAt: context.clock.isoAgo(60),
+          authorizedAt: context.clock.isoAgo(540),
           scheduleEnabled: false,
         });
-        const queued = (await p.sync.enqueue(
-          id,
-          which === 'main' ? 56 : 28,
-          'manual',
-        )) as {
+        const queued = (await p.sync.enqueue(id, 56, 'manual')) as {
           jobs: { id: string }[];
         };
-        for (let batch = 0; batch < 30; batch++) {
+        // Seed the full supported history through the normal collectors and partition writer.
+        // This affects only these new demo jobs, not the public sync range or provider retention rules.
+        const { earliest } = historyBounds(p, id);
+        await p.db.getRepository('nrSyncJobs').update({
+          filter: {
+            projectId: id,
+            id: { $in: queued.jobs.map((job) => job.id) },
+          },
+          values: { startDate: earliest, cursor: earliest },
+        });
+        for (let batch = 0; batch < 160; batch++) {
           const jobs = await p.db.getRepository('nrSyncJobs').find({
             filter: {
               projectId: id,
@@ -372,252 +407,248 @@ async function connectSources(
       },
     ],
   ];
-  if (which === 'main')
-    phases.push(
-      [
-        'github',
+  phases.push(
+    [
+      'github',
+      async () => {
+        await p.github.connect(id, `https://github.com/${repository}`);
+        await p.github.setToken(
+          id,
+          'ghp_DemoOnlyNeverLive000000000000000000000',
+        );
+        await p.github.backfill(id);
+      },
+    ],
+    [
+      'community',
+      async () => {
+        await p.community.connect(id, `https://community.${spec.domain}`);
+        await p.community.runs.wait(id);
+      },
+    ],
+    [
+      'packages',
+      async () => {
+        for (const [registry, name] of [
+          ['npm', which === 'main' ? '@acme/core' : '@acme/crm'],
+          ['pypi', slug],
+          ['docker', repository],
+        ]) {
+          await p.packages.add(id, { registry, name });
+          await p.packages.runs.wait(id);
+        }
+      },
+    ],
+    [
+      'hackernews',
+      async () => {
+        await p.hackernews.connect(id, { terms: [spec.name] });
+        await p.hackernews.runs.wait(id);
+      },
+    ],
+    [
+      'x',
+      async () => {
+        await p.xSource.connect(id, {
+          terms: [spec.name],
+          token: 'DemoOnlyNeverLiveToken000000000000000000000000000000',
+          cap: 5,
+        });
+        await p.xSource.runs.wait(id);
+      },
+    ],
+    ...(['slack', 'discord'] as const).map(
+      (platform): [string, () => Promise<unknown>] => [
+        platform,
         async () => {
-          await p.github.connect(id, `https://github.com/${repository}`);
-          await p.github.setToken(
-            id,
-            'ghp_DemoOnlyNeverLive000000000000000000000',
-          );
-          await p.github.backfill(id);
-        },
-      ],
-      [
-        'community',
-        async () => {
-          await p.community.connect(id, `https://community.${spec.domain}`);
-          await p.community.runs.wait(id);
-        },
-      ],
-      [
-        'packages',
-        async () => {
-          for (const [registry, name] of [
-            ['npm', `@${slug}/core`],
-            ['pypi', slug],
-            ['docker', repository],
-          ]) {
-            await p.packages.add(id, { registry, name });
-            await p.packages.runs.wait(id);
-          }
-        },
-      ],
-      [
-        'hackernews',
-        async () => {
-          await p.hackernews.connect(id, { terms: [spec.name] });
-          await p.hackernews.runs.wait(id);
-        },
-      ],
-      [
-        'x',
-        async () => {
-          await p.xSource.connect(id, {
-            terms: [spec.name],
-            token: 'DemoOnlyNeverLiveToken000000000000000000000000000000',
-            cap: 5,
+          const token =
+            platform === 'slack'
+              ? 'xoxb-DemoOnlyNeverLive0000000000000000'
+              : 'DemoOnlyNeverLive0000000000000000000.demo.DemoOnlyNeverLive0000000000000000000';
+          const inspected = (await p.chat.inspect(id, {
+            platform,
+            token,
+          })) as {
+            guildId?: string;
+            channels: { id: string }[];
+          };
+          await p.chat.connect(id, {
+            platform,
+            token,
+            guildId: inspected.guildId,
+            channels: inspected.channels.map((channel) => channel.id),
           });
-          await p.xSource.runs.wait(id);
+          await p.chat.runs.wait(id);
         },
       ],
-      ...(['slack', 'discord'] as const).map(
-        (platform): [string, () => Promise<unknown>] => [
-          platform,
-          async () => {
-            const token =
-              platform === 'slack'
-                ? 'xoxb-DemoOnlyNeverLive0000000000000000'
-                : 'DemoOnlyNeverLive0000000000000000000.demo.DemoOnlyNeverLive0000000000000000000';
-            const inspected = (await p.chat.inspect(id, {
-              platform,
-              token,
-            })) as {
-              guildId?: string;
-              channels: { id: string }[];
-            };
-            await p.chat.connect(id, {
-              platform,
-              token,
-              guildId: inspected.guildId,
-              channels: inspected.channels.map((channel) => channel.id),
-            });
-            await p.chat.runs.wait(id);
-          },
-        ],
-      ),
-      [
-        'keywords',
-        async () => {
-          await p.keywordService.configure(
-            id,
-            Buffer.from(
-              JSON.stringify({
-                login: `seo@${spec.domain}`,
-                password: 'demo-only-never-live',
-              }),
-            ).toString('base64'),
-            10,
-          );
-          await p.keywordService.check(id);
-          for (const target of market.seeds) {
-            const run = (await p.keywordService.run(id, {
-              view: 'related',
-              target,
-              locationCode: market.locationCode,
-              language: market.language,
-              limit: 100,
-              requestKey: randomUUID(),
-            })) as {
-              id: string;
-              status: string;
-              result: { items: { id: string }[] };
-            };
-            if (run.status !== 'completed')
-              throw new Error('Keyword research failed');
-            await p.keywordService.saveFromRun(id, {
-              runId: String(run.id),
-              itemIds: run.result.items.slice(0, 40).map((item) => item.id),
-            });
-          }
-          await p.rankTracking.add(id, {
-            keywords: market.tracked.map((keyword) => ({
-              keyword,
-              locationCode: market.locationCode,
-              language: market.language,
-            })),
-          });
-          await p.rankTracking.check(id);
-        },
-      ],
-      [
-        'domain',
-        async () => {
-          for (const view of ['keywords', 'pages'])
-            await new DomainService(p).run(id, {
-              target: spec.domain,
-              view,
-              locationCode: market.locationCode,
-              language: market.language,
-              requestKey: randomUUID(),
-            });
-          for (const strategy of ['mobile', 'desktop'])
-            await new Lighthouse(p).run(id, {
-              url: origin,
-              strategy,
-              requestKey: randomUUID(),
-            });
-        },
-      ],
-      [
-        'media',
-        async () => {
-          // The demo's browser collector answers for the three media platforms.
-          for (const platform of [
-            'bilibili',
-            'xiaohongshu',
-            'youtube',
-          ] as const)
-            await p.collectors.save(id, platform, {
-              revision: 0,
-              url: collectorUrl(spec.domain),
-              token: COLLECTOR_TOKEN,
-            });
-          await p.bilibili.connect(id, {
-            collectorId: `project-bilibili-${id}`,
-            terms: [spec.name],
-            revision: null,
-          });
-          await p.bilibili.sync(id);
-          await p.xiaohongshu.connect(id, {
-            collectorId: `project-xiaohongshu-${id}`,
-            query: spec.name,
-            revision: 0,
-          });
-          await p.xiaohongshu.search(id, { revision: 1 });
-          await p.youtube.connect(id, {
-            terms: [spec.name],
-            videoUrls: followedVideos({
-              id,
-              name: spec.name,
-              domain: spec.domain,
-              language: context.language,
+    ),
+    [
+      'keywords',
+      async () => {
+        await p.keywordService.configure(
+          id,
+          Buffer.from(
+            JSON.stringify({
+              login: `seo@${spec.domain}`,
+              password: 'demo-only-never-live',
             }),
-            revision: null,
+          ).toString('base64'),
+          10,
+        );
+        await p.keywordService.check(id);
+        for (const target of market.seeds) {
+          const run = (await p.keywordService.run(id, {
+            view: 'related',
+            target,
+            locationCode: market.locationCode,
+            language: market.language,
+            limit: 100,
+            requestKey: randomUUID(),
+          })) as {
+            id: string;
+            status: string;
+            result: { items: { id: string }[] };
+          };
+          if (run.status !== 'completed')
+            throw new Error('Keyword research failed');
+          await p.keywordService.saveFromRun(id, {
+            runId: String(run.id),
+            itemIds: run.result.items.slice(0, 40).map((item) => item.id),
           });
-          await p.youtube.settled(id);
-        },
-      ],
-      [
-        'reddit',
-        async () => {
-          await p.reddit.connect(id, { terms: [spec.name] });
-          await p.reddit.runs.wait(id);
-        },
-      ],
-      [
-        'trends',
-        async () => {
-          await p.trends.connect(id, { product: spec.name, locationCode: 0 });
-          await p.trends.runs.wait(id);
-        },
-      ],
-      [
-        'competitors',
-        async () => {
-          // One call, so the check it starts covers all three.
-          await p.competitors.add(id, {
-            items: [
-              { name: 'FlowGrove', site: 'https://flowgrove.example' },
-              { name: 'StackMeadow', site: 'https://stackmeadow.example' },
-              { name: 'Gridline', site: 'https://gridline.example' },
-            ],
-          });
-          await p.competitors.checking;
-          // The Chinese team compares in the Chinese market, which competitor research covers.
-          if (market.language === 'zh-CN')
-            await p.competitorResearch.setMarket(id, {
-              locationCode: 2156,
-              language: 'zh-CN',
-            });
-          await p.competitorResearch.refresh(id);
-        },
-      ],
-      [
-        'ai-search',
-        async () => {
-          await p.aiSearch.brand(id, {
-            target: spec.name,
-            platform: 'chat_gpt',
-            competitors: ['FlowGrove', 'Gridline'],
+        }
+        await p.rankTracking.add(id, {
+          keywords: market.tracked.map((keyword) => ({
+            keyword,
+            locationCode: market.locationCode,
+            language: market.language,
+          })),
+        });
+        await p.rankTracking.check(id);
+      },
+    ],
+    [
+      'domain',
+      async () => {
+        for (const view of ['keywords', 'pages'])
+          await new DomainService(p).run(id, {
+            target: spec.domain,
+            view,
+            locationCode: market.locationCode,
+            language: market.language,
             requestKey: randomUUID(),
           });
-          await p.aiSearch.gap(id, {
-            target: spec.name,
-            platform: 'chat_gpt',
-            competitor: 'Gridline',
+        for (const strategy of ['mobile', 'desktop'])
+          await new Lighthouse(p).run(id, {
+            url: origin,
+            strategy,
             requestKey: randomUUID(),
           });
-          for (const model of ['chat_gpt', 'claude', 'gemini', 'perplexity'])
-            await p.aiSearch.ask(id, {
-              question: market.question,
-              model,
-              requestKey: randomUUID(),
-            });
-          await p.aiQuestions.setTopics(id, {
-            topics: [
-              'no code platform',
-              'open source crm',
-              'workflow automation',
-              'ai in business apps',
-            ],
+      },
+    ],
+    [
+      'media',
+      async () => {
+        // The demo's browser collector answers for the three media platforms.
+        for (const platform of ['bilibili', 'xiaohongshu', 'youtube'] as const)
+          await p.collectors.save(id, platform, {
+            revision: 0,
+            url: collectorUrl(spec.domain),
+            token: COLLECTOR_TOKEN,
           });
-          await p.aiQuestions.refresh(id);
-        },
-      ],
-    );
+        await p.bilibili.connect(id, {
+          collectorId: `project-bilibili-${id}`,
+          terms: [spec.name],
+          revision: null,
+        });
+        await p.bilibili.sync(id);
+        await p.xiaohongshu.connect(id, {
+          collectorId: `project-xiaohongshu-${id}`,
+          query: spec.name,
+          revision: 0,
+        });
+        await p.xiaohongshu.search(id, { revision: 1 });
+        await p.youtube.connect(id, {
+          terms: [spec.name],
+          videoUrls: followedVideos({
+            id,
+            name: spec.name,
+            domain: spec.domain,
+            language: context.language,
+          }),
+          revision: null,
+        });
+        await p.youtube.settled(id);
+      },
+    ],
+    [
+      'reddit',
+      async () => {
+        await p.reddit.connect(id, { terms: [spec.name] });
+        await p.reddit.runs.wait(id);
+      },
+    ],
+    [
+      'trends',
+      async () => {
+        await p.trends.connect(id, { product: spec.name, locationCode: 0 });
+        await p.trends.runs.wait(id);
+      },
+    ],
+    [
+      'competitors',
+      async () => {
+        // One call keeps the competitor check scoped to this product.
+        await p.competitors.add(id, {
+          items:
+            which === 'main'
+              ? [
+                  { name: 'Nimbus', site: 'https://nimbus.example' },
+                  { name: 'Example Tasks', site: 'https://tasks.example' },
+                ]
+              : [{ name: 'Example Sales', site: 'https://sales.example' }],
+        });
+        await p.competitors.checking;
+        // The Chinese team compares in the Chinese market, which competitor research covers.
+        if (market.language === 'zh-CN')
+          await p.competitorResearch.setMarket(id, {
+            locationCode: 2156,
+            language: 'zh-CN',
+          });
+        await p.competitorResearch.refresh(id);
+      },
+    ],
+    [
+      'ai-search',
+      async () => {
+        await p.aiSearch.brand(id, {
+          target: spec.name,
+          platform: 'chat_gpt',
+          competitors:
+            which === 'main' ? ['Nimbus', 'Example Tasks'] : ['Example Sales'],
+          requestKey: randomUUID(),
+        });
+        await p.aiSearch.gap(id, {
+          target: spec.name,
+          platform: 'chat_gpt',
+          competitor: which === 'main' ? 'Nimbus' : 'Example Sales',
+          requestKey: randomUUID(),
+        });
+        for (const model of ['chat_gpt', 'claude', 'gemini', 'perplexity'])
+          await p.aiSearch.ask(id, {
+            question: market.question,
+            model,
+            requestKey: randomUUID(),
+          });
+        await p.aiQuestions.setTopics(id, {
+          topics:
+            which === 'main'
+              ? ['project management', 'team collaboration', 'task management']
+              : ['sales pipeline', 'open source crm', 'workflow automation'],
+        });
+        await p.aiQuestions.refresh(id);
+      },
+    ],
+  );
   await p.network.runProject(id, async () => {
     for (const [index, [name, run]] of phases.entries()) {
       try {
@@ -634,18 +665,6 @@ async function connectSources(
       await context.progress((index + 1) / phases.length);
     }
   });
-  if (which === 'second') {
-    // The demo's problem record: this project's Google sign-in has expired since its first sync.
-    await p.projects.update(
-      id,
-      (project: Record<string, unknown>) => ({
-        ...project,
-        demo: { ...(project.demo as object), expired: ['google'] },
-      }),
-      undefined,
-    );
-    p.demoProjects.expire(id, 'google');
-  }
   await context.setData({ skipped });
 }
 
@@ -654,25 +673,29 @@ async function writeKnowledge(
   content: DemoContent,
   context: DemoImportContext,
 ) {
-  const { main } = data(context).projects!;
-  for (const document of content.documents)
-    await host.knowledge.add(
-      main,
-      {
-        title: document.title,
-        category: document.category,
-        text: content.notice + document.text,
-      },
-      data(context).people?.editor ?? context.actorId,
-    );
+  for (const which of ['main', 'second'] as const)
+    for (const document of which === 'main'
+      ? content.documents
+      : (content.secondDocuments ?? []))
+      await host.knowledge.add(
+        data(context).projects![which],
+        {
+          title: document.title,
+          category: document.category,
+          text: content.notice + document.text,
+        },
+        data(context).people?.editor ?? context.actorId,
+      );
 }
 
 function storyTask(
   content: DemoContent,
   context: DemoImportContext,
   origin: string,
-  story: DemoStory,
+  story: DemoTaskStory,
   index: number,
+  partitions: Partition[],
+  adminName: string,
 ) {
   const people = data(context).people ?? {};
   const at = (days: number, hours = 0) =>
@@ -697,13 +720,37 @@ function storyTask(
   const comments = story.comments.map((comment) =>
     commentAuthor(content, comment),
   );
-  const owner = comments.find(
-    (comment) => comment.person && comment.person !== 'editor',
-  )?.person;
-  if (owner && people[owner]) {
-    work.humanOwnerId = people[owner];
-    work.humanOwnerName = content.people[owner].name;
+  const owner =
+    story.owner ??
+    (story.state === 'review'
+      ? 'editor'
+      : comments.find(
+          (comment) => comment.person && comment.person !== 'editor',
+        )?.person);
+  const ownerId = owner === 'admin' ? context.actorId : owner && people[owner];
+  if (ownerId) {
+    work.humanOwnerId = ownerId;
+    work.humanOwnerName =
+      owner === 'admin'
+        ? adminName
+        : owner
+          ? content.people[owner].name
+          : undefined;
   }
+  const completedAgo =
+    story.outcome === 'waiting'
+      ? 2
+      : story.outcome === 'insufficient'
+        ? 12
+        : story.age
+          ? story.age - 8
+          : 12 + (index % 4);
+  const age =
+    story.age ?? (story.state === 'done' ? completedAgo + 8 : 3 + (index % 12));
+  const draftAgo = age - 1;
+  const lastAgo =
+    story.state === 'done' ? completedAgo : Math.max(0.25, age - 3);
+
   if (story.state !== 'todo') {
     work.flow = {
       id: `editorial-${story.kind}`,
@@ -728,93 +775,75 @@ function storyTask(
     work.stageIndex = story.state === 'doing' ? 0 : 1;
   }
   work.history = comments.map((comment, i) => ({
-    at: at(44 - index, i + 1),
+    at: at(age - 2, i + 1),
     actor: (comment.person && people[comment.person]) || 'demo-editor',
     actorName: comment.name,
     action: 'comment',
     comment: comment.text,
   }));
+  if (story.state === 'done')
+    work.history.push({
+      at: at(completedAgo),
+      actor: people.editor,
+      actorName: content.people.editor.name,
+      action: 'comment',
+      comment:
+        context.language === 'en-US'
+          ? 'Review complete. The approved copy and source checks are saved with this task.'
+          : '审核完成，确认稿与来源检查已保存在本任务中。',
+    });
   if (story.draft) {
     const artifact: Artifact = {
       id: `editorial-${story.key}`,
       planVersion: 0,
       stepId: 'draft',
       version: 1,
-      createdAt: at(43 - index),
-      createdBy: (owner && people[owner]) || 'demo-editor',
+      createdAt: at(draftAgo),
+      createdBy: ownerId || people.content || 'demo-editor',
       manual: true,
       content: content.notice + story.draft,
       report: {
         kind: story.kind,
         sources: [{ title: content.sourcePage, url: origin + story.path }],
-        asOf: context.clock.now.toISOString(),
+        asOf: at(draftAgo),
         uncertainties: [content.uncertainty],
       },
-      ...(story.rejected ? { rejectedAt: at(42 - index) } : {}),
+      ...(story.rejected ? { rejectedAt: at(lastAgo) } : {}),
     };
     work.results = [artifact];
   }
   if (story.cancelled) {
-    work.cancelledAt = at(42 - index);
+    work.cancelledAt = at(lastAgo);
     work.cancelledBy = people.editor ?? 'demo-editor';
   }
   if (story.archived) {
-    work.archivedAt = at(42 - index);
+    work.archivedAt = at(lastAgo);
     work.archivedBy = people.editor ?? 'demo-editor';
   }
   if (story.outcome) {
-    // Past, hand-written observations: never a live release or a scheduled observation.
-    work.observeFrom = context.clock.dateAgo(
-      story.outcome === 'waiting' ? 2 : 12,
-    );
+    // Historical observations use the same collected page partitions as the data views.
+    work.observeFrom = context.clock.dateAgo(completedAgo);
     if (story.outcome !== 'waiting') {
-      const pairs = {
-        up: [126, 181],
-        down: [164, 119],
-        flat: [98, 102],
-        insufficient: [12, 7],
-      } as const;
-      const factor =
-        0.92 +
-        context.clock.sample(`effect:${story.path}:${story.outcome}`) * 0.16;
-      const [before, after] = pairs[story.outcome].map((value) =>
-        Math.round(value * factor),
+      const result = compare(
+        7,
+        work.observeFrom,
+        [origin + story.path],
+        partitions,
+        at(completedAgo - 10),
       );
-      const impressions: [number, number] =
-        story.outcome === 'down' ? [4200, 4850] : [3600, 4100];
-      const result: EffectResult = {
-        day: 7,
-        ...windows(work.observeFrom, 7),
-        pages: [origin + story.path],
-        primary: 'clicks',
-        conclusion: story.outcome,
-        change:
-          story.outcome === 'insufficient'
-            ? null
-            : Math.round(((after - before) / before) * 1000) / 1000,
-        gsc: {
-          clicks: [before, after],
-          impressions,
-          ctr: [
-            (before / impressions[0]) * 100,
-            (after / impressions[1]) * 100,
-          ],
-          position: [9.8, 9.4],
-        },
-        coverage: {
-          gsc: {
-            baselineDays: 7,
-            afterDays: story.outcome === 'insufficient' ? 3 : 7,
-          },
-          ga4: { baselineDays: 0, afterDays: 0 },
-        },
-        computedAt: at(4),
-        notes: [content.observationNote],
-      };
+      result.notes.push(content.observationNote);
       work.observation = { results: [result] };
     }
   }
-  return { work, createdAt: at(45 - index), updatedAt: at(1, -index) };
+  return {
+    work,
+    createdAt: at(age),
+    updatedAt: at(
+      story.outcome && story.outcome !== 'waiting'
+        ? completedAgo - 10
+        : lastAgo,
+    ),
+  };
 }
 
 async function writeTasks(
@@ -822,6 +851,15 @@ async function writeTasks(
   content: DemoContent,
   context: DemoImportContext,
 ) {
+  const actor = await host.db
+    .access!.database.repository('user')
+    .findOne({ filter: { id: context.actorId } });
+  const adminName =
+    typeof actor?.name === 'string' && actor.name
+      ? actor.name
+      : typeof actor?.username === 'string'
+        ? actor.username
+        : 'Administrator';
   const projects = data(context).projects!;
   const repo = host.db.getRepository('nrSnapshots');
   for (const [which, stories] of [
@@ -830,6 +868,12 @@ async function writeTasks(
   ] as const) {
     const id = projects[which];
     const origin = `https://${content.projects[which].domain}`;
+    const partitions = (
+      await host.db.getRepository('nrSyncPartitions').find({
+        filter: { projectId: id, grain: { $in: ['page', 'query_page'] } },
+        fields: ['source', 'grain', 'date', 'payload'],
+      })
+    ).map((row) => row.toJSON()) as Partition[];
     await host.db.sequelize.transaction(async (transaction: unknown) => {
       for (const [index, story] of stories.entries()) {
         const { work, createdAt, updatedAt } = storyTask(
@@ -838,6 +882,17 @@ async function writeTasks(
           origin,
           story,
           index,
+          partitions,
+          adminName,
+        );
+        const history = taskHistory(
+          context,
+          content,
+          id,
+          story,
+          work,
+          createdAt,
+          updatedAt,
         );
         const row = await host.db.getRepository('nrTasks').create({
           values: {
@@ -858,7 +913,7 @@ async function writeTasks(
           },
           transaction,
         });
-        for (const artifact of work.results)
+        for (const artifact of history.artifacts)
           if (artifact)
             await repo.create({
               values: {
@@ -867,6 +922,22 @@ async function writeTasks(
               },
               transaction,
             });
+        for (const run of history.runs)
+          await repo.create({
+            values: {
+              key: `nr-task-run:${id}:${String(row.id)}:${run.id}`,
+              payload: { ...run, taskId: String(row.id) },
+            },
+            transaction,
+          });
+        for (const review of history.reviews)
+          await repo.create({
+            values: {
+              key: `nr-task-review:${id}:${String(row.id)}:${randomUUID()}`,
+              payload: review,
+            },
+            transaction,
+          });
       }
     });
     await context.progress(which === 'main' ? 0.8 : 1);
@@ -878,199 +949,46 @@ async function writeOpportunities(
   content: DemoContent,
   context: DemoImportContext,
 ) {
-  const id = data(context).projects!.main;
-  const origin = `https://${content.projects.main.domain}`;
-  const copy = content.opportunities;
-  const now = context.clock.now.toISOString();
-  const repo = host.db.getRepository('nrSnapshots');
-  await host.db.sequelize.transaction(async (transaction: unknown) => {
-    const row = await repo.findOne({
-      filter: { key: `strategy:${id}` },
-      transaction,
-    });
-    const state: StrategyState = structuredClone(
-      (row?.get('payload') as StrategyState | undefined) || {
-        revision: 0,
-        goal: null,
-        proposals: [],
-        operations: [],
-      },
-    );
-    const cards: Opportunity[] = copy.briefs.map(
-      ([
-        key,
-        title,
-        observation,
-        meaning,
-        suggestion,
-        objective,
-        path,
-        source,
-        priority,
-      ]) => ({
-        id: `editorial-opportunity-${key}`,
-        title,
-        observation,
-        meaning,
-        suggestion,
-        objective,
-        source:
-          source === 'gsc' ? 'search' : source === 'site' ? 'website' : 'mixed',
-        evidenceText: `${observation}\n${copy.notice}`,
-        limitation: `${copy.notice} ${copy.limitation}`,
-        signalIds: [`editorial-signal-${key}`],
-        sources: [source],
-        priority,
-        priorityReason:
-          priority === 'high' ? copy.priorityHigh : copy.priorityOther,
-        confidence: 'supported',
-        category: 'optimize',
-        lifecycle: 'persistent',
-        change: 'new',
-        audience: copy.audience,
-        effort: 'medium',
-        target: `${origin}${path}`,
-        firstSeenAt: now,
-      }),
-    );
-    const signals: Signal[] = cards.map((card, i) => ({
-      key: card.signalIds![0],
-      type: 'editorial',
-      source: copy.briefs[i][7],
-      title: card.title,
-      facts: [card.observation, copy.notice],
-      url: card.target,
-      strength: 90 - i * 3,
-      actionable: true,
-      action: 'optimize',
-      isNew: true,
-    }));
-    for (const [key, title, fact] of copy.watches)
-      signals.push({
-        key: `editorial-watch-${key}`,
-        type: 'editorial',
-        source: key === 'github' ? 'github' : 'ga4',
-        title,
-        facts: [fact, copy.notice],
-        strength: 40,
-        actionable: false,
-        action: null,
-      });
-    signals.push({
-      key: 'editorial-normal-search',
-      type: 'editorial',
-      source: 'gsc',
-      title: copy.normal[0],
-      facts: [copy.normal[1], copy.notice],
-      strength: 20,
-      actionable: false,
-      action: null,
-    });
-    state.insights = {
-      generatedAt: now,
-      items: cards,
-      evidence: {
-        searchQueries: [],
-        pages: [],
-        industryCandidates: [],
-        analysisVersion: 3,
-        capturedAt: now,
-        availableThrough: context.clock.dateAgo(0),
-        periodDays: 28,
-        limitations: [copy.notice],
-        signals: {
-          computedAt: now,
-          coverage: { gsc: now, site: now, discourse: now },
-          missing: [],
-          items: signals,
-        },
-      },
-      observations: [copy.notice, ...copy.observations],
-      signalReviews: {},
-    };
-    state.opportunityMeta ||= {};
-    state.watch ||= {};
-    for (const signal of signals.filter((s) => s.actionable))
-      state.insights.signalReviews![signal.key] = {
-        verdict: 'do',
-        reason: copy.doReason,
-      };
-    const decideBy = context.clock.dateAgo(-7);
-    for (const [key, , , waitingFor] of copy.watches) {
-      const signal = signals.find((s) => s.key === `editorial-watch-${key}`)!;
-      state.insights.signalReviews![signal.key] = {
-        verdict: 'watch',
-        reason: signal.facts[0],
-        waitingFor,
-        decideBy,
-      };
-      state.watch[signal.key] = {
-        key: signal.key,
-        source: signal.source,
-        since: now,
-        startTitle: signal.title,
-        startFacts: signal.facts,
-        waitingFor,
-        decideBy,
-        lastSeen: now,
-      };
-    }
-    state.insights.signalReviews!['editorial-normal-search'] = {
-      verdict: 'skip',
-      reason: copy.skipReason,
-    };
-    for (const card of cards.slice(10))
-      state.opportunityMeta[card.id] = {
-        status: 'ignored',
-        ignoredAt: now,
-        reviewedAt: now,
-      };
-    // Two opportunities were already turned into tasks: the CRM search research and the forum reply.
-    const tasks = await host.db.getRepository('nrTasks').find({
-      filter: {
-        projectId: id,
-        taskKey: {
-          $in: [
-            `nocoreach-demo:${id}:crm-search`,
-            `nocoreach-demo:${id}:forum-multiple-roles`,
-          ],
-        },
-      },
-      transaction,
-    });
-    for (const [index, card] of cards.slice(8, 10).entries()) {
-      const task = tasks.find((t) =>
-        String(t.taskKey).endsWith(
-          index === 0 ? 'crm-search' : 'forum-multiple-roles',
-        ),
-      );
-      if (task)
-        state.proposals.push({
-          id: `editorial-proposal-${index}`,
+  for (const which of ['main', 'second'] as const) {
+    const id = data(context).projects![which];
+    const repo = host.db.getRepository('nrSnapshots');
+    const partitions = (
+      await host.db.getRepository('nrSyncPartitions').find({
+        filter: { projectId: id, grain: { $in: ['page', 'query_page'] } },
+      })
+    ).map((row) => row.toJSON()) as Partition[];
+    await host.db.sequelize.transaction(async (transaction: unknown) => {
+      const tasks = await host.db
+        .getRepository('nrTasks')
+        .find({ filter: { projectId: id }, transaction });
+      const state = opportunityHistory(
+        context,
+        content,
+        which,
+        tasks.map((task) => ({
+          id: String(task.id),
+          key: String(task.taskKey).replace(`nocoreach-demo:${id}:`, ''),
           title: String(task.title),
-          brief: card.suggestion,
-          status: 'approved',
-          goalVersion: null,
-          insight: card,
-          // Keep the opaque id: converting a snowflake string loses precision.
-          taskId: task.id as number,
-          taskNo: (task.get('evidence') as { no?: number } | undefined)?.no,
-          evidence: state.insights.evidence,
+          createdAt: new Date(task.get('createdAt') as string).toISOString(),
+          no: (task.get('evidence') as { no?: number } | undefined)?.no,
+        })),
+        partitions,
+      );
+      const row = await repo.findOne({
+        filter: { key: `strategy:${id}` },
+        transaction,
+      });
+      if (row)
+        await repo.update({
+          filterByTk: row.id,
+          values: { payload: state },
+          transaction,
         });
-    }
-    state.goal ||= { ...copy.goal, version: 1, confirmedAt: now };
-    numberOpportunities(state);
-    state.revision++;
-    if (row)
-      await repo.update({
-        filterByTk: row.id,
-        values: { payload: state },
-        transaction,
-      });
-    else
-      await repo.create({
-        values: { key: `strategy:${id}`, payload: state },
-        transaction,
-      });
-  });
+      else
+        await repo.create({
+          values: { key: `strategy:${id}`, payload: state },
+          transaction,
+        });
+    });
+  }
 }

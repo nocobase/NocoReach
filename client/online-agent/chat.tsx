@@ -119,13 +119,15 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
     }
     if (followingRef.current) element.scrollTop = element.scrollHeight;
   }, [current, history]);
-  // A reply's parts can grow after it is drawn (a proposal card reading the rules): keep following the end.
+  // A reply's parts can grow after it is drawn (a proposal card reading the rules), and the transcript shrinks when a
+  // notice appears above the composer: keep following the end.
   useEffect(() => {
     const element = transcriptRef.current;
     if (!element || typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(() => {
       if (followingRef.current) element.scrollTop = element.scrollHeight;
     });
+    observer.observe(element);
     for (const child of element.children) observer.observe(child);
     return () => observer.disconnect();
   }, [current, history]);
@@ -411,7 +413,10 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
             className='relative flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto overscroll-contain px-1 py-3 focus-visible:outline-2 focus-visible:outline-ring'
             aria-label={$t('onlineAgent.transcript')}
           >
-            <OnlineError error={loadError} retry={reload} />
+            <OnlineError
+              error={current ? undefined : loadError}
+              retry={reload}
+            />
             {requested && !current && !loadError && (
               <div role='status' aria-label={$t('common.loading')}>
                 <Skeleton className='ml-auto h-10 w-1/3' />
@@ -512,7 +517,14 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
               )}
             </p>
           )}
-          <OnlineError error={!stopOpen ? error : undefined} />
+          {/* A loaded conversation that cannot be read again (NocoReach restarting) says so here, where the reader
+              follows the latest reply, not at the top of the transcript. It blocks sending, so it wins over a send
+              error, which shows again once a read succeeds. */}
+          {current && loadError ? (
+            <OnlineError error={loadError} retry={reload} />
+          ) : (
+            <OnlineError error={!stopOpen ? error : undefined} />
+          )}
           {chat.request && (
             <p className='text-sm text-muted-foreground'>
               {$t('onlineAgent.ambiguousRequest')}

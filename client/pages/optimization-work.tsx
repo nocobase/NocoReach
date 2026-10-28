@@ -1,5 +1,6 @@
 import {useMe} from './me';
 import {isWaitingTask} from './task-waiting';
+import {onBoard} from './board-done';
 import { renderMessage, type Message, useMessageState, $t, $legacyText } from "#i18n";
 import {useEffect,useRef,useState} from 'react';
 import {Outlet,useLocation,useNavigate} from 'react-router';
@@ -13,7 +14,7 @@ import {refreshNavBadges} from '#components/app-shell/nav-badges';
 import {PageContainer,PageHeader} from '#components/reach/page';
 import {Button} from '#components/ui/button';
 import {taskRecords,useProject} from './reach-data';
-import {workState,isClosed,closeCommand,getCloseConfirm,type BoardState,type Work,type TaskData} from './task-execution-types';
+import {workState,isClosed,isSnoozed,closeCommand,getCloseConfirm,type BoardState,type Work,type TaskData} from './task-execution-types';
 import {legacyPlaybookFilterLabel,matchesPlaybookFilter,playbookFilterOptions,playbookFilterValue} from './task-playbook-filter';
 import {WorkBoard,TaskTable,type TaskAction} from './work-board';
 import {AgentBoard,RuntimeNotice} from './agent-board';
@@ -52,7 +53,8 @@ export default function OptimizationWork(){
  const {mine,isAdmin}=useMe(),waiting=params.get('scope')==='waiting';
  const legacyPlaybook=!params.has('playbookName');
  const playbook=params.get(legacyPlaybook?'playbook':'playbookName')||'',owner=params.get('owner')||'';
- const done=!closed&&params.get('scope')==='done',view=params.get('view')??savedView(),board=view==='board'&&!closed&&!done,byAgent=view==='agent'&&!closed&&!done,agentFilter=params.get('agent')||'';
+ // Snoozed (2026-10-28): its own list, out of Needs you and Current, shown as a table like Done and Closed.
+ const done=!closed&&params.get('scope')==='done',snoozed=!closed&&params.get('scope')==='snoozed',view=params.get('view')??savedView(),board=view==='board'&&!closed&&!done&&!snoozed,byAgent=view==='agent'&&!closed&&!done&&!snoozed,agentFilter=params.get('agent')||'';
  // The project's Agents, to name each task's Agent and lay out By Agent; without them cards show the name saved on the task.
  const [agents,setAgents]=useState<AgentStatus>();
  const playbookOptions=playbookFilterOptions(tasks.map(t=>t.evidence?.work));
@@ -88,14 +90,21 @@ export default function OptimizationWork(){
  async function undo(t:Task){const fresh=tasks.find(x=>x.id===t.id)||t;if(await command(fresh,'unarchiveTask'))setNotice({text:() => $t('optimizationWork.closeUndone',{0:t.title})});}
  const ordered=[...tasks].sort((a,b)=>(a.evidence?.work?.sortOrder??a.id*1024)-(b.evidence?.work?.sortOrder??b.id*1024)||a.id-b.id);
  const isDone=(t:Task)=>!isClosed(t.evidence?.work)&&workState(t.evidence?.work,t.status)==='done';
- const closedCount=tasks.filter(t=>isClosed(t.evidence?.work)).length,doneCount=tasks.filter(isDone).length;
+ const isAside=(t:Task)=>isSnoozed(t.evidence?.work);
+ const closedCount=tasks.filter(t=>isClosed(t.evidence?.work)).length,doneCount=tasks.filter(isDone).length,snoozedCount=tasks.filter(isAside).length;
  // 当前 is what is still under way (the board also shows its 已完成 column); 已完成 and 已关闭 are their own lists.
  const waitingCount=tasks.filter(t=>isWaitingTask(t,mine)).length;
- const inScope=(t:Task)=>waiting?isWaitingTask(t,mine):closed?isClosed(t.evidence?.work):done?isDone(t):!isClosed(t.evidence?.work)&&(board||!isDone(t));
- const visible=ordered.filter(t=>{const w=t.evidence?.work;return inScope(t)&&matchesPlaybookFilter(w,playbook,legacyPlaybook)&&(waiting||!owner||ownerName(t)===owner)&&(!agentFilter||!agents||(taskAgentOf(w,agents)?.id||UNASSIGNED)===agentFilter)&&`${t.evidence?.no?`t-${t.evidence.no}`:''} ${t.evidence?.insight?.no?`o-${t.evidence.insight.no}`:''} ${t.title} ${t.brief} ${t.evidence?.keyword||''}`.toLowerCase().includes(q.trim().toLowerCase());});
+ // The board's Done column keeps what is still watched and what finished in the last week (board-done.ts); the rest is
+ // in the Done list, which its last line opens.
+ const onBoardNow=(t:Task)=>!isDone(t)||onBoard(t.evidence?.work,t.updatedAt);
+ const inScope=(t:Task)=>waiting?isWaitingTask(t,mine):closed?isClosed(t.evidence?.work):done?isDone(t):snoozed?isAside(t):!isClosed(t.evidence?.work)&&!isAside(t)&&(board?onBoardNow(t):!isDone(t));
+ const matches=(t:Task)=>{const w=t.evidence?.work;return matchesPlaybookFilter(w,playbook,legacyPlaybook)&&(waiting||!owner||ownerName(t)===owner)&&(!agentFilter||!agents||(taskAgentOf(w,agents)?.id||UNASSIGNED)===agentFilter)&&`${t.evidence?.no?`t-${t.evidence.no}`:''} ${t.evidence?.insight?.no?`o-${t.evidence.insight.no}`:''} ${t.title} ${t.brief} ${t.evidence?.keyword||''} ${w?.snooze?.reason||''}`.toLowerCase().includes(q.trim().toLowerCase());};
+ const visible=ordered.filter(t=>inScope(t)&&matches(t));
+ const olderDone=board&&!waiting?ordered.filter(t=>isDone(t)&&!onBoardNow(t)&&matches(t)).length:0;
  // The table lists what needs you first: 待确认, 进行中, 待处理, 已完成; the board keeps its manual order.
  const rank:Record<BoardState,number>={review:0,doing:1,todo:2,done:3};
- const rows=board||byAgent||closed?visible:[...visible].sort((a,b)=>rank[workState(a.evidence?.work,a.status)]-rank[workState(b.evidence?.work,b.status)]||String(b.updatedAt).localeCompare(String(a.updatedAt)));
+ // Snoozed: the one coming back soonest first.
+ const rows=board||byAgent||closed?visible:snoozed?[...visible].sort((a,b)=>String(a.evidence?.work?.snooze?.until).localeCompare(String(b.evidence?.work?.snooze?.until))):[...visible].sort((a,b)=>rank[workState(a.evidence?.work,a.status)]-rank[workState(b.evidence?.work,b.status)]||String(b.updatedAt).localeCompare(String(a.updatedAt)));
  const uniq=(xs:string[])=>[...new Set(xs.filter(Boolean))].sort();
  const location=useLocation();
  const newTask=()=>navigate({pathname:'/actions/new',search:location.search});
@@ -104,20 +113,20 @@ export default function OptimizationWork(){
   <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label={$t('common.filter')}>
    {/* The scopes filter this one list, so they are the toolbar's pick-one control, not tabs (2026-10-22 decision D1:
        line tabs only switch a page's sections; a table's filters are a segmented control in its toolbar). */}
-   <Segmented label={$t('optimizationWork.scope')} options={([['waiting',$t('optimizationWork.waitingForMe'),waitingCount],['',$t('optimizationWork.current'),tasks.length-closedCount-doneCount],['done',$t('common.completed'),doneCount],['closed',$t('common.closed'),closedCount]] as const).map(([c,label,n])=>({id:c,label:<>{label} <span>{loading?'':n}</span></>,title:label}))} value={waiting?'waiting':closed?'closed':done?'done':''} onChange={c=>param('scope',c)}/>
+   <Segmented label={$t('optimizationWork.scope')} options={([['waiting',$t('optimizationWork.waitingForMe'),waitingCount],['',$t('optimizationWork.current'),tasks.length-closedCount-doneCount-snoozedCount],['snoozed',$t('common.snoozed'),snoozedCount],['done',$t('common.completed'),doneCount],['closed',$t('common.closed'),closedCount]] as const).map(([c,label,n])=>({id:c,label:<>{label} <span>{loading?'':n}</span></>,title:label}))} value={waiting?'waiting':closed?'closed':done?'done':snoozed?'snoozed':''} onChange={c=>param('scope',c)}/>
    <label className="relative flex min-w-48 flex-1 items-center sm:max-w-72"><SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" aria-hidden="true"/><input aria-label={$t('optimizationWork.searchTasks')} {...inputProps} placeholder={$t('optimizationWork.searchTitleNumber')} className="w-full pl-8!"/></label>
    {/* One set of status choices: the scopes above (UI review 2026-10-22). The board's columns and the list's order
        already separate the statuses, so there is no separate status filter; an old ?status= link is ignored. */}
    <FilterSelect label={$t('optimizationWork.filterPlaybook')} value={playbookFilterValue(playbook,legacyPlaybook)} options={[['',$t('optimizationWork.playbooks')],...(legacyPlaybook&&playbook?[[playbookFilterValue(playbook,true),legacyPlaybookFilterLabel(playbookOptions,playbook)] as [string,string]]:[]),...playbookOptions.map(o=>[o.value,o.label] as [string,string])]} onChange={v=>param('playbookName',playbookOptions.find(o=>o.value===v)?.name||'')}/>
    {!waiting&&<FilterSelect label={$t('optimizationWork.filterOwner')} value={owner} options={[['',$t('optimizationWork.owner')],...uniq(tasks.map(ownerName)).map(n=>[n,n] as [string,string])]} onChange={v=>param('owner',v)}/>}
    {agents?.options?.length?<FilterSelect label={$t('optimizationWork.filterAgent')} value={agentFilter} options={[['',$t('optimizationWork.anyAgent')],...agents.options.map(a=>[a.id,a.name] as [string,string]),[UNASSIGNED,$t('taskAgents.unassigned')]]} onChange={v=>param('agent',v)}/>:null}
-   <div className="ml-auto inline-flex overflow-hidden rounded-md border" role="group" aria-label={$t('optimizationWork.view')}>{([['',$t('optimizationWork.list'),ListIcon],['board',$t('optimizationWork.board'),KanbanIcon],['agent',$t('optimizationWork.byAgent'),BotIcon]] as const).map(([k,label,Icon])=>{const off=(closed||done)&&k!=='',on=k===(board?'board':byAgent?'agent':'');return <button key={label} type="button" aria-label={label} title={off?$t('optimizationWork.finishedClosedTasksShownList'):label} disabled={off} aria-pressed={on} onClick={()=>{saveView(k);param('view',k);}} className={cn('inline-flex size-8 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40',on&&'bg-muted text-foreground')}><Icon className="size-4"/></button>;})}</div>
+   <div className="ml-auto inline-flex overflow-hidden rounded-md border" role="group" aria-label={$t('optimizationWork.view')}>{([['',$t('optimizationWork.list'),ListIcon],['board',$t('optimizationWork.board'),KanbanIcon],['agent',$t('optimizationWork.byAgent'),BotIcon]] as const).map(([k,label,Icon])=>{const off=(closed||done||snoozed)&&k!=='',on=k===(board?'board':byAgent?'agent':'');return <button key={label} type="button" aria-label={label} title={off?$t('optimizationWork.finishedClosedTasksShownList'):label} disabled={off} aria-pressed={on} onClick={()=>{saveView(k);param('view',k);}} className={cn('inline-flex size-8 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40',on&&'bg-muted text-foreground')}><Icon className="size-4"/></button>;})}</div>
   </div>
-  {!closed&&!done&&tasks.length>0&&<RuntimeNotice/>}
+  {!closed&&!done&&!snoozed&&tasks.length>0&&<RuntimeNotice/>}
   {waiting&&<p role='status' className='text-sm text-muted-foreground'>{$t(isAdmin?'optimizationWork.waitingAdminScope':'optimizationWork.waitingMemberScope')}</p>}
-  {loading?<ListSkeleton rows={6} label={$t('common.loadingTasks')}/>:byAgent?<AgentBoard tasks={rows} agents={agents} onOpen={id=>navigate('/actions/'+id)}/>:board?<WorkBoard tasks={rows} busy={busy} list={false} agents={agents} onMove={(t,s,before)=>void move(t as Task,s,before)} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>
-   :rows.length?<TaskTable tasks={rows} closed={closed} agents={agents} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>:null}
-  {!loading&&!tasks.length?<Empty className="min-h-48 border"><EmptyHeader><EmptyTitle>{$t('manualTask.emptyTitle')}</EmptyTitle><EmptyDescription>{$t('manualTask.createHint')}</EmptyDescription></EmptyHeader><EmptyContent><Button onClick={()=>void newTask()}>{$t('manualTask.newTask')}</Button></EmptyContent></Empty>:!loading&&!rows.length&&!board&&!byAgent&&<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{closed?$t('optimizationWork.noClosedTasks'):done?$t('optimizationWork.noFinishedTasksYet'):q||playbook||(!waiting&&owner)||agentFilter?$t('optimizationWork.noMatchingTasksTryAdjusting'):waiting?$t('optimizationWork.noWaitingTasks'):$t('optimizationWork.noTasksYetTasksCreated')}</p>}
+  {loading?<ListSkeleton rows={6} label={$t('common.loadingTasks')}/>:byAgent?<AgentBoard tasks={rows} agents={agents} onOpen={id=>navigate('/actions/'+id)}/>:board?<WorkBoard tasks={rows} busy={busy} list={false} agents={agents} olderDone={olderDone} onOlderDone={()=>param('scope','done')} onMove={(t,s,before)=>void move(t as Task,s,before)} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>
+   :rows.length?<TaskTable tasks={rows} closed={closed} snoozed={snoozed} agents={agents} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>:null}
+  {!loading&&!tasks.length?<Empty className="min-h-48 border"><EmptyHeader><EmptyTitle>{$t('manualTask.emptyTitle')}</EmptyTitle><EmptyDescription>{$t('manualTask.createHint')}</EmptyDescription></EmptyHeader><EmptyContent><Button onClick={()=>void newTask()}>{$t('manualTask.newTask')}</Button></EmptyContent></Empty>:!loading&&!rows.length&&!board&&!byAgent&&<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{closed?$t('optimizationWork.noClosedTasks'):done?$t('optimizationWork.noFinishedTasksYet'):snoozed&&!q&&!playbook&&!owner&&!agentFilter?$t('optimizationWork.noSnoozedTasks'):q||playbook||(!waiting&&owner)||agentFilter?$t('optimizationWork.noMatchingTasksTryAdjusting'):waiting?$t('optimizationWork.noWaitingTasks'):$t('optimizationWork.noTasksYetTasksCreated')}</p>}
   <Outlet/>
  </PageContainer>;
 }

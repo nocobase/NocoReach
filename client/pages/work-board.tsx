@@ -17,6 +17,8 @@ import {WithInfo} from '#components/reach/info-tip';
 import {help} from './glossary';
 import {localizeWorkSnapshots} from './playbook-snapshot';
 import {stageName} from './playbook-model';
+import {EMPTY} from '#lib/format';
+import {snoozeListDay} from './task-detail/snooze-days';
 import {useMe} from './me';
 // A task someone else owns: a 成员 can open and read it, but not drag, move or close it (its owner and 管理员 can; 2026-10-09).
 function useEditable(){const {can}=useMe();return (t:WorkCard)=>can(t.evidence?.work?.humanOwnerId||t.evidence?.createdBy?.id);}
@@ -50,7 +52,7 @@ function Menu({t,busy,moves,onMove,onAction}:{t:WorkCard;busy?:boolean;moves?:{c
 }
 // Board: four columns (待处理 · 进行中 · 待确认 · 已完成) of current tasks; drag or use the card menu to move. Moving never
 // starts AI or publishes, and closing is only in the menu (dragging must not stop a running executor).
-export function WorkBoard({tasks:visible,busy,list,agents,onMove,onOpen,onAction}:{tasks:WorkCard[];busy:boolean;list:boolean;agents?:AgentStatus;onMove:(task:WorkCard,state:BoardState,beforeId?:number)=>void;onOpen:(id:number)=>void;onAction?:Action}):ReactElement{
+export function WorkBoard({tasks:visible,busy,list,agents,onMove,onOpen,onAction,olderDone=0,onOlderDone}:{tasks:WorkCard[];busy:boolean;list:boolean;agents?:AgentStatus;onMove:(task:WorkCard,state:BoardState,beforeId?:number)=>void;onOpen:(id:number)=>void;onAction?:Action;/** Finished tasks the Done column leaves to the list (board-done.ts), and the way there. */olderDone?:number;onOlderDone?:()=>void}):ReactElement{
  const [drag,setDrag]=useState<number|null>(null),[over,setOver]=useState(''),editable=useEditable();
  const state=(t:WorkCard)=>workState(t.evidence?.work,t.status);
  function move(t:WorkCard,target:BoardState,beforeId?:number){setDrag(null);setOver('');onMove(t,target,beforeId);}
@@ -72,18 +74,22 @@ export function WorkBoard({tasks:visible,busy,list,agents,onMove,onOpen,onAction
    onDragOver={e=>{if(drag!==null&&!busy){e.preventDefault();setOver(key);}}} onDrop={e=>{e.preventDefault();drop(key);}}>
    <header className="flex items-center gap-2 px-1 py-1 text-sm font-medium"><span aria-hidden="true" className={cn('size-2 rounded-full',dot[key])}/><h2 className="m-0 text-sm font-medium">{getWorkColumns()[key]}</h2><span className="text-xs font-normal text-muted-foreground tabular-nums">{cards.length}</span></header>
    {cards.map(card)}{!cards.length&&<p className="px-1 py-4 text-center text-xs text-muted-foreground">{$t('workBoard.noTasks')}</p>}
+   {key==='done'&&olderDone>0&&onOlderDone&&<button type='button' className='self-start px-1 py-1 text-left text-xs text-muted-foreground hover:text-foreground hover:underline' onClick={onOlderDone}>{$t('workBoard.olderDone',{0:olderDone})}</button>}
   </section>;})}</div>;
 }
 // Table: one row per task, the row opens the task; 关闭任务 / 重新打开 in the row menu. Closed tasks show where they stood.
 export function TaskTable({
   tasks,
   closed = false,
+  snoozed = false,
   agents,
   onOpen,
   onAction,
 }: {
   tasks: WorkCard[];
   closed?: boolean;
+  /** Snoozed (2026-10-28): what each waits for and the day it comes back, in place of its status and current step. */
+  snoozed?: boolean;
   agents?: AgentStatus;
   onOpen: (id: number) => void;
   onAction?: Action;
@@ -91,7 +97,12 @@ export function TaskTable({
   const editable = useEditable();
   // Keep all columns on wide containers; task-table.css prioritizes the title and actions below that.
   return (
-    <div className='nr-task-table relative overflow-x-auto rounded-lg border bg-card'>
+    <div
+      className={cn(
+        'nr-task-table relative overflow-x-auto rounded-lg border bg-card',
+        snoozed && 'nr-task-table-snoozed',
+      )}
+    >
       <table
         className='w-full table-fixed border-collapse text-sm'
         aria-label={$t('workBoard.taskList')}
@@ -99,8 +110,8 @@ export function TaskTable({
         <colgroup>
           <col className='w-16' />
           <col />
-          <col className='w-32' />
-          <col className='w-56' />
+          <col className={snoozed ? 'w-56' : 'w-32'} />
+          <col className={snoozed ? 'w-32' : 'w-56'} />
           <col className='w-40' />
           <col className='w-44' />
           <col className='w-24' />
@@ -111,8 +122,12 @@ export function TaskTable({
             {[
               $t('common.identifier'),
               $t('common.title'),
-              $t('common.status'),
-              closed ? $t('workBoard.whenClosed') : $t('workBoard.currentStep'),
+              snoozed ? $t('taskSnooze.reason') : $t('common.status'),
+              snoozed
+                ? $t('taskSnooze.until')
+                : closed
+                  ? $t('workBoard.whenClosed')
+                  : $t('workBoard.currentStep'),
               $t('common.owner'),
               $t('common.executor'),
               $t('workBoard.updated'),
@@ -163,18 +178,33 @@ export function TaskTable({
                   </button>
                   <FoundBy source={taskSource(t)} className='mt-0.5' />
                 </td>
-                <td className='px-3 py-2.5'>
-                  <StatusTag t={t} />
-                </td>
-                <td className='truncate px-3 py-2.5'>
-                  {isClosed(w) ? (
-                    <span className='text-muted-foreground'>
-                      {closedWhen(w)}
-                    </span>
-                  ) : (
-                    <StepCell w={w} />
-                  )}
-                </td>
+                {snoozed && w?.snooze ? (
+                  <>
+                    <td className='px-3 py-2.5'>
+                      <span className='line-clamp-2 break-words whitespace-normal'>
+                        {w.snooze.reason || EMPTY}
+                      </span>
+                    </td>
+                    <td className='px-3 py-2.5 whitespace-nowrap tabular-nums'>
+                      {snoozeListDay(w.snooze.day)}
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className='px-3 py-2.5'>
+                      <StatusTag t={t} />
+                    </td>
+                    <td className='truncate px-3 py-2.5'>
+                      {isClosed(w) ? (
+                        <span className='text-muted-foreground'>
+                          {closedWhen(w)}
+                        </span>
+                      ) : (
+                        <StepCell w={w} />
+                      )}
+                    </td>
+                  </>
+                )}
                 <td className='px-3 py-2.5'>
                   <span className='flex min-w-0 items-center gap-2'>
                     <Avatar name={ownerOf(t)} />
