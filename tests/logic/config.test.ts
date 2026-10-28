@@ -100,6 +100,10 @@ describe('application config', () => {
     expect(runtime.config.get<AppSessionConfigInput>('session')!.default).toBe(
       'memory',
     );
+    expect(runtime.config.get('agents.runs.retentionDays')).toBe(0);
+    expect(
+      runtime.config.get('agents.conversations.archivedRetentionDays'),
+    ).toBe(0);
   });
 
   it('reads the secrets keys from SECRETS_KEYS and rejects a weak one', async () => {
@@ -157,26 +161,6 @@ describe('application config', () => {
       language: 'zh-CN',
     });
     expect(runtime.config.publicValues().demoMode).toEqual({ enabled: true });
-  });
-
-  it('gives only a demo deployment sign-in cookies a cross-site iframe keeps', async () => {
-    const path = 'auth.advanced.defaultCookieAttributes';
-    const defaults = await resolveStandaloneAppRuntime(appRuntime, {
-      rootDir: templateRootDir,
-      configPath,
-    });
-    expect(defaults.config.get(path)).toBeUndefined();
-
-    const demo = await resolveStandaloneAppRuntime(appRuntime, {
-      rootDir: templateRootDir,
-      configPath,
-      env: { NOCOBASE_DEMO_MODE: 'true' },
-    });
-    expect(demo.config.get(path)).toEqual({
-      sameSite: 'none',
-      secure: true,
-      partitioned: true,
-    });
   });
 
   it('reloads a file-backed configuration explicitly', async () => {

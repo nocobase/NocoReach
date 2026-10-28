@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
-import { ApiClientError, useApiClient } from '@nocobase/app-client';
+import { ApiClientError } from '@nocobase/app-client';
 import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { useRunnerOptions } from '@nocobase/app-plugin-agents/client/kit';
 import {
@@ -8,9 +8,8 @@ import {
   runtimesRoute,
 } from '@nocobase/app-plugin-agents/client/routes';
 import type { ModelRef } from '@nocobase/app-plugin-agents/shared/models';
-import type { AgentView } from '@nocobase/app-plugin-agents/shared/agents';
 import { Check } from 'lucide-react';
-import { $t, $legacyText, getCurrentLocale, useMessageState } from '#i18n';
+import { $t, $legacyText, useMessageState } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { formatDateTime } from '#lib/format';
 import { Tag } from '#components/reach/tag';
@@ -104,10 +103,6 @@ type Row = {
   action?: Action;
 };
 
-const settings = (id: string, action: string) => ({
-  resource: { type: 'settings', id },
-  action,
-});
 const TOOL_NAMES: Record<string, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
@@ -173,7 +168,6 @@ function healthText(health: Extract<AgentHealth, { state: 'attention' }>) {
 export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
   const { project } = useProject();
   const { search } = useLocation();
-  const client = useApiClient();
   const onlineApi = useOnlineApi();
   const runners = useRunnerOptions();
   const [inner, setInner] = useState(0);
@@ -182,7 +176,6 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
   const online = useOnlineResource<OnlineAgent[]>('definitions', refresh);
   const modelsPage = useCan(routeAccess(modelsRoute));
   const runtimesPage = useCan(routeAccess(runtimesRoute));
-  const manageAgents = useCan(settings('agents.agents', 'manage'));
   const { can: canManageChat } = useBusinessAccess('nrOnline.manage');
   const { can: canSetModel } = useBusinessAccess('nrOnlineAI.setModel');
   const [dialog, setDialog] = useState<'analysis' | 'execution' | null>(null);
@@ -193,7 +186,6 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
   const [status, setStatus] = useState<Status>();
   const [statusFailed, setStatusFailed] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisStatus | null>();
-  const [discovered, setDiscovered] = useState<AgentView[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useMessageState('');
   const projectId = project?.id;
@@ -233,24 +225,6 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
     return () => controller.abort();
   }, [projectId, refresh]);
 
-  // Agents a runtime reported that nobody has enabled yet. Reading them needs the agents grant; without it there is
-  // nothing to offer, so a failure leaves the list empty.
-  useEffect(() => {
-    if (!manageAgents.can) return;
-    let alive = true;
-    void client
-      .request<{ data: AgentView[] }>({ path: 'agents' })
-      .then((answer) => {
-        if (alive) setDiscovered(answer.data || []);
-      })
-      .catch(() => {
-        if (alive) setDiscovered([]);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [client, manageAgents.can, refresh]);
-
   const run = useCallback(
     async (work: () => Promise<void>) => {
       setBusy(true);
@@ -279,22 +253,6 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
         agentId,
       },
     });
-  const enableAndDefault = async (agent: AgentView) => {
-    const zh = getCurrentLocale().startsWith('zh');
-    await client.request({
-      path: `agents/${encodeURIComponent(agent.id)}`,
-      method: 'PATCH',
-      json: {
-        expectedRevision: agent.revision,
-        enabled: true,
-        description:
-          agent.description ||
-          (zh ? agent.suggestion?.zh : agent.suggestion?.en) ||
-          $t('agentRoles.defaultGoodAt'),
-      },
-    });
-    await saveDefault(agent.id);
-  };
   const turnOn = (agent: OnlineAgentDefinition) =>
     run(async () => {
       await onlineApi(
@@ -443,13 +401,6 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
     (agent) =>
       agent.online && agent.id !== status?.agentId && !sameTool(agent.tool),
   );
-  const candidate = discovered.find(
-    (agent) =>
-      agent.status === 'pending' &&
-      agent.canEdit &&
-      agent.runners.team + agent.runners.mine > 0 &&
-      !sameTool(agent.modelEntries?.[0]?.tool),
-  );
   // What the computer lacks (a tool, a sign-in, its setup) fails every agent on it alike, so no switch is offered
   // (2026-10-24 user decision); the row keeps its Settings button.
   const shared =
@@ -463,11 +414,6 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
           ? $t('agentRoles.switchTo', { 0: onlineOption.name })
           : $t('agentRoles.setDefault', { 0: onlineOption.name }),
         run: () => run(async () => void (await saveDefault(onlineOption.id))),
-      };
-    if (candidate && canSaveDefault)
-      return {
-        label: $t('agentRoles.enableDefault', { 0: candidate.name }),
-        run: () => run(() => enableAndDefault(candidate)),
       };
     return undefined;
   };
@@ -552,7 +498,7 @@ export function AgentRoles({ refresh: outer = 0 }: { refresh?: number }) {
         : onlineOption
           ? $t('agentRoles.noDefault')
           : $t('agentRoles.noEnabled'),
-      action: fix() || change,
+      action: fix() || change || viewRuntimes,
     };
   };
   const executionRow: Row = {

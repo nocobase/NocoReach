@@ -45,7 +45,6 @@ const state = vi.hoisted(() => ({
     model: 'deepseek-v4.1-flash' as string | null,
     analysis: { last: { at: '2026-10-21T00:00:00Z', ok: true } } as unknown,
   },
-  discovered: [] as unknown[],
   action: vi.fn(),
   request: vi.fn(),
   onlineApi: vi.fn(),
@@ -133,7 +132,6 @@ beforeEach(() => {
     model: 'deepseek-v4.1-flash',
     analysis: { last: { at: '2026-10-21T00:00:00Z', ok: true } },
   };
-  state.discovered = [];
   state.action.mockReset();
   state.action.mockImplementation((resource: string, action: string) =>
     Promise.resolve(
@@ -145,9 +143,7 @@ beforeEach(() => {
     ),
   );
   state.request.mockReset();
-  state.request.mockImplementation(() =>
-    Promise.resolve({ data: state.discovered }),
-  );
+  state.request.mockImplementation(() => Promise.resolve({ data: [] }));
   state.onlineApi.mockReset();
   state.onlineApi.mockResolvedValue({});
 });
@@ -381,40 +377,16 @@ test('an offline default is replaced by an enabled agent that is online', async 
   );
 });
 
-test('a discovered agent on an online runtime is enabled and made the default in one step', async () => {
-  const user = userEvent.setup();
-  state.status = { revision: 3, agentId: null, options: [], runners: null };
-  state.discovered = [
-    {
-      id: 'claude',
-      name: 'Claude Code · Opus',
-      status: 'pending',
-      canEdit: true,
-      revision: 7,
-      description: null,
-      suggestion: { en: 'Strong writer.', zh: '擅长写作。' },
-      runners: { team: 1, personal: 0, mine: 0, names: ['mac'] },
-    },
-  ];
+test('opens runtime configuration when no enabled agent is available', async () => {
+  state.status.agentId = null;
+  state.status.options = [];
   mount();
-  const button = await screen.findAllByRole('button', {
-    name: '启用 Claude Code · Opus 并设为默认',
-  });
-  await user.click(button[0]);
   await waitFor(() =>
-    expect(state.request).toHaveBeenCalledWith({
-      path: 'agents/claude',
-      method: 'PATCH',
-      json: { expectedRevision: 7, enabled: true, description: '擅长写作。' },
-    }),
+    expect(
+      within(row('执行任务')).getByRole('button', { name: '查看运行环境' }),
+    ).toHaveAttribute('href', '/agents/runtimes'),
   );
-  expect(state.action).toHaveBeenCalledWith(
-    'nrAgent',
-    'saveDefault',
-    expect.objectContaining({
-      body: { projectId: '1', revision: 3, agentId: 'claude' },
-    }),
-  );
+  expect(state.request).not.toHaveBeenCalled();
 });
 
 test('with no runtime yet, tasks and the setup point to adding one', async () => {

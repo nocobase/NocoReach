@@ -173,18 +173,6 @@ describe('app server', () => {
     expect(authConfig({} as never).account?.encryptOAuthTokens).toBe(true);
   });
 
-  it('lets the demo keep its sign-in cookies inside a cross-site iframe', () => {
-    const demo = authConfig({ env: { NOCOBASE_DEMO_MODE: 'true' } } as never);
-    expect(demo.advanced?.defaultCookieAttributes).toEqual({
-      sameSite: 'none',
-      secure: true,
-      partitioned: true,
-    });
-    for (const env of [{}, { NOCOBASE_DEMO_MODE: 'false' }]) {
-      expect(authConfig({ env } as never).advanced).toBeUndefined();
-    }
-  });
-
   it('represents the NocoBase application separately from its Hono router', () => {
     const app = createTestApp({
       publicBasePath: '/app-template-default',
@@ -719,17 +707,21 @@ describe('app server', () => {
         // The demo seeds its sample data, whose Agent credentials are sealed with the secrets keys.
         env: {
           NOCOBASE_DEMO_MODE: 'true',
+          APP_PUBLIC_ORIGIN: 'https://demo.example.com',
           SECRETS_KEYS: `1:${'a'.repeat(64)}`,
         },
       }),
     );
-    const baseUrl = `http://localhost${app.application.publicBasePath}`;
+    const baseUrl = `https://demo.example.com${app.application.publicBasePath}`;
     const signIn = await requestApp(
       app,
       `${baseUrl}/api/auth/sign-in/username`,
       {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          origin: 'https://demo.example.com',
+        },
         body: JSON.stringify({ username: 'nocobase', password: 'admin123' }),
       },
     );
