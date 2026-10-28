@@ -5,6 +5,7 @@ import { ACME_CASES } from './acme-cases.js';
 import { CRM_CASES } from './crm-cases.js';
 import { ACME_NOTES, CRM_NOTES } from './supporting-cases.js';
 import { localCase, type LocalCase } from './case-study.js';
+import { FIRST_DRAFTS } from './case-revisions.js';
 
 export interface EditorialStory {
   key: string;
@@ -27,6 +28,7 @@ export type DemoTaskStory = DemoStory &
   Pick<EditorialStory, 'owner' | 'age'> & {
     caseStudy: LocalCase;
     originalBrief: string;
+    previousDraft?: string;
   };
 
 export function localizeStories(
@@ -96,6 +98,7 @@ export function localizeStories(
       brief: taskBrief,
       originalBrief: brief[lang],
       caseStudy: study,
+      previousDraft: FIRST_DRAFTS[story.key]?.[lang],
       comments: comments.map(
         ([person, text]) =>
           `${people[person].name} · ${people[person].title}: ${text[lang]}`,

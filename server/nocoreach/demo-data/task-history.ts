@@ -35,16 +35,7 @@ export function taskHistory(
   const retry =
     ['acme-dependencies', 'crm-import'].includes(story.key) ||
     (Boolean(story.age) && context.clock.sample(`retry:${story.key}`) > 0.55);
-  const revised = [
-    'acme-dependencies',
-    'acme-guest-access',
-    'acme-weekly-report',
-    'acme-handover',
-    'crm-import',
-    'crm-pipeline',
-    'crm-permissions',
-    'crm-contact-form',
-  ].includes(story.key);
+  const revised = Boolean(story.previousDraft);
   const study = story.caseStudy;
   const failure =
     words(
@@ -275,7 +266,7 @@ export function taskHistory(
       id: `${final.id}-v1`,
       version: 1,
       createdAt: at(-2),
-      content: `${content.notice}# ${story.title}\n\n${study.decision}\n\n${study.document.split('\n\n').slice(0, 5).join('\n\n')}\n\n## ${words('本版尚未覆盖', 'Not covered in this version')}\n\n${study.checks}`,
+      content: `${content.notice}# ${story.title}\n\n${story.previousDraft!}`,
       rejectedAt: at(-1.5),
       report: final.report ? { ...final.report, asOf: at(-2) } : undefined,
     };
