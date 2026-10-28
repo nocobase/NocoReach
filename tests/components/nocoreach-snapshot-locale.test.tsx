@@ -243,6 +243,19 @@ test('canonical-identical legacy snapshots use display-only compatibility withou
   expect(data.work.flow).not.toHaveProperty('system');
 });
 
+// 2026-10-28: a built-in's next steps change over time (Keyword research gained Write blog post); a snapshot taken
+// before is still the built-in's wording.
+test('a legacy snapshot with an older list of next steps is still the built-in', () => {
+  setDictionary(english);
+  const data = task('change-research');
+  delete data.work.flow!.system;
+  delete data.work.flow!.edited;
+  delete data.work.playbook!.system;
+  delete data.work.playbook!.edited;
+  data.work.playbook!.next = [];
+  expect(workTypeLabel(data.work)).toBe('Change investigation · Analysis');
+});
+
 test('legacy compatibility compares every available field and rejects incomplete or changed pairs', () => {
   setDictionary(english);
   const legacy = () => {
@@ -271,9 +284,6 @@ test('legacy compatibility compares every available field and rejects incomplete
     },
     (d) => {
       d.work.playbook!.kind = 'build';
-    },
-    (d) => {
-      d.work.playbook!.next = [];
     },
     (d) => {
       d.work.flow!.stages[0].key = 'renamed';

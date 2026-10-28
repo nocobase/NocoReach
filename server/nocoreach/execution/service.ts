@@ -724,7 +724,10 @@ export class TaskService {
             if (v.next) {
               // Hand-over: the accepted document becomes the brief of a new task with the next playbook, started once this
               // approval is committed (startHandedOver).
-              if (w.stage !== 'done' || w.playbook?.kind !== 'plan' || !w.playbook.next.includes(v.next) || w.nextTaskId) return fail(systemMessageText('taskExecution.stepCannotHandedAnotherPlaybook'), 409);
+              // The playbook's next steps as they are now, so a task started before they changed offers the current ones
+              // (2026-10-28: Keyword research gained Write blog post); the start's copy once the playbook is gone.
+              const nextSteps = (await this.playbooks.list(project, tx)).playbooks.find(p => p.id === w.playbook?.id)?.next ?? w.playbook?.next ?? [];
+              if (w.stage !== 'done' || w.playbook?.kind !== 'plan' || !nextSteps.includes(v.next) || w.nextTaskId) return fail(systemMessageText('taskExecution.stepCannotHandedAnotherPlaybook'), 409);
               const p = await this.playbooks.get(project, v.next, tx), accepted = w.results[index - 1]!;
               // Titled as every handed-off task, by its playbook and the subject this task was about (task-title.ts).
               const chain = { subject: task.evidence?.autoTitle?.subject || task.title, ...(task.evidence?.autoTitle?.locale ? { locale: task.evidence.autoTitle.locale } : {}) };

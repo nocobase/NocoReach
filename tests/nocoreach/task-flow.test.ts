@@ -297,13 +297,13 @@ test('playbooks: built-in ones are edited in place and restored; copies and new 
  r=await f.s.playbooks.restore('1',{playbookId:'new-doc',revision:1});assert.equal(r.playbooks.find(p=>p.id==='new-doc').edited,undefined);assert.match(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,/新建页面/);
  await assert.rejects(f.s.playbooks.restore('1',{playbookId:'custom-x',revision:2}),e=>e.status===409);
  const copied=await f.s.playbooks.copy('1',{playbookId:'content-outline',revision:2});const id=copied.playbook.id;
- assert.equal(copied.playbook.name,'内容选题与大纲（副本）');assert.deepEqual(copied.playbook.next,['new-doc','blog-post']);assert.equal(copied.playbook.system,undefined);assert.equal(copied.playbook.category,'create');
+ assert.equal(copied.playbook.name,'内容选题与大纲（副本）');assert.deepEqual(copied.playbook.next,['blog-post','new-doc']);assert.equal(copied.playbook.system,undefined);assert.equal(copied.playbook.category,'create');
  await assert.rejects(f.s.playbooks.copy('1',{playbookId:'content-outline',revision:2}),e=>e.status===409);
  let d=await f.command('startTask',{playbookId:id});assert.deepEqual(d.work.flow.stages.map(s=>s.kind),['agent','review']);
  const builder=await f.s.playbooks.save('1',{revision:3,name:'只改英文',category:'optimize',steps:[{kind:'change',instruction:'English only'}]});
  const saved=await f.s.playbooks.save('1',{playbookId:id,revision:4,name:'选题',category:'create',steps:[{kind:'analyze',instruction:'outline'}],next:[builder.playbook.id]});
  assert.equal(saved.playbook.version,2);assert.deepEqual(saved.playbook.next,[builder.playbook.id]);
- d=await f.view();assert.deepEqual(d.work.playbook.next,['new-doc','blog-post'],'running task keeps the playbook it started with');
+ d=await f.view();assert.deepEqual(d.work.playbook.next,['blog-post','new-doc'],'running task keeps the playbook it started with');
  const removed=await f.s.playbooks.remove('1',{playbookId:builder.playbook.id,revision:5});
  assert.deepEqual(removed.playbooks.find(p=>p.id===id).next,[],'removing a playbook clears next-step references');
  // Playbooks saved before steps existed are read as steps.
@@ -947,4 +947,36 @@ test('an automatic title follows the playbook the task starts with, and a writte
   const w = await written.command('startTask', { playbookId: 'keyword-research' });
   assert.equal(written.state.nrTasks[0].title, 'Synthetic task');
   assert.equal(w.work.history.some(e => e.action === 'retitle'), false);
+});
+
+// 2026-10-28 user report (T-49): a Keyword research task started before Write blog post was among its next steps could
+// not hand on to it. The next steps are the playbook's as they are now; the start's copy once the playbook is gone.
+test('a research task hands on to its playbook\'s current next steps, or to the start\'s once the playbook is gone', async () => {
+  const run = async (playbookId, snapshotNext) => {
+    const f = fixture();
+    await connectAgent(f);
+    await f.command('startTask', { playbookId });
+    f.state.nrTasks[0].evidence.work.playbook.next = snapshotNext;
+    const c = await claim(f);
+    await finish(f, { taskId: '1', runId: c.run.id, ok: true, content: 'keyword map' });
+    return f;
+  };
+  const f = await run('keyword-research', ['optimize-page', 'new-doc']);
+  let d = await f.view();
+  d = await f.command('approveStage', { stageKey: 'accept', artifactId: output(d).id, checked: ['facts'], next: 'blog-post' });
+  assert.equal(d.work.stage, 'done');
+  assert.equal(f.state.nrTasks.find(t => String(t.id) === d.work.nextTaskId).evidence.work.playbookId, 'blog-post');
+  // A copy removed after the start: its own list at the start decides.
+  const g = fixture();
+  await connectAgent(g);
+  const copy = (await g.s.playbooks.copy('1', { playbookId: 'keyword-research', revision: 0 })).playbook;
+  await g.command('startTask', { playbookId: copy.id });
+  g.state.nrTasks[0].evidence.work.playbook.next = ['new-doc'];
+  const c = await claim(g);
+  await finish(g, { taskId: '1', runId: c.run.id, ok: true, content: 'keyword map' });
+  await g.s.playbooks.remove('1', { playbookId: copy.id, revision: 1 });
+  d = await g.view();
+  await assert.rejects(g.command('approveStage', { stageKey: 'accept', artifactId: output(d).id, checked: ['facts'], next: 'blog-post' }), e => e.status === 409);
+  d = await g.command('approveStage', { stageKey: 'accept', artifactId: output(d).id, checked: ['facts'], next: 'new-doc' });
+  assert.ok(d.work.nextTaskId);
 });

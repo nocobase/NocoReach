@@ -1,6 +1,7 @@
 import { $t, $legacyText } from "#i18n";
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {playbookForActions} from '../../shared/opportunity-parts.js';
+import {SYSTEM_PLAYBOOKS} from '../../shared/playbook-catalog.js';
 // 做法 (SPEC §6.0), mirrored from plugins/connections/server/execution/playbook.ts and flow.ts.
 export type StageKind='agent'|'review'|'publish'|'release'|'observe';
 export type ChecklistItem={key:string;label:string;required:boolean};
@@ -28,6 +29,12 @@ export const withoutRepo=(s:Stage|undefined,stages:Stage[])=>s?.kind==='agent'&&
 // and custom playbooks keep their own words.
 export const localizePlaybook=(p:Playbook):Playbook=>p.system&&!p.edited?{...p,name:$legacyText(p.name),description:$legacyText(p.description),steps:p.steps.map(s=>({...s,name:$legacyText(s.name),...(s.instruction?{instruction:$legacyText(s.instruction)}:{}),...(s.checklist?{checklist:s.checklist.map(c=>({...c,label:$legacyText(c.label)}))}:{})}))}:p;
 // Keep stored responses in their original language. Translate only the display copy; an open editor keeps its own draft.
+// A playbook named by its id: from the project's list, else the built-in's own name while the list loads, never the
+// id itself (2026-10-28: Studio showed "Accept and start optimize-page" before the list arrived). Empty when unknown.
+export const playbookNameOf=(id:string,list?:{playbooks:{id:string;name:string}[]}):string=>{
+ const own=list?.playbooks.find(p=>p.id===id)?.name;if(own)return own;
+ const builtIn=SYSTEM_PLAYBOOKS.find(p=>p.id===id);return builtIn?$legacyText(builtIn.name):'';
+};
 export const localizePlaybookList = (list?: PlaybookList): PlaybookList | undefined => list && ({...list, playbooks:list.playbooks.map(localizePlaybook)});
 export async function playbookRequest<T>(action:'list'|'save'|'copy'|'remove'|'restore'|'draft',projectId:number|string,body:object={}):Promise<T>{return api.action<T>('nrPlaybooks',action,{method:'POST',body:{projectId:String(projectId),...body},unwrap:'data'});}
 

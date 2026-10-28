@@ -167,7 +167,7 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
     'research',
     systemMessageText('playbooks.compareContentCompetitorsSameTopic'),
     systemMessageText('playbooks.competitorComparisonInstruction'),
-    ['new-doc'],
+    ['new-doc', 'blog-post'],
     ['research-report', 'competitor-profiling', 'competitors'],
   ),
   doc(
@@ -176,7 +176,8 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
     'research',
     systemMessageText('playbooks.mapSearchDemandTopicWhich'),
     systemMessageText('playbooks.searchDemandInstruction'),
-    ['optimize-page', 'new-doc'],
+    // A blog post first, as the usual next step after keyword research (2026-10-28 user request).
+    ['blog-post', 'new-doc', 'optimize-page'],
     ['research-report', 'content-strategy', 'ai-seo', 'programmatic-seo'],
   ),
   doc(
@@ -206,7 +207,7 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
     'create',
     systemMessageText('playbooks.decideWhatWriteWhomWhere'),
     systemMessageText('playbooks.contentOutlineInstruction'),
-    ['new-doc', 'blog-post'],
+    ['blog-post', 'new-doc'],
     ['content-strategy', 'ai-seo'],
     systemMessageText('playbooks.writeOutline'),
   ),
