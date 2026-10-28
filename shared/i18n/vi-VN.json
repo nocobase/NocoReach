@@ -2669,6 +2669,7 @@
   "searchPerformance.changesNotCompared": "Chưa so sánh thay đổi",
   "syncPanel.pauseJob": "Tạm dừng tác vụ",
   "workBoard.noTasks": "Chưa có tác vụ",
+  "workBoard.olderDone": "{0} việc xong trước đó, xem trong danh sách →",
   "messages.noContentYet": "Chưa có nội dung",
   "strategy.noComparisonYet": "Chưa có so sánh",
   "strategy.noDataYet": "Chưa có dữ liệu",

@@ -2612,6 +2612,7 @@
   "searchPerformance.changesNotCompared": "Cambios sin comparar",
   "syncPanel.pauseJob": "Pausar tarea",
   "workBoard.noTasks": "No hay tareas",
+  "workBoard.olderDone": "{0} terminadas antes, en la lista →",
   "messages.noContentYet": "Aún no hay contenido",
   "strategy.noComparisonYet": "Aún no hay comparaciones",
   "strategy.noDataYet": "Aún no hay datos",
