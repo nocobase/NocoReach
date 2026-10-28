@@ -277,6 +277,8 @@ test('snoozed tasks have their own list, with what each waits for and its day, a
     expect(screen.getByRole('columnheader', { name: '延后到' })).toBeTruthy();
   } finally {
     tasks.splice(-2, 2);
+  }
+});
 
 // 2026-10-28 user request: the board's Done column shows what finished in the last 7 days; the rest is in the list.
 test('the board keeps recent finished tasks and opens the Done list for the older ones', async () => {

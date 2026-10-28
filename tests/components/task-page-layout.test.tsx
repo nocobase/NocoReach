@@ -1373,6 +1373,7 @@ test('a snoozed task says so first, keeps its card, and can be unsnoozed', async
   expect(commands).toEqual([
     expect.objectContaining({ command: 'unsnoozeTask' }),
   ]);
+});
 
 // 2026-10-28 user report (T-52): a message sent from Activity while a version waited for review only reached the next
 // run, and only Request changes made the Agent revise. Activity's message box is now where changes are asked for, and
