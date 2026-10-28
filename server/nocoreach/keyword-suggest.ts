@@ -131,13 +131,18 @@ function mergeDigs(digs){const out=[];for(const d of digs||[]){const same=out.fi
  return out;}
 // The one seed a keyword is counted for, so a seed's found and picked add up across seeds (2026-10-29: 9 seeds read 169
 // picks for 47 keywords): the seed itself, then the most specific seed it contains as a phrase (the one fewer of the
-// found keywords contain, then the one of more words, then the longer), then the seed whose lookup ranked it highest. A keyword only the
-// related-topics lookup or Search Console brought, matching no seed, has none.
+// found keywords contain, then the one of more words, then the longer), then the seed whose lookup ranked it highest.
+// A keyword only the related-topics lookup or Search Console brought, matching no seed, has none.
 const has=(keyword,seed)=>` ${keyword} `.includes(` ${seed} `);
-const spreadOf=(seeds,keywords)=>new Map(seeds.map(s=>[s,keywords.filter(k=>has(k,s)).length]));
-function ownerOf(keyword,seeds,from,rank={},spread=new Map()){if(seeds.includes(keyword))return keyword;
- const words=x=>x.split(' ').length,phrase=seeds.filter(s=>has(keyword,s)).sort((a,b)=>(spread.get(a)??0)-(spread.get(b)??0)||words(b)-words(a)||b.length-a.length)[0];if(phrase)return phrase;
- return seeds.filter(s=>from?.has?.(s)||from?.includes?.(s)).sort((a,b)=>(rank[a]??1e9)-(rank[b]??1e9)||seeds.indexOf(a)-seeds.indexOf(b))[0]||null;}
+const spreadOf=(seeds,keywords)=>({total:keywords.length,count:new Map(seeds.map(s=>[s,keywords.filter(k=>has(k,s)).length]))});
+function ownerOf(keyword,seeds,from,rank={},spread={total:0,count:new Map()}){if(seeds.includes(keyword))return keyword;
+ const n=s=>spread.count.get(s)??0,words=x=>x.split(' ').length,returned=s=>Boolean(from?.has?.(s)||from?.includes?.(s));
+ const specific=list=>list.slice().sort((a,b)=>n(a)-n(b)||words(b)-words(a)||b.length-a.length)[0],best=list=>list.slice().sort((a,b)=>(rank[a]??1e9)-(rank[b]??1e9)||seeds.indexOf(a)-seeds.indexOf(b))[0];
+ // A head term (a seed in over half of this run's found keywords) is in them by its breadth, not because its lookup brought them, so its phrase alone does not win.
+ const head=s=>spread.total>0&&n(s)>spread.total/2,contained=seeds.filter(s=>has(keyword,s)),phrase=contained.filter(s=>!head(s));
+ if(phrase.length)return specific(phrase);
+ if(contained.length)return best(seeds.filter(s=>returned(s)&&!contained.includes(s)))||specific(contained);
+ return best(seeds.filter(returned))||null;}
 const ownersOf=(seeds,pool)=>{const spread=spreadOf(seeds,[...pool.keys()]);return new Map([...pool.values()].map(c=>[c.keyword,ownerOf(c.keyword,seeds,c.from,c.rank,spread)]));};
 // Per seed: how many real keywords it brought back and how many of them the AI picked, each keyword counted once.
 const seedStatsOf=(seeds,pool,items)=>{const owner=ownersOf(seeds,pool);

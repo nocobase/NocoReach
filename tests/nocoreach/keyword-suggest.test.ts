@@ -374,3 +374,25 @@ test('a head-term seed does not take the keywords a more specific seed it shares
  assert.equal(seedOf('task board app'),'task board','both seeds are in as many found keywords: the one of more words');
  assert.deepEqual(['project management','kanban boards','board','task board'].map(x=>[by[x].found,by[x].picked]),[[3,3],[3,3],[0,0],[1,1]]);
 });
+
+test('a head term (in over half of the found keywords) does not win by its phrase: such a keyword goes to the other seed whose lookup ranked it highest, and stays with the head term only when no other seed returned it',async()=>{
+ global.fetch=async(url,init)=>{const path=String(url),body=JSON.parse(init.body)[0];
+  const items=path.includes('keyword_suggestions')?({
+   'project management':[kw('project management',20000),kw('project management software',6000),kw('project management templates',2400),kw('project management sprint guide',900)],
+   'project templates':[kw('project management templates',2400),kw('project templates',3000),kw('free project templates',800)],
+   'sprint planning':[kw('sprint planning',2000),kw('project management sprint guide',900)],
+  }[body.keyword]||[]):[];
+  return {ok:true,json:async()=>({status_code:20000,cost:0.01,tasks:[{status_code:20000,result:[{seed_keyword:body.keyword,items}]}]})};};
+ const curate=input=>'```json\n'+JSON.stringify({keywords:input.candidates.map(c=>({keyword:c.keyword,group:1,relevance:3,reason:'x'}))})+'\n```';
+ const seeds=['project management','project templates','sprint planning'];
+ const {s}=setup({seeds,curate});await finish(s,{});
+ const v=await s.view('1'),seedOf=k=>v.items.find(i=>i.keyword===k).seed,by=Object.fromEntries(v.seedStats.map(x=>[x.seed,x]));
+ // "project management" is in 4 of the 7 found keywords: a head term.
+ assert.equal(seedOf('project management templates'),'project templates','returned first by the specific seed');
+ assert.equal(seedOf('project management sprint guide'),'sprint planning','the other seed whose lookup returned it');
+ assert.equal(seedOf('project management software'),'project management','no other seed returned it: the head term keeps it');
+ assert.equal(seedOf('project management'),'project management','the seed itself');
+ assert.deepEqual(seeds.map(x=>[by[x].found,by[x].picked]),[[2,2],[3,3],[2,2]]);
+ assert.equal(v.seedStats.reduce((n,x)=>n+x.found,0),7,'found adds up to the keywords the seeds brought');
+ assert.equal(v.seedStats.reduce((n,x)=>n+x.picked,0),v.items.filter(i=>i.seed).length);
+});
