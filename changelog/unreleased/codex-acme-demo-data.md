@@ -11,4 +11,4 @@
 
 - Add dated watch lifecycles with measured starting/current values, varied deadlines, five completed observation outcomes and monthly opportunity handoffs in both products. Populate editorial task execution traces, retries, draft revisions and reviews through application-owned simulated run records. Record the verified rollout in `docs/DEPLOYMENT-acme-flow.md`.
 
-- Replace template-like task outputs with bilingual working documents, decision tables, exception paths and acceptance criteria. Connect Activity deliveries to every simulated artifact, preserve eight revision conversations, and keep page-change approval/release history visible.
+- Replace template-like task outputs with bilingual working documents, decision tables, exception paths and acceptance criteria. Connect Activity deliveries to every simulated artifact, preserve eight revision conversations, and keep page-change approval/release history visible. Author superseded drafts to match their review feedback and validate the dedicated demo after regeneration and restart; see `docs/DEPLOYMENT-acme-activity.md`.

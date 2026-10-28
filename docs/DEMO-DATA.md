@@ -58,4 +58,4 @@
 
 此文说明当前演示模式；旧版独立模拟集成的部署方式见 [模拟集成说明](MOCK-DATA.md)。
 
-本次流转记录与执行详情的发布、备份及检查结果见 [ACME 数据流转部署记录](DEPLOYMENT-acme-flow.md)；此前的全年数据扩充见 [全年历史部署记录](DEPLOYMENT-acme-history.md)。
+最新任务内容与 Activity 的发布、备份及验证见 [任务与 Activity 部署记录](DEPLOYMENT-acme-activity.md)；此前的观察流转见 [数据流转部署记录](DEPLOYMENT-acme-flow.md)，全年数据扩充见 [全年历史部署记录](DEPLOYMENT-acme-history.md)。
