@@ -1325,7 +1325,7 @@ test('languages: a new article in a primary chosen at start other than the first
 test('languages: an update edits the languages the article has with the primary changes, translates the one it lacks, and refuses a result without them', async () => {
   const f = await fixture();
   await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
-  let d = await f.command('startTask', {
+  await f.command('startTask', {
     playbookId: 'optimize-page',
     delivery: { locales: ['en', 'zh', 'ja'] },
   });
@@ -1346,7 +1346,7 @@ test('languages: an update edits the languages the article has with the primary 
       summary: 'New title',
     },
   });
-  d = await approveCurrent(f);
+  let d = await approveCurrent(f);
   // Chinese is there already: it is updated in place, and the approval says so.
   expect(
     d.work.history.filter((e) => e.action === 'approveStage').at(-1),
@@ -1407,9 +1407,9 @@ test('languages: an update edits the languages the article has with the primary 
     article: { locales: { zh: { title: '你好' } }, summary: 'No changes' },
   });
   d = await f.view();
-  expect(
-    review(d).article.changes.filter((c) => !c.startsWith('en.')),
-  ).toEqual([]);
+  expect(review(d).article.changes.filter((c) => !c.startsWith('en.'))).toEqual(
+    [],
+  );
   // Done again (the card's Update again): still an update in place.
   await f.command('requestStageChanges', {
     stageKey: d.work.flow.stages[d.work.stageIndex].key,
@@ -1452,7 +1452,7 @@ test('languages: an update edits the languages the article has with the primary 
     'zh.body',
     'zh.title',
   ]);
-  d = await approveCurrent(f);
+  await approveCurrent(f);
   expect(f.cms.state.rows.find((r) => r.slug === 'hello')).toMatchObject({
     title: 'Hello, world',
     description: 'Old summary',

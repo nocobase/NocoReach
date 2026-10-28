@@ -179,11 +179,7 @@ export function primaryOnly(primary: string, value: unknown) {
  * is to write. 2026-10-28 (T-53): a script failed and the Agent submitted the primary-only file an earlier run had left
  * in its workspace; the other languages were dropped without a word and the approved primary passed as the translation.
  */
-export function writesNone(
-  write: string[],
-  primary: string,
-  value: unknown,
-) {
+export function writesNone(write: string[], primary: string, value: unknown) {
   const locales = (value as { locales?: unknown } | null)?.locales;
   if (!locales || typeof locales !== 'object') return undefined;
   const written = Object.keys(locales);

@@ -306,30 +306,61 @@ export function ViewSwitch({
   );
 }
 
-/** Which languages the article lacks: none written yet for a new article, none at all for a changed one. */
+/**
+ * Which languages the article lacks: none written yet for a new article, none at all for a changed one. While the
+ * primary waits for approval, which languages follow and how; once they are written, the ones this version left as
+ * they were (`unchanged`, for the version under review only).
+ */
 export function MissingLanguages({
   languages,
+  unchanged = false,
 }: {
   languages: ArticleLanguages;
+  unchanged?: boolean;
 }) {
-  const { locales, missing, isNew, pending } = languages;
+  const { locales, missing, isNew, pending, pendingUpdate } = languages;
   const names = (list: string[]) =>
     joinNames(list.map((l) => localeName(l, getCurrentLocale())));
-  if (pending.length)
+  if (pending.length) {
+    const translated = pending.filter((l) => !pendingUpdate.includes(l)),
+      primary = names(locales.slice(0, 1));
     return (
       <p className={text.muted}>
-        {$t('articleTask.translateAfter', {
-          0: names(pending),
-          1: names(locales.slice(0, 1)),
-        })}
+        {!pendingUpdate.length
+          ? $t('articleTask.translateAfter', { 0: names(pending), 1: primary })
+          : translated.length
+            ? $t('articleTask.updateTranslateAfter', {
+                0: names(pendingUpdate),
+                1: primary,
+                2: names(translated),
+              })
+            : $t('articleTask.updateAfter', {
+                0: names(pendingUpdate),
+                1: primary,
+              })}
       </p>
     );
-  return missing.length > 0 ? (
-    <p className={text.muted}>
-      {isNew
-        ? $t('articleTask.onlyWrote', { 0: names(locales) })
-        : $t('articleTask.noVersion', { 0: names(missing) })}
-    </p>
+  }
+  // Every one of them unchanged is the card's title instead.
+  const left =
+    unchanged && languages.unchanged.length < languages.written.length
+      ? languages.unchanged
+      : [];
+  return missing.length > 0 || left.length > 0 ? (
+    <>
+      {missing.length > 0 && (
+        <p className={text.muted}>
+          {isNew
+            ? $t('articleTask.onlyWrote', { 0: names(locales) })
+            : $t('articleTask.noVersion', { 0: names(missing) })}
+        </p>
+      )}
+      {left.length > 0 && (
+        <p className={text.muted}>
+          {$t('articleTask.languagesNotChanged', { 0: names(left) })}
+        </p>
+      )}
+    </>
   ) : null;
 }
 
@@ -406,7 +437,7 @@ export function ArticleReview({
 }) {
   const languages = articleLanguages(data, a);
   const { target, base, locales } = languages;
-  const [own, setOwn] = useState(locales.find(languages.changed) || locales[0]);
+  const [own, setOwn] = useState(languages.first);
   const tab = asked && locales.includes(asked) ? asked : own;
   const setTab = (l: string) => {
     setOwn(l);
@@ -466,7 +497,7 @@ export function ArticleReview({
           )}
         </div>
       </div>
-      <MissingLanguages languages={languages} />
+      <MissingLanguages languages={languages} unchanged={!settled} />
       <ArticleLanguage
         data={data}
         article={a}
