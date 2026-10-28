@@ -2612,6 +2612,7 @@
   "searchPerformance.changesNotCompared": "暫不比較變化",
   "syncPanel.pauseJob": "暫停任務",
   "workBoard.noTasks": "沒有任務",
+  "workBoard.olderDone": "更早完成的 {0} 個，在列表裡看 →",
   "messages.noContentYet": "暫無內容",
   "strategy.noComparisonYet": "暫無比較",
   "strategy.noDataYet": "暫無資料",

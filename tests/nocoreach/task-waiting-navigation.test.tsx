@@ -234,3 +234,31 @@ test('owner fallback and lifecycle transitions match the original home rules', (
   task.evidence.work.cancelledAt = '2026-10-13';
   expect(isWaitingTask(task, mine)).toBe(false);
 });
+
+// 2026-10-28 user request: the board's Done column shows what finished in the last 7 days; the rest is in the list.
+test('the board keeps recent finished tasks and opens the Done list for the older ones', async () => {
+  const recent = makeTask(10, 'done');
+  recent.evidence.work.history = [
+    {
+      at: new Date(Date.now() - 2 * 86400000).toISOString(),
+      action: 'approveStage',
+    },
+  ];
+  tasks.push(recent);
+  try {
+    await setup('/actions?view=board');
+    const column = await screen.findByRole('region', { name: '已完成' });
+    expect(column).toHaveTextContent('Fixture task 10');
+    // Task 5 finished on 2026-10-13, more than a week ago.
+    expect(column).not.toHaveTextContent('Fixture task 5');
+    expect(column.querySelector('header')).toHaveTextContent('1');
+    await userEvent.click(
+      screen.getByRole('button', { name: '更早完成的 1 个，在列表里看 →' }),
+    );
+    expect(screen.getByTestId('url')).toHaveTextContent('scope=done');
+    expect(screen.getByText('Fixture task 5')).toBeInTheDocument();
+    expect(screen.getByText('Fixture task 10')).toBeInTheDocument();
+  } finally {
+    tasks.pop();
+  }
+});

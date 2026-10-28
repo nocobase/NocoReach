@@ -1,5 +1,6 @@
 import {useMe} from './me';
 import {isWaitingTask} from './task-waiting';
+import {onBoard} from './board-done';
 import { renderMessage, type Message, useMessageState, $t, $legacyText } from "#i18n";
 import {useEffect,useRef,useState} from 'react';
 import {Outlet,useLocation,useNavigate} from 'react-router';
@@ -91,8 +92,13 @@ export default function OptimizationWork(){
  const closedCount=tasks.filter(t=>isClosed(t.evidence?.work)).length,doneCount=tasks.filter(isDone).length;
  // 当前 is what is still under way (the board also shows its 已完成 column); 已完成 and 已关闭 are their own lists.
  const waitingCount=tasks.filter(t=>isWaitingTask(t,mine)).length;
- const inScope=(t:Task)=>waiting?isWaitingTask(t,mine):closed?isClosed(t.evidence?.work):done?isDone(t):!isClosed(t.evidence?.work)&&(board||!isDone(t));
- const visible=ordered.filter(t=>{const w=t.evidence?.work;return inScope(t)&&matchesPlaybookFilter(w,playbook,legacyPlaybook)&&(waiting||!owner||ownerName(t)===owner)&&(!agentFilter||!agents||(taskAgentOf(w,agents)?.id||UNASSIGNED)===agentFilter)&&`${t.evidence?.no?`t-${t.evidence.no}`:''} ${t.evidence?.insight?.no?`o-${t.evidence.insight.no}`:''} ${t.title} ${t.brief} ${t.evidence?.keyword||''}`.toLowerCase().includes(q.trim().toLowerCase());});
+ // The board's Done column keeps what is still watched and what finished in the last week (board-done.ts); the rest is
+ // in the Done list, which its last line opens.
+ const onBoardNow=(t:Task)=>!isDone(t)||onBoard(t.evidence?.work,t.updatedAt);
+ const inScope=(t:Task)=>waiting?isWaitingTask(t,mine):closed?isClosed(t.evidence?.work):done?isDone(t):!isClosed(t.evidence?.work)&&(board?onBoardNow(t):!isDone(t));
+ const matches=(t:Task)=>{const w=t.evidence?.work;return matchesPlaybookFilter(w,playbook,legacyPlaybook)&&(waiting||!owner||ownerName(t)===owner)&&(!agentFilter||!agents||(taskAgentOf(w,agents)?.id||UNASSIGNED)===agentFilter)&&`${t.evidence?.no?`t-${t.evidence.no}`:''} ${t.evidence?.insight?.no?`o-${t.evidence.insight.no}`:''} ${t.title} ${t.brief} ${t.evidence?.keyword||''}`.toLowerCase().includes(q.trim().toLowerCase());};
+ const visible=ordered.filter(t=>inScope(t)&&matches(t));
+ const olderDone=board&&!waiting?ordered.filter(t=>isDone(t)&&!onBoardNow(t)&&matches(t)).length:0;
  // The table lists what needs you first: 待确认, 进行中, 待处理, 已完成; the board keeps its manual order.
  const rank:Record<BoardState,number>={review:0,doing:1,todo:2,done:3};
  const rows=board||byAgent||closed?visible:[...visible].sort((a,b)=>rank[workState(a.evidence?.work,a.status)]-rank[workState(b.evidence?.work,b.status)]||String(b.updatedAt).localeCompare(String(a.updatedAt)));
@@ -115,7 +121,7 @@ export default function OptimizationWork(){
   </div>
   {!closed&&!done&&tasks.length>0&&<RuntimeNotice/>}
   {waiting&&<p role='status' className='text-sm text-muted-foreground'>{$t(isAdmin?'optimizationWork.waitingAdminScope':'optimizationWork.waitingMemberScope')}</p>}
-  {loading?<ListSkeleton rows={6} label={$t('common.loadingTasks')}/>:byAgent?<AgentBoard tasks={rows} agents={agents} onOpen={id=>navigate('/actions/'+id)}/>:board?<WorkBoard tasks={rows} busy={busy} list={false} agents={agents} onMove={(t,s,before)=>void move(t as Task,s,before)} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>
+  {loading?<ListSkeleton rows={6} label={$t('common.loadingTasks')}/>:byAgent?<AgentBoard tasks={rows} agents={agents} onOpen={id=>navigate('/actions/'+id)}/>:board?<WorkBoard tasks={rows} busy={busy} list={false} agents={agents} olderDone={olderDone} onOlderDone={()=>param('scope','done')} onMove={(t,s,before)=>void move(t as Task,s,before)} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>
    :rows.length?<TaskTable tasks={rows} closed={closed} agents={agents} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>:null}
   {!loading&&!tasks.length?<Empty className="min-h-48 border"><EmptyHeader><EmptyTitle>{$t('manualTask.emptyTitle')}</EmptyTitle><EmptyDescription>{$t('manualTask.createHint')}</EmptyDescription></EmptyHeader><EmptyContent><Button onClick={()=>void newTask()}>{$t('manualTask.newTask')}</Button></EmptyContent></Empty>:!loading&&!rows.length&&!board&&!byAgent&&<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{closed?$t('optimizationWork.noClosedTasks'):done?$t('optimizationWork.noFinishedTasksYet'):q||playbook||(!waiting&&owner)||agentFilter?$t('optimizationWork.noMatchingTasksTryAdjusting'):waiting?$t('optimizationWork.noWaitingTasks'):$t('optimizationWork.noTasksYetTasksCreated')}</p>}
   <Outlet/>

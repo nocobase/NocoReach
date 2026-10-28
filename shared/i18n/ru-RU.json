@@ -2614,6 +2614,7 @@
   "searchPerformance.changesNotCompared": "Изменения не сравниваются",
   "syncPanel.pauseJob": "Приостановить задание",
   "workBoard.noTasks": "Нет задач",
+  "workBoard.olderDone": "Ещё {0} завершены раньше — в списке →",
   "messages.noContentYet": "Пока нет контента",
   "strategy.noComparisonYet": "Пока нет сравнения",
   "strategy.noDataYet": "Данных пока нет",
