@@ -14,6 +14,8 @@ import {
 } from '../../server/nocoreach/github-discovery/service.js';
 import { githubDiscoveryFixture } from '../../app-plugins/nocoreach-mock/server/github-discovery.js';
 import { newDiscoveryRule } from '../../shared/github-discovery.js';
+import { clearProjects } from '../../server/nocoreach/demo-data/clear.js';
+import type { DemoHost } from '../../server/nocoreach/demo-data/host.js';
 const test = createAppTest({
   createServer: createStandaloneServer,
   config: {
@@ -126,6 +128,18 @@ test('persists isolated rules, seals credentials, scans and reviews through auth
     );
     expect((await reloaded.list('1', {})).total).toBe(3);
     await reloaded.close();
+
+    await service.saveRule('2', newDiscoveryRule(true), 0);
+    await service.setToken('2', token, 1);
+    const other = await service.state('2');
+    await clearProjects(runtime.plugin as unknown as DemoHost, ['1']);
+    expect(await service.status('1')).toMatchObject({
+      rules: [],
+      savedCount: 0,
+      credential: 'missing',
+    });
+    expect(await service.state('2')).toEqual(other);
+    expect(runtime.variables.get(discoveryTokenKey('2'))).toBe(token);
   } finally {
     await service.close();
   }

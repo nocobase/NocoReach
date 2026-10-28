@@ -787,6 +787,7 @@ test('imports the demo through the API and clears all business data while preser
   for (const key of [
     'nr-task-materials:orphan',
     'project-icon:missing',
+    'github-discovery:orphan',
     'nr-migrations:cleanup-test',
     'mock-demo:cleanup-test',
   ])
@@ -794,6 +795,11 @@ test('imports the demo through the API and clears all business data while preser
       .getRepository('nrSnapshots')
       .create({ values: { key, payload: { saved: true } } });
   await runtime.variables.set('NOREACH_GITHUB_TOKEN_orphan', 'project-secret');
+  await runtime.variables.set(
+    'NOREACH_GITHUB_DISCOVERY_orphan',
+    'discovery-secret',
+    true,
+  );
   await runtime.cache.set('project-data', { stale: true });
   const disk = testApp.application.container
     .resolve(driveManagerToken)
@@ -951,7 +957,14 @@ test('imports the demo through the API and clears all business data while preser
   expect(await connection.repository('nrTaskMedia').count()).toBe(0);
   expect(await runtime.cache.get('project-data')).toBeUndefined();
   expect(runtime.variables.get('NOREACH_GITHUB_TOKEN_orphan')).toBeUndefined();
-  for (const key of ['nr-task-materials:orphan', 'project-icon:missing'])
+  expect(
+    runtime.variables.get('NOREACH_GITHUB_DISCOVERY_orphan'),
+  ).toBeUndefined();
+  for (const key of [
+    'nr-task-materials:orphan',
+    'project-icon:missing',
+    'github-discovery:orphan',
+  ])
     expect(
       await connection.repository('nrSnapshots').findOne({ filter: { key } }),
     ).toBeUndefined();
