@@ -28,7 +28,7 @@ import { hasTaskAgent, type PartialResult } from './task-execution-types';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {createContext,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
-import {Outlet,useNavigate,useSearchParams} from 'react-router';
+import {Outlet,useLocation,useNavigate,useSearchParams} from 'react-router';
 import {useNavigationGuard,usePageBreadcrumb} from '@nocobase/app-client';
 import {Comparison} from './results/comparison.js';
 import {nocobaseClient as api,NocoReachHttpError} from "#lib/nocoreach-api";
@@ -46,7 +46,7 @@ import {cn} from '#lib/utils';
 import {Dialog,DialogContent,DialogHeader,DialogTitle} from '#components/ui/dialog';
 import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuCheckboxItem,DropdownMenuItem,DropdownMenuSeparator,DropdownMenuSub,DropdownMenuSubTrigger,DropdownMenuSubContent} from '#components/ui/dropdown-menu';
 import {TaskDraftScope,TaskDraftRecovery} from './task-detail/drafts.js';
-import {Checklist,RequestBox} from './task-detail/review-parts.js';
+import {Checklist} from './task-detail/review-parts.js';
 import type {TaskPageContext} from './task-detail/reader-context.js';
 import {useTaskDraft,useTaskDraftStatus} from './task-detail/draft-store.js';
 import {DocReader,Markdown} from './doc-view';
@@ -118,9 +118,15 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
  // whether the next one had started), once the request has settled so the page's leave guard lets it go.
  const navigate=useNavigate();
  useEffect(()=>{if(handedTo&&!busy)void navigate(`/actions/${handedTo}`);},[handedTo,busy,navigate]);
+ // Request changes on the article's reading page returns here to the message box, once the reading page no longer
+ // covers this one (its layer makes the page inert while open).
+ const feedbackAskRef=useRef(false),{pathname}=useLocation();
+ useEffect(()=>{if(!feedbackAskRef.current)return;const box=document.getElementById('nr-composer');if(box?.closest('[inert]'))return;feedbackAskRef.current=false;if(box)actions.messageAgent();},[pathname,actions]);
  useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setRawPlaybooks).catch(()=>undefined);void call<Member[]>(projectId,taskId,'members').then(m=>setMembers(Array.isArray(m)?m:[])).catch(()=>undefined).finally(()=>setMembersLoaded(true));},[projectId]);
  useEffect(()=>{if(!runActive&&!releasePolling)return;const t=setInterval(()=>{if(!pending.current)void call<Data>(projectId,taskId,'get').then(next=>{setStoredData(next);setError('');}).catch(()=>setError(() => ($t('taskDetail.runStatusTemporarilyUnavailableRetry'))));},2500);return()=>clearInterval(t);},[runActive, releasePolling, projectId, taskId, setError]);
- const update:Update=async(command,body={})=>{if(pending.current)return;pending.current=true;setBusy(true);setError('');const key=JSON.stringify([data.work.revision,command,body]);if(op.current.key!==key)op.current={key,id:crypto.randomUUID()};
+ // A message the box at the bottom of Activity failed to send says why beside the box, where the person is writing.
+ const [composerFailed,setComposerFailed]=useState(false);
+ const update:Update=async(command,body={})=>{if(pending.current)return;pending.current=true;setBusy(true);setError('');setComposerFailed(false);const key=JSON.stringify([data.work.revision,command,body]);if(op.current.key!==key)op.current={key,id:crypto.randomUUID()};
   try{const d=await call<Data>(projectId,taskId,'advance',{revision:data.work.revision,requestId:op.current.id,command,...body});setStoredData(d);refreshNavBadges();return d;}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailed')));
    // A conflict means the page is behind the server (an Agent removed, another window's change): reload the task so
    // what it offers next is current. The message stays until the next command succeeds.
@@ -144,10 +150,10 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
     <div className={cn('order-3 flex min-w-0 flex-col',GAP)}>
      {dirty&&<p role='status' className={cn(text.muted,'flex flex-wrap items-center gap-x-2')}>{$t('taskDetail.draftRetained')} <Button size='sm' variant='ghost' disabled={busy} onClick={()=>{void confirmAction({title:()=>($t('taskDetail.discardTaskDrafts',{0:data.task.title})),description:()=>($t('taskDetail.discardDraftWarning')),action:'taskDetail.discardDrafts'}).then(confirmed=>{if(confirmed)clear();});}}>{$t('taskDetail.discardDrafts')}</Button></p>}
      <TaskDraftRecovery activeScope={w.cancelledAt||w.archivedAt||done?undefined:draftScope}/>
-     {error&&<p role="alert" className="nr-error">{error}</p>}
+     {error&&!composerFailed&&<p role="alert" className="nr-error">{error}</p>}
      {w.cancelledAt||w.archivedAt?<ClosedCard w={w} update={update} busy={busy}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} pick={pick} setPick={setPick} update={update} busy={busy} projectId={projectId} taskId={taskId} onEvidence={()=>setEvidenceOpen(true)}/></TaskDraftScope>:done?<DoneCard data={data} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} list={list}/></TaskDraftScope>}
     </div>
-    <ActivityCard data={data} update={update} busy={busy} members={members} membersLoaded={membersLoaded}/>
+    <ActivityCard data={data} update={update} busy={busy} members={members} membersLoaded={membersLoaded} error={composerFailed?error:''} onFailed={()=>setComposerFailed(true)}/>
    </div>
    <div className={cn('contents xl:flex xl:min-w-0 xl:flex-col',GAP)}>
     <WhyCard data={data} onEvidence={()=>setEvidenceOpen(true)}/>
@@ -160,7 +166,7 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
   <TechnicalDetails data={data} projectId={projectId} taskId={taskId} runs={runs}/>
   <EvidenceDialog open={evidenceOpen} onClose={()=>setEvidenceOpen(false)} data={data} projectId={projectId} taskId={taskId}/>
   {/* The article's reading page (task-detail/article-reader.tsx) covers this page and keeps its scroll position. */}
-  <Outlet context={{data,update,busy,error,allowed:access.allowed,draftScope,crumb:no?`T-${no}`:data.task.title,heading} satisfies TaskPageContext}/>
+  <Outlet context={{data,update,busy,error,allowed:access.allowed,draftScope,crumb:no?`T-${no}`:data.task.title,heading,requestChanges:()=>{feedbackAskRef.current=true;}} satisfies TaskPageContext}/>
   <Dialog open={pageOpen} onOpenChange={o=>{if(!o)setPageOpen(false);}}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>{$t('common.relatedPage')}</DialogTitle></DialogHeader><PageLinkEditor data={data} projectId={projectId} taskId={taskId} busy={busy} update={update}/></DialogContent></Dialog>
  </PageContainer></TaskActions.Provider></TaskAccess.Provider>;
 }
@@ -375,7 +381,6 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  const handledAsk=useRef(manualAsk);
  useEffect(()=>{if(manualAsk!==handledAsk.current){handledAsk.current=manualAsk;setManual(true);}},[manualAsk,setManual]);
  const [checked,setChecked]=useState<string[]>([]),[editingOpen,setEditing]=useTaskDraft('editing',false,false),[draft,setDraft]=useTaskDraft('draft',w.results[index-1]?.content||''),[record,setRecord]=useTaskDraft('record',''),[note,setNote]=useTaskDraft('note',''),[url,setUrl]=useTaskDraft('url','');
- const [requestOpen,setRequest]=useTaskDraft('requesting',false,false);
  const editButtonRef=useRef<HTMLButtonElement>(null);
  const manual=manualOpen||Boolean(record),editing=editingOpen||draft!==(w.results[index-1]?.content||'');
  // What can follow the accepted document: the playbook's next steps as they are now, as the server checks them
@@ -387,8 +392,9 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  const act=async(command:string,body:object)=>{const result=await update(command,{stageKey:stage.key,...body});if(result&&['editStageOutput','recordManual','confirmPublish','approveStage','requestStageChanges'].includes(command))clear();return result;};
  const cur=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];
  const producer=stages[index-1],out=w.results[index-1];
- const request=(executor:string)=>requestOpen&&out?<RequestBox executor={executor} busy={busy} onCancel={()=>setRequest(false)} onSend={async comment=>Boolean(await act('requestStageChanges',{artifactId:out.id,comment}))}/>:null;
- const requestButton=<Button variant="outline" disabled={busy} onClick={()=>setRequest(!requestOpen)}>{$t('taskDetail.requestChanges')}</Button>;
+ // Changes are asked for in Activity's message box, the one place feedback is written (2026-10-28 user report: a
+ // message sent there while the task waited for review only reached the next run): the button takes the person there.
+ const requestButton=<Button variant="outline" disabled={busy} onClick={messageAgent}>{$t('taskDetail.requestChanges')}</Button>;
  const techLinkTo=(tab:TechnicalTab)=><Button variant="link" size="sm" className="h-auto font-normal self-start p-0 text-muted-foreground" onClick={()=>tech.open(tab)}><Code2/>{$t('taskDetail.technicalDetails')}</Button>,techLink=techLinkTo('runs');
  const progress=$t('taskDetail.currentProgress');
  if(stage.kind==='review'&&stages[index+1]?.kind==='release'){
@@ -406,7 +412,6 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    const reviewTitle=translationPending(data)?$t('articleTask.reviewPrimaryTitle',{0:localeName(langs[0],getCurrentLocale())}):translated?$t('articleTask.reviewTranslatedTitle'):$t('articleTask.reviewTitle');
    return <StageCard title={reviewTitle} sub={by} at={out.createdAt}
     actions={editing||!allowed?undefined:<>{!targetGone&&<Button disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked})}><Rocket/>{$t(translationPending(data)?'articleTask.approveTranslate':(mockSettingsAvailable() || data.task.evidence?.simulated) ? 'taskDetail.approveAndSimulatePublish' : 'taskDetail.approveAndPublish')}</Button>}{requestButton}<Button ref={editButtonRef} variant='ghost' disabled={busy} onClick={()=>setEditing(true)}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
-    {!editing&&request(getStageExecutor().agent)}
     {targetGone&&<p role='alert' className='text-sm text-destructive'>{$t('articles.targetMissing')}</p>}
     <LastFeedback w={w} stage={stage} out={out}/>
     {editing?<ArticleEditor data={data} article={out.article} draftKey={out.id} tab={articleTab} busy={busy} onCancel={()=>{setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}} onSave={async article=>{const d=await act('editArticleDraft',{artifactId:out.id,article});if(d){setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}return Boolean(d);}}/>:<>
@@ -418,7 +423,6 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(pr?.outOfScope?.length&&!scopeOk);
   return <StageCard title={(pr||data.task.evidence?.simulated)?$t('taskDetail.pageChangeReady'):$t('taskDetail.madeChangeYourselfAfterConfirm')} sub={by} at={out.createdAt}
    actions={<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote},...(pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}><Rocket/>{$t((mockSettingsAvailable() || data.task.evidence?.simulated) ? 'taskDetail.approveAndSimulatePublish' : 'taskDetail.approveAndPublish')}</Button>{requestButton}<InfoTip label={$t('taskDetail.aboutPublishing')}>{(mockSettingsAvailable() || data.task.evidence?.simulated)?$t('taskDetail.simulatedReleaseDescription'):$t('taskDetail.publishHint')}</InfoTip></>}>
-   {request(getStageExecutor().agent)}
    <LastFeedback w={w} stage={stage} out={out}/>
    <PageChange pr={pr} content={out.content}/>
    <ScopeConfirm pr={pr} ok={scopeOk} setOk={setScopeOk} busy={busy}/>
@@ -455,7 +459,6 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   return <StageCard title={$t('taskDetail.resultReady',{0:producer.name})} sub={by} at={out.createdAt}
    actions={editing?<><Button disabled={busy||!draft.trim()} onClick={()=>void act('editStageOutput',{artifactId:out.id,content:draft})}>{$t('taskDetail.saveChanges')}</Button><Button variant="ghost" onClick={()=>{setEditing(false);setDraft(w.results[index-1]?.content||'');}}>{$t('common.cancel')}</Button></>
     :<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,...(nextOptions.length&&next?{next}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})}).then(d=>{if(d&&nextOptions.length&&next&&d.work.nextTaskId)handedOver(String(d.work.nextTaskId));})}>{label}</Button>{requestButton}<Button variant="ghost" disabled={busy} onClick={()=>{setDraft(out.content);setEditing(true);}}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
-   {!editing&&request(getStageExecutor()[producer.kind])}
    <LastFeedback w={w} stage={stage} out={out}/>
    {editing?<MarkdownEditor aria-label={$t('taskDetail.editContent')} value={draft} disabled={busy} onChange={e=>{setDraft(e.target.value);}} preview={value=><Markdown content={value}/>}/>:<>
     {out.pr?<PageChange pr={out.pr} content={out.content}/>:(()=>{const r=repliesOf(w,out.content);return r.length?<ReplyDrafts items={r}/>:<Reading><Markdown content={out.content}/></Reading>;})()}
@@ -607,18 +610,26 @@ const RECENT=8;
 // Release events in the owner's words rather than in pull-request terms.
 const getPlainEvents=():Record<string,string>=>({merged:$t('taskDetail.eventPublished'),markMerged:$t('taskDetail.publishedManually'),retryMerge:$t('taskDetail.eventPublishAgain'),prClosed:$t('taskDetail.unpublishedClosed'),revertOpened:$t('taskDetail.undoPrepared')});
 // What has happened: people's actions, each version the Agent delivered (open it here) and comments, then one line to
-// write to the Agent (2026-10-22 user decision: the activity and the message form one card).
-function ActivityCard({data,update,busy,members,membersLoaded}:{data:Data;update:Update;busy:boolean;members:Member[];membersLoaded:boolean}){
+// write to the Agent (2026-10-22 user decision: the activity and the message form one card), where changes to a version
+// under review are asked for too.
+function ActivityCard({data,update,busy,members,membersLoaded,error,onFailed}:{data:Data;update:Update;busy:boolean;members:Member[];membersLoaded:boolean;error:string;onFailed:()=>void}){
  const [message,setMessage,clearMessage]=useTaskDraft('comment',''),w=data.work,stages=w.flow?.stages||[],done=w.stage==='done',closed=Boolean(w.cancelledAt||w.archivedAt);
  const [all,setAll]=useState(false),[view,setView]=useState<Artifact>();
  const executor=getStageExecutor().agent;
  const nameOf=(key?:string)=>stages.find(s=>s.key===key)?.name||$t('taskDetail.step');
  const people=useMemo(()=>new Map(members.map(m=>[m.id,m.name])),[members]);
  const artifacts=new Map([...(data.artifacts||[]),...w.results.filter(Boolean) as Artifact[]].map(a=>[a.id,a]));
- const plain=getPlainEvents();
+ const plain=getPlainEvents(),{allowed}=useContext(TaskAccess),index=w.stageIndex||0,stage=stages[index],out=w.results[index-1];
+ // While a version waits for review, the message is the change request (2026-10-28 user decision): the step goes back
+ // to the Agent with it at once and it is recorded as that request, not as a note. Whoever cannot review leaves a note
+ // (the server checks as well). The step's own drafts, such as an edit not saved yet, stay with the version they were
+ // written for and appear under Earlier task drafts once the step moves on.
+ const review=!done&&!closed&&allowed&&stage?.kind==='review'&&out&&!out.rejectedAt?{stageKey:stage.key,artifactId:out.id}:undefined;
+ // Who reads a note: the run that starts the task, the step's next run, or, with only publishing left, no run (it is recorded).
+ const hint=review?$t('taskDetail.writeFeedbackAfterSendRedoes',{0:executor}):!w.flow?$t('taskDetail.leaveNoteBeforeStart',{0:executor,1:$t('taskDetail.changeEnglishVersionKeepTechnical')}):stage?.kind==='release'||stage?.kind==='publish'?$t('taskDetail.leaveNoteRecorded'):$t('taskDetail.leaveNoteNextRunReads',{0:executor});
  const rows=(w.history||[]).map((e,i)=>({e,i,t:QUIET.has(e.action)?null:eventText(e,nameOf,executor)})).filter(x=>x.t).sort((a,b)=>String(a.e.at).localeCompare(String(b.e.at))||a.i-b.i);
  const shown=all?rows:rows.slice(-RECENT),hidden=rows.length-shown.length;
- async function send(){const d=await update('comment',{comment:message});if(d){clearMessage();}}
+ async function send(){const d=review?await update('requestStageChanges',{...review,comment:message}):await update('comment',{comment:message});if(d)clearMessage();else onFailed();}
  const composer=(!done&&!closed)||Boolean(message);
  return <Card className="order-5" aria-label={$t('common.activity')} title={$t('common.activity')}>
   {hidden>0&&<Button variant="link" size="sm" className="h-auto font-normal self-start p-0" onClick={()=>setAll(true)}>{$t('taskDetail.showEarlier',{0:hidden})}</Button>}
@@ -631,7 +642,8 @@ function ActivityCard({data,update,busy,members,membersLoaded}:{data:Data;update
    return <li key={`${e.at}:${e.action}:${e.runId||''}:${i}`} className={cn(text.muted,'flex items-start gap-2')}><span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center [&_svg]:size-3.5">{eventIcons[e.action]||<Play/>}</span><p className="min-w-0 flex-1 break-words"><span data-actor="" className="text-foreground">{e.action==='runSucceeded'?executor:name}</span>{getCurrentLocale()==='ru-RU'?' — ':' '}{line}{artifact&&<> <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>setView(artifact)}>{$t('common.view')}</Button></>}</p><time className="shrink-0">{when(e.at)}</time></li>;})}
    {!rows.length&&<li className={text.muted}>{$t('taskDetail.noActivityYet')}</li>}</ol>
   {view&&<DocReader open onClose={()=>setView(undefined)} title={`${nameOf(view.stepId)} · ${$t('taskDetail.versionNumber',{0:view.version})}`} meta={when(view.createdAt)} content={view.pr||view.article?'':view.content}><VersionChange data={data} artifact={view} notes/></DocReader>}
-  {composer&&<div className="flex items-end gap-2"><Textarea id="nr-composer" aria-label={$t('taskDetail.noteExecutor')} rows={1} className="max-h-40 min-h-8 resize-none py-1.5" value={message} disabled={busy} readOnly={done||closed} placeholder={w.flow?$t('taskDetail.leaveNoteNextRunReads',{0:executor}):$t('taskDetail.leaveNoteBeforeStart',{0:executor,1:$t('taskDetail.changeEnglishVersionKeepTechnical')})} onChange={e=>{setMessage(e.target.value);}}/>{!done&&!closed&&<Button variant="outline" disabled={busy||!message.trim()} onClick={()=>void send()}>{$t('taskDetail.send')}</Button>}</div>}
+  {composer&&<div className="flex items-end gap-2"><Textarea id="nr-composer" aria-label={$t('taskDetail.noteExecutor')} rows={1} className="max-h-40 min-h-8 resize-none py-1.5" value={message} disabled={busy} readOnly={done||closed} placeholder={hint} onChange={e=>{setMessage(e.target.value);}}/>{!done&&!closed&&<Button variant="outline" disabled={busy||!message.trim()} onClick={()=>void send()}>{review?$t('taskDetail.sendRequestChanges'):$t('taskDetail.send')}</Button>}</div>}
+  {error&&<p role="alert" className="nr-error">{error}</p>}
  </Card>;
 }
 function PageLinkEditor({data,projectId,taskId,busy,update}:{data:Data;projectId:number;taskId:string;busy:boolean;update:Update}){
