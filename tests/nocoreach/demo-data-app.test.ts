@@ -877,6 +877,11 @@ test('imports the demo through the API and clears all business data while preser
           (event: { action: string }) => event.action === 'startTask',
         ),
       ).toBe(true);
+      const latestVersion = Math.max(
+        ...detail.artifacts.map(
+          (artifact: { version: number }) => artifact.version,
+        ),
+      );
       for (const artifact of detail.artifacts) {
         expect(activity).toContainEqual(
           expect.objectContaining({
@@ -886,7 +891,9 @@ test('imports the demo through the API and clears all business data while preser
           }),
         );
         expect(artifact.content).toContain('##');
-        expect(artifact.content.length).toBeGreaterThan(500);
+        expect(artifact.content.length).toBeGreaterThan(
+          artifact.version === latestVersion ? 500 : 200,
+        );
       }
       for (const event of activity) {
         expect(Date.parse(event.at)).toBeGreaterThanOrEqual(

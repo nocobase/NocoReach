@@ -64,6 +64,15 @@ describe.each(['zh-CN', 'en-US'])(
             expect(story.draft).toContain(story.caseStudy.document);
             expect(story.draft).not.toBe(story.brief);
           }
+          if (story.previousDraft) {
+            expect(story.previousDraft.length).toBeGreaterThan(
+              language === 'en-US' ? 500 : 180,
+            );
+            expect(story.previousDraft).toContain(
+              language === 'en-US' ? 'Open review issues' : '初稿待复核',
+            );
+            expect(story.draft).not.toContain(story.previousDraft);
+          }
         }
         expect(documents.length).toBeGreaterThanOrEqual(8);
         expect(opportunities.briefs).toHaveLength(which === 'main' ? 16 : 12);
