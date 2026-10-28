@@ -9,16 +9,9 @@ import {
   text,
   type Json,
 } from './kit.js';
-import {
-  AI_QUESTIONS,
-  BACKLINKS,
-  COMPETITORS,
-  LIGHTHOUSE,
-  TRENDS,
-} from './script/market.js';
+import { LIGHTHOUSE, TRENDS } from './script/market.js';
 import { TOPIC_WORDS } from './script/search.js';
-import { REDDIT } from './script/social.js';
-import type { Research } from './script/types.js';
+import type { Research, AiQuestion } from './script/types.js';
 import type { World } from './world.js';
 
 type Keyword = Research & { topic: string };
@@ -204,7 +197,7 @@ function find(world: World, keyword: string): Keyword {
 /** Estimated organic traffic of a domain from its ranking keywords. */
 function organic(world: World, target: string, months = 0) {
   const own = target.replace(/^www\./, '') === world.project.domain;
-  const rival = COMPETITORS.find((c) => c.domain === target);
+  const rival = world.competitors.find((c) => c.domain === target);
   const size = own
     ? 1
     : rival
@@ -222,9 +215,9 @@ function organic(world: World, target: string, months = 0) {
     ? 0.033
     : ((
         {
-          'flowgrove.example': 0.012,
-          'stackmeadow.example': 0.055,
-          'gridline.example': -0.008,
+          'nimbus.example': 0.012,
+          'tasks.example': 0.055,
+          'sales.example': -0.008,
         } as Record<string, number>
       )[target] ?? 0.01);
   const past = (1 + pace) ** -months;
@@ -295,8 +288,9 @@ function serp(world: World, keyword: string, depth: number) {
       continue;
     }
     const rival =
-      COMPETITORS[
-        (rank + world.seeded.int(`serp:${keyword}`, 3)) % COMPETITORS.length
+      world.competitors[
+        (rank + world.seeded.int(`serp:${keyword}`, 3)) %
+          world.competitors.length
       ];
     if (rank % 4 === 2 && rival) {
       const page = rival.pages[rank % rival.pages.length];
@@ -332,7 +326,7 @@ function redditSerp(world: World, keyword: string) {
   const term =
     keyword.match(/"([^"]+)"/)?.[1] ??
     keyword.replace('site:reddit.com', '').trim();
-  return REDDIT.map((thread, i) => ({
+  return world.reddit.map((thread, i) => ({
     type: 'organic',
     rank_group: i + 1,
     rank_absolute: i + 1,
@@ -578,13 +572,13 @@ function lighthouse(world: World, b: Json) {
 function llmResponse(world: World, model: string, b: Json) {
   const prompt = text(b.user_prompt);
   const match =
-    AI_QUESTIONS.find((q) => world.text(q.question) === prompt) ??
-    AI_QUESTIONS.find(
+    world.aiQuestions.find((q) => world.text(q.question) === prompt) ??
+    world.aiQuestions.find(
       (q) =>
         prompt.toLowerCase().includes(world.site.name.toLowerCase()) &&
         q.cites.length,
     ) ??
-    AI_QUESTIONS[0];
+    world.aiQuestions[0];
   const cite = (path: string) => {
     const page = world.page(path);
     return {
@@ -594,7 +588,7 @@ function llmResponse(world: World, model: string, b: Json) {
     };
   };
   const rival = match.rival
-    ? COMPETITORS.find((c) => c.domain === match.rival)
+    ? world.competitors.find((c) => c.domain === match.rival)
     : undefined;
   // Models differ a little: some leave the demo site out.
   const omits =
@@ -653,13 +647,13 @@ function mentions(world: World, b: Json) {
     include?.keyword ?? include?.domain,
     world.site.name,
   ).toLowerCase();
-  const rival = COMPETITORS.find(
+  const rival = world.competitors.find(
     (c) => term.includes(c.name.toLowerCase()) || term.includes(c.domain),
   );
   // A topic search finds the questions asked under that topic.
-  const topical = AI_QUESTIONS.filter((q) => q.topics.includes(term));
+  const topical = world.aiQuestions.filter((q) => q.topics.includes(term));
   if (topical.length && !gap) return questionRows(world, topical, b);
-  const questions = AI_QUESTIONS.filter((q) =>
+  const questions = world.aiQuestions.filter((q) =>
     gap
       ? q.rival && (!rival || q.rival === rival.domain) && !q.cites.length
       : rival
@@ -668,15 +662,13 @@ function mentions(world: World, b: Json) {
           world.text(q.answer).toLowerCase().includes(term),
   );
   const pool =
-    gap && !questions.length ? AI_QUESTIONS.filter((q) => q.rival) : questions;
+    gap && !questions.length
+      ? world.aiQuestions.filter((q) => q.rival)
+      : questions;
   return questionRows(world, pool, b);
 }
 
-function questionRows(
-  world: World,
-  pool: readonly (typeof AI_QUESTIONS)[number][],
-  b: Json,
-) {
+function questionRows(world: World, pool: readonly AiQuestion[], b: Json) {
   return pool.map((q, i) => ({
     id: world.seeded.hash(`q:${world.text(q.question)}`).slice(0, 16),
     question: world.text(q.question),
@@ -696,7 +688,8 @@ function questionRows(
             {
               url: `https://${q.rival}/`,
               title:
-                COMPETITORS.find((c) => c.domain === q.rival)?.name ?? q.rival,
+                world.competitors.find((c) => c.domain === q.rival)?.name ??
+                q.rival,
               domain: q.rival,
             },
           ]
@@ -710,7 +703,8 @@ function questionRows(
         ? [
             {
               title:
-                COMPETITORS.find((c) => c.domain === q.rival)?.name ?? q.rival,
+                world.competitors.find((c) => c.domain === q.rival)?.name ??
+                q.rival,
               category: 'software',
             },
           ]
@@ -821,7 +815,7 @@ export function dataforseo(
       return page(
         list(b.targets).map((v) => {
           const key = text(object(v).aggregation_key);
-          const rival = COMPETITORS.find(
+          const rival = world.competitors.find(
             (c) => c.name === key || c.domain === key,
           );
           return {
@@ -899,7 +893,7 @@ export function dataforseo(
       );
     if (op === 'relevant_pages') {
       const own = target === world.project.domain;
-      const rival = COMPETITORS.find((c) => c.domain === target);
+      const rival = world.competitors.find((c) => c.domain === target);
       const rows = own
         ? world
             .pageShares()
@@ -951,7 +945,7 @@ export function dataforseo(
       );
     if (op === 'ranked_keywords' || op === 'domain_intersection') {
       const own = target === world.project.domain;
-      const rival = COMPETITORS.find((c) => c.domain === target);
+      const rival = world.competitors.find((c) => c.domain === target);
       const rows = world.research
         .filter(
           (k) =>
@@ -1016,7 +1010,7 @@ export function dataforseo(
   if (backlink) {
     const op = backlink[1];
     const target = text(b.target, world.project.domain);
-    const links = BACKLINKS.map((l) => ({
+    const links = world.backlinks.map((l) => ({
       ...l,
       firstSeen: l.firstSeen,
       url_from: `https://${l.domain}${l.path}`,

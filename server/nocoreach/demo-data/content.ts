@@ -1,9 +1,12 @@
+import type { DemoTaskStory } from './editorial.js';
 import {
-  DEMO_DOCUMENTS,
-  DEMO_STORIES,
-  type DemoStory,
-} from '../demo-content.js';
-import { briefs as ZH_BRIEFS } from '../demo-opportunities.js';
+  ACME_STORIES,
+  acmeDocuments,
+  acmeOpportunities,
+} from './acme-content.js';
+import { crmDocuments, crmOpportunities, CRM_STORIES } from './crm-content.js';
+import { historicalStories } from './history-content.js';
+import { localizeStories } from './editorial.js';
 import { EN_US } from './content-en-US.js';
 
 /** The people of the demo. Each is a sign-in; the stories' comments name them. */
@@ -45,7 +48,7 @@ export interface DemoContent {
   >;
   people: Record<DemoPerson, { username: string; name: string; title: string }>;
   roles: Record<'growth' | 'editor' | 'community' | 'viewer', string>;
-  stories: readonly DemoStory[];
+  stories: readonly DemoTaskStory[];
   documents: readonly {
     key: string;
     title: string;
@@ -71,8 +74,10 @@ export interface DemoContent {
     normal: readonly [title: string, fact: string];
     goal: { intent: string; audience: string; focus: string; progress: string };
   };
-  /** The second project's few tasks. */
-  secondTasks: readonly DemoStory[];
+  /** The CRM project has its own editorial catalog. */
+  secondTasks: readonly DemoTaskStory[];
+  secondDocuments: DemoContent['documents'];
+  secondOpportunities: DemoContent['opportunities'];
   chat: {
     metricsIntro: string;
     metricsLine: string;
@@ -87,7 +92,7 @@ export interface DemoContent {
   };
 }
 
-/** The Chinese demo reuses the hand-written editorial material of the simulated deployment. */
+/** Shared interface copy for the Chinese demo. */
 const ZH_CN: DemoContent = {
   notice:
     '> 人工编写的虚构演示资料；人物、讨论、指标和历史成果不代表真实客户、Agent 执行或线上发布。\n\n',
@@ -109,21 +114,22 @@ const ZH_CN: DemoContent = {
   },
   sourcePage: '演示项目页面',
   uncertainty: '全部资料为手工编写的合成样例，未验证真实产品或流量。',
-  observationNote: '人工编写的历史观察样例，不是实际发布效果，不据此推断因果。',
+  observationNote:
+    '根据演示页面的日明细计算，不代表真实发布效果，不据此推断因果。',
   projects: {
     main: {
-      name: 'NocoBase',
-      domain: 'nocobase.example',
+      name: 'ACME',
+      domain: 'acme.example',
       description:
-        '虚构的开源低代码业务应用平台；所有指标、任务与讨论均为演示数据。',
-      audience: '实施顾问、运营负责人与企业内部开发团队',
+        '虚构的项目管理软件，帮助团队从 Excel 迁移任务，管理看板、排期、里程碑与客户协作；所有指标与反馈均为演示。',
+      audience: '项目经理、设计团队、产品团队与客户交付团队',
       market: '全球',
     },
     second: {
-      name: 'NocoCRM',
-      domain: 'nococrm.example',
+      name: 'ACME CRM',
+      domain: 'crm.acme.example',
       description:
-        '基于 NocoBase 的虚构 CRM 产品，刚加入团队的项目列表，目前只接入了网站和 Google。',
+        '虚构的销售协作产品，围绕客户导入、线索分配、商机跟进与续约持续运营；所有人物与经营数据均为演示。',
       audience: '中小企业销售主管与销售团队',
       market: '中国大陆',
     },
@@ -145,92 +151,17 @@ const ZH_CN: DemoContent = {
     community: '社区与开发者关系',
     viewer: '只读观察',
   },
-  stories: DEMO_STORIES,
-  documents: DEMO_DOCUMENTS.map((document) =>
-    document.key === 'personas'
-      ? {
-          ...document,
-          text: document.text.replace(
-            '以上为虚构的演示人物，不对应真实用户或登录账号。',
-            '以上均为虚构的演示人物，也是本演示的登录账号。',
-          ),
-        }
-      : document,
-  ),
-  opportunities: {
-    notice: '人工编写的虚构演示情景；指标、客户反馈和判断均不代表真实业务。',
-    limitation: '单一渠道和有限样本不能证明因果，执行前需核对实际产品版本。',
-    priorityHigh: '直接阻碍用户完成首次实施或数据恢复。',
-    priorityOther: '先核对需求，再安排编辑与技术复核。',
-    audience: '评估与实施 NocoBase 的业务负责人和开发者',
-    observations: [
-      '优先处理首次实施、权限验证与恢复演练；短期流量波动继续观察。',
-    ],
-    doReason: '基于手写演示材料整理的待办建议，实施前仍需核实。',
-    skipReason: '正常波动，继续常规监测。',
-    briefs: ZH_BRIEFS,
-    watches: [
-      [
-        'conversion',
-        '文档改版后试用转化暂时下降',
-        '样例最近三天有 96 次文档访问、4 次试用，窗口尚短，周末结构也不同。',
-        '等待完整七天并核对关键事件是否漏报，再与同星期比较。',
-      ],
-      [
-        'github',
-        'GitHub 新增关注是否带来实际使用',
-        '演示仓库一周新增 78 个 Star，但下载和首次启动数据尚未同步完整。',
-        '等下载与首次启动覆盖同一周后再判断，不把 Star 当成活跃用户。',
-      ],
-      [
-        'localization',
-        '英文采购案例是否值得优先翻译',
-        '样例英文询问只有两条，来自不同规模团队，采购流程差异较大。',
-        '补充至少三次需求访谈，确认共同问题后再确定内容范围。',
-      ],
-    ],
-    normal: [
-      '品牌词点击保持稳定，暂不新增动作',
-      '演示本周品牌词点击 318 次，上周 311 次，波动不足以支持单独立项。',
-    ],
-    goal: {
-      intent: '让评估 NocoBase 的团队完成第一个可验证的小型业务应用。',
-      audience: '实施负责人、业务分析师和负责集成的开发者。',
-      focus: '权限、数据迁移、审批、首次部署与恢复演练。',
-      progress: '以成功完成练习和提出具体实施问题为进展；本项目为虚构演示。',
-    },
-  },
-  secondTasks: [
-    {
-      key: 'nococrm-landing',
-      title: '为小型销售团队写 NocoCRM 落地页',
-      kind: 'content',
-      state: 'todo',
-      path: '/',
-      brief:
-        'NocoCRM 刚加入项目列表。从五人销售团队第一周会检查的事情写起：导入联系人、销售漏斗视图，以及谁能看到哪些商机。',
-      comments: [
-        '许岚 · 增长：目前只接入了网站和 Google，先看搜索数据再动笔。',
-      ],
-    },
-    {
-      key: 'nococrm-google',
-      title: '重新连接 NocoCRM 的 Google Search Console',
-      kind: 'research',
-      state: 'doing',
-      path: '/',
-      brief:
-        '这个项目的 Google 授权已过期，搜索数据停止更新。下次周会前在「数据接入」页面重新登录授权。',
-      comments: [
-        '周宁 · 内容：连接显示「授权已过期」，这是演示里特意保留的问题数据。',
-      ],
-    },
-  ],
+  stories: [],
+  documents: acmeDocuments('zh-CN'),
+  opportunities: acmeOpportunities('zh-CN'),
+  secondTasks: [],
+  secondDocuments: crmDocuments('zh-CN'),
+  secondOpportunities: crmOpportunities('zh-CN'),
   chat: {
     metricsIntro: '根据演示项目的搜索数据（截至 {0}），点击最多的搜索词：',
     metricsLine: '- 「{0}」：点击 {1}，展示 {2}，平均排名 {3}',
     metricsOutro:
-      '这些点击主要来自入门指南和权限相关页面。在正式环境里，模型会读取同样的数据并给出下一步建议；这是演示环境的模拟回答。',
+      '这些是当前项目的搜索数据。下一步可打开对应页面，核对搜索意图和转化路径；这是演示环境的模拟回答。',
     tasksIntro: '你在演示项目中的任务：',
     states: {
       todo: '待处理',
@@ -241,7 +172,7 @@ const ZH_CN: DemoContent = {
     tasksOutro: '打开任务可以查看讨论和稿件。（模拟回答）',
     opportunitiesIntro: '演示项目里待处理的机会：',
     opportunitiesOutro:
-      '权限和 Docker 首次启动两条被标为高优先级，因为它们直接阻碍首次实施。可以在「机会」页面把其中一条转成任务。（模拟回答）',
+      '根据当前项目的证据与优先级选择下一步，可在「机会」页面查看详情并转成任务。（模拟回答）',
     none: '演示项目里没有找到可以展示的内容。（模拟回答）',
   },
 };
@@ -249,8 +180,30 @@ const ZH_CN: DemoContent = {
 export const DEMO_LANGUAGES = ['zh-CN', 'en-US'] as const;
 export type DemoLanguage = (typeof DEMO_LANGUAGES)[number];
 
+const localized = new Map<string, DemoContent>();
+
 export function demoContent(language: string): DemoContent {
-  return language === 'en-US' ? EN_US : ZH_CN;
+  const key = language === 'en-US' ? 'en-US' : 'zh-CN';
+  const cached = localized.get(key);
+  if (cached) return cached;
+  const base = key === 'en-US' ? EN_US : ZH_CN;
+  const content: DemoContent = {
+    ...base,
+    stories: localizeStories(
+      [...ACME_STORIES, ...historicalStories(true)],
+      key,
+      base.people,
+    ),
+    secondTasks: localizeStories(
+      [...CRM_STORIES, ...historicalStories(false)],
+      key,
+      base.people,
+    ),
+    secondDocuments: crmDocuments(key),
+    secondOpportunities: crmOpportunities(key),
+  };
+  localized.set(key, content);
+  return content;
 }
 
 /** The demo person a comment names, read from `<name> · <team>：` or `<name> · <team>: `. */

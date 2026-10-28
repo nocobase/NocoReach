@@ -18,8 +18,14 @@ import { createStandaloneServer } from '../../server/standalone';
 import { onlineAgentsToken } from '../../server/providers/online-agents';
 import { nocoReachToken } from '../../server/providers/nocoreach';
 import { PROJECT_VARIABLES } from '../../server/nocoreach/demo-data/clear';
+import { taskOwner, taskState, taskClosed } from '../../shared/task-pending';
+import { historyBounds } from '../../server/nocoreach/search-history';
 import { projectWork } from '../../server/nocoreach/execution/model';
 import { OnlineProvider } from '../../server/nocoreach/execution/provider';
+import { migrateDemoIdentityEmails } from '../../server/nocoreach/demo-data/identities';
+import type { StrategyState } from '../../shared/strategy-model';
+import { rowsFor, opportunityState } from '../../shared/strategy-pending';
+import { recentlyEnded, verdictsOf } from '../../client/pages/strategy/watch';
 
 vi.setConfig({ testTimeout: 300000, hookTimeout: 300000 });
 // Play the demo Agent's runs back without the pauses a visitor sees.
@@ -251,7 +257,7 @@ describe('read-only demo conversations', () => {
     expect(general.status).toBe(200);
     const created = (await general.json()).data;
     const member = await signIn(testApp, {
-      email: 'chencheng@nocobase.example',
+      email: 'chencheng@acme.example',
       password: 'chencheng123',
     });
     expect(
@@ -328,7 +334,7 @@ describe('read-only demo lifecycle', () => {
       failure: null,
     });
     const member = await signIn(testApp, {
-      email: 'chencheng@nocobase.example',
+      email: 'chencheng@acme.example',
       password: 'chencheng123',
     });
     for (const action of ['import', 'clear', 'reset']) {
@@ -364,7 +370,7 @@ describe('read-only demo lifecycle', () => {
       (await runtime.plugin.projects.all()).map(
         (p: { name: string }) => p.name,
       ),
-    ).toEqual(['NocoBase', 'NocoCRM']);
+    ).toEqual(['ACME', 'ACME CRM']);
     const write = await admin.fetch('/nocoreach/nrProjects/create', {
       method: 'POST',
       headers: json,
@@ -431,7 +437,7 @@ describe('read-only demo lifecycle', () => {
     // Read-looking keyword endpoints persist provider results in the query cache.
     const keywordInput = {
       projectId,
-      keyword: 'nocobase tutorial',
+      keyword: 'acme tutorial',
       locationCode: 2840,
       language: 'en',
     };
@@ -571,8 +577,8 @@ describe('read-only demo lifecycle', () => {
       (event) => event.type === 'toolResult' && event.tool === 'WebFetch',
     );
     // The Agent reads the opportunity's page on the demo site, in the imported language.
-    expect(fetched?.output).toMatch(/Roles and permissions/u);
-    expect(fetched?.output).toContain('"owner = current user"');
+    expect(fetched?.output).toMatch(/Import tasks from Excel/u);
+    expect(fetched?.output).toContain('preview column mappings');
     const review = detail.work.flow.stages[detail.work.stageIndex];
     expect(review.kind).toBe('review');
     const approved = await call('nrTaskWork', 'advance', {
@@ -692,9 +698,304 @@ test('imports the demo through the API and clears all business data while preser
   expect(data.skipped).toEqual([]);
   const { main, second } = data.projects;
 
+  // Both projects must reach the same business surfaces with their own content.
+  for (const [id, name, domain, count] of [
+    [main, 'ACME', 'acme.example', 47],
+    [second, 'ACME CRM', 'crm.acme.example', 39],
+  ] as const) {
+    const project = await runtime.plugin.projects.get(id);
+    expect(project).toMatchObject({ name, domains: [domain] });
+    const rows = await runtime.plugin.db
+      .getRepository('nrTasks')
+      .find({ filter: { projectId: id } });
+    expect(rows).toHaveLength(count);
+    expect(
+      new Set(
+        rows.map((row) => projectWork(row.toJSON()).boardState).filter(Boolean),
+      ),
+    ).toEqual(new Set(['todo', 'doing', 'review', 'done']));
+    const adminUser = await connection
+      .repository('user')
+      .findOne({ filter: { username: DEFAULT_ADMIN_CREDENTIALS.username } });
+    const waiting = rows
+      .map((row) => row.toJSON())
+      .filter(
+        (task) =>
+          taskOwner(task) === String(adminUser!.id) &&
+          !taskClosed(task.evidence?.work) &&
+          ['todo', 'review'].includes(
+            taskState(task.evidence?.work, task.status),
+          ),
+      );
+    expect(
+      waiting.length,
+      `${name}: default visitor's waiting work`,
+    ).toBeGreaterThanOrEqual(3);
+    expect(
+      new Set(
+        waiting.map((task) => taskState(task.evidence?.work, task.status)),
+      ),
+    ).toEqual(new Set(['todo', 'review']));
+    for (const row of rows.filter((row) =>
+      String(row.get('taskKey')).includes('nocoreach-demo:'),
+    )) {
+      const task = row.toJSON(),
+        work = projectWork(task);
+      for (const artifact of work.results.filter(Boolean)) {
+        expect(Date.parse(artifact!.createdAt)).toBeGreaterThanOrEqual(
+          Date.parse(task.createdAt),
+        );
+        expect(Date.parse(artifact!.createdAt)).toBeLessThanOrEqual(
+          Date.parse(task.updatedAt),
+        );
+      }
+      for (const result of work.observation?.results ?? []) {
+        expect(Date.parse(result.after.end)).toBeLessThan(
+          Date.parse(result.computedAt),
+        );
+        expect(Date.parse(result.computedAt)).toBeLessThanOrEqual(
+          Date.parse(task.updatedAt),
+        );
+        expect(result.coverage?.gsc.afterDays).toBe(7);
+      }
+    }
+    const outcomes = new Set(
+      rows.flatMap(
+        (row) =>
+          projectWork(row.toJSON()).observation?.results.map(
+            (result) => result.conclusion,
+          ) ?? [],
+      ),
+    );
+    expect(outcomes, `${name}: measured outcome coverage`).toEqual(
+      new Set(['up', 'down', 'flat', 'insufficient']),
+    );
+    const search = await runtime.plugin.dataViews.search(id, { range: '12m' });
+    expect(search.complete, `${name}: full year of search`).toBe(true);
+    expect(search.coverage.current.missingDays).toBe(0);
+    expect(search.coverage.current.recordedDays).toBe(search.window.days);
+    expect(search.trend.every((point) => point.clicks !== null)).toBe(true);
+    // A year-over-year Search Console comparison exceeds its 16-month retention, so remain honest about that gap.
+    expect(search.previousComplete).toBe(false);
+    expect(search.previous).toBeNull();
+    const longest = await runtime.plugin.dataViews.search(id, { range: '16m' });
+    const bounds = historyBounds(runtime.plugin, id);
+    expect(longest.coverage.current.records[0].start).toBe(bounds.earliest);
+    const website = await runtime.plugin.dataViews.website(id, {
+      range: '12m',
+    });
+    expect(website.complete, `${name}: yearly website report`).toBe(true);
+    expect(website.missing).toEqual([]);
+    expect(website.daily.length).toBeGreaterThanOrEqual(365);
+    expect(website.previousDaily.length).toBeGreaterThanOrEqual(365);
+    expect(website.totals.current.sessions).toBeGreaterThan(0);
+    expect(website.totals.previous.sessions).toBeGreaterThan(0);
+    const historical = await runtime.plugin.dataViews.search(id, {
+      range: 'custom',
+      from: search.window.start,
+      to: new Date(Date.parse(search.window.start) + 6 * 86400000)
+        .toISOString()
+        .slice(0, 10),
+    });
+    expect(historical.complete).toBe(true);
+    expect(historical.totals.clicks).toBeGreaterThan(0);
+    const snapshots = runtime.plugin.db.getRepository('nrSnapshots');
+    const read = async (key: string) =>
+      (await snapshots.findOne({ filter: { key: `${key}:${id}` } }))?.get(
+        'payload',
+      );
+    expect((await read('knowledge')).items).toHaveLength(8);
+    const strategy = await read('strategy');
+    expect(strategy.insights.items).toHaveLength(id === main ? 16 : 12);
+    expect(strategy.proposals).toHaveLength(14);
+    const timeline = strategy as StrategyState;
+    const watches = Object.values(timeline.watch!).filter(
+      (watch) => !watch.ended,
+    );
+    expect(watches).toHaveLength(6);
+    expect(
+      new Set(watches.map((watch) => watch.decideBy)).size,
+    ).toBeGreaterThanOrEqual(5);
+    for (const watch of watches) {
+      const current = timeline.insights!.evidence.signals!.items.find(
+        (signal) => signal.key === watch.key,
+      )!;
+      expect(current.chip?.text).toMatch(/\d/);
+      expect(watch.startChip?.text).toMatch(/\d/);
+      expect(watch.decideBy > timeline.insights!.generatedAt.slice(0, 10)).toBe(
+        true,
+      );
+      expect(
+        Date.parse(watch.decideBy) - Date.parse(watch.since.slice(0, 10)),
+      ).toBeLessThan(14 * 86400000);
+      if (
+        watch.since.slice(0, 10) !== timeline.insights!.generatedAt.slice(0, 10)
+      )
+        expect(verdictsOf(timeline, watch.key).length).toBeGreaterThan(1);
+    }
+    expect(
+      watches.filter(
+        (watch) =>
+          watch.startChip?.text !==
+          timeline.insights!.evidence.signals!.items.find(
+            (signal) => signal.key === watch.key,
+          )!.chip?.text,
+      ).length,
+    ).toBeGreaterThanOrEqual(4);
+    expect(
+      new Set(recentlyEnded(timeline).map((watch) => watch.ended!.outcome)),
+    ).toEqual(new Set(['opportunity', 'normal', 'skip', 'expired', 'ignored']));
+    const handled = rowsFor(timeline).filter(
+      (row) => opportunityState(row, timeline).state !== 'pending',
+    );
+    expect(handled.length).toBeGreaterThanOrEqual(16);
+    expect(
+      new Set(handled.map((row) => row.firstSeenAt.slice(0, 7))).size,
+    ).toBeGreaterThanOrEqual(10);
+    for (const proposal of timeline.proposals) {
+      const task = rows.find(
+        (row) => String(row.id) === String(proposal.taskId),
+      )!;
+      expect(Date.parse(proposal.insight!.firstSeenAt!)).toBeLessThan(
+        new Date(task.get('createdAt') as string).getTime(),
+      );
+    }
+    for (const key of id === main
+      ? ['acme-dependencies', 'acme-weekly-report', 'acme-kanban-wip']
+      : ['crm-import', 'crm-pipeline', 'crm-routing']) {
+      const task = rows.find((row) => String(row.taskKey).endsWith(`:${key}`))!;
+      const response = await admin.fetch('/nocoreach/nrTaskWork/get', {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ projectId: id, taskId: String(task.id) }),
+      });
+      expect(response.status).toBe(200);
+      const detail = (await response.json()).data;
+      const activity = detail.work.history;
+      expect(
+        activity.some(
+          (event: { action: string }) => event.action === 'startTask',
+        ),
+      ).toBe(true);
+      for (const artifact of detail.artifacts) {
+        expect(activity).toContainEqual(
+          expect.objectContaining({
+            action: 'runSucceeded',
+            artifactId: artifact.id,
+            runId: artifact.runId,
+          }),
+        );
+        expect(artifact.content).toContain('##');
+        expect(artifact.content.length).toBeGreaterThan(500);
+      }
+      for (const event of activity) {
+        expect(Date.parse(event.at)).toBeGreaterThanOrEqual(
+          new Date(task.get('createdAt') as string).getTime(),
+        );
+        expect(Date.parse(event.at)).toBeLessThanOrEqual(
+          new Date(task.get('updatedAt') as string).getTime(),
+        );
+      }
+      expect(detail.runs.length).toBeGreaterThanOrEqual(1);
+      expect(detail.execution.canInspect).toBe(true);
+      expect(detail.execution.events.length).toBeGreaterThanOrEqual(9);
+      expect(
+        detail.execution.events.some(
+          (event: { type: string }) => event.type === 'toolResult',
+        ),
+      ).toBe(true);
+      expect(
+        detail.runs.every(
+          (run: { simulated: boolean; pluginRunId?: string }) =>
+            run.simulated && !run.pluginRunId,
+        ),
+      ).toBe(true);
+      for (const run of detail.runs) {
+        expect(Date.parse(run.startedAt)).toBeGreaterThanOrEqual(
+          new Date(task.get('createdAt') as string).getTime(),
+        );
+        expect(Date.parse(run.endedAt)).toBeLessThanOrEqual(
+          new Date(task.get('updatedAt') as string).getTime(),
+        );
+      }
+      if (key === 'acme-dependencies' || key === 'crm-import') {
+        expect(
+          new Set(detail.runs.map((run: { status: string }) => run.status)),
+        ).toEqual(new Set(['succeeded', 'failed']));
+        const previous = await admin.fetch('/nocoreach/nrTaskWork/get', {
+          method: 'POST',
+          headers: json,
+          body: JSON.stringify({
+            projectId: id,
+            taskId: String(task.id),
+            runId: detail.runs.find(
+              (run: { status: string }) => run.status === 'failed',
+            ).id,
+          }),
+        });
+        expect(
+          (await previous.json()).data.execution.events.length,
+        ).toBeGreaterThan(5);
+      }
+      if (key === 'acme-weekly-report' || key === 'crm-pipeline') {
+        expect(detail.artifacts).toHaveLength(2);
+        const versions = [...detail.artifacts].sort(
+          (a, b) => a.version - b.version,
+        );
+        expect(versions[1].content.length).toBeGreaterThan(
+          versions[0].content.length,
+        );
+        const request = activity.find(
+          (event: { action: string }) => event.action === 'requestStageChanges',
+        );
+        expect(request.artifactId).toBe(versions[0].id);
+        expect(Date.parse(request.at)).toBeGreaterThan(
+          Date.parse(versions[0].createdAt),
+        );
+        expect(Date.parse(request.at)).toBeLessThan(
+          Date.parse(versions[1].createdAt),
+        );
+        expect(
+          detail.reviews.some(
+            (review: { decision: string }) =>
+              review.decision === 'requestChanges',
+          ),
+        ).toBe(true);
+      }
+    }
+    const taskIds = new Set(rows.map((row) => String(row.id)));
+    expect(
+      strategy.proposals.every((proposal: { taskId: string }) =>
+        taskIds.has(String(proposal.taskId)),
+      ),
+    ).toBe(true);
+    for (const key of [
+      'site-content',
+      'github',
+      'community',
+      'packages',
+      'chat',
+      'rank-tracking',
+      'youtube',
+    ]) {
+      const snapshot = await read(key);
+      expect(snapshot, `${name}: ${key}`).toBeTruthy();
+      expect(JSON.stringify(snapshot)).not.toMatch(/nocobase|nococrm/i);
+    }
+    expect(
+      (await runtime.plugin.aiSearch.list(id)).length,
+    ).toBeGreaterThanOrEqual(2);
+    const token = await runtime.plugin.demoProjects.worldRequest(
+      id,
+      'https://oauth2.googleapis.com/token',
+      { method: 'POST' },
+    );
+    expect(token.status).toBe(200);
+  }
+
   // The importer and the demo's own people see the demo projects; a member sees only theirs.
   const member = await signIn(testApp, {
-    email: 'chencheng@nocobase.example',
+    email: 'chencheng@acme.example',
     password: 'chencheng123',
   });
   expect((await member.fetch('/demoMode/data')).status).toBe(403);
@@ -998,7 +1299,7 @@ test('imports the demo through the API and clears all business data while preser
   const people = await connection.query
     .selectFrom('user')
     .select(['email', 'disabledAt'])
-    .where('email', 'like', '%@nocobase.example')
+    .where('email', 'like', '%@acme.example')
     .execute();
   expect(people).toHaveLength(5);
   expect(people.every((person) => person.disabledAt)).toBe(true);
@@ -1046,7 +1347,7 @@ test('imports the demo through the API and clears all business data while preser
     password: 'existing-account-password',
   });
   const grace = await signIn(testApp, {
-    email: 'grace@nocobase.example',
+    email: 'grace@acme.example',
     password: 'grace123',
   });
   const graceProjects = (await (
@@ -1056,10 +1357,7 @@ test('imports the demo through the API and clears all business data while preser
       body: '{}',
     })
   ).json()) as { data: { name: string; language: string }[] };
-  expect(graceProjects.data.map((p) => p.name)).toEqual([
-    'NocoBase',
-    'NocoCRM',
-  ]);
+  expect(graceProjects.data.map((p) => p.name)).toEqual(['ACME', 'ACME CRM']);
   expect(graceProjects.data.at(-1)!.language).toBe('en-US');
 
   const reset = await demo.reset(undefined, 'zh-CN', { wait: true });
@@ -1075,6 +1373,73 @@ test('imports the demo through the API and clears all business data while preser
 
 describe('existing account conflicts', () => {
   const test = accountConflictTest;
+  test('renames owned legacy demo emails without changing unrelated identities or passwords', async ({
+    testApp,
+    connection,
+  }) => {
+    const runtime = testApp.application.container.resolve(nocoReachToken);
+    await runtime.ready;
+    const users = testApp.application.container.resolve(
+      userManagementServiceToken,
+    );
+    const specs = [
+      {
+        username: 'grace',
+        email: 'grace@nocobase.example',
+        dataset: 'nocoreach',
+      },
+      { username: 'xulan', email: 'xulan@nocobase.example' },
+      {
+        username: 'ethan',
+        email: 'ethan@nocobase.example',
+        dataset: 'another-demo',
+      },
+      {
+        username: 'sophie',
+        email: 'sophie@team.example',
+        dataset: 'nocoreach',
+      },
+    ];
+    const accounts = [];
+    for (const spec of specs) {
+      const account = await users.create({
+        name: spec.username,
+        username: spec.username,
+        email: spec.email,
+        password: 'original-password-123',
+      });
+      if (spec.dataset)
+        await connection.repository('demoModeAccounts').createOne({
+          values: {
+            userId: account.id,
+            datasetId: spec.dataset,
+            passwordHash: 'fixture-owned-account',
+          },
+        });
+      accounts.push(account);
+    }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await migrateDemoIdentityEmails(
+        runtime.plugin.db.access!.database,
+        users,
+      );
+      for (const [index, account] of accounts.entries()) {
+        const current = await users.get(account.id);
+        expect(current).toMatchObject({
+          id: account.id,
+          username: account.username,
+          name: account.name,
+          email: index === 0 ? 'grace@acme.example' : account.email,
+        });
+        expect(current.roleScopes).toEqual(account.roleScopes);
+      }
+    }
+    await signIn(testApp, {
+      email: 'grace@acme.example',
+      password: 'original-password-123',
+    });
+  });
+
   test('refuses to reuse a pre-existing account even when both demo username and email match', async ({
     testApp,
     connection,
@@ -1087,7 +1452,7 @@ describe('existing account conflicts', () => {
     const own = await users.create({
       name: 'Existing person',
       username: 'zhouning',
-      email: 'zhouning@nocobase.example',
+      email: 'zhouning@acme.example',
       password: 'original-password-123',
     });
     const adminId = (await connection.query
@@ -1117,7 +1482,7 @@ describe('existing account conflicts', () => {
       disabledAt: null,
     });
     await signIn(testApp, {
-      email: 'zhouning@nocobase.example',
+      email: 'zhouning@acme.example',
       password: 'original-password-123',
     });
     expect(await runtime.plugin.projects.all()).toEqual([]);

@@ -377,7 +377,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     await runtime.plugin.agents.agents.applyDefaults();
     if (this.app.container.has(demoDataToken)) {
       const demoData = this.app.container.resolve(demoDataToken);
-      demoData.register(createNocoReachDemo(runtime.plugin, this.app.container.resolve(driveManagerToken), () => runtime.cache.clear()));
+      demoData.register(createNocoReachDemo(runtime.plugin, this.app.container.resolve(driveManagerToken), () => runtime.cache.clear(), users));
       const configuration = this.app.container.resolve(demoConfigurationToken);
       registerDemoAdapters(runtime.plugin, configuration);
       runtime.plugin.demoConfiguration = configuration;

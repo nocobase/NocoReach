@@ -10,9 +10,6 @@ import {
   textResponse,
   type Json,
 } from './kit.js';
-import { DISCORD, SLACK } from './script/chat.js';
-import { FORUM } from './script/community.js';
-import { HN_STORIES, X_POSTS } from './script/social.js';
 import type { ChatChannel, ChatMessage, Topic } from './script/types.js';
 import type { World } from './world.js';
 
@@ -76,9 +73,8 @@ function postsJson(world: World, topic: Topic, index: number): Json[] {
 }
 
 export function community(world: World, u: URL): Response | undefined {
-  if (!world.main || u.hostname !== `community.${world.project.domain}`)
-    return undefined;
-  const topics = FORUM.topics
+  if (u.hostname !== `community.${world.project.domain}`) return undefined;
+  const topics = world.forum.topics
     .map((topic, index) => ({ topic, index }))
     .sort(
       (a, b) =>
@@ -88,11 +84,14 @@ export function community(world: World, u: URL): Response | undefined {
   if (u.pathname === '/about.json')
     return json({
       about: {
-        title: world.text(FORUM.title),
-        description: world.text(FORUM.description),
+        title: world.text(world.forum.title),
+        description: world.text(world.forum.description),
         stats: {
-          topics_count: FORUM.topics.length,
-          posts_count: FORUM.topics.reduce((n, t) => n + t.posts.length, 0),
+          topics_count: world.forum.topics.length,
+          posts_count: world.forum.topics.reduce(
+            (n, t) => n + t.posts.length,
+            0,
+          ),
           users_count: 3480,
           active_users_7_days: 212,
           active_users_30_days: 640,
@@ -103,11 +102,11 @@ export function community(world: World, u: URL): Response | undefined {
     });
   if (u.pathname === '/site.json')
     return json({
-      categories: FORUM.categories.map(([id, name, slug]) => ({
+      categories: world.forum.categories.map(([id, name, slug]) => ({
         id,
         name: world.text(name),
         slug,
-        topic_count: FORUM.topics.filter((t) => t.category === id).length,
+        topic_count: world.forum.topics.filter((t) => t.category === id).length,
       })),
     });
   if (u.pathname === '/latest.json') {
@@ -159,7 +158,7 @@ export function community(world: World, u: URL): Response | undefined {
   }
   if (u.pathname === '/')
     return textResponse(
-      `<!doctype html><html><head><title>${escapeHtml(world.text(FORUM.title))}</title></head><body><h1>${escapeHtml(world.text(FORUM.title))}</h1><p>${escapeHtml(world.text(FORUM.description))}</p></body></html>`,
+      `<!doctype html><html><head><title>${escapeHtml(world.text(world.forum.title))}</title></head><body><h1>${escapeHtml(world.text(world.forum.title))}</h1><p>${escapeHtml(world.text(world.forum.description))}</p></body></html>`,
       'text/html; charset=utf-8',
     );
   return notFound();
@@ -168,7 +167,7 @@ export function community(world: World, u: URL): Response | undefined {
 // Slack and Discord.
 
 function slackChannels(world: World): Json[] {
-  return SLACK.map((channel, i) => ({
+  return world.slack.map((channel, i) => ({
     id: `C0${world.seeded.hash(`slack:${channel.name}`).slice(0, 9).toUpperCase()}`,
     name: channel.name,
     is_channel: true,
@@ -198,7 +197,7 @@ function slackMessages(world: World, channel: ChatChannel): Json[] {
 }
 
 export function slack(world: World, u: URL): Response | undefined {
-  if (u.hostname !== 'slack.com' || !world.main) return undefined;
+  if (u.hostname !== 'slack.com') return undefined;
   const method = u.pathname.replace(/^\/api\//, '');
   const channels = slackChannels(world);
   if (method === 'auth.test')
@@ -244,7 +243,7 @@ export function slack(world: World, u: URL): Response | undefined {
     method === 'conversations.history' ||
     method === 'conversations.replies'
   ) {
-    const channel = SLACK[index];
+    const channel = world.slack[index];
     let rows = slackMessages(world, channel);
     const oldest = Number(u.searchParams.get('oldest') ?? 0);
     if (method === 'conversations.history')
@@ -312,7 +311,7 @@ type Thread = {
 };
 function threads(world: World): Thread[] {
   const out: Thread[] = [];
-  for (const channel of DISCORD) {
+  for (const channel of world.discord) {
     if (!channel.forum) continue;
     channel.messages.forEach((m, i) => {
       const at = world.now - m.at * HOUR;
@@ -332,7 +331,7 @@ function threads(world: World): Thread[] {
 }
 
 function discordMessages(world: World, channelId: string): Json[] {
-  const channel = DISCORD.find(
+  const channel = world.discord.find(
     (c) => discordChannelId(world, c.name) === channelId,
   );
   if (channel) {
@@ -411,7 +410,7 @@ function discordMessages(world: World, channelId: string): Json[] {
 }
 
 export function discord(world: World, u: URL): Response | undefined {
-  if (u.hostname !== 'discord.com' || !world.main) return undefined;
+  if (u.hostname !== 'discord.com') return undefined;
   const p = u.pathname.replace(/^\/api\/v10/, '');
   const guild = guildId(world);
   if (p === '/users/@me')
@@ -434,7 +433,7 @@ export function discord(world: World, u: URL): Response | undefined {
     ]);
   if (p === `/guilds/${guild}/channels`)
     return json(
-      DISCORD.map((channel, i) => ({
+      world.discord.map((channel, i) => ({
         id: discordChannelId(world, channel.name),
         name: channel.name,
         type: channel.forum ? 15 : 0,
@@ -469,7 +468,7 @@ export function discord(world: World, u: URL): Response | undefined {
   if (!channel) return undefined;
   const [, id, kind] = channel;
   const known =
-    DISCORD.some((c) => discordChannelId(world, c.name) === id) ||
+    world.discord.some((c) => discordChannelId(world, c.name) === id) ||
     all.some((t) => t.id === id);
   if (!known) return json({ message: 'Unknown Channel', code: 10003 }, 404);
   if (kind === 'threads/archived/public') {
@@ -505,8 +504,8 @@ export function discord(world: World, u: URL): Response | undefined {
 // X recent search: the last seven days.
 
 function xPosts(world: World): Json[] {
-  if (!world.main) return [];
-  return X_POSTS.filter((post) => post.at < 24 * 7)
+  return world.xPosts
+    .filter((post) => post.at < 24 * 7)
     .map((post, i) => {
       const at = world.now - post.at * HOUR;
       return {
@@ -569,7 +568,7 @@ export function xApi(world: World, u: URL): Response | undefined {
       u.searchParams.get('next_token'),
       u.searchParams.get('max_results') ?? 100,
     );
-    const users = X_POSTS.map((p) => p.author);
+    const users = world.xPosts.map((p) => p.author);
     return json({
       data: page.items,
       includes: {
@@ -601,9 +600,8 @@ export function xApi(world: World, u: URL): Response | undefined {
 // Hacker News through Algolia.
 
 function hnRows(world: World): Json[] {
-  if (!world.main) return [];
   const rows: Json[] = [];
-  HN_STORIES.forEach((story, i) => {
+  world.hnStories.forEach((story, i) => {
     const storyId = 41_000_000 + world.seeded.int(`hn:${i}`, 900_000);
     const at = world.now - story.age * DAY;
     const url = story.url ?? world.origin + story.path;
