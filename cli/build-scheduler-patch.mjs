@@ -9,7 +9,7 @@ const source = realpathSync(path.join(root, 'node_modules', packageName));
 const destination = path.join(root, 'dist/node_modules', packageName);
 const readPackage = (directory) =>
   JSON.parse(readFileSync(path.join(directory, 'package.json'), 'utf8'));
-const version = '1.0.0-beta.19';
+const version = '1.0.0-beta.20';
 if (
   readPackage(source).version !== version ||
   readPackage(destination).version !== version

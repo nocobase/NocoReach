@@ -64,38 +64,16 @@
     },
     "agents": {
       "title": "Agen",
-      "description": "Setiap alat pemrograman dan model yang dilaporkan runner merupakan agen. Manajer proyek menyerahkan setiap langkah suatu isu kepada agen yang deskripsinya sesuai.",
       "fromRunners": "Agen lokal yang dilaporkan lingkungan eksekusi",
-      "discovery": {
-        "selectAll": "Pilih semua hasil",
-        "selectFirst": "Pilih {{limit}} hasil pertama",
-        "selectionCount": "{{count}} / {{limit}} grup dipilih",
-        "clearSelection": "Hapus pilihan",
-        "new": "Baru ditemukan ({{count}})",
-        "ignored": "Diabaikan ({{count}})",
-        "search": "Cari model atau penyedia",
-        "select": "Pilih {{name}}",
-        "ignore": "Abaikan",
-        "restore": "Pulihkan",
-        "ignoreSelected": "Abaikan yang dipilih",
-        "restoreSelected": "Pulihkan yang dipilih",
-        "enabled": "Tampilkan yang diaktifkan",
-        "disabled": "Tampilkan yang dinonaktifkan",
-        "provider": "Penyedia dan runner",
-        "saved": "Preferensi penemuan disimpan"
-      },
       "filterLabel": "Tampilkan agen",
       "filters": {
         "all": "Semua {{count}}",
         "enabled": "Diaktifkan {{count}}",
-        "pending": "Belum diaktifkan {{count}}",
         "unreported": "Tanpa runner {{count}}"
       },
       "loadFailed": "Tidak dapat memuat agen",
       "emptyTitle": "Belum ada agen",
-      "emptyDescription": "Hubungkan runner dengan alat pemrograman yang sudah masuk ke akun: setiap modelnya akan muncul di sini sebagai agen yang dapat diaktifkan.",
       "noneInFilter": "Tidak ada agen di sini.",
-      "howToAdd": "Untuk menambah agen lokal, pasang alat pemrograman di lingkungan eksekusi lalu masuk. Agen muncul di “Baru ditemukan”; tulis keunggulannya untuk mengaktifkannya.",
       "goodAtMissing": "Belum ditulis",
       "columns": {
         "agent": "Agen",
@@ -118,7 +96,6 @@
       },
       "state": {
         "enabled": "Diaktifkan",
-        "pending": "Belum diaktifkan",
         "disabled": "Dinonaktifkan",
         "unreported": "Tanpa runner"
       },
@@ -134,18 +111,13 @@
         "ultra": "Ultra"
       },
       "enable": {
-        "button": "Lengkapi dan aktifkan",
-        "buttonFor": "Lengkapi dan aktifkan {{name}}",
-        "title": "Aktifkan {{name}}",
         "reportedBy_one": "Dilaporkan oleh {{count}} runner daring: {{names}}.",
         "reportedBy_other": "Dilaporkan oleh {{count}} runner daring: {{names}}.",
         "noRunnerNow": "Tidak ada runner yang memiliki agen ini yang sedang daring.",
         "goodAtHint": "Manajer proyek menentukan tugas untuk agen ini berdasarkan deskripsi ini. Jelaskan tugas yang cocok dan yang tidak cocok.",
         "goodAtRequired": "Tuliskan keahliannya sebelum mengaktifkannya.",
         "effortHint": "Manajer proyek tidak dapat mengubahnya saat menyerahkan pekerjaan.",
-        "personalOnly": "Hanya tersedia pada runner pribadi: manajer proyek hanya menyerahkan pekerjaan dari isu yang dimulai oleh pemilik runner tersebut.",
-        "submit": "Aktifkan",
-        "done": "{{name}} diaktifkan"
+        "personalOnly": "Hanya tersedia pada runner pribadi: manajer proyek hanya menyerahkan pekerjaan dari isu yang dimulai oleh pemilik runner tersebut."
       },
       "edit": {
         "button": "Edit",

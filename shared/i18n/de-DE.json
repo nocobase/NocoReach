@@ -6392,7 +6392,6 @@
   "agentsPage.description": "NocoReach nutzt zwei Arten von KI: Cloud-Modelle erstellen die tägliche Analyse und antworten im Chatbereich, lokale Agenten führen Aufgaben aus.",
   "agentsPage.addRuntime": "Laufzeitumgebung hinzufügen",
   "agentsPage.viewRuntimes": "Laufzeitumgebungen anzeigen",
-  "agentsPage.runnerDescription": "Jede Kombination aus Programmierwerkzeug und Modell, die eine Laufzeitumgebung meldet, ist ein lokaler Agent; erst aktiviert übernimmt er Aufgaben.",
   "agentChoice.onlineHint": "Beantwortet Fragen; führt keine Aufgaben aus",
   "agentChoice.runnerHint": "Kann Aufgaben erstellen und starten; benötigt eine aktive Laufzeitumgebung",
   "agentRoles.title": "Wer die Arbeit erledigt",

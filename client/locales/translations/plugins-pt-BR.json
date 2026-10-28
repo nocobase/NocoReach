@@ -64,38 +64,16 @@
     },
     "agents": {
       "title": "Agentes",
-      "description": "Cada combinação de ferramenta de programação e modelo informada por um Runner é um agente. O gerente de projeto atribui cada etapa de uma demanda ao agente cuja descrição corresponde ao trabalho.",
       "fromRunners": "Agentes locais informados pelos ambientes de execução",
-      "discovery": {
-        "selectAll": "Selecionar todos os resultados",
-        "selectFirst": "Selecionar os primeiros {{limit}} resultados",
-        "selectionCount": "Grupos selecionados: {{count}} / {{limit}}",
-        "clearSelection": "Limpar seleção",
-        "new": "Novas descobertas ({{count}})",
-        "ignored": "Ignorados ({{count}})",
-        "search": "Buscar modelos ou provedores",
-        "select": "Selecionar {{name}}",
-        "ignore": "Ignorar",
-        "restore": "Restaurar",
-        "ignoreSelected": "Ignorar selecionados",
-        "restoreSelected": "Restaurar selecionados",
-        "enabled": "Mostrar ativados",
-        "disabled": "Mostrar desativados",
-        "provider": "Provedor e Runner",
-        "saved": "Preferências de descoberta salvas"
-      },
       "filterLabel": "Mostrar agentes",
       "filters": {
         "all": "Todos {{count}}",
         "enabled": "Ativados {{count}}",
-        "pending": "A ativar {{count}}",
         "unreported": "Sem Runner {{count}}"
       },
       "loadFailed": "Não foi possível carregar os agentes",
       "emptyTitle": "Ainda não há agentes",
-      "emptyDescription": "Conecte um Runner com uma ferramenta de programação autenticada: cada modelo dela aparecerá aqui como um agente que você pode ativar.",
       "noneInFilter": "Nenhum agente aqui.",
-      "howToAdd": "Para adicionar um agente local, instale uma ferramenta de programação em um ambiente de execução e entre na conta. Ele aparece em “Novas descobertas”; escreva em que ele é bom para ativá-lo.",
       "goodAtMissing": "Ainda não informado",
       "columns": {
         "agent": "Agente",
@@ -118,7 +96,6 @@
       },
       "state": {
         "enabled": "Ativado",
-        "pending": "A ativar",
         "disabled": "Desativado",
         "unreported": "Sem Runner"
       },
@@ -134,18 +111,13 @@
         "ultra": "Ultra"
       },
       "enable": {
-        "button": "Preencher e ativar",
-        "buttonFor": "Preencher e ativar {{name}}",
-        "title": "Ativar {{name}}",
         "reportedBy_one": "Informado por {{count}} Runner conectado: {{names}}.",
         "reportedBy_other": "Informado por {{count}} Runners conectados: {{names}}.",
         "noRunnerNow": "Nenhum Runner que tem este agente está conectado no momento.",
         "goodAtHint": "O gerente de projeto usa esta descrição para decidir quais tarefas atribuir ao agente. Diga para quais tarefas ele é indicado e para quais não é.",
         "goodAtRequired": "Descreva os pontos fortes do agente antes de ativá-lo.",
         "effortHint": "O gerente de projeto não pode alterar este valor ao atribuir tarefas.",
-        "personalOnly": "Este agente está disponível apenas em Runners pessoais: o gerente de projeto só atribui tarefas a ele em demandas iniciadas pelos proprietários desses Runners.",
-        "submit": "Ativar",
-        "done": "{{name}} está ativado"
+        "personalOnly": "Este agente está disponível apenas em Runners pessoais: o gerente de projeto só atribui tarefas a ele em demandas iniciadas pelos proprietários desses Runners."
       },
       "edit": {
         "button": "Editar",

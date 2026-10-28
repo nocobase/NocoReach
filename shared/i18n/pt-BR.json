@@ -6392,7 +6392,6 @@
   "agentsPage.description": "O NocoReach usa dois tipos de IA: os modelos na nuvem fazem a análise diária e respondem no painel de conversa, e os agentes locais executam as tarefas.",
   "agentsPage.addRuntime": "Adicionar ambiente de execução",
   "agentsPage.viewRuntimes": "Ver ambientes de execução",
-  "agentsPage.runnerDescription": "Cada combinação de ferramenta de programação e modelo informada por um ambiente de execução é um agente local; só recebe tarefas depois de ativado.",
   "agentChoice.onlineHint": "Responde a perguntas; não executa tarefas",
   "agentChoice.runnerHint": "Pode criar e iniciar tarefas; precisa do ambiente de execução online",
   "agentRoles.title": "Quem faz o trabalho",

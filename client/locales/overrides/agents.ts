@@ -9,19 +9,10 @@ const PLUGIN = '@nocobase/app-plugin-agents';
 export const agentsOverridesZhCN: TranslationOverrides = {
   [PLUGIN]: {
     agents: {
-      description:
-        '运行环境上报的每个「工具 · 模型」就是一个 agent。项目经理按「擅长什么」把任务的每一步派给它们。',
       fromRunners: '运行环境上报的本地 Agent',
-      discovery: {
-        provider: '服务商与运行环境',
-      },
       filters: {
         unreported: '暂无运行环境 {{count}}',
       },
-      emptyDescription:
-        '连接一个登录了编码工具的运行环境：它上报的每个模型都会出现在这里，等你启用。',
-      howToAdd:
-        '想加一个本地 Agent：在运行环境上装好编码工具并登录，它会出现在“新发现”里，写好「擅长什么」即可启用。',
       where: {
         none: '暂无运行环境',
         noneOnline: '现在没有运行环境在线',
@@ -142,8 +133,6 @@ export const agentsOverridesEnUS: TranslationOverrides = {
   [PLUGIN]: {
     agents: {
       fromRunners: 'Local agents reported by runtimes',
-      howToAdd:
-        'To add a local agent, install a coding tool on a runtime and sign in. It then shows up as newly discovered; write what it is good at to enable it.',
     },
     runtimes: {
       description:

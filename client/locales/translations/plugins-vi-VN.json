@@ -64,38 +64,16 @@
     },
     "agents": {
       "title": "Tác nhân AI",
-      "description": "Mỗi tổ hợp công cụ lập trình và mô hình do môi trường thực thi báo cáo là một tác nhân AI. Trình quản lý dự án giao từng bước của một vấn đề cho tác nhân AI có mô tả phù hợp.",
       "fromRunners": "Tác nhân AI cục bộ do môi trường thực thi báo cáo",
-      "discovery": {
-        "selectAll": "Chọn tất cả kết quả",
-        "selectFirst": "Chọn {{limit}} kết quả đầu tiên",
-        "selectionCount": "Đã chọn {{count}} / {{limit}} nhóm",
-        "clearSelection": "Bỏ chọn tất cả",
-        "new": "Mới phát hiện ({{count}})",
-        "ignored": "Đã bỏ qua ({{count}})",
-        "search": "Tìm mô hình hoặc nhà cung cấp",
-        "select": "Chọn {{name}}",
-        "ignore": "Bỏ qua",
-        "restore": "Khôi phục",
-        "ignoreSelected": "Bỏ qua mục đã chọn",
-        "restoreSelected": "Khôi phục mục đã chọn",
-        "enabled": "Hiện mục đã bật",
-        "disabled": "Hiện mục đã tắt",
-        "provider": "Nhà cung cấp và môi trường thực thi",
-        "saved": "Đã lưu tùy chọn phát hiện"
-      },
       "filterLabel": "Hiển thị tác nhân AI",
       "filters": {
         "all": "Tất cả {{count}}",
         "enabled": "Đã bật {{count}}",
-        "pending": "Chờ bật {{count}}",
         "unreported": "Không có môi trường thực thi {{count}}"
       },
       "loadFailed": "Không thể tải các tác nhân AI",
       "emptyTitle": "Chưa có tác nhân AI",
-      "emptyDescription": "Kết nối một môi trường thực thi có công cụ lập trình đã đăng nhập: mỗi mô hình của công cụ sẽ xuất hiện tại đây dưới dạng tác nhân AI để bạn bật.",
       "noneInFilter": "Không có tác nhân AI nào ở đây.",
-      "howToAdd": "Để thêm tác nhân AI cục bộ, hãy cài công cụ lập trình trên môi trường thực thi và đăng nhập. Tác nhân sẽ xuất hiện trong “Mới phát hiện”; ghi điểm mạnh của nó để bật.",
       "goodAtMissing": "Chưa có mô tả",
       "columns": {
         "agent": "Tác nhân AI",
@@ -118,7 +96,6 @@
       },
       "state": {
         "enabled": "Đã bật",
-        "pending": "Chờ bật",
         "disabled": "Đã tắt",
         "unreported": "Không có môi trường thực thi"
       },
@@ -134,18 +111,13 @@
         "ultra": "Siêu cao"
       },
       "enable": {
-        "button": "Điền thông tin và bật",
-        "buttonFor": "Điền thông tin và bật {{name}}",
-        "title": "Bật {{name}}",
         "reportedBy_one": "Được {{count}} môi trường thực thi trực tuyến báo cáo: {{names}}.",
         "reportedBy_other": "Được {{count}} môi trường thực thi trực tuyến báo cáo: {{names}}.",
         "noRunnerNow": "Hiện không có môi trường thực thi nào chứa tác nhân AI này đang trực tuyến.",
         "goodAtHint": "Trình quản lý dự án dựa vào mô tả này để quyết định giao việc cho tác nhân AI. Hãy nêu rõ công việc phù hợp và không phù hợp.",
         "goodAtRequired": "Vui lòng mô tả thế mạnh trước khi bật.",
         "effortHint": "Trình quản lý dự án không thể thay đổi mức này khi giao việc.",
-        "personalOnly": "Chỉ có trên môi trường thực thi cá nhân: trình quản lý dự án chỉ giao việc thuộc các vấn đề do chủ sở hữu môi trường đó khởi tạo.",
-        "submit": "Bật",
-        "done": "Đã bật {{name}}"
+        "personalOnly": "Chỉ có trên môi trường thực thi cá nhân: trình quản lý dự án chỉ giao việc thuộc các vấn đề do chủ sở hữu môi trường đó khởi tạo."
       },
       "edit": {
         "button": "Chỉnh sửa",

@@ -275,6 +275,32 @@ minimumReleaseAgeExclude:
   - '@nocobase/agent-protocol@0.1.0-beta.15'
   - '@nocobase/agent-runner@0.1.0-beta.19'
   - '@nocobase/app-cli-client@0.1.0-beta.16'
+  # Demo Mode beta.5 and its coordinated framework, account and Runner companions.
+  - '@nocobase/app-plugin-demo-mode@0.2.0-beta.5'
+  - '@nocobase/app-cli@1.0.0-beta.30'
+  - '@nocobase/app-client@4.0.0-beta.4'
+  - '@nocobase/app-server@3.0.0-beta.4'
+  - '@nocobase/db@1.0.0-beta.23'
+  - '@nocobase/app-plugin-users@2.0.0-beta.11'
+  - '@nocobase/app-plugin-authorization@1.0.0-beta.33'
+  - '@nocobase/app-plugin-authentication@2.0.0-beta.15'
+  - '@nocobase/app-plugin-agents@1.0.0-beta.29'
+  - '@nocobase/app-plugin-file@1.0.0-beta.27'
+  - '@nocobase/app-plugin-notification@2.0.0-beta.1'
+  - '@nocobase/dev-config@0.1.0-beta.25'
+  - '@nocobase/agent-runner@0.1.0-beta.21'
+  - '@nocobase/app-cli-client@0.1.0-beta.17'
+  - '@nocobase/agent-protocol@0.1.0-beta.16'
+  - '@nocobase/api-client@1.0.0-beta.6'
+  # Align the remaining NocoBase plugins and generated development skills.
+  - '@nocobase/app-plugin-api-keys@1.0.0-beta.19'
+  - '@nocobase/app-plugin-authz-default-access@1.0.0-beta.16'
+  - '@nocobase/app-plugin-authz-restriction-rules@1.0.0-beta.15'
+  - '@nocobase/app-plugin-authz-sharing-rules@1.0.0-beta.16'
+  - '@nocobase/app-plugin-database-explorer@1.0.0-beta.17'
+  - '@nocobase/app-plugin-mail@1.0.0-beta.17'
+  - '@nocobase/app-plugin-scheduler@1.0.0-beta.20'
+  - '@nocobase/app-skills@0.1.0-beta.53'
 # NocoReach-owned Scheduler extension. Upgrade this pin, the patch and the version in cli/build-scheduler-patch.mjs together.
 patchedDependencies:
-  '@nocobase/app-plugin-scheduler@1.0.0-beta.19': patches/@nocobase__app-plugin-scheduler@1.0.0-beta.19.patch
+  '@nocobase/app-plugin-scheduler@1.0.0-beta.20': patches/@nocobase__app-plugin-scheduler@1.0.0-beta.20.patch

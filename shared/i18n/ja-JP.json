@@ -6392,7 +6392,6 @@
   "agentsPage.description": "NocoReach では 2 種類の AI が働きます。クラウドモデルが日次分析とチャットパネルの回答を担当し、ローカルエージェントがタスクを実行します。",
   "agentsPage.addRuntime": "実行環境を追加",
   "agentsPage.viewRuntimes": "実行環境を表示",
-  "agentsPage.runnerDescription": "実行環境が報告するコーディングツールとモデルの組み合わせが、それぞれ 1 つのローカルエージェントです。有効にすると、タスクを受け付けます。",
   "agentChoice.onlineHint": "質問に回答します。タスクは実行しません",
   "agentChoice.runnerHint": "タスクを作成・開始できます。実行環境がオンラインである必要があります",
   "agentRoles.title": "作業の担当",

@@ -64,38 +64,16 @@
     },
     "agents": {
       "title": "Agents",
-      "description": "Chaque combinaison d’outil de programmation et de modèle signalée par un moteur d’exécution constitue un agent. Le chef de projet confie chaque étape d’un ticket à l’agent dont la description convient.",
       "fromRunners": "Agents locaux déclarés par les environnements d’exécution",
-      "discovery": {
-        "selectAll": "Sélectionner tous les résultats",
-        "selectFirst": "Sélectionner les {{limit}} premiers résultats",
-        "selectionCount": "Groupes sélectionnés : {{count}} / {{limit}}",
-        "clearSelection": "Effacer la sélection",
-        "new": "Nouvelles découvertes ({{count}})",
-        "ignored": "Ignorés ({{count}})",
-        "search": "Rechercher des modèles ou des fournisseurs",
-        "select": "Sélectionner {{name}}",
-        "ignore": "Ignorer",
-        "restore": "Restaurer",
-        "ignoreSelected": "Ignorer la sélection",
-        "restoreSelected": "Restaurer la sélection",
-        "enabled": "Afficher les agents activés",
-        "disabled": "Afficher les agents désactivés",
-        "provider": "Fournisseur et moteur d’exécution",
-        "saved": "Préférences de découverte enregistrées"
-      },
       "filterLabel": "Afficher les agents",
       "filters": {
         "all": "Tous {{count}}",
         "enabled": "Activés {{count}}",
-        "pending": "À activer {{count}}",
         "unreported": "Sans moteur d’exécution {{count}}"
       },
       "loadFailed": "Impossible de charger les agents",
       "emptyTitle": "Aucun agent pour le moment",
-      "emptyDescription": "Connectez un moteur d’exécution doté d’un outil de programmation authentifié : chacun de ses modèles apparaîtra ici comme agent à activer.",
       "noneInFilter": "Aucun agent ici.",
-      "howToAdd": "Pour ajouter un agent local, installez un outil de développement sur un environnement d’exécution et connectez-vous. Il apparaît dans « Nouvelles découvertes » ; indiquez ce qu’il sait bien faire pour l’activer.",
       "goodAtMissing": "Non renseigné",
       "columns": {
         "agent": "Agent",
@@ -118,7 +96,6 @@
       },
       "state": {
         "enabled": "Activé",
-        "pending": "À activer",
         "disabled": "Désactivé",
         "unreported": "Aucun moteur d’exécution"
       },
@@ -134,18 +111,13 @@
         "ultra": "Ultra"
       },
       "enable": {
-        "button": "Renseigner et activer",
-        "buttonFor": "Renseigner et activer {{name}}",
-        "title": "Activer {{name}}",
         "reportedBy_one": "Signalé par {{count}} moteur d’exécution en ligne : {{names}}.",
         "reportedBy_other": "Signalé par {{count}} moteurs d’exécution en ligne : {{names}}.",
         "noRunnerNow": "Aucun moteur d’exécution disposant de cet agent n’est actuellement en ligne.",
         "goodAtHint": "Le chef de projet s’appuie sur cette description pour choisir les tâches à confier à cet agent. Précisez ce qui lui convient et ce qui ne lui convient pas.",
         "goodAtRequired": "Décrivez ses points forts avant de l’activer.",
         "effortHint": "Le chef de projet ne peut pas modifier cette valeur lorsqu’il attribue une tâche.",
-        "personalOnly": "Seuls des moteurs d’exécution personnels disposent de cet agent : le chef de projet lui confie uniquement des tâches sur les tickets lancés par leurs propriétaires.",
-        "submit": "Activer",
-        "done": "{{name}} est activé"
+        "personalOnly": "Seuls des moteurs d’exécution personnels disposent de cet agent : le chef de projet lui confie uniquement des tâches sur les tickets lancés par leurs propriétaires."
       },
       "edit": {
         "button": "Modifier",

@@ -1,5 +1,10 @@
 import { render, screen } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
+import {
+  createTestI18nRuntime,
+  TestI18nProvider,
+} from '@nocobase/i18n/testing';
+import agentsZhCN from '../../node_modules/@nocobase/app-plugin-agents/dist/client/locales/zh-CN.js';
 import LocalAgentsPage from '../../client/pages/agents/runner';
 
 vi.mock('@nocobase/app-plugin-agents/client/kit', () => ({
@@ -13,13 +18,17 @@ vi.mock('@nocobase/app-plugin-agents/client/kit', () => ({
 
 // Agent › Local agents (2026-10-22 user decision): one description and the plugin's list. The project default moved to
 // the overview's Tasks › Settings dialog, and the tab bar already names the tab.
-test('shows one description and the list, without the project default or a visible heading', () => {
-  render(<LocalAgentsPage />);
-  expect(
-    screen.getByText(
-      '每个运行环境上报的「编码工具 · 模型」就是一个本地 Agent，启用后才会接任务。',
-    ),
-  ).toBeVisible();
+test('uses the plugin description and list, without the project default or a visible heading', async () => {
+  const runtime = await createTestI18nRuntime({
+    locale: 'zh-CN',
+    namespaces: { '@nocobase/app-plugin-agents': agentsZhCN },
+  });
+  render(
+    <TestI18nProvider runtime={runtime} namespace='nocoreach'>
+      <LocalAgentsPage />
+    </TestI18nProvider>,
+  );
+  expect(screen.getByText(agentsZhCN.agents.description)).toBeVisible();
   expect(screen.getByText('Runner list')).toBeInTheDocument();
   expect(screen.queryByRole('combobox')).toBeNull();
   expect(screen.queryByText('项目默认 Agent')).toBeNull();

@@ -6482,7 +6482,6 @@
   "agentsPage.description": "NocoReach dùng hai loại AI: mô hình đám mây thực hiện phân tích hằng ngày và trả lời trong khung trò chuyện, còn tác nhân AI cục bộ thực hiện tác vụ.",
   "agentsPage.addRuntime": "Thêm môi trường thực thi",
   "agentsPage.viewRuntimes": "Xem môi trường thực thi",
-  "agentsPage.runnerDescription": "Mỗi tổ hợp công cụ lập trình và mô hình do môi trường thực thi báo cáo là một tác nhân AI cục bộ; chỉ nhận tác vụ sau khi được bật.",
   "agentChoice.onlineHint": "Trả lời câu hỏi; không chạy tác vụ",
   "agentChoice.runnerHint": "Có thể tạo và bắt đầu tác vụ; cần môi trường thực thi trực tuyến",
   "agentRoles.title": "Ai làm việc gì",

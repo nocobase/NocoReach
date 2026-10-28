@@ -643,39 +643,20 @@
     "agents": {
       "unavailableNow": "지금은 이용할 수 없습니다",
       "title": "에이전트",
-      "description": "Runner가 보고하는 코딩 도구와 모델의 각 조합이 하나의 에이전트가 됩니다. 프로젝트 관리자는 에이전트의 설명을 보고 이슈의 각 단계에 적합한 에이전트에게 작업을 맡깁니다.",
+      "description": "실행 환경이 보고한 모델에서 에이전트를 추가하세요. 프로젝트 관리자는 각 작업 단계에 적합한 설명을 가진 에이전트에게 작업을 배정합니다.",
       "fromRunners": "실행 환경에서 보고한 로컬 에이전트",
-      "discovery": {
-        "selectAll": "모든 결과 선택",
-        "selectFirst": "처음 {{limit}}개 결과 선택",
-        "selectionCount": "그룹 {{limit}}개 중 {{count}}개 선택됨",
-        "clearSelection": "선택 취소",
-        "new": "새로운 발견({{count}})",
-        "ignored": "무시됨({{count}})",
-        "search": "모델 또는 공급자 검색",
-        "select": "{{name}} 선택",
-        "ignore": "무시",
-        "restore": "복원",
-        "ignoreSelected": "선택 항목 무시",
-        "restoreSelected": "선택 항목 복원",
-        "showDisabled": "비활성화 항목 표시",
-        "hideDisabled": "비활성화 항목 숨기기",
-        "provider": "제공업체와 Runner",
-        "saved": "감지 설정을 저장했습니다."
-      },
       "filterLabel": "에이전트 표시",
       "filters": {
         "all": "전체 {{count}}개",
         "enabled": "활성화 {{count}}개",
-        "pending": "활성화 대기 {{count}}개",
         "unreported": "Runner 없음 {{count}}개"
       },
       "loadFailed": "에이전트를 로드할 수 없습니다.",
       "loadMore": "더 불러오기",
       "emptyTitle": "아직 에이전트가 없습니다",
-      "emptyDescription": "코딩 도구에 로그인한 Runner를 연결하세요. 해당 도구의 각 모델이 활성화할 수 있는 에이전트로 여기에 표시됩니다.",
+      "emptyDescription": "코딩 도구에 로그인된 실행 환경을 연결한 다음 사용 가능한 모델에서 에이전트를 추가하세요.",
       "noneInFilter": "여기에는 에이전트가 없습니다.",
-      "howToAdd": "로컬 에이전트를 추가하려면 실행 환경에 코딩 도구를 설치하고 로그인하세요. 새로 감지된 에이전트가 표시되면 잘하는 작업을 작성하여 활성화하세요.",
+      "howToAdd": "로컬 에이전트를 추가하려면 실행 환경에 코딩 도구를 설치하고 사용할 수 있는 모델에 로그인하세요. 실행 환경이 모델을 보고하면 사용 가능한 모델에서 잘하는 작업을 작성하여 에이전트를 추가하세요. 개인 실행 환경에서만 사용할 수 있는 에이전트는 해당 소유자가 시작한 작업만 처리합니다.",
       "goodAtMissing": "아직 작성되지 않았습니다.",
       "columns": {
         "agent": "에이전트",
@@ -698,7 +679,6 @@
       },
       "state": {
         "enabled": "사용",
-        "pending": "활성화 대기",
         "disabled": "사용 안 함",
         "unreported": "Runner 없음"
       },
@@ -714,18 +694,13 @@
         "ultra": "최고"
       },
       "enable": {
-        "button": "설명 작성 후 활성화",
-        "buttonFor": "{{name}} 설명 작성 후 활성화",
-        "title": "{{name}} 활성화",
         "reportedBy_one": "온라인 Runner {{count}}개에서 보고됨: {{names}}.",
         "reportedBy_other": "온라인 Runner {{count}}개에서 보고됨: {{names}}.",
         "noRunnerNow": "이 에이전트가 있는 Runner 중 현재 온라인 상태인 Runner가 없습니다.",
         "goodAtHint": "프로젝트 관리자는 이 설명을 보고 에이전트에게 맡길 작업을 결정합니다. 어떤 작업에 적합하고 어떤 작업에는 적합하지 않은지 작성하세요.",
         "goodAtRequired": "활성화하기 전에 잘하는 작업을 작성하세요.",
         "effortHint": "프로젝트 관리자는 작업을 인계할 때 이를 변경할 수 없습니다.",
-        "personalOnly": "개인 Runner에만 있는 에이전트입니다. 프로젝트 관리자는 해당 Runner 소유자가 시작한 이슈의 작업만 이 에이전트에게 맡깁니다.",
-        "submit": "사용",
-        "done": "{{name}} 에이전트가 활성화되었습니다."
+        "personalOnly": "개인 Runner에만 있는 에이전트입니다. 프로젝트 관리자는 해당 Runner 소유자가 시작한 이슈의 작업만 이 에이전트에게 맡깁니다."
       },
       "edit": {
         "button": "편집",
@@ -774,27 +749,11 @@
         "addedPartial": "{{succeeded}}개를 추가했으며 {{failed}}개는 추가하지 못했습니다. 각 항목 아래에서 이유를 확인하세요.",
         "addFailed": "{{failed}}개를 추가하지 못했습니다. 각 항목 아래에서 이유를 확인하고 다시 시도하세요."
       },
-      "cleanup": {
-        "open": "정리",
-        "title": "사용하지 않는 감지된 에이전트 삭제",
-        "description": "Runner의 보고로 생성되었지만 활성화되거나 실행된 적이 없는 에이전트는 안전하게 삭제할 수 있습니다. 이 목록을 불러온 후 변경된 항목은 삭제하지 않고 건너뜁니다.",
-        "none": "제거할 항목이 없습니다.",
+      "display": {
+        "search": "모델 또는 공급자 검색",
         "select": "{{name}} 선택",
-        "selectGroup": "{{tool}}에서 모두 선택",
-        "clearGroup": "{{tool}} 선택 해제",
-        "neverEnabled": "활성화되지 않음 · 실행 기록 없음",
-        "createdAt": "감지 시점: {{when}}",
-        "group_one": "{{tool}} · 후보 {{count}}개",
-        "group_other": "{{tool}} · 후보 {{count}}개",
-        "selectedCount_one": "{{count}}개 선택됨",
-        "selectedCount_other": "{{count}}개 선택됨",
-        "remove": "{{count}}개 삭제",
-        "confirmTitle_one": "에이전트 {{count}}개를 삭제할까요?",
-        "confirmTitle_other": "에이전트 {{count}}개를 삭제할까요?",
-        "confirmDescription": "대상 도구: {{tools}}. 안전하게 삭제할 수 있도록 삭제 직전에 다시 확인하며, 조건이 달라진 항목은 삭제하지 않고 건너뜁니다.",
-        "confirmAction": "{{count}}개 삭제",
-        "done": "{{removed}}개 삭제, {{skipped}}개 건너뜀",
-        "partialFailure": "{{removed}}개를 삭제하고 {{skipped}}개를 건너뛰었습니다. {{failed}}개는 삭제하지 못했습니다({{reason}}). 다시 시도할 수 있도록 선택 상태로 유지합니다."
+        "showDisabled": "비활성화 항목 표시",
+        "hideDisabled": "비활성화 항목 숨기기"
       }
     },
     "agentTypes": {
@@ -1119,14 +1078,6 @@
       "unknown": "실행이 실패했습니다."
     },
     "runtimes": {
-      "capacity": {
-        "actual": "마지막으로 적용된 실행 슬롯 수: {{slots}}",
-        "online": "적용된 실행 슬롯 수 · 온라인 설정",
-        "pending": "Runner에서 온라인 설정을 동기화하기를 기다리는 중",
-        "legacy": "이전 방식의 로컬 실행 슬롯 · 애플리케이션 서버를 업그레이드하세요",
-        "upgrade": "동기화 상태를 확인할 수 없음 · Runner를 업그레이드하세요",
-        "lastReported": "마지막 보고: {{time}}"
-      },
       "quota": {
         "workspaceStatus": {
           "active": "작업 진행 중",
@@ -1406,9 +1357,8 @@
       "run": "해당 호스트에서 다음 명령을 실행하세요. 이 애플리케이션에서 Runner(nocobase-runner)와 애플리케이션 CLI를 내려받고, Runner를 등록한 뒤 로그인 시 자동으로 시작하도록 설정합니다.",
       "nodeRequired": "호스트에는 Node.js 24 이상이 필요합니다(node --version으로 확인). 설치되어 있지 않으면 명령이 중단되고 설치 방법이 안내됩니다.",
       "installed": "이미 nocobase-runner를 설치하셨나요? 대신 등록하세요.",
-      "prompt": "프롬프트",
-      "manual": "직접 설치",
-      "promptHint": "아래 전체 프롬프트를 대상 머신의 에이전트(Claude Code, Codex 등)에 복사합니다. 작은 화면에서는 대화 상자를 스크롤하여 모든 단계를 읽어보세요. 여기에는 일회성 자격 증명이 포함됩니다. 해당 에이전트하고만 공유하세요.",
+      "manual": "또는 직접 설치하기",
+      "promptHint": "대상 컴퓨터의 에이전트(Claude Code, Codex 등)에 이 프롬프트를 복사하면 아래 단계를 대신 수행합니다. 일회성 자격 증명이 포함되어 있으므로 해당 에이전트에게만 전달하세요.",
       "windowsPowerShell": "1. WSL을 설치하세요. PowerShell에서 다음 명령을 실행한 후 Windows를 다시 시작하세요:",
       "windowsUbuntu": "2. Ubuntu를 열고 아래 Linux 명령을 실행합니다. WSL Ubuntu 내에 Node.js 및 코딩 도구를 설치합니다.",
       "windowsNetwork": "WSL이 인터넷에 연결되지 않으면 WSL의 미러링 네트워킹을 활성화하세요.",
@@ -1430,7 +1380,11 @@
         "macos": "macOS",
         "linux": "Linux",
         "windows": "Windows"
-      }
+      },
+      "promptTitle": "에이전트에게 설정 맡기기",
+      "promptCopy": "에이전트용 프롬프트 복사",
+      "promptShow": "프롬프트 보기",
+      "promptHide": "프롬프트 숨기기"
     },
     "chat": {
       "executionFailed": "실행에 실패했습니다. 다시 시도하기 전에 저장된 대화를 검토하세요.",
@@ -1478,7 +1432,8 @@
         "switchedBack": "{{name}} 에이전트로 돌아왔습니다.",
         "runFailed": "에이전트가 답변하기 전에 중지되었습니다.",
         "runFailedReason": "에이전트가 응답하기 전에 중지되었습니다: {{reason}}",
-        "runCancelled": "취소를 요청했습니다."
+        "runCancelled": "취소를 요청했습니다.",
+        "switchedAgent": "이 대화 기록을 유지한 채 {{name}} 에이전트로 전환했습니다."
       },
       "consultation": {
         "unavailableTitle": "에이전트에게 문의할 수 없음",

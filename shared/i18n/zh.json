@@ -6425,7 +6425,6 @@
   "agentsPage.description": "NocoReach 里有两类 AI：云端模型负责每日分析和对话栏，本地 Agent 负责执行任务。",
   "agentsPage.addRuntime": "添加运行环境",
   "agentsPage.viewRuntimes": "查看运行环境",
-  "agentsPage.runnerDescription": "每个运行环境上报的「编码工具 · 模型」就是一个本地 Agent，启用后才会接任务。",
   "agentChoice.onlineHint": "回答问题，不执行任务",
   "agentChoice.runnerHint": "能建任务并开始，需要运行环境在线",
   "agentRoles.title": "谁在干活",

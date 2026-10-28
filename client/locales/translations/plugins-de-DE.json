@@ -64,38 +64,16 @@
     },
     "agents": {
       "title": "Agenten",
-      "description": "Jedes Programmierwerkzeug und Modell, das ein Runner meldet, ist ein Agent. Der Projektmanager übergibt jeden Bearbeitungsschritt eines Vorgangs an den Agenten, dessen Beschreibung dazu passt.",
       "fromRunners": "Von Laufzeitumgebungen gemeldete lokale Agenten",
-      "discovery": {
-        "selectAll": "Alle Ergebnisse auswählen",
-        "selectFirst": "Die ersten {{limit}} Ergebnisse auswählen",
-        "selectionCount": "Ausgewählte Gruppen: {{count}} / {{limit}}",
-        "clearSelection": "Auswahl aufheben",
-        "new": "Neu erkannt ({{count}})",
-        "ignored": "Ignoriert ({{count}})",
-        "search": "Modelle oder Anbieter suchen",
-        "select": "{{name}} auswählen",
-        "ignore": "Ignorieren",
-        "restore": "Wiederherstellen",
-        "ignoreSelected": "Ausgewählte ignorieren",
-        "restoreSelected": "Ausgewählte wiederherstellen",
-        "enabled": "Aktivierte anzeigen",
-        "disabled": "Deaktivierte anzeigen",
-        "provider": "Anbieter und Runner",
-        "saved": "Erkennungseinstellungen gespeichert"
-      },
       "filterLabel": "Agenten anzeigen",
       "filters": {
         "all": "Alle {{count}}",
         "enabled": "Aktiviert {{count}}",
-        "pending": "Zu aktivieren {{count}}",
         "unreported": "Ohne Runner {{count}}"
       },
       "loadFailed": "Agenten konnten nicht geladen werden",
       "emptyTitle": "Noch keine Agenten",
-      "emptyDescription": "Verbinden Sie einen Runner mit einem angemeldeten Programmierwerkzeug: Jedes seiner Modelle erscheint hier als Agent, den Sie aktivieren können.",
       "noneInFilter": "Keine Agenten vorhanden.",
-      "howToAdd": "Um einen lokalen Agenten hinzuzufügen, installieren Sie auf einer Laufzeitumgebung ein Programmierwerkzeug und melden sich an. Er erscheint unter „Neu erkannt“; schreiben Sie, worin er gut ist, und aktivieren Sie ihn.",
       "goodAtMissing": "Noch nicht beschrieben",
       "columns": {
         "agent": "Agent",
@@ -118,7 +96,6 @@
       },
       "state": {
         "enabled": "Aktiviert",
-        "pending": "Zu aktivieren",
         "disabled": "Deaktiviert",
         "unreported": "Kein Runner"
       },
@@ -134,18 +111,13 @@
         "ultra": "Ultra"
       },
       "enable": {
-        "button": "Ausfüllen und aktivieren",
-        "buttonFor": "{{name}} ausfüllen und aktivieren",
-        "title": "{{name}} aktivieren",
         "reportedBy_one": "Von {{count}} Runner gemeldet, der online ist: {{names}}.",
         "reportedBy_other": "Von {{count}} Runnern gemeldet, die online sind: {{names}}.",
         "noRunnerNow": "Derzeit ist kein Runner online, auf dem dieser Agent verfügbar ist.",
         "goodAtHint": "Anhand dieser Beschreibung entscheidet der Projektmanager, welche Aufgaben er diesem Agenten übergibt. Beschreiben Sie, wofür er geeignet ist und wofür nicht.",
         "goodAtRequired": "Beschreiben Sie seine Stärken, bevor Sie ihn aktivieren.",
         "effortHint": "Der Projektmanager kann diese Einstellung bei der Aufgabenübergabe nicht ändern.",
-        "personalOnly": "Dieser Agent ist nur auf persönlichen Runnern verfügbar: Der Projektmanager übergibt ihm ausschließlich Aufgaben aus Vorgängen, die deren Eigentümer starten.",
-        "submit": "Aktivieren",
-        "done": "{{name}} ist aktiviert"
+        "personalOnly": "Dieser Agent ist nur auf persönlichen Runnern verfügbar: Der Projektmanager übergibt ihm ausschließlich Aufgaben aus Vorgängen, die deren Eigentümer starten."
       },
       "edit": {
         "button": "Bearbeiten",
