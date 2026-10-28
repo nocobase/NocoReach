@@ -1,5 +1,5 @@
 import { taskOwner } from './me';
-import { isClosed, workState, type Work } from './task-execution-types';
+import { isClosed, isSnoozed, workState, type Work } from './task-execution-types';
 
 export const WAITING_TASKS_URL = '/actions?scope=waiting&view=list';
 
@@ -17,6 +17,7 @@ export function isWaitingTask(
   return (
     mine(taskOwner(task)) &&
     !isClosed(task.evidence?.work) &&
+    !isSnoozed(task.evidence?.work) &&
     ['todo', 'review'].includes(workState(task.evidence?.work, task.status))
   );
 }

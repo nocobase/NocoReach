@@ -174,6 +174,9 @@ test('menu counts: personal waiting tasks and all pending opportunities',async()
  tasks[0].evidence.work.humanOwnerId='2';tasks.push({id:6,status:'待处理',evidence:{createdBy:{id:'7',name:'Mia'}}});
  const as=(id,nrRole)=>({auth:{user:{id}},state:{nrRole}});
  assert.equal((await s.badges('1',as(7,'member'))).tasks,1);assert.equal((await s.badges('1',as(2,'member'))).tasks,1);assert.equal((await s.badges('1',as(1,'admin'))).tasks,1);
+ // A snoozed task waits for no one until its day (Snooze, 2026-10-28).
+ tasks.push({id:7,evidence:{work:work(1,{humanOwnerId:'2',snooze:{until:'2099-01-01T01:00:00Z',day:'2099-01-01',at:'x',by:'2'}})}});
+ assert.equal((await s.badges('1',as(2,'member'))).tasks,1);
 });
 test('opportunity numbers: given once by first appearance, shared by every copy, kept when re-raised',()=>{
  const {number}=__opportunity_board;

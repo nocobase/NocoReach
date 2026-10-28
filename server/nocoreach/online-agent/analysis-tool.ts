@@ -39,6 +39,7 @@ const TASK_STANDING: Record<TaskStanding, string> = {
   review: 'task_needs_confirmation',
   done: 'task_done',
   closed: 'task_closed',
+  snoozed: 'task_snoozed',
 };
 // Where an opportunity stands now, in the words Insights and Opportunities use: a handed-off one by where its task
 // stands (2026-10-22: a done task's opportunity read "handed off"); handed_off_to_agent when its task is not known.
@@ -183,7 +184,7 @@ export function dailyAnalysisTool(
   return {
     name: 'daily_analysis',
     description:
-      "Read the project's daily analysis shown on Insights: the notes of a day's analysis, the opportunities it raised and where each stands now (awaiting decision; handed off to agent with its task, or one task per place to change, then that task in progress, needing confirmation, done or closed; dismissed; expired), its verdict on every change (do, watch, skip) with the reason, the opportunities awaiting a decision now, and the watches. Omit day for the latest analysis; `days` lists the earlier ones. Follow nextOffset to read everything. Link opportunities with their url.",
+      "Read the project's daily analysis shown on Insights: the notes of a day's analysis, the opportunities it raised and where each stands now (awaiting decision; handed off to agent with its task, or one task per place to change, then that task in progress, needing confirmation, done, closed or snoozed until a day; dismissed; expired), its verdict on every change (do, watch, skip) with the reason, the opportunities awaiting a decision now, and the watches. Omit day for the latest analysis; `days` lists the earlier ones. Follow nextOffset to read everything. Link opportunities with their url.",
     inputSchema: z.toJSONSchema(input),
     async execute(args) {
       await authorize();
