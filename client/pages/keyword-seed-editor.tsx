@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { X } from 'lucide-react';
-import { $t, $legacyText, useMessageState } from '#i18n';
+import { $t, $legacyText, getCurrentLocale, useMessageState } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { cn } from '#lib/utils';
 import { chipClass } from '#components/reach/chip';
@@ -192,9 +192,16 @@ export function EditSeedsDialog({
                 1: added.length,
               })
             : $t('keywordSuggestions.seedsNoChange')}
-          {estimate
-            ? ` ${$t('keywordSuggestions.seedsMonth', { 0: estimate.monthUsd.toFixed(2), 1: estimate.budgetUsd.toFixed(2) })}`
-            : ''}
+          {/* This month's spending kept on one line; no space after a CJK full stop. */}
+          {estimate ? (
+            <span className='whitespace-nowrap'>
+              {/^(zh|ja)/.test(getCurrentLocale()) ? '' : ' '}
+              {$t('keywordSuggestions.seedsMonth', {
+                0: estimate.monthUsd.toFixed(2),
+                1: estimate.budgetUsd.toFixed(2),
+              })}
+            </span>
+          ) : null}
         </p>
         {over && estimate ? (
           <p className='nr-error' role='alert'>

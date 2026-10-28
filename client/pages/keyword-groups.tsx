@@ -59,6 +59,7 @@ export function GroupTabs({
         actions =
           box.querySelector<HTMLElement>('[data-group-actions]')?.offsetWidth ??
           0,
+        // The row's padding (32) and the segments' border (2), with a little to spare.
         room = box.clientWidth - 48 - (actions ? actions + 8 : 0);
       // Not laid out (hidden, or no layout at all): show every tab.
       if (!box.clientWidth) return setFit(widths.length);
@@ -124,10 +125,11 @@ export function GroupTabs({
         aria-hidden='true'
         className='pointer-events-none invisible absolute -left-[9999px] flex whitespace-nowrap'
       >
+        {/* As styles.css draws a segmented tab (12px each side, tabular figures), in the chosen tab's weight. */}
         {tabs.map((t) => (
           <span
             key={t.value}
-            className='inline-flex px-1.5 text-sm font-medium'
+            className='inline-flex px-3 text-sm font-medium tabular-nums'
           >
             {text(t)}
           </span>
