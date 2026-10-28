@@ -92,8 +92,9 @@ function PanelFrame(): ReactElement | null {
       hidden={!open}
       data-mode={expanded ? 'expanded' : wide ? 'docked' : 'floating'}
       data-testid='chat-panel'
+      // The panel's regions scroll on their own; nothing in it may stretch the page beside it.
       className={cn(
-        'flex min-h-0 min-w-0 flex-col bg-background',
+        'flex min-h-0 min-w-0 flex-col overflow-hidden bg-background',
         expanded
           ? 'absolute inset-0 z-30'
           : wide
@@ -175,7 +176,7 @@ function PanelBody({ compact }: { compact: boolean }): ReactElement {
         >
           <PanelHeader compact={compact} />
           {panel.view === 'history' && (
-            <div className='min-h-0 flex-1 overflow-y-auto p-3'>
+            <div className='relative min-h-0 flex-1 overflow-y-auto p-3'>
               <HistoryList
                 activeId={panel.conversationId}
                 onOpen={panel.selectConversation}
