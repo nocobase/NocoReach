@@ -336,3 +336,46 @@ test('a list that moved on makes the proposal out of date; a dig proposal confir
     within(card).getByRole('link', { name: $t('common.view') }),
   ).toHaveAttribute('href', '/keywords?tab=suggest&group=g1');
 });
+
+test('Confirm while NocoReach is not answering says so, reads the list again and stays to try again', async () => {
+  mount({ proposal: proposal() });
+  const card = await screen.findByRole('region', {
+    name: $t('keywordRun.proposal'),
+  });
+  await waitFor(() =>
+    expect(card).toHaveAttribute('data-keyword-run', 'pending'),
+  );
+  const reads = () =>
+    action.mock.calls.filter(([, op]) => op === 'view').length;
+  const before = reads();
+  // A gateway's bare 502 while NocoReach restarts: no envelope of NocoReach's own.
+  action.mockImplementationOnce(async () => {
+    throw Object.assign(new Error('common.serviceUnavailable'), {
+      status: 502,
+      payload: '<html>Bad gateway</html>',
+    });
+  });
+  fireEvent.click(
+    within(card).getByRole('button', { name: $t('keywordRun.confirm') }),
+  );
+  expect(await within(card).findByRole('alert')).toHaveTextContent(
+    $t('common.serviceUnavailable'),
+  );
+  await waitFor(() => expect(reads()).toBeGreaterThan(before));
+  expect(
+    within(card).getByRole('button', { name: $t('keywordRun.confirm') }),
+  ).toBeEnabled();
+  // No answer at all reads the same, never as the browser's own words.
+  action.mockImplementationOnce(async () => {
+    throw new TypeError('Failed to fetch');
+  });
+  fireEvent.click(
+    within(card).getByRole('button', { name: $t('keywordRun.confirm') }),
+  );
+  await waitFor(() =>
+    expect(within(card).getByRole('alert')).toHaveTextContent(
+      $t('common.serviceUnavailable'),
+    ),
+  );
+  expect(within(card).queryByText('Failed to fetch')).toBeNull();
+});

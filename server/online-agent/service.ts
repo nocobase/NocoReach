@@ -8,6 +8,7 @@ import type { DatabaseConnection, DatabaseManager } from '@nocobase/db';
 import {
   DEFAULT_ONLINE_AGENT,
   onlineRunActive,
+  onlineRunContinuable,
   type OnlineAgentDefinition,
   type OnlineConversation,
   type OnlineEvent,
@@ -19,6 +20,7 @@ import {
 import { OnlineAgentError, onlineErrorCode } from './errors.js';
 import { OnlineRecords } from './records.js';
 import { executeChat, type ChatContext } from './executor.js';
+import { continuation, keptPart } from './continuation.js';
 
 const now = () => new Date().toISOString();
 type MessageInput = { requestId: string; text: string } & (
@@ -34,6 +36,18 @@ type MessageInput = { requestId: string; text: string } & (
 /** Application-owned chat, with durable turns independent of the browser connection. */
 export class OnlineAgentService {
   readonly records: OnlineRecords;
+  /**
+   * A reply stops when nothing has come for `idle` ms (no text, reasoning, tool call or tool result), or after `reply` ms
+   * in all; Continue picks it up from there (`onlineAgent.stalled` and `onlineAgent.timeout` name both). A worker holds
+   * its claim for `lease` ms and renews it every `renew` ms while it runs, so after a restart an abandoned reply reads as
+   * interrupted within a minute, while a long one that is still being written is never taken for dead.
+   */
+  readonly limits = {
+    idle: 90_000,
+    reply: 15 * 60_000,
+    lease: 60_000,
+    renew: 15_000,
+  };
   private readonly holder = randomUUID();
   private readonly active = new Map<
     string,
@@ -323,7 +337,8 @@ export class OnlineAgentService {
       run.ownerId,
     );
     const previous = await this.conversationRuns(conversation);
-    // Store each prompt once. Failed or cancelled partial replies do not become model history.
+    // Store each prompt once. Failed or cancelled partial replies do not become model history, except the current turn's
+    // own when its owner continues it.
     const messages: ModelMessage[] = previous
       .filter(
         (turn) => turn.sequence < run.sequence && turn.status === 'completed',
@@ -333,19 +348,37 @@ export class OnlineAgentService {
         { role: 'assistant', content: turn.output },
       ]);
     messages.push({ role: 'user', content: run.input });
+    if (run.continued?.length) messages.push(...continuation(run.events));
     if (JSON.stringify(messages).length > 400000)
       throw new OnlineAgentError('contextLimit');
     return messages;
   }
+  private lease() {
+    return new Date(Date.now() + this.limits.lease).toISOString();
+  }
   private async execute(run: OnlineRun, abort: AbortController) {
-    const timeout = setTimeout(
-      () => abort.abort(new OnlineAgentError('timeout')),
-      240000,
-    );
+    const started = Date.now();
+    let progressAt = started,
+      renewedAt = started;
+    const progress = () => {
+      progressAt = Date.now();
+    };
+    const renew = async () => {
+      renewedAt = Date.now();
+      await this.updateRun(run.id, (current) => {
+        if (current.holder !== this.holder || current.status !== 'running')
+          throw new OnlineAgentError('runChanged');
+        return { ...current, deadline: this.lease() };
+      });
+    };
     let polling = false;
     let authorize: (() => Promise<void>) | undefined;
     const poll = setInterval(() => {
-      if (polling) return;
+      if (Date.now() - started >= this.limits.reply)
+        abort.abort(new OnlineAgentError('timeout'));
+      else if (Date.now() - progressAt >= this.limits.idle)
+        abort.abort(new OnlineAgentError('stalled'));
+      if (polling || abort.signal.aborted) return;
       polling = true;
       void this.run(run.id)
         .then(async (current) => {
@@ -355,7 +388,9 @@ export class OnlineAgentService {
             current.status !== 'running'
           )
             abort.abort();
-          if (!abort.signal.aborted) await authorize?.();
+          if (abort.signal.aborted) return;
+          if (Date.now() - renewedAt >= this.limits.renew) await renew();
+          await authorize?.();
         })
         .catch((error) => abort.abort(error))
         .finally(() => {
@@ -397,9 +432,9 @@ export class OnlineAgentService {
         }
         if (JSON.stringify(events).length > 2000000)
           throw new OnlineAgentError('transcriptLimit');
-        return { ...current, output, events, usage };
+        return { ...current, output, events, usage, deadline: this.lease() };
       });
-      lastFlush = Date.now();
+      lastFlush = renewedAt = Date.now();
     };
     let output = '',
       status: 'completed' | 'failed' = 'failed',
@@ -437,6 +472,7 @@ export class OnlineAgentService {
           messages: await this.messages(run),
           context,
           signal: abort.signal,
+          progress,
           emit: async (event) => {
             abort.signal.throwIfAborted();
             pending.push(event);
@@ -451,32 +487,88 @@ export class OnlineAgentService {
       status = 'completed';
     } catch (error) {
       failure = error;
+      const reason: unknown = abort.signal.reason;
       if (!abort.signal.aborted) this.onError(error);
+      // A reply that stalled or ran out of time is logged too: its stream did not fail, the watchdog stopped it.
+      else if (
+        reason instanceof OnlineAgentError &&
+        (reason.code === 'stalled' || reason.code === 'timeout')
+      )
+        this.onError(reason);
       await flush().catch(this.onError);
     } finally {
+      clearInterval(poll);
       await this.updateRun(run.id, (current) => {
         if (current.holder !== this.holder || current.status !== 'running')
           return current;
         return {
           ...current,
           status: current.cancelRequested ? 'cancelled' : status,
-          ...(status === 'completed' ? { output } : {}),
+          // A continued reply's answer is what it kept and what it wrote since, as the transcript shows them.
+          ...(status === 'completed'
+            ? { output: (run.continued?.length ? run.output : '') + output }
+            : {}),
           error:
             current.cancelRequested || status === 'completed'
               ? null
-              : onlineErrorCode(abort.signal.reason ?? failure),
+              : onlineErrorCode(abort.signal.reason ?? failure, this.stopping),
           finishedAt: now(),
         };
       }).catch(this.onError);
-      clearTimeout(timeout);
-      clearInterval(poll);
     }
+  }
+  /**
+   * Continues the conversation's latest reply after it stopped partway (`ONLINE_CONTINUABLE`): the same turn is queued
+   * again with what it kept (`keptPart`), and the model carries on from there with the tool results it already has. A
+   * second request while it is continuing changes nothing.
+   */
+  async continueRun(id: string, ownerId: string) {
+    return this.database.transaction(async (context) => {
+      const run = await this.run(id, context);
+      if (run.ownerId !== ownerId)
+        throw new OnlineAgentError('runNotFound', 404);
+      const conversation = await this.conversation(
+        run.conversationId,
+        ownerId,
+        context,
+      );
+      if (onlineRunActive(run)) return conversation;
+      if (conversation.activeRunId !== run.id || !onlineRunContinuable(run))
+        throw new OnlineAgentError('notContinuable');
+      if (!(await this.definition(run.agentId, context)).enabled)
+        throw new OnlineAgentError('agentDisabled');
+      await this.records.save(
+        'run',
+        {
+          ...run,
+          ...keptPart(run),
+          status: 'queued',
+          error: null,
+          finishedAt: null,
+          deadline: null,
+          holder: null,
+          cancelRequested: false,
+          continued: [
+            ...(run.continued ?? []),
+            { at: now(), after: run.error! },
+          ],
+        },
+        context,
+      );
+      return this.records.save(
+        'conversation',
+        { ...conversation, updatedAt: now() },
+        context,
+      );
+    });
   }
   /** Persisted claims fence multiple workers. Expired work fails visibly; it is never replayed automatically. */
   async drain() {
     if (this.scan) return this.scan;
     this.scan = (async () => {
       for (const run of await this.records.list('run', { status: 'running' })) {
+        // This worker's own replies renew their claims and stop themselves.
+        if (this.active.has(run.id)) continue;
         if (run.deadline && Date.parse(run.deadline) < Date.now())
           await this.updateRun(run.id, (current) =>
             current.status === 'running' &&
@@ -495,12 +587,14 @@ export class OnlineAgentService {
         status: 'queued',
       })) {
         if (this.stopping || this.active.size >= 2) break;
+        // A continued reply whose previous attempt is still finishing here waits for the next scan.
+        if (this.active.has(queued.id)) continue;
         const run = {
           ...queued,
           status: 'running' as const,
           holder: this.holder,
           startedAt: now(),
-          deadline: new Date(Date.now() + 270000).toISOString(),
+          deadline: this.lease(),
           revision: queued.revision + 1,
         };
         if (!(await this.records.replace('run', run, queued.revision)))

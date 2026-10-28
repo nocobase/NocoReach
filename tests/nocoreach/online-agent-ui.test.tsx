@@ -600,3 +600,83 @@ test('choosing another online agent confirms before replacing a drafted existing
   expect(screen.getByTestId('chat-agent-picker')).toHaveTextContent('Custom');
   expect(screen.queryByText('Saved chat')).not.toBeInTheDocument();
 });
+
+test('Continue picks up the latest reply that stopped partway and reads the conversation again; earlier replies offer none', async () => {
+  const stopped = (id: string) => ({
+    id,
+    agentName: 'Online',
+    model: { model: 'Fixture' },
+    status: 'failed',
+    error: 'stalled',
+    input: `Question ${id}`,
+    output: `Kept ${id}\n`,
+    events: [{ type: 'text', text: `Kept ${id}\n` }],
+    usage: { inputTokens: 1, outputTokens: 1 },
+  });
+  const detail = {
+    conversation: {
+      id: 'history',
+      agentId: 'online-default',
+      projectId: '1',
+      revision: 3,
+      activeRunId: 'latest',
+    },
+    runs: [stopped('earlier'), stopped('latest')],
+  };
+  api.mockImplementation(async (path: string) =>
+    path === 'runs/latest/continue' ? detail.conversation : detail,
+  );
+  mount();
+  fireEvent.click(screen.getByText('History entry'));
+  await screen.findByText('Kept latest');
+  expect(
+    screen.getAllByText('回答没写完：模型连续 90 秒没有新的输出。'),
+  ).toHaveLength(2);
+  const buttons = screen.getAllByRole('button', { name: '继续' });
+  expect(buttons).toHaveLength(1);
+  const reads = api.mock.calls.length;
+  fireEvent.click(buttons[0]);
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith('runs/latest/continue', {}),
+  );
+  await waitFor(() => expect(api.mock.calls.length).toBeGreaterThan(reads + 1));
+  expect(api.mock.calls.at(-1)![0]).toBe('conversations/history');
+});
+
+test('a refused Continue shows why under the conversation', async () => {
+  const detail = {
+    conversation: {
+      id: 'history',
+      agentId: 'online-default',
+      projectId: '1',
+      revision: 1,
+      activeRunId: 'latest',
+    },
+    runs: [
+      {
+        id: 'latest',
+        agentName: 'Online',
+        model: { model: 'Fixture' },
+        status: 'failed',
+        error: 'modelNetwork',
+        input: 'Question',
+        output: 'Kept\n',
+        events: [{ type: 'text', text: 'Kept\n' }],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      },
+    ],
+  };
+  api.mockImplementation(async (path: string) => {
+    if (path === 'runs/latest/continue')
+      throw new OnlineApiError(503, 'requestFailed');
+    return detail;
+  });
+  mount();
+  fireEvent.click(screen.getByText('History entry'));
+  fireEvent.click(await screen.findByRole('button', { name: '继续' }));
+  expect(
+    await screen.findByText(
+      '暂时连不上 NocoReach（服务器可能正在更新），请稍后再试。',
+    ),
+  ).toBeVisible();
+});

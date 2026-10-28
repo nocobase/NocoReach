@@ -681,7 +681,8 @@ export async function writeChangeTasks(
 interface Exchange {
   ask: L;
   answer: L;
-  failed?: L;
+  /** The error code a failed turn stored, which the chat words in the reader's language. */
+  failed?: string;
 }
 interface Conversation {
   person: DemoPerson | 'admin';
@@ -762,10 +763,7 @@ const CONVERSATIONS: Conversation[] = [
           'Compare its CRM template with ours.',
         ),
         answer: t('', ''),
-        failed: t(
-          '模型服务响应超时，这一轮没有完成。可以重新发送。',
-          'The model service timed out and this turn did not finish. Send it again.',
-        ),
+        failed: 'modelNetwork',
       },
     ],
   },
@@ -857,7 +855,7 @@ export async function writeConversations(
               { type: 'usage', model: used.model, usage },
             ],
         usage,
-        error: turn.failed ? turn.failed[lang] : null,
+        error: turn.failed ?? null,
         revision: 0,
       };
     });

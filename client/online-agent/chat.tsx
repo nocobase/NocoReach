@@ -271,6 +271,25 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
       setBusy(false);
     }
   }
+  // A reply that stopped partway is picked up where it stopped, as the same turn.
+  async function continueReply(runId: string) {
+    if (busy) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      await api(`runs/${runId}/continue`, {});
+      chat.touch();
+      followingRef.current = true;
+      setRefresh((value) => value + 1);
+    } catch (failure) {
+      if ((failure as Error).name === 'AbortError') return;
+      writeFailed(failure);
+      if (failure instanceof OnlineApiError && failure.status === 409)
+        setRefresh((value) => value + 1);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function stop() {
     if (!active) return;
     setStopping(true);
@@ -449,7 +468,16 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
               </Empty>
             )}
             {current?.runs.map((run) => (
-              <OnlineTranscript key={run.id} run={run} />
+              <OnlineTranscript
+                key={run.id}
+                run={run}
+                {...(run.id === current.conversation.activeRunId && !active
+                  ? {
+                      onContinue: () => void continueReply(run.id),
+                      continuing: busy,
+                    }
+                  : {})}
+              />
             ))}
           </div>
           {awayFromEnd && current && (

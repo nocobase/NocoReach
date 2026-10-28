@@ -5,6 +5,7 @@ import {
   nocobaseClient,
   NocoReachHttpError,
 } from '../../client/lib/nocoreach-api.js';
+import { serviceUnavailable } from '../../client/lib/transport-error.js';
 import {
   useFreshData,
   WorkspaceCacheProvider,
@@ -167,15 +168,48 @@ describe('NocoReach action response contract', () => {
   it('preserves non-JSON HTTP failures', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response('unavailable', { status: 502 })),
+      vi.fn(async () => new Response('teapot', { status: 418 })),
     );
     await expect(
       nocobaseClient.action('nrSources', 'list'),
     ).rejects.toMatchObject({
-      status: 502,
-      payload: 'unavailable',
-      message: '请求没有完成（502）',
+      status: 418,
+      payload: 'teapot',
+      message: '请求没有完成（418）',
     });
+  });
+
+  it.each([502, 503, 504])(
+    "words a gateway's bare %s as NocoReach briefly not answering",
+    async (status) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => new Response('unavailable', { status })),
+      );
+      const failure = await nocobaseClient
+        .action('nrSources', 'list')
+        .catch((error: Error) => error);
+      expect(failure).toMatchObject({
+        status,
+        payload: 'unavailable',
+        message: 'common.serviceUnavailable',
+      });
+      expect(serviceUnavailable(failure)).toBe(true);
+    },
+  );
+
+  it("keeps NocoReach's own 502 sentence and does not call it unavailable", async () => {
+    respond({ error: { code: 502, message: 'GitHub could not be reached' } });
+    const failure = await nocobaseClient
+      .action('nrSources', 'list')
+      .catch((error: Error) => error);
+    expect(failure).toMatchObject({
+      status: 502,
+      message: 'GitHub could not be reached',
+    });
+    expect(serviceUnavailable(failure)).toBe(false);
+    expect(serviceUnavailable(new TypeError('Failed to fetch'))).toBe(true);
+    expect(serviceUnavailable(new Error('Boom'))).toBe(false);
   });
 });
 
