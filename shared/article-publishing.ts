@@ -349,6 +349,27 @@ export function translationDefault(
   return { from, to: missing.length ? missing : others };
 }
 
+/**
+ * The languages an update of an existing article edits in place once its primary language is approved (2026-10-28,
+ * T-53): the other languages it writes that the article already has. They keep their own wording and get the changes
+ * the primary got; the ones it lacks are translated in full. A new article and a translation of an article as published
+ * (`translateFrom.published`) have none. `present` is the article's languages (articleLocales of its source).
+ */
+export function inPlaceLocales(
+  d:
+    | {
+        articleId?: string | null;
+        locales?: string[];
+        translateFrom?: { published?: boolean } | null;
+      }
+    | null
+    | undefined,
+  present: string[] | null | undefined,
+) {
+  if (!d?.articleId || !present || d.translateFrom?.published) return [];
+  return (d.locales || []).slice(1).filter((l) => present.includes(l));
+}
+
 export const ARTICLE_TARGET_PRESETS: {
   [K in ArticleTargetKind]: Omit<
     Extract<ArticleTarget, { kind: K }>,

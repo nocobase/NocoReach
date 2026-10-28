@@ -1,3 +1,29 @@
+import { MAIN_REPOSITORY } from './script/github.js';
+import { FORUM } from './script/community.js';
+import { SLACK, DISCORD } from './script/chat.js';
+import { X_POSTS, HN_STORIES, REDDIT } from './script/social.js';
+import {
+  AI_QUESTIONS,
+  BACKLINKS,
+  PACKAGES,
+  COMPETITORS,
+} from './script/market.js';
+import { BILIBILI, XIAOHONGSHU, YOUTUBE } from './script/media.js';
+import {
+  CRM_REPOSITORY,
+  CRM_FORUM,
+  CRM_SLACK,
+  CRM_DISCORD,
+  CRM_X,
+  CRM_HN,
+  CRM_REDDIT,
+  CRM_MEDIA,
+  CRM_AI,
+  CRM_BACKLINKS,
+  CRM_PACKAGES,
+  CRM_QUERIES,
+  CRM_RESEARCH,
+} from './script/crm.js';
 import { demoContent } from '../content.js';
 import { Seeded, shares, type Language } from './kit.js';
 import { MAIN_ANALYTICS, SECOND_ANALYTICS } from './script/analytics.js';
@@ -14,6 +40,7 @@ import type {
 } from './script/types.js';
 import {
   daysAgo,
+  annualDemand,
   growth,
   level,
   localTime,
@@ -97,15 +124,76 @@ export class World {
     this.lang = this.language === 'en-US' ? 'en' : 'zh';
     this.main = project.domain !== SECOND_SITE.domain;
     this.site = this.main ? MAIN_SITE : SECOND_SITE;
-    this.queries = (this.main ? MAIN_QUERIES : SECOND_QUERIES)[this.lang];
+    this.queries = this.main
+      ? MAIN_QUERIES[this.lang]
+      : [...SECOND_QUERIES[this.lang], ...CRM_QUERIES[this.lang]];
     this.analytics = (this.main ? MAIN_ANALYTICS : SECOND_ANALYTICS)[this.lang];
-    this.research = this.main ? RESEARCH[this.lang] : [];
+    this.research = this.main
+      ? RESEARCH[this.lang]
+      : [
+          ...CRM_RESEARCH[this.lang],
+          ...SECOND_QUERIES[this.lang].map((q) => ({
+            keyword: q.q,
+            topic: 'crm',
+            volume: q.impressions * 20,
+            difficulty: Math.round(q.position * 2),
+            cpc: 2.4,
+            intent: 'commercial' as const,
+            position: q.position,
+            path: q.path,
+          })),
+        ];
     this.seeded = new Seeded(
       `nocoreach-demo:${project.domain}:${this.language}`,
     );
     this.origin = `https://${project.domain}`;
     this.timeZone =
       this.lang === 'en' ? 'America/Los_Angeles' : 'Asia/Shanghai';
+  }
+
+  get competitors() {
+    return COMPETITORS.filter((c) =>
+      this.main ? c.domain !== 'sales.example' : c.domain === 'sales.example',
+    );
+  }
+  get repository() {
+    return this.main ? MAIN_REPOSITORY : CRM_REPOSITORY;
+  }
+  get forum() {
+    return this.main ? FORUM : CRM_FORUM;
+  }
+  get slack() {
+    return this.main ? SLACK : CRM_SLACK;
+  }
+  get discord() {
+    return this.main ? DISCORD : CRM_DISCORD;
+  }
+  get xPosts() {
+    return this.main ? X_POSTS : CRM_X;
+  }
+  get hnStories() {
+    return this.main ? HN_STORIES : CRM_HN;
+  }
+  get reddit() {
+    return this.main ? REDDIT : CRM_REDDIT;
+  }
+  get aiQuestions() {
+    return this.main ? AI_QUESTIONS : CRM_AI;
+  }
+  get backlinks() {
+    return this.main ? BACKLINKS : CRM_BACKLINKS;
+  }
+  get packages() {
+    return this.main ? PACKAGES : CRM_PACKAGES;
+  }
+  get bilibili() {
+    return this.main ? BILIBILI : CRM_MEDIA;
+  }
+  get xiaohongshu() {
+    return this.main ? XIAOHONGSHU : CRM_MEDIA;
+  }
+  get youtube() {
+    return this.main ? YOUTUBE : CRM_MEDIA;
   }
 
   text(value: L): string {
@@ -153,6 +241,7 @@ export class World {
       this.site.sessions[this.lang] *
       weekday(date) *
       growth(ago) *
+      annualDemand(date, !this.main) *
       pageLevel *
       sourceLevel *
       this.seeded.jitter(`sessions:${date}`, 0.09)

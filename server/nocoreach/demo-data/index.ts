@@ -3,8 +3,10 @@ import type {
   DemoDataset,
 } from '@nocobase/app-plugin-demo-mode/server/tokens';
 import type { NocoBaseDriveManager } from '@nocobase/drive';
+import type { UserManagementService } from '@nocobase/app-plugin-users/server/tokens';
 
 import { demoAnswers } from './answers.js';
+import { migrateDemoIdentityEmails } from './identities.js';
 import { clearAllBusinessData } from './clear-all.js';
 import { DEMO_LANGUAGES, demoContent } from './content.js';
 import type { Connections } from '../plugin.js';
@@ -50,7 +52,7 @@ export async function demoProjectsOf(
 }
 
 /**
- * NocoReach's demo: the NocoBase marketing team's two projects with their connected sources, tasks, results,
+ * NocoReach's demo: the ACME marketing team's two projects with their connected sources, tasks, results,
  * opportunities and knowledge, and five people with different roles. Sources are collected through the production
  * flows from the in-process demo world, so the pages and their refresh actions work and nothing leaves the process.
  */
@@ -58,6 +60,7 @@ export function createNocoReachDemo(
   connections: Connections,
   drive: NocoBaseDriveManager,
   clearCache: () => void,
+  users: UserManagementService,
 ): DemoDataset {
   const host = connections as DemoHost;
   const ids = async (context: DemoClearContext) => {
@@ -76,7 +79,10 @@ export function createNocoReachDemo(
     timeZone: (language) =>
       language === 'en-US' ? 'America/Los_Angeles' : 'Asia/Shanghai',
     accounts: demoAccounts,
-    generate: (context) => generateNocoReachSamples(host, context),
+    generate: async (context) => {
+      await migrateDemoIdentityEmails(host.db.access!.database, users);
+      await generateNocoReachSamples(host, context);
+    },
     clear: async (context) =>
       clearAllBusinessData(host, drive, clearCache, (fraction) =>
         context.progress(fraction),
@@ -91,8 +97,10 @@ export function createNocoReachDemo(
         projects: projects.length,
         accounts: Object.keys(content.people).length,
         tasks,
-        opportunities: content.opportunities.briefs.length,
-        knowledge: content.documents.length,
+        opportunities:
+          content.opportunities.briefs.length +
+          content.secondOpportunities.briefs.length,
+        knowledge: content.documents.length + content.secondDocuments.length,
       };
     },
     answers: demoAnswers(),

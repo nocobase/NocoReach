@@ -1,6 +1,5 @@
 import { DAY, escapeHtml as h, notFound, textResponse } from './kit.js';
 import { sitemapSection } from './google.js';
-import { COMPETITORS } from './script/market.js';
 import type { Page } from './script/types.js';
 import type { World } from './world.js';
 
@@ -81,7 +80,7 @@ function pageHtml(world: World, page: Page, origin: string): string {
     : '';
   const published = day(world.now - page.published * DAY);
   const updated = day(world.now - (page.updated ?? page.published) * DAY);
-  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${h(title)}${page.path === '/' ? '' : ` | ${h(world.site.name)}`}</title>${description ? `<meta name="description" content="${h(description)}">` : ''}${flags.has('noindex') ? '<meta name="robots" content="noindex,follow">' : '<meta name="robots" content="index,follow">'}<link rel="canonical" href="${canonical}"><meta property="og:title" content="${h(title)}"><meta property="article:published_time" content="${published}"><meta property="article:modified_time" content="${updated}"><link rel="icon" type="image/svg+xml" href="${origin}/favicon.svg"></head><body><header><a href="${origin}/">${h(world.site.name)}</a><nav>${nav}</nav></header><main>${heading}${second}<p class="lead">${h(description || world.text(world.site.tagline))}</p>${image}${sections}${more}${links ? `<ul class="related">${links}</ul>` : ''}</main>${aside}<footer><a href="https://community.${world.project.domain}/">${world.lang === 'zh' ? '社区' : 'Community'}</a><a href="https://github.com/${world.main ? 'nocobase/nocobase' : 'nococrm/nococrm'}">GitHub</a><a href="${origin}/changelog">${world.lang === 'zh' ? '更新日志' : 'Changelog'}</a><span>© ${new Date(world.now).getUTCFullYear()} ${h(world.site.name)}</span></footer></body></html>`;
+  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${h(title)}${page.path === '/' ? '' : ` | ${h(world.site.name)}`}</title>${description ? `<meta name="description" content="${h(description)}">` : ''}${flags.has('noindex') ? '<meta name="robots" content="noindex,follow">' : '<meta name="robots" content="index,follow">'}<link rel="canonical" href="${canonical}"><meta property="og:title" content="${h(title)}"><meta property="article:published_time" content="${published}"><meta property="article:modified_time" content="${updated}"><link rel="icon" type="image/svg+xml" href="${origin}/favicon.svg"></head><body><header><a href="${origin}/">${h(world.site.name)}</a><nav>${nav}</nav></header><main>${heading}${second}<p class="lead">${h(description || world.text(world.site.tagline))}</p>${image}${sections}${more}${links ? `<ul class="related">${links}</ul>` : ''}</main>${aside}<footer><a href="https://community.${world.project.domain}/">${world.lang === 'zh' ? '社区' : 'Community'}</a><a href="https://github.com/${world.repository.owner}/${world.repository.name}">GitHub</a><a href="${origin}/changelog">${world.lang === 'zh' ? '更新日志' : 'Changelog'}</a><span>© ${new Date(world.now).getUTCFullYear()} ${h(world.site.name)}</span></footer></body></html>`;
 }
 
 function competitorHtml(
@@ -89,7 +88,7 @@ function competitorHtml(
   host: string,
   path: string,
 ): string | undefined {
-  const rival = COMPETITORS.find((c) => c.domain === host);
+  const rival = world.competitors.find((c) => c.domain === host);
   const page = rival?.pages.find(([p]) => p === path);
   if (!rival || !page) return undefined;
   const [, title, description] = page;
@@ -104,8 +103,8 @@ function standing(world: World, page: Page, title: string): string {
   const site = world.site.name;
   const version = world.main
     ? world.lang === 'zh'
-      ? 'NocoBase 2.0 及以上版本'
-      : 'NocoBase 2.0 and later'
+      ? 'ACME 2.4 及以上版本'
+      : 'ACME 2.4 and later'
     : world.lang === 'zh'
       ? `${site} 最新版本`
       : `the latest ${site}`;
@@ -118,14 +117,14 @@ function standing(world: World, page: Page, title: string): string {
       block(
         zh ? '开始之前' : 'Before you start',
         zh
-          ? `本文适用于 ${version}。开始之前，请确认你能以管理员身份登录，并准备一个可以随时重置的测试环境，不要直接在生产数据上尝试改动。`
-          : `This guide applies to ${version}. Before you start, make sure you can sign in as an administrator and have a test environment you can reset, so you never try a change on production data first.`,
+          ? `本文适用于 ${version}。开始之前，请确认你有相应项目的操作权限，并准备一份可重置的示例项目，先用少量记录演练。`
+          : `This guide applies to ${version}. Before you start, check that you have permission in the project and prepare a resettable sample project for a small rehearsal.`,
       ) +
       block(
         zh ? '下一步' : 'What next',
         zh
-          ? `完成「${title}」后，可以在社区分享你的配置，或从文档目录继续阅读相关主题。提问时请附上版本号、数据库类型和复现步骤，方便其他人帮你定位问题。`
-          : `Once you have finished “${title}”, share your setup in the community or continue with a related topic from the documentation menu. When you ask for help, include your version, your database and the steps to reproduce.`,
+          ? `完成「${title}」后，可以在社区分享你的配置，或从文档目录继续阅读相关主题。提问时请附上版本号、相关任务状态和复现步骤，方便其他人帮你定位问题。`
+          : `Once you have finished “${title}”, share your setup in the community or continue with a related topic from the documentation menu. When you ask for help, include your version, task status and steps to reproduce.`,
       )
     );
   if (section === 'blog') {
@@ -149,33 +148,31 @@ function standing(world: World, page: Page, title: string): string {
   return (
     block(
       zh ? '适合谁' : 'Who it is for',
-      zh
-        ? `${site} 适合需要把业务数据、流程和权限放在同一个系统里的团队：业务人员可以自己搭建和调整，开发者也保留了完整的扩展空间。`
-        : `${site} suits teams that want business data, processes and permissions in one system: business people can build and adjust it themselves, and developers keep full room to extend it.`,
+      world.main
+        ? zh
+          ? 'ACME 适合需要清楚分工、跟踪交付和邀请客户协作的项目团队。任务负责人、截止日期、阻塞与验收标准放在一起。'
+          : 'ACME supports project teams coordinating owners, deadlines, blockers and acceptance with clients.'
+        : zh
+          ? 'ACME CRM 适合需要整理客户、跟进商机和准备续约的销售团队。销售、主管与运营共享下一步和明确的统计口径。'
+          : 'ACME CRM supports sales teams organizing accounts, deals and renewals with shared next actions and clear reporting definitions.',
     ) +
     block(
       zh ? '下一步' : 'Next steps',
       zh
-        ? '可以先用 Docker 在本地启动体验，或导入一个模板开始；需要评估企业部署时，联系我们安排一次在线演示和部署评审。'
-        : 'Start locally with Docker or import a template to begin; if you are evaluating an enterprise deployment, contact us to book a walkthrough and a deployment review.',
-    ) +
-    block(
-      zh ? '常见问题' : 'Questions',
-      zh
-        ? `可以先试用再决定吗？可以。社区版可以免费私有部署，每个模板的示例数据都展示了一套完整配置，可以直接修改；数据始终保存在你自己的数据库里，以后迁移也不受限制。`
-        : `Can I try ${site} before deciding? Yes. The community edition is free to self-host, and the sample data in each template shows a complete setup you can change. Your data stays in your own database, so moving later is never locked in.`,
+        ? '先邀请一位同事，用少量示例记录完成一次交接，再根据团队需要选择模板与方案。'
+        : 'Invite one teammate, rehearse a handoff with a few sample records, then choose templates and plans for the team.',
     )
   );
 }
 
 const FAVICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#1f4fd8"/><path d="M17 46V18h7l16 18V18h7v28h-7L24 28v18z" fill="#fff"/></svg>';
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#1f4fd8"/><path d="M14 47L27 17h10l13 30H39l-2-7H26l-2 7zm15-16h5l-2-7z" fill="#fff"/></svg>';
 
 /** The demo sites and the competitors' sites: pages, robots.txt, sitemaps and icons. */
 export function website(world: World, u: URL): Response | undefined {
   const host = u.hostname.replace(/^www\./, '');
   const path = u.pathname.replace(/\/+$/, '') || '/';
-  if (COMPETITORS.some((c) => c.domain === host)) {
+  if (world.competitors.some((c) => c.domain === host)) {
     if (path === '/robots.txt')
       return textResponse('User-agent: *\nAllow: /\n');
     if (path === '/favicon.svg' || path === '/favicon.ico')
@@ -192,7 +189,7 @@ export function website(world: World, u: URL): Response | undefined {
       `User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /api/\nSitemap: ${origin}/sitemap.xml\n`,
     );
   if (path === '/sitemap.xml' || path === '/sitemap_index.xml') {
-    const sections = world.main ? ['pages', 'docs', 'blog'] : ['pages', 'docs'];
+    const sections = ['pages', 'docs', 'blog'];
     return textResponse(
       `<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${sections.map((s) => `<sitemap><loc>${origin}/sitemap-${s}.xml</loc></sitemap>`).join('')}</sitemapindex>`,
       'application/xml; charset=utf-8',

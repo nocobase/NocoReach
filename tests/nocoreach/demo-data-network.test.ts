@@ -24,7 +24,7 @@ afterEach(async () => {
 
 function setup() {
   const markers = new Map([
-    ['1', { id: '1', name: 'NocoBase', domain: 'nocobase.example' }],
+    ['1', { id: '1', name: 'ACME', domain: 'acme.example' }],
   ]);
   const projects = new DemoProjects(async (id) => markers.get(id));
   const network = new OutboundNetwork(
@@ -57,9 +57,9 @@ it('resolves demo public pages without performing DNS', async () => {
   const { network } = setup();
   const lookup = vi.spyOn(dns, 'lookup').mockRejectedValue(new Error('No DNS'));
   const result = await network.run('1', () =>
-    download('https://nocobase.example/', 0, { network, connection: 'site' }),
+    download('https://acme.example/', 0, { network, connection: 'site' }),
   );
-  expect(result.text).toContain('NocoBase');
+  expect(result.text).toContain('ACME');
   expect(lookup).not.toHaveBeenCalled();
   expect(liveFetch).not.toHaveBeenCalled();
 });
@@ -70,7 +70,7 @@ it('keeps queued work offline after clearing a demo and leaves ordinary projects
   projects.remove('1');
   markers.delete('1');
   await expect(
-    network.fetch('site', 'https://nocobase.example/', {}, '1'),
+    network.fetch('site', 'https://acme.example/', {}, '1'),
   ).rejects.toMatchObject({ code: 'NR_DEMO_OFFLINE' });
   expect(liveFetch).not.toHaveBeenCalled();
   expect(
@@ -87,7 +87,7 @@ it('does not reach the network if reading the project marker fails', async () =>
     }),
   );
   await expect(
-    network.fetch('site', 'https://nocobase.example/', {}, '1'),
+    network.fetch('site', 'https://acme.example/', {}, '1'),
   ).rejects.toThrow('Database unavailable');
   expect(liveFetch).not.toHaveBeenCalled();
 });

@@ -14,7 +14,6 @@ import {
   textResponse,
   type Json,
 } from './kit.js';
-import { MAIN_REPOSITORY } from './script/github.js';
 import {
   t,
   type Issue,
@@ -37,115 +36,58 @@ const NEIGHBOURS: [
   age: number,
 ][] = [
   [
-    'flowgrove/flowgrove',
-    t(
-      '云端工作流平台的开源运行器',
-      'The open-source runner of the FlowGrove workflow cloud',
-    ),
+    'nimbus/tasks',
+    t('虚构的项目任务客户端', 'A fictional project task client'),
     'TypeScript',
-    ['workflow', 'automation'],
+    ['project-management', 'tasks'],
     9400,
     700,
   ],
   [
-    'stackmeadow/meadow',
-    t('开发者优先的内部工具构建器', 'A developer-first internal tool builder'),
+    'example-tasks/board',
+    t('虚构的轻量看板工具', 'A fictional lightweight Kanban tool'),
     'TypeScript',
-    ['internal-tools', 'low-code'],
+    ['kanban', 'teamwork'],
     14200,
     900,
   ],
   [
-    'gridline/gridline-server',
-    t(
-      '像表格一样好用的数据库服务端',
-      'The server behind a spreadsheet-like database',
-    ),
+    'example-sales/crm',
+    t('虚构的销售协作工具', 'A fictional sales collaboration tool'),
     'Go',
-    ['no-code', 'database'],
+    ['crm', 'sales'],
     22100,
     1300,
   ],
   [
-    'formkit-labs/ai-form-filler',
-    t('用大模型从文档中填写表单', 'Fill forms from documents with an LLM'),
+    'example-team/calendar',
+    t('虚构的团队日历示例', 'A fictional team calendar example'),
     'Python',
-    ['ai', 'forms'],
+    ['calendar', 'scheduling'],
     1840,
     30,
   ],
   [
-    'opsdesk/opsdesk',
-    t('开源售后工单系统', 'An open-source helpdesk'),
+    'example-team/reports',
+    t('虚构的项目周报组件', 'A fictional project reporting component'),
     'TypeScript',
-    ['helpdesk', 'self-hosted'],
+    ['reporting', 'projects'],
     6300,
     600,
   ],
   [
-    'ledgerly/ledgerly',
-    t('面向小团队的开源进销存', 'Open-source inventory for small teams'),
+    'example-team/importer',
+    t('虚构的表格导入工具', 'A fictional spreadsheet importer'),
     'Rust',
-    ['inventory', 'erp'],
+    ['import', 'spreadsheets'],
     3100,
     420,
-  ],
-  [
-    'agentwork/agentwork',
-    t(
-      '业务系统里的 AI Agent 框架',
-      'An AI agent framework for business systems',
-    ),
-    'Python',
-    ['ai', 'agents', 'workflow'],
-    12800,
-    120,
-  ],
-  [
-    'tinycrm/tinycrm',
-    t('十分钟部署的轻量 CRM', 'A lightweight CRM deployed in ten minutes'),
-    'JavaScript',
-    ['crm', 'self-hosted'],
-    2400,
-    360,
-  ],
-  [
-    'chartsmith/chartsmith',
-    t('嵌入式图表与报表组件', 'Embeddable charts and reports'),
-    'TypeScript',
-    ['dashboard', 'charts'],
-    7700,
-    800,
-  ],
-  [
-    'permit-kit/permit-kit',
-    t('基于角色和属性的权限库', 'Role- and attribute-based access control'),
-    'Go',
-    ['rbac', 'security'],
-    5200,
-    650,
-  ],
-  [
-    'workflow-labs/flowpilot',
-    t('可视化编排的工作流引擎', 'A visually orchestrated workflow engine'),
-    'Java',
-    ['workflow', 'bpm'],
-    8800,
-    1000,
-  ],
-  [
-    'quickform/quickform',
-    t('拖拽式表单构建器', 'A drag-and-drop form builder'),
-    'Vue',
-    ['forms', 'no-code'],
-    4100,
-    500,
   ],
 ];
 
 function repository(world: World, repo: string): Repository | undefined {
-  if (world.main && repo === `${MAIN_REPOSITORY.owner}/${MAIN_REPOSITORY.name}`)
-    return MAIN_REPOSITORY;
+  if (repo === `${world.repository.owner}/${world.repository.name}`)
+    return world.repository;
   return undefined;
 }
 
@@ -196,7 +138,7 @@ function issueJson(
     state_reason: x.closed !== undefined ? 'completed' : null,
     html_url: `https://github.com/${repo}/${pullRequest ? 'pull' : 'issues'}/${x.number}`,
     user: { login: world.person(x.author) },
-    author_association: authorRole(x.author),
+    author_association: authorRole(world, x.author),
     labels: x.labels.map((name) => ({
       name,
       color: LABEL_COLOR[name] ?? 'ededed',
@@ -227,8 +169,8 @@ const LABEL_COLOR: Record<string, string> = {
   performance: 'f9d0c4',
 };
 
-function authorRole(login: string): string {
-  const person = MAIN_REPOSITORY.people.find((p) => p.login === login);
+function authorRole(world: World, login: string): string {
+  const person = world.repository.people.find((p) => p.login === login);
   return person?.team
     ? 'MEMBER'
     : person?.bot
@@ -367,7 +309,7 @@ function trafficDays(world: World, kind: 'views' | 'clones') {
     const base = kind === 'views' ? 2600 : 310;
     const count = Math.round(
       base *
-        level(MAIN_REPOSITORY.stars.changes, ago) ** 0.5 *
+        level(world.repository.stars.changes, ago) ** 0.5 *
         world.seeded.jitter(`${kind}:${date}`, 0.2),
     );
     out.push({
@@ -397,18 +339,14 @@ function searchRepositories(world: World, u: URL) {
   const per = Math.min(100, integer(u.searchParams.get('per_page'), 30));
   const all = [
     ...NEIGHBOURS,
-    ...(world.main
-      ? [
-          [
-            `nocobase/nocobase`,
-            MAIN_REPOSITORY.description,
-            'TypeScript',
-            [...MAIN_REPOSITORY.topics],
-            MAIN_REPOSITORY.stars.total,
-            AGE,
-          ] as (typeof NEIGHBOURS)[number],
-        ]
-      : []),
+    [
+      `${world.repository.owner}/${world.repository.name}`,
+      world.repository.description,
+      'TypeScript',
+      [...world.repository.topics],
+      world.repository.stars.total,
+      AGE,
+    ] as (typeof NEIGHBOURS)[number],
   ].filter(
     ([, , , topics, , age]) =>
       (!topic || topics.includes(topic)) && (!created || age <= 7),
@@ -483,10 +421,10 @@ export function github(
   if (p === '/search/repositories') return searchRepositories(world, u);
   const members = p.match(/^\/orgs\/([^/]+)\/public_members$/);
   if (members)
-    return members[1] === MAIN_REPOSITORY.owner && world.main
+    return members[1] === world.repository.owner
       ? json(
           restPage(
-            MAIN_REPOSITORY.people
+            world.repository.people
               .filter((x) => x.team)
               .map((x) => ({ login: x.login })),
             u,
@@ -717,7 +655,7 @@ export function github(
     published_at: at(world, x.age, 5),
     assets: [
       {
-        name: `nocobase-${x.tag}.tar.gz`,
+        name: `${world.repository.name}-${x.tag}.tar.gz`,
         download_count: Math.round(400 + (2000 / (x.age + 2)) * 20),
       },
     ],

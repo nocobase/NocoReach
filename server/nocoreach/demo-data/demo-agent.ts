@@ -106,7 +106,7 @@ const COPY = {
       '最后给出验收方法和常见问题',
     ],
     sampleText: (title: string) =>
-      `> 读完这一节，你可以独立完成「${title}」中描述的配置，并用一个非管理员账号验证结果。下面以一个虚构的五人销售团队为例，一步步完成设置。`,
+      `> 读完这一节，你可以独立完成「${title}」中描述的配置，并用一个非管理员账号验证结果。下面以一个虚构的五人团队为例，一步步完成设置。`,
     simulated:
       '这是演示 Agent 的模拟产物：没有调用真实 Agent、模型、仓库或发布服务，也没有创建 PR 或验证线上效果。',
   },
@@ -170,7 +170,7 @@ const COPY = {
       'End with how to check the result and common questions',
     ],
     sampleText: (title: string) =>
-      `> By the end of this section you can set up what “${title}” describes on your own and check it with a non-admin account. We follow a fictional five-person sales team step by step.`,
+      `> By the end of this section you can set up what “${title}” describes on your own and check it with a non-admin account. We follow a fictional five-person team step by step.`,
     simulated:
       'This is a simulated artifact from the demo Agent: no real Agent, model, repository or publishing service was called, and no PR or live verification exists.',
   },

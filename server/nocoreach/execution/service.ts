@@ -701,8 +701,8 @@ export class TaskService {
           // The primary language approved while others are to follow: the Agent translates it before anything is published
           // (2026-10-24). The step goes back to the Agent; the translated version comes back here for one Publish of all.
           if (w.flow!.stages[index + 1]?.kind === 'release' && this.articleFlow.needsTranslation(w, output)) {
-            await this.articleFlow.approvePrimary(w, output, actor, at, tx);
-            event.note = 'translate';
+            // The note says whether the other languages are translated or updated in place (2026-10-28).
+            event.note = await this.articleFlow.approvePrimary(w, output, actor, at, tx);
             await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approvePrimary', checklist: checked, reviewerId: actor, at }, tx);
             await this.enterFlowStage(project, taskId, task, w, index - 1, tx, actor, at);
           } else {
