@@ -26,6 +26,8 @@ export const rankOf=(ranks:Ranks|undefined,keyword:string)=>ranks?.ranks?.[keywo
 // A month's search volume: research runs keep DataForSEO's search_volume, keywords saved from AI 建议 and the keyword
 // overview keep volume (the 12-month chart was empty for them until 2026-10-15).
 export const monthVolume=(m:KeywordItem['monthlySearches'][number])=>m.search_volume??m.volume??null;
+// A most possible cost, rounded up to the cent so it never reads lower than it can be (Keywords › AI suggestions).
+export const usdUpTo=(n:number)=>(Math.ceil(Number((n*100).toFixed(6)))/100).toFixed(2);
 export const metric=(v:number|null|undefined)=>v==null?'—':new Intl.NumberFormat(getCurrentLocale(),{maximumFractionDigits:3}).format(v);
 // 关键词 详情 opens over the tab it is opened from (/keywords/detail), keeping that tab's query; these are its own
 // parameters, named apart from 找新词's loc and lang, and the way back removes only them.

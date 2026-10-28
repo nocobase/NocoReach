@@ -125,6 +125,7 @@ function business(operation: string, input: Value, en: boolean): Value | null {
     case 'daily-rewrite':
       return { rewrites: [] };
     case 'keyword-seeds': {
+      // Each seed with the input it came from, as the real model is asked to say.
       const direction = str(input.direction, 60);
       if (direction)
         return {
@@ -134,23 +135,95 @@ function business(operation: string, input: Value, en: boolean): Value | null {
             `${direction} tool`,
             `${direction} open source`,
             `best ${direction}`,
-          ],
+          ].map((seed) => ({
+            seed,
+            from: ['direction'],
+            why: t(
+              `围绕这次的方向“${direction}”`,
+              `Around the direction "${direction}"`,
+            ),
+          })),
         };
-      return {
-        seeds: [
+      const seeds: [string, string, string, string][] = [
+        [
           'internal tool builder',
-          'low code platform',
-          'no code database',
-          'approval workflow',
-          'workflow automation',
-          'self hosted crm',
-          'role based access control',
-          'ai agent builder',
-          'airtable alternative',
-          'retool alternative',
-          'admin panel',
-          'inventory management system',
+          'memory',
+          '记忆里写了产品用来搭内部工具',
+          'Project memory says it builds internal tools',
         ],
+        [
+          'low code platform',
+          'memory',
+          '记忆里的产品品类是低代码平台',
+          'The product category in project memory',
+        ],
+        [
+          'no code database',
+          'searchConsole',
+          '本站已有“no code database”相关曝光',
+          'The site already shows for "no code database" searches',
+        ],
+        [
+          'approval workflow',
+          'searchConsole',
+          'Search Console 里审批流相关查询多',
+          'Many approval workflow queries in Search Console',
+        ],
+        [
+          'workflow automation',
+          'memory',
+          '记忆里的主要功能之一',
+          'One of the main features in project memory',
+        ],
+        [
+          'self hosted crm',
+          'memory',
+          '记忆里写了私有部署和 CRM 场景',
+          'Project memory mentions self-hosting and CRM',
+        ],
+        [
+          'role based access control',
+          'memory',
+          '记忆里强调细粒度权限',
+          'Project memory stresses fine-grained permissions',
+        ],
+        [
+          'ai agent builder',
+          'memory',
+          '记忆里提到 AI 员工',
+          'Project memory mentions AI employees',
+        ],
+        [
+          'airtable alternative',
+          'competitors',
+          '竞品 Airtable 的替代说法',
+          'People looking to replace the competitor Airtable',
+        ],
+        [
+          'retool alternative',
+          'competitors',
+          '竞品 Retool 的替代说法',
+          'People looking to replace the competitor Retool',
+        ],
+        [
+          'admin panel',
+          'searchConsole',
+          '本站已有后台管理相关曝光',
+          'The site already shows for admin panel searches',
+        ],
+        [
+          'inventory management system',
+          'searchConsole',
+          'Search Console 里有进销存相关查询',
+          'Inventory management queries in Search Console',
+        ],
+      ];
+      return {
+        seeds: seeds.map(([seed, from, zh, enText]) => ({
+          seed,
+          from: [from],
+          why: t(zh, enText),
+        })),
       };
     }
     case 'keyword-curate': {
@@ -335,37 +408,75 @@ const METRICS =
 const OPPORTUNITIES =
   /机会|建议|下一步|该做|opportunit|suggest|next step|what should/iu;
 
-const CONFIRM =
-  /^\s*(确认|好的?|可以|开始|查吧|yes|ok(ay)?|confirm|go( ahead)?|sure)(?=$|[\s，。,.!！])/iu;
 const DIG =
-  /挖|多找|对比词|竞品|市场|关键词|dig|more keywords|comparison|competitor|market/iu;
-const EXPLAIN = /怎么找|如何找|explain how|how (these|the) keywords/iu;
+  /挖|多找|对比词|竞品|关键词|dig|more keywords|comparison|competitor/iu;
+const EXPLAIN =
+  /怎么找|如何找|怎么定|explain how|how (these|the) (keywords|seed words)/iu;
+const SEED_FOUND = /找出了哪些|which keywords did/iu;
+const CHANGE =
+  /换掉|换一组|更偏|加上|去掉|重新找|另一个市场|市场|replace|lean|add or remove|find again|another market|market/iu;
 
-/** What a Keywords › AI suggestions request asks keyword_dig for, from the row it was opened on or the prompt. */
-function digArguments(
-  request: DemoModelRequest,
-  prompt = request.prompt,
-): Record<string, unknown> {
-  const row = /on the keyword "([^"]{2,80})"/u.exec(request.system)?.[1];
+/** The page data the keywords page context put in the instructions (its JSON line), or an empty object. */
+function keywordsPage(request: DemoModelRequest): Value {
+  const line = request.system
+    .split('\n')
+    .find((l) => l.startsWith('{"madeAt"'));
+  return object(line ? safeJson(line) : {});
+}
+const focusSeed = (request: DemoModelRequest) =>
+  /on the seed word "([^"]{2,80})"/u.exec(request.system)?.[1];
+
+/** What a Keywords › AI suggestions request proposes, from what it was opened on and the prompt. */
+function runArguments(request: DemoModelRequest): Record<string, unknown> {
+  const prompt = request.prompt,
+    seeds = (
+      Array.isArray(keywordsPage(request).seeds)
+        ? (keywordsPage(request).seeds as unknown[])
+        : []
+    ).map(String),
+    seed = focusSeed(request);
   if (/日本|japan/iu.test(prompt))
     return { mode: 'list', market: { locationCode: 2392, language: 'ja' } };
-  if (/美国市场|US market|united states/iu.test(prompt))
-    return { mode: 'list', market: { locationCode: 2840, language: 'en' } };
+  if (/另一个市场|another market|美国市场|US market/iu.test(prompt))
+    return { mode: 'list', market: { locationCode: 2826, language: 'en' } };
+  if (seed && /换掉|replace/iu.test(prompt))
+    return {
+      mode: 'list',
+      seeds: seeds.map((s) => (s === seed ? `${seed} software` : s)),
+    };
+  if (/更偏|lean/iu.test(prompt))
+    return {
+      mode: 'list',
+      seeds: [
+        'approval workflow example',
+        'crm template',
+        'inventory management system',
+        'internal tool examples',
+        'admin panel template',
+        'customer portal',
+      ],
+    };
+  if (/加上|去掉|add or remove/iu.test(prompt))
+    return {
+      mode: 'list',
+      seeds: [...seeds.slice(0, -1), 'project management tool'],
+    };
+  if (/重新找|find again/iu.test(prompt)) return { mode: 'list', seeds };
+  const row = /on the keyword "([^"]{2,80})"/u.exec(request.system)?.[1];
   if (/对比词|竞品|competitor|comparison/iu.test(prompt))
-    return { mode: 'group', direction: 'alternative' };
+    return {
+      mode: 'group',
+      direction: 'alternative',
+      name: request.language === 'en' ? 'Alternatives' : '竞品替代',
+    };
   const quoted = /[“"「]([^”"」]{2,60})[”"」]/u.exec(prompt)?.[1];
   const direction = quoted ?? row ?? 'workflow';
-  return { mode: 'group', direction, seeds: [direction] };
-}
-
-/** The user's request the last answer quoted a lookup cost for, if the last answer did. */
-function dugBefore(request: DemoModelRequest): string | undefined {
-  const earlier = request.messages.slice(0, -1);
-  const answer = [...earlier].reverse().find((m) => m.role === 'assistant');
-  if (!answer || !/\$\d/u.test(answer.content)) return undefined;
-  return [...earlier.slice(0, earlier.lastIndexOf(answer))]
-    .reverse()
-    .find((m) => m.role === 'user')?.content;
+  // A short group name in the user's language, as the real model is asked to give.
+  const name =
+    request.language === 'en'
+      ? direction.slice(0, 16)
+      : `${direction.split(' ').slice(0, 2).join(' ')}相关`.slice(0, 16);
+  return { mode: 'group', direction, name, seeds: [direction] };
 }
 
 /** Business calls carry their operation as the tag; online agents ask in their own words and get tool-backed answers. */
@@ -383,72 +494,119 @@ export function demoAnswers(): DemoAnswer[] {
     {
       id: 'nocoreach-keywords-explain',
       match: (request) =>
-        has(request, 'keyword_dig') &&
+        has(request, 'propose_keyword_run') &&
         asks(request, EXPLAIN) &&
         request.toolResults.length === 0,
-      reply: (request) =>
-        request.language === 'en'
-          ? "The AI first chose short seed words the way people search, from the project memory, the Search Console queries and the competitors. For each seed, DataForSEO returned the Google searches that contain it, and all seeds together returned searches on related topics. Only keywords searched at least 50 times a month in the market were kept; the AI then picked those closest to the product and ranked them by search volume, relevance, difficulty and the site's current position. (Demo answer.)"
-          : 'AI 先根据项目记忆、Search Console 里的查询和竞品，按用户的搜索习惯定了一组短的种子词。每个种子词从 DataForSEO 取包含它的 Google 搜索词，所有种子词再一起取相关话题的词；只保留目标市场月搜索量 50 以上的词，再由 AI 挑出和产品最相关的，按搜索量、相关度、难度和本站现在的排名排序。（演示回答）',
+      reply: (request) => {
+        const en = request.language === 'en',
+          page = keywordsPage(request),
+          stats = new Map(list(page.seedStats).map((x) => [str(x.seed), x]));
+        const notes = list(page.seedNotes);
+        if (!notes.length)
+          return en
+            ? 'The reasons for these seed words were not recorded when the list was made. Ask me to choose them again and I will say why for each. (Demo answer.)'
+            : '这份列表生成时还没有记录每个种子词的依据。可以让我重新定一组，我会逐个说明依据。（演示回答）';
+        const source = (f: string) =>
+          ({
+            memory: en ? 'project memory' : '项目记忆',
+            searchConsole: en
+              ? 'Search Console queries'
+              : 'Search Console 查询',
+            competitors: en ? 'competitors' : '竞品',
+            direction: en ? 'the direction asked for' : '这次的方向',
+            person: en ? 'added by you' : '你加上的',
+          })[f] ?? f;
+        return [
+          en
+            ? 'Each seed word, where it came from and what it found (demo answer):'
+            : '每个种子词的来源和找到的词（演示回答）：',
+          '',
+          ...notes.map((n) => {
+            const st = object(stats.get(str(n.seed)));
+            const from = (Array.isArray(n.from) ? n.from : [])
+              .map((f) => source(String(f)))
+              .join(en ? ', ' : '、');
+            return en
+              ? `- ${str(n.seed)} — from ${from}: ${str(n.why)} (found ${Number(st.found) || 0}, picked ${Number(st.picked) || 0})`
+              : `- ${str(n.seed)}：来自${from}，${str(n.why)}（找到 ${Number(st.found) || 0} 个，挑出 ${Number(st.picked) || 0} 个）`;
+          }),
+        ].join('\n');
+      },
     },
     {
-      id: 'nocoreach-keywords-confirm',
+      id: 'nocoreach-keywords-seed',
       match: (request) =>
-        has(request, 'keyword_dig') &&
-        request.toolResults.length === 0 &&
-        CONFIRM.test(request.prompt) &&
-        Boolean(dugBefore(request)),
-      // Earlier turns reach the model as their text: the request the cost was asked for is the user's message before.
-      reply: (request) => ({
-        toolCalls: [
-          {
-            name: 'keyword_dig',
-            arguments: {
-              ...digArguments(request, dugBefore(request)!),
-              confirm: true,
-            },
-          },
-        ],
-      }),
+        has(request, 'propose_keyword_run') &&
+        asks(request, SEED_FOUND) &&
+        Boolean(focusSeed(request)) &&
+        request.toolResults.length === 0,
+      reply: (request) => {
+        const en = request.language === 'en',
+          seed = focusSeed(request)!;
+        const rows = list(keywordsPage(request).list).filter(
+          (r) => Array.isArray(r.seeds) && r.seeds.includes(seed),
+        );
+        if (!rows.length)
+          return en
+            ? `None of the keywords picked came from "${seed}". (Demo answer.)`
+            : `挑出的词里没有来自“${seed}”的。（演示回答）`;
+        return [
+          en
+            ? `From "${seed}" (demo answer):`
+            : `来自“${seed}”的词（演示回答）：`,
+          '',
+          ...rows.map(
+            (r) => `- ${str(r.keyword, 80)} · ${Number(r.volume) || 0}`,
+          ),
+        ].join('\n');
+      },
     },
     {
       id: 'nocoreach-keywords-plan',
       match: (request) =>
-        has(request, 'keyword_dig') &&
+        has(request, 'propose_keyword_run') &&
         request.toolResults.length === 0 &&
-        asks(request, DIG),
+        (asks(request, CHANGE) || asks(request, DIG)),
       reply: (request) => ({
-        toolCalls: [{ name: 'keyword_dig', arguments: digArguments(request) }],
+        toolCalls: [
+          { name: 'propose_keyword_run', arguments: runArguments(request) },
+        ],
       }),
     },
     {
       id: 'nocoreach-keywords-answer',
       match: (request) =>
-        request.toolResults.some((result) => result.name === 'keyword_dig'),
+        request.toolResults.some(
+          (result) => result.name === 'propose_keyword_run',
+        ),
       reply: (request) => {
         const en = request.language === 'en';
         const result = object(
           safeJson(
-            request.toolResults.find((r) => r.name === 'keyword_dig')!.content,
+            request.toolResults.find((r) => r.name === 'propose_keyword_run')!
+              .content,
           ),
         );
         if (result.error) return str(result.error, 400);
-        if (result.confirmed === false)
+        const p = object(result.proposal);
+        const cost = `$${(Math.ceil(Number(p.maxUsd) * 100) / 100).toFixed(2)}`;
+        if (p.same)
           return en
-            ? `This lookup costs at most $${Number(result.maxCostUsd).toFixed(2)} from the DataForSEO budget (this month: $${Number(result.monthSpentUsd).toFixed(2)} of $${Number(result.monthlyBudgetUsd).toFixed(2)}). Reply "confirm" to run it.`
-            : `这次查询最多花费 $${Number(result.maxCostUsd).toFixed(2)}，从 DataForSEO 预算里扣（本月已用 $${Number(result.monthSpentUsd).toFixed(2)} / $${Number(result.monthlyBudgetUsd).toFixed(2)}）。回复“确认”开始查。`;
-        const group = object(result.group);
-        const lines = list(result.keywords)
-          .slice(0, 8)
-          .map((k) => `- ${str(k.keyword, 80)}: ${str(k.reason, 80)}`);
-        const head = group.name
-          ? en
-            ? `Added "From ${str(group.name, 60)}" to AI suggestions (keywords: ${Number(group.keywords) || 0}), each with real searches:`
-            : `已加到 AI 建议的“从 ${str(group.name, 60)} 挖”，共 ${Number(group.keywords) || 0} 个词，都有真实搜索量：`
-          : en
-            ? 'AI suggestions were found again for the new market:'
-            : 'AI 建议已按新市场重新找词：';
-        return [head, '', ...lines].join('\n');
+            ? `The seed words come out the same as now: nothing in the project memory, the Search Console queries or the competitors points elsewhere. They were looked up in the last 30 days, so finding again costs at most ${cost} and only picks again from the same data. Confirm in the card below if you still want it. (Demo answer.)`
+            : `种子词和现在一样：项目记忆、Search Console 查询和竞品里没有指向别处的内容。它们 30 天内都查过，重新找最多花 ${cost}，只会在同样的数据里重新挑选。仍要重新找的话，在下面的卡片里确认。（演示回答）`;
+        const added = Array.isArray(p.added) ? p.added.map(String) : [],
+          removed = Array.isArray(p.removed) ? p.removed.map(String) : [];
+        const change =
+          p.kind === 'dig'
+            ? en
+              ? `I proposed digging from "${str(p.direction)}".`
+              : `我拟了一个从“${str(p.direction)}”往下挖的方案。`
+            : en
+              ? `I proposed new seed words${added.length ? `, adding ${added.join(', ')}` : ''}${removed.length ? `, removing ${removed.join(', ')}` : ''}.`
+              : `我拟了一组新的种子词${added.length ? `，加上 ${added.join('、')}` : ''}${removed.length ? `，去掉 ${removed.join('、')}` : ''}。`;
+        return en
+          ? `${change} The card below shows them before and after; the lookup costs at most ${cost} and starts only when you click Confirm and look up. (Demo answer.)`
+          : `${change}下面的卡片列出了改前改后；这次最多花费 ${cost}，点“确认查词”后才开始查。（演示回答）`;
       },
     },
     {

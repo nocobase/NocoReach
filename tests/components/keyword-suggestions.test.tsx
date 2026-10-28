@@ -125,7 +125,7 @@ const LIST = {
   ],
   running: null,
   dataforseo: true,
-  maxUsd: 0.241,
+  maxUsd: 0.291,
   minVolume: 50,
 };
 let view: Record<string, unknown>;
@@ -134,14 +134,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   view = LIST;
   action.mockImplementation(async (_resource: string, name: string) =>
-    name === 'estimate'
-      ? { maxUsd: 0.059, reused: 3, monthUsd: 1.2, budgetUsd: 10 }
-      : name === 'suggest'
-        ? {
-            ...view,
-            running: { stage: 'seeds', mode: 'list', direction: null },
-          }
-        : view,
+    name === 'suggest'
+      ? {
+          ...view,
+          running: { stage: 'seeds', mode: 'list', direction: null },
+        }
+      : view,
   );
   api.mockImplementation(async (path: string) =>
     path === 'conversations'
@@ -292,7 +290,7 @@ test('nothing yet: the first run shows its most possible cost and starts only on
   mount();
   await screen.findByText($t('keywordSuggestions.startTitle'));
   expect(
-    screen.getByText($t('keywordSuggestions.costNote', { 0: '0.25' })),
+    screen.getByText($t('keywordSuggestions.costNote', { 0: '0.30' })),
   ).toBeVisible();
   expect(action.mock.calls.map((c) => c[1])).toEqual(['view']);
   fireEvent.click(
@@ -310,53 +308,234 @@ test('nothing yet: the first run shows its most possible cost and starts only on
   ).toBeVisible();
 });
 
-test('Edit seed words shows the cost and this month before running with the edited seeds', async () => {
+test('the seed words are read-only: no dialog or Find again on the page; Adjust seed words with AI opens the chat on them', async () => {
   mount();
   await screen.findByText('open source low code platform');
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Find again' })).toBeNull();
+  expect(
+    screen.queryByRole('textbox', {
+      name: $t('keywordSuggestions.seedsTitle'),
+    }),
+  ).toBeNull();
   fireEvent.click(
-    screen.getByRole('button', { name: $t('keywordSuggestions.editSeeds') }),
+    screen.getByRole('button', { name: $t('keywordSuggestions.adjustSeeds') }),
   );
-  const dialog = screen.getByRole('dialog');
-  const box = within(dialog).getByRole('textbox', {
-    name: $t('keywordSuggestions.seedsTitle'),
+  expect(panel.openChat).toHaveBeenCalled();
+  const log = screen.getByRole('log');
+  expect(
+    within(log).getByText($t('keywordSuggestions.seedsEntryDescription')),
+  ).toBeVisible();
+  const prompts = within(log).getByRole('list', {
+    name: $t('onlineAgent.suggestions'),
   });
-  expect(box).toHaveValue(LIST.seeds.join('\n'));
-  fireEvent.change(box, {
-    target: { value: `${LIST.seeds.join('\n')}\nWorkflow Automation` },
-  });
+  expect(
+    within(prompts)
+      .getAllByRole('button')
+      .map((b) => b.textContent),
+  ).toEqual([
+    $t('keywordSuggestions.presetExplainSeeds'),
+    $t('keywordSuggestions.presetLeanSeeds'),
+    $t('keywordSuggestions.presetAddRemoveSeed'),
+    $t('keywordSuggestions.presetFindAgain'),
+    $t('keywordSuggestions.presetOtherMarket'),
+  ]);
+  fireEvent.click(
+    within(prompts).getByRole('button', {
+      name: $t('keywordSuggestions.presetExplainSeeds'),
+    }),
+  );
   await waitFor(() =>
-    expect(dialog.querySelector('[data-seeds-cost]')?.textContent).toBe(
-      `${$t('keywordSuggestions.seedsCost', { 0: '0.06' })}${$t('keywordSuggestions.seedsReused', { 0: 3 })} · ${$t('keywordSuggestions.seedsMonth', { 0: '1.20', 1: '10.00' })}`,
+    expect(api).toHaveBeenCalledWith(
+      'conversations',
+      expect.objectContaining({
+        subject: { kind: 'page', page: 'keywords', item: 'seeds:' },
+        text: $t('keywordSuggestions.presetExplainSeeds'),
+      }),
     ),
   );
-  expect(action).toHaveBeenLastCalledWith(
-    'nrKeywordSuggest',
-    'estimate',
-    expect.objectContaining({
-      body: {
-        projectId: 2,
-        seeds: [...LIST.seeds, 'workflow automation'],
-        market: LIST.market,
+});
+
+test('a seed chip opens the chat on that seed word', async () => {
+  mount();
+  await screen.findByText('open source low code platform');
+  const basis = document.querySelector('[data-suggest-basis]') as HTMLElement;
+  fireEvent.click(
+    within(basis).getByRole('button', { name: 'retool alternative' }),
+  );
+  const log = screen.getByRole('log');
+  expect(
+    within(log).getByText(
+      $t('keywordSuggestions.seedEntry', { 0: 'retool alternative' }),
+    ),
+  ).toBeVisible();
+  fireEvent.click(
+    within(log).getByRole('button', {
+      name: $t('keywordSuggestions.presetSeedFound'),
+    }),
+  );
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith(
+      'conversations',
+      expect.objectContaining({
+        subject: {
+          kind: 'page',
+          page: 'keywords',
+          item: 'seeds:retool alternative',
+        },
+        text: $t('keywordSuggestions.presetSeedFound'),
+      }),
+    ),
+  );
+});
+
+test('a dug group reads by its short name with the direction on hover, and its ⋯ menu renames or deletes it', async () => {
+  view = {
+    ...LIST,
+    digs: [
+      ...LIST.digs,
+      {
+        id: 'dig2',
+        direction:
+          'The system belongs to the company (self-hosted, open source)',
+        name: null,
+        seeds: ['self hosted'],
+        at: '2026-10-27T10:00:00Z',
+        found: 9,
+        items: [item('self hosted crm', '品类与行业词', 720, 'dig2')],
       },
+    ],
+  };
+  action.mockImplementation(async (_resource: string, name: string) =>
+    name === 'renameDig' || name === 'deleteDig' ? view : view,
+  );
+  mount();
+  await screen.findByText('open source low code platform');
+  const long = screen.getByRole('tab', {
+    name: `${$t('keywordSuggestions.digTab', { 0: 'The system belongs…' })} 1`,
+  });
+  expect(long).toHaveAttribute(
+    'title',
+    $t('keywordSuggestions.digTab', {
+      0: 'The system belongs to the company (self-hosted, open source)',
     }),
   );
   fireEvent.click(
-    within(dialog).getByRole('button', {
-      name: $t('keywordSuggestions.findAgain'),
+    screen.getByRole('button', {
+      name: $t('keywordSuggestions.manageGroup', { 0: 'The system belongs…' }),
     }),
+  );
+  fireEvent.click(
+    await screen.findByRole('menuitem', {
+      name: $t('keywordSuggestions.renameGroup'),
+    }),
+  );
+  const dialog = await screen.findByRole('dialog');
+  fireEvent.change(
+    within(dialog).getByRole('textbox', {
+      name: $t('keywordSuggestions.groupName'),
+    }),
+    { target: { value: '自托管与开源' } },
+  );
+  fireEvent.click(
+    within(dialog).getByRole('button', { name: $t('common.save') }),
   );
   await waitFor(() =>
     expect(action).toHaveBeenCalledWith(
       'nrKeywordSuggest',
-      'suggest',
+      'renameDig',
       expect.objectContaining({
-        body: {
-          projectId: 2,
-          seeds: [...LIST.seeds, 'workflow automation'],
-          market: LIST.market,
-        },
+        body: { projectId: 2, digId: 'dig2', name: '自托管与开源' },
       }),
     ),
   );
-  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  fireEvent.click(
+    screen.getByRole('button', {
+      name: $t('keywordSuggestions.manageGroup', { 0: 'approval workflow' }),
+    }),
+  );
+  fireEvent.click(
+    await screen.findByRole('menuitem', {
+      name: $t('keywordSuggestions.deleteGroup'),
+    }),
+  );
+  const ask = await screen.findByRole('alertdialog');
+  expect(
+    within(ask).getByText(
+      $t('keywordSuggestions.deleteGroupDescription', { 0: 1 }),
+    ),
+  ).toBeVisible();
+  fireEvent.click(
+    within(ask).getByRole('button', { name: $t('common.delete') }),
+  );
+  await waitFor(() =>
+    expect(action).toHaveBeenCalledWith(
+      'nrKeywordSuggest',
+      'deleteDig',
+      expect.objectContaining({ body: { projectId: 2, digId: 'dig1' } }),
+    ),
+  );
+});
+
+test('a failed dig is not shown above the list; a failed re-find newer than the list says the list is the earlier one', async () => {
+  view = {
+    ...LIST,
+    lastError: {
+      message: 'nothing new',
+      mode: 'dig',
+      at: '2026-10-28T00:00:00Z',
+    },
+  };
+  mount();
+  await screen.findByText('open source low code platform');
+  expect(screen.queryByRole('alert')).toBeNull();
+  cleanup();
+  view = {
+    ...LIST,
+    lastError: {
+      message: 'budget',
+      mode: 'list',
+      at: '2026-10-28T00:00:00Z',
+    },
+  };
+  mount();
+  await screen.findByText('open source low code platform');
+  expect(screen.getByRole('alert').textContent).toContain(
+    $t('keywordSuggestions.lastRunFailed', { 0: 'budget', 1: '10-27' }).split(
+      '10-27',
+    )[0],
+  );
+});
+
+test('group tabs stay on one line: those that do not fit go under More, and the selected one stays shown', async () => {
+  const width = vi
+    .spyOn(HTMLElement.prototype, 'offsetWidth', 'get')
+    .mockReturnValue(100);
+  const room = vi
+    .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+    .mockReturnValue(400);
+  try {
+    mount('/keywords?tab=suggest&group=dig1');
+    await screen.findByText('approval workflow software');
+    // 400 wide less padding fits More and two tabs: All, then the selected group in place of the next one.
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
+      `${$t('keywordSuggestions.allTab')} 3`,
+      `${$t('keywordSuggestions.digTab', { 0: 'approval workflow' })} 1`,
+    ]);
+    fireEvent.click(
+      screen.getByRole('button', { name: `${$t('common.more')} 2` }),
+    );
+    fireEvent.click(
+      await screen.findByRole('menuitem', {
+        name: new RegExp($t('keywordSuggestions.groups.comparison')),
+      }),
+    );
+    const table = screen.getByRole('table');
+    await waitFor(() =>
+      expect(within(table).getByText('retool alternative')).toBeVisible(),
+    );
+  } finally {
+    width.mockRestore();
+    room.mockRestore();
+  }
 });

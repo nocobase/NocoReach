@@ -22,6 +22,9 @@ vi.mock('../../client/pages/reach-data', () => ({
     project: { id: 1, name: 'Example', domains: ['example.com'] },
   }),
 }));
+vi.mock('../../client/hooks/use-business-access', () => ({
+  useBusinessAccess: () => ({ can: true }),
+}));
 vi.mock('../../client/pages/keyword-hand-off', () => ({
   KeywordHandOffDialog: () => null,
 }));
