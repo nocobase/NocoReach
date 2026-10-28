@@ -1,5 +1,6 @@
 import { $t, $legacyText } from "#i18n";
 import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {formatDate} from '#lib/format';
 import {playbookForActions} from '../../shared/opportunity-parts.js';
 import {SYSTEM_PLAYBOOKS} from '../../shared/playbook-catalog.js';
 import {inPlaceLocales} from '../../shared/article-publishing.js';
@@ -64,6 +65,13 @@ export function eventText(e:{action:string;note?:string;comment?:string;stageKey
   // An automatic title that followed the playbook chosen before the start (server task-title.ts).
   case 'retitle':return {who:$t('common.system'),text:$t('playbook.retitled',{0:e.note||''})};
   case 'selectPlaybook':return {who:$t('common.you'),text:$t('playbook.changedPlaybook',{0:(e.note||"")})};
+  // Snooze (2026-10-28, server execution/snooze.ts): the day and what it waits for, a new day, ended by hand, by acting
+  // on the task, or come back on its day.
+  case 'snoozeTask':return {who:$t('common.you'),text:e.comment?$t('playbook.snoozedBecause',{0:formatDate(e.note),1:e.comment}):$t('playbook.snoozed',{0:formatDate(e.note)})};
+  case 'snoozeChanged':return {who:$t('common.you'),text:e.comment?$t('playbook.snoozeChangedBecause',{0:formatDate(e.note),1:e.comment}):$t('playbook.snoozeChanged',{0:formatDate(e.note)})};
+  case 'unsnoozeTask':return {who:$t('common.you'),text:$t('playbook.unsnoozed')};
+  case 'snoozeEnded':return {who:$t('common.you'),text:$t('playbook.snoozeEnded')};
+  case 'snoozeDue':return {who:$t('common.system'),text:$t('playbook.snoozeDue')};
   case 'handoff':return {who:$t('common.system'),text:$t('playbook.handedOverTaskDocumentDelivered',{0:(e.note||"")})};
   case 'runQueued':return {who:executor,text:$t('playbook.started',{0:(e.note||$t('common.run'))})};
   case 'runSucceeded':return {who:executor,text:$t('playbook.finishedDeliveredNewVersion')};

@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Connections } from './plugin.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
+import { boardState } from './execution/model.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 
 // 通知 (2026-10-08 user decision): NocoBase's own notifications. Everyone gets an in-app message — the bell in
@@ -42,6 +43,12 @@ class Notifications{
    else if(e.kind==='comment')told+=await this.send([owner],{title:systemMessageText('messages.commented', { 0: await this.userName(e.by), 1: label }),content:String(e.comment||'').slice(0,300),url});
   }
   return told;}
+ // A snoozed task came back on its day (execution/snooze.ts): its owner hears it once, with what it was waiting for.
+ async snoozeDue(task,w,snooze){
+  const owner=w.humanOwnerId;if(!owner)return 0;
+  const state=systemMessageText(({doing:'common.inProgress',review:'common.needsConfirmation'})[boardState(w)]||'common.pending');
+  const content=[task.title,...(snooze?.reason?[systemMessageText('messages.snoozeReason',{0:snooze.reason})]:[])].join('\n');
+  return this.send([owner],{title:systemMessageText('messages.snoozeDue',{0:taskNoOf(task)||task.title,1:state}),content,url:`/actions/${task.id}`});}
  // The day's analysis failed after its automatic tries: the admins hear it.
  async analysisFailed(projectId,error){
   const admins=(await this.p.members?.list?.().catch(()=>[])||[]).filter(u=>u.role==='admin').map(u=>u.id);

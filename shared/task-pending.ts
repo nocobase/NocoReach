@@ -11,6 +11,17 @@ export type TaskWork = {
   cancelledAt?: string;
   archivedAt?: string;
   humanOwnerId?: string;
+  snooze?: TaskSnooze | null;
+};
+/** Put aside until a day (Snooze, 2026-10-28 user request, as Gmail's): the task keeps its place and comes back then. */
+export type TaskSnooze = {
+  /** When it comes back: 09:00 of `day` in the daily analysis's time zone. */
+  until: string;
+  day: string;
+  reason?: string;
+  at: string;
+  by: string;
+  byName?: string;
 };
 export type PendingTask = {
   id: number;
@@ -54,17 +65,21 @@ export function taskOwner(task: Pick<PendingTask, 'evidence'>): string | null {
 }
 export const taskClosed = (work?: TaskWork | null): boolean =>
   Boolean(work?.cancelledAt || work?.archivedAt);
+/** Snoozed: out of Needs you and Current, and of every count and reminder of what waits, until it comes back. */
+export const taskSnoozed = (work?: TaskWork | null): boolean =>
+  Boolean(work?.snooze && !taskClosed(work) && work.stage !== 'done');
 /**
  * Where a task stands now: what Insights, Opportunities and the online agent say of the task an opportunity or a
  * change was handed off as. A cancelled task, or one archived before it finished, is closed; one archived after it
  * finished stays done (2026-10-23, as Results counts it; server/nocoreach/execution/model.ts `taskStanding`).
  */
-export type TaskStanding = TaskState | 'closed';
+export type TaskStanding = TaskState | 'closed' | 'snoozed';
 export const taskStanding = (task: {
   work?: TaskWork | null;
   status?: string;
 }): TaskStanding => {
   if (task.work?.cancelledAt) return 'closed';
   const state = taskState(task.work, task.status);
-  return task.work?.archivedAt && state !== 'done' ? 'closed' : state;
+  if (task.work?.archivedAt && state !== 'done') return 'closed';
+  return taskSnoozed(task.work) ? 'snoozed' : state;
 };

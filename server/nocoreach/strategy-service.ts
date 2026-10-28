@@ -1,6 +1,6 @@
 // @ts-nocheck
 import {rowsFor,opportunityState,insightPending} from '../../shared/strategy-pending.js';
-import {taskState,taskOwner,taskClosed} from '../../shared/task-pending.js';
+import {taskState,taskOwner,taskClosed,taskSnoozed} from '../../shared/task-pending.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { randomUUID } from 'node:crypto';
@@ -212,7 +212,7 @@ class StrategyService{
  async badges(id,ctx){
   const rows=await this.p.taskExecution.tasks(id) as import('../../shared/task-pending.js').PendingTask[];
   const me=ctx?.auth?.user?.id!=null?String(ctx.auth.user.id):null;
-  const tasks=rows.filter(t=>{const owner=taskOwner(t);return me!==null&&(owner?String(owner)===me:ctx?.state?.nrRole==='admin')&&!taskClosed(t.evidence?.work)&&['review','todo'].includes(taskState(t.evidence?.work,t.status));}).length;
+  const tasks=rows.filter(t=>{const owner=taskOwner(t);return me!==null&&(owner?String(owner)===me:ctx?.state?.nrRole==='admin')&&!taskClosed(t.evidence?.work)&&!taskSnoozed(t.evidence?.work)&&['review','todo'].includes(taskState(t.evidence?.work,t.status));}).length;
   const state=await this.state(id) as import('../../shared/strategy-model.js').StrategyState;
   return {tasks,opportunities:rowsFor(state).filter(r=>opportunityState(r,state).state==='pending').length,insights:insightPending(state,rows)};
  }

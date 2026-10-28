@@ -35,7 +35,7 @@ const getTabs = (): [Tab,string][] => ([['pending',$t('common.pending')],['watch
 // A handed-off opportunity goes by where its task stands now, as on Insights (2026-10-22 user feedback: T-34 was done
 // and its opportunity still read "Handed off to agent"); the filter offers the same labels as the tags.
 type Dest='pending'|'task'|Exclude<TaskStanding,'todo'>|'ignored'|'expired'|'skip';
-const getDestinations = (): [Dest|'',string][] => ([['',$t('strategy.anywhere')],['task',TASK_TAG.todo[1]()],['doing',TASK_TAG.doing[1]()],['review',TASK_TAG.review[1]()],['done',TASK_TAG.done[1]()],['closed',TASK_TAG.closed[1]()],['ignored',$t('strategy.dismissed')],['expired',$t('strategy.expired')],['skip',$t('common.noActionNeeded')]]);
+const getDestinations = (): [Dest|'',string][] => ([['',$t('strategy.anywhere')],['task',TASK_TAG.todo[1]()],['doing',TASK_TAG.doing[1]()],['review',TASK_TAG.review[1]()],['done',TASK_TAG.done[1]()],['snoozed',TASK_TAG.snoozed[1]()],['closed',TASK_TAG.closed[1]()],['ignored',$t('strategy.dismissed')],['expired',$t('strategy.expired')],['skip',$t('common.noActionNeeded')]]);
 const day=(iso?:string)=>formatDate(iso);
 type Item=Row&{state:OpportunityState;reason?:string;task?:TaskStanding;/** Where each task stands, when it has several (one per place). */taskStates?:TaskStanding[]};
 const destOf=(r:Item):Dest=>r.state==='task'?(!r.task||r.task==='todo'?'task':r.task):r.state==='archived'?(r.reason==='ignored'?'ignored':'expired'):'pending';
@@ -173,7 +173,7 @@ const changeDest=(c:Settled):Dest=>c.status.next==='task'?(!c.status.task||c.sta
 const RestoreButton=({busy,onClick}:{busy:boolean;onClick:()=>void})=><Tooltip><TooltipTrigger render={<Button size="icon-sm" variant="ghost" className="-my-1.5" aria-label={$t('strategy.restore')} disabled={busy} onClick={onClick}/>}><Undo2Icon/></TooltipTrigger><TooltipContent>{$t('strategy.restore')}</TooltipContent></Tooltip>;
 // Where-it-went order for sorting (2026-10-24 user request: every column but the title sorts): what waits for you first,
 // then work under way, done, closed, and what was dropped.
-const DEST_RANK:Record<Dest,number>={pending:0,review:1,doing:2,task:3,done:4,closed:5,ignored:6,expired:7,skip:8};
+const DEST_RANK:Record<Dest,number>={pending:0,review:1,doing:2,task:3,snoozed:4,done:5,closed:6,ignored:7,expired:8,skip:9};
 type SortKey='no'|'dest'|'found';
 const SORT_KEYS:SortKey[]=['no','dest','found'];
 // Number and first found start newest first; where it went starts with what waits for you.

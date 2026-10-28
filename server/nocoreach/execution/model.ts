@@ -29,7 +29,7 @@ export type Work = {
   agentId?: string; agentName?: string;
   humanOwnerId?: string; humanOwnerName?: string; collaborators?: { id: string; name: string }[]; page?: { url: string; title: string }; latestRun?: { id: string; status: string }; legacyStatus?: string;
   // Flow tasks (stage 'flow'): the chosen flow before start, its snapshot after start, the current stage and the person's note to the AI.
-  flowId?: string; flow?: FlowSnapshot; stageIndex?: number; note?: string; observeFrom?: string; release?: Release; cancelledAt?: string; cancelledBy?: string; archivedAt?: string; archivedBy?: string; prClose?: { number: number; state: 'closing' | 'closed' | 'failed'; error?: string }; revert?: { of: number; state: 'opening' | 'opened' | 'failed'; number?: number; url?: string; at?: string; error?: string }; observation?: { results: import('./effect').EffectResult[] };
+  flowId?: string; flow?: FlowSnapshot; stageIndex?: number; note?: string; observeFrom?: string; release?: Release; cancelledAt?: string; cancelledBy?: string; archivedAt?: string; archivedBy?: string; snooze?: import('../../../shared/task-pending.js').TaskSnooze | null; prClose?: { number: number; state: 'closing' | 'closed' | 'failed'; error?: string }; revert?: { of: number; state: 'opening' | 'opened' | 'failed'; number?: number; url?: string; at?: string; error?: string }; observation?: { results: import('./effect').EffectResult[] };
   // The playbook chosen before start, its snapshot after start, and the tasks linked by a hand-over.
   playbookId?: string; playbook?: PlaybookSnapshot; prevTaskId?: string; nextTaskId?: string;
   // Article delivery: the article linked before start, and the choice frozen at start (article-flow.ts).
@@ -109,11 +109,13 @@ export function boardState(w: Work): BoardState {
  * a cancelled task, or one archived before it finished (including the old-workflow archive), is closed; one archived
  * after finishing stays done. `boardState` keeps cancelled tasks in the board's done column; labels use this.
  */
-export type TaskStanding = BoardState | 'closed';
+export type TaskStanding = BoardState | 'closed' | 'snoozed';
 export function taskStanding(w: Work): TaskStanding {
   if (w.cancelledAt) return 'closed';
   const state = boardState(w);
-  return w.archivedAt && state !== 'done' ? 'closed' : state;
+  if (w.archivedAt && state !== 'done') return 'closed';
+  // Snoozed until a day (snooze.ts): what it waits for is not due yet.
+  return w.snooze && state !== 'done' ? 'snoozed' : state;
 }
 export function contentInput(v: any, domains: string[]) {
   let url: URL;
