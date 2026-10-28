@@ -6902,6 +6902,7 @@
   "articles.draft.needsPrimaryNone": "Um artigo novo precisa de título e corpo em {0}; este rascunho ainda não tem nenhum idioma.",
   "articles.draft.missingField": "Um artigo novo precisa de título e corpo em {0}; falta {1}.",
   "articles.draft.primaryOnly": "Esta etapa escreve só o idioma principal, {0}; os outros são traduzidos depois da aprovação. Este rascunho só tem: {1}.",
+  "articles.draft.othersMissing": "Esta etapa escreve {0}; {1} já foi aprovado e não é escrito de novo. Este rascunho só tem: {2}.",
   "articles.draft.otherLanguage": "O destino de publicação “{0}” não aceita {1}; aceita apenas: {2}.",
   "articles.draft.unmappedField": "O destino de publicação “{0}” não guarda {2} para {1}; deixe esse item de fora.",
   "articles.draft.slug": "Um artigo novo precisa de um endereço (slug): só letras minúsculas, números e hifens, começando com letra ou número, no máximo 200 caracteres.",

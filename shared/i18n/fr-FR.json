@@ -6902,6 +6902,7 @@
   "articles.draft.needsPrimaryNone": "Un nouvel article doit avoir un titre et un corps en {0} ; ce brouillon ne contient encore aucune langue.",
   "articles.draft.missingField": "Un nouvel article doit avoir à la fois un titre et un corps en {0} ; il manque {1}.",
   "articles.draft.primaryOnly": "Cette étape ne rédige que la langue principale, {0} ; les autres sont traduites après approbation. Ce brouillon ne contient que : {1}.",
+  "articles.draft.othersMissing": "Cette étape rédige {0} ; {1} est déjà approuvé et n’est pas réécrit. Ce brouillon ne contient que : {2}.",
   "articles.draft.otherLanguage": "La destination de publication « {0} » ne prend pas {1} ; elle prend seulement : {2}.",
   "articles.draft.unmappedField": "La destination de publication « {0} » n’enregistre pas {2} pour {1} ; retirez-le.",
   "articles.draft.slug": "Un nouvel article doit avoir une adresse (slug) : lettres minuscules, chiffres et tirets uniquement, commençant par une lettre ou un chiffre, 200 caractères au maximum.",

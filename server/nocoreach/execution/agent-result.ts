@@ -111,7 +111,11 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
           '文章用哪种语言写只看 data.article.languages，和 data.language 无关。data.language 是项目语言，只用于 content、summary 这些给审核人看的说明；任务标题和说明、大纲、上一步的成果、留言和资料用什么语言，都不改变文章的语言，需要时先理解其中的意思，再用文章的语言来写。locales 的键是语言代码，每种语言的 title、description、body 都要真的用这种语言写，例如 en 用英语、zh 用中文、ja 用日语。',
           'phase 为 primary 时只写主语言 languages.primary，其他语言（languages.others）在审核通过后再翻译，这次不要写、不要返回；按审核意见修改时也只改主语言。phase 为 all 时一次写 languages.write 里需要的语言，新文章至少要有主语言。',
           'task result 提示语言不符时（例如“新文章必须有英语（en）的标题和正文，这次只写了：中文（zh）”），说明文章写成了别的语言，不是配置问题，也不要因此报告失败：按提示用要求的语言重写标题、摘要和正文，再重新提交。这种情况不受“保留正文、只修正格式”的限制。',
-          'phase 为 translate 时，languages.approved 是要翻译的原文（title、description、body），即已经审核通过的主语言版本，或者翻译已发布文章时文章现在的原文：把它翻译成 languages.write 里的每种语言，只返回这些语言，不要改主语言。翻译要忠实于原意，保持段落、标题层级、Markdown、链接和图片不变，用当地读者习惯的说法，不要逐字硬译；产品名、代码和专有名词保持原样。改已有文章时只翻译 languages.approved.fields 列出的字段，新文章翻译全部字段。summary 写翻译了哪些语言，以及需要人留意的地方（如某个说法没有对应的本地用语）。',
+          'phase 为 translate 时，languages.approved 是要翻译的原文（title、description、body），即已经审核通过的主语言版本，或者翻译已发布文章时文章现在的原文：把 languages.approved.fields 列出的字段翻译成 languages.write 里的每种语言，只返回这些语言，不要改主语言。翻译要忠实于原意，保持段落、标题层级、Markdown、链接和图片不变，用当地读者习惯的说法，不要逐字硬译；产品名、代码和专有名词保持原样。summary 写翻译了哪些语言，以及需要人留意的地方（如某个说法没有对应的本地用语）。',
+          // 2026-10-28 (T-53): updating an existing article re-translated the whole new primary, replacing the other
+          // languages' wording; their own text is now edited with the primary's changes instead.
+          'phase 为 update 时，这是一篇已有文章：主语言已经改好并审核通过，languages.update 里的语言文章原来就有，要把主语言的改动同样做到这些语言上，不是重新翻译。每种语言以 data.article.source 里它现在的文字为底稿。languages.changes 是主语言改了的字段：title、description 给出改前 before 和改后 after；body 的 edits 逐处列出改前 before 和改后 after（before 为空是新增，after 为空是删除），near 是这处改动前面没有变的一段主语言原文，用来在底稿里找到对应的位置；truncated 为 true 时没有逐处列出，请自己对比 source 里主语言的正文和 languages.approved.body。在每种语言里做对应的修改：只改 changes 里的字段，正文只增加、删除或改写对应的段落，新写的内容按上面的翻译要求译成这种语言；其余段落和原来的译法保持原样，不要润色或重新翻译没有改动的部分。主语言只改了标题或摘要时，只改这些字段，不要返回正文。每种语言只返回改过的字段，值是改后的完整内容（body 是完整正文，不是片段）。languages.translate 里的语言文章还没有，把 languages.approved 整篇翻译成这些语言。只返回 languages.write 里的语言，不要改主语言。summary 按语言写改了哪些地方，以及需要人留意的地方。',
+          '提交前确认 article.locales 里是这一步要写的语言（languages.write）。task result 提示没有要写的语言时，说明交的不是这次写的结果（例如之前留下的文件）：用这次写好的内容重新提交。',
           'summary 必填，是审核人最先看到的说明：纯文本，最多三行，用读者能懂的话说这次改了什么；按审核意见修改时先说按意见做了什么，例如“按你的意见换了 5 张截图（NocoBase、Teable）；标题和摘要沿用上一版”。不要写时间戳、规则名、证据细节，也不要重复改前改后的标题和摘要，审核页会显示文章预览和逐项对比。',
           'content 是完整的修改说明（Markdown），审核人需要时才展开：列出改动的语言、字段、理由和依据。',
         ]

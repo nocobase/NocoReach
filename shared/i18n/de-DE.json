@@ -6902,6 +6902,7 @@
   "articles.draft.needsPrimaryNone": "Ein neuer Artikel braucht Titel und Text auf {0}; dieser Entwurf enthält noch keine Sprache.",
   "articles.draft.missingField": "Ein neuer Artikel braucht auf {0} sowohl Titel als auch Text; es fehlt {1}.",
   "articles.draft.primaryOnly": "In diesem Schritt wird nur die Hauptsprache {0} geschrieben; die anderen werden nach der Freigabe übersetzt. Dieser Entwurf enthält nur: {1}.",
+  "articles.draft.othersMissing": "In diesem Schritt werden {0} geschrieben; {1} ist bereits freigegeben und wird nicht erneut geschrieben. Dieser Entwurf enthält nur: {2}.",
   "articles.draft.otherLanguage": "Das Veröffentlichungsziel „{0}“ hat kein {1}; möglich sind nur: {2}.",
   "articles.draft.unmappedField": "Das Veröffentlichungsziel „{0}“ speichert {2} für {1} nicht; lassen Sie es weg.",
   "articles.draft.slug": "Ein neuer Artikel braucht eine Adresse (slug): nur Kleinbuchstaben, Ziffern und Bindestriche, beginnend mit einem Buchstaben oder einer Ziffer, höchstens 200 Zeichen.",

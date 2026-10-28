@@ -6936,6 +6936,7 @@
   "articles.draft.needsPrimaryNone": "新文章必须有{0}的标题和正文，这次没有写任何语言。",
   "articles.draft.missingField": "新文章的{0}要同时有标题和正文，这次缺少 {1}。",
   "articles.draft.primaryOnly": "这一步只写主语言{0}，其他语言在审核通过后再翻译；这次只写了：{1}。",
+  "articles.draft.othersMissing": "这一步要写{0}，{1}已经审核通过，不用再写；这次只写了：{2}。",
   "articles.draft.otherLanguage": "发布目标“{0}”没有{1}，只能写：{2}。",
   "articles.draft.unmappedField": "发布目标“{0}”不保存{1}的 {2}，请去掉这一项。",
   "articles.draft.slug": "新文章需要地址（slug）：只用小写字母、数字和连字符，以字母或数字开头，最多 200 个字符。",

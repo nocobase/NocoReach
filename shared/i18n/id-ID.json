@@ -6993,6 +6993,7 @@
   "articles.draft.needsPrimaryNone": "Artikel baru memerlukan judul dan isi dalam {0}; draf ini belum berisi bahasa apa pun.",
   "articles.draft.missingField": "Artikel baru memerlukan judul dan isi dalam {0}; {1} belum ada.",
   "articles.draft.primaryOnly": "Langkah ini hanya menulis bahasa utama, {0}; bahasa lain diterjemahkan setelah disetujui. Draf ini hanya berisi: {1}.",
+  "articles.draft.othersMissing": "Langkah ini menulis {0}; {1} sudah disetujui dan tidak ditulis ulang. Draf ini hanya berisi: {2}.",
   "articles.draft.otherLanguage": "Tujuan penerbitan “{0}” tidak menerima {1}; hanya menerima: {2}.",
   "articles.draft.unmappedField": "Tujuan penerbitan “{0}” tidak menyimpan {2} untuk {1}; hapus bagian ini.",
   "articles.draft.slug": "Artikel baru memerlukan alamat (slug): hanya huruf kecil, angka, dan tanda hubung, diawali huruf atau angka, maksimal 200 karakter.",

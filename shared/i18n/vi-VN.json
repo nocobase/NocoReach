@@ -6993,6 +6993,7 @@
   "articles.draft.needsPrimaryNone": "Bài viết mới cần có tiêu đề và nội dung bằng {0}; bản nháp này chưa có ngôn ngữ nào.",
   "articles.draft.missingField": "Bài viết mới cần có cả tiêu đề và nội dung bằng {0}; còn thiếu {1}.",
   "articles.draft.primaryOnly": "Bước này chỉ viết ngôn ngữ chính là {0}; các ngôn ngữ khác được dịch sau khi duyệt. Bản nháp này chỉ có: {1}.",
+  "articles.draft.othersMissing": "Bước này viết {0}; {1} đã được duyệt và không viết lại. Bản nháp này chỉ có: {2}.",
   "articles.draft.otherLanguage": "Đích xuất bản “{0}” không có {1}; chỉ nhận: {2}.",
   "articles.draft.unmappedField": "Đích xuất bản “{0}” không lưu {2} cho {1}; hãy bỏ mục này.",
   "articles.draft.slug": "Bài viết mới cần có địa chỉ (slug): chỉ dùng chữ thường, chữ số và dấu gạch nối, bắt đầu bằng chữ cái hoặc chữ số, tối đa 200 ký tự.",

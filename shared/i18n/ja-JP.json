@@ -6902,6 +6902,7 @@
   "articles.draft.needsPrimaryNone": "新しい記事には{0}のタイトルと本文が必要です。今回はどの言語も書かれていません。",
   "articles.draft.missingField": "新しい記事の{0}にはタイトルと本文の両方が必要です。今回は {1} がありません。",
   "articles.draft.primaryOnly": "このステップでは主言語の{0}だけを書きます。他の言語は承認後に翻訳します。今回あるのは {1} だけです。",
+  "articles.draft.othersMissing": "このステップで書くのは{0}です。{1}は承認済みなので書き直しません。今回あるのは {2} だけです。",
   "articles.draft.otherLanguage": "公開先「{0}」には{1}がありません。書けるのは {2} だけです。",
   "articles.draft.unmappedField": "公開先「{0}」は{1}の {2} を保存しません。この項目を外してください。",
   "articles.draft.slug": "新しい記事にはアドレス (slug) が必要です。英小文字・数字・ハイフンだけを使い、英字か数字で始め、200 文字以内にしてください。",

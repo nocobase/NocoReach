@@ -6936,6 +6936,7 @@
   "articles.draft.needsPrimaryNone": "A new article needs a title and body in {0}; this draft has no language yet.",
   "articles.draft.missingField": "A new article needs both a title and a body in {0}; {1} is missing.",
   "articles.draft.primaryOnly": "This step writes only the primary language, {0}; the others are translated after approval. This draft only has: {1}.",
+  "articles.draft.othersMissing": "This step writes {0}; {1} is already approved and is not written again. This draft only has: {2}.",
   "articles.draft.otherLanguage": "The publishing target “{0}” does not take {1}; it takes only: {2}.",
   "articles.draft.unmappedField": "The publishing target “{0}” does not store {2} for {1}; leave it out.",
   "articles.draft.slug": "A new article needs an address (slug): lowercase letters, digits and hyphens only, starting with a letter or digit, at most 200 characters.",

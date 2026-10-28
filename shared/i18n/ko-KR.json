@@ -6932,6 +6932,7 @@
   "articles.draft.needsPrimaryNone": "새 글에는 {0} 언어의 제목과 본문이 필요합니다. 이 초안에는 아직 언어별 내용이 없습니다.",
   "articles.draft.missingField": "새 글에는 {0} 언어의 제목과 본문이 모두 필요합니다. 누락된 항목: {1}.",
   "articles.draft.primaryOnly": "이 단계에서는 기본 언어 버전({0})만 작성합니다. 나머지는 승인 후 번역됩니다. 이 초안에는 {1}만 있습니다.",
+  "articles.draft.othersMissing": "이 단계에서는 {0}을(를) 작성합니다. {1}은(는) 이미 승인되어 다시 작성하지 않습니다. 이 초안에는 {2}만 있습니다.",
   "articles.draft.otherLanguage": "게시 대상 “{0}”은(는) {1} 언어를 지원하지 않습니다. 지원하는 언어: {2}.",
   "articles.draft.unmappedField": "게시 대상 “{0}”은(는) {1} 언어의 {2} 항목을 저장하지 않습니다. 해당 항목을 제외하세요.",
   "articles.draft.slug": "새 글에는 주소(슬러그)가 필요합니다. 소문자, 숫자, 하이픈만 사용할 수 있으며 문자나 숫자로 시작하고 최대 200자입니다.",
