@@ -6482,7 +6482,6 @@
   "agentsPage.description": "NocoReach menggunakan dua jenis AI: model cloud menjalankan analisis harian dan menjawab di panel percakapan, sedangkan agen lokal mengerjakan tugas.",
   "agentsPage.addRuntime": "Tambah lingkungan eksekusi",
   "agentsPage.viewRuntimes": "Lihat lingkungan eksekusi",
-  "agentsPage.runnerDescription": "Setiap kombinasi alat pemrograman dan model yang dilaporkan lingkungan eksekusi adalah satu agen lokal; baru menerima tugas setelah diaktifkan.",
   "agentChoice.onlineHint": "Menjawab pertanyaan; tidak menjalankan tugas",
   "agentChoice.runnerHint": "Dapat membuat dan memulai tugas; lingkungan eksekusinya harus daring",
   "agentRoles.title": "Siapa yang mengerjakan",

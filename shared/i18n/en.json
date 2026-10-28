@@ -6425,7 +6425,6 @@
   "agentsPage.description": "NocoReach uses two kinds of AI: cloud models run the daily analysis and answer in the chat panel, and local agents carry out tasks.",
   "agentsPage.addRuntime": "Add runtime",
   "agentsPage.viewRuntimes": "View runtimes",
-  "agentsPage.runnerDescription": "Each coding tool and model a runtime reports is a local agent; it takes tasks once enabled.",
   "agentChoice.onlineHint": "Answers questions; doesn't run tasks",
   "agentChoice.runnerHint": "Can create and start tasks; needs its runtime online",
   "agentRoles.title": "Who does the work",
