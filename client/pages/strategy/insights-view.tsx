@@ -9,7 +9,7 @@ import {Button} from '#components/ui/button';
 import {Section} from '#components/reach/page';
 import {Tag,type Tone} from '#components/reach/tag';
 import {getSourceNames,type Row} from './board';
-import type {StrategyState,Signal,WatchRecord} from './model';
+import type {StrategyState,Signal,WatchRecord,Evidence,SourceSummary} from './model';
 import {type Work} from '../task-execution-types';
 import {DetailDrawer} from '../detail-drawer';
 import {DraftHandOffDialog,type TaskDraft} from '../keyword-hand-off';
@@ -69,6 +69,18 @@ export function metricItems(cards?:SourceCard[],days?:number):MetricItem[]{
  const gsc=by.get('gsc'),ga4=by.get('ga4');
  return [item($t('common.searchClicks'),gsc,'clicks','/seo-opportunities'),item($t('common.searchImpressions'),gsc,'impressions','/seo-opportunities'),item($t('strategy.sessions'),ga4,'sessions','/website'),item($t('common.keyEvents'),ga4,'conversions','/website/conversion'),
   ...([['github','stars',$t('common.newStars'),'/data/github',true],['packages','downloads',$t('common.downloads'),'/data/downloads',false],['discourse','topics',$t('strategy.newForumTopics'),'/data/community',false],['mentions','mentions',$t('common.hackerNewsMentions'),'/data/hackernews',false],['reddit','posts',$t('strategy.newRedditPosts'),'/data/reddit',false]] as const).flatMap(([id,key,label,to,signed])=>{const c=by.get(id);return c?[item(label,c,key,to,signed,c.series)]:[];})];
+}
+// The numbers a day's analysis read (its evidence: Search Console and GA4 over its own period against the period
+// before), for the chips of that day's message. They come from the analysis, not the tiles above, so the chips and the
+// notes the AI wrote from the same figures agree, and an earlier day keeps its own (2026-10-27 user report: the tiles
+// went to 7 days in #291 and the chips said "Search impressions ↑ 35%" beside notes reading -21.3% over 28 days). A
+// figure the evidence does not carry, or cannot compare, is left out rather than taken from another window.
+export function analysisMetrics(evidence?:Evidence):MetricItem[]{
+ const days=evidence?.periodDays;
+ const item=(label:string,source:SourceSummary|undefined,key:string,to:string):MetricItem=>{const m=source?.metrics?.[key],ok=Boolean(m?.comparable&&m.current!=null&&m.previous!=null);
+  return {label,value:ok?m!.current:null,previous:ok?m!.previous:null,change:ok&&m!.percent!=null?m!.percent/100:null,to:days?`${to}?days=${days}`:to};};
+ const search=evidence?.summary?.search,web=evidence?.summary?.web;
+ return [item($t('common.searchClicks'),search,'clicks','/seo-opportunities'),item($t('common.searchImpressions'),search,'impressions','/seo-opportunities'),item($t('strategy.sessions'),web,'sessions','/website'),item($t('common.keyEvents'),web,'conversions','/website/conversion')].filter(i=>i.value!=null);
 }
 export const percent=pct;
 // 当前状况 (was 各方面一览, then 需要留意 — 2026-10-08 user: “留意” read like the AI's 先观察): how things stand now, as
@@ -146,7 +158,7 @@ export function AreaList({areas,projectId,quiet=false}:{areas?:Area[];projectId:
 function AttentionDetail({item,projectId,onClose}:{item:AreaItem;projectId:number;onClose:()=>void}):ReactElement{
  // A rule's line is titled as in the list, by its label (the rule's own name reads differently).
  const navigate=useNavigate(),list=item.rows||[],selection=useSelection(list.map(r=>r.key)),ticked=list.filter(r=>selection.has(r.key)),text=item.key.startsWith('rule-')&&SITUATION_LABEL[item.key]?$t(SITUATION_LABEL[item.key]):sentence(item);
- const draft=():TaskDraft=>({title:item.handOff!.title.replace('{0}',ticked.map(r=>r.title).join('、').slice(0,120)).slice(0,200),objective:$t('strategy.handleInsightsWorthLook',{0:text}).slice(0,1000),
+ const draft=():TaskDraft=>({title:item.handOff!.title.replace('{0}',ticked.map(r=>r.title).join('、').slice(0,120)).slice(0,200),subject:ticked.map(r=>r.title).join('、').slice(0,160),objective:$t('strategy.handleInsightsWorthLook',{0:text}).slice(0,1000),
   brief:[$t('strategy.insightsWhereThingsStand',{0:text,1:$legacyText(item.source),2:item.detail?`，${$legacyText(item.detail)}`:''}),'',...ticked.map(r=>`- ${r.title}${r.meta?`（${$legacyText(r.meta)}）`:''}${r.url?`：${r.url}`:''}`),'',$t('strategy.suggestionCheckDataPagesItems')].join('\n').slice(0,20000)});
  return <DetailDrawer open onClose={onClose} title={text} description={[$legacyText(item.source),item.detail?$legacyText(item.detail):''].filter(Boolean).join(' · ')}
   actions={item.handOff&&list.length?<SectionHandOff projectId={projectId} disabled={!ticked.length} playbookId={item.handOff.playbookId} page={ticked.length===1&&ticked[0].url?ticked[0].url:undefined} label={ticked.length?$t('common.handOffAgentValue',{0:ticked.length}):$t('common.handOffAgent')} draft={draft}/>:undefined}
@@ -179,7 +191,7 @@ const PLAYBOOK:Record<string,string>={technical:'tech-fix',optimize:'optimize-pa
 // written as the AI's advice, apart from your own 忽略. Tones follow the shared colour table: 建议处理 waits for you
 // (amber), a task in progress is blue, not yet / watching grey, not doing slate.
 const getVerdict = () => ({do:{verdict:'do',label:$t('common.act'),tone:'amber',why:$t('strategy.aiSuggestsActing')},watch:{verdict:'watch',label:$t('common.watchRecommendation'),tone:'grey',why:$t('strategy.aiSuggestsWatchingLooksAgain')},skip:{verdict:'skip',label:$t('common.noActionNeeded'),tone:'slate',why:$t('strategy.aiFoundNoActionNeeded')}} as const);
-function changeDraft(s:Signal,reason?:string):TaskDraft{return {title:titleOf(s).slice(0,200),objective:$t('strategy.handleChange',{0:titleOf(s)}).slice(0,1000),brief:[$t('strategy.latestChangeInsights',{0:getSourceNames()[s.source]||s.source,1:titleOf(s)}),...s.facts.map(f=>`- ${$legacyText(f)}`),...(s.url?[$t('strategy.relatedPage',{0:s.url})]:[]),...(reason?[$t('strategy.aiVerdictValue',{0:reason})]:[]),'',$t('strategy.suggestionCheckDataAffectedPages')].join('\n').slice(0,20000),signalKey:s.key};}
+function changeDraft(s:Signal,reason?:string):TaskDraft{return {title:titleOf(s).slice(0,200),subject:titleOf(s).slice(0,160),objective:$t('strategy.handleChange',{0:titleOf(s)}).slice(0,1000),brief:[$t('strategy.latestChangeInsights',{0:getSourceNames()[s.source]||s.source,1:titleOf(s)}),...s.facts.map(f=>`- ${$legacyText(f)}`),...(s.url?[$t('strategy.relatedPage',{0:s.url})]:[]),...(reason?[$t('strategy.aiVerdictValue',{0:reason})]:[]),'',$t('strategy.suggestionCheckDataAffectedPages')].join('\n').slice(0,20000),signalKey:s.key};}
 // A change keeps its key from day to day (the same 278 duplicate titles), so tasks handed off weeks ago still point at it:
 // only a task still open counts as 处理中; a finished or closed one is mentioned, and today's verdict decides again. The
 // open task's tag says where it stands, in the words and tones of Opportunities' Where it went (task-standing.ts).

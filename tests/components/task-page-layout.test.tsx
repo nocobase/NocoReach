@@ -15,6 +15,7 @@ import { TaskDetail } from '../../client/pages/task-detail';
 import ArticleReaderPage from '../../client/pages/task-detail/article-reader';
 import type { TaskData } from '../../client/pages/task-execution-types';
 import spanish from '../../shared/i18n/es-ES.json';
+import russian from '../../shared/i18n/ru-RU.json';
 
 const { action } = vi.hoisted(() => ({ action: vi.fn() }));
 vi.mock('../../client/lib/nocoreach-api', async (original) => {
@@ -189,6 +190,56 @@ test('unknown activity actors use a member label instead of claiming the current
   expect(
     within(activity).queryByText('Tú', { selector: '[data-actor]' }),
   ).toBeNull();
+});
+
+test('Russian activity keeps named actors separate from gender-neutral event states', async () => {
+  setDictionary(russian, 'ru-RU');
+  action.mockImplementation((resource: string, command: string) => {
+    if (resource === 'nrPlaybooks') return Promise.resolve({ playbooks: [] });
+    if (command === 'members')
+      return Promise.resolve([
+        { id: '1', name: 'Ирина' },
+        { id: '2', name: 'Иван' },
+      ]);
+    return Promise.resolve([]);
+  });
+  const data = pageChange();
+  data.work.history = [
+    { at: '2026-10-13T02:10:00Z', actor: '1', action: 'startTask' },
+    { at: '2026-10-13T02:11:00Z', actor: '2', action: 'editStageOutput' },
+    { at: '2026-10-13T02:12:00Z', actor: 'system', action: 'merged' },
+    {
+      at: '2026-10-13T02:14:00Z',
+      actor: 'system',
+      action: 'runSucceeded',
+      artifactId: 'artifact-1',
+    },
+  ];
+  mount(data);
+  const activity = screen.getByRole('region', {
+    name: russian['common.activity'],
+  });
+  const irina = await within(activity).findByText('Ирина', {
+    selector: '[data-actor]',
+  });
+  const ivan = await within(activity).findByText('Иван', {
+    selector: '[data-actor]',
+  });
+  expect(irina.closest('p')).toHaveTextContent('Ирина — задача запущена');
+  expect(ivan.closest('p')).toHaveTextContent(
+    'Иван — контент отредактирован напрямую',
+  );
+  const agentRows = within(activity)
+    .getAllByText(russian['common.localAgent'], { selector: '[data-actor]' })
+    .map((actor) => actor.closest('p'));
+  expect(agentRows).toHaveLength(2);
+  for (const row of agentRows) {
+    expect(row).toHaveTextContent(`${russian['common.localAgent']} — `);
+  }
+  expect(agentRows[0]).toHaveTextContent(russian['taskDetail.eventPublished']);
+  expect(
+    within(agentRows[1]!).getByRole('button', { name: russian['common.view'] }),
+  ).toBeVisible();
 });
 
 test('a page change is reviewed as what readers see, with code kept in Technical details', async () => {
@@ -1153,4 +1204,60 @@ test('a live page change names what readers see differently and opens it', async
   await user.click(within(card).getByRole('button', { name: /查看改动/ }));
   const dialog = await screen.findByRole('dialog', { name: '改了什么' });
   expect(dialog).toHaveTextContent('オープンソース AI ノーコード');
+});
+
+// 2026-10-27 user report (T-49): the title still said "write content" after Keyword research was chosen to start it.
+test('an automatic title follows the playbook chosen on the start card', async () => {
+  const user = userEvent.setup();
+  const data = blogPageTask();
+  data.task.title = '内容选题与大纲：ai governance framework';
+  data.task.evidence = {
+    ...data.task.evidence,
+    autoTitle: { subject: 'ai governance framework', locale: 'zh-CN' },
+    suggestedPlaybook: 'content-outline',
+  };
+  data.playbookDefault = 'content-outline';
+  const playbook = (id: string, name: string) => ({
+    id,
+    name,
+    kind: 'plan',
+    category: 'research',
+    steps: [{ key: 'research', name: '调研', kind: 'analyze' }],
+  });
+  action.mockImplementation((resource: string) =>
+    Promise.resolve(
+      resource === 'nrPlaybooks'
+        ? {
+            revision: 1,
+            playbooks: [
+              playbook('content-outline', '内容选题与大纲'),
+              playbook('keyword-research', '关键词调研'),
+            ],
+          }
+        : [],
+    ),
+  );
+  const pick = async (name: string) => {
+    await user.click(screen.getByRole('combobox', { name: '做法' }));
+    await user.click(await screen.findByRole('option', { name }));
+  };
+  const view = mount(data, '/actions/32');
+  const heading = () => screen.getByRole('heading', { level: 1 });
+  await vi.waitFor(() =>
+    expect(heading()).toHaveTextContent(
+      '内容选题与大纲：ai governance framework',
+    ),
+  );
+  await pick('关键词调研');
+  expect(heading()).toHaveTextContent('关键词调研：ai governance framework');
+  view.unmount();
+  // A title a person wrote stays whatever is chosen.
+  const written = blogPageTask();
+  written.playbookDefault = 'content-outline';
+  mount(written, '/actions/32');
+  await vi.waitFor(() =>
+    expect(heading()).toHaveTextContent('给工作流自动化博客页改标题'),
+  );
+  await pick('关键词调研');
+  expect(heading()).toHaveTextContent('给工作流自动化博客页改标题');
 });

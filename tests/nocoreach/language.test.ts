@@ -10,6 +10,8 @@ const test=__vitest_test;
 
 test('a project writes in its own language, Chinese when unset; every other language gets a note on every prompt',()=>{
  assert.equal(languageOf({}),'zh-CN');assert.equal(languageOf(null),'zh-CN');assert.equal(languageOf({language:'en-US'}),'en-US');assert.equal(languageOf({language:'fr'}),'zh-CN');
+ assert.equal(languageOf({language:'ko-KR'}),'ko-KR');assert.equal(languageOf({language:'ru-RU'}),'ru-RU');
+ assert.match(forLanguage('x','ko-KR'),/in Korean:/);assert.match(forLanguage('x','ru-RU'),/in Russian:/);
  assert.equal(languageOf({language:'ja-JP'}),'ja-JP');assert.equal(languageOf({language:'id-ID'}),'id-ID');
  assert.match(forLanguage('x','ja-JP'),/write every text meant for people in Japanese:/);assert.match(forLanguage('x','zh-TW'),/in Traditional Chinese:/);assert.match(forLanguage('x','pt-BR'),/in Brazilian Portuguese:/);
  // The English note reads as it did before the other languages were added.

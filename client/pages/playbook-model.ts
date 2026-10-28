@@ -51,6 +51,8 @@ export function eventText(e:{action:string;note?:string;comment?:string;stageKey
  const s=stageName(e.stageKey);
  switch(e.action){
   case 'startTask':return {who:$t('common.you'),text:$t('playbook.startedTask',{0:e.note?$t('playbook.playbook',{0:e.note}):''})};
+  // An automatic title that followed the playbook chosen before the start (server task-title.ts).
+  case 'retitle':return {who:$t('common.system'),text:$t('playbook.retitled',{0:e.note||''})};
   case 'selectPlaybook':return {who:$t('common.you'),text:$t('playbook.changedPlaybook',{0:(e.note||"")})};
   case 'handoff':return {who:$t('common.system'),text:$t('playbook.handedOverTaskDocumentDelivered',{0:(e.note||"")})};
   case 'runQueued':return {who:executor,text:$t('playbook.started',{0:(e.note||$t('common.run'))})};

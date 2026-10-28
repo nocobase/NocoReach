@@ -13,7 +13,7 @@ import {
   resolveAppRuntime,
 } from '@nocobase/app-client/runtime';
 import { I18nProvider } from '@nocobase/i18n/client';
-import { I18nRuntime } from '@nocobase/i18n';
+import { I18nRuntime, type LocaleLoaders } from '@nocobase/i18n';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -25,6 +25,7 @@ import {
 } from '#components/ui/dropdown-menu';
 
 import { LanguageSwitcher } from '#layouts/components/language-switcher';
+import applicationLocales from '../../client/locales/index.js';
 
 const APP = '@nocobase/app-template-default';
 const FALLBACK_NOTICE = '服务端不支持该语言，服务端内容已回落为英文。';
@@ -49,7 +50,10 @@ function createServerResponse(fallback = false): Response {
   );
 }
 
-async function createRuntime(locales: string[]): Promise<{
+async function createRuntime(
+  locales: string[],
+  loaders?: LocaleLoaders,
+): Promise<{
   app: ClientApplication;
   runtime: I18nRuntime;
 }> {
@@ -58,30 +62,33 @@ async function createRuntime(locales: string[]): Promise<{
     locales,
     applicationNamespace: APP,
   });
-  runtime.registerApplicationNamespace(APP, {
-    'en-US': () =>
-      Promise.resolve({
-        default: {
-          actions: { language: 'Language' },
-          notices: {
-            serverLocaleFallback:
-              'The server does not support this language, so server messages will use English.',
-            languageChangeFailed:
-              'Unable to complete the language change. Please try again.',
+  runtime.registerApplicationNamespace(
+    APP,
+    loaders ?? {
+      'en-US': () =>
+        Promise.resolve({
+          default: {
+            actions: { language: 'Language' },
+            notices: {
+              serverLocaleFallback:
+                'The server does not support this language, so server messages will use English.',
+              languageChangeFailed:
+                'Unable to complete the language change. Please try again.',
+            },
           },
-        },
-      }),
-    'zh-CN': () =>
-      Promise.resolve({
-        default: {
-          actions: { language: '语言' },
-          notices: {
-            serverLocaleFallback: FALLBACK_NOTICE,
-            languageChangeFailed: CHANGE_FAILED_NOTICE,
+        }),
+      'zh-CN': () =>
+        Promise.resolve({
+          default: {
+            actions: { language: '语言' },
+            notices: {
+              serverLocaleFallback: FALLBACK_NOTICE,
+              languageChangeFailed: CHANGE_FAILED_NOTICE,
+            },
           },
-        },
-      }),
-  });
+        }),
+    },
+  );
   await runtime.init('en-US');
   const appRuntime = await resolveAppRuntime(
     defineAppRuntime({
@@ -129,6 +136,43 @@ function renderMenu(app: ClientApplication, runtime: I18nRuntime) {
 }
 
 describe('LanguageSwitcher', () => {
+  it.each([
+    ['ko-KR', '한국어'],
+    ['ru-RU', 'Русский'],
+  ])(
+    'loads and persists the real %s application locale',
+    async (locale, label) => {
+      const { app, runtime } = await createRuntime(
+        Object.keys(applicationLocales),
+        applicationLocales,
+      );
+      fetchMock.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            data: { locale, requestedLocale: locale, fallback: false },
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+      renderMenu(app, runtime);
+      screen.getByRole('button', { name: 'Account' }).focus();
+      await userEvent.keyboard('{ArrowDown}');
+      await userEvent.click(
+        await screen.findByRole('menuitem', { name: /Language\s*English/ }),
+      );
+      fireEvent.click(
+        await screen.findByRole('menuitemradio', { name: label }),
+      );
+      await waitFor(() => expect(runtime.getLocale()).toBe(locale));
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+      expect(readStoredLocale()).toBe(locale);
+      expect(runtime.getFixedT(APP, locale)('actions.language')).not.toBe(
+        'Language',
+      );
+      expect(toaster.show).not.toHaveBeenCalled();
+    },
+  );
+
   it('shows the current language by name rather than by locale code', async () => {
     const { app, runtime } = await createRuntime(['en-US', 'zh-CN']);
 

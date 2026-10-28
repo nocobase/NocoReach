@@ -1,0 +1,182 @@
+{
+  "@nocobase/app-plugin-mail": {
+    "errors": {
+      "accessDenied": "Требуется доступ к почте.",
+      "idempotencyConflict": "Ключ идемпотентности уже связан с другим запросом.",
+      "invalidRequest": "Некорректный почтовый запрос.",
+      "accountCredentialsInvalid": "Не удалось войти в почтовый ящик. Проверьте имя пользователя, пароль или код авторизации и убедитесь, что IMAP/SMTP включён. Gmail и другие сервисы могут требовать пароль приложения.",
+      "requestFailed": "Не удалось выполнить почтовый запрос.",
+      "providerRateLimited": "Почтовый сервис ограничил частоту запросов. Повторите попытку позже.",
+      "providerUnavailable": "Не удалось подключиться к почтовому сервису. Повторите попытку позже.",
+      "reauthorizationRequired": "Для работы с этой почтовой учётной записью необходимо подключить её заново.",
+      "syncRunNotFound": "Запуск синхронизации почты не найден.",
+      "messageNotFound": "Почтовое сообщение не найдено.",
+      "authorizationStateRequired": "Отсутствует параметр состояния авторизации почты."
+    }
+  },
+  "@nocobase/app-plugin-agents": {
+    "access": {
+      "section": "Управление агентами",
+      "businessSection": "Управление агентами",
+      "businesses": {
+        "agents": {
+          "title": "Агенты и навыки",
+          "description": "Агенты и навыки, которые они используют.",
+          "actions": {
+            "edit": {
+              "title": "Управление агентами и навыками",
+              "description": "Изменение настроек, навыков и переменных агента, его архивирование, восстановление и удаление, а также редактирование навыков. Права агента не могут превышать права пользователя, который его редактирует.",
+              "related": "Управление агентами и навыками (собственные агенты и созданные навыки)",
+              "relatedLabel": "Мои агенты и созданные мной навыки",
+              "relatedHint": "Агенты, которыми я владею, и созданные мной навыки",
+              "all": "Управление агентами и навыками (все)"
+            }
+          }
+        }
+      },
+      "settings": {
+        "agents": {
+          "agents": "Агенты",
+          "runners": "Среды выполнения",
+          "prices": "Цены на модели",
+          "services": "Сервисы моделей"
+        }
+      },
+      "actions": {
+        "read": "Просмотр",
+        "manage": "Управление"
+      },
+      "keyScopes": {
+        "agents": {
+          "title": "Агенты",
+          "description": "Просмотр агентов, навыков и запусков; изменение агентов и навыков, отмена и повтор запусков."
+        },
+        "runners": {
+          "title": "Среды выполнения",
+          "description": "Просмотр сред выполнения и токенов регистрации; управление средами выполнения."
+        },
+        "prices": {
+          "title": "Цены на модели",
+          "description": "Просмотр и изменение цен моделей, по которым рассчитываются расходы."
+        },
+        "services": {
+          "title": "Сервисы моделей",
+          "description": "Просмотр сервисов моделей и доступных в них моделей без доступа к ключам."
+        }
+      }
+    }
+  },
+  "@nocobase/app-plugin-authz-default-access": {
+    "resourceTitle": "Область доступа к данным по умолчанию"
+  },
+  "@nocobase/app-plugin-authz-sharing-rules": {
+    "resourceTitle": "Правила предоставления доступа"
+  },
+  "@nocobase/app-plugin-authz-restriction-rules": {
+    "resourceTitle": "Правила ограничения доступа"
+  },
+  "@nocobase/app-plugin-authorization": {
+    "sections": {
+      "pages": "Доступ к страницам",
+      "page": "Страницы",
+      "business": "Бизнес-операции",
+      "administration": "Система и инструменты",
+      "other": "Другое"
+    },
+    "options": {
+      "defaultAndSharing": "Использовать область доступа по умолчанию",
+      "actions": {
+        "assign": "Управление назначениями",
+        "configure": "Настроить",
+        "inspect": "Проверка разрешений",
+        "read": "Чтение",
+        "create": "Создать",
+        "update": "Обновить",
+        "delete": "Удалить",
+        "access": "Доступ"
+      },
+      "settingsModules": {
+        "authorization": "Управление доступом"
+      },
+      "pages": {
+        "all": "Все страницы",
+        "allDescription": "Разрешить доступ ко всем страницам, включая страницы, добавленные позже."
+      },
+      "settings": {
+        "inspector": "Проверка разрешений",
+        "permission-sets": "Наборы разрешений"
+      },
+      "subjectTypes": {
+        "authenticated": "Все пользователи, вошедшие в систему",
+        "authenticatedDescription": "Применяется ко всем пользователям с активным сеансом входа.",
+        "user": "Пользователи"
+      },
+      "recordAccessPolicies": {
+        "allRecords": "Все записи",
+        "recordsIOwn": "Мои записи",
+        "recordsICreated": "Созданные мной записи",
+        "customFilter": "Настраиваемый фильтр",
+        "customFilterHint": "Выберите записи с помощью собственного условия фильтрации."
+      }
+    }
+  },
+  "@nocobase/app-plugin-users": {
+    "invitationEmail": {
+      "subject": "{{inviter}}: приглашение в {{app}}",
+      "intro": "Вы получили приглашение в {{app}}. Отправитель: {{inviter}}.",
+      "summary": "Дополнительные назначения: {{items}}.",
+      "separator": ", ",
+      "action": "Принять приглашение",
+      "validity": "Перейдите по ссылке, чтобы указать имя и пароль. Ссылка действует до {{date}} и может быть использована один раз.",
+      "fallback": "Если ссылка не открывается, скопируйте её в адресную строку браузера:"
+    }
+  },
+  "@nocobase/app-plugin-notification": {
+    "errors": {
+      "logsForbidden": "Требуется доступ к журналам уведомлений.",
+      "logNotFound": "Запись в журнале уведомлений не найдена."
+    }
+  },
+  "@nocobase/app-plugin-notification-in-app": {
+    "channels": {
+      "inApp": "В приложении"
+    },
+    "providers": {
+      "builtIn": "Встроенный"
+    },
+    "errors": {
+      "authenticationRequired": "Требуется аутентификация.",
+      "invalidPageToken": "Параметр pageToken не соответствует токену, полученному из этого списка.",
+      "notFound": "Уведомление не найдено."
+    }
+  },
+  "@nocobase/app-plugin-notification-providers": {
+    "providers": {
+      "smtp": "SMTP",
+      "resend": "Resend",
+      "feishuWebhook": "Вебхук Feishu",
+      "dingtalkWebhook": "Вебхук DingTalk"
+    }
+  },
+  "@nocobase/app-plugin-scheduler": {
+    "nav": {
+      "automation": "Автоматизация"
+    },
+    "authorization": {
+      "title": "Расписания",
+      "read": "Чтение"
+    }
+  },
+  "@nocobase/app-plugin-demo-mode": {
+    "authorization": {
+      "title": "Демоданные",
+      "read": "Просмотр",
+      "manage": "Создание и очистка",
+      "configuration": "Настройки деморежима",
+      "configure": "Настроить"
+    },
+    "errors": {
+      "readOnly": "Это демонстрационная версия. Сохранение изменений недоступно."
+    }
+  }
+}

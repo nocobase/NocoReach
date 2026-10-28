@@ -10,15 +10,39 @@ import {
   githubRanges,
   validRange,
 } from '#pages/range-state';
-import { setDictionary } from '#i18n';
+import { prepareLocale, setDictionary } from '#i18n';
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
 });
 afterEach(() => {
   cleanup();
+  setDictionary(null);
   vi.useRealTimers();
 });
+test.each([
+  ['ko-KR', /2026년 10월/u],
+  ['ru-RU', /октябрь 2026/iu],
+])(
+  'uses %s month and weekday labels in the range calendar',
+  async (locale, month) => {
+    await prepareLocale(locale);
+    render(
+      <MemoryRouter>
+        <RangePicker
+          value={{ range: 'custom', from: '2026-10-01', to: '2026-10-15' }}
+          onChange={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    const trigger = screen.getByRole('button', { name: /2026/u });
+    await userEvent.click(trigger);
+    expect(screen.getByRole('grid', { name: month })).toBeVisible();
+    expect(
+      screen.queryByRole('columnheader', { name: 'Monday' }),
+    ).not.toBeInTheDocument();
+  },
+);
 test('data page presets use one 90-day option in GitHub order', () => {
   setDictionary(null);
   expect(presetRanges).toEqual(['7', '28', '90', '12m']);

@@ -257,6 +257,26 @@ const metric = (
   change,
   previous,
 });
+// A period of an analysis's evidence (Search Console or GA4): each metric's total against the period before.
+const period = (metrics: Record<string, [number, number]>) => ({
+  from: '2026-09-23',
+  through: '2026-10-20',
+  availableFrom: '2026-08-01',
+  availableDays: 80,
+  days: 28,
+  metrics: Object.fromEntries(
+    Object.entries(metrics).map(([key, [current, previous]]) => [
+      key,
+      {
+        current,
+        previous,
+        comparable: true,
+        change: current - previous,
+        percent: previous ? ((current - previous) / previous) * 100 : null,
+      },
+    ]),
+  ),
+});
 function BadgeProbe() {
   const insights = useNavBadge('insights');
   return <output>badge:{insights.count ?? 'unknown'}</output>;
@@ -484,6 +504,11 @@ it('the tiles show at most five numbers that have data, the summary names the on
     { id: 'packages', metrics: [metric('downloads', 4000, 0.9)], series: [] },
     { id: 'discourse', metrics: [metric('topics', null)], series: [] },
   ];
+  // What the analysis read over its 28 days: clicks fell 31%, sessions rose 12%, impressions held.
+  fixture.state.insights!.evidence.summary = {
+    search: period({ clicks: [1200, 1739], impressions: [54000, 52941] }),
+    web: period({ sessions: [900, 804], conversions: [0, 0] }),
+  };
   fixture.areas = [
     {
       id: 'site',
@@ -576,6 +601,11 @@ it('a number with fewer than 10 in the week before shows its change as a count, 
     { id: 'github', metrics: [metric('stars', 3, 2, 1)], series: [] },
     { id: 'discourse', metrics: [metric('topics', 4, null, 0)], series: [] },
   ];
+  // The analysis's own figures: key events 6 → 9 is a small base, left out of the day's chips.
+  fixture.state.insights!.evidence.summary = {
+    search: period({ clicks: [1200, 1739], impressions: [54000, 52941] }),
+    web: period({ sessions: [900, 890], conversions: [9, 6] }),
+  };
   setup();
   const tiles = await screen.findByRole('region', {
     name: 'strategy.keyMetrics',
@@ -593,6 +623,66 @@ it('a number with fewer than 10 in the week before shows its change as a count, 
       .getAllByRole('link')
       .map((l) => l.textContent),
   ).toEqual(['common.searchClicks ↓ 31%', 'strategy.watchingChip:1']);
+});
+
+it('the day’s chips follow the figures its analysis read, not the 7-day tiles, even when they point the other way', async () => {
+  // The tiles' last 7 days: impressions up 35%, new stars up 16%.
+  fixture.cards = [
+    {
+      id: 'gsc',
+      metrics: [
+        metric('clicks', 4500, -0.02, 4590),
+        metric('impressions', 28214, 0.35, 20900),
+      ],
+      series: [],
+    },
+    { id: 'github', metrics: [metric('stars', 50, 0.16, 43)], series: [] },
+  ];
+  // The analysis's 28 days, which its notes quote: impressions down 21.3%.
+  fixture.state.insights!.observations = [
+    'Search impressions 759,132 over the last 28 days (-21.3%).',
+  ];
+  fixture.state.insights!.evidence.summary = {
+    search: period({ clicks: [18904, 19712], impressions: [759132, 964590] }),
+    web: period({ sessions: [17229, 17239], conversions: [1171, 1168] }),
+  };
+  setup();
+  const tiles = await screen.findByRole('region', {
+    name: 'strategy.keyMetrics',
+  });
+  await within(tiles).findByText('28,214');
+  expect(within(tiles).getByText('↑ 35%')).toBeTruthy();
+  const brief = screen.getByRole('group', { name: 'strategy.todayBrief' });
+  const chips = within(brief).getAllByRole('link');
+  // Impressions as the analysis read them; new stars are not in its figures, so no chip rather than the tiles' 7 days.
+  expect(chips.map((l) => l.textContent)).toEqual([
+    'common.searchImpressions ↓ 21%',
+    'strategy.watchingChip:1',
+  ]);
+  expect(chips[0].getAttribute('href')).toBe('/seo-opportunities?days=28');
+  expect(chips[0].getAttribute('title')).toBe('strategy.metricWindow:28');
+  expect(within(brief).queryByText(/↑ 35%|↑ 16%/)).toBeNull();
+});
+
+it('without the figures in its evidence, the day’s message names no numbers', async () => {
+  fixture.cards = [
+    {
+      id: 'gsc',
+      metrics: [metric('clicks', 1200, -0.31, 1739)],
+      series: [],
+    },
+  ];
+  setup();
+  const tiles = await screen.findByRole('region', {
+    name: 'strategy.keyMetrics',
+  });
+  await within(tiles).findByText('1,200');
+  const brief = screen.getByRole('group', { name: 'strategy.todayBrief' });
+  expect(
+    within(brief)
+      .getAllByRole('link')
+      .map((l) => l.textContent),
+  ).toEqual(['strategy.watchingChip:1']);
 });
 
 it('the subtitle says how the insights are analyzed, linking the rules and the schedule', async () => {
