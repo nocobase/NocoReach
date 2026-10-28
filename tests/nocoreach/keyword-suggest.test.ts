@@ -4,7 +4,8 @@ import { test, vi, afterEach } from 'vitest';
 vi.setConfig({ testTimeout: 60000 });
 import assert from 'node:assert/strict';
 import { KeywordSuggest, specification, result, seedSpec, ideasSpec, labsResult, score, runUsd, MIN_VOLUME } from '../../server/nocoreach/keyword-suggest.js';
-import { keywordDigTool } from '../../server/nocoreach/online-agent/keyword-tool.js';
+import { keywordRunTool, keywordsPageContext } from '../../server/nocoreach/online-agent/keyword-tool.js';
+import { isKeywordRunProposal } from '../../shared/keyword-run.js';
 const realFetch=global.fetch;
 afterEach(()=>{global.fetch=realFetch;});
 // In-memory nrKeywordRuns and nrSnapshots, with the filters the services use.
@@ -63,7 +64,8 @@ test('DataForSEO requests: suggestions per seed and ideas for all seeds ask only
  // The Search Console overview keeps its earlier shape.
  assert.deepEqual(specification({keywords:['A b','a b','c'],locationCode:2840,language:'en'}).request,{keywords:['a b','c'],location_code:2840,language_code:'en'});
  assert.equal(result({status_code:20000,cost:0.01,tasks:[{status_code:20000,result:[{items:[kw('A B',880,27,'informational')]}]}]}).result.items[0].volume,880);
- assert.equal(runUsd(15,60),0.241,'the most a first run can cost');
+ assert.equal(runUsd(15,60),0.291,'the most a first run can cost, on the $0.012 + $0.00012 list price with each seed\'s own row');
+ assert.equal(one.estimatedUsd,0.013,'the spec keeps the price it was stored with: it is part of the 30-day reuse key');
 });
 
 test('AI suggestions: AI seeds, real keywords for them, only ≥50 searches, the AI picks from those alone, ranked by opportunity',async()=>{
@@ -94,13 +96,13 @@ test('AI suggestions: AI seeds, real keywords for them, only ≥50 searches, the
 test('budget and 30-day reuse: the cost is known before a run, reused seeds are free, a low budget stops it before any request',async()=>{
  const calls=fetchFor();const {s}=setup();await finish(s,{});const n=calls.length;
  const est=await s.estimate('1',{seeds:[...SEEDS,'workflow automation']});
- assert.equal(est.reused,3);assert.equal(est.maxUsd,Number((0.013+0.03+0.016).toFixed(4)),'only the new seed, the ideas for the new set and the Search Console lookup');
- assert.equal((await s.estimate('1',{})).maxUsd,0.241,'seeds still to be chosen: the most a run can cost');
+ assert.equal(est.reused,3);assert.equal(est.maxUsd,Number((0.01572+0.036+0.0192).toFixed(4)),'only the new seed, the ideas for the new set and the Search Console lookup');
+ assert.equal((await s.estimate('1',{})).maxUsd,0.291,'seeds still to be chosen: the most a run can cost');
  await finish(s,{seeds:SEEDS});
  assert.equal(calls.length,n,'the same seeds and Search Console queries within 30 days are read back, not asked again');
  const v=await s.view('1');assert.equal(v.seedsBy,'person');assert.equal(v.costUsd,0,'and cost nothing');assert.equal(v.items.length,4);
  const poor=setup({budget:0.1});fetchFor();
- await assert.rejects(poor.s.start('1',{}),/预算还剩 \$0\.10，这次查询最多要 \$0\.25/);
+ await assert.rejects(poor.s.start('1',{}),/预算还剩 \$0\.10，这次查询最多要 \$0\.30/);
  assert.equal(poor.runs.rows.length,0,'nothing was asked');
  await assert.rejects(setup({verified:false}).s.start('1',{}),/验证 DataForSEO/);
  await assert.rejects(setup({ai:false}).s.start('1',{}),/还没有接入在线 AI/);
@@ -139,19 +141,58 @@ test('a dig adds a group named after its direction, without the keywords the lis
  await finish(s,{seeds:SEEDS,market:{locationCode:2392,language:'ja'}});const ja=await s.view('1');assert.equal(ja.digs.length,0);assert.deepEqual(ja.market,{locationCode:2392,language:'ja'});
 });
 
-test('the online agent: keyword_dig estimates without spending, runs only with confirm, adds a group and links to it',async()=>{
- const calls=fetchFor();const extra=[{keyword:'approval workflow example',group:2,relevance:2,reason:'流程模板'}];
- const {s}=setup({seeds:input=>input.direction?['approval workflow']:SEEDS,curate:input=>curated(input.direction?extra:[])});await finish(s,{});const n=calls.length;
+test('seed words carry why the AI chose them and what each found; a kept seed keeps its note, an added one says the person added it',async()=>{
+ fetchFor();const why={'internal tool builder':{from:['memory'],why:'记忆里写了内部工具'},'approval workflow':{from:['searchConsole','nope'],why:'本站已有审批流查询'},'retool alternative':{from:['competitors'],why:'竞品 Retool'}};
+ const {s,prompts}=setup({seeds:()=>SEEDS.map(seed=>({seed,...why[seed]}))});await finish(s,{});
+ assert.match(prompts.find(x=>x.tag==='keyword-seeds').system,/from（它来自哪些输入/);
+ const v=await s.view('1');
+ assert.deepEqual(v.seedNotes,[{seed:'internal tool builder',from:['memory'],why:'记忆里写了内部工具'},{seed:'approval workflow',from:['searchConsole'],why:'本站已有审批流查询'},{seed:'retool alternative',from:['competitors'],why:'竞品 Retool'}],'unknown inputs are dropped');
+ assert.deepEqual(v.seedStats,[{seed:'internal tool builder',found:2,picked:0},{seed:'approval workflow',found:2,picked:1},{seed:'retool alternative',found:2,picked:1}]);
+ await finish(s,{seeds:['retool alternative','workflow automation'],by:'person'});
+ const w=await s.view('1');assert.equal(w.seedsBy,'person');
+ assert.deepEqual(w.seedNotes,[{seed:'retool alternative',from:['competitors'],why:'竞品 Retool'},{seed:'workflow automation',from:['person'],why:''}]);
+ // Confirmed from the chat with the AI's own picks: the notes it proposed come along.
+ await finish(s,{seeds:['approval workflow'],by:'ai',notes:[{seed:'approval workflow',from:['direction'],why:'这次往审批流挖'},{seed:'other',from:['memory'],why:'x'}]});
+ const x=await s.view('1');assert.equal(x.seedsBy,'ai');assert.deepEqual(x.seedNotes,[{seed:'approval workflow',from:['direction'],why:'这次往审批流挖'}]);
+});
+
+test('a proposal shows the seeds before and after, whether nothing changed, and the most it may cost, looking nothing up and saving nothing',async()=>{
+ const calls=fetchFor();const {s,snaps,prompts}=setup({seeds:input=>input.direction?[{seed:'approval workflow software',from:['direction'],why:'方向'},{seed:'approval workflow',from:['direction'],why:'方向'}]:SEEDS});await finish(s,{});
+ const n=calls.length,saved=JSON.stringify(snaps.rows);
+ const same=await s.propose('1',{});
+ assert.equal(same.kind,'list');assert.deepEqual(same.before,SEEDS);assert.deepEqual(same.after,SEEDS);assert.equal(same.same,true,'the AI chose the same seeds again');
+ assert.equal(same.maxUsd,0.0192,'only the Search Console overview could be new: every seed and the ideas request are reused');assert.equal(same.reused,3);assert.equal(same.by,'ai');
+ const edit=await s.propose('1',{seeds:['internal tool builder','retool alternative','Workflow Automation']});
+ assert.deepEqual([edit.added,edit.removed,edit.same,edit.by],[['workflow automation'],['approval workflow'],false,'person']);
+ assert.equal(edit.maxUsd,Number((0.01572+0.036+0.0192).toFixed(4)));assert.equal(edit.withinBudget,true);assert.equal(edit.monthUsd,0.0512);assert.equal(edit.budgetUsd,5);
+ const lean=await s.propose('1',{direction:'approval workflow'});
+ assert.deepEqual(lean.after,['approval workflow software','approval workflow']);assert.deepEqual(lean.notes.map(x=>x.why),['方向','方向']);assert.equal(prompts.at(-1).input.direction,'approval workflow');
+ const japan=await s.propose('1',{seeds:SEEDS,market:{locationCode:2392,language:'ja'}});
+ assert.equal(japan.marketChanged,true);assert.equal(japan.same,false,'the same seeds in another market are a new lookup');assert.equal(japan.reused,0);
+ const dig=await s.propose('1',{mode:'dig',direction:'approval workflow'});
+ assert.equal(dig.kind,'dig');assert.deepEqual(dig.before,[]);assert.equal(dig.direction,'approval workflow');
+ assert.ok(isKeywordRunProposal({proposal:dig}));
+ assert.equal(calls.length,n,'nothing was looked up');assert.equal(JSON.stringify(snaps.rows),saved,'nothing was saved');
+ await assert.rejects(s.propose('1',{mode:'dig'}),/往哪个方向/);
+ await assert.rejects(setup().s.propose('1',{mode:'dig',direction:'crm'}),/还没有建议/);
+});
+
+test('the online agent: propose_keyword_run returns a proposal in plain market names, refuses without permission, and says refusals in words',async()=>{
+ fetchFor();const {s}=setup();await finish(s,{});
  let may=true;const authorize=vi.fn(async()=>{});
- const tool=keywordDigTool(s,'1',authorize,async(resource,action)=>may&&resource==='nrKeywordSuggest'&&action==='suggest',path=>`/app${path}`);
- const plan=await tool.execute({direction:'approval workflow',seeds:['approval workflow','workflow automation']});
- assert.equal(plan.confirmed,false);assert.equal(plan.spent,0);assert.equal(plan.seedsReusedFree,1);assert.equal(plan.maxCostUsd,0.043);assert.equal(calls.length,n,'nothing was looked up');
- const done=await tool.execute({direction:'approval workflow',confirm:true});
- assert.equal(done.confirmed,true);assert.equal(done.group.name,'approval workflow');assert.equal(done.group.keywords,1);
- const dig=(await s.view('1')).digs[0];assert.equal(done.group.url,`/app/keywords?tab=suggest&group=${dig.id}`);
- assert.deepEqual(done.keywords,[{keyword:'approval workflow example',volume:210,difficulty:18,reason:'流程模板'}]);
- assert.match((await tool.execute({mode:'list',market:{locationCode:2276,language:'de'}})).seeds,/chosen/);
- assert.match((await tool.execute({mode:'group',confirm:true})).error,/往哪个方向/,'refusals come back in words');
- may=false;assert.deepEqual(await tool.execute({direction:'crm',confirm:true}),{accessDenied:true});
- assert.ok(authorize.mock.calls.length>=4);
+ const tool=keywordRunTool(s,'1',authorize,async(resource,action)=>may&&resource==='nrKeywordSuggest'&&action==='suggest');
+ const r=await tool.execute({seeds:['internal tool builder','retool alternative']});
+ assert.equal(r.proposal.kind,'list');assert.deepEqual(r.proposal.removed,['approval workflow']);assert.equal(r.market,'United States · English');assert.match(r.note,/Do not say the lookup ran/);
+ const same=await tool.execute({seeds:SEEDS});assert.match(same.note,/same as now/);
+ const japan=await tool.execute({mode:'list',market:{locationCode:2392,language:'ja'},seeds:['ノーコード']});assert.equal(japan.market,'Japan · Japanese');
+ const group=await tool.execute({mode:'group',direction:'approval workflow',seeds:['approval workflow']});assert.equal(group.proposal.kind,'dig');
+ assert.match((await tool.execute({mode:'group'})).error,/往哪个方向/,'refusals come back in words');
+ may=false;assert.deepEqual(await tool.execute({seeds:['crm']}),{accessDenied:true});
+ assert.ok(authorize.mock.calls.length>=6);
+ // What the chat knows when opened on the seed words or on one seed.
+ const allowed=async()=>true;
+ assert.match(await keywordsPageContext(s,'1','seeds:',allowed),/to adjust the seed words.*"seedNotes"/s);
+ assert.match(await keywordsPageContext(s,'1','seeds:retool alternative',allowed),/on the seed word "retool alternative"/);
+ assert.match(await keywordsPageContext(s,'1','retool alternative',allowed),/on the keyword "retool alternative"/);
+ assert.match(await keywordsPageContext(s,'1',undefined,async()=>false),/may not see the suggestions/);
 });

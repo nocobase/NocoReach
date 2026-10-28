@@ -1,127 +1,93 @@
 import { z } from 'zod';
 import type { OnlineTool } from '../../online-agent/executor.js';
+import { keywordsFocus } from '../../../shared/keyword-subject.js';
+import type { KeywordRunProposal } from '../../../shared/keyword-run.js';
 
 const market = z.strictObject({
   locationCode: z.number().int(),
   language: z.string().min(2).max(10),
 });
 const input = z.strictObject({
-  mode: z.enum(['group', 'list']).default('group'),
+  mode: z.enum(['list', 'group']).default('list'),
+  seeds: z.array(z.string().min(2).max(80)).min(1).max(15).optional(),
   direction: z.string().min(2).max(60).optional(),
-  seeds: z.array(z.string().min(2).max(80)).max(15).optional(),
   market: market.optional(),
-  confirm: z.boolean().default(false),
 });
 
 interface Item {
   keyword: string;
   group: string;
   reason: string;
+  seeds?: string[];
   metrics: { volume: number | null; difficulty: number | null };
 }
-export interface KeywordDigSource {
-  estimate(
-    id: string,
-    v: object,
-  ): Promise<{
-    maxUsd: number;
-    seeds: string[] | null;
-    reused: number;
-    monthUsd: number;
-    budgetUsd: number;
-    market: { locationCode: number; language: string };
-  }>;
-  start(id: string, v: object): Promise<{ promise: Promise<Built> }>;
+export interface KeywordRunSource {
+  propose(id: string, v: object): Promise<KeywordRunProposal>;
 }
-interface Built {
-  state: {
-    market: { locationCode: number; language: string };
-    stats?: { found: number };
-  };
-  group: {
-    id: string;
-    direction: string;
-    found: number;
-    costUsd: number;
-  } | null;
-  items: Item[];
-}
+const PLACES: Record<number, string> = {
+  2840: 'United States',
+  2826: 'United Kingdom',
+  2124: 'Canada',
+  2036: 'Australia',
+  2702: 'Singapore',
+  2276: 'Germany',
+  2250: 'France',
+  2392: 'Japan',
+  2158: 'Taiwan',
+  2344: 'Hong Kong',
+};
+const LANGUAGES: Record<string, string> = {
+  en: 'English',
+  de: 'German',
+  fr: 'French',
+  ja: 'Japanese',
+  'zh-TW': 'Traditional Chinese',
+  'zh-CN': 'Simplified Chinese',
+};
+/** A market as people name it ("Japan · Japanese"), so the AI never speaks in location codes. */
+export const marketName = (m: { locationCode: number; language: string }) =>
+  `${PLACES[m.locationCode] ?? m.locationCode} · ${LANGUAGES[m.language] ?? m.language}`;
 
 /**
- * Keywords › AI suggestions from the online agent: the same demand-first run as the page (seeds, DataForSEO's real
- * keywords, at least the page's minimum volume, the AI's pick), added as a group named after its direction, or
- * rebuilding the whole list (another market). A paid lookup needs confirm: true; without it the tool only estimates.
+ * Keywords › AI suggestions from the online agent (2026-10-28 user decision: changing seed words is a conversation,
+ * not a dialog on the page). The tool only proposes: the seed words before and after (the AI's new picks with why, or
+ * the user's edit), the market, whether anything changed, and the most the lookup may cost with this month's spending.
+ * Nothing is looked up or saved; the proposal is drawn in the conversation, whose Confirm runs it through the page's
+ * own action (suggest for the list, dig for a group).
  */
-export function keywordDigTool(
-  source: KeywordDigSource,
+export function keywordRunTool(
+  source: KeywordRunSource,
   projectId: string,
   authorize: () => Promise<void>,
   allowed: (resource: string, action: string) => Promise<boolean>,
-  link: (path: string) => string,
 ): OnlineTool {
   return {
-    name: 'keyword_dig',
+    name: 'propose_keyword_run',
     description:
-      "Find keywords with real search demand for Keywords › AI suggestions: from seed topics (short phrases the way people search, in the market's language) or a direction, DataForSEO returns real keywords with their monthly volume, and only those with enough searches are picked. mode group (default) adds them to the page as a new group named after direction; mode list rebuilds the whole list, for example for another market (market: locationCode and language as DataForSEO uses them, such as 2392 and ja for Japan). The lookup is paid from the project's monthly DataForSEO budget, with seeds looked up in the last 30 days reused for free. Without confirm: true nothing is spent and the tool returns the most it may cost: tell the user that amount and run with confirm: true only after the user agrees. Read the current list, its seeds and groups with query_data (source keyword_suggestions).",
+      "Propose a keyword lookup for Keywords › AI suggestions; it looks nothing up and saves nothing. mode list (default) finds the whole list again: give seeds as the complete new list of seed words (for an edit: the current seeds with some added or removed), or leave seeds out to have the AI choose new ones (with direction to lean them, e.g. toward use cases), and give market only to switch markets (locationCode and language: 2840 en United States, 2826 en United Kingdom, 2124 en Canada, 2036 en Australia, 2702 en Singapore, 2276 de Germany, 2250 fr France, 2392 ja Japan, 2158 zh-TW Taiwan, 2344 zh-TW Hong Kong). mode group digs from a direction and adds a group named after it (seeds optional). Returns the seed words before and after with why the AI chose each new one, whether they are the same as now, and the most the lookup may cost: seeds looked up in the last 30 days are free, and the month's spending against the budget. The user sees this in the conversation and confirms it there.",
     inputSchema: z.toJSONSchema(input),
     async execute(args) {
       await authorize();
       const v = input.parse(args);
       if (!(await allowed('nrKeywordSuggest', 'suggest')))
         return { accessDenied: true };
-      const request = {
-        mode: v.mode === 'list' ? 'list' : 'dig',
-        direction: v.direction,
-        seeds: v.seeds,
-        market: v.mode === 'list' ? v.market : undefined,
-      };
       try {
-        if (!v.confirm) {
-          const cost = await source.estimate(projectId, request);
-          return {
-            confirmed: false,
-            spent: 0,
-            maxCostUsd: cost.maxUsd,
-            seeds: cost.seeds ?? 'chosen by the AI when the lookup runs',
-            seedsReusedFree: cost.reused,
-            market: cost.market,
-            monthSpentUsd: cost.monthUsd,
-            monthlyBudgetUsd: cost.budgetUsd,
-          };
-        }
-        const job = await source.start(projectId, request);
-        const built = await job.promise;
+        const proposal = await source.propose(projectId, {
+          mode: v.mode === 'group' ? 'dig' : 'list',
+          seeds: v.seeds,
+          direction: v.direction,
+          market: v.mode === 'group' ? undefined : v.market,
+        });
         await authorize();
-        const group = built.group;
         return {
-          confirmed: true,
-          ...(group
-            ? {
-                group: {
-                  name: group.direction,
-                  keywords: built.items.length,
-                  url: link(`/keywords?tab=suggest&group=${group.id}`),
-                },
-              }
-            : {
-                list: {
-                  keywords: built.items.length,
-                  market: built.state.market,
-                  url: link('/keywords?tab=suggest'),
-                },
-              }),
-          realKeywordsFound: group ? group.found : built.state.stats?.found,
-          costUsd:
-            group?.costUsd ?? (built.state as { costUsd?: number }).costUsd,
-          keywords: built.items.slice(0, 25).map((item) => ({
-            keyword: item.keyword,
-            volume: item.metrics.volume,
-            difficulty: item.metrics.difficulty,
-            reason: item.reason,
-          })),
+          proposal,
+          market: marketName(proposal.market),
+          note: proposal.same
+            ? 'The seed words are the same as now: say why (nothing in the inputs points elsewhere, or the edit changed nothing), and that finding again would only pick again from the same looked-up keywords at no DataForSEO cost.'
+            : 'Shown to the user with a Confirm button. Do not say the lookup ran.',
         };
       } catch (error) {
-        // The page's own wording (budget, a run already going, nothing with enough searches) goes back to the model.
+        // The page's own wording (budget, a run already going, no list yet) goes back to the model.
         return {
           error: error instanceof Error ? error.message : String(error),
         };
@@ -135,6 +101,8 @@ interface SuggestionView {
   market: { locationCode: number; language: string };
   seeds?: string[];
   seedsBy?: string;
+  seedNotes?: { seed: string; from: string[]; why: string }[];
+  seedStats?: { seed: string; found: number; picked: number }[];
   stats?: { found: number; picked: number; minVolume: number };
   minVolume: number;
   costUsd?: number;
@@ -144,9 +112,11 @@ interface SuggestionView {
   items: (Item & { site?: { position: number } | null })[];
   digs?: { id: string; direction: string; seeds: string[]; items: Item[] }[];
 }
+const quote = (text: string) => `"${text.replaceAll('"', "'")}"`;
 /**
- * What the AI knows when the chat opens from Keywords › AI suggestions (`PageAiEntry`, or a row's "Dig from this
- * keyword"): the market, how the list was made, the groups dug before and the list itself in brief.
+ * What the AI knows when the chat opens from Keywords › AI suggestions: what it was opened on (the list, a keyword
+ * row, the seed words or one seed), the market, how each seed was chosen and what it found, the groups dug and the
+ * list itself in brief.
  */
 export async function keywordsPageContext(
   source: { view(id: string): Promise<SuggestionView> },
@@ -154,9 +124,15 @@ export async function keywordsPageContext(
   item: string | undefined,
   allowed: (resource: string, action: string) => Promise<boolean>,
 ) {
-  const opened = item
-    ? `The user opened this conversation from Keywords › AI suggestions, on the keyword "${item.replaceAll('"', "'")}", to dig further from it: unless they say otherwise, call keyword_dig with mode group, that keyword as direction and as the first seed, plus up to four shorter or broader ways people search for the same need, in the market's language.`
-    : 'The user opened this conversation from Keywords › AI suggestions, to find more keywords with real search demand, change direction or market, or understand how the list was made.';
+  const focus = keywordsFocus(item);
+  const opened =
+    focus.kind === 'keyword'
+      ? `The user opened this conversation from Keywords › AI suggestions, on the keyword ${quote(focus.keyword)}, to dig further from it: unless they say otherwise, propose a group (propose_keyword_run, mode group) with that keyword as direction and as the first seed, plus up to four shorter or broader ways people search for the same need, in the market's language.`
+      : focus.kind === 'seeds'
+        ? "The user opened this conversation from Keywords › AI suggestions to adjust the seed words. Explain how they were chosen from seedNotes (which inputs led to each: project memory, the site's Search Console queries, competitors, a direction, or the user) and what each found from seedStats; for a change, propose it with propose_keyword_run so the user sees the seeds before and after and the cost, and confirms it."
+        : focus.kind === 'seed'
+          ? `The user opened this conversation from Keywords › AI suggestions on the seed word ${quote(focus.seed)}: say why it was chosen (seedNotes), how many real keywords it found and how many were picked (seedStats), and which of the list came from it (each list row names its seeds). To replace or drop it, propose the new seed list with propose_keyword_run.`
+          : 'The user opened this conversation from Keywords › AI suggestions, to find more keywords with real search demand, change direction or market, or understand how the list was made.';
   if (!(await allowed('nrKeywordSuggest', 'view')))
     return `${opened} They may not see the suggestions now; say so.`;
   const v = await source.view(projectId);
@@ -166,14 +142,17 @@ export async function keywordsPageContext(
     difficulty: i.metrics.difficulty,
     group: i.group,
     position: i.site?.position ?? null,
+    seeds: i.seeds ?? [],
   });
   return [
     opened,
-    `How the list was made: seed topics (${v.seedsBy === 'person' ? 'given by the user' : 'chosen by AI'}) were looked up in DataForSEO's Google search data; only keywords with at least ${v.minVolume} monthly searches in the market were kept, and AI picked those closest to the product, ranked by search volume, relevance, difficulty and the site's position. Its state now:`,
+    `How the list was made: seed words (${v.seedsBy === 'person' ? 'given or edited by the user' : 'chosen by AI'}) were looked up in DataForSEO's Google search data; only keywords with at least ${v.minVolume} monthly searches in the market were kept, and AI picked those closest to the product, ranked by search volume, relevance, difficulty and the site's position. Name markets as countries and languages and never mention tool parameters or codes to the user. A list made before 2026-10-28 has no seedNotes: say that the reasons were not recorded then. Its state now:`,
     JSON.stringify({
       madeAt: v.at ?? null,
-      market: v.market,
+      market: marketName(v.market),
       seeds: v.seeds ?? [],
+      seedNotes: v.seedNotes ?? null,
+      seedStats: v.seedStats ?? null,
       realKeywordsFound: v.stats?.found ?? null,
       picked: v.stats?.picked ?? v.items.length,
       costUsd: v.costUsd ?? null,

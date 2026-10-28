@@ -5,7 +5,8 @@ import {
   RuleProposalCard,
   isRuleProposal,
 } from '../pages/analysis-rules/proposal-card.js';
-import { KeywordDigCard, isKeywordDig } from '../pages/keyword-dig-card.js';
+import { KeywordRunCard } from '../pages/keyword-run-card.js';
+import { isKeywordRunProposal } from '../../shared/keyword-run.js';
 
 export type ToolCardProps = { run: OnlineRun; output: unknown };
 /**
@@ -22,7 +23,7 @@ export const TOOL_CARDS: Readonly<
   >
 > = {
   propose_rule_changes: { applies: isRuleProposal, Card: RuleProposalCard },
-  keyword_dig: { applies: isKeywordDig, Card: KeywordDigCard },
+  propose_keyword_run: { applies: isKeywordRunProposal, Card: KeywordRunCard },
 };
 
 /** The card for a tool call's result, with the parsed result; null when it stays a folded tool call. */
@@ -55,6 +56,6 @@ export const toolLabel = (name: string) =>
             ? $t('onlineAgent.readRules')
             : name === 'propose_rule_changes'
               ? $t('onlineAgent.proposeRules')
-              : name === 'keyword_dig'
-                ? $t('onlineAgent.keywordDig')
+              : name === 'propose_keyword_run'
+                ? $t('onlineAgent.proposeKeywordRun')
                 : name;

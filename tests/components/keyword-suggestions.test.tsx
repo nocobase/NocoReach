@@ -125,7 +125,7 @@ const LIST = {
   ],
   running: null,
   dataforseo: true,
-  maxUsd: 0.241,
+  maxUsd: 0.291,
   minVolume: 50,
 };
 let view: Record<string, unknown>;
@@ -134,14 +134,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   view = LIST;
   action.mockImplementation(async (_resource: string, name: string) =>
-    name === 'estimate'
-      ? { maxUsd: 0.059, reused: 3, monthUsd: 1.2, budgetUsd: 10 }
-      : name === 'suggest'
-        ? {
-            ...view,
-            running: { stage: 'seeds', mode: 'list', direction: null },
-          }
-        : view,
+    name === 'suggest'
+      ? {
+          ...view,
+          running: { stage: 'seeds', mode: 'list', direction: null },
+        }
+      : view,
   );
   api.mockImplementation(async (path: string) =>
     path === 'conversations'
@@ -292,7 +290,7 @@ test('nothing yet: the first run shows its most possible cost and starts only on
   mount();
   await screen.findByText($t('keywordSuggestions.startTitle'));
   expect(
-    screen.getByText($t('keywordSuggestions.costNote', { 0: '0.25' })),
+    screen.getByText($t('keywordSuggestions.costNote', { 0: '0.30' })),
   ).toBeVisible();
   expect(action.mock.calls.map((c) => c[1])).toEqual(['view']);
   fireEvent.click(
@@ -310,53 +308,83 @@ test('nothing yet: the first run shows its most possible cost and starts only on
   ).toBeVisible();
 });
 
-test('Edit seed words shows the cost and this month before running with the edited seeds', async () => {
+test('the seed words are read-only: no dialog or Find again on the page; Adjust seed words with AI opens the chat on them', async () => {
   mount();
   await screen.findByText('open source low code platform');
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Find again' })).toBeNull();
+  expect(
+    screen.queryByRole('textbox', {
+      name: $t('keywordSuggestions.seedsTitle'),
+    }),
+  ).toBeNull();
   fireEvent.click(
-    screen.getByRole('button', { name: $t('keywordSuggestions.editSeeds') }),
+    screen.getByRole('button', { name: $t('keywordSuggestions.adjustSeeds') }),
   );
-  const dialog = screen.getByRole('dialog');
-  const box = within(dialog).getByRole('textbox', {
-    name: $t('keywordSuggestions.seedsTitle'),
+  expect(panel.openChat).toHaveBeenCalled();
+  const log = screen.getByRole('log');
+  expect(
+    within(log).getByText($t('keywordSuggestions.seedsEntryDescription')),
+  ).toBeVisible();
+  const prompts = within(log).getByRole('list', {
+    name: $t('onlineAgent.suggestions'),
   });
-  expect(box).toHaveValue(LIST.seeds.join('\n'));
-  fireEvent.change(box, {
-    target: { value: `${LIST.seeds.join('\n')}\nWorkflow Automation` },
-  });
-  await waitFor(() =>
-    expect(dialog.querySelector('[data-seeds-cost]')?.textContent).toBe(
-      `${$t('keywordSuggestions.seedsCost', { 0: '0.06' })}${$t('keywordSuggestions.seedsReused', { 0: 3 })} · ${$t('keywordSuggestions.seedsMonth', { 0: '1.20', 1: '10.00' })}`,
-    ),
-  );
-  expect(action).toHaveBeenLastCalledWith(
-    'nrKeywordSuggest',
-    'estimate',
-    expect.objectContaining({
-      body: {
-        projectId: 2,
-        seeds: [...LIST.seeds, 'workflow automation'],
-        market: LIST.market,
-      },
+  expect(
+    within(prompts)
+      .getAllByRole('button')
+      .map((b) => b.textContent),
+  ).toEqual([
+    $t('keywordSuggestions.presetExplainSeeds'),
+    $t('keywordSuggestions.presetLeanSeeds'),
+    $t('keywordSuggestions.presetAddRemoveSeed'),
+    $t('keywordSuggestions.presetFindAgain'),
+    $t('keywordSuggestions.presetOtherMarket'),
+  ]);
+  fireEvent.click(
+    within(prompts).getByRole('button', {
+      name: $t('keywordSuggestions.presetExplainSeeds'),
     }),
   );
-  fireEvent.click(
-    within(dialog).getByRole('button', {
-      name: $t('keywordSuggestions.findAgain'),
-    }),
-  );
   await waitFor(() =>
-    expect(action).toHaveBeenCalledWith(
-      'nrKeywordSuggest',
-      'suggest',
+    expect(api).toHaveBeenCalledWith(
+      'conversations',
       expect.objectContaining({
-        body: {
-          projectId: 2,
-          seeds: [...LIST.seeds, 'workflow automation'],
-          market: LIST.market,
-        },
+        subject: { kind: 'page', page: 'keywords', item: 'seeds:' },
+        text: $t('keywordSuggestions.presetExplainSeeds'),
       }),
     ),
   );
-  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
+
+test('a seed chip opens the chat on that seed word', async () => {
+  mount();
+  await screen.findByText('open source low code platform');
+  const basis = document.querySelector('[data-suggest-basis]') as HTMLElement;
+  fireEvent.click(
+    within(basis).getByRole('button', { name: 'retool alternative' }),
+  );
+  const log = screen.getByRole('log');
+  expect(
+    within(log).getByText(
+      $t('keywordSuggestions.seedEntry', { 0: 'retool alternative' }),
+    ),
+  ).toBeVisible();
+  fireEvent.click(
+    within(log).getByRole('button', {
+      name: $t('keywordSuggestions.presetSeedFound'),
+    }),
+  );
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith(
+      'conversations',
+      expect.objectContaining({
+        subject: {
+          kind: 'page',
+          page: 'keywords',
+          item: 'seeds:retool alternative',
+        },
+        text: $t('keywordSuggestions.presetSeedFound'),
+      }),
+    ),
+  );
 });
