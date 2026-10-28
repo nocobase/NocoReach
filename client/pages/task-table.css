@@ -26,6 +26,15 @@
   .nr-task-table :is(col, th, td):nth-child(n + 4):nth-child(-n + 7) {
     display: none;
   }
+
+  /* Snoozed: the day each comes back stays beside what it waits for. */
+  .nr-task-table.nr-task-table-snoozed :is(th, td):nth-child(4) {
+    display: table-cell;
+  }
+
+  .nr-task-table.nr-task-table-snoozed col:nth-child(4) {
+    display: table-column;
+  }
 }
 
 /* Give phone titles the row width; keep the action menu in its own column. */

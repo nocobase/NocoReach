@@ -16,4 +16,6 @@ export const TASK_TAG: Record<TaskStanding, [Tone, () => string]> = {
   review: ['violet', () => $t('results.taskState.review')],
   done: ['green', () => $t('common.completed')],
   closed: ['slate', () => $t('common.closed')],
+  // Put aside until a day (Snooze, 2026-10-28): nothing waits on anyone until then.
+  snoozed: ['slate', () => $t('common.snoozed')],
 };

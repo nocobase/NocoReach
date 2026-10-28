@@ -85,6 +85,8 @@ export const TASK_COMMANDS = [
   'cancelTask',
   'archiveTask',
   'unarchiveTask',
+  'snoozeTask',
+  'unsnoozeTask',
   'confirmPublish',
   'linkArticle',
   'editArticleDraft',

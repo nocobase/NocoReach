@@ -12,6 +12,7 @@ import {
 } from '../../../shared/playbook-catalog.js';
 import type { Artifact, Release, Run, RunEvent } from '../execution/model.js';
 import { projectWork } from '../execution/model.js';
+import { snoozeInstant } from '../execution/snooze.js';
 import { demoContent, type DemoPerson } from './content.js';
 import { ACME_STORIES, ACME_DISCUSSIONS } from './acme-content.js';
 import { CRM_STORIES } from './crm-content.js';
@@ -52,6 +53,8 @@ interface ChangeTask {
   /** Why the Agent or the release failed. */
   error?: L;
   comments: readonly (readonly [DemoPerson, L])[];
+  /** Snoozed (2026-10-28): put aside for this many days, waiting for something outside NocoReach. */
+  snooze?: { days: number; reason: L };
 }
 
 const CHANGES: ChangeTask[] = [
@@ -154,6 +157,18 @@ const CHANGES: ChangeTask[] = [
             'The page changed after review; reconcile the differences.',
           ),
     comments: story.comments,
+    // Snoozed (execution/snooze.ts): acceptance waits for the client's reply.
+    ...(key === 'approval-version'
+      ? {
+          snooze: {
+            days: 10,
+            reason: t(
+              '等客户确认附件版本，再确认页面上线。',
+              'Waiting for the client to confirm the attachment version before confirming the page is live.',
+            ),
+          },
+        }
+      : {}),
   };
 });
 
@@ -623,6 +638,29 @@ function build(
         action: 'simulatedRelease',
         note: text(change.note),
       });
+  }
+  // Put aside until a day (execution/snooze.ts), the latest thing that happened to it.
+  if (change.snooze) {
+    const day = new Date(now + change.snooze.days * DAY)
+        .toISOString()
+        .slice(0, 10),
+      snoozedAt = at(0.5);
+    work.snooze = {
+      until: (snoozeInstant(day) ?? new Date(`${day}T09:00:00Z`)).toISOString(),
+      day,
+      reason: text(change.snooze.reason),
+      at: snoozedAt,
+      by: owner,
+      byName: content.people[change.owner].name,
+    };
+    work.history.push({
+      at: snoozedAt,
+      actor: owner,
+      actorName: content.people[change.owner].name,
+      action: 'snoozeTask',
+      note: day,
+      comment: text(change.snooze.reason),
+    });
   }
   work.history.sort((a: { at: string }, b: { at: string }) =>
     a.at.localeCompare(b.at),
