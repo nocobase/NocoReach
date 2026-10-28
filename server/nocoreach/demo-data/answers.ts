@@ -34,6 +34,12 @@ function inputOf(prompt: string): Value {
 /** What each business operation answers, written for people to read in the demo. */
 function business(operation: string, input: Value, en: boolean): Value | null {
   const t = (zh: string, enText: string) => (en ? enText : zh);
+  const projectName =
+    str(input.project, 100) || str(object(input.memory)['项目'], 100);
+  const crm = projectName.toLowerCase() === 'acme crm';
+  const project = demoContent(en ? 'en-US' : 'zh-CN').projects[
+    crm ? 'second' : 'main'
+  ];
   switch (operation) {
     case 'content-source-map':
       return { mappings: [] };
@@ -80,7 +86,10 @@ function business(operation: string, input: Value, en: boolean): Value | null {
           signalIds: [s.key],
           sources: [str(s.source, 80)].filter(Boolean),
           target: str(s.target || s.page || s.url, 500),
-          audience: t('评估 NocoBase 的团队', 'Teams evaluating NocoBase'),
+          audience: t(
+            '评估当前演示项目的团队',
+            'Teams evaluating the current demo project',
+          ),
           category: 'optimize',
           priority: 'medium',
           priorityReason: t(
@@ -144,85 +153,33 @@ function business(operation: string, input: Value, en: boolean): Value | null {
             ),
           })),
         };
-      const seeds: [string, string, string, string][] = [
-        [
-          'internal tool builder',
-          'memory',
-          '记忆里写了产品用来搭内部工具',
-          'Project memory says it builds internal tools',
-        ],
-        [
-          'low code platform',
-          'memory',
-          '记忆里的产品品类是低代码平台',
-          'The product category in project memory',
-        ],
-        [
-          'no code database',
-          'searchConsole',
-          '本站已有“no code database”相关曝光',
-          'The site already shows for "no code database" searches',
-        ],
-        [
-          'approval workflow',
-          'searchConsole',
-          'Search Console 里审批流相关查询多',
-          'Many approval workflow queries in Search Console',
-        ],
-        [
-          'workflow automation',
-          'memory',
-          '记忆里的主要功能之一',
-          'One of the main features in project memory',
-        ],
-        [
-          'self hosted crm',
-          'memory',
-          '记忆里写了私有部署和 CRM 场景',
-          'Project memory mentions self-hosting and CRM',
-        ],
-        [
-          'role based access control',
-          'memory',
-          '记忆里强调细粒度权限',
-          'Project memory stresses fine-grained permissions',
-        ],
-        [
-          'ai agent builder',
-          'memory',
-          '记忆里提到 AI 员工',
-          'Project memory mentions AI employees',
-        ],
-        [
-          'airtable alternative',
-          'competitors',
-          '竞品 Airtable 的替代说法',
-          'People looking to replace the competitor Airtable',
-        ],
-        [
-          'retool alternative',
-          'competitors',
-          '竞品 Retool 的替代说法',
-          'People looking to replace the competitor Retool',
-        ],
-        [
-          'admin panel',
-          'searchConsole',
-          '本站已有后台管理相关曝光',
-          'The site already shows for admin panel searches',
-        ],
-        [
-          'inventory management system',
-          'searchConsole',
-          'Search Console 里有进销存相关查询',
-          'Inventory management queries in Search Console',
-        ],
-      ];
+      const seeds = crm
+        ? [
+            'sales pipeline',
+            'crm import',
+            'lead routing',
+            'quote approval',
+            'account handover',
+            'renewal management',
+          ]
+        : [
+            'project management',
+            'task management',
+            'kanban boards',
+            'team scheduling',
+            'Excel task import',
+            'client collaboration',
+            'project templates',
+            'ACME vs Nimbus',
+          ];
       return {
-        seeds: seeds.map(([seed, from, zh, enText]) => ({
+        seeds: seeds.map((seed) => ({
           seed,
-          from: [from],
-          why: t(zh, enText),
+          from: ['memory'],
+          why: t(
+            `来自 ${project.name} 的虚构产品场景。`,
+            `From ${project.name}'s fictional product scenarios.`,
+          ),
         })),
       };
     }
@@ -312,12 +269,20 @@ function business(operation: string, input: Value, en: boolean): Value | null {
     }
     case 'ai-question-suggest':
       return {
-        topics: [
-          'internal tools',
-          'data permissions',
-          'approval workflows',
-          'self-hosting',
-        ].map((topic) => ({
+        topics: (crm
+          ? [
+              'sales pipeline',
+              'account imports',
+              'quote approval',
+              'sales handover',
+            ]
+          : [
+              'project management',
+              'team collaboration',
+              'task management',
+              'project handover',
+            ]
+        ).map((topic) => ({
           topic,
           reason: t(
             '用户在 AI 搜索里常问的选型问题。（演示建议）',
@@ -338,14 +303,8 @@ function business(operation: string, input: Value, en: boolean): Value | null {
     case 'memory-draft':
       return {
         memory: {
-          brand: t(
-            `${str(input.project, 100) || 'NocoBase'}：面向需要管理关联数据和岗位权限的团队。`,
-            `${str(input.project, 100) || 'NocoBase'}: for teams managing related data and role-based permissions.`,
-          ),
-          product: t(
-            '开源、可私有部署的低代码业务应用平台。',
-            'An open-source, self-hostable low-code platform for business applications.',
-          ),
+          brand: `${str(input.project, 100) || project.name}: ${project.audience}`,
+          product: project.description,
           rules: t(
             '所有对外内容都要经人工审核；不编造客户案例与价格。',
             'Every public piece gets a human review; never invent customer cases or prices.',
@@ -358,12 +317,12 @@ function business(operation: string, input: Value, en: boolean): Value | null {
       return {
         competitors: [
           {
-            name: 'FlowGrove',
-            site: 'https://flowgrove.example',
-            repo: 'flowgrove/flowgrove',
+            name: crm ? 'Example Sales' : 'Nimbus',
+            site: crm ? 'https://sales.example' : 'https://nimbus.example',
+            repo: crm ? 'example-sales/crm' : 'nimbus/tasks',
             reason: t(
-              '同样面向内部工具搭建的虚构竞品。',
-              'A fictional competitor that also targets internal tools.',
+              '可用于核对当前协作场景的虚构对比样例。',
+              'A fictional comparison for the current collaboration workflow.',
             ),
           },
         ],
@@ -740,19 +699,37 @@ export function demoAnswers(): DemoAnswer[] {
     {
       id: 'nocoreach-opportunities',
       match: (request) =>
-        asks(request, OPPORTUNITIES) && request.toolResults.length === 0,
+        has(request, 'daily_analysis') &&
+        asks(request, OPPORTUNITIES) &&
+        request.toolResults.length === 0,
+      reply: () => ({ toolCalls: [{ name: 'daily_analysis', arguments: {} }] }),
+    },
+    {
+      id: 'nocoreach-opportunities-answer',
+      match: (request) =>
+        request.toolResults.some((result) => result.name === 'daily_analysis'),
       reply: (request) => {
         const content = demoContent(
           request.language === 'en' ? 'en-US' : 'zh-CN',
         );
+        const result = object(
+          safeJson(
+            request.toolResults.find((r) => r.name === 'daily_analysis')!
+              .content,
+          ),
+        );
+        const analysis = object(
+          result.text ? safeJson(str(result.text, 50000)) : result,
+        );
+        const cards = list(analysis.awaitingDecisionNow).slice(0, 6);
+        if (!cards.length) return content.chat.none;
         return [
           content.chat.opportunitiesIntro,
           '',
-          ...content.opportunities.briefs
-            .slice(0, 6)
-            .map(
-              ([, title, , , , , , , priority]) => `- ${title} (${priority})`,
-            ),
+          ...cards.map(
+            (card) =>
+              `- [${str(card.title, 160)}](${str(card.url, 500)}) (${str(card.priority, 40)})`,
+          ),
           '',
           content.chat.opportunitiesOutro,
         ].join('\n');

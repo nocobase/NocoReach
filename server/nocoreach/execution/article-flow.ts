@@ -1,9 +1,10 @@
 // @ts-nocheck
 import { randomUUID } from 'node:crypto';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
-import { ARTICLE_FIELDS, articleLocales, supportsStatus, translationDefault, type ArticleSnapshot } from '../../../shared/article-publishing.js';
+import { ARTICLE_FIELDS, articleLocales, inPlaceLocales, supportsStatus, translationDefault, type ArticleSnapshot } from '../../../shared/article-publishing.js';
 import type { ArticleTargets } from '../articles/targets.js';
-import { articlePages, draftRejection, primaryOnly, verifyPhrase, type ArticleDelivery, type ArticleProposal, type PublishOutcome } from '../articles/delivery.js';
+import { articlePages, draftRejection, primaryOnly, verifyPhrase, writesNone, type ArticleDelivery, type ArticleProposal, type PublishOutcome } from '../articles/delivery.js';
+import { primaryChanges } from '../articles/edits.js';
 import { ArticleError, providerErrorKey } from '../articles/provider.js';
 import { fail, projectWork, type Artifact, type Work } from './model';
 
@@ -228,10 +229,11 @@ export class ArticleFlow {
     return Boolean(d?.locales && d.locales.length > 1 && !d.translateFrom && output.article);
   }
   /**
-   * The approved primary version, kept for the translation run: its draft (merged back under the translations) and the
-   * primary language's text as readers will see it, with the fields this version changed.
+   * The approved primary version, kept for the run that writes the other languages: its draft (merged back under them)
+   * and the primary language's text as readers will see it, with the fields this version changed. Returns `update` when
+   * the article already has some of those languages (they are edited in place, 2026-10-28), else `translate`.
    */
-  async approvePrimary(w: Work, output: Artifact, actor: string, at: string, tx: any) {
+  async approvePrimary(w: Work, output: Artifact, actor: string, at: string, tx: any): Promise<'update' | 'translate'> {
     const d = w.delivery!, primary = d.locales![0], a: ArticleProposal = output.article;
     const base = d.sourceKey ? await this.s.snapshot(d.sourceKey, tx) : null;
     const draft = a.draft.locales?.[primary] || {}, was = base?.locales?.[primary] || {};
@@ -239,6 +241,7 @@ export class ArticleFlow {
     // A new article translates every field; an update only the fields this version changed in the primary language.
     const fields = d.articleId ? a.changes.filter((c) => c.startsWith(`${primary}.`)).map((c) => c.slice(primary.length + 1)) : ['title', 'description', 'body'].filter((f) => (text as any)[f]);
     w.delivery = { ...d, translateFrom: { artifactId: output.id, at, by: actor, draft: a.draft, text, fields } };
+    return inPlaceLocales(d, base ? articleLocales(base) : null).length ? 'update' : 'translate';
   }
   /** What the Runner gets for an article step: the target's shape and the current source article. */
   async runInput(project: string, w: Work, tx: any) {
@@ -251,24 +254,33 @@ export class ArticleFlow {
         target.kind === 'nocobase-api' ? Object.keys(target.fields.locales[l] || {}) : target.kind === 'git-files' ? ['body', ...(target.format === 'frontmatter' ? (target.frontmatter ? ['title', 'description'] : []) : Object.keys(target.metadata?.keys[l] || {}))] : ['title', 'description', 'body'],
       ]),
     );
-    // With languages chosen at start: the primary first, then, once it is approved, a translation of it into the others.
-    // Without them (a task started before 2026-10-24, or by a caller that sends none) every language is written at
-    // once (phase `all`), and the target's first language is named as the primary (2026-10-27): the Agent always
-    // knows which language the article is written in, whatever language the project, the brief or the outline use.
-    const L = d.locales?.length ? d.locales : null, translating = Boolean(L && L.length > 1 && d.translateFrom);
-    const languages = L ? { primary: L[0], others: L.slice(1), phase: translating ? 'translate' : 'primary', write: translating ? L.slice(1) : [L[0]], ...(translating ? { approved: { ...d.translateFrom!.text, fields: d.translateFrom!.fields } } : {}) } : { primary: target.locales[0], others: target.locales.slice(1), phase: 'all', write: target.locales };
+    // With languages chosen at start: the primary first, then, once it is approved, the others. Without them (a task
+    // started before 2026-10-24, or by a caller that sends none) every language is written at once (phase `all`), and
+    // the target's first language is named as the primary (2026-10-27): the Agent always knows which language the
+    // article is written in, whatever language the project, the brief or the outline use.
+    const L = d.locales?.length ? d.locales : null, t = L && L.length > 1 ? d.translateFrom : null;
+    let languages: any = L ? { primary: L[0], others: L.slice(1), phase: 'primary', write: [L[0]] } : { primary: target.locales[0], others: target.locales.slice(1), phase: 'all', write: target.locales };
+    if (t) {
+      // The other languages once the primary is approved. A language the article already has is updated in place with
+      // the primary's changes (phase `update`, 2026-10-28, T-53: translating the whole new primary replaced wording
+      // nobody asked to change); one it lacks, and every language of a new article or of a translation, is translated
+      // from the whole approved text.
+      const write = L!.slice(1), update = inPlaceLocales(d, source ? articleLocales(source) : null);
+      const approved = { ...t.text, fields: ARTICLE_FIELDS.filter((f) => t.text?.[f]?.trim()) };
+      languages = { ...languages, phase: update.length ? 'update' : 'translate', write, approved, ...(update.length ? { update, translate: write.filter((l) => !update.includes(l)), changes: primaryChanges(source.locales[L![0]], t.text, t.fields || []) } : {}) };
+    }
     return { target: { name: target.name, locales: target.locales, fields, status: supportsStatus(target) }, action: d.articleId ? 'update' : 'create', source: source ? { id: source.id, slug: source.slug, status: source.status, locales: source.locales } : null, languages };
   }
   /**
    * A Runner's article for the phase it was asked for: the primary language alone (other languages it wrote anyway are
-   * left for the translation), or the approved primary version with the translations added (the primary as approved).
+   * left for the translation), or the approved primary version with the other languages added (the primary as approved).
    */
   private byPhase(input: any, article: unknown) {
     const L = input?.article?.languages, a = article && typeof article === 'object' ? (article as any) : null;
     if (!L || !a || !a.locales || typeof a.locales !== 'object') return article;
     if (L.phase === 'primary') return { ...a, locales: a.locales[L.primary] ? { [L.primary]: a.locales[L.primary] } : {} };
     const approved = input.delivery?.translateFrom?.draft;
-    if (L.phase !== 'translate' || !approved) return article;
+    if ((L.phase !== 'translate' && L.phase !== 'update') || !approved) return article;
     const written = Object.fromEntries((L.write as string[]).filter((l) => a.locales[l]).map((l) => [l, a.locales[l]]));
     return { ...approved, ...(typeof a.summary === 'string' ? { summary: a.summary } : {}), locales: { ...approved.locales, ...written } };
   }
@@ -277,7 +289,9 @@ export class ArticleFlow {
     const d = input.delivery;
     const base = d.sourceKey ? await this.s.snapshot(d.sourceKey) : null;
     // Only the primary is kept in phase `primary`: an article in other languages only would otherwise read as empty.
-    const L = input?.article?.languages, wrong = L?.phase === 'primary' ? primaryOnly(L.primary, article) : undefined;
+    // Only the other languages are kept once it is approved: an article in the primary only would pass as the approved
+    // version again (T-53).
+    const L = input?.article?.languages, wrong = L?.phase === 'primary' ? primaryOnly(L.primary, article) : L?.phase === 'translate' || L?.phase === 'update' ? writesNone(L.write || [], L.primary, article) : undefined;
     if (wrong) return fail(draftRejection(wrong), 422);
     let p: ArticleProposal;
     try {

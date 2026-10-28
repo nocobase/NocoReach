@@ -40,6 +40,15 @@ export function weekday(date: string): number {
 /** Slow growth: the site had a little over half of today's visits eighteen months ago. */
 export const growth = (ago: number): number => 0.9989 ** ago;
 
+/** Annual planning peaks and holiday slowdowns differ between the two product audiences. */
+export function annualDemand(date: string, crm: boolean): number {
+  const month = Number(date.slice(5, 7)) - 1;
+  const monthly = crm
+    ? [0.94, 0.98, 1.14, 1.02, 1.04, 1.12, 0.88, 0.91, 1.18, 1.08, 1.12, 0.79]
+    : [1.12, 1.02, 1.08, 1.04, 1.01, 0.96, 0.84, 0.9, 1.14, 1.08, 1.02, 0.75];
+  return monthly[month];
+}
+
 /** Whole days between a YYYY-MM-DD date and today's. */
 export const daysAgo = (date: string, today: string): number =>
   Math.round((Date.parse(today) - Date.parse(date)) / DAY);

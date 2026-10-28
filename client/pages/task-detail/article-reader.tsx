@@ -6,7 +6,7 @@ import {
   useParams,
   useSearchParams,
 } from 'react-router';
-import { ArrowLeft, Pencil, Rocket } from 'lucide-react';
+import { ArrowLeft, Pencil, Rocket, RotateCcw } from 'lucide-react';
 import { $t, useNocoReachLocale } from '#i18n';
 import { PageContainer } from '#components/reach/page';
 import { RouteChildPage } from '#components/route-child-page';
@@ -15,7 +15,7 @@ import { cn } from '#lib/utils';
 import { mockSettingsAvailable } from '../../../app-plugins/nocoreach-mock/client/index.js';
 import {
   articleLanguages,
-  translationPending,
+  reviewRound,
   type ArticleView,
 } from './article-model';
 import {
@@ -114,9 +114,7 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
   const article = out.article;
   const languages = articleLanguages(data, article);
   const asked = params.get('lang') || '';
-  const tab = languages.locales.includes(asked)
-    ? asked
-    : languages.locales.find(languages.changed) || languages.locales[0];
+  const tab = languages.locales.includes(asked) ? asked : languages.first;
   const versions = languages.versions(tab);
   const askedView = params.get('view');
   const view: ArticleView =
@@ -137,6 +135,48 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
     (t) => t.id === article.targetId,
   );
   const actions = reviewing && allowed && !editing;
+  // The same round as the task's card (reviewRound): a version that changed none of the other languages offers Update
+  // again first, and publishing the primary only.
+  const simulated =
+      mockSettingsAvailable() || Boolean(data.task.evidence?.simulated),
+    round = reviewRound(data, article, simulated),
+    nothing = reviewing && round.nothing;
+  const approve = !targetGone && (
+    <Button
+      variant={nothing ? 'outline' : 'default'}
+      disabled={busy || missingChecks}
+      onClick={() =>
+        void act('approveStage', {
+          artifactId: out.id,
+          checked,
+        }).then((d) => {
+          if (d) setLeave(true);
+        })
+      }
+    >
+      {!nothing && <Rocket />}
+      {round.approve ||
+        $t(
+          simulated
+            ? 'taskDetail.approveAndSimulatePublish'
+            : 'taskDetail.approveAndPublish',
+        )}
+    </Button>
+  );
+  // Feedback is written in the task's Activity, the one place for it (2026-10-28 user decision): back to the task,
+  // with the cursor in its message box.
+  const request = (
+    <Button
+      variant='outline'
+      disabled={busy}
+      onClick={() => {
+        requestChanges();
+        back();
+      }}
+    >
+      {$t('taskDetail.requestChanges')}
+    </Button>
+  );
   return (
     <PageContainer className='gap-0'>
       <div className='sticky top-0 z-10 -mx-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-b bg-background px-4 py-2'>
@@ -154,40 +194,31 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
           )}
           {actions && (
             <>
-              {!targetGone && (
-                <Button
-                  disabled={busy || missingChecks}
-                  onClick={() =>
-                    void act('approveStage', {
-                      artifactId: out.id,
-                      checked,
-                    }).then((d) => {
-                      if (d) setLeave(true);
-                    })
-                  }
-                >
-                  <Rocket />
-                  {$t(
-                    translationPending(data)
-                      ? 'articleTask.approveTranslate'
-                      : mockSettingsAvailable() || data.task.evidence?.simulated
-                        ? 'taskDetail.approveAndSimulatePublish'
-                        : 'taskDetail.approveAndPublish',
-                  )}
-                </Button>
+              {nothing ? (
+                <>
+                  <Button
+                    disabled={busy}
+                    onClick={() =>
+                      void act('requestStageChanges', {
+                        artifactId: out.id,
+                        comment: round.againComment,
+                      }).then((d) => {
+                        if (d) setLeave(true);
+                      })
+                    }
+                  >
+                    <RotateCcw />
+                    {round.again}
+                  </Button>
+                  {request}
+                  {approve}
+                </>
+              ) : (
+                <>
+                  {approve}
+                  {request}
+                </>
               )}
-              {/* Feedback is written in the task's Activity, the one place for it (2026-10-28 user decision): back to
-                  the task, with the cursor in its message box. */}
-              <Button
-                variant='outline'
-                disabled={busy}
-                onClick={() => {
-                  requestChanges();
-                  back();
-                }}
-              >
-                {$t('taskDetail.requestChanges')}
-              </Button>
               <Button
                 variant='ghost'
                 disabled={busy}
@@ -236,7 +267,8 @@ function Reader({ context }: { context: TaskPageContext }): ReactElement {
           />
         ) : (
           <>
-            <MissingLanguages languages={languages} />
+            {nothing && <p className={text.muted}>{round.hint}</p>}
+            <MissingLanguages languages={languages} unchanged={reviewing} />
             <ArticleLanguage
               data={data}
               article={article}

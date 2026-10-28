@@ -1,5 +1,5 @@
+import type { Media } from './script/media.js';
 import { DAY, body, json, text } from './kit.js';
-import { BILIBILI, XIAOHONGSHU, YOUTUBE, type Media } from './script/media.js';
 import { worldFor, type World, type WorldProject } from './world.js';
 
 /** The browser collector a demo project is connected to; it answers for Xiaohongshu, Bilibili and YouTube. */
@@ -42,9 +42,11 @@ const noteId = (world: World, index: number) =>
 /** Links to the videos searches do not reach, which the demo follows by link. */
 export function followedVideos(project: WorldProject): string[] {
   const world = worldFor(project, Date.now());
-  return YOUTUBE.slice(5, 10).map(
-    (_, i) => `https://www.youtube.com/watch?v=${youtubeId(world, i + 5)}`,
-  );
+  return world.youtube
+    .slice(5, 10)
+    .map(
+      (_, i) => `https://www.youtube.com/watch?v=${youtubeId(world, i + 5)}`,
+    );
 }
 
 /** Answers the browser collector protocol (v1): health, search and video for the three media platforms. */
@@ -55,7 +57,6 @@ export function collector(
 ): Response | undefined {
   if (`${u.protocol}//${u.host}` !== collectorUrl(world.project.domain))
     return undefined;
-  if (!world.main) return json({ error: 'not configured' }, 404);
   const auth = new Headers(init.headers).get('authorization');
   if (auth !== `Bearer ${COLLECTOR_TOKEN}`)
     return json({ error: 'unauthorized' }, 401);
@@ -86,12 +87,12 @@ export function collector(
         // Searching the product name finds everything about it; other terms match the titles.
         return (
           !query ||
-          query.includes('nocobase') ||
+          query.includes(world.site.name.toLowerCase()) ||
           query.split(/\s+/).some((w) => w.length > 1 && title.includes(w))
         );
       });
   if (platform === 'xiaohongshu' && kind === 'search') {
-    const found = pick(XIAOHONGSHU).slice(0, 20);
+    const found = pick(world.xiaohongshu).slice(0, 20);
     if (!found.length)
       return json({ ...envelope, ok: false, errorCode: 'no_results' });
     return json({
@@ -128,7 +129,7 @@ export function collector(
       completeness,
     });
     if (kind === 'search') {
-      const found = pick(BILIBILI).slice(0, 20);
+      const found = pick(world.bilibili).slice(0, 20);
       if (!found.length)
         return json({ ...envelope, ok: false, errorCode: 'no_results' });
       return json({
@@ -140,7 +141,7 @@ export function collector(
       });
     }
     if (kind === 'video') {
-      const index = BILIBILI.findIndex(
+      const index = world.bilibili.findIndex(
         (_, i) => bvid(world, i) === text(b.bvid),
       );
       if (index < 0)
@@ -148,13 +149,13 @@ export function collector(
       return json({
         ...envelope,
         collectedAt,
-        item: meta(BILIBILI[index], index, 'video_metadata'),
+        item: meta(world.bilibili[index], index, 'video_metadata'),
       });
     }
   }
   if (platform === 'youtube') {
     if (kind === 'search') {
-      const found = pick(YOUTUBE.slice(0, 5)).slice(
+      const found = pick(world.youtube.slice(0, 5)).slice(
         0,
         Math.min(5, Number(b.limit) || 5),
       );
@@ -165,12 +166,12 @@ export function collector(
       });
     }
     if (kind === 'video') {
-      const index = YOUTUBE.findIndex(
+      const index = world.youtube.findIndex(
         (_, i) => youtubeId(world, i) === text(b.videoId),
       );
       if (index < 0)
         return json({ ...envelope, ok: false, errorCode: 'not_found' });
-      const item = YOUTUBE[index];
+      const item = world.youtube[index];
       const id = youtubeId(world, index);
       return json({
         ...envelope,
@@ -180,7 +181,7 @@ export function collector(
           url: `https://www.youtube.com/watch?v=${id}`,
           title: world.text(item.title),
           description: item.description ? world.text(item.description) : '',
-          channel: item.channel ?? 'NocoBase',
+          channel: item.channel ?? world.site.name,
           publishedAt: iso(published(world, item, index)).slice(0, 10),
           views: grown(world, item.views, item),
           likes: grown(world, item.likes, item),
