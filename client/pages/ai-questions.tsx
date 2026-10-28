@@ -25,6 +25,7 @@ import { DataTableTabs } from "#components/seo/data-table-toolbar";
 import { SortableHeader } from "#components/seo/sortable-header";
 import { DetailDrawer } from "./detail-drawer";
 import { DraftHandOffDialog, type TaskDraft } from "./keyword-hand-off";
+import { subjectOf } from './task-subject';
 import type { HandOffResult } from "./strategy/hand-off";
 import { safeLink } from "./analytics";
 import { formatCount, formatDate } from '#lib/format';
@@ -192,6 +193,7 @@ function questionsDraft(rows: Question[]): TaskDraft {
   const lines = rows.slice(0, 30).map((q) => $t('aiQuestions.questionEvidence',{0:q.question,1:getPlatform()[q.platform],2:n(q.volume),3:q.status === "ours" ? questionBrandEvidence(q.weNamed, q.weCited) : $t('aiQuestions.notMentionUs'),4:q.rivals.length || q.brands.length ? $t('aiQuestions.mentions',{0:[...q.rivals, ...q.brands].slice(0, 6).join("、")}) : "",5:q.sources.length ? $t('aiQuestions.cites',{0:[...new Set(q.sources.map((s) => s.domain))].slice(0, 5).join("、")}) : "",6:q.answer ? $t('aiQuestions.answerBegins',{0:q.answer.slice(0, 240).replace(/\s+/g, " ")}) : ""}));
   return {
     title: (rows.length === 1 ? $t('common.getAiMentionUsWhen',{0:head}) : $t('aiQuestions.getAiMentionUsWhen',{0:head,1:rows.length})).slice(0, 200),
+    subject: subjectOf(head, rows.length, 'questions').slice(0, 160),
     objective: $t('aiQuestions.aiChatgptGoogleAiOverviews').slice(0, 1000),
     brief: [$t('aiQuestions.questionsPeopleAskAi'), ...lines, "", $t('aiQuestions.evidenceAiQCollectedDataforseo'), $t('aiQuestions.citationAdvice')].join("\n").slice(0, 20000),
   };

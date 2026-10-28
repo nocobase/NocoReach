@@ -18,6 +18,7 @@ import { AllCheck, RowCheck, useTickedList } from "#components/reach/hand-off-sl
 import { Tag } from "#components/reach/tag";
 import { safeLink } from "../analytics";
 import type { TaskDraft } from "../keyword-hand-off";
+import { subjectOf } from '../task-subject';
 import { Segmented } from "#components/reach/segmented";
 import { num } from "./model";
 import { formatDate, formatDateTime } from "#lib/format";
@@ -40,6 +41,7 @@ function topicsDraft(rows: Topic[]): TaskDraft {
   const lines = rows.map((t) => $t('githubHot.topicLine', { 0: t.name, 1: num(t.total), 2: num(t.new7), 3: num(t.lastWeek), 4: num(t.priorAverage, 1), 5: t.leaders.slice(0, 3).map((r) => r.repo).join("、") }));
   return {
     title: clip(rows.length === 1 ? $t('githubHot.topicTaskTitle', { 0: rows[0].name }) : $t('githubHot.topicsTaskTitle', { 0: rows.map((t) => t.name).join("、") }), 200),
+    subject: clip(subjectOf(rows[0].name, rows.length, 'topics'), 160),
     objective: clip($t('githubHot.topicsObjective'), 1000),
     brief: clip([$t('githubHot.topicsBrief'), ...lines, "", $t('githubHot.topicsSuggestion')].join("\n"), 20000),
   };
@@ -51,6 +53,7 @@ function reposDraft(rows: Repo[], period: string): TaskDraft {
   const lines = rows.slice(0, 30).map((r) => $t('githubHot.repoLine', { 0: r.url, 1: num(r.stars), 2: r.gained != null ? `+${num(r.gained)}` : "—", 3: period, 4: r.description || "" }));
   return {
     title: clip(rows.length === 1 ? $t('githubHot.repoTaskTitle', { 0: rows[0].repo }) : $t('githubHot.reposTaskTitle', { 0: rows[0].repo, 1: rows.length }), 200),
+    subject: clip(subjectOf(rows[0].repo, rows.length, 'repositories'), 160),
     objective: clip($t('githubHot.reposObjective'), 1000),
     brief: clip([$t('githubHot.reposBrief'), ...lines, "", $t('githubHot.reposSuggestion')].join("\n"), 20000),
     ...(why ? { why: clip(why, 300) } : {}),

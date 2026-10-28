@@ -5,7 +5,7 @@ import {useEffect,useLayoutEffect,useState,useSyncExternalStore,type ReactElemen
 // floats at the bottom of the window with the count and 交给 Agent (first a button at the top right, which was far from
 // rows ticked lower down). Each list is a source: what is ticked in it and how it becomes a task. The bar adds them up;
 // lists ticked together on one page (GitHub Issues and Discussions) go into the same task.
-export type HandOffDraft={title:string;objective:string;brief:string;signalKey?:string;why?:string};
+export type HandOffDraft={title:string;objective:string;brief:string;signalKey?:string;why?:string;subject?:string};
 export type HandOffSource={
  count:number;
  // What the rows are, for the bar's count (“个关键词已选”); “项已选” otherwise.

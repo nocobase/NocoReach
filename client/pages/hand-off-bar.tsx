@@ -13,7 +13,8 @@ import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 export function combineDrafts(drafts: HandOffDraft[]): HandOffDraft {
   if (drafts.length === 1) return drafts[0];
-  return { title: clip(drafts.map((d) => d.title).join("；"), 200), objective: clip(drafts.map((d) => d.objective).join("；"), 1000), brief: clip(drafts.map((d) => d.brief).join("\n\n"), 20000) };
+  const subjects = drafts.map((d) => d.subject).filter(Boolean);
+  return { title: clip(drafts.map((d) => d.title).join('；'), 200), ...(subjects.length === drafts.length ? { subject: clip(subjects.join('；'), 160) } : {}), objective: clip(drafts.map((d) => d.objective).join('；'), 1000), brief: clip(drafts.map((d) => d.brief).join("\n\n"), 20000) };
 }
 // Once per data page, at the end of its frame; nothing shows until a row is ticked.
 export function HandOffBar({ projectId }: { projectId?: number }): ReactElement | null {
