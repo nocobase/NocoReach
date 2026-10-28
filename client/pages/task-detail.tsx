@@ -52,7 +52,7 @@ import {useTaskDraft,useTaskDraftStatus} from './task-detail/draft-store.js';
 import {DocReader,Markdown} from './doc-view';
 import {effectItems,effectLine,effectPages,type EffectResult} from './effect-model';
 import {closeCommand,canReopen,closedWhen,getCloseConfirm,closedLabel,isClosed,type TaskData as Data,type Work,type Artifact,type PullRequestInfo} from './task-execution-types';
-import {playbookRequest,localizePlaybookList,getCategories,getStageExecutor,stageName as displayStageName,stageLabel,stagesFor,readsOnly,withoutRepo,eventText,type PlaybookList,type Stage} from './playbook-model';
+import {playbookRequest,playbookNameOf,localizePlaybookList,getCategories,getStageExecutor,stageName as displayStageName,stageLabel,stagesFor,readsOnly,withoutRepo,eventText,type PlaybookList,type Stage} from './playbook-model';
 import {translatesArticle} from '../../shared/playbook-catalog';
 import './strategy/strategy.css';
 import './reach-workspace.css';
@@ -304,7 +304,7 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId,onEviden
   {briefText&&<Field label={briefTitle}><Clamped long={briefText.length>240||briefText.split('\n').length>3} extra={whyText(data).from==='brief'&&<Button variant="link" size="sm" className="h-auto font-normal p-0" onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}>{briefText}</Clamped></Field>}
   <Field label={$t('common.playbook')} id={`${taskId}-playbook`}>
    <Select value={pick} disabled={busy||!list||!allowed} onValueChange={v=>{if(v!=null)setPick(String(v));}}>
-    <SelectTrigger className="w-full" aria-labelledby={`${taskId}-playbook`}><SelectValue>{(v:string)=>{const x=list?.playbooks.find(y=>y.id===v);return x?`${x.name}${x.id===data.playbookDefault?$t('taskDetail.recommended'):''}`:v;}}</SelectValue></SelectTrigger>
+    <SelectTrigger className="w-full" aria-labelledby={`${taskId}-playbook`}><SelectValue>{(v:string)=>{const n=playbookNameOf(v,list);return n?`${n}${v===data.playbookDefault?$t('taskDetail.recommended'):''}`:'';}}</SelectValue></SelectTrigger>
     <SelectContent className="max-w-[min(var(--container-md),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal">
      {getCategories().map(([k,label])=>{const items=(list?.playbooks||[]).filter(x=>x.category===k);return items.length?<SelectGroup key={k}><SelectLabel>{label}</SelectLabel>{items.map(x=><SelectItem key={x.id} value={x.id}>{x.name}{x.id===data.playbookDefault?$t('taskDetail.recommended'):''}</SelectItem>)}</SelectGroup>:null;})}
     </SelectContent>
@@ -380,11 +380,11 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  const manual=manualOpen||Boolean(record),editing=editingOpen||draft!==(w.results[index-1]?.content||'');
  // What can follow the accepted document: the playbook's next steps as they are now, as the server checks them
  // (2026-10-28), or the start's copy when the playbook is gone; the first is preselected until another is chosen.
- const current=list?.playbooks.find(p=>p.id===w.playbook?.id),last=stages.slice(index+1).every(s=>s.kind==='observe'),nextOptions=w.playbook?.kind==='plan'&&last?current?.next??w.playbook.next:[];
+ const name=(id:string)=>playbookNameOf(id,list);
+ const current=list?.playbooks.find(p=>p.id===w.playbook?.id),last=stages.slice(index+1).every(s=>s.kind==='observe'),nextOptions=(w.playbook?.kind==='plan'&&last?current?.next??w.playbook.next:[]).filter(id=>name(id));
  const [chosen,setNext]=useState<string>(),next=chosen===''||(chosen&&nextOptions.includes(chosen))?chosen:nextOptions[0]||'',[articleTab,setArticleTab]=useState(''),[relNote,setRelNote]=useTaskDraft('release',w.results[index-1]?.pr?.release||'');
  const {clear}=useTaskDraftStatus();
  const act=async(command:string,body:object)=>{const result=await update(command,{stageKey:stage.key,...body});if(result&&['editStageOutput','recordManual','confirmPublish','approveStage','requestStageChanges'].includes(command))clear();return result;};
- const name=(id:string)=>list?.playbooks.find(p=>p.id===id)?.name||id;
  const cur=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];
  const producer=stages[index-1],out=w.results[index-1];
  const request=(executor:string)=>requestOpen&&out?<RequestBox executor={executor} busy={busy} onCancel={()=>setRequest(false)} onSend={async comment=>Boolean(await act('requestStageChanges',{artifactId:out.id,comment}))}/>:null;

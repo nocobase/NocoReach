@@ -346,3 +346,44 @@ test('the next steps are the playbook’s current ones, not the ones the task st
     (await screen.findAllByRole('option')).map((o) => o.textContent),
   ).toEqual(['写博客文章', '新建文档页', '不接着做']);
 });
+
+// 2026-10-28 user report (T-51 on Studio): the button read "Accept and start optimize-page" while the playbook list was
+// loading.
+test('before the playbook list arrives, next steps are named, never shown as their ids', async () => {
+  action.mockImplementation((resource: string, command: string) =>
+    resource === 'nrPlaybooks'
+      ? new Promise(() => undefined)
+      : command === 'members'
+        ? Promise.resolve([{ id: '1', name: 'Super Admin' }])
+        : Promise.resolve([]),
+  );
+  const data = outlineTask();
+  data.work.playbook!.next = ['custom-x', 'optimize-page', 'blog-post'];
+  mount(data);
+  const user = userEvent.setup();
+  const button = await screen.findByRole('button', {
+    name: '接受并开始优化现有页面',
+  });
+  expect(button).toBeVisible();
+  await user.click(screen.getByRole('combobox', { name: '接着做' }));
+  expect(
+    (await screen.findAllByRole('option')).map((o) => o.textContent),
+  ).toEqual(['优化现有页面', '写博客文章', '不接着做']);
+  expect(document.body.textContent).not.toMatch(
+    /custom-x|optimize-page|blog-post/,
+  );
+});
+
+test('before the playbook list arrives, the start card names its playbook', async () => {
+  action.mockImplementation((resource: string, command: string) =>
+    resource === 'nrPlaybooks'
+      ? new Promise(() => undefined)
+      : command === 'members'
+        ? Promise.resolve([{ id: '1', name: 'Super Admin' }])
+        : Promise.resolve([]),
+  );
+  mount(waitingTask());
+  const select = await screen.findByRole('combobox', { name: '做法' });
+  expect(select).toHaveTextContent('新建文档页（推荐）');
+  expect(select).not.toHaveTextContent('new-doc');
+});

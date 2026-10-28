@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from '#components/ui/dialog';
 import { cn } from '#lib/utils';
-import type { Playbook } from '../playbook-model';
+import { playbookNameOf, type Playbook } from '../playbook-model';
 import { TaskStandingTag } from '../task-status-tag';
 import type { StrategyState } from './model';
 import { oppNo, type Row } from './board';
@@ -96,7 +96,7 @@ export function OpportunityHandOffDialog({
     }
   }
   const playbookName = (id: string) =>
-    playbooks?.find((p) => p.id === id)?.name || '';
+    playbookNameOf(id, playbooks ? { playbooks } : undefined);
   return (
     <Dialog
       open
