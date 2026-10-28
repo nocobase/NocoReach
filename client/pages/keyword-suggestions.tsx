@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
-import { Bookmark, LoaderCircle, Search, Trash2 } from "lucide-react";
+import { Bookmark, LoaderCircle, Pencil, Search, Trash2 } from "lucide-react";
 import { toast } from "#lib/toast";
 import { LoadError, InlineError, EmptyState } from "#components/reach/states";
 import { chipClass, chipButtonClass } from "#components/reach/chip";
@@ -32,8 +32,8 @@ import { help } from "./glossary";
 import { formatDate } from '#lib/format';
 import { PageAiEntry, RowAiEntry, usePageAi } from "../online-agent/page-entry";
 import { seedsItem } from "../../shared/keyword-subject";
-import { GroupTabs, RenameGroupDialog, digName, type GroupTab } from "./keyword-groups";
-import { confirmAction } from "#components/reach/confirm";
+import { EditGroupsDialog, GroupTabs, type GroupTab } from "./keyword-groups";
+import { EditSeedsDialog } from "./keyword-seed-editor";
 import { useBusinessAccess } from "#hooks/use-business-access";
 import { usePageChange } from "../online-agent/page-changes";
 
@@ -44,9 +44,14 @@ type Dig = { id: string; direction: string; name?: string | null; seeds: string[
 type SuggestionView = {
   at?: string; market: Market; seeds: string[]; seedsBy?: "ai" | "person"; stats?: { found: number; picked: number; minVolume: number }; costUsd?: number;
   items: Suggestion[]; digs: Dig[]; missedSeeds?: string[]; lastError?: { message: string; at?: string; mode?: "list" | "dig" } | null;
-  running: { stage: "seeds" | "lookup" | "curate"; mode: "list" | "dig"; direction: string | null } | null; dataforseo: boolean; maxUsd: number; minVolume: number;
+  pendingSeeds?: string[] | null; groupNames?: Record<string, string>; deletedGroups?: string[];
+  running: { stage: "seeds" | "lookup" | "curate"; mode: "list" | "dig"; direction: string | null } | null; naming?: boolean; dataforseo: boolean; maxUsd: number; minVolume: number;
 };
 // Keep persisted group identities unchanged; display uses an explicit semantic-key map.
+// A group's name: a built-in one as the person renamed it, or its default in the reader's language; a dug group by its
+// name, which the server makes once with the AI (while it does, "Naming…"; if it could not, the direction itself).
+const groupName = (view: Pick<SuggestionView, "groupNames"> | undefined, id: string) => view?.groupNames?.[id] || $t(GROUP_KEYS[id] ?? id);
+const digName = (d: Pick<Dig, "name" | "direction">, naming?: boolean) => d.name || (naming ? $t('keywordSuggestions.naming') : d.direction);
 const GROUP_KEYS: Record<string, string> = {"产品与功能词": 'keywordSuggestions.groups.product', "使用场景与问题词": 'keywordSuggestions.groups.useCase', "对比与替代词": 'keywordSuggestions.groups.comparison', "品类与行业词": 'keywordSuggestions.groups.industry'};
 const GROUPS = ['产品与功能词', '使用场景与问题词', '对比与替代词', '品类与行业词'] as const;
 const call = <T,>(projectId: number, action: string, body: object = {}) => api.action<T>("nrKeywordSuggest", action, { method: "POST", body: { projectId, ...body }, unwrap: "data" });
@@ -65,7 +70,7 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
   const openKeyword = useOpenKeyword();
   const [error, setError] = useMessageState("");
   const [busy, setBusy] = useState<"" | "start" | "save" | "remove">("");
-  const [renaming, setRenaming] = useState<{ id: string; name: string }>();
+  const [editing, setEditing] = useState<"" | "groups" | "seeds">("");
   const [group, setGroup] = useState(() => params.get("group") || "all");
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const [handing, setHanding] = useState(false);
@@ -80,9 +85,9 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
     catch (e) { setError(() => failure(e, $t('keywordSuggestions.notLoad'))); }
   };
   useEffect(() => { setView(undefined); void load(); }, [projectId]);
-  // A run goes on in the background: read the page again until it is done.
+  // A run, or the naming of groups dug before names existed, goes on in the background: read the page again until done.
   useEffect(() => {
-    if (!view?.running) return;
+    if (!view?.running && !view?.naming) return;
     const timer = setTimeout(() => void load(), 3000);
     return () => clearTimeout(timer);
   }, [view]);
@@ -107,13 +112,14 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
       // Dig from this keyword sits beside the keyword, where it stays in view when the table scrolls sideways.
       cell: ({ row }) => <div className="flex max-w-md items-start gap-2"><div className="min-w-0 flex-1"><span className="block truncate font-medium" title={row.original.keyword}>{row.original.keyword}</span><span className="block truncate text-xs text-muted-foreground" title={row.original.reason}>{row.original.reason}</span></div><RowAiEntry className="shrink-0" subject={{ kind: "page", page: "keywords", item: row.original.keyword }} label={$t('keywordSuggestions.digFromKeyword')} description={$t('keywordSuggestions.aiEntryDescription')} presets={[$t('keywordSuggestions.presetFromKeyword')]} /></div>,
     }) as ColumnDef<Suggestion>,
-    helper.accessor("group", { enableSorting: false, header: () => $t('keywordSuggestions.group'), cell: ({ getValue }) => <span className="block min-w-28 max-w-40 text-xs whitespace-normal text-muted-foreground">{$t(GROUP_KEYS[String(getValue())] ?? String(getValue()))}</span> }) as ColumnDef<Suggestion>,
+    // The group a row is listed under: its dug group if it came from a dig, otherwise its built-in group.
+    helper.accessor("group", { enableSorting: false, header: () => $t('keywordSuggestions.group'), cell: ({ row }) => { const d = row.original.dig ? view?.digs.find((x) => x.id === row.original.dig) : undefined; return <span className="block min-w-28 max-w-40 text-xs whitespace-normal text-muted-foreground">{d ? digName(d, view?.naming) : row.original.group ? groupName(view, row.original.group) : "—"}</span>; } }) as ColumnDef<Suggestion>,
     helper.display({ id: "intent", header: () => <WithInfo help={help($t('common.intent'))}>{$t('common.intent')}</WithInfo>, cell: ({ row }) => <IntentBadge intent={intentOf(row.original)} /> }) as ColumnDef<Suggestion>,
     helper.accessor((s) => s.metrics?.volume ?? undefined, { id: "volume", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.monthlyVolume')} align="right" />, cell: ({ row }) => metric(row.original.metrics?.volume), meta: right }) as ColumnDef<Suggestion>,
     helper.accessor((s) => s.metrics?.difficulty ?? undefined, { id: "difficulty", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.difficulty')} align="right" />, cell: ({ row }) => <ScoreBadge value={row.original.metrics?.difficulty ?? null} />, meta: right }) as ColumnDef<Suggestion>,
     helper.accessor((s) => s.site?.position ?? undefined, { id: "rank", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t('common.sitePosition')} align="right" />, cell: ({ row }) => row.original.site ? <span title={$t('keywordSuggestions.clicksImpressions',{0:row.original.site.clicks,1:row.original.site.impressions})}>{row.original.site.position.toFixed(1)}</span> : <span className="text-muted-foreground">—</span>, meta: right }) as ColumnDef<Suggestion>,
     helper.display({ id: "page", header: () => $t('keywordSuggestions.matchingPage'), cell: ({ row }) => { const page = row.original.site?.page || row.original.page; return page ? <span className="block max-w-48 truncate text-xs" title={page}>{pathOf(page)}</span> : <span className="text-xs text-muted-foreground">{$t('keywordSuggestions.noMatchingPage')}</span>; } }) as ColumnDef<Suggestion>,
-  ], [anchorRef]);
+  ], [anchorRef, view]);
   const table = useDataTable({ data: rows, columns, withSorting: true, enableRowSelection: true, state: { rowSelection }, onRowSelectionChange: setRowSelection, getRowId: (s) => s.id });
   const selected = all.filter((s) => rowSelection[s.id]);
   useHandOffSource("keyword-suggestions", all.length ? { count: selected.length, open: () => setHanding(true), noun: $t('common.keywordsSelected'), actions: <> <TableBulkActionButton icon={<Bookmark className="size-3.5" />} onClick={() => void save()}>{busy === "save" ? $t('common.saving') : $t('common.save')}</TableBulkActionButton>{canEdit ? <> <TableBulkActionButton icon={<Trash2 className="size-3.5" />} onClick={() => void remove()}>{$t('common.remove')}</TableBulkActionButton></> : null} </>, clear: () => setRowSelection({}) } : null);
@@ -131,11 +137,12 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
     if (await edit("removeItems", { ids: selected.map((s) => s.id) }, () => $t('keywordSuggestions.removedKeywords', { 0: n }))) setRowSelection({});
     setBusy("");
   };
-  const deleteGroup = async (dig: { id: string; name: string }) => {
-    const n = view?.digs.find((d) => d.id === dig.id)?.items.length ?? 0;
-    if (!(await confirmAction({ title: () => $t('keywordSuggestions.deleteGroupTitle', { 0: dig.name }), description: () => $t('keywordSuggestions.deleteGroupDescription', { 0: n }), action: () => $t('common.delete'), destructive: true }))) return;
-    if (await edit("deleteDig", { digId: dig.id }, () => $t('keywordSuggestions.groupDeleted', { 0: dig.name })) && group === dig.id) setGroup("all");
+  const saveGroups = async (changes: { id: string; name?: string; deleted?: boolean }[]) => {
+    const ok = await edit("editGroups", { groups: changes }, () => $t('keywordSuggestions.groupsSaved'));
+    if (ok && changes.some((c) => c.deleted && c.id === group)) setGroup("all");
+    return ok;
   };
+
   const save = async () => {
     if (!projectId || !selected.length) return;
     setBusy("save");
@@ -148,7 +155,8 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
   const has = Boolean(view.at && view.items.length);
   const running = view.running;
   const stage = running ? $t(`keywordSuggestions.stage.${running.stage}`) : "";
-  const status = running ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />{running.mode === "dig" && running.direction ? $t('keywordSuggestions.runningDig', { 0: stage, 1: running.direction }) : stage}</p> : null;
+  const runningGroup = running?.mode === "dig" ? view.digs.find((d) => d.direction === running.direction) : undefined;
+  const status = running ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />{runningGroup?.name ? $t('keywordSuggestions.runningDig', { 0: stage, 1: runningGroup.name }) : stage}</p> : null;
   // A failed re-find of the list shows until the next run starts, saying the list below is the earlier one; a dig's
   // failure belongs to its chat card, and an error older than the list is no longer news (2026-10-28: a failed dig's
   // "nothing found" sat above a full list).
@@ -168,9 +176,15 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
   const seedHint = view.seeds[Math.min(2, view.seeds.length - 1)];
   const tabs: GroupTab[] = [
     { value: "all", label: $t('keywordSuggestions.allTab'), count: all.length },
-    ...GROUPS.map((g) => ({ value: g, label: $t(GROUP_KEYS[g] ?? g), count: view.items.filter((s) => s.group === g).length })).filter((t) => t.count),
-    ...view.digs.map((d) => { const name = digName(d); return { value: d.id, label: $t('keywordSuggestions.digTab', { 0: name }), count: d.items.length, title: $t('keywordSuggestions.digTab', { 0: d.direction }), dig: { id: d.id, name } }; }),
+    ...GROUPS.filter((g) => !view.deletedGroups?.includes(g)).map((g) => ({ value: g, label: groupName(view, g), count: view.items.filter((s) => s.group === g).length })).filter((t) => t.count),
+    ...view.digs.map((d) => ({ value: d.id, label: digName(d, view.naming), count: d.items.length, title: $t('keywordSuggestions.dugDirection', { 0: d.direction }) })),
   ];
+  // Edit groups lists every group, the built-in ones with no keywords now included, so a renamed or emptied one can be edited too.
+  const editable = [
+    ...GROUPS.filter((g) => !view.deletedGroups?.includes(g)).map((g) => ({ id: g, name: groupName(view, g), count: view.items.filter((s) => s.group === g).length })),
+    ...view.digs.map((d) => ({ id: d.id, name: digName(d), count: d.items.length })),
+  ];
+  const shownSeeds = view.pendingSeeds?.length ? view.pendingSeeds : view.seeds;
   // The seed words are adjusted in the chat: as a whole, or one seed from its chip.
   const adjustSeeds = () => openAi?.({ subject: { kind: "page", page: "keywords", item: seedsItem() }, label: $t('keywordSuggestions.adjustSeeds'), description: $t('keywordSuggestions.seedsEntryDescription'),
     presets: [$t('keywordSuggestions.presetExplainSeeds'), $t('keywordSuggestions.presetLeanSeeds'), $t('keywordSuggestions.presetAddRemoveSeed'), $t('keywordSuggestions.presetFindAgain'), $t('keywordSuggestions.presetOtherMarket')] });
@@ -184,9 +198,11 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
           <p className="text-sm text-muted-foreground">
             {made} · {$t(marketLabel(view.market))} · <span className="whitespace-nowrap">{formatDate(view.at!)}</span>
             <InfoTip label={$t('keywordSuggestions.whereAiSuggestionsCome')} className="ml-1">{$t('keywordSuggestions.howMadeInfo', { 0: view.minVolume, 1: usd(view.costUsd ?? 0) })}</InfoTip>
+            {canEdit && !running ? <button type="button" className="nr-link ml-2 inline-flex items-center gap-1" onClick={() => setEditing("seeds")}><Pencil className="size-3.5" />{$t('common.edit')}</button> : null}
             {openAi ? <button type="button" className="nr-link ml-2" onClick={adjustSeeds}>{$t('keywordSuggestions.adjustSeeds')}</button> : null}
           </p>
-          <ul className="flex flex-wrap gap-1.5" aria-label={$t('keywordSuggestions.seedsTitle')}>{view.seeds.map((s) => <li key={s}>{openAi ? <button type="button" className={cn(chipClass, chipButtonClass)} title={$t('keywordSuggestions.seedEntry', { 0: s })} onClick={() => openSeed(s)}>{s}</button> : <span className={chipClass}>{s}</span>}</li>)}</ul>
+          <ul className="flex flex-wrap gap-1.5" aria-label={$t('keywordSuggestions.seedsTitle')}>{shownSeeds.map((s) => <li key={s}>{openAi ? <button type="button" className={cn(chipClass, chipButtonClass)} title={$t('keywordSuggestions.seedEntry', { 0: s })} onClick={() => openSeed(s)}>{s}</button> : <span className={chipClass}>{s}</span>}</li>)}</ul>
+          {view.pendingSeeds?.length ? <p className="text-xs text-muted-foreground">{$t('keywordSuggestions.seedsPending')}</p> : null}
           {view.missedSeeds?.length ? <p className="text-xs text-muted-foreground">{$t('keywordSuggestions.missedSeeds', { 0: view.missedSeeds.join(getCurrentLocale().startsWith('zh') ? '、' : ', ') })}</p> : null}
         </div>
         <PageAiEntry subject={{ kind: "page", page: "keywords" }} label={$t('keywordSuggestions.aiEntry')} description={$t('keywordSuggestions.aiEntryDescription')}
@@ -194,12 +210,16 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
       </div>
       {status}{problem}
       <Card className="gap-0 py-0">
-        <DataTableTabs value={group} onValueChange={(v) => { setGroup(v); setRowSelection({}); }}>
-          <GroupTabs tabs={tabs} value={group} canEdit={canEdit} onSelect={(v) => { setGroup(v); setRowSelection({}); }} onRename={setRenaming} onDelete={(d) => void deleteGroup(d)} />
+        <DataTableTabs value={group} onValueChange={(v) => { setGroup(v); setRowSelection({}); }}
+          actions={canEdit ? <Button variant="outline" size="sm" data-group-actions onClick={() => setEditing("groups")}><Pencil data-icon="inline-start" />{$t('keywordSuggestions.editGroups')}</Button> : undefined}>
+          <GroupTabs tabs={tabs} value={group} onSelect={(v) => { setGroup(v); setRowSelection({}); }} />
         </DataTableTabs>
         <DataTable table={table} rowClassName="group" empty={{ title: $t('keywordSuggestions.noSuggestionsGroup') }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,[role=checkbox],a")) return; openKeyword(row.original.keyword, view.market); }} />
       </Card>
-      {renaming ? <RenameGroupDialog dig={renaming} onClose={() => setRenaming(undefined)} onSave={async (name) => { if (await edit("renameDig", { digId: renaming.id, name }, () => $t('keywordSuggestions.groupRenamed', { 0: name }))) setRenaming(undefined); }} /> : null}
+      {editing === "groups" ? <EditGroupsDialog groups={editable} onClose={() => setEditing("")} onSave={saveGroups} /> : null}
+      {editing === "seeds" ? <EditSeedsDialog projectId={projectId} seeds={shownSeeds} market={view.market} onClose={() => setEditing("")}
+        onSaveOnly={(seeds) => edit("saveSeeds", { seeds }, () => $t('keywordSuggestions.seedsSaved'))}
+        onFind={async (seeds) => (await start({ seeds, market: view.market, by: "person" })) ?? false} /> : null}
       {handing && selected.length ? (
         <KeywordHandOffDialog projectId={projectId} rows={selected.map((s) => ({ keyword: s.keyword, market: view.market, volume: s.metrics?.volume ?? null, difficulty: s.metrics?.difficulty ?? null, intent: intentOf(s) ?? null, ...(s.site ? { rank: s.site } : {}) }))}
           onClose={() => setHanding(false)} onDone={(r) => { setHanding(false); setRowSelection({}); setHandOff({ ok: true, text: r.title, taskId: r.taskId }); }} />

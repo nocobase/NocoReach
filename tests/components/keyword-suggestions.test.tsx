@@ -194,7 +194,7 @@ test('the list says how it was made: seeds, real keywords found, picked, the vol
   ).toBeVisible();
   fireEvent.click(
     screen.getByRole('tab', {
-      name: `${$t('keywordSuggestions.digTab', { 0: 'approval workflow' })} 1`,
+      name: 'approval workflow 1',
     }),
   );
   const table = screen.getByRole('table');
@@ -280,7 +280,7 @@ test('the page entry offers the prompts for this list, and a group dug in the ch
   notifyPageChange('keywords', 2);
   expect(
     await screen.findByRole('tab', {
-      name: `${$t('keywordSuggestions.digTab', { 0: 'crm' })} 1`,
+      name: 'crm 1',
     }),
   ).toBeVisible();
 });
@@ -389,53 +389,86 @@ test('a seed chip opens the chat on that seed word', async () => {
   );
 });
 
-test('a dug group reads by its short name with the direction on hover, and its ⋯ menu renames or deletes it', async () => {
+test('every group tab reads as a name and a count; the group column names the group a row is listed under', async () => {
   view = {
     ...LIST,
+    groupNames: { 对比与替代词: '竞品对比' },
     digs: [
-      ...LIST.digs,
+      { ...LIST.digs[0], name: '审批流' },
       {
         id: 'dig2',
-        direction:
-          'The system belongs to the company (self-hosted, open source)',
+        direction: 'From 1 to 2 (maintenance and modernization)',
         name: null,
-        seeds: ['self hosted'],
+        seeds: ['legacy'],
         at: '2026-10-27T10:00:00Z',
         found: 9,
-        items: [item('self hosted crm', '品类与行业词', 720, 'dig2')],
+        items: [item('legacy modernization', '品类与行业词', 720, 'dig2')],
       },
     ],
+    naming: true,
   };
-  action.mockImplementation(async (_resource: string, name: string) =>
-    name === 'renameDig' || name === 'deleteDig' ? view : view,
-  );
   mount();
   await screen.findByText('open source low code platform');
-  const long = screen.getByRole('tab', {
-    name: `${$t('keywordSuggestions.digTab', { 0: 'The system belongs…' })} 1`,
-  });
-  expect(long).toHaveAttribute(
+  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
+    `${$t('keywordSuggestions.allTab')} 4`,
+    '竞品对比 1',
+    `${$t('keywordSuggestions.groups.industry')} 1`,
+    '审批流 1',
+    `${$t('keywordSuggestions.naming')} 1`,
+  ]);
+  expect(screen.getByRole('tab', { name: '审批流 1' })).toHaveAttribute(
     'title',
-    $t('keywordSuggestions.digTab', {
-      0: 'The system belongs to the company (self-hosted, open source)',
-    }),
+    $t('keywordSuggestions.dugDirection', { 0: 'approval workflow' }),
   );
+  const table = screen.getByRole('table');
+  const row = within(table)
+    .getByText('approval workflow software')
+    .closest('tr')!;
+  expect(within(row).getByText('审批流')).toBeVisible();
+  const retool = within(table).getByText('retool alternative').closest('tr')!;
+  expect(within(retool).getByText('竞品对比')).toBeVisible();
+  // Not a single "From … dig" left anywhere on the page.
+  expect(document.body.textContent).not.toMatch(/从 .* 挖|From .* dig/);
+});
+
+test('Edit groups renames any group in place and deletes with undo until Save', async () => {
+  action.mockImplementation(async () => view);
+  mount();
+  await screen.findByText('open source low code platform');
   fireEvent.click(
-    screen.getByRole('button', {
-      name: $t('keywordSuggestions.manageGroup', { 0: 'The system belongs…' }),
-    }),
-  );
-  fireEvent.click(
-    await screen.findByRole('menuitem', {
-      name: $t('keywordSuggestions.renameGroup'),
-    }),
+    screen.getByRole('button', { name: $t('keywordSuggestions.editGroups') }),
   );
   const dialog = await screen.findByRole('dialog');
-  fireEvent.change(
-    within(dialog).getByRole('textbox', {
-      name: $t('keywordSuggestions.groupName'),
+  const names = within(dialog).getAllByRole('textbox', {
+    name: $t('keywordSuggestions.groupName'),
+  });
+  expect(names.map((n) => (n as HTMLInputElement).value)).toEqual([
+    $t('keywordSuggestions.groups.product'),
+    $t('keywordSuggestions.groups.useCase'),
+    $t('keywordSuggestions.groups.comparison'),
+    $t('keywordSuggestions.groups.industry'),
+    'approval workflow',
+  ]);
+  fireEvent.change(names[2], { target: { value: '竞品对比' } });
+  const deleteIndustry = within(dialog).getByRole('button', {
+    name: $t('keywordSuggestions.deleteNamedGroup', {
+      0: $t('keywordSuggestions.groups.industry'),
     }),
-    { target: { value: '自托管与开源' } },
+  });
+  fireEvent.click(deleteIndustry);
+  expect(names[3]).toBeDisabled();
+  fireEvent.click(
+    within(dialog).getByRole('button', {
+      name: $t('keywordSuggestions.deleteNamedGroup', {
+        0: 'approval workflow',
+      }),
+    }),
+  );
+  // Undo the industry deletion; the dug group stays deleted.
+  fireEvent.click(
+    within(dialog).getAllByRole('button', {
+      name: $t('keywordSuggestions.undoDelete'),
+    })[0],
   );
   fireEvent.click(
     within(dialog).getByRole('button', { name: $t('common.save') }),
@@ -443,38 +476,116 @@ test('a dug group reads by its short name with the direction on hover, and its �
   await waitFor(() =>
     expect(action).toHaveBeenCalledWith(
       'nrKeywordSuggest',
-      'renameDig',
+      'editGroups',
       expect.objectContaining({
-        body: { projectId: 2, digId: 'dig2', name: '自托管与开源' },
+        body: {
+          projectId: 2,
+          groups: [
+            { id: '对比与替代词', name: '竞品对比' },
+            { id: 'dig1', deleted: true },
+          ],
+        },
       }),
     ),
   );
+});
+
+test('Edit seed words: × removes a seed, Enter adds one, Save only keeps them, Save and find again shows its real cost', async () => {
+  action.mockImplementation(async (_resource: string, name: string) =>
+    name === 'estimate'
+      ? { maxUsd: 0.0469, reused: 2, monthUsd: 0.7, budgetUsd: 10 }
+      : name === 'suggest'
+        ? {
+            ...view,
+            running: { stage: 'seeds', mode: 'list', direction: null },
+          }
+        : view,
+  );
+  mount();
+  await screen.findByText('open source low code platform');
+  const basis = document.querySelector('[data-suggest-basis]') as HTMLElement;
   fireEvent.click(
-    screen.getByRole('button', {
-      name: $t('keywordSuggestions.manageGroup', { 0: 'approval workflow' }),
+    within(basis).getByRole('button', { name: $t('common.edit') }),
+  );
+  const dialog = await screen.findByRole('dialog');
+  fireEvent.click(
+    within(dialog).getByRole('button', {
+      name: $t('keywordSuggestions.removeSeed', { 0: 'approval workflow' }),
     }),
   );
-  fireEvent.click(
-    await screen.findByRole('menuitem', {
-      name: $t('keywordSuggestions.deleteGroup'),
-    }),
-  );
-  const ask = await screen.findByRole('alertdialog');
+  const input = within(dialog).getByRole('textbox', {
+    name: $t('keywordSuggestions.addSeedPlaceholder'),
+  });
+  fireEvent.change(input, { target: { value: 'Project Management Tool' } });
+  fireEvent.keyDown(input, { key: 'Enter' });
   expect(
-    within(ask).getByText(
-      $t('keywordSuggestions.deleteGroupDescription', { 0: 1 }),
-    ),
-  ).toBeVisible();
+    dialog.querySelector('[data-seed-editor-hint]')?.textContent,
+  ).toContain($t('keywordSuggestions.seedsChangeHint', { 0: 1, 1: 1 }));
+  const find = await within(dialog).findByRole('button', {
+    name: $t('keywordSuggestions.saveAndFind', { 0: '0.05' }),
+  });
+  expect(action).toHaveBeenLastCalledWith(
+    'nrKeywordSuggest',
+    'estimate',
+    expect.objectContaining({
+      body: {
+        projectId: 2,
+        seeds: [
+          'internal tool builder',
+          'retool alternative',
+          'project management tool',
+        ],
+        market: LIST.market,
+      },
+    }),
+  );
   fireEvent.click(
-    within(ask).getByRole('button', { name: $t('common.delete') }),
+    within(dialog).getByRole('button', {
+      name: $t('keywordSuggestions.saveSeedsOnly'),
+    }),
   );
   await waitFor(() =>
     expect(action).toHaveBeenCalledWith(
       'nrKeywordSuggest',
-      'deleteDig',
-      expect.objectContaining({ body: { projectId: 2, digId: 'dig1' } }),
+      'saveSeeds',
+      expect.objectContaining({
+        body: {
+          projectId: 2,
+          seeds: [
+            'internal tool builder',
+            'retool alternative',
+            'project management tool',
+          ],
+        },
+      }),
     ),
   );
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  // Again, this time running a lookup: only this button spends.
+  fireEvent.click(
+    within(basis).getByRole('button', { name: $t('common.edit') }),
+  );
+  const again = await screen.findByRole('dialog');
+  fireEvent.click(
+    await within(again).findByRole('button', {
+      name: $t('keywordSuggestions.saveAndFind', { 0: '0.05' }),
+    }),
+  );
+  await waitFor(() =>
+    expect(action).toHaveBeenCalledWith(
+      'nrKeywordSuggest',
+      'suggest',
+      expect.objectContaining({
+        body: {
+          projectId: 2,
+          seeds: LIST.seeds,
+          market: LIST.market,
+          by: 'person',
+        },
+      }),
+    ),
+  );
+  void find;
 });
 
 test('a failed dig is not shown above the list; a failed re-find newer than the list says the list is the earlier one', async () => {
@@ -513,14 +624,14 @@ test('group tabs stay on one line: those that do not fit go under More, and the 
     .mockReturnValue(100);
   const room = vi
     .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
-    .mockReturnValue(400);
+    .mockReturnValue(500);
   try {
     mount('/keywords?tab=suggest&group=dig1');
     await screen.findByText('approval workflow software');
-    // 400 wide less padding fits More and two tabs: All, then the selected group in place of the next one.
+    // 500 wide less padding and Edit groups fits More and two tabs: All, then the selected group in place of the next one.
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
       `${$t('keywordSuggestions.allTab')} 3`,
-      `${$t('keywordSuggestions.digTab', { 0: 'approval workflow' })} 1`,
+      'approval workflow 1',
     ]);
     fireEvent.click(
       screen.getByRole('button', { name: `${$t('common.more')} 2` }),
