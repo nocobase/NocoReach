@@ -153,6 +153,32 @@ test('the chat panel starts online without type tabs and puts the picker inside 
   fireEvent.click(screen.getByTestId('chat-header-button'));
   expect(panel.toggleChat).toHaveBeenCalledOnce();
 });
+test('nothing in the chat panel can stretch the page beside it', () => {
+  render(
+    <MemoryRouter>
+      <OnlineChatProvider>
+        <ChatPanel />
+      </OnlineChatProvider>
+    </MemoryRouter>,
+  );
+  const panelElement = screen.getByTestId('chat-panel');
+  // Screen-reader-only text is absolutely positioned. Laid out against the panel instead of the scroller around it, a
+  // long conversation made the whole document taller, and the page beside the chat scrolled on into blank space
+  // (2026-10-28). Each scroller is the containing block of what it scrolls, and the panel clips the rest.
+  expect(panelElement).toHaveClass('overflow-hidden');
+  const scrollers = [
+    ...panelElement.querySelectorAll<HTMLElement>('[class*="overflow-y-auto"]'),
+  ];
+  expect(scrollers).toContain(screen.getByRole('log'));
+  for (const scroller of scrollers) expect(scroller).toHaveClass('relative');
+  fireEvent.click(
+    within(panelElement).getByRole('button', { name: '对话记录' }),
+  );
+  for (const scroller of panelElement.querySelectorAll<HTMLElement>(
+    '[class*="overflow-y-auto"]',
+  ))
+    expect(scroller).toHaveClass('relative');
+});
 test('Enter submits once while Shift+Enter and Chinese composition preserve the draft', async () => {
   api.mockReturnValue(new Promise(() => {}));
   mount();

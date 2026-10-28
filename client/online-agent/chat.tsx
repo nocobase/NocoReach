@@ -333,7 +333,7 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
           : $t('onlineAgent.noProject')}
       </p>
       {history ? (
-        <div className='min-h-0 flex-1 overflow-y-auto'>
+        <div className='relative min-h-0 flex-1 overflow-y-auto'>
           <OnlineError error={conversations?.error} retry={reload} />
           {conversations.loading && !conversations.data && (
             <div role='status' aria-label={$t('common.loading')}>
@@ -386,7 +386,10 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
                 48;
               setAwayFromEnd(!followingRef.current);
             }}
-            className='flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto overscroll-contain px-1 py-3 focus-visible:outline-2 focus-visible:outline-ring'
+            // `relative`: screen-reader-only text (`sr-only`, absolutely positioned) is laid out against this scroller
+            // and clipped by it. Positioned against the panel instead, it stretched the whole document, and the page
+            // beside the chat scrolled on into blank space (2026-10-28, Keywords).
+            className='relative flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto overscroll-contain px-1 py-3 focus-visible:outline-2 focus-visible:outline-ring'
             aria-label={$t('onlineAgent.transcript')}
           >
             <OnlineError error={loadError} retry={reload} />
