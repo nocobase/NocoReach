@@ -38,6 +38,12 @@ export const CONNECT_SOURCES: readonly ConnectSource[] = [
     via: 'cli',
   },
   {
+    id: 'github-discovery',
+    name: 'githubDiscovery.title',
+    needs: ['githubDiscovery.needs'],
+    via: 'browser',
+  },
+  {
     id: 'github-traffic',
     name: 'GitHub Traffic',
     needs: [
@@ -224,6 +230,10 @@ export type StatusInput = {
     slack: { connected: boolean };
   } | null;
   community?: { connected: boolean; lastSync?: { ok: boolean } | null } | null;
+  githubDiscovery?: {
+    connected: boolean;
+    lastRun?: { ok: boolean } | null;
+  } | null;
   github?: {
     connected: boolean;
     token?: { error: string | null } | null;
@@ -268,6 +278,12 @@ export function connectionState(id: string, input: StatusInput): SourceState {
         ? 'partial'
         : 'ready';
   }
+  if (id === 'github-discovery')
+    return input.githubDiscovery?.connected
+      ? input.githubDiscovery.lastRun?.ok === false
+        ? 'attention'
+        : 'connected'
+      : 'ready';
   if (id === 'github') {
     if (input.github?.connected) return 'connected';
     const repos = (input.publicSources || []).filter(

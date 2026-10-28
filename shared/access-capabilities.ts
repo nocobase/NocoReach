@@ -132,15 +132,26 @@ const SITE_ACTIONS: Record<Site, { use: string[]; configure: string[] }> = {
   github: {
     use: [
       ...list('nrGitHub', ['status', 'sync', 'backfill']),
+      ...list('nrGitHubDiscovery', ['status', 'list', 'get', 'scan', 'review']),
       'nrDataViews.github',
     ],
-    configure: list('nrGitHub', [
-      'preview',
-      'connect',
-      'setToken',
-      'removeToken',
-      'disconnect',
-    ]),
+    configure: [
+      ...list('nrGitHubDiscovery', [
+        'setToken',
+        'removeToken',
+        'saveRule',
+        'removeRule',
+        'setEnabled',
+        'preview',
+      ]),
+      ...list('nrGitHub', [
+        'preview',
+        'connect',
+        'setToken',
+        'removeToken',
+        'disconnect',
+      ]),
+    ],
   },
   website: {
     use: list('nrSiteContent', ['summary', 'list', 'refresh']),

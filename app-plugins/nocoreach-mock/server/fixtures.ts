@@ -1,3 +1,4 @@
+import { githubDiscoveryFixture } from './github-discovery.js';
 import { createHash } from 'node:crypto';
 
 import type { MockRunContext } from './types.js';
@@ -2074,6 +2075,8 @@ function github(
   c: FixtureContext,
 ): Response | undefined {
   if (u.hostname !== 'api.github.com') return undefined;
+  const discovery = githubDiscoveryFixture(u);
+  if (discovery) return discovery;
   const b = body(init),
     repo = repoName(u, b, fixtureProduct(c).repository),
     p = u.pathname;

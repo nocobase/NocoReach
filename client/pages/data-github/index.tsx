@@ -1,3 +1,5 @@
+import { DiscoveryResults } from '../github-discovery/results.js';
+import { Outlet, useLocation } from 'react-router';
 import { $t, $tj } from "#i18n";
 import { usePageTab } from '#hooks/use-page-tab';
 // GitHub (网站与产品). 我们的仓库 rebuilt 2026-10-14 in the shape of 访问 (user request: NocoReach's own style, a page
@@ -41,24 +43,26 @@ export default function DataGitHub() {
   const [range, setRange] = useRange();
   const [params, setParams] = useSearchParams();
   const [metric, setMetric] = useState<MetricKey>("stars");
-  const tab = params.get("view") === "hot" ? "hot" : "repo";
-  usePageTab(tab === 'hot' ? $t('githubHot.tab') : $t('githubHot.ourRepository'));
-  const choose = (v: string) => { const p = new URLSearchParams(params); if (v === "hot") p.set("view", "hot"); else p.delete("view"); setParams(p, { replace: true }); };
+  const location = useLocation();
+  const tab = location.pathname.includes('/github/discovery/') || params.get('view') === 'discovery' ? 'discovery' : params.get('view') === 'hot' ? 'hot' : 'repo';
+  usePageTab(tab === 'discovery' ? $t('githubDiscovery.tab') : tab === 'hot' ? $t('githubHot.tab') : $t('githubHot.ourRepository'));
+  const choose = (v: string) => { const p = new URLSearchParams(params); if (v === 'hot' || v === 'discovery') p.set('view', v); else p.delete('view'); setParams(p, { replace: true }); };
   const custom = !validRange(range);
   const r = RANGES.includes(range.range) ? range : { range: "28" };
   const { data: view, error } = useFreshData(project && !custom && tab === "repo" ? `data-view:github:${project.id}:${JSON.stringify(r)}` : null, () => api.action<View>("nrDataViews", "github", { method: "POST", body: { projectId: project!.id, ...r }, unwrap: "data" }));
   const w = view?.window, link = view?.url ? safeLink(view.url) : null;
   const repo = view?.repo ? (link ? <a className="nr-link inline-flex items-center gap-0.5" href={link} target="_blank" rel="noreferrer">{view.repo}<ArrowUpRight className="size-3" /></a> : view.repo) : null;
   return (
-    <PageContainer className="nr-data-page">
+    <><PageContainer className="nr-data-page">
       <PageHeader info={tab === "repo" && view?.notes?.length ? <NotesTip notes={view.notes} /> : undefined} title="GitHub" description={$t('dataGithub.pageSummary')} />
       <Tabs value={tab} onValueChange={(v) => choose(String(v))}>
         <TabsList variant="line" className="h-auto! justify-start">
           <TabsTrigger value="repo">{$t('githubHot.ourRepository')}</TabsTrigger>
+          <TabsTrigger value='discovery'>{$t('githubDiscovery.tab')}</TabsTrigger>
           <TabsTrigger value="hot">{$t('githubHot.tab')}</TabsTrigger>
         </TabsList>
       </Tabs>
-      {tab === "hot" ? (project ? <HotTab projectId={project.id} /> : null) : <>
+      {tab === 'discovery' ? (project ? <DiscoveryResults key={project.id} projectId={project.id} /> : null) : tab === "hot" ? (project ? <HotTab projectId={project.id} /> : null) : <>
       <RangePicker value={r} onChange={setRange} options={RANGES} summary={w && repo ? (w.all ? $tj('dataGithub.repoRangeAll', { 0: repo, 1: formatDate(w.start), 2: formatDate(w.end) }) : $tj('dataGithub.repoRange', { 0: repo, 1: formatDate(w.start), 2: formatDate(w.end), 3: w.days })) : undefined} />
       {error ? <LoadError title={$t('dataGithub.notLoadGithubData')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={6} /> : null}
@@ -77,7 +81,7 @@ export default function DataGitHub() {
       ) : null}
       </>}
       <HandOffBar projectId={project?.id} />
-    </PageContainer>
+    </PageContainer><Outlet /></>
   );
 }
 

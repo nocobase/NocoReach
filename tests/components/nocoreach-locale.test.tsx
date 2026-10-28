@@ -150,18 +150,18 @@ describe('NocoReach language integration', () => {
       );
       await screen.findByText($t('common.websiteContent'));
       const cards = document.querySelectorAll('[data-source-id]');
-      expect(cards).toHaveLength(22);
+      expect(cards).toHaveLength(23);
       expect(
         categories.map(
           (category) =>
             getCatalog().filter((source) => source.category === category.id)
               .length,
         ),
-      ).toEqual([2, 6, 5, 9]);
+      ).toEqual([2, 6, 5, 10]);
       expect(
         new Set([...cards].map((card) => card.getAttribute('data-source-id')))
           .size,
-      ).toBe(22);
+      ).toBe(23);
       expect(document.body).toHaveTextContent($t('dataSources.available'));
     },
   );
@@ -190,7 +190,7 @@ describe('NocoReach language integration', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent(
       $t('common.connectValue', { 0: $t('common.websiteContent') }),
     );
-    expect(document.querySelectorAll('[data-source-id]')).toHaveLength(22);
+    expect(document.querySelectorAll('[data-source-id]')).toHaveLength(23);
     await act(() => i18n.changeLanguage('zh-CN'));
     expect(screen.getByRole('textbox', { name: '官网地址' })).toBe(input);
     expect(input).toHaveValue('https://example.com/draft');

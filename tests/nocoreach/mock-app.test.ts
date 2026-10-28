@@ -28,6 +28,7 @@ import {
 } from '../../server/nocoreach/mock-demo';
 import { nocoReachToken } from '../../server/providers/nocoreach';
 import type { LegacyContext } from '../../server/nocoreach/legacy/context';
+import { newDiscoveryRule } from '../../shared/github-discovery';
 import {
   fixtureCatalog,
   FIXTURE_PRODUCT,
@@ -243,7 +244,10 @@ test('canonical repository status names remain failing HTTP responses through cl
     expect(payload.error.code).toBe(expected);
     expect(payload.data).toBeUndefined();
   }
-  runtime.legacy.resources.define({ name: 'nrMock', actions: { status: original } });
+  runtime.legacy.resources.define({
+    name: 'nrMock',
+    actions: { status: original },
+  });
 });
 
 test('mock admin API enforces anonymous/member/outsider roles, revision, IDs and persistent isolated settings', async ({
@@ -1545,7 +1549,7 @@ for (const target of [
     npm: '@atlasqa/sdk',
   },
 ]) {
-  test(`all 21 catalog connections collect usable synthetic data for ${target.domain} with zero provider egress`, async ({
+  test(`all catalog connections collect usable synthetic data for ${target.domain} with zero provider egress`, async ({
     testApp,
   }) => {
     const { call, plugin, id, configure, admin } = await setup(testApp, target);
@@ -1626,6 +1630,47 @@ for (const target of [
     ['github', 'github-traffic', 'github-discussions'].forEach((source) =>
       covered.add(source),
     );
+
+    const initialDiscovery = await data(call('nrGitHubDiscovery', 'status'));
+    expect(initialDiscovery).toMatchObject({
+      connected: false,
+      credential: 'shared',
+      rules: [],
+    });
+    const configuredDiscovery = await data(
+      call('nrGitHubDiscovery', 'saveRule', {
+        revision: initialDiscovery.revision,
+        rule: newDiscoveryRule(true),
+      }),
+    );
+    expect(configuredDiscovery.connected).toBe(true);
+    await data(call('nrGitHubDiscovery', 'scan'));
+    await plugin.githubDiscovery.idle(id);
+    expect(await data(call('nrGitHubDiscovery', 'status'))).toMatchObject({
+      running: false,
+      savedCount: 3,
+      lastRun: { ok: true, errors: [] },
+    });
+    const discovered = await data(
+      call('nrGitHubDiscovery', 'list', { status: 'verified' }),
+    );
+    expect(discovered.total).toBe(1);
+    expect(discovered.items[0]).toMatchObject({
+      name: 'demo-ecosystem/support-desk',
+      matches: [
+        {
+          status: 'verified',
+          commit: 'a'.repeat(40),
+          evidence: expect.arrayContaining([
+            expect.objectContaining({
+              path: 'package.json',
+              matched: true,
+            }),
+          ]),
+        },
+      ],
+    });
+    covered.add('github-discovery');
 
     // Source-code configuration is a local record, not a provider feed or a real Runner invocation.
     const agent = await data(call('nrAgent', 'status'));

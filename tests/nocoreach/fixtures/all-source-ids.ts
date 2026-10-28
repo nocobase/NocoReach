@@ -5,6 +5,7 @@ export const ALL_SOURCE_IDS = [
   'github',
   'github-traffic',
   'github-discussions',
+  'github-discovery',
   'packages',
   'repo',
   'articles',

@@ -32,6 +32,7 @@ const managementActions: Record<string, readonly string[]> = {
   gsc: google,
   ga4: google,
   github,
+  'github-discovery': actions('nrGitHubDiscovery', ['status', 'setToken', 'removeToken', 'saveRule', 'removeRule', 'setEnabled', 'scan']),
   'github-traffic': github,
   'github-discussions': github,
   site: actions('nrSiteContent', ['discover', 'confirm', 'remove']),

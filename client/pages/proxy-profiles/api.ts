@@ -120,6 +120,7 @@ export const sourceConnection: Record<string, string> = {
   xiaohongshu: 'xiaohongshu',
   gsc: 'google',
   github: 'github',
+  'github-discovery': 'github',
   'github-traffic': 'github',
   'github-discussions': 'github',
   keywords: 'dataforseo',

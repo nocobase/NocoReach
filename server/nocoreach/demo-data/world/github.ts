@@ -1,3 +1,4 @@
+import { githubDiscoveryFixture } from '../../../../app-plugins/nocoreach-mock/server/github-discovery.js';
 import {
   DAY,
   HOUR,
@@ -478,6 +479,8 @@ export function github(
     return r ? textResponse(world.text(r.readme)) : notFound();
   }
   if (u.hostname !== 'api.github.com') return undefined;
+  const discovery = githubDiscoveryFixture(u);
+  if (discovery) return discovery;
   const b = body(init);
   const p = u.pathname;
   if (p === '/search/repositories') return searchRepositories(world, u);

@@ -93,7 +93,7 @@ test('enabled deployments initialize a browsable demo before readiness without o
   expect(state.data.runs).toHaveLength(0);
 });
 
-test('demo catalog connects simulated sources, leaves publishing unconfigured and keeps deliberate disconnections', async ({
+test('demo catalog connects simulated sources, leaves publishing and discovery rules unconfigured and keeps deliberate disconnections', async ({
   testApp,
   connection,
 }) => {
@@ -112,6 +112,7 @@ test('demo catalog connects simulated sources, leaves publishing unconfigured an
     ['site', 'nrSiteContent', 'summary'],
     ['keyword', 'nrKeywords', 'status'],
     ['github', 'nrGitHub', 'status'],
+    ['githubDiscovery', 'nrGitHubDiscovery', 'status'],
     ['community', 'nrCommunity', 'status'],
     ['repo', 'nrAgent', 'status'],
     ['packages', 'nrPackages', 'status'],
@@ -151,10 +152,17 @@ test('demo catalog connects simulated sources, leaves publishing unconfigured an
       .map((source) => [source.id, sourceState(source, input as StatusInput)]),
   );
   expect(Object.keys(states).length).toBeGreaterThan(15);
+  expect(input.githubDiscovery).toMatchObject({
+    credential: 'shared',
+    connected: false,
+    rules: [],
+    savedCount: 0,
+    lastRun: null,
+  });
   for (const [source, state] of Object.entries(states))
     expect({ [source]: state }).toEqual({
       [source]:
-        source === 'articles'
+        source === 'articles' || source === 'github-discovery'
           ? 'ready'
           : source === 'xiaohongshu'
             ? 'done'

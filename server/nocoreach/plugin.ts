@@ -26,6 +26,7 @@ import { ChatSource } from './chat-source.js';
 import { CommunitySource } from './community-source.js';
 import { CompetitorResearch } from './competitor-research.js';
 import { CompetitorWatch } from './competitor-watch.js';
+import { GitHubDiscovery } from './github-discovery/service.js';
 import { GitHubTrends } from './github-trends.js';
 import { SearchIndex } from './search-index.js';
 import type { DemoProjects } from './demo-data/upstream.js';
@@ -74,6 +75,8 @@ const CONFIG='NOREACH_GOOGLE_';
 // Changed: settings live in nrVariables (legacy/variables.ts) instead of NocoBase environment variables; the tables come
 // from a migration; NocoBase 3 has no generic table API to guard; redirects go to the app's own base path.
 export class Connections{
+ githubDiscovery!: GitHubDiscovery;
+ githubDiscoveryCron?: ReturnType<LegacyApp['cronJobManager']['addJob']>;
  sync: SyncService;
  analysis: DailyAnalysis;
  youtube: YouTubeSource;
@@ -155,6 +158,7 @@ export class Connections{
   this.reddit=new RedditSource(this);this.reddit.register(windowFor);
   this.trends=new TrendsSource(this);this.trends.register();
   this.competitors=new CompetitorWatch(this);this.competitors.register();
+  this.githubDiscovery=new GitHubDiscovery(this);this.githubDiscovery.register();
   this.githubTrends=new GitHubTrends(this);this.githubTrends.register();
   this.competitorResearch=new CompetitorResearch(this);this.competitorResearch.register();
   this.aiQuestions=new AiQuestions(this);this.aiQuestions.register();
@@ -201,6 +205,7 @@ export class Connections{
   this.siteCron=this.app.cronJobManager.addJob({name:'siteCron',cronTime:'0 * * * * *',onTick:()=>this.siteContent.tick().catch(e=>this.app.logger.warn('NocoReach site content tick failed',{message:e?.message}))});
   this.githubCron=this.app.cronJobManager.addJob({name:'githubCron',cronTime:'0 */10 * * * *',onTick:()=>this.github.tick().catch(e=>this.app.logger.warn('NocoReach GitHub tick failed',{message:e?.message}))});
   // GitHub 热点 once a day per project (github-trends.ts); the tick skips projects already read today.
+  this.githubDiscoveryCron=(this.app as LegacyApp).cronJobManager.addJob({name:'githubDiscoveryCron',cronTime:'0 */10 * * * *',onTick:()=>this.githubDiscovery.tick().catch(()=>(this.app as LegacyApp).logger.warn('GitHub discovery tick failed'))});
   this.githubTrendsCron=this.app.cronJobManager.addJob({name:'githubTrendsCron',cronTime:'0 7,37 * * * *',onTick:()=>this.githubTrends.tick().catch(e=>this.app.logger.warn('NocoReach GitHub trends tick failed',{message:e?.message}))});
   this.communityCron=this.app.cronJobManager.addJob({name:'communityCron',cronTime:'30 */10 * * * *',onTick:()=>this.community.tick().catch(e=>this.app.logger.warn('NocoReach community tick failed',{message:e?.message}))});
   this.packagesCron=this.app.cronJobManager.addJob({name:'packagesCron',cronTime:'45 */10 * * * *',onTick:()=>this.packages.tick().catch(e=>this.app.logger.warn('NocoReach packages tick failed',{message:e?.message}))});
@@ -221,5 +226,5 @@ export class Connections{
   this.analysisCron=this.app.cronJobManager.addJob({name:'analysisCron',cronTime:'10 * * * * *',onTick:()=>this.analysis.tick().catch(e=>this.app.logger.warn('NocoReach analysis tick failed',{message:e?.message}))});
   this.redditCron=this.app.cronJobManager.addJob({name:'redditCron',cronTime:'0 25 * * * *',onTick:()=>this.reddit.tick().catch(e=>this.app.logger.warn('NocoReach Reddit tick failed',{message:e?.message}))});
  }
- async afterDisable(){await Promise.all([this.trends,this.community,this.reddit,this.hackernews,this.packages,this.xSource,this.chat].map(async(source:{close():Promise<void>}|undefined)=>{if(source)await source.close();}));if(this.youtube)await this.youtube.stop();if(this.youtubeCron)(this.app as LegacyApp).cronJobManager.removeJob(this.youtubeCron);this.bilibili?.stop();this.xiaohongshu?.stop();if(this.taskExecution)this.taskExecution.stop();if(this.taskCron)this.app.cronJobManager.removeJob(this.taskCron);if(this.syncCron)this.app.cronJobManager.removeJob(this.syncCron);if(this.siteCron)this.app.cronJobManager.removeJob(this.siteCron);if(this.githubCron)this.app.cronJobManager.removeJob(this.githubCron);if(this.githubTrendsCron)this.app.cronJobManager.removeJob(this.githubTrendsCron);if(this.communityCron)this.app.cronJobManager.removeJob(this.communityCron);if(this.packagesCron)this.app.cronJobManager.removeJob(this.packagesCron);if(this.hackernewsCron)this.app.cronJobManager.removeJob(this.hackernewsCron);if(this.redditCron)this.app.cronJobManager.removeJob(this.redditCron);if(this.memoryCron)this.app.cronJobManager.removeJob(this.memoryCron);if(this.trendsCron)this.app.cronJobManager.removeJob(this.trendsCron);if(this.competitorCron)this.app.cronJobManager.removeJob(this.competitorCron);if(this.competitorResearchCron)this.app.cronJobManager.removeJob(this.competitorResearchCron);if(this.aiQuestionsCron)this.app.cronJobManager.removeJob(this.aiQuestionsCron);if(this.xCron)this.app.cronJobManager.removeJob(this.xCron);if(this.chatCron)this.app.cronJobManager.removeJob(this.chatCron);if(this.rankCron)this.app.cronJobManager.removeJob(this.rankCron);}
+ async afterDisable(){await this.githubDiscovery?.close();if(this.githubDiscoveryCron)(this.app as LegacyApp).cronJobManager.removeJob(this.githubDiscoveryCron);await Promise.all([this.trends,this.community,this.reddit,this.hackernews,this.packages,this.xSource,this.chat].map(async(source:{close():Promise<void>}|undefined)=>{if(source)await source.close();}));if(this.youtube)await this.youtube.stop();if(this.youtubeCron)(this.app as LegacyApp).cronJobManager.removeJob(this.youtubeCron);this.bilibili?.stop();this.xiaohongshu?.stop();if(this.taskExecution)this.taskExecution.stop();if(this.taskCron)this.app.cronJobManager.removeJob(this.taskCron);if(this.syncCron)this.app.cronJobManager.removeJob(this.syncCron);if(this.siteCron)this.app.cronJobManager.removeJob(this.siteCron);if(this.githubCron)this.app.cronJobManager.removeJob(this.githubCron);if(this.githubTrendsCron)this.app.cronJobManager.removeJob(this.githubTrendsCron);if(this.communityCron)this.app.cronJobManager.removeJob(this.communityCron);if(this.packagesCron)this.app.cronJobManager.removeJob(this.packagesCron);if(this.hackernewsCron)this.app.cronJobManager.removeJob(this.hackernewsCron);if(this.redditCron)this.app.cronJobManager.removeJob(this.redditCron);if(this.memoryCron)this.app.cronJobManager.removeJob(this.memoryCron);if(this.trendsCron)this.app.cronJobManager.removeJob(this.trendsCron);if(this.competitorCron)this.app.cronJobManager.removeJob(this.competitorCron);if(this.competitorResearchCron)this.app.cronJobManager.removeJob(this.competitorResearchCron);if(this.aiQuestionsCron)this.app.cronJobManager.removeJob(this.aiQuestionsCron);if(this.xCron)this.app.cronJobManager.removeJob(this.xCron);if(this.chatCron)this.app.cronJobManager.removeJob(this.chatCron);if(this.rankCron)this.app.cronJobManager.removeJob(this.rankCron);}
 }
