@@ -11,6 +11,8 @@ const input = z.strictObject({
   mode: z.enum(['list', 'group']).default('list'),
   seeds: z.array(z.string().min(2).max(80)).min(1).max(15).optional(),
   direction: z.string().min(2).max(60).optional(),
+  name: z.string().min(1).max(24).optional(),
+  restore: z.array(z.string().min(1).max(80)).max(150).optional(),
   market: market.optional(),
 });
 
@@ -64,7 +66,7 @@ export function keywordRunTool(
   return {
     name: 'propose_keyword_run',
     description:
-      "Propose a keyword lookup for Keywords › AI suggestions; it looks nothing up and saves nothing. mode list (default) finds the whole list again: give seeds as the complete new list of seed words (for an edit: the current seeds with some added or removed), or leave seeds out to have the AI choose new ones (with direction to lean them, e.g. toward use cases), and give market only to switch markets (locationCode and language: 2840 en United States, 2826 en United Kingdom, 2124 en Canada, 2036 en Australia, 2702 en Singapore, 2276 de Germany, 2250 fr France, 2392 ja Japan, 2158 zh-TW Taiwan, 2344 zh-TW Hong Kong). mode group digs from a direction and adds a group named after it (seeds optional). Returns the seed words before and after with why the AI chose each new one, whether they are the same as now, and the most the lookup may cost: seeds looked up in the last 30 days are free, and the month's spending against the budget. The user sees this in the conversation and confirms it there.",
+      "Propose a keyword lookup for Keywords › AI suggestions; it looks nothing up and saves nothing. mode list (default) finds the whole list again: give seeds as the complete new list of seed words (for an edit: the current seeds with some added or removed), or leave seeds out to have the AI choose new ones (with direction to lean them, e.g. toward use cases), and give market only to switch markets (locationCode and language: 2840 en United States, 2826 en United Kingdom, 2124 en Canada, 2036 en Australia, 2702 en Singapore, 2276 de Germany, 2250 fr France, 2392 ja Japan, 2158 zh-TW Taiwan, 2344 zh-TW Hong Kong). mode group digs from a direction and adds a group (seeds optional); give name, a short name for the group in the user's language of at most 16 characters (such as 自托管与开源 or Self-hosting), and a direction already dug adds to that group. Keywords the user removed stay out of every lookup; pass restore with the ones the user asks to have back. Returns the seed words before and after with why the AI chose each new one, whether they are the same as now, and the most the lookup may cost: seeds looked up in the last 30 days are free, and the month's spending against the budget. The user sees this in the conversation and confirms it there.",
     inputSchema: z.toJSONSchema(input),
     async execute(args) {
       await authorize();
@@ -76,6 +78,8 @@ export function keywordRunTool(
           mode: v.mode === 'group' ? 'dig' : 'list',
           seeds: v.seeds,
           direction: v.direction,
+          name: v.name,
+          restore: v.restore,
           market: v.mode === 'group' ? undefined : v.market,
         });
         await authorize();
@@ -110,7 +114,14 @@ interface SuggestionView {
   lastError?: { message: string } | null;
   dataforseo: boolean;
   items: (Item & { site?: { position: number } | null })[];
-  digs?: { id: string; direction: string; seeds: string[]; items: Item[] }[];
+  digs?: {
+    id: string;
+    direction: string;
+    name?: string | null;
+    seeds: string[];
+    items: Item[];
+  }[];
+  removed?: string[];
 }
 const quote = (text: string) => `"${text.replaceAll('"', "'")}"`;
 /**
@@ -160,11 +171,13 @@ export async function keywordsPageContext(
       running: v.running ?? null,
       lastError: v.lastError?.message ?? null,
       groupsDug: (v.digs ?? []).map((d) => ({
-        name: d.direction,
+        name: d.name ?? null,
+        direction: d.direction,
         seeds: d.seeds,
         keywords: d.items.map((i) => i.keyword),
       })),
       list: v.items.slice(0, 50).map(row),
+      removedByUser: (v.removed ?? []).slice(-100),
     }),
   ].join('\n');
 }

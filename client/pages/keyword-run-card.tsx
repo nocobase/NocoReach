@@ -25,6 +25,7 @@ type View = {
   digs: {
     id: string;
     direction: string;
+    name?: string | null;
     seeds: string[];
     at: string;
     items: unknown[];
@@ -34,6 +35,11 @@ type View = {
 };
 const same = (a: string[], b: string[]) =>
   a.length === b.length && a.every((x) => b.includes(x));
+const directionKey = (v: string | null | undefined) =>
+  String(v ?? '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
 const call = <T,>(projectId: string, action: string, body: object = {}) =>
   api.action<T>('nrKeywordSuggest', action, {
     method: 'POST',
@@ -44,10 +50,11 @@ const call = <T,>(projectId: string, action: string, body: object = {}) =>
 /** Whether the list already reads as the proposal would leave it: its seeds and market, or its dug group. */
 function doneIn(p: KeywordRunProposal, view: View) {
   if (p.kind === 'dig')
+    // A dig in a direction already dug lands in that group, whose seeds then include these.
     return view.digs.find(
       (d) =>
-        d.direction === p.direction &&
-        same(d.seeds, p.after) &&
+        directionKey(d.direction) === directionKey(p.direction) &&
+        p.after.every((seed) => d.seeds.includes(seed)) &&
         d.at > (p.revision ?? ''),
     );
   return view.at !== p.revision &&
@@ -139,8 +146,9 @@ export function KeywordRunCard({
           seeds: p.after,
           notes: p.notes,
           by: p.by,
+          ...(p.restore?.length ? { restore: p.restore } : {}),
           ...(p.kind === 'dig'
-            ? { direction: p.direction }
+            ? { direction: p.direction, name: p.name }
             : { market: p.market }),
         },
       );
@@ -187,7 +195,9 @@ export function KeywordRunCard({
       <div className='flex flex-wrap items-center gap-2'>
         <h3 className='font-medium'>
           {p.kind === 'dig'
-            ? $t('keywordSuggestions.digTab', { 0: p.direction ?? '' })
+            ? $t('keywordSuggestions.digTab', {
+                0: p.mergesInto?.name ?? p.name ?? p.direction ?? '',
+              })
             : $t('keywordRun.findAgain')}
         </h3>
         <Tag tone='grey'>{$t(marketLabel(p.market))}</Tag>
@@ -244,6 +254,20 @@ export function KeywordRunCard({
       ) : (
         chips(p.after, [], '')
       )}
+      {p.mergesInto ? (
+        <p className='text-muted-foreground'>
+          {$t('keywordRun.mergeInto', { 0: p.mergesInto.name })}
+        </p>
+      ) : null}
+      {p.restore?.length ? (
+        <p className='text-muted-foreground'>
+          {$t('keywordRun.restore', {
+            0: p.restore.join(
+              getCurrentLocale().startsWith('zh') ? '、' : ', ',
+            ),
+          })}
+        </p>
+      ) : null}
       {p.same ? (
         <p className='text-muted-foreground'>{$t('keywordRun.same')}</p>
       ) : null}

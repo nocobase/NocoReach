@@ -7,6 +7,11 @@ export interface KeywordRunProposal {
   market: { locationCode: number; language: string };
   marketChanged: boolean;
   direction: string | null;
+  /** A dig's short group name in the user's language, and the group it adds to when one was dug in this direction. */
+  name: string | null;
+  mergesInto: { id: string; name: string } | null;
+  /** Removed keywords the user asked to have back. */
+  restore: string[];
   before: string[];
   after: string[];
   added: string[];

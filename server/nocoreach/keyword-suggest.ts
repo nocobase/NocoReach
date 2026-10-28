@@ -107,6 +107,16 @@ function shortlist(pool,exclude){const all=[...pool.values()].filter(c=>!exclude
 async function inTurn(list,n,fn){const out=new Array(list.length);let next=0;await Promise.all(Array.from({length:Math.min(n,list.length)},async()=>{while(next<list.length){const i=next++;out[i]=await fn(list[i],i);}}));return out;}
 const current=s=>s?.version===2?s:null;
 const usedSeeds=s=>[...(s?.seeds||[]),...(s?.digs||[]).flatMap(d=>d.seeds||[])];
+// Keywords the person removed (one by one or with their group): kept out of later lookups unless restored.
+const MAX_REMOVED=1000,MAX_NAME=24;
+const removedOf=s=>new Set((s?.removed||[]).map(k=>String(k).toLowerCase()));
+// The same direction, however it was typed, digs into the same group.
+const directionKey=v=>String(v||'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+// Groups saved before groups merged by direction (2026-10-28) may repeat one: shown and kept as one.
+function mergeDigs(digs){const out=[];for(const d of digs||[]){const same=out.find(x=>directionKey(x.direction)===directionKey(d.direction));
+  if(!same){out.push({...d,items:[...(d.items||[])]});continue;}const have=new Set(same.items.map(i=>i.keyword.toLowerCase()));
+  same.items.push(...(d.items||[]).filter(i=>!have.has(i.keyword.toLowerCase())).map(i=>({...i,dig:same.id})));same.seeds=[...new Set([...(same.seeds||[]),...(d.seeds||[])])];same.name=same.name||d.name||null;}
+ return out;}
 // Per seed: how many real keywords it brought back and how many of them the AI picked.
 const seedStatsOf=(seeds,pool,items)=>seeds.map(seed=>({seed,found:[...pool.values()].filter(c=>c.from.has(seed)).length,picked:items.filter(i=>i.seeds?.includes(seed)).length}));
 const allItems=s=>[...(s?.items||[]),...(s?.digs||[]).flatMap(d=>d.items||[])];
@@ -174,7 +184,7 @@ class KeywordSuggest{
   if(cost.monthUsd+cost.maxUsd>cost.budgetUsd)fail(systemMessageText('keywordSuggest.budgetTooLow',{0:Math.max(0,cost.budgetUsd-cost.monthUsd).toFixed(2),1:(Math.ceil(Number((cost.maxUsd*100).toFixed(6)))/100).toFixed(2)}),409);
   if(this.jobs.has(id))fail(systemMessageText('keywordSuggest.alreadyFinding'),409);
   const job={stage:'seeds',mode,direction:direction||seeds[0]||null,startedAt:new Date().toISOString()};
-  job.promise=this.build(id,{mode,market,seeds,direction:job.direction,notes:Array.isArray(v.notes)?v.notes.slice(0,MAX_SEEDS):[],by:v.by==='ai'?'ai':'person'},stage=>{job.stage=stage;}).finally(()=>this.jobs.delete(id));job.promise.catch(()=>{});this.jobs.set(id,job);return job;}
+  job.promise=this.build(id,{mode,market,seeds,direction:job.direction,name:str(v.name,MAX_NAME)||null,restore:Array.isArray(v.restore)?v.restore.map(k=>str(k,80).toLowerCase()).filter(Boolean).slice(0,MAX_SEEDS*10):[],notes:Array.isArray(v.notes)?v.notes.slice(0,MAX_SEEDS):[],by:v.by==='ai'?'ai':'person'},stage=>{job.stage=stage;}).finally(()=>this.jobs.delete(id));job.promise.catch(()=>{});this.jobs.set(id,job);return job;}
  async build(id,o,progress=()=>{}){const old=current(await this.state(id));
   try{const inp=await this.inputs(id),dig=o.mode==='dig';
    const picked=o.seeds?.length?{seeds:o.seeds,notes:o.notes||[]}:await this.pickSeeds(inp,o.market,{direction:dig?o.direction:null,avoid:dig?usedSeeds(old):[]}),seeds=picked.seeds;
@@ -184,19 +194,36 @@ class KeywordSuggest{
    progress('lookup');const found=await this.lookup(id,seeds,o.market,dig?[]:inp.queries);
    if(found.failed)fail(found.refused||(found.uncertain?systemMessageText('keywordSuggest.lookupUncertain'):systemMessageText('keywordSuggest.keywordDataLookupFailed')),502);
    progress('curate');
-   const items=await this.curate(inp,o.market,found.pool,{direction:dig?o.direction:null,exclude:new Set(dig?allItems(old).map(i=>i.keyword.toLowerCase()):[]),pick:dig?DIG_PICK:PICK});
-   if(!items.length)fail(systemMessageText('keywordSuggest.noKeywordsWithDemand',{0:MIN_VOLUME}),422);
+   // Removed keywords stay out unless the person asked for them back; a dig also skips what the list already has.
+   const restored=new Set(o.restore||[]),removed=[...removedOf(old)].filter(k=>!restored.has(k));
+   const items=await this.curate(inp,o.market,found.pool,{direction:dig?o.direction:null,exclude:new Set([...removed,...(dig?allItems(old).map(i=>i.keyword.toLowerCase()):[])]),pick:dig?DIG_PICK:PICK});
+   if(!items.length)fail(dig?systemMessageText('keywordSuggest.digFoundNothingNew',{0:MIN_VOLUME}):systemMessageText('keywordSuggest.noKeywordsWithDemand',{0:MIN_VOLUME}),422);
    const at=new Date().toISOString(),notes={missedSeeds:found.missed,uncertain:found.uncertain,seedNotes,seedStats:seedStatsOf(seeds,found.pool,items)};let next,group=null;
-   if(dig){group={id:hash(`${o.direction}|${at}`),direction:o.direction,seeds,at,found:found.pool.size,costUsd:found.costUsd,...notes};
-    next={...old,digs:[{...group,items:items.map(i=>({...i,dig:group.id}))},...(old.digs||[])].slice(0,MAX_DIGS),lastError:null};}
+   if(dig){const digs=mergeDigs(old.digs),same=digs.find(d=>directionKey(d.direction)===directionKey(o.direction));
+    // A dig in a direction already dug adds to that group instead of opening a second one.
+    group=same?{...same,seeds:[...new Set([...(same.seeds||[]),...seeds])],at,found:(same.found||0)+found.pool.size,costUsd:usd((same.costUsd||0)+found.costUsd),name:o.name||same.name||null,...notes}
+     :{id:hash(`${o.direction}|${at}`),direction:o.direction,name:o.name||null,seeds,at,found:found.pool.size,costUsd:found.costUsd,...notes};
+    const dug={...group,items:[...(same?.items||[]),...items.map(i=>({...i,dig:group.id}))]};
+    next={...old,removed,digs:[dug,...digs.filter(d=>d.id!==group.id)].slice(0,MAX_DIGS),lastError:null};}
    else{const keys=new Set(items.map(i=>i.keyword.toLowerCase())),keep=old&&old.market.locationCode===o.market.locationCode&&old.market.language===o.market.language;
     // A rebuilt list keeps the groups dug in the same market, minus the keywords the new list now has.
-    next={version:2,at,market:o.market,seeds,seedsBy:o.seeds?.length?(o.by==='ai'?'ai':'person'):'ai',stats:{found:found.pool.size,picked:items.length,minVolume:MIN_VOLUME},costUsd:found.costUsd,...notes,items,
-     digs:keep?(old.digs||[]).map(d=>({...d,items:d.items.filter(i=>!keys.has(i.keyword.toLowerCase()))})).filter(d=>d.items.length):[],lastError:null};}
+    next={version:2,at,market:o.market,removed,seeds,seedsBy:o.seeds?.length?(o.by==='ai'?'ai':'person'):'ai',stats:{found:found.pool.size,picked:items.length,minVolume:MIN_VOLUME},costUsd:found.costUsd,...notes,items,
+     digs:keep?mergeDigs(old.digs).map(d=>({...d,items:d.items.filter(i=>!keys.has(i.keyword.toLowerCase()))})).filter(d=>d.items.length):[],lastError:null};}
    await this.save(id,next);return {state:next,group,items};}
   catch(e){await this.save(id,{...(old||{version:2,market:o.market,seeds:[],items:[],digs:[]}),lastError:{message:e.message,at:new Date().toISOString(),mode:o.mode,direction:o.mode==='dig'?o.direction:null}}).catch(()=>{});throw e;}}
  async view(id){const st=await this.state(id),s=current(st),base={dataforseo:Boolean(this.d4s.config(id)?.verifiedAt),running:this.running(id),maxUsd:runUsd(MAX_SEEDS,QUERIES),minVolume:MIN_VOLUME};
-  return s?{...s,...base}:{...base,market:marketOf(st?.market),seeds:[],items:[],digs:[]};}
+  return s?{...s,digs:mergeDigs(s.digs),...base}:{...base,market:marketOf(st?.market),seeds:[],items:[],digs:[]};}
+ // Editing the list by hand: no edit while a run is going, which would save over it when it ends.
+ async edit(id,fn){if(this.jobs.has(id))fail(systemMessageText('keywordSuggest.alreadyFinding'),409);const s=current(await this.state(id));if(!s?.at)fail(systemMessageText('keywordSuggest.noSuggestionsYet'),409);
+  const next=fn({...s,digs:mergeDigs(s.digs)});next.removed=[...new Set(next.removed||[])].slice(-MAX_REMOVED);await this.save(id,next);return this.view(id);}
+ async renameDig(id,v){const name=str(v.name,MAX_NAME+1);if(!name||name.length>MAX_NAME)fail(systemMessageText('keywordSuggest.groupNameLength',{0:MAX_NAME}),400);
+  return this.edit(id,s=>{if(!s.digs.some(d=>d.id===String(v.digId)))fail(systemMessageText('keywordSuggest.groupNotFound'),404);return {...s,digs:s.digs.map(d=>d.id===String(v.digId)?{...d,name}:d)};});}
+ // Deleting a dug group removes its keywords from the list and keeps them out of later lookups; saved keywords stay.
+ async deleteDig(id,v){return this.edit(id,s=>{const d=s.digs.find(x=>x.id===String(v.digId));if(!d)fail(systemMessageText('keywordSuggest.groupNotFound'),404);
+  return {...s,digs:s.digs.filter(x=>x.id!==d.id),removed:[...(s.removed||[]),...d.items.map(i=>i.keyword.toLowerCase())]};});}
+ async removeItems(id,v){const ids=new Set((Array.isArray(v.ids)?v.ids:[]).map(String).slice(0,MAX_REMOVED));if(!ids.size)fail(systemMessageText('keywordSuggest.pickKeywordsRemove'),400);
+  return this.edit(id,s=>{const gone=allItems(s).filter(i=>ids.has(i.id)).map(i=>i.keyword.toLowerCase());
+   return {...s,items:s.items.filter(i=>!ids.has(i.id)),digs:s.digs.map(d=>({...d,items:d.items.filter(i=>!ids.has(i.id))})).filter(d=>d.items.length),removed:[...(s.removed||[]),...gone]};});}
  // A lookup the chat proposes and the person confirms in it (Keywords › AI suggestions, 2026-10-28: changing seeds is a
  // conversation, not a dialog): the seeds before and after, why the AI chose new ones, whether nothing changed, and the
  // most it may cost with this month's spending. Nothing is written and nothing is looked up; Confirm calls suggest or dig.
@@ -207,7 +234,10 @@ class KeywordSuggest{
   const picked=given.length?{seeds:given,notes:[]}:await this.pickSeeds(await this.inputs(id),market,{direction,avoid:dig?usedSeeds(old):[]});
   const before=dig?[]:old?.seeds||[],sameMarket=!old||(old.market.locationCode===market.locationCode&&old.market.language===market.language);
   const cost=await this.estimate(id,{mode:dig?'dig':'list',market,seeds:picked.seeds});
-  return {kind:dig?'dig':'list',projectId:String(id),revision:old?.at||null,market,marketChanged:!sameMarket,direction:dig?direction||picked.seeds[0]:direction,before,after:picked.seeds,
+  const restore=(Array.isArray(v.restore)?v.restore:[]).map(k=>str(k,80).toLowerCase()).filter(k=>removedOf(old).has(k)).slice(0,MAX_SEEDS*10);
+  const into=dig?mergeDigs(old.digs).find(d=>directionKey(d.direction)===directionKey(direction||picked.seeds[0])):null;
+  return {kind:dig?'dig':'list',projectId:String(id),revision:old?.at||null,market,marketChanged:!sameMarket,direction:dig?direction||picked.seeds[0]:direction,
+   name:dig?str(v.name,MAX_NAME)||into?.name||null:null,mergesInto:into?{id:into.id,name:into.name||into.direction}:null,restore,before,after:picked.seeds,
    added:picked.seeds.filter(k=>!before.includes(k)),removed:before.filter(k=>!picked.seeds.includes(k)),same:!dig&&sameMarket&&sameSeeds(before,picked.seeds),by:given.length?'person':'ai',notes:picked.notes,
    maxUsd:cost.maxUsd,reused:cost.reused,monthUsd:cost.monthUsd,budgetUsd:cost.budgetUsd,withinBudget:cost.monthUsd+cost.maxUsd<=cost.budgetUsd};}
  // Saving keeps where it came from (AI suggestions) and the market numbers it was picked with.
@@ -215,8 +245,8 @@ class KeywordSuggest{
   const spec={locationCode:s.market.locationCode,language:s.market.language},at=new Map((s.digs||[]).map(d=>[d.id,d.at]));
   return this.p.keywordService.store(id,picked.map(i=>{const m=i.metrics;return {keyword:i.keyword,key:candidateKey([id,i.keyword,spec.locationCode,spec.language]),runId:'',payload:{item:{keyword:i.keyword,volume:m.volume,difficulty:m.difficulty,cpc:m.cpc,competition:m.competition,intent:m.intent,monthlySearches:m.monthlySearches},spec,retrievedAt:at.get(i.dig)||s.at,source:systemMessageText('common.aiSuggestions')}};}));}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('keywordSuggest.keywordSuggestionsNotCompleteTry'));}};
-  const run=mode=>wrap(async(id,v)=>{await this.start(id,{mode,seeds:v.seeds,market:v.market,direction:v.direction,notes:v.notes,by:v.by});return this.view(id);});
-  const actions={view:wrap(id=>this.view(id)),suggest:run('list'),dig:run('dig'),save:wrap((id,v)=>this.keep(id,v))};
+  const run=mode=>wrap(async(id,v)=>{await this.start(id,{mode,seeds:v.seeds,market:v.market,direction:v.direction,name:v.name,restore:v.restore,notes:v.notes,by:v.by});return this.view(id);});
+  const actions={view:wrap(id=>this.view(id)),suggest:run('list'),dig:run('dig'),save:wrap((id,v)=>this.keep(id,v)),renameDig:wrap((id,v)=>this.renameDig(id,v)),deleteDig:wrap((id,v)=>this.deleteDig(id,v)),removeItems:wrap((id,v)=>this.removeItems(id,v))};
   this.p.app.resourceManager.define({name:'nrKeywordSuggest',actions});this.p.app.acl.allow('nrKeywordSuggest',Object.keys(actions),'loggedIn');}
 }
 export { KeywordSuggest, specification, result, seedSpec, ideasSpec, labsResult, score, runUsd, GROUPS, MIN_VOLUME, PLACES };

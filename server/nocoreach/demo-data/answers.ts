@@ -464,10 +464,19 @@ function runArguments(request: DemoModelRequest): Record<string, unknown> {
   if (/重新找|find again/iu.test(prompt)) return { mode: 'list', seeds };
   const row = /on the keyword "([^"]{2,80})"/u.exec(request.system)?.[1];
   if (/对比词|竞品|competitor|comparison/iu.test(prompt))
-    return { mode: 'group', direction: 'alternative' };
+    return {
+      mode: 'group',
+      direction: 'alternative',
+      name: request.language === 'en' ? 'Alternatives' : '竞品替代',
+    };
   const quoted = /[“"「]([^”"」]{2,60})[”"」]/u.exec(prompt)?.[1];
   const direction = quoted ?? row ?? 'workflow';
-  return { mode: 'group', direction, seeds: [direction] };
+  // A short group name in the user's language, as the real model is asked to give.
+  const name =
+    request.language === 'en'
+      ? direction.slice(0, 16)
+      : `${direction.split(' ').slice(0, 2).join(' ')}相关`.slice(0, 16);
+  return { mode: 'group', direction, name, seeds: [direction] };
 }
 
 /** Business calls carry their operation as the tag; online agents ask in their own words and get tool-backed answers. */

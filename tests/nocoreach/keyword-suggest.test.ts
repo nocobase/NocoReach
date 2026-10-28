@@ -119,7 +119,7 @@ test('an uncertain lookup is never retried automatically, a run at a time, and a
  await finish(s,{seeds:SEEDS});assert.equal(asked(),1,'the uncertain seed is not asked again');
  // Nothing with enough searches: the previous list stays and the reason is kept for the page.
  const before=(await s.view('1')).items.length;
- await assert.rejects(finish(s,{mode:'dig',direction:'nobody',seeds:['nobody searches this']}),/没有找到月搜索量 50 以上/);
+ await assert.rejects(finish(s,{mode:'dig',direction:'nobody',seeds:['nobody searches this']}),/没有找到列表里还没有的、月搜索量 50 以上/);
  const after=await s.view('1');assert.equal(after.items.length,before);assert.match(after.lastError.message,/月搜索量 50/);
 });
 
@@ -195,4 +195,46 @@ test('the online agent: propose_keyword_run returns a proposal in plain market n
  assert.match(await keywordsPageContext(s,'1','seeds:retool alternative',allowed),/on the seed word "retool alternative"/);
  assert.match(await keywordsPageContext(s,'1','retool alternative',allowed),/on the keyword "retool alternative"/);
  assert.match(await keywordsPageContext(s,'1',undefined,async()=>false),/may not see the suggestions/);
+});
+
+test('editing the list: rename a dug group, delete it (saved keywords stay), remove keywords, which stay out of later lookups until restored',async()=>{
+ fetchFor();const extra=[{keyword:'approval workflow example',group:2,relevance:2,reason:'流程模板'}];
+ const {s,stored}=setup({seeds:input=>input.direction?['approval workflow']:SEEDS,curate:input=>curated(input.direction?extra:[])});
+ await finish(s,{});await finish(s,{mode:'dig',direction:'approval workflow',name:'审批流'});
+ let v=await s.view('1');const dig=v.digs[0];assert.equal(dig.name,'审批流');
+ // Saved before the group goes: deleting the group does not touch saved keywords.
+ await s.keep('1',{ids:[dig.items[0].id]});assert.equal(stored.length,1);
+ assert.equal((await s.renameDig('1',{digId:dig.id,name:'审批流程'})).digs[0].name,'审批流程');
+ await assert.rejects(s.renameDig('1',{digId:dig.id,name:'   '}),/组名需要 1–24 个字/);
+ await assert.rejects(s.renameDig('1',{digId:'nope',name:'x'}),/这组已经不在了/);
+ v=await s.deleteDig('1',{digId:dig.id});assert.equal(v.digs.length,0);assert.deepEqual(v.removed,['approval workflow example']);assert.equal(stored.length,1,'saved keywords stay saved');
+ // Removing rows: gone from the list and from later lookups, even when the AI picks them again.
+ const retool=v.items.find(i=>i.keyword==='retool alternative');
+ v=await s.removeItems('1',{ids:[retool.id]});assert.ok(!v.items.some(i=>i.keyword==='retool alternative'));assert.deepEqual(v.removed,['approval workflow example','retool alternative']);
+ await finish(s,{seeds:SEEDS});v=await s.view('1');assert.ok(!v.items.some(i=>i.keyword==='retool alternative'),'a removed keyword does not come back in a re-find');
+ // The deleted group's keyword stays out of a new dig in its direction too: nothing new is left there.
+ await assert.rejects(finish(s,{mode:'dig',direction:'approval workflow'}),/没有找到列表里还没有的/);
+ // Asked for back in the chat: restore lets it in again.
+ const p=await s.propose('1',{seeds:SEEDS,restore:['retool alternative','never removed']});assert.deepEqual(p.restore,['retool alternative']);
+ await finish(s,{seeds:SEEDS,restore:p.restore});v=await s.view('1');assert.ok(v.items.some(i=>i.keyword==='retool alternative'));assert.ok(!v.removed.includes('retool alternative'));
+ await assert.rejects(s.removeItems('1',{ids:[]}),/请选择要移除的关键词/);
+ // No edits while a run is going: its save would overwrite them.
+ const job=await s.start('1',{seeds:SEEDS});await assert.rejects(s.removeItems('1',{ids:[v.items[0].id]}),/正在找关键词/);await job.promise;
+});
+
+test('a dig in a direction already dug adds to that group; repeated groups saved before are shown as one; a dig with nothing new says so',async()=>{
+ fetchFor();const extraA=[{keyword:'approval workflow example',group:2,relevance:2,reason:'a'}],extraB=[{keyword:'no code database',group:1,relevance:2,reason:'b'}];
+ let round=0;const {s,snaps}=setup({seeds:input=>input.direction?['approval workflow']:SEEDS,curate:input=>curated(input.direction?(round++?extraB:extraA):[])});
+ await finish(s,{});await finish(s,{mode:'dig',direction:'approval workflow',name:'审批流'});
+ const p=await s.propose('1',{mode:'dig',direction:'Approval workflow!',seeds:['approval workflow','approval process']});
+ assert.equal(p.mergesInto.name,'审批流');assert.equal(p.name,'审批流');
+ await finish(s,{mode:'dig',direction:'Approval workflow!',seeds:['approval workflow','approval process']});
+ let v=await s.view('1');assert.equal(v.digs.length,1);assert.deepEqual(v.digs[0].items.map(i=>i.keyword),['approval workflow example','no code database']);
+ assert.deepEqual(v.digs[0].seeds,['approval workflow','approval process']);assert.ok(v.digs[0].items.every(i=>i.dig===v.digs[0].id));
+ // Two groups with one direction from before: one tab.
+ const row=snaps.rows[0];row.payload={...row.payload,digs:[...row.payload.digs,{id:'old',direction:'approval  workflow',seeds:['x'],at:'2026-10-01',items:[{id:'k1',keyword:'approval app',metrics:{volume:90},dig:'old'},{id:'k2',keyword:'no code database',metrics:{volume:2900},dig:'old'}]}]};
+ v=await s.view('1');assert.equal(v.digs.length,1);assert.deepEqual(v.digs[0].items.map(i=>i.keyword),['approval workflow example','no code database','approval app']);
+ // Everything found is already listed: said as such, and not as a failure of the list.
+ await assert.rejects(finish(s,{mode:'dig',direction:'approval workflow',seeds:['approval workflow']}),/没有找到列表里还没有的/);
+ const after=await s.view('1');assert.equal(after.lastError.mode,'dig');
 });

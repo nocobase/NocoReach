@@ -388,3 +388,154 @@ test('a seed chip opens the chat on that seed word', async () => {
     ),
   );
 });
+
+test('a dug group reads by its short name with the direction on hover, and its ⋯ menu renames or deletes it', async () => {
+  view = {
+    ...LIST,
+    digs: [
+      ...LIST.digs,
+      {
+        id: 'dig2',
+        direction:
+          'The system belongs to the company (self-hosted, open source)',
+        name: null,
+        seeds: ['self hosted'],
+        at: '2026-10-27T10:00:00Z',
+        found: 9,
+        items: [item('self hosted crm', '品类与行业词', 720, 'dig2')],
+      },
+    ],
+  };
+  action.mockImplementation(async (_resource: string, name: string) =>
+    name === 'renameDig' || name === 'deleteDig' ? view : view,
+  );
+  mount();
+  await screen.findByText('open source low code platform');
+  const long = screen.getByRole('tab', {
+    name: `${$t('keywordSuggestions.digTab', { 0: 'The system belongs…' })} 1`,
+  });
+  expect(long).toHaveAttribute(
+    'title',
+    $t('keywordSuggestions.digTab', {
+      0: 'The system belongs to the company (self-hosted, open source)',
+    }),
+  );
+  fireEvent.click(
+    screen.getByRole('button', {
+      name: $t('keywordSuggestions.manageGroup', { 0: 'The system belongs…' }),
+    }),
+  );
+  fireEvent.click(
+    await screen.findByRole('menuitem', {
+      name: $t('keywordSuggestions.renameGroup'),
+    }),
+  );
+  const dialog = await screen.findByRole('dialog');
+  fireEvent.change(
+    within(dialog).getByRole('textbox', {
+      name: $t('keywordSuggestions.groupName'),
+    }),
+    { target: { value: '自托管与开源' } },
+  );
+  fireEvent.click(
+    within(dialog).getByRole('button', { name: $t('common.save') }),
+  );
+  await waitFor(() =>
+    expect(action).toHaveBeenCalledWith(
+      'nrKeywordSuggest',
+      'renameDig',
+      expect.objectContaining({
+        body: { projectId: 2, digId: 'dig2', name: '自托管与开源' },
+      }),
+    ),
+  );
+  fireEvent.click(
+    screen.getByRole('button', {
+      name: $t('keywordSuggestions.manageGroup', { 0: 'approval workflow' }),
+    }),
+  );
+  fireEvent.click(
+    await screen.findByRole('menuitem', {
+      name: $t('keywordSuggestions.deleteGroup'),
+    }),
+  );
+  const ask = await screen.findByRole('alertdialog');
+  expect(
+    within(ask).getByText(
+      $t('keywordSuggestions.deleteGroupDescription', { 0: 1 }),
+    ),
+  ).toBeVisible();
+  fireEvent.click(
+    within(ask).getByRole('button', { name: $t('common.delete') }),
+  );
+  await waitFor(() =>
+    expect(action).toHaveBeenCalledWith(
+      'nrKeywordSuggest',
+      'deleteDig',
+      expect.objectContaining({ body: { projectId: 2, digId: 'dig1' } }),
+    ),
+  );
+});
+
+test('a failed dig is not shown above the list; a failed re-find newer than the list says the list is the earlier one', async () => {
+  view = {
+    ...LIST,
+    lastError: {
+      message: 'nothing new',
+      mode: 'dig',
+      at: '2026-10-28T00:00:00Z',
+    },
+  };
+  mount();
+  await screen.findByText('open source low code platform');
+  expect(screen.queryByRole('alert')).toBeNull();
+  cleanup();
+  view = {
+    ...LIST,
+    lastError: {
+      message: 'budget',
+      mode: 'list',
+      at: '2026-10-28T00:00:00Z',
+    },
+  };
+  mount();
+  await screen.findByText('open source low code platform');
+  expect(screen.getByRole('alert').textContent).toContain(
+    $t('keywordSuggestions.lastRunFailed', { 0: 'budget', 1: '10-27' }).split(
+      '10-27',
+    )[0],
+  );
+});
+
+test('group tabs stay on one line: those that do not fit go under More, and the selected one stays shown', async () => {
+  const width = vi
+    .spyOn(HTMLElement.prototype, 'offsetWidth', 'get')
+    .mockReturnValue(100);
+  const room = vi
+    .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+    .mockReturnValue(400);
+  try {
+    mount('/keywords?tab=suggest&group=dig1');
+    await screen.findByText('approval workflow software');
+    // 400 wide less padding fits More and two tabs: All, then the selected group in place of the next one.
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
+      `${$t('keywordSuggestions.allTab')} 3`,
+      `${$t('keywordSuggestions.digTab', { 0: 'approval workflow' })} 1`,
+    ]);
+    fireEvent.click(
+      screen.getByRole('button', { name: `${$t('common.more')} 2` }),
+    );
+    fireEvent.click(
+      await screen.findByRole('menuitem', {
+        name: new RegExp($t('keywordSuggestions.groups.comparison')),
+      }),
+    );
+    const table = screen.getByRole('table');
+    await waitFor(() =>
+      expect(within(table).getByText('retool alternative')).toBeVisible(),
+    );
+  } finally {
+    width.mockRestore();
+    room.mockRestore();
+  }
+});
