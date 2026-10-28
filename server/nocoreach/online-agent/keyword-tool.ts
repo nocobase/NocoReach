@@ -21,6 +21,7 @@ interface Item {
   group: string;
   reason: string;
   seeds?: string[];
+  seed?: string | null;
   metrics: { volume: number | null; difficulty: number | null };
 }
 export interface KeywordRunSource {
@@ -106,7 +107,7 @@ interface SuggestionView {
   seeds?: string[];
   seedsBy?: string;
   seedNotes?: { seed: string; from: string[]; why: string }[];
-  seedStats?: { seed: string; found: number; picked: number }[];
+  seedStats?: { seed: string; found: number | null; picked: number }[];
   stats?: { found: number; picked: number; minVolume: number };
   minVolume: number;
   costUsd?: number;
@@ -144,8 +145,9 @@ const REASONS: Record<string, string> = {
   unrelated: 'not related to the product',
   brand: "another company's brand search",
   intent: 'the search intent does not fit',
-  weaker: 'related, but less worth doing than those picked',
-  direction: "outside the group's direction",
+  weaker:
+    'ranked lower than those picked (at most 40 a lookup, 20 when expanding)',
+  direction: 'outside the expansion direction',
   duplicate: 'means the same as another keyword',
   removed: 'the user removed it before',
   unreviewed: 'ranked too low among the candidates to be shown to the AI',
@@ -172,7 +174,7 @@ export async function keywordsPageContext(
       : focus.kind === 'seeds'
         ? "The user opened this conversation from Keywords › AI suggestions to adjust the seed words. Explain how they were chosen from seedNotes (which inputs led to each: project memory, the site's Search Console queries, competitors, a direction, or the user) and what each found from seedStats; for a change, propose it with propose_keyword_run so the user sees the seeds before and after and the cost, and confirms it."
         : focus.kind === 'seed'
-          ? `The user opened this conversation from Keywords › AI suggestions on the seed word ${quote(focus.seed)}: say why it was chosen (seedNotes), how many real keywords it found and how many were picked (seedStats), and which of the list came from it (each list row names its seeds). To replace or drop it, propose the new seed list with propose_keyword_run.`
+          ? `The user opened this conversation from Keywords › AI suggestions on the seed word ${quote(focus.seed)}: say why it was chosen (seedNotes), how many real keywords it found and how many were picked (seedStats), and which of the list it is counted for (countedForSeed on each list row: every keyword counts for one seed only, the seed itself, the most specific seed it contains, or the seed whose lookup ranked it highest). To replace or drop it, propose the new seed list with propose_keyword_run.`
           : "The user opened this conversation from Keywords › AI suggestions (Ask AI to find keywords), to understand how the seed words were chosen (seedNotes, seedStats), add or remove seed words, expand the keywords in a direction into a new group, or learn why a keyword was not picked (notPicked gives each one's reason; one not listed there was not found by these lookups). Propose any lookup with propose_keyword_run; a keyword already found can be added from Selection rules › View those not picked, at no cost.";
   if (!(await allowed('nrKeywordSuggest', 'view')))
     return `${opened} They may not see the suggestions now; say so.`;
@@ -185,6 +187,7 @@ export async function keywordsPageContext(
     group: i.group,
     position: i.site?.position ?? null,
     seeds: i.seeds ?? [],
+    countedForSeed: i.seed ?? null,
   });
   return [
     opened,

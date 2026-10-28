@@ -39,7 +39,7 @@ import { usePageChange } from "../online-agent/page-changes";
 
 type Market = { locationCode: number; language: string };
 type Metrics = { volume: number | null; difficulty: number | null; cpc: number | null; intent: string | null };
-type Suggestion = { id: string; keyword: string; group: string; intent: string | null; reason: string; by?: "person"; seeds?: string[]; page: string | null; site: { position: number; clicks: number; impressions: number; page: string } | null; metrics: Metrics; dig?: string };
+type Suggestion = { id: string; keyword: string; group: string; intent: string | null; reason: string; by?: "person"; seeds?: string[]; seed?: string | null; page: string | null; site: { position: number; clicks: number; impressions: number; page: string } | null; metrics: Metrics; dig?: string };
 type Dig = { id: string; direction: string; name?: string | null; seeds: string[]; at: string; found: number; items: Suggestion[] };
 type SuggestionView = {
   at?: string; market: Market; seeds: string[]; seedsBy?: "ai" | "person"; stats?: { found: number; picked: number; minVolume: number }; costUsd?: number;
@@ -111,7 +111,8 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
   const all = useMemo(() => [...(view?.items ?? []), ...(view?.digs ?? []).flatMap((d) => d.items)], [view]);
   const rows = useMemo(() => {
     const inGroup = group === "all" ? all : view?.digs.some((d) => d.id === group) ? all.filter((s) => s.dig === group) : (view?.items ?? []).filter((s) => s.group === group);
-    return seedFilter ? inGroup.filter((s) => s.seeds?.includes(seedFilter)) : inGroup;
+    // A seed's keywords are those counted for it, as its chip counts them: one seed each.
+    return seedFilter ? inGroup.filter((s) => s.seed === seedFilter) : inGroup;
   }, [all, view, group, seedFilter]);
   const columns = useMemo<ColumnDef<Suggestion>[]>(() => [
     makeSelectionColumn<Suggestion>(anchorRef),
@@ -224,7 +225,7 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
       {editing === "seeds" ? <EditSeedsDialog projectId={projectId} seeds={shownSeeds} market={marketPick ?? view.market} marketChanged={Boolean(marketPick)} onClose={() => { setEditing(""); setMarketPick(undefined); }}
         onSaveOnly={(seeds) => edit("saveSeeds", { seeds }, () => $t('keywordSuggestions.seedsSaved'))}
         onFind={async (seeds) => (await start({ seeds, market: marketPick ?? view.market, by: "person" })) ?? false} /> : null}
-      {editing === "notPicked" ? <NotPickedDialog projectId={projectId} groups={editable.map(({ id, name }) => ({ id, name }))} canAdd={canAdd && !running} onAdded={(next) => setView(next as SuggestionView)} onClose={() => setEditing("")} /> : null}
+      {editing === "notPicked" ? <NotPickedDialog projectId={projectId} selection={view.selection} groups={editable.map(({ id, name }) => ({ id, name }))} canAdd={canAdd && !running} onAdded={(next) => setView(next as SuggestionView)} onClose={() => setEditing("")} /> : null}
       {handing && selected.length ? (
         <KeywordHandOffDialog projectId={projectId} rows={selected.map((s) => ({ keyword: s.keyword, market: view.market, volume: s.metrics?.volume ?? null, difficulty: s.metrics?.difficulty ?? null, intent: intentOf(s) ?? null, ...(s.site ? { rank: s.site } : {}) }))}
           onClose={() => setHanding(false)} onDone={(r) => { setHanding(false); setRowSelection({}); setHandOff({ ok: true, text: r.title, taskId: r.taskId }); }} />

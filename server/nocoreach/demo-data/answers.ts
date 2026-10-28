@@ -4,6 +4,8 @@ import type {
 } from '@nocobase/app-plugin-demo-mode/server/tokens';
 
 import { demoContent } from './content.js';
+import { ACME_PAGES } from './acme-content.js';
+import { CRM_PAGES } from './crm-content.js';
 
 type Value = Record<string, unknown>;
 const object = (value: unknown): Value =>
@@ -197,15 +199,89 @@ function business(operation: string, input: Value, en: boolean): Value | null {
             'project templates',
             'ACME vs Nimbus',
           ];
+      // Why each seed, as the real model is asked to say: the memory line, query or competitor behind it.
+      const p = project.name;
+      const why: Record<string, [string[], string, string]> = {
+        'project management': [
+          ['memory'],
+          `${p} 的定位是团队项目管理工具，这是品类主词`,
+          `${p} is a team project management tool; the category's main term`,
+        ],
+        'task management': [
+          ['memory'],
+          `任务分派和截止日期是 ${p} 的核心功能`,
+          `Owned, dated tasks are a core ${p} feature`,
+        ],
+        'kanban boards': [
+          ['memory', 'searchConsole'],
+          `${p} 用看板协作，本站看板相关查询曝光最多`,
+          `${p} works on boards; board queries get the most impressions`,
+        ],
+        'team scheduling': [
+          ['memory'],
+          `${p} 记忆里写了排期和团队负荷视图`,
+          `Project memory mentions ${p}'s schedules and workload views`,
+        ],
+        'Excel task import': [
+          ['memory', 'searchConsole'],
+          `不少团队从 Excel 迁到 ${p}，本站已有导入相关查询`,
+          `Teams move from Excel to ${p}; the site already gets import queries`,
+        ],
+        'client collaboration': [
+          ['memory'],
+          `${p} 支持客户访客一起看项目，记忆里写了这个场景`,
+          `${p} lets client guests follow projects, as project memory says`,
+        ],
+        'project templates': [
+          ['memory', 'searchConsole'],
+          `${p} 的模板页在 Search Console 里已有曝光`,
+          `${p}'s templates page already shows in Search Console`,
+        ],
+        'ACME vs Nimbus': [
+          ['memory', 'competitors'],
+          `竞品 Nimbus 的用户在拿它和 ${p} 比较`,
+          `Nimbus users compare it with ${p}`,
+        ],
+        'sales pipeline': [
+          ['memory'],
+          `${p} 的主要场景是管理销售管道`,
+          `${p}'s main use is managing the sales pipeline`,
+        ],
+        'crm import': [
+          ['memory', 'searchConsole'],
+          `新用户先导入客户数据，${p} 的导入文档已有曝光`,
+          `New users import customer data first; ${p}'s import docs already show`,
+        ],
+        'lead routing': [
+          ['memory'],
+          `线索自动分配是 ${p} 的核心功能`,
+          `Routing leads is a core ${p} feature`,
+        ],
+        'quote approval': [
+          ['memory'],
+          `${p} 支持报价审批，记忆里写了这个流程`,
+          `${p} supports quote approvals, as project memory says`,
+        ],
+        'account handover': [
+          ['memory'],
+          `客户交接是 ${p} 记忆里强调的场景`,
+          `Account handover is a ${p} scenario project memory stresses`,
+        ],
+        'renewal management': [
+          ['memory', 'competitors'],
+          `竞品主打续约提醒，${p} 可以写对比`,
+          `Competitors lead with renewal reminders; ${p} can compare`,
+        ],
+      };
       return {
-        seeds: seeds.map((seed) => ({
-          seed,
-          from: ['memory'],
-          why: t(
-            `来自 ${project.name} 的虚构产品场景。`,
-            `From ${project.name}'s fictional product scenarios.`,
-          ),
-        })),
+        seeds: seeds.map((seed) => {
+          const [from, zh, en] = why[seed] ?? [
+            ['memory'],
+            `${p} 的主要场景之一`,
+            `One of ${p}'s main uses`,
+          ];
+          return { seed, from, why: t(zh, en) };
+        }),
       };
     }
     case 'keyword-names': {
@@ -403,8 +479,48 @@ function business(operation: string, input: Value, en: boolean): Value | null {
           ],
         ],
       ];
-      const why = (k: string, position: number) => {
+      // Keywords built from a page of the site ("project management Team plans and seats guide") are explained by that
+      // page: its topic in the reader's language, its path, and whether the searcher is learning or choosing.
+      const pageOf = (k: string) =>
+        [...ACME_PAGES, ...CRM_PAGES].find((p) =>
+          k.includes(p.title.en.toLowerCase()),
+        );
+      const byPage = (k: string, intent: string) => {
+        const p = pageOf(k);
+        if (!p) return null;
+        const topic = p.title.zh.split('：')[0],
+          title = p.title.en.split(':')[0],
+          choosing = intent === 'commercial' || intent === 'transactional';
+        return /common questions/.test(k)
+          ? [
+              `对“${topic}”有疑问的人，在 ${p.path} 补一段问答就能接住`,
+              `People with questions about ${title}; a Q&A on ${p.path} answers them`,
+            ]
+          : /template/.test(k)
+            ? choosing
+              ? [
+                  `想直接套用“${topic}”的团队，给一份能改的模板`,
+                  `Teams ready to adopt ${title}; offer an editable template`,
+                ]
+              : [
+                  `在找“${topic}”参考做法的人，模板页给出现成例子`,
+                  `People looking for ${title} examples; a template shows one`,
+                ]
+            : /guide/.test(k)
+              ? choosing
+                ? [
+                    `选工具前先看“${topic}”怎么做，教程能顺带介绍 ${product}`,
+                    `People checking how ${title} works before choosing; a guide introduces ${product}`,
+                  ]
+                : [
+                    `在学“${topic}”怎么做的人，${p.path} 的步骤能直接回答`,
+                    `People learning ${title}; the steps on ${p.path} answer them`,
+                  ]
+              : null;
+      };
+      const why = (k: string, position: number, intent = '') => {
         const [zh, en] =
+          byPage(k, intent) ??
           REASONS.find(([w]) => w.test(k))?.[1](k) ??
           (position
             ? [
@@ -484,7 +600,7 @@ function business(operation: string, input: Value, en: boolean): Value | null {
           keyword,
           group: groupOf(k),
           relevance: c.position ? 3 : 2,
-          reason: why(k, Number(c.position) || 0),
+          reason: why(k, Number(c.position) || 0, str(c.intent, 20)),
           page: str(page?.url, 500),
         });
       }

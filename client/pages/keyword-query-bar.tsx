@@ -19,7 +19,8 @@ import { PageAiEntry } from '../online-agent/page-entry';
 import { getMarkets, marketLabel } from './keyword-api';
 
 type Market = { locationCode: number; language: string };
-export type SeedStat = { seed: string; found: number; picked: number };
+/** A seed's keywords, each keyword counted for one seed only; found is unknown for lists from before that. */
+export type SeedStat = { seed: string; found: number | null; picked: number };
 export type SeedNote = { seed: string; from: string[]; why: string };
 const SOURCES: Record<string, string> = {
   memory: 'keywordSuggestions.seedSource.memory',
@@ -228,12 +229,14 @@ function SeedChip({
         ) : null}
         {note?.why ? <p>{note.why}</p> : null}
         <p className='border-t pt-2'>
-          {stat
-            ? $t('keywordSuggestions.seedFound', {
-                0: stat.found,
-                1: stat.picked,
-              })
-            : $t('keywordSuggestions.seedNotLookedUp')}
+          {!stat
+            ? $t('keywordSuggestions.seedNotLookedUp')
+            : stat.found == null
+              ? $t('keywordSuggestions.seedPicked', { 0: stat.picked })
+              : $t('keywordSuggestions.seedFound', {
+                  0: stat.found,
+                  1: stat.picked,
+                })}
           {stat?.picked ? (
             <>
               {' · '}

@@ -129,8 +129,24 @@ function mergeDigs(digs){const out=[];for(const d of digs||[]){const same=out.fi
   if(!same){out.push({...d,items:[...(d.items||[])]});continue;}const have=new Set(same.items.map(i=>i.keyword.toLowerCase()));
   same.items.push(...(d.items||[]).filter(i=>!have.has(i.keyword.toLowerCase())).map(i=>({...i,dig:same.id})));same.seeds=[...new Set([...(same.seeds||[]),...(d.seeds||[])])];same.name=same.name||d.name||null;}
  return out;}
-// Per seed: how many real keywords it brought back and how many of them the AI picked.
-const seedStatsOf=(seeds,pool,items)=>seeds.map(seed=>({seed,found:[...pool.values()].filter(c=>c.from.has(seed)).length,picked:items.filter(i=>i.seeds?.includes(seed)).length}));
+// The one seed a keyword is counted for, so a seed's found and picked add up across seeds (2026-10-29: 9 seeds read 169
+// picks for 47 keywords): the seed itself, then the most specific seed it contains as a phrase (the one fewer of the
+// found keywords contain, then the longer), then the seed whose lookup ranked it highest. A keyword only the
+// related-topics lookup or Search Console brought, matching no seed, has none.
+const has=(keyword,seed)=>` ${keyword} `.includes(` ${seed} `);
+const spreadOf=(seeds,keywords)=>new Map(seeds.map(s=>[s,keywords.filter(k=>has(k,s)).length]));
+function ownerOf(keyword,seeds,from,rank={},spread=new Map()){if(seeds.includes(keyword))return keyword;
+ const phrase=seeds.filter(s=>has(keyword,s)).sort((a,b)=>(spread.get(a)??0)-(spread.get(b)??0)||b.length-a.length)[0];if(phrase)return phrase;
+ return seeds.filter(s=>from?.has?.(s)||from?.includes?.(s)).sort((a,b)=>(rank[a]??1e9)-(rank[b]??1e9)||seeds.indexOf(a)-seeds.indexOf(b))[0]||null;}
+const ownersOf=(seeds,pool)=>{const spread=spreadOf(seeds,[...pool.keys()]);return new Map([...pool.values()].map(c=>[c.keyword,ownerOf(c.keyword,seeds,c.from,c.rank,spread)]));};
+// Per seed: how many real keywords it brought back and how many of them the AI picked, each keyword counted once.
+const seedStatsOf=(seeds,pool,items)=>{const owner=ownersOf(seeds,pool);
+ return seeds.map(seed=>({seed,found:[...owner.values()].filter(o=>o===seed).length,picked:items.filter(i=>(i.seed??owner.get(i.keyword))===seed).length}));};
+// A list found before keywords were counted once: picked counted again that way from each keyword's seeds; how many each
+// found is not known any more.
+const legacyOwner=s=>{const seeds=s.seeds||[],spread=spreadOf(seeds,(s.items||[]).map(i=>i.keyword));return i=>ownerOf(i.keyword,seeds,i.seeds||[],{},spread);};
+const legacySeedStats=s=>{if(!s.seedStats||s.seedsCounted)return s.seedStats;const owner=legacyOwner(s);
+ return s.seedStats.map(st=>({seed:st.seed,found:null,picked:(s.items||[]).filter(i=>owner(i)===st.seed).length}));};
 const allItems=s=>[...(s?.items||[]),...(s?.digs||[]).flatMap(d=>d.items||[])];
 // Why a found keyword is not in the list (2026-10-28: "why only 31 of 327?"): the AI's reason (unrelated, another
 // brand, the wrong intent, weaker than those picked, off a group's direction, or a duplicate of another), removed by the person before, or never
@@ -152,10 +168,11 @@ function selectionOf(s){const runs=[{found:s.stats?.found??s.items.length,picked
  const by=new Map();for(const c of recorded){if(!by.has(c.reason))by.set(c.reason,[]);by.get(c.reason).push(c);}
  const reasons=[...by].map(([reason,list])=>({reason,count:list.length,examples:list.slice(0,2).map(c=>c.keyword)})).sort((a,b)=>b.count-a.count);
  if(unrecorded&&recorded.length)reasons.push({reason:'unrecorded',count:unrecorded,examples:[]});
- return {seeds:(s.seeds||[]).length,directions:(s.digs||[]).length,found:picked+recorded.length+unrecorded,picked,notPicked:recorded.length+unrecorded,recorded:runs.some(r=>Array.isArray(r.notPicked)),reasons,pick:PICK,digPick:DIG_PICK};}
+ return {seeds:(s.seeds||[]).length,directions:(s.digs||[]).length,found:picked+recorded.length+unrecorded,picked,notPicked:recorded.length+unrecorded,recorded:runs.some(r=>Array.isArray(r.notPicked)),reasons,pick:PICK,digPick:DIG_PICK,shortlist:POOL};}
 // The list as the page reads it: the not-picked records stay on the server (Selection rules › View those not picked).
 const without=o=>{const x={...o};delete x.notPicked;return x;};
-const forView=s=>({...without(s),digs:mergeDigs(s.digs).map(without),selection:selectionOf({...s,digs:mergeDigs(s.digs)})});
+const forView=s=>({...without(s),seedStats:legacySeedStats(s),items:(()=>{const owner=legacyOwner(s);return (s.items||[]).map(i=>'seed' in i?i:{...i,seed:owner(i)});})(),
+ digs:mergeDigs(s.digs).map(without),selection:selectionOf({...s,digs:mergeDigs(s.digs)})});
 class KeywordSuggest{
  constructor(p,read=download){this.p=p;this.p.network?.bind(this,['build','inputs']);this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;
   this.d4s=new DataForSeo(p,{'keyword-overview':{specification,result},'keyword-seed':{specification:seedSpec,result:labsResult},'keyword-ideas':{specification:ideasSpec,result:labsResult}});this.jobs=new Map();}
@@ -187,7 +204,8 @@ class KeywordSuggest{
    if(r.requestKey&&r.requestKey===candidateKey([id,`kws-${key}-${i}`]))costUsd+=Number(r.costUsd||0)+Number(r.reservedUsd||0);
    if(r.status==='unknown'||r.status==='running')uncertain++;
    if(r.status!=='completed'){if(asks[i][0]==='keyword-seed')missed.push(from);return;}
-   for(const m of r.result?.items||[]){if(!(Number(m.volume)>=MIN_VOLUME))continue;const k=m.keyword.toLowerCase(),had=pool.get(k);if(had)had.from.add(from);else pool.set(k,{...m,keyword:k,from:new Set([from])});}});
+   (r.result?.items||[]).forEach((m,at)=>{if(!(Number(m.volume)>=MIN_VOLUME))return;const k=m.keyword.toLowerCase(),had=pool.get(k);
+    if(had){had.from.add(from);if(!(from in had.rank))had.rank[from]=at;}else pool.set(k,{...m,keyword:k,from:new Set([from]),rank:{[from]:at}});});});
   return {pool,costUsd:usd(costUsd),missed,uncertain,failed:runs.every(r=>r.status!=='completed'),refused:runs.find(r=>r.refused)?.errorCode||null};}
  // Step 4: the AI picks, groups and explains; anything it names that is not a looked-up keyword is dropped.
  async curate(inp,market,pool,o){const site=new Map(inp.queries.map(q=>[String(q.keyword).toLowerCase(),q])),removed=o.removed||new Set(),listed=o.listed||new Set(),candidates=shortlist(pool,new Set([...removed,...listed]));
@@ -198,7 +216,7 @@ class KeywordSuggest{
   const groups=o.groups||GROUPS.map(id=>({id,label:id}));
   let ai;try{ai=json(await this.provider().complete(forLanguage(curatePrompt(groups),languageOf(inp.project)),JSON.stringify({market:this.forAI(market),memory:memoryForAI(inp.project),pages:inp.pages,competitors:inp.competitors,direction:o.direction||undefined,pick:o.pick,
    candidates:candidates.map((c,n)=>({i:n+1,keyword:c.keyword,volume:c.volume,difficulty:c.difficulty,intent:c.intent,position:site.get(c.keyword)?.position}))}),'keyword-curate'));}catch(e){aiFail(e,systemMessageText('aiQuestions.generationFailed'));}
-  const pages=new Set(inp.pages.map(p=>p.url)),byKey=new Map(candidates.map(c=>[c.keyword,c])),seen=new Set(),items=[];
+  const pages=new Set(inp.pages.map(p=>p.url)),byKey=new Map(candidates.map(c=>[c.keyword,c])),seen=new Set(),items=[],owners=ownersOf(o.seeds||[],pool);
   for(const k of Array.isArray(ai?.keywords)?ai.keywords:[]){const key=str(k?.keyword,80).toLowerCase(),c=byKey.get(key);if(!c||seen.has(key))continue;
    // Only keywords on the product or related to it are picked (Selection rules); one marked as merely close is not.
    if(Number(k?.relevance)===1)continue;seen.add(key);
@@ -206,7 +224,7 @@ class KeywordSuggest{
    const at=groups[Number(k?.group)-1]||groups.find(g=>g.id===k?.group||g.label===k?.group)||groups.at(-1);
    items.push({id:hash(key),keyword:c.keyword,group:at?.id??null,intent:c.intent,reason:str(k?.reason,80),page:pages.has(page)?page:null,
     site:own?{position:own.position,clicks:own.clicks,impressions:own.impressions,page:own.page}:null,relevance:[2,3].includes(Number(k?.relevance))?Number(k.relevance):2,
-    seeds:[...c.from].filter(f=>f!=='ideas'&&f!=='searchConsole'),from:[...c.from],metrics:{volume:c.volume,difficulty:c.difficulty,cpc:c.cpc,competition:c.competition,intent:c.intent,monthlySearches:c.monthlySearches}});
+    seeds:[...c.from].filter(f=>f!=='ideas'&&f!=='searchConsole'),seed:owners.get(c.keyword)??null,from:[...c.from],metrics:{volume:c.volume,difficulty:c.difficulty,cpc:c.cpc,competition:c.competition,intent:c.intent,monthlySearches:c.monthlySearches}});
    if(items.length>=Math.min(o.pick,MAX_PICK))break;}
   return {items:items.map(i=>({...i,score:score(i)})).sort((a,b)=>b.score-a.score),notPicked:others(seen,reasonsOf(ai?.skipped,candidates),new Set(byKey.keys()))};}
  // The most a run may cost before it starts, and what this month has used: seeds looked up in the last 30 days are free.
@@ -240,7 +258,7 @@ class KeywordSuggest{
    progress('curate');
    // Removed keywords stay out unless the person asked for them back; a dig also skips what the list already has.
    const restored=new Set(o.restore||[]),removed=[...removedOf(old)].filter(k=>!restored.has(k));
-   const {items,notPicked}=await this.curate(inp,o.market,found.pool,{direction:dig?o.direction:null,groups:groupsOf(old),removed:new Set(removed),listed:new Set(dig?allItems(old).map(i=>i.keyword.toLowerCase()):[]),pick:dig?DIG_PICK:PICK});
+   const {items,notPicked}=await this.curate(inp,o.market,found.pool,{seeds,direction:dig?o.direction:null,groups:groupsOf(old),removed:new Set(removed),listed:new Set(dig?allItems(old).map(i=>i.keyword.toLowerCase()):[]),pick:dig?DIG_PICK:PICK});
    if(!items.length)fail(dig?systemMessageText('keywordSuggest.digFoundNothingNew',{0:MIN_VOLUME}):systemMessageText('keywordSuggest.noKeywordsWithDemand',{0:MIN_VOLUME}),422);
    const at=new Date().toISOString(),notes={missedSeeds:found.missed,uncertain:found.uncertain,seedNotes,seedStats:seedStatsOf(seeds,found.pool,items)};let next,group=null;
    if(dig){const digs=mergeDigs(old.digs),same=digs.find(d=>directionKey(d.direction)===directionKey(o.direction));
@@ -255,7 +273,7 @@ class KeywordSuggest{
     next={...old,removed,digs:[dug,...digs.filter(d=>d.id!==group.id)].slice(0,MAX_DIGS),lastError:null};}
    else{const keys=new Set(items.map(i=>i.keyword.toLowerCase())),keep=old&&old.market.locationCode===o.market.locationCode&&old.market.language===o.market.language;
     // A rebuilt list keeps the groups dug in the same market, minus the keywords the new list now has.
-    next={version:2,at,market:o.market,removed,groupNames:old?.groupNames||{},deletedGroups:old?.deletedGroups||[],seeds,seedsBy:o.seeds?.length?(o.by==='ai'?'ai':'person'):'ai',stats:{found:found.pool.size,picked:items.length,minVolume:MIN_VOLUME},costUsd:found.costUsd,...notes,items,notPicked,
+    next={version:2,at,market:o.market,removed,groupNames:old?.groupNames||{},deletedGroups:old?.deletedGroups||[],seeds,seedsBy:o.seeds?.length?(o.by==='ai'?'ai':'person'):'ai',stats:{found:found.pool.size,picked:items.length,minVolume:MIN_VOLUME},costUsd:found.costUsd,...notes,seedsCounted:true,items,notPicked,
      pendingSeeds:null,digs:keep?mergeDigs(old.digs).map(d=>({...d,items:d.items.filter(i=>!keys.has(i.keyword.toLowerCase())),...(d.notPicked?{notPicked:d.notPicked.filter(c=>!keys.has(c.keyword))}:{})})).filter(d=>d.items.length):[],lastError:null};}
    await this.save(id,next);return {state:next,group,items};}
   catch(e){await this.save(id,{...(old||{version:2,market:o.market,seeds:[],items:[],digs:[]}),lastError:{message:e.message,at:new Date().toISOString(),mode:o.mode,direction:o.mode==='dig'?o.direction:null}}).catch(()=>{});throw e;}}

@@ -42,6 +42,8 @@ export type Selection = {
   reasons: { reason: string; count: number; examples: string[] }[];
   pick: number;
   digPick: number;
+  /** How many candidates at most go to the AI. */
+  shortlist: number;
 };
 type NotPicked = {
   keyword: string;
@@ -54,6 +56,20 @@ type NotPicked = {
 };
 const reasonLabel = (r: string) =>
   $t(`keywordSuggestions.notPickedReason.${r}`);
+/** A not-picked row's reason in full: ranked lower and not reviewed say the limit behind them. */
+const rowReason = (c: NotPicked, s?: Selection) =>
+  c.reason === 'duplicate' && c.duplicateOf
+    ? $t('keywordSuggestions.duplicateOf', { 0: c.duplicateOf })
+    : c.reason === 'weaker'
+      ? $t('keywordSuggestions.notPickedRow.weaker', {
+          0: s?.pick ?? 40,
+          1: s?.digPick ?? 20,
+        })
+      : c.reason === 'unreviewed'
+        ? $t('keywordSuggestions.notPickedRow.unreviewed', {
+            0: s?.shortlist ?? 250,
+          })
+        : reasonLabel(c.reason);
 const call = <T,>(projectId: number, action: string, body: object = {}) =>
   api.action<T>('nrKeywordSuggest', action, {
     method: 'POST',
@@ -303,12 +319,14 @@ export type GroupChoice = { id: string; name: string };
  */
 export function NotPickedDialog({
   projectId,
+  selection,
   groups,
   canAdd,
   onAdded,
   onClose,
 }: {
   projectId: number;
+  selection?: Selection;
   groups: GroupChoice[];
   canAdd: boolean;
   onAdded: (view: unknown) => void;
@@ -367,7 +385,7 @@ export function NotPickedDialog({
   };
   return (
     <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
-      <DialogContent className='flex max-h-[85vh] flex-col sm:max-w-3xl'>
+      <DialogContent className='flex max-h-[85vh] flex-col sm:max-w-4xl'>
         <DialogHeader>
           <DialogTitle>
             {$t('keywordSuggestions.notPickedTitle', {
@@ -408,7 +426,7 @@ export function NotPickedDialog({
               <table className='w-full text-sm'>
                 <thead className='sticky top-0 bg-muted/60 text-left text-xs whitespace-nowrap text-muted-foreground backdrop-blur'>
                   <tr>
-                    <th className='px-3 py-2 font-medium'>
+                    <th className='min-w-64 px-3 py-2 font-medium'>
                       {$t('common.keywords')}
                     </th>
                     <th className='px-3 py-2 text-right font-medium'>
@@ -434,11 +452,7 @@ export function NotPickedDialog({
                         <ScoreBadge value={c.difficulty} />
                       </td>
                       <td className='px-3 py-2 whitespace-nowrap text-muted-foreground'>
-                        {c.reason === 'duplicate' && c.duplicateOf
-                          ? $t('keywordSuggestions.duplicateOf', {
-                              0: c.duplicateOf,
-                            })
-                          : reasonLabel(c.reason)}
+                        {rowReason(c, selection)}
                       </td>
                       <td className='px-3 py-2 text-right'>
                         {canAdd ? (

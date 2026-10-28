@@ -98,6 +98,7 @@ const item = (
   site: null,
   metrics: metrics(volume, 30),
   seeds: keyword === 'retool alternative' ? ['retool alternative'] : [],
+  seed: keyword === 'retool alternative' ? 'retool alternative' : null,
   ...(dig ? { dig } : {}),
 });
 const LIST = {
@@ -137,6 +138,7 @@ const LIST = {
     ],
     pick: 40,
     digPick: 20,
+    shortlist: 250,
   },
   items: [
     item('open source low code platform', '品类与行业词', 3600),
@@ -309,6 +311,14 @@ test('Selection rules: the rules, the numbers and why the others were not picked
       duplicateOf: 'internal tool builder',
       run: 'list',
     },
+    {
+      keyword: 'workflow automation tools',
+      volume: 6600,
+      difficulty: 62,
+      intent: 'commercial',
+      reason: 'weaker',
+      run: 'list',
+    },
   ];
   action.mockImplementation(async (_resource: string, name: string) =>
     name === 'notPicked' ? { recorded: true, items: left } : view,
@@ -349,6 +359,11 @@ test('Selection rules: the rules, the numbers and why the others were not picked
   expect(
     await within(dialog).findByText(
       $t('keywordSuggestions.duplicateOf', { 0: 'internal tool builder' }),
+    ),
+  ).toBeVisible();
+  expect(
+    within(dialog).getByText(
+      $t('keywordSuggestions.notPickedRow.weaker', { 0: 40, 1: 20 }),
     ),
   ).toBeVisible();
   fireEvent.click(
