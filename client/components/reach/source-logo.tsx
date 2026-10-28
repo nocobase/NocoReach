@@ -23,6 +23,7 @@ const BRAND: Record<string, BrandLogoKey> = {
   ga4: 'googleanalytics',
   trends: 'google',
   github: 'github',
+  'github-discovery': 'github',
   'github-traffic': 'github',
   'github-discussions': 'github',
   packages: 'npm',

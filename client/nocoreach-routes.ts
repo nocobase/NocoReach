@@ -158,7 +158,7 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     page('content-index', '/content', () => import('./pages/content-index.js'), { title: nav('pages'), icon: Files, order: 2 }),
     page('website-performance', '/website', () => import('./pages/data-website/index.js'), { title: nav('traffic'), icon: Globe, order: 1 }),
     page('site-audit', '/audit', () => import('./pages/site-audit.js'), { title: nav('audit'), icon: ClipboardCheck, order: 3 }),
-    page('data-github', '/data/github', () => import('./pages/data-github/index.js'), { title: nav('github'), icon: Github, order: 4 }),
+    { ...page('data-github', '/data/github', () => import('./pages/data-github/index.js'), { title: nav('github'), icon: Github, order: 4 }), children: [{ name: 'github-discovery-detail', path: 'discovery/:repositoryId', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/github-discovery/detail.js') }] },
     page('data-downloads', '/data/downloads', () => import('./pages/data-downloads/index.js'), { title: nav('downloads'), icon: Package, order: 5 }),
   ]),
   group('nav-search', nav('search'), Store, 5, [
@@ -235,7 +235,7 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
         },
       ],
     },
-    page('data-connections', '/connections', () => import('./pages/source-connections.js'), { title: nav('connections'), icon: Plug, order: 1 }),
+    { ...page('data-connections', '/connections', () => import('./pages/source-connections.js'), { title: nav('connections'), icon: Plug, order: 1 }), children: [{ name: 'github-discovery-rule', path: 'discovery/:ruleId', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/github-discovery/rule-editor.js') }] },
     ...demoModeRoutes([
       page('demo-data', '/demo-data', () => import('./pages/demo-management/index.js'), { title: nav('demoData'), icon: DatabaseZap, order: 7 }),
     ]),
