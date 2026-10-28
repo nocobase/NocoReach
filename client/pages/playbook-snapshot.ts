@@ -82,14 +82,16 @@ function isCanonicalLegacy(
   if (!flow || !playbook || hasOrigin(flow) || hasOrigin(playbook))
     return false;
   const p = SYSTEM_PLAYBOOKS.find((p) => p.id === playbook.id);
+  // The next steps are left out: a built-in's change over time (Keyword research gained Write blog post on
+  // 2026-10-28) without making the snapshot any less the built-in's.
+  const { next: _next, ...identity } = playbook;
   return Boolean(
     p &&
-    sameSnapshot(playbook, {
+    sameSnapshot(identity, {
       id: p.id,
       name: p.name,
       kind: p.kind,
       version: p.version,
-      next: p.next,
     }) &&
     sameSnapshot(flow, {
       id: p.id,

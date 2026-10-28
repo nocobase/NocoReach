@@ -328,3 +328,21 @@ test('a handed-over task with nothing missing keeps the usual hand-over line', a
     within(card).getByRole('button', { name: '确定开始执行' }),
   ).toBeEnabled();
 });
+
+// 2026-10-28 user report (T-49): a task started before its playbook gained Write blog post offered only the older
+// next steps. The choice follows the playbook as it is now, its first step preselected.
+test('the next steps are the playbook’s current ones, not the ones the task started with', async () => {
+  const user = userEvent.setup();
+  const data = outlineTask();
+  data.work.playbook!.next = ['new-doc'];
+  mount(data);
+  await vi.waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: '接受并开始写博客文章' }),
+    ).toBeVisible(),
+  );
+  await user.click(screen.getByRole('combobox', { name: '接着做' }));
+  expect(
+    (await screen.findAllByRole('option')).map((o) => o.textContent),
+  ).toEqual(['写博客文章', '新建文档页', '不接着做']);
+});

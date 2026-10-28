@@ -378,8 +378,10 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  const [requestOpen,setRequest]=useTaskDraft('requesting',false,false);
  const editButtonRef=useRef<HTMLButtonElement>(null);
  const manual=manualOpen||Boolean(record),editing=editingOpen||draft!==(w.results[index-1]?.content||'');
- const last=stages.slice(index+1).every(s=>s.kind==='observe'),nextOptions=w.playbook?.kind==='plan'&&last?w.playbook.next:[];
- const [next,setNext]=useState(nextOptions[0]||''),[articleTab,setArticleTab]=useState(''),[relNote,setRelNote]=useTaskDraft('release',w.results[index-1]?.pr?.release||'');
+ // What can follow the accepted document: the playbook's next steps as they are now, as the server checks them
+ // (2026-10-28), or the start's copy when the playbook is gone; the first is preselected until another is chosen.
+ const current=list?.playbooks.find(p=>p.id===w.playbook?.id),last=stages.slice(index+1).every(s=>s.kind==='observe'),nextOptions=w.playbook?.kind==='plan'&&last?current?.next??w.playbook.next:[];
+ const [chosen,setNext]=useState<string>(),next=chosen===''||(chosen&&nextOptions.includes(chosen))?chosen:nextOptions[0]||'',[articleTab,setArticleTab]=useState(''),[relNote,setRelNote]=useTaskDraft('release',w.results[index-1]?.pr?.release||'');
  const {clear}=useTaskDraftStatus();
  const act=async(command:string,body:object)=>{const result=await update(command,{stageKey:stage.key,...body});if(result&&['editStageOutput','recordManual','confirmPublish','approveStage','requestStageChanges'].includes(command))clear();return result;};
  const name=(id:string)=>list?.playbooks.find(p=>p.id===id)?.name||id;
