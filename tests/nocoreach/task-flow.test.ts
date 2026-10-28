@@ -1048,3 +1048,13 @@ test('a snooze comes back at 09:00 of its day in the daily analysis time zone', 
   assert.equal(snoozeInstant('2026-11-31', 'UTC'), null);
   assert.equal(snoozeInstant('next week', 'UTC'), null);
 });
+
+test('a snooze comes back in the daily analysis time zone, read before the task is locked', async () => {
+  const f = fixture();
+  let locked = false;
+  const lock = f.s.lock.bind(f.s);
+  f.s.lock = (...args) => { locked = true; return lock(...args).finally(() => { locked = false; }); };
+  f.s.p.analysis = { workflow: async () => { assert.equal(locked, false, 'outside the lock'); return { get: () => ({ timezone: 'America/Los_Angeles' }) }; } };
+  const d = await f.command('snoozeTask', { day: '2099-11-11' });
+  assert.equal(d.work.snooze.until, '2099-11-11T17:00:00.000Z');
+});
