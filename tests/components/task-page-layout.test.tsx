@@ -1205,3 +1205,59 @@ test('a live page change names what readers see differently and opens it', async
   const dialog = await screen.findByRole('dialog', { name: '改了什么' });
   expect(dialog).toHaveTextContent('オープンソース AI ノーコード');
 });
+
+// 2026-10-27 user report (T-49): the title still said "write content" after Keyword research was chosen to start it.
+test('an automatic title follows the playbook chosen on the start card', async () => {
+  const user = userEvent.setup();
+  const data = blogPageTask();
+  data.task.title = '内容选题与大纲：ai governance framework';
+  data.task.evidence = {
+    ...data.task.evidence,
+    autoTitle: { subject: 'ai governance framework', locale: 'zh-CN' },
+    suggestedPlaybook: 'content-outline',
+  };
+  data.playbookDefault = 'content-outline';
+  const playbook = (id: string, name: string) => ({
+    id,
+    name,
+    kind: 'plan',
+    category: 'research',
+    steps: [{ key: 'research', name: '调研', kind: 'analyze' }],
+  });
+  action.mockImplementation((resource: string) =>
+    Promise.resolve(
+      resource === 'nrPlaybooks'
+        ? {
+            revision: 1,
+            playbooks: [
+              playbook('content-outline', '内容选题与大纲'),
+              playbook('keyword-research', '关键词调研'),
+            ],
+          }
+        : [],
+    ),
+  );
+  const pick = async (name: string) => {
+    await user.click(screen.getByRole('combobox', { name: '做法' }));
+    await user.click(await screen.findByRole('option', { name }));
+  };
+  const view = mount(data, '/actions/32');
+  const heading = () => screen.getByRole('heading', { level: 1 });
+  await vi.waitFor(() =>
+    expect(heading()).toHaveTextContent(
+      '内容选题与大纲：ai governance framework',
+    ),
+  );
+  await pick('关键词调研');
+  expect(heading()).toHaveTextContent('关键词调研：ai governance framework');
+  view.unmount();
+  // A title a person wrote stays whatever is chosen.
+  const written = blogPageTask();
+  written.playbookDefault = 'content-outline';
+  mount(written, '/actions/32');
+  await vi.waitFor(() =>
+    expect(heading()).toHaveTextContent('给工作流自动化博客页改标题'),
+  );
+  await pick('关键词调研');
+  expect(heading()).toHaveTextContent('给工作流自动化博客页改标题');
+});

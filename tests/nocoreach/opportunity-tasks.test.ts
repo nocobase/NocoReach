@@ -15,6 +15,7 @@ import {
 } from '../../server/nocoreach/opportunity-hand-off';
 import { StrategyService } from '../../server/nocoreach/strategy-service.js';
 import { flowRunInput } from '../../server/nocoreach/execution/flow';
+import { SYSTEM_PLAYBOOKS } from '../../shared/playbook-catalog';
 import type {
   Opportunity,
   Proposal,
@@ -442,4 +443,61 @@ it("a place's Agent reads its own changes and the opportunity's changes without 
   ) as { evidence: { signals: Signal[]; part?: unknown } };
   expect(whole.evidence.signals).toHaveLength(signals.length);
   expect(whole.evidence.part).toBeUndefined();
+});
+
+// 2026-10-27 (T-49): every handed-off task is titled "<playbook>: <subject>" and keeps its subject, so another playbook
+// chosen before the start retitles it (server/nocoreach/execution/task-title.ts).
+it('a hand-off titles each task by its playbook and keeps the subject', async () => {
+  const f = service();
+  (f.s as any).p.taskExecution = {
+    playbooks: {
+      list: async () => ({ playbooks: SYSTEM_PLAYBOOKS }),
+      get: async (_project: string, id: string) =>
+        SYSTEM_PLAYBOOKS.find((p) => p.id === id),
+    },
+  };
+  await f.hand();
+  expect(f.created.map((c) => c.values.title)).toEqual([
+    'Improve existing page: Top 11 Open Source No-Code AI Tools',
+    'Improve existing page: /en/blog/top-15-low-code-platforms',
+    'Draft community replies: Unanswered community posts',
+    'Write release notes: github.com/nocobase/nocobase/releases/tag/v2.1.0',
+  ]);
+  expect(f.created[0].values.evidence.autoTitle).toEqual({
+    subject: 'Top 11 Open Source No-Code AI Tools',
+    locale: 'en-US',
+  });
+  // A hand-off from a data page sends its subject with the playbook it suggests.
+  await f.s.confirmDirection(
+    1,
+    {
+      title: 'Write content about "ai governance framework"',
+      subject: 'ai governance framework',
+      brief: 'Keywords',
+      objective: 'Rank',
+      playbookId: 'content-outline',
+    },
+    f.ctx,
+  );
+  const last = f.created[f.created.length - 1].values;
+  expect(last.title).toBe('Content topic and outline: ai governance framework');
+  expect(last.evidence.autoTitle).toEqual({
+    subject: 'ai governance framework',
+    locale: 'en-US',
+  });
+  expect(f.state.proposals[0].title).toBe(last.title);
+  // Without a subject, the title it was sent is the person's: kept, and never retitled.
+  await f.s.confirmDirection(
+    1,
+    {
+      title: 'My own title',
+      brief: 'b',
+      objective: 'o',
+      playbookId: 'content-outline',
+    },
+    f.ctx,
+  );
+  const own = f.created[f.created.length - 1].values;
+  expect(own.title).toBe('My own title');
+  expect(own.evidence.autoTitle).toBeUndefined();
 });

@@ -19,6 +19,7 @@ import type { LegacyDatabase, LegacyTransaction } from '../legacy/database';
 import { CHECKPOINTS, compare, dateOf, pageKey, pageNumbers, shift, windows, type Partition } from './effect';
 import { listResults, readResult, resultBoard } from './result-view.js';
 import { ArticleFlow } from './article-flow.js';
+import { playbookTitle, retitle } from './task-title.js';
 import { STARTS_KEY, restartOf, withStart } from './restarts.js';
 import { ownSignalIds } from '../../../shared/opportunity-parts.js';
 import { taskStanding } from '../../../shared/task-pending.js';
@@ -549,7 +550,15 @@ export class TaskService {
       if (w.cancelledAt && !['archiveTask', 'unarchiveTask', 'comment', 'linkPage', 'setOwner', 'setCollaborators'].includes(v.command)) return fail(systemMessageText('taskExecution.taskCancelledCannotMoveForward'), 409);
       if (w.archivedAt && !['unarchiveTask', 'comment'].includes(v.command)) return fail(systemMessageText('taskExecution.taskArchivedRestoreFirst'), 409);
       if (w.humanOwnerId && String(w.humanOwnerId) !== String(actor) && !OPEN_TO_ALL.includes(v.command) && await policy.roleOf(this.p.db, actor) !== 'admin') return fail(systemMessageText('messages.reviewsTaskLeaveComment', { 0: w.humanOwnerName || '负责人' }), 403);
-      const at = now(), event: any = { at, actor, action: v.command, stage: w.stage, step: w.step };
+      const at = now(), event: any = { at, actor, action: v.command, stage: w.stage, step: w.step }, after: { at: string; actor: string; action: string; note: string }[] = [];
+      // An automatic title follows the playbook chosen before the start (task-title.ts), recorded after the choice.
+      const followPlaybook = async (p: { name: string; system?: boolean; edited?: boolean }) => {
+        const title = retitle(task, p);
+        if (!title) return;
+        await this.repo('nrTasks').update({ filterByTk: task.id, values: { title }, transaction: tx });
+        task.title = title;
+        after.push({ at, actor: 'system', action: 'retitle', note: title });
+      };
       if (typeof v.stageKey === 'string') event.stageKey = v.stageKey.slice(0, 40);
       if (v.command === 'moveWork') {
         if (!['todo','doing','review','done'].includes(v.state)) return fail(systemMessageText('taskExecution.invalidWorkState'));
@@ -661,6 +670,7 @@ export class TaskService {
       } else if (v.command === 'selectPlaybook') {
         if (w.stage !== 'plan' || w.plan || w.flow) return fail(systemMessageText('taskExecution.taskStartedPlaybookCannotChange'), 409);
         const p = await this.playbooks.get(project, v.playbookId, tx); w.playbookId = p.id; event.note = p.name;
+        await followPlaybook(p);
       } else if (v.command === 'startTask') {
         if (w.stage !== 'plan' || w.plan || w.flow) return fail(systemMessageText('taskExecution.taskStarted'), 409);
         const p = await this.playbooks.get(project, v.playbookId || w.playbookId || defaultPlaybookId(task), tx);
@@ -669,6 +679,7 @@ export class TaskService {
         w.note = typeof v.note === 'string' ? v.note.trim().slice(0, 3000) : '';
         if (!w.humanOwnerId) { await this.member(actor, tx); w.humanOwnerId = actor; w.humanOwnerName = actorName; }
         w.stage = 'flow'; w.step = 0; w.results = []; event.note = p.name;
+        await followPlaybook(p);
         await this.articleFlow.startDelivery(project, taskId, w, p.id, w.flow.stages.some(changesRepo), v.delivery, tx, articleRead, translatesArticle(p) ? { by: actor, at } : undefined);
         await this.enterFlowStage(project, taskId, task, w, 0, tx, actor, at);
       } else if (v.command === 'comment') {
@@ -715,7 +726,9 @@ export class TaskService {
               // approval is committed (startHandedOver).
               if (w.stage !== 'done' || w.playbook?.kind !== 'plan' || !w.playbook.next.includes(v.next) || w.nextTaskId) return fail(systemMessageText('taskExecution.stepCannotHandedAnotherPlaybook'), 409);
               const p = await this.playbooks.get(project, v.next, tx), accepted = w.results[index - 1]!;
-              const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: `${p.name}：${task.title}`.slice(0, 200), brief: systemMessageText('messages.taskBriefDocumentDeliveredTask', { 0: task.title, 1: accepted.content }).slice(0, 30000), status: systemMessageText('common.pending'), evidence: { source: systemMessageText('taskExecution.chainedTask'), insight: task.evidence?.insight || null, context: task.evidence?.context || null, ...foundBy(task.evidence), handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content }, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
+              // Titled as every handed-off task, by its playbook and the subject this task was about (task-title.ts).
+              const chain = { subject: task.evidence?.autoTitle?.subject || task.title, ...(task.evidence?.autoTitle?.locale ? { locale: task.evidence.autoTitle.locale } : {}) };
+              const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: playbookTitle(p, chain.subject, chain.locale), brief: systemMessageText('messages.taskBriefDocumentDeliveredTask', { 0: task.title, 1: accepted.content }).slice(0, 30000), status: systemMessageText('common.pending'), evidence: { source: systemMessageText('taskExecution.chainedTask'), insight: task.evidence?.insight || null, context: task.evidence?.context || null, ...foundBy(task.evidence), handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content }, autoTitle: chain, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
               w.nextTaskId = String(child.get ? child.get('id') : child.id); event.note = p.name; event.nextTaskId = w.nextTaskId;
             }
           }
@@ -826,7 +839,7 @@ export class TaskService {
         w.receipt = { note: text(v.note, 5000), url, recordedAt: at, recordedBy: actor };
         await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
       } else if (!(await this.articleFlow.command(project, taskId, task, w, v, actor, at, tx, articleRead, event))) return fail(systemMessageText('taskWork.actionNotSupported'));
-      w.history.push(event);
+      w.history.push(event, ...after);
       await this.save(task, w, tx); await this.put(opKey, { hash, at, actor }, tx);
       return this.view(project, taskId, tx);
     });

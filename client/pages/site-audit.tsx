@@ -22,6 +22,7 @@ import { DetailDrawer } from "./detail-drawer";
 import { useProject } from "./reach-data";
 import { safeLink } from "./analytics";
 import { type TaskDraft } from "./keyword-hand-off";
+import { subjectOf } from './task-subject';
 import { HandOffBar } from "./hand-off-bar";
 import { AllCheck, RowCheck, useHandOffSource, useSelection } from "#components/reach/hand-off-slot";
 import { PerformanceTab } from "./audit-performance";
@@ -120,6 +121,7 @@ function auditDraft(issues: Issue[]): TaskDraft {
   const lines = issues.flatMap((issue) => { const pages = issue.pages.slice(0, per); return [...(one ? [] : [`## ${$legacyText(issue.title)}（${$tj('siteAudit.pageCount',{0:issue.count})}）`]), ...(one ? [$t('siteAudit.siteAuditFoundPages',{0:issue.count,1:$legacyText(issue.title)})] : []), $legacyText(issue.description), "", $t('siteAudit.affectedPages'), ...pages.map((p) => `- ${p.url}${p.detail ? `（${p.detail}）` : ""}`), ...(issue.count > pages.length ? [$t('siteAudit.morePagesSiteAudit',{0:issue.count - pages.length})] : []), ""]; });
   return {
     title: (one ? $t('siteAudit.fixPages',{0:one.count,1:$legacyText(one.title)}) : $t('siteAudit.fixSiteAuditIssues',{0:issues.length,1:issues.map((i) => $legacyText(i.title)).join("、")})).slice(0, 200),
+    subject: subjectOf($legacyText(issues[0].title), issues.length, 'issues').slice(0, 160),
     objective: (one ? $t('siteAudit.pagesNoLongerIssue',{0:$legacyText(one.title)}) : $t('siteAudit.clearIssuesPages',{0:issues.map((i) => $legacyText(i.title)).join("、")})).slice(0, 1000),
     brief: [...(one ? [] : [$t('siteAudit.issuesTickedSiteAudit',{0:issues.length}), ""]), ...lines, $t('siteAudit.evidenceSiteAuditChecksPages')].join("\n").slice(0, 20000),
   };

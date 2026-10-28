@@ -12,6 +12,7 @@ import type {
   Signal,
 } from '../../shared/strategy-model.js';
 import { taskClosed, type TaskWork } from '../../shared/task-pending.js';
+import { playbookTitle } from './execution/task-title.js';
 
 // Handing off an opportunity one place at a time (shared/opportunity-parts.ts): what each place is called, the title
 // of its task, which places a task of the opportunity already covers, and the paragraph that tells each task's Agent
@@ -91,7 +92,22 @@ function labelOf(part: OpportunityPart, site: SiteContent, locale: string) {
   }
 }
 
-function titleOf(part: OpportunityPart, label: string, locale: string) {
+type NamedPlaybook = {
+  id: string;
+  name: string;
+  system?: boolean;
+  edited?: boolean;
+};
+
+// "<playbook>: <place>" (task-title.ts), as every handed-off task is titled; the older wording without the playbook.
+function titleOf(
+  part: OpportunityPart,
+  label: string,
+  locale: string,
+  playbooks: NamedPlaybook[],
+) {
+  const playbook = playbooks.find((p) => p.id === part.playbookId);
+  if (playbook) return playbookTitle(playbook, label, locale);
   if (part.kind === 'replies')
     return systemMessageText('opportunityTasks.replyTitle', {}, locale).slice(
       0,
@@ -151,6 +167,7 @@ export function planOf({
   proposals,
   tasks,
   targets,
+  playbooks = [],
   locale,
 }: {
   card: Opportunity;
@@ -159,6 +176,8 @@ export function planOf({
   proposals: Proposal[];
   tasks: PlanTask[];
   targets: ArticleTarget[];
+  /** The project's playbooks, which name each place's task. */
+  playbooks?: NamedPlaybook[];
   locale: string;
 }): PlanPart[] {
   const parts = splitOf(card, signals);
@@ -186,7 +205,7 @@ export function planOf({
       ...(part.url ? { url: part.url } : {}),
       label,
       signalIds: part.signalIds,
-      title: titleOf(part, label, locale),
+      title: titleOf(part, label, locale, playbooks),
       playbookId: part.playbookId,
       ...(covered.has(part.key) ? { task: covered.get(part.key)! } : {}),
     };
