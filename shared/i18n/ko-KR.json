@@ -7506,7 +7506,7 @@
   "keywordSuggestions.whereAiSuggestionsCome": "AI 제안의 출처",
   "keywordSuggestions.notPickedReason.direction": "확장 방향과 무관",
   "keywordSuggestions.notPickedShort.direction": "방향 외",
-  "keywordSuggestions.notPickedRow.weaker": "순위가 낮음(한 번에 최대 {0}개, 방향 확장 시 최대 {1}개)",
-  "keywordSuggestions.notPickedRow.unreviewed": "AI가 검토하지 않음(후보가 {0}개를 넘어 검색량이 많은 것만 보냄)",
-  "keywordSuggestions.seedPicked": "선택: {0}"
+  "keywordSuggestions.seedPicked": "선택: {0}",
+  "keywordSuggestions.notPickedNote.weaker": "한 번에 최대 {0}개, 방향으로 확장할 때는 최대 {1}개를 선택합니다. 이 키워드들은 제품과 관련 있지만 선택된 키워드보다 순위가 낮습니다.",
+  "keywordSuggestions.notPickedNote.unreviewed": "후보가 {0}개를 넘으면 검색량이 많은 것만 AI에 보냅니다. 이 키워드들은 검토되지 않았습니다."
 }

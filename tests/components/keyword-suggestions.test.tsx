@@ -361,11 +361,19 @@ test('Selection rules: the rules, the numbers and why the others were not picked
       $t('keywordSuggestions.duplicateOf', { 0: 'internal tool builder' }),
     ),
   ).toBeVisible();
+  // Ranked lower reads short on its row; the limit behind it is said once, under its tab.
   expect(
-    within(dialog).getByText(
-      $t('keywordSuggestions.notPickedRow.weaker', { 0: 40, 1: 20 }),
-    ),
+    within(dialog).getByText($t('keywordSuggestions.notPickedReason.weaker')),
   ).toBeVisible();
+  expect(dialog.querySelector('[data-not-picked-note]')).toBeNull();
+  fireEvent.click(
+    within(dialog).getByRole('button', {
+      name: `${$t('keywordSuggestions.notPickedShort.weaker')} 1`,
+    }),
+  );
+  expect(dialog.querySelector('[data-not-picked-note]')?.textContent).toBe(
+    $t('keywordSuggestions.notPickedNote.weaker', { 0: 40, 1: 20 }),
+  );
   fireEvent.click(
     within(dialog).getByRole('button', {
       name: `${$t('keywordSuggestions.notPickedShort.unrelated')} 1`,

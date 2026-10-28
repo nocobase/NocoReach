@@ -7504,7 +7504,7 @@
   "keywordSuggestions.whereAiSuggestionsCome": "AI 建议怎么来的",
   "keywordSuggestions.notPickedReason.direction": "和拓展方向无关",
   "keywordSuggestions.notPickedShort.direction": "方向无关",
-  "keywordSuggestions.notPickedRow.weaker": "排在后面（每次最多选 {0} 个，按方向拓展最多 {1} 个）",
-  "keywordSuggestions.notPickedRow.unreviewed": "没交给 AI 判断（候选超过 {0} 个，只送搜索量靠前的）",
-  "keywordSuggestions.seedPicked": "选入 {0} 个"
+  "keywordSuggestions.seedPicked": "选入 {0} 个",
+  "keywordSuggestions.notPickedNote.weaker": "每次最多选 {0} 个、按方向拓展最多 {1} 个；这些词和产品相关，但排在选入的词后面。",
+  "keywordSuggestions.notPickedNote.unreviewed": "候选超过 {0} 个时，只把搜索量靠前的交给 AI 判断；这些词没有经过判断。"
 }

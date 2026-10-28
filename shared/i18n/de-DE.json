@@ -7504,7 +7504,7 @@
   "keywordSuggestions.whereAiSuggestionsCome": "Woher die KI-Vorschläge stammen",
   "keywordSuggestions.notPickedReason.direction": "Außerhalb der erweiterten Richtung",
   "keywordSuggestions.notPickedShort.direction": "Andere Richtung",
-  "keywordSuggestions.notPickedRow.weaker": "Weiter hinten (höchstens {0} pro Suche, {1} beim Erweitern in eine Richtung)",
-  "keywordSuggestions.notPickedRow.unreviewed": "Nicht von der KI geprüft (über {0} Kandidaten; nur die meistgesuchten gehen an sie)",
-  "keywordSuggestions.seedPicked": "Ausgewählt: {0}"
+  "keywordSuggestions.seedPicked": "Ausgewählt: {0}",
+  "keywordSuggestions.notPickedNote.weaker": "Pro Suche werden höchstens {0} ausgewählt, beim Erweitern in eine Richtung {1}; diese passen zum Produkt, stehen aber hinter den ausgewählten.",
+  "keywordSuggestions.notPickedNote.unreviewed": "Bei mehr als {0} Kandidaten gehen nur die meistgesuchten an die KI; diese wurden nicht geprüft."
 }

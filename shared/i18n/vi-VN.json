@@ -7504,7 +7504,7 @@
   "keywordSuggestions.whereAiSuggestionsCome": "Nguồn đề xuất của AI",
   "keywordSuggestions.notPickedReason.direction": "Ngoài hướng mở rộng",
   "keywordSuggestions.notPickedShort.direction": "Lệch hướng",
-  "keywordSuggestions.notPickedRow.weaker": "Xếp sau (tối đa {0} từ mỗi lần tìm, {1} từ khi mở rộng theo hướng)",
-  "keywordSuggestions.notPickedRow.unreviewed": "AI chưa xét (hơn {0} ứng viên; chỉ gửi những từ được tìm nhiều nhất)",
-  "keywordSuggestions.seedPicked": "Đã chọn: {0}"
+  "keywordSuggestions.seedPicked": "Đã chọn: {0}",
+  "keywordSuggestions.notPickedNote.weaker": "Mỗi lần tìm chọn tối đa {0} từ, khi mở rộng theo hướng tối đa {1} từ; những từ này liên quan đến sản phẩm nhưng xếp sau các từ đã chọn.",
+  "keywordSuggestions.notPickedNote.unreviewed": "Khi có hơn {0} ứng viên, chỉ những từ được tìm nhiều nhất được gửi cho AI; những từ này chưa được xét."
 }

@@ -356,3 +356,21 @@ test('a list from before keywords were counted once shows picked per seed counte
  assert.deepEqual(v.seedStats,[{seed:'crm',found:null,picked:1},{seed:'self hosted crm',found:null,picked:1}]);
  assert.deepEqual(v.items.map(i=>i.seed),['self hosted crm','crm']);
 });
+
+test('a head-term seed does not take the keywords a more specific seed it shares them with brought; equally specific seeds go to the one of more words',async()=>{
+ global.fetch=async(url,init)=>{const path=String(url),body=JSON.parse(init.body)[0];
+  const items=path.includes('keyword_suggestions')?({
+   'project management':[kw('project management',20000),kw('project management software',6000),kw('project management kanban boards',900),kw('project management tools',3000)],
+   'kanban boards':[kw('kanban boards',4000),kw('project management kanban boards',900),kw('kanban boards app',700)],
+   'board':[kw('task board app',500)],
+   'task board':[kw('task board app',500)],
+  }[body.keyword]||[]):[];
+  return {ok:true,json:async()=>({status_code:20000,cost:0.01,tasks:[{status_code:20000,result:[{seed_keyword:body.keyword,items}]}]})};};
+ const curate=input=>'```json\n'+JSON.stringify({keywords:input.candidates.map(c=>({keyword:c.keyword,group:1,relevance:3,reason:'x'}))})+'\n```';
+ const {s}=setup({seeds:['project management','kanban boards','board','task board'],curate});await finish(s,{});
+ const v=await s.view('1'),seedOf=k=>v.items.find(i=>i.keyword===k).seed,by=Object.fromEntries(v.seedStats.map(x=>[x.seed,x]));
+ assert.equal(seedOf('project management kanban boards'),'kanban boards','the head term is in more of the found keywords: the specific seed is credited');
+ assert.equal(seedOf('project management tools'),'project management');
+ assert.equal(seedOf('task board app'),'task board','both seeds are in as many found keywords: the one of more words');
+ assert.deepEqual(['project management','kanban boards','board','task board'].map(x=>[by[x].found,by[x].picked]),[[3,3],[3,3],[0,0],[1,1]]);
+});

@@ -7522,7 +7522,7 @@
   "keywordSuggestions.whereAiSuggestionsCome": "Откуда берутся предложения ИИ",
   "keywordSuggestions.notPickedReason.direction": "Вне направления расширения",
   "keywordSuggestions.notPickedShort.direction": "Не по направлению",
-  "keywordSuggestions.notPickedRow.weaker": "Ниже в рейтинге (не больше {0} за поиск и {1} при расширении)",
-  "keywordSuggestions.notPickedRow.unreviewed": "ИИ не оценивал (больше {0} кандидатов; ему отправляются только самые частотные)",
-  "keywordSuggestions.seedPicked": "Выбрано: {0}"
+  "keywordSuggestions.seedPicked": "Выбрано: {0}",
+  "keywordSuggestions.notPickedNote.weaker": "За поиск выбирается не больше {0} слов, при расширении — {1}; эти слова связаны с продуктом, но в рейтинге ниже выбранных.",
+  "keywordSuggestions.notPickedNote.unreviewed": "Если кандидатов больше {0}, ИИ получает только самые частотные; эти слова не оценивались."
 }

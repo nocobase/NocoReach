@@ -56,20 +56,23 @@ type NotPicked = {
 };
 const reasonLabel = (r: string) =>
   $t(`keywordSuggestions.notPickedReason.${r}`);
-/** A not-picked row's reason in full: ranked lower and not reviewed say the limit behind them. */
-const rowReason = (c: NotPicked, s?: Selection) =>
+/** A not-picked row's reason: a duplicate names the keyword it repeats. */
+const rowReason = (c: NotPicked) =>
   c.reason === 'duplicate' && c.duplicateOf
     ? $t('keywordSuggestions.duplicateOf', { 0: c.duplicateOf })
-    : c.reason === 'weaker'
-      ? $t('keywordSuggestions.notPickedRow.weaker', {
-          0: s?.pick ?? 40,
-          1: s?.digPick ?? 20,
+    : reasonLabel(c.reason);
+/** The limit behind a reason, said once under its tab rather than on every row. */
+const reasonNote = (reason: string, s?: Selection) =>
+  reason === 'weaker'
+    ? $t('keywordSuggestions.notPickedNote.weaker', {
+        0: s?.pick ?? 40,
+        1: s?.digPick ?? 20,
+      })
+    : reason === 'unreviewed'
+      ? $t('keywordSuggestions.notPickedNote.unreviewed', {
+          0: s?.shortlist ?? 250,
         })
-      : c.reason === 'unreviewed'
-        ? $t('keywordSuggestions.notPickedRow.unreviewed', {
-            0: s?.shortlist ?? 250,
-          })
-        : reasonLabel(c.reason);
+      : '';
 const call = <T,>(projectId: number, action: string, body: object = {}) =>
   api.action<T>('nrKeywordSuggest', action, {
     method: 'POST',
@@ -422,6 +425,14 @@ export function NotPickedDialog({
                 })),
               ]}
             />
+            {reasonNote(filter, selection) ? (
+              <p
+                className='-mt-1 text-xs text-muted-foreground'
+                data-not-picked-note
+              >
+                {reasonNote(filter, selection)}
+              </p>
+            ) : null}
             <div className='min-h-0 flex-1 overflow-auto rounded-lg border'>
               <table className='w-full text-sm'>
                 <thead className='sticky top-0 bg-muted/60 text-left text-xs whitespace-nowrap text-muted-foreground backdrop-blur'>
@@ -452,7 +463,7 @@ export function NotPickedDialog({
                         <ScoreBadge value={c.difficulty} />
                       </td>
                       <td className='px-3 py-2 whitespace-nowrap text-muted-foreground'>
-                        {rowReason(c, selection)}
+                        {rowReason(c)}
                       </td>
                       <td className='px-3 py-2 text-right'>
                         {canAdd ? (

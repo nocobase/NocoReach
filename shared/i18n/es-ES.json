@@ -7504,7 +7504,7 @@
   "keywordSuggestions.whereAiSuggestionsCome": "De dónde salen las sugerencias de IA",
   "keywordSuggestions.notPickedReason.direction": "Fuera de la dirección ampliada",
   "keywordSuggestions.notPickedShort.direction": "Fuera de dirección",
-  "keywordSuggestions.notPickedRow.weaker": "Quedó más abajo (como máximo {0} por búsqueda, {1} al ampliar en una dirección)",
-  "keywordSuggestions.notPickedRow.unreviewed": "La IA no la revisó (más de {0} candidatas; solo recibe las más buscadas)",
-  "keywordSuggestions.seedPicked": "Seleccionadas: {0}"
+  "keywordSuggestions.seedPicked": "Seleccionadas: {0}",
+  "keywordSuggestions.notPickedNote.weaker": "Se seleccionan como máximo {0} por búsqueda y {1} al ampliar en una dirección; estas están relacionadas con el producto, pero quedaron por debajo de las seleccionadas.",
+  "keywordSuggestions.notPickedNote.unreviewed": "Con más de {0} candidatas, solo las más buscadas pasan a la IA; estas no se revisaron."
 }

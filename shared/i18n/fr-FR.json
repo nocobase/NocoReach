@@ -7504,7 +7504,7 @@
   "keywordSuggestions.whereAiSuggestionsCome": "Origine des suggestions de l’IA",
   "keywordSuggestions.notPickedReason.direction": "Hors de la direction élargie",
   "keywordSuggestions.notPickedShort.direction": "Hors direction",
-  "keywordSuggestions.notPickedRow.weaker": "Classé plus bas ({0} au plus par recherche, {1} pour un élargissement)",
-  "keywordSuggestions.notPickedRow.unreviewed": "Non évalué par l’IA (plus de {0} candidats ; seuls les plus recherchés lui sont envoyés)",
-  "keywordSuggestions.seedPicked": "Retenus : {0}"
+  "keywordSuggestions.seedPicked": "Retenus : {0}",
+  "keywordSuggestions.notPickedNote.weaker": "{0} mots-clés au plus sont retenus par recherche, {1} pour un élargissement ; ceux-ci sont liés au produit mais classés après les retenus.",
+  "keywordSuggestions.notPickedNote.unreviewed": "Au-delà de {0} candidats, seuls les plus recherchés sont envoyés à l’IA ; ceux-ci n’ont pas été évalués."
 }

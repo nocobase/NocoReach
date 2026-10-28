@@ -7504,7 +7504,7 @@
   "keywordSuggestions.whereAiSuggestionsCome": "AIの提案の情報源",
   "keywordSuggestions.notPickedReason.direction": "拡張の方向と関係がない",
   "keywordSuggestions.notPickedShort.direction": "方向外",
-  "keywordSuggestions.notPickedRow.weaker": "順位が低い（1 回の検索で最大 {0} 件、方向に広げるときは最大 {1} 件）",
-  "keywordSuggestions.notPickedRow.unreviewed": "AI が判断していない（候補が {0} 件を超え、検索数の多いものだけを渡すため）",
-  "keywordSuggestions.seedPicked": "選んだ数：{0}"
+  "keywordSuggestions.seedPicked": "選んだ数：{0}",
+  "keywordSuggestions.notPickedNote.weaker": "1 回の検索で最大 {0} 件、方向に広げるときは最大 {1} 件を選びます。これらは製品に関連していますが、選んだキーワードより順位が低いものです。",
+  "keywordSuggestions.notPickedNote.unreviewed": "候補が {0} 件を超えると、検索数の多いものだけを AI に渡します。これらは判断されていません。"
 }

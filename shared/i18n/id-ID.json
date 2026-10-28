@@ -7504,7 +7504,7 @@
   "keywordSuggestions.whereAiSuggestionsCome": "Sumber saran AI",
   "keywordSuggestions.notPickedReason.direction": "Di luar arah perluasan",
   "keywordSuggestions.notPickedShort.direction": "Di luar arah",
-  "keywordSuggestions.notPickedRow.weaker": "Peringkat lebih rendah (maks. {0} per pencarian, {1} saat memperluas ke satu arah)",
-  "keywordSuggestions.notPickedRow.unreviewed": "Tidak dinilai AI (lebih dari {0} kandidat; hanya yang paling banyak dicari yang dikirim)",
-  "keywordSuggestions.seedPicked": "Dipilih: {0}"
+  "keywordSuggestions.seedPicked": "Dipilih: {0}",
+  "keywordSuggestions.notPickedNote.weaker": "Setiap pencarian memilih maksimal {0}, saat memperluas ke satu arah maksimal {1}; kata kunci ini terkait produk, tetapi peringkatnya di bawah yang dipilih.",
+  "keywordSuggestions.notPickedNote.unreviewed": "Jika kandidat lebih dari {0}, hanya yang paling banyak dicari yang dikirim ke AI; kata kunci ini belum dinilai."
 }

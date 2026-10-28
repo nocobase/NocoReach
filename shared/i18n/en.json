@@ -7504,7 +7504,7 @@
   "keywordSuggestions.whereAiSuggestionsCome": "Where AI suggestions come from",
   "keywordSuggestions.notPickedReason.direction": "Outside the expansion direction",
   "keywordSuggestions.notPickedShort.direction": "Off direction",
-  "keywordSuggestions.notPickedRow.weaker": "Ranked lower (at most {0} a lookup, {1} when expanding in a direction)",
-  "keywordSuggestions.notPickedRow.unreviewed": "Not reviewed by AI (over {0} candidates; only the most searched go to it)",
-  "keywordSuggestions.seedPicked": "Picked: {0}"
+  "keywordSuggestions.seedPicked": "Picked: {0}",
+  "keywordSuggestions.notPickedNote.weaker": "At most {0} are picked a lookup, {1} when expanding in a direction; these are related to the product but ranked below those picked.",
+  "keywordSuggestions.notPickedNote.unreviewed": "When there are over {0} candidates, only the most searched go to the AI; these were not reviewed."
 }
