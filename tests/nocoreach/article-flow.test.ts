@@ -1320,6 +1320,188 @@ test('languages: a new article in a primary chosen at start other than the first
   });
 });
 
+// 2026-10-28 (T-53): updating an existing article re-translated the whole new English into the other languages, and a
+// primary-only file the Agent submitted by mistake passed as the translation, with Chinese and Japanese unchanged.
+test('languages: an update edits the languages the article has with the primary changes, translates the one it lacks, and refuses a result without them', async () => {
+  const f = await fixture();
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('startTask', {
+    playbookId: 'optimize-page',
+    delivery: { locales: ['en', 'zh', 'ja'] },
+  });
+  let { run } = await claim(f);
+  expect(run.input.article.languages.phase).toBe('primary');
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'Changed the English title and added a paragraph.',
+    article: {
+      locales: {
+        en: {
+          title: 'Hello, world',
+          body: '# Hello\n\nEnglish body\n\nA new paragraph',
+        },
+      },
+      summary: 'New title',
+    },
+  });
+  let d = await approveCurrent(f);
+  // Chinese is there already: it is updated in place, and the approval says so.
+  expect(
+    d.work.history.filter((e) => e.action === 'approveStage').at(-1),
+  ).toMatchObject({
+    action: 'approveStage',
+    note: 'update',
+  });
+  ({ run } = await claim(f));
+  expect(run.input.article.languages).toEqual({
+    primary: 'en',
+    others: ['zh', 'ja'],
+    phase: 'update',
+    write: ['zh', 'ja'],
+    // The whole approved text, for the language the article lacks.
+    approved: {
+      title: 'Hello, world',
+      description: 'Old summary',
+      body: '# Hello\n\nEnglish body\n\nA new paragraph',
+      fields: ['title', 'description', 'body'],
+    },
+    update: ['zh'],
+    translate: ['ja'],
+    // What the primary changed, for Chinese to get the same edits.
+    changes: [
+      { field: 'title', before: 'Hello', after: 'Hello, world' },
+      {
+        field: 'body',
+        edits: [{ near: 'English body', before: '', after: 'A new paragraph' }],
+      },
+    ],
+  });
+  // Chinese is edited from its own current text, in the source.
+  expect(run.input.article.source.locales.zh).toMatchObject({ title: '你好' });
+  const stored = f.state.nrSnapshots.find((row) =>
+    row.key.endsWith(run.id),
+  ).payload;
+  // The primary-only file of the earlier run: refused in words, so the Agent submits what it wrote this time.
+  await expect(
+    f.s.validateAgentResult(stored, {
+      ok: true,
+      content: 'Changed the English title.',
+      article: {
+        locales: { en: { title: 'Hello, world' } },
+        summary: 'New title',
+      },
+    }),
+  ).rejects.toMatchObject({
+    status: 422,
+    message:
+      '这一步要写中文（zh）、日语（ja），英语（en）已经审核通过，不用再写；这次只写了：英语（en）。',
+  });
+  // Chinese as it was, Japanese not written: accepted, and the review shows that nothing changed in them.
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'Nothing to change.',
+    article: { locales: { zh: { title: '你好' } }, summary: 'No changes' },
+  });
+  d = await f.view();
+  expect(review(d).article.changes.filter((c) => !c.startsWith('en.'))).toEqual(
+    [],
+  );
+  // Done again (the card's Update again): still an update in place.
+  await f.command('requestStageChanges', {
+    stageKey: d.work.flow.stages[d.work.stageIndex].key,
+    artifactId: review(d).id,
+    comment: 'Chinese and Japanese did not change.',
+  });
+  ({ run } = await claim(f));
+  expect(run.input.article.languages).toMatchObject({
+    phase: 'update',
+    update: ['zh'],
+    translate: ['ja'],
+  });
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'Updated Chinese and translated Japanese.',
+    article: {
+      locales: {
+        zh: {
+          title: '你好，世界',
+          body: '# 你好\n\n中文正文\n\n新的一段',
+        },
+        ja: {
+          title: 'こんにちは、世界',
+          description: '古い要約',
+          body: '# こんにちは\n\n英語の本文\n\n新しい段落',
+        },
+      },
+      summary: 'Updated Chinese',
+    },
+  });
+  d = await f.view();
+  expect([...review(d).article.changes].sort()).toEqual([
+    'en.body',
+    'en.title',
+    'ja.body',
+    'ja.description',
+    'ja.title',
+    'zh.body',
+    'zh.title',
+  ]);
+  await approveCurrent(f);
+  expect(f.cms.state.rows.find((r) => r.slug === 'hello')).toMatchObject({
+    title: 'Hello, world',
+    description: 'Old summary',
+    title_cn: '你好，世界',
+    description_cn: '旧摘要',
+    content_cn: '# 你好\n\n中文正文\n\n新的一段',
+    title_ja: 'こんにちは、世界',
+  });
+});
+
+test('languages: a new article and an update of an article without the other languages translate the whole approved text', async () => {
+  const f = await fixture();
+  // The article has English and Chinese; only Japanese is written after English.
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('startTask', {
+    playbookId: 'optimize-page',
+    delivery: { locales: ['en', 'ja'] },
+  });
+  let { run } = await claim(f);
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'New title',
+    article: { locales: { en: { title: 'Hello, world' } }, summary: 'Title' },
+  });
+  const d = await approveCurrent(f);
+  expect(
+    d.work.history.filter((e) => e.action === 'approveStage').at(-1),
+  ).toMatchObject({
+    action: 'approveStage',
+    note: 'translate',
+  });
+  ({ run } = await claim(f));
+  // Every field, not only the title the primary changed: Japanese is not there yet.
+  expect(run.input.article.languages).toEqual({
+    primary: 'en',
+    others: ['ja'],
+    phase: 'translate',
+    write: ['ja'],
+    approved: {
+      title: 'Hello, world',
+      description: 'Old summary',
+      body: '# Hello\n\nEnglish body',
+      fields: ['title', 'description', 'body'],
+    },
+  });
+});
+
 test('translation: the published article is translated into the languages it lacks, the source is kept, one publish writes them', async () => {
   const f = await fixture();
   let d = await f.command('linkArticle', { targetId: 'cms', articleId: '7' });

@@ -175,6 +175,26 @@ export function primaryOnly(primary: string, value: unknown) {
 }
 
 /**
+ * A translation or an update of the other languages (phase `translate` or `update`) that holds none of the languages it
+ * is to write. 2026-10-28 (T-53): a script failed and the Agent submitted the primary-only file an earlier run had left
+ * in its workspace; the other languages were dropped without a word and the approved primary passed as the translation.
+ */
+export function writesNone(write: string[], primary: string, value: unknown) {
+  const locales = (value as { locales?: unknown } | null)?.locales;
+  if (!locales || typeof locales !== 'object') return undefined;
+  const written = Object.keys(locales);
+  return written.length && !written.some((l) => write.includes(l))
+    ? rejected(
+        `missing:${write.join(',')}`,
+        'othersMissing',
+        languages(write),
+        language(primary),
+        languages(written),
+      )
+    : undefined;
+}
+
+/**
  * Keep only the locales and fields the target maps, and drop a status the target has no field for. A new article needs
  * a title and body in `primary`: the task's primary language, by default the target's first; null asks for none (another
  * target while the task's other languages are still to be translated).

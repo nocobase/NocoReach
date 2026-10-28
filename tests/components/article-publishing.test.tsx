@@ -1452,6 +1452,52 @@ it('the start card names the languages, primary first, and the dialog changes th
   );
 });
 
+// 2026-10-28 (T-53): an existing article's other languages get the primary's changes in place, not a new translation.
+it('the languages help says how they are written: translated for a new article, updated for an existing one', () => {
+  const dialog = (mode: 'new' | 'existing') =>
+    render(
+      <DeliveryDialog
+        open
+        onClose={() => undefined}
+        data={
+          {
+            ...data,
+            articleTargets: [{ ...target, locales: ['en', 'zh', 'ja'] }],
+            work: {
+              article: {
+                targetId: 'cms',
+                articleId: '7',
+                slug: 'hello',
+                title: 'Hello',
+                sourceKey: 'k',
+                locales: ['en', 'zh'],
+              },
+            },
+          } as unknown as TaskData
+        }
+        projectId={1}
+        choice={{ target: 'cms', mode, also: [] }}
+        busy={false}
+        link={async () => true}
+        onSave={() => undefined}
+      />,
+    );
+  let view = dialog('new');
+  expect(
+    within(screen.getByRole('dialog')).getByText(
+      /the Agent translates it into the other languages checked here/,
+    ),
+  ).toBeVisible();
+  view.unmount();
+  view = dialog('existing');
+  expect(
+    within(screen.getByRole('dialog')).getByText(
+      /the Agent makes the same changes in the other languages checked here, keeping their existing wording/,
+    ),
+  ).toBeVisible();
+  view.unmount();
+});
+
 it('before the primary is approved, the review says which languages follow', () => {
   render(
     <ArticleReview

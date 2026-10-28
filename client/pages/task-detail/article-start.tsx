@@ -346,6 +346,9 @@ function DeliveryForm({
             id={id}
             all={targets.find((t) => t.id === target)?.locales || []}
             chosen={choiceLocales(data, draft)}
+            present={
+              mode === 'existing' && article ? (present ?? null) : undefined
+            }
             disabled={disabled}
             onChange={(locales) => setDraft({ ...draft, locales })}
           />
@@ -493,24 +496,32 @@ function DeliveryForm({
 // article still has to be picked, the line says why and Choose article opens the same dialog.
 /**
  * The languages a task writes (2026-10-24): the primary, written and reviewed first, and the others, translated from
- * it once it is approved. Every language of the target is chosen until the person changes it.
+ * it once it is approved, or updated in place with its changes where an existing article has them (2026-10-28).
+ * Every language of the target is chosen until the person changes it.
  */
 function LanguagePicker({
   id,
   all,
   chosen,
+  present,
   disabled,
   onChange,
 }: {
   id: string;
   all: string[];
   chosen: string[];
+  /** An existing article's languages (null: not known yet, every one counts as present); undefined for a new one. */
+  present?: string[] | null;
   disabled: boolean;
   onChange: (locales: string[]) => void;
 }) {
   const ui = getCurrentLocale(),
     primary = chosen[0] || all[0] || '',
     others = all.filter((l) => l !== primary);
+  // An existing article's languages get the primary's changes in place rather than a new translation (2026-10-28).
+  const updates =
+    present !== undefined &&
+    chosen.slice(1).some((l) => !present || present.includes(l));
   if (all.length < 2) return null;
   return (
     <div className='nr-td-start-field'>
@@ -573,7 +584,13 @@ function LanguagePicker({
           );
         })}
       </div>
-      <small>{$t('articleTask.languagesHelp')}</small>
+      <small>
+        {$t(
+          updates
+            ? 'articleTask.languagesHelpUpdate'
+            : 'articleTask.languagesHelp',
+        )}
+      </small>
     </div>
   );
 }

@@ -1,5 +1,4 @@
 import { DAY, daysBetween, json, notFound } from './kit.js';
-import { PACKAGES } from './script/market.js';
 import { growth, level, weekday } from './series.js';
 import type { World } from './world.js';
 
@@ -16,13 +15,13 @@ function downloads(
 ): number {
   const ago = Math.round((world.now - Date.parse(date)) / DAY);
   if (ago < 1) return 0;
-  const base = registry === 'npm' ? PACKAGES.npm : PACKAGES.pypi;
+  const base = registry === 'npm' ? world.packages.npm : world.packages.pypi;
   // Package downloads come from CI as much as from people, so weekends dip less than visits.
   return Math.round(
     base *
       weekday(date) ** 0.5 *
       growth(ago) *
-      level(PACKAGES.changes, ago) *
+      level(world.packages.changes, ago) *
       world.seeded.jitter(`${registry}:${name}:${date}`, 0.14),
   );
 }
@@ -31,14 +30,13 @@ const versionTime = (world: World, age: number) =>
   iso(world.now - age * DAY - 7 * 3_600_000);
 
 export function packages(world: World, u: URL): Response | undefined {
-  if (!world.main) return undefined;
   let p: string;
   try {
     p = decodeURIComponent(u.pathname);
   } catch {
     return undefined;
   }
-  const versions = PACKAGES.versions;
+  const versions = world.packages.versions;
   const stable = versions.find(([v]) => !v.includes('-'))![0];
   if (u.hostname === 'registry.npmjs.org') {
     const name = p.replace(/^\//, '').replace(/\/latest$/, '');
@@ -47,12 +45,11 @@ export function packages(world: World, u: URL): Response | undefined {
       return json({
         name,
         version: stable,
-        description:
-          world.lang === 'zh' ? 'NocoBase 核心包' : 'NocoBase core package',
+        description: `${world.site.name} ${world.lang === 'zh' ? '核心包' : 'core package'}`,
         homepage: world.origin,
         repository: {
           type: 'git',
-          url: 'git+https://github.com/nocobase/nocobase.git',
+          url: `git+https://github.com/${world.repository.owner}/${world.repository.name}.git`,
         },
         license: 'AGPL-3.0',
       });
@@ -122,10 +119,12 @@ export function packages(world: World, u: URL): Response | undefined {
         version: stable,
         summary:
           world.lang === 'zh'
-            ? 'NocoBase 的 Python SDK'
-            : 'The Python SDK for NocoBase',
+            ? `${world.site.name} 的 Python SDK`
+            : `The Python SDK for ${world.site.name}`,
         home_page: world.origin,
-        project_urls: { Source: 'https://github.com/nocobase/nocobase' },
+        project_urls: {
+          Source: `https://github.com/${world.repository.owner}/${world.repository.name}`,
+        },
       },
       releases: Object.fromEntries(
         versions
@@ -255,8 +254,10 @@ export function packages(world: World, u: URL): Response | undefined {
       namespace: repo[1],
       name: repo[2],
       description:
-        world.lang === 'zh' ? 'NocoBase 官方镜像' : 'Official NocoBase image',
-      pull_count: Math.round(PACKAGES.docker + elapsed * 2_150),
+        world.lang === 'zh'
+          ? `${world.site.name} 演示镜像`
+          : `${world.site.name} demo image`,
+      pull_count: Math.round(world.packages.docker + elapsed * 2_150),
       star_count: 214,
       last_updated: versionTime(world, versions[1][1]),
       is_private: false,
