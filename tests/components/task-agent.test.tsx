@@ -358,12 +358,11 @@ test.each(['agent'] as const)(
     ).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '直接编辑' })).toBeEnabled();
     expect(screen.getByRole('button', { name: '接受' })).toBeEnabled();
-    // Feedback is written in the result's card, next to what it is about.
+    // Feedback is written in Activity's message box (2026-10-28): Request changes puts the cursor there.
     await user.click(screen.getByRole('button', { name: '提修改意见' }));
-    await user.type(
-      screen.getByRole('textbox', { name: '提修改意见' }),
-      'Keep this result.',
-    );
+    const box = screen.getByRole('textbox', { name: '给执行者的话' });
+    expect(box).toHaveFocus();
+    await user.type(box, 'Keep this result.');
     await user.click(screen.getByRole('button', { name: '发送意见' }));
     await waitFor(() =>
       expect(action).toHaveBeenCalledWith(
@@ -372,13 +371,128 @@ test.each(['agent'] as const)(
         expect.objectContaining({
           body: expect.objectContaining({
             command: 'requestStageChanges',
+            stageKey: 'review',
+            artifactId: 'old-draft',
             comment: 'Keep this result.',
           }),
         }),
       ),
     );
+    expect(commands()).toEqual(['requestStageChanges']);
   },
 );
+
+// The commands the page sent, in order.
+const commands = () =>
+  action.mock.calls
+    .filter(([, command]) => command === 'advance')
+    .map(([, , options]) => options.body.command);
+
+// 2026-10-28 user decision: away from a review, or for someone who cannot review, the message box still leaves a
+// note, and its hint says who reads it.
+test.each([
+  ['before the start', '给 Agent 留言，开始执行时会读取'],
+  ['while the Agent works', '给 Agent 留言，下次运行时会读取'],
+  ['after a failed run', '给 Agent 留言，下次运行时会读取'],
+  ['while waiting to confirm it is live', '写一条留言，会记录在动态里'],
+  ['at a review the person cannot do', '给 Agent 留言，下次运行时会读取'],
+])('%s, the message box leaves a note', async (state, hint) => {
+  const user = userEvent.setup();
+  const data = state === 'before the start' ? initial() : reviewTask();
+  data.work.results = [
+    {
+      id: 'v1',
+      stepId: 'draft',
+      planVersion: 0,
+      content: 'Draft',
+      version: 1,
+      createdAt: '2026-10-28T01:00:00Z',
+      createdBy: 'agent',
+    },
+  ];
+  if (state === 'before the start') data.work.results = [];
+  if (state === 'while the Agent works' || state === 'after a failed run') {
+    data.work.agentId = 'codex';
+    data.agent!.agentId = 'codex';
+    data.runs = [
+      {
+        id: 'run-1',
+        status: state === 'after a failed run' ? 'failed' : 'running',
+        planVersion: 0,
+        stepId: 'draft',
+        createdAt: new Date().toISOString(),
+        error: state === 'after a failed run' ? 'agent_failed' : undefined,
+      },
+    ];
+  }
+  if (state === 'while waiting to confirm it is live') {
+    data.work.flow!.stages.push({
+      key: 'release',
+      name: '上线',
+      kind: 'release',
+    });
+    data.work.stageIndex = 2;
+    data.work.results[0]!.approvedAt = '2026-10-28T02:00:00Z';
+    data.work.release = {
+      state: 'not_seen',
+      reason: 'manual',
+      note: '',
+      pages: [],
+    };
+  }
+  if (state === 'at a review the person cannot do') {
+    access.allowed = false;
+    data.work.stageIndex = 1;
+  }
+  advance.mockResolvedValue(data);
+  mount(data);
+  const box = screen.getByRole('textbox', { name: '给执行者的话' });
+  expect(box.getAttribute('placeholder')).toMatch(new RegExp(`^${hint}`));
+  // Someone who cannot review has no Request changes; the card says who reviews.
+  if (state === 'at a review the person cannot do')
+    expect(screen.queryByRole('button', { name: '提修改意见' })).toBeNull();
+  await user.type(box, 'A note');
+  expect(screen.queryByRole('button', { name: '发送意见' })).toBeNull();
+  await user.click(screen.getByRole('button', { name: '发送', exact: true }));
+  await waitFor(() => expect(commands()).toEqual(['comment']));
+  expect(advance).toHaveBeenCalledTimes(1);
+  expect(
+    action.mock.calls.find(([, command]) => command === 'advance')?.[2].body,
+  ).toMatchObject({ command: 'comment', comment: 'A note' });
+});
+
+// A change request the server refuses (another window changed the version) keeps what was written.
+test('a refused change request keeps the message in the box', async () => {
+  const user = userEvent.setup();
+  const data = reviewTask();
+  data.work.stageIndex = 1;
+  data.work.results = [
+    {
+      id: 'v1',
+      stepId: 'draft',
+      planVersion: 0,
+      content: 'Draft',
+      version: 1,
+      createdAt: '2026-10-28T01:00:00Z',
+      createdBy: 'agent',
+    },
+  ];
+  advance.mockRejectedValueOnce(
+    new NocoReachHttpError('内容已更新，请刷新后再审核', 409, {}),
+  );
+  // A conflict reloads the task.
+  const others = action.getMockImplementation()!;
+  action.mockImplementation((resource: string, command: string) =>
+    command === 'get' ? Promise.resolve(data) : others(resource, command),
+  );
+  mount(data);
+  const box = screen.getByRole('textbox', { name: '给执行者的话' });
+  await user.type(box, 'Shorter title');
+  await user.click(screen.getByRole('button', { name: '发送意见' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('内容已更新');
+  expect(box).toHaveValue('Shorter title');
+  expect(commands()).toEqual(['requestStageChanges']);
+});
 
 // The task's saved Agent was removed after its last run failed, and one other Agent is available (2026-10-17 report:
 // "任务 Agent 已失效，请重新选择" with nowhere to choose).

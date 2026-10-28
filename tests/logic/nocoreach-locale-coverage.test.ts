@@ -366,6 +366,9 @@ describe('NocoReach semantic-key translations', () => {
       '没有完成：{0}': ' · 没有完成：{0}',
       '，{0} 条建议': ' · {0} 条建议',
       '，没有要更新的': ' · 没有要更新的',
+      // Change requests are written in Activity's message box (2026-10-28), and the Agent revises rather than redoes.
+      '写修改意见，发送后{0}会按意见重做':
+        '写修改意见，发送后 {0} 会按意见重新修改',
     };
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(

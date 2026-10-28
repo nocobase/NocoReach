@@ -474,12 +474,20 @@ test('clean browsing and opening an unchanged editor do not warn', async () => {
   expect(unload()).toBe(false);
 });
 
-test('sending a comment clears only that editor', async () => {
+// At a review the message is a change request (2026-10-28): sending it keeps the direct edit not saved yet.
+test('sending a change request clears only that editor', async () => {
   const data = reviewData();
   mount(data);
   const user = await editBoth();
   advance.mockResolvedValue({ ...data, work: { ...data.work, revision: 5 } });
-  await user.click(screen.getByRole('button', { name: '发送', exact: true }));
+  await user.click(screen.getByRole('button', { name: '发送意见' }));
+  expect(
+    action.mock.calls.find(([, command]) => command === 'advance')?.[2].body,
+  ).toMatchObject({
+    command: 'requestStageChanges',
+    artifactId: 'artifact-1',
+    comment: 'Draft comment',
+  });
   await waitFor(() =>
     expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue(
       '',
@@ -623,7 +631,7 @@ test('isolates identical task ids across projects and restores the original draf
   );
 });
 
-test.each(['output', 'comment'])(
+test.each(['output', 'change request'])(
   'keeps a pending %s save mounted across links and history',
   async (kind) => {
     const data = reviewData();
@@ -633,7 +641,7 @@ test.each(['output', 'comment'])(
     const user = await editBoth();
     await user.click(
       screen.getByRole('button', {
-        name: kind === 'output' ? '保存修改' : '发送',
+        name: kind === 'output' ? '保存修改' : '发送意见',
         exact: true,
       }),
     );

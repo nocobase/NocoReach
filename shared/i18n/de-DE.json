@@ -3540,6 +3540,7 @@
   "savedKeywords.changeTagsKeywords": "Tags der Auswahl ändern (Keywords: {0})",
   "taskDetail.leaveHistoricalNote": "Notiz zu dieser früheren Aufgabe hinterlassen",
   "taskDetail.leaveNoteNextRunReads": "Notiz für {0} hinterlassen; sie wird beim nächsten Durchlauf gelesen",
+  "taskDetail.leaveNoteRecorded": "Notiz hinterlassen; sie wird in der Aktivität festgehalten",
   "taskDetail.leaveNoteBeforeStart": "Hinterlassen Sie {0} eine Nachricht; sie wird beim Start gelesen ({1})",
   "seoHandOff.draftReplies": "Antworten für die Auswahl auf {0} entwerfen ({2}; Anzahl: {1})",
   "seoHandOff.draftReplyUnansweredCopyThem": "{0} — {1}: Für jeden ausgewählten Eintrag eine Antwort entwerfen und nach der Prüfung kopieren",
