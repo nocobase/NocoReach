@@ -290,11 +290,7 @@ test('a list that moved on makes the proposal out of date; a dig proposal confir
   await waitFor(() =>
     expect(card).toHaveAttribute('data-keyword-run', 'pending'),
   );
-  expect(
-    within(card).getByText(
-      $t('keywordSuggestions.digTab', { 0: 'approval workflow' }),
-    ),
-  ).toBeVisible();
+  expect(within(card).getByText($t('keywordRun.newGroup'))).toBeVisible();
   expect(
     within(card).getByText(
       $t('keywordRun.because', { 0: 'The direction asked for' }),

@@ -122,6 +122,9 @@ interface SuggestionView {
     items: Item[];
   }[];
   removed?: string[];
+  pendingSeeds?: string[] | null;
+  groupNames?: Record<string, string>;
+  deletedGroups?: string[];
 }
 const quote = (text: string) => `"${text.replaceAll('"', "'")}"`;
 /**
@@ -162,6 +165,10 @@ export async function keywordsPageContext(
       madeAt: v.at ?? null,
       market: marketName(v.market),
       seeds: v.seeds ?? [],
+      // Saved in Edit seed words for the next re-find; the list was still found with seeds.
+      seedsForNextFind: v.pendingSeeds ?? null,
+      groupsRenamed: v.groupNames ?? {},
+      groupsDeleted: v.deletedGroups ?? [],
       seedNotes: v.seedNotes ?? null,
       seedStats: v.seedStats ?? null,
       realKeywordsFound: v.stats?.found ?? null,

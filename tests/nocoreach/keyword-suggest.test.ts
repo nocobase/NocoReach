@@ -197,17 +197,17 @@ test('the online agent: propose_keyword_run returns a proposal in plain market n
  assert.match(await keywordsPageContext(s,'1',undefined,async()=>false),/may not see the suggestions/);
 });
 
-test('editing the list: rename a dug group, delete it (saved keywords stay), remove keywords, which stay out of later lookups until restored',async()=>{
+test('editing the list: rename a dug group, delete it in Edit groups (saved keywords stay), remove keywords, which stay out of later lookups until restored',async()=>{
  fetchFor();const extra=[{keyword:'approval workflow example',group:2,relevance:2,reason:'流程模板'}];
  const {s,stored}=setup({seeds:input=>input.direction?['approval workflow']:SEEDS,curate:input=>curated(input.direction?extra:[])});
  await finish(s,{});await finish(s,{mode:'dig',direction:'approval workflow',name:'审批流'});
  let v=await s.view('1');const dig=v.digs[0];assert.equal(dig.name,'审批流');
  // Saved before the group goes: deleting the group does not touch saved keywords.
  await s.keep('1',{ids:[dig.items[0].id]});assert.equal(stored.length,1);
- assert.equal((await s.renameDig('1',{digId:dig.id,name:'审批流程'})).digs[0].name,'审批流程');
- await assert.rejects(s.renameDig('1',{digId:dig.id,name:'   '}),/组名需要 1–24 个字/);
- await assert.rejects(s.renameDig('1',{digId:'nope',name:'x'}),/这组已经不在了/);
- v=await s.deleteDig('1',{digId:dig.id});assert.equal(v.digs.length,0);assert.deepEqual(v.removed,['approval workflow example']);assert.equal(stored.length,1,'saved keywords stay saved');
+ assert.equal((await s.editGroups('1',{groups:[{id:dig.id,name:'审批流程'}]})).digs[0].name,'审批流程');
+ await assert.rejects(s.editGroups('1',{groups:[{id:dig.id,name:'   '}]}),/组名需要 1–24 个字/);
+ await assert.rejects(s.editGroups('1',{groups:[{id:'nope',name:'x'}]}),/这组已经不在了/);
+ v=await s.editGroups('1',{groups:[{id:dig.id,deleted:true}]});assert.equal(v.digs.length,0);assert.deepEqual(v.removed,['approval workflow example']);assert.equal(stored.length,1,'saved keywords stay saved');
  // Removing rows: gone from the list and from later lookups, even when the AI picks them again.
  const retool=v.items.find(i=>i.keyword==='retool alternative');
  v=await s.removeItems('1',{ids:[retool.id]});assert.ok(!v.items.some(i=>i.keyword==='retool alternative'));assert.deepEqual(v.removed,['approval workflow example','retool alternative']);
@@ -237,4 +237,48 @@ test('a dig in a direction already dug adds to that group; repeated groups saved
  // Everything found is already listed: said as such, and not as a failure of the list.
  await assert.rejects(finish(s,{mode:'dig',direction:'approval workflow',seeds:['approval workflow']}),/没有找到列表里还没有的/);
  const after=await s.view('1');assert.equal(after.lastError.mode,'dig');
+});
+
+test('Edit groups: a renamed built-in group keeps its name and the AI curates into it; a deleted one is not used again and its keywords stay out',async()=>{
+ fetchFor();const {s,prompts}=setup();await finish(s,{});
+ let v=await s.editGroups('1',{groups:[{id:'对比与替代词',name:'竞品对比'},{id:'品类与行业词',deleted:true}]});
+ assert.deepEqual(v.groupNames,{'对比与替代词':'竞品对比'});assert.deepEqual(v.deletedGroups,['品类与行业词']);
+ assert.ok(!v.items.some(i=>i.group==='品类与行业词'),'the deleted group\'s keywords leave the list');
+ assert.deepEqual(v.removed.sort(),['crm for startups','open source low code platform']);
+ await finish(s,{seeds:SEEDS});
+ const prompt=prompts.filter(x=>x.tag==='keyword-curate').at(-1).system;
+ assert.match(prompt,/1=产品与功能词、2=使用场景与问题词、3=竞品对比/);assert.doesNotMatch(prompt,/品类与行业词/);
+ v=await s.view('1');
+ assert.equal(v.items.find(i=>i.keyword==='retool alternative').group,'对比与替代词','group 3 now is the renamed comparison group, kept by its identity');
+ assert.ok(!v.items.some(i=>['crm for startups','open source low code platform'].includes(i.keyword)),'deleted keywords stay out of the re-find');
+ assert.deepEqual(v.groupNames,{'对比与替代词':'竞品对比'});assert.deepEqual(v.deletedGroups,['品类与行业词']);
+});
+
+test('Edit seed words › Save only keeps the seeds for the next re-find; the list stays as it was found until then',async()=>{
+ const calls=fetchFor();const {s}=setup();await finish(s,{});const n=calls.length;
+ let v=await s.saveSeeds('1',{seeds:['internal tool builder','Workflow Automation']});
+ assert.deepEqual(v.pendingSeeds,['internal tool builder','workflow automation']);assert.deepEqual(v.seeds,SEEDS);assert.equal(calls.length,n,'nothing looked up');
+ v=await s.saveSeeds('1',{seeds:SEEDS});assert.equal(v.pendingSeeds,null,'the same seeds as the list are nothing pending');
+ await s.saveSeeds('1',{seeds:['retool alternative']});await finish(s,{seeds:['retool alternative']});
+ v=await s.view('1');assert.equal(v.pendingSeeds,null);assert.deepEqual(v.seeds,['retool alternative']);
+ await assert.rejects(s.saveSeeds('1',{seeds:[]}),/没有关键词/);
+});
+
+test('dug groups get a short name in the reader\'s language: new digs when the chat gave none, and groups from before once, in the background',async()=>{
+ fetchFor();const extra=[{keyword:'approval workflow example',group:2,relevance:2,reason:'a'}];
+ const names=[];const {s,snaps}=setup({seeds:input=>input.direction?['approval workflow']:SEEDS,curate:input=>curated(input.direction?extra:[])});
+ const complete=s.p.taskExecution.provider.complete;
+ s.p.taskExecution.provider.complete=async(system,user,tag)=>{if(tag!=='keyword-names')return complete(system,user,tag);const input=JSON.parse(user);names.push(input);
+  return '```json\n'+JSON.stringify({names:input.groups.map((g,i)=>({id:g.id,name:i===1?'这个名字实在是太长了已经超过了二十四个字的上限所以不能用':'审批流'}))})+'\n```';};
+ await finish(s,{});await finish(s,{mode:'dig',direction:'Approval workflows inside the rules (governance, permissions)',locale:'zh-CN'});
+ let v=await s.view('1');assert.equal(v.digs[0].name,'审批流');assert.equal(names[0].language,'简体中文');
+ assert.deepEqual(names[0].groups[0].keywords,['approval workflow example']);
+ // Two groups from before names existed: named once from the first view, in that reader's language.
+ const row=snaps.rows[0];row.payload={...row.payload,digs:[...row.payload.digs,{id:'old1',direction:'The system belongs to the company (self-hosted, open source)',seeds:['self hosted'],at:'2026-10-01',items:[{id:'k1',keyword:'self hosted erp',metrics:{volume:90},dig:'old1'}]},{id:'old2',direction:'From 1 to 2 (maintenance and modernization)',seeds:['legacy'],at:'2026-10-01',items:[{id:'k2',keyword:'legacy modernization',metrics:{volume:90},dig:'old2'}]}]};
+ v=await s.view('1','en-US');assert.equal(v.naming,true,'the page reads itself again while groups are named');
+ await s.naming.get('1');
+ v=await s.view('1','en-US');assert.equal(v.naming,false);assert.equal(names.at(-1).language,'English');
+ assert.equal(v.digs.find(d=>d.id==='old1').name,'审批流');
+ const two=v.digs.find(d=>d.id==='old2');assert.equal(two.name,undefined,'a name too long is not used, never cut');assert.ok(two.nameTriedAt);
+ const asked=names.length;v=await s.view('1','en-US');assert.equal(v.naming,false);assert.equal(names.length,asked,'not tried again within the hour');
 });

@@ -226,6 +226,45 @@ function business(operation: string, input: Value, en: boolean): Value | null {
         })),
       };
     }
+    case 'keyword-names': {
+      // Short group names in the language asked for, from the direction's words.
+      const zh = /中文/u.test(str(input.language, 40));
+      const words: [RegExp, string][] = [
+        [/self-?host/iu, '自托管'],
+        [/open source/iu, '开源'],
+        [/approval/iu, '审批'],
+        [/permission/iu, '权限'],
+        [/governance/iu, '治理'],
+        [/maintenance/iu, '维护'],
+        [/moderni[sz]/iu, '升级改造'],
+        [/spreadsheet|excel/iu, '表格替代'],
+        [/internal tool|operations/iu, '内部工具'],
+        [/portal/iu, '客户门户'],
+        [/crm/iu, 'CRM'],
+        [/workflow/iu, '工作流'],
+        [/alternative/iu, '竞品替代'],
+      ];
+      return {
+        names: list(input.groups).map((g) => {
+          const direction = str(g.direction, 200);
+          const found = words
+            .filter(([w]) => w.test(direction))
+            .map(([, n]) => n)
+            .slice(0, 2);
+          const en = direction
+            .replace(/\(.*\)/u, '')
+            .split(/\s+/u)
+            .filter((w) => w.length > 3)
+            .slice(0, 2)
+            .map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase())
+            .join(' ');
+          return {
+            id: str(g.id, 40),
+            name: zh ? found.join('与') || '其他方向' : en || 'Other',
+          };
+        }),
+      };
+    }
     case 'keyword-curate': {
       // Picks from the looked-up candidates only, as the real model is told to; grouped by the words they use.
       const pages = list(input.pages),
