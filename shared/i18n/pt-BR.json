@@ -5178,6 +5178,8 @@
   "taskSnooze.description": "A tarefa mantém o progresso e sai de \"Aguardando minha ação\"; no dia, volta para \"{0}\" e o responsável é avisado.",
   "taskSnooze.reason": "Aguardando",
   "taskSnooze.reasonPlaceholder": "Por exemplo: a documentação de permissões",
+  "taskSnooze.scheduleTimezone": "Fuso horário das execuções automáticas",
+  "taskSnooze.timezoneUnavailable": "Não foi possível ler o fuso horário. A data selecionada usará o fuso configurado para a execução automática ou, se nenhum estiver configurado, o do servidor.",
   "taskSnooze.until": "Adiar até",
   "taskSnooze.week": "1 semana",
   "taskSnooze.twoWeeks": "2 semanas",

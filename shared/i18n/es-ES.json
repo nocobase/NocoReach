@@ -5178,6 +5178,8 @@
   "taskSnooze.description": "La tarea conserva su avance y sale de «Pendiente de mí»; ese día vuelve a «{0}» y se avisa a la persona responsable.",
   "taskSnooze.reason": "A la espera de",
   "taskSnooze.reasonPlaceholder": "Por ejemplo: la documentación de permisos",
+  "taskSnooze.scheduleTimezone": "Zona horaria de las ejecuciones automáticas",
+  "taskSnooze.timezoneUnavailable": "No se pudo leer la zona horaria. La fecha seleccionada usará la zona horaria configurada para la ejecución automática o, si no hay ninguna, la del servidor.",
   "taskSnooze.until": "Posponer hasta",
   "taskSnooze.week": "1 semana",
   "taskSnooze.twoWeeks": "2 semanas",

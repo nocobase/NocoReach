@@ -1,7 +1,8 @@
 /* eslint-disable @eslint-react/no-array-index-key -- durable events are append-only within one keyed run */
 import { CornerDownRight, WrenchIcon } from 'lucide-react';
 import { cn } from 'cn';
-import { $t, getCurrentLocale } from '#i18n';
+import { $t } from '#i18n';
+import { formatDateTime } from '#lib/format';
 import { ChatMarkdown } from '../extensions/nocobase-agent-chat/chat-markdown.js';
 import {
   onlineRunActive,
@@ -129,7 +130,7 @@ export function OnlineTranscript({ run }: { run: OnlineRun }) {
                 0: run.usage.inputTokens,
                 1: run.usage.outputTokens,
               })}{' '}
-              · {new Date(run.createdAt).toLocaleString(getCurrentLocale())}
+              · {formatDateTime(run.createdAt)}
             </p>
           </details>
         )}

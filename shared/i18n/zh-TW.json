@@ -5178,6 +5178,8 @@
   "taskSnooze.description": "任務保留目前的進度，不算進「待我處理」；到那天回到「{0}」，並通知負責人。",
   "taskSnooze.reason": "在等什麼",
   "taskSnooze.reasonPlaceholder": "例如：等權限文件寫好",
+  "taskSnooze.scheduleTimezone": "自動執行所用時區",
+  "taskSnooze.timezoneUnavailable": "暫時無法讀取時區。所選日期仍按自動執行設定的時區儲存；未設定時，使用伺服器時區。",
   "taskSnooze.until": "延後到",
   "taskSnooze.week": "1 週後",
   "taskSnooze.twoWeeks": "2 週後",

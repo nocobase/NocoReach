@@ -1326,7 +1326,7 @@ function RankHistory({
           <ResponsiveContainer width='100%' height={200}>
             <LineChart
               data={history.map((c) => ({
-                date: c.at.slice(5, 10),
+                date: formatDate(c.at, { withYear: false }),
                 position: c.position,
               }))}
               margin={{ top: 8, right: 8, left: 0, bottom: 0 }}

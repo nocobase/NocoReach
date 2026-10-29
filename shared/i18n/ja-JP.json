@@ -5178,6 +5178,8 @@
   "taskSnooze.description": "タスクは今の進捗を保ったまま「自分の対応待ち」から外れます。その日に「{0}」に戻り、担当者に通知します。",
   "taskSnooze.reason": "待っていること",
   "taskSnooze.reasonPlaceholder": "例：権限ドキュメントの完成",
+  "taskSnooze.scheduleTimezone": "自動実行のタイムゾーン",
+  "taskSnooze.timezoneUnavailable": "タイムゾーンを読み取れませんでした。選択した日付には自動実行に設定されたタイムゾーンが適用され、未設定の場合はサーバーのタイムゾーンが適用されます。",
   "taskSnooze.until": "スヌーズする日",
   "taskSnooze.week": "1 週間後",
   "taskSnooze.twoWeeks": "2 週間後",

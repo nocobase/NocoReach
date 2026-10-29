@@ -5205,6 +5205,8 @@
   "taskSnooze.description": "작업은 현재 진행 상태를 유지하고 \"내 결정 대기\"에서 빠집니다. 그날 \"{0}\"(으)로 돌아오며 담당자에게 알립니다.",
   "taskSnooze.reason": "기다리는 것",
   "taskSnooze.reasonPlaceholder": "예: 권한 문서 작성 완료",
+  "taskSnooze.scheduleTimezone": "자동 실행 시간대",
+  "taskSnooze.timezoneUnavailable": "시간대를 읽을 수 없습니다. 선택한 날짜에는 자동 실행에 설정된 시간대가 적용되며, 설정되지 않은 경우 서버 시간대가 적용됩니다.",
   "taskSnooze.until": "연기할 날짜",
   "taskSnooze.week": "1주 후",
   "taskSnooze.twoWeeks": "2주 후",

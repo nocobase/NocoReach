@@ -49,7 +49,9 @@ const expected = (observeFrom: string, day: number) =>
     new Date(
       Date.parse(observeFrom.slice(0, 10) + 'T00:00:00Z') +
         (day + 3) * 86400000,
-    ),
+    )
+      .toISOString()
+      .slice(0, 10),
   );
 
 function PageLink({ url }: { url: string }) {

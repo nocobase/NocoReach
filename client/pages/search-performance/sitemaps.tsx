@@ -33,7 +33,7 @@ type SitemapsView = { connected: boolean; site?: string; readAt?: string; sitema
 
 const TABS = ["all", "problems", "unsubmitted"] as const;
 const num = (v: number) => formatCount(v);
-const dateOf = (v?: string | null) => formatDate(v?.slice(0, 10));
+const dateOf = (v?: string | null) => formatDate(v);
 // The host stays: a domain property lists the sitemaps of every subdomain, all called /sitemap.xml (UI review 2026-10-21).
 const pathOf = (u: string) => { try { const x = new URL(u); return `${x.host}${x.pathname}`; } catch { return u; } };
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;

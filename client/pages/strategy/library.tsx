@@ -117,7 +117,7 @@ function Library({project,projectError}:{project?:Project;projectError:string}){
 type WatchTask={id:number;title?:string;status:string;evidence?:{no?:number;work?:import('../task-execution-types').Work}};
 // 观察中: one line per change — what changed, its numbers when watching started and now, what the AI waits for and the
 // day it must decide by; 忽略 ends it. Below, 最近结束: how the watches of the last 7 days ended.
-const short=(d?:string)=>d?d.slice(5,10).replace('-','/'):'—';
+const short=(d?:string)=>formatDate(d);
 type Watching={s:Signal;status:{reason?:string};days:number;record?:WatchRecord};
 // 观察中 columns (2026-10-09 user feedback: 开始时 → 现在, 在等什么 and 最晚定 read oddly): 数值 (current, then where it
 // started), 判断条件 (what decides it) and 截止日期 (the day a verdict is due, with the days left). A change watched before

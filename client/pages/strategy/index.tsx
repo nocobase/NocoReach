@@ -22,7 +22,7 @@ import {
   Today,
   WaitingNote,
 } from './briefing';
-import { dayOf, feedOf } from './feed';
+import { dayOf, conversationDayOf, feedOf } from './feed';
 import { Composer, InsightChatProvider } from './threads';
 import { useOptionalOnlineChat } from '../../online-agent/context';
 import { useChatPanel } from '@nocobase/app-plugin-agents/client/chat';
@@ -66,7 +66,7 @@ import {
   judgeMissing,
   type AnalysisStatus,
 } from './service';
-import { dailyAnalysisTime } from './schedule-time';
+import { dailyScheduleTime } from '#lib/schedule-time';
 import '../reach-workspace.css';
 import './strategy.css';
 type Task = {
@@ -340,7 +340,7 @@ function Insights({
         ]),
       ),
     ),
-    analysisDay = dayOf(state.insights?.generatedAt),
+    analysisDay = conversationDayOf(state.insights?.generatedAt),
     chat = useOptionalOnlineChat(),
     // With the side panel open the day's conversation is there; the page gives it the room.
     docked = useChatPanel().open && !!chat;
@@ -391,7 +391,12 @@ function Insights({
         aria-label={$t('strategy.analysisFeed')}
         className='flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-2'
       >
-        <History days={feed.days} today={analysisDay} rows={rows} />
+        <History
+          state={state}
+          days={feed.days}
+          today={dayOf(state.insights?.generatedAt)}
+          rows={rows}
+        />
         <Today
           state={state}
           rows={rows}
@@ -548,7 +553,7 @@ function HowAnalyzed({
     ) : (
       text
     );
-  const time = dailyAnalysisTime(schedule);
+  const time = dailyScheduleTime(schedule);
   if (schedule && !schedule.enabled)
     return $tj('strategy.howAnalyzedPaused', {
       0: rules,

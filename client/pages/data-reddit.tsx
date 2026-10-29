@@ -44,7 +44,7 @@ export default function DataReddit() {
     finally { setBusy(false); }
   };
   const w = view?.window, visits = view?.visits;
-  const posts = useTickedList("reddit-posts", view?.connected ? view.posts : undefined, (p) => String(p.id), (ticked) => ({ playbookId: "community-summary", description: $t('dataReddit.postsBecomeOneTaskAgent'), draft: () => discussionsDraft("Reddit", $t('common.posts'), ticked.map((p) => ({ title: p.title, url: p.url, meta: `r/${p.subreddit} · ${p.postedAt || p.firstSeenAt.slice(0, 10)}`, excerpt: p.snippet }))) }));
+  const posts = useTickedList("reddit-posts", view?.connected ? view.posts : undefined, (p) => String(p.id), (ticked) => ({ playbookId: "community-summary", description: $t('dataReddit.postsBecomeOneTaskAgent'), draft: () => discussionsDraft("Reddit", $t('common.posts'), ticked.map((p) => ({ title: p.title, url: p.url, meta: `r/${p.subreddit} · ${formatDate(p.postedAt || p.firstSeenAt)}`, excerpt: p.snippet }))) }));
   return (
     <PageContainer className="nr-data-page">
       <PageHeader info={<NotesTip notes={view?.notes} />} title="Reddit" description={$t('dataReddit.redditPostsMentioningProductSearched')} actions={view?.connected ? <RefreshButton busy={busy} label={busy ? $t('common.searching') : $t('common.updateNow')} onClick={() => void check()} /> : undefined} />

@@ -1,4 +1,5 @@
-import { $t, getCurrentLocale } from '#i18n';
+import { $t } from '#i18n';
+import { formatDate, formatDateTime } from '#lib/format';
 
 export interface MaterialNotice {
   code: string;
@@ -47,8 +48,7 @@ export function reportDate(value: string): string {
     return value || '—';
   const date = new Date(value);
   if (Number.isNaN(date.valueOf())) return value;
-  const locale = getCurrentLocale();
   return value.length === 10
-    ? date.toLocaleDateString(locale, { timeZone: 'UTC' })
-    : date.toLocaleString(locale);
+    ? formatDate(value, { withYear: true })
+    : formatDateTime(value, { withYear: true });
 }

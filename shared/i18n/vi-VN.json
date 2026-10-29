@@ -5260,6 +5260,8 @@
   "taskSnooze.description": "Công việc giữ nguyên tiến độ và không nằm trong \"Chờ tôi xử lý\"; đến ngày đó sẽ trở lại \"{0}\" và người phụ trách được nhắc.",
   "taskSnooze.reason": "Đang chờ",
   "taskSnooze.reasonPlaceholder": "Ví dụ: tài liệu phân quyền",
+  "taskSnooze.scheduleTimezone": "Múi giờ chạy tự động",
+  "taskSnooze.timezoneUnavailable": "Không thể đọc múi giờ. Ngày đã chọn sẽ dùng múi giờ được cấu hình cho lần chạy tự động, hoặc múi giờ máy chủ nếu chưa cấu hình.",
   "taskSnooze.until": "Tạm ẩn đến",
   "taskSnooze.week": "1 tuần",
   "taskSnooze.twoWeeks": "2 tuần",

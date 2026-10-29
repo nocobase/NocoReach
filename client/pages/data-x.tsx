@@ -47,7 +47,7 @@ export default function DataX() {
     finally { setBusy(false); }
   };
   const w = view?.window, sp = view?.spend;
-  const source = (ticked: Post[]) => ({ playbookId: "community-summary", description: $t('common.postsBecomeOneTaskAgent'), draft: () => discussionsDraft("X", $t('common.posts'), ticked.map((p) => ({ title: p.text.replace(/\s+/g, " ").slice(0, 120), url: p.url, meta: $t('dataX.likes',{0:p.createdAt.slice(0, 10),1:p.metrics.likes}) }))) });
+  const source = (ticked: Post[]) => ({ playbookId: "community-summary", description: $t('common.postsBecomeOneTaskAgent'), draft: () => discussionsDraft("X", $t('common.posts'), ticked.map((p) => ({ title: p.text.replace(/\s+/g, " ").slice(0, 120), url: p.url, meta: $t('dataX.likes',{0:formatDate(p.createdAt),1:p.metrics.likes}) }))) });
   const top = useTickedList("x-top", view?.connected ? view.top : undefined, (p) => String(p.id), source);
   const latest = useTickedList("x-latest", view?.connected ? view.latest : undefined, (p) => String(p.id), source);
   const list = (title: string, rows: Post[], empty: string, selection: Selection) => (

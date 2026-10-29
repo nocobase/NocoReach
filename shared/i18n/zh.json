@@ -5206,6 +5206,8 @@
   "taskSnooze.description": "任务保留现在的进度，不算进“待我处理”；到那天回到“{0}”，并通知负责人。",
   "taskSnooze.reason": "在等什么",
   "taskSnooze.reasonPlaceholder": "例如：等权限文档写好",
+  "taskSnooze.scheduleTimezone": "自动运行所用时区",
+  "taskSnooze.timezoneUnavailable": "暂时无法读取时区。所选日期仍按自动运行配置的时区保存；未配置时，使用服务器时区。",
   "taskSnooze.until": "延后到",
   "taskSnooze.week": "1 周后",
   "taskSnooze.twoWeeks": "2 周后",

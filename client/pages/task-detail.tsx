@@ -168,7 +168,7 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
   </div>
   <TechnicalDetails data={data} projectId={projectId} taskId={taskId} runs={runs}/>
   <EvidenceDialog open={evidenceOpen} onClose={()=>setEvidenceOpen(false)} data={data} projectId={projectId} taskId={taskId}/>
-  <SnoozeDialog open={snoozeOpen} onClose={()=>setSnoozeOpen(false)} data={data} busy={busy} update={update}/>
+  <SnoozeDialog projectId={projectId} open={snoozeOpen} onClose={()=>setSnoozeOpen(false)} data={data} busy={busy} update={update}/>
   {/* The article's reading page (task-detail/article-reader.tsx) covers this page and keeps its scroll position. */}
   <Outlet context={{data,update,busy,error,allowed:access.allowed,draftScope,crumb:no?`T-${no}`:data.task.title,heading,requestChanges:()=>{feedbackAskRef.current=true;}} satisfies TaskPageContext}/>
   <Dialog open={pageOpen} onOpenChange={o=>{if(!o)setPageOpen(false);}}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>{$t('common.relatedPage')}</DialogTitle></DialogHeader><PageLinkEditor data={data} projectId={projectId} taskId={taskId} busy={busy} update={update}/></DialogContent></Dialog>
@@ -640,7 +640,7 @@ function ActivityCard({data,update,busy,members,membersLoaded,error,onFailed}:{d
  const review=!done&&!closed&&allowed&&stage?.kind==='review'&&out&&!out.rejectedAt?{stageKey:stage.key,artifactId:out.id}:undefined;
  // Who reads a note: the run that starts the task, the step's next run, or, with only publishing left, no run (it is recorded).
  const hint=review?$t('taskDetail.writeFeedbackAfterSendRedoes',{0:executor}):!w.flow?$t('taskDetail.leaveNoteBeforeStart',{0:executor,1:$t('taskDetail.changeEnglishVersionKeepTechnical')}):stage?.kind==='release'||stage?.kind==='publish'?$t('taskDetail.leaveNoteRecorded'):$t('taskDetail.leaveNoteNextRunReads',{0:executor});
- const rows=(w.history||[]).map((e,i)=>({e,i,t:QUIET.has(e.action)?null:eventText(e,nameOf,executor)})).filter(x=>x.t).sort((a,b)=>String(a.e.at).localeCompare(String(b.e.at))||a.i-b.i);
+ const rows=(w.history||[]).map((e,i)=>({e,i,t:QUIET.has(e.action)?null:eventText(e,nameOf,executor,w.snooze)})).filter(x=>x.t).sort((a,b)=>String(a.e.at).localeCompare(String(b.e.at))||a.i-b.i);
  const shown=all?rows:rows.slice(-RECENT),hidden=rows.length-shown.length;
  async function send(){const d=review?await update('requestStageChanges',{...review,comment:message}):await update('comment',{comment:message});if(d)clearMessage();else onFailed();}
  const composer=(!done&&!closed)||Boolean(message);

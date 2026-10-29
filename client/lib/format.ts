@@ -1,4 +1,4 @@
-import { $t, getCurrentLocale, isChinese } from '#i18n';
+import { $t, getCurrentLocale } from '#i18n';
 
 // One way to write dates, numbers and changes on every page (UI review 2026-10-21: eight date styles and six
 // ways of writing a change were in use). Chinese dates follow the agreed "2026-10-21", without the year in the
@@ -9,6 +9,7 @@ import { $t, getCurrentLocale, isChinese } from '#i18n';
 export const EMPTY = '—';
 
 type DateInput = string | number | Date | null | undefined;
+type DateOptions = { withYear?: boolean; now?: Date; locale?: string };
 
 const CALENDAR_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -45,19 +46,27 @@ function parts(at: Date, utc: boolean) {
 
 const thisYear = (year: number, now: Date) => year === now.getFullYear();
 
+/** A browser-local day key for display grouping; calendar days retain their identity. */
+export function localDateKey(value: DateInput): string {
+  const r = read(value);
+  if (!r) return '';
+  const p = parts(r.at, r.utc);
+  return `${p.year}-${pad(p.month)}-${pad(p.day)}`;
+}
+
 /** A day: "10-21" / "Oct 21" this year, "2025-10-21" / "Oct 21, 2025" otherwise; "—" when missing. */
 export function formatDate(
   value: DateInput,
-  { withYear, now = new Date() }: { withYear?: boolean; now?: Date } = {},
+  { withYear, now = new Date(), locale = getCurrentLocale() }: DateOptions = {},
 ): string {
   const r = read(value);
   if (!r) return EMPTY;
   const p = parts(r.at, r.utc);
   const year = withYear ?? !thisYear(p.year, now);
-  if (isChinese()) {
+  if (locale.startsWith('zh')) {
     return `${year ? `${p.year}-` : ''}${pad(p.month)}-${pad(p.day)}`;
   }
-  return new Intl.DateTimeFormat(getCurrentLocale(), {
+  return new Intl.DateTimeFormat(locale, {
     month: 'short',
     day: 'numeric',
     ...(year ? { year: 'numeric' } : {}),
@@ -66,16 +75,23 @@ export function formatDate(
 }
 
 /** A time of day: "14:03" / "2:03 PM". */
-export function formatTime(value: DateInput): string {
+export function formatTime(
+  value: DateInput,
+  {
+    locale = getCurrentLocale(),
+    seconds = false,
+  }: { locale?: string; seconds?: boolean } = {},
+): string {
   const r = read(value);
   if (!r) return EMPTY;
-  if (isChinese()) {
+  if (locale.startsWith('zh')) {
     const p = parts(r.at, r.utc);
-    return `${pad(p.hour)}:${pad(p.minute)}`;
+    return `${pad(p.hour)}:${pad(p.minute)}${seconds ? `:${pad(r.utc ? r.at.getUTCSeconds() : r.at.getSeconds())}` : ''}`;
   }
-  return new Intl.DateTimeFormat(getCurrentLocale(), {
+  return new Intl.DateTimeFormat(locale, {
     hour: 'numeric',
     minute: '2-digit',
+    ...(seconds ? ({ second: '2-digit' } as const) : {}),
     ...(r.utc ? { timeZone: 'UTC' } : {}),
   }).format(r.at);
 }
@@ -83,14 +99,16 @@ export function formatTime(value: DateInput): string {
 /** A day and time, without seconds or a time zone: "10-21 14:03" / "Oct 21, 2:03 PM". */
 export function formatDateTime(
   value: DateInput,
-  options: { withYear?: boolean; now?: Date } = {},
+  options: DateOptions = {},
 ): string {
   const r = read(value);
   if (!r) return EMPTY;
-  if (isChinese()) return `${formatDate(value, options)} ${formatTime(value)}`;
+  const locale = options.locale ?? getCurrentLocale();
+  if (locale.startsWith('zh'))
+    return `${formatDate(value, options)} ${formatTime(value, { locale })}`;
   const p = parts(r.at, r.utc);
   const year = options.withYear ?? !thisYear(p.year, options.now ?? new Date());
-  return new Intl.DateTimeFormat(getCurrentLocale(), {
+  return new Intl.DateTimeFormat(locale, {
     month: 'short',
     day: 'numeric',
     ...(year ? { year: 'numeric' } : {}),
