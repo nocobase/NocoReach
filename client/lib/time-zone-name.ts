@@ -1,9 +1,22 @@
 /**
  * A timezone as people say it ("China Standard Time", "Eastern Time") rather than its IANA id. The generic name stays
  * the same across daylight saving; where the locale has none (UTC gives "GMT+00:00"), the specific name is used, and
- * the id itself when neither is known.
+ * the id itself when neither is known. Chinese UI keeps UTC as its standard abbreviation.
  */
 export function timeZoneName(timeZone: string, locale?: string): string {
+  if (/^zh(?:-|$)/i.test(locale || '')) {
+    try {
+      if (
+        new Intl.DateTimeFormat('en-US', { timeZone }).resolvedOptions()
+          .timeZone === 'UTC'
+      ) {
+        return 'UTC';
+      }
+    } catch {
+      // Keep the existing fallback for invalid timezone identifiers.
+    }
+  }
+
   const name = (style: 'longGeneric' | 'long') => {
     try {
       return new Intl.DateTimeFormat(locale, { timeZone, timeZoneName: style })
