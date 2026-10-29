@@ -579,10 +579,12 @@ test('a Git-only edit of the article blocks publishing until it is taken into th
 test('a blog post goes to the default target, and the task page marks it', async () => {
   const f = await fixture();
   const targets = f.s.p.articleTargets;
-  // A target view carries hasSecret and capabilities; the saved settings must not.
-  const { hasSecret, capabilities, ...cms } = targets.list('1').targets[0];
+  // A target view carries hasSecret, capabilities and its latest check; the saved settings must not.
+  const { hasSecret, capabilities, check, ...cms } =
+    targets.list('1').targets[0];
   void hasSecret;
   void capabilities;
+  void check;
   await targets.save('1', {
     revision: 1,
     secret: 'cms-key',

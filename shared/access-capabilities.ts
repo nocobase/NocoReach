@@ -239,7 +239,7 @@ const SITE_ACTIONS: Record<Site, { use: string[]; configure: string[] }> = {
 /** Every capability with the business actions it covers. Project capabilities follow the role's scope. */
 export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
   view: [
-    'nrAgent.status',
+    ...list('nrAgent', ['status', 'repos']),
     'nrAiQuestions.view',
     ...list('nrAiSearch', ['list', 'open', 'brand', 'gap', 'gaps']),
     'nrAnalysisRules.view',
@@ -340,7 +340,7 @@ export const CAPABILITY_ACTIONS: Readonly<Record<string, readonly string[]>> = {
     ...list('nrDiscovery', ['discover', 'connections']),
     ...list('nrAutomaticSources', ['ingest', 'disconnect']),
     ...list('nrProxyProfiles', ['selections', 'select', 'testConnection']),
-    ...list('nrAgent', ['saveRepo', 'removeRepo']),
+    ...list('nrAgent', ['saveRepo', 'removeRepo', 'checkRepo']),
     ...list('nrArticles', [
       'saveTarget',
       'removeTarget',

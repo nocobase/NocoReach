@@ -67,7 +67,7 @@ export const CONNECT_SOURCES: readonly ConnectSource[] = [
     id: 'repo',
     name: 'dataSources.websiteSourceGitRepository',
     needs: [
-      'dataSources.linkGithubRepositoryWebsiteSource',
+      'dataSources.repositoryLinksServedUrls',
       'dataSources.connectedRunnerTeamAccessibleAgent',
     ],
     via: 'browser',
@@ -240,7 +240,7 @@ export type StatusInput = {
   } | null;
   publicSources?: { kind: string; status: string; error?: string }[];
   site?: { pages: number } | null;
-  repo?: { repo: string } | null;
+  repos?: { repo: string }[] | null;
   articles?: { targets: number } | null;
 };
 
@@ -290,7 +290,7 @@ export function connectionState(id: string, input: StatusInput): SourceState {
         : 'connected';
   }
   if (id === 'site') return input.site?.pages ? 'connected' : 'ready';
-  if (id === 'repo') return input.repo?.repo ? 'connected' : 'ready';
+  if (id === 'repo') return input.repos?.length ? 'connected' : 'ready';
   if (id === 'articles') return input.articles?.targets ? 'connected' : 'ready';
   if (id === 'discourse') {
     const c = input.community;

@@ -11,6 +11,7 @@ import { TaskService } from '../../server/nocoreach/execution/service.js';
 import { validateFlow, flowRunInput } from '../../server/nocoreach/execution/flow.js';
 import { SYSTEM_PLAYBOOKS, stagesFor, validatePlaybook, defaultPlaybookId, normalize } from '../../server/nocoreach/execution/playbook.js';
 import { repoInput, allowedPath } from '../../server/nocoreach/execution/agent.js';
+import { systemMessageText } from '../../shared/i18n/messages.js';
 import * as __playbook from '../../server/nocoreach/execution/playbook.js';
 import * as __members from '../../server/nocoreach/members.js';
 import * as __effect from '../../server/nocoreach/execution/effect.js';
@@ -1057,4 +1058,78 @@ test('a snooze comes back in the daily analysis time zone, read before the task 
   f.s.p.analysis = { workflow: async () => { assert.equal(locked, false, 'outside the lock'); return { get: () => ({ timezone: 'America/Los_Angeles' }) }; } };
   const d = await f.command('snoozeTask', { day: '2099-11-11' });
   assert.equal(d.work.snooze.until, '2099-11-11T17:00:00.000Z');
+});
+
+// Website source in several repositories (2026-10-29, shared/repo-routing.ts).
+const legacyRepo={revision:1,agentId:'shared-agent',repo:{repo:'org/site',baseBranch:'main',allowedPaths:[],contentCheck:true}};
+const sites=f=>f.state.nrSnapshots.push({id:900,key:'site-content:1',payload:{sites:[{origin:'https://www.example.com'},{origin:'https://docs.example.com'}],pages:[]}});
+test('repositories: a project with one repository keeps it, serving every address of its website',async()=>{
+ const f=fixture();sites(f);
+ await f.s.lock('1','agent',tx=>f.s.put('nr-task-agent:1',legacyRepo,tx));
+ let doc=await f.s.agents.doc('1');
+ assert.deepEqual(doc.repos,[{id:'website',repo:'org/site',baseBranch:'main',allowedPaths:[],contentCheck:true,urls:['www.example.com','docs.example.com']}]);
+ // An address belongs to one repository: the second takes the docs from the first.
+ doc=await f.s.agents.saveRepo('1',{revision:1,repo:'org/docs',baseBranch:'main',urls:['https://docs.example.com/']});
+ assert.deepEqual(doc.repos.map(r=>[r.repo,r.urls]),[['org/site',['www.example.com']],['org/docs',['docs.example.com']]]);
+ const stored=f.state.nrSnapshots.find(r=>r.key==='nr-task-agent:1').payload;
+ assert.equal(stored.repo,undefined,'saved in the new shape');assert.equal(stored.repos.length,2);
+ await assert.rejects(f.s.agents.saveRepo('1',{revision:doc.revision,repo:'https://github.com/org/site',baseBranch:'main'}),e=>e.status===409,'one entry per repository');
+ await assert.rejects(f.s.agents.saveRepo('1',{revision:doc.revision,repo:'org/x',baseBranch:'main',urls:['not an address']}),e=>e.status===400);
+ doc=await f.s.agents.saveRepo('1',{revision:doc.revision,id:'website',repo:'org/site',baseBranch:'main',urls:['www.example.com','docs.example.com']});
+ assert.deepEqual(doc.repos.map(r=>r.urls),[['www.example.com','docs.example.com'],[]],'editing moves an address back');
+ doc=await f.s.agents.removeRepo('1',{revision:doc.revision,id:doc.repos[1].id});
+ assert.deepEqual(doc.repos.map(r=>r.repo),['org/site']);
+ await assert.rejects(f.s.agents.removeRepo('1',{revision:doc.revision,id:'gone'}),e=>e.status===409);
+});
+test('repositories: a task changes the one serving its page, kept from its start for every later step',async()=>{
+ const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>({content:'x'})},{page:'https://docs.example.com/guide/start'});
+ await selectAgent(f);
+ let doc=await f.s.agents.saveRepo('1',{revision:1,repo:'org/site',baseBranch:'main',urls:['www.example.com']});
+ doc=await f.s.agents.saveRepo('1',{revision:doc.revision,repo:'org/docs',baseBranch:'main',allowedPaths:['content'],urls:['docs.example.com']});
+ const docs=doc.repos[1];
+ let d=await f.view();
+ assert.equal(d.agent.repo.repo,'org/docs','the start card shows where it goes');assert.deepEqual(d.agent.repos.map(r=>r.repo),['org/site','org/docs']);
+ d=await f.command('startTask',{playbookId:'optimize-page'});
+ assert.deepEqual(d.work.repo,{id:docs.id,repo:'org/docs',baseBranch:'main',allowedPaths:['content'],contentCheck:true});
+ let c=await claim(f);assert.equal(c.run.input.repo.repo,'org/docs');
+ // Settings changed afterwards do not move a started task: its pull request has to be in the repository it was given.
+ doc=await f.s.agents.removeRepo('1',{revision:doc.revision,id:docs.id});
+ assert.equal((await f.view()).agent.repo.repo,'org/docs');
+ await assert.rejects(finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'changed',pr:{url:'https://github.com/org/site/pull/7',number:7,branch:'nocoreach/task-1',headSha:'abc1234',files:[]}}),e=>e.status===400);
+ await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'changed',pr:{url:'https://github.com/org/docs/pull/7',number:7,branch:'nocoreach/task-1',headSha:'abc1234',files:[{path:'content/a.md',additions:1,deletions:0}]}});
+ d=await f.view();assert.equal(output(d).pr.url,'https://github.com/org/docs/pull/7');assert.deepEqual(output(d).pr.outOfScope,[]);
+});
+test('repositories: pages served by none of several, or by different ones, need a person to choose',async()=>{
+ const f=fixture(undefined,{page:'https://forum.example.com/t/1'});
+ await selectAgent(f);
+ let doc=await f.s.agents.saveRepo('1',{revision:1,repo:'org/site',baseBranch:'main',urls:['www.example.com']});
+ doc=await f.s.agents.saveRepo('1',{revision:doc.revision,repo:'org/docs',baseBranch:'main',urls:['docs.example.com']});
+ assert.equal((await f.view()).agent.repo,null);
+ await assert.rejects(f.command('startTask',{playbookId:'optimize-page'}),e=>e.status===409&&e.message===systemMessageText('taskExecution.chooseTaskRepository'));
+ await assert.rejects(f.command('startTask',{playbookId:'optimize-page',repoId:'gone'}),e=>e.status===409);
+ const d=await f.command('startTask',{playbookId:'optimize-page',repoId:doc.repos[0].id});
+ assert.equal(d.work.repo.repo,'org/site');const c=await claim(f);assert.equal(c.run.input.repo.repo,'org/site');
+ // An analysis that changes nothing needs none.
+ const g=fixture(undefined,{page:'https://forum.example.com/t/1'});await selectAgent(g);
+ doc=await g.s.agents.saveRepo('1',{revision:1,repo:'org/site',baseBranch:'main',urls:['www.example.com']});
+ await g.s.agents.saveRepo('1',{revision:doc.revision,repo:'org/docs',baseBranch:'main',urls:['docs.example.com']});
+ assert.equal((await g.command('startTask',{playbookId:'change-research'})).work.repo,null);
+});
+test('repositories: a check asks GitHub for the repository and branch and says whether a runner is online',async()=>{
+ const f=fixture();await selectAgent(f);const asked=[];
+ f.s.p.github={token:()=> 'ghp_token',gh:async(path,token)=>{asked.push([path,token]);if(path==='/repos/org/site'||path==='/repos/org/site/branches/main')return {};if(path==='/repos/org/flaky')throw Object.assign(Error('GitHub is unreachable'),{status:502});throw Object.assign(Error('Not Found'),{status:404});}};
+ let doc=await f.s.agents.saveRepo('1',{revision:1,repo:'org/site',baseBranch:'main'});
+ doc=await f.s.agents.checkRepo('1',{id:doc.repos[0].id},'1');
+ assert.deepEqual(asked,[['/repos/org/site','ghp_token'],['/repos/org/site/branches/main','ghp_token']]);
+ assert.deepEqual({...doc.repos[0].check,at:undefined},{at:undefined,repo:'ok',branch:'ok',runner:'online'});
+ assert.equal(doc.revision,2,'a check leaves the settings revision as it was');
+ f.s.p.agents.agent.online=false;
+ doc=await f.s.agents.saveRepo('1',{revision:doc.revision,id:doc.repos[0].id,repo:'org/site',baseBranch:'release'});
+ assert.equal(doc.repos[0].check,null,'another branch needs a new check');
+ doc=await f.s.agents.checkRepo('1',{id:doc.repos[0].id},'1');
+ assert.deepEqual([doc.repos[0].check.repo,doc.repos[0].check.branch,doc.repos[0].check.runner],['ok','missing','offline']);
+ doc=await f.s.agents.saveRepo('1',{revision:doc.revision,repo:'org/flaky',baseBranch:'main'});
+ doc=await f.s.agents.checkRepo('1',{id:doc.repos[1].id},'1');
+ assert.deepEqual([doc.repos[1].check.repo,doc.repos[1].check.branch,doc.repos[1].check.detail],['unknown','unknown','GitHub is unreachable']);
+ await assert.rejects(f.s.agents.checkRepo('1',{id:'gone'},'1'),e=>e.status===409);
 });

@@ -1,5 +1,8 @@
 import { expect, test } from 'vitest';
 import {
+  REPO,
+  choiceRepo,
+  deliveryPlan,
   lookupMatters,
   startAgent,
   startBlockers,
@@ -172,4 +175,51 @@ test('a translation needs an existing article and a target with another language
       { ...translate, found: { article, unchecked: false } },
     ),
   ).toEqual(['chooseArticle']);
+});
+
+// Several website repositories (2026-10-29): the one serving the task's pages, else a person chooses.
+test('a repository change with several repositories waits for a person only when no single one serves its pages', () => {
+  const repos = [
+    { id: 'site', repo: 'org/site', urls: ['www.example.com'] },
+    { id: 'docs', repo: 'org/docs', urls: ['docs.example.com'] },
+  ];
+  const at = (page: string) =>
+    view({
+      task: { evidence: { page } },
+      agent: { repo: null, repos, agentId: 'a', options: [{ id: 'a' }] },
+    });
+  const change = {
+    playbookId: 'optimize-page',
+    changes: true,
+    needsRepository: true,
+  };
+  expect(startBlockers(at('https://docs.example.com/a'), change)).toEqual([]);
+  expect(
+    deliveryPlan(at('https://docs.example.com/a'), {
+      target: REPO,
+      mode: 'new',
+      also: [],
+    }),
+  ).toMatchObject({ ready: true, repoId: 'docs' });
+  expect(startBlockers(at('https://forum.example.com/t/1'), change)).toEqual([
+    'chooseRepository',
+  ]);
+  const chosen = {
+    target: REPO,
+    mode: 'new' as const,
+    also: [],
+    repoId: 'site',
+  };
+  expect(
+    deliveryPlan(at('https://forum.example.com/t/1'), chosen),
+  ).toMatchObject({
+    ready: true,
+    repoId: 'site',
+  });
+  expect(choiceRepo(at('https://forum.example.com/t/1'), chosen)).toMatchObject(
+    {
+      by: 'chosen',
+      repo: { id: 'site' },
+    },
+  );
 });

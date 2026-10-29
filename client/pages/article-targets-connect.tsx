@@ -52,6 +52,9 @@ import {
   DropdownMenuTrigger,
 } from '#components/ui/dropdown-menu';
 import { confirmAction } from '#components/reach/confirm';
+import { Tag, type Tone } from '#components/reach/tag';
+import { formatDate, formatDateTime } from '#lib/format';
+import { StatusCard, StatusRow } from './connection-status-card';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import {
   localizePlaybookList,
@@ -61,8 +64,10 @@ import {
 import {
   ARTICLE_TARGET_KINDS,
   ARTICLE_TARGET_PRESETS,
+  fill,
   type ArticleTargetKind,
   type ArticleTargetView,
+  type PublishedArticle,
 } from '../../shared/article-publishing.js';
 import {
   articleRequest,
@@ -97,6 +102,7 @@ const BASIC = [
   'branch',
   'hasSecret',
   'capabilities',
+  'check',
 ];
 const advancedOf = (t: object) =>
   JSON.stringify(
@@ -212,6 +218,12 @@ function TargetsPanel({
     projectId,
   );
   const [list, setList] = useState<TargetList>();
+  // A write answers with the settings only: what was published stays as the last read found it.
+  const keepList = (next: TargetList) =>
+    setList((now) => ({
+      ...next,
+      published: next.published ?? now?.published,
+    }));
   const [loadError, setLoadError] = useState<{ key: string; retry: boolean }>();
   const [form, setForm] = useState<Form | null>(null);
   const [errors, setErrors] = useState<
@@ -349,7 +361,7 @@ function TargetsPanel({
           },
           sessionId,
         );
-        setList(next);
+        keepList(next);
         setForm(null);
         toast.success(() => $t('articlePublishing.saved', { 0: target.name }));
         onChange();
@@ -390,6 +402,7 @@ function TargetsPanel({
     setFormError(undefined);
     focusLater(was?.isNew ? 'new' : `edit-${was?.id}`);
   }
+  // The outcome stays on the target's card with its time (2026-10-29), as a repository's check does.
   async function test(t: ArticleTargetView) {
     await run(`test-${t.id}`, async () => {
       try {
@@ -399,18 +412,16 @@ function TargetsPanel({
           { targetId: t.id },
           sessionId,
         );
-        if (r.ok)
-          toast.success(() =>
-            r.sample
-              ? $t('articlePublishing.testOk', { 0: r.sample.title })
-              : $t('articlePublishing.testOkEmpty'),
-          );
-        else
-          toast.error(() =>
-            $t(providerKey(r.code)) === providerKey(r.code)
-              ? $t('articlePublishing.testFailed')
-              : $t(providerKey(r.code)),
-          );
+        setList((now) =>
+          now
+            ? {
+                ...now,
+                targets: now.targets.map((x) =>
+                  x.id === t.id ? { ...x, check: r.check } : x,
+                ),
+              }
+            : now,
+        );
       } catch (e) {
         toast.error(() =>
           e instanceof Error ? e.message : $t('articlePublishing.testFailed'),
@@ -428,7 +439,7 @@ function TargetsPanel({
           { revision: list.revision, id: t.id },
           sessionId,
         );
-        setList(next);
+        keepList(next);
         toast.success(() => $t('articlePublishing.defaultSet', { 0: t.name }));
         onChange();
       } catch (e) {
@@ -461,7 +472,7 @@ function TargetsPanel({
           { revision: list.revision, id: t.id },
           sessionId,
         );
-        setList(next);
+        keepList(next);
         toast.success(() => $t('articlePublishing.deleted', { 0: t.name }));
         onChange();
         focusLater('new');
@@ -581,131 +592,93 @@ function TargetsPanel({
         form && !form.isNew && form.id === t.id ? (
           <div key={t.id}>{editor}</div>
         ) : (
-          <Card key={t.id} size='sm'>
-            <CardHeader>
-              <CardTitle className='flex flex-wrap items-center gap-2'>
-                {t.name}
-                <Badge variant='secondary'>{$t(kindKey[t.kind])}</Badge>
-                {t.id === list.defaultTargetId && (
-                  <Badge>{$t('articlePublishing.default')}</Badge>
-                )}
-              </CardTitle>
-              <CardDescription className='break-all'>
-                {t.kind === 'git-files' ? `${t.repo} · ${t.branch}` : t.baseUrl}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className='flex flex-col gap-1 text-sm text-muted-foreground'>
-              <p>
-                {/* The first language is the primary one, written and reviewed first; the others are translated
-                    from it (2026-10-24). */}
-                {t.locales.length > 1
-                  ? $t('articlePublishing.primaryLanguages', {
-                      0: localeName(t.locales[0], getCurrentLocale()),
-                      1: t.locales
-                        .slice(1)
-                        .map((l) => localeName(l, getCurrentLocale()))
-                        .join(
-                          getCurrentLocale().startsWith('zh') ? '、' : ', ',
-                        ),
-                    })
-                  : $t('articlePublishing.languages', {
-                      0: localeName(t.locales[0], getCurrentLocale()),
-                    })}
-              </p>
-              {t.kind !== 'git-files' && t.downstream && (
-                <p className='break-all'>
-                  {$t('articlePublishing.exportsTo', {
-                    0: t.downstream.repo,
-                    1: t.downstream.branch,
-                  })}
-                </p>
-              )}
-              <p>
-                {$t(
-                  t.capabilities.concurrency === 'conditional'
-                    ? 'articlePublishing.conditional'
-                    : 'articlePublishing.checkBeforeWrite',
-                )}
-              </p>
-            </CardContent>
-            <CardFooter className='flex flex-wrap justify-end gap-2'>
-              {canTest &&
-                locked(
-                  <Button
-                    variant='outline'
-                    disabled={disabled}
-                    onClick={() => void test(t)}
-                  >
-                    {busy === `test-${t.id}` && (
-                      <Spinner data-icon='inline-start' />
-                    )}
-                    {$t('articlePublishing.test')}
-                  </Button>,
-                )}
-              {canSave &&
-                locked(
-                  <Button
-                    id={`${id}-edit-${t.id}`}
-                    variant='outline'
-                    disabled={disabled}
-                    onClick={() => void startEdit(t)}
-                  >
-                    {busy === `edit-${t.id}` && (
-                      <Spinner data-icon='inline-start' />
-                    )}
-                    {$t('articlePublishing.edit')}
-                  </Button>,
-                )}
-              {(canRemove ||
-                (canSetDefault && t.id !== list.defaultTargetId)) &&
-                locked(
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={
-                        <Button
-                          variant='ghost'
-                          size='icon'
-                          aria-label={$t('articlePublishing.actions', {
-                            0: t.name,
-                          })}
-                          disabled={disabled}
-                        />
-                      }
+          <TargetCard
+            key={t.id}
+            target={t}
+            isDefault={t.id === list.defaultTargetId}
+            published={list.published?.[t.id]}
+            actions={
+              <>
+                {canTest &&
+                  locked(
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      disabled={disabled}
+                      onClick={() => void test(t)}
                     >
-                      {busy === `remove-${t.id}` ||
-                      busy === `default-${t.id}` ? (
-                        <Spinner />
-                      ) : (
-                        <MoreHorizontal />
+                      {busy === `test-${t.id}` && (
+                        <Spinner data-icon='inline-start' />
                       )}
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align='end'
-                      className='w-auto min-w-40'
+                      {$t(t.check ? 'repos.recheck' : 'repos.checkNow')}
+                    </Button>,
+                  )}
+                {canSave &&
+                  locked(
+                    <Button
+                      id={`${id}-edit-${t.id}`}
+                      variant='outline'
+                      size='sm'
+                      disabled={disabled}
+                      onClick={() => void startEdit(t)}
                     >
-                      {canSetDefault && t.id !== list.defaultTargetId && (
-                        <DropdownMenuItem onClick={() => void makeDefault(t)}>
-                          {$t('articlePublishing.setDefault')}
-                        </DropdownMenuItem>
+                      {busy === `edit-${t.id}` && (
+                        <Spinner data-icon='inline-start' />
                       )}
-                      {canRemove &&
-                        canSetDefault &&
-                        t.id !== list.defaultTargetId && (
-                          <DropdownMenuSeparator />
+                      {$t('articlePublishing.edit')}
+                    </Button>,
+                  )}
+                {(canRemove ||
+                  (canSetDefault && t.id !== list.defaultTargetId)) &&
+                  locked(
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button
+                            variant='ghost'
+                            size='icon-sm'
+                            aria-label={$t('articlePublishing.actions', {
+                              0: t.name,
+                            })}
+                            disabled={disabled}
+                          />
+                        }
+                      >
+                        {busy === `remove-${t.id}` ||
+                        busy === `default-${t.id}` ? (
+                          <Spinner />
+                        ) : (
+                          <MoreHorizontal />
                         )}
-                      {canRemove && (
-                        <DropdownMenuItem
-                          variant='destructive'
-                          onClick={() => void remove(t)}
-                        >
-                          {$t('articlePublishing.delete')}
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>,
-                )}
-            </CardFooter>
-          </Card>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align='end'
+                        className='w-auto min-w-40'
+                      >
+                        {canSetDefault && t.id !== list.defaultTargetId && (
+                          <DropdownMenuItem onClick={() => void makeDefault(t)}>
+                            {$t('articlePublishing.setDefault')}
+                          </DropdownMenuItem>
+                        )}
+                        {canRemove &&
+                          canSetDefault &&
+                          t.id !== list.defaultTargetId && (
+                            <DropdownMenuSeparator />
+                          )}
+                        {canRemove && (
+                          <DropdownMenuItem
+                            variant='destructive'
+                            onClick={() => void remove(t)}
+                          >
+                            {$t('articlePublishing.delete')}
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>,
+                  )}
+              </>
+            }
+          />
         ),
       )}
       {list.targets.length > 0 && canSetPlaybooks && (
@@ -724,7 +697,7 @@ function TargetsPanel({
                 { revision: list.revision, playbookTargets },
                 sessionId,
               );
-              setList(next);
+              keepList(next);
               onChange();
             })
           }
@@ -746,6 +719,124 @@ function TargetsPanel({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * A publishing target as Data sources › Blog CMS shows it (2026-10-29): the same status card as a website repository,
+ * with whether it answers (the latest check, kept with its time), where it is, its languages and the article a task
+ * last published there.
+ */
+function TargetCard({
+  target: t,
+  isDefault,
+  published,
+  actions,
+}: {
+  target: ArticleTargetView;
+  isDefault: boolean;
+  published?: PublishedArticle;
+  actions: React.ReactNode;
+}) {
+  const ui = getCurrentLocale(),
+    c = t.check;
+  const failure = (code?: string) =>
+    code && $t(providerKey(code)) !== providerKey(code)
+      ? $t(providerKey(code))
+      : $t('articlePublishing.testFailed');
+  const health: { tone: Tone; label: string; text: string } = !c
+    ? {
+        tone: 'grey',
+        label: $t('repos.notChecked'),
+        text: $t('repos.neverChecked'),
+      }
+    : c.ok
+      ? {
+          tone: 'green',
+          label: $t('articlePublishing.canPublish'),
+          text: `${$t('articlePublishing.checkOk')} · ${formatDateTime(c.at)}`,
+        }
+      : {
+          tone: 'red',
+          label: $t('repos.problem'),
+          text: `${failure(c.code).replace(/[。.]$/u, '')} · ${formatDateTime(c.at)}`,
+        };
+  const pageLocale = [...t.locales, ...Object.keys(t.pages || {})].find(
+      (l) => t.pages?.[l],
+    ),
+    articleUrl =
+      published?.slug && pageLocale
+        ? fill(t.pages![pageLocale], encodeURIComponent(published.slug))
+        : '';
+  return (
+    <StatusCard
+      data-target={t.id}
+      title={
+        <>
+          {t.name}
+          <Badge variant='secondary'>{$t(kindKey[t.kind])}</Badge>
+          {isDefault && <Badge>{$t('articlePublishing.default')}</Badge>}
+        </>
+      }
+      tag={
+        <Tag tone={health.tone} dot>
+          {health.label}
+        </Tag>
+      }
+      note={$t(
+        t.capabilities.concurrency === 'conditional'
+          ? 'articlePublishing.conditional'
+          : 'articlePublishing.checkBeforeWrite',
+      )}
+      actions={actions}
+    >
+      <StatusRow label={$t('articlePublishing.address')}>
+        <span className='break-all'>
+          {t.kind === 'git-files' ? `${t.repo} · ${t.branch}` : t.baseUrl}
+        </span>
+      </StatusRow>
+      <StatusRow label={$t('articlePublishing.languagesRow')}>
+        {/* The first language is the primary one, written and reviewed first; the others are translated from it. */}
+        {t.locales.length > 1
+          ? $t('articlePublishing.primaryLanguages', {
+              0: localeName(t.locales[0], ui),
+              1: t.locales
+                .slice(1)
+                .map((l) => localeName(l, ui))
+                .join(ui.startsWith('zh') ? '、' : ', '),
+            })
+          : localeName(t.locales[0], ui)}
+      </StatusRow>
+      {t.kind !== 'git-files' && t.downstream && (
+        <StatusRow label={$t('articlePublishing.exportsRow')}>
+          <span className='break-all'>
+            {`${t.downstream.repo} · ${t.downstream.branch}`}
+          </span>
+        </StatusRow>
+      )}
+      <StatusRow label={$t('repos.check')}>
+        <span data-target-check=''>{health.text}</span>
+      </StatusRow>
+      <StatusRow label={$t('articlePublishing.lastPublished')}>
+        {published ? (
+          <span>
+            <a
+              className='nr-link'
+              href={articleUrl || `/main/actions/${published.taskId}`}
+              target={articleUrl ? '_blank' : undefined}
+              rel={articleUrl ? 'noreferrer' : undefined}
+            >
+              {published.title}
+            </a>{' '}
+            <span className='text-muted-foreground'>
+              {formatDate(published.at)}
+            </span>
+          </span>
+        ) : (
+          <span className='text-muted-foreground'>{$t('repos.noPr')}</span>
+        )}
+      </StatusRow>
+    </StatusCard>
   );
 }
 

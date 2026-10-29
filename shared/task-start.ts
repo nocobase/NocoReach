@@ -1,5 +1,6 @@
 import { translationDefault, type ArticleMatch } from './article-publishing.js';
 import { ownSignalIds } from './opportunity-parts.js';
+import { routeRepo, type RepoRef } from './repo-routing.js';
 
 // How a task starts when nobody has to choose: the start card preselects these, and a task handed over from an
 // accepted document (Accept and start) is started with them by the server (2026-10-24 user decision). Both read the
@@ -20,6 +21,8 @@ export type DeliveryChoice = {
   article?: ArticleMatch;
   /** The languages the task writes, primary first; left out, every language of the target in its order. */
   locales?: string[];
+  /** The repository a pull request goes to (2026-10-29); left out, the one serving the task's pages. */
+  repoId?: string;
 };
 /** What the page lookup said: the article found, or none; `unchecked` when a target could not be asked. */
 export type ArticleFound = { article: ArticleMatch | null; unchecked: boolean };
@@ -39,6 +42,8 @@ export type StartContext = {
   articlePlaybookTargets?: Record<string, string>;
   agent?: {
     repo?: unknown;
+    /** The website source repositories, each with the addresses it serves (shared/repo-routing.ts). */
+    repos?: RepoRef[];
     agentId?: string | null;
     options?: { id: string; type?: string }[];
   } | null;
@@ -108,9 +113,25 @@ export function defaultDelivery(
   const article = found?.article;
   if (article && targets.some((t) => t.id === article.targetId))
     return { target: article.targetId, mode: 'existing', also: [], article };
-  if (found && !found.unchecked && !named && data.agent?.repo)
+  if (found && !found.unchecked && !named && hasRepository(data))
     return { target: REPO, mode: 'new', also: [] };
   return { target, mode: 'existing', also: [] };
+}
+
+/** Whether the project has a website source repository. */
+const hasRepository = (data: StartContext) =>
+  Boolean(data.agent?.repos?.length || data.agent?.repo);
+
+/**
+ * The repository a pull request goes to: the one chosen on the start card while it is still there, else the one
+ * serving the task's pages (`by` says how it was found); null when a person has to choose.
+ */
+export function choiceRepo(data: StartContext, choice?: DeliveryChoice) {
+  const repos = data.agent?.repos || [],
+    picked = choice?.repoId && repos.find((r) => r.id === choice.repoId);
+  return picked
+    ? { repo: picked, by: 'chosen' as const }
+    : routeRepo(repos, pageUrlsOf(data));
 }
 
 /** Whether the page lookup can change the default, so a caller without it can skip asking the targets. */
@@ -182,8 +203,17 @@ export function deliveryPlan(
   translate = false,
 ) {
   const linked = data.work.article;
-  if (choice.target === REPO)
-    return { ready: true, unlink: Boolean(linked?.targetId), delivery: REPO };
+  if (choice.target === REPO) {
+    const repos = data.agent?.repos || [],
+      repo = choiceRepo(data, choice).repo;
+    return {
+      // Several repositories, and none serving the task's pages alone: the start card asks which.
+      ready: repos.length < 2 || Boolean(repo),
+      unlink: Boolean(linked?.targetId),
+      delivery: REPO,
+      ...(repos.length > 1 && repo ? { repoId: repo.id } : {}),
+    };
+  }
   const also = translate
       ? []
       : choice.also.filter((id) => id !== choice.target),
@@ -251,7 +281,8 @@ export type StartBlocker =
   | 'targetGone'
   | 'chooseTarget'
   | 'chooseArticle'
-  | 'noRepository';
+  | 'noRepository'
+  | 'chooseRepository';
 
 /**
  * What stops a task from starting with its defaults. `changes`: the playbook changes something, so its delivery is
@@ -299,7 +330,10 @@ export function startBlockers(
     else if (!deliveryPlan(data, choice, translate).ready)
       out.push('chooseArticle');
   }
-  if (repository && needsRepository && !simulated && !data.agent?.repo)
-    out.push('noRepository');
+  if (repository && needsRepository && !simulated) {
+    if (!hasRepository(data)) out.push('noRepository');
+    else if ((data.agent?.repos?.length ?? 0) > 1 && !choiceRepo(data).repo)
+      out.push('chooseRepository');
+  }
   return out;
 }

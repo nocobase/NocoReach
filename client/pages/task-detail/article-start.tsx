@@ -15,6 +15,15 @@ import { Input } from '#components/ui/input';
 import { Label } from '#components/ui/label';
 import { RadioGroup, RadioGroupItem } from '#components/ui/radio-group';
 import { Tag } from '#components/reach/tag';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '#components/ui/select';
 import type {
   ArticleMatch,
   ArticleSummary,
@@ -31,6 +40,7 @@ import {
   MAX_ALSO,
   REPO,
   choiceLocales,
+  choiceRepo,
   translationLocales,
   type DeliveryChoice,
 } from './article-model';
@@ -843,5 +853,142 @@ export function DeliverySummary({
         <Tag tone='green'>{$t('articleTask.foundByPage')}</Tag>
       )}
     </>,
+  );
+}
+
+const REPO_VALUE = 'repo:',
+  TARGET_VALUE = 'target:';
+/** A page address as short as it reads: host and path, without the scheme. */
+const shortPage = (url: string) =>
+  url.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+
+/**
+ * Changes go to (2026-10-29, ui-references/repos-2026-10-29/multi-repo.png ④): the website repositories (a pull request)
+ * and the publishing targets (published directly) in one select. The repository serving the task's pages is preselected
+ * and the line below says from which page; when several or none serve them, the person chooses.
+ */
+export function WhereField({
+  data,
+  choice,
+  playbookId,
+  found,
+  allowed,
+  busy,
+  onChange,
+}: {
+  data: TaskData;
+  choice: DeliveryChoice;
+  playbookId: string;
+  found?: ArticleMatch | null;
+  allowed: boolean;
+  busy: boolean;
+  onChange: (choice: DeliveryChoice) => void;
+}) {
+  const id = useId(),
+    repos = data.agent?.repos || [],
+    targets = data.articleTargets || [],
+    route = choice.target === REPO ? choiceRepo(data, choice) : null;
+  const value =
+    choice.target === REPO
+      ? route?.repo
+        ? REPO_VALUE + route.repo.id
+        : null
+      : TARGET_VALUE + choice.target;
+  const label = (v: string) => {
+    if (v.startsWith(REPO_VALUE)) {
+      const r = repos.find((x) => x.id === v.slice(REPO_VALUE.length));
+      return r ? `${r.repo} · ${$t('articleTask.viaPr')}` : '';
+    }
+    const t = targets.find((x) => x.id === v.slice(TARGET_VALUE.length));
+    return t ? `${t.name} · ${$t('articleTask.publishDirect')}` : '';
+  };
+  return (
+    <Field label={$t('articleTask.changesGoTo')} id={`${id}-where`}>
+      <Select
+        value={value}
+        disabled={busy || !allowed}
+        onValueChange={(v) => {
+          if (typeof v !== 'string') return;
+          if (v.startsWith(REPO_VALUE))
+            return onChange({
+              target: REPO,
+              mode: 'new',
+              also: [],
+              repoId: v.slice(REPO_VALUE.length),
+            });
+          const target = v.slice(TARGET_VALUE.length);
+          // A blog post is a new article; any other change is to the article found from the page, else one picked.
+          onChange({
+            target,
+            mode: playbookId === 'blog-post' ? 'new' : 'existing',
+            also: [],
+            ...(found?.targetId === target && playbookId !== 'blog-post'
+              ? { article: found }
+              : {}),
+          });
+        }}
+      >
+        <SelectTrigger className='w-full' aria-labelledby={`${id}-where`}>
+          <SelectValue>
+            {(v: string | null) =>
+              v ? (
+                label(v)
+              ) : (
+                <span className='text-muted-foreground'>
+                  {$t('articleTask.chooseRepository')}
+                </span>
+              )
+            }
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent className='max-w-[min(var(--container-md),var(--available-width))] min-w-(--anchor-width)'>
+          {repos.length > 0 && (
+            <SelectGroup>
+              <SelectLabel>{$t('articleTask.repositoryGroup')}</SelectLabel>
+              {repos.map((r) => (
+                <SelectItem key={r.id} value={REPO_VALUE + r.id}>
+                  <span className='min-w-0 flex-1 truncate'>{r.repo}</span>
+                  <span className='max-w-48 truncate text-muted-foreground'>
+                    {r.urls.join(
+                      getCurrentLocale().startsWith('zh') ? '、' : ', ',
+                    )}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          )}
+          {targets.length > 0 && (
+            <SelectGroup>
+              <SelectLabel>{$t('articleTask.targetGroup')}</SelectLabel>
+              {targets.map((t) => (
+                <SelectItem key={t.id} value={TARGET_VALUE + t.id}>
+                  <span className='min-w-0 flex-1 truncate'>{t.name}</span>
+                  <span className='text-muted-foreground'>
+                    {$t('articleTask.publishDirect')}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          )}
+        </SelectContent>
+      </Select>
+      {route?.by === 'page' && (
+        <p className={text.muted} data-repo-picked=''>
+          {$t('articleTask.pickedByPage', { 0: shortPage(route.page) })}
+        </p>
+      )}
+      {choice.target === REPO && !route?.repo && (
+        <p
+          className='text-sm text-nr-ink-red'
+          data-start-blocker='chooseRepository'
+        >
+          {$t(
+            route?.by === 'mixed'
+              ? 'articleTask.repositoryMixed'
+              : 'articleTask.repositoryNone',
+          )}
+        </p>
+      )}
+    </Field>
   );
 }
