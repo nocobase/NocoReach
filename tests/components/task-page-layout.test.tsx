@@ -500,8 +500,12 @@ test('the start card finds the article from the task page and links it as the ta
             },
           ],
         });
-      if (resource === 'nrArticles' && command === 'match')
-        return Promise.resolve({ article, unchecked: false });
+      if (resource === 'nrTaskWork' && command === 'pagePlaces')
+        return Promise.resolve({
+          article,
+          unchecked: false,
+          pages: [{ url: article.url, article }],
+        });
       if (resource === 'nrTaskWork' && command === 'advance') {
         commands.push(init!.body!);
         const revision = Number(init!.body!.revision) + 1;
@@ -517,12 +521,15 @@ test('the start card finds the article from the task page and links it as the ta
   expect(
     await screen.findByRole('link', { name: 'Top Workflow Automation Tools' }),
   ).toHaveAttribute('href', article.url);
-  expect(screen.getByText('要修改的文章')).toBeTruthy();
+  // 2026-10-29: the pages to change, and one line for where they are changed.
+  expect(screen.getByText('要改的页面')).toBeTruthy();
+  expect(screen.getByText('博客文章 · 在 NocoBase CMS 里改')).toBeTruthy();
   expect(screen.queryByLabelText('发布到')).toBeNull();
   expect(
-    action.mock.calls.find(([r, c]) => r === 'nrArticles' && c === 'match')?.[2]
-      .body.urls,
-  ).toEqual([article.url]);
+    action.mock.calls.find(
+      ([r, c]) => r === 'nrTaskWork' && c === 'pagePlaces',
+    )?.[2].body,
+  ).toMatchObject({ taskId: '1' });
   await userEvent
     .setup()
     .click(screen.getByRole('button', { name: '确定开始执行' }));
@@ -641,7 +648,7 @@ test('Change opens a dialog and the card keeps its one-line summary', async () =
 
   const card = screen.getByRole('region', { name: '等你处理' });
   await user.click(within(card).getByRole('button', { name: '更改' }));
-  const dialog = await screen.findByRole('dialog', { name: '选择文章' });
+  const dialog = await screen.findByRole('dialog', { name: '更改改动方式' });
   expect(within(dialog).getByLabelText('发布到')).toHaveValue('cms');
   expect(within(dialog).getByRole('radio', { name: '已有文章' })).toBeChecked();
   expect(dialog).toHaveTextContent(
@@ -651,7 +658,7 @@ test('Change opens a dialog and the card keeps its one-line summary', async () =
   expect(within(card).queryByLabelText('发布到')).toBeNull();
   await user.click(within(dialog).getByRole('radio', { name: '新文章' }));
   await user.click(within(dialog).getByRole('button', { name: '保存' }));
-  expect(screen.queryByRole('dialog', { name: '选择文章' })).toBeNull();
+  expect(screen.queryByRole('dialog', { name: '更改改动方式' })).toBeNull();
   expect(within(card).getByText('发布到 NocoBase CMS')).toBeTruthy();
 });
 

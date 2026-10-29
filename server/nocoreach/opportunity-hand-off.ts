@@ -1,5 +1,8 @@
 import { systemMessageText } from '../../shared/i18n/messages.js';
-import { slugFromPage } from '../../shared/article-publishing.js';
+import {
+  looseSlugFromPage,
+  slugFromPage,
+} from '../../shared/article-publishing.js';
 import {
   pageKey,
   splitOf,
@@ -31,7 +34,10 @@ type SiteContent = {
   sites?: { origin?: unknown }[];
   origin?: unknown;
 } | null;
-type ArticleTarget = { pages?: Record<string, string> };
+type ArticleTarget = {
+  pages?: Record<string, string | string[]>;
+  locales?: string[];
+};
 export type PlanTask = {
   id: number | string;
   evidence?: {
@@ -120,6 +126,41 @@ function titleOf(
   ).slice(0, 200);
 }
 
+/** The slug a page is one of the targets' articles under, by its patterns or as a guess (looseSlugFromPage). */
+function articleKey(url: string | undefined, targets: ArticleTarget[]) {
+  if (!url) return '';
+  for (const [i, t] of targets.entries()) {
+    const hit =
+      slugFromPage(t.pages, url) || looseSlugFromPage(t.pages, url, t.locales);
+    if (hit) return `${i}:${hit.slug}`;
+  }
+  return '';
+}
+
+/**
+ * One place per article (2026-10-29: O-59 made T-55 for /blog/{slug}/ and T-56 for /en/blog/{slug}, one CMS post):
+ * pages that read back to the same article of a target become the first of them, with all their changes.
+ */
+function oneArticleEach(parts: OpportunityPart[], targets: ArticleTarget[]) {
+  const out: OpportunityPart[] = [],
+    seen = new Map<string, OpportunityPart>();
+  for (const part of parts) {
+    const key =
+      part.kind === 'page' && part.key !== 'announce'
+        ? articleKey(part.url, targets)
+        : '';
+    const same = key ? seen.get(key) : undefined;
+    if (same) {
+      same.signalIds = [...new Set([...same.signalIds, ...part.signalIds])];
+      continue;
+    }
+    const copy = { ...part, signalIds: [...part.signalIds] };
+    if (key) seen.set(key, copy);
+    out.push(copy);
+  }
+  return out;
+}
+
 /** The pages and articles a task handed off before places existed has changed or is about. */
 function legacyCover(
   task: PlanTask,
@@ -148,7 +189,10 @@ function legacyCover(
         p.kind === 'page' &&
         (pages.has(pageKey(p.url)) ||
           targets.some((t) => {
-            const slug = slugFromPage(t.pages, String(p.url))?.slug;
+            const slug = (
+              slugFromPage(t.pages, String(p.url)) ||
+              looseSlugFromPage(t.pages, String(p.url), t.locales)
+            )?.slug;
             return Boolean(slug && slugs.has(slug));
           })),
     )
@@ -180,7 +224,7 @@ export function planOf({
   playbooks?: NamedPlaybook[];
   locale: string;
 }): PlanPart[] {
-  const parts = splitOf(card, signals);
+  const parts = oneArticleEach(splitOf(card, signals), targets);
   if (!parts.length) return [];
   const byId = new Map(tasks.map((t) => [String(t.id), t])),
     covered = new Map<string, { id: string; no?: number }>();

@@ -19,6 +19,9 @@ import type {HandOffResult} from './hand-off';
 import {daysBetween,type Verdict} from './watch';
 import {isZero,situationLines} from './situation-lines';
 import {TASK_TAG,type TaskStanding} from './task-standing';
+import {distinctPages} from '../../../shared/task-start.js';
+// The playbooks that change the site's pages.
+const PAGE_PLAYBOOKS=new Set(['optimize-page','tech-fix']);
 // 洞察 building blocks (SPEC §5): numbers and changes first, one line each; no paragraphs.
 export type Metric={key:string;label:string;value:number|null;previous:number|null;complete:boolean;change:number|null};
 export type SourceCard={id:string;cutoff:string|null;window:{start:string;end:string;days:number};metrics:Metric[];series:{date:string;value:number|null}[];seriesBy?:Record<string,{date:string;value:number|null}[]>};
@@ -88,7 +91,8 @@ export const percent=pct;
 // 2026-10-08 (user: beside the metric cards, a second grid of number tiles left no telling which to look at): the metric
 // cards are the only big numbers on the page; this is a quiet list, one sentence per line with its numbers in bold, then
 // where it comes from. Lines to deal with (amber or red) come first with an amber dot; the rest are grey.
-export type AreaRow={key:string;title:string;meta?:string;url?:string|null;tag?:{tone:Tone;text:string}};
+// `pages`: a site audit row's affected pages, handed off with it (2026-10-29).
+export type AreaRow={key:string;title:string;meta?:string;url?:string|null;pages?:string[];tag?:{tone:Tone;text:string}};
 export type AreaItem={key:string;text:string;values:string[];source:string;detail?:string;to:string;tone?:Tone;group?:'worse'|'handle'|'chance'|'voice';rows?:AreaRow[];total?:number;compare?:{label:string;now:string|number;before:string|number}[];handOff?:{playbookId:string;title:string}};
 export type Area={id:string;title:string;items:AreaItem[]};
 // Current situation names each line with a short noun label and puts its value on the right (2026-10-24 user-approved
@@ -158,7 +162,9 @@ export function AreaList({areas,projectId,quiet=false}:{areas?:Area[];projectId:
 function AttentionDetail({item,projectId,onClose}:{item:AreaItem;projectId:number;onClose:()=>void}):ReactElement{
  // A rule's line is titled as in the list, by its label (the rule's own name reads differently).
  const navigate=useNavigate(),list=item.rows||[],selection=useSelection(list.map(r=>r.key)),ticked=list.filter(r=>selection.has(r.key)),text=item.key.startsWith('rule-')&&SITUATION_LABEL[item.key]?$t(SITUATION_LABEL[item.key]):sentence(item);
- const draft=():TaskDraft=>({title:item.handOff!.title.replace('{0}',ticked.map(r=>r.title).join('、').slice(0,120)).slice(0,200),subject:ticked.map(r=>r.title).join('、').slice(0,160),objective:$t('strategy.handleInsightsWorthLook',{0:text}).slice(0,1000),
+ // A line about the site's own pages hands its ticked pages off with the task (2026-10-29); others (forum topics,
+ // posts) are not pages to change.
+ const draft=():TaskDraft=>({...(PAGE_PLAYBOOKS.has(item.handOff!.playbookId)?{pages:distinctPages(ticked.flatMap(r=>[r.url,...(r.pages||[])]))}:{}),title:item.handOff!.title.replace('{0}',ticked.map(r=>r.title).join('、').slice(0,120)).slice(0,200),subject:ticked.map(r=>r.title).join('、').slice(0,160),objective:$t('strategy.handleInsightsWorthLook',{0:text}).slice(0,1000),
   brief:[$t('strategy.insightsWhereThingsStand',{0:text,1:$legacyText(item.source),2:item.detail?`，${$legacyText(item.detail)}`:''}),'',...ticked.map(r=>`- ${r.title}${r.meta?`（${$legacyText(r.meta)}）`:''}${r.url?`：${r.url}`:''}`),'',$t('strategy.suggestionCheckDataPagesItems')].join('\n').slice(0,20000)});
  return <DetailDrawer open onClose={onClose} title={text} description={[$legacyText(item.source),item.detail?$legacyText(item.detail):''].filter(Boolean).join(' · ')}
   actions={item.handOff&&list.length?<SectionHandOff projectId={projectId} disabled={!ticked.length} playbookId={item.handOff.playbookId} page={ticked.length===1&&ticked[0].url?ticked[0].url:undefined} label={ticked.length?$t('common.handOffAgentValue',{0:ticked.length}):$t('common.handOffAgent')} draft={draft}/>:undefined}

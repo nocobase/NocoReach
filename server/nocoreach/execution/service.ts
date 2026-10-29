@@ -22,9 +22,8 @@ import { ArticleFlow } from './article-flow.js';
 import { playbookTitle, retitle } from './task-title.js';
 import { KEEPS_SNOOZE, snoozeInstant } from './snooze.js';
 import { STARTS_KEY, restartOf, withStart } from './restarts.js';
-import { ownSignalIds } from '../../../shared/opportunity-parts.js';
 import { taskStanding } from '../../../shared/task-pending.js';
-import { defaultDelivery, deliveryPlan, lookupMatters, pageUrlsOf, startAgent, startBlockers } from '../../../shared/task-start.js';
+import { defaultDelivery, deliveryPlan, distinctPages, lookupMatters, pagesToStart, pageUrlsOf, startAgent, startBlockers } from '../../../shared/task-start.js';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
 // Roles and what only 管理员 may change live with the server code (server/policy.js); the same relative path works from
 // the source and from dist/execution.
@@ -152,15 +151,15 @@ export class TaskService {
     const related = [...(await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => ({ ...relatedTask(r), relation: String(r.get('id')) === String(work.nextTaskId) ? 'next' : 'prev' })), ...await this.siblings(project, task, tx)];
     return { task, content, work, runs: runs.map(({ input, transcript: _transcript, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), articleBases: await this.articleFlow.bases(project, taskId, work, tx) };
   }
-  // The other tasks handed off from the same opportunity (2026-10-22: one opportunity, a task per place to change), in
-  // the order they were created, with where each stands.
+  // The other tasks handed off from the same opportunity (2026-10-22: one opportunity, a task per place to change), or
+  // split off the same task for pages it leaves (2026-10-29: proposals sharing `group`, the first task's proposal or
+  // `task:<id>`), in the order they were created, with where each stands and the pages each was handed off with.
   private async siblings(project: string, task: any, tx?: any) {
-    const insight = task.evidence?.insight?.id;
-    if (typeof insight !== 'string') return [];
-    const strategy = await this.snapshot(`strategy:${project}`, tx);
-    const ids = [...new Set<string>([...(strategy?.proposals || [])].reverse().filter((p: any) => p.taskId && p.insight?.id === insight).map((p: any) => String(p.taskId)))].filter(id => id !== String(task.id));
+    const insight = task.evidence?.insight?.id, strategy = await this.snapshot(`strategy:${project}`, tx), proposals: any[] = strategy?.proposals || [];
+    const own = proposals.find((p: any) => p.id === task.evidence?.proposalId), group = own ? own.group || own.id : `task:${task.id}`;
+    const ids = [...new Set<string>([...(typeof group === 'string' && group.startsWith('task:') ? [group.slice(5)] : []), ...[...proposals].reverse().filter((p: any) => p.taskId && ((typeof insight === 'string' && p.insight?.id === insight) || (p.group || p.id) === group)).map((p: any) => String(p.taskId))])].filter(id => id !== String(task.id));
     const rows = (await Promise.all(ids.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean);
-    return rows.map((r: any) => ({ ...relatedTask(r), relation: 'sibling' }));
+    return rows.map((r: any) => { const e = (r.toJSON ? r.toJSON() : r).evidence || {}, pages = distinctPages([e.page, ...(Array.isArray(e.pages) ? e.pages : [])]); return { ...relatedTask(r), relation: 'sibling', ...(pages.length ? { pages } : {}) }; });
   }
   private async withAgent(project: string, data: any, actor?: string) {
     // Actor-specific Runner eligibility opens plugin reads of its own.
@@ -359,18 +358,12 @@ export class TaskService {
   }
   // The pages a finished task changed: what was released, the published page and the linked page.
   effectPages(w: Work) { return [...new Set([...(w.release?.pages || []), w.receipt?.url || '', w.page?.url || ''].map(httpsUrl).filter(Boolean))].slice(0, 10); }
-  // The pages the task page shows numbers for (2026-10-22): those the observation compares, then the page the task
-  // was handed off with, the opportunity's page and the cited changes' pages (as the article lookup reads them). One of
-  // an opportunity's several tasks (handed off one place at a time) shows its own place only, never the others'.
+  // The pages the task page shows numbers for (2026-10-22): those the observation compares, then the task's pages as
+  // the start card reads them (pageUrlsOf: the pages it was handed off with, or the opportunity's page and the cited
+  // changes' pages), or the ones it was started to change when it left others to other tasks (`w.pages`). One of an
+  // opportunity's several tasks (handed off one place at a time) shows its own place only, never the others'.
   numberPages(task: any, w: Work) {
-    const e = task.evidence || {}, ids = new Set(ownSignalIds(e));
-    const cited = (e.context?.signals?.items || []).filter((s: any) => ids.has(s?.key)).map((s: any) => s?.url);
-    const pages = new Map<string, string>();
-    for (const u of [...this.effectPages(w), e.page, e.part ? undefined : e.insight?.target, ...cited]) {
-      const url = typeof u === 'string' ? u.trim() : '';
-      if (/^https?:\/\//i.test(url) && pageKey(url) && !pages.has(pageKey(url))) pages.set(pageKey(url), url);
-    }
-    return [...pages.values()].slice(0, 10);
+    return distinctPages([...this.effectPages(w), ...(w.pages?.length ? w.pages : pageUrlsOf({ task, work: w }))], 10);
   }
   // Each page's numbers over 28 days, for the task page: the 28 days before the change went live once it has,
   // otherwise the latest 28 days every source has data for.
@@ -694,6 +687,12 @@ export class TaskService {
         w.playbookId = p.id; w.playbook = { id: p.id, name: p.name, kind: p.kind, version: p.version, next: [...p.next], system: p.system === true, edited: p.edited === true };
         w.flow = { id: p.id, name: p.name, version: p.version, stages: stagesFor(p), system: p.system === true, edited: p.edited === true };
         w.note = typeof v.note === 'string' ? v.note.trim().slice(0, 3000) : '';
+        // The pages it changes when it leaves some of its pages to other tasks (2026-10-29), from its own pages only.
+        if (v.pages !== undefined) {
+          const own = new Set(pageUrlsOf({ task, work: w }).map(pageKey)), pages = distinctPages(Array.isArray(v.pages) ? v.pages : []);
+          if (!pages.length || pages.some(u => !own.has(pageKey(u)))) return fail(systemMessageText('taskPages.notOwnPages'), 409);
+          w.pages = pages;
+        }
         if (!w.humanOwnerId) { await this.member(actor, tx); w.humanOwnerId = actor; w.humanOwnerName = actorName; }
         w.stage = 'flow'; w.step = 0; w.results = []; event.note = p.name;
         await followPlaybook(p);
@@ -880,17 +879,18 @@ export class TaskService {
       if (w.flow || w.plan || w.stage !== 'plan' || w.cancelledAt || w.archivedAt || !w.playbookId) return;
       const p = await this.playbooks.get(project, w.playbookId), stages = stagesFor(p), first = stages[0];
       const data = { task, work: w, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), agent: await this.agents.status(project, w.agentId, actor) };
-      const found = lookupMatters(data, p.id) ? await Promise.resolve(this.p.articleTargets.match(project, pageUrlsOf(data))).catch(() => ({ article: null, unchecked: true })) : undefined;
+      const found = lookupMatters(data, p.id) ? await this.lookupPages(project, pageUrlsOf(data)) : undefined;
       const changes = p.kind === 'build', translate = changes && data.articleTargets.length > 0 && translatesArticle(p), needsRepository = first?.kind === 'agent' && !(first.mode === 'analyze' && !stages.some(changesRepo));
       if (startBlockers(data, { playbookId: p.id, changes, translate, needsRepository, simulated: Boolean(this.p.demoConfiguration?.enabled), found }).length) return;
-      const plan = changes && data.articleTargets.length ? deliveryPlan(data, defaultDelivery(data, p.id, found, translate), translate) : { unlink: false, link: undefined, delivery: undefined };
+      const choice = changes && data.articleTargets.length ? defaultDelivery(data, p.id, found, translate) : undefined;
+      const plan = choice ? deliveryPlan(data, choice, translate) : { unlink: false, link: undefined, delivery: undefined }, pages = choice && pagesToStart(data, choice, found);
       let revision = w.revision;
       const run = async (command: string, body: object = {}) => { revision = (await this.updateTask(project, { taskId, revision, requestId: randomUUID(), command, ...body }, actor, actorName)).work.revision; };
       const agent = startAgent(data);
       if (agent.save) await run('setAgent', { agentId: agent.save });
       if (plan.unlink) await run('linkArticle', { targetId: null });
       if (plan.link) await run('linkArticle', plan.link);
-      await run('startTask', { playbookId: p.id, ...(plan.delivery ? { delivery: plan.delivery } : {}) });
+      await run('startTask', { playbookId: p.id, ...(plan.delivery ? { delivery: plan.delivery } : {}), ...(pages ? { pages } : {}) });
     } catch (e: any) {
       this.p.app?.logger?.warn?.('NocoReach could not start a handed-over task', { projectId: project, taskId, message: e?.message });
     }
@@ -1153,6 +1153,19 @@ export class TaskService {
     const term = typeof q === 'string' ? q.trim().toLowerCase().slice(0, 100) : '';
     return all.filter(p => !term || `${p.url} ${p.title || ''}`.toLowerCase().includes(term)).slice(0, 20).map(p => ({ url: String(p.url), title: String(p.title || ''), type: String(p.type || '') }));
   }
+  // Where each of a task's pages is changed (2026-10-29), for its start card: the article a publishing target holds it
+  // in, or none, a page of the site itself; with its title in Website content. Read-only.
+  async pagePlaces(project: string, taskId: string) {
+    const task = await this.task(project, taskId), urls = pageUrlsOf({ task, work: projectWork(task) });
+    if (!urls.length) return { article: null, unchecked: false, pages: [] };
+    const s = await this.snapshot(`site-content:${project}`), titles = new Map<string, string>((Array.isArray(s?.pages) ? s.pages : []).map((p: any) => [pageKey(p.url), String(p.title || '').slice(0, 300)]));
+    const found = await this.lookupPages(project, urls);
+    return { ...found, pages: found.pages.map(p => ({ ...p, ...(titles.get(pageKey(p.url)) ? { title: titles.get(pageKey(p.url)) } : {}) })) };
+  }
+  // The article lookup of every page; a lookup that fails leaves each page unchecked.
+  private async lookupPages(project: string, urls: string[]): Promise<{ article: any; unchecked: boolean; pages: { url: string; article?: any; unchecked?: boolean }[] }> {
+    try { return await this.p.articleTargets.match(project, urls); } catch { return { article: null, unchecked: true, pages: urls.map(url => ({ url, unchecked: true })) }; }
+  }
   async contentSave(project: string, v: any, actor: string) {
     const context=await this.p.project(project);
     const entry=contentInput(v,context.domains || []);
@@ -1180,7 +1193,7 @@ export class TaskService {
     this.p.app.acl.allow('nrPlaybooks', ['list', 'save', 'copy', 'remove', 'restore', 'draft'], 'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrAgent', actions: { status: wrap(async (p, v, c) => this.agents.status(p, undefined, String(c.auth.user.id), { seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), saveDefault: wrap((p, v, c) => this.agents.saveDefault(p, v, String(c.auth.user.id))), saveRepo: wrap((p, v) => this.agents.saveRepo(p, v)), removeRepo: wrap((p, v) => this.agents.removeRepo(p, v)) } });
     this.p.app.acl.allow('nrAgent', ['status', 'saveDefault', 'saveRepo', 'removeRepo'], 'loggedIn');
-    this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { results: wrap((p,v)=>listResults(this,p,v)), result: wrap((p,v)=>readResult(this,p,v)), board: wrap((p,v)=>resultBoard(this,p,v)), get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), numbers: wrap((p, v) => this.numbers(p, String(v.taskId))), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)) } });
-    this.p.app.acl.allow('nrTaskWork', ['results', 'result', 'board', 'get', 'numbers', 'advance', 'members', 'list', 'pages'], 'loggedIn');
+    this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { results: wrap((p,v)=>listResults(this,p,v)), result: wrap((p,v)=>readResult(this,p,v)), board: wrap((p,v)=>resultBoard(this,p,v)), get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), numbers: wrap((p, v) => this.numbers(p, String(v.taskId))), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)), pagePlaces: wrap((p, v) => this.pagePlaces(p, String(v.taskId))) } });
+    this.p.app.acl.allow('nrTaskWork', ['results', 'result', 'board', 'get', 'numbers', 'advance', 'members', 'list', 'pages', 'pagePlaces'], 'loggedIn');
   }
 }

@@ -4,6 +4,7 @@ import {
   articleDraftSchema,
   ARTICLE_FIELDS,
   fill,
+  pagePattern,
   LOCALE,
   SLUG,
   supportsStatus,
@@ -333,7 +334,7 @@ export function articlePages(
     ),
   ];
   return locales
-    .map((l) => target.pages?.[l])
+    .map((l) => pagePattern(target.pages, l))
     .filter(Boolean)
     .map((t) => fill(t!, slug))
     .slice(0, 10);
