@@ -26,7 +26,7 @@ import { useProject } from './reach-data';
 import { ruleUnitLabel } from './analysis-rules/labels';
 import { getSourceNames } from './strategy/board';
 import { analysisRequest, type AnalysisStatus } from './strategy/service';
-import { dailyAnalysisTime } from './strategy/schedule-time';
+import { dailyScheduleTime } from '#lib/schedule-time';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { SchemeManager, AddRule } from './analysis-rules/schemes';
 import type { Rule, Settings, View } from './analysis-rules/types';
@@ -169,7 +169,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
       live = false;
     };
   }, [projectId]);
-  const scheduleTime = dailyAnalysisTime(schedule);
+  const scheduleTime = dailyScheduleTime(schedule);
   // A change confirmed in the chat panel shows here at once.
   usePageChange('analysisRules', projectId, () => void load());
   const closeEditor = () => {

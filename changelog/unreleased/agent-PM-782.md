@@ -7,3 +7,4 @@
 - Show snooze deadlines in browser time while keeping form dates and presets in the labeled analysis timezone.
 - Group Insights by local calendar day while preserving each original conversation association.
 - Keep snooze saves available when timezone metadata is unavailable, report the effective server default, and align active Activity deadlines with the task card.
+- Convert read-only daily analysis clocks in Insights, Analysis rules and Data health to browser time using the next occurrence and its daylight saving offset; keep Automatic runs editing in the configured timezone.

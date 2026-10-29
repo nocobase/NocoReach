@@ -66,7 +66,7 @@ import {
   judgeMissing,
   type AnalysisStatus,
 } from './service';
-import { dailyAnalysisTime } from './schedule-time';
+import { dailyScheduleTime } from '#lib/schedule-time';
 import '../reach-workspace.css';
 import './strategy.css';
 type Task = {
@@ -553,7 +553,7 @@ function HowAnalyzed({
     ) : (
       text
     );
-  const time = dailyAnalysisTime(schedule);
+  const time = dailyScheduleTime(schedule);
   if (schedule && !schedule.enabled)
     return $tj('strategy.howAnalyzedPaused', {
       0: rules,

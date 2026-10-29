@@ -687,15 +687,20 @@ it('without the figures in its evidence, the day’s message names no numbers', 
 
 it('the subtitle says how the insights are analyzed, linking the rules and the schedule', async () => {
   fixture.runs = [{ ok: true, trigger: 'workflow' }];
-  fixture.schedule = { workflowId: 1, enabled: true, cron: '0 9 * * *' };
+  fixture.schedule = {
+    workflowId: 1,
+    enabled: true,
+    cron: '0 9 * * *',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  };
   setup();
   const link = await screen.findByRole('link', {
-    name: 'strategy.everyDayAt:09:00',
+    name: 'strategy.everyDayAt:9:00 AM',
   });
   expect(link.getAttribute('href')).toBe('/schedules');
   const sentence = link.parentElement!;
   expect(sentence.textContent).toBe(
-    'strategy.howAnalyzedDaily:strategy.analysisRulesLink,strategy.everyDayAt:09:00',
+    'strategy.howAnalyzedDaily:strategy.analysisRulesLink,strategy.everyDayAt:9:00 AM',
   );
   expect(
     within(sentence)

@@ -29,6 +29,8 @@ for (const timezoneId of [
         .fill(process.env.E2E_PASSWORD!);
       await page.getByRole('button', { name: 'Sign in', exact: true }).click();
       await page.waitForURL((url) => !url.pathname.endsWith('/login'));
+      const apiDocs = await page.request.get(`${base}/api/swagger`);
+      expect(apiDocs.ok()).toBe(true);
       const response = await page.request.get(
         `${base}/api/scheduler/schedules`,
       );
@@ -39,6 +41,43 @@ for (const timezoneId of [
       expect(schedule).toBeTruthy();
       const [minute, hour] = schedule.cron.trim().split(/\s+/);
       const configuredTime = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+      const localClock = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezoneId,
+        hour: 'numeric',
+        minute: '2-digit',
+      }).format(new Date(schedule.nextRunAt));
+      await page.goto(`${base}/home`);
+      await expect(
+        page.getByRole('link', {
+          name: `every day at ${localClock}`,
+          exact: true,
+        }),
+      ).toBeVisible();
+      await page.screenshot({
+        path: testInfo.outputPath('insights-local-en.png'),
+        animations: 'disabled',
+      });
+      await page.goto(`${base}/rules`);
+      await page
+        .getByRole('button', { name: 'What is Rules', exact: true })
+        .click();
+      await expect(page.locator('[data-rules-schedule]')).toHaveText(
+        `Analyzed every day at ${localClock}; changes apply to the next analysis.`,
+      );
+      await page.screenshot({
+        path: testInfo.outputPath('rules-local-en.png'),
+        animations: 'disabled',
+      });
+      await page.goto(`${base}/connections?tab=health`);
+      const healthRow = page
+        .getByRole('row')
+        .filter({ has: page.getByText('Daily analysis', { exact: true }) });
+      await expect(healthRow).toContainText(`Runs daily at ${localClock}`);
+      await healthRow.scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: testInfo.outputPath('health-local-en.png'),
+        animations: 'disabled',
+      });
       await page.goto(`${base}/schedules`);
       const row = page
         .getByRole('row')
