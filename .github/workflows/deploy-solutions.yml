@@ -4,37 +4,59 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      release_tag:
+        required: true
+        type: string
+      release_sha:
+        required: true
+        type: string
+      archive_name:
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 env:
   STUDIO_APP_ID: reach
+  STUDIO_RELEASE_TAG: ${{ inputs.release_tag }}
+  STUDIO_RELEASE_SHA: ${{ inputs.release_sha }}
+
+concurrency:
+  group: solutions-reach
+  cancel-in-progress: false
 
 jobs:
   build:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.release_tag != '')
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ inputs.release_sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: pnpm/action-setup@c336a2788d9774dccfdeb4823a5058ccc9f07453 # v4.3.0; packageManager selects pnpm
+        if: inputs.archive_name == ''
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
-          cache: pnpm
+          cache: ${{ inputs.archive_name == '' && 'pnpm' || '' }}
       - name: Check release version and main ancestry
         run: node scripts/ci/deploy-studio.mjs --check-release
       - run: pnpm install --frozen-lockfile
+        if: inputs.archive_name == ''
       - run: pnpm test --maxWorkers=2 --passWithNoTests=false
+        if: inputs.archive_name == ''
       - run: pnpm build --target linux-x64 --node-version 24 --tar
+        if: inputs.archive_name == ''
         env:
           NODE_OPTIONS: --max-old-space-size=6144
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: inputs.archive_name == ''
         with:
           name: solutions-release-archive
           path: storage/exports/dist.tar.gz
@@ -42,9 +64,10 @@ jobs:
           if-no-files-found: error
 
   deploy:
+    name: Deploy ${{ matrix.studio }} / reach
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -68,7 +91,7 @@ jobs:
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ inputs.release_sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -81,7 +104,7 @@ jobs:
         run: node scripts/ci/deploy-studio.mjs --check-config
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: solutions-release-archive
+          name: ${{ inputs.archive_name || 'solutions-release-archive' }}
           path: storage/exports
       # beta.58 is the last published npm release containing the Studio CLI.
       - name: Install nb-studio
