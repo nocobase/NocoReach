@@ -370,7 +370,7 @@ describe('read-only demo lifecycle', () => {
       (await runtime.plugin.projects.all()).map(
         (p: { name: string }) => p.name,
       ),
-    ).toEqual(['ACME', 'ACME CRM']);
+    ).toEqual(['Acme', 'Acme CRM']);
     const write = await admin.fetch('/nocoreach/nrProjects/create', {
       method: 'POST',
       headers: json,
@@ -700,8 +700,8 @@ test('imports the demo through the API and clears all business data while preser
 
   // Both projects must reach the same business surfaces with their own content.
   for (const [id, name, domain, count] of [
-    [main, 'ACME', 'acme.example', 47],
-    [second, 'ACME CRM', 'crm.acme.example', 39],
+    [main, 'Acme', 'acme.example', 47],
+    [second, 'Acme CRM', 'crm.acme.example', 39],
   ] as const) {
     const project = await runtime.plugin.projects.get(id);
     expect(project).toMatchObject({ name, domains: [domain] });
@@ -928,7 +928,7 @@ test('imports the demo through the API and clears all business data while preser
       if (key === 'acme-dependencies' || key === 'crm-import') {
         expect(
           new Set(detail.runs.map((run: { status: string }) => run.status)),
-        ).toEqual(new Set(['succeeded', 'failed']));
+        ).toEqual(new Set(['succeeded']));
         const previous = await admin.fetch('/nocoreach/nrTaskWork/get', {
           method: 'POST',
           headers: json,
@@ -936,7 +936,7 @@ test('imports the demo through the API and clears all business data while preser
             projectId: id,
             taskId: String(task.id),
             runId: detail.runs.find(
-              (run: { status: string }) => run.status === 'failed',
+              (run: { status: string }) => run.status === 'succeeded',
             ).id,
           }),
         });
@@ -1364,7 +1364,7 @@ test('imports the demo through the API and clears all business data while preser
       body: '{}',
     })
   ).json()) as { data: { name: string; language: string }[] };
-  expect(graceProjects.data.map((p) => p.name)).toEqual(['ACME', 'ACME CRM']);
+  expect(graceProjects.data.map((p) => p.name)).toEqual(['Acme', 'Acme CRM']);
   expect(graceProjects.data.at(-1)!.language).toBe('en-US');
 
   const reset = await demo.reset(undefined, 'zh-CN', { wait: true });

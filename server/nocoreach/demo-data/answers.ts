@@ -197,7 +197,7 @@ function business(operation: string, input: Value, en: boolean): Value | null {
             'Excel task import',
             'client collaboration',
             'project templates',
-            'ACME vs Nimbus',
+            'Acme vs Nimbus',
           ];
       // Why each seed, as the real model is asked to say: the memory line, query or competitor behind it.
       const p = project.name;

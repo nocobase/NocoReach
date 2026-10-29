@@ -5,7 +5,7 @@ export const ACME_NOTES: Record<string, L> = {
   '/': t(
     `## 建议采用的搜索摘要
 
-标题：ACME 项目管理：任务、排期与团队协作。描述：把项目任务、依赖排期和客户评审放在一个协作空间，查看负责人、截止时间与交付风险，从现有 Excel 清单开始。
+标题：Acme 项目管理：任务、排期与团队协作。描述：把项目任务、依赖排期和客户评审放在一个协作空间，查看负责人、截止时间与交付风险，从现有 Excel 清单开始。
 
 原文“让工作更高效”没有说明产品类别，也没有帮助搜索者判断能否管理跨团队交付。新文保留项目管理主词，依次交代任务、排期与协作。它不使用“最佳”“保证按时”等缺乏依据的承诺。
 
@@ -16,7 +16,7 @@ export const ACME_NOTES: Record<string, L> = {
 发布前对照标题、描述、首屏与分享卡片；移动端预览只用于检查可读性，不保证搜索引擎按同样方式展示。观察时固定目标页和查询组，分开记录曝光、点击与排名。若查询构成改变，先解释构成变化，不能把全部波动归功于标题。`,
     `## Recommended search snippet
 
-Title: ACME Project Management: Tasks, Timelines and Teamwork. Description: Organize project tasks, dependencies and client reviews in one workspace. See owners, deadlines and delivery risks, starting from your existing Excel checklist.
+Title: Acme Project Management: Tasks, Timelines and Teamwork. Description: Organize project tasks, dependencies and client reviews in one workspace. See owners, deadlines and delivery risks, starting from your existing Excel checklist.
 
 The original “Work more efficiently” neither identifies the product category nor helps someone evaluating cross-team delivery. The revision names project management, then tasks, schedules and collaboration. It avoids unsupported “best” and on-time guarantees.
 
@@ -61,13 +61,13 @@ Do not invent discounts, totals or a promise that guests are always free. Increa
   '/compare/nimbus': t(
     `## 用同一份交付清单做比较
 
-对比范围限定为 12 人项目团队带 3 位客户评审者。ACME 与 Nimbus 都是虚构产品；本页展示评估方法，不把演示结果写成现实市场排名。
+对比范围限定为 12 人项目团队带 3 位客户评审者。Acme 与 Nimbus 都是虚构产品；本页展示评估方法，不把演示结果写成现实市场排名。
 
 | 评估场景 | 要求的演示 | 当前判断 |
 | --- | --- | --- |
-| 表格迁移 | 20 行试导、错误恢复、唯一编号对账 | ACME 教程已有演练；Nimbus 待核实 |
-| 外部评审 | 获邀项目、附件与撤权 | ACME 有权限案例；Nimbus 待核实 |
-| 排期延期 | 固定里程碑与独立任务 | ACME 有依赖示例；Nimbus 待核实 |
+| 表格迁移 | 20 行试导、错误恢复、唯一编号对账 | Acme 教程已有演练；Nimbus 待核实 |
+| 外部评审 | 获邀项目、附件与撤权 | Acme 有权限案例；Nimbus 待核实 |
+| 排期延期 | 固定里程碑与独立任务 | Acme 有依赖示例；Nimbus 待核实 |
 | 离开平台 | 任务、附件与评论分别导出 | 两者均需按格式复核 |
 
 不使用全绿勾的能力表。区分“有入口”“本例验证通过”“尚未核实”三种证据强度。预算、实施时间与集成依赖另列，不把便宜或功能更多直接等同于适合。
@@ -75,13 +75,13 @@ Do not invent discounts, totals or a promise that guests are always free. Increa
 建议读者携带同一份清单试用两者，记录实际版本、执行身份和结果。只有完成相同条件验证的单元格才能给出比较结论；没有搜索量和转化证据，不预测本页新增客户数。`,
     `## Compare one shared delivery checklist
 
-Limit the evaluation to a twelve-person project team with three client reviewers. ACME and Nimbus are fictional; the page demonstrates an evaluation method rather than a real market ranking.
+Limit the evaluation to a twelve-person project team with three client reviewers. Acme and Nimbus are fictional; the page demonstrates an evaluation method rather than a real market ranking.
 
 | Scenario | Required demonstration | Current finding |
 | --- | --- | --- |
-| Spreadsheet migration | Twenty-row pilot, recovery and ID reconciliation | ACME rehearsal available; Nimbus unverified |
-| External review | Invited project, attachments and revocation | ACME access case available; Nimbus unverified |
-| Schedule delay | Fixed milestone and independent tasks | ACME dependency case available; Nimbus unverified |
+| Spreadsheet migration | Twenty-row pilot, recovery and ID reconciliation | Acme rehearsal available; Nimbus unverified |
+| External review | Invited project, attachments and revocation | Acme access case available; Nimbus unverified |
+| Schedule delay | Fixed milestone and independent tasks | Acme dependency case available; Nimbus unverified |
 | Leaving the platform | Separate tasks, attachments and comments | Both require format-specific checks |
 
 Avoid an all-green feature grid. Distinguish an available entry point, a passing rehearsal and an unverified capability. List budget, setup effort and integration dependencies separately; more features or a lower price do not establish fit.
@@ -410,7 +410,7 @@ Cover acceptance, rejection, replacement and expired links. Without evidence, do
 
 回放只选择失败事件，先在演练环境确认重复和乱序，再开放自动重试。错误消息应说明事件与下一步，不把凭据写进日志。
 
-当前缺少重复事件演练包，任务保留检查计划和失败原因。补齐后重跑上述四种输入，确认不会重复建任务；在此之前不声称集成已经修复。`,
+已使用模拟事件演练包核对上述四种输入，并完成重放与去重说明，等待人工复核。演练结果仅适用于演示数据，不代表真实集成已经修复。`,
     `## Establish whether an event was processed before retrying
 
 Identify each status callback by event ID. For a duplicate, consult the processed-event record and return the original result instead of creating another task. A timeout does not prove the remote operation failed.
@@ -424,7 +424,7 @@ Identify each status callback by event ID. For a duplicate, consult the processe
 
 Replay failed events only. Verify duplicates and out-of-order delivery in rehearsal before enabling retries. Error messages identify the event and next action without logging secrets.
 
-The duplicate-event pack is still missing, so this task retains its check plan and failure reason. Rerun all four inputs after the pack arrives. Until then, do not claim the integration has been repaired.`,
+All four inputs have been checked against the simulated event pack. Replay and deduplication instructions are ready for human review. These demo results do not establish that a real integration has been repaired.`,
   ),
   '/docs/export': t(
     `## 导出前先问接收者要什么
