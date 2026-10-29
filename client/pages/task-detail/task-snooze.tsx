@@ -106,8 +106,14 @@ function SnoozeForm({
     void analysisRequest(projectId, 'status').then(
       (status) => {
         if (!active) return;
-        if (status.schedule?.timezone) setZone(status.schedule.timezone);
-        else setFailed(true);
+        const timezone = status.schedule?.timezone;
+        try {
+          if (!timezone) throw new Error('Timezone unavailable');
+          snoozeToday(timezone, now);
+          setZone(timezone);
+        } catch {
+          setFailed(true);
+        }
       },
       () => {
         if (active) setFailed(true);
@@ -116,7 +122,7 @@ function SnoozeForm({
     return () => {
       active = false;
     };
-  }, [projectId, retry]);
+  }, [projectId, retry, now]);
   const id = useId(),
     w = data.work,
     current = w.snooze,
@@ -164,7 +170,7 @@ function SnoozeForm({
       <Field>
         <FieldLabel id={`${id}-until`}>
           {$t('taskSnooze.until')}
-          {zone && ` · ${timeZoneName(zone, getCurrentLocale())} (${zone})`}
+          {` · ${zone ? `${timeZoneName(zone, getCurrentLocale())} (${zone})` : $t('taskSnooze.scheduleTimezone')}`}
         </FieldLabel>
         <Segmented
           label={$t('taskSnooze.until')}
@@ -217,7 +223,7 @@ function SnoozeForm({
       </Field>
       {failed && (
         <p role='alert' className={text.muted}>
-          {$t('strategy.blockFailed')}{' '}
+          {$t('taskSnooze.timezoneUnavailable')}{' '}
           <Button
             variant='outline'
             size='sm'
@@ -235,7 +241,7 @@ function SnoozeForm({
           {$t('common.cancel')}
         </Button>
         <Button
-          disabled={busy || !day || !zone}
+          disabled={busy || !day || (!zone && !failed)}
           onClick={() =>
             void update('snoozeTask', { day, reason: reason.trim() }).then(
               (d) => {

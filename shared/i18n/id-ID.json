@@ -5260,6 +5260,8 @@
   "taskSnooze.description": "Tugas tetap pada progresnya dan tidak masuk \"Menunggu saya\"; pada harinya kembali ke \"{0}\" dan penanggung jawab diingatkan.",
   "taskSnooze.reason": "Menunggu",
   "taskSnooze.reasonPlaceholder": "Misalnya: dokumentasi izin",
+  "taskSnooze.scheduleTimezone": "Zona waktu proses otomatis",
+  "taskSnooze.timezoneUnavailable": "Zona waktu tidak dapat dibaca. Tanggal yang dipilih akan menggunakan zona waktu yang dikonfigurasi untuk proses otomatis, atau zona waktu server jika belum dikonfigurasi.",
   "taskSnooze.until": "Tunda sampai",
   "taskSnooze.week": "1 minggu",
   "taskSnooze.twoWeeks": "2 minggu",

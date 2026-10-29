@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { setDictionary } from '../../client/i18n';
 import {
   formatDate,
@@ -20,7 +20,12 @@ import {
 import english from '../../shared/i18n/en.json';
 
 const now = new Date('2026-10-21T12:00:00Z');
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(now);
+});
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllEnvs();
   setDictionary(null);
 });
@@ -114,3 +119,42 @@ it('compares release ages using their local calendar day within a selected analy
   vi.stubEnv('TZ', 'America/New_York');
   expect(downloadAgo(at, '2026-10-22')).toBe('1 days ago');
 });
+
+it('shows the active snooze instant in Activity and does not reuse it for another historical event', async () => {
+  vi.stubEnv('TZ', 'America/New_York');
+  setDictionary(english);
+  const { eventText } = await import('../../client/pages/playbook-model');
+  const snooze = { at: '2026-10-29T00:00:00Z', until: '2026-11-12T01:00:00Z' };
+  const event = { at: snooze.at, action: 'snoozeTask', note: '2026-11-12' };
+  expect(eventText(event, () => '', 'Agent', snooze)?.text).toBe(
+    'snoozed the task until Nov 11, 8:00 PM',
+  );
+  expect(
+    eventText({ ...event, action: 'snoozeChanged' }, () => '', 'Agent', snooze)
+      ?.text,
+  ).toBe('changed the snooze date to Nov 11, 8:00 PM');
+  expect(
+    eventText(
+      { ...event, at: '2026-10-28T00:00:00Z' },
+      () => '',
+      'Agent',
+      snooze,
+    )?.text,
+  ).not.toContain('8:00 PM');
+});
+
+it.each([
+  ['UTC', 'Oct 8', 'Oct 8', '5 days ago'],
+  ['Asia/Shanghai', 'Oct 8', 'Oct 8', '5 days ago'],
+  ['America/New_York', 'Oct 7', 'Oct 8', '6 days ago'],
+])(
+  'distinguishes midnight release instants from calendar dates in %s',
+  (timezone, instantDay, calendarDay, age) => {
+    vi.stubEnv('TZ', timezone);
+    setDictionary(english);
+    expect(downloadDate('2026-10-08T00:00:00Z')).toBe(instantDay);
+    expect(downloadDate('2026-10-08')).toBe(calendarDay);
+    expect(downloadAgo('2026-10-08T00:00:00Z', '2026-10-13')).toBe(age);
+    expect(downloadAgo('2026-10-08', '2026-10-13')).toBe('5 days ago');
+  },
+);

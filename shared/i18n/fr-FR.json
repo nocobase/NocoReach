@@ -5178,6 +5178,8 @@
   "taskSnooze.description": "La tâche garde son avancement et sort de « À traiter par moi » ; le jour venu, elle revient à « {0} » et son responsable est prévenu.",
   "taskSnooze.reason": "En attente de",
   "taskSnooze.reasonPlaceholder": "Par exemple : la documentation des permissions",
+  "taskSnooze.scheduleTimezone": "Fuseau horaire des exécutions automatiques",
+  "taskSnooze.timezoneUnavailable": "Le fuseau horaire n’a pas pu être lu. La date choisie utilisera le fuseau configuré pour l’exécution automatique ou, à défaut, celui du serveur.",
   "taskSnooze.until": "En attente jusqu’au",
   "taskSnooze.week": "1 semaine",
   "taskSnooze.twoWeeks": "2 semaines",

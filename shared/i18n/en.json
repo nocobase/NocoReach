@@ -5206,6 +5206,8 @@
   "taskSnooze.description": "The task keeps its progress and leaves \"Waiting for me\"; on the day it comes back to \"{0}\" and its owner is reminded.",
   "taskSnooze.reason": "Waiting for",
   "taskSnooze.reasonPlaceholder": "For example: the permissions docs",
+  "taskSnooze.scheduleTimezone": "Automatic runs timezone",
+  "taskSnooze.timezoneUnavailable": "The timezone could not be read. The selected date will use the automatic run’s configured timezone, or the server timezone if none is configured.",
   "taskSnooze.until": "Snooze until",
   "taskSnooze.week": "1 week",
   "taskSnooze.twoWeeks": "2 weeks",

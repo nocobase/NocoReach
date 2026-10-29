@@ -5178,6 +5178,8 @@
   "taskSnooze.description": "Die Aufgabe behält ihren Fortschritt und zählt nicht zu „Von mir zu bearbeiten“; am Tag kehrt sie zu „{0}“ zurück und die verantwortliche Person wird erinnert.",
   "taskSnooze.reason": "Wartet auf",
   "taskSnooze.reasonPlaceholder": "Zum Beispiel: die Berechtigungsdokumentation",
+  "taskSnooze.scheduleTimezone": "Zeitzone der automatischen Ausführungen",
+  "taskSnooze.timezoneUnavailable": "Die Zeitzone konnte nicht gelesen werden. Das gewählte Datum verwendet die für den automatischen Lauf konfigurierte Zeitzone oder andernfalls die Zeitzone des Servers.",
   "taskSnooze.until": "Zurückstellen bis",
   "taskSnooze.week": "1 Woche",
   "taskSnooze.twoWeeks": "2 Wochen",

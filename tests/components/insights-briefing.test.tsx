@@ -6,7 +6,7 @@ import {
   within,
 } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import StrategyPage from '../../client/pages/strategy/index';
 import {
@@ -1550,4 +1550,45 @@ it('handing off an opportunity with several places asks which ones first', async
       }),
     ),
   );
+});
+
+afterEach(() => vi.unstubAllEnvs());
+it('uses one local day heading across midnight while keeping original conversation keys', async () => {
+  vi.stubEnv('TZ', 'Asia/Shanghai');
+  fixture.state.insights = batch('2026-10-21T00:30:00Z', [
+    card('local-today', { firstSeenAt: '2026-10-20T23:30:00Z' }),
+  ]);
+  fixture.state.insightHistory = [batch('2026-10-20T23:30:00Z', [])];
+  fixture.state.opportunityMeta = { 'local-today': { status: 'ignored' } };
+  fixture.state.watch = {};
+  fixture.state.proposals = [];
+  fixture.threads = [
+    thread('utc-20', '2026-10-20'),
+    thread('utc-21', '2026-10-21'),
+  ];
+  for (const id of ['utc-20', 'utc-21'])
+    fixture.details[id] = {
+      conversation: { id, revision: 1 },
+      runs: [run(id, id + ' question', id + ' answer', '2026-10-21T00:05:00Z')],
+    };
+  setup();
+  await waitFor(() =>
+    expect(document.querySelectorAll('[data-day-conversation]')).toHaveLength(
+      2,
+    ),
+  );
+  expect(
+    screen
+      .getAllByRole('heading', { level: 3 })
+      .filter((h) => /10\/21/.test(h.textContent || '')),
+  ).toHaveLength(1);
+  expect(
+    screen.queryByRole('button', { name: /strategy.earlierAnalyses/ }),
+  ).toBeNull();
+  expect(
+    document.querySelector('[data-day-conversation="2026-10-20"]'),
+  ).toBeTruthy();
+  expect(
+    document.querySelector('[data-day-conversation="2026-10-21"]'),
+  ).toBeTruthy();
 });
