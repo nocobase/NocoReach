@@ -26,6 +26,7 @@ import { MarkdownView } from '#components/markdown-view';
 import { useOptionalOnlineChat } from '../../online-agent/context';
 import { useOnlineApi, type ConversationDetail } from '../../online-agent/api';
 import { OnlineError } from '../../online-agent/controls';
+import { OnlineCutOff } from '../../online-agent/cut-off';
 import { parseQuote } from '../../online-agent/quote';
 import { toolCard, toolLabel } from '../../online-agent/tool-cards';
 import { useFreshData } from '../workspace-cache';
@@ -195,8 +196,21 @@ export function QuoteOpportunity({ row }: { row: Row }) {
 }
 
 const clock = (iso: string) => formatTime(iso);
-/** One question and its answer: the quote above the question, the answer as Markdown, the data it read folded. */
-function Turn({ run }: { run: OnlineRun }) {
+/**
+ * One question and its answer: the quote above the question, the answer as Markdown, the data it read folded. An answer
+ * that stopped partway says why, and the latest one offers Continue, as in the side panel.
+ */
+function Turn({
+  run,
+  onContinue,
+  continuing,
+  continueError,
+}: {
+  run: OnlineRun;
+  onContinue?: () => void;
+  continuing?: boolean;
+  continueError?: unknown;
+}) {
   const [open, setOpen] = useState(false),
     { quote, question } = parseQuote(run.input),
     tools = run.events.flatMap((e) => (e.type === 'toolCall' ? [e] : [])),
@@ -261,7 +275,9 @@ function Turn({ run }: { run: OnlineRun }) {
                   : $t('strategy.threadNoAnswer')}
               </p>
             )}
+            <OnlineCutOff run={run} onContinue={onContinue} busy={continuing} />
           </div>
+          <OnlineError error={continueError} />
           {cards.map((card) => (
             <card.Card key={card.id} run={run} output={card.output} />
           ))}
@@ -326,9 +342,27 @@ function DayTurns({
       clearTimeout(timer);
     };
   }, [key, version, api]);
-  const runs = (state?.key === key ? state.details : [])
+  const details = state?.key === key ? state.details : [];
+  const runs = details
     .flatMap((d) => d.runs)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  // Only a conversation's latest turn can be continued, and not while any of the day's answers is being written.
+  const latest = new Set(details.map((d) => d.conversation.activeRunId)),
+    writing = runs.some(onlineRunActive);
+  const [continuing, setContinuing] = useState<{
+    id: string;
+    error?: unknown;
+  }>();
+  const continueReply = async (id: string) => {
+    setContinuing({ id });
+    try {
+      await api(`runs/${id}/continue`, {});
+      setContinuing(undefined);
+      chat.sent();
+    } catch (error) {
+      setContinuing({ id, error });
+    }
+  };
   // Today's starts folded to one line, so the day's analysis is what shows when Insights opens (2026-10-22 user
   // feedback); a question sent since then opens it.
   const [folded, setFolded] = useState(startFolded),
@@ -360,7 +394,22 @@ function DayTurns({
           />
         </span>
       </button>
-      {!folded && runs.map((run) => <Turn key={run.id} run={run} />)}
+      {!folded &&
+        runs.map((run) => (
+          <Turn
+            key={run.id}
+            run={run}
+            {...(latest.has(run.id) && !writing
+              ? {
+                  onContinue: () => void continueReply(run.id),
+                  continuing: continuing?.id === run.id && !continuing.error,
+                }
+              : {})}
+            continueError={
+              continuing?.id === run.id ? continuing.error : undefined
+            }
+          />
+        ))}
       <div ref={endRef} />
     </div>
   );

@@ -55,7 +55,33 @@ export interface OnlineRun {
   usage: OnlineUsage;
   error: string | null;
   revision: number;
+  /** Each time the owner continued this reply after it stopped partway, and why it had stopped. */
+  continued?: { at: string; after: string }[];
 }
+/**
+ * Why a reply may stop partway through no fault of the question: it stalled, ran out of time, NocoReach restarted, a
+ * service could not be reached, or the model stopped early. Such a reply can be continued from where it stopped.
+ */
+export const ONLINE_CONTINUABLE: readonly string[] = [
+  'stalled',
+  'timeout',
+  'interrupted',
+  'modelNetwork',
+  'serviceUnavailable',
+  'modelRateLimit',
+  'incompleteResponse',
+  'length',
+];
+export const onlineRunContinuable = (
+  run: Pick<OnlineRun, 'status' | 'error'>,
+) => run.status === 'failed' && ONLINE_CONTINUABLE.includes(run.error ?? '');
+/** Whether a reply kept anything to continue from: text or a tool's result. */
+export const onlineRunPartial = (run: Pick<OnlineRun, 'events'>) =>
+  run.events.some(
+    (event) =>
+      (event.type === 'text' && event.text.trim()) ||
+      event.type === 'toolResult',
+  );
 /** A day's analysis on Insights, and the opportunity asked about, if any. */
 export interface OnlineInsightsSubject {
   kind: 'insights';

@@ -326,5 +326,27 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
       });
     },
   );
+  router.post(
+    '/onlineAgents/runs/:id/continue',
+    endpoint(
+      'continueOnlineConversationRun',
+      'Continue an owned reply that stopped partway, from where it stopped',
+    ),
+    apiValidator('param', id),
+    apiValidator('json', z.strictObject({})),
+    async (context) => {
+      const run = await service().run(context.req.valid('param').id);
+      if (run.ownerId !== owner(context))
+        throw new OnlineAgentError('runNotFound', 404);
+      const conversation = await service().conversation(
+        run.conversationId,
+        owner(context),
+      );
+      await project(conversation.projectId);
+      return context.json({
+        data: await service().continueRun(run.id, owner(context)),
+      });
+    },
+  );
   return new Hono().route('/', router);
 });

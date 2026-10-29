@@ -117,7 +117,8 @@ vi.mock('@nocobase/app-plugin-agents/client/chat', async (original) => ({
 }));
 // The chat's records: the owner's questions asked from Insights in project 1, each conversation's turns, and what is
 // sent.
-vi.mock('../../client/online-agent/api', () => ({
+vi.mock('../../client/online-agent/api', async (original) => ({
+  ...(await original<typeof import('../../client/online-agent/api')>()),
   useOnlineApi: () => async (path: string, body?: unknown) => {
     if (body !== undefined) {
       fixture.posts.push({ path, body });
@@ -1583,6 +1584,50 @@ it('handing off an opportunity with several places asks which ones first', async
         }),
       }),
     ),
+  );
+});
+
+it('an answer in the day’s conversation that stopped partway says why, and the latest one continues from where it stopped', async () => {
+  fixture.threads = [thread('t-day', '2026-10-21')];
+  const stopped = (id: string, at: string) => ({
+    ...run(id, `Question ${id}`, `Kept ${id}`, at),
+    status: 'failed',
+    error: 'interrupted',
+    events: [{ type: 'text', text: `Kept ${id}` }],
+  });
+  fixture.details['t-day'] = {
+    conversation: { id: 't-day', revision: 4, activeRunId: 'r2' },
+    runs: [
+      stopped('r1', '2026-10-21T10:00:00Z'),
+      stopped('r2', '2026-10-21T10:05:00Z'),
+    ],
+  };
+  setup();
+  const conversation = await waitFor(() => {
+    const found = document.querySelector(
+      '[data-day-conversation="2026-10-21"]',
+    );
+    expect(found).toBeTruthy();
+    return found as HTMLElement;
+  });
+  fireEvent.click(
+    within(conversation).getByRole('button', {
+      name: /strategy.conversationTurns:2/,
+    }),
+  );
+  const turns = [...conversation.querySelectorAll<HTMLElement>('[data-turn]')];
+  for (const turn of turns)
+    expect(within(turn).getByRole('status')).toHaveTextContent(
+      'onlineAgent.interrupted',
+    );
+  expect(
+    within(turns[0]).queryByRole('button', { name: 'onlineAgent.continue' }),
+  ).toBeNull();
+  fireEvent.click(
+    within(turns[1]).getByRole('button', { name: 'onlineAgent.continue' }),
+  );
+  await waitFor(() =>
+    expect(fixture.posts).toEqual([{ path: 'runs/r2/continue', body: {} }]),
   );
 });
 

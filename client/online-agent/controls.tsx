@@ -27,6 +27,7 @@ import {
 } from '#components/ui/select';
 import { Field, FieldLabel } from '#components/ui/field';
 import { OnlineApiError } from './api.js';
+import { onlineErrorText } from './error-text.js';
 
 export function OnlineChatAction({
   label,
@@ -49,46 +50,6 @@ export function OnlineChatAction({
     </Tooltip>
   );
 }
-const knownErrors = new Set([
-  'agentDisabled',
-  'modelRequired',
-  'modelUnavailable',
-  'revisionConflict',
-  'requestConflict',
-  'runActive',
-  'contextLimit',
-  'timeout',
-  'interrupted',
-  'accessDenied',
-  'sessionChanged',
-  'modelAuth',
-  'modelQuota',
-  'modelRateLimit',
-  'modelNetwork',
-  'modelFailed',
-  'filtered',
-  'length',
-  'incompleteResponse',
-  'emptyResponse',
-  'invalidToolCall',
-  'toolOutputLimit',
-  'transcriptLimit',
-  'stepLimit',
-  'outputLimit',
-]);
-function onlineError(error: unknown) {
-  if (error instanceof OnlineApiError) {
-    if (error.status === 401) return $t('common.sessionExpiredSignAgain');
-    if (error.status === 403) return $t('onlineAgent.accessDenied');
-    if (error.status === 404) return $t('onlineAgent.notFound');
-    return $t(
-      knownErrors.has(error.code)
-        ? `onlineAgent.${error.code}`
-        : 'onlineAgent.requestFailed',
-    );
-  }
-  return $t('onlineAgent.requestFailed');
-}
 export function OnlineError({
   error,
   retry,
@@ -100,7 +61,7 @@ export function OnlineError({
   return (
     <Alert variant='destructive'>
       <AlertDescription>
-        <p>{onlineError(error)}</p>
+        <p>{onlineErrorText(error)}</p>
         {error instanceof OnlineApiError && error.status === 401 && (
           <Button
             variant='outline'

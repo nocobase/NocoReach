@@ -67,11 +67,13 @@ const messageOf = (payload: unknown, status: number) => {
     error?.message === 'NR_MOCK_PROFILE_REQUIRED'
   )
     return 'networkProfiles.profileRequired';
-  return (
-    error?.localizedMessage?.message ||
-    error?.message ||
-    `请求没有完成（${status}）`
-  );
+  const message = error?.localizedMessage?.message || error?.message;
+  if (message) return message;
+  // A gateway's own 502-504 page instead of NocoReach's answer: the server was briefly unreachable, often while it
+  // restarts for an update, so the reader is told to try again rather than shown a bare status.
+  if (!error && status >= 502 && status <= 504)
+    return 'common.serviceUnavailable';
+  return `请求没有完成（${status}）`;
 };
 
 const errorOf = (payload: unknown): Record<string, unknown> | undefined => {

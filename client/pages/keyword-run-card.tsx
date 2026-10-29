@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { Loader2 } from 'lucide-react';
 import { $t, $legacyText, getCurrentLocale, useMessageState } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
+import { serviceUnavailable } from '#lib/transport-error';
 import { cn } from '#lib/utils';
 import { Tag } from '#components/reach/tag';
 import { chipClass } from '#components/reach/chip';
@@ -159,8 +160,14 @@ export function KeywordRunCard({
     } catch (e) {
       if (!aliveRef.current) return;
       const failure = e as { code?: string; message?: string };
+      // NocoReach did not answer (often restarting for an update). The lookup may have started before the answer was
+      // lost, so the list is read again: the card follows it if it did, and Confirm stays to try again if not.
+      if (serviceUnavailable(e)) {
+        setError(() => $t('common.serviceUnavailable'));
+        reload();
+      }
       // Demo Mode explains its refusal in its own toast.
-      if (failure.code !== 'DEMO_READ_ONLY')
+      else if (failure.code !== 'DEMO_READ_ONLY')
         setError(
           () =>
             $legacyText(failure.message || '') ||
@@ -301,7 +308,7 @@ export function KeywordRunCard({
           })}
         </p>
       ) : null}
-      {error ? (
+      {error && state !== 'running' && state !== 'done' ? (
         <p className='nr-error' role='alert'>
           {error}
         </p>

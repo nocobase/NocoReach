@@ -24,12 +24,15 @@ export async function executeChat(
     context,
     signal,
     emit,
+    progress,
   }: {
     model: OnlineModel;
     messages: ModelMessage[];
     context: ChatContext;
     signal: AbortSignal;
     emit: (event: OnlineEvent) => Promise<void>;
+    /** Called whenever the model streams anything, reasoning included, and when a tool answers. */
+    progress?: () => void;
   },
   maxSteps = 16,
 ): Promise<string> {
@@ -52,6 +55,7 @@ export async function executeChat(
       signal,
     })) {
       signal.throwIfAborted();
+      progress?.();
       if (event.type === 'text') {
         text += event.delta;
         if (text.length > 200000) throw new OnlineAgentError('outputLimit');
@@ -109,6 +113,7 @@ export async function executeChat(
           ok = false;
         }
       }
+      progress?.();
       if (output.length > 24000) throw new OnlineAgentError('toolOutputLimit');
       await context.authorize();
       await emit({
