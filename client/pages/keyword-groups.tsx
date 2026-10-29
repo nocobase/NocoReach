@@ -1,7 +1,9 @@
-import { useLayoutEffect, useRef, useState } from 'react';
-import { ChevronDown, Trash2 } from 'lucide-react';
-import { $t, $legacyText, useMessageState } from '#i18n';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ChevronDown, Plus, Trash2 } from 'lucide-react';
+import { $t, $legacyText, getCurrentLocale, useMessageState } from '#i18n';
+import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { cn } from '#lib/utils';
+import { Tag } from '#components/reach/tag';
 import { Button } from '#components/ui/button';
 import { Input } from '#components/ui/input';
 import { TabsTrigger } from '#components/ui/tabs';
@@ -149,28 +151,61 @@ export type EditableGroup = {
   count: number;
 };
 type Row = EditableGroup & { deleted: boolean };
+type Estimate = { maxUsd: number; monthUsd: number; budgetUsd: number };
+/** A group added in Edit groups: its keywords are expanded in the direction its name gives. */
+export type NewGroup = { direction: string; name?: string };
+const MAX_NAME = 24;
+// A most possible cost, rounded up to the cent (as keyword-api's usdUpTo).
+const upTo = (n: number) =>
+  (Math.ceil(Number((n * 100).toFixed(6))) / 100).toFixed(2);
 
 /**
  * Edit groups (2026-10-28, mockup ui-references/keywords-2026-10-28/manual-edit.png): every group, the built-in four
  * included, renamed in place or deleted, each deletion undoable until Save. Deleting removes the group's keywords from
- * AI suggestions and keeps them out of later lookups; saved keywords are not touched. Nothing changes until Save.
+ * AI suggestions and keeps them out of later lookups; saved keywords are not touched. New group takes a name or a
+ * direction; Save then expands the keywords in that direction into it (2026-10-28 user decision, option A), the most
+ * it may cost shown first, as the chat's lookup card does. Nothing changes until Save.
  */
 export function EditGroupsDialog({
+  projectId,
   groups,
+  canAdd,
   onClose,
   onSave,
 }: {
+  projectId: number;
   groups: EditableGroup[];
+  /** Whether a group can be added now: one run at a time, and Expand needs the dig right. */
+  canAdd: boolean;
   onClose: () => void;
   onSave: (
     changes: { id: string; name?: string; deleted?: boolean }[],
+    added?: NewGroup,
   ) => Promise<boolean>;
 }) {
   const [rows, setRows] = useState<Row[]>(() =>
       groups.map((g) => ({ ...g, deleted: false })),
     ),
+    [fresh, setFresh] = useState<string | null>(null),
+    [estimate, setEstimate] = useState<Estimate>(),
     [busy, setBusy] = useState(false),
     [error, setError] = useMessageState('');
+  const adding = fresh !== null;
+  // The most a new group's expansion may cost: the AI chooses its seed words, so the most a lookup can take.
+  useEffect(() => {
+    if (!adding || estimate) return;
+    void api
+      .action<Estimate>('nrKeywordSuggest', 'estimate', {
+        method: 'POST',
+        body: { projectId, mode: 'dig' },
+        unwrap: 'data',
+      })
+      .then(setEstimate, () => undefined);
+  }, [adding, estimate, projectId]);
+  const direction = fresh?.trim() ?? '';
+  const over = estimate
+    ? estimate.monthUsd + estimate.maxUsd > estimate.budgetUsd
+    : false;
   const set = (id: string, patch: Partial<Row>) =>
     setRows((list) => list.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   const changes = rows.flatMap(
@@ -182,13 +217,26 @@ export function EditGroupsDialog({
         : [];
     },
   );
-  const empty = rows.some((r) => !r.deleted && !r.name.trim());
+  const empty =
+    rows.some((r) => !r.deleted && !r.name.trim()) ||
+    (adding && direction.length < 2);
   const save = async () => {
-    if (!changes.length) return onClose();
+    if (!changes.length && !adding) return onClose();
     setBusy(true);
     setError('');
     try {
-      if (await onSave(changes)) onClose();
+      if (
+        await onSave(
+          changes,
+          adding
+            ? {
+                direction,
+                ...(direction.length <= MAX_NAME ? { name: direction } : {}),
+              }
+            : undefined,
+        )
+      )
+        onClose();
     } catch (e) {
       setError(() =>
         e instanceof Error ? $legacyText(e.message) : $t('common.notSaved'),
@@ -254,7 +302,76 @@ export function EditGroupsDialog({
               )}
             </li>
           ))}
+          {adding ? (
+            <li
+              className='flex items-center gap-3 px-3 py-2'
+              data-group-row='new'
+            >
+              <Input
+                value={fresh}
+                maxLength={60}
+                autoFocus
+                placeholder={$t('keywordSuggestions.newGroupPlaceholder')}
+                aria-label={$t('keywordSuggestions.newGroupName')}
+                className='h-8 flex-1'
+                onChange={(e) => setFresh(e.target.value)}
+              />
+              <span className='flex w-24 shrink-0 justify-end'>
+                <Tag tone='blue'>{$t('keywordRun.newGroup')}</Tag>
+              </span>
+              <Button
+                variant='ghost'
+                size='icon-xs'
+                className='mx-3 shrink-0'
+                aria-label={$t('keywordSuggestions.cancelNewGroup')}
+                onClick={() => setFresh(null)}
+              >
+                <Trash2 />
+              </Button>
+            </li>
+          ) : null}
         </ul>
+        {canAdd && !adding ? (
+          <Button
+            variant='ghost'
+            size='sm'
+            className='w-fit'
+            onClick={() => setFresh('')}
+          >
+            <Plus data-icon='inline-start' />
+            {$t('keywordSuggestions.addGroup')}
+          </Button>
+        ) : null}
+        {adding ? (
+          <p className='text-xs text-muted-foreground' data-new-group-cost>
+            {$t('keywordSuggestions.newGroupHint', {
+              0: direction || '…',
+            })}
+            {estimate ? (
+              <>
+                {/^(zh|ja)/.test(getCurrentLocale()) ? '' : ' '}
+                {$t('keywordSuggestions.seedsCost', {
+                  0: upTo(estimate.maxUsd),
+                })}
+                {' · '}
+                <span className='whitespace-nowrap'>
+                  {$t('keywordSuggestions.seedsMonth', {
+                    0: estimate.monthUsd.toFixed(2),
+                    1: estimate.budgetUsd.toFixed(2),
+                  })}
+                </span>
+              </>
+            ) : null}
+          </p>
+        ) : null}
+        {over && estimate ? (
+          <p className='nr-error' role='alert'>
+            {$t('keywordSuggest.budgetTooLow', {
+              0: Math.max(0, estimate.budgetUsd - estimate.monthUsd).toFixed(2),
+              1: upTo(estimate.maxUsd),
+            })}
+          </p>
+        ) : null}
         {error ? (
           <p className='nr-error' role='alert'>
             {error}
@@ -264,8 +381,15 @@ export function EditGroupsDialog({
           <Button variant='outline' onClick={onClose}>
             {$t('common.cancel')}
           </Button>
-          <Button disabled={busy || empty} onClick={() => void save()}>
-            {$t('common.save')}
+          <Button
+            disabled={busy || empty || (adding && (!estimate || over))}
+            onClick={() => void save()}
+          >
+            {adding && estimate
+              ? $t('keywordSuggestions.saveAndExpand', {
+                  0: upTo(estimate.maxUsd),
+                })
+              : $t('common.save')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -27,8 +27,14 @@ export type PageAiEntryProps = {
   presets: string[];
   disabled?: boolean;
   className?: string;
+  /** The button's look: quiet among a header's actions (default), or outlined among a toolbar's buttons. */
+  variant?: 'ghost' | 'outline';
+  size?: 'default' | 'sm';
 };
-type Opening = Omit<PageAiEntryProps, 'disabled' | 'className'>;
+type Opening = Omit<
+  PageAiEntryProps,
+  'disabled' | 'className' | 'variant' | 'size'
+>;
 
 /** Opens the chat panel as the entry does, for a page's own trigger; null outside the app layout. */
 export function usePageAi(): ((opening: Opening) => void) | null {
@@ -48,13 +54,16 @@ export function usePageAi(): ((opening: Opening) => void) | null {
 export function PageAiEntry({
   disabled,
   className,
+  variant = 'ghost',
+  size = 'default',
   ...opening
 }: PageAiEntryProps): ReactElement | null {
   const open = usePageAi();
   if (!open) return null;
   return (
     <Button
-      variant='ghost'
+      variant={variant}
+      size={size}
       className={className}
       disabled={disabled}
       data-page-ai={opening.subject.page}

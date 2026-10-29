@@ -1,10 +1,11 @@
-import { useMessageState, getCurrentLocale, $t, $legacyText } from "#i18n";
+import { useMessageState, $t, $legacyText } from "#i18n";
 // Keywords › AI suggestions, demand first (2026-10-27): every keyword comes from Google's search data through
 // DataForSEO with at least the server's minimum monthly volume. The AI chooses seed words, the real keywords found for
-// them are filtered and the AI picks and explains the most relevant; the line above the list says how, with the seeds
-// read-only. Everything that needs a conversation goes through the chat panel (2026-10-28 user decision): Ask AI to dig
-// for keywords, a row's Dig from this keyword, Adjust seed words with AI and a seed chip each open it on what they are
-// about; a lookup the chat proposes runs only when Confirm is clicked in the chat, and the page then reads itself again.
+// them are filtered and the AI picks and explains the most relevant. The top reads like a keyword tool's (2026-10-28,
+// after Google Keyword Planner, Semrush and Ahrefs): the query bar with the seed words and market, then a results
+// summary whose Selection rules say why the others were not picked. What needs a conversation goes through the chat
+// panel: Ask AI to find keywords and a row's Expand from this keyword open it; a lookup the chat proposes runs only when
+// Confirm is clicked in the chat, and the page then reads itself again.
 import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
@@ -13,8 +14,6 @@ import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { Bookmark, LoaderCircle, Pencil, Search, Trash2 } from "lucide-react";
 import { toast } from "#lib/toast";
 import { LoadError, InlineError, EmptyState } from "#components/reach/states";
-import { chipClass, chipButtonClass } from "#components/reach/chip";
-import { cn } from "#lib/utils";
 import { Button } from "#components/ui/button";
 import { Card } from "#components/ui/card";
 import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "#components/seo/data-table";
@@ -24,25 +23,27 @@ import { SortableHeader } from "#components/seo/sortable-header";
 import { ScoreBadge } from "#components/seo/score-badge";
 import { IntentBadge } from "#components/seo/intent-badge";
 import { useProject } from "./reach-data";
-import { marketLabel, metric, useOpenKeyword, usdUpTo } from "./keyword-api";
+import { metric, useOpenKeyword, usdUpTo } from "./keyword-api";
 import { KeywordHandOffDialog } from "./keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
-import { WithInfo, InfoTip } from "#components/reach/info-tip";
+import { WithInfo } from "#components/reach/info-tip";
 import { help } from "./glossary";
 import { formatDate } from '#lib/format';
-import { PageAiEntry, RowAiEntry, usePageAi } from "../online-agent/page-entry";
-import { seedsItem } from "../../shared/keyword-subject";
-import { EditGroupsDialog, GroupTabs, type GroupTab } from "./keyword-groups";
+import { RowAiEntry } from "../online-agent/page-entry";
+import { EditGroupsDialog, GroupTabs, type GroupTab, type NewGroup } from "./keyword-groups";
 import { EditSeedsDialog } from "./keyword-seed-editor";
+import { KeywordQueryBar, type SeedNote, type SeedStat } from "./keyword-query-bar";
+import { NotPickedDialog, SelectionSummary, summaryWhen, type Selection } from "./keyword-selection";
 import { useBusinessAccess } from "#hooks/use-business-access";
 import { usePageChange } from "../online-agent/page-changes";
 
 type Market = { locationCode: number; language: string };
 type Metrics = { volume: number | null; difficulty: number | null; cpc: number | null; intent: string | null };
-type Suggestion = { id: string; keyword: string; group: string; intent: string | null; reason: string; page: string | null; site: { position: number; clicks: number; impressions: number; page: string } | null; metrics: Metrics; dig?: string };
+type Suggestion = { id: string; keyword: string; group: string; intent: string | null; reason: string; by?: "person"; seeds?: string[]; seed?: string | null; page: string | null; site: { position: number; clicks: number; impressions: number; page: string } | null; metrics: Metrics; dig?: string };
 type Dig = { id: string; direction: string; name?: string | null; seeds: string[]; at: string; found: number; items: Suggestion[] };
 type SuggestionView = {
   at?: string; market: Market; seeds: string[]; seedsBy?: "ai" | "person"; stats?: { found: number; picked: number; minVolume: number }; costUsd?: number;
+  seedNotes?: SeedNote[]; seedStats?: SeedStat[]; selection?: Selection;
   items: Suggestion[]; digs: Dig[]; missedSeeds?: string[]; lastError?: { message: string; at?: string; mode?: "list" | "dig" } | null;
   pendingSeeds?: string[] | null; groupNames?: Record<string, string>; deletedGroups?: string[];
   running: { stage: "seeds" | "lookup" | "curate"; mode: "list" | "dig"; direction: string | null } | null; naming?: boolean; dataforseo: boolean; maxUsd: number; minVolume: number;
@@ -57,7 +58,6 @@ const GROUPS = ['产品与功能词', '使用场景与问题词', '对比与替�
 const call = <T,>(projectId: number, action: string, body: object = {}) => api.action<T>("nrKeywordSuggest", action, { method: "POST", body: { projectId, ...body }, unwrap: "data" });
 const pathOf = (u: string) => { try { return new URL(u).pathname || "/"; } catch { return u; } };
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
-const usd = (n: number) => n.toFixed(2);
 const helper = createColumnHelper<Suggestion>();
 const intentOf = (s: Suggestion) => s.metrics?.intent || s.intent;
 const failure = (e: unknown, fallback: string) => (e instanceof Error ? $legacyText(e.message) : fallback);
@@ -70,15 +70,20 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
   const openKeyword = useOpenKeyword();
   const [error, setError] = useMessageState("");
   const [busy, setBusy] = useState<"" | "start" | "save" | "remove">("");
-  const [editing, setEditing] = useState<"" | "groups" | "seeds">("");
+  const [editing, setEditing] = useState<"" | "groups" | "seeds" | "notPicked">("");
+  // Another market chosen in the query bar: Edit seed words finds the list again there.
+  const [marketPick, setMarketPick] = useState<Market>();
   const [group, setGroup] = useState(() => params.get("group") || "all");
+  // A seed's Show only these: the list narrowed to the keywords that seed brought.
+  const [seedFilter, setSeedFilter] = useState("");
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const [handing, setHanding] = useState(false);
   const [handOff, setHandOff] = useState<HandOffResult>();
   const anchorRef = useSelectionAnchor();
   const projectId = project?.id;
-  const openAi = usePageAi();
   const { can: canEdit } = useBusinessAccess("nrKeywordSuggest.removeItems", projectId);
+  const { can: canDig } = useBusinessAccess("nrKeywordSuggest.dig", projectId);
+  const { can: canAdd } = useBusinessAccess("nrKeywordSuggest.addItems", projectId);
   const load = async () => {
     if (!projectId) return;
     try { setView(await call<SuggestionView>(projectId, "view")); }
@@ -104,13 +109,18 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
     finally { setBusy(""); }
   };
   const all = useMemo(() => [...(view?.items ?? []), ...(view?.digs ?? []).flatMap((d) => d.items)], [view]);
-  const rows = useMemo(() => group === "all" ? all : view?.digs.some((d) => d.id === group) ? all.filter((s) => s.dig === group) : (view?.items ?? []).filter((s) => s.group === group), [all, view, group]);
+  const rows = useMemo(() => {
+    const inGroup = group === "all" ? all : view?.digs.some((d) => d.id === group) ? all.filter((s) => s.dig === group) : (view?.items ?? []).filter((s) => s.group === group);
+    // A seed's keywords are those counted for it, as its chip counts them: one seed each.
+    return seedFilter ? inGroup.filter((s) => s.seed === seedFilter) : inGroup;
+  }, [all, view, group, seedFilter]);
   const columns = useMemo<ColumnDef<Suggestion>[]>(() => [
     makeSelectionColumn<Suggestion>(anchorRef),
     helper.accessor("keyword", {
       header: ({ column }) => <SortableHeader column={column} label={$t('common.keywords')} />,
-      // Dig from this keyword sits beside the keyword, where it stays in view when the table scrolls sideways.
-      cell: ({ row }) => <div className="flex max-w-md items-start gap-2"><div className="min-w-0 flex-1"><span className="block truncate font-medium" title={row.original.keyword}>{row.original.keyword}</span><span className="block truncate text-xs text-muted-foreground" title={row.original.reason}>{row.original.reason}</span></div><RowAiEntry className="shrink-0" subject={{ kind: "page", page: "keywords", item: row.original.keyword }} label={$t('keywordSuggestions.digFromKeyword')} description={$t('keywordSuggestions.aiEntryDescription')} presets={[$t('keywordSuggestions.presetFromKeyword')]} /></div>,
+      // Expand from this keyword sits beside the keyword, where it stays in view when the table scrolls sideways. A
+      // keyword added from those not picked has no AI reason: it says the person added it.
+      cell: ({ row }) => { const reason = row.original.reason || (row.original.by === "person" ? $t('keywordSuggestions.addedByYou') : ""); return <div className="flex max-w-md items-start gap-2"><div className="min-w-0 flex-1"><span className="block truncate font-medium" title={row.original.keyword}>{row.original.keyword}</span><span className="block truncate text-xs text-muted-foreground" title={reason}>{reason}</span></div><RowAiEntry className="shrink-0" subject={{ kind: "page", page: "keywords", item: row.original.keyword }} label={$t('keywordSuggestions.digFromKeyword')} description={$t('keywordSuggestions.aiEntryDescription')} presets={[$t('keywordSuggestions.presetFromKeyword')]} /></div>; },
     }) as ColumnDef<Suggestion>,
     // The group a row is listed under: its dug group if it came from a dig, otherwise its built-in group.
     helper.accessor("group", { enableSorting: false, header: () => $t('keywordSuggestions.group'), cell: ({ row }) => { const d = row.original.dig ? view?.digs.find((x) => x.id === row.original.dig) : undefined; return <span className="block min-w-28 max-w-40 text-xs whitespace-normal text-muted-foreground">{d ? digName(d, view?.naming) : row.original.group ? groupName(view, row.original.group) : "—"}</span>; } }) as ColumnDef<Suggestion>,
@@ -137,10 +147,18 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
     if (await edit("removeItems", { ids: selected.map((s) => s.id) }, () => $t('keywordSuggestions.removedKeywords', { 0: n }))) setRowSelection({});
     setBusy("");
   };
-  const saveGroups = async (changes: { id: string; name?: string; deleted?: boolean }[]) => {
-    const ok = await edit("editGroups", { groups: changes }, () => $t('keywordSuggestions.groupsSaved'));
-    if (ok && changes.some((c) => c.deleted && c.id === group)) setGroup("all");
-    return ok;
+  // Edit groups › Save: renames and deletions first, then a new group's expansion, which runs in the background.
+  const saveGroups = async (changes: { id: string; name?: string; deleted?: boolean }[], added?: NewGroup) => {
+    if (changes.length) {
+      const ok = await edit("editGroups", { groups: changes }, () => $t('keywordSuggestions.groupsSaved'));
+      if (!ok) return false;
+      if (changes.some((c) => c.deleted && c.id === group)) setGroup("all");
+    }
+    if (added && projectId) {
+      try { setView(await call<SuggestionView>(projectId, "dig", { direction: added.direction, name: added.name, by: "person" })); toast.success(() => $t('keywordSuggestions.expanding', { 0: added.name ?? added.direction })); }
+      catch (e) { toast.error(() => failure(e, $t('keywordSuggestions.notCompleteTryAgain'))); }
+    }
+    return true;
   };
 
   const save = async () => {
@@ -171,9 +189,6 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
       )}
     </>
   );
-  const dug = view.digs.reduce((n, d) => n + d.items.length, 0);
-  const made = $t(view.seedsBy === "person" ? 'keywordSuggestions.madeByPerson' : 'keywordSuggestions.madeByAi', { 0: view.seeds.length, 1: view.stats?.found ?? view.items.length, 2: view.items.length, 3: dug ? $t('keywordSuggestions.dugLater', { 0: dug }) : "", 4: view.minVolume });
-  const seedHint = view.seeds[Math.min(2, view.seeds.length - 1)];
   const tabs: GroupTab[] = [
     { value: "all", label: $t('keywordSuggestions.allTab'), count: all.length },
     ...GROUPS.filter((g) => !view.deletedGroups?.includes(g)).map((g) => ({ value: g, label: groupName(view, g), count: view.items.filter((s) => s.group === g).length })).filter((t) => t.count),
@@ -185,41 +200,32 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
     ...view.digs.map((d) => ({ id: d.id, name: digName(d), count: d.items.length })),
   ];
   const shownSeeds = view.pendingSeeds?.length ? view.pendingSeeds : view.seeds;
-  // The seed words are adjusted in the chat: as a whole, or one seed from its chip.
-  const adjustSeeds = () => openAi?.({ subject: { kind: "page", page: "keywords", item: seedsItem() }, label: $t('keywordSuggestions.adjustSeeds'), description: $t('keywordSuggestions.seedsEntryDescription'),
-    presets: [$t('keywordSuggestions.presetExplainSeeds'), $t('keywordSuggestions.presetLeanSeeds'), $t('keywordSuggestions.presetAddRemoveSeed'), $t('keywordSuggestions.presetFindAgain'), $t('keywordSuggestions.presetOtherMarket')] });
-  const openSeed = (seed: string) => openAi?.({ subject: { kind: "page", page: "keywords", item: seedsItem(seed) }, label: $t('keywordSuggestions.seedEntry', { 0: seed }), description: $t('keywordSuggestions.seedsEntryDescription'),
-    presets: [$t('keywordSuggestions.presetSeedFound'), $t('keywordSuggestions.presetSeedReplace')] });
+  const selectGroup = (v: string) => { setGroup(v); setSeedFilter(""); setRowSelection({}); };
+  const shownDig = view.digs.find((d) => d.id === group);
   return (
     <>
       <HandOffNotice result={handOff} />
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2" data-suggest-basis>
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <p className="text-sm text-muted-foreground">
-            {made} · {$t(marketLabel(view.market))} · <span className="whitespace-nowrap">{formatDate(view.at!)}</span>
-            <InfoTip label={$t('keywordSuggestions.whereAiSuggestionsCome')} className="ml-1">{$t('keywordSuggestions.howMadeInfo', { 0: view.minVolume, 1: usd(view.costUsd ?? 0) })}</InfoTip>
-            {canEdit && !running ? <button type="button" className="nr-link ml-2 inline-flex items-center gap-1" onClick={() => setEditing("seeds")}><Pencil className="size-3.5" />{$t('common.edit')}</button> : null}
-            {openAi ? <button type="button" className="nr-link ml-2" onClick={adjustSeeds}>{$t('keywordSuggestions.adjustSeeds')}</button> : null}
-          </p>
-          <ul className="flex flex-wrap gap-1.5" aria-label={$t('keywordSuggestions.seedsTitle')}>{shownSeeds.map((s) => <li key={s}>{openAi ? <button type="button" className={cn(chipClass, chipButtonClass)} title={$t('keywordSuggestions.seedEntry', { 0: s })} onClick={() => openSeed(s)}>{s}</button> : <span className={chipClass}>{s}</span>}</li>)}</ul>
-          {view.pendingSeeds?.length ? <p className="text-xs text-muted-foreground">{$t('keywordSuggestions.seedsPending')}</p> : null}
-          {view.missedSeeds?.length ? <p className="text-xs text-muted-foreground">{$t('keywordSuggestions.missedSeeds', { 0: view.missedSeeds.join(getCurrentLocale().startsWith('zh') ? '、' : ', ') })}</p> : null}
-        </div>
-        <PageAiEntry subject={{ kind: "page", page: "keywords" }} label={$t('keywordSuggestions.aiEntry')} description={$t('keywordSuggestions.aiEntryDescription')}
-          presets={[...(seedHint ? [$t('keywordSuggestions.presetMore', { 0: seedHint })] : []), $t('keywordSuggestions.presetCompetitors'), $t(view.market.locationCode === 2392 ? 'keywordSuggestions.presetUnitedStates' : 'keywordSuggestions.presetJapan'), $t('keywordSuggestions.presetExplain')]} />
-      </div>
+      <KeywordQueryBar seeds={shownSeeds} stats={view.seedStats ?? []} notes={view.seedNotes ?? []} market={view.market} pending={Boolean(view.pendingSeeds?.length)} missed={view.missedSeeds ?? []}
+        canEdit={canEdit} running={Boolean(running)}
+        onMarket={(m) => { setMarketPick(m); setEditing("seeds"); }} onEdit={() => { setMarketPick(undefined); setEditing("seeds"); }}
+        onOnly={(seed) => { setGroup("all"); setSeedFilter(seed); setRowSelection({}); }}
+        onRemove={(seed) => edit("saveSeeds", { seeds: shownSeeds.filter((x) => x !== seed) }, () => $t('keywordSuggestions.seedRemoved', { 0: seed }))} />
       {status}{problem}
+      <SelectionSummary rows={rows} selection={view.selection} market={view.market} minVolume={view.minVolume} product={project?.name ?? ""}
+        right={shownDig ? summaryWhen(shownDig.at, digName(shownDig, view.naming)) : summaryWhen(view.at!)}
+        seedFilter={seedFilter} onClearSeed={() => setSeedFilter("")} onViewNotPicked={() => setEditing("notPicked")} />
       <Card className="gap-0 py-0">
-        <DataTableTabs value={group} onValueChange={(v) => { setGroup(v); setRowSelection({}); }}
+        <DataTableTabs value={group} onValueChange={selectGroup}
           actions={canEdit ? <Button variant="outline" size="sm" data-group-actions onClick={() => setEditing("groups")}><Pencil data-icon="inline-start" />{$t('keywordSuggestions.editGroups')}</Button> : undefined}>
-          <GroupTabs tabs={tabs} value={group} onSelect={(v) => { setGroup(v); setRowSelection({}); }} />
+          <GroupTabs tabs={tabs} value={group} onSelect={selectGroup} />
         </DataTableTabs>
         <DataTable table={table} rowClassName="group" empty={{ title: $t('keywordSuggestions.noSuggestionsGroup') }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,[role=checkbox],a")) return; openKeyword(row.original.keyword, view.market); }} />
       </Card>
-      {editing === "groups" ? <EditGroupsDialog groups={editable} onClose={() => setEditing("")} onSave={saveGroups} /> : null}
-      {editing === "seeds" ? <EditSeedsDialog projectId={projectId} seeds={shownSeeds} market={view.market} onClose={() => setEditing("")}
+      {editing === "groups" ? <EditGroupsDialog projectId={projectId} groups={editable} canAdd={canDig && !running} onClose={() => setEditing("")} onSave={saveGroups} /> : null}
+      {editing === "seeds" ? <EditSeedsDialog projectId={projectId} seeds={shownSeeds} market={marketPick ?? view.market} marketChanged={Boolean(marketPick)} onClose={() => { setEditing(""); setMarketPick(undefined); }}
         onSaveOnly={(seeds) => edit("saveSeeds", { seeds }, () => $t('keywordSuggestions.seedsSaved'))}
-        onFind={async (seeds) => (await start({ seeds, market: view.market, by: "person" })) ?? false} /> : null}
+        onFind={async (seeds) => (await start({ seeds, market: marketPick ?? view.market, by: "person" })) ?? false} /> : null}
+      {editing === "notPicked" ? <NotPickedDialog projectId={projectId} selection={view.selection} groups={editable.map(({ id, name }) => ({ id, name }))} canAdd={canAdd && !running} onAdded={(next) => setView(next as SuggestionView)} onClose={() => setEditing("")} /> : null}
       {handing && selected.length ? (
         <KeywordHandOffDialog projectId={projectId} rows={selected.map((s) => ({ keyword: s.keyword, market: view.market, volume: s.metrics?.volume ?? null, difficulty: s.metrics?.difficulty ?? null, intent: intentOf(s) ?? null, ...(s.site ? { rank: s.site } : {}) }))}
           onClose={() => setHanding(false)} onDone={(r) => { setHanding(false); setRowSelection({}); setHandOff({ ok: true, text: r.title, taskId: r.taskId }); }} />

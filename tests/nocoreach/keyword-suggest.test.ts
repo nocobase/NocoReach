@@ -34,7 +34,7 @@ const curated=extra=>'```json\n'+JSON.stringify({keywords:[
  {keyword:'approval workflow software',group:2,relevance:2,reason:'审批流是高频需求',page:'https://x.com/workflow'},
  {keyword:'internal tool builder nocobase',group:1,relevance:3,reason:'搜索量不到 50'},
  {keyword:'build your own crm without code',group:1,relevance:3,reason:'AI 自己想的词'},
- {keyword:'crm for startups',group:'品类与行业词',relevance:1,reason:'沾边'},
+ {keyword:'crm for startups',group:'品类与行业词',relevance:2,reason:'创业团队要的 CRM'},
  ...(extra||[])]})+'\n```';
 function setup({budget=5,seeds=SEEDS,curate=curated(),verified=true,ai=true}={}){const runs=memory(),snaps=memory(),prompts=[],stored=[];
  const env={NOREACH_DATAFORSEO_1:verified?JSON.stringify({login:'l',password:'p',budget,verifiedAt:'t'}):''};
@@ -134,6 +134,7 @@ test('a dig adds a group named after its direction, without the keywords the lis
  const v=await s.view('1');assert.equal(v.digs.length,1);const dig=v.digs[0];
  assert.equal(dig.direction,'approval workflow');assert.deepEqual(dig.items.map(i=>i.keyword),['approval workflow example']);assert.equal(dig.items[0].dig,dig.id);assert.equal(built.group.id,dig.id);
  assert.equal(v.items.length,4,'the list itself is unchanged');
+ assert.equal(dig.found,2,'a group counts what it brought that the list did not have: picked + not picked');assert.equal(dig.picked,1);assert.equal(dig.notPicked,undefined,'the records stay on the server');
  await s.keep('1',{ids:[dig.items[0].id,v.items[0].id]});
  assert.deepEqual(stored.map(e=>[e.keyword,e.payload.source,e.payload.item.volume,e.payload.spec.locationCode,e.payload.retrievedAt===dig.at||e.payload.retrievedAt===v.at]),[['open source low code platform','AI 建议',3600,2840,true],['approval workflow example','AI 建议',210,2840,true]]);
  // Rebuilt in the same market the group stays; in another market it goes.
@@ -281,4 +282,117 @@ test('dug groups get a short name in the reader\'s language: new digs when the c
  assert.equal(v.digs.find(d=>d.id==='old1').name,'审批流');
  const two=v.digs.find(d=>d.id==='old2');assert.equal(two.name,undefined,'a name too long is not used, never cut');assert.ok(two.nameTriedAt);
  const asked=names.length;v=await s.view('1','en-US');assert.equal(v.naming,false);assert.equal(names.length,asked,'not tried again within the hour');
+});
+
+test('Selection rules: every keyword found but not picked is kept with why; the page gets the counts, the list comes on its own, and one can be added back',async()=>{
+ fetchFor();
+ const curate=input=>{const n=k=>input.candidates.find(c=>c.keyword===k)?.i;
+  return '```json\n'+JSON.stringify({keywords:[
+   {keyword:'open source low code platform',group:4,relevance:3,reason:'正对产品品类'},
+   {keyword:'retool alternative',group:3,relevance:3,reason:'竞品用户在找替代'},
+   {keyword:'crm for startups',group:4,relevance:1,reason:'沾边'}],
+   skipped:{unrelated:[n('no code database')],duplicate:[[n('retool alternative open source'),n('retool alternative')]],brand:[999]}})+'\n```';};
+ const {s,prompts}=setup({curate});await finish(s,{});
+ const ask=prompts.find(x=>x.tag==='keyword-curate');
+ assert.ok(ask.input.candidates.every((c,i)=>c.i===i+1),'candidates are numbered, so reasons cost a number each');
+ assert.match(ask.system,/skipped\.duplicate/);assert.match(ask.system,/不要复述搜索量和难度/);
+ const v=await s.view('1');
+ assert.equal(v.notPicked,undefined,'the records stay on the server');
+ assert.deepEqual(v.items.map(i=>i.keyword).sort(),['open source low code platform','retool alternative'],'one marked as merely close is not picked');
+ assert.deepEqual({...v.selection,reasons:undefined},{seeds:3,directions:0,found:9,picked:2,notPicked:7,recorded:true,reasons:undefined,pick:40,digPick:20,shortlist:250});
+ assert.deepEqual(Object.fromEntries(v.selection.reasons.map(r=>[r.reason,r.count])),{weaker:5,unrelated:1,duplicate:1},'shown to the AI without a reason: weaker than those picked; an unknown number is ignored');
+ assert.deepEqual(v.selection.reasons.find(r=>r.reason==='weaker').examples,['crm for startups','internal tool builder'],'two examples, the most searched');
+ const list=await s.notPicked('1');assert.equal(list.recorded,true);assert.equal(list.items.length,7);assert.equal(list.items[0].keyword,'crm for startups','the most searched first');
+ assert.deepEqual(list.items.find(c=>c.keyword==='retool alternative open source'),{keyword:'retool alternative open source',volume:390,difficulty:24,intent:'commercial',reason:'duplicate',duplicateOf:'retool alternative',run:'list'});
+ // Add to suggestions: into the group the person picks, as theirs, and the numbers still add up.
+ await s.addItems('1',{keyword:'no code database',group:'产品与功能词'});const v2=await s.view('1');
+ const added=v2.items.find(i=>i.keyword==='no code database');
+ assert.equal(added.group,'产品与功能词');assert.equal(added.by,'person');assert.equal(added.reason,'');assert.equal(added.metrics.volume,2900);
+ assert.deepEqual([v2.selection.found,v2.selection.picked,v2.selection.notPicked],[9,3,6]);
+ assert.ok(!(await s.notPicked('1')).items.some(c=>c.keyword==='no code database'));
+ await assert.rejects(s.addItems('1',{keyword:'no code database',group:'产品与功能词'}),/不在没选的列表里/);
+ await assert.rejects(s.addItems('1',{keyword:'approval workflow example',group:'nope'}),/这组已经不在了/);
+ // A keyword the person removed is found again but not offered to the AI: removed by you.
+ await s.removeItems('1',{ids:[v2.items.find(i=>i.keyword==='retool alternative').id]});await finish(s,{seeds:SEEDS});
+ assert.equal((await s.notPicked('1')).items.find(c=>c.keyword==='retool alternative').reason,'removed');
+});
+
+test('Selection rules for a list found before reasons were kept: the totals it has, no reasons and no list',async()=>{
+ const {s,snaps}=setup({ai:false});
+ snaps.rows.push({id:99,key:'keyword-suggest:1',payload:{version:2,at:'2026-10-20T00:00:00.000Z',market:{locationCode:2840,language:'en'},seeds:['a','b'],stats:{found:120,picked:30,minVolume:50},
+  items:[{id:'x',keyword:'x',group:'产品与功能词',metrics:{volume:100,difficulty:20}}],digs:[{id:'d1',direction:'crm',name:'CRM',seeds:['crm'],at:'2026-10-21T00:00:00.000Z',found:40,items:[{id:'y',keyword:'y',metrics:{volume:90}}]}]}});
+ const v=await s.view('1');
+ assert.deepEqual(v.selection,{seeds:2,directions:1,found:160,picked:31,notPicked:129,recorded:false,reasons:[],pick:40,digPick:20,shortlist:250});
+ assert.deepEqual(await s.notPicked('1'),{recorded:false,items:[]});
+});
+
+test('a keyword is counted for one seed only, so found and picked add up across the seeds: the seed itself, the most specific seed it contains, else the lookup that ranked it highest',async()=>{
+ const calls=[];
+ global.fetch=async(url,init)=>{const path=String(url),body=JSON.parse(init.body)[0];calls.push(path);
+  const items=path.includes('keyword_suggestions')?({
+   'workflow':[kw('workflow',9000),kw('approval workflow software',1300),kw('team scheduling tool',800)],
+   'approval workflow':[kw('approval workflow',2000),kw('approval workflow software',1300)],
+   'scheduling':[kw('team scheduling tool',800),kw('shift planner',700)],
+  }[body.keyword]||[]):path.includes('keyword_ideas')?[kw('shift planner',700),kw('resource planning',600)]:[];
+  return {ok:true,json:async()=>({status_code:20000,cost:0.01,tasks:[{status_code:20000,result:[{seed_keyword:body.keyword,items}]}]})};};
+ const curate=input=>'```json\n'+JSON.stringify({keywords:input.candidates.map(c=>({keyword:c.keyword,group:1,relevance:3,reason:'x'}))})+'\n```';
+ const {s}=setup({seeds:['workflow','approval workflow','scheduling'],curate});await finish(s,{});
+ const v=await s.view('1'),by=Object.fromEntries(v.seedStats.map(x=>[x.seed,x]));
+ assert.equal(v.items.find(i=>i.keyword==='approval workflow software').seed,'approval workflow','the more specific seed it contains (fewer keywords contain it), not every seed that found it');
+ assert.equal(v.items.find(i=>i.keyword==='team scheduling tool').seed,'scheduling','contains "scheduling"');
+ assert.equal(v.items.find(i=>i.keyword==='shift planner').seed,'scheduling','no seed in it: the lookup that returned it');
+ assert.equal(v.items.find(i=>i.keyword==='resource planning').seed,null,'only the related-topics lookup brought it');
+ assert.deepEqual([by.workflow.found,by['approval workflow'].found,by.scheduling.found],[1,2,2]);
+ assert.equal(v.seedStats.reduce((n,x)=>n+x.picked,0),v.items.filter(i=>i.seed).length,'picked adds up to the keywords counted for a seed');
+ assert.equal(v.seedStats.reduce((n,x)=>n+x.found,0),5,'found adds up to the pool the seeds brought');
+});
+
+test('a list from before keywords were counted once shows picked per seed counted that way, and found as unknown',async()=>{
+ const {s,snaps}=setup({ai:false});
+ snaps.rows.push({id:98,key:'keyword-suggest:1',payload:{version:2,at:'2026-10-20T00:00:00.000Z',market:{locationCode:2840,language:'en'},seeds:['crm','self hosted crm'],stats:{found:20,picked:2,minVolume:50},
+  seedStats:[{seed:'crm',found:12,picked:2},{seed:'self hosted crm',found:8,picked:1}],
+  items:[{id:'a',keyword:'self hosted crm software',seeds:['crm','self hosted crm'],metrics:{volume:100}},{id:'b',keyword:'crm for startups',seeds:['crm'],metrics:{volume:90}}],digs:[]}});
+ const v=await s.view('1');
+ assert.deepEqual(v.seedStats,[{seed:'crm',found:null,picked:1},{seed:'self hosted crm',found:null,picked:1}]);
+ assert.deepEqual(v.items.map(i=>i.seed),['self hosted crm','crm']);
+});
+
+test('a head-term seed does not take the keywords a more specific seed it shares them with brought; equally specific seeds go to the one of more words',async()=>{
+ global.fetch=async(url,init)=>{const path=String(url),body=JSON.parse(init.body)[0];
+  const items=path.includes('keyword_suggestions')?({
+   'project management':[kw('project management',20000),kw('project management software',6000),kw('project management kanban boards',900),kw('project management tools',3000)],
+   'kanban boards':[kw('kanban boards',4000),kw('project management kanban boards',900),kw('kanban boards app',700)],
+   'board':[kw('task board app',500)],
+   'task board':[kw('task board app',500)],
+  }[body.keyword]||[]):[];
+  return {ok:true,json:async()=>({status_code:20000,cost:0.01,tasks:[{status_code:20000,result:[{seed_keyword:body.keyword,items}]}]})};};
+ const curate=input=>'```json\n'+JSON.stringify({keywords:input.candidates.map(c=>({keyword:c.keyword,group:1,relevance:3,reason:'x'}))})+'\n```';
+ const {s}=setup({seeds:['project management','kanban boards','board','task board'],curate});await finish(s,{});
+ const v=await s.view('1'),seedOf=k=>v.items.find(i=>i.keyword===k).seed,by=Object.fromEntries(v.seedStats.map(x=>[x.seed,x]));
+ assert.equal(seedOf('project management kanban boards'),'kanban boards','the head term is in more of the found keywords: the specific seed is credited');
+ assert.equal(seedOf('project management tools'),'project management');
+ assert.equal(seedOf('task board app'),'task board','both seeds are in as many found keywords: the one of more words');
+ assert.deepEqual(['project management','kanban boards','board','task board'].map(x=>[by[x].found,by[x].picked]),[[3,3],[3,3],[0,0],[1,1]]);
+});
+
+test('a head term (in over half of the found keywords) does not win by its phrase: such a keyword goes to the other seed whose lookup ranked it highest, and stays with the head term only when no other seed returned it',async()=>{
+ global.fetch=async(url,init)=>{const path=String(url),body=JSON.parse(init.body)[0];
+  const items=path.includes('keyword_suggestions')?({
+   'project management':[kw('project management',20000),kw('project management software',6000),kw('project management templates',2400),kw('project management sprint guide',900)],
+   'project templates':[kw('project management templates',2400),kw('project templates',3000),kw('free project templates',800)],
+   'sprint planning':[kw('sprint planning',2000),kw('project management sprint guide',900)],
+  }[body.keyword]||[]):[];
+  return {ok:true,json:async()=>({status_code:20000,cost:0.01,tasks:[{status_code:20000,result:[{seed_keyword:body.keyword,items}]}]})};};
+ const curate=input=>'```json\n'+JSON.stringify({keywords:input.candidates.map(c=>({keyword:c.keyword,group:1,relevance:3,reason:'x'}))})+'\n```';
+ const seeds=['project management','project templates','sprint planning'];
+ const {s}=setup({seeds,curate});await finish(s,{});
+ const v=await s.view('1'),seedOf=k=>v.items.find(i=>i.keyword===k).seed,by=Object.fromEntries(v.seedStats.map(x=>[x.seed,x]));
+ // "project management" is in 4 of the 7 found keywords: a head term.
+ assert.equal(seedOf('project management templates'),'project templates','returned first by the specific seed');
+ assert.equal(seedOf('project management sprint guide'),'sprint planning','the other seed whose lookup returned it');
+ assert.equal(seedOf('project management software'),'project management','no other seed returned it: the head term keeps it');
+ assert.equal(seedOf('project management'),'project management','the seed itself');
+ assert.deepEqual(seeds.map(x=>[by[x].found,by[x].picked]),[[2,2],[3,3],[2,2]]);
+ assert.equal(v.seedStats.reduce((n,x)=>n+x.found,0),7,'found adds up to the keywords the seeds brought');
+ assert.equal(v.seedStats.reduce((n,x)=>n+x.picked,0),v.items.filter(i=>i.seed).length);
 });

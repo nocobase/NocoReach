@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '#components/ui/dialog';
-import { usdUpTo } from './keyword-api';
+import { marketLabel, usdUpTo } from './keyword-api';
 
 type Market = { locationCode: number; language: string };
 type Estimate = {
@@ -36,12 +36,14 @@ const call = <T,>(projectId: number, action: string, body: object) =>
  * Edit seed words (2026-10-28, mockup ui-references/keywords-2026-10-28/manual-edit.png): the seeds as tags, × to
  * remove one (struck through, a click puts it back) and Enter to add one. Save only keeps them for the next re-find;
  * Save and find again runs one now, its most possible cost and this month's spending read from the same estimate as the
- * chat's lookup card. Only that button spends money. Choosing seeds with the AI stays in the chat.
+ * chat's lookup card. Only that button spends money. Choosing seeds with the AI stays in the chat. Opened from the query
+ * bar's market select it finds again in the market chosen there, so it has no Save only.
  */
 export function EditSeedsDialog({
   projectId,
   seeds,
   market,
+  marketChanged = false,
   onClose,
   onSaveOnly,
   onFind,
@@ -49,6 +51,8 @@ export function EditSeedsDialog({
   projectId: number;
   seeds: string[];
   market: Market;
+  /** Opened to switch to this market: the list is found again there. */
+  marketChanged?: boolean;
   onClose: () => void;
   onSaveOnly: (seeds: string[]) => Promise<boolean>;
   onFind: (seeds: string[]) => Promise<boolean>;
@@ -185,6 +189,13 @@ export function EditSeedsDialog({
             onBlur={() => text.trim() && add()}
           />
         </div>
+        {marketChanged ? (
+          <p className='text-sm' data-seed-editor-market>
+            {$t('keywordSuggestions.marketChangeHint', {
+              0: $t(marketLabel(market)),
+            })}
+          </p>
+        ) : null}
         <p className='text-xs text-muted-foreground' data-seed-editor-hint>
           {changed
             ? $t('keywordSuggestions.seedsChangeHint', {
@@ -220,13 +231,15 @@ export function EditSeedsDialog({
           <Button variant='outline' onClick={onClose}>
             {$t('common.cancel')}
           </Button>
-          <Button
-            variant='outline'
-            disabled={!next.length || !changed || Boolean(busy)}
-            onClick={() => void run('save')}
-          >
-            {$t('keywordSuggestions.saveSeedsOnly')}
-          </Button>
+          {marketChanged ? null : (
+            <Button
+              variant='outline'
+              disabled={!next.length || !changed || Boolean(busy)}
+              onClick={() => void run('save')}
+            >
+              {$t('keywordSuggestions.saveSeedsOnly')}
+            </Button>
+          )}
           <Button
             disabled={!next.length || !estimate || over || Boolean(busy)}
             onClick={() => void run('find')}

@@ -8,7 +8,7 @@ import {
 } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { $t, setDictionary } from '../../client/i18n';
+import { $t, getCurrentLocale, setDictionary } from '../../client/i18n';
 import { OnlineChatProvider } from '../../client/online-agent/context.js';
 import { OnlineChatView } from '../../client/online-agent/chat.js';
 import { notifyPageChange } from '../../client/online-agent/page-changes.js';
@@ -97,6 +97,8 @@ const item = (
   page: null,
   site: null,
   metrics: metrics(volume, 30),
+  seeds: keyword === 'retool alternative' ? ['retool alternative'] : [],
+  seed: keyword === 'retool alternative' ? 'retool alternative' : null,
   ...(dig ? { dig } : {}),
 });
 const LIST = {
@@ -107,6 +109,37 @@ const LIST = {
   seedsBy: 'ai',
   stats: { found: 386, picked: 2, minVolume: 50 },
   costUsd: 0.18,
+  seedStats: [
+    { seed: 'internal tool builder', found: 12, picked: 0 },
+    { seed: 'approval workflow', found: 20, picked: 0 },
+    { seed: 'retool alternative', found: 15, picked: 1 },
+  ],
+  seedNotes: [
+    {
+      seed: 'retool alternative',
+      from: ['competitors'],
+      why: 'Retool users looking to switch',
+    },
+  ],
+  selection: {
+    seeds: 3,
+    directions: 1,
+    found: 386,
+    picked: 3,
+    notPicked: 383,
+    recorded: true,
+    reasons: [
+      {
+        reason: 'unrelated',
+        count: 300,
+        examples: ['ai business ideas', 'vibe coding jobs'],
+      },
+      { reason: 'duplicate', count: 83, examples: ['internal tools builder'] },
+    ],
+    pick: 40,
+    digPick: 20,
+    shortlist: 250,
+  },
   items: [
     item('open source low code platform', '品类与行业词', 3600),
     item('retool alternative', '对比与替代词', 1600),
@@ -167,39 +200,240 @@ const mount = (url = '/keywords?tab=suggest') =>
     </MemoryRouter>,
   );
 
-test('the list says how it was made: seeds, real keywords found, picked, the volume floor and the groups dug', async () => {
+test('the query bar: seeds sorted by how many were picked, each with its count; a seed says where it came from and what it found, and Show only these narrows the list', async () => {
   mount();
   await screen.findByText('open source low code platform');
-  const basis = document.querySelector('[data-suggest-basis]') as HTMLElement;
-  expect(basis.textContent).toContain(
-    $t('keywordSuggestions.madeByAi', {
-      0: 3,
-      1: 386,
-      2: 2,
-      3: $t('keywordSuggestions.dugLater', { 0: 1 }),
-      4: 50,
-    }),
+  const bar = document.querySelector('[data-query-bar]') as HTMLElement;
+  expect(bar.textContent).toContain(
+    $t('keywordSuggestions.seedsLabel', { 0: 3 }),
   );
   expect(
-    within(
-      within(basis).getByRole('list', {
-        name: $t('keywordSuggestions.seedsTitle'),
-      }),
-    )
-      .getAllByRole('listitem')
-      .map((li) => li.textContent),
-  ).toEqual(LIST.seeds);
-  expect(
-    screen.getByRole('tab', { name: `${$t('common.allCount', { 0: 3 })}` }),
-  ).toBeVisible();
+    [...bar.querySelectorAll('[data-seed]')].map((c) => c.textContent),
+  ).toEqual([
+    'retool alternative1',
+    'internal tool builder0',
+    'approval workflow0',
+  ]);
+  // No sentence of AI output above the list any more.
+  expect(document.body.textContent).not.toContain(
+    $t('keywordSuggestions.seedsTitle') + ' (',
+  );
   fireEvent.click(
-    screen.getByRole('tab', {
-      name: 'approval workflow 1',
+    within(bar).getByRole('button', { name: /^retool alternative/ }),
+  );
+  const pop = await screen.findByText('Retool users looking to switch');
+  const card = pop.closest('[data-slot=popover-content]') as HTMLElement;
+  expect(card.textContent).toContain(
+    $t('keywordSuggestions.seedFrom', {
+      0: $t('keywordSuggestions.seedSource.competitors'),
+    }),
+  );
+  expect(card.textContent).toContain(
+    $t('keywordSuggestions.seedFound', { 0: 15, 1: 1 }),
+  );
+  fireEvent.click(
+    within(card).getByRole('button', {
+      name: $t('keywordSuggestions.seedOnly', { 0: 1 }),
     }),
   );
   const table = screen.getByRole('table');
-  expect(within(table).getByText('approval workflow software')).toBeVisible();
-  expect(within(table).queryByText('retool alternative')).toBeNull();
+  await waitFor(() =>
+    expect(
+      within(table).queryByText('open source low code platform'),
+    ).toBeNull(),
+  );
+  expect(within(table).getByText('retool alternative')).toBeVisible();
+  const summary = document.querySelector(
+    '[data-selection-summary]',
+  ) as HTMLElement;
+  expect(summary.textContent).toContain(
+    $t('keywordSuggestions.seedFilter', { 0: 'retool alternative' }),
+  );
+  fireEvent.click(
+    within(summary).getByRole('button', {
+      name: $t('keywordSuggestions.clearSeedFilter', {
+        0: 'retool alternative',
+      }),
+    }),
+  );
+  expect(
+    await within(table).findByText('open source low code platform'),
+  ).toBeVisible();
+});
+
+test('the results summary follows the tab: count, monthly searches added up, average difficulty; an expanded group says its direction', async () => {
+  view = { ...LIST, digs: [{ ...LIST.digs[0], name: 'Approvals' }] };
+  mount();
+  await screen.findByText('open source low code platform');
+  const summary = document.querySelector(
+    '[data-selection-summary]',
+  ) as HTMLElement;
+  const volume = new Intl.NumberFormat(getCurrentLocale()).format(6500);
+  expect(summary.textContent).toContain(
+    $t('keywordSuggestions.summaryKeywords', { 0: 3 }),
+  );
+  expect(summary.textContent).toContain(
+    $t('keywordSuggestions.summaryVolume', { 0: volume }),
+  );
+  expect(summary.textContent).toContain(
+    $t('keywordSuggestions.summaryDifficulty', { 0: 30 }),
+  );
+  expect(summary.textContent).toContain(
+    $t('keywordSuggestions.updatedAt', { 0: '10-27' }),
+  );
+  fireEvent.click(screen.getByRole('tab', { name: 'Approvals 1' }));
+  await waitFor(() =>
+    expect(summary.textContent).toContain(
+      $t('keywordSuggestions.expandedIn', { 0: 'Approvals', 1: '10-27' }),
+    ),
+  );
+  expect(summary.textContent).toContain(
+    $t('keywordSuggestions.summaryKeywords', { 0: 1 }),
+  );
+});
+
+test('Selection rules: the rules, the numbers and why the others were not picked; View those not picked lists them, and Add to suggestions puts one in the group picked', async () => {
+  const left = [
+    {
+      keyword: 'ai business ideas',
+      volume: 8100,
+      difficulty: 41,
+      intent: 'informational',
+      reason: 'unrelated',
+      run: 'list',
+    },
+    {
+      keyword: 'internal tools builder',
+      volume: 390,
+      difficulty: 38,
+      intent: 'commercial',
+      reason: 'duplicate',
+      duplicateOf: 'internal tool builder',
+      run: 'list',
+    },
+    {
+      keyword: 'workflow automation tools',
+      volume: 6600,
+      difficulty: 62,
+      intent: 'commercial',
+      reason: 'weaker',
+      run: 'list',
+    },
+  ];
+  action.mockImplementation(async (_resource: string, name: string) =>
+    name === 'notPicked' ? { recorded: true, items: left } : view,
+  );
+  mount();
+  await screen.findByText('open source low code platform');
+  fireEvent.click(
+    screen.getByRole('button', {
+      name: $t('keywordSuggestions.selectionRules'),
+    }),
+  );
+  const rules = (
+    await screen.findByText($t('keywordSuggestions.ruleDemandTitle'))
+  ).closest('[data-slot=popover-content]') as HTMLElement;
+  expect(rules.textContent).toContain('Project B');
+  expect(rules.textContent).toContain(
+    $t('keywordSuggestions.selectionCounts', { 0: 3, 1: 1, 2: 386, 3: 3 }),
+  );
+  expect(rules.textContent).toContain(
+    $t('keywordSuggestions.notPickedHead', { 0: 383 }),
+  );
+  expect(rules.textContent).toContain(
+    $t('keywordSuggestions.notPickedReason.unrelated'),
+  );
+  expect(rules.textContent).toContain(
+    $t('keywordSuggestions.examples', {
+      0: ['ai business ideas', 'vibe coding jobs'].join(
+        getCurrentLocale().startsWith('zh') ? '、' : ', ',
+      ),
+    }),
+  );
+  fireEvent.click(
+    within(rules).getByRole('button', {
+      name: $t('keywordSuggestions.viewNotPicked', { 0: 383 }),
+    }),
+  );
+  const dialog = await screen.findByRole('dialog');
+  expect(
+    await within(dialog).findByText(
+      $t('keywordSuggestions.duplicateOf', { 0: 'internal tool builder' }),
+    ),
+  ).toBeVisible();
+  // Ranked lower reads short on its row; the limit behind it is said once, under its tab.
+  expect(
+    within(dialog).getByText($t('keywordSuggestions.notPickedReason.weaker')),
+  ).toBeVisible();
+  expect(dialog.querySelector('[data-not-picked-note]')).toBeNull();
+  fireEvent.click(
+    within(dialog).getByRole('button', {
+      name: `${$t('keywordSuggestions.notPickedShort.weaker')} 1`,
+    }),
+  );
+  expect(dialog.querySelector('[data-not-picked-note]')?.textContent).toBe(
+    $t('keywordSuggestions.notPickedNote.weaker', { 0: 40, 1: 20 }),
+  );
+  fireEvent.click(
+    within(dialog).getByRole('button', {
+      name: `${$t('keywordSuggestions.notPickedShort.unrelated')} 1`,
+    }),
+  );
+  expect(within(dialog).queryByText('internal tools builder')).toBeNull();
+  fireEvent.click(
+    within(dialog).getByRole('button', {
+      name: $t('keywordSuggestions.addToSuggestions'),
+    }),
+  );
+  fireEvent.click(
+    await screen.findByRole('menuitem', {
+      name: $t('keywordSuggestions.groups.product'),
+    }),
+  );
+  await waitFor(() =>
+    expect(action).toHaveBeenCalledWith(
+      'nrKeywordSuggest',
+      'addItems',
+      expect.objectContaining({
+        body: {
+          projectId: 2,
+          keyword: 'ai business ideas',
+          group: '产品与功能词',
+        },
+      }),
+    ),
+  );
+  await waitFor(() =>
+    expect(within(dialog).queryByText('ai business ideas')).toBeNull(),
+  );
+});
+
+test('Selection rules for a list found before reasons were kept: the totals only, no reasons and no list', async () => {
+  view = {
+    ...LIST,
+    selection: { ...LIST.selection, recorded: false, reasons: [] },
+  };
+  mount();
+  await screen.findByText('open source low code platform');
+  fireEvent.click(
+    screen.getByRole('button', {
+      name: $t('keywordSuggestions.selectionRules'),
+    }),
+  );
+  const rules = (
+    await screen.findByText($t('keywordSuggestions.ruleDemandTitle'))
+  ).closest('[data-slot=popover-content]') as HTMLElement;
+  expect(rules.textContent).toContain(
+    $t('keywordSuggestions.selectionCounts', { 0: 3, 1: 1, 2: 386, 3: 3 }),
+  );
+  expect(rules.textContent).not.toContain(
+    $t('keywordSuggestions.notPickedHead', { 0: 383 }),
+  );
+  expect(
+    within(rules).queryByRole('button', {
+      name: $t('keywordSuggestions.viewNotPicked', { 0: 383 }),
+    }),
+  ).toBeNull();
 });
 
 test('the chat link to a new group opens on its tab', async () => {
@@ -244,11 +478,16 @@ test('each row has Dig from this keyword, shown on hover, which opens the chat a
   expect(screen.getByText('open source low code platform')).toBeVisible();
 });
 
-test('the page entry offers the prompts for this list, and a group dug in the chat appears without a reload', async () => {
+test('Ask AI to find keywords opens the chat with its four prompts, and a group expanded in the chat appears without a reload', async () => {
   mount();
   await screen.findByText('open source low code platform');
+  expect(
+    screen.getAllByRole('button', {
+      name: $t('keywordSuggestions.findWithAi'),
+    }),
+  ).toHaveLength(1);
   fireEvent.click(
-    screen.getByRole('button', { name: $t('keywordSuggestions.aiEntry') }),
+    screen.getByRole('button', { name: $t('keywordSuggestions.findWithAi') }),
   );
   const prompts = within(screen.getByRole('log')).getByRole('list', {
     name: $t('onlineAgent.suggestions'),
@@ -258,10 +497,10 @@ test('the page entry offers the prompts for this list, and a group dug in the ch
       .getAllByRole('button')
       .map((b) => b.textContent),
   ).toEqual([
-    $t('keywordSuggestions.presetMore', { 0: 'retool alternative' }),
-    $t('keywordSuggestions.presetCompetitors'),
-    $t('keywordSuggestions.presetJapan'),
-    $t('keywordSuggestions.presetExplain'),
+    $t('keywordSuggestions.presetHowSeeds'),
+    $t('keywordSuggestions.presetAddRemoveSeeds'),
+    $t('keywordSuggestions.presetExpand'),
+    $t('keywordSuggestions.presetWhyNotPicked'),
   ]);
   view = {
     ...LIST,
@@ -308,85 +547,130 @@ test('nothing yet: the first run shows its most possible cost and starts only on
   ).toBeVisible();
 });
 
-test('the seed words are read-only: no dialog or Find again on the page; Adjust seed words with AI opens the chat on them', async () => {
+test('Remove this seed word keeps the seeds without it for the next re-find and looks nothing up', async () => {
   mount();
   await screen.findByText('open source low code platform');
-  expect(screen.queryByRole('dialog')).toBeNull();
-  expect(screen.queryByRole('button', { name: 'Find again' })).toBeNull();
-  expect(
-    screen.queryByRole('textbox', {
-      name: $t('keywordSuggestions.seedsTitle'),
-    }),
-  ).toBeNull();
+  const bar = document.querySelector('[data-query-bar]') as HTMLElement;
   fireEvent.click(
-    screen.getByRole('button', { name: $t('keywordSuggestions.adjustSeeds') }),
+    within(bar).getByRole('button', { name: /^internal tool builder/ }),
   );
-  expect(panel.openChat).toHaveBeenCalled();
-  const log = screen.getByRole('log');
-  expect(
-    within(log).getByText($t('keywordSuggestions.seedsEntryDescription')),
-  ).toBeVisible();
-  const prompts = within(log).getByRole('list', {
-    name: $t('onlineAgent.suggestions'),
-  });
-  expect(
-    within(prompts)
-      .getAllByRole('button')
-      .map((b) => b.textContent),
-  ).toEqual([
-    $t('keywordSuggestions.presetExplainSeeds'),
-    $t('keywordSuggestions.presetLeanSeeds'),
-    $t('keywordSuggestions.presetAddRemoveSeed'),
-    $t('keywordSuggestions.presetFindAgain'),
-    $t('keywordSuggestions.presetOtherMarket'),
-  ]);
   fireEvent.click(
-    within(prompts).getByRole('button', {
-      name: $t('keywordSuggestions.presetExplainSeeds'),
+    await screen.findByRole('button', {
+      name: $t('keywordSuggestions.removeThisSeed'),
     }),
   );
   await waitFor(() =>
-    expect(api).toHaveBeenCalledWith(
-      'conversations',
+    expect(action).toHaveBeenCalledWith(
+      'nrKeywordSuggest',
+      'saveSeeds',
       expect.objectContaining({
-        subject: { kind: 'page', page: 'keywords', item: 'seeds:' },
-        text: $t('keywordSuggestions.presetExplainSeeds'),
+        body: {
+          projectId: 2,
+          seeds: ['approval workflow', 'retool alternative'],
+        },
+      }),
+    ),
+  );
+  expect(action.mock.calls.map((c) => c[1])).not.toContain('suggest');
+});
+
+test('another market from the query bar opens Edit seed words to find the list again there, with no Save only', async () => {
+  action.mockImplementation(async (_resource: string, name: string) =>
+    name === 'estimate'
+      ? { maxUsd: 0.2911, reused: 0, monthUsd: 0.7, budgetUsd: 10 }
+      : view,
+  );
+  mount();
+  await screen.findByText('open source low code platform');
+  const bar = document.querySelector('[data-query-bar]') as HTMLElement;
+  fireEvent.click(
+    within(bar).getByRole('button', { name: $t('common.unitedStatesEnglish') }),
+  );
+  fireEvent.click(
+    await screen.findByRole('menuitem', { name: $t('keyword.japanJapanese') }),
+  );
+  const dialog = await screen.findByRole('dialog');
+  expect(dialog.textContent).toContain(
+    $t('keywordSuggestions.marketChangeHint', {
+      0: $t('keyword.japanJapanese'),
+    }),
+  );
+  expect(
+    within(dialog).queryByRole('button', {
+      name: $t('keywordSuggestions.saveSeedsOnly'),
+    }),
+  ).toBeNull();
+  fireEvent.click(
+    await within(dialog).findByRole('button', {
+      name: $t('keywordSuggestions.saveAndFind', { 0: '0.30' }),
+    }),
+  );
+  await waitFor(() =>
+    expect(action).toHaveBeenCalledWith(
+      'nrKeywordSuggest',
+      'suggest',
+      expect.objectContaining({
+        body: {
+          projectId: 2,
+          seeds: LIST.seeds,
+          market: { locationCode: 2392, language: 'ja' },
+          by: 'person',
+        },
       }),
     ),
   );
 });
 
-test('a seed chip opens the chat on that seed word', async () => {
+test('Edit groups › New group shows the most its expansion may cost, and Save expands in that direction into it', async () => {
+  action.mockImplementation(async (_resource: string, name: string) =>
+    name === 'estimate'
+      ? { maxUsd: 0.2718, reused: 0, monthUsd: 0.7, budgetUsd: 10 }
+      : view,
+  );
   mount();
   await screen.findByText('open source low code platform');
-  const basis = document.querySelector('[data-suggest-basis]') as HTMLElement;
   fireEvent.click(
-    within(basis).getByRole('button', { name: 'retool alternative' }),
+    screen.getByRole('button', { name: $t('keywordSuggestions.editGroups') }),
   );
-  const log = screen.getByRole('log');
-  expect(
-    within(log).getByText(
-      $t('keywordSuggestions.seedEntry', { 0: 'retool alternative' }),
-    ),
-  ).toBeVisible();
+  const dialog = await screen.findByRole('dialog');
   fireEvent.click(
-    within(log).getByRole('button', {
-      name: $t('keywordSuggestions.presetSeedFound'),
+    within(dialog).getByRole('button', {
+      name: $t('keywordSuggestions.addGroup'),
     }),
   );
+  fireEvent.change(
+    within(dialog).getByRole('textbox', {
+      name: $t('keywordSuggestions.newGroupName'),
+    }),
+    { target: { value: 'Self-hosting' } },
+  );
+  const save = await within(dialog).findByRole('button', {
+    name: $t('keywordSuggestions.saveAndExpand', { 0: '0.28' }),
+  });
+  expect(action).toHaveBeenCalledWith(
+    'nrKeywordSuggest',
+    'estimate',
+    expect.objectContaining({ body: { projectId: 2, mode: 'dig' } }),
+  );
+  expect(dialog.querySelector('[data-new-group-cost]')?.textContent).toContain(
+    $t('keywordSuggestions.seedsMonth', { 0: '0.70', 1: '10.00' }),
+  );
+  fireEvent.click(save);
   await waitFor(() =>
-    expect(api).toHaveBeenCalledWith(
-      'conversations',
+    expect(action).toHaveBeenCalledWith(
+      'nrKeywordSuggest',
+      'dig',
       expect.objectContaining({
-        subject: {
-          kind: 'page',
-          page: 'keywords',
-          item: 'seeds:retool alternative',
+        body: {
+          projectId: 2,
+          direction: 'Self-hosting',
+          name: 'Self-hosting',
+          by: 'person',
         },
-        text: $t('keywordSuggestions.presetSeedFound'),
       }),
     ),
   );
+  expect(action.mock.calls.map((c) => c[1])).not.toContain('editGroups');
 });
 
 test('every group tab reads as a name and a count; the group column names the group a row is listed under', async () => {
@@ -503,10 +787,11 @@ test('Edit seed words: × removes a seed, Enter adds one, Save only keeps them, 
   );
   mount();
   await screen.findByText('open source low code platform');
-  const basis = document.querySelector('[data-suggest-basis]') as HTMLElement;
-  fireEvent.click(
-    within(basis).getByRole('button', { name: $t('common.edit') }),
-  );
+  const editSeeds = () =>
+    fireEvent.click(
+      screen.getByRole('button', { name: $t('keywordSuggestions.editSeeds') }),
+    );
+  editSeeds();
   const dialog = await screen.findByRole('dialog');
   fireEvent.click(
     within(dialog).getByRole('button', {
@@ -562,9 +847,7 @@ test('Edit seed words: × removes a seed, Enter adds one, Save only keeps them, 
   );
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   // Again, this time running a lookup: only this button spends.
-  fireEvent.click(
-    within(basis).getByRole('button', { name: $t('common.edit') }),
-  );
+  editSeeds();
   const again = await screen.findByRole('dialog');
   fireEvent.click(
     await within(again).findByRole('button', {
