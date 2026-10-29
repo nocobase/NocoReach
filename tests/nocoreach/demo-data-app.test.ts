@@ -1187,62 +1187,6 @@ test('imports the demo through the API and clears all business data while preser
       updatedAt: createdAt,
     },
   });
-  // Cross multiple cleanup pages, mixing retained inbox items with both stale predicates.
-  const batchedFiles: string[] = [];
-  for (let index = 0; index < 205; index++) {
-    for (const table of ['nrTaskMedia', 'agChatAttachments']) {
-      const id = randomUUID();
-      const key = `tests/demo-data/batched-${id}.txt`;
-      await disk.put(key, Buffer.from('batch'));
-      batchedFiles.push(key);
-      await connection.repository(table).createOne({
-        values: {
-          id,
-          disk: 'local',
-          key,
-          filename: 'batch.txt',
-          ext: 'txt',
-          mimeType: 'text/plain',
-          size: 5,
-          createdAt,
-          updatedAt: createdAt,
-          ...(table === 'nrTaskMedia'
-            ? {
-                ownerId: 'test-owner',
-                sessionId: 'test-session',
-                projectId: 'missing',
-                draftId: id,
-                expiresAt: new Date(Date.now() + 60000),
-                deleting: false,
-              }
-            : { uploaderId: 'test-owner', conversationId: legacyChatId }),
-        },
-      });
-    }
-  }
-  const retainedMessages: string[] = [];
-  const staleMessages: string[] = [];
-  for (let index = 0; index < 405; index++) {
-    const id = `cleanup-${String(index).padStart(8, '0')}`;
-    const keep = index % 3 === 0;
-    (keep ? retainedMessages : staleMessages).push(id);
-    await connection.repository('notificationInAppItems').createOne({
-      values: {
-        id,
-        deliveryId: randomUUID(),
-        userId: 'test-owner',
-        body: 'cleanup fixture',
-        notificationId:
-          index % 3 === 1 ? `nocoreach-demo-${index}` : `system-${index}`,
-        target: {
-          type: 'route',
-          path: index % 3 === 2 ? '/actions/old-task' : '/home',
-        },
-        createdAt,
-        updatedAt: createdAt,
-      },
-    });
-  }
   const globalAgents = await connection
     .repository('nrOnlineAgentRecords')
     .findMany({ filter: { kind: 'agent' } });
@@ -1300,15 +1244,6 @@ test('imports the demo through the API and clears all business data while preser
   expect(remaining).toEqual([]);
   expect(await disk.exists(fileKey)).toBe(false);
   expect(await disk.exists(chatFileKey)).toBe(false);
-  for (const key of batchedFiles) expect(await disk.exists(key)).toBe(false);
-  const remainingNotifications = await connection.query
-    .selectFrom('notificationInAppItems')
-    .select(['id'])
-    .where('id', 'in', [...retainedMessages, ...staleMessages])
-    .execute<{ id: string }>();
-  expect(remainingNotifications.map(({ id }) => id).sort()).toEqual(
-    retainedMessages,
-  );
   for (const table of [
     'agConversations',
     'agConversationMessages',

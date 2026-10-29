@@ -1,6 +1,5 @@
-## Demo data: bound reset memory and stream analytics aggregation
+## Demo data: stream analytics and retire project caches
 
-- Aggregate demo Google Analytics facts incrementally while preserving response ordering, filters, hourly/event dimensions, totals and ratios. Keep only a bounded day of visit buckets instead of retaining visits and derived facts for the entire history.
-- Invalidate cached worlds when projects are removed or replaced, replace old hourly editions, and evict the least recently used world without flushing unrelated projects.
+- Stream Google Analytics facts into aggregation while preserving report history, filters, totals and ratios.
+- Bound visit and world caches, invalidate removed or replaced projects, and evict older worlds without flushing unrelated projects.
 - Page attachment and inbox cleanup while preserving retryable blob deletion, unrelated notifications and active-work protection.
-- Add full-application, opt-in reset resource regression coverage with isolated databases/storage, fixed fixtures, five resets, resource budgets and a separate annual-report stress phase. Record the baseline and changed measurements and their limits in the benchmark report.
