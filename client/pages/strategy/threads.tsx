@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- the conversation context and its hook live with their views */
-import { $t, getCurrentLocale } from '#i18n';
+import { $t } from '#i18n';
+import { formatTime } from '#lib/format';
 import {
   createContext,
   useContext,
@@ -194,11 +195,7 @@ export function QuoteOpportunity({ row }: { row: Row }) {
   );
 }
 
-const clock = (iso: string) =>
-  new Date(iso).toLocaleTimeString(getCurrentLocale(), {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+const clock = (iso: string) => formatTime(iso);
 /**
  * One question and its answer: the quote above the question, the answer as Markdown, the data it read folded. An answer
  * that stopped partway says why, and the latest one offers Continue, as in the side panel.

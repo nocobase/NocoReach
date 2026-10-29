@@ -14,6 +14,7 @@ export const MOCK_AI_OPERATIONS = [
   'daily-rewrite',
   'keyword-seeds',
   'keyword-curate',
+  'keyword-names',
   'ai-question-suggest',
   'knowledge-suggest',
   'memory-draft',
@@ -172,6 +173,15 @@ function fixture(
                   500,
                 ),
               })),
+      };
+    case 'keyword-names':
+      return {
+        names: empty
+          ? []
+          : list(input.groups).map((group, i) => ({
+              id: str(group.id, 40),
+              name: `Demo group ${i + 1}`,
+            })),
       };
     case 'ai-question-suggest':
       return {

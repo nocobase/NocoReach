@@ -108,7 +108,7 @@ describe.each(['zh-CN', 'en-US'])(
       );
     });
 
-    it('connects the ACME import opportunity to recent unanswered customer questions', () => {
+    it('connects the Acme import opportunity to recent unanswered customer questions', () => {
       const world = new World(
         { id: 'main', ...content.projects.main, language },
         now,

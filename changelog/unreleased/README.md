@@ -10,4 +10,4 @@ A note is one section, written in English as CHANGELOG.md's sections are, withou
 - The Skill drawer lists the playbooks that use the Skill as tags, each opening its playbook.
 ```
 
-`pnpm changelog:fold` moves the notes to the top of CHANGELOG.md, the latest merged first, and deletes them. Run it on a branch from `main`, in a pull request of its own; since no other pull request edits CHANGELOG.md or these files, it does not conflict with them. `tests/logic/changelog.test.ts` checks each note's form and fails when CHANGELOG.md gains an "Unreleased" section.
+`pnpm changelog:fold` moves the notes to the top of CHANGELOG.md, the latest merged first, and deletes them. The Release workflow does this automatically in its version commit and uses the same notes for the GitHub Release. To fold notes separately, run it on a branch from `main`, in a pull request of its own. `tests/logic/changelog.test.ts` checks each note's form and fails when CHANGELOG.md gains an "Unreleased" section.

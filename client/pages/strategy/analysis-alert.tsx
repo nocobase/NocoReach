@@ -2,7 +2,8 @@ import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { Button } from '#components/ui/button';
-import { $t, getCurrentLocale, translateSystemError } from '#i18n';
+import { $t, translateSystemError } from '#i18n';
+import { formatTime } from '#lib/format';
 import type { AnalysisStatus } from './service';
 
 export function AnalysisAlert({
@@ -52,10 +53,7 @@ export function AnalysisAlert({
     return null;
   const configuration = run.failureKind === 'model_configuration';
   if (status.retry && !configuration) {
-    const time = new Date(status.retry.nextAt).toLocaleTimeString(
-      getCurrentLocale(),
-      { hour: '2-digit', minute: '2-digit' },
-    );
+    const time = formatTime(status.retry.nextAt);
     return (
       <p
         role='status'

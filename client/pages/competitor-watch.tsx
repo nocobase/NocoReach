@@ -197,7 +197,7 @@ export function CompetitorWatchTab({ projectId, onListChange }: { projectId: num
               <span className="text-muted-foreground">{e.competitor} · {getType()[e.type]} · </span><a className="nr-link" href={e.url} target="_blank" rel="noreferrer" onClick={(ev) => ev.stopPropagation()}>{unescapeHtml(e.title)}<ExternalLink className="ml-0.5 inline size-3" /></a>
               {e.detail ? <span className="block truncate text-xs text-muted-foreground">{unescapeHtml(e.detail)}</span> : null}
             </span>
-            <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{formatDate(e.at.slice(0, 10))}</span>
+            <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{formatDate(e.at)}</span>
           </label>
         )) : <p className="px-4 py-3 text-sm text-muted-foreground">{view.lastRun ? $t('competitorWatch.noNewActivityLast90') : $t('competitorWatch.checkingFirstTime')}</p>}
       </Card>

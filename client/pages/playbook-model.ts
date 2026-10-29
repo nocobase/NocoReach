@@ -1,6 +1,6 @@
 import { $t, $legacyText } from "#i18n";
 import {nocobaseClient as api} from "#lib/nocoreach-api";
-import {formatDate} from '#lib/format';
+import {formatDate,formatDateTime} from '#lib/format';
 import {playbookForActions} from '../../shared/opportunity-parts.js';
 import {SYSTEM_PLAYBOOKS} from '../../shared/playbook-catalog.js';
 import {inPlaceLocales} from '../../shared/article-publishing.js';
@@ -58,8 +58,9 @@ export const stageLabel=(s:Stage,w?:StepWork)=>s.kind==='review'?$t('common.your
 // Same rule as the server's defaultPlaybookId: the actions of the signals an opportunity cites.
 export const recommendedPlaybookId=(actions:(string|null)[])=>playbookForActions(actions);
 // What a task timeline says for each recorded event.
-export function eventText(e:{action:string;note?:string;comment?:string;stageKey?:string},stageName:(key?:string)=>string,executor:string):{who:string;text:string}|null{
+export function eventText(e:{at?:string;action:string;note?:string;comment?:string;stageKey?:string},stageName:(key?:string)=>string,executor:string,snooze?:{at:string;until:string}|null):{who:string;text:string}|null{
  const s=stageName(e.stageKey);
+ const snoozeTime=()=>snooze&&snooze.at===e.at?formatDateTime(snooze.until):formatDate(e.note);
  switch(e.action){
   case 'startTask':return {who:$t('common.you'),text:$t('playbook.startedTask',{0:e.note?$t('playbook.playbook',{0:e.note}):''})};
   // An automatic title that followed the playbook chosen before the start (server task-title.ts).
@@ -67,8 +68,8 @@ export function eventText(e:{action:string;note?:string;comment?:string;stageKey
   case 'selectPlaybook':return {who:$t('common.you'),text:$t('playbook.changedPlaybook',{0:(e.note||"")})};
   // Snooze (2026-10-28, server execution/snooze.ts): the day and what it waits for, a new day, ended by hand, by acting
   // on the task, or come back on its day.
-  case 'snoozeTask':return {who:$t('common.you'),text:e.comment?$t('playbook.snoozedBecause',{0:formatDate(e.note),1:e.comment}):$t('playbook.snoozed',{0:formatDate(e.note)})};
-  case 'snoozeChanged':return {who:$t('common.you'),text:e.comment?$t('playbook.snoozeChangedBecause',{0:formatDate(e.note),1:e.comment}):$t('playbook.snoozeChanged',{0:formatDate(e.note)})};
+  case 'snoozeTask':return {who:$t('common.you'),text:e.comment?$t('playbook.snoozedBecause',{0:snoozeTime(),1:e.comment}):$t('playbook.snoozed',{0:snoozeTime()})};
+  case 'snoozeChanged':return {who:$t('common.you'),text:e.comment?$t('playbook.snoozeChangedBecause',{0:snoozeTime(),1:e.comment}):$t('playbook.snoozeChanged',{0:snoozeTime()})};
   case 'unsnoozeTask':return {who:$t('common.you'),text:$t('playbook.unsnoozed')};
   case 'snoozeEnded':return {who:$t('common.you'),text:$t('playbook.snoozeEnded')};
   case 'snoozeDue':return {who:$t('common.system'),text:$t('playbook.snoozeDue')};

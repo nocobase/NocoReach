@@ -80,6 +80,7 @@ function createScenario(appId: string) {
         async () => {},
       ),
       summary: vi.fn(),
+      log: vi.fn(),
       now: () => time,
       wait: vi.fn(async (ms: number) => {
         time += ms;
@@ -361,11 +362,52 @@ describe.each(['nocoreach', 'nocoreach-demo', 'reach'])(
     it('times out without retrying the upload', async () => {
       const { deployment, options } = scenario();
       deployment.status = 'deploying';
-      await expect(deploy(options)).rejects.toThrow('timed out');
+      await expect(deploy(options)).rejects.toThrow(
+        `Deployment timed out after 20 seconds; ci-phase=deployment-poll; app=${appId}; release=release-1; deployment=deployment-1. Studio may still complete this deployment; inspect it before retrying (no automatic rollback).`,
+      );
       expect(
         options.cli.mock.calls.filter(([args]) => args[1] === '--app'),
       ).toHaveLength(1);
       expect(options.health).not.toHaveBeenCalled();
+    });
+
+    it('verifies a deployment that takes longer than the former ten-minute limit', async () => {
+      const { deployment, options } = scenario();
+      const cli = options.cli.getMockImplementation()!;
+      options.cli.mockImplementation(async (args) => {
+        if (args[0] === 'deploy' && args[1] === 'get')
+          return {
+            ...deployment,
+            status: options.now() < 12 * 60_000 ? 'deploying' : 'succeeded',
+          };
+        return cli(args);
+      });
+      await expect(deploy({ ...options, timeout: undefined })).resolves.toBe(
+        'succeeded',
+      );
+      expect(options.now()).toBe(12 * 60_000);
+      expect(options.health).toHaveBeenCalledOnce();
+      expect(options.log).toHaveBeenCalledTimes(12);
+      expect(options.log).toHaveBeenLastCalledWith(
+        expect.stringContaining('elapsed=660s; budget=1800s;'),
+      );
+      expect(
+        options.cli.mock.calls.filter(([args]) => args[1] === '--app'),
+      ).toHaveLength(1);
+    });
+
+    it('stops waiting after thirty minutes by default without reporting success', async () => {
+      const { deployment, options } = scenario();
+      deployment.status = 'queued';
+      await expect(deploy({ ...options, timeout: undefined })).rejects.toThrow(
+        'Deployment timed out after 1800 seconds',
+      );
+      expect(options.now()).toBe(30 * 60_000);
+      expect(options.log).toHaveBeenCalledTimes(30);
+      expect(options.health).not.toHaveBeenCalled();
+      expect(
+        options.cli.mock.calls.filter(([args]) => args[1] === '--app'),
+      ).toHaveLength(1);
     });
 
     it('does not accept an older healthy release as success', async () => {
@@ -527,6 +569,9 @@ describe('Studio demo dispatch boundary', () => {
 describe('Studio preflight and health identity', () => {
   it.each([
     ['nocoreach', 'push', 'refs/heads/main', 0],
+    ['reach', 'push', 'refs/heads/main', 1],
+    ['reach', 'workflow_dispatch', 'refs/heads/main', 1],
+    ['reach', 'workflow_dispatch', 'refs/heads/feature', 1],
     ['nocoreach-demo', 'workflow_dispatch', 'refs/heads/main', 0],
     ['nocoreach-demo', 'push', 'refs/heads/main', 1],
     ['nocoreach-demo', 'workflow_dispatch', 'refs/heads/demo/editorial', 0],

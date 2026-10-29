@@ -48,7 +48,7 @@ const PAGE_SIZES = [25, 50, 100] as const;
 const DAY = 86400000;
 const num = (v: number) => formatCount(v);
 const pct = (v: number) => `${Math.round(v * 100)}%`;
-const dateOf = (v?: string | null) => formatDate(v?.slice(0, 10));
+const dateOf = (v?: string | null) => formatDate(v);
 const pathOf = (u: string) => { try { const x = new URL(u); return x.pathname + x.search || "/"; } catch { return u; } };
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 
@@ -339,6 +339,6 @@ const List = ({ title, items, empty }: { title: string; items: string[]; empty: 
 // 交给 Agent for the ticked pages: one task, its brief built from what Google says about them, started with 优化页面.
 function HandOff({ projectId, rows, onClose }: { projectId: number; rows: IndexRow[]; onClose: () => void }) {
   const [result, setResult] = useState<HandOffResult>();
-  const draft: TaskDraft = useMemo(() => indexDraft(rows.map((r) => ({ url: r.url, status: STATUS[r.status].label(), reason: r.error ?? (r.status === "unchecked" ? null : coverageName(r.coverageState)), lastCrawl: r.lastCrawlTime ? r.lastCrawlTime.slice(0, 10) : null, canonicalMismatch: Boolean(r.canonicalMismatch), rich: (r.rich ?? []).filter((t) => t.errors + t.warnings).map((t) => richProblem(t.type, t.errors, t.warnings)) }))), [rows]);
+  const draft: TaskDraft = useMemo(() => indexDraft(rows.map((r) => ({ url: r.url, status: STATUS[r.status].label(), reason: r.error ?? (r.status === "unchecked" ? null : coverageName(r.coverageState)), lastCrawl: r.lastCrawlTime ? formatDate(r.lastCrawlTime) : null, canonicalMismatch: Boolean(r.canonicalMismatch), rich: (r.rich ?? []).filter((t) => t.errors + t.warnings).map((t) => richProblem(t.type, t.errors, t.warnings)) }))), [rows]);
   return <><HandOffNotice result={result} />{result ? null : <DraftHandOffDialog projectId={projectId} draft={draft} playbookId="optimize-page" page={rows.length === 1 ? rows[0].url : undefined} description={$t('searchIndex.handOffDescription')} onClose={onClose} onDone={setResult} />}</>;
 }

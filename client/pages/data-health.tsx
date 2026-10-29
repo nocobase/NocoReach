@@ -4,6 +4,7 @@ import {useBusinessAccess} from '#hooks/use-business-access';
 import {Link,useNavigate} from 'react-router';
 import {useCan} from '@nocobase/app-plugin-authorization/client';
 import {timeZoneName} from '#lib/time-zone-name';
+import {dailyScheduleTime} from '#lib/schedule-time';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {Button} from '#components/ui/button';
 import {confirmAction} from '#components/reach/confirm';
@@ -74,7 +75,10 @@ export const getCadenceText = (): Record<NonNullable<HealthItem['cadence']>,stri
 // and link there for whoever may open that page.
 function ScheduleNote({schedule}:{schedule:NonNullable<HealthItem['schedule']>}){
  const {can}=useCan({resource:{type:'page',id:'scheduler.schedules'},action:'access'});
- return <span className='nr-block nr-footnote'>{$t('dataHealth.dailyAnalysisAt',{0:schedule.time,1:timeZoneName(schedule.timezone,getCurrentLocale())})}{can?<> · <Link className='nr-link-quiet' to='/schedules'>{$t('dataHealth.changeTime')}</Link></>:null}</span>;
+ const [hour,minute]=schedule.time.split(':');
+ const time=dailyScheduleTime({cron:`${minute} ${hour} * * *`,timezone:schedule.timezone});
+ if(!time)return null;
+ return <span className='nr-block nr-footnote'>{$t('dataHealth.dailyAnalysisAt',{0:time,1:timeZoneName(Intl.DateTimeFormat().resolvedOptions().timeZone,getCurrentLocale())})}{can?<> · <Link className='nr-link-quiet' to='/schedules'>{$t('dataHealth.changeTime')}</Link></>:null}</span>;
 }
 // Each row checks its own retry action, as every other control does, and reports it, so Retry all counts only the rows
 // this person may retry.

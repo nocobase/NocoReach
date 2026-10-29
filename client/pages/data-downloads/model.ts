@@ -1,6 +1,6 @@
 import { $t } from "#i18n";
 import type { Tone } from "#components/reach/tag";
-import { formatCount, formatDate, formatPercent } from '#lib/format';
+import { formatCount, formatDate, formatPercent, localDateKey } from '#lib/format';
 // 下载量: what server/nocoreach/downloads-view.ts answers, and how its names and numbers read.
 
 export type Registry = "npm" | "pypi" | "docker" | "github";
@@ -43,11 +43,12 @@ export const num = (v: number | null | undefined, digits = 0) => formatCount(v, 
 export const pct = (v: number | null | undefined) => formatPercent(v);
 export const change = (now: number | null | undefined, before: number | null | undefined) => (now == null || before == null || !before ? null : (now - before) / before);
 export const bytes = (b: number | null | undefined) => (b == null ? "—" : b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : b >= 1e3 ? `${(b / 1e3).toFixed(1)} KB` : `${b} B`);
-export const dateOf = (t: string | null | undefined) => formatDate(t && t.length > 10 ? t.slice(0, 10) : t);
-// Days before the day after the window's end (the business clock's today), as 3 天前 / 今天.
+export const dateOf = (t: string | null | undefined) => formatDate(t);
+// Compare browser-local publication days with the selected calendar window's end.
 export const ago = (t: string | null | undefined, end: string | undefined) => {
-  if (!t || !end) return "";
-  const n = Math.floor((Date.parse(`${end}T00:00:00Z`) + 86_400_000 - Date.parse(t)) / 86_400_000);
+  const day = localDateKey(t);
+  if (!day || !end) return "";
+  const n = Math.round((Date.parse(end) - Date.parse(day)) / 86_400_000);
   return n <= 0 ? $t('dataDownloads.today') : $t('dataDownloads.daysAgo', { 0: n });
 };
 export const otherName = (name: string) => (name === "*other" ? $t('dataDownloads.channelOther') : name);

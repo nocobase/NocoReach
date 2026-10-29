@@ -2,7 +2,7 @@ import { ACME_PAGES } from '../../acme-content.js';
 import { t, type Site } from './types.js';
 
 export const MAIN_SITE: Site = {
-  name: 'ACME',
+  name: 'Acme',
   domain: 'acme.example',
   tagline: t(
     '让任务、排期与团队协作清晰可见',

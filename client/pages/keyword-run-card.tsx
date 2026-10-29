@@ -201,11 +201,14 @@ export function KeywordRunCard({
     >
       <div className='flex flex-wrap items-center gap-2'>
         <h3 className='font-medium'>
-          {p.kind === 'dig'
-            ? $t('keywordSuggestions.digTab', {
-                0: p.mergesInto?.name ?? p.name ?? p.direction ?? '',
-              })
-            : $t('keywordRun.findAgain')}
+          {/* A dig is titled by its group's name alone, as its tab reads; the direction shows on hover. */}
+          {p.kind === 'dig' ? (
+            <span title={p.direction ?? undefined}>
+              {p.mergesInto?.name ?? p.name ?? $t('keywordRun.newGroup')}
+            </span>
+          ) : (
+            $t('keywordRun.findAgain')
+          )}
         </h3>
         <Tag tone='grey'>{$t(marketLabel(p.market))}</Tag>
         {state === 'done' ? (

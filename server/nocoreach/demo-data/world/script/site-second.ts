@@ -3,7 +3,7 @@ import { t, type Site } from './types.js';
 
 /** The CRM project has an established product site and an active editorial calendar. */
 export const SECOND_SITE: Site = {
-  name: 'ACME CRM',
+  name: 'Acme CRM',
   domain: 'crm.acme.example',
   tagline: t(
     '给中小销售团队的开源 CRM',
@@ -15,12 +15,12 @@ export const SECOND_SITE: Site = {
     {
       path: '/',
       title: t(
-        'ACME CRM：开源、可私有部署的 CRM',
-        'ACME CRM: an open-source CRM you can self-host',
+        'Acme CRM：开源、可私有部署的 CRM',
+        'Acme CRM: an open-source CRM you can self-host',
       ),
       description: t(
-        'ACME CRM 是 ACME 虚构品牌旗下的独立销售协作产品：客户、商机、报价和跟进记录一站管理，可以私有部署，并按团队的销售流程自由调整字段和阶段。',
-        'A separate sales collaboration product under the fictional ACME brand, bringing accounts, deals, quotes and activities together.',
+        'Acme CRM 是 Acme 虚构品牌旗下的独立销售协作产品：客户、商机、报价和跟进记录一站管理，可以私有部署，并按团队的销售流程自由调整字段和阶段。',
+        'A separate sales collaboration product under the fictional Acme brand, bringing accounts, deals, quotes and activities together.',
       ),
       sections: [
         [
@@ -48,7 +48,7 @@ export const SECOND_SITE: Site = {
       changes: [{ kind: 'step', at: 14, to: 0.82 }],
       title: t('价格', 'Pricing'),
       description: t(
-        'ACME CRM 开源版免费，包含全部核心功能，由团队自行部署和维护；托管版按席位计费，提供备份和升级服务，具体价格以销售报价为准。',
+        'Acme CRM 开源版免费，包含全部核心功能，由团队自行部署和维护；托管版按席位计费，提供备份和升级服务，具体价格以销售报价为准。',
         'The open-source edition is free; hosted plans are per seat, priced in a quote.',
       ),
       sections: [
@@ -128,8 +128,8 @@ export const SECOND_SITE: Site = {
       path: '/docs/quick-start',
       title: t('快速开始', 'Quick start'),
       description: t(
-        '十分钟开始使用 ACME CRM：下载 docker-compose.yml 并修改密码，启动后用 Excel 模板导入客户，再邀请团队成员并分配销售和主管角色。',
-        'Deploy ACME CRM with Docker, import accounts and invite your team.',
+        '十分钟开始使用 Acme CRM：下载 docker-compose.yml 并修改密码，启动后用 Excel 模板导入客户，再邀请团队成员并分配销售和主管角色。',
+        'Deploy Acme CRM with Docker, import accounts and invite your team.',
       ),
       sections: [
         [
@@ -245,17 +245,17 @@ export const SECOND_SITE: Site = {
     },
     {
       path: '/compare/example-sales',
-      title: t('ACME CRM 与 Example Sales 对比', 'ACME CRM vs Example Sales'),
+      title: t('Acme CRM 与 Example Sales 对比', 'Acme CRM vs Example Sales'),
       description: t(
-        'ACME CRM 与 Example Sales 的对比：私有部署与云端托管、字段和页面的定制能力、按席位计算的长期成本，以及哪类销售团队更适合哪一种。',
-        'How ACME CRM and Example Sales differ in self-hosting, customizing fields and pages, and long-term per-seat cost.',
+        'Acme CRM 与 Example Sales 的对比：私有部署与云端托管、字段和页面的定制能力、按席位计算的长期成本，以及哪类销售团队更适合哪一种。',
+        'How Acme CRM and Example Sales differ in self-hosting, customizing fields and pages, and long-term per-seat cost.',
       ),
       sections: [
         [
           t('定制', 'Customization'),
           t(
-            'ACME CRM 的字段、阶段和页面都可以由管理员直接修改。',
-            'Admins change ACME CRM fields, stages and pages directly.',
+            'Acme CRM 的字段、阶段和页面都可以由管理员直接修改。',
+            'Admins change Acme CRM fields, stages and pages directly.',
           ),
         ],
       ],
