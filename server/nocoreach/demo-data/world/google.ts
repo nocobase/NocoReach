@@ -30,7 +30,7 @@ type Fact = {
 };
 
 function aggregate(
-  rows: Fact[],
+  rows: Iterable<Fact>,
   dimensions: string[],
   metrics: string[],
 ): Fact[] {
@@ -483,31 +483,33 @@ function ga4Report(world: World, b: Json): Json {
     const start = ga4Day(world, range.startDate ?? '28daysAgo');
     const end = ga4Day(world, range.endDate ?? 'yesterday');
     const days = daysBetween(start, end < today ? end : today);
-    const facts: Fact[] = [];
-    for (const date of days) {
-      const daily = world.memo(`ga4-facts:${date}`, () =>
-        world
-          .visitsOn(date)
-          .map((visit, i) => visitFact(world, date, visit, i)),
-      );
-      daily.forEach((fact, i) => {
-        let split: Fact[] = [fact];
-        if (fields.has('hour') || fields.has('dateHour'))
-          split = split.flatMap((f) =>
-            byHour(
-              world,
-              f,
-              date,
-              date === today ? hour : 24,
-              `h:${date}:${i}`,
-            ),
-          );
-        if (fields.has('eventName')) split = split.flatMap(events);
-        for (const f of split) if (keep(f)) facts.push(f);
-      });
+    // Consume one visit at a time; hour/event expansion never accumulates across days.
+    function* facts(): Generator<Fact> {
+      for (const date of days) {
+        const visits = world.visitsOn(date);
+        for (const [i, visit] of visits.entries()) {
+          const fact = visitFact(world, date, visit, i);
+          const hourly =
+            fields.has('hour') || fields.has('dateHour')
+              ? byHour(
+                  world,
+                  fact,
+                  date,
+                  date === today ? hour : 24,
+                  `h:${date}:${i}`,
+                )
+              : [fact];
+          for (const hourFact of hourly) {
+            const expanded = fields.has('eventName')
+              ? events(hourFact)
+              : [hourFact];
+            for (const row of expanded) if (keep(row)) yield row;
+          }
+        }
+      }
     }
     const name = text(range.name) || `date_range_${r}`;
-    return aggregate(facts, dim, wanted).map((row) => ({
+    return aggregate(facts(), dim, wanted).map((row) => ({
       dimensions: named
         ? { ...row.dimensions, dateRange: name }
         : row.dimensions,

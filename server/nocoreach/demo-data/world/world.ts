@@ -94,7 +94,10 @@ export function split(
   return out;
 }
 
-const CACHE_LIMIT = 4_000;
+// Visit objects contain only nine scalar fields. Keep at most one day and 20,000 buckets
+// (roughly a few MiB), regardless of the history requested. Larger days are computed but not retained.
+const VISIT_CACHE_BUCKETS = 20_000;
+const WORLD_CACHE_LIMIT = 8;
 
 /**
  * The demo world as one project sees it at one moment: its site, searches, visitors and communities, in the language
@@ -348,8 +351,8 @@ export class World {
         },
       );
     });
-    if (this.visits.size > CACHE_LIMIT) this.visits.clear();
-    this.visits.set(date, out);
+    this.visits.clear();
+    if (out.length <= VISIT_CACHE_BUCKETS) this.visits.set(date, out);
     return out;
   }
 
@@ -368,15 +371,26 @@ export class World {
 
 const worlds = new Map<string, World>();
 
-/** One world per project, language and hour: requests within the hour share computed days. */
+/** Release every cached edition of a retired or replaced project. */
+export function invalidateWorlds(projectId: string): void {
+  for (const [key, world] of worlds)
+    if (String(world.project.id) === String(projectId)) worlds.delete(key);
+}
+
+/** One current world per project; an LRU bound also covers abandoned projects. */
 export function worldFor(project: WorldProject, now: number): World {
   const key = `${project.id}:${project.domain}:${project.language}:${Math.floor(now / 3_600_000)}`;
   let world = worlds.get(key);
   if (!world) {
-    if (worlds.size > 16) worlds.clear();
+    invalidateWorlds(project.id);
+    if (worlds.size >= WORLD_CACHE_LIMIT)
+      worlds.delete(worlds.keys().next().value!);
     world = new World(project, now);
     worlds.set(key, world);
   }
+  // Refresh insertion order on a hit without flushing unrelated projects.
+  worlds.delete(key);
+  worlds.set(key, world);
   world.now = now;
   return world;
 }
