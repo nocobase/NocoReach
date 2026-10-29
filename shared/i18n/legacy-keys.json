@@ -991,7 +991,6 @@
   "值得做 {0} · 先观察 {1} · 不用做 {2}": "messages.worthDoingWatchSkip",
   "做了什么、何时发布": "messages.whatDoneWhenPublished",
   "做到“{0}”时停下": "taskExecution.stopped",
-  "做到一半停下的任务不能接着做；要做的话，从机会页重新交给 Agent。": "taskDetail.taskStoppedHalfwayCannotContinue",
   "做法": "common.playbook",
   "做法#title": "playbooks.title",
   "做法不存在，请刷新后重新选择": "playbook.playbookNotExistRefreshPick",
