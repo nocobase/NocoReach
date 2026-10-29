@@ -266,30 +266,30 @@ const MARKETS = {
   'zh-CN': {
     locationCode: 2702,
     language: 'zh-CN',
-    seeds: ['项目管理', '团队协作', 'ACME'],
+    seeds: ['项目管理', '团队协作', 'Acme'],
     tracked: [
       '项目管理软件',
       'Excel 导入任务',
       '项目看板',
       '团队排期',
-      'ACME vs Nimbus',
+      'Acme vs Nimbus',
       'acme',
     ],
-    question: 'ACME 如何管理任务、排期和客户协作？',
+    question: 'Acme 如何管理任务、排期和客户协作？',
   },
   'en-US': {
     locationCode: 2840,
     language: 'en',
-    seeds: ['project management', 'team collaboration', 'ACME'],
+    seeds: ['project management', 'team collaboration', 'Acme'],
     tracked: [
       'project management software',
       'import tasks from Excel',
       'kanban boards',
       'team scheduling',
-      'ACME vs Nimbus',
+      'Acme vs Nimbus',
       'acme',
     ],
-    question: 'How does ACME manage tasks, schedules and client collaboration?',
+    question: 'How does Acme manage tasks, schedules and client collaboration?',
   },
 } as const;
 
@@ -314,8 +314,8 @@ async function connectSources(
       : {
           ...MARKETS[en ? 'en-US' : 'zh-CN'],
           seeds: en
-            ? ['sales pipeline', 'crm import', 'ACME CRM']
-            : ['销售漏斗', 'CRM 导入', 'ACME CRM'],
+            ? ['sales pipeline', 'crm import', 'Acme CRM']
+            : ['销售漏斗', 'CRM 导入', 'Acme CRM'],
           tracked: en
             ? [
                 'acme crm',
@@ -334,8 +334,8 @@ async function connectSources(
                 '报价单 审批',
               ],
           question: en
-            ? 'How does ACME CRM handle account imports and sales handovers?'
-            : 'ACME CRM 如何处理客户导入与销售交接？',
+            ? 'How does Acme CRM handle account imports and sales handovers?'
+            : 'Acme CRM 如何处理客户导入与销售交接？',
         };
   const phases: [string, () => Promise<unknown>][] = [
     [
@@ -772,7 +772,7 @@ function storyTask(
         },
       ],
     };
-    work.stageIndex = story.state === 'doing' ? 0 : 1;
+    work.stageIndex = 1;
   }
   work.history = comments.map((comment, i) => ({
     at: at(age - 2, i + 1),

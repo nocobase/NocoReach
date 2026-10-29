@@ -118,7 +118,7 @@ const ZH_CN: DemoContent = {
     '根据演示页面的日明细计算，不代表真实发布效果，不据此推断因果。',
   projects: {
     main: {
-      name: 'ACME',
+      name: 'Acme',
       domain: 'acme.example',
       description:
         '虚构的项目管理软件，帮助团队从 Excel 迁移任务，管理看板、排期、里程碑与客户协作；所有指标与反馈均为演示。',
@@ -126,7 +126,7 @@ const ZH_CN: DemoContent = {
       market: '全球',
     },
     second: {
-      name: 'ACME CRM',
+      name: 'Acme CRM',
       domain: 'crm.acme.example',
       description:
         '虚构的销售协作产品，围绕客户导入、线索分配、商机跟进与续约持续运营；所有人物与经营数据均为演示。',

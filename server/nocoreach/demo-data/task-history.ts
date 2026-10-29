@@ -21,7 +21,8 @@ export function taskHistory(
   const runs: Run[] = [];
   const artifacts = work.results.filter(Boolean) as Artifact[];
   const reviews: Record<string, unknown>[] = [];
-  if (story.state === 'todo') return { runs, artifacts, reviews };
+  if (story.state === 'todo' || !artifacts.length)
+    return { runs, artifacts, reviews };
   const en = context.language === 'en-US';
   const words = (zh: string, english: string) => (en ? english : zh);
   const owner = work.humanOwnerId || context.actorId;
@@ -32,16 +33,8 @@ export function taskHistory(
     ? Date.parse(final.createdAt)
     : Date.parse(createdAt) + 24 * HOUR;
   const at = (offset: number) => new Date(finish + offset * HOUR).toISOString();
-  const retry =
-    ['acme-dependencies', 'crm-import'].includes(story.key) ||
-    (Boolean(story.age) && context.clock.sample(`retry:${story.key}`) > 0.55);
   const revised = Boolean(story.previousDraft);
   const study = story.caseStudy;
-  const failure =
-    words(
-      '核对尚未完成，已保留工作文档与待确认项；需要负责人补充：',
-      'Verification is incomplete. The working document and open items are saved; the owner needs to resolve: ',
-    ) + study.review;
   const firstComment = (work.history as { action: string; at: string }[]).find(
     (entry) => entry.action === 'comment',
   );
@@ -65,9 +58,8 @@ export function taskHistory(
       note: work.flow?.name,
     },
   );
-  const run = (end: number, artifact?: Artifact, previous?: Artifact) => {
+  const run = (end: number, artifact: Artifact, previous?: Artifact) => {
     const id = randomUUID();
-    const failed = !artifact;
     const duration =
       (72 +
         Math.round(
@@ -80,9 +72,7 @@ export function taskHistory(
         1800 + context.clock.sample(`in:${story.key}:${runs.length}`) * 17500,
       ),
       outputTokens: Math.round(
-        (failed ? 90 : 850) +
-          context.clock.sample(`out:${story.key}:${runs.length}`) *
-            (failed ? 400 : 3100),
+        850 + context.clock.sample(`out:${story.key}:${runs.length}`) * 3100,
       ),
     };
     const event = (
@@ -143,36 +133,32 @@ export function taskHistory(
         output: {
           checks: study.checks,
           limitation: study.limitation,
-          decision: failed ? 'needs-material' : 'ready-for-human-review',
+          decision: 'ready-for-human-review',
         },
       }),
       event(0.6, {
         type: 'toolUse',
-        tool: failed ? 'task data' : 'task draft',
-        input: failed
-          ? { section: 'source-evidence', page: work.page?.url }
-          : { artifactId: artifact.id, content: artifact.content },
+        tool: 'task draft',
+        input: { artifactId: artifact.id, content: artifact.content },
       }),
       event(0.85, {
         type: 'toolResult',
-        tool: failed ? 'task data' : 'task draft',
-        output: failed
-          ? { error: failure }
-          : { saved: true, artifactId: artifact.id, version: artifact.version },
+        tool: 'task draft',
+        output: {
+          saved: true,
+          artifactId: artifact.id,
+          version: artifact.version,
+        },
       }),
       event(0.94, {
         type: 'text',
-        content: failed
-          ? failure
-          : words(
-              '稿件已保存，等待人工核对。',
-              'Draft saved for human review.',
-            ) +
-            '\n\n' +
-            artifact.content,
+        content:
+          words('稿件已保存，等待人工核对。', 'Draft saved for human review.') +
+          '\n\n' +
+          artifact.content,
       }),
       event(0.98, { type: 'usage', meta: usage }),
-      event(1, { type: 'status', content: failed ? 'failed' : 'completed' }),
+      event(1, { type: 'status', content: 'completed' }),
     ].map((e, i) => ({ ...e, seq: i + 1 }));
     const record: Run = {
       id,
@@ -186,7 +172,7 @@ export function taskHistory(
       actor: owner,
       inputVersion: 1,
       capabilitySnapshot: ['repo.read'],
-      status: failed ? 'failed' : 'succeeded',
+      status: 'succeeded',
       createdAt: at(start - 0.02),
       startedAt: at(start),
       endedAt: at(end),
@@ -204,9 +190,7 @@ export function taskHistory(
       agentName: 'NocoReach Demo Agent',
       transcript,
       usage,
-      ...(failed
-        ? { error: 'agent_failed', errorDetail: failure }
-        : { artifactId: artifact.id }),
+      artifactId: artifact.id,
     };
     if (artifact) {
       artifact.createdBy = 'agent';
@@ -240,26 +224,15 @@ export function taskHistory(
       {
         at: record.endedAt!,
         actor: 'system',
-        action: failed ? 'runFailed' : 'runSucceeded',
+        action: 'runSucceeded',
         runId: id,
         stageKey: 'draft',
-        ...(artifact ? { artifactId: artifact.id } : { note: failure }),
+        artifactId: artifact.id,
       },
     );
     runs.push(record);
     return record;
   };
-  if (retry) {
-    run(-7);
-    work.history.push({
-      at: at(-5),
-      actor: owner,
-      action: 'comment',
-      comment:
-        words('补充本轮复核资料：', 'Added material for this review: ') +
-        study.evidence,
-    });
-  }
   if (revised && final) {
     const previous: Artifact = {
       ...final,
@@ -334,13 +307,6 @@ export function taskHistory(
       ...(comment ? { comment } : {}),
     });
   }
-  if (!final)
-    work.history.push({
-      at: at(0.3),
-      actor: owner,
-      action: 'comment',
-      comment: failure,
-    });
   if (story.cancelled || story.archived)
     work.history.push({
       at: story.cancelled ? work.cancelledAt! : work.archivedAt!,

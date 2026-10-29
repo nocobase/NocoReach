@@ -14,7 +14,7 @@ type Episode = readonly [
   decision: L,
 ];
 
-const ACME: readonly Episode[] = [
+const Acme: readonly Episode[] = [
   [
     58,
     '/docs/import-excel',
@@ -390,7 +390,7 @@ const CRM: readonly Episode[] = [
 ];
 
 export function historicalStories(main: boolean): EditorialStory[] {
-  return (main ? ACME : CRM).map(
+  return (main ? Acme : CRM).map(
     ([age, path, title, finding, decision], i) => ({
       key: `${main ? 'acme' : 'crm'}-history-${age}`,
       path,
@@ -412,7 +412,7 @@ export function historicalStories(main: boolean): EditorialStory[] {
 }
 
 export function historicalTopics(main: boolean): Forum['topics'][number][] {
-  return (main ? ACME : CRM).map(([age, , title, finding, decision], i) => ({
+  return (main ? Acme : CRM).map(([age, , title, finding, decision], i) => ({
     title,
     category: 2,
     opened: age + 2,
@@ -434,7 +434,7 @@ export function historicalTopics(main: boolean): Forum['topics'][number][] {
 export function historicalReleases(
   main: boolean,
 ): Repository['releases'][number][] {
-  return (main ? ACME : CRM)
+  return (main ? Acme : CRM)
     .filter((_, i) => i % 2 === 1)
     .map(([age, , title, , decision], i) => ({
       age: age - 8,

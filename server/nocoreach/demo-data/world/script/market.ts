@@ -33,7 +33,7 @@ export const COMPETITORS: Competitor[] = [
       ],
       [
         '/compare/acme',
-        t('Nimbus 与 ACME', 'Nimbus and ACME'),
+        t('Nimbus 与 Acme', 'Nimbus and Acme'),
         t(
           '以相同的任务迁移和交付场景评估两种示例方案。',
           'Evaluate both sample options with the same migration and delivery scenarios.',

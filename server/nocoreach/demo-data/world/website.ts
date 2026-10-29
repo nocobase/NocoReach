@@ -103,8 +103,8 @@ function standing(world: World, page: Page, title: string): string {
   const site = world.site.name;
   const version = world.main
     ? world.lang === 'zh'
-      ? 'ACME 2.4 及以上版本'
-      : 'ACME 2.4 and later'
+      ? 'Acme 2.4 及以上版本'
+      : 'Acme 2.4 and later'
     : world.lang === 'zh'
       ? `${site} 最新版本`
       : `the latest ${site}`;
@@ -150,11 +150,11 @@ function standing(world: World, page: Page, title: string): string {
       zh ? '适合谁' : 'Who it is for',
       world.main
         ? zh
-          ? 'ACME 适合需要清楚分工、跟踪交付和邀请客户协作的项目团队。任务负责人、截止日期、阻塞与验收标准放在一起。'
-          : 'ACME supports project teams coordinating owners, deadlines, blockers and acceptance with clients.'
+          ? 'Acme 适合需要清楚分工、跟踪交付和邀请客户协作的项目团队。任务负责人、截止日期、阻塞与验收标准放在一起。'
+          : 'Acme supports project teams coordinating owners, deadlines, blockers and acceptance with clients.'
         : zh
-          ? 'ACME CRM 适合需要整理客户、跟进商机和准备续约的销售团队。销售、主管与运营共享下一步和明确的统计口径。'
-          : 'ACME CRM supports sales teams organizing accounts, deals and renewals with shared next actions and clear reporting definitions.',
+          ? 'Acme CRM 适合需要整理客户、跟进商机和准备续约的销售团队。销售、主管与运营共享下一步和明确的统计口径。'
+          : 'Acme CRM supports sales teams organizing accounts, deals and renewals with shared next actions and clear reporting definitions.',
     ) +
     block(
       zh ? '下一步' : 'Next steps',

@@ -3,8 +3,8 @@ import { crmDocuments, crmOpportunities } from './crm-content.js';
 import type { DemoContent } from './content.js';
 
 /**
- * The English demo: the same fictional ACME editorial team as the Chinese one, with English names. Nothing here
- * describes real ACME customers, traffic or results.
+ * The English demo: the same fictional Acme editorial team as the Chinese one, with English names. Nothing here
+ * describes real Acme customers, traffic or results.
  */
 export const EN_US: DemoContent = {
   notice:
@@ -32,7 +32,7 @@ export const EN_US: DemoContent = {
     'Calculated from the demo page’s daily records. This is a simulated observation, not evidence of a real release or a causal effect.',
   projects: {
     main: {
-      name: 'ACME',
+      name: 'Acme',
       domain: 'acme.example',
       description:
         'A fictional project management product for tasks, boards, schedules, milestones and client collaboration. Every metric and discussion is demo data.',
@@ -41,7 +41,7 @@ export const EN_US: DemoContent = {
       market: 'Global',
     },
     second: {
-      name: 'ACME CRM',
+      name: 'Acme CRM',
       domain: 'crm.acme.example',
       description:
         'A fictional sales collaboration product with active work on imports, lead routing, deals and renewals. All people and business results are demo data.',

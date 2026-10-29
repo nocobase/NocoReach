@@ -52,7 +52,7 @@ export async function demoProjectsOf(
 }
 
 /**
- * NocoReach's demo: the ACME marketing team's two projects with their connected sources, tasks, results,
+ * NocoReach's demo: the Acme marketing team's two projects with their connected sources, tasks, results,
  * opportunities and knowledge, and five people with different roles. Sources are collected through the production
  * flows from the in-process demo world, so the pages and their refresh actions work and nothing leaves the process.
  */

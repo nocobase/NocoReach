@@ -24,7 +24,7 @@ afterEach(async () => {
 
 function setup() {
   const markers = new Map([
-    ['1', { id: '1', name: 'ACME', domain: 'acme.example' }],
+    ['1', { id: '1', name: 'Acme', domain: 'acme.example' }],
   ]);
   const projects = new DemoProjects(async (id) => markers.get(id));
   const network = new OutboundNetwork(
@@ -59,7 +59,7 @@ it('resolves demo public pages without performing DNS', async () => {
   const result = await network.run('1', () =>
     download('https://acme.example/', 0, { network, connection: 'site' }),
   );
-  expect(result.text).toContain('ACME');
+  expect(result.text).toContain('Acme');
   expect(lookup).not.toHaveBeenCalled();
   expect(liveFetch).not.toHaveBeenCalled();
 });
