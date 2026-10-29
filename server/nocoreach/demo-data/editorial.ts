@@ -103,9 +103,7 @@ export function localizeStories(
         ([person, text]) =>
           `${people[person].name} · ${people[person].title}: ${text[lang]}`,
       ),
-      ...(draft || story.state === 'done' || story.state === 'review'
-        ? { draft: delivery }
-        : {}),
+      ...(draft || story.state !== 'todo' ? { draft: delivery } : {}),
     };
   });
 }

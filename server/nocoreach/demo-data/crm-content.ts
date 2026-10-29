@@ -646,8 +646,8 @@ const DOCUMENTS: readonly [string, L, L][] = [
     'positioning',
     t('产品定位与适用边界', 'Positioning and scope'),
     t(
-      'ACME CRM 是虚构的销售协作产品，面向五到五十人的团队。核心是客户、联系人、商机与跟进；演示中的价格、指标和用户反馈均不代表真实产品。自建部署需要团队承担维护责任，不承诺一键迁移所有历史系统。',
-      'ACME CRM is a fictional sales collaboration product for teams of five to fifty. It centers on accounts, contacts, deals and follow-ups. Prices, metrics and feedback are synthetic. Self-hosting requires maintenance; no universal one-click migration is promised.',
+      'Acme CRM 是虚构的销售协作产品，面向五到五十人的团队。核心是客户、联系人、商机与跟进；演示中的价格、指标和用户反馈均不代表真实产品。自建部署需要团队承担维护责任，不承诺一键迁移所有历史系统。',
+      'Acme CRM is a fictional sales collaboration product for teams of five to fifty. It centers on accounts, contacts, deals and follow-ups. Prices, metrics and feedback are synthetic. Self-hosting requires maintenance; no universal one-click migration is promised.',
     ),
   ],
   [

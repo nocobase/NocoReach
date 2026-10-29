@@ -170,7 +170,7 @@ function business(operation: string, input: Value, en: boolean): Value | null {
             'Excel task import',
             'client collaboration',
             'project templates',
-            'ACME vs Nimbus',
+            'Acme vs Nimbus',
           ];
       return {
         seeds: seeds.map((seed) => ({

@@ -97,8 +97,8 @@ export const ACME_STORIES: readonly EditorialStory[] = [
     path: '/compare/nimbus',
     state: 'todo',
     title: {
-      zh: '「ACME vs Nimbus」有人搜索，补齐项目协作对比',
-      en: 'Complete the ACME vs Nimbus project collaboration comparison',
+      zh: '「Acme vs Nimbus」有人搜索，补齐项目协作对比',
+      en: 'Complete the Acme vs Nimbus project collaboration comparison',
     },
     brief: {
       zh: '对比关键词有持续搜索，现有页面只有简短介绍。用同一份跨团队交付清单比较导入、访客、依赖与导出；Nimbus 也是虚构样例。',
@@ -455,7 +455,7 @@ export const ACME_STORIES: readonly EditorialStory[] = [
     ],
     outcome: 'up',
     draft: {
-      zh: '# 第一次用 ACME，先建项目还是先邀请所有人？\n\n把首次上手缩成建项目、建三条任务、邀请同事、完成一次交接。避免一开始要求配置完整字段体系。\n\n## 操作与核对\n\n先用两人小组走通，再邀请整个部门。\n\n验收包含同事接手，不只是发送邀请。\n\n样例中的团队、记录和结果均为虚构，发布前由编辑核对产品适用范围。',
+      zh: '# 第一次用 Acme，先建项目还是先邀请所有人？\n\n把首次上手缩成建项目、建三条任务、邀请同事、完成一次交接。避免一开始要求配置完整字段体系。\n\n## 操作与核对\n\n先用两人小组走通，再邀请整个部门。\n\n验收包含同事接手，不只是发送邀请。\n\n样例中的团队、记录和结果均为虚构，发布前由编辑核对产品适用范围。',
       en: '# Should we create a project or invite everyone first?\n\nStart with a project, three tasks, a teammate invitation and one accepted handoff, rather than configuring every field first.\n\n## Steps and checks\n\nRehearse with two people before inviting the whole department.\n\nAcceptance includes the teammate taking over, not just an invitation.\n\nTeams, records and outcomes are fictional. Editorial review must confirm product scope before publication.',
     },
   },
@@ -915,8 +915,8 @@ export const ACME_DISCUSSIONS = [
   },
   {
     title: {
-      zh: '找项目管理软件，ACME 适合十人的交付团队吗？',
-      en: 'Is ACME suitable for a ten-person delivery team?',
+      zh: '找项目管理软件，Acme 适合十人的交付团队吗？',
+      en: 'Is Acme suitable for a ten-person delivery team?',
     },
     text: {
       zh: '样例查询平均排名从 11 升到 6，点击率仍约 1.2%。标题优先说明任务、排期和团队协作；将搜索意图与首屏承诺逐项核对。',
@@ -935,8 +935,8 @@ export const ACME_DISCUSSIONS = [
   },
   {
     title: {
-      zh: '跨团队交付时 ACME 和 Nimbus 怎么比较？',
-      en: 'How should we compare ACME and Nimbus for cross-team delivery?',
+      zh: '跨团队交付时 Acme 和 Nimbus 怎么比较？',
+      en: 'How should we compare Acme and Nimbus for cross-team delivery?',
     },
     text: {
       zh: '对比关键词有持续搜索，现有页面只有简短介绍。用同一份跨团队交付清单比较导入、访客、依赖与导出；Nimbus 也是虚构样例。',
@@ -1035,7 +1035,7 @@ export const ACME_DISCUSSIONS = [
   },
   {
     title: {
-      zh: '第一次用 ACME，先建项目还是先邀请所有人？',
+      zh: '第一次用 Acme，先建项目还是先邀请所有人？',
       en: 'Should we create a project or invite everyone first?',
     },
     text: {
@@ -1189,8 +1189,8 @@ export const ACME_PAGES: readonly Page[] = [
   {
     path: '/',
     title: {
-      zh: 'ACME 项目管理：任务、排期与团队协作',
-      en: 'ACME project management: tasks, schedules and teamwork',
+      zh: 'Acme 项目管理：任务、排期与团队协作',
+      en: 'Acme project management: tasks, schedules and teamwork',
     },
     description: {
       zh: '把计划拆成有负责人和截止日期的任务，用看板协作，用时间线检查依赖，用项目周报同步风险。先邀请一位同事，完成一次明确的任务交接。',
@@ -1277,8 +1277,8 @@ export const ACME_PAGES: readonly Page[] = [
   {
     path: '/compare/nimbus',
     title: {
-      zh: 'ACME 与 Nimbus',
-      en: 'ACME and Nimbus',
+      zh: 'Acme 与 Nimbus',
+      en: 'Acme and Nimbus',
     },
     description: {
       zh: '用同一份项目交付清单评估两个虚构产品：导入现有任务、邀请客户、检查依赖、归档和导出。完整对比内容正在准备中。',
@@ -2008,8 +2008,8 @@ export const ACME_PAGES: readonly Page[] = [
       en: 'Sample client-delivery stories',
     },
     description: {
-      zh: '虚构的 ACME Studio 团队以十二位成员和三位客户访客演示网站交付：先导入任务，再确认里程碑，最后整理验收和复盘。',
-      en: 'The fictional ACME Studio team demonstrates website delivery with twelve members and three client guests: import tasks, confirm milestones, then organize acceptance and review.',
+      zh: '虚构的 Acme Studio 团队以十二位成员和三位客户访客演示网站交付：先导入任务，再确认里程碑，最后整理验收和复盘。',
+      en: 'The fictional Acme Studio team demonstrates website delivery with twelve members and three client guests: import tasks, confirm milestones, then organize acceptance and review.',
     },
     sections: [
       [
@@ -2018,8 +2018,8 @@ export const ACME_PAGES: readonly Page[] = [
           en: 'How it works',
         },
         {
-          zh: '虚构的 ACME Studio 团队以十二位成员和三位客户访客演示网站交付：先导入任务，再确认里程碑，最后整理验收和复盘。',
-          en: 'The fictional ACME Studio team demonstrates website delivery with twelve members and three client guests: import tasks, confirm milestones, then organize acceptance and review.',
+          zh: '虚构的 Acme Studio 团队以十二位成员和三位客户访客演示网站交付：先导入任务，再确认里程碑，最后整理验收和复盘。',
+          en: 'The fictional Acme Studio team demonstrates website delivery with twelve members and three client guests: import tasks, confirm milestones, then organize acceptance and review.',
         },
       ],
     ],
@@ -2032,8 +2032,8 @@ export const ACME_PAGES: readonly Page[] = [
   {
     path: '/changelog',
     title: {
-      zh: 'ACME 更新记录',
-      en: 'ACME release notes',
+      zh: 'Acme 更新记录',
+      en: 'Acme release notes',
     },
     description: {
       zh: '2.4.2 修复重复任务的时区显示；2.4.1 改善 Excel 导入预览；2.4.0 新增客户访客与项目交接检查表。',
@@ -2059,12 +2059,12 @@ export const ACME_PAGES: readonly Page[] = [
   {
     path: '/products/crm',
     title: {
-      zh: 'ACME CRM 销售协作',
-      en: 'ACME CRM sales collaboration',
+      zh: 'Acme CRM 销售协作',
+      en: 'Acme CRM sales collaboration',
     },
     description: {
-      zh: '销售团队使用独立的 ACME CRM 管理客户、商机、报价与续约；项目交付团队使用 ACME 管理任务与里程碑。',
-      en: 'Sales teams use the separate ACME CRM product for accounts, deals, quotes and renewals; delivery teams use ACME for tasks and milestones.',
+      zh: '销售团队使用独立的 Acme CRM 管理客户、商机、报价与续约；项目交付团队使用 Acme 管理任务与里程碑。',
+      en: 'Sales teams use the separate Acme CRM product for accounts, deals, quotes and renewals; delivery teams use Acme for tasks and milestones.',
     },
     sections: [
       [
@@ -2073,8 +2073,8 @@ export const ACME_PAGES: readonly Page[] = [
           en: 'How it works',
         },
         {
-          zh: '销售团队使用独立的 ACME CRM 管理客户、商机、报价与续约；项目交付团队使用 ACME 管理任务与里程碑。',
-          en: 'Sales teams use the separate ACME CRM product for accounts, deals, quotes and renewals; delivery teams use ACME for tasks and milestones.',
+          zh: '销售团队使用独立的 Acme CRM 管理客户、商机、报价与续约；项目交付团队使用 Acme 管理任务与里程碑。',
+          en: 'Sales teams use the separate Acme CRM product for accounts, deals, quotes and renewals; delivery teams use Acme for tasks and milestones.',
         },
       ],
     ],
@@ -2094,8 +2094,8 @@ const DOCUMENTS: readonly [string, string, L, L][] = [
       en: 'Product positioning and scope',
     },
     {
-      zh: 'ACME 是虚构的项目管理产品，面向 5–50 人的项目交付、设计、产品和运营团队。核心是任务、看板、时间线、里程碑、客户访客和团队周报。ACME CRM 是另一独立演示项目，负责客户与商机。',
-      en: 'ACME is a fictional project management product for delivery, design, product and operations teams of 5–50. It centers on tasks, boards, timelines, milestones, client guests and weekly reports. ACME CRM is a separate demo project for accounts and deals.',
+      zh: 'Acme 是虚构的项目管理产品，面向 5–50 人的项目交付、设计、产品和运营团队。核心是任务、看板、时间线、里程碑、客户访客和团队周报。Acme CRM 是另一独立演示项目，负责客户与商机。',
+      en: 'Acme is a fictional project management product for delivery, design, product and operations teams of 5–50. It centers on tasks, boards, timelines, milestones, client guests and weekly reports. Acme CRM is a separate demo project for accounts and deals.',
     },
   ],
   [
@@ -2106,8 +2106,8 @@ const DOCUMENTS: readonly [string, string, L, L][] = [
       en: 'Team roles and daily needs',
     },
     {
-      zh: '项目经理关心依赖与交付承诺；执行者关心下一步和阻塞；客户只需查看获邀内容并确认版本。虚构的 ACME Studio 有十二位成员和三位客户访客，每周交付网站与活动项目。',
-      en: 'Managers care about dependencies and commitments, contributors about next actions and blockers, and clients about invited material and approvals. Fictional ACME Studio has twelve members and three client guests delivering websites and events weekly.',
+      zh: '项目经理关心依赖与交付承诺；执行者关心下一步和阻塞；客户只需查看获邀内容并确认版本。虚构的 Acme Studio 有十二位成员和三位客户访客，每周交付网站与活动项目。',
+      en: 'Managers care about dependencies and commitments, contributors about next actions and blockers, and clients about invited material and approvals. Fictional Acme Studio has twelve members and three client guests delivering websites and events weekly.',
     },
   ],
   [

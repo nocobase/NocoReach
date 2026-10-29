@@ -196,13 +196,13 @@ export const CRM_REPOSITORY: Repository = {
   watchers: 32,
   languages: { TypeScript: 460000, CSS: 64000, JavaScript: 31000 },
   readme: t(
-    '# ACME CRM\n\n虚构演示项目。管理客户、联系人、商机与下一步跟进。先用二十行样例验证导入与权限，再扩展流程。',
-    '# ACME CRM\n\nFictional demo project. Manage accounts, contacts, deals and next actions. Rehearse twenty rows and verify access before expanding workflows.',
+    '# Acme CRM\n\n虚构演示项目。管理客户、联系人、商机与下一步跟进。先用二十行样例验证导入与权限，再扩展流程。',
+    '# Acme CRM\n\nFictional demo project. Manage accounts, contacts, deals and next actions. Rehearse twenty rows and verify access before expanding workflows.',
   ),
 };
 
 export const CRM_FORUM: Forum = {
-  title: t('ACME CRM 社区', 'ACME CRM community'),
+  title: t('Acme CRM 社区', 'Acme CRM community'),
   description: t(
     '虚构销售团队的实施提问与经验交流。',
     'Implementation questions and experience from fictional sales teams.',
@@ -267,8 +267,8 @@ export const CRM_X: SocialPost[] = CRM_STORIES.slice(0, 14).map((s, i) => ({
   at: 2 + i * 9,
   author: i % 3 ? `crm-demo-${(i % 5) + 1}` : '@editor',
   text: t(
-    `ACME CRM 演示笔记：${s.comments[0][1].zh}`,
-    `ACME CRM demo notes: ${s.comments[0][1].en}`,
+    `Acme CRM 演示笔记：${s.comments[0][1].zh}`,
+    `Acme CRM demo notes: ${s.comments[0][1].en}`,
   ),
   likes: 18 + i * 13,
   reposts: 2 + (i % 8),
@@ -279,7 +279,7 @@ export const CRM_X: SocialPost[] = CRM_STORIES.slice(0, 14).map((s, i) => ({
 export const CRM_HN: Story[] = CRM_STORIES.filter((_, i) =>
   [0, 4, 8, 9, 16, 19].includes(i),
 ).map((s, i) => ({
-  title: t(`ACME CRM：${s.title.zh}`, `ACME CRM: ${s.title.en}`),
+  title: t(`Acme CRM：${s.title.zh}`, `Acme CRM: ${s.title.en}`),
   path: s.path,
   author: 'crm-demo-team',
   points: 29 + i * 17,
@@ -297,8 +297,8 @@ export const CRM_REDDIT: Thread[] = CRM_STORIES.slice(0, 10).map((s, i) => ({
 }));
 export const CRM_MEDIA: Media[] = CRM_STORIES.slice(0, 15).map((s, i) => ({
   title: t(
-    `ACME CRM 实操：${QUESTIONS[i].zh}`,
-    `ACME CRM workshop: ${QUESTIONS[i].en}`,
+    `Acme CRM 实操：${QUESTIONS[i].zh}`,
+    `Acme CRM workshop: ${QUESTIONS[i].en}`,
   ),
   description: s.brief,
   age: 2 + i * 3,
@@ -307,15 +307,15 @@ export const CRM_MEDIA: Media[] = CRM_STORIES.slice(0, 15).map((s, i) => ({
   comments: 7 + i * 5,
   duration: 360 + i * 53,
   channel: [
-    'ACME CRM Demo',
+    'Acme CRM Demo',
     'Sales Operations Demo',
     'Implementation Workshop',
   ][i % 3],
 }));
 export const CRM_AI: AiQuestion[] = CRM_PAGES.slice(0, 10).map((p, i) => ({
   question: t(
-    `ACME CRM 如何处理${p.title.zh}？`,
-    `How does ACME CRM handle ${p.title.en.toLowerCase()}?`,
+    `Acme CRM 如何处理${p.title.zh}？`,
+    `How does Acme CRM handle ${p.title.en.toLowerCase()}?`,
   ),
   answer: t(
     `虚构演示资料说明：${p.description.zh}`,

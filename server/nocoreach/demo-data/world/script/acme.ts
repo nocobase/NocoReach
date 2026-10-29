@@ -123,13 +123,13 @@ export const ACME_REPOSITORY: Repository = {
   watchers: 86,
   languages: { TypeScript: 820000, CSS: 64000, JavaScript: 31000 },
   readme: t(
-    '# ACME\n\n虚构演示项目。管理任务、看板、里程碑和项目交接。先用二十行任务验证 Excel 导入与访客权限。',
-    '# ACME\n\nFictional demo project. Manage tasks, boards, milestones and handovers. Rehearse twenty task rows and verify guest access before expanding.',
+    '# Acme\n\n虚构演示项目。管理任务、看板、里程碑和项目交接。先用二十行任务验证 Excel 导入与访客权限。',
+    '# Acme\n\nFictional demo project. Manage tasks, boards, milestones and handovers. Rehearse twenty task rows and verify guest access before expanding.',
   ),
 };
 
 export const ACME_FORUM: Forum = {
-  title: t('ACME 社区', 'ACME community'),
+  title: t('Acme 社区', 'Acme community'),
   description: t(
     '虚构项目团队的协作提问与交付经验。',
     'Collaboration questions and delivery experience from fictional project teams.',
@@ -267,8 +267,8 @@ export const ACME_X: SocialPost[] = ACME_STORIES.slice(0, 14).map((s, i) => ({
   at: 2 + i * 9,
   author: i % 3 ? `acme-demo-${(i % 5) + 1}` : '@editor',
   text: t(
-    `ACME 演示笔记：${s.comments[0][1].zh}`,
-    `ACME demo notes: ${s.comments[0][1].en}`,
+    `Acme 演示笔记：${s.comments[0][1].zh}`,
+    `Acme demo notes: ${s.comments[0][1].en}`,
   ),
   likes: 18 + i * 13,
   reposts: 2 + (i % 8),
@@ -280,8 +280,8 @@ export const ACME_HN: Story[] = ACME_STORIES.filter((_, i) =>
   [0, 4, 8, 9, 16, 19].includes(i),
 ).map((s, i) => ({
   title: t(
-    `ACME：${ACME_DISCUSSIONS[ACME_STORIES.indexOf(s)].title.zh}`,
-    `ACME: ${ACME_DISCUSSIONS[ACME_STORIES.indexOf(s)].title.en}`,
+    `Acme：${ACME_DISCUSSIONS[ACME_STORIES.indexOf(s)].title.zh}`,
+    `Acme: ${ACME_DISCUSSIONS[ACME_STORIES.indexOf(s)].title.en}`,
   ),
   path: s.path,
   author: 'acme-demo-team',
@@ -300,8 +300,8 @@ export const ACME_REDDIT: Thread[] = ACME_STORIES.slice(0, 10).map((_, i) => ({
 }));
 export const ACME_MEDIA: Media[] = ACME_STORIES.slice(0, 15).map((s, i) => ({
   title: t(
-    `ACME 实操：${ACME_DISCUSSIONS[i].title.zh}`,
-    `ACME workshop: ${ACME_DISCUSSIONS[i].title.en}`,
+    `Acme 实操：${ACME_DISCUSSIONS[i].title.zh}`,
+    `Acme workshop: ${ACME_DISCUSSIONS[i].title.en}`,
   ),
   description: s.brief,
   age: 2 + i * 3,
@@ -309,14 +309,14 @@ export const ACME_MEDIA: Media[] = ACME_STORIES.slice(0, 15).map((s, i) => ({
   likes: 78 + i * 41,
   comments: 7 + i * 5,
   duration: 360 + i * 53,
-  channel: ['ACME Demo', 'Team Delivery Demo', 'Implementation Workshop'][
+  channel: ['Acme Demo', 'Team Delivery Demo', 'Implementation Workshop'][
     i % 3
   ],
 }));
 export const ACME_AI: AiQuestion[] = ACME_PAGES.slice(0, 10).map((p, i) => ({
   question: t(
-    `ACME 如何处理${p.title.zh}？`,
-    `How does ACME handle ${p.title.en.toLowerCase()}?`,
+    `Acme 如何处理${p.title.zh}？`,
+    `How does Acme handle ${p.title.en.toLowerCase()}?`,
   ),
   answer: t(
     `虚构演示资料说明：${p.description.zh}`,
@@ -368,7 +368,7 @@ export const ACME_QUERIES: PerLanguage<Query[]> = {
     },
     { q: 'acme', path: '/', impressions: 220, position: 1.2, brand: true },
     {
-      q: 'ACME vs Nimbus',
+      q: 'Acme vs Nimbus',
       path: '/compare/nimbus',
       impressions: 8,
       position: 23,
@@ -392,7 +392,7 @@ export const ACME_QUERIES: PerLanguage<Query[]> = {
     },
     { q: 'acme', path: '/', impressions: 280, position: 1.2, brand: true },
     {
-      q: 'ACME vs Nimbus',
+      q: 'Acme vs Nimbus',
       path: '/compare/nimbus',
       impressions: 10,
       position: 23,
