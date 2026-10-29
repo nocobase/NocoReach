@@ -468,7 +468,7 @@ describe('访问', () => {
     expect(within(card).getByText('昨天同时段')).toBeTruthy();
     expect(within(card).getByText('12%', { exact: false })).toBeTruthy();
     expect(
-      within(card).getByText('截至 14:00 · 中国标准时间 · 每 10 分钟更新'),
+      within(card).getByText('截至 14:00 · GMT+8 · 每 10 分钟更新'),
     ).toBeTruthy();
     expect(within(card).getByText('ChatGPT')).toBeTruthy();
     await userEvent.click(

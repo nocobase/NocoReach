@@ -193,7 +193,7 @@ test('the sync table says how often each source runs and links the daily analysi
     within(table).getByRole('columnheader', { name: '频率' }),
   ).toBeInTheDocument();
   const row = (name: string) => within(table).getByText(name).closest('tr')!;
-  expect(row('每日分析')).toHaveTextContent('每天 07:30 运行（中国标准时间）');
+  expect(row('每日分析')).toHaveTextContent('每天 07:30 运行（GMT+8）');
   expect(row('每日分析')).not.toHaveTextContent('Asia/Shanghai');
   expect(row('每日分析')).toHaveTextContent('每天');
   expect(row('Reddit')).toHaveTextContent('每周');
