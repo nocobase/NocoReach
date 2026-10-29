@@ -94,10 +94,33 @@ export function split(
   return out;
 }
 
-// Visit objects contain only nine scalar fields. Keep at most one day and 20,000 buckets
-// (roughly a few MiB), regardless of the history requested. Larger days are computed but not retained.
-const VISIT_CACHE_BUCKETS = 20_000;
+// A day holds a few thousand nine-field visit buckets (about 0.1-0.3 MiB). Keep the most recent 31 days, which
+// covers the default 28-day window and today, so older history is recomputed rather than retained.
+const VISIT_CACHE_DAYS = 31;
+// Answers repeated within the hour, such as pages that read GA4 live; oversized answers are not retained.
+const ANSWER_CACHE_LIMIT = 32;
 const WORLD_CACHE_LIMIT = 8;
+
+/** Reads a bounded map as least recently used: a hit moves to the end, a miss evicts the oldest entries. */
+function recent<K, V>(
+  cache: Map<K, V>,
+  key: K,
+  limit: number,
+  compute: () => V,
+  retain: (value: V) => boolean = () => true,
+): V {
+  if (cache.has(key)) {
+    const value = cache.get(key) as V;
+    cache.delete(key);
+    cache.set(key, value);
+    return value;
+  }
+  const value = compute();
+  if (!retain(value)) return value;
+  while (cache.size >= limit) cache.delete(cache.keys().next().value as K);
+  cache.set(key, value);
+  return value;
+}
 
 /**
  * The demo world as one project sees it at one moment: its site, searches, visitors and communities, in the language
@@ -253,8 +276,12 @@ export class World {
 
   /** A day's visits, allocated from source down to browser so every report of that day adds up the same. */
   visitsOn(date: string): Visit[] {
-    const cached = this.visits.get(date);
-    if (cached) return cached;
+    return recent(this.visits, date, VISIT_CACHE_DAYS, () =>
+      this.allocate(date),
+    );
+  }
+
+  private allocate(date: string): Visit[] {
     const { date: today, hour } = this.local();
     const ago = daysAgo(date, today);
     const s = this.seeded;
@@ -351,9 +378,22 @@ export class World {
         },
       );
     });
-    this.visits.clear();
-    if (out.length <= VISIT_CACHE_BUCKETS) this.visits.set(date, out);
     return out;
+  }
+
+  private readonly answers = new Map<string, unknown>();
+  /**
+   * Remembers a recent answer for this world; the key must name everything the answer depends on. `retain` skips
+   * answers too large to keep; they are still returned.
+   */
+  answer<T>(key: string, compute: () => T, retain?: (value: T) => boolean): T {
+    return recent(
+      this.answers as Map<string, T>,
+      key,
+      ANSWER_CACHE_LIMIT,
+      compute,
+      retain,
+    );
   }
 
   private readonly memos = new Map<string, unknown>();
@@ -380,17 +420,13 @@ export function invalidateWorlds(projectId: string): void {
 /** One current world per project; an LRU bound also covers abandoned projects. */
 export function worldFor(project: WorldProject, now: number): World {
   const key = `${project.id}:${project.domain}:${project.language}:${Math.floor(now / 3_600_000)}`;
-  let world = worlds.get(key);
-  if (!world) {
-    invalidateWorlds(project.id);
-    if (worlds.size >= WORLD_CACHE_LIMIT)
-      worlds.delete(worlds.keys().next().value!);
-    world = new World(project, now);
-    worlds.set(key, world);
-  }
-  // Refresh insertion order on a hit without flushing unrelated projects.
-  worlds.delete(key);
-  worlds.set(key, world);
+  if (!worlds.has(key)) invalidateWorlds(project.id);
+  const world = recent(
+    worlds,
+    key,
+    WORLD_CACHE_LIMIT,
+    () => new World(project, now),
+  );
   world.now = now;
   return world;
 }

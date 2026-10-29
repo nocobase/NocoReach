@@ -454,7 +454,19 @@ function ga4Response(
   };
 }
 
+// Pages read GA4 live, so a report repeated within the hour is answered once; the largest are recomputed instead.
+const RETAINED_REPORT_ROWS = 2_000;
+
 function ga4Report(world: World, b: Json): Json {
+  const { date, hour } = world.local();
+  return world.answer(
+    `ga4:${date}:${hour}:${JSON.stringify(b)}`,
+    () => computeGa4Report(world, b),
+    (report) => (report.rows as unknown[]).length <= RETAINED_REPORT_ROWS,
+  );
+}
+
+function computeGa4Report(world: World, b: Json): Json {
   const dim = names(b.dimensions);
   const met = names(b.metrics);
   const ranges = list(b.dateRanges).map(object);
