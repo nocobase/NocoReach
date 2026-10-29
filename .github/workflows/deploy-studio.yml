@@ -1,4 +1,4 @@
-name: Deploy to Studio
+name: Deploy to test Studio
 
 on:
   push:
