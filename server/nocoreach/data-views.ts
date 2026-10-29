@@ -111,16 +111,21 @@ class DataViews{
  token(id,scope){if(!scope||this.p.db?.transactionContext?.())return this.p.token(id);const key=JSON.stringify([String(id),...scope]);let pending=this.tokenPending.get(key);if(!pending){pending=Promise.resolve().then(()=>this.p.token(id)).finally(()=>this.tokenPending.delete(key));this.tokenPending.set(key,pending);}return pending;}
  async fresh(id,source,cutoff){try{return await this.p.sync.fresh(id,source,cutoff);}catch{return [];}}
  async overview(id,v){const now=businessNow(this.p,id),yesterday=iso(now-DAY);let snaps=[];try{snaps=await this.p.sync.snapshots(id);}catch(e){if(!googleDisconnected(e))throw e;snaps=[];}const get=k=>snaps.find(s=>s.key===k)?.payload;const lastDate=rows=>(rows||[]).map(r=>r.date).sort().at(-1)||null;const range=String(v.range||'28');
-  const w=end=>windowFor(end,range,v.from,v.to);const cards=[];
+  const gscEnd=lastDate(get('history-search')),ga4End=lastDate(get('history-web'));
+  // `sameWindow` (Insights' metric cards, 2026-10-29 user request): every card covers one window, the latest `range`
+  // days that every source has complete (Google's data lands two or three days late), against the same days before, so
+  // the one dated line above the cards is true of all of them. Without it each source keeps its own cutoff.
+  const common=v.sameWindow&&['7','28','90'].includes(range)?[gscEnd,ga4End,yesterday].filter(Boolean).sort()[0]:null;
+  const w=end=>windowFor(common||end,range,v.from,v.to);const cards=[];
   // Each Google source uses its own cutoff (SPEC §5), the same one 搜索表现 shows.
-  const gscEnd=lastDate(get('history-search')),ga4End=lastDate(get('history-web'));if(gscEnd){const g=gscCard(get('history-search'),gscEnd,w(gscEnd));if(g)cards.push(withFresh(g,await this.fresh(id,'gsc',gscEnd),['clicks','impressions']));}if(ga4End){const a=ga4Card(get('history-web'),ga4End,w(ga4End));if(a)cards.push(withFresh(a,await this.fresh(id,'ga4',ga4End),['sessions','views']));}
+  if(gscEnd){const g=gscCard(get('history-search'),gscEnd,w(gscEnd));if(g)cards.push(withFresh(g,await this.fresh(id,'gsc',gscEnd),['clicks','impressions']));}if(ga4End){const a=ga4Card(get('history-web'),ga4End,w(ga4End));if(a)cards.push(withFresh(a,await this.fresh(id,'ga4',ga4End),['sessions','views']));}
   const site=await this.p.siteContent?.state(id).catch(()=>null);const c=contentCard(site,w(yesterday),now);if(c)cards.push(c);
   const gh=await this.p.github?.state(id).catch(()=>null);const g=githubCard(gh,w(yesterday));if(g)cards.push(g);
   const cm=await this.p.community?.state(id).catch(()=>null);const d=communityCard(cm,w(yesterday),now);if(d)cards.push(d);
   const pk=await this.p.packages?.state(id).catch(()=>null);const pc=packagesCard(pk,w(yesterday),now);if(pc)cards.push(pc);
   const hn=await this.p.hackernews?.state(id).catch(()=>null);const hc=hackernewsCard(hn,w(yesterday),now);if(hc)cards.push(hc);
   const rd=await this.p.reddit?.state(id).catch(()=>null);const rc=redditCard(rd,w(yesterday),now);if(rc)cards.push(rc);
-  return {range,from:v.from||null,to:v.to||null,generatedAt:new Date().toISOString(),cards};}
+  return {range,from:v.from||null,to:v.to||null,...(common?{window:w(common)}:{}),generatedAt:new Date().toISOString(),cards};}
  // GitHub page: stars/forks per day, Traffic per day (uniques are daily only, never summed), releases in range,
  // the latest 14-day referrer and path snapshot, and the 90-day issue summary.
  // GitHub page: github-view.ts (2026-10-14) — history figures for any range back to the repository's first day, the

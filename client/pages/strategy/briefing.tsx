@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '#lib/utils';
-import { formatCount } from '#lib/format';
+import { formatCount, formatDate } from '#lib/format';
 import { Tag, type Tone } from '#components/reach/tag';
 import { ActorAvatar, AiMark } from '#components/reach/actor';
 import { Button } from '#components/ui/button';
@@ -17,6 +17,7 @@ import {
   chipOf,
   percent,
   type MetricItem,
+  type MetricWindow,
 } from './insights-view';
 import { citedSignals, oppNo, taskNo, type Row } from './board';
 import { dayOf, type Day, type Feed, type Line } from './feed';
@@ -74,10 +75,12 @@ export function MetricTiles({
   metrics,
   overview,
   days,
+  window,
 }: {
   metrics: MetricItem[];
   overview: RequestState;
   days: number;
+  window?: MetricWindow;
 }) {
   const items = metrics.filter((i) => i.value != null).slice(0, 5);
   return (
@@ -88,10 +91,18 @@ export function MetricTiles({
       empty={!items.length}
       emptyText={$t('strategy.noDataYet')}
     >
-      {/* What the numbers and their changes cover, quietly above them (2026-10-22: the period left the subtitle). */}
+      {/* What the numbers and their changes cover, quietly above them (2026-10-22: the period left the subtitle): the
+          shared window's dates, written as the data pages write their range (2026-10-29 user request), so the line
+          reads the same on the page a card opens. */}
       <div className='flex min-w-0 flex-1 flex-col gap-1.5'>
-        <p className='text-xs text-muted-foreground'>
-          {$t('strategy.metricWindow', { 0: days })}
+        <p className='text-xs text-muted-foreground' data-metric-window=''>
+          {window
+            ? $t('common.comparedPreviousDays', {
+                0: formatDate(window.start),
+                1: formatDate(window.end),
+                2: window.days,
+              })
+            : $t('strategy.metricWindow', { 0: days })}
         </p>
         <div className='grid min-w-0 grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3'>
           {items.map((i) => (

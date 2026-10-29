@@ -34,6 +34,8 @@ const fixture = vi.hoisted(() => ({
   state: undefined as unknown as StrategyState,
   tasks: [] as unknown[],
   cards: [] as unknown[],
+  /** The window the cards share (nrDataViews:overview with sameWindow), when the server gives one. */
+  window: undefined as unknown,
   areas: [] as unknown[],
   runs: [] as unknown[],
   schedule: null as unknown,
@@ -76,6 +78,7 @@ vi.mock('../../client/i18n', async () => {
     $legacyJsx: (value: string) => value,
     $legacyFragment: (value: string) => value,
     getCurrentLocale: () => 'en-US',
+    isChinese: () => false,
     translateSystemError: (value: string) => value,
     renderMessage: () => '',
   };
@@ -285,6 +288,7 @@ beforeEach(() => {
   fixture.state = initial();
   fixture.tasks = [];
   fixture.cards = [];
+  fixture.window = undefined;
   fixture.areas = [];
   fixture.runs = [];
   fixture.schedule = null;
@@ -356,7 +360,10 @@ beforeEach(() => {
       if (resource === 'nrTaskWork' && action === 'list')
         return Promise.resolve(fixture.tasks);
       if (resource === 'nrDataViews')
-        return Promise.resolve({ cards: fixture.cards });
+        return Promise.resolve({
+          cards: fixture.cards,
+          ...(fixture.window ? { window: fixture.window } : {}),
+        });
       if (resource === 'nrInsights')
         return Promise.resolve({ areas: fixture.areas });
       if (resource === 'nrAnalysis')
@@ -504,6 +511,14 @@ it('the tiles show at most five numbers that have data, the summary names the on
     { id: 'packages', metrics: [metric('downloads', 4000, 0.9)], series: [] },
     { id: 'discourse', metrics: [metric('topics', null)], series: [] },
   ];
+  // The one window the cards share: the latest 7 days every source has complete.
+  fixture.window = {
+    start: '2026-10-19',
+    end: '2026-10-25',
+    days: 7,
+    previousStart: '2026-10-12',
+    previousEnd: '2026-10-18',
+  };
   // What the analysis read over its 28 days: clicks fell 31%, sessions rose 12%, impressions held.
   fixture.state.insights!.evidence.summary = {
     search: period({ clicks: [1200, 1739], impressions: [54000, 52941] }),
@@ -545,19 +560,31 @@ it('the tiles show at most five numbers that have data, the summary names the on
   });
   await within(tiles).findByText('1,200');
   expect(within(tiles).getAllByRole('link')).toHaveLength(5);
-  // The cards say what their numbers and changes cover.
-  expect(within(tiles).getByText('strategy.metricWindow:7')).toBeTruthy();
-  // Each card opens its page on the same 7 days.
+  // One line says the dates all the cards cover, as the data pages write their range; the cards carry none.
+  expect(
+    within(tiles).getByText('common.comparedPreviousDays:Oct 19,Oct 25,7'),
+  ).toBeTruthy();
+  expect(within(tiles).queryByText('strategy.metricWindow:7')).toBeNull();
+  // The window is asked for once, shared by every card.
+  expect(fixture.action).toHaveBeenCalledWith(
+    'nrDataViews',
+    'overview',
+    expect.objectContaining({
+      body: { projectId: 1, range: '7', sameWindow: true },
+    }),
+  );
+  // Each card opens its page on those dates.
+  const range = 'days=custom&from=2026-10-19&to=2026-10-25';
   expect(
     within(tiles)
       .getAllByRole('link')
       .map((l) => l.getAttribute('href')),
   ).toEqual([
-    '/seo-opportunities?days=7',
-    '/seo-opportunities?days=7',
-    '/website?days=7',
-    '/website/conversion?days=7',
-    '/data/github?days=7',
+    `/seo-opportunities?${range}`,
+    `/seo-opportunities?${range}`,
+    `/website?${range}`,
+    `/website?${range}`,
+    `/data/github?${range}`,
   ]);
   // Downloads is the sixth number: it waits under All data, and is not named in the summary either.
   expect(within(tiles).queryByText('4,000')).toBeNull();
@@ -611,6 +638,8 @@ it('a number with fewer than 10 in the week before shows its change as a count, 
     name: 'strategy.keyMetrics',
   });
   await within(tiles).findByText('1,200');
+  // Without a shared window from the server, the line names the number of days instead.
+  expect(within(tiles).getByText('strategy.metricWindow:7')).toBeTruthy();
   // 1 → 3 is "↑ 2", not "↑ 200%"; 0 → 4 is "↑ 4", where a percentage has no answer.
   expect(within(tiles).getByText('↓ 31%')).toBeTruthy();
   expect(within(tiles).getByText('↑ 2')).toBeTruthy();
