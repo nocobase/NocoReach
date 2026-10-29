@@ -13,7 +13,7 @@ import 'cronstrue/locales/ko';
 import 'cronstrue/locales/ru';
 import { resolveLocale } from '../../../shared/i18n/locales';
 
-import { formatDateTime } from '#lib/format';
+import { formatDateTime, formatTime, localDateKey } from '#lib/format';
 import { timeZoneName } from '#lib/time-zone-name';
 import { ANALYSIS_SCHEDULE, dailyTime, type Schedule } from './data.js';
 
@@ -21,30 +21,17 @@ export function useScheduleFormatting() {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const dayOf = (value: Date) =>
-    new Intl.DateTimeFormat('en-CA', { timeZone }).format(value);
   return {
     timeZone,
-    date: (value?: string) =>
-      value && Number.isFinite(Date.parse(value))
-        ? new Intl.DateTimeFormat(locale, {
-            dateStyle: 'medium',
-            timeStyle: 'medium',
-            timeZone,
-          }).format(new Date(value))
-        : '—',
-    /** "Today 09:00", "Tomorrow 09:00", or other days as every page shows a time ("10-20 09:00"), in the browser's timezone. */
+    date: (value?: string) => formatDateTime(value, { locale, withYear: true }),
+    /** Relative calendar labels with a browser-local clock; other dates use the shared full formatter. */
     when: (value?: string) => {
       if (!value || !Number.isFinite(Date.parse(value))) return '—';
       const at = new Date(value);
-      const time = new Intl.DateTimeFormat(locale, {
-        hour: '2-digit',
-        minute: '2-digit',
-        hourCycle: 'h23',
-        timeZone,
-      }).format(at);
+      const time = formatTime(at, { locale });
       const offset =
-        (Date.parse(dayOf(at)) - Date.parse(dayOf(new Date()))) / 86400000;
+        (Date.parse(localDateKey(at)) - Date.parse(localDateKey(new Date()))) /
+        86400000;
       if (offset === 0) return t('schedules.today', { time });
       if (offset === 1) return t('schedules.tomorrow', { time });
       if (offset === -1) return t('schedules.yesterday', { time });

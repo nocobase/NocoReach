@@ -17,8 +17,7 @@ import {WithInfo} from '#components/reach/info-tip';
 import {help} from './glossary';
 import {localizeWorkSnapshots} from './playbook-snapshot';
 import {stageName} from './playbook-model';
-import {EMPTY} from '#lib/format';
-import {snoozeListDay} from './task-detail/snooze-days';
+import { EMPTY, formatDateTime } from '#lib/format';
 import {useMe} from './me';
 // A task someone else owns: a 成员 can open and read it, but not drag, move or close it (its owner and 管理员 can; 2026-10-09).
 function useEditable(){const {can}=useMe();return (t:WorkCard)=>can(t.evidence?.work?.humanOwnerId||t.evidence?.createdBy?.id);}
@@ -186,7 +185,7 @@ export function TaskTable({
                       </span>
                     </td>
                     <td className='px-3 py-2.5 whitespace-nowrap tabular-nums'>
-                      {snoozeListDay(w.snooze.day)}
+                      {formatDateTime(w.snooze.until)}
                     </td>
                   </>
                 ) : (

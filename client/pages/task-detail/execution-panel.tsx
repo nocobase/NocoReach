@@ -1,8 +1,8 @@
-import { formatDateTime } from '#lib/format';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Bot, Clock3 } from 'lucide-react';
 import { $t, getCurrentLocale, $legacyText } from '#i18n';
+import { formatDateTime } from '#lib/format';
 import { materialNoticeText } from './material-notices.js';
 import { nocobaseClient as api, NocoReachHttpError } from '#lib/nocoreach-api';
 import {
@@ -301,9 +301,7 @@ export function TaskExecutionPanel({
             // the Runner was lost.
             <p className='text-sm text-muted-foreground'>
               {$t('taskDetail.restartTechnical', {
-                0: new Date(current.restartedAt).toLocaleString(
-                  getCurrentLocale(),
-                ),
+                0: formatDateTime(current.restartedAt),
                 1: execution?.run.failureReason || '—',
               })}
             </p>
@@ -311,9 +309,7 @@ export function TaskExecutionPanel({
           {current?.autoRetry ? (
             <p className='text-sm text-muted-foreground'>
               {$t('taskDetail.restartRetryTechnical', {
-                0: new Date(current.autoRetry.restartedAt).toLocaleString(
-                  getCurrentLocale(),
-                ),
+                0: formatDateTime(current.autoRetry.restartedAt),
               })}
             </p>
           ) : null}

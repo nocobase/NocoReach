@@ -29,7 +29,7 @@ test('selects a scheduling timezone, recalculates the next run, and retains it o
   await page.waitForURL((url) => !url.pathname.endsWith('/login'));
   await page.goto(`${base}/schedules`);
   const row = page.getByRole('row').filter({
-    has: page.getByText('Daily analysis', { exact: true }),
+    has: page.getByText(/^(Daily analysis|每日分析)$/),
   });
   // Changing the time is in the row's "…" menu.
   const changeTime = async (more: string, name: string) => {

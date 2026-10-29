@@ -1,3 +1,4 @@
+import { formatTime, localDateKey } from '#lib/format';
 import { $t, $tj, $legacyText, getCurrentLocale } from '#i18n';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
@@ -134,8 +135,7 @@ export function MetricTiles({
   );
 }
 
-const localDay = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const localDay = localDateKey;
 function dayLabel(day: string, now: Date) {
   const date = new Date(`${day}T00:00:00`),
     locale = getCurrentLocale(),
@@ -146,13 +146,7 @@ function dayLabel(day: string, now: Date) {
     return `${$t('strategy.dayYesterday')} · ${text}`;
   return text;
 }
-const clock = (iso?: string) =>
-  iso
-    ? new Date(iso).toLocaleTimeString(getCurrentLocale(), {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : '';
+const clock = (iso?: string) => (iso ? formatTime(iso) : '');
 
 /** A day in the conversation: its date between two rules. */
 function DayDivider({ label }: { label: string }) {
@@ -612,7 +606,7 @@ export function Today({
   return (
     <>
       <DayDivider
-        label={dayLabel(dayOf(batch?.generatedAt) || localDay(now), now)}
+        label={dayLabel(localDay(batch?.generatedAt) || localDay(now), now)}
       />
       {situation}
       <AgentMessage
@@ -686,13 +680,17 @@ function StatusTag({ row, st, task, tasks }: Line) {
 /** An earlier day, folded to one line: what was suggested and where each went; opens to the list. */
 function PastDay({ day, rows, now }: { day: Day; rows: Row[]; now: Date }) {
   const [open, setOpen] = useState(false),
-    asked = questionCount(useInsightChat()?.threads || [], day.day);
+    threads = useInsightChat()?.threads || [],
+    asked = questionCount(threads, day.day),
+    displayDay = localDateKey(
+      day.items[0]?.row.firstSeenAt || day.ended[0]?.ended?.at || day.day,
+    );
   return (
     <section
-      aria-label={dayLabel(day.day, now)}
+      aria-label={dayLabel(displayDay, now)}
       className='flex flex-col gap-2'
     >
-      <DayDivider label={dayLabel(day.day, now)} />
+      <DayDivider label={dayLabel(displayDay, now)} />
       <div className='flex gap-2.5'>
         <ActorAvatar type='agent' size='sm' />
         <div className='flex min-w-0 flex-1 flex-col gap-1.5'>

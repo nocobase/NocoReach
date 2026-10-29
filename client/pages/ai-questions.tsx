@@ -174,7 +174,7 @@ function Topics({ projectId, view, onView }: { projectId: number; view: View; on
 // One question: the AI's answer, who it names, what it cites.
 function QuestionDetail({ q, onClose, onHand }: { q: Question; onClose: () => void; onHand: () => void }) {
   return (
-    <DetailDrawer open onClose={onClose} title={q.question} description={$t('aiQuestions.questionVolume',{0:getPlatform()[q.platform],1:n(q.volume),2:q.at ? $t('aiQuestions.answered',{0:formatDate(q.at.slice(0, 10))}) : ""})}
+    <DetailDrawer open onClose={onClose} title={q.question} description={$t('aiQuestions.questionVolume',{0:getPlatform()[q.platform],1:n(q.volume),2:q.at ? $t('aiQuestions.answered',{0:formatDate(q.at)}) : ""})}
       actions={<Button size="sm" onClick={onHand}><Bot data-icon="inline-start" />{$t('common.handOffAgent')}</Button>}>
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2"><Tag tone={getStatus()[q.status].tone} dot>{q.status === "ours" ? [q.weNamed ? $t('aiQuestions.mentionsUs') : "", q.weCited ? $t('common.citesSite') : ""].filter(Boolean).join("、") : getStatus()[q.status].label}</Tag>{q.rivals.map((r) => <Tag key={r} tone="grey">{r}</Tag>)}{q.brands.map((b) => <span key={b} className="text-xs text-muted-foreground">{b}</span>)}</div>

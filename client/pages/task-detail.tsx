@@ -168,7 +168,7 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
   </div>
   <TechnicalDetails data={data} projectId={projectId} taskId={taskId} runs={runs}/>
   <EvidenceDialog open={evidenceOpen} onClose={()=>setEvidenceOpen(false)} data={data} projectId={projectId} taskId={taskId}/>
-  <SnoozeDialog open={snoozeOpen} onClose={()=>setSnoozeOpen(false)} data={data} busy={busy} update={update}/>
+  <SnoozeDialog projectId={projectId} open={snoozeOpen} onClose={()=>setSnoozeOpen(false)} data={data} busy={busy} update={update}/>
   {/* The article's reading page (task-detail/article-reader.tsx) covers this page and keeps its scroll position. */}
   <Outlet context={{data,update,busy,error,allowed:access.allowed,draftScope,crumb:no?`T-${no}`:data.task.title,heading,requestChanges:()=>{feedbackAskRef.current=true;}} satisfies TaskPageContext}/>
   <Dialog open={pageOpen} onOpenChange={o=>{if(!o)setPageOpen(false);}}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>{$t('common.relatedPage')}</DialogTitle></DialogHeader><PageLinkEditor data={data} projectId={projectId} taskId={taskId} busy={busy} update={update}/></DialogContent></Dialog>

@@ -56,10 +56,10 @@ test('source notices translate their stable codes and numeric parameters into En
 });
 test('report date formatting preserves ranges and uses the interface locale for ISO dates', () => {
   setDictionary(en);
-  expect(reportDate('2026-10-11')).toBe('10/11/2026');
+  expect(reportDate('2026-10-11')).toBe('Oct 11, 2026');
   expect(reportDate('2026-10-01 through 2026-10-11')).toBe(
     '2026-10-01 through 2026-10-11',
   );
   setDictionary(null);
-  expect(reportDate('2026-10-11')).toBe('2026/10/11');
+  expect(reportDate('2026-10-11')).toBe('2026-10-11');
 });

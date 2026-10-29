@@ -218,7 +218,9 @@ function Detail({ projectId, taskId }: { projectId: string; taskId: string }) {
                               data.observeFrom.slice(0, 10) + 'T00:00:00Z',
                             ) +
                               (day + 3) * 86400000,
-                          ).toISOString(),
+                          )
+                            .toISOString()
+                            .slice(0, 10),
                         ),
                       })}
                     </>

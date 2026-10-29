@@ -18,10 +18,9 @@ export const LIST_PARAMS = ['q', 'status', 'order', 'page'];
 export const signed = (value: number) => formatSigned(value, 1);
 // A change given in percent (12 for 12%), written like every other change: "↑ 12%".
 export const signedPercent = (value: number) => formatChange(value / 100);
-// A calendar date from the server (YYYY-MM-DD or an ISO time, read as UTC like every results date) as month and
-// day in the current language, with the year when it is not this year.
+// Keep calendar dates intact and convert instants to the browser timezone before formatting.
 export function shortDate(date: string) {
-  return formatDate(date.slice(0, 10));
+  return formatDate(date);
 }
 export const httpStatus = (error: unknown) =>
   error instanceof NocoReachHttpError ? error.status : 0;
