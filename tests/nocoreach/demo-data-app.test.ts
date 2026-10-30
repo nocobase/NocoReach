@@ -28,6 +28,11 @@ import { rowsFor, opportunityState } from '../../shared/strategy-pending';
 import { recentlyEnded, verdictsOf } from '../../client/pages/strategy/watch';
 
 vi.setConfig({ testTimeout: 300000, hookTimeout: 300000 });
+// The demo's synthetic traffic is keyed by calendar date while its observation windows sit a set number of days before
+// today, so which conclusion a measured task reaches moves from day to day (Acme CRM's flat task read "up" on 2026-10-30).
+// Fix the day so every outcome stays covered; the clock still advances, so timeouts and timestamps behave as usual.
+vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true });
+vi.setSystemTime(new Date('2026-10-29T12:00:00Z'));
 // Play the demo Agent's runs back without the pauses a visitor sees.
 process.env.NOCOREACH_DEMO_AGENT_PACE = '0';
 const createDemoTest = (enabled = true) =>

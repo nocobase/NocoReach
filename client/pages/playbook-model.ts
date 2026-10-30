@@ -93,7 +93,8 @@ export function eventText(e:{at?:string;action:string;note?:string;comment?:stri
   case 'linkContent':return {who:$t('common.you'),text:$t('playbook.linkedPage')};
   case 'cancelTask':return {who:$t('common.you'),text:$t('playbook.closedTaskStoppedRun',{0:e.note?`：${$legacyText(e.note)}`:''})};
   case 'archiveTask':return e.note?{who:$t('common.system'),text:$t('playbook.closedTaskValue',{0:$legacyText(e.note)})}:{who:$t('common.you'),text:$t('playbook.closedTask')};
-  case 'unarchiveTask':return {who:$t('common.you'),text:$t('playbook.reopenedTask')};
+  // Reopened (2026-10-29): the step a task stopped halfway went back to.
+  case 'unarchiveTask':return {who:$t('common.you'),text:e.stageKey?$t('playbook.reopenedTaskAt',{0:s}):$t('playbook.reopenedTask')};
   case 'prClosed':return {who:$t('common.localAgent'),text:$t('playbook.closedBranchKept',{0:e.note||'PR'})};
   case 'merged':return {who:$t('common.localAgent'),text:$t('playbook.merged',{0:e.note||'PR'})};
   case 'revertRelease':return {who:$t('common.you'),text:$t('playbook.reverted',{0:e.note||$t('playbook.change')})};

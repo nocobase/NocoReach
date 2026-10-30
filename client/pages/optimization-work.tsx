@@ -17,6 +17,7 @@ import {taskRecords,useProject} from './reach-data';
 import {workState,isClosed,isSnoozed,closeCommand,getCloseConfirm,type BoardState,type Work,type TaskData} from './task-execution-types';
 import {legacyPlaybookFilterLabel,matchesPlaybookFilter,playbookFilterOptions,playbookFilterValue} from './task-playbook-filter';
 import {WorkBoard,TaskTable,type TaskAction} from './work-board';
+import {nextSort,sortTasks,taskSort,type TaskScope,type TaskSortKey} from './task-sort';
 import {AgentBoard,RuntimeNotice} from './agent-board';
 import {taskAgentOf,UNASSIGNED,type AgentStatus} from './task-agents';
 import {confirmAction} from '#components/reach/confirm';
@@ -62,7 +63,10 @@ export default function OptimizationWork(){
  useEffect(()=>{void load();return()=>{generation.current++;};},[project?.id]);
  useEffect(()=>{if(!project)return;const c=new AbortController();void Promise.resolve().then(()=>api.action<AgentStatus>('nrAgent','status',{method:'POST',body:{projectId:String(project.id)},signal:c.signal})).then(a=>{if(!c.signal.aborted)setAgents(a);},()=>undefined);return()=>c.abort();},[project?.id]);
  useEffect(()=>{const task=params.get('task');if(task)navigate('/actions/'+encodeURIComponent(task),{replace:true});},[params.get('task')]);
- function param(key:string,value:string){updateParams(p=>{if(p.get('status')==='closed')p.delete('status');if(p.get('scope')==='archived')p.set('scope','closed');if(key==='playbookName')p.delete('playbook');if(key==='scope'&&value==='waiting'){p.delete('status');p.delete('owner');}value?p.set(key,value):p.delete(key);},key==='q');}
+ function param(key:string,value:string){updateParams(p=>{if(p.get('status')==='closed')p.delete('status');if(p.get('scope')==='archived')p.set('scope','closed');if(key==='playbookName')p.delete('playbook');if(key==='scope'&&value==='waiting'){p.delete('status');p.delete('owner');}
+  // Each scope has its own columns and default order (task-sort.ts), so a sort chosen on one does not follow to another.
+  if(key==='scope'){p.delete('sort');p.delete('order');}
+  value?p.set(key,value):p.delete(key);},key==='q');}
  function saved(t:Task,d:TaskData){setTasks(rows=>rows.map(row=>row.id===t.id?{...row,...d.task,evidence:{...row.evidence,work:d.work}}:row));refreshNavBadges();}
  async function move(t:Task,target:BoardState,beforeId?:number){
   if(!project||pending.current||beforeId===t.id)return;
@@ -101,10 +105,11 @@ export default function OptimizationWork(){
  const matches=(t:Task)=>{const w=t.evidence?.work;return matchesPlaybookFilter(w,playbook,legacyPlaybook)&&(waiting||!owner||ownerName(t)===owner)&&(!agentFilter||!agents||(taskAgentOf(w,agents)?.id||UNASSIGNED)===agentFilter)&&`${t.evidence?.no?`t-${t.evidence.no}`:''} ${t.evidence?.insight?.no?`o-${t.evidence.insight.no}`:''} ${t.title} ${t.brief} ${t.evidence?.keyword||''} ${w?.snooze?.reason||''}`.toLowerCase().includes(q.trim().toLowerCase());};
  const visible=ordered.filter(t=>inScope(t)&&matches(t));
  const olderDone=board&&!waiting?ordered.filter(t=>isDone(t)&&!onBoardNow(t)&&matches(t)).length:0;
- // The table lists what needs you first: 待确认, 进行中, 待处理, 已完成; the board keeps its manual order.
- const rank:Record<BoardState,number>={review:0,doing:1,todo:2,done:3};
- // Snoozed: the one coming back soonest first.
- const rows=board||byAgent||closed?visible:snoozed?[...visible].sort((a,b)=>String(a.evidence?.work?.snooze?.until).localeCompare(String(b.evidence?.work?.snooze?.until))):[...visible].sort((a,b)=>rank[workState(a.evidence?.work,a.status)]-rank[workState(b.evidence?.work,b.status)]||String(b.updatedAt).localeCompare(String(a.updatedAt)));
+ // The table sorts by any column, kept in the address (task-sort.ts): by default what needs you first, Done the latest
+ // first, Closed the latest closed first and Snoozed the one coming back soonest first. The board keeps its manual order.
+ const scope:TaskScope=waiting?'waiting':closed?'closed':done?'done':snoozed?'snoozed':'current',sorting=taskSort(scope,params.get('sort'),params.get('order'));
+ const rows=board||byAgent?visible:sortTasks(visible,sorting,scope,agents);
+ const sortBy=(key:TaskSortKey)=>{const next=nextSort(scope,sorting,key);updateParams(p=>{p.set('sort',next.sort);p.set('order',next.order);},true);};
  const uniq=(xs:string[])=>[...new Set(xs.filter(Boolean))].sort();
  const location=useLocation();
  const newTask=()=>navigate({pathname:'/actions/new',search:location.search});
@@ -125,7 +130,7 @@ export default function OptimizationWork(){
   {!closed&&!done&&!snoozed&&tasks.length>0&&<RuntimeNotice/>}
   {waiting&&<p role='status' className='text-sm text-muted-foreground'>{$t(isAdmin?'optimizationWork.waitingAdminScope':'optimizationWork.waitingMemberScope')}</p>}
   {loading?<ListSkeleton rows={6} label={$t('common.loadingTasks')}/>:byAgent?<AgentBoard tasks={rows} agents={agents} onOpen={id=>navigate('/actions/'+id)}/>:board?<WorkBoard tasks={rows} busy={busy} list={false} agents={agents} olderDone={olderDone} onOlderDone={()=>param('scope','done')} onMove={(t,s,before)=>void move(t as Task,s,before)} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>
-   :rows.length?<TaskTable tasks={rows} closed={closed} snoozed={snoozed} agents={agents} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>:null}
+   :rows.length?<TaskTable tasks={rows} closed={closed} snoozed={snoozed} agents={agents} sort={sorting} onSort={sortBy} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>:null}
   {!loading&&!tasks.length?<Empty className="min-h-48 border"><EmptyHeader><EmptyTitle>{$t('manualTask.emptyTitle')}</EmptyTitle><EmptyDescription>{$t('manualTask.createHint')}</EmptyDescription></EmptyHeader><EmptyContent><Button onClick={()=>void newTask()}>{$t('manualTask.newTask')}</Button></EmptyContent></Empty>:!loading&&!rows.length&&!board&&!byAgent&&<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{closed?$t('optimizationWork.noClosedTasks'):done?$t('optimizationWork.noFinishedTasksYet'):snoozed&&!q&&!playbook&&!owner&&!agentFilter?$t('optimizationWork.noSnoozedTasks'):q||playbook||(!waiting&&owner)||agentFilter?$t('optimizationWork.noMatchingTasksTryAdjusting'):waiting?$t('optimizationWork.noWaitingTasks'):$t('optimizationWork.noTasksYetTasksCreated')}</p>}
   <Outlet/>
  </PageContainer>;
