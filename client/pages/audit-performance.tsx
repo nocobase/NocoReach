@@ -27,6 +27,7 @@ import { SectionHandOff } from "./section-hand-off";
 import { safeLink } from "./analytics";
 import { help } from "./glossary";
 import { formatDateTime } from '#lib/format';
+import { distinctPages } from '../../shared/task-start.js';
 import { Segmented } from '#components/reach/segmented';
 
 type Issue = { category: string; key: string; title: string; description: string; value: string; score: number; savingsMs: number | null; savingsBytes: number | null; severity: "high" | "medium" };
@@ -54,6 +55,7 @@ const pathOf = (u: string) => { try { const x = new URL(u); return x.pathname ==
 function draft(r: Result): TaskDraft {
   const device = r.strategy === "mobile" ? $t('lighthouseCard.mobile') : $t('lighthouseCard.computer');
   return {
+    pages: distinctPages([r.finalUrl]),
     title: $t('lighthouseCard.improvePagePerformance',{0:pathOf(r.finalUrl),1:device}).slice(0, 200),
     objective: $t('lighthouseCard.getLighthousePerformanceScore90',{0:r.finalUrl}).slice(0, 1000),
     brief: [$t('lighthouseCard.pageLighthouse',{0:r.finalUrl,1:r.version || "",2:device}), $t('lighthouseCard.scores',{0:Object.entries(r.scores).map(([k, v]) => `${getCategory()[k]} ${v ?? "—"}`).join("，")}), $t('lighthouseCard.metrics',{0:r.metrics.map((m) => `${m.label} ${m.value}`).join("，")}), "", $t('lighthouseCard.failedChecks'), ...r.issues.slice(0, 20).map((i) => `- [${getCategory()[i.category]}] ${zh(i)}${getZh()[i.key] ? `（${i.title}）` : ""}${i.value ? `：${i.value}` : ""}`), "", $t('lighthouseCard.suggestionFixItemsSaveMost')].join("\n").slice(0, 20000),
@@ -81,6 +83,7 @@ function draftMany(rows: Record_[]): TaskDraft {
   ]);
   const page = pathOf(rows[0].finalUrl || rows[0].url);
   return {
+    pages: distinctPages(rows.map((r) => r.finalUrl || r.url)),
     title: (rows.length === 1 ? $t('lighthouseCard.improvePagePerformance', { 0: page, 1: deviceName(rows[0].strategy) }) : $t('auditPerformance.improvePagesPerformance', { 0: page, 1: rows.length })).slice(0, 200),
     objective: $t('auditPerformance.improvePagesObjective').slice(0, 1000),
     brief: [$t('auditPerformance.tickedResults', { 0: rows.length }), ...lines, "", $t('lighthouseCard.suggestionFixItemsSaveMost')].join("\n").slice(0, 20000),

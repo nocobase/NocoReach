@@ -14,7 +14,8 @@ import { playbookTitle, subjectInput } from './execution/task-title.js';
 import { projectId, requireAccess } from './policy.js';
 import { memoryForAI, MEMORY_SECTIONS } from './execution/memory.js';
 import { projectWork } from './execution/model.js';
-import { splitOf } from '../../shared/opportunity-parts.js';
+import { splitOf, pageKey } from '../../shared/opportunity-parts.js';
+import { distinctPages, pageUrlsOf } from '../../shared/task-start.js';
 import { planOf, scopeText, taskPart } from './opportunity-hand-off.js';
 // Who created a task: it becomes the task's owner (2026-10-08).
 const creator=ctx=>{const u=ctx?.auth?.user;return u?.id!=null&&u.kind!=='service'?{createdBy:{id:String(u.id),name:String(u.nickname||u.username||u.id)}}:{};};
@@ -31,11 +32,14 @@ function reviewsOf(list,signals,cards){const keys=new Map(signals.map(s=>[s.key,
  return out;}
 // The page a hand-off is about (an http(s) address), kept on the task so its article can be found before it starts.
 function pageInput(v){if(typeof v!=='string'||!v.trim()||v.length>2000)return undefined;try{const u=new URL(v.trim());return u.protocol==='https:'||u.protocol==='http:'?u.href:undefined;}catch{return undefined;}}
+// Every page a hand-off concerns (2026-10-29: an audit issue's affected pages, the pages ticked on a data page), kept on
+// the task as `evidence.pages` so the start card knows where the change goes and Performance shows them all.
+const pagesInput=v=>distinctPages((Array.isArray(v)?v.slice(0,100):[]).map(pageInput));
 // `entry`: the page a person handed the task off from (a path such as /data/github), shown as where it was found.
 // The task's short reason in one or two plain sentences (evidence.why, 2026-10-23): what the task page's Why card shows
 // first. Optional; Markdown and line breaks are flattened, and anything past 300 characters is dropped.
 const whyInput=v=>{if(typeof v!=='string')return '';const t=v.replace(/[*_`#>]/g,'').replace(/\s+/g,' ').trim();return t.length>300?'':t;};
-function proposalInput(v){const page=pageInput(v.page),why=whyInput(v.why),subject=subjectInput(v.subject);return {title:text(v.title,200,true),brief:text(v.brief,20000,true),...(why?{why}:{}),...(subject?{subject}:{}),...(typeof v.signalKey==='string'&&v.signalKey.trim()?{signalKey:v.signalKey.trim().slice(0,200)}:{}),...(page?{page}:{}),...(typeof v.entry==='string'&&/^\/[\w\-/]{1,200}$/.test(v.entry)?{entry:v.entry}:{})};}
+function proposalInput(v){const page=pageInput(v.page),pages=pagesInput(v.pages),why=whyInput(v.why),subject=subjectInput(v.subject);return {title:text(v.title,200,true),brief:text(v.brief,20000,true),...(why?{why}:{}),...(subject?{subject}:{}),...(typeof v.signalKey==='string'&&v.signalKey.trim()?{signalKey:v.signalKey.trim().slice(0,200)}:{}),...(page?{page}:{}),...(pages.length?{pages}:{}),...(typeof v.entry==='string'&&/^\/[\w\-/]{1,200}$/.test(v.entry)?{entry:v.entry}:{})};}
 function insightInput(v){return {...board.assessment(v),signalIds:(Array.isArray(v.signalIds)?v.signalIds:[]).filter(x=>typeof x==='string').slice(0,10).map(x=>x.slice(0,200)),title:text(v.title,200,true),...(typeof v.reason==='string'&&v.reason.trim()?{reason:v.reason.trim().slice(0,300)}:{}),observation:text(v.observation,2000,true),meaning:text(v.meaning,2000,true),evidenceText:text(v.evidenceText,3000,true),limitation:text(v.limitation,2000,true),suggestion:text(v.suggestion,3000,true),objective:text(v.objective,1000,true),source:['website','search','market','mixed'].includes(v.source)?v.source:'mixed'};}
 function initial(){return {revision:0,goal:null,goalHistory:[],proposals:[],operations:[]};}
 function resultEvidence(source){return {capturedAt:source.capturedAt,availableThrough:null,periodDays:source.day||28,searchQueries:[],pages:[],industryCandidates:[],limitations:[systemMessageText('results.sourceEvidenceOnly')]};}
@@ -160,7 +164,7 @@ class StrategyService{
    const open=plan.filter(p=>!p.task),chosen=v.parts===undefined?open:open.filter(p=>v.parts.includes(p.key));
    if(!chosen.length)fail(systemMessageText('opportunityTasks.nothingToHandOff'),409);
    if(state.proposals.length+chosen.length>100)fail(systemMessageText('strategy.currentPilotSavesUp100'),409);
-   const locale=ctx?.getCurrentLocale?.()||'zh-CN',siblings=plan.filter(p=>p.task||chosen.includes(p)),{page:_page,...rest}=fields;
+   const locale=ctx?.getCurrentLocale?.()||'zh-CN',siblings=plan.filter(p=>p.task||chosen.includes(p)),{page:_page,pages:_pages,...rest}=fields;
    for(const part of chosen){const at=new Date().toISOString(),scope=scopeText(insight,part,siblings.filter(p=>p!==part),locale);
     const proposal={...rest,title:part.title,subject:part.label,brief:`${scope}\n\n${fields.brief}`.slice(0,20000),objective,id:randomUUID(),status:'approved',goalVersion:null,goal:null,insight,evidence:batch.evidence,part:taskPart(part),...(part.url?{page:part.url}:{}),createdAt:at};
     const task=await this.createDirectionTask(id,proposal,{...v,playbookId:part.playbookId},ctx,transaction);
@@ -172,13 +176,32 @@ class StrategyService{
   const task=await this.createDirectionTask(id,proposal,v,ctx,transaction);
   state.proposals.unshift({...proposal,taskId:task.id,taskNo:task.get?.('evidence')?.no,approvedAt:new Date().toISOString()});
  });}
+ // Pages in two places (2026-10-29): a task changes where most of its pages are, and its start card's Create separate
+ // tasks hands the rest off, one task per group the card names (each article alone, the site's pages together), with
+ // the task's brief, opportunity and playbook. They are siblings through their proposals (`group`, the first task's
+ // proposal or `task:<id>`); the task itself is not changed and, when it starts, names the pages it keeps.
+ async splitTask(id,v,ctx){const source=await this.p.taskExecution.task(String(id),String(v.taskId)),e=source.evidence||{},w=projectWork(source);
+  if(w.flow||w.plan||w.stage!=='plan'||w.cancelledAt||w.archivedAt)fail(systemMessageText('taskExecution.taskStarted'),409);
+  const own=new Set(pageUrlsOf({task:source,work:w}).map(pageKey)),groups=Array.isArray(v.groups)?v.groups:[];
+  const lists=groups.slice(0,10).map(g=>({pages:distinctPages(Array.isArray(g?.pages)?g.pages:[]),subject:subjectInput(g?.subject)}));
+  if(!lists.length||lists.length!==groups.length||lists.some(g=>!g.pages.length))fail(systemMessageText('strategy.checkInputLength'));
+  if(lists.some(g=>g.pages.some(u=>!own.has(pageKey(u)))))fail(systemMessageText('taskPages.notOwnPages'),409);
+  return this.mutate(id,v,async(state,transaction)=>{
+   if(state.proposals.length+lists.length>100)fail(systemMessageText('strategy.currentPilotSavesUp100'),409);
+   const from=state.proposals.find(p=>p.id===e.proposalId),group=from?(from.group||from.id):`task:${source.id}`,locale=ctx?.getCurrentLocale?.()||'zh-CN';
+   const objective=String(from?.objective||e.objective||source.title||'').slice(0,1000),brief=String(from?.brief||source.brief||'');
+   for(const g of lists){const at=new Date().toISOString(),scope=systemMessageText('taskPages.splitScope',{0:Number.isInteger(e.no)?`T-${e.no}`:source.title},locale);
+    const proposal={title:String(source.title||'').slice(0,200),...(g.subject?{subject:g.subject}:{}),brief:`${scope}\n${g.pages.map(u=>`- ${u}`).join('\n')}\n\n${brief}`.slice(0,20000),objective,...(e.why?{why:e.why}:{}),id:randomUUID(),status:'approved',goalVersion:null,goal:null,insight:e.insight||null,evidence:from?.evidence||e.context||null,...(e.resultSource?{resultSource:e.resultSource}:{}),page:g.pages[0],pages:g.pages,group,...(e.entry?{entry:e.entry}:{}),createdAt:at};
+    const task=await this.createDirectionTask(id,proposal,{playbookId:v.playbookId},ctx,transaction);
+    const {evidence:_evidence,...slim}=proposal;state.proposals.unshift({...slim,taskId:task.id,taskNo:task.get?.('evidence')?.no,approvedAt:at});}
+  });}
  // A hand-off that names its subject gets an automatic title, "<playbook>: <subject>" in the request's language, and
  // keeps the subject so another playbook chosen before the start retitles it (task-title.ts); without a playbook the
  // title it was sent stays.
  async createDirectionTask(id,proposal,v,ctx,transaction){const locale=ctx?.getCurrentLocale?.()||undefined,playbookId=typeof v.playbookId==='string'&&/^[a-z0-9-]{1,60}$/.test(v.playbookId)?v.playbookId:'';
   const playbook=proposal.subject&&playbookId?await this.p.taskExecution?.playbooks.get(String(id),playbookId,transaction).catch(()=>null):null;
   if(playbook)proposal.title=playbookTitle(playbook,proposal.subject,locale);
-  return this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:systemMessageText('messages.goal',{0:proposal.objective,1:proposal.brief},ctx?.getCurrentLocale?.()),status:systemMessageText('common.pending'),evidence:{source:systemMessageText('strategy.aiOpportunityActionConfirmedPerson'),objective:proposal.objective,...((proposal.why||whyInput(proposal.insight?.reason))?{why:proposal.why||whyInput(proposal.insight?.reason)}:{}),insight:proposal.insight,context:proposal.evidence,proposalId:proposal.id,...(proposal.signalKey?{signalKey:proposal.signalKey}:{}),...(proposal.page?{page:proposal.page}:{}),...(proposal.part?{part:proposal.part}:{}),...(proposal.entry?{entry:proposal.entry}:{}),...(proposal.resultSource?{resultSource:proposal.resultSource}:{}),...(proposal.subject?{autoTitle:{subject:proposal.subject,...(locale?{locale}:{})}}:{}),...creator(ctx),...(typeof v.playbookId==='string'&&/^[a-z0-9-]{1,60}$/.test(v.playbookId)?{suggestedPlaybook:v.playbookId}:{})}},transaction});}
+  return this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:systemMessageText('messages.goal',{0:proposal.objective,1:proposal.brief},ctx?.getCurrentLocale?.()),status:systemMessageText('common.pending'),evidence:{source:systemMessageText('strategy.aiOpportunityActionConfirmedPerson'),objective:proposal.objective,...((proposal.why||whyInput(proposal.insight?.reason))?{why:proposal.why||whyInput(proposal.insight?.reason)}:{}),insight:proposal.insight,context:proposal.evidence,proposalId:proposal.id,...(proposal.signalKey?{signalKey:proposal.signalKey}:{}),...(proposal.page?{page:proposal.page}:{}),...(proposal.pages?.length?{pages:proposal.pages}:{}),...(proposal.part?{part:proposal.part}:{}),...(proposal.entry?{entry:proposal.entry}:{}),...(proposal.resultSource?{resultSource:proposal.resultSource}:{}),...(proposal.subject?{autoTitle:{subject:proposal.subject,...(locale?{locale}:{})}}:{}),...creator(ctx),...(typeof v.playbookId==='string'&&/^[a-z0-9-]{1,60}$/.test(v.playbookId)?{suggestedPlaybook:v.playbookId}:{})}},transaction});}
  // Short task numbers (T-1, T-2 …): task record ids are long generated numbers, so each new task gets the next number
  // of its project when it is created — one hook for every place that creates tasks; kept in evidence.no.
  async numberTask(model,options){
@@ -223,10 +246,10 @@ class StrategyService{
   proposal.status='approved';proposal.taskId=task.id;proposal.taskNo=task.get?.('evidence')?.no;proposal.approvedAt=new Date().toISOString();
  });}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,systemMessageText('strategy.workspaceRequestNotCompleteEdits'));}};
-  this.p.app.resourceManager.define({name:'nrStrategy',actions:{state:wrap(id=>this.state(id)),handOffPlan:wrap((id,v,c)=>this.handOffPlan(id,v,c)),reviewOpportunity:wrap((id,v)=>this.reviewOpportunity(id,v)),saveInsights:wrap((id,v,c)=>this.saveInsights(id,v,c)),context:wrap(async(id,v,c)=>{const context=await this.context(id,v.periodDays),evidenceToken=randomUUID();await c.cache.set(`nr-analysis:${id}:${c.auth.user.id}:${evidenceToken}`,context,86400000);return {...context,evidenceToken};}),saveGoal:wrap((id,v,c)=>this.saveGoal(id,v,c)),saveProposal:wrap((id,v)=>this.saveProposal(id,v)),approve:wrap((id,v,c)=>this.approve(id,v,c)),confirmDirection:wrap((id,v,c)=>this.confirmDirection(id,v,c)),decideSignal:wrap((id,v)=>this.decideSignal(id,v)),badges:wrap((id,v,c)=>this.badges(id,c))}});
+  this.p.app.resourceManager.define({name:'nrStrategy',actions:{state:wrap(id=>this.state(id)),handOffPlan:wrap((id,v,c)=>this.handOffPlan(id,v,c)),reviewOpportunity:wrap((id,v)=>this.reviewOpportunity(id,v)),saveInsights:wrap((id,v,c)=>this.saveInsights(id,v,c)),context:wrap(async(id,v,c)=>{const context=await this.context(id,v.periodDays),evidenceToken=randomUUID();await c.cache.set(`nr-analysis:${id}:${c.auth.user.id}:${evidenceToken}`,context,86400000);return {...context,evidenceToken};}),saveGoal:wrap((id,v,c)=>this.saveGoal(id,v,c)),saveProposal:wrap((id,v)=>this.saveProposal(id,v)),approve:wrap((id,v,c)=>this.approve(id,v,c)),confirmDirection:wrap((id,v,c)=>this.confirmDirection(id,v,c)),splitTask:wrap((id,v,c)=>this.splitTask(id,v,c)),decideSignal:wrap((id,v)=>this.decideSignal(id,v)),badges:wrap((id,v,c)=>this.badges(id,c))}});
   this.p.db.on('nrTasks.beforeCreate',(model,options)=>this.numberTask(model,options));
   this.p.app.on('afterStart',()=>this.numberAll().catch(e=>this.p.app.logger.warn('NocoReach opportunity numbers not filled',{message:e.message})));
-  this.p.app.acl.allow('nrStrategy',['state','handOffPlan','context','reviewOpportunity','saveGoal','saveProposal','approve','confirmDirection','decideSignal','saveInsights','badges'],'loggedIn');
+  this.p.app.acl.allow('nrStrategy',['state','handOffPlan','context','reviewOpportunity','saveGoal','saveProposal','approve','confirmDirection','splitTask','decideSignal','saveInsights','badges'],'loggedIn');
  }
 }
 export { StrategyService, goalInput, proposalInput, insightInput, evidenceFrom, projectMemory, memoryFields };

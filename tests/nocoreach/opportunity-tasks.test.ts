@@ -501,3 +501,33 @@ it('a hand-off titles each task by its playbook and keeps the subject', async ()
   expect(own.title).toBe('My own title');
   expect(own.evidence.autoTitle).toBeUndefined();
 });
+
+// O-59 (2026-10-29) made T-55 for /blog/{slug}/ and T-56 for /en/blog/{slug}: two places, one CMS post.
+it('pages that are one article in different forms are one place, with all their changes', () => {
+  const post = 'https://www.nocobase.com/blog/6-open-source-tools/',
+    en = 'https://www.nocobase.com/en/blog/6-open-source-tools',
+    pricing = 'https://www.nocobase.com/pricing';
+  const list = [
+    signal('ctr:post', 'optimize', post),
+    signal('rank:post', 'optimize', en),
+    signal('rank:pricing', 'optimize', pricing),
+  ];
+  const plan = planOf({
+    card: { ...card, signalIds: list.map((s) => s.key) },
+    signals: list,
+    site: null,
+    proposals: [],
+    tasks: [],
+    targets: [
+      {
+        pages: { en: 'https://www.nocobase.com/en/blog/{slug}' },
+        locales: ['en'],
+      },
+    ],
+    locale: 'en-US',
+  });
+  expect(plan.map((p) => [p.url, p.signalIds])).toEqual([
+    [post, ['ctr:post', 'rank:post']],
+    [pricing, ['rank:pricing']],
+  ]);
+});

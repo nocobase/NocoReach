@@ -90,6 +90,8 @@ export function DeliveryDialog({
   notice?: string;
   /** A translation playbook: an article that exists, the source language and the languages to write. */
   translate?: boolean;
+  /** What the article search starts from: the slug of a page that looks like an article not found (T-55). */
+  query?: string;
   busy: boolean;
   link: (targetId: string, articleId: string) => Promise<boolean>;
   onSave: (choice: DeliveryChoice) => void;
@@ -107,7 +109,7 @@ export function DeliveryDialog({
             {$t(
               form.translate
                 ? 'articleTask.chooseTranslation'
-                : 'articleTask.chooseArticle',
+                : 'articleTask.changeDeliveryTitle',
             )}
           </DialogTitle>
         </DialogHeader>
@@ -125,6 +127,7 @@ function DeliveryForm({
   found,
   notice,
   translate = false,
+  query = '',
   busy,
   link,
   onSave,
@@ -136,6 +139,7 @@ function DeliveryForm({
   found?: ArticleMatch | null;
   notice?: string;
   translate?: boolean;
+  query?: string;
   busy: boolean;
   link: (targetId: string, articleId: string) => Promise<boolean>;
   onSave: (choice: DeliveryChoice) => void;
@@ -152,7 +156,7 @@ function DeliveryForm({
       ...(choice.locales ? { locales: choice.locales } : {}),
     }),
     [picked, setPicked] = useState(() => pickedOf(data, choice));
-  const [q, setQ] = useState(''),
+  const [q, setQ] = useState(query),
     [attempt, setAttempt] = useState(0),
     [saving, setSaving] = useState(false),
     [error, setError] = useMessageState('');
@@ -491,9 +495,6 @@ function DeliveryForm({
   );
 }
 
-// Where the change goes, in one line (2026-10-21): the article found from the task's page, the one saved on the
-// task, a new article in the playbook's target, or the website repository. Change opens DeliveryDialog; when an
-// article still has to be picked, the line says why and Choose article opens the same dialog.
 /**
  * The languages a task writes (2026-10-24): the primary, written and reviewed first, and the others, translated from
  * it once it is approved, or updated in place with its changes where an existing article has them (2026-10-28).
@@ -687,6 +688,79 @@ function TranslationPicker({
   );
 }
 
+/** A page as the list shows it: its path, decoded. */
+const pathOf = (url: string) => {
+  try {
+    const path = new URL(url).pathname || '/';
+    try {
+      return decodeURI(path);
+    } catch {
+      return path;
+    }
+  } catch {
+    return url;
+  }
+};
+/** How many pages the list shows before "N more". */
+const FIRST_PAGES = 3;
+
+/** The pages a start changes: the first few, then the rest behind "N more"; each opens where readers see it. */
+export function PageList({
+  pages,
+}: {
+  pages: { url: string; title?: string }[];
+}) {
+  const [all, setAll] = useState(false),
+    shown = all ? pages : pages.slice(0, FIRST_PAGES);
+  if (!pages.length) return null;
+  return (
+    <ul className='flex flex-col gap-1' data-start-pages=''>
+      {shown.map((p) => (
+        <li
+          key={p.url}
+          className={cn(text.body, 'flex min-w-0 items-baseline gap-2')}
+        >
+          {/^https?:\/\//i.test(p.url) ? (
+            <a
+              className='nr-link inline-flex min-w-0 items-center gap-1'
+              href={p.url}
+              target='_blank'
+              rel='noreferrer'
+            >
+              <span className='truncate'>{p.title || pathOf(p.url)}</span>
+              <ExternalLink className='size-3 shrink-0' aria-hidden='true' />
+            </a>
+          ) : (
+            <span className='truncate'>{p.title || p.url}</span>
+          )}
+          {p.title && (
+            <small className='truncate text-xs text-muted-foreground'>
+              {pathOf(p.url)}
+            </small>
+          )}
+        </li>
+      ))}
+      {pages.length > shown.length && (
+        <li>
+          <Button
+            variant='link'
+            size='sm'
+            className='h-auto p-0 font-normal'
+            onClick={() => setAll(true)}
+          >
+            {$t('taskNumbers.morePages', { 0: pages.length - shown.length })}
+          </Button>
+        </li>
+      )}
+    </ul>
+  );
+}
+
+// Where the change goes (2026-10-29, after T-54: people choose pages, not articles or publishing targets): the pages to
+// change, then one plain line for where they are changed, decided by where they live: the site's code by pull
+// request, or the CMS article that holds them, with its languages. Change opens DeliveryDialog for the exceptions;
+// when the place could not be told, the line says why and Choose article opens the same dialog. A new article reads
+// "New article · Publishes to <target>" and a translation its article and languages, as before.
 export function DeliverySummary({
   data,
   choice,
@@ -695,7 +769,10 @@ export function DeliverySummary({
   allowed,
   busy,
   translate = false,
+  pages = [],
+  changeable = true,
   onChange,
+  children,
 }: {
   data: TaskData;
   choice: DeliveryChoice;
@@ -705,7 +782,13 @@ export function DeliverySummary({
   busy: boolean;
   /** A translation playbook: the article to translate and, in one line, from and into which languages. */
   translate?: boolean;
+  /** The task's pages this start changes, with their titles (startPages); every page while they are looked up. */
+  pages?: { url: string; title?: string }[];
+  /** Whether Change has anything to offer: a project without publishing targets only has the website's code. */
+  changeable?: boolean;
   onChange: () => void;
+  /** What follows the line, in the same field: the pages left to other tasks (RestNotice). */
+  children?: ReactNode;
 }) {
   const targets = data.articleTargets || [],
     name = (id: string) => targets.find((t) => t.id === id)?.name || id,
@@ -713,13 +796,8 @@ export function DeliverySummary({
     languages = translate
       ? translationLocales(data, choice)
       : choiceLocales(data, choice),
-    ui = getCurrentLocale(),
-    toChange = $t(
-      translate
-        ? 'articleTask.articleToTranslate'
-        : 'articleTask.articleToChange',
-    );
-  const change = allowed && !finding && (
+    ui = getCurrentLocale();
+  const change = allowed && !finding && changeable && (
     <Button
       variant='link'
       size='sm'
@@ -730,80 +808,109 @@ export function DeliverySummary({
       {$t('articleTask.changeDelivery')}
     </Button>
   );
-  const row = (label: string, body: ReactNode, action: ReactNode = change) => (
+  const choose = allowed && (
+    <Button variant='outline' size='sm' disabled={busy} onClick={onChange}>
+      {$t('articleTask.chooseArticle')}
+    </Button>
+  );
+  const languageLine =
+    translate && choice.target !== REPO ? (
+      languages.length > 1 ? (
+        <p
+          className={cn(text.muted, 'flex flex-wrap items-center gap-1')}
+          data-delivery-languages=''
+        >
+          {$tj('articleTask.translateLine', {
+            0: <Tag tone='grey'>{localeName(languages[0], ui)}</Tag>,
+            1: (
+              <span className='inline-flex flex-wrap gap-1'>
+                {languages.slice(1).map((l) => (
+                  <Tag key={l} tone='grey'>
+                    {localeName(l, ui)}
+                  </Tag>
+                ))}
+              </span>
+            ),
+          })}
+        </p>
+      ) : (
+        <p className={text.muted} data-translate-one-language=''>
+          {$t('articleTask.translateOneLanguage')}
+        </p>
+      )
+    ) : (
+      languages.length > 1 && (
+        <p className={text.muted} data-delivery-languages=''>
+          {$t('articleTask.languagesLine', {
+            0: [
+              $t('articleTask.primaryMark', {
+                0: localeName(languages[0], ui),
+              }),
+              ...languages.slice(1).map((l) => localeName(l, ui)),
+            ].join(' · '),
+          })}
+        </p>
+      )
+    );
+  const field = (
+    label: string,
+    list: { url: string; title?: string }[],
+    line: ReactNode,
+    action: ReactNode,
+    article: boolean,
+  ) => (
     <Field label={label}>
+      <PageList pages={list} />
       <div
         className={cn(text.body, 'flex flex-wrap items-center gap-x-2 gap-y-1')}
         data-delivery-summary=''
       >
-        {body}
+        {line}
         {action}
       </div>
-      {also.length > 0 && (
+      {article && also.length > 0 && (
         <p className={text.muted}>
           {$t('articleTask.alsoPublishesTo', { 0: names(data, also) })}
         </p>
       )}
-      {translate && choice.target !== REPO ? (
-        languages.length > 1 ? (
-          <p
-            className={cn(text.muted, 'flex flex-wrap items-center gap-1')}
-            data-delivery-languages=''
-          >
-            {$tj('articleTask.translateLine', {
-              0: <Tag tone='grey'>{localeName(languages[0], ui)}</Tag>,
-              1: (
-                <span className='inline-flex flex-wrap gap-1'>
-                  {languages.slice(1).map((l) => (
-                    <Tag key={l} tone='grey'>
-                      {localeName(l, ui)}
-                    </Tag>
-                  ))}
-                </span>
-              ),
-            })}
-          </p>
-        ) : (
-          <p className={text.muted} data-translate-one-language=''>
-            {$t('articleTask.translateOneLanguage')}
-          </p>
-        )
-      ) : (
-        languages.length > 1 && (
-          <p className={text.muted} data-delivery-languages=''>
-            {$t('articleTask.languagesLine', {
-              0: [
-                $t('articleTask.primaryMark', {
-                  0: localeName(languages[0], getCurrentLocale()),
-                }),
-                ...languages
-                  .slice(1)
-                  .map((l) => localeName(l, getCurrentLocale())),
-              ].join(' · '),
-            })}
-          </p>
-        )
-      )}
+      {article && languageLine}
+      {children}
     </Field>
   );
+  const pagesLabel = $t(
+    translate ? 'articleTask.articleToTranslate' : 'taskPages.label',
+  );
   if (finding)
-    return row(
-      toChange,
+    return field(
+      pagesLabel,
+      translate ? [] : pages,
       <span className='text-muted-foreground'>
-        {$t('articleTask.findingArticle')}
+        {$t(translate ? 'articleTask.findingArticle' : 'taskPages.finding')}
       </span>,
+      null,
+      false,
     );
   if (choice.target === REPO)
-    return row($t('articleTask.changeVia'), $t('articleTask.repository'));
+    return field(
+      $t(pages.length ? 'taskPages.label' : 'articleTask.changeVia'),
+      pages,
+      <span data-delivery-place='repo'>{$t('taskPages.inRepository')}</span>,
+      change,
+      false,
+    );
   if (choice.mode === 'new' && !translate)
-    return row(
+    return field(
       $t('articleTask.newArticle'),
+      [],
       $t('articleTask.publishesTo', { 0: name(choice.target) }),
+      change,
+      true,
     );
   const picked = pickedOf(data, choice);
   if (!picked)
-    return row(
-      toChange,
+    return field(
+      pagesLabel,
+      translate ? [] : pages,
       <span className='text-muted-foreground' data-article-not-found=''>
         {notice ||
           $t(
@@ -812,36 +919,22 @@ export function DeliverySummary({
               : 'articleTask.pickArticle',
           )}
       </span>,
-      allowed && (
-        <Button variant='outline' size='sm' disabled={busy} onClick={onChange}>
-          {$t('articleTask.chooseArticle')}
-        </Button>
-      ),
+      choose,
+      false,
     );
   const url =
     choice.article?.targetId === choice.target
       ? choice.article.url
       : articlePageUrl(data, choice.target, picked.slug);
-  return row(
-    toChange,
-    <>
-      {/^https?:\/\//i.test(url) ? (
-        <a
-          className='nr-link inline-flex items-center gap-1'
-          href={url}
-          target='_blank'
-          rel='noreferrer'
-        >
-          {picked.title}
-          <ExternalLink className='size-3 shrink-0' aria-hidden='true' />
-        </a>
-      ) : (
-        <span>{picked.title}</span>
-      )}
-      <Tag tone='grey'>{name(choice.target)}</Tag>
-      {choice.article && (
-        <Tag tone='green'>{$t('articleTask.foundByPage')}</Tag>
-      )}
-    </>,
+  return field(
+    pagesLabel,
+    [{ url: url || picked.slug, title: picked.title }],
+    <span data-delivery-place='article'>
+      {$t(translate ? 'taskPages.translatedIn' : 'taskPages.inArticle', {
+        0: name(choice.target),
+      })}
+    </span>,
+    change,
+    true,
   );
 }
