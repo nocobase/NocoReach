@@ -1715,3 +1715,84 @@ test('Accept and start: a new docs page with no article found from its page wait
     expect.objectContaining({ relation: 'next', state: 'todo' }),
   ]);
 });
+
+// Tasks carry their pages (2026-10-29): the start card reads where each one is changed, a start that leaves some to
+// other tasks names the ones it changes, and the tasks split off for the rest are its siblings.
+const hello = 'https://www.example.com/en/blog/hello',
+  pricing = 'https://www.example.com/pricing',
+  missing = 'https://www.example.com/en/blog/missing';
+
+test('task pages: each page is read as an article or a page of the site, with its title; a start names the pages it keeps', async () => {
+  const f = await fixture();
+  f.state.nrTasks[0].evidence = { pages: [pricing, hello, missing] };
+  f.state.nrSnapshots.push({
+    id: 900,
+    key: 'site-content:1',
+    payload: { pages: [{ url: pricing, title: 'Pricing' }] },
+  });
+  const places = await f.s.pagePlaces('1', '1');
+  expect(places.article).toMatchObject({ targetId: 'cms', articleId: '7' });
+  expect(places.unchecked).toBe(false);
+  // A page no target's pattern reads costs no request; one it reads but has no article is the site's own.
+  expect(places.pages).toEqual([
+    { url: pricing, title: 'Pricing' },
+    {
+      url: hello,
+      article: expect.objectContaining({ articleId: '7', slug: 'hello' }),
+    },
+    { url: missing },
+  ]);
+  await expect(
+    f.command('startTask', {
+      playbookId: 'optimize-page',
+      pages: ['https://www.example.com/elsewhere'],
+    }),
+  ).rejects.toMatchObject({ status: 409 });
+  await f.s.agents.saveRepo('1', {
+    repo: 'org/site',
+    baseBranch: 'main',
+    revision: 1,
+  });
+  const d = await f.command('startTask', {
+    playbookId: 'optimize-page',
+    pages: [pricing, missing],
+  });
+  expect(d.work.pages).toEqual([pricing, missing]);
+  const task = f.state.nrTasks[0];
+  expect(f.s.numberPages(task, d.work)).toEqual([pricing, missing]);
+  const { run } = await claim(f);
+  expect(run.input.pagesToChange).toEqual([pricing, missing]);
+});
+
+test('task pages: the tasks split off a task are listed as its siblings, with their pages', async () => {
+  const f = await fixture();
+  f.state.nrTasks[0].evidence = { proposalId: 'p1', pages: [pricing, hello] };
+  f.state.nrTasks.push({
+    id: 2,
+    projectId: '1',
+    title: 'Improve the hello post',
+    brief: 'b',
+    status: '待处理',
+    evidence: { no: 2, proposalId: 'p2', page: hello, pages: [hello] },
+  });
+  f.state.nrSnapshots.push({
+    id: 901,
+    key: 'strategy:1',
+    payload: {
+      proposals: [
+        { id: 'p2', taskId: 2, group: 'p1' },
+        { id: 'p1', taskId: 1 },
+      ],
+    },
+  });
+  expect((await f.view()).related).toEqual([
+    expect.objectContaining({ id: 2, relation: 'sibling', pages: [hello] }),
+  ]);
+  expect((await f.s.get('1', '2')).related).toEqual([
+    expect.objectContaining({
+      id: 1,
+      relation: 'sibling',
+      pages: [pricing, hello],
+    }),
+  ]);
+});

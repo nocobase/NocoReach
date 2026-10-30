@@ -81,7 +81,7 @@ export function runNotes(history: readonly { action?: unknown; comment?: unknown
   }
   return comments.filter(e => kept.has(e)).map(e => e.comment);
 }
-export function flowRunInput(project: any, task: any, w: { flow?: FlowSnapshot; playbook?: { name: string }; results: ({ content: string; rejectedAt?: string } | null)[]; note?: string; history?: any[] }, index: number, content: unknown, reviews: any[]) {
+export function flowRunInput(project: any, task: any, w: { flow?: FlowSnapshot; playbook?: { name: string }; results: ({ content: string; rejectedAt?: string } | null)[]; note?: string; history?: any[]; pages?: string[] }, index: number, content: unknown, reviews: any[]) {
   const stages = w.flow!.stages, stage = stages[index];
   const insight = task?.evidence?.insight || null, part = task?.evidence?.part || null;
   // One of an opportunity's several tasks reads the changes about its own place, and the opportunity's changes that
@@ -99,6 +99,8 @@ export function flowRunInput(project: any, task: any, w: { flow?: FlowSnapshot; 
     // Messages the person left for the executor, and the document handed over by the task before this one.
     notes: runNotes(w.history || []),
     handoff: task?.evidence?.handoff?.content || null,
+    // The task's pages this task changes, when it left the others to other tasks (2026-10-29).
+    ...(w.pages?.length ? { pagesToChange: w.pages } : {}),
     evidence: insight ? { insight, signals, ...(part ? { part: { target: part.label, ...(part.url ? { url: part.url } : {}) } } : {}) } : rest,
     content: content || null,
     stage: { name: stage.name, instruction: stage.instruction || '', ...(stage.skills?.length ? { skills: stage.skills } : {}) },

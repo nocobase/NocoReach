@@ -5,6 +5,7 @@ import {
   type ArticleField,
 } from '../../../shared/article-publishing.js';
 import { localeName, providerKey } from '../article-targets-api';
+import { subjectOf } from '../task-subject';
 import type {
   ArticleProposal,
   Artifact,
@@ -23,11 +24,15 @@ export {
   defaultDelivery,
   deliveryPlan,
   pageUrlsOf,
+  pagesToStart,
   presentLocales,
+  startPages,
   translationLocales,
   type ArticleFound,
   type DeliveryChoice,
+  type PageFound,
 } from '../../../shared/task-start.js';
+import type { PageFound } from '../../../shared/task-start.js';
 /** A task publishes to its primary target and at most this many others (article-flow.ts). */
 export const MAX_ALSO = 4;
 
@@ -370,4 +375,62 @@ export function canRebase(r: Release) {
     primary?.state === 'publish_conflict' &&
     primary.a.conflict?.reason === 'missing'
   );
+}
+
+/** A page's path, decoded, as lists and subjects name it. */
+export const pagePath = (url: string) => {
+  try {
+    const path = new URL(url).pathname || '/';
+    try {
+      return decodeURI(path);
+    } catch {
+      return path;
+    }
+  } catch {
+    return url;
+  }
+};
+
+/** A group of the pages left out, as Create separate tasks sends it: an article alone, or the site's pages together. */
+export type PageGroup = { pages: string[]; subject: string };
+
+/** The pages left to other tasks: each article (by id, or by the slug it was guessed under), then the site's pages. */
+export function restGroups(rest: PageFound[]): {
+  articles: PageGroup[];
+  site: PageGroup | null;
+} {
+  const articles = new Map<string, PageGroup>(),
+    site: string[] = [];
+  for (const p of rest) {
+    const key = p.article
+      ? `${p.article.targetId}:${p.article.articleId}`
+      : p.guess
+        ? `${p.guess.targetId}:slug:${p.guess.slug}`
+        : '';
+    if (!key) {
+      site.push(p.url);
+      continue;
+    }
+    const group = articles.get(key) || {
+      pages: [],
+      subject: (p.article?.title || p.guess?.slug || pagePath(p.url)).slice(
+        0,
+        160,
+      ),
+    };
+    group.pages.push(p.url);
+    articles.set(key, group);
+  }
+  return {
+    articles: [...articles.values()],
+    site: site.length
+      ? {
+          pages: site,
+          subject: subjectOf(pagePath(site[0]), site.length, 'pages').slice(
+            0,
+            160,
+          ),
+        }
+      : null,
+  };
 }

@@ -4,6 +4,7 @@ import { getCurrentLocale, $t } from "#i18n";
 // behind it (where it ranks, how many people see and click it, which page), with the 做法 that fits by default.
 import type { TaskDraft } from "./keyword-hand-off";
 import { countOf, subjectOf } from './task-subject';
+import { distinctPages } from '../../shared/task-start.js';
 
 const n = (v: number | null | undefined) => (v == null ? "—" : Math.round(v).toLocaleString(getCurrentLocale()));
 const pos = (v: number | null | undefined) => (v == null || !v ? "—" : v.toFixed(1));
@@ -12,6 +13,9 @@ const pathOf = (u: string) => { try { return new URL(u).pathname || "/"; } catch
 const clip = (s: string, max: number) => s.slice(0, max);
 export type Period = { start: string; end: string } | undefined;
 const since = (w: Period) => (w ? $t('common.range',{0:w.start,1:w.end}) : $t('seoHandOff.recent'));
+// The pages a hand-off concerns, each once (2026-10-29): kept on the task, so its start card knows where the change
+// goes and Performance shows them. Only the site's own pages: never a competitor's.
+const pagesOf = (urls: (string | null | undefined)[]) => distinctPages(urls);
 // The page most of the rows point to (by impressions), linked to the task when it is in 网站内容.
 export function mainPage(rows: { page?: string | null; impressions?: number }[]) {
   const by = new Map<string, number>();
@@ -25,6 +29,7 @@ export function queryDraft(rows: QueryRow[], w: Period): TaskDraft {
   const head = rows[0].query, page = mainPage(rows);
   const lines = rows.slice(0, 40).map((r) => $t('seoHandOff.averagePositionImpressionsClicks',{0:r.query,1:pos(r.position),2:n(r.impressions),3:n(r.clicks),4:r.ctr != null ? $t('seoHandOff.ctr',{0:pct(r.ctr)}) : "",5:r.page ? $t('seoHandOff.rankingPage',{0:r.page}) : ""}));
   return {
+    pages: pagesOf([page, ...rows.map((r) => r.page)]),
     title: clip(rows.length === 1 ? $t('seoHandOff.pushTopResults',{0:head}) : $t('seoHandOff.pushMoreQueriesTopResults',{0:head,1:rows.length}), 200),
     subject: clip(subjectOf(head, rows.length, 'queries'), 160),
     objective: clip($t('seoHandOff.queriesRankGoogleTop5',{0:rows.map((r) => r.query).join("、")}), 1000),
@@ -38,6 +43,7 @@ export function pageDraft(rows: PageRow[], w: Period): TaskDraft {
   const head = pathOf(rows[0].page);
   const lines = rows.slice(0, 30).map((r) => $t('seoHandOff.clicksImpressionsCtrAveragePosition',{0:r.page,1:n(r.clicks),2:n(r.impressions),3:pct(r.ctr),4:pos(r.position)}));
   return {
+    pages: pagesOf(rows.map((r) => r.page)),
     title: clip(rows.length === 1 ? $t('seoHandOff.improveSearchPerformance',{0:head}) : $t('seoHandOff.improveSearchPerformanceMorePages',{0:head,1:rows.length}), 200),
     subject: clip(subjectOf(head, rows.length, 'pages'), 160),
     objective: clip($t('seoHandOff.pagesGetMoreClicksGoogle',{0:rows.map((r) => pathOf(r.page)).join("、")}), 1000),
@@ -51,6 +57,7 @@ export function indexDraft(rows: IndexPage[]): TaskDraft {
   const head = pathOf(rows[0].url);
   const lines = rows.slice(0, 40).map((r) => $t('seoHandOff.indexPageLine',{0:r.url,1:r.status,2:r.reason ?? "—",3:r.lastCrawl ?? "—",4:r.canonicalMismatch ? $t('seoHandOff.indexCanonicalMismatch') : "",5:r.rich.length ? $t('seoHandOff.indexRich',{0:r.rich.join(" · ")}) : ""}));
   return {
+    pages: pagesOf(rows.map((r) => r.url)),
     title: clip(rows.length === 1 ? $t('seoHandOff.fixIndexing',{0:head}) : $t('seoHandOff.fixIndexingMorePages',{0:head,1:rows.length}), 200),
     subject: clip(subjectOf(head, rows.length, 'pages'), 160),
     objective: clip($t('seoHandOff.pagesIndexedProperly',{0:rows.map((r) => pathOf(r.url)).join("、")}), 1000),
@@ -88,6 +95,7 @@ export type ContentPage = { url: string; title?: string; views?: number | null; 
 export function contentPageDraft(p: ContentPage, rangeLabel: string): TaskDraft {
   const name = p.title || pathOf(p.url);
   return {
+    pages: pagesOf([p.url]),
     title: clip($t('seoHandOff.optimizeQuotedTarget',{0:name}), 200),
     subject: clip(name, 160),
     objective: clip($t('seoHandOff.getMoreTrafficSearchClicks',{0:p.url}), 1000),
@@ -101,6 +109,7 @@ export function trackedDraft(rows: TrackedRow[]): TaskDraft {
   const head = rows[0].keyword, ranked = rows.some((r) => r.latest?.position || r.gsc);
   const lines = rows.slice(0, 40).map((r) => `- ${r.keyword}（${r.market}）：${r.latest ? $t('seoHandOff.googleRank',{0:formatDate(r.latest.at),1:r.latest.position ?? $t('common.beyond100'),2:r.latest.position ? $t('seoHandOff.personMeasure') : "",3:r.latest.url ? `（${r.latest.url}）` : ""}) : $t('seoHandOff.notCheckedYet')}${r.previous ? $t('seoHandOff.lastTimeRank',{0:r.previous.position ?? $t('common.beyond100'),1:r.previous.position ? $t('seoHandOff.personMeasure') : ""}) : ""}${r.gsc ? $t('seoHandOff.searchConsoleAveragePositionOver',{0:r.gsc.position.toFixed(1),1:n(r.gsc.clicks)}) : ""}`);
   return {
+    pages: pagesOf([trackedPage(rows), ...rows.map((r) => r.latest?.url || r.gsc?.page)]),
     title: clip(rows.length === 1 ? $t('seoHandOff.improveRanking',{0:head}) : $t('seoHandOff.improveRankingMoreKeywords',{0:head,1:rows.length}), 200),
     subject: clip(subjectOf(head, rows.length, 'keywords'), 160),
     objective: clip($t('seoHandOff.trackedKeywordsReachTopResults',{0:rows.map((r) => r.keyword).join("、")}), 1000),
@@ -113,6 +122,7 @@ export const trackedPage = (rows: TrackedRow[]) => mainPage(rows.map((r) => ({ p
 export function ownPagesDraft(domain: string, market: string, rows: CompetitorPage[]): TaskDraft {
   const lines = rows.slice(0, 20).map((r) => $t('seoHandOff.estimatedTrafficRankingKeywords',{0:r.url,1:n(r.traffic),2:n(r.keywords)}));
   return {
+    pages: pagesOf(rows.map((r) => r.url)),
     title: clip(rows.length === 1 ? $t('seoHandOff.improve',{0:pathOf(rows[0].url)}) : $t('seoHandOff.improvePages',{0:domain,1:rows.length}), 200),
     subject: clip(rows.length === 1 ? pathOf(rows[0].url) : countOf(domain, rows.length, 'pages'), 160),
     objective: clip($t('seoHandOff.pagesRankBetterGoogleBring'), 1000),
@@ -145,6 +155,7 @@ export function discussionsDraft(where: string, noun: string, items: DiscussionI
 // 访问 · 页面详情: a page's GA4 numbers and the search queries that reach it.
 export function visitPageDraft(page: string, period: string, views: number, conversions: number, share: string, queries: { keyword: string; clicks?: number | null; impressions?: number | null }[]): TaskDraft {
   return {
+    pages: pagesOf([page]),
     title: clip($t('seoHandOff.optimizeTarget',{0:pathOf(page)}), 200),
     subject: clip(pathOf(page), 160),
     objective: clip($t('seoHandOff.getMoreKeyActionsSignValue',{0:page}), 1000),
@@ -182,6 +193,7 @@ export function competitorEventsDraft(rows: CompetitorEvent[]): TaskDraft {
 export function visitPagesDraft(rows: { page: string; views: number; conversions: number; share: string; queries: number }[], period: string): TaskDraft {
   const lines = rows.slice(0, 40).map((r) => $t('seoHandOff.viewsSiteKeyEventsSearch',{0:r.page,1:n(r.views),2:r.share,3:n(r.conversions),4:r.queries}));
   return {
+    pages: pagesOf(rows.map((r) => r.page)),
     title: clip(rows.length === 1 ? $t('seoHandOff.optimizeTarget',{0:pathOf(rows[0].page)}) : $t('seoHandOff.improvePagesTotal',{0:pathOf(rows[0].page),1:rows.length}), 200),
     subject: clip(subjectOf(pathOf(rows[0].page), rows.length, 'pages'), 160),
     objective: clip($t('seoHandOff.getMoreKeyActionsSign'), 1000),
