@@ -37,6 +37,14 @@ const stored = z.object({
         target: articleTargetSchema,
         secret: secret.optional(),
         gitToken: secret.optional(),
+        // The latest Check (2026-10-29), kept for the settings it read with: saving the target drops it.
+        check: z
+          .object({
+            at: z.string().max(40),
+            ok: z.boolean(),
+            code: z.string().max(80).optional(),
+          })
+          .optional(),
       }),
     )
     .max(10),
@@ -89,6 +97,7 @@ export class ArticleTargets {
       ...e.target,
       hasSecret: Boolean(e.secret),
       capabilities: ARTICLE_CAPABILITIES[e.target.kind],
+      check: e.check ?? null,
     };
   }
   list(id: string) {
@@ -280,8 +289,34 @@ export class ArticleTargets {
       ...(Object.keys(playbookTargets).length ? { playbookTargets } : {}),
     });
   }
-  /** Read one page of articles (and the downstream branch) to prove the settings and credentials work. */
+  /**
+   * Read one page of articles (and the downstream branch) to prove the settings and credentials work. The outcome is
+   * kept on the target with its time, so its card shows whether it works; the settings' revision stays as it was.
+   */
   async test(id: string, targetId: string) {
+    const result = await this.probe(id, targetId);
+    const now = this.stored(id),
+      check = {
+        at: new Date().toISOString(),
+        ok: result.ok,
+        ...(result.ok ? {} : { code: result.code }),
+      };
+    if (now.targets.some((e) => e.target.id === targetId))
+      await this.persist(id, {
+        ...now,
+        targets: now.targets.map((e) =>
+          e.target.id === targetId ? { ...e, check } : e,
+        ),
+      });
+    return { ...result, check };
+  }
+  private async probe(
+    id: string,
+    targetId: string,
+  ): Promise<
+    | { ok: true; sample: { id: string; title: string } | null }
+    | { ok: false; code: string }
+  > {
     try {
       const found = await this.provider(id, targetId).search('', 1);
       const d = this.downstream(id, targetId);
@@ -424,7 +459,13 @@ export class ArticleTargets {
       throw error;
     }
   }
-  register(p: { app: LegacyApp; project(id: string): Promise<unknown> }) {
+  register(p: {
+    app: LegacyApp;
+    project(id: string): Promise<unknown>;
+    taskExecution?: {
+      latestPublished(id: string): Promise<Record<string, unknown>>;
+    };
+  }) {
     const wrap =
       (
         fn: (id: string, values: Record<string, unknown>) => unknown,
@@ -448,7 +489,11 @@ export class ArticleTargets {
     p.app.resourceManager.define({
       name: 'nrArticles',
       actions: {
-        targets: wrap((id) => this.list(id)),
+        // With the article each target last published (the task service reads the tasks).
+        targets: wrap(async (id) => ({
+          ...this.list(id),
+          published: (await p.taskExecution?.latestPublished(id)) ?? {},
+        })),
         search: wrap((id, v) => this.search(id, scalar(v.targetId), v.q)),
         match: wrap((id, v) => this.match(id, v.urls)),
         languages: wrap((id, v) =>

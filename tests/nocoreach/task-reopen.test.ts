@@ -178,11 +178,13 @@ test('a merged change never goes back: closed while its live page was checked, i
 
 test('a publish stopped before merging goes back to the review, so publishing waits for a new approval', async () => {
   const f = fixture();
+  await withRepo(f);
   const release = { state: 'merging', pr: { number: 4, url: pr(4).url, headSha: 'abc1234' }, note: 'x', pages: [] };
   placed(f, 2, 'optimize-page', 2, { release, results: [{ id: 'a1', stepId: 'build', planVersion: 0, version: 1, content: 'Changed', createdAt: '2026-10-27T00:00:00Z', createdBy: 'agent', pr: pr(4), approvedAt: '2026-10-27T01:00:00Z' }] });
-  // No repository connected any more, so closing could not withdraw the PR.
+  // A task keeps the repository its PR is in (feat/multi-repo), so closing always asks to close the PR; reopened before
+  // the Agent picks that up, the close is dropped and only the publish rule applies.
   let d = await f.command('cancelTask', {}, '2');
-  assert.equal(d.work.prClose, undefined);
+  assert.equal(d.runs.find(r => r.mode === 'close')?.status, 'queued');
   d = await f.command('unarchiveTask', {}, '2');
   assert.equal((await f.stage('2')).kind, 'review');
   assert.equal(d.work.release, undefined);

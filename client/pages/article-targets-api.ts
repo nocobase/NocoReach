@@ -2,7 +2,9 @@ import { nocobaseClient as api, NocoReachHttpError } from '#lib/nocoreach-api';
 import type {
   ArticleMatch,
   ArticleSummary,
+  ArticleTargetCheck,
   ArticleTargetView,
+  PublishedArticle,
 } from '../../shared/article-publishing.js';
 
 export type TargetList = {
@@ -12,10 +14,13 @@ export type TargetList = {
   // Where each playbook's new tasks publish (a target id, or 'repo' for a pull request); absent means the default.
   playbookTargets?: Record<string, string>;
   targets: ArticleTargetView[];
+  /** The article each target last received from a task (2026-10-29). */
+  published?: Record<string, PublishedArticle>;
 };
-export type TestResult =
+export type TestResult = (
   | { ok: true; sample: { id: string; title: string } | null }
-  | { ok: false; code: string };
+  | { ok: false; code: string }
+) & { check: ArticleTargetCheck };
 
 /** Article publishing targets (server/nocoreach/articles/targets.ts). Writes need the browser's session id. */
 export const articleRequest = <T>(

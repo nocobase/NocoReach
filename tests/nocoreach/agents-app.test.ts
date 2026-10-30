@@ -1133,19 +1133,18 @@ test('protocol 11 Runner claims a task, returns its result once, and handles can
   const runningBuild = await tasks.snapshot(
     tasks.key('run', project, buildId, build.id),
   );
-  const configured = await tasks.agents.doc(project);
-  const changedRepo = vi.spyOn(tasks.agents, 'doc').mockResolvedValueOnce({
-    ...configured,
-    repo: { ...configured.repo!, repo: 'other/site' },
-  });
+  // The pull request has to be in the repository the run was given (2026-10-29: kept on the task at its start).
   await expect(
     tasks.acceptAgentResult(project, runningBuild.runtimeRunId, {
       ...buildResult,
+      pr: {
+        ...buildResult.pr,
+        url: buildResult.pr.url.replace('org/site', 'other/site'),
+      },
       taskId: buildId,
       runId: build.id,
     }),
   ).rejects.toMatchObject({ status: 400 });
-  changedRepo.mockRestore();
   expect((await tasks.get(project, buildId)).artifacts).toHaveLength(0);
   await agents.reports.complete(runner, build.pluginRunId, {
     summary: 'Build completed; structured result already submitted.',

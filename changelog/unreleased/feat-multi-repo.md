@@ -1,0 +1,9 @@
+## Website source: several repositories, chosen by the page
+
+- Data sources › Website source connects several repositories, each serving some of the website's addresses (a host, or a host and a path such as example.com/docs). A project's one repository keeps serving every address of its website.
+- Each repository has a status card: the addresses it serves, its branch and folders, its latest check and the pull request the Agent last opened there, with Check again, Edit and Remove. Remove asks first; new tasks no longer change that repository and pull requests already opened stay as they are.
+- Connect another repository opens a dialog that picks addresses from Website content or takes another address or path, says when an address moves from another repository, then saves and checks.
+- A check asks GitHub whether the repository and its base branch exist and says whether the project's Agent has a runner online; Data health warns when GitHub cannot see a repository and fails when its branch is missing.
+- The start card keeps listing the pages to change. When a change can go to more than one place (two repositories, or a repository beside a publishing target), Changes go to follows the list in place of its line saying where the pages are changed: the repositories (a pull request) and the publishing targets (published directly) in one select, picking the repository serving the task's pages and saying from which page; pages served by none of several repositories, or by different ones, wait for a person to choose. With one repository and no publishing target the card is as before. The task keeps the repository from its start for every later step, its pull request, release and revert, and its Properties show it.
+- Data sources › Blog CMS shows each target on the same status card: its address, languages, latest check (kept with its time) and the article a task last published there.
+- The demo project has a second repository for its docs.

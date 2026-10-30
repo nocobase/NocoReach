@@ -10,7 +10,7 @@ import { failureOf, failureStreak, sentences } from './task-detail/failure-model
 import { EvidenceDialog } from './task-detail/evidence.js';
 import { taskEvidence, whyText } from './task-detail/evidence-model.js';
 import { VisibleChanges } from './task-detail/visible-changes.js';
-import { DeliveryDialog, DeliverySummary, HandoffLanguage, PrimaryLanguage } from './task-detail/article-start.js';
+import { DeliveryDialog, DeliverySummary, HandoffLanguage, PrimaryLanguage, WhereField } from './task-detail/article-start.js';
 import { defaultLocales } from '../../shared/article-publishing.js';
 import { PagePicker, RestNotice } from './task-detail/start-pages.js';
 import { request } from './strategy/service';
@@ -26,7 +26,7 @@ import { TaskNumbers } from './task-detail/task-numbers.js';
 import { Card, Clamped, Field } from './task-detail/layout.js';
 import { GAP, text } from './task-detail/styles.js';
 import { TaskStatusTag, TaskStandingTag } from './task-status-tag';
-import { startAgent, startBlockers, type StartBlocker } from '../../shared/task-start.js';
+import { choiceRepo, startAgent, startBlockers, type StartBlocker } from '../../shared/task-start.js';
 import { MarkdownEditor } from './task-detail/markdown-editor.js';
 import { hasTaskAgent, type PartialResult } from './task-execution-types';
 import { SnoozeDialog, SnoozedCard } from './task-detail/task-snooze.js';
@@ -314,6 +314,11 @@ function StartCard({data,list,pick,setPick,update,reload,busy,projectId,taskId,o
  const notice=known&&!known.article?guess?$t('taskPages.guessNotFound',{0:data.articleTargets?.find(t=>t.id===guess.targetId)?.name||guess.targetId}):$t(known.unchecked?'articleTask.matchUnavailable':'articleTask.noArticleForPage'):undefined;
  // No page known (2026-10-29): the card asks which page, until one is picked or the exception chosen in the dialog.
  const picking=articleChoice&&!translate&&!choice&&!pages.length&&!savedArticle&&current.mode==='existing';
+ // Changes go to (2026-10-29): with a second website repository or a publishing target beside one, the card offers them
+ // all in one select; the repository serving the task's pages comes preselected. With several and none clear, the
+ // person picks one before the start.
+ const repos=data.agent?.repos||[],showWhere=Boolean(p?.kind==='build'&&!translate&&repos.length&&repos.length+(data.articleTargets?.length||0)>1);
+ const repoRoute=current.target==='repo'?choiceRepo(data,current):null,repoMissing=Boolean(p?.kind==='build'&&current.target==='repo'&&repos.length>1&&!repoRoute?.repo),repoId=repos.length>1&&repoRoute?.repo?repoRoute.repo.id:undefined;
  // A task handed over from an accepted document starts by itself (startHandedOver in service.ts, with these same
  // rules from shared/task-start.ts); one still waiting here has something only a person can settle: the sub line says
  // so, and each item is marked where it is chosen (the Agent below, the article in its field, a target or repository).
@@ -325,13 +330,13 @@ function StartCard({data,list,pick,setPick,update,reload,busy,projectId,taskId,o
  const link=async(targetId:string,articleId:string)=>Boolean(await update('linkArticle',{targetId,articleId}));
  // Create separate tasks for the pages left out: one per article, one for the site's pages, with this task's playbook.
  const splitOff=async(groups:PageGroup[])=>{setSplitting(true);setSplitError('');try{const state=await request<StrategyState>(projectId,'state');await request(projectId,'splitTask',{taskId,groups,playbookId:pick,revision:state.revision,requestId:createUuid()});refreshNavBadges();await reload();}catch(e){setSplitError(()=>e instanceof Error?$legacyText(e.message):$t('common.operationFailed'));}finally{setSplitting(false);}};
- const start=async()=>{let revision=data.work.revision;if(agent.save){const d=await update('setAgent',{agentId:agent.save});if(!d)return;revision=d.work.revision;}if(plan.unlink){const d=await update('linkArticle',{targetId:null,revision});if(!d)return;revision=d.work.revision;}if(plan.link){const d=await update('linkArticle',{...plan.link,revision});if(!d)return;revision=d.work.revision;}const d=await update('startTask',{playbookId:pick,revision,...(plan.delivery?{delivery:plan.delivery}:{}),...(startWith?{pages:startWith}:{})});if(d)clear();};
+ const start=async()=>{let revision=data.work.revision;if(agent.save){const d=await update('setAgent',{agentId:agent.save});if(!d)return;revision=d.work.revision;}if(plan.unlink){const d=await update('linkArticle',{targetId:null,revision});if(!d)return;revision=d.work.revision;}if(plan.link){const d=await update('linkArticle',{...plan.link,revision});if(!d)return;revision=d.work.revision;}const d=await update('startTask',{playbookId:pick,revision,...(plan.delivery?{delivery:plan.delivery}:{}),...(startWith?{pages:startWith}:{}),...(repoId?{repoId}:{})});if(d)clear();};
  const attachments=Array.isArray(data.task.evidence?.attachmentIds)&&data.task.evidence.attachmentIds.length>0;
  const briefText=brief.replace(/[#*>`_]/g,'').replace(/^[ \t]+/gm,'').replace(/\n{2,}/g,'\n').trim();
  // Top to bottom, every field the card's full width (2026-10-22 user decision): the brief as plain text, the playbook
  // with its description, the article where the change goes, and the note.
  return <StageCard title={$t('taskDetail.startAfterReview')} sub={handoff?$t(blockers.length?'taskDetail.handoffNotStarted':'taskDetail.taskHandedOverDocumentDelivered',{0:handoff.playbook}):$t('taskDetail.agentNotStartedReadBrief')}
-  actions={<Button disabled={busy||!p||!ready||!plan.ready||finding} onClick={()=>void start()}>{$t('taskDetail.confirmStart')}</Button>}>
+  actions={<Button disabled={busy||!p||!ready||!plan.ready||finding||repoMissing} onClick={()=>void start()}>{$t('taskDetail.confirmStart')}</Button>}>
   {briefText&&<Field label={briefTitle}><Clamped long={briefText.length>240||briefText.split('\n').length>3} extra={whyText(data).from==='brief'&&<Button variant="link" size="sm" className="h-auto font-normal p-0" onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}>{briefText}</Clamped></Field>}
   <Field label={$t('common.playbook')} id={`${taskId}-playbook`}>
    <Select value={pick} disabled={busy||!list||!allowed} onValueChange={v=>{if(v!=null)setPick(String(v));}}>
@@ -345,9 +350,12 @@ function StartCard({data,list,pick,setPick,update,reload,busy,projectId,taskId,o
    <PlaybookDrawer playbook={p} open={viewing} onClose={()=>setViewing(false)}/>
   </Field>
   {changes&&(picking?<PagePicker data={data} projectId={projectId} taskId={taskId} allowed={allowed} busy={busy} onPage={url=>void update('linkPage',{url})} onArticle={(targetId,articleId)=>void link(targetId,articleId)} onChange={()=>setChoosing(true)}/>
-   :(articleChoice||split.pages.length>0)&&<DeliverySummary data={data} choice={current} finding={finding} notice={notice} allowed={allowed} busy={busy} translate={translate} pages={split.pages} changeable={articleChoice} onChange={()=>setChoosing(true)}>
+   :(articleChoice||split.pages.length>0)&&<DeliverySummary data={data} choice={current} finding={finding} notice={notice} allowed={allowed} busy={busy} translate={translate} pages={split.pages} changeable={articleChoice} hidePlace={showWhere} onChange={()=>setChoosing(true)}>
     {plan.ready&&split.rest.length>0&&<RestNotice rest={split.rest} related={data.related} allowed={allowed} busy={busy||splitting} error={splitError} onSplit={groups=>void splitOff(groups)}/>}
    </DeliverySummary>)}
+  {/* Changes go to (2026-10-30 user decision, merging #322 and #324): with more than one place a change can go, the
+      select follows the page list and replaces its line; while the card asks which page, the page decides first. */}
+  {changes&&showWhere&&p&&!picking&&<WhereField data={data} choice={current} playbookId={p.id} found={known?.article??null} allowed={allowed} busy={busy||finding} onChange={c=>setChoiceState({...c,playbook:pick})}/>}
   {blocked('chooseTarget',$t('taskDetail.startChooseTarget'))}
   {blocked('targetGone',$t('articles.targetMissing'))}
   {articleChoice&&<DeliveryDialog open={choosing} onClose={()=>setChoosing(false)} data={data} projectId={projectId} choice={current} found={known?.article||null} notice={notice} translate={translate} query={guess?.slug} busy={busy} link={link} onSave={c=>setChoiceState({...c,playbook:pick})}/>}

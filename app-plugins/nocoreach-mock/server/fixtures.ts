@@ -2353,6 +2353,22 @@ function github(
         u,
       ),
     );
+  // A repository has its default branch only (Website source checks, 2026-10-29).
+  const branch = /^\/branches\/(.+)$/.exec(suffix)?.[1];
+  if (branch)
+    return decodeURIComponent(branch) === 'main'
+      ? json({
+          name: 'main',
+          commit: { sha: fixtureHash(c, `${repo}:main`) },
+          protected: false,
+        })
+      : json(
+          {
+            message: 'Branch not found',
+            documentation_url: 'https://docs.github.com/rest',
+          },
+          404,
+        );
   if (suffix === '/git/trees/main') {
     return json({
       sha: fixtureHash(c, 'repository-tree'),

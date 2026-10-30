@@ -186,6 +186,31 @@ export function TaskProperties({
           </Row>
         )}
         {playbook && <Row label={$t('common.playbook')}>{playbook}</Row>}
+        {/* Where a started change goes (2026-10-29): the repository kept at its start, which its PR is opened in. */}
+        {w.flow &&
+          w.playbook?.kind === 'build' &&
+          w.delivery?.kind !== 'article' &&
+          data.agent?.repo && (
+            <Row label={$t('taskDetail.propRepository')}>
+              <a
+                className='nr-link break-all'
+                href={`https://github.com/${data.agent.repo.repo}`}
+                target='_blank'
+                rel='noreferrer'
+                data-task-repo=''
+              >
+                {data.agent.repo.repo}
+                <ExternalLink
+                  className='ml-1 inline size-3 align-baseline'
+                  aria-hidden='true'
+                />
+              </a>
+              <span className='text-muted-foreground'>
+                {' '}
+                · {$t('articleTask.viaPr')}
+              </span>
+            </Row>
+          )}
         {article && (
           <Row label={$t('articleTask.article')}>
             {articleUrl ? (

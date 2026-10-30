@@ -26,6 +26,7 @@ import { reopening } from '../../../shared/task-reopen.js';
 import { datesBetween } from '../search-history.js';
 import { taskStanding } from '../../../shared/task-pending.js';
 import { defaultDelivery, deliveryPlan, distinctPages, lookupMatters, pagesToStart, pageUrlsOf, startAgent, startBlockers } from '../../../shared/task-start.js';
+import { prRepo, routeRepo, startedRepo, taskRepo, type TaskRepo } from '../../../shared/repo-routing.js';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
 // Roles and what only 管理员 may change live with the server code (server/policy.js); the same relative path works from
 // the source and from dist/execution.
@@ -41,6 +42,8 @@ const active = (r: Run) => r.status === 'queued' || r.status === 'running';
 const withoutRepo = (w: Work, stage: Stage) => stage.kind === 'agent' && stage.mode === 'analyze' && !w.flow!.stages.some(changesRepo);
 // A task that delivers an article to a publishing target needs no repository for any step (article-flow.ts).
 const articleTask = (w: Work) => w.delivery?.kind === 'article';
+/** The repository a run was given: its pull request has to be there, whatever the settings say now. */
+const inputRepo = (r: Run): TaskRepo | null => { try { return JSON.parse(r.input)?.repo || null; } catch { return null; } };
 // A related task as the task page lists it: its title, number and where it stands.
 const relatedTask = (r: any) => { const t = r.toJSON ? r.toJSON() : r; return { id: t.id, title: t.title, ...(Number.isInteger(t.evidence?.no) ? { no: t.evidence.no } : {}), state: taskStanding({ work: t.evidence?.work, status: t.status }) }; };
 const ID = /^[1-9]\d{0,15}$/;
@@ -169,7 +172,43 @@ export class TaskService {
     const agent = await this.agents.status(project, data.work.agentId, actor);
     // The project's AI content language: the primary language a start defaults to (shared/task-start.ts, 2026-10-30).
     const language = (await this.p.project(project).catch(() => null))?.language || null;
-    return { ...data, language, agent: { repo: agent.repo, online: agent.online, agentId: agent.agentId, defaultAgentId: agent.defaultAgentId, options: agent.options } };
+    // `repo`: the repository the task changes, or would by its pages (null when a person has to choose); `repos`: every one, for the start card.
+    const repos = agent.repos.map(r => ({ id: r.id, repo: r.repo, baseBranch: r.baseBranch, allowedPaths: r.allowedPaths, urls: r.urls }));
+    return { ...data, language, agent: { repo: startedRepo(agent.repos, data.work, pageUrlsOf(data)), repos, online: agent.online, agentId: agent.agentId, defaultAgentId: agent.defaultAgentId, options: agent.options } };
+  }
+  // Every task of a project, read in pages outside any business transaction, for what Data sources shows of them.
+  private async eachTask(project: string, fn: (task: any) => void) {
+    for (let offset = 0; ; offset += 200) {
+      const rows = await this.repo('nrTasks').find({ filter: { projectId: project }, fields: ['id', 'title', 'evidence'], sort: ['id'], limit: 200, offset });
+      for (const row of rows) fn(row.toJSON ? row.toJSON() : row);
+      if (rows.length < 200) break;
+    }
+  }
+  /**
+   * Website source repositories as Data sources › Website source shows them: each with the pull request the Agent last
+   * opened there (the one push known to have worked), and the website's addresses they can serve.
+   */
+  async repoView(project: string) {
+    const d = await this.agents.doc(project), latest = new Map<string, { number: number; url: string; title: string; at: string; taskId: string }>();
+    await this.eachTask(project, t => {
+      for (const a of t.evidence?.work?.results || []) {
+        const name = prRepo(a?.pr?.url)?.toLowerCase(), at = String(a?.createdAt || '');
+        if (name && !(latest.get(name)?.at >= at)) latest.set(name, { number: a.pr.number, url: a.pr.url, title: String(t.title || '').slice(0, 200), at, taskId: String(t.id) });
+      }
+    });
+    return { revision: d.revision, repos: d.repos.map(r => ({ ...r, lastPr: latest.get(r.repo.toLowerCase()) || null })), sites: await this.agents.siteUrls(project) };
+  }
+  /** The article each publishing target last received from a task (Data sources › Blog CMS, 2026-10-29). */
+  async latestPublished(project: string) {
+    const latest: Record<string, { slug: string; title: string; at: string; taskId: string }> = {};
+    await this.eachTask(project, t => {
+      const r = t.evidence?.work?.release;
+      for (const a of [r?.article, ...(Array.isArray(r?.also) ? r.also : [])]) {
+        const at = String(a?.published?.at || '');
+        if (a?.targetId && at && !(latest[a.targetId]?.at >= at)) latest[a.targetId] = { slug: String(a.published.slug || a.slug || ''), title: String(t.title || '').slice(0, 200), at, taskId: String(t.id) };
+      }
+    });
+    return latest;
   }
   async get(project: string, taskId: string, selectedRunId?: string, viewer?: {userId:string;seesMachines:boolean}) {
     const data = await this.withAgent(project, await this.lock(project, taskId, tx => this.view(project, taskId, tx)), viewer?.userId);
@@ -238,6 +277,10 @@ export class TaskService {
   flowStageOf(w: Work, key: unknown, kinds: StageKind[]) { return this.flowStage(w, key, kinds); }
   flowArtifactOf(project: string, taskId: string, stageKey: string, content: string, actor: string, at: string, tx: any) { return this.flowArtifact(project, taskId, stageKey, content, actor, at, tx); }
   enterStage(project: string, taskId: string, task: any, w: Work, index: number, tx: any, actor: string, at: string) { return this.enterFlowStage(project, taskId, task, w, index, tx, actor, at); }
+  /** The repository the task changes (shared/repo-routing.ts): the one kept at its start. */
+  private async repoOf(project: string, task: any, w: Work, tx: any) {
+    return startedRepo((await this.agents.doc(project, tx)).repos, w, pageUrlsOf({ task, work: w }));
+  }
   private async flowArtifact(project: string, taskId: string, stageKey: string, content: string, actor: string, at: string, tx: any, runId?: string): Promise<Artifact> {
     const versions: Artifact[] = await this.list('artifact', project, taskId, tx);
     const artifact: Artifact = { id: randomUUID(), stepId: stageKey, planVersion: 0, version: 1 + Math.max(0, ...versions.filter(a => a.stepId === stageKey && a.planVersion === 0).map(a => a.version)), content, createdAt: at, createdBy: actor, ...(runId ? { runId } : {}) };
@@ -250,7 +293,7 @@ export class TaskService {
     w.stageIndex = index; w.boardState = undefined;
     if (index >= stages.length) { w.stage = 'done'; return; }
     if (stages[index].kind === 'observe') { w.observeFrom = at; w.stage = 'done'; return; }
-    if (stages[index].kind === 'agent' && (this.p.demoConfiguration?.enabled || ((await this.agents.doc(project, tx)).repo || withoutRepo(w, stages[index]) || articleTask(w)))) await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
+    if (stages[index].kind === 'agent' && (this.p.demoConfiguration?.enabled || ((await this.repoOf(project, task, w, tx)) || withoutRepo(w, stages[index]) || articleTask(w)))) await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
     // A change you made yourself has no PR to merge: it waits for you to say it is live.
     if (stages[index].kind === 'release' && (this.simulated || task.evidence?.simulated)) {
       this.simulateRelease(w, actor, at);
@@ -263,7 +306,7 @@ export class TaskService {
   // the program itself commits, pushes and opens the PR on the task's branch. An analysis in a playbook that never changes
   // the repository runs without one (repo null): the Agent works from the material and public pages only.
   private async queueAgentRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string, extra: Partial<Run> = {}) {
-    const index = w.stageIndex ?? 0, stage = w.flow!.stages[index], repo = (await this.agents.doc(project, tx)).repo || null;
+    const index = w.stageIndex ?? 0, stage = w.flow!.stages[index], repo = await this.repoOf(project, task, w, tx);
     if (!repo && !withoutRepo(w, stage) && !articleTask(w) && !(this.p.demoConfiguration?.enabled)) return fail(systemMessageText('taskExecution.connectRepositoryUnderDataSources'), 409);
     if (!w.humanOwnerId) return fail(systemMessageText('taskExecution.assignOwnerFirst'), 409);
     const runs = await this.list('run', project, taskId, tx) as Run[];
@@ -299,7 +342,7 @@ export class TaskService {
   // The local Agent merges the reviewed PR at the exact commit you looked at (it fails if the PR changed since).
   private async queueMergeRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
     if (this.simulated) return this.simulateRelease(w, actor, at);
-    const index = w.stageIndex ?? 0, stage = w.flow!.stages[index], repo = (await this.agents.doc(project, tx)).repo;
+    const index = w.stageIndex ?? 0, stage = w.flow!.stages[index], repo = await this.repoOf(project, task, w, tx);
     if (!repo) return fail(systemMessageText('taskExecution.connectRepositoryUnderDataSources'), 409);
     if (!w.release?.pr) return fail(systemMessageText('taskExecution.noPrMerge'), 409);
     if (!w.humanOwnerId) return fail(systemMessageText('taskExecution.assignOwnerFirst'), 409);
@@ -438,8 +481,8 @@ export class TaskService {
     }
   }
   // Closing the PR of a cancelled task is a repository change, so the local Agent does it.
-  private async queueCloseRun(project: string, taskId: string, w: Work, pr: { number: number; url: string }, tx: any, actor: string, at: string) {
-    const repo = (await this.agents.doc(project, tx)).repo, branch = `nocoreach/task-${taskId}`;
+  private async queueCloseRun(project: string, taskId: string, w: Work, pr: { number: number; url: string }, repo: TaskRepo, tx: any, actor: string, at: string) {
+    const branch = `nocoreach/task-${taskId}`;
     const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: 'close', baseArtifactId: null, ownerId: w.humanOwnerId || actor, actor, inputVersion: 1, capabilitySnapshot: ['pr.close'], status: 'queued', createdAt: at, input: JSON.stringify({ mode: 'close', repo, branch, taskId, pr: { number: pr.number, url: pr.url } }), model: { llmService: 'local', model: 'close' }, mode: 'close', branch };
     try {
       run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
@@ -456,7 +499,7 @@ export class TaskService {
   // Undoing a merged change is a repository change too: the local Agent opens GitHub's own revert of the PR, which you
   // merge on GitHub like any other PR.
   private async queueRevertRun(project: string, taskId: string, task: any, w: Work, pr: { number: number; url: string }, tx: any, actor: string, at: string) {
-    const repo = (await this.agents.doc(project, tx)).repo;
+    const repo = await this.repoOf(project, task, w, tx);
     const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: 'revert', baseArtifactId: null, ownerId: w.humanOwnerId || actor, actor, inputVersion: 1, capabilitySnapshot: ['pr.revert'], status: 'queued', createdAt: at, input: JSON.stringify({ mode: 'revert', repo, taskId, title: task.title, pr: { number: pr.number, url: pr.url } }), model: { llmService: 'local', model: 'revert' }, mode: 'revert' };
     run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
     await this.put(this.key('run', project, taskId, run.id), run, tx);
@@ -466,7 +509,7 @@ export class TaskService {
     return this.lock(r.projectId, r.taskId, async tx => {
       const key = this.key('run', r.projectId, r.taskId, r.id), fresh: Run = await this.snapshot(key, tx);
       if (!fresh || fresh.status !== 'running') return { accepted: false, status: fresh?.status };
-      const repo = (await this.agents.doc(r.projectId, tx)).repo, p = v.pr || {};
+      const repo = inputRepo(fresh), p = v.pr || {};
       const ok = Boolean(v.ok && repo && typeof p.url === 'string' && p.url === `https://github.com/${repo.repo}/pull/${p.number}` && Number.isSafeInteger(p.number) && p.number > 0);
       if (v.ok && !ok) return fail(systemMessageText('taskExecution.revertPrsOpenedRegisteredRepository'), 400);
       const task = await this.task(r.projectId, r.taskId, tx), w = projectWork(task), at = now();
@@ -700,6 +743,16 @@ export class TaskService {
         w.stage = 'flow'; w.step = 0; w.results = []; event.note = p.name;
         await followPlaybook(p);
         await this.articleFlow.startDelivery(project, taskId, w, p.id, w.flow.stages.some(changesRepo), v.delivery, tx, articleRead, translatesArticle(p) ? { by: actor, at } : undefined);
+        // The repository is chosen at the start and kept (2026-10-29): the one the start card names, else the one
+        // serving the task's pages. Its later steps, pull request, release and revert use it, whatever changes in
+        // the settings afterwards. Pages that several repositories serve, or none of several, need a person's choice.
+        if (!articleTask(w)) {
+          const repos = (await this.agents.doc(project, tx)).repos, first = w.flow.stages[0];
+          const chosen = v.repoId ? repos.find(r => r.id === v.repoId) : routeRepo(repos, pageUrlsOf({ task, work: w })).repo;
+          if (v.repoId && !chosen) return fail(systemMessageText('agent.repositoryRemovedRefresh'), 409);
+          if (!chosen && repos.length > 1 && first?.kind === 'agent' && !withoutRepo(w, first) && !this.p.demoConfiguration?.enabled) return fail(systemMessageText('taskExecution.chooseTaskRepository'), 409);
+          w.repo = chosen ? taskRepo(chosen) : null;
+        }
         await this.enterFlowStage(project, taskId, task, w, 0, tx, actor, at);
       } else if (v.command === 'comment') {
         // A message for the executor; the next run reads the latest ones.
@@ -843,7 +896,7 @@ export class TaskService {
         void index;
       } else if (v.command === 'revertRelease') {
         // 撤回: only a change merged through its PR can be undone this way; the revert PR is reviewed and merged on GitHub.
-        const r = w.release, repo = (await this.agents.doc(project, tx)).repo;
+        const r = w.release, repo = await this.repoOf(project, task, w, tx);
         if (!r?.pr || !r.mergedAt) return fail(systemMessageText('taskExecution.mergedChangesReverted'), 409);
         if (!repo) return fail(systemMessageText('taskExecution.connectRepositoryUnderDataSources'), 409);
         if (w.revert && w.revert.state !== 'failed') return fail(systemMessageText('taskExecution.revertPrAlreadyOpened'), 409);
@@ -859,8 +912,8 @@ export class TaskService {
         }
         w.cancelledAt = at; w.cancelledBy = actor; w.boardState = undefined; event.note = optional(v.reason, 500) || undefined;
         // A PR an earlier closing already closed (the task was reopened before a new one) is not closed again.
-        const pr = [...w.results].reverse().find(a => a?.pr)?.pr, repo = (await this.agents.doc(project, tx)).repo;
-        if (pr && repo && w.release?.state !== 'live' && !w.release?.mergedAt && !(w.prClose?.number === pr.number && w.prClose.state === 'closed')) await this.queueCloseRun(project, taskId, w, pr, tx, actor, at);
+        const pr = [...w.results].reverse().find(a => a?.pr)?.pr, repo = await this.repoOf(project, task, w, tx);
+        if (pr && repo && w.release?.state !== 'live' && !w.release?.mergedAt && !(w.prClose?.number === pr.number && w.prClose.state === 'closed')) await this.queueCloseRun(project, taskId, w, pr, repo, tx, actor, at);
       } else if (v.command === 'archiveTask') {
         if ((await this.list('run', project, taskId, tx) as Run[]).some(r => active(r) && r.mode !== 'close')) return fail(systemMessageText('taskExecution.executorStillRunningWaitFinish'), 409);
         const started = w.stage === 'flow' || (w.stage === 'work' && w.plan) || w.stage === 'execution' || w.stage === 'verification';
@@ -1061,7 +1114,7 @@ export class TaskService {
     // `task result` checks an article against its target before saving, so the Agent can correct it.
     if (v.ok && r.mode === 'article') { await this.articleFlow.proposal(r.projectId, JSON.parse(r.input), v.article); return; }
     if (!v.ok || r.mode !== 'build') return;
-    const repo = (await this.agents.doc(r.projectId)).repo, p = v.pr || {};
+    const repo = inputRepo(r), p = v.pr || {};
     if (!repo) return fail(systemMessageText('taskExecution.repositorySettingsRemoved'), 409);
     if (typeof p.url !== 'string' || p.url !== `https://github.com/${repo.repo}/pull/${p.number}` || !Number.isSafeInteger(p.number) || p.number < 1 || p.branch !== r.branch || typeof p.headSha !== 'string' || !/^[0-9a-f]{7,40}$/.test(p.headSha)) return fail(systemMessageText('taskExecution.prsOpenedRegisteredRepositoryTask'), 400);
     return repo;
@@ -1225,8 +1278,8 @@ export class TaskService {
     this.p.app.acl.allow('nrContentIndex',['list','save','createWork'],'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrPlaybooks', actions: { list: wrap(p => this.playbooks.list(p)), save: wrap((p, v) => this.playbooks.save(p, v)), copy: wrap((p, v) => this.playbooks.copy(p, v)), remove: wrap((p, v) => this.playbooks.remove(p, v)), restore: wrap((p, v) => this.playbooks.restore(p, v)), draft: wrap(async (p, v) => draftPlaybook(v, await this.playbooks.list(p), await this.p.project(p), (system: string, user: string) => this.provider.complete(system, user))) } });
     this.p.app.acl.allow('nrPlaybooks', ['list', 'save', 'copy', 'remove', 'restore', 'draft'], 'loggedIn');
-    this.p.app.resourceManager.define({ name: 'nrAgent', actions: { status: wrap(async (p, v, c) => this.agents.status(p, undefined, String(c.auth.user.id), { seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), saveDefault: wrap((p, v, c) => this.agents.saveDefault(p, v, String(c.auth.user.id))), saveRepo: wrap((p, v) => this.agents.saveRepo(p, v)), removeRepo: wrap((p, v) => this.agents.removeRepo(p, v)) } });
-    this.p.app.acl.allow('nrAgent', ['status', 'saveDefault', 'saveRepo', 'removeRepo'], 'loggedIn');
+    this.p.app.resourceManager.define({ name: 'nrAgent', actions: { status: wrap(async (p, v, c) => this.agents.status(p, undefined, String(c.auth.user.id), { seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), saveDefault: wrap((p, v, c) => this.agents.saveDefault(p, v, String(c.auth.user.id))), repos: wrap(p => this.repoView(p)), saveRepo: wrap(async (p, v) => (await this.agents.saveRepo(p, v), this.repoView(p))), removeRepo: wrap(async (p, v) => (await this.agents.removeRepo(p, v), this.repoView(p))), checkRepo: wrap(async (p, v, c) => (await this.agents.checkRepo(p, v, String(c.auth.user.id)), this.repoView(p))) } });
+    this.p.app.acl.allow('nrAgent', ['status', 'saveDefault', 'repos', 'saveRepo', 'removeRepo', 'checkRepo'], 'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { results: wrap((p,v)=>listResults(this,p,v)), result: wrap((p,v)=>readResult(this,p,v)), board: wrap((p,v)=>resultBoard(this,p,v)), get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), numbers: wrap((p, v) => this.numbers(p, String(v.taskId))), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)), pagePlaces: wrap((p, v) => this.pagePlaces(p, String(v.taskId))) } });
     this.p.app.acl.allow('nrTaskWork', ['results', 'result', 'board', 'get', 'numbers', 'advance', 'members', 'list', 'pages', 'pagePlaces'], 'loggedIn');
   }

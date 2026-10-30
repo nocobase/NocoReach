@@ -4,6 +4,7 @@ import {
   type ArticleMatch,
 } from './article-publishing.js';
 import { ownSignalIds, pageKey } from './opportunity-parts.js';
+import { routeRepo, type RepoRef } from './repo-routing.js';
 
 // How a task starts when nobody has to choose: the start card preselects these, and a task handed over from an
 // accepted document (Accept and start) is started with them by the server (2026-10-24 user decision). Both read the
@@ -24,6 +25,8 @@ export type DeliveryChoice = {
   article?: ArticleMatch;
   /** The languages the task writes, primary first; left out, every language of the target in its order. */
   locales?: string[];
+  /** The repository a pull request goes to (2026-10-29); left out, the one serving the task's pages. */
+  repoId?: string;
 };
 /**
  * One of a task's pages as the lookup read it: the article that holds it, or none, a page of the site itself;
@@ -70,6 +73,8 @@ export type StartContext = {
   articlePlaybookTargets?: Record<string, string>;
   agent?: {
     repo?: unknown;
+    /** The website source repositories, each with the addresses it serves (shared/repo-routing.ts). */
+    repos?: RepoRef[];
     agentId?: string | null;
     options?: { id: string; type?: string }[];
   } | null;
@@ -266,6 +271,22 @@ function targetDelivery(
   return { target, mode: 'existing', also: [] };
 }
 
+/** Whether the project has a website source repository. */
+const hasRepository = (data: StartContext) =>
+  Boolean(data.agent?.repos?.length || data.agent?.repo);
+
+/**
+ * The repository a pull request goes to: the one chosen on the start card while it is still there, else the one
+ * serving the task's pages (`by` says how it was found); null when a person has to choose.
+ */
+export function choiceRepo(data: StartContext, choice?: DeliveryChoice) {
+  const repos = data.agent?.repos || [],
+    picked = choice?.repoId && repos.find((r) => r.id === choice.repoId);
+  return picked
+    ? { repo: picked, by: 'chosen' as const }
+    : routeRepo(repos, pageUrlsOf(data));
+}
+
 /** Whether the page lookup can change the default, so a caller without it can skip asking the targets. */
 export function lookupMatters(data: StartContext, playbookId: string) {
   const targets = data.articleTargets || [],
@@ -335,8 +356,17 @@ export function deliveryPlan(
   translate = false,
 ) {
   const linked = data.work.article;
-  if (choice.target === REPO)
-    return { ready: true, unlink: Boolean(linked?.targetId), delivery: REPO };
+  if (choice.target === REPO) {
+    const repos = data.agent?.repos || [],
+      repo = choiceRepo(data, choice).repo;
+    return {
+      // Several repositories, and none serving the task's pages alone: the start card asks which.
+      ready: repos.length < 2 || Boolean(repo),
+      unlink: Boolean(linked?.targetId),
+      delivery: REPO,
+      ...(repos.length > 1 && repo ? { repoId: repo.id } : {}),
+    };
+  }
   const also = translate
       ? []
       : choice.also.filter((id) => id !== choice.target),
@@ -405,7 +435,8 @@ export type StartBlocker =
   | 'chooseTarget'
   | 'chooseArticle'
   | 'choosePage'
-  | 'noRepository';
+  | 'noRepository'
+  | 'chooseRepository';
 
 /**
  * What stops a task from starting with its defaults. `changes`: the playbook changes something, so its delivery is
@@ -456,7 +487,10 @@ export function startBlockers(
         translate || pageUrlsOf(data).length ? 'chooseArticle' : 'choosePage',
       );
   }
-  if (repository && needsRepository && !simulated && !data.agent?.repo)
-    out.push('noRepository');
+  if (repository && needsRepository && !simulated) {
+    if (!hasRepository(data)) out.push('noRepository');
+    else if ((data.agent?.repos?.length ?? 0) > 1 && !choiceRepo(data).repo)
+      out.push('chooseRepository');
+  }
   return out;
 }
