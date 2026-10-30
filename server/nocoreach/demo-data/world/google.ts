@@ -3,6 +3,7 @@ import {
   WorldUnsupported,
   body,
   daysBetween,
+  integer,
   isDay,
   json,
   list,
@@ -397,14 +398,20 @@ function ratios(row: Fact): void {
   m.screenPageViewsPerSession = sessions ? m.screenPageViews / sessions : 0;
 }
 
-function ga4Response(
+/** A report's rows in their requested order and its totals, before `offset` and `limit` select a page. */
+type Ga4Table = {
+  dim: string[];
+  met: string[];
+  rows: Fact[];
+  totals: Fact[];
+};
+
+function ga4Table(
   dim: string[],
   met: string[],
   rows: Fact[],
   b: Json,
-  kind: string,
-): Json {
-  const sorted = ga4Order(rows, b);
+): Ga4Table {
   const totals = aggregate(
     rows,
     [],
@@ -420,6 +427,14 @@ function ga4Response(
     ],
   );
   totals.forEach(ratios);
+  return { dim, met, rows: ga4Order(rows, b), totals };
+}
+
+function ga4Response(
+  { dim, met, rows, totals }: Ga4Table,
+  b: Json,
+  kind: string,
+): Json {
   const value = (m: string, v: number) =>
     RATIOS.has(m) ? String(Number(v.toFixed(6))) : String(Math.round(v));
   return {
@@ -432,7 +447,7 @@ function ga4Response(
           ? 'TYPE_SECONDS'
           : 'TYPE_INTEGER',
     })),
-    rows: slice(sorted, b.offset, b.limit, 10_000).map((r) => ({
+    rows: slice(rows, b.offset, b.limit, 10_000).map((r) => ({
       dimensionValues: dim.map((d) => ({ value: r.dimensions[d] ?? '' })),
       metricValues: met.map((m) => ({ value: value(m, r.metrics[m] ?? 0) })),
     })),
@@ -454,19 +469,29 @@ function ga4Response(
   };
 }
 
-// Pages read GA4 live, so a report repeated within the hour is answered once; the largest are recomputed instead.
+// Pages read GA4 live and a sync pages through each report, so a table is computed once for all its pages. Tables
+// up to this size stay for the hour; a larger one only until its last page is read.
 const RETAINED_REPORT_ROWS = 2_000;
 
 function ga4Report(world: World, b: Json): Json {
+  const { offset, limit: _limit, ...request } = b;
   const { date, hour } = world.local();
-  return world.answer(
-    `ga4:${date}:${hour}:${JSON.stringify(b)}`,
-    () => computeGa4Report(world, b),
-    (report) => (report.rows as unknown[]).length <= RETAINED_REPORT_ROWS,
+  const key = `ga4:${date}:${hour}:${JSON.stringify(request)}`;
+  const table = world.answer(
+    key,
+    () => computeGa4Table(world, request),
+    (t) => t.rows.length <= RETAINED_REPORT_ROWS,
   );
+  const response = ga4Response(table, b, 'analyticsData#runReport');
+  if (
+    table.rows.length > RETAINED_REPORT_ROWS &&
+    integer(offset) + (response.rows as unknown[]).length >= table.rows.length
+  )
+    world.forget(key);
+  return response;
 }
 
-function computeGa4Report(world: World, b: Json): Json {
+function computeGa4Table(world: World, b: Json): Ga4Table {
   const dim = names(b.dimensions);
   const met = names(b.metrics);
   const ranges = list(b.dateRanges).map(object);
@@ -529,13 +554,7 @@ function computeGa4Report(world: World, b: Json): Json {
     }));
   });
   rows.forEach(ratios);
-  return ga4Response(
-    named ? [...dim, 'dateRange'] : dim,
-    met,
-    rows,
-    b,
-    'analyticsData#runReport',
-  );
+  return ga4Table(named ? [...dim, 'dateRange'] : dim, met, rows, b);
 }
 
 // GA4 Realtime: the last 30 minutes, per minute, page, place and device.
@@ -636,9 +655,7 @@ function ga4Realtime(world: World, b: Json): Json {
     });
   }
   return ga4Response(
-    dim,
-    met,
-    aggregate(facts, dim, met),
+    ga4Table(dim, met, aggregate(facts, dim, met), b),
     b,
     'analyticsData#runRealtimeReport',
   );

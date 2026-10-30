@@ -97,7 +97,7 @@ export function split(
 // A day holds a few thousand nine-field visit buckets (about 0.1-0.3 MiB). Keep the most recent 31 days, which
 // covers the default 28-day window and today, so older history is recomputed rather than retained.
 const VISIT_CACHE_DAYS = 31;
-// Answers repeated within the hour, such as pages that read GA4 live; oversized answers are not retained.
+// Answers repeated within the hour, such as pages that read GA4 live; an oversized answer is kept only while paged.
 const ANSWER_CACHE_LIMIT = 32;
 const WORLD_CACHE_LIMIT = 8;
 
@@ -382,18 +382,34 @@ export class World {
   }
 
   private readonly answers = new Map<string, unknown>();
+  private large?: { key: string; value: unknown };
   /**
-   * Remembers a recent answer for this world; the key must name everything the answer depends on. `retain` skips
-   * answers too large to keep; they are still returned.
+   * Remembers a recent answer for this world; the key must name everything the answer depends on. Answers `small`
+   * rejects share a single slot instead, enough for a reader paging through one; `forget` releases it early.
    */
-  answer<T>(key: string, compute: () => T, retain?: (value: T) => boolean): T {
+  answer<T>(
+    key: string,
+    compute: () => T,
+    small: (value: T) => boolean = () => true,
+  ): T {
+    if (this.large?.key === key) return this.large.value as T;
     return recent(
       this.answers as Map<string, T>,
       key,
       ANSWER_CACHE_LIMIT,
-      compute,
-      retain,
+      () => {
+        const value = compute();
+        if (!small(value)) this.large = { key, value };
+        return value;
+      },
+      small,
     );
+  }
+
+  /** Releases an answer before the world expires, such as a large report whose last page has been read. */
+  forget(key: string): void {
+    this.answers.delete(key);
+    if (this.large?.key === key) this.large = undefined;
   }
 
   private readonly memos = new Map<string, unknown>();

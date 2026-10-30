@@ -116,4 +116,46 @@ describe('demo world caches', () => {
     expect(visits.mock.calls.length).toBeGreaterThan(computed);
     expect(pages.totals).toEqual(first.totals);
   });
+
+  it('computes a large GA4 report once for all its pages and releases it after the last one', async () => {
+    const a = project();
+    const property = worldGoogle(a, now).ga4PropertyId;
+    const report = (body: unknown) =>
+      worldResponse(
+        a,
+        `https://analyticsdata.googleapis.com/v1beta/properties/${property}:runReport`,
+        { method: 'POST', body: JSON.stringify(body) },
+        now,
+      ).then((response) => response.json());
+    const request = {
+      dateRanges: [{ startDate: '90daysAgo', endDate: 'yesterday' }],
+      dimensions: [{ name: 'date' }, { name: 'pagePath' }],
+      metrics: [{ name: 'sessions' }],
+      orderBys: [{ dimension: { dimensionName: 'date' } }],
+    };
+    const visits = vi.spyOn(World.prototype, 'visitsOn');
+    const whole = await report({ ...request, limit: '100000' });
+    const rowCount = Number(whole.rowCount);
+    expect(rowCount).toBeGreaterThan(2_000);
+    const computed = visits.mock.calls.length;
+
+    const limit = Math.ceil(rowCount / 3);
+    const paged = [];
+    for (let offset = 0; offset < rowCount; offset += limit) {
+      const page = await report({
+        ...request,
+        limit: String(limit),
+        offset: String(offset),
+      });
+      expect(Number(page.rowCount)).toBe(rowCount);
+      paged.push(...page.rows);
+    }
+    // The first request read the whole table, so it was released; the pages compute it once more.
+    expect(visits.mock.calls.length).toBe(computed * 2);
+    expect(paged).toEqual(whole.rows);
+
+    // The last page released it.
+    await report({ ...request, limit: String(limit) });
+    expect(visits.mock.calls.length).toBe(computed * 3);
+  });
 });
