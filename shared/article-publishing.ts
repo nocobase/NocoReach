@@ -385,7 +385,10 @@ export const articleLocales = (a: Pick<ArticleContent, 'locales'>) =>
  * The target language that is the project's AI content language (2026-10-30, T-58): the same code, else the same
  * language ("zh-CN" is "zh"); null when the target has neither.
  */
-export function projectLocale(targetLocales: string[], language?: string | null) {
+export function projectLocale(
+  targetLocales: string[],
+  language?: string | null,
+) {
   if (!language) return null;
   const norm = (l: string) => l.toLowerCase().replace(/_/g, '-'),
     want = norm(language);
