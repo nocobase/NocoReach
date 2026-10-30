@@ -21,6 +21,7 @@ import type {
 export {
   REPO,
   choiceLocales,
+  choiceRepo,
   defaultDelivery,
   deliveryPlan,
   pageUrlsOf,

@@ -1638,7 +1638,16 @@ for (const target of [
         contentCheck: true,
       }),
     );
-    expect((await data(call('nrAgent', 'status'))).repo.repo).toBe(repository);
+    const repos = (await data(call('nrAgent', 'status'))).repos as {
+      id: string;
+      repo: string;
+    }[];
+    expect(repos.map((r) => r.repo)).toEqual([repository]);
+    // The check asks the simulated GitHub whether the repository and its base branch exist.
+    const checked = await data(
+      call('nrAgent', 'checkRepo', { id: repos[0].id }),
+    );
+    expect(checked.repos[0].check).toMatchObject({ repo: 'ok', branch: 'ok' });
     covered.add('repo');
 
     // Article publishing targets are sealed local settings; publishing itself is simulated in this deployment.

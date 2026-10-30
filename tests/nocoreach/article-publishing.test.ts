@@ -479,6 +479,13 @@ describe('NocoBase API target', () => {
       ok: true,
       sample: { id: '7' },
     });
+    // The card shows the latest check with its time (2026-10-29); it keeps the revision, and saving drops it.
+    expect(targets.list('1')).toMatchObject({
+      revision: 2,
+      targets: [{ check: { ok: true, at: expect.any(String) } }],
+    });
+    await targets.save('1', { revision: 2, target: cmsTarget({ name: 'Again' }) });
+    expect(targets.list('1').targets[0].check).toBeNull();
   });
 });
 

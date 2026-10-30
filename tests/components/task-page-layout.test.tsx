@@ -551,6 +551,106 @@ test('the start card finds the article from the task page and links it as the ta
   expect(commands[1]).not.toHaveProperty('note');
 });
 
+// Site pages with one website repository, then with two (2026-10-30 user decision, merging #322 and #324): the pages
+// to change are always listed; with one repository a line says where they are changed, with more than one place the
+// Changes go to select replaces that line.
+function sitePagesTask(repos: { id: string; urls: string[] }[]): TaskData {
+  const pages = [
+    'https://www.nocobase.com/pricing',
+    'https://www.nocobase.com/features',
+  ];
+  return {
+    task: {
+      id: 35,
+      title: '重复的页面描述',
+      brief: '7 个页面共用同一个描述',
+      evidence: { no: 35, pages },
+    },
+    work: {
+      revision: 2,
+      stage: 'plan',
+      plan: null,
+      planVersion: 0,
+      step: 0,
+      results: [],
+      history: [],
+      humanOwnerId: '1',
+      humanOwnerName: 'Super Admin',
+    },
+    runs: [],
+    artifacts: [],
+    reviews: [],
+    playbookDefault: 'optimize-page',
+    agent: {
+      // As the server sends it: the repository serving the task's pages (startedRepo).
+      repo: {
+        id: 'site',
+        repo: 'nocobase/site',
+        baseBranch: 'main',
+        allowedPaths: [],
+      },
+      repos: repos.map((r) => ({
+        ...r,
+        repo: `nocobase/${r.id}`,
+        baseBranch: 'main',
+        allowedPaths: [],
+      })),
+      online: true,
+      agentId: 'codex',
+      options: [{ id: 'codex', name: 'codex' }],
+    },
+  } as unknown as TaskData;
+}
+test('the start card lists the pages, with one line for one repository and Changes go to for several', async () => {
+  action.mockImplementation((resource: string, command: string) => {
+    if (resource === 'nrPlaybooks')
+      return Promise.resolve({ playbooks: [OPTIMIZE] });
+    // Pages of the site itself: none of them is an article.
+    if (resource === 'nrTaskWork' && command === 'pagePlaces')
+      return Promise.resolve({
+        article: null,
+        unchecked: false,
+        pages: [
+          { url: 'https://www.nocobase.com/pricing', title: 'Pricing' },
+          { url: 'https://www.nocobase.com/features', title: 'Features' },
+        ],
+      });
+    return Promise.resolve([]);
+  });
+  const { unmount } = mount(
+    sitePagesTask([{ id: 'site', urls: ['www.nocobase.com'] }]),
+    '/actions/35',
+  );
+  expect(await screen.findByText('要改的页面')).toBeTruthy();
+  expect(
+    screen.getAllByRole('link', { name: /Pricing|Features/ }),
+  ).toHaveLength(2);
+  expect(screen.getByText('网站页面 · 改网站代码，提 PR')).toBeTruthy();
+  expect(screen.queryByText('改到哪')).toBeNull();
+  unmount();
+  mount(
+    sitePagesTask([
+      { id: 'site', urls: ['www.nocobase.com'] },
+      { id: 'docs', urls: ['docs.nocobase.com'] },
+    ]),
+    '/actions/35',
+  );
+  expect(await screen.findByText('要改的页面')).toBeTruthy();
+  expect(
+    screen.getAllByRole('link', { name: /Pricing|Features/ }),
+  ).toHaveLength(2);
+  // The select says it once: no line under the list, and no second Change.
+  expect(screen.queryByText('网站页面 · 改网站代码，提 PR')).toBeNull();
+  expect(screen.getByText('改到哪')).toBeTruthy();
+  expect(screen.getByRole('combobox', { name: '改到哪' })).toHaveTextContent(
+    'nocobase/site · PR',
+  );
+  expect(
+    screen.getByText('按页面 www.nocobase.com/pricing 自动选的'),
+  ).toBeTruthy();
+  expect(screen.getByRole('button', { name: '确定开始执行' })).toBeEnabled();
+});
+
 test('before the start, the message box is where the instructions go', () => {
   mount(blogPageTask(), '/actions/32');
   expect(screen.queryByText('补充说明（可选）')).toBeNull();

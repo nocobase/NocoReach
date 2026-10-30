@@ -263,9 +263,19 @@ export type GitTarget = z.infer<typeof gitTargetSchema>;
 export type Downstream = z.infer<typeof downstream>;
 
 /** A target as the browser sees it: configuration without credentials. */
+/** The latest Check of a target (2026-10-29): whether it answered with its saved settings, and when. */
+export type ArticleTargetCheck = { at: string; ok: boolean; code?: string };
 export type ArticleTargetView = ArticleTarget & {
   hasSecret: boolean;
   capabilities: ArticleCapabilities;
+  check?: ArticleTargetCheck | null;
+};
+/** The article a task last published to a target: its slug, the task's title and when. */
+export type PublishedArticle = {
+  slug: string;
+  title: string;
+  at: string;
+  taskId: string;
 };
 
 /** Whether a target stores a draft/published status (Git files have none: committing publishes). */

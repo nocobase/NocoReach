@@ -35,7 +35,7 @@ const managementActions: Record<string, readonly string[]> = {
   'github-traffic': github,
   'github-discussions': github,
   site: actions('nrSiteContent', ['discover', 'confirm', 'remove']),
-  repo: actions('nrAgent', ['saveRepo', 'removeRepo']),
+  repo: actions('nrAgent', ['saveRepo', 'removeRepo', 'checkRepo']),
   articles: actions('nrArticles', [
     'saveTarget',
     'removeTarget',

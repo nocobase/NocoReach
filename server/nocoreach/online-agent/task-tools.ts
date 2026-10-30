@@ -8,12 +8,14 @@ import { projectWork, taskStanding } from '../execution/model.js';
 import { defaultPlaybookId, stagesFor } from '../execution/playbook.js';
 import { changesRepo, type Stage } from '../execution/flow.js';
 import { roleOf } from '../policy.js';
+import { startedRepo } from '../../../shared/repo-routing.js';
+import { pageUrlsOf } from '../../../shared/task-start.js';
 
 interface TaskRecord {
   id: string | number;
   projectId: string | number;
   title?: string;
-  evidence?: { createdBy?: { id?: string } };
+  evidence?: { createdBy?: { id?: string } } & Record<string, unknown>;
 }
 
 const id = z.string().regex(/^[1-9]\d{0,15}$/);
@@ -122,6 +124,13 @@ export function taskTools(
       current.mode === 'analyze' &&
       !stages.some(changesRepo)
     );
+    // The website repository the change goes to (shared/repo-routing.ts): kept at the start, else found from the
+    // task's pages; with several repositories and no clear one, the task page asks which.
+    const repo = startedRepo(
+      agent.repos,
+      work,
+      pageUrlsOf({ task: { evidence: task.evidence }, work }),
+    );
     const reason = !mutable
       ? 'owner_or_closed'
       : active
@@ -136,9 +145,11 @@ export function taskTools(
                 ? 'runner_not_selected'
                 : !agent.online
                   ? 'runner_unavailable'
-                  : needsRepo && !agent.repo
+                  : needsRepo && !agent.repos.length
                     ? 'repository_required'
-                    : null;
+                    : needsRepo && !repo
+                      ? 'repository_choice_required'
+                      : null;
     return {
       agent,
       item: {
@@ -166,6 +177,7 @@ export function taskTools(
             }
           : {}),
         playbookId,
+        repository: repo?.repo ?? null,
         agentId: agent.agentId,
         latestRun: work.latestRun,
         executable: reason === null,
@@ -245,7 +257,7 @@ export function taskTools(
     ),
     tool(
       'task_get',
-      'Read task status and current revision before triggering a Runner. Includes eligible Runner choices and a task page URL. Human reviews and publication confirmations require that page.',
+      'Read task status and current revision before triggering a Runner. Includes eligible Runner choices, the website repository its change goes to (repository) and a task page URL. Human reviews, publication confirmations and choosing a repository (blockedReason repository_choice_required) require that page.',
       selection,
       async (args) => {
         const input = selection.parse(args);
