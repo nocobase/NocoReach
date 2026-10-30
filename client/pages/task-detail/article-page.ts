@@ -1,4 +1,8 @@
-import { fill, slugFromPage } from '../../../shared/article-publishing.js';
+import {
+  fill,
+  pagePattern,
+  slugFromPage,
+} from '../../../shared/article-publishing.js';
 import type { TaskData } from '../task-execution-types';
 import { pageUrlsOf } from './article-model';
 
@@ -19,10 +23,12 @@ export function articlePageUrl(
     (url) => slugFromPage(pages, url)?.slug === slug,
   );
   if (own) return own;
-  const locale = [...(target.locales || []), ...Object.keys(pages)].find(
-    (l) => pages[l],
+  const locale = [...(target.locales || []), ...Object.keys(pages)].find((l) =>
+    pagePattern(pages, l),
   );
-  return locale ? fill(pages[locale], encodeURIComponent(slug)) : '';
+  return locale
+    ? fill(pagePattern(pages, locale), encodeURIComponent(slug))
+    : '';
 }
 
 /**
@@ -35,9 +41,10 @@ export function localePageUrl(
   slug: string,
   locale: string,
 ): string {
-  const pattern = data.articleTargets?.find((t) => t.id === targetId)?.pages?.[
-    locale
-  ];
+  const pattern = pagePattern(
+    data.articleTargets?.find((t) => t.id === targetId)?.pages,
+    locale,
+  );
   return pattern && slug
     ? fill(pattern, encodeURIComponent(slug))
     : articlePageUrl(data, targetId, slug);

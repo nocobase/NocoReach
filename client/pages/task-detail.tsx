@@ -11,11 +11,14 @@ import { EvidenceDialog } from './task-detail/evidence.js';
 import { taskEvidence, whyText } from './task-detail/evidence-model.js';
 import { VisibleChanges } from './task-detail/visible-changes.js';
 import { DeliveryDialog, DeliverySummary, WhereField } from './task-detail/article-start.js';
+import { PagePicker, RestNotice } from './task-detail/start-pages.js';
+import { request } from './strategy/service';
+import type { StrategyState } from './strategy/model';
 import { PlaybookDrawer } from './task-detail/playbook-drawer.js';
 import { ArticleEditor, ArticleReview } from './task-detail/article-review.js';
 import { ConflictBody, DriftNotice, PendingButton, TargetRows } from './task-detail/article-release.js';
-import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, fieldLabel, joinNames, otherLanguages, pageUrlsOf, publishingTitle, reviewRound, soleConflict, type ArticleFound, type DeliveryChoice } from './task-detail/article-model.js';
-import { matchArticle, localeName } from './article-targets-api';
+import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, fieldLabel, joinNames, otherLanguages, pageUrlsOf, pagesToStart, publishingTitle, reviewRound, soleConflict, startPages, type ArticleFound, type DeliveryChoice, type PageGroup } from './task-detail/article-model.js';
+import { localeName } from './article-targets-api';
 import { TaskMedia } from './task-detail/media.js';
 import { TaskProperties } from './task-detail/task-properties.js';
 import { TaskNumbers } from './task-detail/task-numbers.js';
@@ -30,7 +33,7 @@ import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {createContext,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
 import {Outlet,useLocation,useNavigate,useSearchParams} from 'react-router';
-import {useNavigationGuard,usePageBreadcrumb} from '@nocobase/app-client';
+import {createUuid,useNavigationGuard,usePageBreadcrumb} from '@nocobase/app-client';
 import {Comparison} from './results/comparison.js';
 import {nocobaseClient as api,NocoReachHttpError} from "#lib/nocoreach-api";
 import {BookOpen,CirclePlay,Lock,Archive,ArchiveRestore,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitMerge,Globe,Search,ExternalLink,Users,Square,Undo2,Loader2,MoreHorizontal,Code2,ChevronRight,TriangleAlert,CircleCheck,Sparkles,CircleAlert,Hand,Clock} from 'lucide-react';
@@ -154,7 +157,7 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
      {error&&!composerFailed&&<p role="alert" className="nr-error">{error}</p>}
      {/* Snoozed (task-detail/task-snooze.tsx): named first; the card below stays usable and acting on it ends it. */}
      {isSnoozed(w)&&<SnoozedCard data={data} busy={busy} allowed={access.allowed} onChange={()=>setSnoozeOpen(true)} update={update}/>}
-     {w.cancelledAt||w.archivedAt?<ClosedCard w={w} update={update} busy={busy}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} pick={pick} setPick={setPick} update={update} busy={busy} projectId={projectId} taskId={taskId} onEvidence={()=>setEvidenceOpen(true)}/></TaskDraftScope>:done?<DoneCard data={data} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} list={list}/></TaskDraftScope>}
+     {w.cancelledAt||w.archivedAt?<ClosedCard w={w} update={update} busy={busy}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} pick={pick} setPick={setPick} update={update} reload={()=>call<Data>(projectId,taskId,'get').then(setStoredData)} busy={busy} projectId={projectId} taskId={taskId} onEvidence={()=>setEvidenceOpen(true)}/></TaskDraftScope>:done?<DoneCard data={data} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} list={list}/></TaskDraftScope>}
     </div>
     <ActivityCard data={data} update={update} busy={busy} members={members} membersLoaded={membersLoaded} error={composerFailed?error:''} onFailed={()=>setComposerFailed(true)}/>
    </div>
@@ -280,29 +283,36 @@ async function withUsableAgent(data:Data,update:Update,command:string,body:objec
 // the playbook (the one suggested at hand-off preselected) and a note; nothing runs until Start. A task an accepted
 // document was handed over to is started with these defaults instead (2026-10-24) and shows this card only when one
 // of them needs a person.
-function StartCard({data,list,pick,setPick,update,busy,projectId,taskId,onEvidence}:{data:Data;list?:PlaybookList;pick:string;setPick:(id:string)=>void;update:Update;busy:boolean;projectId:number;taskId:string;onEvidence:()=>void}){
+function StartCard({data,list,pick,setPick,update,reload,busy,projectId,taskId,onEvidence}:{data:Data;list?:PlaybookList;pick:string;setPick:(id:string)=>void;update:Update;reload:()=>Promise<unknown>;busy:boolean;projectId:number;taskId:string;onEvidence:()=>void}){
  const {allowed}=useContext(TaskAccess);
  const {clear}=useTaskDraftStatus();
  const p=list?.playbooks.find(x=>x.id===pick),handoff=(data.task.evidence?.handoff as {playbook?:string;content?:string}|undefined),brief=handoff?.content||data.task.brief||'',briefTitle=handoff?.content?$t('taskDetail.documentDelivered',{0:handoff.playbook}):$t('taskDetail.whatAgentReceive');
  const options=data.agent?.options||[],agent=startAgent(data),ready=agent.ready;
  // With exactly one Agent available nothing needs choosing: it is saved on the task as the start is confirmed.
- // Article publishing (article-start.tsx): shown for playbooks that change something, when the project has a target.
- const articleChoice=Boolean(p?.kind==='build'&&data.articleTargets?.length);
+ // Where the change goes (article-start.tsx, start-pages.tsx): shown for playbooks that change something; the choice
+ // of target or repository only when the project has a publishing target.
+ const changes=p?.kind==='build',articleChoice=Boolean(changes&&data.articleTargets?.length);
  // Translate into other languages (2026-10-25): an existing article, from its source language into the ones chosen.
  const translate=articleChoice&&translatesArticle(p);
  // A choice belongs to the playbook it was made for: another playbook starts again from its own default.
  const [choiceState,setChoiceState]=useState<DeliveryChoice&{playbook:string}>();
  const targetIds=(data.articleTargets||[]).map(t=>t.id);
  const choice=choiceState&&choiceState.playbook===pick&&(choiceState.target==='repo'||targetIds.includes(choiceState.target))?{...choiceState,also:choiceState.also.filter(x=>targetIds.includes(x))}:undefined;
- // The article is found from the task's page (2026-10-21) rather than picked from hundreds; Change is for exceptions.
- const pages=pageUrlsOf(data),pagesKey=pages.join('\n'),hasTargets=Boolean(data.articleTargets?.length),savedArticle=data.work.article?.articleId||'';
- const lookupKey=hasTargets&&!savedArticle&&pagesKey?`${projectId}\n${pagesKey}`:'';
- const [lookup,setLookup]=useState<{key:string;found:ArticleFound}>(),[choosing,setChoosing]=useState(false),[viewing,setViewing]=useState(false);
- useEffect(()=>{if(!lookupKey)return;const c=new AbortController();
-  void matchArticle(projectId,pagesKey.split('\n'),c.signal).then(r=>{if(!c.signal.aborted)setLookup({key:lookupKey,found:r});},()=>{if(!c.signal.aborted)setLookup({key:lookupKey,found:{article:null,unchecked:true}});});return()=>c.abort();},[lookupKey,projectId,pagesKey]);
+ // Where it goes is decided by where the task's pages are (2026-10-21; every page, 2026-10-29), read by pagePlaces with
+ // their titles rather than picked from hundreds of articles; Change is for exceptions.
+ const pages=pageUrlsOf(data),pagesKey=pages.join('\n'),savedArticle=data.work.article?.articleId||'';
+ const lookupKey=changes&&!savedArticle&&pagesKey?`${projectId}\n${taskId}\n${pagesKey}`:'';
+ const [lookup,setLookup]=useState<{key:string;found:ArticleFound}>(),[choosing,setChoosing]=useState(false),[viewing,setViewing]=useState(false),[splitting,setSplitting]=useState(false),[splitError,setSplitError]=useMessageState('');
+ useEffect(()=>{if(!lookupKey)return;const c=new AbortController(),urls=pagesKey.split('\n');
+  void api.action<ArticleFound>('nrTaskWork','pagePlaces',{method:'POST',body:{projectId:String(projectId),taskId},unwrap:'data',signal:c.signal}).then(r=>{if(!c.signal.aborted)setLookup({key:lookupKey,found:r});},()=>{if(!c.signal.aborted)setLookup({key:lookupKey,found:{article:null,unchecked:true,pages:urls.map(url=>({url,unchecked:true}))}});});return()=>c.abort();},[lookupKey,projectId,taskId,pagesKey]);
  const found:ArticleFound|'finding'|undefined=!lookupKey?undefined:lookup?.key===lookupKey?lookup.found:'finding';
- const finding=found==='finding',delivery=defaultDelivery(data,pick,found==='finding'?undefined:found,translate),current=choice||delivery,plan:{ready:boolean;unlink:boolean;link?:{targetId:string;articleId:string};delivery?:unknown}=articleChoice?deliveryPlan(data,current,translate):{ready:true,unlink:false,delivery:undefined};
- const notice=found&&found!=='finding'&&!found.article?$t(found.unchecked?'articleTask.matchUnavailable':'articleTask.noArticleForPage'):undefined;
+ const finding=found==='finding',known=finding?undefined:found,delivery=defaultDelivery(data,pick,known,translate),current=choice||delivery,plan:{ready:boolean;unlink:boolean;link?:{targetId:string;articleId:string};delivery?:unknown}=articleChoice?deliveryPlan(data,current,translate):{ready:true,unlink:false,delivery:undefined};
+ // The pages this start changes and the ones it leaves to other tasks; a page that looks like an exported article not
+ // found (T-55) starts the article search from its slug.
+ const split=finding?{pages:pages.map(url=>({url})),rest:[]}:startPages(data,current,known),startWith=finding?undefined:pagesToStart(data,current,known),guess=known?.pages?.find(x=>x.guess)?.guess;
+ const notice=known&&!known.article?guess?$t('taskPages.guessNotFound',{0:data.articleTargets?.find(t=>t.id===guess.targetId)?.name||guess.targetId}):$t(known.unchecked?'articleTask.matchUnavailable':'articleTask.noArticleForPage'):undefined;
+ // No page known (2026-10-29): the card asks which page, until one is picked or the exception chosen in the dialog.
+ const picking=articleChoice&&!translate&&!choice&&!pages.length&&!savedArticle&&current.mode==='existing';
  // Changes go to (2026-10-29): with a second website repository or a publishing target beside one, the card offers them
  // all in one select; the repository serving the task's pages comes preselected. With several and none clear, the
  // person picks one before the start.
@@ -312,10 +322,14 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId,onEviden
  // rules from shared/task-start.ts); one still waiting here has something only a person can settle: the sub line says
  // so, and each item is marked where it is chosen (the Agent below, the article in its field, a target or repository).
  const navigate=useNavigate(),st=p?stagesFor(p):[],first=st[0],demo=options.some(a=>a.id===data.agent?.agentId&&a.type==='demo');
+ // A change of the site's code needs the repository: said on the card, rather than asking for an article (2026-10-29).
+ const noRepo=changes&&current.target==='repo'&&first?.kind==='agent'&&!withoutRepo(first,st)&&!demo&&!data.agent?.repo;
  const blockers:StartBlocker[]=handoff?.content&&p&&!finding?startBlockers(data,{playbookId:p.id,changes:p.kind==='build',translate,needsRepository:first?.kind==='agent'&&!withoutRepo(first,st),simulated:demo,found}):[];
  const blocked=(b:StartBlocker,body:ReactNode)=>blockers.includes(b)?<p className="text-sm text-nr-ink-red" data-start-blocker={b}>{body}</p>:null;
  const link=async(targetId:string,articleId:string)=>Boolean(await update('linkArticle',{targetId,articleId}));
- const start=async()=>{let revision=data.work.revision;if(agent.save){const d=await update('setAgent',{agentId:agent.save});if(!d)return;revision=d.work.revision;}if(plan.unlink){const d=await update('linkArticle',{targetId:null,revision});if(!d)return;revision=d.work.revision;}if(plan.link){const d=await update('linkArticle',{...plan.link,revision});if(!d)return;revision=d.work.revision;}const d=await update('startTask',{playbookId:pick,revision,...(plan.delivery?{delivery:plan.delivery}:{}),...(repoId?{repoId}:{})});if(d)clear();};
+ // Create separate tasks for the pages left out: one per article, one for the site's pages, with this task's playbook.
+ const splitOff=async(groups:PageGroup[])=>{setSplitting(true);setSplitError('');try{const state=await request<StrategyState>(projectId,'state');await request(projectId,'splitTask',{taskId,groups,playbookId:pick,revision:state.revision,requestId:createUuid()});refreshNavBadges();await reload();}catch(e){setSplitError(()=>e instanceof Error?$legacyText(e.message):$t('common.operationFailed'));}finally{setSplitting(false);}};
+ const start=async()=>{let revision=data.work.revision;if(agent.save){const d=await update('setAgent',{agentId:agent.save});if(!d)return;revision=d.work.revision;}if(plan.unlink){const d=await update('linkArticle',{targetId:null,revision});if(!d)return;revision=d.work.revision;}if(plan.link){const d=await update('linkArticle',{...plan.link,revision});if(!d)return;revision=d.work.revision;}const d=await update('startTask',{playbookId:pick,revision,...(plan.delivery?{delivery:plan.delivery}:{}),...(startWith?{pages:startWith}:{}),...(repoId?{repoId}:{})});if(d)clear();};
  const attachments=Array.isArray(data.task.evidence?.attachmentIds)&&data.task.evidence.attachmentIds.length>0;
  const briefText=brief.replace(/[#*>`_]/g,'').replace(/^[ \t]+/gm,'').replace(/\n{2,}/g,'\n').trim();
  // Top to bottom, every field the card's full width (2026-10-22 user decision): the brief as plain text, the playbook
@@ -334,13 +348,18 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId,onEviden
    {p&&<p className={text.muted}>{p.description}{p.description?' ':''}<Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>setViewing(true)}>{$t('taskDetail.viewSteps')}</Button></p>}
    <PlaybookDrawer playbook={p} open={viewing} onClose={()=>setViewing(false)}/>
   </Field>
-  {showWhere&&p&&<WhereField data={data} choice={current} playbookId={p.id} found={found&&found!=='finding'?found.article:null} allowed={allowed} busy={busy||finding} onChange={c=>setChoiceState({...c,playbook:pick})}/>}
-  {articleChoice&&!(showWhere&&current.target==='repo')&&<DeliverySummary data={data} choice={current} finding={finding} notice={notice} allowed={allowed} busy={busy} translate={translate} onChange={()=>setChoosing(true)}/>}
+  {changes&&(picking?<PagePicker data={data} projectId={projectId} taskId={taskId} allowed={allowed} busy={busy} onPage={url=>void update('linkPage',{url})} onArticle={(targetId,articleId)=>void link(targetId,articleId)} onChange={()=>setChoosing(true)}/>
+   :(articleChoice||split.pages.length>0)&&<DeliverySummary data={data} choice={current} finding={finding} notice={notice} allowed={allowed} busy={busy} translate={translate} pages={split.pages} changeable={articleChoice} hidePlace={showWhere} onChange={()=>setChoosing(true)}>
+    {plan.ready&&split.rest.length>0&&<RestNotice rest={split.rest} related={data.related} allowed={allowed} busy={busy||splitting} error={splitError} onSplit={groups=>void splitOff(groups)}/>}
+   </DeliverySummary>)}
+  {/* Changes go to (2026-10-30 user decision, merging #322 and #324): with more than one place a change can go, the
+      select follows the page list and replaces its line; while the card asks which page, the page decides first. */}
+  {changes&&showWhere&&p&&!picking&&<WhereField data={data} choice={current} playbookId={p.id} found={known?.article??null} allowed={allowed} busy={busy||finding} onChange={c=>setChoiceState({...c,playbook:pick})}/>}
   {blocked('chooseTarget',$t('taskDetail.startChooseTarget'))}
   {blocked('targetGone',$t('articles.targetMissing'))}
-  {articleChoice&&<DeliveryDialog open={choosing} onClose={()=>setChoosing(false)} data={data} projectId={projectId} choice={current} found={found&&found!=='finding'?found.article:null} notice={notice} translate={translate} busy={busy} link={link} onSave={c=>setChoiceState({...c,playbook:pick})}/>}
+  {articleChoice&&<DeliveryDialog open={choosing} onClose={()=>setChoosing(false)} data={data} projectId={projectId} choice={current} found={known?.article||null} notice={notice} translate={translate} query={guess?.slug} busy={busy} link={link} onSave={c=>setChoiceState({...c,playbook:pick})}/>}
   <NeedsAgent data={data}/>
-  {blocked('noRepository',<>{$t('taskDetail.noWebsiteSourceRepositoryConnectedMessage')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>void navigate('/connections?source=repo')}>{$t('common.goDataSources')}</Button></>)}
+  {(noRepo||blockers.includes('noRepository'))&&<p className='text-sm text-nr-ink-red' data-start-blocker='noRepository'>{$t('taskDetail.noWebsiteSourceRepositoryConnectedMessage')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>void navigate('/connections?source=repo')}>{$t('common.goDataSources')}</Button></p>}
   {attachments&&<Field label={$t('taskDetail.attachmentsDelivered')}><TaskMedia projectId={projectId} taskId={taskId}/></Field>}
  </StageCard>;
 }

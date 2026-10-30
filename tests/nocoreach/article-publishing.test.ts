@@ -1,6 +1,8 @@
 import { describe, expect, test, vi } from 'vitest';
 import {
   ARTICLE_TARGET_PRESETS,
+  articleTargetSchema,
+  looseSlugFromPage,
   slugFromPage,
   type ArticleTarget,
 } from '../../shared/article-publishing.js';
@@ -677,9 +679,13 @@ describe('a failed publish keeps its step and detail', () => {
       { site: fetchers.site || cms.fetcher, github: fetchers.github },
       { secret: 'cms-key' },
     );
-    const read = await setup(cmsTarget(), { site: cms.fetcher }, {
-      secret: 'cms-key',
-    });
+    const read = await setup(
+      cmsTarget(),
+      { site: cms.fetcher },
+      {
+        secret: 'cms-key',
+      },
+    );
     const base = await read.delivery.read('1', 'cms', '7');
     const p = delivery.proposal('1', {
       targetId: 'cms',
@@ -716,9 +722,7 @@ describe('a failed publish keeps its step and detail', () => {
     });
     expect(cms.state.requests.some((r) => r.action === 'update')).toBe(false);
     limited = false;
-    expect((await delivery.publish('1', p, base, 'k')).kind).toBe(
-      'published',
-    );
+    expect((await delivery.publish('1', p, base, 'k')).kind).toBe('published');
   });
 
   test('an unexpected error keeps its name and message', async () => {
@@ -878,29 +882,35 @@ test('reads a page address back to the slug it is published under', () => {
   ).toBeNull();
 });
 
-test('finds the article a task page belongs to, and says when a target could not be asked', async () => {
+test("finds the article each of a task's pages belongs to, and says when a target could not be asked", async () => {
   const cms = fakeNocoBase([row()]);
   const { targets } = await setup(
     cmsTarget(),
     { site: cms.fetcher },
     { secret: 'cms-key' },
   );
+  const hello = {
+    targetId: 'cms',
+    articleId: '7',
+    slug: 'hello',
+    title: '你好',
+    url: 'https://example.com/cn/blog/hello/',
+    // The languages it has text in (Japanese is empty), for a translation's choice.
+    locales: ['en', 'zh'],
+  };
   expect(
     await targets.match('1', [
       'https://www.example.com/en/docs/hello',
       'https://example.com/cn/blog/hello/',
     ]),
   ).toEqual({
-    article: {
-      targetId: 'cms',
-      articleId: '7',
-      slug: 'hello',
-      title: '你好',
-      url: 'https://example.com/cn/blog/hello/',
-      // The languages it has text in (Japanese is empty), for a translation's choice.
-      locales: ['en', 'zh'],
-    },
+    article: hello,
     unchecked: false,
+    // Every page in its order (2026-10-29): a page no target publishes is a page of the site itself.
+    pages: [
+      { url: 'https://www.example.com/en/docs/hello' },
+      { url: 'https://example.com/cn/blog/hello/', article: hello },
+    ],
   });
   // The same languages read for an article picked by hand.
   expect(await targets.languages('1', 'cms', '7')).toEqual({
@@ -912,11 +922,18 @@ test('finds the article a task page belongs to, and says when a target could not
       'https://www.example.com/pricing',
       'https://www.example.com/en/blog/missing',
     ]),
-  ).toEqual({ article: null, unchecked: false });
+  ).toEqual({
+    article: null,
+    unchecked: false,
+    pages: [
+      { url: 'https://www.example.com/pricing' },
+      { url: 'https://www.example.com/en/blog/missing' },
+    ],
+  });
   expect(
     await targets.match('1', 'https://www.example.com/en/blog/hello'),
-  ).toEqual({ article: null, unchecked: false });
-  // A target that cannot be reached: not found is not known for sure.
+  ).toEqual({ article: null, unchecked: false, pages: [] });
+  // A target that cannot be reached: not found is not known for sure, for that page only.
   const offline = await setup(
     cmsTarget(),
     {
@@ -927,8 +944,18 @@ test('finds the article a task page belongs to, and says when a target could not
     { secret: 'cms-key' },
   );
   expect(
-    await offline.targets.match('1', ['https://www.example.com/en/blog/hello']),
-  ).toEqual({ article: null, unchecked: true });
+    await offline.targets.match('1', [
+      'https://www.example.com/en/blog/hello',
+      'https://www.example.com/pricing',
+    ]),
+  ).toEqual({
+    article: null,
+    unchecked: true,
+    pages: [
+      { url: 'https://www.example.com/en/blog/hello', unchecked: true },
+      { url: 'https://www.example.com/pricing' },
+    ],
+  });
 });
 
 // 2026-10-27 (T-47): the Agent got `locale:en` back for a Chinese-only new article and took it for a setting to fix.
@@ -1084,4 +1111,110 @@ describe('a draft the target cannot take is explained in words', () => {
       setDictionary(null);
     }
   });
+});
+
+// T-55 (2026-10-29): the NocoBase CMS maps English posts to /en/blog/{slug}, while the site also serves them, and Search
+// Console reports them, at /blog/{slug}/. The page was taken for a page of the site and its change for a pull request,
+// although the repository's copy is exported by the CMS.
+const t55 = 'https://www.example.com/blog/hello/';
+
+test('a language can have several page addresses; the first is the one links use', () => {
+  const pages = {
+    en: [
+      'https://www.example.com/blog/{slug}/',
+      'https://www.example.com/en/blog/{slug}',
+    ],
+    zh: 'https://www.example.com/cn/blog/{slug}',
+  };
+  expect(articleTargetSchema.safeParse(cmsTarget({ pages })).success).toBe(
+    true,
+  );
+  expect(
+    articleTargetSchema.safeParse(
+      cmsTarget({ pages: { en: ['http://www.example.com/blog/{slug}'] } }),
+    ).success,
+  ).toBe(false);
+  for (const url of [
+    t55,
+    'http://example.com/en/blog/hello?ref=x#top',
+    'https://www.example.com/en/blog/hello/',
+  ])
+    expect(slugFromPage(pages, url)).toEqual({ locale: 'en', slug: 'hello' });
+  expect(slugFromPage(pages, 'https://www.example.com/cn/blog/hello')).toEqual({
+    locale: 'zh',
+    slug: 'hello',
+  });
+});
+
+test("a page no pattern reads is guessed to be an article only on the target's host, under the pattern's own path", () => {
+  const pages = {
+    en: 'https://www.example.com/en/blog/{slug}',
+    zh: 'https://www.example.com/cn/blog/{slug}',
+  };
+  expect(looseSlugFromPage(pages, t55, ['en', 'zh'])).toEqual({
+    locale: 'en',
+    slug: 'hello',
+  });
+  // The first language of the target whose pattern fits.
+  expect(looseSlugFromPage(pages, t55, ['zh', 'en'])?.locale).toBe('zh');
+  for (const url of [
+    'https://www.example.com/cn/pricing',
+    'https://www.example.com/solutions/crm',
+    'https://www.example.com/pricing',
+    'https://www.example.com/blog/category/news',
+    'https://other.example/blog/hello',
+  ])
+    expect(looseSlugFromPage(pages, url, ['en', 'zh'])).toBeNull();
+});
+
+test('T-55: the article of a page in another form is found by its last path part; one exported by the CMS is never a page of the site', async () => {
+  const cms = fakeNocoBase([row()]);
+  const { targets } = await setup(
+    cmsTarget(),
+    { site: cms.fetcher },
+    { secret: 'cms-key' },
+  );
+  expect((await targets.match('1', [t55])).pages).toEqual([
+    {
+      url: t55,
+      article: expect.objectContaining({
+        targetId: 'cms',
+        articleId: '7',
+        slug: 'hello',
+        title: 'Hello',
+        url: t55,
+      }),
+    },
+  ]);
+  // Exported to the website repository: a post not found is a guess to ask about, not a page to change by PR.
+  const exported = await setup(
+    cmsTarget({
+      downstream: {
+        repo: 'org/site',
+        branch: 'main',
+        files: { en: 'content/articles/{slug}/index.md' },
+      },
+    } as Partial<ArticleTarget>),
+    { site: fakeNocoBase([row()]).fetcher },
+    { secret: 'cms-key' },
+  );
+  expect(
+    (
+      await exported.targets.match('1', [
+        'https://www.example.com/blog/missing/',
+        'https://www.example.com/en/blog/gone',
+        'https://www.example.com/pricing',
+      ])
+    ).pages,
+  ).toEqual([
+    {
+      url: 'https://www.example.com/blog/missing/',
+      guess: { targetId: 'cms', slug: 'missing' },
+    },
+    {
+      url: 'https://www.example.com/en/blog/gone',
+      guess: { targetId: 'cms', slug: 'gone' },
+    },
+    { url: 'https://www.example.com/pricing' },
+  ]);
 });

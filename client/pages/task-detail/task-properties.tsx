@@ -336,19 +336,22 @@ function RelatedTasks({
       </h3>
       {group($t('taskDetail.relatedPrev'), prev, 'prev')}
       {group(
-        $tj('taskDetail.relatedSame', {
-          0: opportunity ? (
-            <button
-              type='button'
-              className='nr-link'
-              onClick={() => onOpportunity(opportunity.id)}
-            >
-              {opportunity.label || $t('common.opportunity')}
-            </button>
-          ) : (
-            $t('common.opportunity')
-          ),
-        }),
+        // Tasks split off for pages in another place (2026-10-29) without an opportunity share the hand-off instead.
+        !opportunity && same.every((r) => r.pages)
+          ? $t('taskPages.relatedSplit')
+          : $tj('taskDetail.relatedSame', {
+              0: opportunity ? (
+                <button
+                  type='button'
+                  className='nr-link'
+                  onClick={() => onOpportunity(opportunity.id)}
+                >
+                  {opportunity.label || $t('common.opportunity')}
+                </button>
+              ) : (
+                $t('common.opportunity')
+              ),
+            }),
         same,
         'same',
       )}

@@ -125,6 +125,10 @@ const pathTemplate = template.refine(
     !v.split('/').some((x) => !x || x === '.' || x === '..'),
   'path',
 );
+const pageTemplate = template.refine(
+  (v) => httpsUrl.safeParse(v.split('{slug}').join('x')).success,
+  'https',
+);
 const repo = z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/);
 const branch = z.string().regex(/^[A-Za-z0-9._/-]{1,100}$/);
 const columnName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,62}$/);
@@ -163,11 +167,10 @@ const common = {
   id: z.string().regex(TARGET_ID),
   name: z.string().trim().min(1).max(60),
   locales: z.array(z.string().regex(LOCALE)).min(1).max(ARTICLE_LIMITS.locales),
+  // A language's page address, or several (2026-10-29: nocobase.com serves English posts at /blog/{slug}/ as well as
+  // /en/blog/{slug}); the first is the one links and checks use, the others are only read back.
   pages: localeMap(
-    template.refine(
-      (v) => httpsUrl.safeParse(v.split('{slug}').join('x')).success,
-      'https',
-    ),
+    z.union([pageTemplate, z.array(pageTemplate).min(1).max(5)]),
   ).optional(),
 };
 export const nocobaseTargetSchema = z
@@ -295,30 +298,80 @@ const pageKey = (url: string) => {
     return null;
   }
 };
+/** A target's page addresses for each language: one, or several read back as the same language. */
+export type PagePatterns = Record<string, string | string[]>;
+/** A language's page addresses, the main one first. */
+export const pagePatterns = (v: string | string[] | undefined) =>
+  Array.isArray(v) ? v : v ? [v] : [];
+/** The address links to a language's page and checks of it use: its first. */
+export const pagePattern = (pages: PagePatterns | undefined, locale: string) =>
+  pagePatterns(pages?.[locale])[0];
+const LOCALE_PART = /^[a-z]{2}(-[a-z0-9]{2,4})?$/i;
+const slugOf = (middle: string) => {
+  if (!middle || middle.includes('/')) return null;
+  try {
+    const slug = decodeURIComponent(middle);
+    // Existing CMS slugs may hold dots (v2.2.29), which new drafts' SLUG does not allow.
+    return /^[^\s/?#]{1,200}$/.test(slug) ? slug : null;
+  } catch {
+    return null;
+  }
+};
 export function slugFromPage(
-  pages: Record<string, string> | undefined,
+  pages: PagePatterns | undefined,
   url: string,
 ): { locale: string; slug: string } | null {
   const page = pageKey(url);
   if (!page) return null;
-  for (const [locale, pattern] of Object.entries(pages || {})) {
-    const key = pattern.includes('{slug}')
-      ? pageKey(pattern.replace('{slug}', 'nr-slug-marker'))
-      : null;
-    if (!key || !key.includes('nr-slug-marker')) continue;
-    const [before, after] = key.split('nr-slug-marker');
-    if (!page.startsWith(before) || !page.endsWith(after)) continue;
-    const middle = page.slice(before.length, page.length - after.length);
-    if (!middle || middle.includes('/')) continue;
-    let slug = middle;
-    try {
-      slug = decodeURIComponent(middle);
-    } catch {
-      continue;
+  for (const [locale, list] of Object.entries(pages || {}))
+    for (const pattern of pagePatterns(list)) {
+      const key = pattern.includes('{slug}')
+        ? pageKey(pattern.replace('{slug}', 'nr-slug-marker'))
+        : null;
+      if (!key || !key.includes('nr-slug-marker')) continue;
+      const [before, after] = key.split('nr-slug-marker');
+      if (!page.startsWith(before) || !page.endsWith(after)) continue;
+      const slug = slugOf(
+        page.slice(before.length, page.length - after.length),
+      );
+      if (slug) return { locale, slug };
     }
-    // Existing CMS slugs may hold dots (v2.2.29), which new drafts' SLUG does not allow.
-    if (/^[^\s/?#]{1,200}$/.test(slug)) return { locale, slug };
-  }
+  return null;
+}
+
+/**
+ * A page that looks like one of a target's articles although no pattern reads it (2026-10-29, T-55: the CMS maps
+ * English posts to /en/blog/{slug}, the site also serves and Search Console reports /blog/{slug}/): on a host the
+ * target's pages are on, its path's last part as the slug and every other part one of the fixed parts of a pattern of
+ * that host, all of them but a language (here `blog`, of `en` and `blog`). The language is the first in `locales`
+ * whose pattern fits. Only a guess: the article still has to be found by that slug.
+ */
+export function looseSlugFromPage(
+  pages: PagePatterns | undefined,
+  url: string,
+  locales: string[] = [],
+): { locale: string; slug: string } | null {
+  const page = pageKey(url);
+  if (!page) return null;
+  const [host, ...parts] = page.split('/'),
+    slug = slugOf(parts.pop() || ''),
+    path = parts.filter(Boolean);
+  if (!slug || !path.length) return null;
+  const order = Object.keys(pages || {}).sort(
+    (a, b) => (locales.indexOf(a) + 1 || 99) - (locales.indexOf(b) + 1 || 99),
+  );
+  for (const locale of order)
+    for (const pattern of pagePatterns(pages?.[locale])) {
+      const key = pageKey(pattern.replace('{slug}', 'nr-slug-marker')) || '';
+      const [patternHost, ...fixed] = key.split('/');
+      if (patternHost !== host || fixed.pop() !== 'nr-slug-marker') continue;
+      // Every fixed part but a language (`en`, `cn`) has to be there: /cn/pricing is no /cn/blog/{slug} post.
+      if (
+        path.every((p) => fixed.includes(p)) &&
+        fixed.every((f) => path.includes(f) || LOCALE_PART.test(f))
+      )
+        return { locale, slug };
+    }
   return null;
 }
 /** The article found for a task's page: where it lives and what to show. */

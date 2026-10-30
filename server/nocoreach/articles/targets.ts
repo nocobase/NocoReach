@@ -7,8 +7,10 @@ import {
   type ArticleTarget,
   type ArticleTargetView,
   slugFromPage,
+  looseSlugFromPage,
   type ArticleMatch,
 } from '../../../shared/article-publishing.js';
+import { MAX_TASK_PAGES } from '../../../shared/task-start.js';
 import { projectId, requireAccess } from '../policy.js';
 import type { LegacyVariables } from '../legacy/variables.js';
 import type { LegacyApp } from '../legacy/app.js';
@@ -335,51 +337,98 @@ export class ArticleTargets {
     }
   }
   /**
-   * The article a task's page belongs to (2026-10-21): each page address read back through every target's `pages`
-   * patterns gives a slug, looked up with findBySlug; the default target is asked first. Read-only. `unchecked` says a
-   * target that could hold the page could not be asked (no secret, offline), so "not found" is not known for sure.
+   * The article each of a task's pages belongs to (2026-10-21; every page since 2026-10-29): a page address read back
+   * through every target's `pages` patterns gives a slug, looked up with findBySlug; the default target is asked first.
+   * When no pattern reads it, a page that looks like a target's article (looseSlugFromPage, T-55's /blog/{slug}/ for a
+   * CMS mapping /en/blog/{slug}) is looked up by its last path part. A page nothing reads costs no request: it is a
+   * page of the site itself. Read-only. `article` is the first page's article found; `unchecked` says a target that
+   * could hold a page could not be asked (no secret, offline), so "not found" is not known for sure for that page.
+   * `guess` marks a page that looks like an article of a target whose exporter rewrites the repository's copy, found
+   * or not: its repository files are protected, so it never counts as a page of the site to change by pull request.
    */
   async match(
     id: string,
     urls: unknown,
-  ): Promise<{ article: ArticleMatch | null; unchecked: boolean }> {
+  ): Promise<{
+    article: ArticleMatch | null;
+    unchecked: boolean;
+    pages: {
+      url: string;
+      article?: ArticleMatch;
+      unchecked?: boolean;
+      guess?: { targetId: string; slug: string };
+    }[];
+  }> {
     const pages = (Array.isArray(urls) ? urls : [])
       .filter((u): u is string => typeof u === 'string' && u.length <= 2000)
-      .slice(0, 10);
+      .slice(0, MAX_TASK_PAGES);
     const settings = this.stored(id),
       first = this.defaultOf(settings);
     const targets = [...settings.targets]
       .map((e) => e.target)
       .sort((a, b) => Number(b.id === first) - Number(a.id === first));
-    let unchecked = false;
-    for (const url of pages)
-      for (const target of targets) {
-        const hit = slugFromPage(target.pages, url);
-        if (!hit) continue;
+    const lookup = async (
+      url: string,
+      target: ArticleTarget,
+      hit: { locale: string; slug: string },
+    ) => {
+      const found = await this.provider(id, target.id).findBySlug(hit.slug);
+      if (!found) return null;
+      const title =
+        found.locales[hit.locale]?.title ||
+        Object.values(found.locales).find((f) => f?.title)?.title ||
+        found.slug ||
+        hit.slug;
+      return {
+        url,
+        article: {
+          targetId: target.id,
+          articleId: found.id,
+          slug: found.slug || hit.slug,
+          title,
+          url,
+          locales: articleLocales(found),
+        },
+      };
+    };
+    const one = async (url: string) => {
+      let unchecked = false,
+        guess: { targetId: string; slug: string } | undefined;
+      const strict = targets.flatMap((t) => {
+        const hit = slugFromPage(t.pages, url);
+        return hit ? [{ target: t, hit }] : [];
+      });
+      const hits = strict.length
+        ? strict
+        : targets.flatMap((t) => {
+            const hit = looseSlugFromPage(t.pages, url, t.locales);
+            return hit ? [{ target: t, hit }] : [];
+          });
+      for (const { target, hit } of hits) {
+        if (!guess && downstreamOf(target))
+          guess = { targetId: target.id, slug: hit.slug };
         try {
-          const found = await this.provider(id, target.id).findBySlug(hit.slug);
-          if (!found) continue;
-          const title =
-            found.locales[hit.locale]?.title ||
-            Object.values(found.locales).find((f) => f?.title)?.title ||
-            found.slug ||
-            hit.slug;
-          return {
-            article: {
-              targetId: target.id,
-              articleId: found.id,
-              slug: found.slug || hit.slug,
-              title,
-              url,
-              locales: articleLocales(found),
-            },
-            unchecked: false,
-          };
+          const found = await lookup(url, target, hit);
+          if (found) return found;
         } catch {
           unchecked = true;
         }
       }
-    return { article: null, unchecked };
+      return {
+        url,
+        ...(unchecked ? { unchecked } : {}),
+        ...(guess ? { guess } : {}),
+      };
+    };
+    // A few pages at a time, so an issue spanning many blog posts does not open as many requests at once.
+    const read: Awaited<ReturnType<typeof one>>[] = [];
+    for (let i = 0; i < pages.length; i += 5)
+      read.push(...(await Promise.all(pages.slice(i, i + 5).map(one))));
+    return {
+      article: read.find((p) => 'article' in p)?.article || null,
+      unchecked: read.some((p) => 'unchecked' in p && p.unchecked),
+      pages: read,
+    };
   }
   async search(id: string, targetId: string, q: unknown) {
     const provider = this.provider(id, targetId);
