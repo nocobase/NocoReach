@@ -15,11 +15,22 @@ import {
 
 const now = Date.parse('2026-10-28T12:00:00Z');
 const HOUR = 3_600_000;
-const DAY = 24 * HOUR;
-const { main } = demoContent('en-US').projects;
-const project = () => ({ id: randomUUID(), ...main, language: 'en-US' });
-const day = (ago: number) =>
-  new Date(now - ago * DAY).toISOString().slice(0, 10);
+const { main, second } = demoContent('en-US').projects;
+const project = (site = main) => ({
+  id: randomUUID(),
+  ...site,
+  language: 'en-US',
+});
+const ga4 = (a: ReturnType<typeof project>) => {
+  const property = worldGoogle(a, now).ga4PropertyId;
+  return (body: unknown) =>
+    worldResponse(
+      a,
+      `https://analyticsdata.googleapis.com/v1beta/properties/${property}:runReport`,
+      { method: 'POST', body: JSON.stringify(body) },
+      now,
+    ).then((response) => response.json());
+};
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -42,7 +53,7 @@ describe('demo world caches', () => {
   it('evicts the least recently used project, not every project', () => {
     const kept = project();
     const first = worldFor(kept, now);
-    const others = Array.from({ length: 7 }, project);
+    const others = Array.from({ length: 7 }, () => project());
     const evicted = worldFor(others[0], now);
     for (const other of others.slice(1)) worldFor(other, now);
     // A hit moves the world to the newest end, so the next project evicts the oldest other one.
@@ -70,74 +81,91 @@ describe('demo world caches', () => {
     expect(worldFor(b, now)).not.toBe(replaced);
   });
 
-  it('keeps the most recent month of daily visits', () => {
-    const world = new World(project(), now);
-    const first = world.visitsOn(day(1));
-    expect(world.visitsOn(day(1))).toBe(first);
-    for (let ago = 2; ago <= 31; ago++) world.visitsOn(day(ago));
-    // Read again above, so 31 days later it is still the most recent of those retained.
-    expect(world.visitsOn(day(1))).toBe(first);
-    for (let ago = 32; ago <= 62; ago++) world.visitsOn(day(ago));
-    const recomputed = world.visitsOn(day(1));
-    expect(recomputed).not.toBe(first);
-    expect(recomputed).toEqual(first);
+  it('keeps two years of drawn visits by date, so a long report does not evict recent days', async () => {
+    const report = ga4(project(second));
+    const allocated = vi.spyOn(World.prototype, 'visitsOn');
+    const recent = {
+      dateRanges: [{ startDate: '28daysAgo', endDate: 'yesterday' }],
+      dimensions: [{ name: 'date' }],
+      metrics: [{ name: 'sessions' }],
+    };
+    const first = await report(recent);
+    expect(allocated).toHaveBeenCalledTimes(28);
+
+    // A comparison reaching past the kept history allocates each day it has not kept, then the recent month is
+    // still kept for another report.
+    await report({
+      dateRanges: [
+        { startDate: '400daysAgo', endDate: 'yesterday', name: 'current' },
+        { startDate: '800daysAgo', endDate: '401daysAgo', name: 'previous' },
+      ],
+      dimensions: [{ name: 'pagePath' }],
+      metrics: [{ name: 'sessions' }],
+    });
+    expect(allocated).toHaveBeenCalledTimes(800);
+    const countries = await report({
+      ...recent,
+      dimensions: [{ name: 'country' }],
+      metricAggregations: ['TOTAL'],
+    });
+    expect(allocated).toHaveBeenCalledTimes(800);
+    expect(countries.totals[0].metricValues[0].value).toBe(
+      String(
+        first.rows.reduce(
+          (sum: number, row: { metricValues: { value: string }[] }) =>
+            sum + Number(row.metricValues[0].value),
+          0,
+        ),
+      ),
+    );
+
+    // Older than two years, a day is allocated again on each read.
+    await report({
+      ...recent,
+      dateRanges: [{ startDate: '790daysAgo', endDate: '781daysAgo' }],
+    });
+    expect(allocated).toHaveBeenCalledTimes(810);
   });
 
   it('answers a repeated GA4 report within the hour without recomputing it', async () => {
-    const a = project();
-    const property = worldGoogle(a, now).ga4PropertyId;
-    const report = (body: unknown) =>
-      worldResponse(
-        a,
-        `https://analyticsdata.googleapis.com/v1beta/properties/${property}:runReport`,
-        { method: 'POST', body: JSON.stringify(body) },
-        now,
-      ).then((response) => response.json());
+    const report = ga4(project());
     const request = {
       dateRanges: [{ startDate: '90daysAgo', endDate: 'yesterday' }],
       dimensions: [{ name: 'date' }],
       metrics: [{ name: 'sessions' }],
       metricAggregations: ['TOTAL'],
     };
-    const visits = vi.spyOn(World.prototype, 'visitsOn');
+    const days = vi.spyOn(World.prototype, 'daily');
     const first = await report(request);
     expect(first.rows).toHaveLength(90);
-    const computed = visits.mock.calls.length;
+    const computed = days.mock.calls.length;
     expect(computed).toBeGreaterThanOrEqual(90);
 
     expect(await report(request)).toEqual(first);
-    expect(visits.mock.calls.length).toBe(computed);
+    expect(days.mock.calls.length).toBe(computed);
 
     // A different request is its own answer.
     const pages = await report({
       ...request,
       dimensions: [{ name: 'pagePath' }],
     });
-    expect(visits.mock.calls.length).toBeGreaterThan(computed);
+    expect(days.mock.calls.length).toBeGreaterThan(computed);
     expect(pages.totals).toEqual(first.totals);
   });
 
   it('computes a large GA4 report once for all its pages and releases it after the last one', async () => {
-    const a = project();
-    const property = worldGoogle(a, now).ga4PropertyId;
-    const report = (body: unknown) =>
-      worldResponse(
-        a,
-        `https://analyticsdata.googleapis.com/v1beta/properties/${property}:runReport`,
-        { method: 'POST', body: JSON.stringify(body) },
-        now,
-      ).then((response) => response.json());
+    const report = ga4(project());
     const request = {
       dateRanges: [{ startDate: '90daysAgo', endDate: 'yesterday' }],
       dimensions: [{ name: 'date' }, { name: 'pagePath' }],
       metrics: [{ name: 'sessions' }],
       orderBys: [{ dimension: { dimensionName: 'date' } }],
     };
-    const visits = vi.spyOn(World.prototype, 'visitsOn');
+    const days = vi.spyOn(World.prototype, 'daily');
     const whole = await report({ ...request, limit: '100000' });
     const rowCount = Number(whole.rowCount);
     expect(rowCount).toBeGreaterThan(2_000);
-    const computed = visits.mock.calls.length;
+    const computed = days.mock.calls.length;
 
     const limit = Math.ceil(rowCount / 3);
     const paged = [];
@@ -151,11 +179,11 @@ describe('demo world caches', () => {
       paged.push(...page.rows);
     }
     // The first request read the whole table, so it was released; the pages compute it once more.
-    expect(visits.mock.calls.length).toBe(computed * 2);
+    expect(days.mock.calls.length).toBe(computed * 2);
     expect(paged).toEqual(whole.rows);
 
     // The last page released it.
     await report({ ...request, limit: String(limit) });
-    expect(visits.mock.calls.length).toBe(computed * 3);
+    expect(days.mock.calls.length).toBe(computed * 3);
   });
 });

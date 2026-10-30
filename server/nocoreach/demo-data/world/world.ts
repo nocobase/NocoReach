@@ -94,9 +94,10 @@ export function split(
   return out;
 }
 
-// A day holds a few thousand nine-field visit buckets (about 0.1-0.3 MiB). Keep the most recent 31 days, which
-// covers the default 28-day window and today, so older history is recomputed rather than retained.
-const VISIT_CACHE_DAYS = 31;
+// Per-date values a world keeps: a year and the year before it, the longest comparison reports make over full
+// data. Dates are kept by how long ago they are, not when last read, so a long report cannot evict recent days;
+// older dates are recomputed on each read.
+const KEPT_DAYS = 2 * 366;
 // Answers repeated within the hour, such as pages that read GA4 live; an oversized answer is kept only while paged.
 const ANSWER_CACHE_LIMIT = 32;
 const WORLD_CACHE_LIMIT = 8;
@@ -139,7 +140,7 @@ export class World {
   readonly origin: string;
   /** The Google Analytics property's time zone. */
   readonly timeZone: string;
-  private readonly visits = new Map<string, Visit[]>();
+  private readonly days = new Map<string, unknown>();
 
   constructor(
     readonly project: WorldProject,
@@ -274,14 +275,24 @@ export class World {
     );
   }
 
-  /** A day's visits, allocated from source down to browser so every report of that day adds up the same. */
-  visitsOn(date: string): Visit[] {
-    return recent(this.visits, date, VISIT_CACHE_DAYS, () =>
-      this.allocate(date),
-    );
+  /**
+   * A value derived from one date, such as its visits in compact form, computed once while the date lies within the
+   * kept history. `kind` names the value; it must be the same for the same derivation.
+   */
+  daily<T>(kind: string, date: string, compute: () => T): T {
+    const key = `${kind}:${date}`;
+    if (this.days.has(key)) return this.days.get(key) as T;
+    const value = compute();
+    const ago = daysAgo(date, this.local().date);
+    if (ago >= 0 && ago <= KEPT_DAYS) this.days.set(key, value);
+    return value;
   }
 
-  private allocate(date: string): Visit[] {
+  /**
+   * A day's visits, allocated from source down to browser so every report of that day adds up the same. Each call
+   * allocates afresh; readers keep what they need through `daily`.
+   */
+  visitsOn(date: string): Visit[] {
     const { date: today, hour } = this.local();
     const ago = daysAgo(date, today);
     const s = this.seeded;
