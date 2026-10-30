@@ -1,4 +1,8 @@
-import { translationDefault, type ArticleMatch } from './article-publishing.js';
+import {
+  defaultLocales,
+  translationDefault,
+  type ArticleMatch,
+} from './article-publishing.js';
 import { ownSignalIds } from './opportunity-parts.js';
 
 // How a task starts when nobody has to choose: the start card preselects these, and a task handed over from an
@@ -27,6 +31,8 @@ export type ArticleFound = { article: ArticleMatch | null; unchecked: boolean };
 /** What the defaults read: the task page's data, or the same fields the server reads for a hand-over. */
 export type StartContext = {
   task: { evidence?: Record<string, unknown> };
+  /** The project's AI content language ("zh-CN"): the primary language when nobody chose one (2026-10-30). */
+  language?: string | null;
   work: {
     page?: { url?: string } | null;
     article?: {
@@ -91,6 +97,25 @@ export function defaultDelivery(
   /** A translation playbook: always an article that exists (2026-10-25). */
   translate = false,
 ): DeliveryChoice {
+  const choice = targetDelivery(data, playbookId, found, translate);
+  // The languages picked when the task was handed over (2026-10-30), primary first.
+  const handed = (data.task?.evidence?.handoff as { locales?: unknown } | null)
+    ?.locales;
+  return choice.target !== REPO &&
+    !translate &&
+    Array.isArray(handed) &&
+    handed.length &&
+    handed.every((l) => typeof l === 'string')
+    ? { ...choice, locales: handed }
+    : choice;
+}
+
+function targetDelivery(
+  data: StartContext,
+  playbookId: string,
+  found: ArticleFound | undefined,
+  translate: boolean,
+): DeliveryChoice {
   const targets = data.articleTargets || [],
     linked = data.work.article,
     entry = data.articlePlaybookTargets?.[playbookId];
@@ -128,8 +153,8 @@ export function lookupMatters(data: StartContext, playbookId: string) {
 
 /**
  * The languages a task writes, primary first (2026-10-24): the ones chosen at start that its target has, else every
- * language of the target in the target's order. The first is written and reviewed first; the others are translated
- * from it once it is approved.
+ * language of the target, the project's AI content language first when the target has it (2026-10-30), then the
+ * target's order. The first is written and reviewed first; the others are translated from it once it is approved.
  */
 export function choiceLocales(data: StartContext, choice: DeliveryChoice) {
   if (choice.target === REPO) return [];
@@ -137,7 +162,7 @@ export function choiceLocales(data: StartContext, choice: DeliveryChoice) {
     (data.articleTargets || []).find((t) => t.id === choice.target)?.locales ||
     [];
   const chosen = (choice.locales || []).filter((l) => all.includes(l));
-  return chosen.length ? chosen : all;
+  return chosen.length ? chosen : defaultLocales(all, data.language);
 }
 
 /** The languages the chosen article has, when known: the one found from the page, else the one saved on the task. */
@@ -171,7 +196,7 @@ export function translationLocales(
   if (all.length < 2) return [];
   // A choice is kept as made, even a source alone (nothing to write yet: the task cannot start).
   if (chosen.length) return chosen;
-  const d = translationDefault(all, present);
+  const d = translationDefault(all, present, undefined, data.language);
   return [d.from, ...d.to];
 }
 

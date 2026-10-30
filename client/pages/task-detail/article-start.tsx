@@ -15,6 +15,13 @@ import { Input } from '#components/ui/input';
 import { Label } from '#components/ui/label';
 import { RadioGroup, RadioGroupItem } from '#components/ui/radio-group';
 import { Tag } from '#components/reach/tag';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '#components/ui/select';
 import type {
   ArticleMatch,
   ArticleSummary,
@@ -843,5 +850,114 @@ export function DeliverySummary({
         <Tag tone='green'>{$t('articleTask.foundByPage')}</Tag>
       )}
     </>,
+  );
+}
+
+/**
+ * Primary language under Continue with (2026-10-30, T-58: a hand-off wrote English first in a Chinese project): the
+ * language the new task writes and has reviewed first, the project's AI content language preselected; the target's
+ * other languages are translated after it is approved.
+ */
+export function HandoffLanguage({
+  id,
+  all,
+  primary,
+  busy,
+  onChange,
+}: {
+  id: string;
+  all: string[];
+  primary: string;
+  busy: boolean;
+  onChange: (primary: string) => void;
+}) {
+  const ui = getCurrentLocale();
+  if (all.length < 2) return null;
+  const others = all.filter((l) => l !== primary);
+  return (
+    <Field label={$t('articleTask.primaryLanguage')} id={`${id}-primary`}>
+      <Select
+        value={primary}
+        disabled={busy}
+        onValueChange={(v) => {
+          if (typeof v === 'string') onChange(v);
+        }}
+      >
+        <SelectTrigger className='w-full' aria-labelledby={`${id}-primary`}>
+          <SelectValue>{(v: string) => localeName(v, ui)}</SelectValue>
+        </SelectTrigger>
+        <SelectContent className='min-w-(--anchor-width)'>
+          {all.map((l) => (
+            <SelectItem key={l} value={l}>
+              {localeName(l, ui)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className={text.muted}>
+        {$t('articleTask.handoffLanguagesHelp', {
+          0: others
+            .map((l) => localeName(l, ui))
+            .join(ui.startsWith('zh') ? '、' : ', '),
+        })}
+      </p>
+    </Field>
+  );
+}
+
+/**
+ * The primary language on the article review card while it waits for approval (2026-10-30): choosing another one
+ * writes a new version in it, and the others, the former primary included, are translated once it is approved.
+ */
+export function PrimaryLanguage({
+  data,
+  busy,
+  allowed,
+  onChange,
+}: {
+  data: TaskData;
+  busy: boolean;
+  allowed: boolean;
+  onChange: (locale: string) => void;
+}) {
+  const id = useId(),
+    ui = getCurrentLocale(),
+    d = data.work.delivery,
+    all =
+      (data.articleTargets || []).find((t) => t.id === d?.targetId)?.locales ||
+      [];
+  const primary = d?.locales?.[0];
+  if (
+    !primary ||
+    (d?.locales?.length || 0) < 2 ||
+    d?.translateFrom ||
+    all.length < 2
+  )
+    return null;
+  return (
+    <Field label={$t('articleTask.primaryLanguage')} id={`${id}-primary`}>
+      <Select
+        value={primary}
+        disabled={busy || !allowed}
+        onValueChange={(v) => {
+          if (typeof v === 'string' && v !== primary) onChange(v);
+        }}
+      >
+        <SelectTrigger
+          className='w-full sm:w-64'
+          aria-labelledby={`${id}-primary`}
+        >
+          <SelectValue>{(v: string) => localeName(v, ui)}</SelectValue>
+        </SelectTrigger>
+        <SelectContent className='min-w-(--anchor-width)'>
+          {all.map((l) => (
+            <SelectItem key={l} value={l}>
+              {localeName(l, ui)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className={text.muted}>{$t('articleTask.changePrimaryHelp')}</p>
+    </Field>
   );
 }

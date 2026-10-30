@@ -10,11 +10,12 @@ import { failureOf, failureStreak, sentences } from './task-detail/failure-model
 import { EvidenceDialog } from './task-detail/evidence.js';
 import { taskEvidence, whyText } from './task-detail/evidence-model.js';
 import { VisibleChanges } from './task-detail/visible-changes.js';
-import { DeliveryDialog, DeliverySummary } from './task-detail/article-start.js';
+import { DeliveryDialog, DeliverySummary, HandoffLanguage, PrimaryLanguage } from './task-detail/article-start.js';
+import { defaultLocales } from '../../shared/article-publishing.js';
 import { PlaybookDrawer } from './task-detail/playbook-drawer.js';
 import { ArticleEditor, ArticleReview } from './task-detail/article-review.js';
 import { ConflictBody, DriftNotice, PendingButton, TargetRows } from './task-detail/article-release.js';
-import { canRebase, conflictHeading, defaultDelivery, deliveryPlan, exportingNames, failedSub, fieldLabel, joinNames, otherLanguages, pageUrlsOf, publishingTitle, reviewRound, soleConflict, type ArticleFound, type DeliveryChoice } from './task-detail/article-model.js';
+import { canRebase, conflictHeading, defaultDelivery, handoffTarget, deliveryPlan, exportingNames, failedSub, fieldLabel, joinNames, otherLanguages, pageUrlsOf, publishingTitle, reviewRound, soleConflict, type ArticleFound, type DeliveryChoice } from './task-detail/article-model.js';
 import { matchArticle, localeName } from './article-targets-api';
 import { TaskMedia } from './task-detail/media.js';
 import { TaskProperties } from './task-detail/task-properties.js';
@@ -397,7 +398,11 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  // (2026-10-28), or the start's copy when the playbook is gone; the first is preselected until another is chosen.
  const name=(id:string)=>playbookNameOf(id,list);
  const current=list?.playbooks.find(p=>p.id===w.playbook?.id),last=stages.slice(index+1).every(s=>s.kind==='observe'),nextOptions=(w.playbook?.kind==='plan'&&last?current?.next??w.playbook.next:[]).filter(id=>name(id));
- const [chosen,setNext]=useState<string>(),next=chosen===''||(chosen&&nextOptions.includes(chosen))?chosen:nextOptions[0]||'',[articleTab,setArticleTab]=useState(''),[relNote,setRelNote]=useTaskDraft('release',w.results[index-1]?.pr?.release||'');
+ const [chosen,setNext]=useState<string>(),next=chosen===''||(chosen&&nextOptions.includes(chosen))?chosen:nextOptions[0]||'',
+ // The primary language of the article a handed-over playbook writes (2026-10-30): the project's AI content language
+ // when its target has it, else the target's first; the others are translated after it is approved.
+ nextPlaybook=list?.playbooks.find(p=>p.id===next),handTarget=next?handoffTarget(data,nextPlaybook,translatesArticle(nextPlaybook)):null,handAll=handTarget?.locales||[],
+ [handPrimary,setHandPrimary]=useState<string>(),handLang=handPrimary&&handAll.includes(handPrimary)?handPrimary:defaultLocales(handAll,data.language)[0]||'',nextLocales=handAll.length>1?[handLang,...handAll.filter(l=>l!==handLang)]:undefined,[articleTab,setArticleTab]=useState(''),[relNote,setRelNote]=useTaskDraft('release',w.results[index-1]?.pr?.release||'');
  const {clear}=useTaskDraftStatus();
  const act=async(command:string,body:object)=>{const result=await update(command,{stageKey:stage.key,...body});if(result&&['editStageOutput','recordManual','confirmPublish','approveStage','requestStageChanges'].includes(command))clear();return result;};
  const cur=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];
@@ -420,11 +425,16 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
    // In several languages the card says which round it is (reviewRound): the primary to approve, the other languages
    // translated or updated in place, or a version that changed none of them, which offers Update again first (T-53).
    const simulated=mockSettingsAvailable()||Boolean(data.task.evidence?.simulated),round=reviewRound(data,out.article,simulated);
+   // Another primary before it is approved (2026-10-30): the Agent writes a new version in it; asked first.
+   const changePrimary=async(l:string)=>{const ui=getCurrentLocale(),lang=localeName(l,ui),others=(w.delivery?.locales||[]).filter(x=>x!==l).map(x=>localeName(x,ui)).join(ui.startsWith('zh')?'、':', ');
+    if(await confirmAction({title:()=>$t('articleTask.changePrimaryTitle',{0:lang}),description:()=>$t('articleTask.changePrimaryDescription',{0:lang,1:others}),action:()=>$t('articleTask.changePrimaryAction',{0:lang}),destructive:false}))
+     await act('changePrimary',{artifactId:out.id,locale:l,comment:$t('articleTask.primaryChangedComment',{0:lang})});};
    const approve=!targetGone&&<Button variant={round.nothing?'outline':'default'} disabled={busy||missingChecks} onClick={()=>void act('approveStage',{artifactId:out.id,checked})}>{!round.nothing&&<Rocket/>}{round.approve||$t(simulated?'taskDetail.approveAndSimulatePublish':'taskDetail.approveAndPublish')}</Button>;
    return <StageCard title={round.title} sub={by} at={out.createdAt}
     actions={editing||!allowed?undefined:<>{round.nothing?<><Button disabled={busy} onClick={()=>void act('requestStageChanges',{artifactId:out.id,comment:round.againComment})}><RotateCcw/>{round.again}</Button>{requestButton}{approve}</>:<>{approve}{requestButton}</>}<Button ref={editButtonRef} variant='ghost' disabled={busy} onClick={()=>setEditing(true)}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
     {targetGone&&<p role='alert' className='text-sm text-destructive'>{$t('articles.targetMissing')}</p>}
     {round.nothing&&<p className={text.muted}>{round.hint}</p>}
+    {!editing&&<PrimaryLanguage data={data} busy={busy} allowed={allowed} onChange={l=>void changePrimary(l)}/>}
     <LastFeedback w={w} stage={stage} out={out}/>
     {editing?<ArticleEditor data={data} article={out.article} draftKey={out.id} tab={articleTab} busy={busy} onCancel={()=>{setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}} onSave={async article=>{const d=await act('editArticleDraft',{artifactId:out.id,article});if(d){setEditing(false);setTimeout(()=>editButtonRef.current?.focus(),0);}return Boolean(d);}}/>:<>
      <ArticleReview key={out.id} data={data} article={out.article} notes={out.content} tab={articleTab} onTab={setArticleTab} readerTo={(lang,view)=>`article?lang=${encodeURIComponent(lang)}&view=${view}`}/>
@@ -470,7 +480,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   if(!out)return <StageCard error title={displayStageName(stage)} sub={$t('taskDetail.nothingReviewRefreshTryAgain')}/>;
   return <StageCard title={$t('taskDetail.resultReady',{0:producer.name})} sub={by} at={out.createdAt}
    actions={editing?<><Button disabled={busy||!draft.trim()} onClick={()=>void act('editStageOutput',{artifactId:out.id,content:draft})}>{$t('taskDetail.saveChanges')}</Button><Button variant="ghost" onClick={()=>{setEditing(false);setDraft(w.results[index-1]?.content||'');}}>{$t('common.cancel')}</Button></>
-    :<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,...(nextOptions.length&&next?{next}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})}).then(d=>{if(d&&nextOptions.length&&next&&d.work.nextTaskId)handedOver(String(d.work.nextTaskId));})}>{label}</Button>{requestButton}<Button variant="ghost" disabled={busy} onClick={()=>{setDraft(out.content);setEditing(true);}}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
+    :<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,...(nextOptions.length&&next?{next,...(nextLocales?{nextLocales}:{})}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})}).then(d=>{if(d&&nextOptions.length&&next&&d.work.nextTaskId)handedOver(String(d.work.nextTaskId));})}>{label}</Button>{requestButton}<Button variant="ghost" disabled={busy} onClick={()=>{setDraft(out.content);setEditing(true);}}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
    <LastFeedback w={w} stage={stage} out={out}/>
    {editing?<MarkdownEditor aria-label={$t('taskDetail.editContent')} value={draft} disabled={busy} onChange={e=>{setDraft(e.target.value);}} preview={value=><Markdown content={value}/>}/>:<>
     {out.pr?<PageChange pr={out.pr} content={out.content}/>:(()=>{const r=repliesOf(w,out.content);return r.length?<ReplyDrafts items={r}/>:<Reading><Markdown content={out.content}/></Reading>;})()}
@@ -481,6 +491,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
      <SelectTrigger className="w-full" aria-labelledby={`${stage.key}-next`}><SelectValue>{(v:string)=>v===NONE?$t('taskDetail.notContinue'):name(v)}</SelectValue></SelectTrigger>
      <SelectContent className="min-w-(--anchor-width)">{nextOptions.map(id=><SelectItem key={id} value={id}>{name(id)}</SelectItem>)}<SelectItem value={NONE}>{$t('taskDetail.notContinue')}</SelectItem></SelectContent>
     </Select></Field>}
+    {nextOptions.length>0&&handTarget&&<HandoffLanguage id={`${stage.key}-hand`} all={handAll} primary={handLang} busy={busy} onChange={setHandPrimary}/>}
    </>}
   </StageCard>;
  }

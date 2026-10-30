@@ -261,3 +261,14 @@ it('tells article runs the article language is the primary one, not the project 
     'data.article.languages',
   );
 });
+
+// 2026-10-30 (T-58): asked for another primary language, the Agent sent the person to an article setting that does
+// not exist; it now names the review card's Primary language and never a setting the task page lacks.
+it('article rules say where the primary language is changed and to name only what the task page has', () => {
+  const rules = resultRules('article').join('\n');
+  expect(rules).toContain(
+    '主语言由任务决定（languages.primary），你不能自己换',
+  );
+  expect(rules).toContain('任务页文章审核卡片上的“主语言”');
+  expect(rules).toContain('不要提到任务页上没有的设置或按钮');
+});
