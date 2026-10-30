@@ -342,8 +342,10 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId,onEviden
 // From the second version on: what was asked last time, above the version that answers it.
 function LastFeedback({w,stage,out}:{w:Work;stage:Stage;out:Artifact}){
  if(out.version<2)return null;
- const last=[...(w.history||[])].reverse().find(e=>e.action==='requestStageChanges'&&(!e.stageKey||e.stageKey===stage.key)&&e.comment);
- return last?<p className={cn(text.body,'whitespace-pre-wrap')}><span className="text-muted-foreground">{$t('taskDetail.lastFeedback')}</span>{last.comment}</p>:null;
+ // A version written after the primary language changed (2026-10-30) says so rather than an older request.
+ const last=[...(w.history||[])].reverse().find(e=>(e.action==='requestStageChanges'&&e.comment||e.action==='changePrimary')&&(!e.stageKey||e.stageKey===stage.key));
+ const said=last?.action==='changePrimary'?$t('playbook.primaryChanged',{0:localeName(last.note||'',getCurrentLocale())}):last?.comment;
+ return said?<p className={cn(text.body,'whitespace-pre-wrap')}><span className="text-muted-foreground">{$t('taskDetail.lastFeedback')}</span>{said}</p>:null;
 }
 // What a failed run got before it stopped (2026-10-24 user decision): kept for the owner to read or to finish the step
 // with by hand, and handed to the step's next run to continue from.

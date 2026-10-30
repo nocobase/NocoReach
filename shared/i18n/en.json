@@ -7240,7 +7240,7 @@
   "articleTask.failureCode": "Error code",
   "articleTask.failedAt": "Time",
   "articleTask.primaryChangedComment": "The primary language is now {0}: rewrite this version's title, description and body in {0}; any {0} text in the previous draft or notes can be used. The other languages are translated after approval.",
-  "articleTask.handoffLanguagesHelp": "The primary language is written first; once you approve it, the agent translates it into {0} and everything is published together.",
+  "articleTask.handoffLanguagesHelp": "The primary language is written first; once you approve it, the agent translates it into {0}, then everything is published together.",
   "articleTask.changePrimaryHelp": "Before approval you can change the primary language: the agent rewrites this version in it, and the other languages are translated after approval.",
   "articleTask.changePrimaryTitle": "Make {0} the primary language?",
   "articleTask.changePrimaryDescription": "The agent rewrites this version in {0} for your review; {1} are translated after approval.",

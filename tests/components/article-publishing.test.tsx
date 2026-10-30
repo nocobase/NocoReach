@@ -1756,7 +1756,7 @@ it('offers the primary language with a hand-over and on the review card until it
   );
   expect(
     screen.getByText(
-      'The primary language is written first; once you approve it, the agent translates it into English, Japanese and everything is published together.',
+      'The primary language is written first; once you approve it, the agent translates it into English, Japanese, then everything is published together.',
     ),
   ).toBeInTheDocument();
   cleanup();
