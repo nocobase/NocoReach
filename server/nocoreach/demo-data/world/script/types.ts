@@ -60,6 +60,8 @@ export interface Page {
   published: number;
   updated?: number;
   changes?: readonly Change[];
+  /** A story's effect observation measures this page: it skips the annual demand cycle so only `changes` move it. */
+  measured?: boolean;
   index?: IndexState;
   flags?: readonly PageFlag[];
   /** Pages this one links to, besides the navigation. */
@@ -88,6 +90,8 @@ export interface Query {
   /** Click-through relative to what the position usually earns. */
   ctr?: number;
   changes?: readonly Change[];
+  /** Lands on a measured page, which it follows; see `Page.measured`. */
+  measured?: boolean;
   /** Position moves by this much from `at` days ago, over three days. */
   rank?: { at: number; by: number };
   /** Branded searches. */

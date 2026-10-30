@@ -1,14 +1,69 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
 import { demoContent } from '../../server/nocoreach/demo-data/content';
+import { completedAgo } from '../../server/nocoreach/demo-data/editorial';
 import { worldResponse } from '../../server/nocoreach/demo-data/world';
-import { World } from '../../server/nocoreach/demo-data/world/world';
+import {
+  World,
+  type WorldProject,
+} from '../../server/nocoreach/demo-data/world/world';
 import {
   compare,
+  shift,
   type Partition,
 } from '../../server/nocoreach/execution/effect';
 
 const now = Date.parse('2026-10-28T12:00:00Z');
+
+/** Search Console query and page rows by day, as a sync stores them for effect observations. */
+async function searchPartitions(
+  project: WorldProject,
+  startDate: string,
+  endDate: string,
+  at: number,
+): Promise<Partition[]> {
+  const response = await worldResponse(
+    project,
+    `https://www.googleapis.com/webmasters/v3/sites/sc-domain%3A${project.domain}/searchAnalytics/query`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        startDate,
+        endDate,
+        dimensions: ['date', 'query', 'page'],
+        rowLimit: 25000,
+      }),
+    },
+    at,
+  );
+  const data = (await response.json()) as {
+    rows: {
+      keys: string[];
+      clicks: number;
+      impressions: number;
+      position: number;
+    }[];
+  };
+  const dates = new Map<string, Partition>();
+  for (const row of data.rows) {
+    const [date, keyword, page] = row.keys;
+    if (!dates.has(date))
+      dates.set(date, {
+        date,
+        source: 'gsc',
+        grain: 'query_page',
+        payload: [],
+      });
+    dates.get(date)!.payload.push({
+      keyword,
+      page,
+      clicks: row.clicks,
+      impressions: row.impressions,
+      position: row.position,
+    });
+  }
+  return [...dates.values()];
+}
 
 describe.each(['zh-CN', 'en-US'])(
   'the complete %s demo edition',
@@ -224,51 +279,11 @@ describe.each(['zh-CN', 'en-US'])(
       'measures %s %s from source data in either language',
       async (which, path, conclusion) => {
         const project = { id: which, ...content.projects[which], language };
-        const response = await worldResponse(
-          project,
-          `https://www.googleapis.com/webmasters/v3/sites/sc-domain%3A${project.domain}/searchAnalytics/query`,
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              startDate: '2026-10-07',
-              endDate: '2026-10-21',
-              dimensions: ['date', 'query', 'page'],
-              rowLimit: 25000,
-            }),
-          },
-          now,
-        );
-        const data = (await response.json()) as {
-          rows: {
-            keys: string[];
-            clicks: number;
-            impressions: number;
-            position: number;
-          }[];
-        };
-        const dates = new Map<string, Partition>();
-        for (const row of data.rows) {
-          const [date, keyword, page] = row.keys;
-          if (!dates.has(date))
-            dates.set(date, {
-              date,
-              source: 'gsc',
-              grain: 'query_page',
-              payload: [],
-            });
-          dates.get(date)!.payload.push({
-            keyword,
-            page,
-            clicks: row.clicks,
-            impressions: row.impressions,
-            position: row.position,
-          });
-        }
         const effect = compare(
           7,
           '2026-10-14',
           [`https://${project.domain}${path}`],
-          [...dates.values()],
+          await searchPartitions(project, '2026-10-07', '2026-10-21', now),
           '2026-10-24T12:00:00Z',
         );
         expect(effect.coverage?.gsc).toEqual({ baselineDays: 7, afterDays: 7 });
@@ -276,6 +291,53 @@ describe.each(['zh-CN', 'en-US'])(
         expect(
           Math.abs(effect.gsc!.clicks[0] - effect.gsc!.clicks[1]),
         ).toBeGreaterThanOrEqual(10);
+      },
+    );
+
+    // The import computes each done story's observation from the day's collected search data, so whichever day the
+    // demo is imported on, the story's page must move as its outcome says: across month boundaries and at hours when
+    // Search Console's Pacific date and the project's date agree or differ.
+    it.each(['main', 'second'] as const)(
+      'finds every measured %s outcome on any import day',
+      async (which) => {
+        const project = { id: which, ...content.projects[which], language };
+        const stories =
+          which === 'main' ? content.stories : content.secondTasks;
+        for (let month = 0; month < 12; month++)
+          for (const [day, hour] of [
+            [1, 2],
+            [16, 12],
+          ]) {
+            const at = Date.UTC(2027, month, day, hour);
+            const today = new World(project, at).local().date;
+            const partitions = await searchPartitions(
+              project,
+              shift(today, -40),
+              today,
+              at,
+            );
+            for (const [index, story] of stories.entries()) {
+              if (!['up', 'down', 'flat'].includes(story.outcome ?? ''))
+                continue;
+              const effect = compare(
+                7,
+                shift(today, -completedAgo(story, index)),
+                [`https://${project.domain}${story.path}`],
+                partitions,
+                new Date(at).toISOString(),
+              );
+              const imported = `${story.key} imported on ${today}`;
+              expect({
+                imported,
+                primary: effect.primary,
+                conclusion: effect.conclusion,
+              }).toEqual({
+                imported,
+                primary: 'clicks',
+                conclusion: story.outcome,
+              });
+            }
+          }
       },
     );
   },

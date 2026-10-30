@@ -45,7 +45,6 @@ export const SECOND_SITE: Site = {
     },
     {
       path: '/pricing',
-      changes: [{ kind: 'step', at: 14, to: 0.82 }],
       title: t('价格', 'Pricing'),
       description: t(
         'Acme CRM 开源版免费，包含全部核心功能，由团队自行部署和维护；托管版按席位计费，提供备份和升级服务，具体价格以销售报价为准。',

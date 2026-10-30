@@ -24,7 +24,9 @@ import {
   CRM_QUERIES,
   CRM_RESEARCH,
 } from './script/crm.js';
+import { ACME_STORIES } from '../acme-content.js';
 import { demoContent } from '../content.js';
+import { CRM_STORIES } from '../crm-content.js';
 import { Seeded, shares, type Language } from './kit.js';
 import { MAIN_ANALYTICS, SECOND_ANALYTICS } from './script/analytics.js';
 import { MAIN_QUERIES, RESEARCH, SECOND_QUERIES } from './script/search.js';
@@ -47,6 +49,7 @@ import {
   shareBefore,
   weekday,
 } from './series.js';
+import { measuredQueries, measuredSite } from './outcomes.js';
 
 export interface WorldProject {
   readonly id: string;
@@ -96,6 +99,22 @@ export function split(
 
 const CACHE_LIMIT = 4_000;
 
+// Each project's stories script the pages their effect observations measure, the same in both languages.
+const SITES = {
+  main: measuredSite(MAIN_SITE, ACME_STORIES),
+  second: measuredSite(SECOND_SITE, CRM_STORIES),
+};
+const QUERIES = {
+  main: {
+    zh: measuredQueries(MAIN_QUERIES.zh, ACME_STORIES),
+    en: measuredQueries(MAIN_QUERIES.en, ACME_STORIES),
+  },
+  second: {
+    zh: measuredQueries([...SECOND_QUERIES.zh, ...CRM_QUERIES.zh], CRM_STORIES),
+    en: measuredQueries([...SECOND_QUERIES.en, ...CRM_QUERIES.en], CRM_STORIES),
+  },
+};
+
 /**
  * The demo world as one project sees it at one moment: its site, searches, visitors and communities, in the language
  * the demo was imported in. Everything is derived from the script and the date, so a day reads the same all day and
@@ -123,10 +142,8 @@ export class World {
     this.language = project.language === 'en-US' ? 'en-US' : 'zh-CN';
     this.lang = this.language === 'en-US' ? 'en' : 'zh';
     this.main = project.domain !== SECOND_SITE.domain;
-    this.site = this.main ? MAIN_SITE : SECOND_SITE;
-    this.queries = this.main
-      ? MAIN_QUERIES[this.lang]
-      : [...SECOND_QUERIES[this.lang], ...CRM_QUERIES[this.lang]];
+    this.site = this.main ? SITES.main : SITES.second;
+    this.queries = (this.main ? QUERIES.main : QUERIES.second)[this.lang];
     this.analytics = (this.main ? MAIN_ANALYTICS : SECOND_ANALYTICS)[this.lang];
     this.research = this.main
       ? RESEARCH[this.lang]
@@ -262,7 +279,12 @@ export class World {
     );
     const { sources, regions, devices, newShare } = this.analytics;
     const pages = this.site.pages;
-    const pageWeights = pages.map((p) => p.weight * level(p.changes, ago));
+    // A measured page keeps today's month's demand, so a month boundary cannot pass for its change.
+    const steady =
+      annualDemand(today, !this.main) / annualDemand(date, !this.main);
+    const pageWeights = pages.map(
+      (p) => p.weight * level(p.changes, ago) * (p.measured ? steady : 1),
+    );
     const meanPage = pageWeights.reduce((a, b) => a + b, 0) / pages.length;
     const out: Visit[] = [];
     const bySource = split(
@@ -274,9 +296,10 @@ export class World {
     bySource.forEach((sourceCount, source) => {
       if (!sourceCount) return;
       const lands = sources[source].lands ?? [];
+      // What a source sends to a page follows the page's own changes, as the rest of its visits do.
       const weights = pages.map((p, i) => {
         const extra = lands.find(([path]) => path === p.path)?.[1] ?? 0;
-        return pageWeights[i] + extra * meanPage;
+        return pageWeights[i] * (1 + (extra * meanPage) / p.weight);
       });
       split(s, `page:${date}:${source}`, sourceCount, weights).forEach(
         (pageCount, page) => {

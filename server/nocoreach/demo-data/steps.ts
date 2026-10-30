@@ -5,7 +5,10 @@ import type {
   DemoStep,
 } from '@nocobase/app-plugin-demo-mode/server/tokens';
 
-import type { DemoTaskStory } from './editorial.js';
+import {
+  completedAgo as storyCompletedAgo,
+  type DemoTaskStory,
+} from './editorial.js';
 import { historyBounds } from '../search-history.js';
 import { DomainService } from '../domain-service.js';
 import { Lighthouse } from '../lighthouse.js';
@@ -737,14 +740,7 @@ function storyTask(
           ? content.people[owner].name
           : undefined;
   }
-  const completedAgo =
-    story.outcome === 'waiting'
-      ? 2
-      : story.outcome === 'insufficient'
-        ? 12
-        : story.age
-          ? story.age - 8
-          : 12 + (index % 4);
+  const completedAgo = storyCompletedAgo(story, index);
   const age =
     story.age ?? (story.state === 'done' ? completedAgo + 8 : 3 + (index % 12));
   const draftAgo = age - 1;

@@ -31,6 +31,19 @@ export type DemoTaskStory = DemoStory &
     previousDraft?: string;
   };
 
+/**
+ * Days before the import that a story's work went live, from its place among the project's stories. Its effect
+ * observation starts that day, and the demo world moves the page's traffic from then on.
+ */
+export function completedAgo(
+  story: Pick<EditorialStory, 'outcome' | 'age'>,
+  index: number,
+): number {
+  if (story.outcome === 'waiting') return 2;
+  if (story.outcome === 'insufficient') return 12;
+  return story.age ? story.age - 8 : 12 + (index % 4);
+}
+
 export function localizeStories(
   stories: readonly EditorialStory[],
   language: string,

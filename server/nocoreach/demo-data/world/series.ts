@@ -91,3 +91,16 @@ export function localTime(
 /** Days before `date`. */
 export const shiftDay = (date: string, days: number): string =>
   new Date(Date.parse(date) - days * DAY).toISOString().slice(0, 10);
+
+// Search Console: clicks by position, from a typical organic click curve.
+const CTR = [0.31, 0.17, 0.11, 0.075, 0.055, 0.042, 0.033, 0.027, 0.022, 0.019];
+export function ctrAt(position: number): number {
+  if (position < 1) return CTR[0];
+  if (position <= 10) {
+    const i = Math.floor(position) - 1;
+    const next = CTR[Math.min(9, i + 1)];
+    return CTR[i] + (next - CTR[i]) * (position - Math.floor(position));
+  }
+  if (position <= 20) return 0.012 - (position - 10) * 0.0007;
+  return 0.0035;
+}

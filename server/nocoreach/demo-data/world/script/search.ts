@@ -15,10 +15,6 @@ const q = (
   extra: Extra = {},
 ): Query => ({ q: query, path, impressions, position, ...extra });
 const brand: Extra = { brand: true, ctr: 1.15 };
-const pricingDecline: Extra = {
-  ...brand,
-  changes: [{ kind: 'step', at: 14, to: 0.55 }],
-};
 export const TOPIC_WORDS: Record<string, readonly string[]> = {
   'project management': [
     'acme',
@@ -37,7 +33,7 @@ export const TOPIC_WORDS: Record<string, readonly string[]> = {
 export const SECOND_QUERIES: PerLanguage<Query[]> = {
   zh: [
     q('acme crm', '/', 120, 1.1, brand),
-    q('acme crm 价格', '/pricing', 25, 1.3, pricingDecline),
+    q('acme crm 价格', '/pricing', 25, 1.3, brand),
     q('acme crm 部署', '/docs/quick-start', 18, 1.5, brand),
     q('开源crm', '/', 200, 18.5),
     q('免费crm 小团队', '/blog/crm-for-small-teams', 90, 12.3),
@@ -58,7 +54,7 @@ export const SECOND_QUERIES: PerLanguage<Query[]> = {
   ],
   en: [
     q('acme crm', '/', 100, 1.1, brand),
-    q('acme crm pricing', '/pricing', 20, 1.2, pricingDecline),
+    q('acme crm pricing', '/pricing', 20, 1.2, brand),
     q('acme crm docker', '/docs/quick-start', 15, 1.4, brand),
     q('open source crm', '/', 260, 21.4),
     q('free crm for small teams', '/blog/crm-for-small-teams', 110, 13.1),

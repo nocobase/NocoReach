@@ -15,6 +15,7 @@ import {
 import {
   daysAgo,
   annualDemand,
+  ctrAt,
   growth,
   hourShare,
   level,
@@ -630,19 +631,6 @@ function ga4Realtime(world: World, b: Json): Json {
   );
 }
 
-// Search Console: clicks by position, from a typical organic click curve.
-const CTR = [0.31, 0.17, 0.11, 0.075, 0.055, 0.042, 0.033, 0.027, 0.022, 0.019];
-function ctrAt(position: number): number {
-  if (position < 1) return CTR[0];
-  if (position <= 10) {
-    const i = Math.floor(position) - 1;
-    const next = CTR[Math.min(9, i + 1)];
-    return CTR[i] + (next - CTR[i]) * (position - Math.floor(position));
-  }
-  if (position <= 20) return 0.012 - (position - 10) * 0.0007;
-  return 0.0035;
-}
-
 const DEVICES = [
   ['DESKTOP', 0.6, 0],
   ['MOBILE', 0.37, 0.6],
@@ -665,14 +653,15 @@ type SearchCell = {
 function queryDay(world: World, query: Query, date: string, today: string) {
   const ago = daysAgo(date, today);
   const s = world.seeded;
-  const key = `${query.q}:${date}`;
+  // A measured search repeats its week's noise, so the two weeks an observation compares differ only by its change.
+  const key = `${query.q}:${query.measured ? `weekday-${new Date(`${date}T00:00:00Z`).getUTCDay()}` : date}`;
   const seasonal = weekday(date) ** (query.brand ? 0.9 : 0.6);
   const impressions = s.round(
     `imp:${key}`,
     query.impressions *
       level(query.changes, ago) *
       growth(ago) *
-      annualDemand(date, !world.main) *
+      annualDemand(query.measured ? today : date, !world.main) *
       seasonal *
       s.jitter(`impj:${key}`, 0.18),
   );

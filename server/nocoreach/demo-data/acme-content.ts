@@ -1383,13 +1383,6 @@ export const ACME_PAGES: readonly Page[] = [
     published: 762,
     updated: 18,
     links: ['/docs/getting-started', '/pricing', '/templates'],
-    changes: [
-      {
-        kind: 'step',
-        at: 14,
-        to: 1.35,
-      },
-    ],
   },
   {
     path: '/docs/weekly-reports',
@@ -1417,13 +1410,6 @@ export const ACME_PAGES: readonly Page[] = [
     published: 759,
     updated: 18,
     links: ['/docs/getting-started', '/pricing', '/templates'],
-    changes: [
-      {
-        kind: 'step',
-        at: 14,
-        to: 1.35,
-      },
-    ],
   },
   {
     path: '/docs/notifications',
@@ -1478,13 +1464,6 @@ export const ACME_PAGES: readonly Page[] = [
     published: 753,
     updated: 18,
     links: ['/docs/getting-started', '/pricing', '/templates'],
-    changes: [
-      {
-        kind: 'step',
-        at: 14,
-        to: 0.72,
-      },
-    ],
   },
   {
     path: '/templates',
@@ -1601,13 +1580,6 @@ export const ACME_PAGES: readonly Page[] = [
     published: 741,
     updated: 18,
     links: ['/docs/getting-started', '/pricing', '/templates'],
-    changes: [
-      {
-        kind: 'step',
-        at: 14,
-        to: 1.35,
-      },
-    ],
   },
   {
     path: '/docs/milestones',
@@ -1884,13 +1856,6 @@ export const ACME_PAGES: readonly Page[] = [
     published: 711,
     updated: 18,
     links: ['/docs/getting-started', '/pricing', '/templates'],
-    changes: [
-      {
-        kind: 'step',
-        at: 14,
-        to: 1.35,
-      },
-    ],
   },
   {
     path: '/blog/estimation',

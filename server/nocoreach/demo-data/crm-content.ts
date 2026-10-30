@@ -837,9 +837,6 @@ export const CRM_PAGES: readonly Page[] = [
         index: 'discovered' as const,
       }
     : {}),
-  ...(i === 2 || i === 3
-    ? { changes: [{ kind: 'step' as const, at: 14, to: 1.35 }] }
-    : {}),
   links: ['/docs/quick-start', '/docs/import', '/contact'],
 }));
 
