@@ -369,6 +369,9 @@ describe('NocoReach semantic-key translations', () => {
       // Change requests are written in Activity's message box (2026-10-28), and the Agent revises rather than redoes.
       '写修改意见，发送后{0}会按意见重做':
         '写修改意见，发送后 {0} 会按意见重新修改',
+      // Every closed task can be reopened (2026-10-29), so closing no longer says the task cannot continue.
+      '执行者会停下，没合并的 PR 会关掉（分支保留），之后不能接着做。':
+        '执行者会停下，没合并的 PR 会关掉（分支保留）。之后可以重新打开，回到这一步。',
     };
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(

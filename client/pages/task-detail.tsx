@@ -55,7 +55,7 @@ import type {TaskPageContext} from './task-detail/reader-context.js';
 import {useTaskDraft,useTaskDraftStatus} from './task-detail/draft-store.js';
 import {DocReader,Markdown} from './doc-view';
 import {effectItems,effectLine,effectPages,type EffectResult} from './effect-model';
-import {closeCommand,canReopen,closedWhen,getCloseConfirm,closedLabel,isClosed,isSnoozed,type TaskData as Data,type Work,type Artifact,type PullRequestInfo} from './task-execution-types';
+import {closeCommand,canReopen,closedWhen,reopenHint,restartOf,getCloseConfirm,closedLabel,isClosed,isSnoozed,type TaskData as Data,type Work,type Artifact,type PullRequestInfo} from './task-execution-types';
 import {playbookRequest,playbookNameOf,localizePlaybookList,getCategories,getStageExecutor,stageName as displayStageName,stageLabel,stagesFor,readsOnly,withoutRepo,eventText,type PlaybookList,type Stage} from './playbook-model';
 import {translatesArticle} from '../../shared/playbook-catalog';
 import './strategy/strategy.css';
@@ -157,7 +157,7 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
      {error&&!composerFailed&&<p role="alert" className="nr-error">{error}</p>}
      {/* Snoozed (task-detail/task-snooze.tsx): named first; the card below stays usable and acting on it ends it. */}
      {isSnoozed(w)&&<SnoozedCard data={data} busy={busy} allowed={access.allowed} onChange={()=>setSnoozeOpen(true)} update={update}/>}
-     {w.cancelledAt||w.archivedAt?<ClosedCard w={w} update={update} busy={busy}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} pick={pick} setPick={setPick} update={update} reload={()=>call<Data>(projectId,taskId,'get').then(setStoredData)} busy={busy} projectId={projectId} taskId={taskId} onEvidence={()=>setEvidenceOpen(true)}/></TaskDraftScope>:done?<DoneCard data={data} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} list={list}/></TaskDraftScope>}
+     {w.cancelledAt||w.archivedAt?<ClosedCard data={data} update={update} busy={busy}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} pick={pick} setPick={setPick} update={update} reload={()=>call<Data>(projectId,taskId,'get').then(setStoredData)} busy={busy} projectId={projectId} taskId={taskId} onEvidence={()=>setEvidenceOpen(true)}/></TaskDraftScope>:done?<DoneCard data={data} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} list={list}/></TaskDraftScope>}
     </div>
     <ActivityCard data={data} update={update} busy={busy} members={members} membersLoaded={membersLoaded} error={composerFailed?error:''} onFailed={()=>setComposerFailed(true)}/>
    </div>
@@ -512,11 +512,14 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  if(stage.kind==='agent'){
   const approved=[...w.results.slice(0,index)].reverse().find(r=>r?.approvedAt&&!r.rejectedAt),source=approved?stages[w.results.indexOf(approved)]:undefined;
   const agent=data.agent,isActive=cur&&active(cur),canRun=Boolean(agent?.options?.some(a=>a.id===agent.agentId&&a.type==='demo'))||Boolean(agent?.repo)||withoutRepo(stage,stages)||w.delivery?.kind==='article';
-  const failure=cur?.status==='failed'?failureOf(cur,data):undefined;
+  // Reopened after the closing stopped this step or withdrew its change (shared/task-reopen.ts): until it is started
+  // again it waits for a person, rather than reading as a failure.
+  const restart=restartOf(w);
+  const failure=cur?.status==='failed'&&!restart?failureOf(cur,data):undefined;
   // How often the step failed in a row, and for the same cause (failure-model.ts): after the same cause twice the card
   // says what to fix first and no longer suggests Try again (2026-10-24 user decision).
   const {failures,same}=failure?failureStreak(data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))),failure.group,data):{failures:0,same:0},repeated=same>=2&&Boolean(failure?.fix);
-  const retry=cur?.status!=='running'&&cur?.status!=='queued'&&canRun&&<Button variant={failure&&(NO_RETRY.has(failure.group)||repeated)?'outline':'default'} disabled={busy||(!hasTaskAgent(data)&&(agent?.options||[]).length!==1)} onClick={()=>void withUsableAgent(data,update,'retryStage',{stageKey:stage.key})}>{cur?$t('taskDetail.tryAgain'):$t('taskDetail.handOffAgent')}</Button>;
+  const retry=cur?.status!=='running'&&cur?.status!=='queued'&&canRun&&<Button variant={failure&&(NO_RETRY.has(failure.group)||repeated)?'outline':'default'} disabled={busy||(!hasTaskAgent(data)&&(agent?.options||[]).length!==1)} onClick={()=>void withUsableAgent(data,update,'retryStage',{stageKey:stage.key})}>{restart?$t('taskDetail.startStepAgain'):cur?$t('taskDetail.tryAgain'):$t('taskDetail.handOffAgent')}</Button>;
   // Every Agent on the computer meets a shared failure alike, so switching is not offered (2026-10-24 user decision).
   const switchAgent=failure&&failure.group!=='restart'&&!failure.shared&&(agent?.options||[]).length>1&&<Button variant="outline" disabled={busy} onClick={pickAgent}>{$t('taskDetail.switchAgent')}</Button>;
   const actions=!manual?<>
@@ -541,6 +544,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   // or updating in place the ones the article has (2026-10-28).
   const plan=otherLanguages(data),translating=w.delivery?.translateFrom&&!w.release?plan.write:[],names=(l:string[])=>joinNames(l.map(x=>localeName(x,getCurrentLocale()))),from=localeName(plan.primary,getCurrentLocale());
   const working=!translating.length?$t('taskDetail.agentWorking',{0:stage.name}):!plan.update.length?$t('articleTask.translating',{0:names(translating)}):plan.translate.length?$t('articleTask.updatingAndTranslating',{0:from,1:names(plan.update),2:names(plan.translate)}):$t('articleTask.updating',{0:from,1:names(plan.update)});
+  if(restart&&!isActive&&!manual)return <StageCard title={displayStageName(stage)} sub={$t(restart==='withdrawn'?'taskDetail.restartWithdrawn':'taskDetail.restartStopped')} actions={actions}>{body}</StageCard>;
   if(cur?.status==='queued')return <StageCard label={progress} title={working} sub={agent?.online?$t('taskDetail.handedOffAgentStartingNow'):<>{$t('taskDetail.agentComputerOffline')} <Button variant="link" size="sm" className="h-auto font-normal p-0 align-baseline" onClick={()=>navigate('/agents')}>{$t('common.manageAgents')}</Button></>} actions={actions}>{restarted}{body}</StageCard>;
   if(cur?.status==='running')return <StageCard label={progress} spinning title={<>{working}{cur.cancelRequested?$t('taskDetail.stoppingAside'):''}</>} sub={$t('taskDetail.agentWorkingFor',{0:since(cur.createdAt)})} actions={actions}>{restarted}{body}</StageCard>;
   if(cur?.status==='failed'&&failure){
@@ -568,12 +572,13 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
 }
 // The empty choice of a Select (Do not continue), which cannot hold "".
 const NONE='__none__';
-// A cancelled or archived task: what happened, what became of the unpublished change, and Reopen when allowed.
-function ClosedCard({w,update,busy}:{w:Work;update:Update;busy:boolean}){
- const pr=w.prClose,prLine=pr?{closing:$t('taskDetail.unpublishedClosing'),closed:$t('taskDetail.unpublishedClosed'),failed:$t('taskDetail.unpublishedCloseFailed')}[pr.state]:'';
+// A cancelled or archived task: what happened, what became of the unpublished change, and where Reopen takes it
+// (2026-10-29 user decision: every closed task can be reopened and resumes where it was closed).
+function ClosedCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
+ const w=data.work,{allowed}=useContext(TaskAccess),pr=w.prClose,prLine=pr?{closing:$t('taskDetail.unpublishedClosing'),closed:$t('taskDetail.unpublishedClosed'),failed:$t('taskDetail.unpublishedCloseFailed')}[pr.state]:'';
  const at=w.cancelledAt||w.archivedAt;
- return <StageCard label={$t('common.status')} title={$t('taskDetail.closedValue',{0:closedWhen(w)})} sub={`${at?$t('taskDetail.closedValueMessage',{0:when(at)}):''}${canReopen(w)?'':$t('taskDetail.taskStoppedHalfwayCannotContinue')}`}
-  actions={canReopen(w)?<Button variant="outline" disabled={busy} onClick={()=>void update('unarchiveTask')}><ArchiveRestore/>{$t('common.reopen')}</Button>:undefined}>{prLine&&<p className={text.body}>{prLine}</p>}</StageCard>;
+ return <StageCard label={$t('common.status')} title={$t('taskDetail.closedValue',{0:closedWhen(w)})} sub={sentences(at&&$t('taskDetail.closedValueMessage',{0:when(at)}),reopenHint(w,data.runs))}
+  actions={allowed&&canReopen(w)?<Button variant="outline" disabled={busy} onClick={()=>void update('unarchiveTask')}><ArchiveRestore/>{$t('common.reopen')}</Button>:undefined}>{prLine&&<p className={text.body}>{prLine}</p>}</StageCard>;
 }
 // After the task: the effect once a change is live, otherwise the accepted result itself.
 function DoneCard({data,update,busy}:{data:Data;update:Update;busy:boolean}){
@@ -640,7 +645,7 @@ function EffectRow({r,observeFrom}:{r:EffectResult;observeFrom?:string}){
  return <li className={cn(text.body,'flex flex-col items-start gap-1')} data-c={r.conclusion}><span>{effectLine(r,observeFrom)}</span><Button variant="link" size="sm" className="h-auto font-normal p-0" onClick={()=>setOpen(v=>!v)}>{open?$t('common.collapse'):$t('taskDetail.seeNumbers')}</Button>
   {open&&<div className="nr-td-effect-detail"><Comparison result={r} observeFrom={observeFrom}/>{(!r.coverage||!matchesObservation(r,observeFrom))&&<Reveal label={$t('results.legacy')}><p>{r.conclusion} · {r.change===null?'—':`${r.change*100}%`}</p><p className="text-muted-foreground">{$tj('taskDetail.beforeGoingLiveAfter',{0:range(r.baseline),1:range(r.after)})}</p><table><tbody>{rows.map(([k,[b,a],u])=><tr key={k}><th>{k}</th><td>{b}{u}</td><td>→</td><td>{a}{u}</td></tr>)}</tbody></table></Reveal>}</div>}</li>;
 }
-const eventIcons:Record<string,ReactNode>={merged:<GitMerge/>,live:<Globe/>,notSeen:<AlertCircle/>,retryMerge:<RotateCcw/>,markMerged:<GitMerge/>,confirmLive:<Globe/>,waitLonger:<RotateCcw/>,startTask:<CirclePlay/>,runSucceeded:<FileText/>,approveStage:<Check/>,editStageOutput:<Pencil/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setAgent:<Bot/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<BookOpen/>,revertRelease:<Undo2/>,snoozeTask:<Clock/>,snoozeChanged:<Clock/>,unsnoozeTask:<Clock/>,snoozeEnded:<Clock/>,snoozeDue:<Clock/>};
+const eventIcons:Record<string,ReactNode>={merged:<GitMerge/>,live:<Globe/>,notSeen:<AlertCircle/>,retryMerge:<RotateCcw/>,markMerged:<GitMerge/>,confirmLive:<Globe/>,waitLonger:<RotateCcw/>,startTask:<CirclePlay/>,runSucceeded:<FileText/>,approveStage:<Check/>,editStageOutput:<Pencil/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setAgent:<Bot/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<BookOpen/>,revertRelease:<Undo2/>,snoozeTask:<Clock/>,snoozeChanged:<Clock/>,unsnoozeTask:<Clock/>,snoozeEnded:<Clock/>,snoozeDue:<Clock/>,cancelTask:<Archive/>,archiveTask:<Archive/>,unarchiveTask:<ArchiveRestore/>};
 // Run bookkeeping that only matters when something goes wrong; the stage card shows the current failure and
 // Technical details keeps every run.
 const QUIET=new Set(['runQueued','runFailed','flowWaiting']);

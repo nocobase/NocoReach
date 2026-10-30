@@ -19,6 +19,8 @@ import {localizeWorkSnapshots} from './playbook-snapshot';
 import {stageName} from './playbook-model';
 import { EMPTY, formatDateTime } from '#lib/format';
 import {useMe} from './me';
+import {SortableHeader} from '#components/seo/sortable-header';
+import type {TaskOrder,TaskSortKey} from './task-sort';
 // A task someone else owns: a 成员 can open and read it, but not drag, move or close it (its owner and 管理员 can; 2026-10-09).
 function useEditable(){const {can}=useMe();return (t:WorkCard)=>can(t.evidence?.work?.humanOwnerId||t.evidence?.createdBy?.id);}
 export type WorkCard={id:number;title:string;brief:string;status:string;updatedAt:string;createdAt?:string;taskKey?:string;evidence?:{work?:Work;keyword?:string;no?:number;insight?:{id?:string;no?:number};createdBy?:{id?:string;name?:string}}};
@@ -82,6 +84,8 @@ export function TaskTable({
   closed = false,
   snoozed = false,
   agents,
+  sort,
+  onSort,
   onOpen,
   onAction,
 }: {
@@ -90,10 +94,29 @@ export function TaskTable({
   /** Snoozed (2026-10-28): what each waits for and the day it comes back, in place of its status and current step. */
   snoozed?: boolean;
   agents?: AgentStatus;
+  /** The column the rows are sorted by (task-sort.ts); every header sorts when `onSort` is given. */
+  sort?: { sort: TaskSortKey; order: TaskOrder };
+  onSort?: (key: TaskSortKey) => void;
   onOpen: (id: number) => void;
   onAction?: Action;
 }): ReactElement {
   const editable = useEditable();
+  const columns: [TaskSortKey, string][] = [
+    ['no', $t('common.identifier')],
+    ['title', $t('common.title')],
+    ['status', snoozed ? $t('taskSnooze.reason') : $t('common.status')],
+    [
+      'step',
+      snoozed
+        ? $t('taskSnooze.until')
+        : closed
+          ? $t('workBoard.whenClosed')
+          : $t('workBoard.currentStep'),
+    ],
+    ['owner', $t('common.owner')],
+    ['executor', $t('common.executor')],
+    ['updated', $t('workBoard.updated')],
+  ];
   // Keep all columns on wide containers; task-table.css prioritizes the title and actions below that.
   return (
     <div
@@ -118,21 +141,32 @@ export function TaskTable({
         </colgroup>
         <thead data-slot='table-header' className='text-xs text-muted-foreground'>
           <tr>
-            {[
-              $t('common.identifier'),
-              $t('common.title'),
-              snoozed ? $t('taskSnooze.reason') : $t('common.status'),
-              snoozed
-                ? $t('taskSnooze.until')
-                : closed
-                  ? $t('workBoard.whenClosed')
-                  : $t('workBoard.currentStep'),
-              $t('common.owner'),
-              $t('common.executor'),
-              $t('workBoard.updated'),
-            ].map((h) => (
-              <th key={h} className='px-3 py-2 text-left font-medium'>
-                {h === $t('common.executor') ? (
+            {columns.map(([key, h]) => (
+              <th
+                key={key}
+                className='px-3 py-2 text-left font-medium'
+                aria-sort={
+                  sort
+                    ? sort.sort === key
+                      ? sort.order === 'asc'
+                        ? 'ascending'
+                        : 'descending'
+                      : 'none'
+                    : undefined
+                }
+              >
+                {/* As the Keywords tables (2026-10-29): what Executor means shows on hover rather than in an ⓘ. */}
+                {sort && onSort ? (
+                  <SortableHeader
+                    label={h}
+                    help={key === 'executor' ? undefined : false}
+                    column={{
+                      getIsSorted: () =>
+                        sort.sort === key ? sort.order : false,
+                      getToggleSortingHandler: () => () => onSort(key),
+                    }}
+                  />
+                ) : key === 'executor' ? (
                   <WithInfo help={help(h)}>{h}</WithInfo>
                 ) : (
                   h
