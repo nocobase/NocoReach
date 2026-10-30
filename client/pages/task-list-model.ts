@@ -4,7 +4,7 @@ import {stageName} from './playbook-model';
 import { timestamp } from '../../shared/timestamps';
 import { $t } from '#i18n';
 import type {Tone} from '#components/reach/tag';
-import {closedLabel,type BoardState,type Work} from './task-execution-types';
+import {closedLabel,restartOf,type BoardState,type Work} from './task-execution-types';
 import {effectItems,effectPages,latestEffect,type EffectResult} from './effect-model';
 // The task list (SPEC §5 任务, as NocoProject's issue list): status, the current step, owner, executor and update time.
 export const stateTone:Record<BoardState,Tone>={todo:'grey',doing:'blue',review:'violet',done:'green'};
@@ -29,6 +29,7 @@ export function stepOf(w?:Work):Step|null{
  }
  if(!w.flow||w.stage==='done'||!st)return null;
  if(st.kind==='agent'){const who='Agent',run=w.latestRun?.status;
+  if(restartOf(w))return {text:$t('taskList.waitingRestart'),tone:'amber'};
   if(run==='failed')return {text:$t('taskList.runFailed',{0:who}),tone:'red'};
   if(run==='queued')return {text:$t('taskList.waitingAgentPickUp')};
   return {text:$t('taskList.executorActivity',{0:who,1:stageName(st,w)})};}

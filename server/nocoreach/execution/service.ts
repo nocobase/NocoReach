@@ -22,6 +22,8 @@ import { ArticleFlow } from './article-flow.js';
 import { playbookTitle, retitle } from './task-title.js';
 import { KEEPS_SNOOZE, snoozeInstant } from './snooze.js';
 import { STARTS_KEY, restartOf, withStart } from './restarts.js';
+import { reopening } from '../../../shared/task-reopen.js';
+import { datesBetween } from '../search-history.js';
 import { taskStanding } from '../../../shared/task-pending.js';
 import { defaultDelivery, deliveryPlan, distinctPages, lookupMatters, pagesToStart, pageUrlsOf, startAgent, startBlockers } from '../../../shared/task-start.js';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
@@ -379,19 +381,21 @@ export class TaskService {
     }
     return { ...pageNumbers(await this.partitions(project, range.start, range.end), pages, range), live };
   }
-  // Daily Google partitions of the project's current property and site, between two dates.
+  // Daily Google partitions of the project's current property and site, between two dates. Only the days in range of
+  // the connected resource are read, one at a time, giving way to other requests between them: SQLite answers
+  // synchronously, so one long read held up every request behind it (2026-10-29: on Studio a task page's Activity
+  // names waited seconds for its Performance numbers).
   private async partitions(project: string, start: string, end: string): Promise<Partition[]> {
-    const link = await this.p.link(project), out: Partition[] = [];
+    const link = await this.p.link(project), out: Partition[] = [], dates = datesBetween(start, end);
     const day = (d: any) => d instanceof Date ? d.toISOString().slice(0, 10) : String(d || '').slice(0, 10);
     for (const [source, grain, resource] of [['gsc', 'query_page', link?.get?.('gscSiteUrl')], ['ga4', 'page', link?.get?.('ga4PropertyId')]]) {
       if (!resource) continue;
-      const ids: { id: any; date: string }[] = [];
-      for (let offset = 0; ; offset += 200) {
-        const rows = await this.repo('nrSyncPartitions').find({ filter: { projectId: project, source, grain }, fields: ['id', 'date', 'resource'], sort: ['id'], limit: 200, offset });
-        for (const r of rows) { const x = r.toJSON ? r.toJSON() : r; if (x.resource === resource && day(x.date) >= start && day(x.date) <= end) ids.push({ id: x.id, date: day(x.date) }); }
-        if (rows.length < 200) break;
+      const days = (await this.repo('nrSyncPartitions').find({ filter: { projectId: project, source, grain, resource, date: { $in: dates } }, fields: ['id', 'date'], sort: ['date', 'id'] })).map((r: any) => r.toJSON ? r.toJSON() : r);
+      for (const { id, date } of days) {
+        await new Promise(resolve => setImmediate(resolve));
+        const r = await this.repo('nrSyncPartitions').findOne({ filterByTk: id, fields: ['id', 'payload'] }), payload = r?.get ? r.get('payload') : r?.payload;
+        if (Array.isArray(payload)) out.push({ source, grain, date: day(date), payload });
       }
-      for (const { id, date } of ids) { const r = await this.repo('nrSyncPartitions').findOne({ filterByTk: id }); if (r && Array.isArray((r.toJSON ? r.toJSON() : r).payload)) out.push({ source, grain, date, payload: (r.toJSON ? r.toJSON() : r).payload }); }
     }
     return out;
   }
@@ -399,13 +403,10 @@ export class TaskService {
   private async dataEnd(project: string) {
     const link = await this.p.link(project), ends: string[] = [];
     for (const [source, grain, resource] of [['gsc', 'query_page', link?.get?.('gscSiteUrl')], ['ga4', 'page', link?.get?.('ga4PropertyId')]]) {
-      if (!resource) continue; let end = '';
-      for (let offset = 0; ; offset += 200) {
-        const rows = await this.repo('nrSyncPartitions').find({ filter: { projectId: project, source, grain }, fields: ['id', 'date', 'resource'], sort: ['id'], limit: 200, offset });
-        for (const r of rows) { const x = r.toJSON ? r.toJSON() : r, d = x.date instanceof Date ? x.date.toISOString().slice(0, 10) : String(x.date || '').slice(0, 10); if (x.resource === resource && d > end) end = d; }
-        if (rows.length < 200) break;
-      }
-      if (end) ends.push(end);
+      if (!resource) continue;
+      const [latest] = await this.repo('nrSyncPartitions').find({ filter: { projectId: project, source, grain, resource }, fields: ['id', 'date'], sort: ['-date'], limit: 1 });
+      const x = latest?.toJSON ? latest.toJSON() : latest, d = x?.date instanceof Date ? x.date.toISOString().slice(0, 10) : String(x?.date || '').slice(0, 10);
+      if (d) ends.push(d);
     }
     return ends.length ? ends.sort()[0] : '';
   }
@@ -839,8 +840,9 @@ export class TaskService {
           else if (r.status === 'running' && (Boolean(r.pluginRunId) || r.simulated)) await this.put(this.key('run', project, taskId, r.id), { ...r, cancelRequested: true }, tx);
         }
         w.cancelledAt = at; w.cancelledBy = actor; w.boardState = undefined; event.note = optional(v.reason, 500) || undefined;
+        // A PR an earlier closing already closed (the task was reopened before a new one) is not closed again.
         const pr = [...w.results].reverse().find(a => a?.pr)?.pr, repo = (await this.agents.doc(project, tx)).repo;
-        if (pr && repo && w.release?.state !== 'live' && !w.release?.mergedAt) await this.queueCloseRun(project, taskId, w, pr, tx, actor, at);
+        if (pr && repo && w.release?.state !== 'live' && !w.release?.mergedAt && !(w.prClose?.number === pr.number && w.prClose.state === 'closed')) await this.queueCloseRun(project, taskId, w, pr, tx, actor, at);
       } else if (v.command === 'archiveTask') {
         if ((await this.list('run', project, taskId, tx) as Run[]).some(r => active(r) && r.mode !== 'close')) return fail(systemMessageText('taskExecution.executorStillRunningWaitFinish'), 409);
         const started = w.stage === 'flow' || (w.stage === 'work' && w.plan) || w.stage === 'execution' || w.stage === 'verification';
@@ -849,8 +851,22 @@ export class TaskService {
         if (started && !w.cancelledAt && !live) return fail(systemMessageText('taskExecution.taskProgressStopBeforeClosing'), 409);
         w.archivedAt = at; w.archivedBy = actor;
       } else if (v.command === 'unarchiveTask') {
-        if (!w.archivedAt) return fail(systemMessageText('taskExecution.taskNotArchived'), 409);
-        w.archivedAt = undefined; w.archivedBy = undefined;
+        // Reopen (2026-10-29 user decision): every closed task, back where it was closed with what was done and approved
+        // (shared/task-reopen.ts). A task stopped halfway goes back to its step; an Agent step waits to be started again.
+        if (!w.archivedAt && !w.cancelledAt) return fail(systemMessageText('taskExecution.taskNotArchived'), 409);
+        const runs = await this.list('run', project, taskId, tx) as Run[], back = reopening(w, runs);
+        if (back.wait) return fail(systemMessageText('taskExecution.reopenWhileStopping'), 409);
+        // Closing the PR had not started: it is dropped and the change stays open for its review.
+        if (back.keepsChange) {
+          for (const r of runs) if (r.mode === 'close' && r.status === 'queued') await this.put(this.key('run', project, taskId, r.id), { ...r, status: 'failed', error: 'cancelled', endedAt: at }, tx);
+          w.prClose = undefined;
+        }
+        // Going back before a release leaves what it was to publish (the closed PR, or a publish that never merged).
+        if (back.stageIndex !== undefined && back.stageIndex !== (w.stageIndex ?? 0)) { w.stageIndex = back.stageIndex; w.release = undefined; }
+        if (w.stage === 'flow' && w.flow?.stages[w.stageIndex ?? 0]) event.stageKey = w.flow.stages[w.stageIndex ?? 0].key;
+        if (back.restart) event.note = back.restart;
+        w.cancelledAt = undefined; w.cancelledBy = undefined; w.archivedAt = undefined; w.archivedBy = undefined;
+        if (w.release?.state === 'publishing') this.articleFlow.kick(project, taskId, tx);
       } else if (v.command === 'confirmPublish') {
         const { index } = this.flowStage(w, v.stageKey, ['publish']);
         let url = '';

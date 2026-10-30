@@ -1,6 +1,8 @@
 import type { TaskResultSource } from '../../shared/task-result.js';
 import type { ArticleDraft, ArticleSnapshot } from '../../shared/article-publishing.js';
 import {localizeWorkSnapshots} from './playbook-snapshot';
+import {stageName} from './playbook-model';
+import {reopening} from '../../shared/task-reopen.js';
 import type { MaterialNotice } from './task-detail/material-notices.js';
 import type { AgentRunExecution, RunTranscriptEvent } from '#components/agent-run-history';
 import { $t } from "#i18n";
@@ -29,28 +31,48 @@ export type BoardState='todo'|'doing'|'review'|'done';
 export const getWorkColumns = (): Record<BoardState,string> => ({todo:$t('common.pending'),doing:$t('common.inProgress'),review:$t('common.needsConfirmation'),done:$t('common.completed')});
 export {taskState as workState} from '../../shared/task-pending.js';
 
-// Task lifecycle (SPEC §6.2): one action, 关闭任务. A task that is under way is stopped (cancelTask: the executor stops,
-// an unmerged PR is closed); anything else — not started, done, or live and being observed — is put away (archiveTask).
-// Only tasks put away can be reopened; a stopped task cannot continue.
+// Task lifecycle (SPEC §6.2): one action, Close task. A task that is under way is stopped (cancelTask: the executor
+// stops, an unmerged PR is closed); anything else — not started, done, or live and being observed — is put away
+// (archiveTask). Every closed task can be reopened (2026-10-29 user decision) and resumes where it was closed
+// (shared/task-reopen.ts).
 export const isClosed=(w?:Partial<Work>)=>Boolean(w?.cancelledAt||w?.archivedAt);
+/** When a closed task was closed. */
+export const closedAt=(w?:Partial<Work>)=>w?.cancelledAt||w?.archivedAt||'';
 // Snoozed until a day (Snooze, 2026-10-28): out of Needs you, Current, the board and every count of what waits.
 export const isSnoozed=(w?:Partial<Work>)=>Boolean(w?.snooze&&!isClosed(w)&&w.stage!=='done');
 export const isLive=(w?:Partial<Work>)=>w?.stage==='flow'&&w.flow?.stages[w.stageIndex||0]?.kind==='observe';
 export function canCancel(w?:Partial<Work>){return Boolean(w&&!w.cancelledAt&&!w.archivedAt&&w.stage!=='done'&&!isLive(w)&&(w.flow||w.plan||w.simple));}
 export function canArchive(w?:Partial<Work>){const started=w&&(w.stage==='flow'||(w.stage==='work'&&w.plan)||w.stage==='execution'||w.stage==='verification');return Boolean(!w?.archivedAt&&(!started||w?.cancelledAt||w?.stage==='done'||isLive(w)));}
 export function closeCommand(w?:Partial<Work>):'cancelTask'|'archiveTask'|null{if(isClosed(w))return null;if(canArchive(w))return 'archiveTask';if(canCancel(w))return 'cancelTask';return null;}
-export const canReopen=(w?:Partial<Work>)=>Boolean(w?.archivedAt&&!w.cancelledAt);
+export const canReopen=(w?:Partial<Work>)=>isClosed(w);
 export const closedLabel=(w?:Partial<Work>)=>isClosed(w)?$t('common.closed'):'';
 // Where a closed task stood when it was closed.
 export function closedWhen(w?:Partial<Work>){
  if(!w)return '';
  w=localizeWorkSnapshots(w);
- if(w.cancelledAt){const st=w.flow?.stages[w.stageIndex||0];return st?$t('taskExecution.stopped',{0:st.name}):$t('taskExecution.stoppedWhileProgress');}
+ if(w.cancelledAt){const st=w.flow?.stages[w.stageIndex||0];return st?$t('taskExecution.stopped',{0:stageName(st,w)}):$t('taskExecution.stoppedWhileProgress');}
  if(w.archivedBy==='system')return $t('taskExecution.oldWorkflowArchivedSystem');
  if(w.stage==='done'||isLive(w))return $t('common.completed');
  return $t('common.notStarted');
 }
 export const getCloseConfirm = () => ($t('taskExecution.executorStopsUnmergedPrsClosed'));
+// An Agent step reopened after the closing stopped it or withdrew its change, not started again yet: it waits for a
+// person (Start this step again) rather than reading as a failure or as the Agent at work.
+export function restartOf(w?:Partial<Work>):'stopped'|'withdrawn'|undefined{
+ const st=w?.flow?.stages[w.stageIndex||0];if(!w||w.stage!=='flow'||st?.kind!=='agent'||isClosed(w))return;
+ const h=w.history||[],i=h.map(e=>e.action).lastIndexOf('unarchiveTask'),e=h[i];
+ if(!e||e.stageKey!==st.key||(e.note!=='stopped'&&e.note!=='withdrawn'))return;
+ return h.slice(i+1).some(x=>x.action==='runQueued'||x.action==='recordManual')?undefined:e.note;
+}
+// What Reopen does, on the closed card: where the task goes back to, as the server moves it (shared/task-reopen.ts).
+export function reopenHint(w:Work,runs:Run[]){
+ const back=reopening(w,runs);w=localizeWorkSnapshots(w);
+ if(back.wait)return $t('taskExecution.reopenAfterStopping');
+ const st=back.stageIndex===undefined?undefined:w.flow?.stages[back.stageIndex];
+ if(st){const name=stageName(st,w);return back.restart?$t(back.restart==='withdrawn'?'taskExecution.reopenResubmit':'taskExecution.reopenRestart',{0:name}):$t(st.kind==='review'?'taskExecution.reopenToReview':'taskExecution.reopenTo',{0:name});}
+ if(w.archivedBy==='system'||w.plan||w.simple)return $t('taskExecution.reopenToStep');
+ return $t(w.stage==='done'||isLive(w)?'taskExecution.reopenToDone':'taskExecution.reopenToStart');
+}
 
 export function hasTaskAgent(data: TaskData) {
   return Boolean(

@@ -21,9 +21,10 @@ const test=__vitest_test;
 const signals=[{key:'gsc-low-ctr:/a',action:'optimize'},{key:'community-gap:q',action:'create'},{key:'github-release',action:'distribute'},{key:'gsc-site-impressions',action:null}];
 function fixture(provider={prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>({content:'AI draft'})},evidence={reason:'original'}){
  const state={nrTasks:[{id:1,projectId:'1',title:'Synthetic task',brief:'Supplied evidence only',status:'待处理',evidence}],nrSnapshots:[],users:[{id:1,username:'tester',roles:[{name:'admin'}]}]};let sequence=100;
- const match=(r,filter={})=>Object.entries(filter).every(([k,v])=>v&&typeof v==='object'?v.$startsWith!==undefined&&String(r[k]).startsWith(v.$startsWith):String(r[k])===String(v));
+ const match=(r,filter={})=>Object.entries(filter).every(([k,v])=>v&&typeof v==='object'?v.$startsWith!==undefined?String(r[k]).startsWith(v.$startsWith):Array.isArray(v.$in)&&v.$in.map(String).includes(String(r[k])):String(r[k])===String(v));
+ const order=(rows,sort)=>{const keys=sort?[].concat(sort):[];return keys.length?[...rows].sort((a,b)=>{for(const key of keys){const desc=key.startsWith('-'),f=desc?key.slice(1):key,c=String(a[f]).localeCompare(String(b[f]),undefined,{numeric:true});if(c)return desc?-c:c;}return 0;}):rows;};
  const row=r=>r?{...r,get:k=>structuredClone(r[k]),toJSON:()=>structuredClone(r)}:null;
- const repo=name=>({findOne:async({filter,filterByTk})=>row(state[name].find(r=>filterByTk!==undefined?String(r.id)===String(filterByTk):match(r,filter))),find:async({filter,offset=0,limit=100})=>state[name].filter(r=>match(r,filter)).slice(offset,offset+limit).map(row),create:async({values})=>{const r={id:sequence++,...structuredClone(values)};state[name].push(r);return row(r);},update:async({filterByTk,values})=>{Object.assign(state[name].find(r=>String(r.id)===String(filterByTk)),structuredClone(values));}});
+ const repo=name=>({findOne:async({filter,filterByTk})=>row(state[name].find(r=>filterByTk!==undefined?String(r.id)===String(filterByTk):match(r,filter))),find:async({filter,offset=0,limit=100,sort})=>order(state[name].filter(r=>match(r,filter)),sort).slice(offset,offset+limit).map(row),create:async({values})=>{const r={id:sequence++,...structuredClone(values)};state[name].push(r);return row(r);},update:async({filterByTk,values})=>{Object.assign(state[name].find(r=>String(r.id)===String(filterByTk)),structuredClone(values));}});
  let tail=Promise.resolve();const routes={};
  const p={agents:fakeAgents(),project:async id=>{if(id!=='1')throw Object.assign(Error('project'),{status:404});return {name:'Synthetic',writingStyle:'Plain'};},db:{getRepository:repo,sequelize:{query:async()=>{},transaction:fn=>{const result=tail.then(async()=>{const old=structuredClone(state);try{const after=[];const value=await fn({connection:{},afterCommit:cb=>after.push(cb)});for(const cb of after)await cb();return value;}catch(e){Object.assign(state,old);throw e;}});tail=result.catch(()=>{});return result;}}},app:{resourceManager:{define:r=>routes[r.name]=r.actions},acl:{allow:()=>{}}}};
  const s=new TaskService(p,provider);
@@ -586,9 +587,12 @@ test('the task page reads each page\'s numbers: the latest 28 days before going 
  assert.deepEqual(n.pages,[{page:'https://www.example.com/docs/install',clicks:56,position:8,views:140},{page:'https://www.example.com/docs/start/',clicks:28,position:20,views:0}]);
  f.state.nrTasks[0].evidence.work.observeFrom='2026-09-01T08:00:00Z';
  n=await f.s.numbers('1','1');assert.equal(n.live,true);assert.deepEqual(n.range,{start:'2026-08-04',end:'2026-08-31'});assert.equal(n.pages[0].clicks,44,'only the days with data before going live');
+ // Reading the days gives way to other requests (SQLite answers synchronously): one waiting meanwhile is served first.
+ const order=[];const reading=f.s.numbers('1','1').then(()=>order.push('numbers'));setImmediate(()=>order.push('other request'));await reading;
+ assert.deepEqual(order,['other request','numbers']);
 });
 
-test('cancel and archive: a cancelled task stops, its PR is closed by the Agent, late results never apply; archive hides and restores',async()=>{
+test('cancel and archive: a cancelled task stops, its PR is closed by the Agent, late results never apply; archive hides and reopen resumes',async()=>{
  const f=fixture();const me=await selectAgent(f);
  await f.s.agents.saveRepo('1',{repo:'estheryo/website-test',baseBranch:'main',revision:1});
  let d=await f.command('startTask',{playbookId:'optimize-page'});let c=await claim(f);
@@ -601,7 +605,7 @@ test('cancel and archive: a cancelled task stops, its PR is closed by the Agent,
  await finish(f,{taskId:'1',runId:c.run.id,ok:true});d=await f.view();assert.equal(d.work.prClose.state,'closed');
  d=await f.command('archiveTask');assert.ok(d.work.archivedAt);
  await assert.rejects(f.command('linkPage',{url:''}),e=>e.status===409&&/归档/.test(e.message));
- d=await f.command('unarchiveTask');assert.equal(d.work.archivedAt,undefined);assert.ok(d.work.cancelledAt,'restoring does not reopen a cancelled task');
+ d=await f.command('unarchiveTask');assert.equal(d.work.archivedAt,undefined);assert.equal(d.work.cancelledAt,undefined,'reopening a stopped task resumes it (2026-10-29)');assert.equal((await f.stage()).key,'build','its withdrawn change is made again');
 });
 
 test('cancelling stops a running Agent and its late result is kept only as a candidate; not-started tasks archive directly',async()=>{
