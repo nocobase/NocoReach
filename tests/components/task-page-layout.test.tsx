@@ -605,26 +605,33 @@ test('the start card lists the pages, with one line for one repository and Chang
   action.mockImplementation((resource: string, command: string) => {
     if (resource === 'nrPlaybooks')
       return Promise.resolve({ playbooks: [OPTIMIZE] });
-    // Pages of the site itself: none of them is an article.
+    // Pages of the site itself: none of them is an article. It answers a little later, as the server does, so the
+    // card first lists the pages by address while it looks them up.
     if (resource === 'nrTaskWork' && command === 'pagePlaces')
-      return Promise.resolve({
-        article: null,
-        unchecked: false,
-        pages: [
-          { url: 'https://www.nocobase.com/pricing', title: 'Pricing' },
-          { url: 'https://www.nocobase.com/features', title: 'Features' },
-        ],
-      });
+      return new Promise((resolve) =>
+        setTimeout(
+          () =>
+            resolve({
+              article: null,
+              unchecked: false,
+              pages: [
+                { url: 'https://www.nocobase.com/pricing', title: 'Pricing' },
+                { url: 'https://www.nocobase.com/features', title: 'Features' },
+              ],
+            }),
+          50,
+        ),
+      );
     return Promise.resolve([]);
   });
   const { unmount } = mount(
     sitePagesTask([{ id: 'site', urls: ['www.nocobase.com'] }]),
     '/actions/35',
   );
-  expect(await screen.findByText('要改的页面')).toBeTruthy();
   expect(
-    screen.getAllByRole('link', { name: /Pricing|Features/ }),
+    await screen.findAllByRole('link', { name: /Pricing|Features/ }),
   ).toHaveLength(2);
+  expect(screen.getByText('要改的页面')).toBeTruthy();
   expect(screen.getByText('网站页面 · 改网站代码，提 PR')).toBeTruthy();
   expect(screen.queryByText('改到哪')).toBeNull();
   unmount();
@@ -635,10 +642,10 @@ test('the start card lists the pages, with one line for one repository and Chang
     ]),
     '/actions/35',
   );
-  expect(await screen.findByText('要改的页面')).toBeTruthy();
   expect(
-    screen.getAllByRole('link', { name: /Pricing|Features/ }),
+    await screen.findAllByRole('link', { name: /Pricing|Features/ }),
   ).toHaveLength(2);
+  expect(screen.getByText('要改的页面')).toBeTruthy();
   // The select says it once: no line under the list, and no second Change.
   expect(screen.queryByText('网站页面 · 改网站代码，提 PR')).toBeNull();
   expect(screen.getByText('改到哪')).toBeTruthy();
