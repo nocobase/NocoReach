@@ -64,6 +64,11 @@
           "description": "모델 서비스와 제공 모델을 조회합니다. 키는 표시하지 않습니다."
         }
       }
+    },
+    "runnerConversation": {
+      "title": "대화: {{title}}",
+      "other": "다른 사용자의 대화",
+      "untitled": "새 대화"
     }
   },
   "@nocobase/app-plugin-authz-default-access": {

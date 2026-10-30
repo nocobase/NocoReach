@@ -46,7 +46,7 @@ const test = createAppTest({
     },
     secrets: { keys: [{ version: 1, key: randomBytes(32).toString('hex') }] },
     nocoreachMock: { enabled: true, environment: 'test' },
-    agents: { server: { enabled: false }, vectors: { store: false } },
+    agents: { server: { enabled: false } },
     nocoreach: { publicDns: '' },
   },
 });

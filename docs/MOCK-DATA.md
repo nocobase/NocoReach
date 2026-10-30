@@ -24,13 +24,9 @@
 nocoreachMock:
   enabled: true
   environment: demo # 仅允许 demo 或 test
-
-agents:
-  vectors:
-    store: false
 ```
 
-必须启用模拟并声明 `demo`/`test`；缺少环境声明会拒绝启动，`NODE_ENV=test` 不能代替。正式环境不注册模拟数据菜单或页面路由。Agents 配置独立于模拟数据：可以配置真实模型、测试连接、创建 Agent、注册 Runner 并执行任务。上例关闭向量存储只是可选设置，不再是启动条件。
+必须启用模拟并声明 `demo`/`test`；缺少环境声明会拒绝启动，`NODE_ENV=test` 不能代替。正式环境不注册模拟数据菜单或页面路由。Agents 配置独立于模拟数据：可以配置真实模型、测试连接、创建 Agent、注册 Runner 并执行任务。Agents 2 已移除向量存储；旧配置中 `agents.vectors` 只接受 `store: false`（无实际作用，可删除），其他值会使启动失败。
 
 `NOCOREACH_MOCK_ENABLED=true`、`NOCOREACH_MOCK_ENVIRONMENT=test` 可覆盖前两个字段；NocoReach 已废弃 `agents.server.enabled` 的开关作用，正式环境和 demo 都始终允许 Online Agent 执行。旧实例即使保留 `agents.server.enabled: false`，升级重启后也会自动启动执行器，无需手动改配置；该字段可清理。模型、凭据及 Agent 权限仍需正常配置。
 
@@ -270,7 +266,7 @@ pnpm --dir app-plugins/nocoreach-mock pack \
 
 This companion plugin replaces upstream I/O with a default fictional NocoBloom dataset and project-aware website, Google and GitHub responses while retaining the real NocoReach authentication, parsers, connection forms, jobs, persistence and business checks. It is off by default. Use a fresh, dedicated database and storage, never copied production data or real provider credentials.
 
-Enable `nocoreachMock.enabled: true`, set `environment: demo` or `test`. Online Agent execution is always available in NocoReach, including deployments retaining the retired `agents.server.enabled: false` setting. No configuration edit is required when upgrading. Vector configuration is independent. Only enabled in-app notification channels are allowed. Selected jobs.default, scheduler.jobs and notification.jobs must resolve to process-local memory configurations; absent selectors use built-in memory, and unused Redis definitions may remain. Invalid names or selected Redis adapters fail before providers start. Disable or remove external channels and do not share job or schedule queues with live workers. In-app delivery and inbox read-state controls remain available; email, external notification writes and test sends are suppressed or blocked. Initial activation rejects existing NocoReach business data/credentials. A permanent simulated-dataset marker prevents restarting that database in live mode. Use a different clean database for live operation.
+Enable `nocoreachMock.enabled: true`, set `environment: demo` or `test`. Online Agent execution is always available in NocoReach, including deployments retaining the retired `agents.server.enabled: false` setting. No configuration edit is required when upgrading. Agents 2 removed the vector store: delete any `agents.vectors` setting, because only the inert `store: false` is accepted and any other value stops startup. Only enabled in-app notification channels are allowed. Selected jobs.default, scheduler.jobs and notification.jobs must resolve to process-local memory configurations; absent selectors use built-in memory, and unused Redis definitions may remain. Invalid names or selected Redis adapters fail before providers start. Disable or remove external channels and do not share job or schedule queues with live workers. In-app delivery and inbox read-state controls remain available; email, external notification writes and test sends are suppressed or blocked. Initial activation rejects existing NocoReach business data/credentials. A permanent simulated-dataset marker prevents restarting that database in live mode. Use a different clean database for live operation.
 
 Open **Settings → Network profiles** (`/proxy-profiles`), create a mock profile, and select it on the project's data connections. Bulk assignment is available. See [the routing/upgrade contract](NETWORK-PROFILES.md). The old mock settings URL redirects there; host `nrMock/configure` and `reset` return a migration error. Status remains readable; standalone plugin hosts without profile integration retain their original API. Fixed clocks and revisions belong to the selected profile, and existing jobs keep their captured settings.
 

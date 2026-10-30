@@ -34,7 +34,6 @@ const createTest = (
       app: { publicOrigin: origin },
       users: { initialAdmin: DEFAULT_ADMIN_CREDENTIALS },
       secrets: { keys: [{ version: 1, key: randomBytes(32).toString('hex') }] },
-      agents: { vectors: { store: false } },
       nocoreach: { publicDns: '' },
       demoMode: { enabled },
       ...(cookieOverrides

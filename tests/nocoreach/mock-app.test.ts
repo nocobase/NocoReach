@@ -64,7 +64,6 @@ const test = createAppTest({
       initializeData: false,
     },
     // Exercise compatibility with the configuration used by existing Studio demos.
-    agents: { vectors: { store: false } },
     nocoreach: { publicDns: '' },
   },
 });

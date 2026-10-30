@@ -54,7 +54,6 @@ const createDemoTest = (enabled = true) =>
         initialAdmin: { ...DEFAULT_ADMIN_CREDENTIALS, name: 'Demo data admin' },
       },
       secrets: { keys: [{ version: 1, key: randomBytes(32).toString('hex') }] },
-      agents: { vectors: { store: false } },
       nocoreach: { publicDns: '' },
       demoMode: { enabled },
     },

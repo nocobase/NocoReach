@@ -301,6 +301,21 @@ minimumReleaseAgeExclude:
   - '@nocobase/app-plugin-mail@1.0.0-beta.17'
   - '@nocobase/app-plugin-scheduler@1.0.0-beta.20'
   - '@nocobase/app-skills@0.1.0-beta.53'
+  # Demo Mode beta.6 and the framework, Agents 2 and Jobs releases it requires.
+  - '@nocobase/app-plugin-demo-mode@0.2.0-beta.6'
+  - '@nocobase/app-client@4.0.0-beta.5'
+  - '@nocobase/app-server@3.0.0-beta.5'
+  - '@nocobase/db@1.0.0-beta.24'
+  - '@nocobase/jobs@1.0.0-beta.5'
+  - '@nocobase/queue@1.0.0-beta.10'
+  - '@nocobase/app-plugin-authentication@2.0.0-beta.16'
+  - '@nocobase/app-plugin-agents@2.0.0-beta.0'
+  - '@nocobase/app-plugin-mail@1.0.0-beta.18'
+  - '@nocobase/app-plugin-notification@2.0.0-beta.2'
+  - '@nocobase/app-plugin-scheduler@1.0.0-beta.21'
+  - '@nocobase/mailer@0.1.0-beta.1'
+  - '@nocobase/app-plugin-notification-providers@1.0.0-beta.16'
+  - '@nocobase/lifecycle@0.1.0-beta.4'
 # NocoReach-owned Scheduler extension. Upgrade this pin, the patch and the version in cli/build-scheduler-patch.mjs together.
 patchedDependencies:
-  '@nocobase/app-plugin-scheduler@1.0.0-beta.20': patches/@nocobase__app-plugin-scheduler@1.0.0-beta.20.patch
+  '@nocobase/app-plugin-scheduler@1.0.0-beta.21': patches/@nocobase__app-plugin-scheduler@1.0.0-beta.21.patch
