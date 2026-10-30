@@ -1,12 +1,21 @@
 import { addDays, addMonths, format } from 'date-fns';
 import { getCurrentLocale, isChinese } from '#i18n';
-import { formatDate } from '#lib/format';
 
 // The days a snooze is set to and how they read (task-snooze.tsx). A day is the calendar day "2026-11-11"; the server
 // turns it into 09:00 of that day in the daily analysis's time zone (server/nocoreach/execution/snooze.ts).
 
 export const dayOf = (d: Date) => format(d, 'yyyy-MM-dd');
-/** The days the quick choices stand for, counted from today in the browser. */
+/** Materialize the configured calendar day for date-only editing, independent of the browser timezone. */
+export function snoozeToday(timeZone: string, now = new Date()): Date {
+  const day = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+  return new Date(`${day}T12:00:00`);
+}
+/** The days the quick choices stand for, counted from the supplied calendar day. */
 export const snoozeDays = (today = new Date()) => ({
   week: dayOf(addDays(today, 7)),
   twoWeeks: dayOf(addDays(today, 14)),
@@ -31,6 +40,3 @@ export const snoozeWeekday = (day: string) =>
     weekday: 'short',
     timeZone: 'UTC',
   }).format(new Date(`${day}T00:00:00Z`));
-/** As the task list shows it: "Nov 11 Tue". */
-export const snoozeListDay = (day: string) =>
-  `${formatDate(day)} ${snoozeWeekday(day)}`;

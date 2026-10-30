@@ -16,6 +16,8 @@ import {
   type OnlineConversation,
 } from '../../shared/online-agent.js';
 import { OnlineAgentError } from '../../server/online-agent/errors.js';
+import { OnlineAgentService } from '../../server/online-agent/service.js';
+import { CONTINUE_PROMPT } from '../../server/online-agent/continuation.js';
 import { toApply, type RuleProposal } from '../../shared/rule-proposal.js';
 import type { ModelEvent } from '@nocobase/app-plugin-agents/server/tokens';
 vi.setConfig({ testTimeout: 120000, hookTimeout: 120000 });
@@ -1089,4 +1091,326 @@ test('a conversation opened from Analysis rules reads the rules, and a proposal 
   expect((await confirm(admin)).status).toBe(200);
   expect(await dropPct()).toBe(50);
   expect((await confirm(admin)).status).toBe(409);
+});
+
+// A worker of its own, with tools of the test's choosing and the limits shortened.
+async function worker(
+  testApp: Parameters<Parameters<typeof test>[1]>[0]['testApp'],
+  connection: Parameters<Parameters<typeof test>[1]>[0]['connection'],
+  tools: Awaited<
+    ReturnType<ConstructorParameters<typeof OnlineAgentService>[2]>
+  >['tools'] = [],
+) {
+  const service = testApp.application.container.resolve(onlineAgentsToken);
+  await service.stop();
+  await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const actor = String(
+    (await connection
+      .repository('user')
+      .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } }))!.id,
+  );
+  const own = new OnlineAgentService(
+    service.database,
+    service.models,
+    async () => ({
+      instructions: 'Scoped',
+      tools,
+      authorize: async () => {},
+    }),
+  );
+  vi.spyOn(own, 'resolveModel').mockResolvedValue({
+    modelService: 'test',
+    model: 'test-model',
+  });
+  const ask = (text: string, conversation?: OnlineConversation) =>
+    own.send(
+      actor,
+      conversation
+        ? {
+            requestId: randomUUID(),
+            conversationId: conversation.id,
+            revision: conversation.revision,
+            text,
+          }
+        : {
+            requestId: randomUUID(),
+            agentId: DEFAULT_ONLINE_AGENT,
+            projectId: null,
+            text,
+          },
+    );
+  const drive = async () => {
+    own.start();
+    await own.idle();
+    await own.stop();
+  };
+  return { service, own, actor, ask, drive };
+}
+// Waits, unless the reply is stopped first.
+const pause = (ms: number, signal: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        reject(signal.reason);
+      },
+      { once: true },
+    );
+  });
+
+test('a reply that keeps streaming runs past the idle limit; one that goes quiet stops as stalled, and every reply stops at the absolute cap', async ({
+  testApp,
+  connection,
+}) => {
+  const { own, ask, drive } = await worker(testApp, connection);
+  Object.assign(own.limits, { idle: 1500, reply: 60_000 });
+  let mode: 'steady' | 'quiet' | 'endless' = 'steady';
+  vi.spyOn(own.models.gateway, 'stream').mockImplementation(async function* ({
+    signal,
+  }) {
+    if (mode === 'steady') {
+      // Reasoning counts as progress as much as text does.
+      for (let i = 0; i < 8; i++) {
+        await pause(300, signal!);
+        yield i % 2
+          ? { type: 'text', delta: `${i} ` }
+          : { type: 'reasoning', delta: '…' };
+      }
+      yield finish;
+      return;
+    }
+    yield { type: 'text', delta: 'Line one\nLine t' };
+    if (mode === 'quiet') await pause(60_000, signal!);
+    for (;;) {
+      await pause(100, signal!);
+      yield { type: 'reasoning', delta: '.' };
+    }
+  });
+  const steady = await ask('A long answer');
+  await drive();
+  expect(await own.run(steady.activeRunId)).toMatchObject({
+    status: 'completed',
+    output: '1 3 5 7 ',
+    error: null,
+  });
+  mode = 'quiet';
+  const quiet = await ask('Goes quiet');
+  await drive();
+  expect(await own.run(quiet.activeRunId)).toMatchObject({
+    status: 'failed',
+    error: 'stalled',
+    output: 'Line one\nLine t',
+  });
+  mode = 'endless';
+  own.limits.reply = 2000;
+  const endless = await ask('Never ends');
+  const started = Date.now();
+  await drive();
+  expect(Date.now() - started).toBeLessThan(10_000);
+  expect(await own.run(endless.activeRunId)).toMatchObject({
+    status: 'failed',
+    error: 'timeout',
+  });
+});
+
+test('a running reply renews its claim, so another worker leaves it alone; a claim nobody renews reads as interrupted', async ({
+  testApp,
+  connection,
+}) => {
+  const { own, ask } = await worker(testApp, connection);
+  Object.assign(own.limits, { lease: 1500, renew: 150, idle: 60_000 });
+  vi.spyOn(own.models.gateway, 'stream').mockImplementation(async function* ({
+    signal,
+  }) {
+    yield { type: 'text', delta: 'Part one\n' };
+    for (let i = 0; i < 20; i++) {
+      await pause(200, signal!);
+      yield { type: 'reasoning', delta: '.' };
+    }
+    yield { type: 'text', delta: 'Part two' };
+    yield finish;
+  });
+  const conversation = await ask('Write it all');
+  const id = conversation.activeRunId;
+  own.start();
+  await vi.waitFor(async () =>
+    expect((await own.run(id)).output).toBe('Part one\n'),
+  );
+  const claimed = Date.parse((await own.run(id)).deadline!);
+  const other = new OnlineAgentService(own.database, own.models, async () => {
+    throw new Error('This worker only sweeps');
+  });
+  await new Promise((resolve) => setTimeout(resolve, 2500));
+  expect(Date.now()).toBeGreaterThan(claimed);
+  await other.drain();
+  const live = await own.run(id);
+  expect(live.status).toBe('running');
+  expect(Date.parse(live.deadline!)).toBeGreaterThan(Date.now());
+  await own.idle();
+  await own.stop();
+  expect(await own.run(id)).toMatchObject({
+    status: 'completed',
+    output: 'Part one\nPart two',
+  });
+
+  // A worker that died mid-reply never renews: once its claim runs out, the next sweep says so.
+  const orphan = await ask(
+    'Orphaned',
+    await own.conversation(conversation.id, live.ownerId),
+  );
+  const run = await own.run(orphan.activeRunId);
+  await own.records.save('run', {
+    ...run,
+    status: 'running',
+    holder: 'previous-process',
+    startedAt: new Date().toISOString(),
+    deadline: new Date(Date.now() + 2000).toISOString(),
+    events: [{ type: 'text', text: 'Half' }],
+    output: 'Half',
+  });
+  await other.drain();
+  expect((await own.run(run.id)).status).toBe('running');
+  await new Promise((resolve) => setTimeout(resolve, 2200));
+  await other.drain();
+  expect(await own.run(run.id)).toMatchObject({
+    status: 'failed',
+    error: 'interrupted',
+    output: 'Half',
+  });
+});
+
+test('a reply cut off by a restart continues from where it stopped, with the data it already read, and joins the history as one answer', async ({
+  testApp,
+  connection,
+}) => {
+  const execute = vi.fn(async () => ({ rows: 9 }));
+  const { own, actor, ask, drive } = await worker(testApp, connection, [
+    {
+      name: 'query_data',
+      description: 'Read data',
+      inputSchema: {},
+      execute,
+    },
+  ]);
+  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const requests: { role: string; content: string }[][] = [];
+  const replies = ['First answer', '| 3 |\n\nThat is all.'];
+  vi.spyOn(own.models.gateway, 'stream').mockImplementation(
+    async function* (request) {
+      requests.push(
+        structuredClone(request.messages).filter(
+          (message) => message.role !== 'system',
+        ) as { role: string; content: string }[],
+      );
+      yield { type: 'text', delta: replies.shift() ?? 'Third answer' };
+      yield finish;
+    },
+  );
+  let conversation = await ask('First question');
+  await drive();
+  conversation = await ask('Second question', conversation);
+  const id = conversation.activeRunId;
+  // The worker writing it went away with the restart, after reading data and half a table.
+  const queued = await own.run(id);
+  await own.records.save('run', {
+    ...queued,
+    status: 'running',
+    holder: 'previous-process',
+    startedAt: '2020-01-01T00:00:00.000Z',
+    deadline: '2020-01-01T00:01:00.000Z',
+    usage: { ...finish.usage },
+    output: 'Reading.\n| a |\n| 1 |\n| 2',
+    events: [
+      { type: 'text', text: 'Reading.\n' },
+      {
+        type: 'toolCall',
+        id: 't1',
+        name: 'query_data',
+        args: { source: 'gsc' },
+      },
+      { type: 'usage', model: 'test-model', usage: finish.usage },
+      {
+        type: 'toolResult',
+        id: 't1',
+        name: 'query_data',
+        output: '{"rows":3}',
+        ok: true,
+      },
+      { type: 'text', text: '| a |\n| 1 |\n| 2' },
+    ],
+  });
+  await own.drain();
+  expect(await own.run(id)).toMatchObject({
+    status: 'failed',
+    error: 'interrupted',
+  });
+
+  // Only the owner's latest reply, and only one that stopped through no fault of the question, can be continued.
+  const first = (await own.conversationRuns(conversation))[0];
+  const refused = await post(
+    admin,
+    `/onlineAgents/runs/${first.id}/continue`,
+    {},
+  );
+  expect(refused.status).toBe(409);
+  expect((await refused.json()).error.reason).toBe('notContinuable');
+  await expect(own.continueRun(id, 'someone-else')).rejects.toMatchObject({
+    status: 404,
+  });
+  expect(
+    (await post(admin, `/onlineAgents/runs/${id}/continue`, {})).status,
+  ).toBe(200);
+  expect(await own.run(id)).toMatchObject({
+    status: 'queued',
+    error: null,
+    output: 'Reading.\n| a |\n| 1 |\n',
+    continued: [{ after: 'interrupted' }],
+  });
+  // A second click while it waits changes nothing.
+  expect(
+    (await post(admin, `/onlineAgents/runs/${id}/continue`, {})).status,
+  ).toBe(200);
+  expect((await own.run(id)).continued).toHaveLength(1);
+
+  await drive();
+  expect(execute).not.toHaveBeenCalled();
+  expect(requests[1]).toEqual([
+    { role: 'user', content: 'First question' },
+    { role: 'assistant', content: 'First answer' },
+    { role: 'user', content: 'Second question' },
+    {
+      role: 'assistant',
+      content: 'Reading.\n',
+      toolCalls: [{ id: 't1', name: 'query_data', args: { source: 'gsc' } }],
+    },
+    { role: 'tool', toolCallId: 't1', content: '{"rows":3}' },
+    { role: 'assistant', content: '| a |\n| 1 |\n' },
+    { role: 'user', content: CONTINUE_PROMPT },
+  ]);
+  const done = await own.run(id);
+  expect(done).toMatchObject({
+    status: 'completed',
+    error: null,
+    output: 'Reading.\n| a |\n| 1 |\n| 3 |\n\nThat is all.',
+  });
+  expect(
+    done.events.flatMap((event) => (event.type === 'text' ? [event.text] : [])),
+  ).toEqual(['Reading.\n', '| a |\n| 1 |\n| 3 |\n\nThat is all.']);
+  // Its usage counts both attempts.
+  expect(done.usage.outputTokens).toBe(finish.usage.outputTokens * 2);
+
+  await ask('Third question', await own.conversation(conversation.id, actor));
+  await drive();
+  expect(requests[2].slice(2, 4)).toEqual([
+    { role: 'user', content: 'Second question' },
+    {
+      role: 'assistant',
+      content: 'Reading.\n| a |\n| 1 |\n| 3 |\n\nThat is all.',
+    },
+  ]);
+  await expect(own.continueRun(id, actor)).rejects.toMatchObject({
+    code: 'notContinuable',
+  });
 });

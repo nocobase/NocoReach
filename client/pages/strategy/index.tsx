@@ -12,6 +12,7 @@ import {
   AreaList,
   metricItems,
   type SourceCard,
+  type MetricWindow,
   type Area,
 } from './insights-view';
 import { situationLines } from './situation-lines';
@@ -22,7 +23,7 @@ import {
   Today,
   WaitingNote,
 } from './briefing';
-import { dayOf, feedOf } from './feed';
+import { dayOf, conversationDayOf, feedOf } from './feed';
 import { Composer, InsightChatProvider } from './threads';
 import { useOptionalOnlineChat } from '../../online-agent/context';
 import { useChatPanel } from '@nocobase/app-plugin-agents/client/chat';
@@ -66,7 +67,7 @@ import {
   judgeMissing,
   type AnalysisStatus,
 } from './service';
-import { dailyAnalysisTime } from './schedule-time';
+import { dailyScheduleTime } from '#lib/schedule-time';
 import '../reach-workspace.css';
 import './strategy.css';
 type Task = {
@@ -292,14 +293,18 @@ function Insights({
         unwrap: 'data',
       }),
   );
-  const overview = useFreshData<{ cards: SourceCard[] }>(
-    `data-view:overview:${projectId}:${JSON.stringify({ range: String(METRIC_DAYS) })}`,
+  const overview = useFreshData<{ cards: SourceCard[]; window?: MetricWindow }>(
+    `data-view:overview:${projectId}:${JSON.stringify({ range: String(METRIC_DAYS), sameWindow: true })}`,
     () =>
-      api.action<{ cards: SourceCard[] }>('nrDataViews', 'overview', {
-        method: 'POST',
-        body: { projectId, range: String(METRIC_DAYS) },
-        unwrap: 'data',
-      }),
+      api.action<{ cards: SourceCard[]; window?: MetricWindow }>(
+        'nrDataViews',
+        'overview',
+        {
+          method: 'POST',
+          body: { projectId, range: String(METRIC_DAYS), sameWindow: true },
+          unwrap: 'data',
+        },
+      ),
     googleLocalFreshness,
   );
   // When an analysis ends, the numbers, the situation and the tasks are read again with it.
@@ -325,7 +330,11 @@ function Insights({
       action: 'access',
     });
   const rows = rowsFor(state),
-    metrics = metricItems(overview.data?.cards, METRIC_DAYS),
+    metrics = metricItems(
+      overview.data?.cards,
+      METRIC_DAYS,
+      overview.data?.window,
+    ),
     feed = feedOf(
       state,
       rows,
@@ -340,7 +349,7 @@ function Insights({
         ]),
       ),
     ),
-    analysisDay = dayOf(state.insights?.generatedAt),
+    analysisDay = conversationDayOf(state.insights?.generatedAt),
     chat = useOptionalOnlineChat(),
     // With the side panel open the day's conversation is there; the page gives it the room.
     docked = useChatPanel().open && !!chat;
@@ -391,7 +400,12 @@ function Insights({
         aria-label={$t('strategy.analysisFeed')}
         className='flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-2'
       >
-        <History days={feed.days} today={analysisDay} rows={rows} />
+        <History
+          state={state}
+          days={feed.days}
+          today={dayOf(state.insights?.generatedAt)}
+          rows={rows}
+        />
         <Today
           state={state}
           rows={rows}
@@ -483,7 +497,12 @@ function Insights({
       {/* On wide screens the page fills the window and only the day's conversation scrolls, between the numbers and
           the input (2026-10-22 user feedback). */}
       <div className='flex flex-col gap-6 lg:min-h-0 lg:flex-1'>
-        <MetricTiles metrics={metrics} overview={overview} days={METRIC_DAYS} />
+        <MetricTiles
+          metrics={metrics}
+          overview={overview}
+          days={METRIC_DAYS}
+          window={overview.data?.window}
+        />
         {/* The day's conversation, with the standing facts in a narrow quiet column beside it (2026-10-21 user); with the
             side panel open, the facts fold to a line under the day's date. */}
         <div
@@ -519,9 +538,10 @@ function Insights({
 // 10/18" beside today's analysis read as analysing stale data; freshness lives under Data sources › Data health): which
 // rules, and when the daily analysis runs, each a link to where it is set for those who may open it. No period: each
 // rule reads its own window (7, 14, 28 or 30 days); the period belongs to the metric cards, which say so.
-// The metric cards: each source's last 7 days against the 7 before (nrDataViews:overview; 2026-10-27 user decision:
-// the analysis runs daily, so the cards show this week, a whole week against the one before). Each card opens its
-// page on the same 7 days.
+// The metric cards: 7 days against the 7 before (nrDataViews:overview; 2026-10-27 user decision: the analysis runs
+// daily, so the cards show this week, a whole week against the one before). All five share one window, the latest 7
+// days every source has complete, named by its dates above them (2026-10-29 user request); each card opens its page on
+// those dates.
 const METRIC_DAYS = 7;
 const subtleLink = 'nr-link-quiet';
 function HowAnalyzed({
@@ -548,7 +568,7 @@ function HowAnalyzed({
     ) : (
       text
     );
-  const time = dailyAnalysisTime(schedule);
+  const time = dailyScheduleTime(schedule);
   if (schedule && !schedule.enabled)
     return $tj('strategy.howAnalyzedPaused', {
       0: rules,

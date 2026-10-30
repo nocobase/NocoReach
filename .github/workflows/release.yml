@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (optional; defaults to the next prerelease or patch)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nocoreach-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.prepare.outputs.tag }}
+      sha: ${{ steps.prepare.outputs.sha }}
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: pnpm/action-setup@c336a2788d9774dccfdeb4823a5058ccc9f07453 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Prepare version and changelog
+        id: prepare
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_NOTES_FILE: ${{ runner.temp }}/release-notes.md
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          node scripts/ci/release.mjs prepare
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test --maxWorkers=2 --passWithNoTests=false
+      - run: pnpm build --target linux-x64 --node-version 24 --tar
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: solutions-release-archive
+          path: storage/exports/dist.tar.gz
+          retention-days: 7
+          if-no-files-found: error
+      - name: Publish version commit and tag atomically
+        env:
+          RELEASE_VERSION: ${{ steps.prepare.outputs.version }}
+          RELEASE_SHA: ${{ steps.prepare.outputs.sha }}
+          RELEASE_BASE_SHA: ${{ steps.prepare.outputs.base_sha }}
+        run: node scripts/ci/release.mjs publish
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.prepare.outputs.tag }}
+          RELEASE_PRERELEASE: ${{ steps.prepare.outputs.prerelease }}
+          RELEASE_NOTES_FILE: ${{ runner.temp }}/release-notes.md
+        run: |
+          args=(--verify-tag --title "$RELEASE_TAG" --notes-file "$RELEASE_NOTES_FILE")
+          if [ "$RELEASE_PRERELEASE" = true ]; then
+            args+=(--prerelease --latest=false)
+          fi
+          gh release create "$RELEASE_TAG" "${args[@]}"
+          echo "已创建 $RELEASE_TAG；两个 Solutions 环境的部署结果请查看本次运行的 deploy 作业。" >> "$GITHUB_STEP_SUMMARY"
+
+  # GITHUB_TOKEN tag pushes do not trigger another workflow; call deployment explicitly.
+  deploy:
+    needs: release
+    uses: ./.github/workflows/deploy-solutions.yml
+    with:
+      release_tag: ${{ needs.release.outputs.tag }}
+      release_sha: ${{ needs.release.outputs.sha }}
+      archive_name: solutions-release-archive
+    secrets: inherit

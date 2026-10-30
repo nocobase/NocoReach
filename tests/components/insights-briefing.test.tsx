@@ -6,7 +6,7 @@ import {
   within,
 } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import StrategyPage from '../../client/pages/strategy/index';
 import {
@@ -34,6 +34,8 @@ const fixture = vi.hoisted(() => ({
   state: undefined as unknown as StrategyState,
   tasks: [] as unknown[],
   cards: [] as unknown[],
+  /** The window the cards share (nrDataViews:overview with sameWindow), when the server gives one. */
+  window: undefined as unknown,
   areas: [] as unknown[],
   runs: [] as unknown[],
   schedule: null as unknown,
@@ -76,6 +78,7 @@ vi.mock('../../client/i18n', async () => {
     $legacyJsx: (value: string) => value,
     $legacyFragment: (value: string) => value,
     getCurrentLocale: () => 'en-US',
+    isChinese: () => false,
     translateSystemError: (value: string) => value,
     renderMessage: () => '',
   };
@@ -114,7 +117,8 @@ vi.mock('@nocobase/app-plugin-agents/client/chat', async (original) => ({
 }));
 // The chat's records: the owner's questions asked from Insights in project 1, each conversation's turns, and what is
 // sent.
-vi.mock('../../client/online-agent/api', () => ({
+vi.mock('../../client/online-agent/api', async (original) => ({
+  ...(await original<typeof import('../../client/online-agent/api')>()),
   useOnlineApi: () => async (path: string, body?: unknown) => {
     if (body !== undefined) {
       fixture.posts.push({ path, body });
@@ -285,6 +289,7 @@ beforeEach(() => {
   fixture.state = initial();
   fixture.tasks = [];
   fixture.cards = [];
+  fixture.window = undefined;
   fixture.areas = [];
   fixture.runs = [];
   fixture.schedule = null;
@@ -356,7 +361,10 @@ beforeEach(() => {
       if (resource === 'nrTaskWork' && action === 'list')
         return Promise.resolve(fixture.tasks);
       if (resource === 'nrDataViews')
-        return Promise.resolve({ cards: fixture.cards });
+        return Promise.resolve({
+          cards: fixture.cards,
+          ...(fixture.window ? { window: fixture.window } : {}),
+        });
       if (resource === 'nrInsights')
         return Promise.resolve({ areas: fixture.areas });
       if (resource === 'nrAnalysis')
@@ -504,6 +512,14 @@ it('the tiles show at most five numbers that have data, the summary names the on
     { id: 'packages', metrics: [metric('downloads', 4000, 0.9)], series: [] },
     { id: 'discourse', metrics: [metric('topics', null)], series: [] },
   ];
+  // The one window the cards share: the latest 7 days every source has complete.
+  fixture.window = {
+    start: '2026-10-19',
+    end: '2026-10-25',
+    days: 7,
+    previousStart: '2026-10-12',
+    previousEnd: '2026-10-18',
+  };
   // What the analysis read over its 28 days: clicks fell 31%, sessions rose 12%, impressions held.
   fixture.state.insights!.evidence.summary = {
     search: period({ clicks: [1200, 1739], impressions: [54000, 52941] }),
@@ -545,19 +561,31 @@ it('the tiles show at most five numbers that have data, the summary names the on
   });
   await within(tiles).findByText('1,200');
   expect(within(tiles).getAllByRole('link')).toHaveLength(5);
-  // The cards say what their numbers and changes cover.
-  expect(within(tiles).getByText('strategy.metricWindow:7')).toBeTruthy();
-  // Each card opens its page on the same 7 days.
+  // One line says the dates all the cards cover, as the data pages write their range; the cards carry none.
+  expect(
+    within(tiles).getByText('common.comparedPreviousDays:Oct 19,Oct 25,7'),
+  ).toBeTruthy();
+  expect(within(tiles).queryByText('strategy.metricWindow:7')).toBeNull();
+  // The window is asked for once, shared by every card.
+  expect(fixture.action).toHaveBeenCalledWith(
+    'nrDataViews',
+    'overview',
+    expect.objectContaining({
+      body: { projectId: 1, range: '7', sameWindow: true },
+    }),
+  );
+  // Each card opens its page on those dates.
+  const range = 'days=custom&from=2026-10-19&to=2026-10-25';
   expect(
     within(tiles)
       .getAllByRole('link')
       .map((l) => l.getAttribute('href')),
   ).toEqual([
-    '/seo-opportunities?days=7',
-    '/seo-opportunities?days=7',
-    '/website?days=7',
-    '/website/conversion?days=7',
-    '/data/github?days=7',
+    `/seo-opportunities?${range}`,
+    `/seo-opportunities?${range}`,
+    `/website?${range}`,
+    `/website?${range}`,
+    `/data/github?${range}`,
   ]);
   // Downloads is the sixth number: it waits under All data, and is not named in the summary either.
   expect(within(tiles).queryByText('4,000')).toBeNull();
@@ -611,6 +639,8 @@ it('a number with fewer than 10 in the week before shows its change as a count, 
     name: 'strategy.keyMetrics',
   });
   await within(tiles).findByText('1,200');
+  // Without a shared window from the server, the line names the number of days instead.
+  expect(within(tiles).getByText('strategy.metricWindow:7')).toBeTruthy();
   // 1 → 3 is "↑ 2", not "↑ 200%"; 0 → 4 is "↑ 4", where a percentage has no answer.
   expect(within(tiles).getByText('↓ 31%')).toBeTruthy();
   expect(within(tiles).getByText('↑ 2')).toBeTruthy();
@@ -687,15 +717,20 @@ it('without the figures in its evidence, the day’s message names no numbers', 
 
 it('the subtitle says how the insights are analyzed, linking the rules and the schedule', async () => {
   fixture.runs = [{ ok: true, trigger: 'workflow' }];
-  fixture.schedule = { workflowId: 1, enabled: true, cron: '0 9 * * *' };
+  fixture.schedule = {
+    workflowId: 1,
+    enabled: true,
+    cron: '0 9 * * *',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  };
   setup();
   const link = await screen.findByRole('link', {
-    name: 'strategy.everyDayAt:09:00',
+    name: 'strategy.everyDayAt:9:00 AM',
   });
   expect(link.getAttribute('href')).toBe('/schedules');
   const sentence = link.parentElement!;
   expect(sentence.textContent).toBe(
-    'strategy.howAnalyzedDaily:strategy.analysisRulesLink,strategy.everyDayAt:09:00',
+    'strategy.howAnalyzedDaily:strategy.analysisRulesLink,strategy.everyDayAt:9:00 AM',
   );
   expect(
     within(sentence)
@@ -1550,4 +1585,89 @@ it('handing off an opportunity with several places asks which ones first', async
       }),
     ),
   );
+});
+
+it('an answer in the day’s conversation that stopped partway says why, and the latest one continues from where it stopped', async () => {
+  fixture.threads = [thread('t-day', '2026-10-21')];
+  const stopped = (id: string, at: string) => ({
+    ...run(id, `Question ${id}`, `Kept ${id}`, at),
+    status: 'failed',
+    error: 'interrupted',
+    events: [{ type: 'text', text: `Kept ${id}` }],
+  });
+  fixture.details['t-day'] = {
+    conversation: { id: 't-day', revision: 4, activeRunId: 'r2' },
+    runs: [
+      stopped('r1', '2026-10-21T10:00:00Z'),
+      stopped('r2', '2026-10-21T10:05:00Z'),
+    ],
+  };
+  setup();
+  const conversation = await waitFor(() => {
+    const found = document.querySelector(
+      '[data-day-conversation="2026-10-21"]',
+    );
+    expect(found).toBeTruthy();
+    return found as HTMLElement;
+  });
+  fireEvent.click(
+    within(conversation).getByRole('button', {
+      name: /strategy.conversationTurns:2/,
+    }),
+  );
+  const turns = [...conversation.querySelectorAll<HTMLElement>('[data-turn]')];
+  for (const turn of turns)
+    expect(within(turn).getByRole('status')).toHaveTextContent(
+      'onlineAgent.interrupted',
+    );
+  expect(
+    within(turns[0]).queryByRole('button', { name: 'onlineAgent.continue' }),
+  ).toBeNull();
+  fireEvent.click(
+    within(turns[1]).getByRole('button', { name: 'onlineAgent.continue' }),
+  );
+  await waitFor(() =>
+    expect(fixture.posts).toEqual([{ path: 'runs/r2/continue', body: {} }]),
+  );
+});
+
+afterEach(() => vi.unstubAllEnvs());
+it('uses one local day heading across midnight while keeping original conversation keys', async () => {
+  vi.stubEnv('TZ', 'Asia/Shanghai');
+  fixture.state.insights = batch('2026-10-21T00:30:00Z', [
+    card('local-today', { firstSeenAt: '2026-10-20T23:30:00Z' }),
+  ]);
+  fixture.state.insightHistory = [batch('2026-10-20T23:30:00Z', [])];
+  fixture.state.opportunityMeta = { 'local-today': { status: 'ignored' } };
+  fixture.state.watch = {};
+  fixture.state.proposals = [];
+  fixture.threads = [
+    thread('utc-20', '2026-10-20'),
+    thread('utc-21', '2026-10-21'),
+  ];
+  for (const id of ['utc-20', 'utc-21'])
+    fixture.details[id] = {
+      conversation: { id, revision: 1 },
+      runs: [run(id, id + ' question', id + ' answer', '2026-10-21T00:05:00Z')],
+    };
+  setup();
+  await waitFor(() =>
+    expect(document.querySelectorAll('[data-day-conversation]')).toHaveLength(
+      2,
+    ),
+  );
+  expect(
+    screen
+      .getAllByRole('heading', { level: 3 })
+      .filter((h) => /10\/21/.test(h.textContent || '')),
+  ).toHaveLength(1);
+  expect(
+    screen.queryByRole('button', { name: /strategy.earlierAnalyses/ }),
+  ).toBeNull();
+  expect(
+    document.querySelector('[data-day-conversation="2026-10-20"]'),
+  ).toBeTruthy();
+  expect(
+    document.querySelector('[data-day-conversation="2026-10-21"]'),
+  ).toBeTruthy();
 });

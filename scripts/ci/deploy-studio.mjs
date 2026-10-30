@@ -11,6 +11,7 @@ const ARCHIVE = 'storage/exports/dist.tar.gz';
 // shorter process budget. A timeout never proves Studio rejected the upload.
 const UPLOAD_PROCESS_TIMEOUT = 10 * 60_000;
 const READ_PROCESS_TIMEOUT = 3 * 60_000;
+const DEPLOYMENT_POLL_TIMEOUT = 30 * 60_000;
 
 // Studio reports a deployment succeeded before the app has finished restarting,
 // so the first health probes can 404 or be refused. Retry those for a while.
@@ -123,7 +124,28 @@ export function validateConfig(env) {
     );
   }
 }
+export function deploymentSource(env) {
+  if (env.STUDIO_RELEASE_TAG || env.STUDIO_RELEASE_SHA) {
+    assert(
+      deploymentApp(env) === 'reach' &&
+        env.GITHUB_EVENT_NAME === 'workflow_dispatch' &&
+        env.GITHUB_REF === 'refs/heads/main',
+      'A release workflow may pass a Solutions source only from main',
+    );
+    assert(
+      /^v\d+\.\d+\.\d+(?:-[\w.]+)?$/u.test(env.STUDIO_RELEASE_TAG ?? '') &&
+        /^[a-f0-9]{40}$/u.test(env.STUDIO_RELEASE_SHA ?? ''),
+      'Release workflow requires both a version tag and commit SHA',
+    );
+    return {
+      ref: `refs/tags/${env.STUDIO_RELEASE_TAG}`,
+      sha: env.STUDIO_RELEASE_SHA,
+    };
+  }
+  return { ref: env.GITHUB_REF, sha: env.GITHUB_SHA };
+}
 export function validateRelease(env, version, execute = execFileSync) {
+  const source = deploymentSource(env);
   assert(
     ['nocoreach', 'reach'].includes(deploymentApp(env)),
     'Release tags can only deploy nocoreach or reach',
@@ -137,14 +159,14 @@ export function validateRelease(env, version, execute = execFileSync) {
     'package.json has no release version',
   );
   assert.equal(
-    env.GITHUB_REF,
+    source.ref,
     `refs/tags/v${version}`,
     'Release tag must match package.json version',
   );
   const sha = execute('git', ['rev-parse', 'HEAD'], {
     encoding: 'utf8',
   }).trim();
-  assert.equal(sha, env.GITHUB_SHA, 'Checkout does not match release commit');
+  assert.equal(sha, source.sha, 'Checkout does not match release commit');
   try {
     execute('git', ['merge-base', '--is-ancestor', 'HEAD', 'origin/main'], {
       stdio: 'pipe',
@@ -152,6 +174,13 @@ export function validateRelease(env, version, execute = execFileSync) {
   } catch {
     throw new Error('Release commit must belong to origin/main');
   }
+  assert.equal(
+    execute('git', ['rev-parse', `${source.ref}^{commit}`], {
+      encoding: 'utf8',
+    }).trim(),
+    sha,
+    'Release tag does not point to the checked-out commit',
+  );
 }
 export function validateHealth(health, appId) {
   assert.equal(health.ok, true, 'Health endpoint did not report ok=true');
@@ -252,9 +281,10 @@ export async function deploy({
   cli,
   health,
   summary,
+  log = console.info,
   wait = sleep,
   now = Date.now,
-  timeout = 600000,
+  timeout = DEPLOYMENT_POLL_TIMEOUT,
 }) {
   validateConfig(env);
   const appId = deploymentApp(env);
@@ -347,7 +377,10 @@ export async function deploy({
     'Deployment response missing deployment ID',
   );
   summary(`Deployment：${diagnosticId(deploymentId)}\n\n`);
-  const deadline = now() + timeout;
+  const startedAt = now();
+  const deadline = startedAt + timeout;
+  const context = `ci-phase=deployment-poll; app=${diagnosticId(appId)}; release=${diagnosticId(releaseId)}; deployment=${diagnosticId(deploymentId)}`;
+  let nextProgressAt = startedAt;
   while (now() < deadline) {
     const data = await cli(['deploy', 'get', appId, deploymentId, '--json']);
     if (deploymentState(data, appId, releaseId, deploymentId) === 'succeeded') {
@@ -377,10 +410,16 @@ export async function deploy({
       );
       return 'succeeded';
     }
-    await wait(10000);
+    if (now() >= nextProgressAt) {
+      log(
+        `Studio deployment waiting; elapsed=${Math.floor((now() - startedAt) / 1000)}s; budget=${timeout / 1000}s; ${context}.`,
+      );
+      nextProgressAt = now() + 60_000;
+    }
+    await wait(Math.min(10000, Math.max(0, deadline - now())));
   }
   throw new Error(
-    'Deployment timed out after 10 minutes; inspect Studio before retrying (no automatic rollback)',
+    `Deployment timed out after ${timeout / 1000} seconds; ${context}. Studio may still complete this deployment; inspect it before retrying (no automatic rollback).`,
   );
 }
 export function deploymentOutcomeMessage(outcome) {
@@ -399,12 +438,17 @@ async function main() {
   };
   try {
     const releaseOnly = process.argv.includes('--check-release');
-    const releaseRef = process.env.GITHUB_REF?.startsWith('refs/tags/');
+    const source = deploymentSource(process.env);
+    const releaseRef = source.ref?.startsWith('refs/tags/');
     if (releaseOnly || releaseRef) {
       const { version } = JSON.parse(readFileSync('package.json', 'utf8'));
       validateRelease(process.env, version);
       if (releaseOnly) return;
     }
+    assert(
+      deploymentApp(process.env) !== 'reach' || releaseRef,
+      'Solutions deployment requires a verified release tag',
+    );
     validateConfig(process.env);
     assert(
       releaseRef ||
@@ -418,11 +462,7 @@ async function main() {
     const sha = execFileSync('git', ['rev-parse', 'HEAD'], {
       encoding: 'utf8',
     }).trim();
-    assert.equal(
-      sha,
-      process.env.GITHUB_SHA,
-      'Checkout does not match dispatched commit',
-    );
+    assert.equal(sha, source.sha, 'Checkout does not match dispatched commit');
     assert(process.env.GITHUB_REPOSITORY, 'Missing GITHUB_REPOSITORY');
     const size = statSync(ARCHIVE).size;
     assert(
@@ -442,6 +482,8 @@ async function main() {
       health: probeHealth,
     });
     console.info(deploymentOutcomeMessage(outcome));
+    // A pending approval must not make the release pipeline look deployed.
+    if (outcome === 'pending') process.exitCode = 1;
   } catch (error) {
     summary(
       `部署未完成：${error.message}\n\n不自动回滚；请按操作手册检查已有 release/deployment，避免重复上传。\n`,

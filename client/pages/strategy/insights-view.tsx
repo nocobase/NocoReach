@@ -1,3 +1,4 @@
+import { formatDate } from '#lib/format';
 import {signalDisposition} from '../../../shared/strategy-pending.js';
 import {WAITING_TASKS_URL} from '../task-waiting';
 import { $t, $tj, $legacyText, $legacyFragment, $legacyJsx } from "#i18n";
@@ -65,12 +66,18 @@ export function Sparkline({points,change}:{points:Point[];change?:number|null}):
 // when connected, each with its daily series and its data page. A metric without a value is left out by the caller.
 // `days` is the cards' period; each card's page opens on it (?days=), so the numbers there match.
 export type MetricItem={label:string;value:number|null;previous?:number|null;change:number|null;to:string;signed?:boolean;series?:Point[]};
-export function metricItems(cards?:SourceCard[],days?:number):MetricItem[]{
+/** The one window all the metric cards share (nrDataViews:overview with sameWindow), and the period before it. */
+export type MetricWindow={start:string;end:string;days:number;previousStart:string;previousEnd:string};
+// Each card opens its page on the cards' window: its exact dates when the cards share one (a custom range, since it
+// may end before the page's own cutoff), else the same number of days. Key events open Website itself: the old
+// /website/conversion address redirects there without the query, which lost the period.
+export function metricItems(cards?:SourceCard[],days?:number,window?:MetricWindow):MetricItem[]{
  const by=new Map((cards||[]).map(c=>[c.id,c]));
+ const period=window?`days=custom&from=${window.start}&to=${window.end}`:days?`days=${days}`:'';
  const item=(label:string,c:SourceCard|undefined,key:string,to:string,signed=false,series?:Point[]):MetricItem=>{const m=c?.metrics.find(x=>x.key===key);
-  return {label,value:m?.value??null,previous:m?.previous??null,change:m?.change??null,to:days?`${to}${to.includes('?')?'&':'?'}days=${days}`:to,signed,series:series||c?.seriesBy?.[key]||(c?.metrics[0]?.key===key?c.series:undefined)};};
+  return {label,value:m?.value??null,previous:m?.previous??null,change:m?.change??null,to:period?`${to}${to.includes('?')?'&':'?'}${period}`:to,signed,series:series||c?.seriesBy?.[key]||(c?.metrics[0]?.key===key?c.series:undefined)};};
  const gsc=by.get('gsc'),ga4=by.get('ga4');
- return [item($t('common.searchClicks'),gsc,'clicks','/seo-opportunities'),item($t('common.searchImpressions'),gsc,'impressions','/seo-opportunities'),item($t('strategy.sessions'),ga4,'sessions','/website'),item($t('common.keyEvents'),ga4,'conversions','/website/conversion'),
+ return [item($t('common.searchClicks'),gsc,'clicks','/seo-opportunities'),item($t('common.searchImpressions'),gsc,'impressions','/seo-opportunities'),item($t('strategy.sessions'),ga4,'sessions','/website'),item($t('common.keyEvents'),ga4,'conversions','/website'),
   ...([['github','stars',$t('common.newStars'),'/data/github',true],['packages','downloads',$t('common.downloads'),'/data/downloads',false],['discourse','topics',$t('strategy.newForumTopics'),'/data/community',false],['mentions','mentions',$t('common.hackerNewsMentions'),'/data/hackernews',false],['reddit','posts',$t('strategy.newRedditPosts'),'/data/reddit',false]] as const).flatMap(([id,key,label,to,signed])=>{const c=by.get(id);return c?[item(label,c,key,to,signed,c.series)]:[];})];
 }
 // The numbers a day's analysis read (its evidence: Search Console and GA4 over its own period against the period
@@ -83,7 +90,7 @@ export function analysisMetrics(evidence?:Evidence):MetricItem[]{
  const item=(label:string,source:SourceSummary|undefined,key:string,to:string):MetricItem=>{const m=source?.metrics?.[key],ok=Boolean(m?.comparable&&m.current!=null&&m.previous!=null);
   return {label,value:ok?m!.current:null,previous:ok?m!.previous:null,change:ok&&m!.percent!=null?m!.percent/100:null,to:days?`${to}?days=${days}`:to};};
  const search=evidence?.summary?.search,web=evidence?.summary?.web;
- return [item($t('common.searchClicks'),search,'clicks','/seo-opportunities'),item($t('common.searchImpressions'),search,'impressions','/seo-opportunities'),item($t('strategy.sessions'),web,'sessions','/website'),item($t('common.keyEvents'),web,'conversions','/website/conversion')].filter(i=>i.value!=null);
+ return [item($t('common.searchClicks'),search,'clicks','/seo-opportunities'),item($t('common.searchImpressions'),search,'impressions','/seo-opportunities'),item($t('strategy.sessions'),web,'sessions','/website'),item($t('common.keyEvents'),web,'conversions','/website')].filter(i=>i.value!=null);
 }
 export const percent=pct;
 // 当前状况 (was 各方面一览, then 需要留意 — 2026-10-08 user: “留意” read like the AI's 先观察): how things stand now, as
@@ -232,7 +239,7 @@ export function ChangeDetail({signal:open,status:st,projectId,verdicts,watch,tod
     {st.earlier?<p className="text-xs text-muted-foreground">{$t('strategy.handedOffAgentBefore')}<button type="button" className="nr-link" onClick={()=>navigate(`/actions/${st.earlier!.id}`)}>{st.earlier.no?`T-${st.earlier.no}`:$t('common.tasks')}</button>{$tj('strategy.changeStillThere',{0:st.earlier.state==='done'?$t('strategy.done'):$t('strategy.closed')})}</p>:null}
     {watch&&st.verdict==='watch'&&!st.dismissed?<section className="space-y-1" data-watch-record=""><h3 className="text-xs font-medium text-muted-foreground">{$t('common.watch')}</h3>
      <dl className="grid grid-cols-[5.5rem_1fr] gap-y-1"><dt className="text-muted-foreground">{$t('strategy.decisionCondition')}</dt><dd>{watch.waitingFor||'—'}</dd>
-      <dt className="text-muted-foreground">{$t('strategy.watchingSince')}</dt><dd>{$t('strategy.day',{0:watch.since.slice(5,10).replace('-','/'),1:daysBetween(watch.since,today||new Date().toISOString())})}</dd>
+      <dt className="text-muted-foreground">{$t('strategy.watchingSince')}</dt><dd>{$t('strategy.day',{0:formatDate(watch.since),1:daysBetween(watch.since,today||new Date().toISOString())})}</dd>
       <dt className="text-muted-foreground">{$t('strategy.deadline')}</dt><dd>{watch.decideBy.slice(5).replace('-','/')}</dd>
       <dt className="text-muted-foreground">{$t('strategy.startingValue')}</dt><dd><ul className="list-disc space-y-0.5 pl-4">{watch.startFacts.map(f=><li key={f}>{$legacyText(f)}</li>)}</ul></dd></dl></section>:null}
     {verdicts&&verdicts.length>1?<section className="space-y-1" data-verdicts=""><h3 className="text-xs font-medium text-muted-foreground">{$t('strategy.verdictDay')}</h3><ul className="space-y-0.5">{verdicts.slice(0,14).map(v=><li key={v.day} className="grid grid-cols-[3.5rem_1fr] gap-2"><span className="tabular-nums text-muted-foreground">{v.day.slice(5).replace('-','/')}</span><span>{getVerdict()[v.verdict].label}：{v.reason}</span></li>)}</ul></section>:null}

@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { $t, $legacyText, useMessageState } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { toast } from '#lib/toast';
+import { serviceUnavailable } from '#lib/transport-error';
 import { Tag } from '#components/reach/tag';
 import { Button } from '#components/ui/button';
 import { useBusinessAccess } from '#hooks/use-business-access';
@@ -142,14 +143,19 @@ export function RuleProposalCard({
     } catch (e) {
       if (!aliveRef.current) return;
       const failure = e as { status?: number; code?: string; message?: string };
+      // NocoReach did not answer (often restarting for an update). The change may have been saved before the answer
+      // was lost, so the rules are read again: the card shows it saved if it was, and Confirm stays if not.
+      const unavailable = serviceUnavailable(e);
       // Demo Mode explains its refusal in its own toast.
       if (failure.code !== 'DEMO_READ_ONLY')
         setError(() =>
-          failure.status === 409
-            ? $t('analysisRules.settingsChanged')
-            : $legacyText(failure.message || '') || $t('common.saveFailed'),
+          unavailable
+            ? $t('common.serviceUnavailable')
+            : failure.status === 409
+              ? $t('analysisRules.settingsChanged')
+              : $legacyText(failure.message || '') || $t('common.saveFailed'),
         );
-      if (failure.status === 409) reload();
+      if (failure.status === 409 || unavailable) reload();
     } finally {
       if (aliveRef.current) setBusy(false);
     }
@@ -296,7 +302,7 @@ export function RuleProposalCard({
           {$t('analysisRules.proposalOutdatedHelp')}
         </p>
       ) : null}
-      {error ? (
+      {error && state !== 'saved' ? (
         <p role='alert' className='nr-error'>
           {error}
         </p>

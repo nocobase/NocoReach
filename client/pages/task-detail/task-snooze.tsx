@@ -1,8 +1,8 @@
-import { useId, useState, type ReactElement } from 'react';
+import { useEffect, useId, useState, type ReactElement } from 'react';
 import { addDays, parseISO } from 'date-fns';
 import { CalendarIcon, Clock } from 'lucide-react';
-import { $t } from '#i18n';
-import { formatDate } from '#lib/format';
+import { $t, getCurrentLocale } from '#i18n';
+import { formatDate, formatDateTime } from '#lib/format';
 import { Button } from '#components/ui/button';
 import { Calendar } from '#components/ui/calendar';
 import {
@@ -22,7 +22,13 @@ import {
 import { Textarea } from '#components/ui/textarea';
 import { Segmented } from '#components/reach/segmented';
 import { useDayPickerLocale } from '../day-picker-locale';
-import { dayOf, snoozeDay, snoozeDays, snoozeWeekday } from './snooze-days';
+import {
+  dayOf,
+  snoozeDay,
+  snoozeDays,
+  snoozeToday,
+  snoozeWeekday,
+} from './snooze-days';
 import {
   getWorkColumns,
   workState,
@@ -30,6 +36,8 @@ import {
 } from '../task-execution-types';
 import { Card } from './layout';
 import { text } from './styles';
+import { analysisRequest } from '../strategy/service';
+import { timeZoneName } from '#lib/time-zone-name';
 
 // Snooze (2026-10-28 user request, as Gmail's): a task waiting for something outside NocoReach is put aside until a
 // day. It keeps its progress, leaves Needs you and Current, and comes back on that day at 9 AM, its owner reminded
@@ -41,12 +49,14 @@ type Choice = 'week' | 'twoWeeks' | 'month' | 'date';
 
 /** The dialog that puts a task aside, or changes the day of one that is. */
 export function SnoozeDialog({
+  projectId,
   open,
   onClose,
   data,
   busy,
   update,
 }: {
+  projectId: number;
   open: boolean;
   onClose: () => void;
   data: TaskData;
@@ -62,39 +72,69 @@ export function SnoozeDialog({
     >
       {/* Made anew each time it opens: what the snooze says now, or two weeks for a new one. */}
       {open && (
-        <SnoozeForm data={data} busy={busy} update={update} onClose={onClose} />
+        <SnoozeForm
+          projectId={projectId}
+          data={data}
+          busy={busy}
+          update={update}
+          onClose={onClose}
+        />
       )}
     </Dialog>
   );
 }
 
 function SnoozeForm({
+  projectId,
   onClose,
   data,
   busy,
   update,
 }: {
+  projectId: number;
   onClose: () => void;
   data: TaskData;
   busy: boolean;
   update: Update;
 }): ReactElement {
+  const [now] = useState(() => new Date());
+  const [zone, setZone] = useState('');
+  const [failed, setFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    let active = true;
+    void analysisRequest(projectId, 'status').then(
+      (status) => {
+        if (!active) return;
+        const timezone = status.schedule?.timezone;
+        try {
+          if (!timezone) throw new Error('Timezone unavailable');
+          snoozeToday(timezone, now);
+          setZone(timezone);
+        } catch {
+          setFailed(true);
+        }
+      },
+      () => {
+        if (active) setFailed(true);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [projectId, retry, now]);
   const id = useId(),
     w = data.work,
     current = w.snooze,
-    days = snoozeDays(),
+    today = zone ? snoozeToday(zone, now) : now,
+    days = snoozeDays(today),
     locale = useDayPickerLocale();
-  const preset = (Object.keys(days) as (keyof typeof days)[]).find(
-    (k) => days[k] === current?.day,
-  );
   const [reason, setReason] = useState(current?.reason || '');
-  const [choice, setChoice] = useState<Choice>(
-    current ? (preset ?? 'date') : 'twoWeeks',
-  );
-  const [picked, setPicked] = useState(current && !preset ? current.day : '');
+  const [choice, setChoice] = useState<Choice>(current ? 'date' : 'twoWeeks');
+  const [picked, setPicked] = useState(current?.day || '');
   const [calendar, setCalendar] = useState(false);
   const day = choice === 'date' ? picked : days[choice];
-  const tomorrow = addDays(new Date(), 1);
+  const tomorrow = addDays(today, 1);
   const owner = w.humanOwnerName || $t('common.owner');
   const options: [Choice, string][] = [
     ['week', $t('taskSnooze.week')],
@@ -128,7 +168,10 @@ function SnoozeForm({
         />
       </Field>
       <Field>
-        <FieldLabel id={`${id}-until`}>{$t('taskSnooze.until')}</FieldLabel>
+        <FieldLabel id={`${id}-until`}>
+          {$t('taskSnooze.until')}
+          {` · ${zone ? `${timeZoneName(zone, getCurrentLocale())} (${zone})` : $t('taskSnooze.scheduleTimezone')}`}
+        </FieldLabel>
         <Segmented
           label={$t('taskSnooze.until')}
           value={choice}
@@ -178,12 +221,27 @@ function SnoozeForm({
             : $t('taskSnooze.chooseDay')}
         </p>
       </Field>
+      {failed && (
+        <p role='alert' className={text.muted}>
+          {$t('taskSnooze.timezoneUnavailable')}{' '}
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={() => {
+              setFailed(false);
+              setRetry((n) => n + 1);
+            }}
+          >
+            {$t('common.retry')}
+          </Button>
+        </p>
+      )}
       <DialogFooter>
         <Button variant='outline' disabled={busy} onClick={onClose}>
           {$t('common.cancel')}
         </Button>
         <Button
-          disabled={busy || !day}
+          disabled={busy || !day || (!zone && !failed)}
           onClick={() =>
             void update('snoozeTask', { day, reason: reason.trim() }).then(
               (d) => {
@@ -229,7 +287,7 @@ export function SnoozedCard({
             aria-hidden='true'
             className='size-4 shrink-0 text-muted-foreground'
           />
-          {$t('taskSnooze.snoozedUntil', { 0: snoozeDay(s.day) })}
+          {$t('taskSnooze.snoozedUntil', { 0: formatDateTime(s.until) })}
         </>
       }
       sub={s.reason ? `${s.reason} · ${by}` : by}

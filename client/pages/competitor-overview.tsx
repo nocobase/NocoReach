@@ -163,7 +163,7 @@ function CompetitorDetail({ projectId, r, market, dataforseo, onClose }: { proje
         {r.events.length ? (
           <section className="space-y-1">
             <h3 className="text-sm font-semibold">{$t('competitorOverview.recentActivity')}</h3>
-            {r.events.map((e) => <p key={e.url + e.at} className="flex items-center gap-2 text-sm"><Tag tone={e.type === "release" ? "violet" : "grey"}>{e.type === "release" ? $t('common.newRelease') : $t('common.newPages')}</Tag><a className="nr-link min-w-0 flex-1 truncate" href={e.url} target="_blank" rel="noreferrer">{e.title}<ExternalLink className="ml-0.5 inline size-3" /></a><span className="shrink-0 text-xs text-muted-foreground">{formatDate(e.at.slice(0, 10))}</span></p>)}
+            {r.events.map((e) => <p key={e.url + e.at} className="flex items-center gap-2 text-sm"><Tag tone={e.type === "release" ? "violet" : "grey"}>{e.type === "release" ? $t('common.newRelease') : $t('common.newPages')}</Tag><a className="nr-link min-w-0 flex-1 truncate" href={e.url} target="_blank" rel="noreferrer">{e.title}<ExternalLink className="ml-0.5 inline size-3" /></a><span className="shrink-0 text-xs text-muted-foreground">{formatDate(e.at)}</span></p>)}
           </section>
         ) : null}
       </div>

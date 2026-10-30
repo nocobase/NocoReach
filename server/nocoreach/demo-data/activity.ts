@@ -26,13 +26,7 @@ const HOUR = 3_600_000;
 export const DEMO_NOTIFICATION = 'nocoreach-demo-';
 
 type ChangeState =
-  | 'failed'
-  | 'ready'
-  | 'merge_failed'
-  | 'verifying'
-  | 'not_seen'
-  | 'simulated'
-  | 'live';
+  'ready' | 'merge_failed' | 'verifying' | 'not_seen' | 'simulated' | 'live';
 
 /** Page-change tasks in each state the release path has, hand-written like the other demo stories. */
 interface ChangeTask {
@@ -50,7 +44,7 @@ interface ChangeTask {
   after: L;
   /** The release note the owner wrote. */
   note: L;
-  /** Why the Agent or the release failed. */
+  /** Why the release failed. */
   error?: L;
   comments: readonly (readonly [DemoPerson, L])[];
   /** Snoozed (2026-10-28): put aside for this many days, waiting for something outside NocoReach. */
@@ -60,7 +54,7 @@ interface ChangeTask {
 const CHANGES: ChangeTask[] = [
   [
     22,
-    'failed',
+    'ready',
     'fix-sync-example',
     t('失败后重试即可。', 'Retry after a failure.'),
     t(
@@ -74,8 +68,8 @@ const CHANGES: ChangeTask[] = [
     'home-project-management',
     t('让工作更高效。', 'Work more efficiently.'),
     t(
-      'ACME 项目管理：把任务、排期和团队协作放在一起。',
-      'ACME project management: tasks, schedules and teamwork together.',
+      'Acme 项目管理：把任务、排期和团队协作放在一起。',
+      'Acme project management: tasks, schedules and teamwork together.',
     ),
   ],
   [
@@ -146,16 +140,10 @@ const CHANGES: ChangeTask[] = [
       '演示页面修订，保留原稿供复核。',
       'Demo page revision; retain the original for review.',
     ),
-    error:
-      i === 0
-        ? t(
-            '缺少重复同步事件的测试样例，模拟执行停止，未修改页面。',
-            'Duplicate sync event fixtures are missing; the simulated run stopped without changing the page.',
-          )
-        : t(
-            '审核后页面发生变化，需要重新核对差异。',
-            'The page changed after review; reconcile the differences.',
-          ),
+    error: t(
+      '审核后页面发生变化，需要重新核对差异。',
+      'The page changed after review; reconcile the differences.',
+    ),
     comments: story.comments,
     // Snoozed (execution/snooze.ts): acceptance waits for the client's reply.
     ...(key === 'approval-version'
@@ -175,7 +163,7 @@ const CHANGES: ChangeTask[] = [
 const CRM_CHANGES: ChangeTask[] = [
   [
     19,
-    'failed',
+    'ready',
     t('回传失败后重试即可。', 'Retry a failed callback.'),
     t(
       '按事件编号核对已处理记录，再从确认点重放。',
@@ -259,16 +247,10 @@ const CRM_CHANGES: ChangeTask[] = [
       '演示页面内容修订，保留原稿供核对。',
       'Demo page revision; keep the previous copy for review.',
     ),
-    error:
-      i === 0
-        ? t(
-            '找不到回传重放的测试数据，模拟执行停止，未修改页面。',
-            'Callback replay fixtures were missing; the simulated run stopped without changing the page.',
-          )
-        : t(
-            '审核后目标页面发生变化，需要重新核对差异。',
-            'The target page changed after review; reconcile the differences.',
-          ),
+    error: t(
+      '审核后目标页面发生变化，需要重新核对差异。',
+      'The target page changed after review; reconcile the differences.',
+    ),
     comments: story.comments,
   };
 });
@@ -303,11 +285,9 @@ function build(
     new Date(now - days * DAY + hours * HOUR).toISOString();
   const owner = people[change.owner] ?? context.actorId;
   const work = projectWork({});
-  const failed = change.state === 'failed';
   // Where the task is: the Agent's step, the review, the release, or watching the effect.
-  const index = failed
-    ? 0
-    : change.state === 'ready'
+  const index =
+    change.state === 'ready'
       ? 1
       : change.state === 'live'
         ? 3
@@ -352,12 +332,10 @@ function build(
   const started = change.age - 0.2;
   const usage = {
     inputTokens: Math.round(
-      (failed ? 3400 : 9200) +
-        context.clock.sample(`input:${change.key}`) * 12000,
+      9200 + context.clock.sample(`input:${change.key}`) * 12000,
     ),
     outputTokens: Math.round(
-      (failed ? 120 : 1300) +
-        context.clock.sample(`output:${change.key}`) * 1900,
+      1300 + context.clock.sample(`output:${change.key}`) * 1900,
     ),
   };
   const transcript: RunEvent[] = [
@@ -386,58 +364,33 @@ function build(
         limits: story.caseStudy.limitation,
       },
     },
-    ...(failed
-      ? [
-          {
-            seq: 5,
-            at: at(started, 0.05),
-            type: 'toolUse',
-            tool: 'Bash',
-            input: { command: `rg --files docs${change.path}` },
-          },
-          {
-            seq: 6,
-            at: at(started, 0.06),
-            type: 'toolResult',
-            tool: 'Bash',
-            output: text(change.error!),
-          },
-          {
-            seq: 7,
-            at: at(started, 0.08),
-            type: 'text',
-            content: text(change.error!),
-          },
-        ]
-      : [
-          {
-            seq: 5,
-            at: at(started, 0.05),
-            type: 'toolUse',
-            tool: 'Write',
-            input: {
-              path: `docs${change.path === '/' ? '/index' : change.path}.mdx`,
-            },
-          },
-          {
-            seq: 6,
-            at: at(started, 0.06),
-            type: 'toolResult',
-            tool: 'Write',
-            output: {
-              saved: true,
-              after: text(change.after),
-              checks: story.caseStudy.checks,
-              simulated: true,
-            },
-          },
-          {
-            seq: 7,
-            at: at(started, 0.08),
-            type: 'text',
-            content: `${text(change.after)}\n\n${story.caseStudy.checks}\n\n${story.caseStudy.limitation}`,
-          },
-        ]),
+    {
+      seq: 5,
+      at: at(started, 0.05),
+      type: 'toolUse',
+      tool: 'Write',
+      input: {
+        path: `docs${change.path === '/' ? '/index' : change.path}.mdx`,
+      },
+    },
+    {
+      seq: 6,
+      at: at(started, 0.06),
+      type: 'toolResult',
+      tool: 'Write',
+      output: {
+        saved: true,
+        after: text(change.after),
+        checks: story.caseStudy.checks,
+        simulated: true,
+      },
+    },
+    {
+      seq: 7,
+      at: at(started, 0.08),
+      type: 'text',
+      content: `${text(change.after)}\n\n${story.caseStudy.checks}\n\n${story.caseStudy.limitation}`,
+    },
     {
       seq: 8,
       at: at(started, 0.09),
@@ -456,7 +409,7 @@ function build(
     actor: owner,
     inputVersion: 1,
     capabilitySnapshot: ['repo.read', 'repo.write', 'pr.open'],
-    status: failed ? 'failed' : 'succeeded',
+    status: 'succeeded',
     createdAt: at(started, -0.05),
     startedAt: at(started),
     endedAt: at(started, 0.1),
@@ -469,9 +422,6 @@ function build(
     agentName: 'NocoReach Demo Agent',
     transcript,
     usage,
-    ...(failed
-      ? { error: 'agent_failed', errorDetail: text(change.error!) }
-      : {}),
   };
   work.latestRun = { id: runId, status: run.status };
   work.history.unshift({
@@ -520,57 +470,38 @@ function build(
       },
     ],
   };
-  let artifact: Artifact | undefined;
-  if (!failed) {
-    artifact = {
-      id: `editorial-${change.key}`,
-      planVersion: 0,
-      stepId: stages[0].key,
-      version: 1,
-      createdAt: at(started, 0.1),
-      createdBy: 'agent',
-      runId,
-      content: `${content.notice}# ${text(change.title)}\n\n**${text(change.label)}**\n\n| ${lang === 'zh' ? '修改前' : 'Before'} | ${lang === 'zh' ? '修改后' : 'After'} |\n| --- | --- |\n| ${text(change.before)} | ${text(change.after)} |\n\n${story.caseStudy.document}\n\n## ${lang === 'zh' ? '复核清单与边界' : 'Review checklist and limits'}\n\n${story.caseStudy.checks}\n\n${story.caseStudy.limitation}`,
-      pr,
-      ...(index > 1
-        ? { approvedAt: at(change.age - 1.5), approvedBy: owner }
-        : {}),
-    };
-    work.results = [artifact];
-    run.artifactId = artifact.id;
+  const artifact: Artifact = {
+    id: `editorial-${change.key}`,
+    planVersion: 0,
+    stepId: stages[0].key,
+    version: 1,
+    createdAt: at(started, 0.1),
+    createdBy: 'agent',
+    runId,
+    content: `${content.notice}# ${text(change.title)}\n\n**${text(change.label)}**\n\n| ${lang === 'zh' ? '修改前' : 'Before'} | ${lang === 'zh' ? '修改后' : 'After'} |\n| --- | --- |\n| ${text(change.before)} | ${text(change.after)} |\n\n${story.caseStudy.document}\n\n## ${lang === 'zh' ? '复核清单与边界' : 'Review checklist and limits'}\n\n${story.caseStudy.checks}\n\n${story.caseStudy.limitation}`,
+    pr,
+    ...(index > 1
+      ? { approvedAt: at(change.age - 1.5), approvedBy: owner }
+      : {}),
+  };
+  work.results = [artifact];
+  run.artifactId = artifact.id;
+  work.history.push({
+    at: artifact.createdAt,
+    actor: 'system',
+    action: 'runSucceeded',
+    runId,
+    artifactId: artifact.id,
+    stageKey: stages[0].key,
+  });
+  if (artifact.approvedAt)
     work.history.push({
-      at: artifact.createdAt,
-      actor: 'system',
-      action: 'runSucceeded',
-      runId,
+      at: artifact.approvedAt,
+      actor: owner,
+      action: 'approveStage',
+      stageKey: stages[1].key,
       artifactId: artifact.id,
-      stageKey: stages[0].key,
     });
-    if (artifact.approvedAt)
-      work.history.push({
-        at: artifact.approvedAt,
-        actor: owner,
-        action: 'approveStage',
-        stageKey: stages[1].key,
-        artifactId: artifact.id,
-      });
-  } else {
-    work.history.push(
-      {
-        at: run.endedAt!,
-        actor: 'system',
-        action: 'runFailed',
-        runId,
-        note: text(change.error!),
-      },
-      {
-        at: at(started, 0.2),
-        actor: owner,
-        action: 'comment',
-        comment: text(change.error!),
-      },
-    );
-  }
   if (index >= 2) {
     const release: Release = {
       state: 'merging',
@@ -710,7 +641,6 @@ export async function writeChangeTasks(
           title: change.title[lang],
           brief: `${content.notice}${(domain === 'crm.acme.example' ? content.secondTasks : content.stories).find((story) => story.path === change.path)!.brief}\n\n${lang === 'zh' ? '本轮页面改动' : 'Page change in this run'}: ${change.before[lang]} → ${change.after[lang]}`,
           status: {
-            failed: '进行中',
             ready: '待确认',
             merge_failed: '待确认',
             verifying: '进行中',
@@ -752,7 +682,6 @@ export async function writeChangeTasks(
 interface Exchange {
   ask: L;
   answer: L;
-  failed?: L;
 }
 interface Conversation {
   person: DemoPerson | 'admin';
@@ -771,15 +700,7 @@ const CONVERSATIONS: Conversation[] = [0, 1, 3, 9].map((index, i) => {
       { ask: ACME_DISCUSSIONS[index].title, answer: story.brief },
       {
         ask: t('下一步先验证什么？', 'What should we verify next?'),
-        answer: i === 2 ? t('', '') : story.comments[1][1],
-        ...(i === 2
-          ? {
-              failed: t(
-                '模拟模型响应超时，这一轮未完成，可重新发送。',
-                'The simulated model timed out; this turn did not finish and may be retried.',
-              ),
-            }
-          : {}),
+        answer: story.comments[1][1],
       },
     ],
   };
@@ -837,9 +758,9 @@ export async function writeConversations(
       const created = start + i * 6 * 60_000;
       const usage = {
         inputTokens: 3_200 + i * 1_400,
-        outputTokens: turn.failed ? 0 : 420 + i * 90,
+        outputTokens: 420 + i * 90,
       };
-      const output = turn.failed ? '' : turn.answer[lang];
+      const output = turn.answer[lang];
       const requestId = randomUUID();
       return {
         id: `online-run-${requestId}`,
@@ -853,24 +774,20 @@ export async function writeConversations(
         model: used,
         instructions: '',
         input: turn.ask[lang],
-        status: turn.failed ? 'failed' : 'completed',
+        status: 'completed',
         createdAt: new Date(created).toISOString(),
         startedAt: new Date(created + 1_000).toISOString(),
-        finishedAt: new Date(
-          created + (turn.failed ? 120_000 : 9_000),
-        ).toISOString(),
+        finishedAt: new Date(created + 9_000).toISOString(),
         deadline: null,
         holder: null,
         cancelRequested: false,
         output,
-        events: turn.failed
-          ? []
-          : [
-              { type: 'text', text: output },
-              { type: 'usage', model: used.model, usage },
-            ],
+        events: [
+          { type: 'text', text: output },
+          { type: 'usage', model: used.model, usage },
+        ],
         usage,
-        error: turn.failed ? turn.failed[lang] : null,
+        error: null,
         revision: 0,
       };
     });

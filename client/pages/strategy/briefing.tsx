@@ -1,9 +1,10 @@
+import { formatTime, localDateKey } from '#lib/format';
 import { $t, $tj, $legacyText, getCurrentLocale } from '#i18n';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '#lib/utils';
-import { formatCount } from '#lib/format';
+import { formatCount, formatDate } from '#lib/format';
 import { Tag, type Tone } from '#components/reach/tag';
 import { ActorAvatar, AiMark } from '#components/reach/actor';
 import { Button } from '#components/ui/button';
@@ -17,9 +18,17 @@ import {
   chipOf,
   percent,
   type MetricItem,
+  type MetricWindow,
 } from './insights-view';
 import { citedSignals, oppNo, taskNo, type Row } from './board';
-import { dayOf, type Day, type Feed, type Line } from './feed';
+import {
+  conversationDayOf,
+  conversationDaysByLocalDay,
+  dayOf,
+  type Day,
+  type Feed,
+  type Line,
+} from './feed';
 import { TASK_TAG } from './task-standing';
 import { severalTag } from './places-model';
 import { handOffLabel } from './hand-off';
@@ -30,7 +39,6 @@ import {
   questionCount,
   useInsightChat,
 } from './threads';
-import { recentlyEnded } from './watch';
 import type { InsightBatch, StrategyState, WatchRecord } from './model';
 
 // Insights as a conversation with the daily analysis (2026-10-21 user decision: the brief of sections read like
@@ -74,10 +82,12 @@ export function MetricTiles({
   metrics,
   overview,
   days,
+  window,
 }: {
   metrics: MetricItem[];
   overview: RequestState;
   days: number;
+  window?: MetricWindow;
 }) {
   const items = metrics.filter((i) => i.value != null).slice(0, 5);
   return (
@@ -88,10 +98,18 @@ export function MetricTiles({
       empty={!items.length}
       emptyText={$t('strategy.noDataYet')}
     >
-      {/* What the numbers and their changes cover, quietly above them (2026-10-22: the period left the subtitle). */}
+      {/* What the numbers and their changes cover, quietly above them (2026-10-22: the period left the subtitle): the
+          shared window's dates, written as the data pages write their range (2026-10-29 user request), so the line
+          reads the same on the page a card opens. */}
       <div className='flex min-w-0 flex-1 flex-col gap-1.5'>
-        <p className='text-xs text-muted-foreground'>
-          {$t('strategy.metricWindow', { 0: days })}
+        <p className='text-xs text-muted-foreground' data-metric-window=''>
+          {window
+            ? $t('common.comparedPreviousDays', {
+                0: formatDate(window.start),
+                1: formatDate(window.end),
+                2: window.days,
+              })
+            : $t('strategy.metricWindow', { 0: days })}
         </p>
         <div className='grid min-w-0 grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3'>
           {items.map((i) => (
@@ -134,8 +152,7 @@ export function MetricTiles({
   );
 }
 
-const localDay = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const localDay = localDateKey;
 function dayLabel(day: string, now: Date) {
   const date = new Date(`${day}T00:00:00`),
     locale = getCurrentLocale(),
@@ -146,13 +163,7 @@ function dayLabel(day: string, now: Date) {
     return `${$t('strategy.dayYesterday')} · ${text}`;
   return text;
 }
-const clock = (iso?: string) =>
-  iso
-    ? new Date(iso).toLocaleTimeString(getCurrentLocale(), {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : '';
+const clock = (iso?: string) => (iso ? formatTime(iso) : '');
 
 /** A day in the conversation: its date between two rules. */
 function DayDivider({ label }: { label: string }) {
@@ -606,14 +617,19 @@ export function Today({
   situation?: ReactNode;
 } & Decide) {
   const [now] = useState(() => new Date()),
-    docked = useInsightChat()?.docked;
+    chat = useInsightChat(),
+    docked = chat?.docked;
   const batch = state.insights,
-    watching = Object.values(state.watch || {}).filter((w) => !w.ended).length;
+    watching = Object.values(state.watch || {}).filter((w) => !w.ended).length,
+    today = dayOf(batch?.generatedAt) || localDay(now),
+    conversationDays =
+      conversationDaysByLocalDay(state, [
+        conversationDayOf(batch?.generatedAt),
+        ...(chat?.threads || []).map((t) => t.subject.day),
+      ]).get(today) || [];
   return (
     <>
-      <DayDivider
-        label={dayLabel(dayOf(batch?.generatedAt) || localDay(now), now)}
-      />
+      <DayDivider label={dayLabel(today, now)} />
       {situation}
       <AgentMessage
         meta={
@@ -636,16 +652,21 @@ export function Today({
             {...decide}
           />
         )}
-        {recentlyEnded(state, 1).map((w) => (
-          <Ended key={w.key} w={w} rows={rows} />
-        ))}
+        {Object.values(state.watch || {})
+          .filter((w) => w.ended && dayOf(w.ended.at) >= today)
+          .sort((a, b) => b.ended!.at.localeCompare(a.ended!.at))
+          .map((w) => (
+            <Ended key={w.key} w={w} rows={rows} />
+          ))}
         {tasks}
         <HealthNote projectId={projectId} />
       </AgentMessage>
       {docked ? (
         <InPanelNote />
       ) : (
-        <DayConversation day={dayOf(batch?.generatedAt)} folded />
+        conversationDays.map((day) => (
+          <DayConversation key={day} day={day} folded />
+        ))
       )}
     </>
   );
@@ -684,9 +705,23 @@ function StatusTag({ row, st, task, tasks }: Line) {
   );
 }
 /** An earlier day, folded to one line: what was suggested and where each went; opens to the list. */
-function PastDay({ day, rows, now }: { day: Day; rows: Row[]; now: Date }) {
+function PastDay({
+  day,
+  rows,
+  now,
+  conversationDays,
+}: {
+  day: Day;
+  rows: Row[];
+  now: Date;
+  conversationDays: string[];
+}) {
   const [open, setOpen] = useState(false),
-    asked = questionCount(useInsightChat()?.threads || [], day.day);
+    threads = useInsightChat()?.threads || [],
+    asked = conversationDays.reduce(
+      (n, key) => n + questionCount(threads, key),
+      0,
+    );
   return (
     <section
       aria-label={dayLabel(day.day, now)}
@@ -737,7 +772,9 @@ function PastDay({ day, rows, now }: { day: Day; rows: Row[]; now: Date }) {
               {day.ended.map((w) => (
                 <Ended key={w.key} w={w} rows={rows} />
               ))}
-              <DayConversation day={day.day} />
+              {conversationDays.map((key) => (
+                <DayConversation key={key} day={key} />
+              ))}
             </>
           )}
         </div>
@@ -776,10 +813,12 @@ export function FoldedSituation({
  * one line, then a week at a time, the oldest shown at the top so the page reads down to today and its conversation.
  */
 export function History({
+  state,
   days: feedDays,
   today,
   rows,
 }: {
+  state: StrategyState;
   days: Day[];
   today: string;
   rows: Row[];
@@ -787,15 +826,16 @@ export function History({
   const [shown, setShown] = useState(0),
     [now] = useState(() => new Date()),
     threads = useInsightChat()?.threads || [];
-  // A day whose analysis raised nothing but was asked about still shows, for its questions.
-  const known = new Set(feedDays.map((d) => d.day)),
-    asked = [...new Set(threads.map((t) => t.subject.day))].filter(
-      (d) => !known.has(d) && (!today || d < today),
-    ),
-    days = [
-      ...feedDays,
-      ...asked.map((day): Day => ({ day, items: [], ended: [] })),
-    ].sort((a, b) => b.day.localeCompare(a.day));
+  const conversations = conversationDaysByLocalDay(
+    state,
+    threads.map((t) => t.subject.day),
+  );
+  const byDay = new Map(feedDays.map((day) => [day.day, day]));
+  for (const day of conversations.keys()) {
+    if ((!today || day < today) && !byDay.has(day))
+      byDay.set(day, { day, items: [], ended: [] });
+  }
+  const days = [...byDay.values()].sort((a, b) => b.day.localeCompare(a.day));
   if (!days.length) return null;
   const hide = (
     <button
@@ -828,7 +868,13 @@ export function History({
         .slice(0, shown)
         .reverse()
         .map((d) => (
-          <PastDay key={d.day} day={d} rows={rows} now={now} />
+          <PastDay
+            key={d.day}
+            day={d}
+            rows={rows}
+            now={now}
+            conversationDays={conversations.get(d.day) || []}
+          />
         ))}
       {/* Folding again from just above today, where the reader is after scrolling through them. */}
       {shown > 0 && <div className='flex justify-center'>{hide}</div>}

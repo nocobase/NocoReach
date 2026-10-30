@@ -1,3 +1,4 @@
+import { formatDate } from '#lib/format';
 import { getCurrentLocale, $t } from "#i18n";
 // 交给 Agent from the search pages (2026-10-03): what the person selected becomes one task whose brief carries the data
 // behind it (where it ranks, how many people see and click it, which page), with the 做法 that fits by default.
@@ -106,7 +107,7 @@ export function contentPageDraft(p: ContentPage, rangeLabel: string): TaskDraft 
 export type TrackedRow = { keyword: string; market: string; latest: { at: string; position: number | null; url: string | null } | null; previous: { at: string; position: number | null } | null; gsc?: { position: number; clicks: number; page: string } };
 export function trackedDraft(rows: TrackedRow[]): TaskDraft {
   const head = rows[0].keyword, ranked = rows.some((r) => r.latest?.position || r.gsc);
-  const lines = rows.slice(0, 40).map((r) => `- ${r.keyword}（${r.market}）：${r.latest ? $t('seoHandOff.googleRank',{0:r.latest.at.slice(0, 10),1:r.latest.position ?? $t('common.beyond100'),2:r.latest.position ? $t('seoHandOff.personMeasure') : "",3:r.latest.url ? `（${r.latest.url}）` : ""}) : $t('seoHandOff.notCheckedYet')}${r.previous ? $t('seoHandOff.lastTimeRank',{0:r.previous.position ?? $t('common.beyond100'),1:r.previous.position ? $t('seoHandOff.personMeasure') : ""}) : ""}${r.gsc ? $t('seoHandOff.searchConsoleAveragePositionOver',{0:r.gsc.position.toFixed(1),1:n(r.gsc.clicks)}) : ""}`);
+  const lines = rows.slice(0, 40).map((r) => `- ${r.keyword}（${r.market}）：${r.latest ? $t('seoHandOff.googleRank',{0:formatDate(r.latest.at),1:r.latest.position ?? $t('common.beyond100'),2:r.latest.position ? $t('seoHandOff.personMeasure') : "",3:r.latest.url ? `（${r.latest.url}）` : ""}) : $t('seoHandOff.notCheckedYet')}${r.previous ? $t('seoHandOff.lastTimeRank',{0:r.previous.position ?? $t('common.beyond100'),1:r.previous.position ? $t('seoHandOff.personMeasure') : ""}) : ""}${r.gsc ? $t('seoHandOff.searchConsoleAveragePositionOver',{0:r.gsc.position.toFixed(1),1:n(r.gsc.clicks)}) : ""}`);
   return {
     pages: pagesOf([trackedPage(rows), ...rows.map((r) => r.latest?.url || r.gsc?.page)]),
     title: clip(rows.length === 1 ? $t('seoHandOff.improveRanking',{0:head}) : $t('seoHandOff.improveRankingMoreKeywords',{0:head,1:rows.length}), 200),
@@ -179,7 +180,7 @@ export type CompetitorEvent = { competitor: string; type: "page" | "release" | "
 export function competitorEventsDraft(rows: CompetitorEvent[]): TaskDraft {
   const names = [...new Set(rows.map((r) => r.competitor))];
   const label = { page: $t('common.newPages'), release: $t('common.newRelease'), site: $t('common.websiteChanges') } as const;
-  const lines = rows.slice(0, 40).map((r) => $t('seoHandOff.found',{0:r.competitor,1:label[r.type],2:r.title,3:r.at.slice(0, 10),4:r.url,5:r.detail ? `\n  ${r.detail}` : ""}));
+  const lines = rows.slice(0, 40).map((r) => $t('seoHandOff.found',{0:r.competitor,1:label[r.type],2:r.title,3:formatDate(r.at),4:r.url,5:r.detail ? `\n  ${r.detail}` : ""}));
   return {
     title: clip($t('seoHandOff.competitorComparisonNewActivities',{0:names.join("、"),1:rows.length}), 200),
     subject: clip(countOf(names.join('、'), rows.length, 'activities'), 160),

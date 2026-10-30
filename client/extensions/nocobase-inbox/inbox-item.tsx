@@ -1,3 +1,4 @@
+import { formatDateTime } from '#lib/format';
 import { CheckCircle2Icon, MoreHorizontalIcon } from 'lucide-react';
 import { createElement, type KeyboardEvent, type ReactElement } from 'react';
 
@@ -214,7 +215,10 @@ function ItemCard({
             <time
               className='ml-auto shrink-0 text-xs text-muted-foreground tabular-nums group-has-focus-visible:invisible group-hover:invisible group-has-data-popup-open:invisible'
               dateTime={item.createdAt}
-              title={new Date(item.createdAt).toLocaleString(language)}
+              title={formatDateTime(item.createdAt, {
+                locale: language,
+                withYear: true,
+              })}
             >
               {relativeTime(item.createdAt, language)}
             </time>

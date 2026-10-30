@@ -200,7 +200,8 @@ describe('下载量', () => {
     await ready();
     const releases = document.querySelector('[data-releases]') as HTMLElement;
     expect(within(releases).getByText('2.1.0')).toBeTruthy();
-    expect(within(releases).getByText('6 天前')).toBeTruthy();
+    const latest = within(releases).getByText('2.1.0').closest('li')!;
+    expect(within(latest).getByText('5 天前')).toBeTruthy();
     expect(
       within(releases).getByText(
         '本期发布：npm 2 个版本 · Docker 1 个标签 · GitHub 1 个 Release',

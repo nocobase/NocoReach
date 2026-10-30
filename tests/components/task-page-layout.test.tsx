@@ -1,3 +1,4 @@
+import { formatDateTime } from '../../client/lib/format';
 import { NavigationGuardProvider } from '@nocobase/app-client';
 import {
   cleanup,
@@ -1424,6 +1425,8 @@ test('Snooze… puts the task aside until a day with what it waits for', async (
       command: string,
       init?: { body?: Record<string, unknown> },
     ) => {
+      if (resource === 'nrAnalysis')
+        return Promise.resolve({ schedule: { timezone: 'Asia/Shanghai' } });
       if (resource === 'nrPlaybooks') return Promise.resolve({ playbooks: [] });
       if (command === 'members')
         return Promise.resolve([{ id: '1', name: 'Super Admin' }]);
@@ -1443,12 +1446,18 @@ test('Snooze… puts the task aside until a day with what it waits for', async (
     within(dialog).getByRole('button', { name: '2 周后' }),
   ).toHaveAttribute('aria-pressed', 'true');
   expect(dialog).toHaveTextContent('上午 9 点回来，并提醒 Super Admin');
+  await within(dialog).findByText(/Asia\/Shanghai/);
   await user.type(
     within(dialog).getByRole('textbox', { name: '在等什么' }),
     '等权限文档写好',
   );
   await user.click(within(dialog).getByRole('button', { name: '延后' }));
-  const day = new Date(Date.now() + 14 * 86400000);
+  const day = new Date(
+    new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(
+      new Date(),
+    ) + 'T12:00:00',
+  );
+  day.setDate(day.getDate() + 14);
   const pad = (n: number) => String(n).padStart(2, '0');
   expect(commands).toEqual([
     expect.objectContaining({
@@ -1487,6 +1496,8 @@ test('a snoozed task says so first, keeps its card, and can be unsnoozed', async
       command: string,
       init?: { body?: Record<string, unknown> },
     ) => {
+      if (resource === 'nrAnalysis')
+        return Promise.resolve({ schedule: { timezone: 'Asia/Shanghai' } });
       if (resource === 'nrPlaybooks') return Promise.resolve({ playbooks: [] });
       if (command === 'members')
         return Promise.resolve([{ id: '1', name: 'Super Admin' }]);
@@ -1501,12 +1512,14 @@ test('a snoozed task says so first, keeps its card, and can be unsnoozed', async
   const heading = screen.getByRole('heading', { level: 1 }).parentElement!;
   expect(heading).toHaveTextContent('已延后');
   const card = screen.getByRole('region', { name: '已延后' });
-  expect(card).toHaveTextContent('已延后到 2099 年 11 月 11 日');
+  expect(card).toHaveTextContent(
+    `已延后到 ${formatDateTime(data.work.snooze!.until)}`,
+  );
   expect(card).toHaveTextContent('等权限文档写好 · Super Admin 10-28 延后');
   // The stage card stays, to act on.
   expect(screen.getByRole('region', { name: '等你处理' })).toBeVisible();
   expect(screen.getByRole('region', { name: '动态' })).toHaveTextContent(
-    '把任务延后到 2099-11-11：等权限文档写好',
+    `把任务延后到 ${formatDateTime(data.work.snooze!.until)}：等权限文档写好`,
   );
   // Snooze… is not offered again: the row changes the day.
   await user.click(screen.getByRole('button', { name: '更多' }));
@@ -1662,3 +1675,125 @@ test('Request changes on the reading page goes back to the task, into the messag
   );
   expect(action.mock.calls.some(([, c]) => c === 'advance')).toBe(false);
 });
+
+test('saving an existing snooze keeps its configuration day after the schedule timezone loads', async () => {
+  const data = pageChange();
+  data.work.snooze = {
+    until: '2099-11-11T01:00:00Z',
+    day: '2099-11-11',
+    reason: 'Waiting for documentation',
+    at: '2026-10-28T13:05:00Z',
+    by: '1',
+  };
+  const schedule = Promise.withResolvers<{ schedule: { timezone: string } }>();
+  const commands: Record<string, unknown>[] = [];
+  action.mockImplementation(
+    (
+      resource: string,
+      command: string,
+      init?: { body?: Record<string, unknown> },
+    ) => {
+      if (resource === 'nrAnalysis') return schedule.promise;
+      if (resource === 'nrPlaybooks') return Promise.resolve({ playbooks: [] });
+      if (command === 'members')
+        return Promise.resolve([{ id: '1', name: 'Super Admin' }]);
+      if (command === 'advance') {
+        commands.push(init!.body!);
+        return Promise.resolve(data);
+      }
+      return Promise.resolve([]);
+    },
+  );
+  mount(data);
+  await userEvent.click(
+    within(screen.getByRole('region', { name: '已延后' })).getByRole('button', {
+      name: '改日期',
+    }),
+  );
+  const dialog = await screen.findByRole('dialog', { name: '改延后日期' });
+  const save = within(dialog).getByRole('button', {
+    name: '保存',
+    exact: true,
+  });
+  expect(save).toBeDisabled();
+  schedule.resolve({ schedule: { timezone: 'Asia/Shanghai' } });
+  await within(dialog).findByText(/Asia\/Shanghai/);
+  await userEvent.click(save);
+  expect(commands).toEqual([
+    expect.objectContaining({
+      command: 'snoozeTask',
+      day: '2099-11-11',
+      reason: 'Waiting for documentation',
+    }),
+  ]);
+});
+
+test.each([
+  'missing schedule',
+  'missing timezone',
+  'invalid timezone',
+  'request failed',
+])(
+  'an unavailable snooze timezone does not block saving the configured calendar day: %s',
+  async (failure) => {
+    const data = pageChange();
+    data.work.snooze = {
+      until: '2099-11-11T01:00:00Z',
+      day: '2099-11-11',
+      at: '2026-10-28T13:05:00Z',
+      by: '1',
+    };
+    const commands: Record<string, unknown>[] = [];
+    action.mockImplementation(
+      (
+        resource: string,
+        command: string,
+        init?: { body?: Record<string, unknown> },
+      ) => {
+        if (resource === 'nrAnalysis') {
+          if (failure === 'request failed')
+            return Promise.reject(new Error('Synthetic network failure'));
+          return Promise.resolve({
+            schedule:
+              failure === 'missing schedule'
+                ? null
+                : {
+                    timezone:
+                      failure === 'invalid timezone' ? 'Mars/Olympus' : null,
+                  },
+          });
+        }
+        if (resource === 'nrPlaybooks')
+          return Promise.resolve({ playbooks: [] });
+        if (command === 'members')
+          return Promise.resolve([{ id: '1', name: 'Super Admin' }]);
+        if (command === 'advance') {
+          commands.push(init!.body!);
+          return Promise.resolve(data);
+        }
+        return Promise.resolve([]);
+      },
+    );
+    mount(data);
+    await userEvent.click(
+      within(screen.getByRole('region', { name: '已延后' })).getByRole(
+        'button',
+        { name: '改日期' },
+      ),
+    );
+    const dialog = await screen.findByRole('dialog', { name: '改延后日期' });
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      '未配置时，使用服务器时区',
+    );
+    expect(dialog).toHaveTextContent('自动运行所用时区');
+    const save = within(dialog).getByRole('button', {
+      name: '保存',
+      exact: true,
+    });
+    expect(save).toBeEnabled();
+    await userEvent.click(save);
+    expect(commands).toEqual([
+      expect.objectContaining({ command: 'snoozeTask', day: '2099-11-11' }),
+    ]);
+  },
+);

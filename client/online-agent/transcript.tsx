@@ -1,18 +1,30 @@
 /* eslint-disable @eslint-react/no-array-index-key -- durable events are append-only within one keyed run */
 import { CornerDownRight, WrenchIcon } from 'lucide-react';
 import { cn } from 'cn';
-import { $t, getCurrentLocale } from '#i18n';
+import { $t } from '#i18n';
+import { formatDateTime } from '#lib/format';
 import { ChatMarkdown } from '../extensions/nocobase-agent-chat/chat-markdown.js';
 import {
   onlineRunActive,
+  onlineRunContinuable,
   type OnlineEvent,
   type OnlineRun,
 } from '../../shared/online-agent.js';
 import { OnlineApiError } from './api.js';
 import { OnlineError } from './controls.js';
+import { OnlineCutOff } from './cut-off.js';
 import { parseQuote } from './quote.js';
 import { toolCard, toolLabel } from './tool-cards.js';
-export function OnlineTranscript({ run }: { run: OnlineRun }) {
+export function OnlineTranscript({
+  run,
+  onContinue,
+  continuing,
+}: {
+  run: OnlineRun;
+  /** Continues this reply after it stopped partway; given for the conversation's latest turn. */
+  onContinue?: () => void;
+  continuing?: boolean;
+}) {
   // Markdown must see a complete text segment, not one renderer per streaming delta.
   const parts: Extract<OnlineEvent, { type: 'text' | 'toolCall' }>[] = [];
   const results = new Map<
@@ -28,6 +40,7 @@ export function OnlineTranscript({ run }: { run: OnlineRun }) {
     } else if (event.type === 'toolCall') parts.push(event);
   }
   const active = onlineRunActive(run),
+    cutOff = onlineRunContinuable(run),
     { quote, question } = parseQuote(run.input);
   const hasText = parts.some(
     (part) => part.type === 'text' && part.text.trim(),
@@ -110,14 +123,17 @@ export function OnlineTranscript({ run }: { run: OnlineRun }) {
           );
         })}
         {!hasText && run.output && <ChatMarkdown content={run.output} />}
-        {(active || run.status === 'cancelled' || run.status === 'failed') && (
+        {(active ||
+          run.status === 'cancelled' ||
+          (run.status === 'failed' && !cutOff)) && (
           <p role='status' className='text-sm text-muted-foreground'>
             {$t(`onlineAgent.${status}`)}
           </p>
         )}
-        {run.error && (
+        {run.error && !cutOff && (
           <OnlineError error={new OnlineApiError(409, run.error)} />
         )}
+        <OnlineCutOff run={run} onContinue={onContinue} busy={continuing} />
         {!active && (
           <details className='text-xs text-muted-foreground'>
             <summary className='w-fit cursor-pointer rounded-sm py-1 focus-visible:outline-2 focus-visible:outline-ring'>
@@ -129,7 +145,10 @@ export function OnlineTranscript({ run }: { run: OnlineRun }) {
                 0: run.usage.inputTokens,
                 1: run.usage.outputTokens,
               })}{' '}
-              · {new Date(run.createdAt).toLocaleString(getCurrentLocale())}
+              {run.continued?.length
+                ? `· ${$t('onlineAgent.continuedTimes', { 0: run.continued.length })} `
+                : ''}
+              · {formatDateTime(run.createdAt)}
             </p>
           </details>
         )}

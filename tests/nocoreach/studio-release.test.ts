@@ -1,7 +1,13 @@
 // @vitest-environment node
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -157,5 +163,94 @@ describe('Studio release preflight', () => {
     );
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('Missing NB_STUDIO_API_KEY');
+  });
+
+  it('exits unsuccessfully when Studio accepts an upload but requires approval', () => {
+    mkdirSync(join(directory, 'storage/exports'), { recursive: true });
+    writeFileSync(
+      join(directory, 'storage/exports/dist.tar.gz'),
+      'fixture archive',
+    );
+    const cli = join(directory, 'pending-cli.mjs');
+    writeFileSync(
+      cli,
+      `#!/usr/bin/env node
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+const checksum = createHash('sha256').update(readFileSync('storage/exports/dist.tar.gz')).digest('hex');
+console.log(JSON.stringify({ ok: true, status: 'success', result: { data: {
+  superseded: false,
+  release: { id: 'release-1', appId: 'reach', sourceCommit: process.env.GITHUB_SHA, checksum },
+  deployed: { appId: 'reach', releaseId: 'release-1', request: { id: 'request-1', status: 'pending' } }
+} } }));
+`,
+    );
+    chmodSync(cli, 0o755);
+    const result = preflight(
+      {
+        ...deploymentConfig,
+        STUDIO_CLI: cli,
+        GITHUB_REPOSITORY: 'example/repository',
+      },
+      '',
+    );
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('Studio deployment pending approval');
+    expect(result.stdout).not.toContain('deployment succeeded');
+  });
+
+  it('verifies the new release commit passed by a workflow dispatched on main', () => {
+    const result = preflight(
+      {
+        ...deploymentConfig,
+        GITHUB_EVENT_NAME: 'workflow_dispatch',
+        GITHUB_REF: 'refs/heads/main',
+        GITHUB_SHA: 'a'.repeat(40),
+        STUDIO_RELEASE_TAG: `v${version}`,
+        STUDIO_RELEASE_SHA: releaseSha,
+      },
+      '--check-config',
+    );
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+  });
+
+  it.each([
+    { STUDIO_RELEASE_SHA: '' },
+    { STUDIO_RELEASE_TAG: '' },
+    { STUDIO_RELEASE_TAG: 'v1.2.3-beta.4\nref=bad' },
+    { STUDIO_RELEASE_SHA: 'main' },
+    { GITHUB_REF: 'refs/heads/feature' },
+    { GITHUB_EVENT_NAME: 'pull_request' },
+    { STUDIO_APP_ID: 'nocoreach' },
+  ])('rejects an invalid release workflow source: %j', (override) => {
+    const result = preflight(
+      {
+        ...deploymentConfig,
+        GITHUB_EVENT_NAME: 'workflow_dispatch',
+        GITHUB_REF: 'refs/heads/main',
+        STUDIO_RELEASE_TAG: `v${version}`,
+        STUDIO_RELEASE_SHA: releaseSha,
+        ...override,
+      },
+      '--check-config',
+    );
+    expect(result.status).toBe(1);
+  });
+
+  it('rejects a main commit that is different from the release tag', () => {
+    git('checkout', '--detach', releaseSha);
+    git('commit', '--allow-empty', '-m', 'Later main commit');
+    const later = git('rev-parse', 'HEAD');
+    git('update-ref', 'refs/remotes/origin/main', later);
+    try {
+      const result = preflight({}, '--check-release', later);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        'Release tag does not point to the checked-out commit',
+      );
+    } finally {
+      git('update-ref', 'refs/remotes/origin/main', releaseSha);
+    }
   });
 });

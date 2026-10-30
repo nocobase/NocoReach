@@ -1,3 +1,4 @@
+import { localDateKey } from '#lib/format';
 import { opportunityState, priorityRank, type Row } from './board';
 import type { StrategyState, WatchRecord } from './model';
 import type { TaskWork } from '../../../shared/task-pending.js';
@@ -5,8 +6,34 @@ import { taskStanding, type TaskStanding } from './task-standing';
 
 // Where each opportunity of Insights shows: in today's message or on an earlier day (briefing.tsx renders both).
 
-/** Days as yyyy-mm-dd, the way the analysis and the watch records date them. */
-export const dayOf = (iso?: string) => String(iso || '').slice(0, 10);
+/** Display grouping always uses the browser-local calendar day. */
+export const dayOf = localDateKey;
+/** Persisted Insights subjects retain their original UTC calendar key. */
+export const conversationDayOf = (iso?: string) =>
+  String(iso || '').slice(0, 10);
+
+/** Associate each existing subject once, using its latest known analysis timestamp. */
+export function conversationDaysByLocalDay(
+  state: StrategyState,
+  subjectDays: Iterable<string>,
+): Map<string, string[]> {
+  const displayDays = new Map<string, string>();
+  for (const batch of [state.insights, ...(state.insightHistory || [])]) {
+    if (!batch) continue;
+    const key = conversationDayOf(batch.generatedAt);
+    if (key && !displayDays.has(key))
+      displayDays.set(key, dayOf(batch.generatedAt));
+  }
+  const groups = new Map<string, string[]>();
+  for (const key of new Set(subjectDays)) {
+    if (!key) continue;
+    // A subject without its analysis is already a calendar identifier; do not invent a timestamp for it.
+    const day = displayDays.get(key) || key;
+    if (!groups.has(day)) groups.set(day, []);
+    groups.get(day)!.push(key);
+  }
+  return groups;
+}
 export type Standing = ReturnType<typeof opportunityState>;
 export type { TaskStanding };
 export type Line = {

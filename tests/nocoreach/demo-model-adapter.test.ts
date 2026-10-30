@@ -61,26 +61,26 @@ it('asks for the authorized current-project analysis and uses its opportunity li
   ).not.toContain('/opportunities?');
 });
 
-it.each(['ACME', 'ACME CRM'])(
+it.each(['Acme', 'Acme CRM'])(
   'keeps %s memory suggestions aligned with its product',
   async (project) => {
     const input = request({
       tag: 'memory-draft',
       prompt: JSON.stringify({
         project,
-        website: [{ text: 'ACME and ACME CRM are separate products.' }],
+        website: [{ text: 'Acme and Acme CRM are separate products.' }],
       }),
     });
     const reply = await demoAnswers()
       .find((answer) => answer.match(input))
       ?.reply(input);
     expect(String(reply)).toContain(
-      project === 'ACME' ? '项目管理' : '销售协作',
+      project === 'Acme' ? '项目管理' : '销售协作',
     );
     expect(String(reply)).not.toMatch(/NocoBase|低代码/);
   },
 );
-it.each(['ACME', 'ACME CRM'])(
+it.each(['Acme', 'Acme CRM'])(
   'keeps %s keyword seeds scoped and compatible with proposal provenance',
   async (project) => {
     const input = request({
@@ -100,7 +100,7 @@ it.each(['ACME', 'ACME CRM'])(
       ),
     ).toBe(true);
     expect(result.seeds.map((seed) => seed.seed)).toContain(
-      project === 'ACME' ? 'project management' : 'sales pipeline',
+      project === 'Acme' ? 'project management' : 'sales pipeline',
     );
     expect(JSON.stringify(result)).not.toMatch(
       /nocobase|low code|internal tool builder/i,

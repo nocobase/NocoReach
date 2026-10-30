@@ -1,7 +1,6 @@
 import { I18nRuntime } from '@nocobase/i18n';
 import { I18nProvider } from '@nocobase/i18n/client';
 import { act, cleanup, render, screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, expect, test, vi } from 'vitest';
 import {
@@ -11,6 +10,7 @@ import {
   useNocoReachLocale,
 } from '../../client/i18n';
 import locales from '../../client/locales';
+import { timeZoneName } from '../../client/lib/time-zone-name';
 import {
   HealthPanel,
   HealthAlert,
@@ -93,6 +93,7 @@ afterEach(() => {
   disconnect = undefined;
   setDictionary(null);
   action.mockReset();
+  vi.useRealTimers();
 });
 function Page() {
   useNocoReachLocale();
@@ -157,6 +158,8 @@ test('health panel, expanded table, alert and card preserve user content while s
 });
 
 test('the sync table says how often each source runs and links the daily analysis time to its setting', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-29T00:00:00Z'));
   const analysis = item('daily-analysis', '每日分析', {
     nameText: { key: 'dailyAnalysis.dailyAnalysis' },
     state: 'healthy',
@@ -193,7 +196,15 @@ test('the sync table says how often each source runs and links the daily analysi
     within(table).getByRole('columnheader', { name: '频率' }),
   ).toBeInTheDocument();
   const row = (name: string) => within(table).getByText(name).closest('tr')!;
-  expect(row('每日分析')).toHaveTextContent('每天 07:30 运行（中国标准时间）');
+  const localClock = new Intl.DateTimeFormat('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date('2026-10-29T23:30:00Z'));
+  const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  expect(row('每日分析')).toHaveTextContent(
+    `每天 ${localClock} 运行（${timeZoneName(browserZone, 'zh-CN')}）`,
+  );
   expect(row('每日分析')).not.toHaveTextContent('Asia/Shanghai');
   expect(row('每日分析')).toHaveTextContent('每天');
   expect(row('Reddit')).toHaveTextContent('每周');

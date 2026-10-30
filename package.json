@@ -1,7 +1,7 @@
 {
   "name": "nocoreach",
   "displayName": "nocoreach",
-  "version": "1.0.0-beta.72",
+  "version": "1.0.0-beta.73",
   "license": "Apache-2.0",
   "type": "module",
   "prettier": "@nocobase/dev-config/prettier",

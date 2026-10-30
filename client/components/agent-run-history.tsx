@@ -1,3 +1,4 @@
+import { formatDateTime, formatTime } from '#lib/format';
 import {
   BotIcon,
   ChevronRightIcon,
@@ -409,13 +410,7 @@ function relativeTime(iso: string | null | undefined, locale?: string): string {
 
 /** Date and time in `locale`, or "—". */
 function dateTimeText(iso: string | null | undefined, locale?: string): string {
-  const date = parse(iso);
-  return date
-    ? new Intl.DateTimeFormat(locale, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      }).format(date)
-    : '—';
+  return formatDateTime(iso, { locale, withYear: true });
 }
 
 /** "1m 05s" between two instants, or null when either is missing. */
@@ -1747,7 +1742,6 @@ export function RunTranscriptRow({
         </p>
       );
   }
-  const at = parse(event.at);
   return (
     <li
       data-type={event.type}
@@ -1770,11 +1764,7 @@ export function RunTranscriptRow({
         <span className='text-muted-foreground/70'>#{event.seq}</span>
         <span aria-hidden='true'>·</span>
         <time dateTime={event.at}>
-          {at
-            ? new Intl.DateTimeFormat(locale, { timeStyle: 'medium' }).format(
-                at,
-              )
-            : '—'}
+          {formatTime(event.at, { locale, seconds: true })}
         </time>
       </div>
     </li>
