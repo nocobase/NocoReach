@@ -1972,6 +1972,60 @@ it('an article picked by hand for a translation has its languages read, and a on
   ).toBe(false);
 });
 
+// With the Changes go to select below it (2026-10-30 user decision, merging #322 and #324), the summary keeps the
+// pages and leaves out the line saying where they are changed; an article keeps Change for its other choices.
+it('leaves the place line to the Changes go to select and keeps the pages', async () => {
+  const d = {
+    ...data,
+    articleTargets: [target],
+    work: {},
+  } as unknown as TaskData;
+  const pages = [
+    { url: 'https://www.example.com/pricing', title: 'Pricing' },
+    { url: 'https://www.example.com/features', title: 'Features' },
+  ];
+  const show = (choice: DeliveryChoice) =>
+    render(
+      <DeliverySummary
+        data={d}
+        choice={choice}
+        finding={false}
+        pages={pages}
+        hidePlace
+        allowed
+        busy={false}
+        onChange={() => {}}
+      />,
+    );
+  const { unmount } = show({ target: 'repo', mode: 'new', also: [] });
+  expect(screen.getByText('Pages to change')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Pricing' })).toBeInTheDocument();
+  expect(
+    screen.queryByText(
+      "Site pages · Changed in the site's code by pull request",
+    ),
+  ).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
+  unmount();
+  show({
+    target: 'cms',
+    mode: 'existing',
+    also: [],
+    article: {
+      targetId: 'cms',
+      articleId: '9',
+      slug: 'workflow-tools',
+      title: 'Workflow tools',
+      url: 'https://www.example.com/blog/workflow-tools',
+    },
+  });
+  expect(
+    screen.getByRole('link', { name: 'Workflow tools' }),
+  ).toBeInTheDocument();
+  expect(screen.queryByText('Blog post · Changed in NocoBase CMS')).toBeNull();
+  expect(screen.getByRole('button', { name: 'Change' })).toBeInTheDocument();
+});
+
 // Changes go to (2026-10-29): the website repositories and the publishing targets in one select, the repository
 // serving the task's pages preselected.
 it('offers the repositories and targets where a change goes, picking the repository by the page', async () => {

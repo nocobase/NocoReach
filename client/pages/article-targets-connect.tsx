@@ -65,6 +65,7 @@ import {
   ARTICLE_TARGET_KINDS,
   ARTICLE_TARGET_PRESETS,
   fill,
+  pagePattern,
   type ArticleTargetKind,
   type ArticleTargetView,
   type PublishedArticle,
@@ -761,12 +762,15 @@ function TargetCard({
           label: $t('repos.problem'),
           text: `${failure(c.code).replace(/[。.]$/u, '')} · ${formatDateTime(c.at)}`,
         };
-  const pageLocale = [...t.locales, ...Object.keys(t.pages || {})].find(
-      (l) => t.pages?.[l],
+  const pageLocale = [...t.locales, ...Object.keys(t.pages || {})].find((l) =>
+      pagePattern(t.pages, l),
     ),
     articleUrl =
       published?.slug && pageLocale
-        ? fill(t.pages![pageLocale], encodeURIComponent(published.slug))
+        ? fill(
+            pagePattern(t.pages, pageLocale)!,
+            encodeURIComponent(published.slug),
+          )
         : '';
   return (
     <StatusCard
