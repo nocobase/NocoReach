@@ -94,7 +94,34 @@ export function split(
   return out;
 }
 
-const CACHE_LIMIT = 4_000;
+// Per-date values a world keeps: a year and the year before it, the longest comparison reports make over full
+// data. Dates are kept by how long ago they are, not when last read, so a long report cannot evict recent days;
+// older dates are recomputed on each read.
+const KEPT_DAYS = 2 * 366;
+// Answers repeated within the hour, such as pages that read GA4 live; an oversized answer is kept only while paged.
+const ANSWER_CACHE_LIMIT = 32;
+const WORLD_CACHE_LIMIT = 8;
+
+/** Reads a bounded map as least recently used: a hit moves to the end, a miss evicts the oldest entries. */
+function recent<K, V>(
+  cache: Map<K, V>,
+  key: K,
+  limit: number,
+  compute: () => V,
+  retain: (value: V) => boolean = () => true,
+): V {
+  if (cache.has(key)) {
+    const value = cache.get(key) as V;
+    cache.delete(key);
+    cache.set(key, value);
+    return value;
+  }
+  const value = compute();
+  if (!retain(value)) return value;
+  while (cache.size >= limit) cache.delete(cache.keys().next().value as K);
+  cache.set(key, value);
+  return value;
+}
 
 /**
  * The demo world as one project sees it at one moment: its site, searches, visitors and communities, in the language
@@ -113,7 +140,7 @@ export class World {
   readonly origin: string;
   /** The Google Analytics property's time zone. */
   readonly timeZone: string;
-  private readonly visits = new Map<string, Visit[]>();
+  private readonly days = new Map<string, unknown>();
 
   constructor(
     readonly project: WorldProject,
@@ -248,10 +275,24 @@ export class World {
     );
   }
 
-  /** A day's visits, allocated from source down to browser so every report of that day adds up the same. */
+  /**
+   * A value derived from one date, such as its visits in compact form, computed once while the date lies within the
+   * kept history. `kind` names the value; it must be the same for the same derivation.
+   */
+  daily<T>(kind: string, date: string, compute: () => T): T {
+    const key = `${kind}:${date}`;
+    if (this.days.has(key)) return this.days.get(key) as T;
+    const value = compute();
+    const ago = daysAgo(date, this.local().date);
+    if (ago >= 0 && ago <= KEPT_DAYS) this.days.set(key, value);
+    return value;
+  }
+
+  /**
+   * A day's visits, allocated from source down to browser so every report of that day adds up the same. Each call
+   * allocates afresh; readers keep what they need through `daily`.
+   */
   visitsOn(date: string): Visit[] {
-    const cached = this.visits.get(date);
-    if (cached) return cached;
     const { date: today, hour } = this.local();
     const ago = daysAgo(date, today);
     const s = this.seeded;
@@ -348,9 +389,38 @@ export class World {
         },
       );
     });
-    if (this.visits.size > CACHE_LIMIT) this.visits.clear();
-    this.visits.set(date, out);
     return out;
+  }
+
+  private readonly answers = new Map<string, unknown>();
+  private large?: { key: string; value: unknown };
+  /**
+   * Remembers a recent answer for this world; the key must name everything the answer depends on. Answers `small`
+   * rejects share a single slot instead, enough for a reader paging through one; `forget` releases it early.
+   */
+  answer<T>(
+    key: string,
+    compute: () => T,
+    small: (value: T) => boolean = () => true,
+  ): T {
+    if (this.large?.key === key) return this.large.value as T;
+    return recent(
+      this.answers as Map<string, T>,
+      key,
+      ANSWER_CACHE_LIMIT,
+      () => {
+        const value = compute();
+        if (!small(value)) this.large = { key, value };
+        return value;
+      },
+      small,
+    );
+  }
+
+  /** Releases an answer before the world expires, such as a large report whose last page has been read. */
+  forget(key: string): void {
+    this.answers.delete(key);
+    if (this.large?.key === key) this.large = undefined;
   }
 
   private readonly memos = new Map<string, unknown>();
@@ -368,15 +438,22 @@ export class World {
 
 const worlds = new Map<string, World>();
 
-/** One world per project, language and hour: requests within the hour share computed days. */
+/** Release every cached edition of a retired or replaced project. */
+export function invalidateWorlds(projectId: string): void {
+  for (const [key, world] of worlds)
+    if (String(world.project.id) === String(projectId)) worlds.delete(key);
+}
+
+/** One current world per project; an LRU bound also covers abandoned projects. */
 export function worldFor(project: WorldProject, now: number): World {
   const key = `${project.id}:${project.domain}:${project.language}:${Math.floor(now / 3_600_000)}`;
-  let world = worlds.get(key);
-  if (!world) {
-    if (worlds.size > 16) worlds.clear();
-    world = new World(project, now);
-    worlds.set(key, world);
-  }
+  if (!worlds.has(key)) invalidateWorlds(project.id);
+  const world = recent(
+    worlds,
+    key,
+    WORLD_CACHE_LIMIT,
+    () => new World(project, now),
+  );
   world.now = now;
   return world;
 }

@@ -1,4 +1,5 @@
 import type { DemoUpstream } from '../outbound-network.js';
+import { invalidateWorlds } from './world/world.js';
 import { worldGoogle, worldResponse } from './world/index.js';
 
 export interface DemoProject {
@@ -35,11 +36,13 @@ export class DemoProjects implements DemoUpstream {
   }
 
   replace(projects: readonly DemoProject[]): void {
+    for (const id of this.projects.keys()) invalidateWorlds(id);
     this.projects.clear();
     for (const project of projects) this.add(project);
   }
 
   add(project: DemoProject): void {
+    invalidateWorlds(String(project.id));
     this.projects.set(String(project.id), project);
   }
 
@@ -47,6 +50,7 @@ export class DemoProjects implements DemoUpstream {
     // Work already queued for a cleared demo must keep failing closed.
     this.retired.add(String(id));
     this.projects.delete(String(id));
+    invalidateWorlds(String(id));
   }
 
   /** From now on the connection's sign-in is refused, as an expired authorization is. */

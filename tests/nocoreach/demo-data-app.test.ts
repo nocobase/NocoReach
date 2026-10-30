@@ -1208,6 +1208,31 @@ test('imports the demo through the API and clears all business data while preser
       payload: '{}',
     },
   });
+  // More than one cleanup page, with retained messages between stale ones on every page.
+  const inbox = Array.from({ length: 450 }, (_, index) => ({
+    id: `inbox-cleanup-${String(index).padStart(4, '0')}`,
+    kind: (['demo', 'task', 'other'] as const)[index % 3],
+  }));
+  for (const { id, kind } of inbox)
+    await connection.repository('notificationInAppItems').createOne({
+      values: {
+        id,
+        deliveryId: randomUUID(),
+        notificationId:
+          kind === 'demo' ? `nocoreach-demo-${id.slice(-4)}` : randomUUID(),
+        userId: 'test-owner',
+        title: id,
+        body: id,
+        actionUrl: null,
+        readAt: null,
+        createdAt,
+        updatedAt: createdAt,
+        target:
+          kind === 'task'
+            ? { type: 'route', path: `/actions/${id}` }
+            : { type: 'route', path: '/settings' },
+      },
+    });
   const clearRequest = () =>
     admin.fetch('/demoMode/data/clear', {
       method: 'POST',
@@ -1247,6 +1272,16 @@ test('imports the demo through the API and clears all business data while preser
     name: string;
   }[];
   expect(remaining).toEqual([]);
+  expect(
+    (
+      await connection.query
+        .selectFrom('notificationInAppItems')
+        .select(['id'])
+        .where('id', 'like', 'inbox-cleanup-%')
+        .orderBy('id', 'asc')
+        .execute<{ id: string }>()
+    ).map(({ id }) => id),
+  ).toEqual(inbox.filter(({ kind }) => kind === 'other').map(({ id }) => id));
   expect(await disk.exists(fileKey)).toBe(false);
   expect(await disk.exists(chatFileKey)).toBe(false);
   for (const table of [
