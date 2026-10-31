@@ -5,6 +5,7 @@ import {
   deploy,
   deploymentApp,
   deploymentOutcomeMessage,
+  deploymentSource,
   HealthUnavailable,
   parseEnvelope,
   probeHealth,
@@ -534,6 +535,46 @@ describe.each(['nocoreach', 'nocoreach-demo', 'reach'])(
     });
   },
 );
+
+describe('Studio pull request previews', () => {
+  const preview = {
+    ...env,
+    STUDIO_APP_ID: 'nocoreach-pr-12',
+    GITHUB_EVENT_NAME: 'pull_request',
+    GITHUB_REF: 'refs/pull/12/merge',
+    GITHUB_SHA: 'a'.repeat(40),
+    STUDIO_PREVIEW_SHA: 'b'.repeat(40),
+  };
+
+  it('deploys the pull request head rather than the merge commit', () => {
+    expect(deploymentApp(preview)).toBe('nocoreach-pr-12');
+    expect(deploymentSource(preview).sha).toBe('b'.repeat(40));
+  });
+
+  it('refuses a preview without the head commit', () => {
+    expect(() =>
+      deploymentSource({ ...preview, STUDIO_PREVIEW_SHA: undefined }),
+    ).toThrow('pull request head commit');
+  });
+
+  it.each(['push', 'workflow_dispatch', undefined])(
+    'refuses a preview from %s',
+    (eventName) => {
+      expect(() =>
+        deploymentApp({ ...preview, GITHUB_EVENT_NAME: eventName }),
+      ).toThrow('only from a pull request');
+    },
+  );
+
+  it.each(['nocoreach-pr-', 'nocoreach-pr-0', 'nocoreach-pr-1/x', 'crm-pr-1'])(
+    'refuses the App name %s',
+    (appId) => {
+      expect(() => deploymentApp({ ...preview, STUDIO_APP_ID: appId })).toThrow(
+        'Unsupported Studio application',
+      );
+    },
+  );
+});
 
 describe('Studio demo dispatch boundary', () => {
   it('keeps existing regular deployments targeting nocoreach', () => {

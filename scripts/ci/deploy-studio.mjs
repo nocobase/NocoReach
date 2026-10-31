@@ -79,8 +79,19 @@ export function parseEnvelope(text) {
   assert(envelope.result?.data, 'Studio CLI returned no result.data');
   return envelope.result.data;
 }
+// A pull request's preview: Studio ties the App to the pull request on its first deployment and deletes it with it.
+export const isPreviewApp = (appId) =>
+  /^nocoreach-pr-[1-9]\d*$/u.test(appId ?? '');
 export function deploymentApp(env) {
   const appId = env.STUDIO_APP_ID ?? 'nocoreach';
+  if (isPreviewApp(appId)) {
+    assert.equal(
+      env.GITHUB_EVENT_NAME,
+      'pull_request',
+      'A preview deploys only from a pull request',
+    );
+    return appId;
+  }
   assert(
     ['nocoreach', 'nocoreach-demo', 'reach'].includes(appId),
     'Unsupported Studio application',
@@ -125,6 +136,14 @@ export function validateConfig(env) {
   }
 }
 export function deploymentSource(env) {
+  if (isPreviewApp(env.STUDIO_APP_ID)) {
+    // GITHUB_SHA is GitHub's merge commit; Studio recognizes a preview by the pull request's head.
+    assert(
+      /^[a-f0-9]{40}$/u.test(env.STUDIO_PREVIEW_SHA ?? ''),
+      'A preview requires the pull request head commit',
+    );
+    return { ref: env.GITHUB_REF, sha: env.STUDIO_PREVIEW_SHA };
+  }
   if (env.STUDIO_RELEASE_TAG || env.STUDIO_RELEASE_SHA) {
     assert(
       deploymentApp(env) === 'reach' &&
@@ -452,6 +471,7 @@ async function main() {
     validateConfig(process.env);
     assert(
       releaseRef ||
+        isPreviewApp(deploymentApp(process.env)) ||
         process.env.GITHUB_REF === 'refs/heads/main' ||
         (deploymentApp(process.env) === 'nocoreach-demo' &&
           process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' &&

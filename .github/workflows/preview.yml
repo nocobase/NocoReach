@@ -1,0 +1,87 @@
+name: Preview
+# One Studio preview per pull request: `nocoreach-pr-<number>`, with fictional data open to writes. Studio ties the App
+# to the pull request on its first deployment and deletes it when the pull request is merged or closed. See
+# docs/DEVELOPMENT.md.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths-ignore:
+      - 'docs/**'
+      - 'changelog/**'
+      - '**/*.md'
+permissions:
+  contents: read
+  pull-requests: write
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  preview:
+    # A fork's pull request gets no secrets.
+    if: github.event.pull_request.head.repo.full_name == github.repository && !contains(github.event.pull_request.labels.*.name, 'no-preview')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      STUDIO_APP_ID: nocoreach-pr-${{ github.event.pull_request.number }}
+      STUDIO_PREVIEW_SHA: ${{ github.event.pull_request.head.sha }}
+      NB_STUDIO_SERVER: ${{ vars.NB_STUDIO_SERVER }}
+      NB_STUDIO_API_KEY: ${{ secrets.NB_STUDIO_API_KEY }}
+      STUDIO_TARGET: ${{ vars.STUDIO_TARGET }}
+      STUDIO_NODE_MAJOR: ${{ vars.STUDIO_NODE_MAJOR }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@c336a2788d9774dccfdeb4823a5058ccc9f07453 # v4.3.0; packageManager selects pnpm
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install nb-studio
+        run: |
+          npm install --prefix "$RUNNER_TEMP/studio-cli" --ignore-scripts --no-audit --no-fund @nocobase/studio-cli@1.0.0-beta.56
+          echo "STUDIO_CLI=$RUNNER_TEMP/studio-cli/node_modules/.bin/nb-studio" >> "$GITHUB_ENV"
+      - name: Name the preview address
+        run: echo "STUDIO_APP_URL=$(node -p 'new URL(process.env.NB_STUDIO_SERVER).origin')/$STUDIO_APP_ID" >> "$GITHUB_ENV"
+      - name: Make sure of the preview App
+        env:
+          INITIAL_ADMIN_PASSWORD: ${{ secrets.PREVIEW_ADMIN_PASSWORD }}
+        run: |
+          if [ -z "$INITIAL_ADMIN_PASSWORD" ]; then
+            echo '::error::Add the repository Actions secret PREVIEW_ADMIN_PASSWORD.'
+            exit 1
+          fi
+          "$STUDIO_CLI" app ensure "$STUDIO_APP_ID" --environment preview
+          "$STUDIO_CLI" build status --app "$STUDIO_APP_ID" --sha "$STUDIO_PREVIEW_SHA" --state building --logs "$RUN_URL"
+          "$STUDIO_CLI" app env set "$STUDIO_APP_ID" NOCOBASE_DEMO_MODE true
+          "$STUDIO_CLI" app env set "$STUDIO_APP_ID" INITIAL_ADMIN_PASSWORD --from-env --secret
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build --target linux-x64 --node-version 24 --tar
+      - name: Deploy to the preview App
+        run: node scripts/ci/deploy-studio.mjs
+      - name: Import the demo data and open it to writes
+        run: node scripts/ci/prepare-preview.mjs
+        env:
+          PREVIEW_ADMIN_PASSWORD: ${{ secrets.PREVIEW_ADMIN_PASSWORD }}
+      - name: Comment the address on the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          marker='<!-- nocoreach-preview -->'
+          body="$marker
+          **Preview:** $STUDIO_APP_URL/
+
+          Commit \`${STUDIO_PREVIEW_SHA:0:8}\`. Opening it signs you in as an administrator; the account menu switches to the demo people. The data is fictional, you can change anything, and it is cleared daily at 03:00 UTC."
+          id=$(gh api "repos/$REPO/issues/$NUMBER/comments" --paginate --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1)
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$REPO/issues/comments/$id" -f body="$body" > /dev/null
+          else
+            gh api --method POST "repos/$REPO/issues/$NUMBER/comments" -f body="$body" > /dev/null
+          fi
+      - name: Report a failed build to Studio
+        if: failure()
+        run: '"$STUDIO_CLI" build status --app "$STUDIO_APP_ID" --sha "$STUDIO_PREVIEW_SHA" --state failed --logs "$RUN_URL" || true'
