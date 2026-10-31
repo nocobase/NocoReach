@@ -28,7 +28,6 @@ jobs:
       NB_STUDIO_API_KEY: ${{ secrets.NB_STUDIO_API_KEY }}
       STUDIO_TARGET: ${{ vars.STUDIO_TARGET }}
       STUDIO_NODE_MAJOR: ${{ vars.STUDIO_NODE_MAJOR }}
-      STUDIO_CLI: ${{ runner.temp }}/studio-cli/node_modules/.bin/nb-studio
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
@@ -41,7 +40,9 @@ jobs:
           node-version: '24'
           cache: pnpm
       - name: Install nb-studio
-        run: npm install --prefix "$RUNNER_TEMP/studio-cli" --ignore-scripts --no-audit --no-fund @nocobase/studio-cli@1.0.0-beta.56
+        run: |
+          npm install --prefix "$RUNNER_TEMP/studio-cli" --ignore-scripts --no-audit --no-fund @nocobase/studio-cli@1.0.0-beta.56
+          echo "STUDIO_CLI=$RUNNER_TEMP/studio-cli/node_modules/.bin/nb-studio" >> "$GITHUB_ENV"
       - name: Name the preview address
         run: echo "STUDIO_APP_URL=$(node -p 'new URL(process.env.NB_STUDIO_SERVER).origin')/$STUDIO_APP_ID" >> "$GITHUB_ENV"
       - name: Make sure of the preview App
