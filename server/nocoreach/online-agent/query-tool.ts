@@ -434,6 +434,7 @@ const SOURCES: Record<string, Source> = {
         tables[`${name}_changes`] = list(changes[name]).map(changeRow);
       return {
         dataThrough: v.cutoff,
+        settledThrough: v.settledThrough ?? null,
         window: v.window,
         summary: {
           totals: v.totals ?? null,

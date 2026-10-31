@@ -3,7 +3,7 @@
 // and pages). Read live from the GA4 Data API instead of the synced days: users counted over a period are deduplicated
 // by GA4, while adding up synced days counts a person once per day. Three parts, each cached:
 // - period: the totals, the daily line and the report tables (流量获取, 着陆页, 页面, 事件, 地区, 技术) for a window that
-//   ends at the synced cutoff, like the other data pages; persisted for six hours per query, independent of sync writes.
+//   ends yesterday in the property's time zone; persisted for six hours per query, independent of sync writes.
 // - today: today so far against yesterday and the same weekday last week up to the same hour, per hour, and today's
 //   sources (GA4's standard data, which lags; the realtime API has no source dimension). Ten minutes.
 // - realtime: the last 30 minutes from the Realtime API — users, per minute, pages, countries, cities, devices, events.
@@ -124,13 +124,15 @@ class WebsiteReport{
   catch(e){ok=false;zone=hit?.zone||'UTC';confirmed=Boolean(hit?.confirmed);this.p.app?.logger?.warn('NocoReach GA4 time zone lookup failed',{message:e?.message,code:e?.code,status:e?.status});}
   this.zones.set(property,{at:Date.now(),zone,confirmed,ttl:ok?24*HOUR:5*MIN});return zone;}
 
- // The window `w` ends at the synced cutoff; the daily line goes on to yesterday, the days after the cutoff marked 初步.
+ // Yesterday in the property's time zone: the last full day GA4 can report, and the end of every Traffic window.
+ async yesterday(id:string|number,property:string){const zone=await this.timeZone(id,property),today=calendarDateInTimeZone(zone,new Date(businessNow(this.p,id,'google')));return new Date(Date.parse(today+'T00:00:00Z')-24*HOUR).toISOString().slice(0,10);}
+ // The totals, the daily line and the tables all cover the window `w`.
  period(id:string|number,property:string,w:unknown){const now=businessNow(this.p,id,'google');return this.history.load(String(id),['period',...this.scope(id,property),w,new Date(now).toISOString().slice(0,10)],()=>this.readPeriod(id,property,w),value=>Math.min(value.complete===false||value.missing.length?GA4_PARTIAL_CACHE_MS:GA4_HISTORY_CACHE_MS,24*HOUR-now%(24*HOUR)),(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));}
  async readPeriod(id,property,w){const both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],current=[range(w.start,w.end)];
   const names=Object.keys(TABLES),changeNames=Object.keys(CHANGES);
   const reports=await this.batch(id,property,[
    request([],SESSION,both),
-   request(['date'],SESSION,[range(w.start,w.explicitEnd?w.end:'yesterday','current'),range(w.previousStart,w.previousEnd,'previous')],null,Math.max(1000,(w.days||Math.ceil((Date.parse(w.end)-Date.parse(w.start))/86400000)+1)*2)),
+   request(['date'],SESSION,[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],null,Math.max(1000,(w.days||Math.ceil((Date.parse(w.end)-Date.parse(w.start))/86400000)+1)*2)),
    ...names.map(n=>{const t=TABLES[n];return request(t.dims,t.metrics||SESSION,current,t.order||'sessions',t.limit);}),
    ...changeNames.map(n=>{const c=CHANGES[n];return request([c.dim],c.metrics,both,c.order,c.limit);}),
   ]);

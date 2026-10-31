@@ -37,15 +37,19 @@ function windowFor(end,range,from,to,first){if(range==='all'){const start=calend
 // Sums need every day of the window present; otherwise the value is shown with its coverage, never as a comparison.
 function metric(rows,field,w){const inWin=(a,b)=>rows.filter(r=>r.date>=a&&r.date<=b&&Number.isFinite(r[field]));const cur=inWin(w.start,w.end),prev=inWin(w.previousStart,w.previousEnd);const sum=l=>l.reduce((s,r)=>s+r[field],0);const complete=cur.length===days(w.start,w.end),prevComplete=!w.all&&prev.length===days(w.previousStart,w.previousEnd);const value=cur.length?sum(cur):null,previous=prevComplete?sum(prev):null;return {value,previous,complete,change:complete&&previous?(value-previous)/previous:null};}
 function series(rows,field,w){const by=new Map(rows.map(r=>[r.date,r[field]]));const out=[];for(let d=w.start;d<=w.end;d=add(d,1))out.push({date:d,value:by.has(d)&&Number.isFinite(by.get(d))?by.get(d):null});return out;}
-// 访问 (GA4): the window ends at the project cutoff, like the other data pages; the numbers come live from GA4
+// GA4 can take 24 to 48 hours to process a day, so Traffic marks its last two days as still changing.
+const GA4_PROCESSING_DAYS=2;
+// Traffic reads GA4 live, so its window ends yesterday instead of waiting for the synced cutoff.
+const trafficEnd=(synced,yesterday)=>calendarDate(yesterday)&&yesterday>synced?yesterday:synced;
+// Traffic (GA4): the window ends yesterday in the property's time zone; the numbers come live from GA4
 // (website-report.ts, `period`), and each page row carries the Search Console queries that landed on it in the range.
 // The page explains the numbers itself; `missing` names the reports GA4 did not return.
-async function websiteView(snaps,range,period,from,to){const get=k=>snaps.find(s=>s.key===k)?.payload,web=get('history-web')||[],end=get('project')?.end||web.map(r=>r.date).sort().at(-1);if(!end||!web.length)return {connected:true,cutoff:null};
- const w=windowFor(end,range,from,to,firstDate(web)),report=await period(range==='custom'||range==='all'?{...w,explicitEnd:true}:w);
+async function websiteView(snaps,range,period,from,to,yesterday){const get=k=>snaps.find(s=>s.key===k)?.payload,web=get('history-web')||[],synced=get('project')?.end||web.map(r=>r.date).sort().at(-1);if(!synced||!web.length)return {connected:true,cutoff:null};const end=trafficEnd(synced,yesterday);
+ const w=windowFor(end,range,from,to,firstDate(web)),report=await period(w);
  const pathOf=u=>{try{return new URL(u).pathname.replace(/\/+$/,'')||'/';}catch{return String(u||'').split('?')[0].replace(/\/+$/,'')||'/';}};
  const queries=new Map();for(const q of get(`queries-${range}`)||[]){const k=pathOf(q.page);if(!queries.has(k))queries.set(k,[]);queries.get(k).push({keyword:q.keyword,clicks:q.clicks,impressions:q.impressions,position:q.position});}
  if(report.tables.page)report.tables.page=report.tables.page.map(p=>({...p,queries:(queries.get(pathOf(p.key))||[]).sort((a,b)=>b.impressions-a.impressions).slice(0,8)}));
- return {connected:true,cutoff:end,from:firstDate(web),window:w,...report};}
+ return {connected:true,cutoff:end,settledThrough:add(end,-GA4_PROCESSING_DAYS),from:firstDate(web),window:w,...report};}
 function firstDate(rows){return rows.map(r=>r.date).sort()[0]||null;}
 // Search Console filters for a country and the query and page filters. Search performance reads web search only
 // (2026-10-22: the other search types were dropped from the page; the sync reads web search only too).
@@ -203,11 +207,11 @@ class DataViews{
  // GA4 history is cached by the actual query in WebsiteReport. Synced partition writes only refresh the local
  // Search Console enrichment, without invalidating an unchanged GA4 window or repeating its upstream reports.
  async website(id,v){let link,snaps;try{[link,snaps]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshots(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
-  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28';return websiteView(snaps,range,w=>this.ga4.period(id,link.get('ga4PropertyId'),w),v.from,v.to);}
+  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28';const property=link.get('ga4PropertyId');return websiteView(snaps,range,w=>this.ga4.period(id,property,w),v.from,v.to,await this.ga4.yesterday(id,property));}
  // 访问 · one row's days (its detail), 今天 and 实时: read from GA4 when asked (website-report.ts keeps each a while).
  async websiteRow(id,v){let link,snaps;try{[link,snaps]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshots(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
-  const get=k=>snaps.find(s=>s.key===k)?.payload,end=get('project')?.end||(get('history-web')||[]).map(r=>r.date).sort().at(-1);if(!end)return {connected:true,cutoff:null};
-  const cutoff=v.cutoff===undefined?end:v.cutoff,first=firstDate(get('history-web')||[]);if(!calendarDate(cutoff)||cutoff>end||(first&&cutoff<first))fail(systemMessageText('dataViews.invalidDate'));
+  const get=k=>snaps.find(s=>s.key===k)?.payload,synced=get('project')?.end||(get('history-web')||[]).map(r=>r.date).sort().at(-1);if(!synced)return {connected:true,cutoff:null};
+  const end=trafficEnd(synced,await this.ga4.yesterday(id,link.get('ga4PropertyId'))),cutoff=v.cutoff===undefined?end:v.cutoff,first=firstDate(get('history-web')||[]);if(!calendarDate(cutoff)||cutoff>end||(first&&cutoff<first))fail(systemMessageText('dataViews.invalidDate'));
   const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28',w=windowFor(cutoff,range,v.from,v.to,first);
   return {connected:true,cutoff,window:w,...await this.ga4.row(id,link.get('ga4PropertyId'),w,{table:String(v.table||''),dims:v.dims&&typeof v.dims==='object'?v.dims:{}})};}
  async websiteToday(id){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.today(id,link.get('ga4PropertyId'))};}

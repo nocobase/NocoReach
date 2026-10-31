@@ -27,7 +27,7 @@ test('period: deduplicated totals for both periods, the daily line, every table;
  const v=await g.period('1','123',w);
  assert.equal(calls.length,4,'18 reports in four batches');
  assert.deepEqual(calls[0].body.requests[0].dateRanges,[{startDate:w.start,endDate:w.end,name:'current'},{startDate:w.previousStart,endDate:w.previousEnd,name:'previous'}]);
- assert.equal(calls[0].body.requests[1].dateRanges[0].endDate,'yesterday','the line runs on past the cutoff');
+ assert.equal(calls[0].body.requests[1].dateRanges[0].endDate,w.end,'the line covers the same days as the totals');
  assert.equal(v.totals.current.users,100);assert.equal(v.totals.previous.sessions,120);assert.equal(v.totals.current.keyEventRate,0.08);
  assert.deepEqual(v.daily.map(r=>r.date),['2026-10-04','2026-10-05']);assert.deepEqual(v.previousDaily.map(r=>r.date),['2026-09-28']);
  const changeRequests=calls.flatMap(c=>c.body.requests).filter(r=>r.dateRanges.length===2&&r.dimensions.length===1&&r.dimensions[0].name!=='date');
@@ -140,9 +140,25 @@ test('访问 view: window at the cutoff, Search Console queries on their page ro
  assert.equal((await websiteView([{key:'history-web',payload:[]}],'28',()=>{throw new Error('not asked');})).cutoff,null);
 });
 
+test('Traffic window ends yesterday, ahead of the synced cutoff, with the last two days unsettled',async()=>{
+ const synced='2026-09-27',snaps=[{key:'project',payload:{end:synced}},{key:'history-web',payload:[{date:'2026-09-20'},{date:synced}]}];
+ let asked;const period=async w=>{asked=w;return {tables:{},missing:[]};};
+ const v=await websiteView(snaps,'7',period,undefined,undefined,'2026-09-30');
+ assert.deepEqual(asked,windowFor('2026-09-30','7'));assert.equal(v.cutoff,'2026-09-30');assert.equal(v.settledThrough,'2026-09-28');
+ await websiteView(snaps,'custom',period,'2026-09-25','2026-09-30','2026-09-30');
+ assert.equal(asked.end,'2026-09-30','a custom range can reach yesterday');
+});
+
+test('yesterday follows the property time zone, not UTC',async()=>{
+ vi.useFakeTimers({now:new Date('2026-10-31T01:00:00Z')});
+ const {g}=fake(()=>({}));
+ g.timeZone=async()=>'America/Los_Angeles';assert.equal(await g.yesterday('1','123'),'2026-10-29');
+ g.timeZone=async()=>'Asia/Shanghai';assert.equal(await g.yesterday('1','123'),'2026-10-30');
+});
+
 test('all-time daily reports increase the row limit and omit previous data',async()=>{
  const {g,calls}=fake((method,body)=>({reports:body.requests.map(r=>report(r.dimensions.map(d=>d.name),r.metrics.map(m=>m.name),[]))}));
- const w={...windowFor('2026-09-27','all',undefined,undefined,'2022-01-01'),explicitEnd:true};
+ const w=windowFor('2026-09-27','all',undefined,undefined,'2022-01-01');
  const all=await g.period('1','123',w);
  const daily=calls.flatMap(c=>c.body.requests||[]).find(r=>dimsOf(r)==='date');
  assert.ok(Number(daily.limit)>1000);assert.equal(daily.dateRanges[0].endDate,w.end);

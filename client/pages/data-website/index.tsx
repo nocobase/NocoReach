@@ -7,8 +7,8 @@ import {
 // 访问 (网站与产品, GA4), rebuilt 2026-10-14 after GA4's own reports (user request: show everything GA4 has). From the
 // top: 今天 (实时 and today against yesterday and last week, today.tsx), the range, GA4's eight figures (a figure picks
 // the line below it), where sessions come from (channels with AI 助手, new and returning visitors, devices) and the
-// report tables (reports.tsx). The numbers are read live from GA4 for a window ending at the synced cutoff, like the
-// other data pages; the line runs on to yesterday with the days after the cutoff dotted.
+// report tables (reports.tsx). The numbers are read live from GA4 for a window ending yesterday; the line's last two
+// days are dotted because GA4 is still processing them.
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { BarChart3, TriangleAlert } from 'lucide-react';
@@ -74,7 +74,7 @@ function notesOf(report: Report): string[] {
     $t('dataWebsite.usersDeduplicatedPeriod'),
     $t('dataWebsite.aiAssistantsBySourceName'),
     $t('dataWebsite.keyEventsFollowDefinitionGa'),
-    $t('dataWebsite.preliminaryAfterCutoff'),
+    $t('dataWebsite.latestDaysPreliminary'),
     ...(missing.length
       ? [
           $t('dataWebsite.ga4DidNotReturn', {
@@ -326,24 +326,25 @@ function ChangeDrivers({
   );
 }
 
-// The chosen figure per day against the same day of the period before; the days after the cutoff dotted (初步).
+// The chosen figure per day against the same day of the period before; days GA4 is still processing are dotted.
 function TrendCard({ report, metric }: { report: Report; metric: MetricKey }) {
   const m = METRICS[metric],
-    cutoff = report.cutoff!;
+    settled = report.settledThrough ?? report.cutoff!;
   const days = ownDays(report.window, report.daily, report.previousDaily);
   const points = days.current.map((d, i) => {
     const before = days.previous[i];
     const value = m.of(d);
     return {
       date: d.date,
-      value: d.date <= cutoff ? value : null,
-      fresh: d.date >= cutoff ? value : null,
+      value: d.date <= settled ? value : null,
+      fresh: d.date >= settled ? value : null,
       previous: before ? m.of(before) : null,
       previousDate: before?.date ?? '',
     };
   });
-  const fresh = points.some((p) => p.date > cutoff);
-  if (points.filter((p) => p.value !== null).length < 2) return null;
+  const fresh = points.some((p) => p.date > settled);
+  if (points.filter((p) => p.value !== null || p.fresh !== null).length < 2)
+    return null;
   const axis = (v: number) =>
     m.format === 'percent'
       ? `${Math.round(v * 100)}%`
@@ -360,7 +361,7 @@ function TrendCard({ report, metric }: { report: Report; metric: MetricKey }) {
         </h2>
         <InfoTip label={$t('common.howReadChart')}>
           {$t('dataWebsite.trendHowToRead', {
-            0: fresh ? $t('dataWebsite.dottedPreliminaryAfterCutoff') : '',
+            0: fresh ? $t('dataWebsite.dottedLatestDaysPreliminary') : '',
           })}
         </InfoTip>
       </div>

@@ -54,6 +54,7 @@ export type Report = {
   connected: boolean;
   cacheExpiresAt?: number;
   cutoff?: string | null;
+  settledThrough?: string | null;
   window?: Window;
   totals?: { current: Values | null; previous: Values | null };
   daily?: Day[];
