@@ -29,7 +29,6 @@ test('timezone saves validate before writes, isolate tasks, roll back, and survi
         environment: 'test',
         initializeData: false,
       },
-      agents: { vectors: { store: false } },
     },
   });
   let server: StandaloneServer | undefined;
