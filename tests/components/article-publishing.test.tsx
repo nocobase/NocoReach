@@ -34,8 +34,11 @@ import {
 import {
   DeliveryDialog,
   DeliverySummary,
+  HandoffLanguage,
+  PrimaryLanguage,
   WhereField,
 } from '../../client/pages/task-detail/article-start';
+import { handoffTarget } from '../../client/pages/task-detail/article-model';
 import {
   conflictHeading,
   defaultDelivery,
@@ -1970,6 +1973,71 @@ it('an article picked by hand for a translation has its languages read, and a on
       true,
     ).ready,
   ).toBe(false);
+});
+
+// The primary language (2026-10-30, T-58): chosen with a hand-over, and changed on the review card until approved.
+it('offers the primary language with a hand-over and on the review card until it is approved', async () => {
+  const cms = { ...target, locales: ['en', 'zh', 'ja'] };
+  const d = (delivery: object) =>
+    ({
+      ...data,
+      articleTargets: [cms],
+      articlePlaybookTargets: { 'new-doc': 'repo' },
+      work: { delivery },
+    }) as unknown as TaskData;
+  const pending = d({
+    kind: 'article',
+    targetId: 'cms',
+    locales: ['en', 'zh', 'ja'],
+  });
+  expect(
+    handoffTarget(pending, { id: 'blog-post', kind: 'build' }, false)?.id,
+  ).toBe('cms');
+  expect(
+    handoffTarget(pending, { id: 'new-doc', kind: 'build' }, false),
+  ).toBeNull();
+  expect(
+    handoffTarget(pending, { id: 'keyword-research', kind: 'plan' }, false),
+  ).toBeNull();
+  const onPick = vi.fn();
+  const user = userEvent.setup();
+  render(
+    <HandoffLanguage
+      id='next'
+      all={['en', 'zh', 'ja']}
+      primary='zh'
+      busy={false}
+      onChange={onPick}
+    />,
+  );
+  expect(
+    screen.getByText(
+      'The primary language is written first; once you approve it, the agent translates it into English, Japanese, then everything is published together.',
+    ),
+  ).toBeInTheDocument();
+  cleanup();
+  const onChange = vi.fn();
+  const { rerender } = render(
+    <PrimaryLanguage data={pending} busy={false} allowed onChange={onChange} />,
+  );
+  await user.click(screen.getByRole('combobox'));
+  await user.click(await screen.findByRole('option', { name: 'Chinese' }));
+  expect(onChange).toHaveBeenCalledWith('zh');
+  // Approved and being translated: no longer offered.
+  rerender(
+    <PrimaryLanguage
+      data={d({
+        kind: 'article',
+        targetId: 'cms',
+        locales: ['en', 'zh'],
+        translateFrom: { artifactId: 'a' },
+      })}
+      busy={false}
+      allowed
+      onChange={onChange}
+    />,
+  );
+  expect(screen.queryByRole('combobox')).toBeNull();
 });
 
 // With the Changes go to select below it (2026-10-30 user decision, merging #322 and #324), the summary keeps the

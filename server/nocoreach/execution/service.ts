@@ -170,9 +170,11 @@ export class TaskService {
     // Actor-specific Runner eligibility opens plugin reads of its own.
     // Read them after committing the business transaction, since SQLite has a single connection.
     const agent = await this.agents.status(project, data.work.agentId, actor);
+    // The project's AI content language: the primary language a start defaults to (shared/task-start.ts, 2026-10-30).
+    const language = (await this.p.project(project).catch(() => null))?.language || null;
     // `repo`: the repository the task changes, or would by its pages (null when a person has to choose); `repos`: every one, for the start card.
     const repos = agent.repos.map(r => ({ id: r.id, repo: r.repo, baseBranch: r.baseBranch, allowedPaths: r.allowedPaths, urls: r.urls }));
-    return { ...data, agent: { repo: startedRepo(agent.repos, data.work, pageUrlsOf(data)), repos, online: agent.online, agentId: agent.agentId, defaultAgentId: agent.defaultAgentId, options: agent.options } };
+    return { ...data, language, agent: { repo: startedRepo(agent.repos, data.work, pageUrlsOf(data)), repos, online: agent.online, agentId: agent.agentId, defaultAgentId: agent.defaultAgentId, options: agent.options } };
   }
   // Every task of a project, read in pages outside any business transaction, for what Data sources shows of them.
   private async eachTask(project: string, fn: (task: any) => void) {
@@ -756,10 +758,23 @@ export class TaskService {
         // A message for the executor; the next run reads the latest ones.
         if (w.stage === 'done') return fail(systemMessageText('taskDetail.taskDone'), 409);
         event.comment = text(v.comment, 3000);
-      } else if (v.command === 'approveStage' || v.command === 'requestStageChanges') {
+      } else if (v.command === 'approveStage' || v.command === 'requestStageChanges' || v.command === 'changePrimary') {
         const { stage, index } = this.flowStage(w, v.stageKey, ['review']), producer = w.flow!.stages[index - 1], output = w.results[index - 1];
         if (!output || output.id !== v.artifactId || output.rejectedAt) return fail(systemMessageText('taskExecution.contentUpdatedRefreshBeforeReviewing'), 409);
         event.artifactId = output.id;
+        // Another primary language before it is approved (2026-10-30, T-58: a hand-off started in English when the
+        // project writes in Chinese): the step writes a new version in it, and the other languages, the one that was
+        // primary included, are translated once it is approved. Not once the primary is approved or a translation runs.
+        let feedback = '';
+        if (v.command === 'changePrimary') {
+          const d = w.delivery, locale = typeof v.locale === 'string' ? v.locale : '';
+          if (!output.article || d?.kind !== 'article' || !d.locales || d.locales.length < 2 || d.translateFrom) return fail(systemMessageText('taskExecution.primaryLocked'), 409);
+          if (!this.articleFlow.targets(project).find(t => t.id === d.targetId)?.locales.includes(locale)) return fail(systemMessageText('taskExecution.primaryNotTargetLanguage'), 400);
+          if (locale === d.locales[0]) return fail(systemMessageText('taskExecution.primaryUnchanged'), 409);
+          w.delivery = { ...d, locales: [locale, ...d.locales.filter(l => l !== locale)] };
+          event.note = locale;
+          feedback = optional(v.comment, 3000) || systemMessageText('taskExecution.primaryChangedComment', { 0: locale });
+        }
         if (v.command === 'approveStage') {
           const checked: string[] = Array.isArray(v.checked) ? v.checked.filter((k: unknown) => typeof k === 'string') : [];
           const missing = (stage.checklist || []).filter(c => c.required && !checked.includes(c.key));
@@ -801,12 +816,15 @@ export class TaskService {
               const p = await this.playbooks.get(project, v.next, tx), accepted = w.results[index - 1]!;
               // Titled as every handed-off task, by its playbook and the subject this task was about (task-title.ts).
               const chain = { subject: task.evidence?.autoTitle?.subject || task.title, ...(task.evidence?.autoTitle?.locale ? { locale: task.evidence.autoTitle.locale } : {}) };
-              const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: playbookTitle(p, chain.subject, chain.locale), brief: systemMessageText('messages.taskBriefDocumentDeliveredTask', { 0: task.title, 1: accepted.content }).slice(0, 30000), status: systemMessageText('common.pending'), evidence: { source: systemMessageText('taskExecution.chainedTask'), insight: task.evidence?.insight || null, context: task.evidence?.context || null, ...foundBy(task.evidence), handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content }, autoTitle: chain, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
+              // The languages chosen with the hand-over, primary first (2026-10-30); the new task's start takes the ones its target has.
+              const handLocales = Array.isArray(v.nextLocales) ? [...new Set<string>(v.nextLocales.filter((l: unknown) => typeof l === 'string' && /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(l)))].slice(0, 20) : [];
+              const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: playbookTitle(p, chain.subject, chain.locale), brief: systemMessageText('messages.taskBriefDocumentDeliveredTask', { 0: task.title, 1: accepted.content }).slice(0, 30000), status: systemMessageText('common.pending'), evidence: { source: systemMessageText('taskExecution.chainedTask'), insight: task.evidence?.insight || null, context: task.evidence?.context || null, ...foundBy(task.evidence), handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content, ...(handLocales.length ? { locales: handLocales } : {}) }, autoTitle: chain, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
               w.nextTaskId = String(child.get ? child.get('id') : child.id); event.note = p.name; event.nextTaskId = w.nextTaskId;
             }
           }
         } else {
-          const comment = text(v.comment, 3000); event.comment = comment;
+          const comment = feedback || text(v.comment, 3000);
+          if (!feedback) event.comment = comment;
           w.results[index - 1] = { ...output, rejectedAt: at };
           // Feedback is filed under the stage that redoes the work, so its next run reads it.
           await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: producer.key, stageIndex: index - 1, artifactVersionId: output.id, decision: 'requestChanges', comment, reviewerId: actor, at }, tx);
@@ -947,7 +965,7 @@ export class TaskService {
       const task = await this.task(project, taskId), w = projectWork(task);
       if (w.flow || w.plan || w.stage !== 'plan' || w.cancelledAt || w.archivedAt || !w.playbookId) return;
       const p = await this.playbooks.get(project, w.playbookId), stages = stagesFor(p), first = stages[0];
-      const data = { task, work: w, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), agent: await this.agents.status(project, w.agentId, actor) };
+      const data = { task, work: w, language: (await this.p.project(project))?.language || null, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), agent: await this.agents.status(project, w.agentId, actor) };
       const found = lookupMatters(data, p.id) ? await this.lookupPages(project, pageUrlsOf(data)) : undefined;
       const changes = p.kind === 'build', translate = changes && data.articleTargets.length > 0 && translatesArticle(p), needsRepository = first?.kind === 'agent' && !(first.mode === 'analyze' && !stages.some(changesRepo));
       if (startBlockers(data, { playbookId: p.id, changes, translate, needsRepository, simulated: Boolean(this.p.demoConfiguration?.enabled), found }).length) return;

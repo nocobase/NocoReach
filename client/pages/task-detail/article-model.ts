@@ -5,6 +5,7 @@ import {
   type ArticleField,
 } from '../../../shared/article-publishing.js';
 import { localeName, providerKey } from '../article-targets-api';
+import { REPO as REPOSITORY } from '../../../shared/task-start.js';
 import { subjectOf } from '../task-subject';
 import type {
   ArticleProposal,
@@ -375,6 +376,27 @@ export function canRebase(r: Release) {
   return !(
     primary?.state === 'publish_conflict' &&
     primary.a.conflict?.reason === 'missing'
+  );
+}
+
+/**
+ * The target a handed-over playbook writes its article to, as the new task's start picks it (2026-10-30): the
+ * playbook's target, else the default one; null when it opens a pull request or writes no article.
+ */
+export function handoffTarget(
+  data: TaskData,
+  playbook: { id: string; kind?: string } | undefined,
+  translate: boolean,
+) {
+  const targets = data.articleTargets || [];
+  if (!playbook || playbook.kind !== 'build' || translate || !targets.length)
+    return null;
+  const entry = data.articlePlaybookTargets?.[playbook.id];
+  if (entry === REPOSITORY) return null;
+  return (
+    targets.find((t) => t.id === entry) ||
+    targets.find((t) => t.default) ||
+    targets[0]
   );
 }
 

@@ -1,10 +1,11 @@
 import { expect, test } from 'vitest';
 import {
+  choiceLocales,
+  defaultDelivery,
+  deliveryPlan,
   MAX_TASK_PAGES,
   REPO,
   choiceRepo,
-  defaultDelivery,
-  deliveryPlan,
   lookupMatters,
   pageUrlsOf,
   pagesToStart,
@@ -13,6 +14,11 @@ import {
   startPages,
   type StartContext,
 } from '../../shared/task-start.js';
+import {
+  defaultLocales,
+  projectLocale,
+  translationDefault,
+} from '../../shared/article-publishing.js';
 
 // The defaults a task starts with when nobody chooses (shared/task-start.ts): the start card preselects them and a
 // handed-over task is started with them (Accept and start, 2026-10-24); anything else waits for a person.
@@ -184,6 +190,40 @@ test('a translation needs an existing article and a target with another language
       { ...translate, found: { article, unchecked: false } },
     ),
   ).toEqual(['chooseArticle']);
+});
+
+// The primary language when nobody chose one (2026-10-30, T-58): the project's AI content language when the target
+// has it, then the target's other languages in order; otherwise the target's order.
+test('the primary language follows the project AI content language when the target has it', () => {
+  const cms = { id: 'cms', default: true, locales: ['en', 'zh', 'ja'] };
+  const at = (language: string | null, evidence = {}) =>
+    view({ task: { evidence }, articleTargets: [cms], language });
+  const blog = defaultDelivery(at('zh-CN'), 'blog-post');
+  expect(choiceLocales(at('zh-CN'), blog)).toEqual(['zh', 'en', 'ja']);
+  expect(deliveryPlan(at('zh-CN'), blog).delivery).toEqual({
+    targetId: 'cms',
+    locales: ['zh', 'en', 'ja'],
+  });
+  expect(choiceLocales(at('ja-JP'), blog)).toEqual(['ja', 'en', 'zh']);
+  // A target without it, or no project language: the target's order.
+  expect(choiceLocales(at('fr-FR'), blog)).toEqual(['en', 'zh', 'ja']);
+  expect(choiceLocales(at(null), blog)).toEqual(['en', 'zh', 'ja']);
+  // Chosen at the hand-over: kept, as far as the target has them.
+  const handed = at('zh-CN', { handoff: { locales: ['ja', 'en', 'xx'] } });
+  expect(choiceLocales(handed, defaultDelivery(handed, 'blog-post'))).toEqual([
+    'ja',
+    'en',
+  ]);
+  expect(projectLocale(['en', 'zh-TW'], 'zh-TW')).toBe('zh-TW');
+  expect(projectLocale(['en', 'zh'], 'zh-CN')).toBe('zh');
+  expect(defaultLocales(['en', 'zh'], 'de-DE')).toEqual(['en', 'zh']);
+  // A translation's source: the project's language when the article has it, else the target's first it has.
+  expect(
+    translationDefault(['en', 'zh', 'ja'], ['en', 'zh'], undefined, 'zh-CN'),
+  ).toEqual({ from: 'zh', to: ['ja'] });
+  expect(
+    translationDefault(['en', 'zh', 'ja'], ['en'], undefined, 'zh-CN'),
+  ).toEqual({ from: 'en', to: ['zh', 'ja'] });
 });
 
 // Several website repositories (2026-10-29): the one serving the task's pages, else a person chooses.

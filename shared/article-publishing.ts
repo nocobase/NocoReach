@@ -392,19 +392,55 @@ export const articleLocales = (a: Pick<ArticleContent, 'locales'>) =>
     .map(([l]) => l);
 
 /**
+ * The target language that is the project's AI content language (2026-10-30, T-58): the same code, else the same
+ * language ("zh-CN" is "zh"); null when the target has neither.
+ */
+export function projectLocale(
+  targetLocales: string[],
+  language?: string | null,
+) {
+  if (!language) return null;
+  const norm = (l: string) => l.toLowerCase().replace(/_/g, '-'),
+    want = norm(language);
+  return (
+    targetLocales.find((l) => norm(l) === want) ||
+    targetLocales.find((l) => norm(l).split('-')[0] === want.split('-')[0]) ||
+    null
+  );
+}
+
+/**
+ * The languages a task writes when nobody chose them (2026-10-30, T-58: a hand-off wrote English first in a Chinese
+ * project): the project's AI content language first when the target has it, then the target's others in its order;
+ * otherwise the target's order, its first language being the primary.
+ */
+export function defaultLocales(
+  targetLocales: string[],
+  language?: string | null,
+) {
+  const first = projectLocale(targetLocales, language);
+  return first
+    ? [first, ...targetLocales.filter((l) => l !== first)]
+    : [...targetLocales];
+}
+
+/**
  * What a translation translates by default (2026-10-25): from the target's first language the article has, into the
  * languages it lacks; with none lacking, into all the others, to bring them up to date. `present` unknown (an article
  * linked before languages were recorded) counts every language as present. `source` keeps a source already chosen.
+ * The project's AI content language comes first when the article has it (2026-10-30).
  */
 export function translationDefault(
   targetLocales: string[],
   present?: string[],
   source?: string,
+  language?: string | null,
 ) {
   const has = (l: string) => !present || present.includes(l);
+  const order = defaultLocales(targetLocales, language);
   const from =
     (source && targetLocales.includes(source) ? source : '') ||
-    targetLocales.find(has) ||
+    order.find(has) ||
     targetLocales[0] ||
     '';
   const others = targetLocales.filter((l) => l !== from),
