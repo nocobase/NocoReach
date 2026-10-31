@@ -311,6 +311,7 @@ it.each([
         ],
       },
     });
+    views.ga4.yesterday = vi.fn(async () => end);
     views.ga4.readPeriod = vi.fn(async () => ({ tables: {}, missing: [] }));
     const read = vi.fn(async () => ({ daily: [], totals: {} }));
     views.ga4.readRow = read;
