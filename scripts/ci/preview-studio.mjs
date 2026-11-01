@@ -11,6 +11,7 @@ import { verifyPreviewExperience } from './verify-preview.mjs';
 // deploy-studio.mjs's. The CI key must independently restrict access to preview Apps.
 
 const ARCHIVE = 'storage/exports/dist.tar.gz';
+const SOURCE_REPOSITORY = 'nocobase/NocoReach';
 const DEPLOYMENT_POLL_TIMEOUT = 30 * 60_000;
 const HEALTH_RETRY_WINDOW = 3 * 60_000;
 const HEALTH_RETRY_INTERVAL = 10_000;
@@ -26,6 +27,11 @@ export function previewApp(env) {
 
 export function validatePreviewConfig(env) {
   previewApp(env);
+  assert.equal(
+    env.PREVIEW_SOURCE_REPOSITORY,
+    SOURCE_REPOSITORY,
+    'PREVIEW_SOURCE_REPOSITORY must be nocobase/NocoReach',
+  );
   for (const key of ['NB_STUDIO_SERVER', 'NB_STUDIO_API_KEY', 'STUDIO_CLI'])
     assert(env[key]?.trim(), `Missing ${key}`);
   assert(
@@ -137,11 +143,25 @@ export async function publishPreview({
   validatePreviewConfig(env);
   const appId = previewApp(env);
   assert.equal(
+    metadata.repository,
+    SOURCE_REPOSITORY,
+    'Wrong preview source repository',
+  );
+  assert.equal(
     metadata.sha,
     env.PREVIEW_HEAD_SHA,
     'Checkout is not the pull request head',
   );
-  await cli(['app', 'ensure', appId, '--environment', 'preview', '--json']);
+  await cli([
+    'app',
+    'ensure',
+    appId,
+    '--environment',
+    'preview',
+    '--repository',
+    metadata.repository,
+    '--json',
+  ]);
   assertDemoEntry(await cli(['app', 'env', 'list', appId, '--json']), appId);
   summary(
     `Preview App: ${appId}\n\nCommit: ${metadata.sha}\n\nArchive SHA-256: ${metadata.sha256}\n\n`,
@@ -253,7 +273,6 @@ async function main() {
     const sha = execFileSync('git', ['rev-parse', 'HEAD'], {
       encoding: 'utf8',
     }).trim();
-    assert(process.env.GITHUB_REPOSITORY, 'Missing GITHUB_REPOSITORY');
     const size = statSync(ARCHIVE).size;
     assert(
       size > 0 && size <= 256 * 1024 * 1024,
@@ -262,7 +281,7 @@ async function main() {
     const url = await publishPreview({
       env: process.env,
       metadata: {
-        repository: process.env.GITHUB_REPOSITORY,
+        repository: process.env.PREVIEW_SOURCE_REPOSITORY,
         sha,
         sha256: createHash('sha256')
           .update(readFileSync(ARCHIVE))

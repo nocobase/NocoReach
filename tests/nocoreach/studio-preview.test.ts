@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import {
   assertDemoEntry,
@@ -23,6 +23,8 @@ const env = {
   STUDIO_NODE_MAJOR: '24',
   PREVIEW_PR_NUMBER: '332',
   PREVIEW_HEAD_SHA: sha,
+  PREVIEW_SOURCE_REPOSITORY: 'nocobase/NocoReach',
+  GITHUB_REPOSITORY: '2013xile/nocobase-ci',
 };
 const metadata = {
   repository: 'nocobase/NocoReach',
@@ -141,6 +143,8 @@ describe('Studio preview', () => {
       appId,
       '--environment',
       'preview',
+      '--repository',
+      'nocobase/NocoReach',
       '--json',
     ]);
     expect(cli).toHaveBeenCalledWith(
@@ -288,27 +292,31 @@ describe('Studio preview', () => {
     expect(drift.verify).not.toHaveBeenCalled();
   });
 
-  it('runs only for labeled pull requests from this repository, with the preview key', () => {
-    const workflow = readFileSync('.github/workflows/preview.yml', 'utf8');
-    expect(workflow).toContain(
-      'github.event.pull_request.head.repo.full_name == github.repository',
-    );
-    expect(workflow).toContain(
-      "contains(github.event.pull_request.labels.*.name, 'preview')",
-    );
-    expect(workflow).toContain(
-      'ref: ${{ github.event.pull_request.head.sha }}',
-    );
-    expect(workflow).toContain('secrets.NB_STUDIO_PREVIEW_API_KEY');
-    expect(workflow).not.toContain('secrets.NB_STUDIO_API_KEY');
-    expect(workflow).not.toContain('pull_request_target');
-    expect(workflow).toContain('name: studio-preview');
-    expect(workflow).toContain(
-      'name: Preview PR ${{ github.event.pull_request.number }} at ${{ github.event.pull_request.head.sha }}',
-    );
-    expect(workflow.split('secrets.NB_STUDIO_PREVIEW_API_KEY')).toHaveLength(2);
-    expect(
-      workflow.indexOf('secrets.NB_STUDIO_PREVIEW_API_KEY'),
-    ).toBeGreaterThan(workflow.indexOf('name: Publish the preview'));
+  it('keeps publication in the unified CI instead of a duplicate source trigger', () => {
+    expect(existsSync('.github/workflows/preview.yml')).toBe(false);
+  });
+
+  it('requires the application repository even when invoked from another CI repository', async () => {
+    for (const repository of [
+      '',
+      '2013xile/nocobase-ci',
+      'nocobase/nocoreach',
+    ]) {
+      expect(() =>
+        validatePreviewConfig({
+          ...env,
+          PREVIEW_SOURCE_REPOSITORY: repository,
+        }),
+      ).toThrow('PREVIEW_SOURCE_REPOSITORY');
+    }
+    const value = scenario();
+    await expect(
+      publishPreview({
+        env,
+        metadata: { ...metadata, repository: env.GITHUB_REPOSITORY },
+        ...value,
+      }),
+    ).rejects.toThrow('Wrong preview source repository');
+    expect(value.cli).not.toHaveBeenCalled();
   });
 });
