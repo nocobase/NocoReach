@@ -16,14 +16,17 @@ concurrency:
 
 jobs:
   preview:
-    # Only pull requests from this repository that a maintainer has labeled `preview`: the job runs the pull request's
-    # code with the preview key, so a fork or an unreviewed change never reaches it.
+    name: Preview PR ${{ github.event.pull_request.number }} at ${{ github.event.pull_request.head.sha }}
+    # The label selects candidates, not trusted code. Required environment reviewers must inspect this exact head
+    # (including workflows, scripts and install hooks) before EVERY run. See docs/STUDIO-PREVIEW.md.
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
       contains(github.event.pull_request.labels.*.name, 'preview')
     runs-on: ubuntu-24.04
     timeout-minutes: 75
-    environment: studio-preview
+    environment:
+      name: studio-preview
+      url: https://github.com/${{ github.repository }}/commit/${{ github.event.pull_request.head.sha }}
     env:
       NB_STUDIO_SERVER: ${{ vars.NB_STUDIO_SERVER }}
       STUDIO_TARGET: ${{ vars.STUDIO_TARGET }}
@@ -40,14 +43,10 @@ jobs:
         with:
           node-version: '24'
           cache: pnpm
-      - name: Check preview configuration
-        env:
-          NB_STUDIO_API_KEY: ${{ secrets.NB_STUDIO_PREVIEW_API_KEY }}
-          STUDIO_CLI: ${{ runner.temp }}/studio-cli/node_modules/.bin/nb-studio
-        run: node scripts/ci/preview-studio.mjs --check-config
       - run: pnpm install --frozen-lockfile
       - run: pnpm test --maxWorkers=2 --passWithNoTests=false
       - run: pnpm build --target linux-x64 --node-version 24 --tar
+      - run: pnpm exec playwright install --with-deps chromium
       - name: Install nb-studio
         run: npm install --prefix "$RUNNER_TEMP/studio-cli" --ignore-scripts --no-audit --no-fund @nocobase/studio-cli@1.0.0-beta.56
       - name: Publish the preview

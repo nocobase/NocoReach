@@ -1,3 +1,3 @@
 ## CI: a preview of a pull request on Studio
 
-- A pull request from this repository that a maintainer labels `preview` is built and published to its own preview App on Studio, which runs in Demo Mode so anyone can try the change with demo data. The main deployment is unchanged.
+- A labeled same-repository pull request can publish its reviewed head to an isolated Studio preview through a protected GitHub environment. Previews verify archive identity, generated demo data, visitor entry and representative pages before reporting ready. A runbook covers exact-head approval and first generation on new storage; CI never resets existing previews. The main deployment is unchanged.

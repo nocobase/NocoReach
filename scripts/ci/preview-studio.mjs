@@ -5,9 +5,10 @@ import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { deploymentState, runStudioCli } from './deploy-studio.mjs';
+import { verifyPreviewExperience } from './verify-preview.mjs';
 
 // Publishes a pull request's head to its own preview App in Studio's Preview environment. The main deployment is
-// deploy-studio.mjs's; this script names only nocoreach-pr-<number> Apps, so it cannot deploy anything else.
+// deploy-studio.mjs's. The CI key must independently restrict access to preview Apps.
 
 const ARCHIVE = 'storage/exports/dist.tar.gz';
 const DEPLOYMENT_POLL_TIMEOUT = 30 * 60_000;
@@ -67,7 +68,7 @@ export function assertDemoEntry(variables, appId) {
 }
 
 /** The App's address from Studio's answer: a path under the Studio server, or an absolute URL on the same origin. */
-export function previewUrl(app, server) {
+export function previewUrl(app, server, appId) {
   const base = new URL(server);
   assert(typeof app?.url === 'string' && app.url, 'Studio returned no App URL');
   const url = new URL(app.url, base.origin);
@@ -75,6 +76,15 @@ export function previewUrl(app, server) {
     url.origin,
     base.origin,
     'Preview URL is not on the Studio server',
+  );
+  assert.equal(
+    url.pathname.replace(/\/$/u, ''),
+    `/${appId}`,
+    'Preview URL belongs to another App',
+  );
+  assert(
+    !url.search && !url.hash && !url.username && !url.password,
+    'Invalid preview URL',
   );
   return url.href.endsWith('/') ? url.href : `${url.href}/`;
 }
@@ -118,6 +128,7 @@ export async function publishPreview({
   metadata,
   cli,
   health = probe,
+  verify = verifyPreviewExperience,
   summary,
   wait = sleep,
   now = Date.now,
@@ -147,6 +158,7 @@ export async function publishPreview({
     ARCHIVE,
     '--json',
   ]);
+  assert.equal(uploaded.superseded, false, 'Uploaded build was superseded');
   assert.equal(uploaded.release?.appId, appId, 'Wrong uploaded release app');
   assert.equal(
     uploaded.release?.sourceCommit,
@@ -154,28 +166,58 @@ export async function publishPreview({
     'Uploaded commit mismatch',
   );
   const releaseId = uploaded.release.id;
+  assert(typeof releaseId === 'string' && releaseId, 'Missing release ID');
+  const reused = uploaded.reused === true;
+  const checksum = reused ? uploaded.release.checksum : metadata.sha256;
+  assert(/^[a-f0-9]{64}$/u.test(checksum ?? ''), 'Invalid release SHA-256');
+  const verifyRelease = (release) => {
+    assert.equal(release?.id, releaseId, 'Release ID mismatch');
+    assert.equal(release?.appId, appId, 'Wrong release app');
+    assert.equal(
+      release?.sourceCommit,
+      metadata.sha,
+      'Release commit mismatch',
+    );
+    assert.equal(release?.checksum, checksum, 'Release checksum mismatch');
+  };
+  verifyRelease(uploaded.release);
+  if (reused) {
+    verifyRelease(await cli(['release', 'get', appId, releaseId, '--json']));
+    summary(
+      `Reusing the stored release, not the rebuilt archive. Release SHA-256: ${checksum}\n\n`,
+    );
+  }
   const result = uploaded.deployed;
   assert(result?.deployment?.id, 'Preview deployment was not started');
   assert(!result.request, 'A preview must not need a deployment approval');
+  assert.equal(result.appId, appId, 'Wrong deployment outcome app');
+  assert.equal(result.releaseId, releaseId, 'Wrong deployment outcome release');
   const deploymentId = result.deployment.id;
   const deadline = now() + timeout;
   for (;;) {
     const data = await cli(['deploy', 'get', appId, deploymentId, '--json']);
-    if (deploymentState(data, appId, releaseId, deploymentId) === 'succeeded')
+    if (deploymentState(data, appId, releaseId, deploymentId) === 'succeeded') {
+      assert.equal(
+        data.release?.checksum,
+        checksum,
+        'Deployed checksum mismatch',
+      );
       break;
+    }
     assert(
       now() < deadline,
       'Preview deployment timed out; inspect it in Studio',
     );
     await wait(10000);
   }
+  verifyRelease(await cli(['release', 'get', appId, releaseId, '--json']));
   const app = await cli(['app', 'get', appId, '--json']);
   assert.equal(
     app.app?.currentDeploymentId,
     deploymentId,
     'The preview no longer runs this deployment',
   );
-  const url = previewUrl(app, env.NB_STUDIO_SERVER);
+  const url = previewUrl(app, env.NB_STUDIO_SERVER, appId);
   const stop = Math.min(now() + HEALTH_RETRY_WINDOW, deadline);
   for (;;) {
     try {
@@ -191,7 +233,11 @@ export async function publishPreview({
     await wait(HEALTH_RETRY_INTERVAL);
   }
   summary(
-    `Preview ready: ${url}\n\nIt runs ${metadata.sha} in Demo Mode; open it to enter with demo data.\n\n`,
+    `Deployment and health verified: ${url}\n\nChecking generated data and visitor pages; this is not yet a ready preview.\n\n`,
+  );
+  await verify(url);
+  summary(
+    `Preview ready: ${url}\n\nIt runs ${metadata.sha}; generated data, native visitor entry and representative pages passed.\n\n`,
   );
   return url;
 }
