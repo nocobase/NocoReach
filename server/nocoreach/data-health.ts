@@ -64,16 +64,19 @@ class DataHealth{
   const weekly=new Set(['reddit','trends','competitors','rank']);for(const i of items){i.cadence??=weekly.has(i.id)?'weekly':'daily';if(i.state==='warning'||i.state==='failing'){if(!i.fix&&i.retry)i.fix='retry';}else delete i.fix;}
   const order={failing:0,warning:1,pending:2,healthy:3};return {checkedAt:new Date(now).toISOString(),items:items.sort((a,b)=>order[a.state]-order[b.state])};}
  // Which sources this project has connected, for the menu (2026-10-04: a data page shows only once its source is in).
- // Cheap reads of each source's saved state; a source that cannot be read counts as not connected.
+ // Cheap reads of each source's saved state, made together since none depends on another; a source that cannot be
+ // read counts as not connected.
  async connected(id){const safe=async fn=>{try{return Boolean(await fn());}catch{return false;}},on=x=>x&&x.status!=='disconnected';
-  const link=await this.p.link(id).catch(()=>null),google=Boolean(link&&this.p.env(__policy.secretKey(id))&&link.get('status')!=='disconnected');
-  const ch=await this.p.chat?.state(id).catch(()=>null);
-  return {ga4:google&&Boolean(link.get('ga4PropertyId')),gsc:google&&Boolean(link.get('gscSiteUrl')),
-   site:await safe(async()=>(await this.p.siteContent?.state(id))?.sites?.length),github:await safe(async()=>{const g=await this.p.github?.state(id);return g?.repo&&on(g);}),
-   packages:await safe(async()=>(await this.p.packages?.state(id))?.packages?.length),discourse:await safe(async()=>{const c=await this.p.community?.state(id);return c?.origin&&on(c);}),
-   hackernews:await safe(async()=>{const h=await this.p.hackernews?.state(id);return h?.terms?.length&&on(h);}),reddit:await safe(async()=>{const r=await this.p.reddit?.state(id);return r?.terms?.length&&on(r);}),
-   x:await safe(async()=>{const x=await this.p.xSource?.state(id);return x?.terms?.length&&on(x);}),discord:ch?.discord?.status==='active',slack:ch?.slack?.status==='active',
-   trends:await safe(async()=>{const t=await this.p.trends?.state(id);return Boolean(t?.terms?.length&&on(t)||t?.keywords?.length);}),dataforseo:Boolean(this.p.aiSearch?.d4s?.config(id)?.verifiedAt)};}
+  const [link,ch,site,github,packages,discourse,hackernews,reddit,x,trends]=await Promise.all([
+   this.p.link(id).catch(()=>null),this.p.chat?.state(id).catch(()=>null),
+   safe(async()=>(await this.p.siteContent?.state(id))?.sites?.length),safe(async()=>{const g=await this.p.github?.state(id);return g?.repo&&on(g);}),
+   safe(async()=>(await this.p.packages?.state(id))?.packages?.length),safe(async()=>{const c=await this.p.community?.state(id);return c?.origin&&on(c);}),
+   safe(async()=>{const h=await this.p.hackernews?.state(id);return h?.terms?.length&&on(h);}),safe(async()=>{const r=await this.p.reddit?.state(id);return r?.terms?.length&&on(r);}),
+   safe(async()=>{const x=await this.p.xSource?.state(id);return x?.terms?.length&&on(x);}),
+   safe(async()=>{const t=await this.p.trends?.state(id);return Boolean(t?.terms?.length&&on(t)||t?.keywords?.length);})]);
+  const google=Boolean(link&&this.p.env(__policy.secretKey(id))&&link.get('status')!=='disconnected');
+  return {ga4:google&&Boolean(link.get('ga4PropertyId')),gsc:google&&Boolean(link.get('gscSiteUrl')),site,github,packages,discourse,hackernews,reddit,x,
+   discord:ch?.discord?.status==='active',slack:ch?.slack?.status==='active',trends,dataforseo:Boolean(this.p.aiSearch?.d4s?.config(id)?.verifiedAt)};}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('dataHealth.notLoadDataHealth'));}};
   this.p.app.resourceManager.define({name:'nrHealth',actions:{list:wrap(id=>this.list(id)),connected:wrap(id=>this.connected(id))}});this.p.app.acl.allow('nrHealth',['list','connected'],'loggedIn');}
 }
