@@ -6,6 +6,8 @@ Publication belongs to the dedicated NocoReach job in `2013xile/nocobase-ci`, fo
 
 The companion unified-CI patch and bot registration must be reviewed and installed by their maintainers before this path can run. Removing the duplicate trigger does not register this repository with the bot. No source-repository `preview` label or source-repository deployment secret is needed.
 
+Land the application integration and update candidate branches to include this publisher contract before enabling general bot routing. Older heads without the scripts or required source-identity mapping are unsupported; there is no fallback that publishes them without application acceptance.
+
 ## Dispatch and application contract
 
 The proposed `nocoreach-ci.yml` uses `workflow_dispatch` with the same seven fields as [CustomerPortal](https://github.com/2013xile/nocobase-ci/blob/d6c1d6ebe58b83e7b7816e59e5544d5162b0f408/.github/workflows/customerportal-ci.yml): `request_id`, `event_name`, `head_sha`, `base_sha`, `target_branch`, `pr_number`, `skip_label`. Its run name must be `nocoreach-ci:<request_id>` and the mirrored job name must remain exactly `Preview`. The bot must forward only open, same-repository PRs, whatever their target, never forks or pushes. Its actual routing configuration and deployment are a maintainer-owned prerequisite, not included in this application change.
