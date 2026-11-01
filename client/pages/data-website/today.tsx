@@ -1,3 +1,4 @@
+import { ChartLegend } from '#components/reach/chart-legend';
 import { $t, getCurrentLocale } from '#i18n';
 import {
   GA4_TODAY_CACHE_MS,
@@ -13,7 +14,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -330,7 +330,7 @@ function HourChart({ today, weekday }: { today: Today; weekday: string }) {
           <XAxis dataKey='hour' interval={5} fontSize={11} />
           <YAxis allowDecimals={false} fontSize={11} width={44} />
           <Tooltip />
-          <Legend wrapperStyle={{ fontSize: 12 }} />
+          <ChartLegend order={['today', 'yesterday', 'lastWeek', 'partial']} />
           <Line
             isAnimationActive={false}
             type='linear'
@@ -351,14 +351,14 @@ function HourChart({ today, weekday }: { today: Today; weekday: string }) {
             strokeDasharray='4 3'
             dot={false}
             connectNulls={false}
-            legendType='none'
+            legendType={reached > today.through ? 'line' : 'none'}
           />
           <Line
             isAnimationActive={false}
             type='linear'
             dataKey='yesterday'
             name={$t('dataWebsite.yesterday')}
-            stroke='var(--muted-foreground)'
+            stroke='var(--foreground)'
             dot={false}
           />
           <Line

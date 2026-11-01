@@ -1,3 +1,4 @@
+import { ChartLegend } from '#components/reach/chart-legend';
 import { GOOGLE_PROGRESS_CACHE_MS } from '../../../shared/google-cache.js';
 import { $t, $tj } from "#i18n";
 // 搜索表现 · 索引 (?view=index, 2026-10-14, user request: everything Search Console's API offers, in NocoReach's own
@@ -9,7 +10,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { ArrowUpRight, Download, FileSearch } from "lucide-react";
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { toast } from "#lib/toast";
 import { cn } from "#lib/utils";
@@ -167,7 +168,7 @@ function HistoryCard({ history }: { history: NonNullable<IndexView["history"]> }
               <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} minTickGap={32} fontSize={11} />
               <YAxis allowDecimals={false} fontSize={11} width={44} />
               <Tooltip formatter={(v) => num(Number(v))} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <ChartLegend order={['indexed', 'notIndexed']} />
               <Line isAnimationActive={false} type="linear" dataKey="indexed" name={$t('searchIndex.indexed')} stroke="var(--chart-3)" dot={false} />
               <Line isAnimationActive={false} type="linear" dataKey="notIndexed" name={$t('searchIndex.notIndexed')} stroke="var(--muted-foreground)" strokeDasharray="4 4" dot={false} />
             </LineChart>

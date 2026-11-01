@@ -1,3 +1,4 @@
+import { ChartLegend } from '#components/reach/chart-legend';
 import { $t, $tj } from "#i18n";
 import { usePageTab } from '#hooks/use-page-tab';
 // GitHub (网站与产品). 我们的仓库 rebuilt 2026-10-14 in the shape of 访问 (user request: NocoReach's own style, a page
@@ -9,7 +10,7 @@ import { usePageTab } from '#hooks/use-page-tab';
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { ArrowUpRight, Github } from "lucide-react";
-import { Area, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { cn } from "#lib/utils";
 import { PageContainer, PageHeader } from "#components/reach/page";
@@ -132,7 +133,7 @@ function TrendCard({ view, metric }: { view: View; metric: Metric }) {
               <XAxis dataKey="date" tickFormatter={(d: string) => (w.all ? d.slice(0, 7) : d.slice(5))} minTickGap={32} fontSize={11} />
               <YAxis allowDecimals={false} fontSize={11} width={52} tickFormatter={(v: number) => num(v)} />
               <Tooltip formatter={(v) => num(Number(v))} labelFormatter={(d) => dateOf(String(d))} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <ChartLegend order={['value', 'previous']} />
               <Area isAnimationActive={false} type="linear" dataKey="value" name={metric.label()} stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.1} connectNulls={false} />
               {compare ? <Line isAnimationActive={false} type="linear" dataKey="previous" name={$t('dataGithub.previousPeriod')} stroke="var(--muted-foreground)" strokeDasharray="4 4" dot={false} /> : null}
             </ComposedChart>
