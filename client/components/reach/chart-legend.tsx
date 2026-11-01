@@ -26,7 +26,7 @@ export function ChartLegendContent({
   };
   const entries = payload
     .filter((entry) => entry.type !== 'none' && !entry.inactive)
-    .toSorted((a, b) => rank(a) - rank(b));
+    .sort((a, b) => rank(a) - rank(b));
 
   return (
     <ul className='flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-foreground'>

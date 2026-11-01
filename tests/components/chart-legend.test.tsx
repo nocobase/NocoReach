@@ -27,6 +27,7 @@ it('matches real series styles and keeps the main metric first across conditiona
           dataKey='previous'
           name='B previous'
           stroke='var(--muted-foreground)'
+          strokeOpacity={0.5}
           strokeWidth={2}
           strokeDasharray='4 4'
           isAnimationActive={false}
@@ -68,6 +69,9 @@ it('matches real series styles and keeps the main metric first across conditiona
   ).toBe('4 4');
   expect(entries[1].querySelector('line')?.getAttribute('stroke-width')).toBe(
     '2',
+  );
+  expect(entries[1].querySelector('line')?.getAttribute('stroke-opacity')).toBe(
+    '0.5',
   );
   expect(entries[1].querySelector('rect')).toBeNull();
   expect(

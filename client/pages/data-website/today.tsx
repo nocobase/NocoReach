@@ -358,7 +358,7 @@ function HourChart({ today, weekday }: { today: Today; weekday: string }) {
             type='linear'
             dataKey='yesterday'
             name={$t('dataWebsite.yesterday')}
-            stroke='var(--foreground)'
+            stroke='var(--muted-foreground)'
             dot={false}
           />
           <Line
@@ -367,6 +367,7 @@ function HourChart({ today, weekday }: { today: Today; weekday: string }) {
             dataKey='lastWeek'
             name={$t('dataWebsite.lastWeekday', { 0: weekday })}
             stroke='var(--muted-foreground)'
+            strokeOpacity={0.5}
             strokeDasharray='4 4'
             dot={false}
           />
