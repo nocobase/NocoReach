@@ -1,4 +1,9 @@
-import { ChartLegend } from '#components/reach/chart-legend';
+import {
+  ChartLegend,
+  TrendChart,
+  ChartArea as Area,
+  ChartLine as Line,
+} from '#components/reach/chart-legend';
 import { $t, $tj } from "#i18n";
 import { usePageTab } from '#hooks/use-page-tab';
 // GitHub (网站与产品). 我们的仓库 rebuilt 2026-10-14 in the shape of 访问 (user request: NocoReach's own style, a page
@@ -10,7 +15,7 @@ import { usePageTab } from '#hooks/use-page-tab';
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { ArrowUpRight, Github } from "lucide-react";
-import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { cn } from "#lib/utils";
 import { PageContainer, PageHeader } from "#components/reach/page";
@@ -67,7 +72,7 @@ export default function DataGitHub() {
       {view?.connected && view.figures ? (
         <>
           <Tiles view={view} metric={metric} onPick={setMetric} />
-          <TrendCard view={view} metric={METRICS.find((m) => m.key === metric)!} />
+          <TrendCard key={metric} view={view} metric={METRICS.find((m) => m.key === metric)!} />
           <div className="grid gap-3 lg:grid-cols-3">
             <HealthCard view={view} />
             <SourcesCard view={view} />
@@ -128,7 +133,7 @@ function TrendCard({ view, metric }: { view: View; metric: Metric }) {
       {has ? (
         <div className="nr-chart-box px-4 py-3">
           <ResponsiveContainer width="100%" height={260}>
-            <ComposedChart data={points} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+            <TrendChart as={ComposedChart} data={points} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="date" tickFormatter={(d: string) => (w.all ? d.slice(0, 7) : d.slice(5))} minTickGap={32} fontSize={11} />
               <YAxis allowDecimals={false} fontSize={11} width={52} tickFormatter={(v: number) => num(v)} />
@@ -136,7 +141,7 @@ function TrendCard({ view, metric }: { view: View; metric: Metric }) {
               <ChartLegend order={['value', 'previous']} />
               <Area isAnimationActive={false} type="linear" dataKey="value" name={metric.label()} stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.1} connectNulls={false} />
               {compare ? <Line isAnimationActive={false} type="linear" dataKey="previous" name={$t('dataGithub.previousPeriod')} stroke="var(--muted-foreground)" strokeDasharray="4 4" dot={false} /> : null}
-            </ComposedChart>
+            </TrendChart>
           </ResponsiveContainer>
         </div>
       ) : <p className="px-4 py-6 text-sm text-muted-foreground">{emptyText(view, metric)}</p>}

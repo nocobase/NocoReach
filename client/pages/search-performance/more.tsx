@@ -1,3 +1,9 @@
+import {
+  ChartLegend,
+  TrendChart,
+  ChartArea as Area,
+  ChartLine as Line,
+} from '#components/reach/chart-legend';
 import { googleHistoryFreshness } from '../../../shared/google-cache.js';
 import { $t } from "#i18n";
 // Search performance › Performance, the parts beyond the totals: Country / region, Device and Search appearance (read
@@ -7,7 +13,7 @@ import { $t } from "#i18n";
 import { useMemo, useState } from "react";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { ArrowUpRight } from "lucide-react";
-import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { cn } from "#lib/utils";
 import { Card } from "#components/ui/card";
@@ -164,14 +170,15 @@ export function RowDrawer({ scope, dimension, rowKey, figures, metric, onClose }
       {error ? <InlineError>{error instanceof Error ? error.message : $t('common.tryAgainLater')}</InlineError> : !data ? <ListSkeleton rows={3} /> : (
         <div className="nr-chart-box" data-row-line="">
           <ResponsiveContainer width="100%" height={200}>
-            <ComposedChart data={points} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
+            <TrendChart as={ComposedChart} data={points} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} minTickGap={28} fontSize={11} />
               <YAxis fontSize={11} width={48} reversed={m === "position"} allowDecimals={m !== "clicks" && m !== "impressions"} tickFormatter={(v: number) => (m === "ctr" ? `${Math.round(v * 100)}%` : String(v))} />
               <Tooltip formatter={(v) => showMetric(m, Number(v))} />
+              <ChartLegend order={['value', 'previous']} />
               <Area isAnimationActive={false} type="linear" dataKey="value" name={METRIC_LABEL[m]()} stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.1} connectNulls={false} />
               <Line isAnimationActive={false} type="linear" dataKey="previous" name={$t('searchPerformance.previousPeriodShort')} stroke="var(--muted-foreground)" strokeDasharray="4 4" dot={false} />
-            </ComposedChart>
+            </TrendChart>
           </ResponsiveContainer>
         </div>
       )}

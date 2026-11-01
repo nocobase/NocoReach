@@ -1,4 +1,8 @@
-import { ChartLegend } from '#components/reach/chart-legend';
+import {
+  ChartLegend,
+  TrendChart,
+  ChartLine as Line,
+} from '#components/reach/chart-legend';
 import { $t, getCurrentLocale } from '#i18n';
 import {
   GA4_TODAY_CACHE_MS,
@@ -14,7 +18,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Line,
   LineChart,
   ResponsiveContainer,
   Tooltip,
@@ -322,7 +325,8 @@ function HourChart({ today, weekday }: { today: Today; weekday: string }) {
   return (
     <div className='nr-chart-box' data-hour-chart=''>
       <ResponsiveContainer width='100%' height={176}>
-        <LineChart
+        <TrendChart
+          as={LineChart}
           data={data}
           margin={{ left: 0, right: 8, top: 4, bottom: 0 }}
         >
@@ -371,7 +375,7 @@ function HourChart({ today, weekday }: { today: Today; weekday: string }) {
             strokeDasharray='4 4'
             dot={false}
           />
-        </LineChart>
+        </TrendChart>
       </ResponsiveContainer>
     </div>
   );

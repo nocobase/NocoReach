@@ -1,4 +1,9 @@
-import { ChartLegend } from '#components/reach/chart-legend';
+import {
+  ChartLegend,
+  TrendChart,
+  ChartArea as Area,
+  ChartLine as Line,
+} from '#components/reach/chart-legend';
 import type { Range } from '../range-state';
 import {
   Select,
@@ -22,10 +27,8 @@ import { useSearchParams } from 'react-router';
 import { createColumnHelper, type ColumnDef } from '@tanstack/react-table';
 import { ArrowUpRight, Search } from 'lucide-react';
 import {
-  Area,
   CartesianGrid,
   ComposedChart,
-  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -808,7 +811,8 @@ function RowDrawer({
       ) : (
         <div className='nr-chart-box'>
           <ResponsiveContainer width='100%' height={200}>
-            <ComposedChart
+            <TrendChart
+              as={ComposedChart}
               data={points}
               margin={{ left: 0, right: 8, top: 4, bottom: 0 }}
             >
@@ -854,7 +858,7 @@ function RowDrawer({
                 strokeDasharray='4 4'
                 dot={false}
               />
-            </ComposedChart>
+            </TrendChart>
           </ResponsiveContainer>
         </div>
       )}

@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react';
 // 下载量 page (client/pages/data-downloads/), rebuilt 2026-10-14 in the shape of 访问 and GitHub. The page is fed what
 // the real view (server/nocoreach/downloads-view.ts) builds from a small package history, so the two stay in step.
 import { render, screen, waitFor, within } from '@testing-library/react';
@@ -11,6 +12,18 @@ import { WorkspaceCacheProvider } from '#pages/workspace-cache';
 import { downloadsView } from '../../server/nocoreach/downloads-view.js';
 // @ts-expect-error The server modules are plain JavaScript under ts-nocheck.
 import { windowFor, netChange } from '../../server/nocoreach/data-views.js';
+
+vi.mock('recharts', async (original) => {
+  const actual = await original<typeof import('recharts')>();
+  return {
+    ...actual,
+    ResponsiveContainer: ({ children }: { children: ReactElement }) => (
+      <actual.ResponsiveContainer width={600} height={260}>
+        {children}
+      </actual.ResponsiveContainer>
+    ),
+  };
+});
 
 const { action } = vi.hoisted(() => ({ action: vi.fn() }));
 vi.mock('#lib/nocoreach-api', () => ({ nocobaseClient: { action } }));
@@ -233,6 +246,29 @@ describe('下载量', () => {
     expect(
       within(await screen.findByRole('dialog')).getByText('app · npm 下载'),
     ).toBeTruthy();
+    const chart = document.querySelector('[data-item-line]') as HTMLElement;
+    const series = within(chart)
+      .getAllByRole('listitem')
+      .map((entry) => within(entry).getByRole('button'));
+    expect(series).toHaveLength(2);
+    for (const button of series) {
+      expect(button.getAttribute('aria-pressed')).toBe('true');
+      await userEvent.click(button);
+      expect(button.getAttribute('aria-pressed')).toBe('false');
+    }
+    expect(
+      chart.querySelectorAll('.recharts-area, .recharts-line'),
+    ).toHaveLength(0);
+    for (const name of series.map((button) => button.textContent!)) {
+      await userEvent.click(
+        within(chart).getByRole('button', { name, exact: true }),
+      );
+      expect(
+        within(chart)
+          .getByRole('button', { name, exact: true })
+          .getAttribute('aria-pressed'),
+      ).toBe('true');
+    }
     await userEvent.click(screen.getByRole('button', { name: '关闭详情' }));
     await userEvent.click(within(report).getByRole('tab', { name: '版本' }));
     expect(router.state.location.search).toBe('?tab=versions');
@@ -252,5 +288,55 @@ describe('下载量', () => {
       within(report).getByRole('tab', { name: 'Release 安装包' }),
     );
     expect(within(report).getByText('app.zip')).toBeTruthy();
+  });
+  it('starts a newly selected metric with every series visible', async () => {
+    renderPage();
+    await ready();
+    const chart = document.querySelector('[data-trend]') as HTMLElement;
+    const legend = within(chart).getAllByRole('listitem');
+    expect(legend.length).toBeGreaterThanOrEqual(2);
+    const buttons = legend.map((item) => within(item).getByRole('button'));
+    for (const button of buttons) await userEvent.click(button);
+    expect(
+      buttons.every(
+        (button) => button.getAttribute('aria-pressed') === 'false',
+      ),
+    ).toBe(true);
+    await userEvent.click(within(tile('docker:o/app')).getByRole('button'));
+    const next = document.querySelector(
+      '[data-trend="docker:o/app"]',
+    ) as HTMLElement;
+    const visible = within(next)
+      .getAllByRole('listitem')
+      .map((item) => within(item).getByRole('button'));
+    expect(visible.length).toBeGreaterThanOrEqual(2);
+    expect(
+      visible.every((button) => button.getAttribute('aria-pressed') === 'true'),
+    ).toBe(true);
+  });
+
+  it('restores all series when switching between count and growth charts', async () => {
+    renderPage();
+    await ready();
+    const buttons = () =>
+      within(document.querySelector('[data-trend]') as HTMLElement)
+        .getAllByRole('listitem')
+        .map((entry) => within(entry).getByRole('button'));
+    for (const button of buttons()) await userEvent.click(button);
+    await userEvent.click(screen.getByRole('button', { name: '增长指数' }));
+    expect(
+      buttons().every(
+        (button) => button.getAttribute('aria-pressed') === 'true',
+      ),
+    ).toBe(true);
+    for (const button of buttons()) await userEvent.click(button);
+    await userEvent.click(
+      screen.getByRole('button', { name: '下载量', exact: true }),
+    );
+    expect(
+      buttons().every(
+        (button) => button.getAttribute('aria-pressed') === 'true',
+      ),
+    ).toBe(true);
   });
 });

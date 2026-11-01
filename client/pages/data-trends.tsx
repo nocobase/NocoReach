@@ -1,3 +1,8 @@
+import {
+  ChartLegend,
+  TrendChart,
+  ChartLine as Line,
+} from '#components/reach/chart-legend';
 import { $t, $tj, $legacyText } from "#i18n";
 import { chipButtonClass, chipClass } from '#components/reach/chip';
 import { cn } from '#lib/utils';
@@ -12,7 +17,7 @@ import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { ExternalLink, LoaderCircle, TrendingUp } from "lucide-react";
 import { RefreshButton } from '#components/reach/refresh-button';
 import { confirmAction } from "#components/reach/confirm";
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "#lib/toast";
 import { PageContainer, PageHeader } from "#components/reach/page";
 import { EmptyState, InlineError, ListSkeleton, LoadError } from "#components/reach/states";
@@ -121,14 +126,14 @@ export default function DataTrends() {
                 <h2 className="flex items-center gap-1 text-sm font-semibold">{$t('dataTrends.interestWeeklyPeak100')}<InfoTip label={$t('common.info')}>{$t('dataTrends.interestNote')}</InfoTip></h2>
                 <div className="nr-chart-box" data-trends-chart>
                   <ResponsiveContainer width="100%" height={260}>
-                    <LineChart data={chart} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+                    <TrendChart as={LineChart} data={chart} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
                       <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} minTickGap={32} fontSize={11} />
                       <YAxis domain={[0, 100]} allowDecimals={false} fontSize={11} width={36} />
                       <Tooltip />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      <ChartLegend order={terms} />
                       {terms.map((t, i) => <Line key={t} isAnimationActive={false} type="linear" dataKey={t} stroke={COLORS[i]} strokeWidth={i === 0 ? 2.5 : 1.5} dot={false} connectNulls />)}
-                    </LineChart>
+                    </TrendChart>
                   </ResponsiveContainer>
                 </div>
               </Card>
