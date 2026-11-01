@@ -233,10 +233,10 @@ class StrategyService{
   });}
  // Project menu counts reuse the page predicates; personal tasks use the same raw-record owner/state fallback as home.
  async badges(id,ctx){
-  const rows=await this.p.taskExecution.tasks(id) as import('../../shared/task-pending.js').PendingTask[];
+  // The tasks and the state are read together; the counts do not depend on which arrives first.
+  const [rows,state]=await Promise.all([this.p.taskExecution.tasks(id),this.state(id)]) as [import('../../shared/task-pending.js').PendingTask[],import('../../shared/strategy-model.js').StrategyState];
   const me=ctx?.auth?.user?.id!=null?String(ctx.auth.user.id):null;
   const tasks=rows.filter(t=>{const owner=taskOwner(t);return me!==null&&(owner?String(owner)===me:ctx?.state?.nrRole==='admin')&&!taskClosed(t.evidence?.work)&&!taskSnoozed(t.evidence?.work)&&['review','todo'].includes(taskState(t.evidence?.work,t.status));}).length;
-  const state=await this.state(id) as import('../../shared/strategy-model.js').StrategyState;
   return {tasks,opportunities:rowsFor(state).filter(r=>opportunityState(r,state).state==='pending').length,insights:insightPending(state,rows)};
  }
  async approve(id,v,ctx){return this.mutate(id,{...v,action:'approve'},async(state,transaction)=>{

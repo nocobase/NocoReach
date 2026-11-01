@@ -178,6 +178,17 @@ test('menu counts: personal waiting tasks and all pending opportunities',async()
  tasks.push({id:7,evidence:{work:work(1,{humanOwnerId:'2',snooze:{until:'2099-01-01T01:00:00Z',day:'2099-01-01',at:'x',by:'2'}})}});
  assert.equal((await s.badges('1',as(2,'member'))).tasks,1);
 });
+
+test('menu counts read the tasks and the state together',async()=>{
+ const {StrategyService}=__strategy_service;const order=[];let release;const tasksRead=new Promise(r=>{release=r;});
+ const s=new StrategyService({db:{getRepository:()=>({findOne:async()=>{order.push('state');return {get:()=>({revision:1,proposals:[]})};}})}});
+ s.p.taskExecution={tasks:async()=>{order.push('tasks');await tasksRead;return [];}};
+ const counts=s.badges('1',{auth:{user:{id:1}},state:{nrRole:'admin'}});
+ await new Promise(r=>setTimeout(r,0));
+ // The state is read while the tasks are still loading, and the counts are the same as reading one after the other.
+ assert.deepEqual(order,['tasks','state']);release();
+ assert.deepEqual(await counts,{tasks:0,opportunities:0,insights:0});
+});
 test('opportunity numbers: given once by first appearance, shared by every copy, kept when re-raised',()=>{
  const {number}=__opportunity_board;
  const state={insights:{generatedAt:'2026-10-02',items:[{id:'b',firstSeenAt:'2026-09-28'},{id:'c'}]},insightHistory:[{generatedAt:'2026-09-28',items:[{id:'b'},{id:'a',firstSeenAt:'2026-09-20'}]}]};
