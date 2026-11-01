@@ -1,3 +1,4 @@
+import { ChartLegend } from '#components/reach/chart-legend';
 import { $t, $tj, getCurrentLocale, isChinese } from '#i18n';
 import {
   GA4_HISTORY_CACHE_MS,
@@ -16,7 +17,6 @@ import {
   Area,
   CartesianGrid,
   ComposedChart,
-  Legend,
   Line,
   ResponsiveContainer,
   Tooltip,
@@ -382,7 +382,7 @@ function TrendCard({ report, metric }: { report: Report; metric: MetricKey }) {
               formatter={(v) => show(Number(v), m.format)}
               labelFormatter={dayLabel}
             />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <ChartLegend order={['value', 'previous', 'fresh']} />
             <Area
               isAnimationActive={false}
               type='linear'

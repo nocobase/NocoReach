@@ -1,3 +1,4 @@
+import { ChartLegend } from '#components/reach/chart-legend';
 import type { Range } from '../range-state';
 import {
   Select,
@@ -24,7 +25,6 @@ import {
   Area,
   CartesianGrid,
   ComposedChart,
-  Legend,
   Line,
   ResponsiveContainer,
   Tooltip,
@@ -50,7 +50,6 @@ import { ListSkeleton, InlineError } from '#components/reach/states';
 import { Tag } from '#components/reach/tag';
 import { Delta } from '#components/reach/delta';
 import { formatDate, formatPercent } from '#lib/format';
-import { cn } from '#lib/utils';
 import { safeLink } from '../analytics';
 import { DetailDrawer } from '../detail-drawer';
 import { help } from '../glossary';
@@ -836,7 +835,7 @@ function RowDrawer({
                 formatter={(v) => show(Number(v), METRICS[main].format)}
                 labelFormatter={dayLabel}
               />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <ChartLegend order={['value', 'previous']} />
               <Area
                 isAnimationActive={false}
                 type='linear'

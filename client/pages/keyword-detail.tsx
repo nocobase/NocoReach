@@ -1,3 +1,4 @@
+import { ChartLegend } from '#components/reach/chart-legend';
 import {
   getCurrentLocale,
   $t,
@@ -18,7 +19,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -847,7 +847,7 @@ function TrendSection({
                     allowDecimals={false}
                   />
                   <Tooltip />
-                  <Legend />
+                  <ChartLegend order={['impressions', 'clicks']} />
                   <Line
                     yAxisId='i'
                     isAnimationActive={false}
