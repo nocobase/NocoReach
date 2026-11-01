@@ -1,4 +1,9 @@
-import { ChartLegend } from '#components/reach/chart-legend';
+import {
+  ChartLegend,
+  TrendChart,
+  ChartArea as Area,
+  ChartLine as Line,
+} from '#components/reach/chart-legend';
 import { $t } from "#i18n";
 // 下载量 (网站与产品), rebuilt 2026-10-14 in the shape of 访问 and GitHub (user request: take the first NocoReach's 产品采用
 // page, which had far more to see): a figure per package and one for the GitHub release files, a figure picking the
@@ -9,7 +14,7 @@ import { $t } from "#i18n";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Package } from "lucide-react";
-import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { cn } from "#lib/utils";
 import { PageContainer, PageHeader } from "#components/reach/page";
@@ -104,7 +109,7 @@ function TrendCard({ view, item }: { view: View; item: Item }) {
       {has ? (
         <div className="nr-chart-box px-4 py-3">
           <ResponsiveContainer width="100%" height={260}>
-            <ComposedChart data={points} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+            <TrendChart as={ComposedChart} data={points} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} minTickGap={32} fontSize={11} />
               <YAxis allowDecimals={false} fontSize={11} width={56} tickFormatter={(v: number) => num(v)} />
@@ -114,7 +119,7 @@ function TrendCard({ view, item }: { view: View; item: Item }) {
                 <Area isAnimationActive={false} type="linear" dataKey="value" name={kindLabel(item)} stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.1} connectNulls={false} />
                 <Line isAnimationActive={false} type="linear" dataKey="previous" name={$t('dataDownloads.previousPeriod')} stroke="var(--muted-foreground)" strokeDasharray="4 4" dot={false} />
               </> : items.map((it, i) => <Line key={it.id} isAnimationActive={false} type="linear" dataKey={it.id} name={`${it.kind === "assets" ? REGISTRY.github : it.title} · ${kindLabel(it)}`} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={false} connectNulls={false} />)}
-            </ComposedChart>
+            </TrendChart>
           </ResponsiveContainer>
         </div>
       ) : <p className="px-4 py-6 text-sm text-muted-foreground">{item.since ? $t('dataDownloads.noDaysInRange', { 0: dateOf(item.since) }) : $t('dataDownloads.shownAfterNextSync')}</p>}
