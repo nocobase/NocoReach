@@ -63,7 +63,7 @@ export default function DataDownloads() {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" role="group" aria-label={$t('dataDownloads.figures')}>
             {items.map((it) => <Tile key={it.id} item={it} active={it.id === chosen.id} onPick={() => setPicked(it.id)} />)}
           </div>
-          <TrendCard view={view} item={chosen} />
+          <TrendCard key={chosen.id} view={view} item={chosen} />
           {cards.length ? <div className={cn("grid gap-3", COLS[cards.length])}>{cards}</div> : null}
           {view.coverage?.length ? <CoverageCard view={view} /> : null}
           <ReportCard view={view} projectId={project?.id} />
@@ -109,7 +109,7 @@ function TrendCard({ view, item }: { view: View; item: Item }) {
       {has ? (
         <div className="nr-chart-box px-4 py-3">
           <ResponsiveContainer width="100%" height={260}>
-            <TrendChart as={ComposedChart} data={points} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+            <TrendChart key={mode} as={ComposedChart} data={points} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} minTickGap={32} fontSize={11} />
               <YAxis allowDecimals={false} fontSize={11} width={56} tickFormatter={(v: number) => num(v)} />

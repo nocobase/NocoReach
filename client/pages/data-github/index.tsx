@@ -72,7 +72,7 @@ export default function DataGitHub() {
       {view?.connected && view.figures ? (
         <>
           <Tiles view={view} metric={metric} onPick={setMetric} />
-          <TrendCard view={view} metric={METRICS.find((m) => m.key === metric)!} />
+          <TrendCard key={metric} view={view} metric={METRICS.find((m) => m.key === metric)!} />
           <div className="grid gap-3 lg:grid-cols-3">
             <HealthCard view={view} />
             <SourcesCard view={view} />

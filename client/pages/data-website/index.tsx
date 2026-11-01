@@ -239,7 +239,7 @@ export default function DataWebsite() {
             <ChangeDrivers report={report!} metric={metric} suspect={suspect} />
             <QualityNotes issues={issuesFor(issues, metric)} />
           </div>
-          <TrendCard report={report!} metric={metric} />
+          <TrendCard key={metric} report={report!} metric={metric} />
           <div className='grid gap-3 lg:grid-cols-2'>
             <ChannelCard report={report!} issues={issues} />
             <AudienceCard report={report!} />

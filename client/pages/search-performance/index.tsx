@@ -1,3 +1,8 @@
+import {
+  ChartLegend,
+  TrendChart,
+  ChartArea as Area,
+} from '#components/reach/chart-legend';
 import { googleLocalFreshness, googleCacheExpiry } from '../../../shared/google-cache.js';
 import { $t, $tj, $legacyText } from "#i18n";
 import { usePageTab } from '#hooks/use-page-tab';
@@ -17,7 +22,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Copy, Download, Save, SearchCheck } from "lucide-react";
 import { toast } from "#lib/toast";
 import { cn } from "#lib/utils";
@@ -217,7 +222,7 @@ export default function SearchPerformancePage() {
         <>
           {project ? <SearchHistory key={String(project.id)} projectId={project.id} property={project.searchConsoleProperty} report={report} reload={reload} /> : null}
           <TotalsCards report={report} metric={metric} onMetric={(m) => update({ metric: m === "clicks" ? undefined : m })} />
-          <TrendCard report={report} metric={metric} />
+          <TrendCard key={metric} report={report} metric={metric} />
           {showDetails && !tableReport && !detailsError ? <ListSkeleton rows={4} /> : null}
           {showDetails && detailsError ? <LoadError title={$t('searchHistory.detailsFailed')} message={$t('searchHistory.detailsFailed')} onRetry={() => window.location.reload()} /> : null}
           {showDetails && tableReport ? <>
@@ -352,15 +357,16 @@ function TrendCard({ report, metric }: { report: SearchReport; metric: Metric })
       <div className="flex items-center gap-1"><h2 className="text-sm font-semibold">{$tj('searchPerformance.daily',{0:label})}</h2><InfoTip label={$t('common.howReadChart')}>{$tj('searchPerformance.solidLineSelectedPeriodDashed',{0:fresh.length ? $t('searchPerformance.preliminaryDataDottedLineGoogle',{0:formatDate(fresh[0].date),1:fresh.length > 1 ? $t('searchPerformance.rangeEnd',{0:formatDate(fresh.at(-1)!.date)}) : ""}) : ""})}{" "}{$t('searchPerformance.clickFigureToSwitch')}</InfoTip></div>
       <div className="nr-chart-box">
         <ResponsiveContainer width="100%" height={240}>
-          <AreaChart data={data} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+          <TrendChart as={AreaChart} data={data} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} minTickGap={32} fontSize={11} />
             <YAxis allowDecimals={metric === "ctr" || metric === "position"} reversed={metric === "position"} fontSize={11} width={48} tickFormatter={(v: number) => (metric === "ctr" ? `${(v * 100).toFixed(0)}%` : String(v))} />
             <Tooltip formatter={(v) => showMetric(metric, Number(v))} labelFormatter={(d, p) => (p?.[0]?.payload?.previousDate ? $t('searchPerformance.previous',{0:d,1:p[0].payload.previousDate}) : $t('searchPerformance.preliminaryMetric',{0:d}))} />
+            <ChartLegend order={['value', 'previous', 'fresh']} />
             <Area isAnimationActive={false} type="linear" dataKey="value" name={$t('searchPerformance.period',{0:label})} stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.1} />
             <Area isAnimationActive={false} type="linear" dataKey="previous" name={$t('searchPerformance.previousPeriod',{0:label})} stroke="var(--muted-foreground)" strokeDasharray="5 4" fill="none" />
             {fresh.length ? <Area isAnimationActive={false} type="linear" dataKey="fresh" name={$t('searchPerformance.preliminaryPrefix',{0:label})} stroke="var(--chart-3)" strokeDasharray="2 3" fill="var(--chart-3)" fillOpacity={0.04} connectNulls={false} /> : null}
-          </AreaChart>
+          </TrendChart>
         </ResponsiveContainer>
       </div>
     </Card>

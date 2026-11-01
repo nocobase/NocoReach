@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react';
 // 搜索表现 (client/pages/search-performance/), 2026-10-14: search types, the four figures picking the line, 国家/地区 ·
 // 设备 · 搜索结果呈现, 上升最快 · 下降最快 · 新出现, 细分, and a query's detail.
 import { act, render, screen, waitFor, within } from '@testing-library/react';
@@ -7,6 +8,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import SearchPerformancePage from '#pages/search-performance/index';
 import { WorkspaceCacheProvider } from '#pages/workspace-cache';
+
+vi.mock('recharts', async (original) => {
+  const actual = await original<typeof import('recharts')>();
+  return {
+    ...actual,
+    ResponsiveContainer: ({ children }: { children: ReactElement }) => (
+      <actual.ResponsiveContainer width={600} height={260}>
+        {children}
+      </actual.ResponsiveContainer>
+    ),
+  };
+});
 
 const { action, project } = vi.hoisted(() => ({
   action: vi.fn(),
@@ -168,7 +181,9 @@ const tile = (key: string) =>
   document.querySelector(`[data-metric="${key}"]`) as HTMLElement;
 // The details load with the page; wait for their table.
 const loadDetails = async () => {
-  await waitFor(() => expect(document.querySelector('[data-report]')).toBeTruthy());
+  await waitFor(() =>
+    expect(document.querySelector('[data-report]')).toBeTruthy(),
+  );
 };
 const ready = () =>
   waitFor(() =>
@@ -267,6 +282,29 @@ describe('搜索表现', () => {
     expect(
       await within(drawer).findByText('https://example.com/crm'),
     ).toBeTruthy();
+    const chart = document.querySelector('[data-row-line]') as HTMLElement;
+    const series = within(chart)
+      .getAllByRole('listitem')
+      .map((entry) => within(entry).getByRole('button'));
+    expect(series).toHaveLength(2);
+    for (const button of series) {
+      expect(button.getAttribute('aria-pressed')).toBe('true');
+      await userEvent.click(button);
+      expect(button.getAttribute('aria-pressed')).toBe('false');
+    }
+    expect(
+      chart.querySelectorAll('.recharts-area, .recharts-line'),
+    ).toHaveLength(0);
+    for (const name of series.map((button) => button.textContent!)) {
+      await userEvent.click(
+        within(chart).getByRole('button', { name, exact: true }),
+      );
+      expect(
+        within(chart)
+          .getByRole('button', { name, exact: true })
+          .getAttribute('aria-pressed'),
+      ).toBe('true');
+    }
     expect(action).toHaveBeenCalledWith(
       'nrDataViews',
       'searchRow',
@@ -291,15 +329,23 @@ describe('搜索表现', () => {
     ).toHaveLength(1);
     await act(async () => router.navigate('/search'));
     await ready();
-    expect(action.mock.calls.filter(([, name]) => name === 'search')).toHaveLength(2);
-    expect(action.mock.calls.filter(([, name]) => name === 'searchBreakdown')).toHaveLength(1);
+    expect(
+      action.mock.calls.filter(([, name]) => name === 'search'),
+    ).toHaveLength(2);
+    expect(
+      action.mock.calls.filter(([, name]) => name === 'searchBreakdown'),
+    ).toHaveLength(1);
     await act(async () => router.navigate('/search?view=index'));
     project.searchConsoleProperty = 'sc-domain:changed.test';
     await act(async () => router.navigate('/search'));
     await ready();
     await loadDetails();
-    expect(action.mock.calls.filter(([, name]) => name === 'search')).toHaveLength(4);
-    expect(action.mock.calls.filter(([, name]) => name === 'searchBreakdown')).toHaveLength(2);
+    expect(
+      action.mock.calls.filter(([, name]) => name === 'search'),
+    ).toHaveLength(4);
+    expect(
+      action.mock.calls.filter(([, name]) => name === 'searchBreakdown'),
+    ).toHaveLength(2);
   });
 
   it('hydrates the main report and breakdown from the same session after a browser refresh', async () => {
@@ -338,5 +384,70 @@ describe('搜索表现', () => {
     } finally {
       date.mockRestore();
     }
+  });
+  it('starts a newly selected metric with every series visible', async () => {
+    renderPage();
+    await ready();
+    const chart = document.querySelector('[data-trend]') as HTMLElement;
+    const legend = within(chart).getAllByRole('listitem');
+    expect(legend.length).toBeGreaterThanOrEqual(2);
+    const buttons = legend.map((item) => within(item).getByRole('button'));
+    for (const button of buttons) await userEvent.click(button);
+    expect(
+      buttons.every(
+        (button) => button.getAttribute('aria-pressed') === 'false',
+      ),
+    ).toBe(true);
+    await userEvent.click(
+      within(tile('position')).getByRole('button', { name: '平均排名' }),
+    );
+    const next = document.querySelector(
+      '[data-trend="position"]',
+    ) as HTMLElement;
+    const visible = within(next)
+      .getAllByRole('listitem')
+      .map((item) => within(item).getByRole('button'));
+    expect(visible.length).toBeGreaterThanOrEqual(2);
+    expect(
+      visible.every((button) => button.getAttribute('aria-pressed') === 'true'),
+    ).toBe(true);
+  });
+
+  it('toggles current, previous and preliminary daily series independently', async () => {
+    const original = action.getMockImplementation()!;
+    action.mockImplementation(async (...args) => {
+      const result = await original(...args);
+      return args[1] === 'search'
+        ? {
+            ...result,
+            preliminary: [{ date: '2026-10-08', clicks: 12, impressions: 120 }],
+          }
+        : result;
+    });
+    renderPage();
+    await ready();
+    const chart = document.querySelector('[data-trend]') as HTMLElement;
+    const series = within(chart)
+      .getAllByRole('listitem')
+      .map((entry) => within(entry).getByRole('button'));
+    expect(series).toHaveLength(3);
+    for (let index = 0; index < series.length; index++) {
+      expect(series[index].getAttribute('aria-pressed')).toBe('true');
+      await userEvent.click(series[index]);
+      expect(series[index].getAttribute('aria-pressed')).toBe('false');
+      expect(chart.querySelectorAll('.recharts-area')).toHaveLength(
+        series.length - index - 1,
+      );
+    }
+    for (const name of series.map((button) => button.textContent!))
+      await userEvent.click(
+        within(chart).getByRole('button', { name, exact: true }),
+      );
+    expect(
+      within(chart)
+        .getAllByRole('listitem')
+        .map((entry) => within(entry).getByRole('button'))
+        .every((button) => button.getAttribute('aria-pressed') === 'true'),
+    ).toBe(true);
   });
 });
