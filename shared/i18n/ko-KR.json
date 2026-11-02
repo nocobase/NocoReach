@@ -7721,6 +7721,7 @@
   "repos.limitPaths": "일부 폴더에서만 변경 허용(선택)",
   "repos.saveAndCheck": "저장하고 확인",
   "repos.checkNow": "확인",
+  "navSources.addedToMenu": "메뉴에 추가됨: {0}",
   "collectorQueue.title": "수집기가 다른 읽기를 처리하고 있어 대기 중입니다",
   "collectorQueue.help": "약 10분 뒤 자동으로 다시 시도하며 최대 3번까지 시도합니다. 따로 할 일은 없습니다.",
   "collectorQueue.gaveUp": "수집기가 계속 다른 읽기를 처리하고 있어 이번에는 읽지 못했습니다"

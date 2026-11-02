@@ -7719,6 +7719,7 @@
   "repos.limitPaths": "Izinkan perubahan hanya di beberapa folder (opsional)",
   "repos.saveAndCheck": "Simpan dan periksa",
   "repos.checkNow": "Periksa",
+  "navSources.addedToMenu": "Ditambahkan ke menu: {0}",
   "collectorQueue.title": "Pengumpul sedang memproses pembacaan lain, jadi pembacaan ini antre",
   "collectorQueue.help": "Akan dicoba lagi otomatis dalam sekitar 10 menit, hingga 3 kali. Tidak perlu melakukan apa pun.",
   "collectorQueue.gaveUp": "Pengumpul terus sibuk dengan pembacaan lain, jadi kali ini tidak ada yang terbaca"

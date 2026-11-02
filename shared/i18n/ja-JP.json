@@ -7719,6 +7719,7 @@
   "repos.limitPaths": "一部のフォルダーだけ変更を許可（任意）",
   "repos.saveAndCheck": "保存してチェック",
   "repos.checkNow": "チェック",
+  "navSources.addedToMenu": "メニューに追加しました：{0}",
   "collectorQueue.title": "コレクターが別の取得を処理中のため、待機中です",
   "collectorQueue.help": "約 10 分後に自動で再試行します（最大 3 回）。操作は不要です。",
   "collectorQueue.gaveUp": "コレクターが他の取得で使用中のままだったため、今回は取得できませんでした"

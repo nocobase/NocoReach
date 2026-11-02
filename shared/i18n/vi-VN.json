@@ -7719,6 +7719,7 @@
   "repos.limitPaths": "Chỉ cho phép sửa một số thư mục (không bắt buộc)",
   "repos.saveAndCheck": "Lưu và kiểm tra",
   "repos.checkNow": "Kiểm tra",
+  "navSources.addedToMenu": "Đã thêm vào menu: {0}",
   "collectorQueue.title": "Bộ thu thập đang xử lý lượt đọc khác, lượt này đang chờ",
   "collectorQueue.help": "Sẽ tự động thử lại sau khoảng 10 phút, tối đa 3 lần. Bạn không cần làm gì.",
   "collectorQueue.gaveUp": "Bộ thu thập luôn bận với các lượt đọc khác, nên lần này không đọc được"

@@ -39,7 +39,20 @@ const fixture = vi.hoisted(() => ({
   areas: [] as unknown[],
   runs: [] as unknown[],
   schedule: null as unknown,
+  /** Which sources are connected (nrHealth:connected), for the menu and the links into data pages. */
+  sources: {} as Record<string, boolean>,
 }));
+const CONNECTED = {
+  ga4: true,
+  gsc: true,
+  site: true,
+  github: true,
+  packages: true,
+  discourse: true,
+  hackernews: true,
+  reddit: true,
+  trends: true,
+};
 vi.mock('../../client/lib/nocoreach-api', async (original) => ({
   ...(await original<typeof import('../../client/lib/nocoreach-api')>()),
   nocobaseClient: { action: fixture.action },
@@ -290,6 +303,7 @@ beforeEach(() => {
   fixture.tasks = [];
   fixture.cards = [];
   fixture.window = undefined;
+  fixture.sources = CONNECTED;
   fixture.areas = [];
   fixture.runs = [];
   fixture.schedule = null;
@@ -304,7 +318,7 @@ beforeEach(() => {
   fixture.action.mockImplementation(
     (resource: string, action: string, options: { body?: object }) => {
       const body = (options?.body || {}) as Record<string, unknown>;
-      if (resource === 'nrHealth') return Promise.resolve({});
+      if (resource === 'nrHealth') return Promise.resolve(fixture.sources);
       if (resource === 'nrStrategy' && action === 'badges')
         return Promise.resolve({
           insights: insightPending(fixture.state, []),
@@ -692,6 +706,75 @@ it('the day’s chips follow the figures its analysis read, not the 7-day tiles,
   expect(chips[0].getAttribute('href')).toBe('/seo-opportunities?days=28');
   expect(chips[0].getAttribute('title')).toBe('strategy.metricWindow:28');
   expect(within(brief).queryByText(/↑ 35%|↑ 16%/)).toBeNull();
+});
+
+it('a card, chip or line whose page the menu leaves out shows its number without leading there', async () => {
+  // Google was disconnected after this analysis: Traffic and Search performance are out of the menu; GitHub is in.
+  fixture.sources = { ...CONNECTED, ga4: false, gsc: false };
+  fixture.cards = [
+    {
+      id: 'gsc',
+      metrics: [metric('clicks', 1200, -0.31, 1739)],
+      series: [],
+    },
+    { id: 'github', metrics: [metric('stars', 30)], series: [] },
+  ];
+  fixture.state.insights!.evidence.summary = {
+    search: period({ clicks: [1200, 1739], impressions: [54000, 52941] }),
+  };
+  fixture.areas = [
+    {
+      id: 'site',
+      title: 'Site',
+      items: [
+        {
+          key: 'a',
+          text: 'Pages indexed: 120',
+          values: [],
+          source: 'site',
+          to: '/seo-opportunities',
+        },
+        {
+          key: 'c',
+          text: 'Google interest {0}',
+          values: ['↓ 36%'],
+          source: 'trends',
+          to: '/trends',
+        },
+      ],
+    },
+  ];
+  setup();
+  const tiles = await screen.findByRole('region', {
+    name: 'strategy.keyMetrics',
+  });
+  await waitFor(() =>
+    expect(
+      within(tiles)
+        .getAllByRole('link')
+        .map((l) => l.getAttribute('href')),
+    ).toEqual([expect.stringMatching(/^\/data\/github/)]),
+  );
+  expect(within(tiles).getByText('1,200')).toBeTruthy();
+  const brief = screen.getByRole('group', { name: 'strategy.todayBrief' });
+  expect(within(brief).getByText('common.searchClicks ↓ 31%')).toBeTruthy();
+  expect(
+    within(brief)
+      .getAllByRole('link')
+      .map((l) => l.textContent),
+  ).toEqual(['strategy.watchingChip:1']);
+  // The line about Search performance only reads; the Trends line still opens its page.
+  const situation = screen.getByRole('region', {
+    name: 'strategy.currentSituation',
+  });
+  expect(
+    (await within(situation).findByText('Pages indexed: 120')).closest(
+      'button',
+    ),
+  ).toBeDisabled();
+  expect(
+    within(situation).getByText('Google interest ↓ 36%').closest('button'),
+  ).toBeEnabled();
 });
 
 it('without the figures in its evidence, the day’s message names no numbers', async () => {

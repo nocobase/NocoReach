@@ -7719,6 +7719,7 @@
   "repos.limitPaths": "Änderungen nur in bestimmten Ordnern erlauben (optional)",
   "repos.saveAndCheck": "Speichern und prüfen",
   "repos.checkNow": "Prüfen",
+  "navSources.addedToMenu": "Zum Menü hinzugefügt: {0}",
   "collectorQueue.title": "Der Datensammler bearbeitet gerade ein anderes Einlesen, dieses wartet",
   "collectorQueue.help": "Es wird in etwa 10 Minuten automatisch erneut versucht, bis zu 3-mal. Sie müssen nichts tun.",
   "collectorQueue.gaveUp": "Der Datensammler war durchgehend mit anderen Einlesevorgängen beschäftigt, diesmal wurde nichts gelesen"

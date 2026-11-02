@@ -7719,6 +7719,7 @@
   "repos.limitPaths": "只允許改部分目錄（選填）",
   "repos.saveAndCheck": "儲存並檢查",
   "repos.checkNow": "檢查",
+  "navSources.addedToMenu": "已加到選單：{0}",
   "collectorQueue.title": "擷取器正在處理另一個讀取，已排隊",
   "collectorQueue.help": "約 10 分鐘後自動再試，最多再試 3 次。不需要手動操作。",
   "collectorQueue.gaveUp": "擷取器一直在處理其他讀取，這次沒有讀到"

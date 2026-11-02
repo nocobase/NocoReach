@@ -23,6 +23,11 @@ import {
 } from './components/app-sidebar.js';
 import { NavigationMenu } from './components/navigation-menu.js';
 import { usePendingNavigationBadges } from '../components/app-shell/pending-navigation-badges.js';
+import { useNavSources } from '../components/app-shell/nav-badges.js';
+import {
+  bySources,
+  useMenuAdditions,
+} from '../components/app-shell/nav-sources.js';
 import { AppBrand } from './components/app-brand.js';
 import { HeaderActions } from './components/header-actions.js';
 import { AppSidebarFooter } from './components/sidebar-footer.js';
@@ -48,6 +53,10 @@ export function AppLayout({ routes }: AppLayoutProps): ReactElement {
     denied,
   );
   const navigationBadges = usePendingNavigationBadges();
+  // NocoReach: a data page is in the menu once its source is connected (2026-11-02 user decision); its address still
+  // opens it, with the page's own prompt to connect.
+  const sources = useNavSources();
+  useMenuAdditions(menuItems);
   // The element pages scroll in: the trail of a top-level page waits for the page's heading to leave it.
   const contentRef = useRef<HTMLDivElement>(null);
   const navigationLabel = t('navigation.label', {
@@ -70,7 +79,7 @@ export function AppLayout({ routes }: AppLayoutProps): ReactElement {
                   {/* NocoReach keeps its top-level groups collapsible rather than the template's always-open sections,
                 and shows its pending counts through the template's entry badges. */}
                   <NavigationMenu
-                    items={menuItems}
+                    items={bySources(menuItems, sources)}
                     label={navigationLabel}
                     selectedKey={selectedKey}
                     sections={false}

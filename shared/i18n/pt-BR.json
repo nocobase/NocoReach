@@ -7719,6 +7719,7 @@
   "repos.limitPaths": "Permitir alterações só em algumas pastas (opcional)",
   "repos.saveAndCheck": "Salvar e verificar",
   "repos.checkNow": "Verificar",
+  "navSources.addedToMenu": "Adicionado ao menu: {0}",
   "collectorQueue.title": "O coletor está processando outra leitura, então esta ficou na fila",
   "collectorQueue.help": "Uma nova tentativa automática acontece em cerca de 10 minutos, até 3 vezes. Não é preciso fazer nada.",
   "collectorQueue.gaveUp": "O coletor continuou ocupado com outras leituras, então nada foi lido desta vez"

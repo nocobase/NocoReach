@@ -7719,6 +7719,7 @@
   "repos.limitPaths": "N’autoriser les modifications que dans certains dossiers (facultatif)",
   "repos.saveAndCheck": "Enregistrer et vérifier",
   "repos.checkNow": "Vérifier",
+  "navSources.addedToMenu": "Ajouté au menu : {0}",
   "collectorQueue.title": "Le collecteur traite une autre lecture : celle-ci est en attente",
   "collectorQueue.help": "Nouvel essai automatique dans 10 minutes environ, jusqu’à 3 fois. Aucune action nécessaire.",
   "collectorQueue.gaveUp": "Le collecteur est resté occupé par d’autres lectures : rien n’a été lu cette fois"

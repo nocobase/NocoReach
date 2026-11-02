@@ -7719,6 +7719,7 @@
   "repos.limitPaths": "Allow changes only in some folders (optional)",
   "repos.saveAndCheck": "Save and check",
   "repos.checkNow": "Check",
+  "navSources.addedToMenu": "Added to the menu: {0}",
   "collectorQueue.title": "The collector is busy with another read, so this one is queued",
   "collectorQueue.help": "It tries again in about 10 minutes, up to 3 more times. Nothing to do.",
   "collectorQueue.gaveUp": "The collector stayed busy with other reads, so nothing was read this time"

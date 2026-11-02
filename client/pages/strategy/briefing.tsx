@@ -8,6 +8,7 @@ import { formatCount, formatDate } from '#lib/format';
 import { Tag, type Tone } from '#components/reach/tag';
 import { ActorAvatar, AiMark } from '#components/reach/actor';
 import { Button } from '#components/ui/button';
+import { useLinkInMenu } from '#components/app-shell/nav-sources';
 import { healthText, loadHealth, type HealthItem } from '../data-health';
 import { WAITING_TASKS_URL } from '../task-waiting';
 import type { Work } from '../task-execution-types';
@@ -113,10 +114,11 @@ export function MetricTiles({
         </p>
         <div className='grid min-w-0 grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3'>
           {items.map((i) => (
-            <Link
+            <PageLink
               key={i.label}
               to={i.to}
-              className='flex flex-col gap-1 rounded-lg border bg-card px-3 pt-2.5 pb-2 text-card-foreground transition-colors hover:border-ring/60'
+              className='flex flex-col gap-1 rounded-lg border bg-card px-3 pt-2.5 pb-2 text-card-foreground'
+              linkClassName='transition-colors hover:border-ring/60'
             >
               <span className='text-xs text-muted-foreground'>{i.label}</span>
               <span className='flex flex-wrap items-baseline gap-x-2'>
@@ -144,11 +146,38 @@ export function MetricTiles({
                   change={smallBase(i) ? i.value! - i.previous! : i.change}
                 />
               )}
-            </Link>
+            </PageLink>
           ))}
         </div>
       </div>
     </RequestBlock>
+  );
+}
+
+// A card or chip opens its data page, unless the menu leaves that page out because its source is no longer connected
+// (2026-11-02); then it only shows the number.
+function PageLink({
+  to,
+  className,
+  linkClassName,
+  title,
+  children,
+}: {
+  to: string;
+  className?: string;
+  linkClassName?: string;
+  title?: string;
+  children: ReactNode;
+}) {
+  const inMenu = useLinkInMenu();
+  return inMenu(to) ? (
+    <Link to={to} className={cn(className, linkClassName)} title={title}>
+      {children}
+    </Link>
+  ) : (
+    <span className={className} title={title}>
+      {children}
+    </span>
   );
 }
 
@@ -249,7 +278,7 @@ function Summary({
       {(moved.length > 0 || watching > 0) && (
         <div className='mt-1.5 flex flex-wrap gap-1.5'>
           {moved.map((i) => (
-            <Link
+            <PageLink
               key={i.label}
               to={i.to}
               title={
@@ -259,7 +288,7 @@ function Summary({
               <Tag tone={i.change! >= 0 ? 'green' : 'red'}>
                 {i.label} {changeText(i)}
               </Tag>
-            </Link>
+            </PageLink>
           ))}
           {watching > 0 && (
             <Link to='/opportunities?tab=watch'>
