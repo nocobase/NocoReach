@@ -26,6 +26,12 @@ test('tracking: add once per keyword and market, weekly checks only when due, al
  await t.add('1',{keywords:[{keyword:'pricey',locationCode:2840,language:'en'},{keyword:'after',locationCode:2840,language:'en'}]});r=await t.check('1',{all:true});assert.ok(r.errors.some(e=>e.includes('预算')));assert.ok(!runs.some(v=>v.target==='after'),'stops at the budget');
  await t.remove('1',{ids:[k0]});s=await t.status('1');assert.ok(!s.keywords.some(k=>k.id===k0));assert.equal(rows['rank-tracking:1'].checks[k0],undefined);
 });
+test('Update now reuses results from the last 6 days and says how many, instead of counting them as checked',async()=>{
+ const {t}=harness(()=>3);let reuse=false;const run=t.d4s.run;t.d4s.run=async(...a)=>({...(await run(...a)),...(reuse?{reused:true}:{})});
+ await t.add('1',{keywords:[{keyword:'crm',locationCode:2840,language:'en'},{keyword:'erp',locationCode:2840,language:'en'}]});
+ assert.deepEqual(await t.check('1',{all:true}),{checked:2,reused:0,errors:[]});
+ reuse=true;assert.deepEqual(await t.check('1',{all:true}),{checked:2,reused:2,errors:[]});
+});
 test('rank signals: drop of 5+, lost from the top 20, entered the top 10',()=>{
  const c=(at,position)=>({at,position,url:'https://x/'+position});const rt={keywords:[{id:'a',keyword:'a'},{id:'b',keyword:'b'},{id:'c',keyword:'c'},{id:'d',keyword:'d'}],checks:{a:[c('2026-09-20',4),c('2026-09-27',11)],b:[c('2026-09-20',15),c('2026-09-27',null)],c:[c('2026-09-20',14),c('2026-09-27',6)],d:[c('2026-09-20',5),c('2026-09-27',6)]}};
  assert.deepEqual(rankSignals({rt}).map(s=>s.key.split(':')[0]+':'+s.key.split(':')[1]),['rank-drop:a','rank-lost:b','rank-top10:c']);

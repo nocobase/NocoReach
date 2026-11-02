@@ -3,7 +3,7 @@
 import { test as __vitest_test, vi } from 'vitest';
 vi.setConfig({ testTimeout: 60000 });
 import assert from 'node:assert/strict';
-import { Lighthouse, specification, result } from '../../server/nocoreach/lighthouse.js';
+import { Lighthouse, specification, result, RECENT_MS } from '../../server/nocoreach/lighthouse.js';
 const test=__vitest_test;
 const report={status_code:20000,cost:0.00425,tasks:[{status_code:20000,cost:0.00425,result:[{finalUrl:'https://www.example.com/',lighthouseVersion:'12.6.0',
  categories:{performance:{score:0.42,auditRefs:[{id:'largest-contentful-paint'},{id:'render-blocking-resources'},{id:'unused-javascript'},{id:'diagnostics'},{id:'uses-http2'}]},accessibility:{score:0.88,auditRefs:[{id:'color-contrast'},{id:'image-alt'}]},'best-practices':{score:1,auditRefs:[]},seo:{score:0.92,auditRefs:[{id:'meta-description'}]}},
@@ -26,7 +26,7 @@ test('性能检查: one page per run, mobile by default, a longer wait; scores, 
  assert.equal(result({status_code:20000,tasks:[{status_code:20000,result:[{categories:{}}]}]},spec).errorCode,'lighthouse_no_scores');
 });
 
-test('a check runs only when asked and the same page and device within 30 days is the saved one',async()=>{
+test('a check runs only when asked; the same page and device is the saved one only within 10 minutes, and says so',async()=>{
  const rows=[];let id=0,calls=0;const wrap=r=>r&&{...r,get:k=>r[k],toJSON:()=>({...r})};const match=(r,f={})=>Object.entries(f).every(([k,v])=>v&&typeof v==='object'?('$in' in v?v.$in.includes(r[k]):'$gte' in v?r[k]>=v.$gte:false):r[k]===v);
  const repo={findOne:async o=>wrap(o.filterByTk!==undefined?rows.find(r=>r.id===o.filterByTk):rows.filter(r=>match(r,o.filter)).sort((a,b)=>b.createdAt.localeCompare(a.createdAt))[0]),find:async o=>rows.filter(r=>match(r,o.filter)).map(wrap),create:async o=>{const r={id:++id,createdAt:new Date().toISOString(),...o.values};rows.push(r);return wrap(r);},update:async o=>Object.assign(rows.find(r=>r.id===o.filterByTk),o.values)};
  const env={NOREACH_DATAFORSEO_1:JSON.stringify({login:'a',password:'b',budget:5,verifiedAt:'t'})};
@@ -34,8 +34,27 @@ test('a check runs only when asked and the same page and device within 30 days i
  global.fetch=async(url,init)=>{calls++;assert.ok(String(url).endsWith('on_page/lighthouse/live/json'));assert.equal(JSON.parse(init.body)[0].url,'https://www.example.com/');return {ok:true,json:async()=>report};};
  const l=new Lighthouse(p);assert.deepEqual(await l.status('1'),{connected:true,suggested:'https://www.example.com/'});
  const a=await l.run('1',{url:'https://www.example.com/',requestKey:'lh-aaaaaaaa'});assert.equal(a.status,'completed');assert.equal(a.result.scores.performance,42);
- const b=await l.run('1',{url:'https://www.example.com/',requestKey:'lh-bbbbbbbb'});assert.equal(b.id,a.id);assert.equal(calls,1);
+ assert.equal(a.reused,undefined,'a new check is not marked');
+ const b=await l.run('1',{url:'https://www.example.com/',requestKey:'lh-bbbbbbbb'});assert.equal(b.id,a.id);assert.equal(calls,1);assert.equal(b.reused,true,'a second click within 10 minutes gets that check, marked');
  assert.deepEqual((await l.list('1')).map(x=>[x.url,x.strategy,x.scores.performance]),[['https://www.example.com/','mobile',42]]);
+ // After the guard window the same page and device is checked again: a new row, not the 10-26 one reopened.
+ rows[0].createdAt=new Date(Date.now()-RECENT_MS-1000).toISOString();
+ const c=await l.run('1',{url:'https://www.example.com/',requestKey:'lh-cccccccc'});assert.notEqual(c.id,a.id);assert.equal(c.reused,undefined);assert.equal(calls,2);
+ assert.equal((await l.list('1')).length,2);
+ const d=await l.run('1',{url:'https://www.example.com/',strategy:'desktop',requestKey:'lh-dddddddd'});assert.notEqual(d.id,c.id);assert.equal(calls,3,'the other device is its own check');
+});
+
+test('an uncertain check blocks the same page and device for the guard window only, and is marked',async()=>{
+ const rows=[];let id=0,calls=0;const wrap=r=>r&&{...r,get:k=>r[k],toJSON:()=>({...r})};const match=(r,f={})=>Object.entries(f).every(([k,v])=>v&&typeof v==='object'?('$in' in v?v.$in.includes(r[k]):'$gte' in v?r[k]>=v.$gte:false):r[k]===v);
+ const repo={findOne:async o=>wrap(o.filterByTk!==undefined?rows.find(r=>r.id===o.filterByTk):rows.filter(r=>match(r,o.filter)).sort((a,b)=>b.createdAt.localeCompare(a.createdAt))[0]),find:async o=>rows.filter(r=>match(r,o.filter)).map(wrap),create:async o=>{const r={id:++id,createdAt:new Date().toISOString(),...o.values};rows.push(r);return wrap(r);},update:async o=>Object.assign(rows.find(r=>r.id===o.filterByTk),o.values)};
+ const env={NOREACH_DATAFORSEO_1:JSON.stringify({login:'a',password:'b',budget:5,verifiedAt:'t'})};
+ const p={env:k=>env[k],app:{logger:{warn(){}}},db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};
+ global.fetch=async()=>{calls++;if(calls===1)throw Object.assign(new Error('timeout'),{name:'TimeoutError'});return {ok:true,json:async()=>report};};
+ const l=new Lighthouse(p);
+ const a=await l.run('1',{url:'https://www.example.com/',requestKey:'lh-aaaaaaaa'});assert.equal(a.status,'unknown');
+ const b=await l.run('1',{url:'https://www.example.com/',requestKey:'lh-bbbbbbbb'});assert.deepEqual([b.id,b.status,b.reused,calls],[a.id,'unknown',true,1],'never retried by a second click inside the window');
+ rows[0].createdAt=new Date(Date.now()-RECENT_MS-1000).toISOString();
+ const c=await l.run('1',{url:'https://www.example.com/',requestKey:'lh-cccccccc'});assert.equal(c.status,'completed');assert.equal(calls,2,'a click after it checks again on purpose');
 });
 
 test('审计 · 性能检查 lists every check, newest first, with metrics and the worst ten failing checks; other DataForSEO runs left out',async()=>{

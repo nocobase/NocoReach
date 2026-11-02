@@ -120,7 +120,8 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
   const handOffRows = (list: Tracked[]): TrackedRow[] => list.map((t) => { const g = rankOf(ranks, t.keyword); return { keyword: t.keyword, market: marketLabel(t), latest: t.latest, previous: t.previous, ...(g ? { gsc: { position: g.position, clicks: g.clicks, page: g.page } } : {}) }; });
   const checkNow = async () => {
     setBusy(true);
-    try { const r = await rankRequest<Status & { checked: number; errors: string[] }>("check"); setStatus(r); r.errors.length ? toast.error(() => ($legacyText(r.errors[0]))) : toast.success(() => ($t('rankTracking.keywordsChecked',{0:r.checked}))); }
+    // Results from the last 6 days are reused (rankTracking.checkNowReusesResultLast); the toast says how many, not "checked".
+    try { const r = await rankRequest<Status & { checked: number; reused?: number; errors: string[] }>("check"); setStatus(r); const reused = r.reused ?? 0; r.errors.length ? toast.error(() => ($legacyText(r.errors[0]))) : toast.success(() => (!reused ? $t('rankTracking.keywordsChecked',{0:r.checked}) : reused === r.checked ? $t('rankTracking.keywordsReused') : $t('rankTracking.keywordsCheckedSomeReused',{0:r.checked - reused,1:reused}))); }
     catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('rankTracking.notFullyChecked'))); }
     finally { setBusy(false); }
   };

@@ -33,7 +33,8 @@ import { Segmented } from '#components/reach/segmented';
 type Issue = { category: string; key: string; title: string; description: string; value: string; score: number; savingsMs: number | null; savingsBytes: number | null; severity: "high" | "medium" };
 type Result = { url: string; finalUrl: string; strategy: "mobile" | "desktop"; version: string | null; scores: Record<string, number | null>; metrics: { key: string; label: string; value: string; score: number | null }[]; issues: Issue[] };
 type Metric = Result["metrics"][number];
-type Run = { id: string | number; status: string; spec: { url: string; strategy: "mobile" | "desktop" }; result?: Result | null; errorCode?: string | null; createdAt: string };
+// reused: the run was not started by this click (the same page and device checked within 10 minutes, or still running).
+type Run = { id: string | number; status: string; spec: { url: string; strategy: "mobile" | "desktop" }; result?: Result | null; errorCode?: string | null; createdAt: string; reused?: boolean };
 // One check as the list gives it: scores, metrics and the worst ten failing checks (server/nocoreach/lighthouse.ts list).
 type Record_ = { id: string; status: string; url: string; finalUrl: string | null; strategy: "mobile" | "desktop"; createdAt: string; scores: Record<string, number | null> | null; metrics: Metric[]; issueCount: number | null; issues: Pick<Issue, "category" | "key" | "title" | "value" | "severity">[]; errorCode: string | null };
 const getCategory = (): Record<string, string> => ({ performance: $t('lighthouseCard.performance'), accessibility: $t('lighthouseCard.accessibility'), "best-practices": $t('lighthouseCard.bestPractices'), seo: "SEO" });
@@ -101,17 +102,20 @@ export function PerformanceTab({ projectId, initialUrl }: { projectId: number; i
   const [records, setRecords] = useState<Record_[]>();
   const [listError, setListError] = useMessageState("");
   const [openId, setOpenId] = useState<string>();
+  const [earlier, setEarlier] = useState<Run>();
   const load = () => call<Record_[]>("list").then((r) => { setRecords(r); setListError(""); }).catch((e) => setListError(() => (e instanceof Error ? $legacyText(e.message) : $t('auditPerformance.notLoadRuns'))));
   useEffect(() => {
     void call<{ connected: boolean; suggested: string }>("status").then((s) => { setStatus(s); setUrl((u) => u || s.suggested); }).catch(() => setStatus({ connected: false, suggested: "" }));
     void load();
   }, [projectId]);
-  // A finished check opens in the drawer; one without a result says why here and stays in the list.
+  // A finished check opens in the drawer; one without a result says why here and stays in the list. An earlier run
+  // returned instead of a new one is said so next to the button and opens only when asked.
   const check = async () => {
-    setBusy(true); setError("");
+    setBusy(true); setError(""); setEarlier(undefined);
     try {
       const r = await call<Run>("run", { url: url.trim(), strategy, requestKey: crypto.randomUUID().replace(/-/g, "") });
-      if (r.status === "completed") setOpenId(String(r.id));
+      if (r.reused) setEarlier(r);
+      else if (r.status === "completed") setOpenId(String(r.id));
       else setError(() => (r.status === "unknown" ? r.errorCode || $t('common.resultUncertainMayChargedRepeat') : $t('lighthouseCard.noResults', { 0: r.errorCode || $t('errors.unknownReason') })));
       void load();
     } catch (e) { setError(() => (e instanceof Error ? $legacyText(e.message) : $t('lighthouseCard.notFullyCheckedTryAgain'))); }
@@ -124,16 +128,29 @@ export function PerformanceTab({ projectId, initialUrl }: { projectId: number; i
           <p className="text-sm text-muted-foreground">{$t('lighthouseCard.lighthouseRunsThroughDataforseoFirst')}<Button variant="link" className="h-auto p-0" onClick={() => navigate("/connections?source=keywords")}>{$t('common.connectDataforseo')}</Button>。</p>
         ) : (
           <form className="flex flex-col gap-2 lg:flex-row lg:items-center" onSubmit={(e) => { e.preventDefault(); void check(); }}>
-            <Input className="lg:max-w-xl" aria-label={$t('lighthouseCard.urlCheck')} value={url} placeholder="https://www.example.com/pricing" onChange={(e) => setUrl(e.target.value)} />
-            <Segmented label={$t('lighthouseCard.device')} options={(["mobile", "desktop"] as const).map((s) => ({ id: s, label: deviceName(s) }))} value={strategy} onChange={(v) => setStrategy(v as typeof strategy)} />
+            <Input className="lg:max-w-xl" aria-label={$t('lighthouseCard.urlCheck')} value={url} placeholder="https://www.example.com/pricing" onChange={(e) => { setUrl(e.target.value); setEarlier(undefined); }} />
+            <Segmented label={$t('lighthouseCard.device')} options={(["mobile", "desktop"] as const).map((s) => ({ id: s, label: deviceName(s) }))} value={strategy} onChange={(v) => { setStrategy(v as typeof strategy); setEarlier(undefined); }} />
             <div className="flex items-center gap-2"><Button type="submit" disabled={busy || !url.trim()}>{busy ? $t('lighthouseCard.checkingAboutHalfMinute') : $t('common.check')}</Button><InfoTip label={$t('auditPerformance.aboutCheck')}>{$t('lighthouseCard.checksOnePageTimeWhen')}</InfoTip></div>
           </form>
         )}
+        {earlier ? <EarlierRun run={earlier} onOpen={() => setOpenId(String(earlier.id))} /> : null}
         {error ? <p role="alert" className="nr-error">{error}</p> : null}
       </Card>
       {listError ? <p role="alert" className="nr-error">{listError}</p> : !records ? <ListSkeleton rows={5} /> : <RunsTable records={records} onOpen={setOpenId} />}
       {openId ? <RunDrawer id={openId} records={records ?? []} projectId={projectId} getRun={(runId) => call<Run>("getRun", { runId })} onOpen={setOpenId} onClose={() => setOpenId(undefined)} /> : null}
     </>
+  );
+}
+
+// Why a click showed an earlier check: one within the last 10 minutes (completed or uncertain), or one still running.
+function EarlierRun({ run, onOpen }: { run: Run; onOpen: () => void }) {
+  const at = when(run.createdAt), device = deviceName(run.spec.strategy);
+  return (
+    <p role="status" className="text-sm text-muted-foreground" data-lighthouse-earlier="">
+      {run.status === "completed" ? <>{$t('auditPerformance.checkedRecently', { 0: at, 1: device })} <Button variant="link" className="h-auto p-0" onClick={onOpen}>{$t('auditPerformance.viewThatRun')}</Button></>
+        : run.status === "running" ? $t('auditPerformance.checkStillRunning', { 0: at, 1: device })
+        : $t('auditPerformance.checkedRecentlyUncertain', { 0: at, 1: device })}
+    </p>
   );
 }
 

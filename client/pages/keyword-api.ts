@@ -15,7 +15,7 @@ export const getMarkets = (): {locationCode:number;language:string;label:string}
 export const marketLabel=(m?:{locationCode:number;language:string}|null)=>m?getMarkets().find(x=>x.locationCode===m.locationCode&&x.language===m.language)?.label||`${m.locationCode} · ${m.language}`:'—';
 export type KeywordItem={id:string;keyword:string;title?:string;volume:number|null;difficulty:number|null;cpc:number|null;competition?:number|null;intent:string|null;position:number|null;url:string;monthlySearches:{year:number;month:number;search_volume?:number|null;volume?:number|null}[]};
 export type ResearchSpec={view:ResearchView;target:string;locationCode:number;language:string;limit:number;estimatedUsd:number;reservationUsd:number};
-export type ResearchRun={id:number|string;status:string;spec:ResearchSpec;result?:{items:KeywordItem[];totalCount:number|null;providerTime?:string};costUsd:number|null;errorCode?:string;createdAt:string;completedAt?:string};
+export type ResearchRun={id:number|string;status:string;spec:ResearchSpec;result?:{items:KeywordItem[];totalCount:number|null;providerTime?:string};costUsd:number|null;errorCode?:string;createdAt:string;completedAt?:string;reused?:boolean};
 export type RecentRun={id:string;status:string;spec:ResearchSpec;createdAt:string;completedAt:string|null;errorCode:string|null;count:number|null};
 export type Tag={id:string;name:string;color:string};
 export type SavedKeyword={id:string;keyword:string;source:'dataforseo'|'gsc'|'ai';market:{locationCode:number;language:string}|null;metrics:{volume:number|null;difficulty:number|null;cpc:number|null;competition:number|null;intent:string|null;monthlySearches:KeywordItem['monthlySearches']}|null;retrievedAt:string|null;savedAt:string;tagIds:string[]};

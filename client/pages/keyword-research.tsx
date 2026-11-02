@@ -136,10 +136,9 @@ export default function KeywordResearch({ embedded = false }: { embedded?: boole
     const target = form.target.trim();
     if (target.length < 2) { setError(() => ($t('keywordResearch.enterKeywordLeast2Characters'))); return; }
     setBusy(true); setError("");
-    const started = Date.now();
     try {
       const r = await keywordRequest<ResearchRun>("run", { target, view: form.view, locationCode: form.market.locationCode, language: form.market.language, limit: 100, requestKey: requestKey(), ...(forceRefresh ? { forceRefresh: true } : {}) });
-      open(r, Date.parse(r.createdAt) < started - 5000);
+      open(r, Boolean(r.reused));
       void loadRecent();
     } catch (e) {
       setError(() => (e instanceof Error ? $legacyText(e.message) : $t('common.lookupNotCompleteTryAgain')));
