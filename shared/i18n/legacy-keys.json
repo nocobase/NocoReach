@@ -4610,7 +4610,6 @@
   "将删除本项目保存的视频信息和字幕，并暂停自动读取；不删除 YouTube 上的视频。此操作无法撤销。": "youtube.deleteSavedHelp",
   "删除已保存视频": "youtube.deleteSaved",
   "已删除本项目保存的 YouTube 视频": "youtube.deletedSaved",
-  "指标读取时间：播放 {0} · 点赞 {1} · 评论 {2}；缺失值保留上次有效值。": "youtube.metricsReadAt",
   "本次字幕读取失败，保留上次于 {0} 读取的字幕。": "youtube.retainedCaptionsAt",
   "已保存视频分页": "youtube.savedPagination",
   "第 {0} 页，共 {1} 页": "youtube.pageSummary",

@@ -1,6 +1,13 @@
 // 小红书, Bilibili and YouTube data pages (client/pages/data-*.tsx): each reads its platform's period report and lists
 // the saved records published in the range; connection settings stay in 数据源.
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import type { ComponentType } from 'react';
@@ -126,13 +133,36 @@ it('lists Xiaohongshu notes of the period literally and searches with the curren
   // Dates in the current year are written without the year: fix the year the fixtures are in.
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(2026, 9, 21, 12));
+  const shortened = {
+    ...xiaohongshu.notes[0],
+    id: '69a123456789abcdef012346',
+    title: 'NocoBase 搭建客户管理',
+    url: 'https://www.xiaohongshu.com/explore/69a123456789abcdef012346',
+    likes: 12000,
+    likesText: '1.2万',
+    estimatedPublishedAt: '2026-10-05',
+  };
   action.mockImplementation(async (_resource, name) =>
-    name === 'search' ? {} : xiaohongshu,
+    name === 'search'
+      ? {}
+      : { ...xiaohongshu, notes: [...xiaohongshu.notes, shortened] },
   );
   show(DataXiaohongshu, '/data/xiaohongshu');
   expect(
     await screen.findByRole('link', { name: '分析。任务。' }),
   ).toHaveAttribute('href', xiaohongshu.notes[0].url);
+  // A count the page shortened is written like other counts.
+  expect(
+    within(
+      screen.getByRole('link', { name: shortened.title }).closest('tr')!,
+    ).getAllByText(/1\.2 万/)[0],
+  ).toBeInTheDocument();
+  // When the notes were read is said once, after the source line, not on each row.
+  const line = screen
+    .getByText(/^搜索词：NocoBase · 更新于/)
+    .closest('[data-source-line]')!;
+  expect(line.querySelector('[data-info-tip]')).not.toBeNull();
+  expect(screen.queryByText(/^采集 /)).toBeNull();
   expect(action).toHaveBeenCalledWith(
     'nrXiaohongshu',
     'report',
@@ -226,6 +256,14 @@ it('keeps saved Bilibili videos readable after disconnecting, without turning un
   ).toBeVisible();
   expect(screen.getByText(/Views — · Likes 0 · Comments —/)).toBeVisible();
   expect(screen.getByText('Earlier config')).toBeVisible();
+  // No read time on the rows; the source line says it once, with an ⓘ.
+  expect(screen.queryByText(/^Collected /)).toBeNull();
+  expect(
+    screen
+      .getByText(/^Search term: NocoBase · Updated/)
+      .closest('[data-source-line]')
+      ?.querySelector('[data-info-tip]'),
+  ).not.toBeNull();
   // Sources link to the Bilibili search or the video itself.
   expect(screen.getByRole('link', { name: /TermNocoBase/ })).toHaveAttribute(
     'href',
@@ -294,10 +332,21 @@ it('shows YouTube provenance without captions, and offers reading only with the 
     youtube.videos[0].url,
   );
   expect(screen.getByText(/播放 10 · 点赞 — · 评论 —/)).toBeVisible();
-  // Where the videos come from, in one line.
+  // Where the videos come from, in one line; the ⓘ after it says what the read time means.
+  const line = screen
+    .getByText(/^搜索词：NocoBase · 手动读取 · 更新于/)
+    .closest('[data-source-line]') as HTMLElement;
+  await userEvent.click(within(line).getByRole('button'));
   expect(
-    screen.getByText(/^搜索词：NocoBase · 手动读取 · 更新于/),
+    await screen.findByText(
+      '列表里的数字是每条内容最近一次读到时的数值，“更新于”是最近一次读取的时间。',
+    ),
   ).toBeVisible();
+  // The row names the channel only: no read time, no note on missing values.
+  const row = screen.getByRole('link', { name: 'Tutorial' }).closest('tr')!;
+  expect(within(row).getByText('NocoBase')).toBeVisible();
+  expect(row).not.toHaveTextContent('更新于');
+  expect(document.body).not.toHaveTextContent('缺失值');
   expect(screen.queryByText('Actual transcript')).not.toBeInTheDocument();
   expect(screen.queryByText('字幕')).not.toBeInTheDocument();
   await waitFor(() =>
@@ -308,6 +357,20 @@ it('shows YouTube provenance without captions, and offers reading only with the 
   expect(
     screen.queryByRole('button', { name: '立即更新' }),
   ).not.toBeInTheDocument();
+});
+
+it('waits to read YouTube while the month’s DataForSEO budget is used up, and says until when', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(2026, 10, 12, 12));
+  action.mockResolvedValue({
+    ...youtube,
+    pausedUntil: '2026-12-01T00:00:00.000Z',
+  });
+  show(DataYouTube, '/data/youtube');
+  const text =
+    '本月 DataForSEO 预算已用完，12-01 自动恢复；调高预算后可以再读。';
+  expect(await screen.findByRole('button', { name: text })).toBeDisabled();
+  expect(screen.getByRole('status')).toHaveTextContent(text);
 });
 
 it('polls only the YouTube status while a read runs, then reads the report once', async () => {

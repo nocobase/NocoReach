@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import type { MockRunContext } from './types.js';
-import { projectText } from './fixtures.js';
 
 type Platform = 'xiaohongshu' | 'bilibili';
 type CollectorKind = 'health' | 'search' | 'video';
@@ -35,12 +34,30 @@ export const MOCK_MEDIA = Object.freeze({
     'BV1NB411c7m4',
   ]),
 });
-const titles = [
-  'NocoBloom: 从模板搭建团队工作台',
-  'NocoBloom: 串联 GitHub 与 Slack 工作流',
-  'NocoBloom: 做一张每周增长报表',
-  'NocoBloom: 新版自动化模板体验',
-];
+// Titles as people write them on each platform, without the product's name in front, so the search term finds
+// them by subject as a real search does.
+const titles = {
+  bilibili: [
+    '10 分钟从模板搭一个团队工作台',
+    '把 GitHub 和 Slack 工作流串起来，实测一周',
+    '每周增长报表怎么做？完整流程演示',
+    '新版自动化模板上手体验',
+    '给客服团队配权限，一步步演示',
+    '自托管部署全流程（Docker 版）',
+    '零代码搭一个内部 CRM',
+    '内部工具搭建平台横评：五款对比',
+  ],
+  xiaohongshu: [
+    '打工人效率神器｜10 分钟搭好团队工作台',
+    'GitHub + Slack 自动同步，周报再也不用手抄',
+    '每周增长复盘模板分享，直接套用',
+    '新版自动化模板真香，附上手笔记',
+    '小团队客服权限这样配，省心很多',
+    '自己部署一套协作工具，踩坑记录',
+    '零代码搭客户管理表，销售同事都说好用',
+    '五款内部工具平台对比，选型前必看',
+  ],
+} as const;
 
 export function mockBrowserCollectorConfig(
   projectId?: string,
@@ -98,11 +115,11 @@ function published(context: Readonly<MockRunContext>, index: number) {
   at.setUTCSeconds(0, 0);
   return at.toISOString();
 }
-function title(index: number, context: MockRunContext) {
-  return projectText(
-    context,
-    titles[index] ?? `NocoBloom: 团队工作流示例 ${index + 1}`,
-  );
+// A longer search (the pagination scenario) continues the series: "（2）" and so on after the first round.
+function title(platform: Platform, index: number) {
+  const list = titles[platform];
+  const round = Math.floor(index / list.length);
+  return `${list[index % list.length]}${round ? `（${round + 1}）` : ''}`;
 }
 function id(
   platform: keyof typeof MOCK_MEDIA,
@@ -233,7 +250,7 @@ export function mockCollectorTransport(
           mode === 'empty'
             ? []
             : Array.from({ length: count(context, 20) }, (_, index) => ({
-                title: title(index, context),
+                title: title(platform, index),
                 url: `https://www.xiaohongshu.com/explore/${id(platform, index, context)}?xsec_source=pc_search`,
                 // Preserve upstream lossy count formats and let the real normalizer decide certainty.
                 likes:
@@ -251,7 +268,7 @@ export function mockCollectorTransport(
         completeness: 'search_summary' | 'video_metadata',
       ) => ({
         bvid: id(platform, index, context),
-        title: title(index, context),
+        title: title(platform, index),
         views: metric(context, index),
         likes: Math.floor(metric(context, index) / 50),
         comments: Math.floor(metric(context, index) / 300),

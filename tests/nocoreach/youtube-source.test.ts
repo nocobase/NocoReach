@@ -75,7 +75,9 @@ describe('YouTube through DataForSEO', () => {
     expect(first.recent).toHaveLength(3);
     expect(first.nextSyncAt).not.toBeNull();
     // Two terms a day, and before a week of history one new video a term a day.
-    expect(first.estimate).toMatchObject({ monthlyUsd: 0.48, readUsd: 0.004 });
+    expect(first.estimate).toMatchObject({ monthlyUsd: 0.48 });
+    // The cost is said as a month's estimate only, never per read.
+    expect(first.estimate).not.toHaveProperty('readUsd');
     const saved = await f.videos();
     expect(saved.find((v) => v.id === videoKey(3))).toMatchObject({
       title: 'Video 3',
@@ -118,7 +120,6 @@ describe('YouTube through DataForSEO', () => {
     const again = await f.sync();
     expect(f.reader.details.mock.calls.map((c) => c[1])).toEqual([videoKey(9)]);
     expect(again.total).toBe(3);
-    expect(again.estimate.readUsd).toBe(0.008);
     expect(again.estimate.monthlyUsd).toBe(0.42);
   });
 
@@ -156,6 +157,7 @@ describe('YouTube through DataForSEO', () => {
       if (term === 'Second') throw new YouTubeError('budget_exceeded');
       return { ok: true, videos: [found(1), found(2)], costUsd: 0.002 };
     });
+    f.reader.spend.mockResolvedValue({ monthUsd: 10, budgetUsd: 10 });
     const status = await f.connect('1', 'First\nSecond');
     expect(f.reader.search).toHaveBeenCalledTimes(2);
     expect(f.reader.details).not.toHaveBeenCalled();
@@ -172,11 +174,15 @@ describe('YouTube through DataForSEO', () => {
       lastSync: { ...status.lastSync, at: yesterday() },
     });
     f.reader.search.mockClear();
-    f.reader.spend.mockResolvedValue({ monthUsd: 10, budgetUsd: 10 });
     await f.source.tick();
     expect(f.reader.search).not.toHaveBeenCalled();
-    // Raised: the daily read runs, reads the waiting videos and lifts the pause.
+    // Raised: the pause shows no longer (Read now is offered again), and the daily read runs, reads the waiting
+    // videos and lifts it.
     f.reader.spend.mockResolvedValue({ monthUsd: 10, budgetUsd: 20 });
+    expect(await f.source.status('1')).toMatchObject({
+      pausedUntil: null,
+      nextSyncAt: expect.not.stringMatching(nextMonth()),
+    });
     f.reader.search.mockResolvedValue({ ok: true, videos: [], costUsd: 0.002 });
     await f.source.tick();
     expect(f.reader.search.mock.calls.map((c) => c[2])).toEqual([false, false]);
@@ -190,6 +196,7 @@ describe('YouTube through DataForSEO', () => {
       lastSync: { ok: true },
     });
     // A read the budget refuses outright fails and pauses as well.
+    f.reader.spend.mockResolvedValue({ monthUsd: 20, budgetUsd: 20 });
     f.reader.search.mockRejectedValue(new YouTubeError('budget_exceeded'));
     expect(await f.sync()).toMatchObject({
       pausedUntil: nextMonth(),
@@ -213,6 +220,51 @@ describe('YouTube through DataForSEO', () => {
     // The video whose details were not read waits for the next read.
     expect(status.pendingDetails).toBe(1);
     expect((await f.videos())[0]).toMatchObject({ views: 100, likes: null });
+  });
+
+  it('flags a term only once daily reads missed it three days in a row', async () => {
+    const f = await youtubeFixture();
+    let slow = true;
+    f.reader.search.mockImplementation(async (_id, term) =>
+      term === 'Slow term' && slow
+        ? { ok: false, missed: 'timeout', costUsd: 0 }
+        : { ok: true, videos: [found(1)], costUsd: 0.002 },
+    );
+    const daily = async () => {
+      const state = (await f.stored())!;
+      await f.store('1', {
+        ...state,
+        lastSync: { ...state.lastSync, at: yesterday() },
+      });
+      await f.source.tick();
+      return f.source.status('1');
+    };
+    // Saving the terms reads at once, as Read now does: a miss there is not a daily one.
+    const first = await f.connect('1', 'NocoBase\nSlow term');
+    expect(first.lastSync?.missed).toEqual([
+      { term: 'Slow term', reason: 'timeout' },
+    ]);
+    expect(first.repeatedMisses).toEqual([]);
+    expect((await f.stored())?.missedRuns).toEqual({});
+    expect((await daily()).repeatedMisses).toEqual([]);
+    expect((await daily()).repeatedMisses).toEqual([]);
+    expect((await f.stored())?.missedRuns).toEqual({ 'Slow term': 2 });
+    const third = await daily();
+    expect(third.repeatedMisses).toEqual(['Slow term']);
+    expect(third.lastSync).toMatchObject({ ok: true });
+    // Read now that misses it again adds no day; one that reads it clears the run.
+    expect((await f.sync()).repeatedMisses).toEqual(['Slow term']);
+    expect((await f.stored())?.missedRuns).toEqual({ 'Slow term': 3 });
+    slow = false;
+    expect((await f.sync()).repeatedMisses).toEqual([]);
+    expect((await f.stored())?.missedRuns).toEqual({});
+    // New terms start without misses; saving the same terms keeps the run.
+    slow = true;
+    await daily();
+    await f.connect('1', 'NocoBase\nSlow term', { autoSync: true });
+    expect((await f.stored())?.missedRuns).toEqual({ 'Slow term': 1 });
+    await f.connect('1', 'Slow term\nNocoBase');
+    expect((await f.stored())?.missedRuns).toEqual({});
   });
 
   it('turns daily reading off and on without reading again', async () => {
@@ -303,6 +355,10 @@ describe('YouTube through DataForSEO', () => {
       firstSeenAt: '2026-10-20T00:00:00.000Z',
       transcript: { text: 'Caption the Collector read' },
     });
+    // Recording started when the Collector first saved a video, not when DataForSEO took over.
+    expect((await f.source.status('1')).recordingSince).toBe(
+      '2026-10-20T00:00:00.000Z',
+    );
     expect((await f.stored())?.engine).toBe('dataforseo');
     // A disconnected Collector state stays off.
     expect(
@@ -317,6 +373,48 @@ describe('YouTube through DataForSEO', () => {
         lastSync: null,
       }),
     ).toMatchObject({ autoSync: false, engine: 'dataforseo' });
+  });
+
+  it('counts recording from the earliest video saved, including the Collector reader’s', async () => {
+    const f = await youtubeFixture();
+    // Saved by the Collector reader on two days, the later one first.
+    for (const [n, day] of [
+      [5, '2026-10-24'],
+      [6, '2026-10-18'],
+    ] as const)
+      await f.library.save('1', [
+        {
+          ...details(n),
+          publishedAt: '2026-10-10',
+          fetchedAt: `${day}T08:00:00.000Z`,
+          provider: 'yt-dlp',
+        },
+      ]);
+    await f.store('1', {
+      revision: 'legacy',
+      configured: true,
+      terms: ['NocoBase'],
+      videoIds: [],
+      autoSync: true,
+      verifiedAt: '2026-10-18T08:00:00.000Z',
+      fetchedAt: '2026-10-24T08:00:00.000Z',
+      lastSync: null,
+    });
+    expect((await f.source.status('1')).recordingSince).toBe(
+      '2026-10-18T08:00:00.000Z',
+    );
+    await f.source.tick();
+    const after = await f.source.status('1');
+    expect(after.total).toBe(4);
+    expect(after.recordingSince).toBe('2026-10-18T08:00:00.000Z');
+    // The videos DataForSEO found are first saved today; the Collector's keep their days.
+    const saved = await f.videos();
+    expect(
+      saved.find((v) => v.id === videoKey(6))?.firstSeenAt.slice(0, 10),
+    ).toBe('2026-10-18');
+    expect(
+      Date.parse(saved.find((v) => v.id === videoKey(1))!.firstSeenAt),
+    ).toBeGreaterThan(Date.now() - 60000);
   });
 
   it('rejects stale saves, disconnects and clears, and keeps saved videos on disconnect', async () => {

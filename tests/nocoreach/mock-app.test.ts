@@ -243,7 +243,10 @@ test('canonical repository status names remain failing HTTP responses through cl
     expect(payload.error.code).toBe(expected);
     expect(payload.data).toBeUndefined();
   }
-  runtime.legacy.resources.define({ name: 'nrMock', actions: { status: original } });
+  runtime.legacy.resources.define({
+    name: 'nrMock',
+    actions: { status: original },
+  });
 });
 
 test('mock admin API enforces anonymous/member/outsider roles, revision, IDs and persistent isolated settings', async ({
@@ -1938,8 +1941,11 @@ for (const target of [
     await plugin.youtube.settled(id);
     const youtube = await data(call('nrYouTube', 'status'));
     expect(youtube.total).toBeGreaterThan(0);
-    expect(JSON.stringify(youtube.recent)).toContain(target.name);
+    expect(youtube.terms).toEqual([target.name]);
+    // The project's own videos (hashed IDs, never the fixture product's NocoBloom01…), titled as creators write them,
+    // without the product's name in front.
     expect(JSON.stringify(youtube.recent)).not.toContain('NocoBloom');
+    expect(JSON.stringify(youtube.recent)).not.toContain(`${target.name}:`);
     covered.add('youtube');
 
     const authorized = await call('nrGoogle', 'authorize');

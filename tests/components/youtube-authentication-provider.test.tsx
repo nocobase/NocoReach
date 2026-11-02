@@ -86,8 +86,9 @@ function view(connected = true): YouTubeStatus {
     recent: [],
     pendingDetails: 0,
     pausedUntil: null,
+    repeatedMisses: [],
     spend: { monthUsd: 0, budgetUsd: 5 },
-    estimate: { monthlyUsd: 0, readUsd: 0, searchUsd: 0.002, videoUsd: 0.006 },
+    estimate: { monthlyUsd: 0, searchUsd: 0.002, videoUsd: 0.006 },
     lastSync: null,
     nextSyncAt: null,
   };

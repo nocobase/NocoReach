@@ -1395,19 +1395,20 @@ function keywordRows(
     },
   );
 }
+// Titles as creators write them, without the product's name in front: the search term finds them by subject.
 const YOUTUBE_TOPICS = [
-  'team workspace from templates',
-  'GitHub and Slack workflows',
-  'a weekly growth report',
-  'the new automation templates',
-  'permissions for a support team',
-  'importing customer data',
-  'a self-hosted setup',
-  'reporting blocks in ten minutes',
-  'an internal CRM',
-  'issue triage with a template',
-  'onboarding new teammates',
-  'comparing internal tool builders',
+  'Build a team workspace from templates in 10 minutes',
+  'Connecting GitHub and Slack workflows, step by step',
+  'How we build our weekly growth report',
+  'First look at the new automation templates',
+  'Setting up permissions for a support team',
+  'Importing customer data without spreadsheets',
+  'Self-hosting with Docker: the full setup',
+  'Reporting dashboards in ten minutes',
+  'Building an internal CRM from scratch',
+  'Issue triage with a ready-made template',
+  'Onboarding new teammates: our checklist',
+  'Internal tool builders compared (2026)',
 ];
 // Fictional YouTube videos: NocoBloom01… for the fixture product, hashed IDs for a configured project, so one
 // project's videos never appear in another's results. Any valid ID can be read for details (a tracked video).
@@ -1423,15 +1424,14 @@ function youtubeVideo(
   const views = 800 + fixtureNumber(c, `youtube-views:${index}`, 24_000);
   return {
     video_id: id,
-    title: `${fixtureProduct(c).name}: ${YOUTUBE_TOPICS[index % YOUTUBE_TOPICS.length]}`,
+    title: YOUTUBE_TOPICS[index % YOUTUBE_TOPICS.length],
     url: `https://www.youtube.com/watch?v=${id}`,
-    channel_name:
-      index % 3 ? 'FlowGrove Academy' : `${fixtureProduct(c).name} Team`,
+    channel_name: ['Ops Notes', 'FlowGrove Academy', 'Build With Data'][
+      index % 3
+    ],
     channel_id: `UC${fixtureHash(c, `youtube-channel:${index % 3}`).slice(0, 22)}`,
-    description: projectText(
-      c,
-      'A fictional walkthrough of NocoBloom templates, workflows and reports.',
-    ),
+    description:
+      'A fictional walkthrough of workspace templates, workflows and reports.',
     views_count: views + (added(c) ? 275 : 0),
     timestamp: at(c, 1 + index * 2)
       .replace('T', ' ')

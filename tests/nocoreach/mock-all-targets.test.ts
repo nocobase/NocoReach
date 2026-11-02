@@ -271,13 +271,19 @@ describe('all connector targets use raw synthetic protocols', () => {
     };
     const bili = createMockBilibiliAdapter(c),
       xhs = createMockXiaohongshuAdapter(c);
+    // Titles read as people write them: no product name and colon in front, nothing of the fixture product.
+    const realistic = (title: string | null | undefined) => {
+      expect(title).toBeTruthy();
+      expect(title).not.toMatch(/^(Supabase|NocoBloom|supabase\.com)\s*[:：]/);
+      expect(title).not.toMatch(/NocoBloom|nocobloom/);
+    };
     const videos = await bili.search(cfg, { ...req, query: 'Supabase' });
-    expect(videos.items[0].title).toContain('Supabase');
+    for (const video of videos.items) realistic(video.title);
     expect(
       (await bili.video(cfg, { ...req, bvid: 'BV1xx411c7mD' })).items[0].bvid,
     ).toBe('BV1xx411c7mD');
     const notes = await xhs.search(cfg, { ...req, query: 'Supabase' });
-    expect(notes.notes[0].title).toContain('Supabase');
+    for (const note of notes.notes) realistic(note.title);
     // YouTube is answered as DataForSEO's YouTube SERP API and read by the production parsers.
     const search = async (term: string, at = c) => {
       const spec = youtubeSearch.specification({ term });
@@ -287,7 +293,7 @@ describe('all connector targets use raw synthetic protocols', () => {
     };
     const found = await search('Supabase');
     expect(found).toHaveLength(8);
-    expect(found[0].title).toContain('Supabase');
+    for (const video of found) realistic(video.title);
     const other = await search(
       'Atlas',
       context({
@@ -303,7 +309,7 @@ describe('all connector targets use raw synthetic protocols', () => {
       spec,
     ).result.video;
     expect(info).toMatchObject({ id: 'Supabase001' });
-    expect(info!.title).toContain('Supabase');
+    realistic(info!.title);
     expect(info!.likes).toBeGreaterThan(0);
   });
 });

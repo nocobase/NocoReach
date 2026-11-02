@@ -27,6 +27,7 @@ import {
   type DemoPerson,
 } from './content.js';
 import { writeActivity } from './activity.js';
+import { backdateYouTube } from './youtube-history.js';
 import type { DemoHost } from './host.js';
 import {
   COLLECTOR_TOKEN,
@@ -616,6 +617,8 @@ async function connectSources(
           revision: null,
         });
         await p.youtube.settled(id);
+        // As if read daily for the past four weeks, not first saved just now.
+        await backdateYouTube(p.db, id);
       },
     ],
     [

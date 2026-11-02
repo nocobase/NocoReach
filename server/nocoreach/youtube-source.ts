@@ -62,6 +62,8 @@ export interface YouTubeState {
   pendingDetails?: string[];
   /** The month's DataForSEO budget ran out: daily reads wait for this day, or until the budget is raised. */
   pausedUntil?: string | null;
+  /** Daily reads in a row that missed each search term; reading the term or changing the terms clears it. */
+  missedRuns?: Record<string, number>;
 }
 
 export type SearchResult =
@@ -167,6 +169,11 @@ interface Running {
 }
 // A read reads the likes and comments of at most this many videos; the rest wait for the next read.
 const DETAILS_PER_READ = 20;
+/**
+ * A term missed on this many daily reads in a row needs attention; a single miss is read again the next day. The
+ * copy says "3 days in a row" (`youtube.termsMissedRepeated*`), so change it with this.
+ */
+export const REPEATED_MISSES = 3;
 const PENDING_LIMIT = 100;
 // Each DataForSEO request waits up to a minute; a read of five terms and twenty videos stays well inside this.
 const READ_MS = 10 * 60000;
@@ -182,6 +189,32 @@ const attempt = (
   ok: boolean,
   errors: string[],
 ): Attempt => record(previous, { at, ok, errors }) as Attempt;
+/** Whether the month's budget has room for a read again (someone raised it after it ran out). */
+const roomFor = (
+  spend: { monthUsd: number; budgetUsd: number } | null,
+  terms: number,
+) =>
+  Boolean(
+    spend &&
+    spend.budgetUsd - spend.monthUsd >= Math.max(1, terms) * SEARCH_USD * 2,
+  );
+/** Each term's run of daily misses after a read: a term read clears it, and Read now adds no miss. */
+function missCounts(
+  state: YouTubeState,
+  read: Set<string>,
+  missed: Missed[],
+  manual: boolean,
+) {
+  const now = new Set(missed.map((m) => m.term));
+  const counts: Record<string, number> = {};
+  for (const term of state.terms) {
+    if (read.has(term)) continue;
+    const before = state.missedRuns?.[term] ?? 0;
+    const count = now.has(term) && !manual ? before + 1 : before;
+    if (count) counts[term] = count;
+  }
+  return counts;
+}
 
 /**
  * State saved by the earlier Collector reader (before 2026-11-02) carries over its search terms, tracked videos and
@@ -201,6 +234,7 @@ export function migrated(state: YouTubeState | null): YouTubeState | null {
     analysisVideoIds: [],
     pendingDetails: [],
     pausedUntil: null,
+    missedRuns: {},
   };
 }
 
@@ -299,6 +333,11 @@ export class YouTubeSource {
           lastSync: same ? old.lastSync : null,
           pendingDetails: old?.pendingDetails ?? [],
           pausedUntil: old?.pausedUntil ?? null,
+          // New terms start without misses.
+          missedRuns:
+            old && JSON.stringify(old.terms) === JSON.stringify(input.terms)
+              ? (old.missedRuns ?? {})
+              : {},
         };
       });
     } finally {
@@ -367,11 +406,13 @@ export class YouTubeSource {
         throw new YouTubeError(cancellation.aborted ? 'cancelled' : 'timeout');
     };
     const at = new Date().toISOString();
+    let misses: Record<string, number> | null = null;
     try {
       if (!this.reader.ready(id)) throw new YouTubeError('dataforseo_missing');
       const found = new Map<string, FoundVideo>(),
         details = new Map<string, VideoDetails>(),
-        missed: Missed[] = [];
+        missed: Missed[] = [],
+        read = new Set<string>();
       let costUsd = 0,
         searched = 0,
         budget = false;
@@ -402,9 +443,11 @@ export class YouTubeSource {
           continue;
         }
         searched++;
+        read.add(term);
         for (const video of result.videos)
           if (!found.has(video.id)) found.set(video.id, video);
       }
+      misses = missCounts(state, read, missed, manual);
       const fresh = await this.library.unknown(id, [...found.keys()]);
       const queue = [
         ...new Set([
@@ -483,6 +526,7 @@ export class YouTubeSource {
             .filter((videoId) => !tracked.has(videoId))
             .slice(0, PENDING_LIMIT),
           pausedUntil: budget ? nextMonth() : null,
+          missedRuns: misses ?? {},
           lastSync: {
             ...attempt(current.lastSync, fetchedAt, true, []),
             missed,
@@ -504,6 +548,8 @@ export class YouTubeSource {
                 e.code === 'budget_exceeded'
                   ? nextMonth()
                   : (current.pausedUntil ?? null),
+              // A read that got no term through still counts its misses; a stopped one does not.
+              ...(misses && !signal.aborted ? { missedRuns: misses } : {}),
               lastSync: {
                 ...attempt(current.lastSync, at, false, [e.message]),
                 code: e.code,
@@ -561,6 +607,7 @@ export class YouTubeSource {
               lastSync: null,
               pendingDetails: [],
               pausedUntil: null,
+              missedRuns: {},
             }
           : null;
       });
@@ -587,6 +634,7 @@ export class YouTubeSource {
           lastSync: null,
           analysisVideoIds: [],
           pendingDetails: [],
+          missedRuns: {},
         };
       });
     } finally {
@@ -626,10 +674,8 @@ export class YouTubeSource {
       terms * 30 * SEARCH_USD +
       tracked * 30 * VIDEO_USD +
       newPerMonth * VIDEO_USD;
-    const readUsd = terms * SEARCH_USD + tracked * VIDEO_USD;
     return {
       monthlyUsd: Number(monthlyUsd.toFixed(2)),
-      readUsd: Number(readUsd.toFixed(3)),
       searchUsd: SEARCH_USD,
       videoUsd: VIDEO_USD,
     };
@@ -653,8 +699,11 @@ export class YouTubeSource {
     const spend = dataforseo
       ? await this.reader.spend(id).catch(() => null)
       : null;
+    // Paused until the day it resumes, unless the budget was raised since (the next read lifts it then).
     const paused =
-      state?.pausedUntil && Date.parse(state.pausedUntil) > Date.now()
+      state?.pausedUntil &&
+      Date.parse(state.pausedUntil) > Date.now() &&
+      !roomFor(spend, state.terms.length)
         ? state.pausedUntil
         : null;
     return {
@@ -688,6 +737,10 @@ export class YouTubeSource {
       })),
       pendingDetails: state?.pendingDetails?.length ?? 0,
       pausedUntil: paused,
+      // Terms missed on REPEATED_MISSES daily reads in a row: these need attention, a single miss does not.
+      repeatedMisses: (state?.terms ?? []).filter(
+        (term) => (state?.missedRuns?.[term] ?? 0) >= REPEATED_MISSES,
+      ),
       spend,
       estimate: this.estimate(state, overview),
       lastSync: state?.lastSync || null,
@@ -742,11 +795,7 @@ export class YouTubeSource {
   /** Whether the budget has room again for a read (someone raised it after it ran out). */
   private async room(id: string, state: YouTubeState) {
     const spend = await this.reader.spend(id).catch(() => null);
-    return Boolean(
-      spend &&
-      spend.budgetUsd - spend.monthUsd >=
-        Math.max(1, state.terms.length) * SEARCH_USD * 2,
-    );
+    return roomFor(spend, state.terms.length);
   }
   async tick() {
     if (this.ticking || this.stopped) return;

@@ -36,6 +36,33 @@ import type {
 } from './collector-report';
 import { countText } from './collector-columns';
 
+/**
+ * Where the records came from, in one line ("Search term: … · Updated …"), with an ⓘ after it: the page's notes on
+ * the source, then that each count is the one from the record's latest read. The read time is said here once, not on
+ * every row (review 2026-11-02).
+ */
+export function CollectorSourceLine({
+  parts,
+  notes = [],
+}: {
+  parts: (string | false | null | undefined)[];
+  notes?: string[];
+}) {
+  return (
+    <p
+      className='nr-footnote flex flex-wrap items-center gap-x-1 break-words'
+      data-source-line=''
+    >
+      <span>{parts.filter(Boolean).join(' · ')}</span>
+      <InfoTip>
+        {[...notes, $t('collectorPage.readTimeNote')].map((note) => (
+          <p key={note}>{note}</p>
+        ))}
+      </InfoTip>
+    </p>
+  );
+}
+
 /** The title link, with the outline tag of a record kept from an earlier configuration right after it. */
 export function TitleLink({
   href,

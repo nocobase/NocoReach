@@ -67,8 +67,9 @@ const empty: YouTubeStatus = {
   recent: [],
   pendingDetails: 0,
   pausedUntil: null,
+  repeatedMisses: [],
   spend: { monthUsd: 3.12, budgetUsd: 10 },
-  estimate: { monthlyUsd: 0, readUsd: 0, searchUsd: 0.002, videoUsd: 0.006 },
+  estimate: { monthlyUsd: 0, searchUsd: 0.002, videoUsd: 0.006 },
   lastSync: null,
   nextSyncAt: null,
 };
@@ -97,7 +98,6 @@ const active: YouTubeStatus = {
   ],
   estimate: {
     monthlyUsd: 0.72,
-    readUsd: 0.006,
     searchUsd: 0.002,
     videoUsd: 0.006,
   },
@@ -210,7 +210,8 @@ it('shows the terms, recently found videos, daily reading and what it costs', as
       name: 'Build an internal CRM with NocoBase in 20 minutes',
     }),
   ).toHaveAttribute('href', active.recent[0].url);
-  expect(within(box).getByText(/1\.2万 次播放/)).toBeVisible();
+  // A shortened count joins the word after it; a plain one keeps its space.
+  expect(within(box).getByText(/1\.2 万次播放/)).toBeVisible();
   expect(within(box).getByText(/3,410 次播放/)).toBeVisible();
   expect(within(box).getByRole('switch')).toBeChecked();
   expect(
@@ -243,6 +244,17 @@ it('turns daily reading off and reads now', async () => {
   );
   await user.click(screen.getByRole('button', { name: '立即读取' }));
   await waitFor(() => expect(request('sync')).toHaveLength(1));
+});
+
+it('says the cost as a monthly estimate while daily reading is off', async () => {
+  vi.mocked(api.action).mockResolvedValue({ ...active, autoSync: false });
+  setup();
+  expect(
+    await screen.findByText(
+      '每天自动读取已关闭；开启后预计每月约 $0.7，计入 DataForSEO 每月预算（本月已用 $3.12 / $10）。',
+    ),
+  ).toBeVisible();
+  expect(screen.queryByText(/每次读取约/)).toBeNull();
 });
 
 it('changes the terms and tracked videos in a dialog', async () => {
@@ -291,25 +303,48 @@ it('says when the month’s budget is used up and when reading resumes', async (
       /^已用 \$10\.00 \/ \$10，YouTube 本月暂停读取，.*12.*1.* 自动恢复；已有视频照常查看。$/,
     ),
   ).toBeVisible();
+  // Read now waits too, and says until when.
+  const readNow = screen.getByRole('button', { name: '立即读取' });
+  expect(readNow).toBeDisabled();
+  expect(readNow.parentElement).toHaveAttribute(
+    'title',
+    expect.stringMatching(
+      /^本月 DataForSEO 预算已用完，.*12.*1.* 自动恢复；调高预算后可以再读。$/,
+    ),
+  );
   await userEvent.click(screen.getByRole('button', { name: '调整预算' }));
   expect(onOpenSource).toHaveBeenCalledWith('keywords');
 });
 
-it('names the term that timed out and says the others were updated', async () => {
-  vi.mocked(api.action).mockResolvedValue({
+it('names a term that timed out once in a grey line, and flags one missed three days in a row', async () => {
+  const missed = {
     ...active,
     lastSync: {
       ...active.lastSync!,
-      missed: [{ term: 'open source no-code', reason: 'timeout' }],
+      missed: [{ term: 'open source no-code', reason: 'timeout' as const }],
     },
+  };
+  vi.mocked(api.action).mockResolvedValue(missed);
+  const { unmount } = setup();
+  const note = await screen.findByText(
+    '“open source no-code”这次读取超时，其他 2 个词已更新。明天会照常再读，也可以点“立即读取”。',
+  );
+  expect(note).toHaveAttribute('data-missed-note');
+  expect(note).toHaveClass('text-muted-foreground');
+  expect(screen.queryByText('有搜索词连续 3 天没读到')).toBeNull();
+  unmount();
+  vi.mocked(api.action).mockResolvedValue({
+    ...missed,
+    repeatedMisses: ['open source no-code'],
   });
   setup();
-  expect(await screen.findByText('这次有一个词没读到')).toBeVisible();
+  expect(await screen.findByText('有搜索词连续 3 天没读到')).toBeVisible();
   expect(
     screen.getByText(
-      '“open source no-code”这次读取超时，其他 2 个词已更新。明天会照常再读，也可以点“立即读取”。',
+      '“open source no-code”连续 3 天没读到。可以换一个搜索词，或点“立即读取”再试。',
     ),
   ).toBeVisible();
+  expect(document.querySelector('[data-missed-note]')).toBeNull();
 });
 
 it('shows a failed read plainly, in English too', async () => {
@@ -366,4 +401,7 @@ it('shows the card as connected once search terms are saved', () => {
     '已接入的 DataForSEO',
     '搜索词，例如 NocoBase（最多 5 个）',
   ]);
+  // The cost is said once the terms are set, as a monthly estimate; no price per search or per video.
+  expect(source.guide?.intro).toMatch(/预计每月费用/);
+  expect(source.guide?.intro).not.toMatch(/\$0\.0/);
 });

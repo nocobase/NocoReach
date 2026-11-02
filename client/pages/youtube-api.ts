@@ -47,10 +47,11 @@ export interface YouTubeStatus {
   pendingDetails: number;
   /** The month's DataForSEO budget is used up: daily reads resume on this day. */
   pausedUntil: string | null;
+  /** Search terms missed on three daily reads in a row; a single miss is read again the next day. */
+  repeatedMisses: string[];
   spend: { monthUsd: number; budgetUsd: number } | null;
   estimate: {
     monthlyUsd: number;
-    readUsd: number;
     searchUsd: number;
     videoUsd: number;
   };
