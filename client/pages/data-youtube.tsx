@@ -9,7 +9,7 @@ import { toast } from '#lib/toast';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { PageContainer, PageHeader } from '#components/reach/page';
 import { EmptyState, LoadError } from '#components/reach/states';
-import { InfoTip, NotesTip } from '#components/reach/info-tip';
+import { NotesTip } from '#components/reach/info-tip';
 import { Button } from '#components/ui/button';
 import { useProject } from './reach-data';
 import { RangePicker } from './range-picker';
@@ -26,6 +26,7 @@ import {
   CollectorBody,
   CollectorGroupsCard,
   CollectorSkeleton,
+  CollectorSourceLine,
   CollectorTable,
   CollectorTrendCard,
   TitleLink,
@@ -59,24 +60,14 @@ const summary = (v: YouTubeVideo) =>
   });
 const SORTS = ['views', 'likes', 'comments'] as const;
 
-// The title cell: the channel and description stay with the video.
+// The title cell: the channel and description stay with the video; when it was read is said once, on the source line.
 function VideoCell({ v }: { v: YouTubeVideo }) {
   return (
     <div className='flex min-w-0 flex-col' data-video={v.id}>
       <TitleLink href={safeLink(v.url)}>{v.title}</TitleLink>
-      <p className='mt-1 text-xs text-muted-foreground'>
-        {v.channel} · {$t('youtube.sourceRetrieved', { 0: time(v.fetchedAt) })}
-        {v.metricFetchedAt &&
-        Object.values(v.metricFetchedAt).some(
-          (at) => at !== null && at !== v.fetchedAt,
-        )
-          ? ` · ${$t('youtube.metricsReadAt', {
-              0: time(v.metricFetchedAt.views),
-              1: time(v.metricFetchedAt.likes),
-              2: time(v.metricFetchedAt.comments),
-            })}`
-          : null}
-      </p>
+      {v.channel ? (
+        <p className='mt-1 text-xs text-muted-foreground'>{v.channel}</p>
+      ) : null}
       {v.description ? (
         <p className='mt-1 line-clamp-2 whitespace-pre-wrap break-words text-sm text-muted-foreground'>
           {v.description}
@@ -124,6 +115,10 @@ export default function DataYouTube() {
     [],
   );
   const running = busy || Boolean(data?.syncing);
+  // While the month's DataForSEO budget is used up a read would only be refused.
+  const paused = data?.pausedUntil
+    ? $t('youtube.readNowPaused', { 0: formatDate(data.pausedUntil) })
+    : null;
   const sync = async () => {
     if (!project) return;
     setBusy(true);
@@ -163,7 +158,12 @@ export default function DataYouTube() {
           data?.configured && data.dataforseo && canSync ? (
             <RefreshButton
               busy={running}
-              label={running ? $t('youtube.reading') : $t('common.updateNow')}
+              disabled={Boolean(paused)}
+              label={
+                running
+                  ? $t('youtube.reading')
+                  : (paused ?? $t('common.updateNow'))
+              }
               onClick={() => void sync()}
             />
           ) : undefined
@@ -209,42 +209,29 @@ export default function DataYouTube() {
         <>
           {/* Where the videos come from in one line; a read that fails shows in Data sources › Data health. */}
           {data.configured ? (
-            <p className='nr-footnote flex flex-wrap items-center gap-x-1 break-words'>
-              <span>
-                {[
-                  $t('common.searchTermValue', {
-                    0:
-                      data.terms.length > 1
-                        ? $t('youtube.termsAndMore', {
-                            0: data.terms[0],
-                            1: data.terms.length,
-                          })
-                        : data.terms[0],
-                  }),
-                  $t(
-                    data.autoSync
-                      ? 'youtube.autoRead'
-                      : 'youtube.manualReading',
-                  ),
-                  ...(data.fetchedAt
-                    ? [
-                        $t('youtube.sourceRetrieved', {
-                          0: time(data.fetchedAt),
-                        }),
-                      ]
-                    : []),
-                ].join(' · ')}
-              </span>
-              <InfoTip>
-                <p>
-                  {$t('youtube.sourceInfo', {
-                    0: new Intl.ListFormat(getCurrentLocale()).format(
-                      data.terms,
-                    ),
-                  })}
-                </p>
-              </InfoTip>
-            </p>
+            <CollectorSourceLine
+              parts={[
+                $t('common.searchTermValue', {
+                  0:
+                    data.terms.length > 1
+                      ? $t('youtube.termsAndMore', {
+                          0: data.terms[0],
+                          1: data.terms.length,
+                        })
+                      : data.terms[0],
+                }),
+                $t(
+                  data.autoSync ? 'youtube.autoRead' : 'youtube.manualReading',
+                ),
+                data.fetchedAt &&
+                  $t('youtube.sourceRetrieved', { 0: time(data.fetchedAt) }),
+              ]}
+              notes={[
+                $t('youtube.sourceInfo', {
+                  0: new Intl.ListFormat(getCurrentLocale()).format(data.terms),
+                }),
+              ]}
+            />
           ) : null}
           {!data.configured ? (
             <p role='status' className='nr-footnote'>
@@ -254,6 +241,10 @@ export default function DataYouTube() {
           {running ? (
             <p role='status' className='nr-footnote'>
               {$t('youtube.resultsUpdating')}
+            </p>
+          ) : paused && canSync ? (
+            <p role='status' className='nr-footnote'>
+              {paused}
             </p>
           ) : null}
           <ReportMetrics kpis={data.kpis} />

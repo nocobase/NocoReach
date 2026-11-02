@@ -1,5 +1,5 @@
 import {
-  formatCompact,
+  formatCompactIn,
   formatCount,
   formatDate,
   formatDateTime,
@@ -393,7 +393,7 @@ function YouTubePanel({
                         ? ` · ${formatDate(video.publishedAt)}`
                         : ''}
                       {video.views !== null
-                        ? ` · ${$t('youtube.viewsCount', { 0: formatCompact(video.views) })}`
+                        ? ` · ${formatCompactIn('youtube.viewsCount', video.views)}`
                         : ''}
                     </span>
                   </li>
@@ -432,18 +432,36 @@ function YouTubePanel({
               </span>
             </label>
             {canSync ? (
-              <Button
-                size='sm'
-                variant='outline'
-                disabled={busy || state.syncing || !state.dataforseo}
-                onClick={() => void run('sync', {}, 'youtube.readingStarted')}
+              // A disabled button shows no tooltip, so the reason it waits sits on its wrapper.
+              <span
+                className='shrink-0'
+                title={
+                  state.pausedUntil
+                    ? $t('youtube.readNowPaused', {
+                        0: formatDate(state.pausedUntil),
+                      })
+                    : undefined
+                }
               >
-                {state.syncing
-                  ? $t('youtube.readingShort')
-                  : $t('common.readNow')}
-              </Button>
+                <Button
+                  size='sm'
+                  variant='outline'
+                  disabled={
+                    busy ||
+                    state.syncing ||
+                    !state.dataforseo ||
+                    Boolean(state.pausedUntil)
+                  }
+                  onClick={() => void run('sync', {}, 'youtube.readingStarted')}
+                >
+                  {state.syncing
+                    ? $t('youtube.readingShort')
+                    : $t('common.readNow')}
+                </Button>
+              </span>
             ) : null}
           </div>
+          <MissedNote state={state} />
           <Estimate state={state} />
         </section>
       ) : state.dataforseo ? (
@@ -616,17 +634,31 @@ function Problem({
         <p>{retry}</p>
       </>,
     );
-  const missed = last.missed ?? [];
-  if (!missed.length) return null;
-  const others = state.terms.length - missed.length;
-  const terms = quoted(missed.map((m) => m.term));
+  // A term missed once is read again the next day (MissedNote); only one missed on three daily reads in a row
+  // needs attention.
+  if (!state.repeatedMisses.length) return null;
   return box(
-    $t(
-      missed.length === 1
-        ? 'youtube.termMissedTitle'
-        : 'youtube.termsMissedTitle',
-    ),
+    $t('youtube.termsMissedRepeatedTitle'),
     <p>
+      {$t('youtube.termsMissedRepeated', {
+        0: quoted(state.repeatedMisses),
+      })}
+    </p>,
+  );
+}
+
+/** The terms the last read missed, other than those Problem already flags, as a grey line: they are read again. */
+function MissedNote({ state }: { state: YouTubeStatus }) {
+  const last = state.lastSync;
+  if (!last?.ok || state.syncing) return null;
+  const missed = (last.missed ?? []).filter(
+    (m) => !state.repeatedMisses.includes(m.term),
+  );
+  if (!missed.length) return null;
+  const others = state.terms.length - (last.missed ?? []).length;
+  const terms = quoted(missed.map((m) => m.term));
+  return (
+    <p className='text-muted-foreground' role='status' data-missed-note=''>
       {sentences(
         others > 0
           ? $t(
@@ -636,9 +668,9 @@ function Problem({
               { 0: terms, 1: others },
             )
           : $t('youtube.termsMissedOnly', { 0: terms }),
-        retry,
+        $t(state.autoSync ? 'youtube.retryTomorrow' : 'youtube.retryManually'),
       )}
-    </p>,
+    </p>
   );
 }
 
@@ -654,8 +686,8 @@ function Estimate({ state }: { state: YouTubeStatus }) {
   return (
     <p className='text-muted-foreground'>
       {!state.autoSync
-        ? $t('youtube.estimateManual', {
-            0: state.estimate.readUsd.toFixed(3),
+        ? $t('youtube.estimateOff', {
+            0: estimateUsd(state.estimate.monthlyUsd),
             1: used,
             2: budget,
           })

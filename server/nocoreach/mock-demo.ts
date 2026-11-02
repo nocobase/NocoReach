@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { DEMO_PRODUCT } from './demo-content.js';
 import { installEditorialDemo } from './demo-install.js';
+import { backdateYouTube } from './demo-data/youtube-history.js';
 import {
   FIXTURE_PRODUCT,
   fixtureCatalog,
@@ -402,6 +403,8 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
         autoSync: false,
       });
       await p.youtube.settled(id);
+      // As if read for the past four weeks, not first saved just now.
+      await backdateYouTube(p.db, id);
     });
     await phase('trends', async () => {
       await p.trends.connect(id, { product: product.name, locationCode: 0 });

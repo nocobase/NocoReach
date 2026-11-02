@@ -8,15 +8,16 @@ import {dailyScheduleTime} from '#lib/schedule-time';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {Button} from '#components/ui/button';
 import {confirmAction} from '#components/reach/confirm';
-import {formatDateTime} from '#lib/format';
+import {formatDate,formatDateTime} from '#lib/format';
 import {InfoTip} from '#components/reach/info-tip';
 import {SourceLogo} from '#components/reach/source-logo';
 import {help} from './glossary';
-export type HealthText={key:string;params?:Record<string,string|number|HealthText|{systemError:string}>};
-// A missing descriptor is legacy or user-authored content: preserve the original verbatim.
+export type HealthText={key:string;params?:Record<string,string|number|HealthText|{systemError:string}|{date:string}>};
+// A missing descriptor is legacy or user-authored content: preserve the original verbatim. A `date` is an instant the
+// browser writes as a day, as the drawers do (when YouTube resumes after the month's budget ran out).
 export function healthText(original:string|undefined,text?:HealthText):string{
  if(!text)return original||'';
- const params=Object.fromEntries(Object.entries(text.params||{}).map(([key,value])=>[key,typeof value==='object'?('systemError' in value?translateSourceError(value.systemError):healthText('',value)):value]));
+ const params=Object.fromEntries(Object.entries(text.params||{}).map(([key,value])=>[key,typeof value==='object'?('systemError' in value?translateSourceError(value.systemError):'date' in value?formatDate(value.date):healthText('',value)):value]));
  return $legacyText(text.key,params);
 }
 // A message joins " · Last success …", so its closing full stop goes: "…access · Last success …", not "…access. · Last success …".
