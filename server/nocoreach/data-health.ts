@@ -63,17 +63,27 @@ class DataHealth{
   // How often each runs on its own, for the Frequency column; a source with its own manual mode says so above.
   const weekly=new Set(['reddit','trends','competitors','rank']);for(const i of items){i.cadence??=weekly.has(i.id)?'weekly':'daily';if(i.state==='warning'||i.state==='failing'){if(!i.fix&&i.retry)i.fix='retry';}else delete i.fix;}
   const order={failing:0,warning:1,pending:2,healthy:3};return {checkedAt:new Date(now).toISOString(),items:items.sort((a,b)=>order[a.state]-order[b.state])};}
- // Which sources this project has connected, for the menu (2026-10-04: a data page shows only once its source is in).
+ // Which sources this project has connected, for the menu (2026-10-04, again 2026-11-02: a data page shows only once its
+ // source is in; client/components/app-shell/nav-sources.tsx maps the pages to these keys). A source counts while its
+ // page has something to show: Xiaohongshu, Bilibili and YouTube keep showing their saved data after a disconnect, until it
+ // is cleared, so they count until then; the other pages go back to their prompt to connect, so a disconnect ends them.
+ // Keywords also counts saved and tracked keywords, which its tabs list without any source.
  // Cheap reads of each source's saved state; a source that cannot be read counts as not connected.
  async connected(id){const safe=async fn=>{try{return Boolean(await fn());}catch{return false;}},on=x=>x&&x.status!=='disconnected';
   const link=await this.p.link(id).catch(()=>null),google=Boolean(link&&this.p.env(__policy.secretKey(id))&&link.get('status')!=='disconnected');
-  const ch=await this.p.chat?.state(id).catch(()=>null);
-  return {ga4:google&&Boolean(link.get('ga4PropertyId')),gsc:google&&Boolean(link.get('gscSiteUrl')),
+  const ch=await this.p.chat?.state(id).catch(()=>null);const shown=async source=>{const s=await source?.status(id);return s?.connected||s?.total>0;};
+  // Traffic and Search performance read the one Google sync, which needs both the GA4 property and the Search Console
+  // site (sync-service.ts `link`); with one chosen, both pages still ask to finish connecting.
+  const both=google&&Boolean(link.get('ga4PropertyId'))&&Boolean(link.get('gscSiteUrl'));
+  return {ga4:both,gsc:both,
    site:await safe(async()=>(await this.p.siteContent?.state(id))?.sites?.length),github:await safe(async()=>{const g=await this.p.github?.state(id);return g?.repo&&on(g);}),
    packages:await safe(async()=>(await this.p.packages?.state(id))?.packages?.length),discourse:await safe(async()=>{const c=await this.p.community?.state(id);return c?.origin&&on(c);}),
    hackernews:await safe(async()=>{const h=await this.p.hackernews?.state(id);return h?.terms?.length&&on(h);}),reddit:await safe(async()=>{const r=await this.p.reddit?.state(id);return r?.terms?.length&&on(r);}),
    x:await safe(async()=>{const x=await this.p.xSource?.state(id);return x?.terms?.length&&on(x);}),discord:ch?.discord?.status==='active',slack:ch?.slack?.status==='active',
-   trends:await safe(async()=>{const t=await this.p.trends?.state(id);return Boolean(t?.terms?.length&&on(t)||t?.keywords?.length);}),dataforseo:Boolean(this.p.aiSearch?.d4s?.config(id)?.verifiedAt)};}
+   trends:await safe(async()=>{const t=await this.p.trends?.state(id);return Boolean(t?.terms?.length&&on(t)||t?.keywords?.length);}),dataforseo:Boolean(this.p.aiSearch?.d4s?.config(id)?.verifiedAt),
+   competitors:await safe(async()=>(await this.p.competitors?.state(id))?.list?.length),
+   keywords:await safe(async()=>await this.p.keywordService?.candidates().count({filter:{projectId:id}})||(await this.p.rankTracking?.state(id))?.keywords?.length),
+   xiaohongshu:await safe(()=>shown(this.p.xiaohongshu)),bilibili:await safe(()=>shown(this.p.bilibili)),youtube:await safe(()=>shown(this.p.youtube))};}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('dataHealth.notLoadDataHealth'));}};
   this.p.app.resourceManager.define({name:'nrHealth',actions:{list:wrap(id=>this.list(id)),connected:wrap(id=>this.connected(id))}});this.p.app.acl.allow('nrHealth',['list','connected'],'loggedIn');}
 }

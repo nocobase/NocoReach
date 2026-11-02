@@ -7636,5 +7636,6 @@
   "repos.moves": "{0} is served by {1} now; saving moves it to this repository.",
   "repos.limitPaths": "Allow changes only in some folders (optional)",
   "repos.saveAndCheck": "Save and check",
-  "repos.checkNow": "Check"
+  "repos.checkNow": "Check",
+  "navSources.addedToMenu": "Added to the menu: {0}"
 }

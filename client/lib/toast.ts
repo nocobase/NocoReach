@@ -15,6 +15,8 @@ interface Options {
   readonly id?: string;
   readonly description?: ReactNode;
   readonly duration?: number;
+  /** A button in the toast, its label read like the title; it leaves the toast open unless `onClick` dismisses it. */
+  readonly action?: { readonly label: ToastMessage; readonly onClick: () => void };
 }
 
 let toaster: Toaster | undefined;
@@ -28,7 +30,13 @@ const show = (type: ToastType, title: ToastMessage, options: Options = {}): stri
     console.info(typeof title === 'function' ? title() : title);
     return '';
   }
-  return toaster.show({ type, title: createElement(LiveMessage, { message: title }), ...options });
+  const { action, ...rest } = options;
+  return toaster.show({
+    type,
+    title: createElement(LiveMessage, { message: title }),
+    ...rest,
+    ...(action ? { action: { label: createElement(LiveMessage, { message: action.label }), onClick: action.onClick } } : {}),
+  });
 };
 
 export const toast = Object.assign((title: ToastMessage, options?: Options) => show('info', title, options), {

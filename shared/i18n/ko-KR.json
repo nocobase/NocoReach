@@ -7638,5 +7638,6 @@
   "repos.moves": "{0}은(는) 현재 {1} 담당입니다. 저장하면 이 저장소로 옮겨집니다.",
   "repos.limitPaths": "일부 폴더에서만 변경 허용(선택)",
   "repos.saveAndCheck": "저장하고 확인",
-  "repos.checkNow": "확인"
+  "repos.checkNow": "확인",
+  "navSources.addedToMenu": "메뉴에 추가됨: {0}"
 }

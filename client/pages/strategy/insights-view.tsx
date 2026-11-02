@@ -7,6 +7,7 @@ import {useNavigate} from 'react-router';
 import {BellIcon,ArrowRightIcon,BotIcon,ChevronRightIcon,SparklesIcon} from 'lucide-react';
 import {AiMark} from '#components/reach/actor';
 import {Button} from '#components/ui/button';
+import {useLinkInMenu} from '#components/app-shell/nav-sources';
 import {Section} from '#components/reach/page';
 import {Tag,type Tone} from '#components/reach/tag';
 import {getSourceNames,type Row} from './board';
@@ -126,10 +127,12 @@ function useRowRoom(listRef:RefObject<HTMLElement|null>,ready:boolean):{fit:numb
  return room;}
 const sentence=(i:AreaItem)=>$legacyText(i.text).replace(/\{(\d+)\}/g,(_,k:string)=>i.values[Number(k)]??'');
 export function AreaList({areas,projectId,quiet=false}:{areas?:Area[];projectId:number;quiet?:boolean}):ReactElement|null{
- const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),[allNormal,setAllNormal]=useState(false),listRef=useRef<HTMLDivElement>(null),all=situationLines(areas),room=useRowRoom(listRef,quiet&&all.length>0);if(!all.length)return null;
+ const navigate=useNavigate(),inMenu=useLinkInMenu(),[openKey,setOpenKey]=useState<string>(),[allNormal,setAllNormal]=useState(false),listRef=useRef<HTMLDivElement>(null),all=situationLines(areas),room=useRowRoom(listRef,quiet&&all.length>0);if(!all.length)return null;
  const items=all,open=items.find(i=>`${i.area}:${i.key}`===openKey);
- // A line with something behind it opens its detail here; one without (AI 搜索还没查过) goes to its page.
- const go=(i:typeof items[number])=>{if(i.rows?.length||i.compare?.length)setOpenKey(`${i.area}:${i.key}`);else navigate(i.to);};
+ // A line with something behind it opens its detail here; one without (AI search not checked yet) goes to its page,
+ // unless the menu leaves that page out (2026-11-02); then the line only reads.
+ const leads=(i:typeof items[number])=>Boolean(i.rows?.length||i.compare?.length)||inMenu(i.to);
+ const go=(i:typeof items[number])=>{if(i.rows?.length||i.compare?.length)setOpenKey(`${i.area}:${i.key}`);else if(inMenu(i.to))navigate(i.to);};
  const detail=open?<AttentionDetail key={openKey} item={open} projectId={projectId} onClose={()=>setOpenKey(undefined)}/>:null;
  // Quiet, beside the day's conversation on Insights (2026-10-21 user feedback: the column drew the eye from the
  // conversation): one list in group order (getting worse, to handle, opportunities, share of voice), each row a short
@@ -142,7 +145,7 @@ export function AreaList({areas,projectId,quiet=false}:{areas?:Area[];projectId:
  // all N" (useRowRoom).
  if(quiet){const ink=(i:typeof items[number],v:string)=>/^[↑↓]/.test(v)?isZero(v)?'text-foreground':v.startsWith('↑')?'text-nr-ink-green':'text-nr-ink-red':i.group==='worse'?'text-nr-ink-red':i.group==='handle'?'text-nr-ink-amber':i.group||!i.attention?'text-foreground':i.tone==='red'?'text-nr-ink-red':'text-nr-ink-amber';
   const row=(i:typeof items[number])=>{const label=SITUATION_LABEL[i.key],value=i.values.length?situationValue(i):null;
-   return <li key={`${i.area}:${i.key}`}><button type='button' onClick={()=>go(i)} title={[$legacyText(i.source),i.detail?$legacyText(i.detail):''].filter(Boolean).join(' · ')} className='-mx-2 flex w-[calc(100%+var(--spacing)*4)] items-baseline gap-3 rounded-md px-2 py-[5px] text-left text-xs text-foreground/80 transition-colors hover:bg-muted' data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
+   return <li key={`${i.area}:${i.key}`}><button type='button' disabled={!leads(i)} onClick={()=>go(i)} title={[$legacyText(i.source),i.detail?$legacyText(i.detail):''].filter(Boolean).join(' · ')} className='-mx-2 flex w-[calc(100%+var(--spacing)*4)] items-baseline gap-3 rounded-md px-2 py-[5px] text-left text-xs text-foreground/80 transition-colors hover:bg-muted disabled:cursor-default disabled:hover:bg-transparent' data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
     <span className='min-w-0 flex-1'>{label&&value?$t(label):sentence(i)}</span>
     {label&&value?<span className='flex shrink-0 gap-1.5 font-medium tabular-nums'>{value.map(v=><span key={v} className={ink(i,v)}>{v}</span>)}</span>:null}
    </button></li>;};
@@ -153,7 +156,7 @@ export function AreaList({areas,projectId,quiet=false}:{areas?:Area[];projectId:
    {detail}</div>;}
  // Untitled: the block around it carries the heading and what it means.
  return <Section aria-label={$t('strategy.whereThingsStand')}><ul className="divide-y">{items.map(i=><li key={`${i.area}:${i.key}`}>
-  <button type="button" onClick={()=>go(i)} title={i.detail?$legacyText(i.detail):undefined} className="flex w-full items-start gap-2.5 py-2 text-left hover:opacity-80" data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
+  <button type="button" disabled={!leads(i)} onClick={()=>go(i)} title={i.detail?$legacyText(i.detail):undefined} className="flex w-full items-start gap-2.5 py-2 text-left hover:opacity-80 disabled:cursor-default disabled:hover:opacity-100" data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
    <span className={`mt-1.5 size-2 shrink-0 rounded-full ${i.attention?'bg-nr-ink-amber':'bg-muted-foreground/40'}`} aria-hidden="true"/>
    <span className="min-w-0 flex-1">
     <span className={`block text-sm ${i.attention?'':'text-muted-foreground'}`}>{$legacyJsx(i.text,Object.fromEntries(i.values.map((v,k)=>[k,<b key={k} className="font-semibold text-foreground tabular-nums">{v}</b>])))}</span>
@@ -168,14 +171,14 @@ export function AreaList({areas,projectId,quiet=false}:{areas?:Area[];projectId:
 // against the one before; then the page with all of it.
 function AttentionDetail({item,projectId,onClose}:{item:AreaItem;projectId:number;onClose:()=>void}):ReactElement{
  // A rule's line is titled as in the list, by its label (the rule's own name reads differently).
- const navigate=useNavigate(),list=item.rows||[],selection=useSelection(list.map(r=>r.key)),ticked=list.filter(r=>selection.has(r.key)),text=item.key.startsWith('rule-')&&SITUATION_LABEL[item.key]?$t(SITUATION_LABEL[item.key]):sentence(item);
+ const navigate=useNavigate(),inMenu=useLinkInMenu(),list=item.rows||[],selection=useSelection(list.map(r=>r.key)),ticked=list.filter(r=>selection.has(r.key)),text=item.key.startsWith('rule-')&&SITUATION_LABEL[item.key]?$t(SITUATION_LABEL[item.key]):sentence(item);
  // A line about the site's own pages hands its ticked pages off with the task (2026-10-29); others (forum topics,
  // posts) are not pages to change.
  const draft=():TaskDraft=>({...(PAGE_PLAYBOOKS.has(item.handOff!.playbookId)?{pages:distinctPages(ticked.flatMap(r=>[r.url,...(r.pages||[])]))}:{}),title:item.handOff!.title.replace('{0}',ticked.map(r=>r.title).join('、').slice(0,120)).slice(0,200),subject:ticked.map(r=>r.title).join('、').slice(0,160),objective:$t('strategy.handleInsightsWorthLook',{0:text}).slice(0,1000),
   brief:[$t('strategy.insightsWhereThingsStand',{0:text,1:$legacyText(item.source),2:item.detail?`，${$legacyText(item.detail)}`:''}),'',...ticked.map(r=>`- ${r.title}${r.meta?`（${$legacyText(r.meta)}）`:''}${r.url?`：${r.url}`:''}`),'',$t('strategy.suggestionCheckDataPagesItems')].join('\n').slice(0,20000)});
  return <DetailDrawer open onClose={onClose} title={text} description={[$legacyText(item.source),item.detail?$legacyText(item.detail):''].filter(Boolean).join(' · ')}
   actions={item.handOff&&list.length?<SectionHandOff projectId={projectId} disabled={!ticked.length} playbookId={item.handOff.playbookId} page={ticked.length===1&&ticked[0].url?ticked[0].url:undefined} label={ticked.length?$t('common.handOffAgentValue',{0:ticked.length}):$t('common.handOffAgent')} draft={draft}/>:undefined}
-  footer={<Button variant="outline" onClick={()=>navigate(item.to)}>{$t('strategy.see',{0:$legacyText(item.source)})}<ArrowRightIcon/></Button>}>
+  footer={inMenu(item.to)?<Button variant="outline" onClick={()=>navigate(item.to)}>{$t('strategy.see',{0:$legacyText(item.source)})}<ArrowRightIcon/></Button>:undefined}>
   <div className="space-y-3 text-sm" data-attention-detail={item.key}>
    {item.compare?.length?<table className="w-full text-sm" aria-label={$t('strategy.periodLast')}><thead className="text-xs text-muted-foreground"><tr className="border-b"><th className="py-1.5 text-left font-normal"></th><th className="py-1.5 text-right font-normal">{$t('strategy.period')}</th><th className="py-1.5 text-right font-normal">{$t('strategy.lastPeriod')}</th></tr></thead>
     <tbody>{item.compare.map(c=><tr key={c.label} className="border-b last:border-0"><td className="py-1.5">{$legacyText(c.label)}</td><td className="py-1.5 text-right tabular-nums">{c.now}</td><td className="py-1.5 text-right tabular-nums text-muted-foreground">{c.before}</td></tr>)}</tbody></table>:null}
@@ -221,7 +224,7 @@ export const watchedLabel=(days:number)=>days<=1?$t('strategy.watchingSinceToday
 // One change in a panel (洞察's 今天的变化, 机会's 观察中): its data, the AI's verdict and one next step, and the verdicts of
 // earlier days when there are some (how a watched change has been judged).
 export function ChangeDetail({signal:open,status:st,projectId,verdicts,watch,today,judging,error,onJudge,onDecide,onClose,onHandOff}:{signal:Signal;status:Status;projectId:number;verdicts?:Verdict[];watch?:WatchRecord;today?:string;judging?:boolean;error?:string;onJudge?:()=>void;onDecide?:(status:'ignored'|'pending')=>void;onClose:()=>void;onHandOff:(r:HandOffResult)=>void}):ReactElement{
- const navigate=useNavigate(),[handing,setHanding]=useState(false),page=pageOf(open);
+ const navigate=useNavigate(),inMenu=useLinkInMenu(),[handing,setHanding]=useState(false),page=pageOf(open);
  return <>
   {handing?null:<DetailDrawer open onClose={onClose} title={titleOf(open)} description={getSourceNames()[open.source]||open.source}
    footer={<div className="flex w-full flex-wrap gap-2">
@@ -231,7 +234,7 @@ export function ChangeDetail({signal:open,status:st,projectId,verdicts,watch,tod
     {(st.next==='hand'||st.next==='judge')&&open.actionable?<Button variant={st.next==='hand'&&st.verdict==='do'&&!st.ignored&&!st.dismissed?'default':'outline'} onClick={()=>setHanding(true)}><BotIcon data-icon="inline-start"/>{st.next==='hand'&&!(st.verdict==='do'&&!st.dismissed)?$t('strategy.handOffAgentAnyway'):$t('common.handOffAgent')}</Button>:null}
     {onDecide&&st.next==='hand'&&!st.dismissed&&(st.verdict==='do'||st.verdict==='watch')?<Button variant="ghost" disabled={judging} onClick={()=>onDecide('ignored')}>{$t('common.ignore')}</Button>:null}
     {onDecide&&st.ignored?<Button variant="outline" disabled={judging} onClick={()=>onDecide('pending')}>{$t('strategy.restore')}</Button>:null}
-    {page?<Button variant="outline" onClick={()=>navigate(page)}>{$t('strategy.viewData')}</Button>:null}</div>}>
+    {page&&inMenu(page)?<Button variant="outline" onClick={()=>navigate(page)}>{$t('strategy.viewData')}</Button>:null}</div>}>
    <div className="space-y-3 text-sm">
     <div className="flex flex-wrap items-center gap-2"><Tag tone={st.tone} dot>{st.label}</Tag>{(()=>{const c=chipOf(open);return c?<Tag tone={c.tone}>{c.text}</Tag>:null;})()}</div>
     <section className="space-y-1"><h3 className="text-xs font-medium text-muted-foreground">{$t('strategy.data')}</h3><ul className="list-disc space-y-1 pl-5">{open.facts.map(f=><li key={f}>{$legacyText(f)}</li>)}</ul>{open.url?<p><a className="nr-link break-all" href={open.url} target="_blank" rel="noreferrer">{open.url}</a></p>:null}</section>
