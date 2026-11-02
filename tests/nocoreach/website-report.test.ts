@@ -4,6 +4,7 @@ import { test, vi, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
 import { WebsiteReport, TABLES } from '../../server/nocoreach/website-report.js';
 import { websiteView, windowFor } from '../../server/nocoreach/data-views.js';
+import { GA4_PARTIAL_CACHE_MS } from '../../shared/ga4-cache.js';
 
 afterEach(()=>{vi.useRealTimers();vi.restoreAllMocks();});
 // A GA4 report from plain rows: dimension and metric names in order, the date range last when the request named several.
@@ -170,6 +171,24 @@ test('yesterday after a failed zone lookup ends on a day already over everywhere
  let lookups=0;g.timeZone=async()=>{lookups++;return 'Asia/Shanghai';};
  g.zones.set('123',{at:Date.now()-86400001,zone:'America/Los_Angeles',confirmed:true,ttl:86400000});
  assert.equal(await g.yesterday('1','123'),'2026-10-29','the known zone is used while it is looked up again');assert.equal(lookups,1);
+});
+
+test('callers at the same time share one zone lookup, and a failure keeps the zone known by then',async()=>{
+ const {g}=fake(()=>({}));g.timeZone=WebsiteReport.prototype.timeZone;g.token=async()=>'t';
+ let answer;g.json=vi.fn(()=>new Promise(r=>{answer=r;}));
+ const a=g.timeZone('1','123'),b=g.yesterday('1','123');await vi.waitFor(()=>assert.ok(answer));
+ answer({timeZone:'Asia/Shanghai'});
+ assert.equal(await a,'Asia/Shanghai');await b;assert.equal(g.json.mock.calls.length,1,'one Admin API call');
+ g.zones.set('123',{...g.zones.get('123'),at:0});g.json=vi.fn(async()=>{throw Object.assign(new Error('quota'),{status:429});});
+ assert.equal(await g.timeZone('1','123'),'Asia/Shanghai');assert.equal(g.zones.get('123').confirmed,true);assert.equal(g.zones.get('123').ttl,300000);
+});
+
+test('a period ended on a guessed zone is kept only as long as a partial report',async()=>{
+ vi.useFakeTimers({now:new Date('2026-10-31T06:00:00Z')});
+ const {g}=fake(()=>({}));g.readPeriod=async()=>({tables:{},missing:[]});
+ g.zones.set('123',{at:Date.now(),zone:'UTC',confirmed:false,ttl:300000});
+ const v=await g.period('1','123',windowFor('2026-10-29','7'));
+ assert.equal(v.cacheExpiresAt,Date.now()+GA4_PARTIAL_CACHE_MS);
 });
 
 test('a period is kept until midnight in the zone its window ends in',async()=>{

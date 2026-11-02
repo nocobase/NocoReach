@@ -737,6 +737,7 @@ function RowDrawer({
                     : null,
                 ),
                 row.queries ?? [],
+                report.queriesWindow,
               )
             }
           />

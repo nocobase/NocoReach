@@ -91,6 +91,7 @@ function tableRows(name,report){const t=TABLES[name];const rows=rowsOf(report);
 class WebsiteReport{
  requests=new Ga4Requests();
  tokenPending=new Map<string|number,Promise<string>>();
+ zonePending=new Map<string,Promise<string>>();
  tokens=new Map<string|number,{at:number;token:string}>();
  history:Ga4ReportCache;
  constructor(plugin){this.p=plugin;this.history=new Ga4ReportCache((plugin as {db?:LegacyDatabase}).db);this.zones=new Map();this.todayCache=new Map();this.liveCache=new Map();}
@@ -121,10 +122,13 @@ class WebsiteReport{
    catch(e){if(!refused(e))this.explain(e);const out=[];for(const r of part)out.push(await one(r));return out;}}));
   return done.flat();}
  // The property's time zone, kept a day. A failed lookup keeps the last known zone (or UTC, unconfirmed) for five minutes
- // only, so one timeout does not leave 今天 on the wrong hours for a day.
- async timeZone(id,property){const hit=this.zones.get(property);if(hit&&Date.now()-hit.at<hit.ttl)return hit.zone;let zone='UTC',confirmed=true,ok=true;
+ // only, so one timeout does not leave 今天 on the wrong hours for a day. Callers at the same time share one lookup, so a
+ // late failure cannot overwrite a zone another lookup has just confirmed.
+ timeZone(id,property){const hit=this.zones.get(property);if(hit&&Date.now()-hit.at<hit.ttl)return Promise.resolve(hit.zone);
+  if(!this.zonePending.has(property))this.zonePending.set(property,this.lookupZone(id,property).finally(()=>this.zonePending.delete(property)));return this.zonePending.get(property);}
+ async lookupZone(id,property){let zone='UTC',confirmed=true,ok=true;
   try{zone=(await this.json(id,`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${property}`,{...jsonRequest(await this.token(id)),signal:AbortSignal.timeout(20000)})).timeZone||'UTC';}
-  catch(e){ok=false;zone=hit?.zone||'UTC';confirmed=Boolean(hit?.confirmed);this.p.app?.logger?.warn('NocoReach GA4 time zone lookup failed',{message:e?.message,code:e?.code,status:e?.status});}
+  catch(e){ok=false;const known=this.zones.get(property);zone=known?.zone||'UTC';confirmed=Boolean(known?.confirmed);this.p.app?.logger?.warn('NocoReach GA4 time zone lookup failed',{message:e?.message,code:e?.code,status:e?.status});}
   this.zones.set(property,{at:Date.now(),zone,confirmed,ttl:ok?24*HOUR:5*MIN});return zone;}
 
  // The zone Traffic's windows end in: the property's own unless the lookup failed with none confirmed, then UTC-12,
@@ -136,8 +140,10 @@ class WebsiteReport{
   const zone=this.endZone(property,hit?hit.zone:await this.timeZone(id,property)),now=new Date(businessNow(this.p,id,'google'));
   try{return resolveGa4SyncRange({},zone,now).targetEnd;}catch{return resolveGa4SyncRange({},'Etc/GMT+12',now).targetEnd;}}
  // The totals, the daily line and the tables all cover the window `w`, kept until midnight where it ends, when
- // yesterday moves on and the same range names other days.
- period(id:string|number,property:string,w:unknown){const now=businessNow(this.p,id,'google');return this.history.load(String(id),['period',...this.scope(id,property),w],()=>this.readPeriod(id,property,w),value=>Math.min(value.complete===false||value.missing.length?GA4_PARTIAL_CACHE_MS:GA4_HISTORY_CACHE_MS,untilMidnight(this.endZone(property),now)),(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));}
+ // yesterday moves on and the same range names other days. A window ended in UTC-12 because the zone is unconfirmed is
+ // kept only as long as a partial report, so the browser (and other instances, through the stored cache) move to the
+ // property's own yesterday once the lookup succeeds.
+ period(id:string|number,property:string,w:unknown){const now=businessNow(this.p,id,'google'),guessed=this.zones.get(property)?.confirmed===false;return this.history.load(String(id),['period',...this.scope(id,property),w],()=>this.readPeriod(id,property,w),value=>Math.min(guessed||value.complete===false||value.missing.length?GA4_PARTIAL_CACHE_MS:GA4_HISTORY_CACHE_MS,untilMidnight(this.endZone(property),now)),(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));}
  async readPeriod(id,property,w){const both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],current=[range(w.start,w.end)];
   const names=Object.keys(TABLES),changeNames=Object.keys(CHANGES);
   const reports=await this.batch(id,property,[
