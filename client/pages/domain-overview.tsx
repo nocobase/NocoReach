@@ -43,7 +43,8 @@ import { formatCount, formatDateTime } from '#lib/format';
 
 type Item = { id: string; keyword: string; url: string; volume: number | null; difficulty: number | null; intent: string | null; position: number | null; traffic: number | null; keywords: number | null; cpc: number | null };
 type Spec = { kind: "domain"; view: "keywords" | "pages"; target: string; locationCode: number; language: string };
-type Run = { id: number | string; status: string; spec: Spec; result?: { items: Item[]; totalCount: number | null; summary?: { traffic: number; keywords: number; top3: number; top10: number } | null }; errorCode?: string; createdAt: string; completedAt?: string };
+// reused: a query returned the saved lookup of the last 30 days instead of asking DataForSEO again.
+type Run = { id: number | string; status: string; spec: Spec; result?: { items: Item[]; totalCount: number | null; summary?: { traffic: number; keywords: number; top3: number; top10: number } | null }; errorCode?: string; createdAt: string; completedAt?: string; reused?: boolean };
 type Recent = { id: string; status: string; spec: Spec; createdAt: string; completedAt: string | null; count: number | null; summary: Run["result"] extends infer R ? R extends { summary?: infer S } ? S : null : null };
 const call = <T,>(action: string, body: object = {}) => api.action<T>("nrDomains", action, { method: "POST", body: { projectId: String(currentProjectId()), ...body }, unwrap: "data" });
 const requestKey = () => crypto.randomUUID().replace(/-/g, "");
@@ -78,10 +79,10 @@ export default function DomainOverview({ embedded = false }: { embedded?: boolea
       if (!id && runs[view]) setRuns((s) => ({ ...s, [view]: undefined }));
     }
   }, [params.get("k"), params.get("p")]);
-  const query = async (view: "keywords" | "pages", target = form.target, m = form.market) => {
+  const query = async (view: "keywords" | "pages", target = form.target, m = form.market, forceRefresh = false) => {
     setBusy(view); setError("");
     try {
-      const r = await call<Run>("run", { view, target, locationCode: m.locationCode, language: m.language, requestKey: requestKey() });
+      const r = await call<Run>("run", { view, target, locationCode: m.locationCode, language: m.language, requestKey: requestKey(), ...(forceRefresh ? { forceRefresh: true } : {}) });
       setRuns((s) => (view === "keywords" ? { keywords: r } : { ...s, pages: r }));
       const p = new URLSearchParams(params);
       p.set("d", r.spec.target); p.set("loc", String(r.spec.locationCode)); p.set("lang", r.spec.language); p.set(view === "keywords" ? "k" : "p", String(r.id)); if (view === "keywords") { p.delete("p"); p.delete("tab"); } else p.set("tab", "pages");
@@ -91,6 +92,9 @@ export default function DomainOverview({ embedded = false }: { embedded?: boolea
   };
   const shown = runs.keywords;
   const isOwn = Boolean(shown && own.includes(bare(shown.spec.target)));
+  const marketOf = (spec: Spec) => getMarkets().find((m) => m.locationCode === spec.locationCode && m.language === spec.language) ?? form.market;
+  // The lookup on screen, when a query just returned a saved one: said so, with Check again (as on Keywords).
+  const visible = tab === "pages" && runs.pages && shown && runs.pages.spec.target === shown.spec.target ? runs.pages : shown;
   const setTab = (v: string) => { const p = new URLSearchParams(params); v === "pages" ? p.set("tab", "pages") : p.delete("tab"); setParams(p, { replace: true }); };
   const actions = shown ? <Button variant="outline" size="sm" onClick={() => setParams(new URLSearchParams(), { replace: true })}><History data-icon="inline-start" />{$t('domainOverview.recentLookups')}</Button> : undefined;
   const body = (
@@ -117,6 +121,9 @@ export default function DomainOverview({ embedded = false }: { embedded?: boolea
       {shown ? (
         shown.status !== "completed" ? <EmptyState icon={<Globe />} title={$t('common.lookupNotComplete')} description={shown.errorCode || $t('common.notRunSameLookupAgain')} /> : (
           <>
+            {visible?.reused && visible.status === "completed" ? (
+              <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" data-domain-reused="">{$tj('keywordResearch.resultNoNewCharge', { 0: fmtTime(visible.completedAt || visible.createdAt) })}<InfoTip>{$t('domainOverview.sameLookupLast30')}</InfoTip><Button variant="link" size="sm" className="h-auto p-0" disabled={Boolean(busy)} onClick={() => void query(visible.spec.view, visible.spec.target, marketOf(visible.spec), true)}>{$t('common.queryAgain')}</Button></p>
+            ) : null}
             <Summary run={shown} />
             <Card className="gap-0 py-0">
               <DataTableTabs value={tab} onValueChange={setTab}>
@@ -126,7 +133,7 @@ export default function DomainOverview({ embedded = false }: { embedded?: boolea
               {tab === "keywords" ? <KeywordsTable run={shown} own={isOwn} /> : runs.pages && runs.pages.spec.target === shown.spec.target ? <PagesTable own={isOwn} run={runs.pages} /> : (
                 <div className="space-y-2 p-6 text-sm">
                   <p className="text-muted-foreground">{$tj('domainOverview.seeWhichPagesBringMost',{0:shown.spec.target})}</p>
-                  <Button variant="outline" disabled={Boolean(busy)} onClick={() => void query("pages", shown.spec.target, getMarkets().find((m) => m.locationCode === shown.spec.locationCode && m.language === shown.spec.language) ?? form.market)}>{busy === "pages" ? $t('common.querying') : $t('domainOverview.lookUpTopPages')}</Button>
+                  <Button variant="outline" disabled={Boolean(busy)} onClick={() => void query("pages", shown.spec.target, marketOf(shown.spec))}>{busy === "pages" ? $t('common.querying') : $t('domainOverview.lookUpTopPages')}</Button>
                 </div>
               )}
             </Card>

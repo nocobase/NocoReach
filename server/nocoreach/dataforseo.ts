@@ -4,13 +4,17 @@ import { systemMessageText } from '../../shared/i18n/messages.js';
 import { hash, VisibilityError } from './research-helpers.js';
 // DataForSEO paid queries shared by the 数据分析 pages (SPEC "OpenSEO 数据页面"): one connection and monthly budget per
 // project; a query runs only when the person asks for it (no per-query cost prompt since 2026-10-02 — spending is shown
-// in 数据接入) and stops once the month's budget is used; the same query within 30 days returns the saved result; a run
-// whose outcome is uncertain (timeout, cut connection, unreadable reply) may already be billed, so it is recorded as
-// unknown and never retried automatically. Each page registers a kind: specification(v)
-// returns {kind,path,request,estimatedUsd,reservationUsd,...} (or {kind,requests:[{path,body}],...}) and result(raw,spec)
-// the parsed run values (raw is the list of replies for `requests`).
+// in 数据接入) and stops once the month's budget is used; the same query within the kind's reuse time (30 days unless it
+// sets reuseMs) returns the saved result, marked reused; a run whose outcome is uncertain (timeout, cut connection,
+// unreadable reply) may already be billed, so it is recorded as unknown and never retried automatically. Each page
+// registers a kind: specification(v) returns {kind,path,request,estimatedUsd,reservationUsd,...} (or
+// {kind,requests:[{path,body}],...}) and result(raw,spec) the parsed run values (raw is the list of replies for
+// `requests`).
 const key=id=>'NOREACH_DATAFORSEO_'+id;
 const REUSE_MS=30*86400000;
+// A forced refresh (the person asking again on purpose) still gets the same query's run from the last RECENT_MS, so a
+// double click is not billed twice; Lighthouse uses it as its whole reuse time.
+const RECENT_MS=10*60000;
 const error=(message,status=409)=>{throw new VisibilityError(message,status);};
 // What a run counts against the budget: its billed cost, or the reservation while the cost is unknown.
 const spent=r=>Number(r.get('costUsd')||0)+Number(r.get('reservedUsd')||0);
@@ -62,14 +66,17 @@ class DataForSeo{
    const uncertain=kind!=='reddit'&&v.retryUncertain===true?null:await this.repo().findOne({filter:{projectId:id,queryHash:preview.queryHash,status:{$in:['running','unknown']},...(kind==='reddit'?{}:{createdAt:{$gte:new Date(Date.now()-(this.kind(kind).reuseMs??REUSE_MS)).toISOString()}})},transaction});if(uncertain)return uncertain;
    const completed=await this.repo().findOne({filter:{projectId:id,queryHash:preview.queryHash,status:'completed'},sort:'-createdAt',transaction});
    // A kind may reuse for a shorter time (rank checks: under a week, so the weekly check always reads anew).
-   if(completed&&Date.now()-Date.parse(completed.get('createdAt'))<(this.kind(kind).reuseMs??REUSE_MS)&&v.forceRefresh!==true)return completed;
+   const reuseMs=this.kind(kind).reuseMs??REUSE_MS;
+   if(completed&&Date.now()-Date.parse(completed.get('createdAt'))<(v.forceRefresh===true?Math.min(RECENT_MS,reuseMs):reuseMs))return completed;
    const month=new Date().toISOString().slice(0,7)+'-01';
    const previous=await this.repo().find({filter:{projectId:id,createdAt:{$gte:month}},limit:10001,transaction});
    const used=previous.reduce((sum,r)=>sum+spent(r),0);
    if(previous.length>10000||used+spec.reservationUsd>c.budget)throw Object.assign(new VisibilityError(systemMessageText('messages.monthDataforseoBudgetUsedUp', { 0: used.toFixed(2), 1: c.budget }),409),{safeCode:'budget_exceeded'});
    owns=true;return this.repo().create({values:{projectId:id,requestKey,queryHash:preview.queryHash,status:'running',spec,reservedUsd:spec.reservationUsd,costUsd:null},transaction});
   });
-  if(!owns)return row.toJSON();
+  // A run this call did not start (the same request again, one still running or uncertain, a result saved within the
+  // reuse time) is marked, so a page can say the person is looking at an earlier run, not a new one.
+  if(!owns)return {...row.toJSON(),reused:true};
   let stage='request';
   // A spec with `requests` (AI 搜索's brand lookup) sends them one after another and parses the replies together; any
   // failure after the first request leaves the whole run uncertain, as the earlier ones may be billed.
@@ -94,4 +101,4 @@ class DataForSeo{
   return {runId:String(row.id),localStatus:row.get('status'),matches,complete:(task.result||[]).length<1000};
  }
 }
-export { DataForSeo, REUSE_MS, key };
+export { DataForSeo, REUSE_MS, RECENT_MS, key };

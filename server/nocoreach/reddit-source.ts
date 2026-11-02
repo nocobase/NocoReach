@@ -76,12 +76,13 @@ class RedditSource{
   for(const e of due)if(e.status!=='pending'||!e.requestKey){if(!['budget','attention'].includes(e.status)){e.requestKey=`reddit-${randomUUID()}`;e.attempt++;}e.status='pending';e.at=at;}
   // Persist stable request keys before any paid I/O. Restarting an interrupted batch returns the same runs.
   if(prepare)await this.mutate(id,cur=>({...cur,plan}));
-  const found=[];
+  const found=[];let reused=0;
   for(const entry of due){this.runs.assertActive();let run;try{run=await this.d4s.run(id,'reddit',{term:entry.term,recent:plan.recent,requestKey:entry.requestKey});}
    catch(e){this.runs.assertActive();entry.status=e.safeCode==='budget_exceeded'?'budget':'attention';entry.diagnostic={reason:entry.status==='budget'?'budget':'configuration',retryable:false};
     if(entry.status==='budget'){const date=new Date();entry.at=new Date(Date.UTC(date.getUTCFullYear(),date.getUTCMonth()+1,1)).toISOString();for(const waiting of due.slice(due.indexOf(entry)+1)){waiting.status='budget';waiting.at=entry.at;waiting.diagnostic=entry.diagnostic;}break;}continue;}
    entry.status=run.status==='running'?'unknown':run.status;entry.runId=String(run.id||'');entry.diagnostic=run.result?.diagnostic||{reason:'uncertain',retryable:false};entry.at=run.completedAt||at;
    if(run.status!=='completed')continue;
+   if(run.reused)reused++;
    entry.queriedAt=run.createdAt||at;
    // A cache hit is historical evidence. Translate its age to the project's business clock without advancing coverage.
    entry.through=iso(Date.parse(plan.cutoff)-Math.max(0,Date.parse(at)-Date.parse(entry.queriedAt)));
@@ -94,7 +95,8 @@ class RedditSource{
    for(const p of found){const old=posts[p.id];if(!old)added++;posts[p.id]={...p,firstSeenAt:old?.firstSeenAt||now,lastSeenAt:now,postedAt:p.postedAt||old?.postedAt||null};}
    const kept=Object.values(posts).sort((a,b)=>b.firstSeenAt.localeCompare(a.firstSeenAt)).slice(0,MAX_POSTS);
    return {...cur,plan,posts:Object.fromEntries(kept.map(p=>[p.id,p])),retainedFrom:cur.retainedFrom||(complete?through:null),lastRun:{at,ok:complete,errors:errors.slice(0,5),found:found.length,added,lastSuccessAt:successAt||lastSuccess(cur.lastRun)},dataThrough:through||cur.dataThrough||null,datesReadAt:cur.datesReadAt||(complete?plan.cutoff:null)};});
-  return {found:found.length,added,errors};}
+  // searched and reused let Update now say when every term came back from the 6-day reuse instead of a new search.
+  return {found:found.length,added,errors,searched:due.length,reused};}
  async status(id){const s=await this.state(id);if(!s?.terms?.length)return {connected:false,dataforseo:Boolean(this.d4s.config(id)?.verifiedAt)};const list=Object.values(s.posts||{});
   return {connected:s.status!=='disconnected',checking:this.runs.has(id),dataforseo:Boolean(this.d4s.config(id)?.verifiedAt),terms:s.terms,lastRun:s.lastRun||null,retainedFrom:s.retainedFrom||null,total:list.length,
    schedule:redditSchedule(s),diagnostics:s.plan?.entries.filter(e=>e.diagnostic).map(e=>({term:e.term,runId:e.runId,attempt:e.attempt,...e.diagnostic})),nextCheckAt:redditSchedule(s).nextAt,recent:list.sort((a,b)=>b.firstSeenAt.localeCompare(a.firstSeenAt)).slice(0,3).map(p=>({title:p.title,subreddit:p.subreddit,url:p.url}))};}
