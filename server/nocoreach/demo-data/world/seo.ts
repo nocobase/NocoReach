@@ -77,7 +77,7 @@ function keywordInfo(world: World, k: Keyword) {
     se_type: 'google',
     keyword: k.keyword,
     location_code: null,
-    language_code: world.lang === 'zh' ? 'zh-CN' : 'en',
+    language_code: world.lang === 'zh' ? 'zh-TW' : 'en',
     keyword_info: {
       last_updated_time: dfsTime(world.now - 3 * DAY),
       competition: Number(competition.toFixed(2)),
@@ -153,7 +153,7 @@ function around(world: World, seed: string): Keyword[] {
   if (scored.length < 3) {
     const suffixes =
       world.lang === 'zh'
-        ? ['教程', '开源', '工具', '对比', '价格', '模板']
+        ? ['教學', '開源', '工具', '比較', '費用', '範本']
         : [
             'tutorial',
             'open source',
@@ -176,6 +176,36 @@ function around(world: World, seed: string): Keyword[] {
   return scored.filter(
     (k) =>
       !seen.has(k.keyword.toLowerCase()) && seen.add(k.keyword.toLowerCase()),
+  );
+}
+
+/** Suggestions contain the seed; related results must remain distinct after the detail reader deduplicates them. */
+function suggestions(world: World, seed: string): Keyword[] {
+  const lower = seed.toLowerCase();
+  const rows = world.research.filter((k) =>
+    k.keyword.toLowerCase().includes(lower),
+  );
+  const suffixes =
+    world.lang === 'zh'
+      ? ['教學', '範例', '工具', '比較', '費用']
+      : ['guide', 'examples', 'tools', 'comparison', 'pricing'];
+  for (const suffix of suffixes) {
+    if (rows.filter((k) => k.keyword.toLowerCase() !== lower).length >= 5)
+      break;
+    const keyword = `${seed} ${suffix}`;
+    if (!rows.some((k) => k.keyword.toLowerCase() === keyword.toLowerCase()))
+      rows.push(find(world, keyword));
+  }
+  return rows;
+}
+
+function related(world: World, seed: string): Keyword[] {
+  const lower = seed.toLowerCase();
+  const topic = find(world, seed).topic;
+  return world.research.filter(
+    (k) =>
+      (topic === 'other' || k.topic === topic) &&
+      !k.keyword.toLowerCase().includes(lower),
   );
 }
 
@@ -313,13 +343,35 @@ function serp(world: World, keyword: string, depth: number) {
       serpItem(
         site,
         `/${encodeURIComponent(keyword.replaceAll(' ', '-'))}-${rank}`,
-        `${keyword} — ${site}`,
+        world.lang === 'zh'
+          ? `${keyword}：${site === 'youtube.com' ? '操作影片' : site === 'github.com' ? '開源工具與範例' : '實作指南與使用心得'}`
+          : `${keyword}: ${site === 'youtube.com' ? 'video tutorial' : site === 'github.com' ? 'open source tools and examples' : 'practical guide and reviews'}`,
         rank,
         Math.round(k.volume * 0.01),
       ),
     );
   }
-  return rows;
+  const questions = world.research.filter((q) =>
+    /^(how|what|why|when|where|which|who)\b|^(如何|怎麼|什麼|為什麼)/i.test(
+      q.keyword,
+    ),
+  );
+  const samePage = questions.filter((q) => q.path === k.path);
+  return [
+    ...rows,
+    {
+      type: 'people_also_ask',
+      items: (samePage.length ? samePage : questions)
+        .slice(0, 3)
+        .map((q) => ({ type: 'people_also_ask_element', title: q.keyword })),
+    },
+    {
+      type: 'related_searches',
+      items: related(world, keyword)
+        .slice(0, 6)
+        .map((q) => q.keyword),
+    },
+  ];
 }
 
 function redditSerp(world: World, keyword: string) {
@@ -926,7 +978,13 @@ export function dataforseo(
       ['related_keywords', 'keyword_suggestions', 'keyword_ideas'].includes(op)
     ) {
       const seed = text(b.keyword, names(b.keywords)[0] ?? '');
-      const rows = around(world, seed).map((k) => keywordInfo(world, k));
+      const rows = (
+        op === 'keyword_suggestions'
+          ? suggestions(world, seed)
+          : op === 'related_keywords'
+            ? related(world, seed)
+            : around(world, seed)
+      ).map((k) => keywordInfo(world, k));
       if (op === 'related_keywords')
         return page(
           rows.map((keyword_data, i) => ({

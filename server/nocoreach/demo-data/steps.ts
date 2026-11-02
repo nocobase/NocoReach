@@ -264,14 +264,14 @@ async function createPeople(
  */
 const MARKETS = {
   'zh-CN': {
-    locationCode: 2702,
-    language: 'zh-CN',
-    seeds: ['项目管理', '团队协作', 'Acme'],
+    locationCode: 2158,
+    language: 'zh-TW',
+    seeds: ['專案管理', '團隊協作', 'Acme'],
     tracked: [
-      '项目管理软件',
-      'Excel 导入任务',
-      '项目看板',
-      '团队排期',
+      '專案管理軟體',
+      'Excel 匯入任務',
+      '專案看板',
+      '團隊排程',
       'Acme vs Nimbus',
       'acme',
     ],
@@ -315,7 +315,7 @@ async function connectSources(
           ...MARKETS[en ? 'en-US' : 'zh-CN'],
           seeds: en
             ? ['sales pipeline', 'crm import', 'Acme CRM']
-            : ['销售漏斗', 'CRM 导入', 'Acme CRM'],
+            : ['銷售漏斗', 'CRM 匯入', 'Acme CRM'],
           tracked: en
             ? [
                 'acme crm',
@@ -327,11 +327,11 @@ async function connectSources(
               ]
             : [
                 'acme crm',
-                '开源crm',
-                '销售漏斗 管理',
-                'crm 导入 excel',
-                '小团队 crm',
-                '报价单 审批',
+                '開源crm',
+                '銷售漏斗 管理',
+                'crm 匯入 excel',
+                '小團隊 crm',
+                '報價單 審核',
               ],
           question: en
             ? 'How does Acme CRM handle account imports and sales handovers?'
@@ -493,7 +493,7 @@ async function connectSources(
               password: 'demo-only-never-live',
             }),
           ).toString('base64'),
-          10,
+          100,
         );
         await p.keywordService.check(id);
         for (const target of market.seeds) {
@@ -524,6 +524,43 @@ async function connectSources(
           })),
         });
         await p.rankTracking.check(id);
+        // Keep three weekly observations before the real latest check for the history chart.
+        await p.rankTracking.mutate(
+          id,
+          (state: {
+            checks: Record<
+              string,
+              {
+                at: string;
+                position: number | null;
+                url: string | null;
+                runId: string;
+              }[]
+            >;
+          }) => ({
+            ...state,
+            checks: Object.fromEntries(
+              Object.entries(state.checks).map(([key, checks]) => {
+                const latest = checks.at(-1);
+                if (!latest?.position) return [key, checks];
+                return [
+                  key,
+                  [
+                    ...[3, 2, 1].map((week) => ({
+                      at: new Date(
+                        context.clock.now.getTime() - week * 7 * DAY,
+                      ).toISOString(),
+                      position: latest.position! + week,
+                      url: latest.url,
+                      runId: '',
+                    })),
+                    ...checks,
+                  ],
+                ];
+              }),
+            ),
+          }),
+        );
       },
     ],
     [
@@ -592,6 +629,10 @@ async function connectSources(
       async () => {
         await p.trends.connect(id, { product: spec.name, locationCode: 0 });
         await p.trends.runs.wait(id);
+        for (const keyword of market.seeds) {
+          await p.trends.addKeyword(id, { keyword });
+          await p.trends.runs.wait(id);
+        }
       },
     ],
     [
@@ -608,11 +649,13 @@ async function connectSources(
               : [{ name: 'Example Sales', site: 'https://sales.example' }],
         });
         await p.competitors.checking;
-        // The Chinese team compares in the Chinese market, which competitor research covers.
-        if (market.language === 'zh-CN')
+        // Finish any initial comparison before changing its market.
+        await p.competitorResearch.running.get(id);
+        // The Chinese team compares in the same market as keyword research.
+        if (market.language === 'zh-TW')
           await p.competitorResearch.setMarket(id, {
-            locationCode: 2156,
-            language: 'zh-CN',
+            locationCode: market.locationCode,
+            language: market.language,
           });
         await p.competitorResearch.refresh(id);
       },
