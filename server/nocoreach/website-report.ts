@@ -3,7 +3,7 @@
 // and pages). Read live from the GA4 Data API instead of the synced days: users counted over a period are deduplicated
 // by GA4, while adding up synced days counts a person once per day. Three parts, each cached:
 // - period: the totals, the daily line and the report tables (流量获取, 着陆页, 页面, 事件, 地区, 技术) for a window that
-//   ends at the synced cutoff, like the other data pages; persisted for six hours per query, independent of sync writes.
+//   ends at the synced cutoff, like the other data pages; persisted until its day ends or the sync moves its window, so at most two reads a day.
 // - today: today so far against yesterday and the same weekday last week up to the same hour, per hour, and today's
 //   sources (GA4's standard data, which lags; the realtime API has no source dimension). Ten minutes.
 // - realtime: the last 30 minutes from the Realtime API — users, per minute, pages, countries, cities, devices, events.
@@ -16,7 +16,7 @@ import { GOOGLE_ENDPOINTS, googleJson, jsonRequest } from './google-client.js';
 import { aiProviders, calendarDateInTimeZone } from './google-sync.js';
 import { Ga4Requests } from './ga4-requests.js';
 import { Ga4ReportCache } from './ga4-report-cache.js';
-import { GA4_HISTORY_CACHE_MS, GA4_PARTIAL_CACHE_MS, GA4_TODAY_CACHE_MS, GA4_REALTIME_CACHE_MS } from '../../shared/ga4-cache.js';
+import { GA4_PARTIAL_CACHE_MS, GA4_TODAY_CACHE_MS, GA4_REALTIME_CACHE_MS } from '../../shared/ga4-cache.js';
 import { GOOGLE_SAVED_REPORT_MS } from '../../shared/google-cache.js';
 import type { LegacyDatabase } from './legacy/database.js';
 
@@ -127,7 +127,7 @@ class WebsiteReport{
 
  // The window `w` ends at the synced cutoff; the daily line goes on to yesterday, the days after the cutoff marked 初步.
  // A new day's window is answered from the view's previous one while it is read, so the report keeps the window it holds.
- period(id:string|number,property:string,w:unknown,{cutoff,view}:{cutoff?:string;view?:unknown[]}={}){const now=businessNow(this.p,id,'google');return this.history.load(String(id),['period',...this.scope(id,property),w,new Date(now).toISOString().slice(0,10)],async()=>{const {explicitEnd,...window}=w as {explicitEnd?:boolean};return {...await this.readPeriod(id,property,w),window,...(cutoff?{cutoff}:{})};},value=>Math.min(value.complete===false||value.missing.length?GA4_PARTIAL_CACHE_MS:GA4_HISTORY_CACHE_MS,24*HOUR-now%(24*HOUR)),(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}),view?{family:['period',...this.scope(id,property),...view]}:{});}
+ period(id:string|number,property:string,w:unknown,{cutoff,view}:{cutoff?:string;view?:unknown[]}={}){const now=businessNow(this.p,id,'google');return this.history.load(String(id),['period',...this.scope(id,property),w,new Date(now).toISOString().slice(0,10)],async()=>{const {explicitEnd,...window}=w as {explicitEnd?:boolean};return {...await this.readPeriod(id,property,w),window,...(cutoff?{cutoff}:{})};},value=>Math.min(value.complete===false||value.missing.length?GA4_PARTIAL_CACHE_MS:Infinity,24*HOUR-now%(24*HOUR)),(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}),view?{family:['period',...this.scope(id,property),...view]}:{});}
  async readPeriod(id,property,w){const both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],current=[range(w.start,w.end)];
   const names=Object.keys(TABLES),changeNames=Object.keys(CHANGES);
   const reports=await this.batch(id,property,[

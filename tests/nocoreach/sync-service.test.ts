@@ -47,6 +47,18 @@ test('tick: readies Search performance at most every 15 minutes whatever came of
  }finally{vi.useRealTimers();}
 });
 
+test('tick: a project nobody opened lately keeps its summary but reads nothing from Google ahead of time',async()=>{
+ const {sync}=setup();sync.step=async()=>false;sync.snapshots=async()=>[];sync.refreshFresh=async()=>{};
+ sync.repo=()=>({find:async()=>[{get:k=>k==='projectId'?'1':k==='nextSyncAt'?'2999-01-01T00:00:00Z':k==='authorizedAt'?'2026-01-01T00:00:00Z':null}],findOne:async()=>null});
+ const search=vi.fn(async()=>({})),website=vi.fn(async()=>({})),warm=vi.fn(async()=>{}),recentlyRead=vi.fn(async()=>false);
+ sync.p.dataViews={search,website,warm,recentlyRead};
+ await sync.tick();
+ assert.equal(search.mock.calls.length,1);assert.equal(website.mock.calls.length,0);assert.equal(warm.mock.calls.length,0);
+ assert.deepEqual(recentlyRead.mock.calls[0],['1','2026-01-01T00:00:00Z']);
+ recentlyRead.mockResolvedValue(true);await sync.tick();
+ assert.equal(website.mock.calls.length,1);assert.equal(warm.mock.calls.length,1);
+});
+
 test('concurrent requests share one build',async()=>{
  const {sync,calls}=setup();
  const [a,b,c]=await Promise.all([sync.snapshots('1'),sync.snapshots('1'),sync.snapshots('1')]);

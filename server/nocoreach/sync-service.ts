@@ -214,10 +214,12 @@ class SyncService{
   // Rebuild here after new data lands (and once after a restart) so page requests find it ready.
   // …and the default 搜索表现 and 访问 views (28 days), saved, so opening the page after new data or a restart is immediate.
   // 访问 asks GA4 live, so a failed build waits 15 minutes before the tick tries again.
-  // These wait for the new report instead of taking its saved copy, as the tick is what has to read it. Search performance's
+  // A project nobody has opened lately is not read ahead: its summary comes from the synced days, but Traffic and the
+  // breakdowns ask Google. These wait for the new report instead of taking its saved copy, as the tick is what has to read it. Search performance's
   // tables and breakdowns join them at most every 15 minutes, whatever came of it: they change once a day, and a breakdown
   // Google refuses in part is a 'partial' report whose six queries must not repeat every 15 seconds.
   for(const id of new Set(links.map(l=>String(l.get('projectId'))))){await this.snapshots(id).catch(()=>{});await waitForFresh(()=>this.p.dataViews?.search(id,{range:'28'})).catch(()=>{});
+   if(this.p.dataViews?.recentlyRead&&!await this.p.dataViews.recentlyRead(id,links.find(l=>String(l.get('projectId'))===id)?.get('authorizedAt')))continue;
    const webTried=this.webTried=this.webTried||new Map();if(Date.now()-(webTried.get(id)||0)>=15*60000)await waitForFresh(()=>this.p.dataViews?.website(id,{range:'28'})).then(()=>webTried.delete(id),()=>webTried.set(id,Date.now()));
    const searchTried=this.searchTried=this.searchTried||new Map();if(Date.now()-(searchTried.get(id)||0)>=15*60000){searchTried.set(id,Date.now());await waitForFresh(()=>this.p.dataViews?.warm?.(id)).catch(()=>{});}}
   for(const id of new Set(links.map(l=>String(l.get('projectId'))))){if(Date.now()>=deadline+20000)break;const at=Math.max(this.freshTried?.get(id)||0,Date.parse((await this.repo('nrSnapshots').findOne({filter:{key:`google-fresh:${id}`}}))?.get('payload')?.fetchedAt||'')||0);if(Date.now()-at<FRESH_MS)continue;

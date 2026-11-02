@@ -196,6 +196,20 @@ it('persists GSC reports, empty countries and row details, preserves expiry and 
   expect(upstream).toHaveBeenCalledTimes(count + 6);
 });
 
+it('shares one breakdown read between a page that can compare and one that cannot yet', async () => {
+  const { views, upstream } = await fixture();
+  const plain = await views.searchBreakdown('1', { ...window, compare: false });
+  expect(upstream).toHaveBeenCalledTimes(6);
+  expect(plain.countries[0]).toMatchObject({
+    clicks: 10,
+    previousClicks: null,
+    previousImpressions: null,
+  });
+  const compared = await views.searchBreakdown('1', window);
+  expect(upstream).toHaveBeenCalledTimes(6);
+  expect(compared.countries[0].previousClicks).toBe(10);
+});
+
 it('reads a report still holding days after the final cutoff again after six hours, answering from its copy', async () => {
   const { plugin, views, upstream } = await fixture();
   vi.useFakeTimers({ toFake: ['Date'] });

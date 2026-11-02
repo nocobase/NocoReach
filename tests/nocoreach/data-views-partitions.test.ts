@@ -184,6 +184,62 @@ it.each(paths)(
   },
 );
 
+it.each([
+  ['the last day', [0], -1],
+  ['the last two days', [0, -1], -2],
+])(
+  'ends the tables at the last synced day while the daily sync has not stored %s, without Search Console',
+  async (_name, missing, last) => {
+    const { views, db } = await fixture();
+    for (const offset of missing)
+      await db.getRepository('nrSyncPartitions').destroy({
+        filter: { projectId, grain: 'query_page', date: dateAt(offset) },
+      });
+    const asked = vi.fn(async () => []);
+    views.gscQuery = asked;
+    const report = await views.search(projectId, {
+      range: '7',
+      details: true,
+    } as never);
+    expect(asked).not.toHaveBeenCalled();
+    expect(report).not.toHaveProperty('live');
+    expect(report.window.end).toBe(dateAt(last));
+    expect(report.window.days).toBe(7);
+    expect(report.cutoff).toBe(dateAt(0));
+    expect(report.queries.rows[0].key).toBe('crm');
+    // A reader that states the period beside the tables gets exactly that period.
+    const exact = await views.search(projectId, {
+      range: '7',
+      details: true,
+      exactWindow: true,
+    } as never);
+    expect(exact).toMatchObject({ live: true });
+    expect(exact.window.end).toBe(dateAt(0));
+  },
+);
+
+it('reads Search Console when more days are missing than a sync can be behind, or for a custom range', async () => {
+  const { views, db } = await fixture();
+  for (const offset of [0, -1, -2])
+    await db.getRepository('nrSyncPartitions').destroy({
+      filter: { projectId, grain: 'query_page', date: dateAt(offset) },
+    });
+  views.gscQuery = vi.fn(async () => []);
+  const behind = await views.search(projectId, {
+    range: '7',
+    details: true,
+  } as never);
+  expect(behind).toMatchObject({ live: true });
+  expect(behind.window.end).toBe(dateAt(0));
+  const custom = await views.search(projectId, {
+    range: 'custom',
+    from: dateAt(-6),
+    to: dateAt(0),
+    details: true,
+  } as never);
+  expect(custom).toMatchObject({ live: true });
+});
+
 it('reads details, breakdowns and one row directly from Search Console, for web search only', async () => {
   const { views, db } = await fixture();
   await db.getRepository('nrSyncPartitions').destroy({

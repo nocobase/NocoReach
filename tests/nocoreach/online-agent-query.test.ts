@@ -854,6 +854,7 @@ it('filters, sorts and ranges reach the source the way its page asks', async () 
         queryFilter: { operator: 'contains', expression: 'crm' },
         pageFilter: { operator: 'contains', expression: '/docs/' },
         details: true,
+        exactWindow: true,
       },
     ],
   );

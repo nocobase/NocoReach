@@ -315,11 +315,13 @@ const SOURCES: Record<string, Source> = {
       if (!base.window) return noData(base.cutoff);
       const w = obj(base.window);
       let details: Promise<Obj> | undefined;
-      // The same tables as the page's: the synced days where they hold the window, otherwise Search Console.
+      // The same tables as the page's: the synced days where they hold the window, otherwise Search Console. The answer
+      // states the period beside them, so they must cover exactly that period even before the daily sync lands.
       const detail = () =>
         (details ??= call(s, 'dataViews', 'search', q.id, {
           ...v,
           details: true,
+          exactWindow: true,
         }).then(obj));
       const dimension = (key: string) => async () => {
         const d = obj((await detail())[key]);

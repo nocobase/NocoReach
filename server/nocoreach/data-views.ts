@@ -25,6 +25,11 @@ const days=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/DAY)+1;
 const dayOf=v=>v instanceof Date?v.toISOString().slice(0,10):String(v||'').slice(0,10);
 // The longest stretch of synced query × page days read for a report: both 90-day periods. Longer ones ask Search Console.
 const MAX_STORED_PAIR_DAYS=200;
+// How far a report's window may run ahead of the synced days and still have its tables built from them: the daily sync
+// runs every 24 hours from when it last ran, so it lands up to a day after the final cutoff moves.
+const PENDING_SYNC_DAYS=2;
+// A project nobody opened for this long is not read ahead of time; its saved reports still answer when someone returns.
+const WARM_READ_WINDOW_MS=3*DAY;
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 // Same page identity as task effects: host without www, path without a trailing slash.
 const pageKey=u=>{try{const x=new URL(u);return `${x.host.toLowerCase().replace(/^www\./,'')}${x.pathname.replace(/\/+$/,'')||'/'}`;}catch{return '';}};
@@ -107,7 +112,7 @@ class DataViews{
  p: Connections & {db: LegacyDatabase;sync: SyncService};
  reports: GoogleReportCache;
  localReports: GoogleReportCache;
- constructor(plugin){this.p=plugin;this.ga4=new WebsiteReport(plugin);this.reports=new GoogleReportCache(plugin.db,'gsc-reports');this.localReports=new GoogleReportCache(plugin.db,'google-local-reports');this.tokenPending=new Map();}
+ constructor(plugin){this.p=plugin;this.ga4=new WebsiteReport(plugin);this.reports=new GoogleReportCache(plugin.db,'gsc-reports');this.localReports=new GoogleReportCache(plugin.db,'google-local-reports');this.tokenPending=new Map();this.readAt=new Map();}
  scope(id,link: LegacyRecord): unknown[]{return [link.get('gscSiteUrl'),link.get('authorizedAt'),this.p.network?.mockCacheKey?.('google',String(id))];}
  // Search Console's final days do not change: a report that ends by the final cutoff stays good for as long as it is kept.
  lifetime(id,w){return w&&w.end<=historyBounds(this.p,id).cutoff?GOOGLE_SAVED_REPORT_MS:GOOGLE_HISTORY_CACHE_MS;}
@@ -187,19 +192,24 @@ class DataViews{
  // Synced versions invalidate local aggregation; live Google requests retain their own query-scoped cache.
  async search(id: string | number,v: SearchRequest){let link,snapKey;try{[link,{key:snapKey}]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshotKey(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const filters={queryFilter:sp.readFilter(v.queryFilter),pageFilter:sp.readFilter(v.pageFilter)},country=/^[a-z]{3}$/.test(String(v.country||''))?String(v.country):null;
-  const identity=['search',...this.scope(id,link),snapKey,String(v.range||'28'),String(v.from||''),String(v.to||''),filters,country,v.details===true,historyBounds(this.p,id).cutoff,5];
+  const identity=['search',...this.scope(id,link),snapKey,String(v.range||'28'),String(v.from||''),String(v.to||''),filters,country,v.details===true,v.exactWindow===true,historyBounds(this.p,id).cutoff,5];
   // Reports that may have to ask Search Console answer a new day's window from the previous one while it is read; the
   // default summary is built from the synced days and never waits for Google.
   const upstream=Boolean(country||filters.queryFilter||filters.pageFilter||v.details===true);
-  const value=await this.localReports.load(String(id),identity,()=>this.buildSearch(id,v,link,filters,country),value=>value.connected===false||value.cutoff===null||value.refreshing?0:Math.min(GOOGLE_HISTORY_CACHE_MS,(value.cacheExpiresAt??Infinity)-Date.now()),(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}),upstream?{family:['search',...this.scope(id,link),String(v.range||'28'),String(v.from||''),String(v.to||''),filters,country,v.details===true]}:{});
+  const value=await this.localReports.load(String(id),identity,()=>this.buildSearch(id,v,link,filters,country),value=>value.connected===false||value.cutoff===null||value.refreshing?0:Math.min(GOOGLE_HISTORY_CACHE_MS,(value.cacheExpiresAt??Infinity)-Date.now()),(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}),upstream?{family:['search',...this.scope(id,link),String(v.range||'28'),String(v.from||''),String(v.to||''),filters,country,v.details===true,v.exactWindow===true]}:{});
   const preliminary=value.cutoff&&!value.filtered&&!value.country&&!value.live&&value.window?.end===value.cutoff?await this.fresh(id,'gsc',value.cutoff):[];
   const progress=!value.live&&value.window&&this.p.sync.historyJobs?await this.p.sync.historyJobs(id,String(link.get('gscSiteUrl')),String(value.window.all?value.window.start:value.window.previousStart),String(value.window.end)):[];
   return {...value,preliminary,history:{jobs:progress.map(j=>({id:j.id,status:String(j.get('status')),startDate:String(j.get('cursor')||j.get('startDate')),endDate:String(j.get('endDate')),errorCode:j.get('errorCode') as unknown})),scheduleEnabled:Boolean(link.get('scheduleEnabled'))}};}
 
  async buildSearch(id: string | number,v: SearchRequest,link: LegacyRecord,filters: SearchFilters,country: string | null){let snaps: {key:string;payload?: {date:string}[]}[];try{snaps=await this.p.sync.snapshots(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const daily=snaps.find(s=>s.key==='history-search')?.payload||[],{cutoff,earliest}=historyBounds(this.p,id);
-  const w=windowFor(cutoff,String(v.range||'28'),v.from,v.to,[firstDate(daily),earliest].filter(Boolean).sort()[0]),filtered=Boolean(filters.queryFilter||filters.pageFilter),site=String(link.get('gscSiteUrl'));
-  const stored=v.details===true&&!country&&!filtered?await this.storedPairs(id,site,w):null;
+  let w=windowFor(cutoff,String(v.range||'28'),v.from,v.to,[firstDate(daily),earliest].filter(Boolean).sort()[0]);const filtered=Boolean(filters.queryFilter||filters.pageFilter),site=String(link.get('gscSiteUrl'));
+  let stored=v.details===true&&!country&&!filtered?await this.storedPairs(id,site,w):null;
+  // The final cutoff moved and the daily sync has not landed yet: the tables end at the last synced day until it does,
+  // rather than asking Search Console for what the sync is about to store. The report says which window it holds. A hole
+  // further back, with the last day held, is not a pending sync and reads Search Console.
+  if(!stored&&v.details===true&&!country&&!filtered&&v.exactWindow!==true&&!w.all&&String(v.range||'28')!=='custom'){const last=await this.lastPairDay(id,site,cutoff);
+   if(last&&last<cutoff){const synced=windowFor(last,String(v.range||'28'),v.from,v.to,[firstDate(daily),earliest].filter(Boolean).sort()[0]);stored=await this.storedPairs(id,site,synced);if(stored)w=synced;}}
   if(!stored&&(country||filtered||v.details===true)){let live;try{live=await this.searchLive(id,site,w,{country,filters,details:v.details===true},null,this.scope(id,link));}catch(e){fail(e.code==='invalid_grant'?systemMessageText('dataViews.googleAuthorizationExpiredAuthorizeAgain'):systemMessageText('dataViews.notReadSearchConsoleData'),502);}
    return {connected:true,cutoff,from:null,window:w,filtered,filters,country,...live};}
   const parts=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'overview',resource:site,date:partitionDates(w.all?w.start:w.previousStart,w.end,Boolean(w.all))},fields:['date','payload','updatedAt']});
@@ -213,6 +223,8 @@ class DataViews{
  // The query × page rows of both periods from the synced days, summed a day at a time and giving way between days, as
  // those days are large. Only when the sync holds every day of both: a history fill stores overview rows alone, so a
  // recent project or a long range holds part of them and is read from Search Console, or its tables would come up short.
+ async lastPairDay(id: string | number,site: string,cutoff: string){const dates=[];for(let i=PENDING_SYNC_DAYS;i>=0;i--)dates.push(add(cutoff,-i));
+  const held=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:{$in:dates}},fields:['date']});return held.map(p=>dayOf(p.get('date'))).sort().at(-1)||null;}
  async storedPairs(id: string | number,site: string,w: SearchWindow){if(w.all||days(w.previousStart,w.end)>MAX_STORED_PAIR_DAYS)return null;
   const repo=this.p.db.getRepository('nrSyncPartitions'),scope={projectId:id,source:'gsc',grain:'query_page',resource:site},wanted=partitionDates(w.previousStart,w.end).$in;
   const held=new Set((await repo.find({filter:{...scope,date:{$in:wanted}},fields:['date']})).map(p=>dayOf(p.get('date'))));if(wanted.some(d=>!held.has(d)))return null;
@@ -239,14 +251,17 @@ class DataViews{
  // Search Console when the page asks (the synced rows keep none) and saved: see `lifetime`.
  async searchBreakdown(id: string | number,v: SearchRequest){const w=liveWindow(v);let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const filters={queryFilter:sp.readFilter(v.queryFilter),pageFilter:sp.readFilter(v.pageFilter)},country=/^[a-z]{3}$/.test(String(v.country||''))?String(v.country):null;
-  const site=link.get('gscSiteUrl'),scope=this.scope(id,link);return this.report(id,['breakdown',...scope,w,filters,country,v.compare!==false,5],async()=>{
+  const site=link.get('gscSiteUrl'),scope=this.scope(id,link);const value=await this.report(id,['breakdown',...scope,w,filters,country,6],async()=>{
   const groups=liveGroups(country,filters),{earliest}=historyBounds(this.p,id);let failure=null;
   const read=async(dimension: string,a: string,b: string)=>{if(b<earliest)return [];a=a>earliest?a:earliest;try{return (await this.gscQuery(id,site,{startDate:a,endDate:b,dimensions:[dimension],rowLimit:1000,...(groups.length?{dimensionFilterGroups:groups}:{})},scope)).map(r=>({key:String(r.keys?.[0]||''),clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0})).filter(r=>r.key);}catch(e){failure=failure||e;return null;}};
-  const part=async(dimension: string)=>{const [cur,prev]=await Promise.all([read(dimension,w.start,w.end),w.all||v.compare===false||w.previousStart<earliest?Promise.resolve(null):read(dimension,w.previousStart,w.previousEnd)]);if(!cur)return null;const before=new Map((prev||[]).map(r=>[r.key,r]));
+  const part=async(dimension: string)=>{const [cur,prev]=await Promise.all([read(dimension,w.start,w.end),w.all||w.previousStart<earliest?Promise.resolve(null):read(dimension,w.previousStart,w.previousEnd)]);if(!cur)return null;const before=new Map((prev||[]).map(r=>[r.key,r]));
    return cur.map(r=>({...r,ctr:r.impressions?r.clicks/r.impressions:0,previousClicks:prev?before.get(r.key)?.clicks??0:null,previousImpressions:prev?before.get(r.key)?.impressions??0:null})).sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions);};
   const [countries,devices,appearances]=await Promise.all(['country','device','searchAppearance'].map(part));
   if(!countries&&!devices&&!appearances)fail(failure?.code==='invalid_grant'?systemMessageText('dataViews.googleAuthorizationExpiredAuthorizeAgain'):systemMessageText('dataViews.notReadSearchConsoleData'),502);
-  return {connected:true,countries,devices,appearances,partial:Boolean(failure)};},w);}
+  return {connected:true,countries,devices,appearances,partial:Boolean(failure)};},w);
+  // The period before is always read: a page that may not compare yet (the sync has not landed) and one that can then
+  // share one report instead of reading the same window twice a day.
+  if(v.compare!==false)return value;const plain=rows=>rows&&rows.map(r=>({...r,previousClicks:null,previousImpressions:null}));return {...value,countries:plain(value.countries),devices:plain(value.devices),appearances:plain(value.appearances)};}
  // 搜索表现 · one query or page: its days against the period before, and the pages it shows with (or the queries a page
  // shows for), read from Search Console when its row is opened and saved: see `lifetime`.
  async searchRow(id: string | number,v: SearchRequest){const w=liveWindow(v),dimension=v.dimension==='page'?'page':'query',k=String(v.key||'').slice(0,4096),country=/^[a-z]{3}$/.test(String(v.country||''))?String(v.country):null;
@@ -264,7 +279,14 @@ class DataViews{
  // What Search performance reads when it opens on its default range, ready before anyone asks (the sync's tick calls this).
  async warm(id){const report=await this.search(id,{range:'28'});if(!report?.connected||!report.cutoff||!report.window)return;
   await this.search(id,{range:'28',details:true});
-  await this.searchBreakdown(id,{...report.window,compare:Boolean(report.complete&&report.previousComplete)});}
+  await this.searchBreakdown(id,report.window);}
+ // D: who has opened this project's reports lately decides whether they are read ahead of time. Kept in memory and saved
+ // at most hourly, as a restart must not forget it; a demo's refused write leaves the memory copy working.
+ noteRead(id){const key=String(id),now=Date.now(),last=this.readAt.get(key)||0;this.readAt.set(key,now);if(now-last<3600000||this.p.db?.transactionContext?.())return;void this.saveRead(key,now);}
+ async saveRead(id,at){try{const repo=this.p.db.getRepository('nrSnapshots'),key=`report-reads:${id}`,row=await repo.findOne({filter:{key}}),payload={at:new Date(at).toISOString()};if(row)await repo.update({filter:{key},values:{payload}});else await repo.create({values:{key,payload}});}catch{/* the memory copy still works */}}
+ // A project connected in the same days counts as read, so its first open does not have to wait either.
+ async recentlyRead(id,authorizedAt){const key=String(id);if(!this.readAt.has(key)){let at=0;try{at=Date.parse((await this.p.db.getRepository('nrSnapshots').findOne({filter:{key:`report-reads:${key}`}}))?.get('payload')?.at||'')||0;}catch{at=0;}if(!this.readAt.has(key))this.readAt.set(key,at);}
+  return Date.now()-Math.max(this.readAt.get(key)||0,Date.parse(authorizedAt||'')||0)<WARM_READ_WINDOW_MS;}
  // The last 28 synced days of Search Console query × page rows, one row per pair, saved until the next sync; 本站排名
  // and 关键词 详情 read them.
  async pairRows(id){let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch(e){if(googleDisconnected(e))return {connected:false,cutoff:null,window:null,rows:[]};throw e;}
@@ -311,6 +333,6 @@ class DataViews{
   const daily=[];for(let d=w.start;d<=w.end;d=add(d,1))daily.push(byDay.get(d)||{date:d});
   return {connected:true,window:w,gscCutoff:gscEnd,ga4Cutoff:ga4End,daily};});}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('dataViews.notLoadDataTryAgain'));}};
-  this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),search:wrap((id,v)=>this.search(id,v)),website:wrap((id,v)=>this.website(id,v)),websiteRow:wrap((id,v)=>this.websiteRow(id,v)),websiteToday:wrap(id=>this.websiteToday(id)),websiteRealtime:wrap(id=>this.websiteRealtime(id)),searchCountries:wrap((id,v)=>this.searchCountries(id,v)),searchBreakdown:wrap((id,v)=>this.searchBreakdown(id,v)),searchRow:wrap((id,v)=>this.searchRow(id,v)),ranks:wrap((id,v)=>this.ranks(id,v)),page:wrap((id,v)=>this.page(id,v)),github:wrap((id,v)=>this.github(id,v)),community:wrap((id,v)=>this.community(id,v)),downloads:wrap((id,v)=>this.downloads(id,v)),hackernews:wrap((id,v)=>this.hackernews(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','search','website','websiteRow','websiteToday','websiteRealtime','searchCountries','searchBreakdown','searchRow','ranks','page','github','community','downloads','hackernews'],'loggedIn');}
+  this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),search:wrap((id,v)=>{this.noteRead(id);return this.search(id,v);}),website:wrap((id,v)=>{this.noteRead(id);return this.website(id,v);}),websiteRow:wrap((id,v)=>this.websiteRow(id,v)),websiteToday:wrap(id=>this.websiteToday(id)),websiteRealtime:wrap(id=>this.websiteRealtime(id)),searchCountries:wrap((id,v)=>this.searchCountries(id,v)),searchBreakdown:wrap((id,v)=>this.searchBreakdown(id,v)),searchRow:wrap((id,v)=>this.searchRow(id,v)),ranks:wrap((id,v)=>this.ranks(id,v)),page:wrap((id,v)=>this.page(id,v)),github:wrap((id,v)=>this.github(id,v)),community:wrap((id,v)=>this.community(id,v)),downloads:wrap((id,v)=>this.downloads(id,v)),hackernews:wrap((id,v)=>this.hackernews(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','search','website','websiteRow','websiteToday','websiteRealtime','searchCountries','searchBreakdown','searchRow','ranks','page','github','community','downloads','hackernews'],'loggedIn');}
 }
 export { websiteView, withFresh, redditCard, DataViews, packagesCard, hackernewsCard, windowFor, metric, series, netChange, starRows, githubCard, communityCard, contentCard, gscCard };

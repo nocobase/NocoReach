@@ -76,6 +76,39 @@ const showCopy = (
   saved?: { refreshing: boolean; savedAt: number },
 ) => ({ ...value, cacheExpiresAt, ...saved });
 
+it('reads the Traffic report when its day or window changes, not every six hours as well', async () => {
+  const { db } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime('2026-10-20T09:00:00Z');
+  const report = new WebsiteReport({ db });
+  const read = vi.fn(async () => ({ tables: {}, missing: [], complete: true }));
+  (report as { readPeriod: unknown }).readPeriod = read;
+  const w = windowFor('2026-10-17', '28');
+  const first = await report.period('1', '123', w, {
+    cutoff: '2026-10-17',
+    view: ['28'],
+  });
+  expect(first.cacheExpiresAt).toBe(Date.parse('2026-10-21T00:00:00Z'));
+  expect(first).toMatchObject({ window: w, cutoff: '2026-10-17' });
+  vi.setSystemTime('2026-10-20T20:00:00Z');
+  expect(
+    await report.period('1', '123', w, { view: ['28'] }),
+  ).not.toHaveProperty('savedAt');
+  expect(read).toHaveBeenCalledTimes(1);
+  // A report GA4 answered in part is still read again soon.
+  read.mockResolvedValue({ tables: {}, missing: ['city'], complete: false });
+  const partial = await report.period('1', '123', windowFor('2026-10-17', '7'));
+  expect(partial.cacheExpiresAt).toBe(Date.now() + GA4_PARTIAL_CACHE_MS);
+  // The next day, or a sync moving the window, reads it again.
+  read.mockResolvedValue({ tables: {}, missing: [], complete: true });
+  vi.setSystemTime('2026-10-21T00:00:00Z');
+  expect(await report.period('1', '123', w, { view: ['28'] })).toMatchObject({
+    refreshing: true,
+  });
+  await report.history.settled();
+  expect(read).toHaveBeenCalledTimes(3);
+});
+
 it('answers an expired report from its copy without waiting, and marks the copy', async () => {
   const { cache } = await fixture();
   vi.useFakeTimers({ toFake: ['Date'] });

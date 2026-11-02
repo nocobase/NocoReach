@@ -87,7 +87,7 @@ test('search details: a filter or a country reads Search Console; so does a rang
 test('warm: reads what the page opens with, so its details and breakdown are saved before anyone asks',async()=>{
  const {dv,saved}=views();dv.gscQuery=async()=>[];
  const breakdown=vi.spyOn(dv,'searchBreakdown');await dv.warm('1');
- const asked=breakdown.mock.calls[0][1];assert.equal(asked.compare,true);
+ const asked=breakdown.mock.calls[0][1];assert.notEqual(asked.compare,false,'the one report of this window, with the period before');
  assert.deepEqual(['start','end','previousStart','previousEnd'].map(k=>typeof asked[k]),['string','string','string','string']);
  assert.equal(saved.find(s=>s.key==='google-local-reports:1').payload.entries.length,2,'summary and details');
  assert.ok(saved.find(s=>s.key==='gsc-reports:1').payload.entries.length>=1);

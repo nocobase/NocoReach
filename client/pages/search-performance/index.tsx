@@ -151,6 +151,7 @@ export default function SearchPerformancePage() {
   );
   const tableReport = showDetails ? details : undefined;
   const w = report?.window;
+  const tableWindow = details?.window ?? w;
   // 国家/地区, 设备 and 搜索结果呈现 come on their own (live Search Console queries), so the report never waits for them;
   // the countries also fill the country menu.
   const scope: Scope | null = project && !custom && view === 'performance' && showDetails && w && report?.cutoff ? { projectId: project.id, property: project.searchConsoleProperty, compare: Boolean(report.complete && report.previousComplete), window: { all: w.all, start: w.start, end: w.end, previousStart: w.previousStart, previousEnd: w.previousEnd }, country, filters } : null;
@@ -195,7 +196,7 @@ export default function SearchPerformancePage() {
   // No nr-page class: its legacy table and input rules are unlayered and would override the ported table.
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={view === "performance" && report?.totals ? <NotesTip notes={[...notesOf(report), ...coverageNotes(report), ...(w ? [$t('searchHistory.detailsScope', { 0: formatDate(w.start), 1: formatDate(w.end) })] : [])]} /> : undefined} title={$t('common.searchPerformance')} description={$t('searchPerformance.pageSummary')} />
+      <PageHeader info={view === "performance" && report?.totals ? <NotesTip notes={[...notesOf(report), ...coverageNotes(report), ...(tableWindow ? [$t('searchHistory.detailsScope', { 0: formatDate(tableWindow.start), 1: formatDate(tableWindow.end) })] : [])]} /> : undefined} title={$t('common.searchPerformance')} description={$t('searchPerformance.pageSummary')} />
       <Tabs value={view} onValueChange={(v) => chooseView(String(v))}>
         <TabsList variant="line" className="h-auto! justify-start">
           <TabsTrigger value="performance">{$t('searchPerformance.viewPerformance')}</TabsTrigger>
