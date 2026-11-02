@@ -20,6 +20,8 @@ Retain every raw value, median and min–max, including unusual samples. Record 
 
 Record request start, response start, response end, payload size, request count, LCP, long tasks and readiness. Match `x-request-id` to the server request log's `durationMs`; browser round-trip time includes transport and body consumption and must remain a separate metric. Observe SQL counts and operation types without logging parameters or credentials.
 
+Collect network totals after finite requests have finished reading their bodies. A quiet interval in completed Resource Timing entries can hide an active large download. Exclude intentional event streams from that wait, report aborted requests and keep the collection boundary separate from the page's readiness timestamp.
+
 Independent responses still share bandwidth and the browser main thread. Test a scheduling hypothesis by changing only one request's start, then compare response timelines and server durations. Do not add overlapping durations or attribute all TTFB to server computation. Parallel reads do not remove query or JSON processing costs, and SQLite's single connection cannot execute its queries concurrently.
 
 Before delivery, verify refreshes, retry and forbidden states, full history, search and sorting, account/project boundaries, both languages and permission revocation in an open session. Keep functional snapshots and endpoint comparisons separate from timings. Publish sanitized measurement tools and evidence with the verification record, outside the source repository. CI and independent review apply to the actual delivered commit.
