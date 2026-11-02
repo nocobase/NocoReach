@@ -7680,5 +7680,6 @@
   "repos.moves": "{0} は現在 {1} の担当です。保存するとこのリポジトリに移ります。",
   "repos.limitPaths": "一部のフォルダーだけ変更を許可（任意）",
   "repos.saveAndCheck": "保存してチェック",
-  "repos.checkNow": "チェック"
+  "repos.checkNow": "チェック",
+  "navSources.addedToMenu": "メニューに追加しました：{0}"
 }

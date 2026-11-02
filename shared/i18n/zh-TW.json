@@ -7680,5 +7680,6 @@
   "repos.moves": "{0} 現在歸 {1}，儲存後改歸這個儲存庫。",
   "repos.limitPaths": "只允許改部分目錄（選填）",
   "repos.saveAndCheck": "儲存並檢查",
-  "repos.checkNow": "檢查"
+  "repos.checkNow": "檢查",
+  "navSources.addedToMenu": "已加到選單：{0}"
 }

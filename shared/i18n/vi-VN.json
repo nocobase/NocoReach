@@ -7680,5 +7680,6 @@
   "repos.moves": "{0} hiện do {1} phụ trách; khi lưu sẽ chuyển sang kho mã này.",
   "repos.limitPaths": "Chỉ cho phép sửa một số thư mục (không bắt buộc)",
   "repos.saveAndCheck": "Lưu và kiểm tra",
-  "repos.checkNow": "Kiểm tra"
+  "repos.checkNow": "Kiểm tra",
+  "navSources.addedToMenu": "Đã thêm vào menu: {0}"
 }

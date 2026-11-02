@@ -7680,5 +7680,6 @@
   "repos.moves": "{0} relève actuellement de {1} ; l’enregistrement le rattache à ce dépôt.",
   "repos.limitPaths": "N’autoriser les modifications que dans certains dossiers (facultatif)",
   "repos.saveAndCheck": "Enregistrer et vérifier",
-  "repos.checkNow": "Vérifier"
+  "repos.checkNow": "Vérifier",
+  "navSources.addedToMenu": "Ajouté au menu : {0}"
 }

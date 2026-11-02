@@ -29,6 +29,41 @@ const googleCodes={network_timeout:systemMessageText('errors.networkTimeout'),ne
 // source's own words, since "will retry automatically" would not be true.
 function needs(h,last,flag,fix){return h.state!=='healthy'&&h.state!=='pending'&&last?.[flag]&&last.errors?.[0]?{...h,...text('message','{0}',{0:errorValue(last.errors[0])}),fix}:h;}
 function running(source:unknown,id:unknown){return (source as {runs?:ProjectRuns}|undefined)?.runs?.has(id);}
+// Which sources a project has connected, for the menu (2026-10-04, again 2026-11-02: a data page shows only once its
+// source is in; client/components/app-shell/nav-sources.tsx maps the pages to these keys). One check per key, so a
+// source's rule changes here alone. A source counts while its page has something to show; cheap reads of its saved
+// state, and a source that cannot be read counts as not connected.
+// The other pages go back to their prompt to connect after a disconnect, so a disconnect ends them.
+const on=x=>x&&x.status!=='disconnected';
+// Collector sources keep showing their saved data after a disconnect, until it is cleared, so they count until then.
+const collected=async(source,id)=>{const s=await source?.status(id);return s?.connected||s?.total>0;};
+// Reads more than one check needs, made once per call.
+function sharedReads(p,id){let google,chat;return {
+ // Traffic and Search performance read the one Google sync, which needs both the GA4 property and the Search Console
+ // site (sync-service.ts `link`); with one chosen, both pages still ask to finish connecting.
+ google:()=>google??=(async()=>{const link=await p.link(id).catch(()=>null);return Boolean(link&&p.env(__policy.secretKey(id))&&link.get('status')!=='disconnected'&&link.get('ga4PropertyId')&&link.get('gscSiteUrl'));})(),
+ chat:()=>chat??=p.chat?.state(id).catch(()=>null)};}
+const CONNECTED_CHECKS={
+ ga4:(p,id,ctx)=>ctx.google(),
+ gsc:(p,id,ctx)=>ctx.google(),
+ site:async(p,id)=>(await p.siteContent?.state(id))?.sites?.length,
+ github:async(p,id)=>{const g=await p.github?.state(id);return g?.repo&&on(g);},
+ packages:async(p,id)=>(await p.packages?.state(id))?.packages?.length,
+ discourse:async(p,id)=>{const c=await p.community?.state(id);return c?.origin&&on(c);},
+ hackernews:async(p,id)=>{const h=await p.hackernews?.state(id);return h?.terms?.length&&on(h);},
+ reddit:async(p,id)=>{const r=await p.reddit?.state(id);return r?.terms?.length&&on(r);},
+ x:async(p,id)=>{const x=await p.xSource?.state(id);return x?.terms?.length&&on(x);},
+ discord:async(p,id,ctx)=>(await ctx.chat())?.discord?.status==='active',
+ slack:async(p,id,ctx)=>(await ctx.chat())?.slack?.status==='active',
+ trends:async(p,id)=>{const t=await p.trends?.state(id);return t?.terms?.length&&on(t)||t?.keywords?.length;},
+ dataforseo:(p,id)=>p.aiSearch?.d4s?.config(id)?.verifiedAt,
+ competitors:async(p,id)=>(await p.competitors?.state(id))?.list?.length,
+ // Keywords also counts saved and tracked keywords, which its Saved and Rank tracking tabs list without any source.
+ keywords:async(p,id)=>await p.keywordService?.candidates().count({filter:{projectId:id}})||(await p.rankTracking?.state(id))?.keywords?.length,
+ xiaohongshu:(p,id)=>collected(p.xiaohongshu,id),
+ bilibili:(p,id)=>collected(p.bilibili,id),
+ youtube:(p,id)=>collected(p.youtube,id),
+};
 class DataHealth{
  constructor(plugin){this.p=plugin;}
  async google(id,now){const out=[];let status=null,link=null;try{link=await this.p.link(id);if(link&&this.p.env(__policy.secretKey(id)))status=await this.p.sync.status(id);}catch{status=null;}
@@ -64,17 +99,10 @@ class DataHealth{
   // How often each runs on its own, for the Frequency column; a source with its own manual mode says so above.
   const weekly=new Set(['reddit','trends','competitors','rank']);for(const i of items){i.cadence??=weekly.has(i.id)?'weekly':'daily';if(i.state==='warning'||i.state==='failing'){if(!i.fix&&i.retry)i.fix='retry';}else delete i.fix;}
   const order={failing:0,warning:1,pending:2,healthy:3};return {checkedAt:new Date(now).toISOString(),items:items.sort((a,b)=>order[a.state]-order[b.state])};}
- // Which sources this project has connected, for the menu (2026-10-04: a data page shows only once its source is in).
- // Cheap reads of each source's saved state; a source that cannot be read counts as not connected.
- async connected(id){const safe=async fn=>{try{return Boolean(await fn());}catch{return false;}},on=x=>x&&x.status!=='disconnected';
-  const link=await this.p.link(id).catch(()=>null),google=Boolean(link&&this.p.env(__policy.secretKey(id))&&link.get('status')!=='disconnected');
-  const ch=await this.p.chat?.state(id).catch(()=>null);
-  return {ga4:google&&Boolean(link.get('ga4PropertyId')),gsc:google&&Boolean(link.get('gscSiteUrl')),
-   site:await safe(async()=>(await this.p.siteContent?.state(id))?.sites?.length),github:await safe(async()=>{const g=await this.p.github?.state(id);return g?.repo&&on(g);}),
-   packages:await safe(async()=>(await this.p.packages?.state(id))?.packages?.length),discourse:await safe(async()=>{const c=await this.p.community?.state(id);return c?.origin&&on(c);}),
-   hackernews:await safe(async()=>{const h=await this.p.hackernews?.state(id);return h?.terms?.length&&on(h);}),reddit:await safe(async()=>{const r=await this.p.reddit?.state(id);return r?.terms?.length&&on(r);}),
-   x:await safe(async()=>{const x=await this.p.xSource?.state(id);return x?.terms?.length&&on(x);}),discord:ch?.discord?.status==='active',slack:ch?.slack?.status==='active',
-   trends:await safe(async()=>{const t=await this.p.trends?.state(id);return Boolean(t?.terms?.length&&on(t)||t?.keywords?.length);}),dataforseo:Boolean(this.p.aiSearch?.d4s?.config(id)?.verifiedAt)};}
+ // Which sources this project has connected, for the menu: one entry per source in CONNECTED_CHECKS (above).
+ async connected(id){const ctx=sharedReads(this.p,id),out={};
+  for(const [key,check] of Object.entries(CONNECTED_CHECKS)){try{out[key]=Boolean(await check(this.p,id,ctx));}catch{out[key]=false;}}
+  return out;}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('dataHealth.notLoadDataHealth'));}};
   this.p.app.resourceManager.define({name:'nrHealth',actions:{list:wrap(id=>this.list(id)),connected:wrap(id=>this.connected(id))}});this.p.app.acl.allow('nrHealth',['list','connected'],'loggedIn');}
 }

@@ -31,6 +31,8 @@ vi.mock('../../client/pages/reach-data', async (importOriginal) => ({
 }));
 vi.mock('../../client/components/app-shell/nav-badges', () => ({
   refreshNavBadges: () => undefined,
+  // Sources not read yet: links into data pages stay as they are.
+  useNavSources: () => null,
 }));
 const text = vi.hoisted(
   () => (key: string, params?: Record<string, unknown>) =>

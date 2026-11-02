@@ -7680,5 +7680,6 @@
   "repos.moves": "{0} wird derzeit von {1} betreut; beim Speichern wechselt es zu diesem Repository.",
   "repos.limitPaths": "Änderungen nur in bestimmten Ordnern erlauben (optional)",
   "repos.saveAndCheck": "Speichern und prüfen",
-  "repos.checkNow": "Prüfen"
+  "repos.checkNow": "Prüfen",
+  "navSources.addedToMenu": "Zum Menü hinzugefügt: {0}"
 }

@@ -7680,5 +7680,6 @@
   "repos.moves": "{0} é atendido agora por {1}; ao salvar, passa para este repositório.",
   "repos.limitPaths": "Permitir alterações só em algumas pastas (opcional)",
   "repos.saveAndCheck": "Salvar e verificar",
-  "repos.checkNow": "Verificar"
+  "repos.checkNow": "Verificar",
+  "navSources.addedToMenu": "Adicionado ao menu: {0}"
 }
