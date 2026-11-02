@@ -215,12 +215,14 @@ export type StatusInput = {
   bilibili?: {
     connected: boolean;
     configured: boolean;
+    collectors?: { id: string }[];
     verifiedAt: string | null;
     lastRun?: { ok: boolean; errorCode?: string | null } | null;
   } | null;
   xiaohongshu?: {
     configured: boolean;
     connected: boolean;
+    collectors?: { id: string }[];
     verifiedAt?: string | null;
     lastRun?: { ok: boolean; errorCode?: string | null } | null;
   } | null;

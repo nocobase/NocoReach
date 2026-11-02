@@ -136,7 +136,7 @@ async function openForm(
   await user.click(await screen.findByRole('button', { name: button }));
   return screen.findByRole('dialog');
 }
-it('saves with the collector assumed ready, checks health honestly, then reads by hand', async () => {
+it('saves with the collector assumed ready, leaves the collector check to its row, then reads by hand', async () => {
   const user = userEvent.setup();
   setup();
   expect(
@@ -146,14 +146,14 @@ it('saves with the collector assumed ready, checks health honestly, then reads b
   expect(
     within(dialog).getByRole('heading', { name: '填写小红书搜索词' }),
   ).toBeVisible();
-  const input = within(dialog).getByLabelText('小红书搜索词');
-  await user.type(input, 'NocoBase');
-  await user.click(within(dialog).getByRole('button', { name: '检查采集器' }));
+  const input = within(dialog).getByLabelText('搜索词');
+  // One term, as the collector takes; the hint says so.
+  expect(input.tagName).toBe('INPUT');
+  expect(input).toHaveAccessibleDescription('只填 1 个，2–60 字符。');
   expect(
-    await within(dialog).findByText(
-      '采集器可达，OpenCLI 已安装；浏览器和小红书登录状态仍未验证。',
-    ),
-  ).toBeVisible();
+    within(dialog).queryByRole('button', { name: '检查采集器' }),
+  ).not.toBeInTheDocument();
+  await user.type(input, 'NocoBase');
   await user.click(within(dialog).getByRole('button', { name: '保存' }));
   expect(
     await screen.findByText('采集条件已保存，可以立即搜索。'),
@@ -185,8 +185,8 @@ it('validates at submit, focuses the first bad field, and preserves failed draft
   setup();
   const dialog = await openForm(user);
   await user.click(within(dialog).getByRole('button', { name: '保存' }));
-  expect(within(dialog).getByLabelText('小红书搜索词')).toHaveFocus();
-  await user.type(within(dialog).getByLabelText('小红书搜索词'), '中文产品');
+  expect(within(dialog).getByLabelText('搜索词')).toHaveFocus();
+  await user.type(within(dialog).getByLabelText('搜索词'), '中文产品');
   vi.mocked(xiaohongshuRequest).mockRejectedValueOnce(
     new TypeError('Failed to fetch'),
   );
@@ -205,7 +205,7 @@ it('validates at submit, focuses the first bad field, and preserves failed draft
   expect(
     within(dialog).getByText('网络请求未完成，请检查网络连接后重试。'),
   ).toBeVisible();
-  expect(within(dialog).getByLabelText('小红书搜索词')).toHaveValue('中文产品');
+  expect(within(dialog).getByLabelText('搜索词')).toHaveValue('中文产品');
 });
 it('members can view old notes but never see mutation controls', async () => {
   authorization.can.mockResolvedValue(false);
@@ -303,9 +303,7 @@ it.each([
     await userEvent.click(button);
     if (allowed === 'connect') {
       const dialog = await screen.findByRole('dialog');
-      expect(within(dialog).getByLabelText('小红书搜索词')).toHaveValue(
-        'NocoBase',
-      );
+      expect(within(dialog).getByLabelText('搜索词')).toHaveValue('NocoBase');
       expect(
         within(dialog).queryByRole('button', { name: '检查采集器' }),
       ).not.toBeInTheDocument();
@@ -360,7 +358,7 @@ it('retries a failed collector refresh after initial setup', async () => {
   expect(add).toBeEnabled();
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   const dialog = await openForm(user);
-  expect(within(dialog).getByLabelText('小红书搜索词')).toBeEnabled();
+  expect(within(dialog).getByLabelText('搜索词')).toBeEnabled();
   expect(within(dialog).getByLabelText('采集器')).toHaveValue(
     'project-xiaohongshu-1',
   );
@@ -416,9 +414,7 @@ it('keeps deployment collector names and choices independent of ID prefixes', as
   ).toBeInTheDocument();
   await user.selectOptions(collector, 'backup');
   await user.type(
-    within(dialog).getByLabelText(
-      english['xiaohongshu.xiaohongshuSearchPhrase'],
-    ),
+    within(dialog).getByLabelText(english['common.searchTerm']),
     'NocoBase',
   );
   await user.click(
@@ -455,7 +451,7 @@ it.each([false, true])(
       />,
     );
     const dialog = await openForm(userEvent.setup());
-    const input = within(dialog).getByLabelText('小红书搜索词');
+    const input = within(dialog).getByLabelText('搜索词');
     expect(input).toHaveValue('Current query');
     fireEvent.change(input, { target: { value: 'Unsaved draft' } });
     await act(async () => {
@@ -480,7 +476,7 @@ it.each([false, true])(
     const result = setup();
     const user = userEvent.setup();
     const dialog = await openForm(user);
-    await user.type(within(dialog).getByLabelText('小红书搜索词'), 'NocoBase');
+    await user.type(within(dialog).getByLabelText('搜索词'), 'NocoBase');
     const previous = structuredClone(stored);
     let resolveOld!: (value: XiaohongshuView) => void;
     let rejectOld!: (error: Error) => void;
@@ -541,14 +537,14 @@ it('keeps the sole available collector selected when editing an unavailable conn
   };
   // Opening the dialog reads the latest status first, which no longer has the saved collector.
   let dialog = await openForm(user, '修改');
-  let query = within(dialog).getByLabelText('小红书搜索词');
+  let query = within(dialog).getByLabelText('搜索词');
   expect(within(dialog).getByLabelText('采集器')).toHaveValue('backup');
   expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   await user.type(query, ' draft');
   await user.click(within(dialog).getByRole('button', { name: '取消' }));
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   dialog = await openForm(user);
-  query = within(dialog).getByLabelText('小红书搜索词');
+  query = within(dialog).getByLabelText('搜索词');
   expect(query).toHaveValue('NocoBase');
   expect(within(dialog).getByLabelText('采集器')).toHaveValue('backup');
   await user.click(within(dialog).getByRole('button', { name: '保存' }));
@@ -562,7 +558,7 @@ it('keeps the sole available collector selected when editing an unavailable conn
 it('recovers status errors without clearing failed mutations or unsaved drafts', async () => {
   const result = setup();
   const dialog = await openForm(userEvent.setup());
-  const input = within(dialog).getByLabelText('小红书搜索词');
+  const input = within(dialog).getByLabelText('搜索词');
   fireEvent.change(input, { target: { value: 'Unsaved draft' } });
   vi.mocked(xiaohongshuRequest).mockRejectedValueOnce(
     new Error('Save rejected'),
@@ -662,7 +658,7 @@ it('shows existing in-flight work after reopening and lets an administrator canc
 it('keeps the current draft during a revision-conflict refresh and supports IME edits', async () => {
   setup();
   const dialog = await openForm(userEvent.setup());
-  const input = within(dialog).getByLabelText('小红书搜索词');
+  const input = within(dialog).getByLabelText('搜索词');
   fireEvent.compositionStart(input);
   fireEvent.change(input, { target: { value: '中文产品' } });
   fireEvent.compositionEnd(input);
@@ -685,7 +681,7 @@ it('loads the new collector revision after an earlier save response settles', as
   const result = setup();
   const user = userEvent.setup();
   const dialog = await openForm(user);
-  await user.type(within(dialog).getByLabelText('小红书搜索词'), 'Draft query');
+  await user.type(within(dialog).getByLabelText('搜索词'), 'Draft query');
   const saved = {
     ...empty,
     connected: true,
@@ -764,11 +760,11 @@ it('English copy is complete and permission failures do not invite retry', async
       name: 'Enter Xiaohongshu search term',
     }),
   ).toBeVisible();
-  for (const name of ['Check collector', 'Cancel', 'Save'])
+  for (const name of ['Cancel', 'Save'])
     expect(within(dialog).getByRole('button', { name })).toBeVisible();
   expect(
-    within(dialog).getByLabelText('Xiaohongshu search phrase'),
-  ).toBeVisible();
+    within(dialog).getByLabelText('Search term'),
+  ).toHaveAccessibleDescription('One term only, 2–60 characters.');
   app.unmount();
   vi.mocked(xiaohongshuRequest).mockRejectedValue(
     Object.assign(new Error('权限不足'), { status: 403 }),
@@ -849,11 +845,12 @@ it('marks all required fields and revalidates corrected values after the first s
   setup();
   const user = userEvent.setup();
   const dialog = await openForm(user);
-  const query = within(dialog).getByLabelText('小红书搜索词');
+  const query = within(dialog).getByLabelText('搜索词');
   const collector = within(dialog).getByLabelText('采集器');
   for (const field of [query, collector])
     expect(field).toHaveAttribute('aria-required', 'true');
-  expect(within(dialog).getAllByText('*')).toHaveLength(2);
+  // Only the collector shows a required mark; the search term reads as Bilibili's does.
+  expect(within(dialog).getAllByText('*')).toHaveLength(1);
   await user.selectOptions(collector, '');
   await user.click(within(dialog).getByRole('button', { name: '保存' }));
   expect(collector).toHaveFocus();
@@ -878,59 +875,70 @@ it('marks all required fields and revalidates corrected values after the first s
   );
 });
 
-it('preserves drafts and one pending health request across live language changes', async () => {
+it('preserves drafts across live language changes', async () => {
   const app = setup();
   const dialog = await openForm(userEvent.setup());
-  const input = within(dialog).getByLabelText('小红书搜索词');
+  const input = within(dialog).getByLabelText('搜索词');
   fireEvent.change(input, { target: { value: '用户草稿 {0}' } });
+  await act(async () => setDictionary(english));
+  expect(within(dialog).getByLabelText(english['common.searchTerm'])).toBe(
+    input,
+  );
+  expect(input).toHaveValue('用户草稿 {0}');
+  await act(async () => setDictionary(null));
+  expect(input).toHaveValue('用户草稿 {0}');
+  app.unmount();
+});
+
+it('keeps one pending collector check across live language changes for someone who may only check it', async () => {
+  authorization.can.mockImplementation(
+    async ({ action }) => action === 'nrXiaohongshu.test',
+  );
+  const app = setup();
   let resolve!: (value: unknown) => void;
+  const button = await screen.findByRole('button', { name: '检查采集器' });
   vi.mocked(xiaohongshuRequest).mockImplementationOnce(
     () =>
       new Promise((r) => {
         resolve = r;
       }),
   );
-  fireEvent.click(within(dialog).getByRole('button', { name: '检查采集器' }));
-  fireEvent.click(within(dialog).getByRole('button', { name: '正在检查…' }));
+  fireEvent.click(button);
+  fireEvent.click(screen.getByRole('button', { name: '正在检查…' }));
   await act(async () => setDictionary(english));
   expect(
-    within(dialog).getByLabelText(
-      english['xiaohongshu.xiaohongshuSearchPhrase'],
-    ),
-  ).toBe(input);
-  expect(input).toHaveValue('用户草稿 {0}');
-  expect(
-    within(dialog).getByRole('button', { name: english['common.checking'] }),
+    screen.getByRole('button', { name: english['common.checking'] }),
   ).toBeDisabled();
   expect(
     vi.mocked(xiaohongshuRequest).mock.calls.filter((c) => c[1] === 'test'),
   ).toHaveLength(1);
   await act(async () => resolve({}));
   expect(
-    await within(dialog).findByText(
+    await screen.findByText(
       english['xiaohongshu.collectorReachableOpencliInstalledBrowser'],
     ),
   ).toBeVisible();
   await act(async () => setDictionary(null));
   expect(
-    within(dialog).getByText(
+    screen.getByText(
       '采集器可达，OpenCLI 已安装；浏览器和小红书登录状态仍未验证。',
     ),
   ).toBeVisible();
-  expect(input).toHaveValue('用户草稿 {0}');
   app.unmount();
 });
 
 it('retranslates exact owned errors but preserves unknown upstream payload text', async () => {
   setup();
-  const dialog = await openForm(userEvent.setup());
+  const user = userEvent.setup();
+  const dialog = await openForm(user);
+  await user.type(within(dialog).getByLabelText('搜索词'), 'NocoBase');
   const message = '此项目没有可用的指定小红书采集器，请联系管理员。';
   vi.mocked(xiaohongshuRequest).mockRejectedValueOnce(
     Object.assign(new Error('already localized'), {
       payload: { error: { message } },
     }),
   );
-  fireEvent.click(within(dialog).getByRole('button', { name: '检查采集器' }));
+  fireEvent.click(within(dialog).getByRole('button', { name: '保存' }));
   expect(await within(dialog).findByRole('alert')).toHaveTextContent(message);
   await act(async () => setDictionary(english));
   expect(within(dialog).getByRole('alert')).toHaveTextContent(
@@ -943,9 +951,7 @@ it('retranslates exact owned errors but preserves unknown upstream payload text'
     }),
   );
   fireEvent.click(
-    within(dialog).getByRole('button', {
-      name: english['common.checkCollector'],
-    }),
+    within(dialog).getByRole('button', { name: english['common.save'] }),
   );
   await waitFor(() =>
     expect(within(dialog).getByRole('alert')).toHaveTextContent(raw),

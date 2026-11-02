@@ -1140,7 +1140,9 @@ it('queues a read the busy collector turned away, retries it three times without
       lastRun: { ok: false, errorCode: 'busy' },
     });
     // The next attempt is the next day's read, not another retry.
-    expect(done.nextSyncAt!.slice(0, 10)).not.toBe(done.lastRun!.at.slice(0, 10));
+    expect(done.nextSyncAt!.slice(0, 10)).not.toBe(
+      done.lastRun!.at.slice(0, 10),
+    );
   } finally {
     vi.useRealTimers();
   }
@@ -1160,24 +1162,81 @@ it('pauses daily reading after three reads in a row got nothing through, and a r
       expect(Date.parse(failed.nextSyncAt!)).toBeLessThan(later(70));
       vi.setSystemTime(later(70));
     }
+    // The pause switches daily reading off, so the switch and the notice agree.
     const paused = await service.sync('1');
     expect(paused).toMatchObject({
       failures: 3,
       pausedCode: 'collector_unreachable',
       nextSyncAt: null,
-      autoSync: true,
+      autoSync: false,
     });
     vi.setSystemTime(later(24 * 60));
     await service.tick();
     expect(search).toHaveBeenCalledTimes(3);
+    // Another failed Read now keeps the pause and names the latest reason.
+    search.mockImplementationOnce(async () => {
+      throw new BilibiliError('timeout');
+    });
+    expect(await service.sync('1')).toMatchObject({
+      failures: 4,
+      pausedCode: 'timeout',
+      autoSync: false,
+    });
   } finally {
     vi.useRealTimers();
   }
+  // A Read now that gets through switches daily reading back on.
   search.mockImplementation(async () => batch());
   expect(await service.sync('1')).toMatchObject({
     failures: 0,
     pausedCode: null,
+    autoSync: true,
     lastRun: { ok: true },
+  });
+});
+it('resumes paused daily reading when it is switched back on, and never pauses reading by hand', async () => {
+  const search = vi.fn(async () => {
+    throw new BilibiliError('collector_unreachable');
+  });
+  const { service } = setup({ search });
+  const saved = await connect(service);
+  for (let i = 0; i < 3; i++) await service.sync('1');
+  const paused = await service.status('1');
+  expect(paused).toMatchObject({
+    autoSync: false,
+    pausedCode: 'collector_unreachable',
+  });
+  const resumed = await service.connect('1', {
+    collectorId: 'local',
+    terms: saved.terms,
+    bvids: saved.bvids,
+    autoSync: true,
+    revision: saved.revision,
+  });
+  expect(resumed).toMatchObject({
+    autoSync: true,
+    pausedCode: null,
+    failures: 0,
+    revision: saved.revision,
+  });
+  // Switched off by the person: failed reads by hand count, but pause nothing and switch nothing back on.
+  await service.connect('1', {
+    collectorId: 'local',
+    terms: saved.terms,
+    bvids: saved.bvids,
+    autoSync: false,
+    revision: saved.revision,
+  });
+  for (let i = 0; i < 3; i++) await service.sync('1');
+  expect(await service.status('1')).toMatchObject({
+    autoSync: false,
+    pausedCode: null,
+    failures: 3,
+  });
+  search.mockImplementation(async () => batch());
+  expect(await service.sync('1')).toMatchObject({
+    autoSync: false,
+    failures: 0,
   });
 });
 it('waits for the next day after Bilibili refuses a read', async () => {

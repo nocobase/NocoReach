@@ -157,14 +157,10 @@ test('demo catalog connects simulated sources, leaves publishing unconfigured an
     { repo: 'nocobloom/nocobloom', urls: ['nocobloom.example'] },
     { repo: 'nocobloom/docs', urls: ['nocobloom.example/docs'] },
   ]);
+  // Xiaohongshu shows Connected once its search term is saved, as the other sources do (2026-11-02).
   for (const [source, state] of Object.entries(states))
     expect({ [source]: state }).toEqual({
-      [source]:
-        source === 'articles'
-          ? 'ready'
-          : source === 'xiaohongshu'
-            ? 'done'
-            : 'connected',
+      [source]: source === 'articles' ? 'ready' : 'connected',
     });
   expect(
     (input.google as { connection: { status: string } }).connection.status,

@@ -38,6 +38,9 @@ const currentSystemText = new Map<string, MessageKey>(
     'analysis.modelTimedOut',
     // Bilibili takes up to five search terms (2026-11-02); the three-term text stays as its alias.
     'bilibili.selectAvailableCollectorEnterUp',
+    // A refused Bilibili read no longer adds that it stopped (2026-11-02); the old wording stays as their aliases.
+    'bilibili.bilibiliRequiresVerificationDeniedAccess',
+    'bilibili.bilibiliRequiresLoginCollectionStopped',
   ].map((key) => [chinese[key as MessageKey], key as MessageKey]),
 );
 

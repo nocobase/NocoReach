@@ -125,24 +125,6 @@ const split = (s: string) =>
     .split(/[,，、\n]/)
     .map((v) => v.trim())
     .filter(Boolean);
-const validBvid = (s: string) => {
-  if (/^BV[a-zA-Z0-9]{10}$/.test(s)) return true;
-  try {
-    const u = new URL(s);
-    return (
-      u.protocol === 'https:' &&
-      ['bilibili.com', 'www.bilibili.com', 'm.bilibili.com'].includes(
-        u.hostname,
-      ) &&
-      !u.username &&
-      !u.password &&
-      !u.port &&
-      /^\/video\/BV[a-zA-Z0-9]{10}\/?$/.test(u.pathname)
-    );
-  } catch {
-    return false;
-  }
-};
 const stamp = (value: string | null) =>
   value && Number.isFinite(Date.parse(value))
     ? formatDateTime(value)
@@ -198,24 +180,17 @@ function BilibiliForm({
             ),
           'bilibili.enterUp5SearchTerms',
         ),
-      bvids: z
-        .string()
-        .max(2048, 'bilibili.enterUp5ValidBv')
-        .refine(
-          (v) => split(v).length <= 5 && split(v).every(validBvid),
-          'bilibili.enterUp5ValidBv',
-        ),
     })
-    .refine((v) => split(v.terms).length > 0 || split(v.bvids).length > 0, {
+    // The dialog no longer offers a video list; one saved earlier still counts and is still read.
+    .refine((v) => split(v.terms).length > 0 || state.bvids.length > 0, {
       path: ['terms'],
-      message: 'bilibili.enterLeastOneSearchTerm',
+      message: 'youtube.termsRequired',
     });
   const form = useForm({
     resolver: zodResolver(schema),
     defaultValues: {
       collectorId: state.collectorId || state.collectors[0]?.id || '',
       terms: state.terms.join('\n'),
-      bvids: state.bvids.join('\n'),
     },
   });
   useEffect(() => {
@@ -233,7 +208,11 @@ function BilibiliForm({
   const submit = form.handleSubmit(async (values) => {
     setProblem(null);
     try {
-      await save({ ...values, revision: state.revision });
+      await save({
+        ...values,
+        bvids: state.bvids.join('\n'),
+        revision: state.revision,
+      });
     } catch (error) {
       setProblem(failure(error));
     }
@@ -321,7 +300,8 @@ function BilibiliForm({
                     }
                   />
                 </Field>
-                {canTest && (
+                {/* The dialog leaves the check to the Collector row; only someone who may not change the terms checks here. */}
+                {canTest && !canConnect && (
                   <Button
                     type='button'
                     variant='outline'
@@ -346,68 +326,36 @@ function BilibiliForm({
             )}
           />
           {canConnect && (
-            <>
-              <Controller
-                name='terms'
-                control={form.control}
-                render={({ field, fieldState }) => (
-                  <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor='bili-terms'>
-                      {$t('common.searchTerm')}
-                    </FieldLabel>
-                    <Textarea
-                      {...field}
-                      id='bili-terms'
-                      aria-invalid={fieldState.invalid}
-                      aria-describedby='bili-terms-help bili-terms-error'
-                      disabled={disabled}
-                      rows={3}
-                    />
-                    <FieldDescription id='bili-terms-help'>
-                      {$t('bilibili.onePerLineUp5Terms')}
-                    </FieldDescription>
-                    <FieldError
-                      id='bili-terms-error'
-                      errors={
-                        fieldState.error
-                          ? [{ message: $t(fieldState.error.message || '') }]
-                          : []
-                      }
-                    />
-                  </Field>
-                )}
-              />
-              <Controller
-                name='bvids'
-                control={form.control}
-                render={({ field, fieldState }) => (
-                  <Field data-invalid={fieldState.invalid}>
-                    <FieldLabel htmlFor='bili-videos'>
-                      {$t('bilibili.bvIdsVideoLinks')}
-                    </FieldLabel>
-                    <Textarea
-                      {...field}
-                      id='bili-videos'
-                      aria-invalid={fieldState.invalid}
-                      aria-describedby='bili-videos-help bili-videos-error'
-                      disabled={disabled}
-                      rows={3}
-                    />
-                    <FieldDescription id='bili-videos-help'>
-                      {$t('bilibili.onePerLineUp5')}
-                    </FieldDescription>
-                    <FieldError
-                      id='bili-videos-error'
-                      errors={
-                        fieldState.error
-                          ? [{ message: $t(fieldState.error.message || '') }]
-                          : []
-                      }
-                    />
-                  </Field>
-                )}
-              />
-            </>
+            <Controller
+              name='terms'
+              control={form.control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor='bili-terms'>
+                    {$t('common.searchTerm')}
+                  </FieldLabel>
+                  <Textarea
+                    {...field}
+                    id='bili-terms'
+                    aria-invalid={fieldState.invalid}
+                    aria-describedby='bili-terms-help bili-terms-error'
+                    disabled={disabled}
+                    rows={3}
+                  />
+                  <FieldDescription id='bili-terms-help'>
+                    {$t('bilibili.onePerLineUp5Terms')}
+                  </FieldDescription>
+                  <FieldError
+                    id='bili-terms-error'
+                    errors={
+                      fieldState.error
+                        ? [{ message: $t(fieldState.error.message || '') }]
+                        : []
+                    }
+                  />
+                </Field>
+              )}
+            />
           )}
         </FieldGroup>
       </form>
@@ -948,7 +896,13 @@ function BilibiliPanel({
               />
               <span>
                 {$t('youtube.autoRead')}
-                {state.verifiedAt ? (
+                {/* Paused after failed reads: the switch is off and says so; switching it on resumes. */}
+                {state.pausedCode ? (
+                  <span className='text-muted-foreground'>
+                    {' · '}
+                    {$t('bilibili.pausedShort')}
+                  </span>
+                ) : state.verifiedAt ? (
                   <span className='text-muted-foreground'>
                     {' · '}
                     {$t('bilibili.lastSuccessfulCollection', {

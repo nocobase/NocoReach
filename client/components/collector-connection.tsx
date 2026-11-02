@@ -496,19 +496,25 @@ function ConnectionForm({
         className='nr-guide-connected flex items-center justify-between gap-3'
         data-collector-row
       >
-        <p className='min-w-0 truncate'>
-          <span className='mr-2 text-muted-foreground'>
-            {$t('collectorConnection.row')}
-          </span>
-          {data.source === 'project'
-            ? hostOf(data.url)
-            : $t(
-                data.source === 'mock'
-                  ? 'collectorConnection.mockShort'
-                  : 'collectorConnection.deploymentShort',
-              )}
-          {health}
-        </p>
+        <div className='min-w-0'>
+          <p className='min-w-0 truncate'>
+            <span className='mr-2 text-muted-foreground'>
+              {$t('collectorConnection.row')}
+            </span>
+            {data.source === 'project'
+              ? hostOf(data.url)
+              : $t(
+                  data.source === 'mock'
+                    ? 'collectorConnection.mockShort'
+                    : 'collectorConnection.deploymentShort',
+                )}
+            {health}
+          </p>
+          {/* Collector sources have no network card: their traffic leaves from the collector's host. */}
+          <p className='text-sm text-muted-foreground'>
+            {$t('collectorConnection.networkOnHost')}
+          </p>
+        </div>
         {data.source !== 'mock' ? (
           <Button
             size='sm'

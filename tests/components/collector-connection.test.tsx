@@ -323,6 +323,10 @@ it('folds a collector in place to one row whose Change opens the form in a dialo
   expect(row.closest('[data-collector-row]')).toHaveTextContent(
     '采集器collector.example · 连接正常',
   );
+  // Collector sources have no network card; the row says where their network is managed.
+  expect(row.closest('[data-collector-row]')).toHaveTextContent(
+    '网络由采集器所在服务器管理',
+  );
   expect(screen.queryByLabelText('采集器地址 *')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: '修改' }));
   const dialog = await screen.findByRole('dialog', { name: '采集器连接' });

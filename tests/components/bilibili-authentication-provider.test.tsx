@@ -55,7 +55,9 @@ vi.mock('../../client/lib/nocoreach-api', () => ({
     wrapRequests: vi.fn(),
   },
 }));
-vi.mock('../../client/pages/bilibili-api', () => ({
+// Only the request is replaced; the panel still formats errors with the real helpers.
+vi.mock('../../client/pages/bilibili-api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../client/pages/bilibili-api')>()),
   bilibiliRequest: vi.fn(),
 }));
 const AuthorizationProvider = reactProviders[0].component;
@@ -152,6 +154,11 @@ function setup() {
   );
   return { client, authz };
 }
+/** The saved search term, as the panel lists it under Search terms. */
+const findTerm = (term: string) =>
+  waitFor(() =>
+    within(screen.getByRole('region', { name: '搜索词' })).getByText(term),
+  );
 async function openDisconnect() {
   const button = await waitFor(() => {
     const current = screen.getByRole('button', { name: '断开' });
@@ -224,9 +231,7 @@ for (const transition of [
           fireEvent.click(screen.getByText('Refresh official session'));
         });
       }
-      await screen.findByText(
-        new RegExp(`搜索词：${network.session.session.id}`),
-      );
+      await findTerm(network.session.session.id);
       const newDialog = await openDisconnect();
       const sessionReads = client.getSession.mock.calls.length;
       const requests = vi.mocked(bilibiliRequest).mock.calls.length;
@@ -276,7 +281,7 @@ it('still refreshes the official provider for a session conflict while the initi
   network.session = { user: { id: 'admin-b' }, session: { id: 'session-b' } };
   vi.mocked(bilibiliRequest).mockRejectedValueOnce(sessionConflict());
   await confirm(dialog);
-  await screen.findByText(/搜索词：session-b/);
+  await findTerm('session-b');
   expect(client.getSession).toHaveBeenCalledTimes(reads + 1);
   expect(screen.getByTestId('session')).toHaveTextContent('session-b');
   expect(changes).not.toHaveBeenCalled();

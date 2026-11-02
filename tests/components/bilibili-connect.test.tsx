@@ -176,6 +176,13 @@ async function openDialog(
   await user.click(await screen.findByRole('button', { name: button }));
   return screen.findByRole('dialog', { name: title });
 }
+/** Someone who may check the collector but not change the terms: the check sits in the panel. */
+function checkOnly() {
+  authorization.can.mockImplementation(
+    async ({ action }) => action === 'nrBilibili.test',
+  );
+  view();
+}
 it('opens a real form in a dialog, validates on submit, associates errors and focuses the first invalid field', async () => {
   call.mockResolvedValue(base());
   view();
@@ -186,19 +193,18 @@ it('opens a real form in a dialog, validates on submit, associates errors and fo
   const dialog = await openDialog();
   const terms = within(dialog).getByRole('textbox', { name: '搜索词' });
   expect(
-    within(dialog).getByText(
-      '每行一个，最多 5 个，每个 1–80 字；也可只填写下方视频。',
-    ),
+    within(dialog).getByText('每行一个，最多 5 个，每个 1–80 字符。'),
   ).toBeVisible();
+  // Search terms only: no video list, and the collector is checked from its row, not here.
+  expect(within(dialog).getAllByRole('textbox')).toEqual([terms]);
   expect(
-    screen.queryByText('请至少填写一个搜索词或视频。'),
+    within(dialog).queryByRole('button', { name: '检查采集器' }),
   ).not.toBeInTheDocument();
+  expect(screen.queryByText('请至少填写一个搜索词')).not.toBeInTheDocument();
   await userEvent.click(
     within(dialog).getByRole('button', { name: '保存并读取' }),
   );
-  expect(
-    await screen.findByText('请至少填写一个搜索词或视频。'),
-  ).toBeInTheDocument();
+  expect(await screen.findByText('请至少填写一个搜索词')).toBeInTheDocument();
   await waitFor(() => expect(terms).toHaveFocus());
   expect(terms).toHaveAttribute('aria-invalid', 'true');
   expect(terms).toHaveAttribute(
@@ -246,13 +252,12 @@ it('tool checks do not imply platform verification or start collection', async (
       ? { toolInstalled: true, browser: 'unchecked', login: 'unchecked' }
       : base(),
   );
-  view();
-  const dialog = await openDialog();
+  checkOnly();
   await userEvent.click(
-    within(dialog).getByRole('button', { name: '检查采集器' }),
+    await screen.findByRole('button', { name: '检查采集器' }),
   );
   expect(
-    await within(dialog).findByText('OpenCLI 可用，平台尚未验证'),
+    await screen.findByText('OpenCLI 可用，平台尚未验证'),
   ).toBeInTheDocument();
   expect(screen.queryByText('已取得可确认内容')).not.toBeInTheDocument();
   expect(sent()).toEqual(['test']);
@@ -452,12 +457,8 @@ it('keeps criteria drafts when a collector changes and saves with its new ID and
     'Research browser',
   );
   const terms = within(dialog).getByRole('textbox', { name: '搜索词' });
-  const videos = within(dialog).getByRole('textbox', {
-    name: 'BV 号或视频链接',
-  });
   await user.clear(terms);
   await user.type(terms, 'My draft');
-  await user.type(videos, 'BV1MW421X7gM');
   const latest = {
     ...connected(),
     revision: LATEST,
@@ -470,7 +471,6 @@ it('keeps criteria drafts when a collector changes and saves with its new ID and
   await waitFor(() => expect(screen.queryByRole('combobox')).toBeNull());
   expect(screen.getByRole('textbox', { name: '搜索词' })).toBe(terms);
   expect(terms).toHaveValue('My draft');
-  expect(videos).toHaveValue('BV1MW421X7gM');
   await user.click(screen.getByRole('button', { name: '保存' }));
   await waitFor(() =>
     expect(call).toHaveBeenLastCalledWith(
@@ -480,10 +480,31 @@ it('keeps criteria drafts when a collector changes and saves with its new ID and
         collectorId: latest.collectorId,
         revision: latest.revision,
         terms: 'My draft',
-        bvids: 'BV1MW421X7gM',
       }),
     ),
   );
+});
+it('keeps reading a video list saved before the dialog dropped it, even with no search terms', async () => {
+  call.mockResolvedValue({
+    ...connected(),
+    terms: [],
+    bvids: ['BV1MW421X7gM'],
+  });
+  view();
+  const user = userEvent.setup();
+  const dialog = await openDialog(user, '修改', '修改 Bilibili 搜索词');
+  const terms = within(dialog).getByRole('textbox', { name: '搜索词' });
+  expect(terms).toHaveValue('');
+  await user.click(within(dialog).getByRole('button', { name: '保存' }));
+  await waitFor(() =>
+    expect(call).toHaveBeenLastCalledWith(1, 'connect', {
+      collectorId: 'shared',
+      terms: '',
+      bvids: 'BV1MW421X7gM',
+      revision: REV,
+    }),
+  );
+  expect(screen.queryByText('请至少填写一个搜索词')).not.toBeInTheDocument();
 });
 it('translates the project collector label when the language changes', async () => {
   call.mockResolvedValue({
@@ -943,15 +964,12 @@ it('shows an allowlisted tool recovery message instead of raw diagnostics', asyn
       );
     return base();
   });
-  view();
-  const dialog = await openDialog();
+  checkOnly();
   await userEvent.click(
-    within(dialog).getByRole('button', { name: '检查采集器' }),
+    await screen.findByRole('button', { name: '检查采集器' }),
   );
   expect(
-    await within(dialog).findByText(
-      '采集器尚未安装 OpenCLI，请管理员完成安装。',
-    ),
+    await screen.findByText('采集器尚未安装 OpenCLI，请管理员完成安装。'),
   ).toBeInTheDocument();
   expect(
     screen.queryByText('OpenCLI 可用，平台尚未验证'),
@@ -1061,14 +1079,9 @@ it.each([false, true])(
             ],
           },
     );
-    view();
-    const dialog = await openDialog(
-      undefined,
-      english ? 'Add search terms' : '填写搜索词',
-      english ? 'Enter Bilibili search terms' : '填写 Bilibili 搜索词',
-    );
+    checkOnly();
     await userEvent.click(
-      within(dialog).getByRole('button', {
+      await screen.findByRole('button', {
         name: english ? 'Check collector' : '检查采集器',
       }),
     );
@@ -1100,11 +1113,9 @@ it('retranslates existing validation errors and preserves the draft during a loc
   await userEvent.click(
     within(dialog).getByRole('button', { name: '保存并读取' }),
   );
-  expect(await screen.findByText('请至少填写一个搜索词或视频。')).toBeVisible();
+  expect(await screen.findByText('请至少填写一个搜索词')).toBeVisible();
   act(() => setDictionary(enDictionary));
-  expect(
-    screen.getByText('Enter at least one search term or video.'),
-  ).toBeVisible();
+  expect(screen.getByText('Enter at least one search term.')).toBeVisible();
   const input = screen.getByRole('textbox', {
     name: enDictionary['common.searchTerm'],
   });
@@ -1129,10 +1140,9 @@ it.each([true, false])(
         });
       return base();
     });
-    view();
-    const dialog = await openDialog();
+    checkOnly();
     await userEvent.click(
-      within(dialog).getByRole('button', { name: '检查采集器' }),
+      await screen.findByRole('button', { name: '检查采集器' }),
     );
     expect(await screen.findByText(raw)).toBeVisible();
     act(() => setDictionary(enDictionary));
@@ -1172,9 +1182,7 @@ it('keeps search terms literal while translating collection status', async () =>
     await screen.findByRole('heading', { name: '上次没有读到' }),
   ).toBeVisible();
   expect(
-    screen.getByText(
-      'Bilibili 要求验证或拒绝了访问，本次读取已停止。可以点“立即读取”重试。',
-    ),
+    screen.getByText('Bilibili 要求验证或拒绝了访问。可以点“立即读取”重试。'),
   ).toBeVisible();
   act(() => setDictionary(enDictionary));
   expect(
@@ -1182,7 +1190,7 @@ it('keeps search terms literal while translating collection status', async () =>
   ).toBeVisible();
   expect(
     screen.getByText(
-      'Bilibili requires verification or denied access. Collection has stopped. Click "Read now" to try again.',
+      'Bilibili requires verification or denied access. Click "Read now" to try again.',
     ),
   ).toBeVisible();
   const box = screen.getByRole('region', { name: 'Search terms' });
@@ -1258,8 +1266,10 @@ it('says a read is queued while the collector is busy, and toasts that instead o
 });
 
 it('says daily reading paused after three empty reads, with the reason, in both languages', async () => {
+  // The server switches daily reading off when it pauses.
   call.mockResolvedValue({
     ...connected(),
+    autoSync: false,
     pausedCode: 'login_required',
     lastRun: lastRun({ ok: false, errorCode: 'login_required' }),
   });
@@ -1271,9 +1281,14 @@ it('says daily reading paused after three empty reads, with the reason, in both 
   ).toBeVisible();
   expect(
     screen.getByText(
-      'Bilibili 要求登录，本次读取已停止。请管理员检查采集器所选模式。已有视频照常查看；过几小时后点“立即读取”重试，读到后每天自动读取会恢复。',
+      'Bilibili 要求登录。请管理员检查采集器所选模式。已有视频照常查看。过几小时后点“立即读取”重试，读到后会恢复每天自动读取；也可以直接打开每天自动读取。',
     ),
   ).toBeVisible();
+  // The switch agrees: off, and says it is paused.
+  const toggle = screen.getByRole('switch', {
+    name: /^每天自动读取\s?· 已暂停$/,
+  });
+  expect(toggle).not.toBeChecked();
   // One notice at a time: the pause already names the last read's reason.
   expect(
     screen.queryByRole('heading', { name: '上次没有读到' }),
@@ -1285,8 +1300,47 @@ it('says daily reading paused after three empty reads, with the reason, in both 
     }),
   ).toBeVisible();
   expect(
-    screen.getByText(/^Bilibili requires login\. .* daily reading resumes\.$/),
+    screen.getByText(/^Bilibili requires login\. .* or switch it back on\.$/),
   ).toBeVisible();
+  expect(
+    screen.getByRole('switch', {
+      name: /^Read automatically every day\s?· paused$/,
+    }),
+  ).not.toBeChecked();
+});
+it('resumes paused daily reading when the switch is turned back on', async () => {
+  const paused = {
+    ...connected(),
+    autoSync: false,
+    pausedCode: 'timeout',
+    lastRun: lastRun({ ok: false, errorCode: 'timeout' }),
+  };
+  call.mockImplementation(async (_id, action) =>
+    action === 'connect'
+      ? { ...paused, autoSync: true, pausedCode: null }
+      : paused,
+  );
+  view();
+  await userEvent.click(
+    await screen.findByRole('switch', { name: /^每天自动读取\s?· 已暂停$/ }),
+  );
+  await waitFor(() =>
+    expect(call).toHaveBeenCalledWith(1, 'connect', {
+      collectorId: 'shared',
+      terms: ['NocoBase'],
+      bvids: [],
+      autoSync: true,
+      revision: REV,
+    }),
+  );
+  expect(
+    await screen.findByRole('switch', { name: '每天自动读取' }),
+  ).toBeChecked();
+  expect(
+    screen.queryByRole('heading', {
+      name: '连续 3 次没有读到，已暂停每天自动读取',
+    }),
+  ).not.toBeInTheDocument();
 });
 
 it.each([

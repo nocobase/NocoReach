@@ -33,6 +33,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '#components/ui/dialog';
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from '#components/ui/field';
+import { Input } from '#components/ui/input';
 import { Spinner } from '#components/ui/spinner';
 import { chipClass } from '#components/reach/chip';
 import { confirmAction } from '#components/reach/confirm';
@@ -374,7 +381,7 @@ export function XiaohongshuConnect({
     });
   const cancelEdit = () => {
     setEditing(false);
-    // What the dialog said (a failed save, a collector check) belongs to the discarded draft.
+    // What the dialog said (a failed save) belongs to the discarded draft.
     setError(null);
     setNotice('');
     setQuery(data.query);
@@ -505,8 +512,7 @@ export function XiaohongshuConnect({
       type='button'
       variant='outline'
       size='sm'
-      // self-start in the panel's flex column, justify-self-start in the dialog's grid.
-      className='self-start justify-self-start'
+      className='justify-self-start'
       disabled={Boolean(busy) || running || !collectorId || blocked}
       onClick={() =>
         void run('test', async () => {
@@ -778,40 +784,36 @@ export function XiaohongshuConnect({
                   {error.message()}
                 </p>
               ) : null}
+              {/* The collector is checked from its row in the drawer, not here. */}
               {collectorField}
-              {testButton}
-              {notice ? (
-                <p role='status' className='text-sm'>
-                  {notice}
-                </p>
-              ) : null}
-              <label className='nr-field'>
-                <span className='inline-flex items-center gap-1'>
-                  {$t('xiaohongshu.xiaohongshuSearchPhrase')}
-                  <span aria-hidden='true' className='text-destructive'>
-                    *
-                  </span>
-                  <InfoTip>
-                    {$t('xiaohongshu.enterOnePhraseManualSearch')}
-                  </InfoTip>
-                </span>
-                <input
+              {/* The same field as Bilibili's search terms, as one line: the collector takes a single term. */}
+              <Field data-invalid={fieldErrors.query}>
+                <FieldLabel htmlFor='xhs-query'>
+                  {$t('common.searchTerm')}
+                </FieldLabel>
+                <Input
                   ref={queryInputRef}
-                  aria-label={$t('xiaohongshu.xiaohongshuSearchPhrase')}
+                  id='xhs-query'
                   aria-required='true'
                   aria-invalid={fieldErrors.query}
+                  aria-describedby='xhs-query-help xhs-query-error'
                   value={query}
                   disabled={Boolean(busy) || running}
                   maxLength={60}
-                  placeholder='NocoBase'
                   onChange={(e) => setQuery(e.target.value)}
                 />
-              </label>
-              {fieldErrors.query && (
-                <p role='alert' className='nr-error'>
-                  {$t('xiaohongshu.errors.invalidQuery')}
-                </p>
-              )}
+                <FieldDescription id='xhs-query-help'>
+                  {$t('xiaohongshu.termHelp')}
+                </FieldDescription>
+                <FieldError
+                  id='xhs-query-error'
+                  errors={
+                    fieldErrors.query
+                      ? [{ message: $t('xiaohongshu.errors.invalidQuery') }]
+                      : []
+                  }
+                />
+              </Field>
               <DialogFooter>
                 <Button
                   type='button'

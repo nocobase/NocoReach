@@ -243,7 +243,10 @@ test('canonical repository status names remain failing HTTP responses through cl
     expect(payload.error.code).toBe(expected);
     expect(payload.data).toBeUndefined();
   }
-  runtime.legacy.resources.define({ name: 'nrMock', actions: { status: original } });
+  runtime.legacy.resources.define({
+    name: 'nrMock',
+    actions: { status: original },
+  });
 });
 
 test('mock admin API enforces anonymous/member/outsider roles, revision, IDs and persistent isolated settings', async ({
@@ -891,9 +894,14 @@ test('Xiaohongshu uses the real HTTP adapter/parser, keeps old data for empty/er
     'malformed',
   ]) {
     await configure(scenario);
-    expect(
-      (await call('nrXiaohongshu', 'search', { revision: 1 })).status,
-    ).toBeGreaterThanOrEqual(400);
+    const response = await call('nrXiaohongshu', 'search', { revision: 1 });
+    // The collector answers 429 while it is busy: the read is queued for a retry, not failed.
+    if (scenario === 'rate-limit') {
+      expect(response.status).toBe(200);
+      expect(
+        (await data(call('nrXiaohongshu', 'status'))).queued,
+      ).toMatchObject({ retries: 1 });
+    } else expect(response.status).toBeGreaterThanOrEqual(400);
     expect((await data(call('nrXiaohongshu', 'view'))).notes).toEqual(original);
   }
   await configure('empty');

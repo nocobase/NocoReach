@@ -78,7 +78,7 @@ interface State extends BilibiliConfig {
   queued?: Queued | null;
   /** Reads in a row that got nothing through. */
   failures?: number;
-  /** Why daily reading paused, once `failures` reached three. */
+  /** Why daily reading paused, once `failures` reached three; the pause also set `autoSync` off. */
   pausedCode?: BilibiliErrorCode | null;
 }
 interface Host {
@@ -235,11 +235,17 @@ export class BilibiliSource {
           old?.connected &&
           JSON.stringify([old.collectorId, old.terms, old.bvids]) ===
             JSON.stringify([config.collectorId, config.terms, config.bvids]);
-        // Switching daily reading keeps the revision, so a read under way still saves what it found.
+        // Switching daily reading keeps the revision, so a read under way still saves what it found. Switching it
+        // back on after a pause starts the failure count afresh.
         if (same)
           return autoSync === undefined || autoSync === (old.autoSync !== false)
             ? old
-            : { ...old, autoSync };
+            : {
+                ...old,
+                autoSync,
+                failures: autoSync ? 0 : old.failures,
+                pausedCode: null,
+              };
         changed = true;
         return {
           ...config,
@@ -494,6 +500,13 @@ export class BilibiliSource {
               },
             };
           const failures = usable ? 0 : (cur.failures ?? 0) + (busy ? 0 : 1);
+          // Three failures in a row switch daily reading off and say why; a read that gets through switches it back
+          // on. Someone who switched it off themselves reads by hand, and their failures pause nothing.
+          const pause =
+            !usable &&
+            !busy &&
+            failures >= PAUSE_AFTER &&
+            (cur.autoSync !== false || !!cur.pausedCode);
           const errorCode =
             failure?.code || (!usable ? 'unconfirmed_empty' : null);
           const all = { ...cur.videos };
@@ -558,9 +571,11 @@ export class BilibiliSource {
             failures,
             pausedCode: usable
               ? null
-              : !busy && failures >= PAUSE_AFTER
+              : pause
                 ? errorCode
                 : (cur.pausedCode ?? null),
+            autoSync:
+              usable && cur.pausedCode ? true : pause ? false : cur.autoSync,
             lastRun: {
               at,
               ok: !failure && usable,
@@ -638,7 +653,8 @@ export class BilibiliSource {
     const connected = !!state?.connected && available;
     const daily = connected && state?.autoSync !== false;
     const queued = connected ? (state?.queued ?? null) : null;
-    const pausedCode = daily ? (state?.pausedCode ?? null) : null;
+    // A pause switches daily reading off; its reason stays until a read gets through or daily reading is back on.
+    const pausedCode = connected ? (state?.pausedCode ?? null) : null;
     const since = videos.reduce<string | null>(
       (min, v) => (!min || v.firstSeenAt < min ? v.firstSeenAt : min),
       null,
