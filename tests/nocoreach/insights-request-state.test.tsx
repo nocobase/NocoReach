@@ -521,7 +521,7 @@ it.each([401, 403, 404])(
   },
 );
 
-it('starts the tasks, the situation and the metrics with the state, and reads each once', async () => {
+it('defers tasks until the state and reads each dependency once', async () => {
   const state = deferred<unknown>();
   const answer = action.getMockImplementation()!;
   action.mockImplementation(
@@ -534,9 +534,9 @@ it('starts the tasks, the situation and the metrics with the state, and reads ea
   requests.metrics.mockResolvedValue(values.metrics);
   requests.summary.mockResolvedValue(values.summary);
   await setup();
-  // Before the state has answered, the page's other reads are already on their way.
+  // Small reads start with state; the task payload waits for Insights to mount.
   await waitFor(() => {
-    expect(tasks).toHaveBeenCalledTimes(1);
+    expect(tasks).not.toHaveBeenCalled();
     expect(requests.summary).toHaveBeenCalledTimes(1);
     expect(requests.metrics).toHaveBeenCalledTimes(1);
   });

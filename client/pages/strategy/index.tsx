@@ -34,6 +34,7 @@ import { EarlyRequests } from './early-requests';
 import { useOnlineApi } from '../../online-agent/api';
 import { useOptionalOnlineChat } from '../../online-agent/context';
 import { useChatPanel } from '@nocobase/app-plugin-agents/client/chat';
+import { createUuid } from '@nocobase/app-client';
 import { Link, useNavigate } from 'react-router';
 import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { InfoTip } from '#components/reach/info-tip';
@@ -152,9 +153,7 @@ function ProjectInsights({ projectId }: { projectId: number }) {
     const attemptKey = `${projectId}:${attempt}`;
     if (startedRef.current === attemptKey) return;
     startedRef.current = attemptKey;
-    early.start(cache, insightTasksKey(projectId), () =>
-      insightTasks(projectId),
-    );
+    // Keep the large task response behind state so their downloads do not compete.
     early.start(cache, insightSummaryKey(projectId), () =>
       insightSummary(projectId),
     );
@@ -256,7 +255,7 @@ function Insights({
   async function mutate(action: string, body: object) {
     const key = JSON.stringify([action, state.revision, body]);
     if (operationRef.current.key !== key)
-      operationRef.current = { key, id: crypto.randomUUID() };
+      operationRef.current = { key, id: createUuid() };
     return request<StrategyState>(projectId, action, {
       ...body,
       revision: state.revision,
