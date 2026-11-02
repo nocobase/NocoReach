@@ -170,9 +170,11 @@ export class TaskService {
     // Actor-specific Runner eligibility opens plugin reads of its own.
     // Read them after committing the business transaction, since SQLite has a single connection.
     const agent = await this.agents.status(project, data.work.agentId, actor);
+    // The project's AI content language: the primary language a start defaults to (shared/task-start.ts, 2026-10-30).
+    const language = (await this.p.project(project).catch(() => null))?.language || null;
     // `repo`: the repository the task changes, or would by its pages (null when a person has to choose); `repos`: every one, for the start card.
     const repos = agent.repos.map(r => ({ id: r.id, repo: r.repo, baseBranch: r.baseBranch, allowedPaths: r.allowedPaths, urls: r.urls }));
-    return { ...data, agent: { repo: startedRepo(agent.repos, data.work, pageUrlsOf(data)), repos, online: agent.online, agentId: agent.agentId, defaultAgentId: agent.defaultAgentId, options: agent.options } };
+    return { ...data, language, agent: { repo: startedRepo(agent.repos, data.work, pageUrlsOf(data)), repos, online: agent.online, agentId: agent.agentId, defaultAgentId: agent.defaultAgentId, options: agent.options } };
   }
   // Every task of a project, read in pages outside any business transaction, for what Data sources shows of them.
   private async eachTask(project: string, fn: (task: any) => void) {
@@ -579,7 +581,6 @@ export class TaskService {
     const articleRead = ['linkArticle', 'rebaseArticle'].includes(v.command) || (v.command === 'startTask' && Array.isArray(v.delivery?.also) && v.delivery.also.length) ? (await this.authorized(actor, project), await this.articleFlow.preRead(project, taskId, v)) : {};
     const hash = digest({ ...v, actor });
     const data = await this.lock(project, taskId, async tx => {
-      if(v.command==='moveWork') await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:`nr-task-board:${project}`},transaction:tx});
       const task = await this.task(project, taskId, tx), w = projectWork(task);
       const opKey = this.key('op', project, taskId, v.requestId), previous = await this.snapshot(opKey, tx);
       if (previous) { if (previous.hash !== hash) return fail(systemMessageText('taskExecution.sameRequestIdCannotUsed'), 409); return this.view(project, taskId, tx); }
@@ -603,11 +604,14 @@ export class TaskService {
       if (typeof v.stageKey === 'string') event.stageKey = v.stageKey.slice(0, 40);
       if (v.command === 'moveWork') {
         if (!['todo','doing','review','done'].includes(v.state)) return fail(systemMessageText('taskExecution.invalidWorkState'));
+        // A column has no order of its own (2026-11-02: the board shows each column newest activity first), so a move
+        // within the task's column changes nothing and records nothing; an old client's beforeId is ignored.
         const from = boardState(w);
+        if (from === v.state) return this.view(project, taskId, tx);
         const runs: Run[] = await this.list('run', project, taskId, tx);
-        if (from !== v.state && runs.some(active)) return fail(systemMessageText('taskExecution.waitCurrentRunFinishBefore'), 409);
-        if (from !== v.state && v.state === 'review' && !w.results.some(a => a && !a.rejectedAt)) return fail(systemMessageText('taskExecution.saveDeliverableConfirmFirst'), 409);
-        if (from !== v.state && v.state === 'done') {
+        if (runs.some(active)) return fail(systemMessageText('taskExecution.waitCurrentRunFinishBefore'), 409);
+        if (v.state === 'review' && !w.results.some(a => a && !a.rejectedAt)) return fail(systemMessageText('taskExecution.saveDeliverableConfirmFirst'), 409);
+        if (v.state === 'done') {
           if (v.confirm !== true) return fail(systemMessageText('taskExecution.confirmWorkDoneMovingNot'), 409);
           if (w.flow) {
             if (w.stage !== 'done') return fail(systemMessageText('messages.followWorkflowStage', { 0: w.flow.stages[w.stageIndex || 0]?.name }), 409);
@@ -616,19 +620,7 @@ export class TaskService {
           } else if (!w.receipt?.note || !['verification','done'].includes(w.stage)) return fail(systemMessageText('taskExecution.recordActualPublishRunResult'), 409);
         }
         // Reopening a completed card changes planning status only; receipt and prior approval remain historical facts.
-        const rows: any[] = [];
-        for (let offset=0;;offset+=100) {
-          const page = await this.repo('nrTasks').find({filter:{projectId:project},limit:100,offset,sort:'id',transaction:tx});
-          rows.push(...page.map((r:any)=>r.toJSON())); if(page.length<100) break;
-        }
-        const ordered = rows.filter(t => String(t.id)!==taskId && boardState(projectWork(t))===v.state).sort((a,b)=>(projectWork(a).sortOrder ?? Number(a.id)*1024)-(projectWork(b).sortOrder ?? Number(b.id)*1024) || Number(a.id)-Number(b.id));
-        const index = v.beforeId ? ordered.findIndex(t => String(t.id)===String(v.beforeId)) : ordered.length;
-        if(index<0) return fail(systemMessageText('taskExecution.targetCardMovedRefreshTry'),409);
-        const rank=(t:any)=>projectWork(t).sortOrder ?? Number(t.id)*1024;
-        const prev=index>0?rank(ordered[index-1]):(ordered.length?rank(ordered[0])-2048:0);
-        const next=index<ordered.length?rank(ordered[index]):prev+2048;
-        if(!Number.isFinite(prev)||!Number.isFinite(next)||(next-prev)<0.000001) return fail(systemMessageText('taskExecution.tooManyItemsPositionMove'),409);
-        w.sortOrder=(prev+next)/2;w.boardState=v.state;event.previous=from;event.note=v.state;
+        w.boardState=v.state;event.previous=from;event.note=v.state;
       } else if (v.command === 'startSimple') {
         await this.member(actor, tx);
         if(w.stage!=='plan' || w.plan) return fail(systemMessageText('taskExecution.planExistsKeepAdjust'),409);
@@ -756,10 +748,23 @@ export class TaskService {
         // A message for the executor; the next run reads the latest ones.
         if (w.stage === 'done') return fail(systemMessageText('taskDetail.taskDone'), 409);
         event.comment = text(v.comment, 3000);
-      } else if (v.command === 'approveStage' || v.command === 'requestStageChanges') {
+      } else if (v.command === 'approveStage' || v.command === 'requestStageChanges' || v.command === 'changePrimary') {
         const { stage, index } = this.flowStage(w, v.stageKey, ['review']), producer = w.flow!.stages[index - 1], output = w.results[index - 1];
         if (!output || output.id !== v.artifactId || output.rejectedAt) return fail(systemMessageText('taskExecution.contentUpdatedRefreshBeforeReviewing'), 409);
         event.artifactId = output.id;
+        // Another primary language before it is approved (2026-10-30, T-58: a hand-off started in English when the
+        // project writes in Chinese): the step writes a new version in it, and the other languages, the one that was
+        // primary included, are translated once it is approved. Not once the primary is approved or a translation runs.
+        let feedback = '';
+        if (v.command === 'changePrimary') {
+          const d = w.delivery, locale = typeof v.locale === 'string' ? v.locale : '';
+          if (!output.article || d?.kind !== 'article' || !d.locales || d.locales.length < 2 || d.translateFrom) return fail(systemMessageText('taskExecution.primaryLocked'), 409);
+          if (!this.articleFlow.targets(project).find(t => t.id === d.targetId)?.locales.includes(locale)) return fail(systemMessageText('taskExecution.primaryNotTargetLanguage'), 400);
+          if (locale === d.locales[0]) return fail(systemMessageText('taskExecution.primaryUnchanged'), 409);
+          w.delivery = { ...d, locales: [locale, ...d.locales.filter(l => l !== locale)] };
+          event.note = locale;
+          feedback = optional(v.comment, 3000) || systemMessageText('taskExecution.primaryChangedComment', { 0: locale });
+        }
         if (v.command === 'approveStage') {
           const checked: string[] = Array.isArray(v.checked) ? v.checked.filter((k: unknown) => typeof k === 'string') : [];
           const missing = (stage.checklist || []).filter(c => c.required && !checked.includes(c.key));
@@ -801,12 +806,15 @@ export class TaskService {
               const p = await this.playbooks.get(project, v.next, tx), accepted = w.results[index - 1]!;
               // Titled as every handed-off task, by its playbook and the subject this task was about (task-title.ts).
               const chain = { subject: task.evidence?.autoTitle?.subject || task.title, ...(task.evidence?.autoTitle?.locale ? { locale: task.evidence.autoTitle.locale } : {}) };
-              const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: playbookTitle(p, chain.subject, chain.locale), brief: systemMessageText('messages.taskBriefDocumentDeliveredTask', { 0: task.title, 1: accepted.content }).slice(0, 30000), status: systemMessageText('common.pending'), evidence: { source: systemMessageText('taskExecution.chainedTask'), insight: task.evidence?.insight || null, context: task.evidence?.context || null, ...foundBy(task.evidence), handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content }, autoTitle: chain, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
+              // The languages chosen with the hand-over, primary first (2026-10-30); the new task's start takes the ones its target has.
+              const handLocales = Array.isArray(v.nextLocales) ? [...new Set<string>(v.nextLocales.filter((l: unknown) => typeof l === 'string' && /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(l)))].slice(0, 20) : [];
+              const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: playbookTitle(p, chain.subject, chain.locale), brief: systemMessageText('messages.taskBriefDocumentDeliveredTask', { 0: task.title, 1: accepted.content }).slice(0, 30000), status: systemMessageText('common.pending'), evidence: { source: systemMessageText('taskExecution.chainedTask'), insight: task.evidence?.insight || null, context: task.evidence?.context || null, ...foundBy(task.evidence), handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content, ...(handLocales.length ? { locales: handLocales } : {}) }, autoTitle: chain, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
               w.nextTaskId = String(child.get ? child.get('id') : child.id); event.note = p.name; event.nextTaskId = w.nextTaskId;
             }
           }
         } else {
-          const comment = text(v.comment, 3000); event.comment = comment;
+          const comment = feedback || text(v.comment, 3000);
+          if (!feedback) event.comment = comment;
           w.results[index - 1] = { ...output, rejectedAt: at };
           // Feedback is filed under the stage that redoes the work, so its next run reads it.
           await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: producer.key, stageIndex: index - 1, artifactVersionId: output.id, decision: 'requestChanges', comment, reviewerId: actor, at }, tx);
@@ -947,7 +955,7 @@ export class TaskService {
       const task = await this.task(project, taskId), w = projectWork(task);
       if (w.flow || w.plan || w.stage !== 'plan' || w.cancelledAt || w.archivedAt || !w.playbookId) return;
       const p = await this.playbooks.get(project, w.playbookId), stages = stagesFor(p), first = stages[0];
-      const data = { task, work: w, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), agent: await this.agents.status(project, w.agentId, actor) };
+      const data = { task, work: w, language: (await this.p.project(project))?.language || null, articleTargets: this.articleFlow.targets(project), articlePlaybookTargets: this.articleFlow.playbookTargets(project), agent: await this.agents.status(project, w.agentId, actor) };
       const found = lookupMatters(data, p.id) ? await this.lookupPages(project, pageUrlsOf(data)) : undefined;
       const changes = p.kind === 'build', translate = changes && data.articleTargets.length > 0 && translatesArticle(p), needsRepository = first?.kind === 'agent' && !(first.mode === 'analyze' && !stages.some(changesRepo));
       if (startBlockers(data, { playbookId: p.id, changes, translate, needsRepository, simulated: Boolean(this.p.demoConfiguration?.enabled), found }).length) return;

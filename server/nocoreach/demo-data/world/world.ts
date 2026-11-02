@@ -170,6 +170,24 @@ export class World {
             path: q.path,
           })),
         ];
+    this.queries = [
+      ...this.queries,
+      ...this.research
+        .filter(
+          (k) =>
+            !this.queries.some(
+              (q) =>
+                q.q !== k.keyword &&
+                q.q.toLowerCase().includes(k.keyword.toLowerCase()),
+            ),
+        )
+        .map((k) => ({
+          q: `${k.keyword} ${this.lang === 'zh' ? '教學' : 'guide'}`,
+          path: k.path!,
+          impressions: 8,
+          position: k.position! + 2,
+        })),
+    ];
     this.seeded = new Seeded(
       `nocoreach-demo:${project.domain}:${this.language}`,
     );

@@ -1,3 +1,9 @@
+import {
+  ChartLegend,
+  TrendChart,
+  ChartArea as Area,
+  ChartLine as Line,
+} from '#components/reach/chart-legend';
 import { $t, $tj, getCurrentLocale, isChinese } from '#i18n';
 import {
   GA4_HISTORY_CACHE_MS,
@@ -13,11 +19,8 @@ import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { BarChart3, TriangleAlert } from 'lucide-react';
 import {
-  Area,
   CartesianGrid,
   ComposedChart,
-  Legend,
-  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -236,7 +239,7 @@ export default function DataWebsite() {
             <ChangeDrivers report={report!} metric={metric} suspect={suspect} />
             <QualityNotes issues={issuesFor(issues, metric)} />
           </div>
-          <TrendCard report={report!} metric={metric} />
+          <TrendCard key={metric} report={report!} metric={metric} />
           <div className='grid gap-3 lg:grid-cols-2'>
             <ChannelCard report={report!} issues={issues} />
             <AudienceCard report={report!} />
@@ -366,7 +369,8 @@ function TrendCard({ report, metric }: { report: Report; metric: MetricKey }) {
       </div>
       <div className='nr-chart-box' data-website-chart={metric}>
         <ResponsiveContainer width='100%' height={240}>
-          <ComposedChart
+          <TrendChart
+            as={ComposedChart}
             data={points}
             margin={{ left: 0, right: 12, top: 8, bottom: 0 }}
           >
@@ -382,7 +386,7 @@ function TrendCard({ report, metric }: { report: Report; metric: MetricKey }) {
               formatter={(v) => show(Number(v), m.format)}
               labelFormatter={dayLabel}
             />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <ChartLegend order={['value', 'previous', 'fresh']} />
             <Area
               isAnimationActive={false}
               type='linear'
@@ -412,7 +416,7 @@ function TrendCard({ report, metric }: { report: Report; metric: MetricKey }) {
                 dot={false}
               />
             ) : null}
-          </ComposedChart>
+          </TrendChart>
         </ResponsiveContainer>
       </div>
     </Card>

@@ -372,6 +372,11 @@ describe('NocoReach semantic-key translations', () => {
       // Every closed task can be reopened (2026-10-29), so closing no longer says the task cannot continue.
       '执行者会停下，没合并的 PR 会关掉（分支保留），之后不能接着做。':
         '执行者会停下，没合并的 PR 会关掉（分支保留）。之后可以重新打开，回到这一步。',
+      // Performance checks run anew on every click (2026-11-02); the rank tip names its Update now button.
+      '一次检查一个页面，点了才查（约 $0.005，算进 DataForSEO 的月度预算）；同一页面、同一设备 30 天内直接打开上次的结果。':
+        '一次检查一个页面，点了才查，每次约 $0.005，算进 DataForSEO 的月度预算。同一页面、同一设备 10 分钟内不重复检查。',
+      '“立即检查”6 天内查过的直接用那次结果，不重复收费。名次是那一刻的 Google 结果，和 Search Console 的平均排名会有出入。':
+        '“立即更新”6 天内查过的直接用那次结果，不重复收费。名次是那一刻的 Google 结果，和 Search Console 的平均排名会有出入。',
     };
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(

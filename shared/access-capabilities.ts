@@ -72,6 +72,7 @@ export const TASK_COMMANDS = [
   'comment',
   'approveStage',
   'requestStageChanges',
+  'changePrimary',
   'editStageOutput',
   'recordManual',
   'recoverResult',

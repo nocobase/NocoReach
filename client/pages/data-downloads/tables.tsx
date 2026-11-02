@@ -1,3 +1,9 @@
+import {
+  ChartLegend,
+  TrendChart,
+  ChartArea as Area,
+  ChartLine as Line,
+} from '#components/reach/chart-legend';
 import { $t } from "#i18n";
 // 下载量 · one table with tabs, as on 访问 and GitHub: 包 (each figure with the period before, its daily average, peak,
 // running total and latest version; a row opens its days; ticked rows go to the Agent to find out why downloads moved),
@@ -8,7 +14,7 @@ import { useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ArrowUpRight, Search } from "lucide-react";
-import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card } from "#components/ui/card";
 import { Input } from "#components/ui/input";
 import { TabsTrigger } from "#components/ui/tabs";
@@ -144,14 +150,15 @@ function ItemDrawer({ view, item: it, onClose }: { view: View; item: Item; onClo
       {points.filter((x) => x.value !== null).length < 2 ? <p className="text-sm text-muted-foreground">{it.since ? $t('dataDownloads.noDaysInRange', { 0: dateOf(it.since) }) : $t('dataDownloads.shownAfterNextSync')}</p> : (
         <div className="nr-chart-box" data-item-line="">
           <ResponsiveContainer width="100%" height={200}>
-            <ComposedChart data={points} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
+            <TrendChart as={ComposedChart} data={points} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} minTickGap={28} fontSize={11} />
               <YAxis allowDecimals={false} fontSize={11} width={52} tickFormatter={(v: number) => num(v)} />
               <Tooltip formatter={(v) => num(Number(v))} labelFormatter={(d) => dateOf(String(d))} />
+              <ChartLegend order={['value', 'previous']} />
               <Area isAnimationActive={false} type="linear" dataKey="value" name={kindLabel(it)} stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.1} connectNulls={false} />
               <Line isAnimationActive={false} type="linear" dataKey="previous" name={$t('dataDownloads.previousPeriod')} stroke="var(--muted-foreground)" strokeDasharray="4 4" dot={false} />
-            </ComposedChart>
+            </TrendChart>
           </ResponsiveContainer>
         </div>
       )}

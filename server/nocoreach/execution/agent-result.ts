@@ -110,6 +110,9 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
           // outline in Chinese, the Agent wrote a Chinese-only article for a target whose first language is English).
           '文章用哪种语言写只看 data.article.languages，和 data.language 无关。data.language 是项目语言，只用于 content、summary 这些给审核人看的说明；任务标题和说明、大纲、上一步的成果、留言和资料用什么语言，都不改变文章的语言，需要时先理解其中的意思，再用文章的语言来写。locales 的键是语言代码，每种语言的 title、description、body 都要真的用这种语言写，例如 en 用英语、zh 用中文、ja 用日语。',
           'phase 为 primary 时只写主语言 languages.primary，其他语言（languages.others）在审核通过后再翻译，这次不要写、不要返回；按审核意见修改时也只改主语言。phase 为 all 时一次写 languages.write 里需要的语言，新文章至少要有主语言。',
+          // 2026-10-30 (T-58): asked for another primary language, the Agent told the person to change it in an article
+          // setting that does not exist. The primary is changed on the review card, which reruns the step in it.
+          '主语言由任务决定（languages.primary），你不能自己换。审核意见要求换主语言时，这次仍按 languages.primary 写，并在 summary 里告诉负责人：可以在任务页文章审核卡片上的“主语言”里改，改了会用新的主语言重写这一版。主语言刚换过时，上一版的草稿或说明里已经有这种语言的内容，可以直接拿来用。做不到的要求，只说负责人在任务页上能怎么做，不要提到任务页上没有的设置或按钮。',
           'task result 提示语言不符时（例如“新文章必须有英语（en）的标题和正文，这次只写了：中文（zh）”），说明文章写成了别的语言，不是配置问题，也不要因此报告失败：按提示用要求的语言重写标题、摘要和正文，再重新提交。这种情况不受“保留正文、只修正格式”的限制。',
           'phase 为 translate 时，languages.approved 是要翻译的原文（title、description、body），即已经审核通过的主语言版本，或者翻译已发布文章时文章现在的原文：把 languages.approved.fields 列出的字段翻译成 languages.write 里的每种语言，只返回这些语言，不要改主语言。翻译要忠实于原意，保持段落、标题层级、Markdown、链接和图片不变，用当地读者习惯的说法，不要逐字硬译；产品名、代码和专有名词保持原样。summary 写翻译了哪些语言，以及需要人留意的地方（如某个说法没有对应的本地用语）。',
           // 2026-10-28 (T-53): updating an existing article re-translated the whole new primary, replacing the other

@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react';
 // 访问 (client/pages/data-website/): the page GA4's reports were redrawn on (2026-10-14), with the server's answers
 // stubbed — 今天 with 实时, the eight figures, the channel shares (GA4's AI Assistant among them), the report tables and a row's detail.
 import {
@@ -18,6 +19,18 @@ import { setDictionary } from '../../client/i18n';
 import DataWebsite from '../../client/pages/data-website/index';
 import { GoogleConnection } from '../../client/pages/google-connection';
 import { WorkspaceCacheProvider } from '../../client/pages/workspace-cache';
+
+vi.mock('recharts', async (original) => {
+  const actual = await original<typeof import('recharts')>();
+  return {
+    ...actual,
+    ResponsiveContainer: ({ children }: { children: ReactElement }) => (
+      <actual.ResponsiveContainer width={600} height={260}>
+        {children}
+      </actual.ResponsiveContainer>
+    ),
+  };
+});
 
 const { action, project } = vi.hoisted(() => ({
   action: vi.fn(),
@@ -691,7 +704,9 @@ describe('访问', () => {
         }),
       ),
     );
-    expect(within(drawer).getByText('前一期')).toBeTruthy();
+    expect(
+      within(drawer).getByRole('columnheader', { name: '前一期' }),
+    ).toBeTruthy();
     expect(within(drawer).getAllByText('↑ 25%').length).toBeGreaterThan(0);
     await userEvent.click(
       within(drawer).getByRole('button', { name: '关闭详情' }),
@@ -786,5 +801,34 @@ describe('访问', () => {
         }),
       ),
     );
+  });
+  it('starts a newly selected metric with every series visible', async () => {
+    renderPage();
+    await screen.findByRole('group', { name: '指标' });
+    const chart = document.querySelector('[data-website-chart]') as HTMLElement;
+    const legend = within(chart).getAllByRole('listitem');
+    expect(legend.length).toBeGreaterThanOrEqual(2);
+    const buttons = legend.map((item) => within(item).getByRole('button'));
+    for (const button of buttons) await userEvent.click(button);
+    expect(
+      buttons.every(
+        (button) => button.getAttribute('aria-pressed') === 'false',
+      ),
+    ).toBe(true);
+    await userEvent.click(
+      within(
+        document.querySelector('[data-metric=views]') as HTMLElement,
+      ).getByRole('button', { name: '浏览量' }),
+    );
+    const next = document.querySelector(
+      '[data-website-chart="views"]',
+    ) as HTMLElement;
+    const visible = within(next)
+      .getAllByRole('listitem')
+      .map((item) => within(item).getByRole('button'));
+    expect(visible.length).toBeGreaterThanOrEqual(2);
+    expect(
+      visible.every((button) => button.getAttribute('aria-pressed') === 'true'),
+    ).toBe(true);
   });
 });

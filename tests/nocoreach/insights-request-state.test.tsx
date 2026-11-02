@@ -61,6 +61,8 @@ vi.mock('../../client/pages/me', () => ({
 }));
 vi.mock('../../client/components/app-shell/nav-badges', () => ({
   refreshNavBadges: vi.fn(),
+  // Sources not read yet: links into data pages stay as they are.
+  useNavSources: () => null,
 }));
 
 const requests = { tasks, metrics: vi.fn(), summary: vi.fn() };
