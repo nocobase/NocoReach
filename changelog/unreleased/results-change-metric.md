@@ -1,0 +1,7 @@
+## Results: each change judged by the first metric with enough data
+
+- A change is judged by search clicks when there are at least 40 in the days before and after going live together, otherwise by search impressions (at least 200), otherwise by views (at least 40). A change under 15%, or under 10 clicks, 50 impressions or 10 views, is no clear change. Before, only clicks or else views counted, so pages with few views but plenty of impressions were all “Not enough data”.
+- Results › Changes names the metric each line was judged by ("Down · Search impressions 6,071 → 4,318 · ↓ 29% · day 7"), draws green for up, red for down and grey for no clear change, and draws no bar when nothing had enough data, saying what there was instead ("Not enough data: Only 35 search impressions and 6 views in the 7 days before and after going live, too few to judge"). Its ⓘ gives the rule.
+- The task page's Performance, the status chip, the effect line in Activity and the Agent's and daily analysis's task summaries name impressions when they decided.
+- Day 7 and day 28 results already recorded are judged again once under the new rule, from their stored numbers: they keep their dates and add no line to Activity.
+- In the demo, the workload page (Acme) and the renewals page (CRM) stay “Not enough data” under the new rule: their long-tail searches no longer draw more impressions than the page's own keywords.

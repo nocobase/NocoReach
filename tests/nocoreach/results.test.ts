@@ -14,6 +14,7 @@ import {
   readResult,
 } from '../../server/nocoreach/execution/result-view.js';
 import {
+  lacking,
   metricValues,
   safeConclusion,
 } from '../../shared/result-comparison.js';
@@ -55,8 +56,13 @@ describe('safe result comparison', () => {
     const r = compare(7, '2026-10-01', [url, other], records, '2026-10-12');
     expect(r.gsc?.clicks).toEqual([28, 98]);
     expect(r.byPage).toEqual([
-      { page: url, clicks: [0, 70], position: [0, 3] },
-      { page: other, clicks: [28, 28], position: [12, 12] },
+      { page: url, clicks: [0, 70], impressions: [0, 700], position: [0, 3] },
+      {
+        page: other,
+        clicks: [28, 28],
+        impressions: [280, 280],
+        position: [12, 12],
+      },
     ]);
     expect(
       compare(7, '2026-10-01', [url], parts(), '2026-10-12').byPage,
@@ -538,6 +544,38 @@ describe('results dashboard', () => {
     expect(board.totals.clicks).toBeNull();
     expect(board.changes[0]).toMatchObject({ status: 'insufficient' });
     expect(board.counts.insufficient).toBe(1);
+  });
+  it('judges by search impressions when clicks are few, and says what there was when nothing has enough', async () => {
+    // 2 → 3 clicks a day are 35 in all, too few; their impressions, 140 → 210, decide.
+    const byImpressions = live(1, '2026-10-01', [2, 3]);
+    // 1 a day: 14 clicks and 140 impressions, too few of both, and no views.
+    const tooLittle = live(2, '2026-10-01', [1, 1]);
+    const board = await resultBoard(service([byImpressions, tooLittle]), '1', {
+      range: 'all',
+    });
+    const change = (id: string) => board.changes.find((c) => c.taskId === id);
+    expect(change('1')).toMatchObject({
+      status: 'up',
+      metric: 'impressions',
+      before: 140,
+      after: 210,
+      percent: 50,
+      lacking: null,
+    });
+    expect(change('2')).toMatchObject({
+      status: 'insufficient',
+      metric: null,
+      before: null,
+      lacking: { day: 7, impressions: 140 },
+    });
+    expect(board.counts).toMatchObject({ up: 1, down: 0, insufficient: 1 });
+    // Days missing, or no data at all.
+    expect(
+      lacking(compare(7, '2026-10-01', [url], parts().slice(1), '2026-10-12')),
+    ).toEqual({ day: 7, missingDays: true });
+    expect(lacking(compare(7, '2026-10-01', [url], [], '2026-10-12'))).toEqual({
+      day: 7,
+    });
   });
   it('lists the dashboard period with phases as filters, in either order', async () => {
     const s = service(period()),

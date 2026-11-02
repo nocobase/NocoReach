@@ -48,6 +48,11 @@ import { ClippedLink } from './clipped-link.js';
 import { ResultsLoadError } from './states.js';
 import { ResultTag } from './status-tag.js';
 import { FoundBy } from '../found-by.js';
+import { lackingText, metricName } from '../effect-model.js';
+import {
+  FLAT_BELOW,
+  JUDGED_METRICS,
+} from '../../../shared/result-comparison.js';
 import type {
   BoardChange,
   BoardTotal,
@@ -215,12 +220,15 @@ const formatNumber = (value: number) =>
   value.toLocaleString(getCurrentLocale(), { maximumFractionDigits: 1 });
 const taskLabel = (item: { taskNo: number | null; title: string }) =>
   `${item.taskNo ? `T-${item.taskNo} · ` : ''}${item.title}`;
-const nextCheck = (item: {
-  nextDay: number | null;
-  nextDate: string | null;
-}) =>
+const nextCheck = (
+  item: {
+    nextDay: number | null;
+    nextDate: string | null;
+  },
+  key = 'results.board.nextCheck',
+) =>
   item.nextDay && item.nextDate
-    ? $t('results.board.nextCheck', {
+    ? $t(key, {
         0: shortDate(item.nextDate),
         1: item.nextDay,
       })
@@ -312,7 +320,8 @@ function TotalMetric({
 
 // Each live change as a bar from a zero line: right for more, left for fewer. Its length is the percentage, capped at
 // 100% (half the track); a change from zero fills its half; a small change still shows. The status word starts the
-// line beside it, so the conclusion never rests on color (A2).
+// line beside it, so the conclusion never rests on color (A2). The line names the metric the change was judged by;
+// the ⓘ gives the rule from the numbers the server judges by (shared/result-comparison.ts JUDGED_METRICS).
 function ChangesCard({ board }: { board: ResultBoard }) {
   const location = useLocation();
   return (
@@ -321,10 +330,32 @@ function ChangesCard({ board }: { board: ResultBoard }) {
         <CardTitle className='flex items-center gap-1'>
           {$t('results.board.changes')}
           <InfoTip label={$t('common.info')}>
-            {$t('results.board.changesDescription')}
-            {board.counts.live > board.changes.length
-              ? ` ${$t('results.board.changesMore', { 0: board.changes.length })}`
-              : ''}
+            <span className='flex flex-col gap-1'>
+              <span className='font-medium'>
+                {$t('results.board.judgeTitle')}
+              </span>
+              <span>{$t('results.board.judgeIntro')}</span>
+              <ol className='list-decimal pl-5'>
+                {JUDGED_METRICS.map((m) => (
+                  <li key={m.metric}>
+                    {$t('results.board.judgeMetric', {
+                      0: metricName(m.metric),
+                      1: m.enough,
+                    })}
+                  </li>
+                ))}
+              </ol>
+              <span>
+                {$t('results.board.judgeFlat', { 0: FLAT_BELOW * 100 })}
+              </span>
+              {board.counts.live > board.changes.length ? (
+                <span>
+                  {$t('results.board.changesMore', {
+                    0: board.changes.length,
+                  })}
+                </span>
+              ) : null}
+            </span>
           </InfoTip>
         </CardTitle>
       </CardHeader>
@@ -358,6 +389,30 @@ function ChangesCard({ board }: { board: ResultBoard }) {
 }
 
 function ChangeBar({ change }: { change: BoardChange }) {
+  // Too little to judge: no bar, and the line says why in the numbers there were.
+  if (change.status === 'insufficient')
+    return (
+      <div className='flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-3'>
+        <span
+          aria-hidden='true'
+          className='hidden shrink-0 text-center text-xs text-muted-foreground sm:block sm:w-40'
+        >
+          —
+        </span>
+        <span className='min-w-0 text-sm text-muted-foreground tabular-nums'>
+          {[
+            change.lacking
+              ? $t('results.board.insufficientLine', {
+                  0: lackingText(change.lacking),
+                })
+              : resultStatus(change.status),
+            nextCheck(change, 'results.board.nextLook'),
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </span>
+      </div>
+    );
   const measured =
     change.metric !== null && change.before !== null && change.after !== null;
   const difference = measured ? change.after! - change.before! : 0;
@@ -373,20 +428,15 @@ function ChangeBar({ change }: { change: BoardChange }) {
         ? 'bg-nr-ink-red'
         : 'bg-muted-foreground';
   const text = [
-    resultStatus(change.status),
     measured
-      ? $t('results.board.changeLine', {
-          0:
+      ? $t('results.board.changeFigures', {
+          0: metricName(change.metric!),
+          1: formatNumber(change.before!),
+          2: formatNumber(change.after!),
+          3:
             change.percent !== null
               ? signedPercent(change.percent)
               : signed(difference),
-          1: $t(
-            change.metric === 'clicks'
-              ? 'common.searchClicks'
-              : 'common.viewCount',
-          ),
-          2: formatNumber(change.before!),
-          3: formatNumber(change.after!),
           4: change.day,
         })
       : '',
@@ -413,7 +463,15 @@ function ChangeBar({ change }: { change: BoardChange }) {
         ) : null}
       </div>
       <span className='min-w-0 text-sm text-muted-foreground tabular-nums'>
-        {text}
+        <span
+          className={cn(
+            change.status === 'up' && 'font-semibold text-nr-ink-green',
+            change.status === 'down' && 'font-semibold text-nr-ink-red',
+          )}
+        >
+          {resultStatus(change.status)}
+        </span>
+        {text ? ` · ${text}` : ''}
       </span>
     </div>
   );

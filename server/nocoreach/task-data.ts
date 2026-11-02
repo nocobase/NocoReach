@@ -14,11 +14,11 @@ const hostOf=u=>{try{return new URL(String(u)).hostname.toLowerCase().replace(/^
 // GA4 rows carry `host` and GSC rows a full URL; rows without a host (older syncs) match any site.
 const samePage=(url,page,host)=>{const h=host?String(host).toLowerCase().replace(/^www\./,''):hostOf(page),own=hostOf(url);return pathOf(page)===pathOf(url)&&(!h||!own||h===own);};
 const CONCLUSION={up:systemMessageText('effect.up'),down:systemMessageText('effect.down'),flat:systemMessageText('common.flat'),insufficient:systemMessageText('effect.notEnoughData')};
-// One line per effect checkpoint (day 7, day 28), as the task page shows them.
+// One line per effect checkpoint (day 7, day 28), as the task page shows them, naming the metric it was judged by.
 function effectLines(w){return ((w?.observation?.results)||[]).map(r=>{
  if(r.conclusion==='insufficient'||!r.primary||r.change==null)return systemMessageText('common.dayNotEnoughData', { 0: r.day });
- const [b,a]=r.primary==='clicks'?(r.gsc?.clicks||[]):(r.ga4?.views||[]),p=Math.round(r.change*100);
- return systemMessageText('effect.day', { 0: r.day, 1: CONCLUSION[r.conclusion]||r.conclusion, 2: r.primary==='clicks'?'搜索点击':'浏览量', 3: b, 4: a, 5: p>0?'+':'', 6: p });});}
+ const [b,a]=r.primary==='views'?(r.ga4?.views||[]):(r.gsc?.[r.primary]||[]),p=Math.round(r.change*100);
+ return systemMessageText('effect.day', { 0: r.day, 1: CONCLUSION[r.conclusion]||r.conclusion, 2: ({clicks:'搜索点击',impressions:'搜索曝光',views:'浏览量'})[r.primary]||r.primary, 3: b, 4: a, 5: p>0?'+':'', 6: p });});}
 // Where a task stands, in a few words.
 function taskState(task,w){
  if(!w)return '还没开始';if(w.cancelledAt)return systemMessageText('common.closed');if(w.revert&&w.revert.state!=='failed')return '已撤回';

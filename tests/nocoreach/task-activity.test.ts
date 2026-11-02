@@ -20,16 +20,21 @@ import {
 
 afterEach(() => setDictionary(null));
 
-const effect = (extra: Partial<EffectResult>) =>
-  ({
-    day: 7,
+// Every day of both windows covered, as a judged result's are.
+const effect = (extra: Partial<EffectResult>) => {
+  const day = extra.day ?? 7,
+    days = { baselineDays: day, afterDays: day };
+  return {
+    day,
     conclusion: 'insufficient',
     primary: null,
     change: null,
     computedAt: '2026-11-01T09:10:01.077Z',
     notes: [],
+    coverage: { gsc: days, ga4: days },
     ...extra,
-  }) as unknown as EffectResult;
+  } as unknown as EffectResult;
+};
 
 it('Activity has words for exactly the events it shows, plus the run bookkeeping it leaves out', () => {
   // Every case eventText words, read from its source, is either shown or quiet: a new event needs both.
@@ -87,7 +92,42 @@ it('the effect reading is a line in Activity, in the words of the status chip', 
       effect({ conclusion: 'down', primary: 'views', change: -0.104 }),
     ),
   ).toEqual({ text: 'Day 7: Views ↓ 10%', tone: 'red' });
+  // Judged by search impressions (2026-11-02), and from nothing before: the count it rose to.
+  const t33 = effect({
+    conclusion: 'down',
+    primary: 'impressions',
+    change: -0.289,
+    gsc: {
+      clicks: [2, 1],
+      impressions: [6071, 4318],
+      ctr: [0, 0],
+      position: [22.9, 23.7],
+    },
+  });
+  expect(effectChip(t33)).toEqual({
+    text: 'Day 7: Impressions ↓ 29%',
+    tone: 'red',
+  });
+  expect(
+    effectSummary(
+      effect({
+        conclusion: 'up',
+        primary: 'impressions',
+        change: null,
+        gsc: {
+          clicks: [0, 3],
+          impressions: [0, 240],
+          ctr: [0, 0],
+          position: [0, 0],
+        },
+      }),
+    ),
+  ).toBe('Impressions ↑ 240');
   setDictionary(null);
+  expect(
+    eventText({ action: 'effect', note: '7' }, () => '', 'Agent', null, [t33])
+      ?.text,
+  ).toBe('记录了第 7 天结果：曝光 ↓ 29%');
   expect(line('7')?.text).toBe('记录了第 7 天结果：数据不足');
   expect(effectChip(day28).text).toBe('第 28 天：点击 ↑ 26%');
 });

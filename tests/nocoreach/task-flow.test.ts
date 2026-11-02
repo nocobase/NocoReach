@@ -539,14 +539,23 @@ test('effect observation: day 7 and day 28 compare the page with the days before
  assert.deepEqual(windows('2026-09-10',7),{baseline:{start:'2026-09-03',end:'2026-09-09'},after:{start:'2026-09-11',end:'2026-09-17'}});
  assert.equal(pageKey('https://www.example.com/docs/install/?a=1#x'),pageKey('http://example.com/docs/install'));
  const days=(start,n)=>Array.from({length:n},(_,i)=>new Date(Date.parse(start)+i*86400000).toISOString().slice(0,10));
- const parts=(clicks,views,dates=days('2026-09-03',15))=>dates.flatMap(d=>[{source:'gsc',grain:'query_page',date:d,payload:[{keyword:'install',page:'https://www.example.com/docs/install',clicks:d<'2026-09-10'?clicks[0]:clicks[1],impressions:100,position:d<'2026-09-10'?9:7},{keyword:'x',page:'https://www.example.com/other',clicks:99,impressions:999,position:1}]},{source:'ga4',grain:'page',date:d,payload:[{page:'/docs/install',views:d<'2026-09-10'?views[0]:views[1],conversions:1}]}]);
+ const parts=(clicks,views,dates=days('2026-09-03',15),impressions=[100,100])=>dates.flatMap(d=>[{source:'gsc',grain:'query_page',date:d,payload:[{keyword:'install',page:'https://www.example.com/docs/install',clicks:d<'2026-09-10'?clicks[0]:clicks[1],impressions:d<'2026-09-10'?impressions[0]:impressions[1],position:d<'2026-09-10'?9:7},{keyword:'x',page:'https://www.example.com/other',clicks:99,impressions:999,position:1}]},{source:'ga4',grain:'page',date:d,payload:[{page:'/docs/install',views:d<'2026-09-10'?views[0]:views[1],conversions:1}]}]);
  const page=['https://www.example.com/docs/install'];
  let r=compare(7,'2026-09-10',page,parts([10,15],[50,50]),'t');
  assert.equal(r.primary,'clicks');assert.deepEqual(r.gsc.clicks,[70,105]);assert.deepEqual(r.gsc.position,[9,7]);assert.deepEqual(r.ga4.views,[350,350]);assert.equal(r.conclusion,'up');assert.equal(r.change,0.5);
  assert.equal(summary(r),'第 7 天：上升，搜索点击 70 → 105（+50%）');
  assert.equal(compare(7,'2026-09-10',page,parts([10,11],[50,50]),'t').conclusion,'flat','10% is no clear change');
- r=compare(7,'2026-09-10',page,parts([1,2],[50,70]),'t');assert.equal(r.primary,'views','few clicks: views decide');assert.equal(r.conclusion,'up');
- assert.equal(compare(7,'2026-09-10',page,parts([1,2],[2,3]),'t').conclusion,'insufficient','too little of both');
+ // The first metric with enough data decides (2026-11-02): search clicks (40 in both windows together), then search
+ // impressions (200), then views (40); under 15% or under the metric's floor (10, 50, 10) is no clear change.
+ const all=days('2026-09-03',15);
+ r=compare(7,'2026-09-10',page,parts([1,2],[50,70],all,[100,70]),'t');assert.equal(r.primary,'impressions','few clicks: impressions decide');assert.deepEqual(r.gsc.impressions,[700,490]);assert.equal(r.conclusion,'down');assert.equal(r.change,-0.3);assert.equal(r.rule,2);
+ assert.equal(summary(r),'第 7 天：下降，搜索曝光 700 → 490（-30%）');
+ assert.equal(compare(7,'2026-09-10',page,parts([1,2],[50,70],all,[100,106]),'t').conclusion,'flat','6% more impressions is no clear change');
+ assert.equal(compare(7,'2026-09-10',page,parts([1,2],[50,50],all,[30,38]),'t').conclusion,'up','210 → 266 impressions: 27% and 56 more');
+ assert.equal(compare(7,'2026-09-10',page,parts([1,2],[50,50],all,[30,36]),'t').conclusion,'flat','210 → 252 impressions: 20% but under 50 more');
+ r=compare(7,'2026-09-10',page,parts([1,2],[50,70],all,[10,15]),'t');assert.equal(r.primary,'views','few clicks and impressions: views decide');assert.equal(r.conclusion,'up');
+ r=compare(7,'2026-09-10',page,parts([1,2],[2,3],all,[10,15]),'t');assert.equal(r.conclusion,'insufficient','too little of all three');assert.equal(r.primary,null);
+ assert.deepEqual(r.notes,['曝光太少（共 175 次），不做判断','浏览太少（共 35 次），不做判断'],'the notes give the totals there were');
  r=compare(7,'2026-09-10',page,parts([10,15],[50,50],days('2026-09-03',9)),'t');assert.equal(r.conclusion,'insufficient');assert.ok(r.notes.some(n=>/缺/.test(n)),'missing days are named');
  r=compare(7,'2026-09-10',['https://www.example.com/no-data'],parts([10,15],[50,50]),'t');assert.equal(r.conclusion,'insufficient');
 });
@@ -571,6 +580,27 @@ test('effect observation runs for finished tasks once the data covers the day, a
  assert.equal(r.day,7);assert.deepEqual(r.gsc.clicks,[70,112]);assert.deepEqual(r.ga4.views,[280,280],'only the connected property counts');assert.equal(r.conclusion,'up');
  assert.ok(r.notes.some(n=>n.includes('Another change')),'another change to the same page in the window is named');
  await f.s.observeEffects();d=await f.view();assert.equal(d.work.observation.results.length,1,'computed once');
+});
+
+test('results judged by the earlier rule are judged again once, from their stored numbers, with no line in Activity',async()=>{
+ const f=fixture();f.state.nrSyncPartitions=[];
+ f.s.p.link=async()=>({get:k=>({gscSiteUrl:'sc-domain:example.com',ga4PropertyId:'p1'})[k]});
+ // T-33 and T-34 on Studio (day 7, 2026-11-01): too few views, so “not enough data” under clicks-or-else-views, while
+ // their search impressions fell and rose.
+ const stored=(views,impressions,notes)=>({day:7,baseline:{start:'2026-10-15',end:'2026-10-21'},after:{start:'2026-10-23',end:'2026-10-29'},pages:['https://www.example.com/a'],gsc:{clicks:[2,1],impressions,ctr:[0,0],position:[22.9,23.7]},ga4:{views,conversions:[0,0]},primary:'views',change:null,conclusion:'insufficient',notes,computedAt:'2026-11-01T09:09:59.451Z',coverage:{gsc:{baselineDays:7,afterDays:7},ga4:{baselineDays:7,afterDays:7}}});
+ const other='Another change also went live on this page on 2026-10-25';
+ f.state.nrTasks[0].evidence.work={...__model.projectWork(f.state.nrTasks[0]),stage:'done',observeFrom:'2026-10-22T10:03:36.435Z',observation:{results:[stored([4,7],[6071,4318],['浏览太少（共 11 次），不做判断',other])]}};
+ f.state.nrTasks.push({id:2,projectId:'1',title:'T-34',brief:'',status:'已完成',evidence:{work:{...__model.projectWork({}),stage:'done',observeFrom:'2026-10-22T10:03:36.435Z',observation:{results:[stored([22,17],[170,524],['浏览太少（共 39 次），不做判断'])]}}}});
+ await f.s.observeEffects();
+ const t33=f.state.nrTasks[0].evidence.work,t34=f.state.nrTasks[1].evidence.work,[r33]=t33.observation.results,[r34]=t34.observation.results;
+ assert.equal(r33.primary,'impressions');assert.equal(r33.conclusion,'down');assert.equal(r33.change,-0.289);assert.equal(r33.rule,2);
+ assert.equal(r34.primary,'impressions');assert.equal(r34.conclusion,'up');assert.equal(r34.change,2.082);
+ // The same checkpoint: windows, numbers and time; the old rule's note gives way, any other note stays.
+ assert.equal(r33.computedAt,'2026-11-01T09:09:59.451Z');assert.deepEqual(r33.after,{start:'2026-10-23',end:'2026-10-29'});assert.deepEqual(r33.ga4.views,[4,7]);
+ assert.deepEqual(r33.notes,[other]);assert.deepEqual(r34.notes,[]);
+ assert.equal(t33.history.length,0,'Activity gets no new line');
+ const revision=t33.revision;
+ await f.s.observeEffects();assert.equal(f.state.nrTasks[0].evidence.work.revision,revision,'once');
 });
 
 test('the task page reads each page\'s numbers: the latest 28 days before going live, the 28 days before it after',async()=>{

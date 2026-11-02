@@ -16,7 +16,7 @@ import { resultOf, type AgentResult } from './agent-result.js';
 import { TaskBusiness } from './task-business.js';
 import { serializeTaskInput, type TaskInput } from './task-materials';
 import type { LegacyDatabase, LegacyTransaction } from '../legacy/database';
-import { CHECKPOINTS, compare, dateOf, pageKey, pageNumbers, shift, windows, type Partition } from './effect';
+import { CHECKPOINTS, EFFECT_RULE, compare, dateOf, pageKey, pageNumbers, rejudge, shift, windows, type Partition } from './effect';
 import { listResults, readResult, resultBoard } from './result-view.js';
 import { ArticleFlow } from './article-flow.js';
 import { playbookTitle, retitle } from './task-title.js';
@@ -461,7 +461,18 @@ export class TaskService {
     for (let offset = 0; ; offset += 100) { const rows = await this.repo('nrTasks').find({ sort: 'id', limit: 100, offset }); tasks.push(...rows.map((r: any) => r.toJSON ? r.toJSON() : r)); if (rows.length < 100) break; }
     const ends = new Map<string, string>();
     for (const t of tasks) {
-      const w = projectWork(t); if (!w.observeFrom || t.evidence?.simulated) continue;
+      const w = projectWork(t);
+      // Results judged by an earlier rule are judged again once, from their stored numbers (the first run after an upgrade
+      // does it): no new data is read, the checkpoint keeps its time, and Activity gets no new line.
+      if ((w.observation?.results || []).some(r => r.rule !== EFFECT_RULE)) {
+        await this.lock(String(t.projectId), String(t.id), async tx => {
+          const task = await this.task(String(t.projectId), String(t.id), tx), fresh = projectWork(task), results = fresh.observation?.results || [];
+          if (!results.some(r => r.rule !== EFFECT_RULE)) return;
+          fresh.observation = { ...fresh.observation, results: results.map(rejudge) };
+          await this.save(task, fresh, tx);
+        });
+      }
+      if (!w.observeFrom || t.evidence?.simulated) continue;
       const project = String(t.projectId), from = dateOf(w.observeFrom), pages = this.effectPages(w), done = new Set((w.observation?.results || []).map(r => r.day));
       if (!pages.length) continue;
       if (!ends.has(project)) ends.set(project, await this.dataEnd(project));

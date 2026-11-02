@@ -4,8 +4,9 @@ import {
   metricValues,
   safeConclusion,
   matchesObservation,
+  sourceOf,
 } from '../../../shared/result-comparison.js';
-import type { EffectResult } from '../effect-model.js';
+import { metricName, type EffectResult } from '../effect-model.js';
 import { formatDate, formatDateTime } from '#lib/format';
 import { ResultTag } from './status-tag.js';
 const metrics = [
@@ -18,21 +19,15 @@ const metrics = [
 ] as const;
 export function PrimaryComparison({ result }: { result: EffectResult }) {
   if (!result.primary) return <span>{resultStatus('insufficient')}</span>;
-  const v = metricValues(
-    result,
-    result.primary === 'clicks' ? 'gsc' : 'ga4',
-    result.primary,
-  );
+  const v = metricValues(result, sourceOf(result.primary), result.primary);
   return (
     <div>
       <strong className='tabular-nums'>
         {number(v.before)} → {number(v.after)}
       </strong>
       <p className='text-sm text-muted-foreground'>
-        {result.primary === 'clicks'
-          ? $t('common.searchClicks')
-          : $t('common.viewCount')}{' '}
-        · Δ {v.difference === null ? '—' : signed(v.difference)} ·{' '}
+        {metricName(result.primary)} · Δ{' '}
+        {v.difference === null ? '—' : signed(v.difference)} ·{' '}
         {v.percent === null
           ? v.before === 0
             ? $t('results.zeroBaseline')
