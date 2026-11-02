@@ -1,4 +1,9 @@
 import {
+  ChartLegend,
+  TrendChart,
+  ChartLine as Line,
+} from '#components/reach/chart-legend';
+import {
   getCurrentLocale,
   $t,
   $tj,
@@ -18,8 +23,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Legend,
-  Line,
   LineChart,
   ResponsiveContainer,
   Tooltip,
@@ -822,7 +825,8 @@ function TrendSection({
           ) : (
             <div className='nr-chart-box'>
               <ResponsiveContainer width='100%' height={200}>
-                <LineChart
+                <TrendChart
+                  as={LineChart}
                   data={days}
                   margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
                 >
@@ -847,7 +851,7 @@ function TrendSection({
                     allowDecimals={false}
                   />
                   <Tooltip />
-                  <Legend />
+                  <ChartLegend order={['impressions', 'clicks']} />
                   <Line
                     yAxisId='i'
                     isAnimationActive={false}
@@ -866,7 +870,7 @@ function TrendSection({
                     stroke='var(--chart-1)'
                     dot={false}
                   />
-                </LineChart>
+                </TrendChart>
               </ResponsiveContainer>
             </div>
           )}

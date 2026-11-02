@@ -47,7 +47,8 @@ type BrandResult = { platform: Platform; mentions: number | null; aiSearchVolume
 type AnswerResult = { model: Model; modelName: string; text: string; citations: Source[]; mentioned: boolean; ownCited: number; webSearch: boolean; fanOut: string[] };
 type BrandSpec = { kind: "ai-brand"; platform: Platform; target: string; competitors: string[]; locationCode: number; language: string; group: string };
 type AnswerSpec = { kind: "ai-answer"; model: Model; modelName: string; question: string; group: string };
-type Run<S, R> = { id: string | number; status: string; spec: S; result?: R | null; errorCode?: string | null; createdAt: string; completedAt?: string | null };
+// reused: the server returned a saved run instead of asking again (server/nocoreach/dataforseo.ts).
+type Run<S, R> = { id: string | number; status: string; spec: S; result?: R | null; errorCode?: string | null; createdAt: string; completedAt?: string | null; reused?: boolean };
 type BrandRun = Run<BrandSpec, BrandResult>;
 type AnswerRun = Run<AnswerSpec, AnswerResult>;
 type Recent = { kind: "brand" | "answer"; group: string; label: string; competitors: string[]; createdAt: string; runs: Record<string, { id: string; status: string; mentioned: boolean | null }> };
@@ -143,11 +144,10 @@ function BrandTab({ group, brand, projectId, recent, onOpen, onRan, onHandOff }:
     const target = what.target.trim();
     if (target.length < 2) { setError(() => ($t('aiSearch.enterBrandNameDomain'))); return; }
     setBusy(true); setError(""); setErrors({});
-    const started = Date.now();
     const settled = await Promise.allSettled(PLATFORMS.map((platform) => ai<BrandRun>("brand", { target, competitors: what.competitors, platform, locationCode: form.market.locationCode, language: form.market.language, requestKey: requestKey(), ...(forceRefresh ? { forceRefresh: true } : {}) })));
     const next: Partial<Record<Platform, BrandRun>> = {}, errs: Partial<Record<Platform, Message>> = {};
     settled.forEach((r, i) => { if (r.status === "fulfilled") next[PLATFORMS[i]] = r.value; else errs[PLATFORMS[i]] = () => message(r.reason); });
-    setRuns(next); setErrors(errs); setReused(Object.values(next).some((r) => Date.parse(r.createdAt) < started - 5000)); setBusy(false);
+    setRuns(next); setErrors(errs); setReused(Object.values(next).some((r) => Boolean(r.reused))); setBusy(false);
     const g = Object.values(next)[0]?.spec.group;
     if (g) { shownGroup.current = g; onRan(g); }
   };
@@ -219,17 +219,18 @@ function CompetitorGaps({ spec, projectId }: { spec: BrandSpec; projectId?: numb
   );
 }
 function GapBlock({ spec, competitor, runs, projectId, onRuns }: { spec: BrandSpec; competitor: string; runs: Partial<Record<Platform, GapRun>>; projectId?: number; onRuns: (r: Partial<Record<Platform, GapRun>>) => void }) {
-  const [busy, setBusy] = useState(false), [error, setError] = useMessageState("");
+  const [busy, setBusy] = useState(false), [error, setError] = useMessageState(""), [recent, setRecent] = useState(false);
   const done = PLATFORMS.flatMap((p) => { const r = runs[p]; return r?.status === "completed" && r.result ? [r] : []; });
   const rows: GapRow[] = done.flatMap((r) => r.result!.questions.map((q, i) => ({ ...q, id: `${r.spec.platform}:${i}`, platform: r.spec.platform }))).sort((a, b) => (b.volume || 0) - (a.volume || 0));
   const removed = done.reduce((n, r) => n + (r.result!.removed || 0), 0);
   const picked = useTickedList(`ai-gap-${competitor}`, projectId && rows.length ? rows : undefined, (r) => r.id, (ticked) => ({ playbookId: "competitor-compare", noun: $t('common.questionsSelected'), description: $t('aiSearch.questionsBecomeOneTaskAgent'), draft: () => gapDraft(spec.target, competitor, ticked) }));
-  const ask = async () => {
-    setBusy(true); setError("");
-    const settled = await Promise.allSettled(PLATFORMS.map((platform) => ai<GapRun>("gap", { target: spec.target, competitors: [competitor], competitor, platform, locationCode: spec.locationCode, language: spec.language, requestKey: requestKey() })));
+  // Check again asks anew (it names its price); within 10 minutes of the last check the server returns that one, said here.
+  const ask = async (again: boolean) => {
+    setBusy(true); setError(""); setRecent(false);
+    const settled = await Promise.allSettled(PLATFORMS.map((platform) => ai<GapRun>("gap", { target: spec.target, competitors: [competitor], competitor, platform, locationCode: spec.locationCode, language: spec.language, requestKey: requestKey(), ...(again ? { forceRefresh: true } : {}) })));
     const next: Partial<Record<Platform, GapRun>> = { ...runs }; const errs: Message[] = [];
     settled.forEach((r, i) => { if (r.status === "fulfilled") next[PLATFORMS[i]] = r.value; else errs.push(() => `${getPlatform()[PLATFORMS[i]]}：${message(r.reason)}`); });
-    onRuns(next); setError(() => (errs.map(renderMessage).join("; "))); setBusy(false);
+    onRuns(next); setError(() => (errs.map(renderMessage).join("; "))); setRecent(again && settled.some((r) => r.status === "fulfilled" && r.value.reused && r.value.status === "completed")); setBusy(false);
   };
   const failed = PLATFORMS.flatMap((p) => { const r = runs[p]; return r && r.status !== "completed" ? [`${getPlatform()[p]}：${runProblem(r)}`] : []; });
   return (
@@ -237,8 +238,9 @@ function GapBlock({ spec, competitor, runs, projectId, onRuns }: { spec: BrandSp
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium">{$t('aiSearch.mentionedNot', { 0: competitor })}</span>
         {done.length ? <span className="text-xs text-muted-foreground">{$t('aiSearch.questionsChecked', { 0: rows.length, 1: formatDate(done[0].createdAt) })}</span> : null}
-        <Button size="sm" variant="outline" className="ml-auto" disabled={busy} onClick={() => void ask()}>{busy ? $t('common.lookingUp') : done.length ? $t('aiSearch.checkAgainAbout03') : $t('aiSearch.checkAbout03')}</Button>
+        <Button size="sm" variant="outline" className="ml-auto" disabled={busy} onClick={() => void ask(done.length > 0)}>{busy ? $t('common.lookingUp') : done.length ? $t('aiSearch.checkAgainAbout03') : $t('aiSearch.checkAbout03')}</Button>
       </div>
+      {recent ? <p className="text-xs text-muted-foreground" data-gap-recent="">{$t('aiSearch.gapCheckedRecently')}</p> : null}
       {error || failed.length ? <p role="alert" className="nr-error">{error || failed.join("；")}</p> : null}
       {rows.length ? (
         <div className="rounded-md border">
@@ -402,11 +404,10 @@ function AskTab({ group, projectId, brand, domains, recent, onOpen, onRan }: Tab
     if (!models.length) { setError(() => ($t('aiSearch.pickLeastOneModel'))); return; }
     setError(""); setReused(false);
     setRuns(Object.fromEntries(models.map((m) => [m, "loading"]))); setAsked(q);
-    const started = Date.now();
     // Each model is its own query, asked at once; each answer shows as it arrives.
     const settled = await Promise.allSettled(models.map((m) => ai<AnswerRun>("ask", { question: q, model: m, requestKey: requestKey(), ...(forceRefresh ? { forceRefresh: true } : {}) }).then((r) => { setRuns((s) => ({ ...s, [m]: r })); return r; }).catch((e) => { setRuns((s) => ({ ...s, [m]: { error: message(e) } })); throw e; })));
     const done = settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
-    setReused(done.some((r) => Date.parse(r.createdAt) < started - 5000));
+    setReused(done.some((r) => Boolean(r.reused)));
     if (done[0]) { shownGroup.current = done[0].spec.group; onRan(done[0].spec.group); }
   };
   const answers = MODELS.flatMap((m) => { const r = runs[m]; return r && r !== "loading" && !("error" in r) && r.status === "completed" && r.result ? [r] : []; });

@@ -36,14 +36,15 @@ class RankTracking{
    return {...cur,keywords:next,lastAdded:added};});}
  async remove(id,v){const ids=new Set((Array.isArray(v.ids)?v.ids:[]).map(String));return this.mutate(id,cur=>{const checks={...cur.checks};for(const k of ids)delete checks[k];return {...cur,keywords:cur.keywords.filter(k=>!ids.has(k.id)),checks};});}
  // Checks the keywords due (none in the last week), or all when asked; stops at the first budget refusal.
- async check(id,{all=false,retryUncertain=false}={}){const s=await this.state(id);if(!s?.keywords?.length)return {checked:0,errors:[]};const project=await this.p.project(id),domains=project.domains||[],now=Date.now(),errors=[];let checked=0,uncertain=false;
+ async check(id,{all=false,retryUncertain=false}={}){const s=await this.state(id);if(!s?.keywords?.length)return {checked:0,errors:[]};const project=await this.p.project(id),domains=project.domains||[],now=Date.now(),errors=[];let checked=0,reused=0,uncertain=false;
   for(const k of s.keywords){const last=(s.checks?.[k.id]||[]).at(-1);if(!all&&last&&now-Date.parse(last.at)<WEEK-6*3600000)continue;
    let run;try{run=await this.d4s.run(id,'rank',{target:k.keyword,locationCode:k.locationCode,language:k.language,requestKey:`rank-${k.id}-${now}`,retryUncertain});}catch(e){errors.push(`${k.keyword}：${e.message}`);if(/预算/.test(e.message))break;continue;}
    if(run.status!=='completed'){if(run.status==='unknown')uncertain=true;errors.push(`${k.keyword}：${run.errorCode||systemMessageText('common.notComplete')}`);continue;}
-   const pos=sitePosition(run.result?.items,domains),at=run.completedAt||new Date().toISOString();checked++;
+   // A result from the last 6 days is reused (Update now included) and counted, so the page can say how many were not asked anew.
+   const pos=sitePosition(run.result?.items,domains),at=run.completedAt||new Date().toISOString();checked++;if(run.reused)reused++;
    await this.mutate(id,cur=>{if(!cur.keywords.some(x=>x.id===k.id))return cur;const list=(cur.checks?.[k.id]||[]).filter(c=>String(c.runId)!==String(run.id));return {...cur,checks:{...cur.checks,[k.id]:[...list,{at,position:pos.position,url:pos.url,runId:String(run.id)}].slice(-KEEP_CHECKS)}};});}
   await this.mutate(id,cur=>({...cur,lastRun:{at:new Date().toISOString(),ok:!errors.length,errors:errors.slice(0,5),checked,...(uncertain?{uncertain:true}:{})}}));
-  return {checked,errors};}
+  return {checked,reused,errors};}
  async status(id){const s=await this.state(id);if(!s)return {keywords:[],lastRun:null};return {lastRun:s.lastRun||null,keywords:s.keywords.map(k=>{const list=s.checks?.[k.id]||[],last=list.at(-1),prev=list.at(-2);return {...k,latest:last||null,previous:prev||null,history:list.slice(-12),nextCheckAt:last?new Date(Date.parse(last.at)+WEEK).toISOString():null};})};}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(id);if(s?.keywords?.length)await this.check(id);}catch(e){this.p.app?.logger?.warn?.('NocoReach rank tracking failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('rankTracking.rankTrackingNotCompleteTry'));}};

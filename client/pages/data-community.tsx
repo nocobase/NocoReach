@@ -1,3 +1,9 @@
+import {
+  ChartLegend,
+  TrendChart,
+  ChartBar as Bar,
+  ChartLine as Line,
+} from '#components/reach/chart-legend';
 import { $t, $tj } from "#i18n";
 import { Delta } from "#components/reach/delta";
 // 论坛 (社区): topics, replies and unanswered questions of the connected Discourse forum for the period against the one
@@ -6,7 +12,7 @@ import { Delta } from "#components/reach/delta";
 import { useNavigate } from "react-router";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { MessagesSquare } from "lucide-react";
-import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { PageContainer, PageHeader } from "#components/reach/page";
 import { EmptyState, ListSkeleton, LoadError } from "#components/reach/states";
 import { Button } from "#components/ui/button";
@@ -62,16 +68,16 @@ export default function DataCommunity() {
             <div className="flex items-center gap-1"><h2 className="text-sm font-semibold">{$t('dataCommunity.newTopicsRepliesPerDay')}</h2><InfoTip label={$t('common.howReadChart')}>{$t('dataCommunity.repliesGroupedDayTopicCreated')}</InfoTip></div>
             <div className="nr-chart-box">
               <ResponsiveContainer width="100%" height={240}>
-                <ComposedChart data={view.daily} margin={{ left: 0, right: 0, top: 8, bottom: 0 }}>
+                <TrendChart as={ComposedChart} data={view.daily} margin={{ left: 0, right: 0, top: 8, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="date" tickFormatter={short} minTickGap={24} fontSize={11} />
                   <YAxis yAxisId="t" allowDecimals={false} fontSize={11} width={32} />
                   <YAxis yAxisId="r" orientation="right" allowDecimals={false} fontSize={11} width={40} />
                   <Tooltip />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <ChartLegend order={['topics', 'replies']} />
                   <Bar isAnimationActive={false} yAxisId="t" dataKey="topics" name={$t('dataCommunity.newTopics')} fill="var(--chart-3)" />
                   <Line isAnimationActive={false} yAxisId="r" dataKey="replies" name={$t('dataCommunity.repliesTopics')} stroke="var(--chart-5)" dot={false} />
-                </ComposedChart>
+                </TrendChart>
               </ResponsiveContainer>
             </div>
           </Card>

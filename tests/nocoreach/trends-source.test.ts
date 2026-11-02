@@ -43,6 +43,19 @@ test('weekly check keeps the latest run; rising searches first seen after the fi
  const none=new TrendsSource({...p,env:()=>''});await assert.rejects(none.connect('1',{terms:'NocoBase'}),/请先接入并验证 DataForSEO/);
 });
 
+test('Update now, saving and adding a keyword ask DataForSEO anew; the weekly check may reuse; a reused run keeps its date',async()=>{
+ const rows=[];const repo={findOne:async({filter})=>{const r=rows.find(x=>x.key===filter.key);return r&&{id:r.id,get:()=>r.payload};},update:async({filterByTk,values})=>{rows.find(x=>x.id===filterByTk).payload=values.payload;},create:async({values})=>{rows.push({id:rows.length+1,...values});}};
+ const p={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}},env:()=>JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}),projectIds:async()=>['1'],competitors:{state:async()=>({list:[]})}};
+ const s=new TrendsSource(p),asked=[];let reused=false;
+ s.d4s.run=async(id,kind,v)=>{asked.push([kind,v.forceRefresh]);return {status:'completed',...(reused?{reused:true}:{}),result:{terms:v.terms||[v.keyword],points:weeks(8,()=>[20]),top:[],rising:[],checkUrl:null}};};
+ await s.connect('1',{terms:'NocoBase'});await s.runs.wait('1');
+ await s.addKeyword('1',{keyword:'nocobase crm'});await s.keywordRun;
+ rows[0].payload.lastRun.at=new Date(Date.now()-8*DAY).toISOString();rows[0].payload.keywords[0].lastRun.at=rows[0].payload.lastRun.at;await s.checkAll('1');
+ assert.deepEqual(asked,[['trends',true],['trends-keyword',true],['trends',false],['trends-keyword',false]],'clicks force a new run, the weekly check does not');
+ reused=true;rows[0].payload.latest.at='2026-01-01T00:00:00.000Z';await s.check('1',{force:true});
+ assert.equal((await s.status('1')).checkedAt,'2026-01-01T00:00:00.000Z','a run returned within the 10-minute guard keeps its own date, not the click time');
+});
+
 test('关注的关键词: one request each (own line and related searches), added on the page and queried at once, up to ten, weekly after',async()=>{
  const {keywordSpecification,keywordResult}=__trends_source;
  const spec=keywordSpecification({keyword:' ai  agent builder ',locationCode:2840});assert.equal(spec.kind,'trends-keyword');assert.deepEqual(spec.request.keywords,['ai agent builder']);assert.deepEqual(spec.request.item_types,['google_trends_graph','google_trends_queries_list']);assert.equal(spec.request.location_code,2840);assert.equal(spec.estimatedUsd,0.011);
