@@ -14,7 +14,7 @@ import {
 /**
  * Which sources put a data page in the menu, keyed by route name (client/nocoreach-routes.ts): the page shows once any
  * of them is in `nrHealth:connected`. Pages not listed (Insights, Opportunities, Tasks, Results, AI team, Settings,
- * Demo data) always show. The keys are the server's (server/nocoreach/data-health.ts `connected`).
+ * Demo data) always show. The keys are the server's (server/nocoreach/data-health.ts `CONNECTED_CHECKS`).
  */
 export const PAGE_SOURCES: Readonly<Record<string, readonly string[]>> = {
   'website-performance': ['ga4'],

@@ -157,6 +157,25 @@ describe('which source puts each page in the menu', () => {
     expect(dataPageOf('/connections?source=bilibili')).toBeUndefined();
   });
 
+  it('waits only for sources the server checks, each in one place', () => {
+    const server = readFileSync(
+      path.resolve(
+        import.meta.dirname,
+        '../../server/nocoreach/data-health.ts',
+      ),
+      'utf8',
+    );
+    const table = server.slice(
+      server.indexOf('const CONNECTED_CHECKS={'),
+      server.indexOf('\n};', server.indexOf('const CONNECTED_CHECKS={')),
+    );
+    const checked = [...table.matchAll(/^ (\w+):/gm)].map(([, key]) => key);
+    expect(new Set(checked).size).toBe(checked.length);
+    expect([...new Set(Object.values(PAGE_SOURCES).flat())].sort()).toEqual(
+      [...checked].sort(),
+    );
+  });
+
   it('follows the agreed rule: any one of a page’s sources is enough', () => {
     const only = (key: string) => ({ [key]: true });
     expect(pageInMenu('site-audit', only('dataforseo'))).toBe(true);
