@@ -2,7 +2,7 @@ import { useAuthenticationErrorResolver } from '@nocobase/app-plugin-authenticat
 import { useToaster } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
-import { LogOut, Mail, TerminalIcon, UserRound } from 'lucide-react';
+import { KeyRound, LogOut, Mail, TerminalIcon, UserRound } from 'lucide-react';
 import { useRef, useState, type ReactElement } from 'react';
 import { Link } from 'react-router';
 import { $t, useNocoReachLocale } from '#i18n';
@@ -16,6 +16,7 @@ import {
 } from '#components/ui/dropdown-menu';
 
 import { AgentSetupDialog } from '#components/agent-setup-dialog';
+import { ChangePasswordDialog } from '#components/change-password-dialog';
 import { usePendingInvitationCount } from '#pages/access/api';
 
 import { AppVersion } from './app-version.js';
@@ -39,6 +40,7 @@ export function UserMenu(): ReactElement {
     : null;
   const accountTriggerRef = useRef<HTMLButtonElement>(null);
   const [agentSetupOpen, setAgentSetupOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { t } = useTranslation();
   const toaster = useToaster();
@@ -113,6 +115,15 @@ export function UserMenu(): ReactElement {
               {t('agentSetup.title')}
             </DropdownMenuItem>
           ) : null}
+          {identity && !isLoading ? (
+            <DropdownMenuItem
+              className='gap-2'
+              onClick={() => setPasswordOpen(true)}
+            >
+              <KeyRound className='size-4' />
+              {$t('changePassword.title')}
+            </DropdownMenuItem>
+          ) : null}
           <LanguageSwitcher />
           <DropdownMenuSeparator />
           <DropdownMenuItem
@@ -166,6 +177,14 @@ export function UserMenu(): ReactElement {
           key={identity.id}
           open={agentSetupOpen}
           onOpenChange={setAgentSetupOpen}
+          returnFocus={accountTriggerRef}
+        />
+      ) : null}
+      {identity && !isLoading ? (
+        <ChangePasswordDialog
+          key={`password-${identity.id}`}
+          open={passwordOpen}
+          onOpenChange={setPasswordOpen}
           returnFocus={accountTriggerRef}
         />
       ) : null}

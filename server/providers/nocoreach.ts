@@ -318,7 +318,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     ]);
     await access.upgrade();
     runtime.legacy.db.access = access;
-    runtime.management = new ReachManagement(access);
+    runtime.management = new ReachManagement(access, this.app.container.resolve(userAdministrationServiceToken));
     const users = this.app.container.resolve(userManagementServiceToken);
     runtime.invitations = new ReachInvitations(runtime.management, users, this.app.config.get<AppIdentityConfig>('app')!, async (email, url) => {
       const channel = this.app.config.get<{ invitations?: { emailChannel?: string } }>('users')?.invitations?.emailChannel ?? 'system-email';

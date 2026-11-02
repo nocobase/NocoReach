@@ -3,6 +3,7 @@ import { ApiError } from '@nocobase/app-server/router';
 import type { PermissionGrant } from '@nocobase/authorization/core';
 import type { PermissionSet } from '@nocobase/authorization/permission-sets';
 import type { DatabaseConnection } from '@nocobase/db';
+import type { UserAdministrationService } from '@nocobase/app-plugin-authentication/server';
 import type { BusinessRoleInput } from '../../shared/member-access.js';
 import {
   BUSINESS_ADMIN,
@@ -42,7 +43,10 @@ export const roleRevision = (set: PermissionSet) =>
 
 /** Only policyless, explicitly catalogued business grants are configurable in this surface. */
 export class ReachManagement {
-  constructor(readonly access: ReachAccess) {}
+  constructor(
+    readonly access: ReachAccess,
+    readonly users?: UserAdministrationService,
+  ) {}
 
   validateGrants(grants: readonly PermissionGrant[]) {
     const reason = this.access.invalidRoleGrants(grants);
@@ -185,6 +189,54 @@ export class ReachManagement {
         accessError('roleAssigned', 'ALREADY_EXISTS');
       await sets.delete(key);
       await this.access.event(connection, actorId, 'role.delete', key, {});
+    });
+  }
+
+  /**
+   * Members > Reset password, for a member who cannot sign in: sets the password and ends every session of theirs. A
+   * password opens everything the account may do, so the actor must be able to grant each of its permission sets, and
+   * system administrators stay outside this page. People change their own password from the account menu.
+   */
+  async resetPassword(actorId: string, userId: string, password: string) {
+    await this.access.require('nrMembers', 'setRole');
+    if (actorId === userId) accessError('ownPassword');
+    if (!this.users) throw new Error('User administration is not available');
+    const users = this.users;
+    await this.access.database.transaction(async (connection) => {
+      await this.access.lockManagement(connection);
+      const actor = await this.actorGrants(actorId, connection);
+      const target = await connection
+        .repository('user')
+        .findOne({ filter: { id: userId, kind: 'person' } });
+      if (!target || target.disabledAt != null)
+        accessError('missing', 'NOT_FOUND');
+      const sets = this.access.authorization.permissionSets;
+      const assigned = await sets.withTransaction(connection).getEffective({
+        principal: { type: 'user', id: userId },
+      });
+      if (
+        assigned.some(
+          (set) =>
+            ['root', 'admin'].includes(set.key) ||
+            sets.protection(set.key)?.unrestricted,
+        )
+      )
+        accessError('systemAccount');
+      if (!assigned.some((set) => set.key.startsWith('nr.')))
+        accessError('missing', 'NOT_FOUND');
+      if (
+        !actor.root &&
+        assigned.some((set) => !grantSubset(set.grants, actor.grants))
+      )
+        accessError('ungrantable');
+      await users.withConnection(connection).resetPassword(userId, password);
+      await this.access.event(
+        connection,
+        actorId,
+        'member.password',
+        userId,
+        {},
+      );
     });
   }
 

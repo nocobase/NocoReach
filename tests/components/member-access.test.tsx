@@ -20,6 +20,7 @@ import enUS from '../../client/locales/en-US';
 import dictionary from '../../shared/i18n/en.json';
 import Members from '../../client/pages/members';
 import MemberForm from '../../client/pages/access/member-form';
+import MemberPassword from '../../client/pages/access/member-password';
 import InviteForm from '../../client/pages/access/invite-form';
 import AcceptInvitation from '../../client/pages/access/accept';
 import RoleForm from '../../client/pages/access/role-form';
@@ -135,6 +136,7 @@ function setup(
             children: [
               { path: 'invite', element: <InviteForm /> },
               { path: ':memberId/roles', element: <MemberForm /> },
+              { path: ':memberId/password', element: <MemberPassword /> },
               { path: 'roles/new', element: <RoleForm /> },
               { path: 'roles/:roleKey', element: <RoleForm /> },
             ],
@@ -207,6 +209,44 @@ it('loads fresh member roles and saves all selected roles before returning to th
           projectIds: ['1'],
           expectedProjects: ['1'],
         },
+      }),
+    ),
+  );
+  await waitFor(() => expect(router.state.location.pathname).toBe('/members'));
+  expect(router.state.location.search).toBe('?tab=members&q=Synthetic');
+});
+
+it('resets a member password from a generated value, checking its length first', async () => {
+  const router = setup('/members/person/password?tab=members&q=Synthetic');
+  expect(
+    await screen.findByRole('dialog', { name: 'Reset password' }),
+  ).toBeVisible();
+  expect(await screen.findByText(/Synthetic person/)).toBeVisible();
+  const field = screen.getByLabelText('New password');
+  expect((field as HTMLInputElement).value).toMatch(
+    /^[A-Za-z2-9]{4}-[A-Za-z2-9]{4}-[A-Za-z2-9]{4}$/,
+  );
+  await userEvent.clear(field);
+  await userEvent.type(field, 'short');
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Reset password', exact: true }),
+  );
+  expect(await screen.findByText('At least 8 characters.')).toBeVisible();
+  expect(
+    state.request.mock.calls.some(
+      ([input]) => input.path === 'nocoreachAccess/members/person/password',
+    ),
+  ).toBe(false);
+  await userEvent.type(field, '-and-longer');
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Reset password', exact: true }),
+  );
+  await waitFor(() =>
+    expect(state.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: 'nocoreachAccess/members/person/password',
+        method: 'POST',
+        json: { password: 'short-and-longer' },
       }),
     ),
   );

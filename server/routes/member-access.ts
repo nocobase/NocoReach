@@ -1,5 +1,6 @@
 import {
   authenticationToken,
+  UserAdministrationError,
   type AuthEnv,
 } from '@nocobase/app-plugin-authentication/server';
 import {
@@ -56,7 +57,16 @@ export const memberAccessRoutes = defineApiRoutes<Application>((app) => {
             domain: 'users',
             message: error.message,
           })
-        : error,
+        : // A password outside the configured length, from Members > Reset password.
+          error instanceof UserAdministrationError &&
+            error.code.startsWith('PASSWORD_')
+          ? new ApiError({
+              status: 'INVALID_ARGUMENT',
+              reason: error.code,
+              domain: 'authentication',
+              message: error.message,
+            })
+          : error,
       context,
     ),
   );
@@ -197,6 +207,26 @@ export const memberAccessRoutes = defineApiRoutes<Application>((app) => {
         actor(context),
         context.req.valid('param').id,
         [],
+      );
+      return context.json({ data: null });
+    },
+  );
+  routes.post(
+    '/members/:id/password',
+    describe(
+      'resetReachMemberPassword',
+      'Set the password of a member who cannot sign in and end their sessions',
+    ),
+    apiValidator('param', id),
+    apiValidator(
+      'json',
+      z.strictObject({ password: z.string().min(1).max(256) }),
+    ),
+    async (context) => {
+      await runtime().management!.resetPassword(
+        actor(context),
+        context.req.valid('param').id,
+        context.req.valid('json').password,
       );
       return context.json({ data: null });
     },

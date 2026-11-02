@@ -11,6 +11,7 @@ import {
   Users,
   UserPlus,
   Pencil,
+  KeyRound,
   UserRoundMinus,
   Send,
   Link2,
@@ -545,6 +546,19 @@ function Members() {
                                       >
                                         <Pencil />
                                         {$t('accessMembers.editMember')}
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        render={
+                                          <Link
+                                            to={{
+                                              pathname: `${row.id}/password`,
+                                              search: location.search,
+                                            }}
+                                          />
+                                        }
+                                      >
+                                        <KeyRound />
+                                        {$t('accessMembers.resetPassword')}
                                       </DropdownMenuItem>
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem

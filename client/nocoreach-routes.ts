@@ -250,6 +250,7 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
       { name: 'role-new', path: 'roles/new', componentLoader: () => import('./pages/access/role-form.js') },
       { name: 'role-edit', path: 'roles/:roleKey', componentLoader: () => import('./pages/access/role-form.js') },
       { name: 'member-roles', path: ':memberId/roles', componentLoader: () => import('./pages/access/member-form.js') },
+      { name: 'member-password', path: ':memberId/password', componentLoader: () => import('./pages/access/member-password.js') },
     ] },
     { ...page('keys', '/keys', () => import('./pages/access/keys.js'), { title: nav('apiKeys'), icon: KeyRound, order: 4 }), authz: { resource: { type: 'page', id: 'members' }, action: 'access' }, children: [
         { name: 'key-new', path: 'new', componentLoader: () => import('./pages/access/key-form.js') },
