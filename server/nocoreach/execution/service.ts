@@ -581,7 +581,6 @@ export class TaskService {
     const articleRead = ['linkArticle', 'rebaseArticle'].includes(v.command) || (v.command === 'startTask' && Array.isArray(v.delivery?.also) && v.delivery.also.length) ? (await this.authorized(actor, project), await this.articleFlow.preRead(project, taskId, v)) : {};
     const hash = digest({ ...v, actor });
     const data = await this.lock(project, taskId, async tx => {
-      if(v.command==='moveWork') await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:`nr-task-board:${project}`},transaction:tx});
       const task = await this.task(project, taskId, tx), w = projectWork(task);
       const opKey = this.key('op', project, taskId, v.requestId), previous = await this.snapshot(opKey, tx);
       if (previous) { if (previous.hash !== hash) return fail(systemMessageText('taskExecution.sameRequestIdCannotUsed'), 409); return this.view(project, taskId, tx); }
@@ -605,11 +604,14 @@ export class TaskService {
       if (typeof v.stageKey === 'string') event.stageKey = v.stageKey.slice(0, 40);
       if (v.command === 'moveWork') {
         if (!['todo','doing','review','done'].includes(v.state)) return fail(systemMessageText('taskExecution.invalidWorkState'));
+        // A column has no order of its own (2026-11-02: the board shows each column newest activity first), so a move
+        // within the task's column changes nothing and records nothing; an old client's beforeId is ignored.
         const from = boardState(w);
+        if (from === v.state) return this.view(project, taskId, tx);
         const runs: Run[] = await this.list('run', project, taskId, tx);
-        if (from !== v.state && runs.some(active)) return fail(systemMessageText('taskExecution.waitCurrentRunFinishBefore'), 409);
-        if (from !== v.state && v.state === 'review' && !w.results.some(a => a && !a.rejectedAt)) return fail(systemMessageText('taskExecution.saveDeliverableConfirmFirst'), 409);
-        if (from !== v.state && v.state === 'done') {
+        if (runs.some(active)) return fail(systemMessageText('taskExecution.waitCurrentRunFinishBefore'), 409);
+        if (v.state === 'review' && !w.results.some(a => a && !a.rejectedAt)) return fail(systemMessageText('taskExecution.saveDeliverableConfirmFirst'), 409);
+        if (v.state === 'done') {
           if (v.confirm !== true) return fail(systemMessageText('taskExecution.confirmWorkDoneMovingNot'), 409);
           if (w.flow) {
             if (w.stage !== 'done') return fail(systemMessageText('messages.followWorkflowStage', { 0: w.flow.stages[w.stageIndex || 0]?.name }), 409);
@@ -618,19 +620,7 @@ export class TaskService {
           } else if (!w.receipt?.note || !['verification','done'].includes(w.stage)) return fail(systemMessageText('taskExecution.recordActualPublishRunResult'), 409);
         }
         // Reopening a completed card changes planning status only; receipt and prior approval remain historical facts.
-        const rows: any[] = [];
-        for (let offset=0;;offset+=100) {
-          const page = await this.repo('nrTasks').find({filter:{projectId:project},limit:100,offset,sort:'id',transaction:tx});
-          rows.push(...page.map((r:any)=>r.toJSON())); if(page.length<100) break;
-        }
-        const ordered = rows.filter(t => String(t.id)!==taskId && boardState(projectWork(t))===v.state).sort((a,b)=>(projectWork(a).sortOrder ?? Number(a.id)*1024)-(projectWork(b).sortOrder ?? Number(b.id)*1024) || Number(a.id)-Number(b.id));
-        const index = v.beforeId ? ordered.findIndex(t => String(t.id)===String(v.beforeId)) : ordered.length;
-        if(index<0) return fail(systemMessageText('taskExecution.targetCardMovedRefreshTry'),409);
-        const rank=(t:any)=>projectWork(t).sortOrder ?? Number(t.id)*1024;
-        const prev=index>0?rank(ordered[index-1]):(ordered.length?rank(ordered[0])-2048:0);
-        const next=index<ordered.length?rank(ordered[index]):prev+2048;
-        if(!Number.isFinite(prev)||!Number.isFinite(next)||(next-prev)<0.000001) return fail(systemMessageText('taskExecution.tooManyItemsPositionMove'),409);
-        w.sortOrder=(prev+next)/2;w.boardState=v.state;event.previous=from;event.note=v.state;
+        w.boardState=v.state;event.previous=from;event.note=v.state;
       } else if (v.command === 'startSimple') {
         await this.member(actor, tx);
         if(w.stage!=='plan' || w.plan) return fail(systemMessageText('taskExecution.planExistsKeepAdjust'),409);

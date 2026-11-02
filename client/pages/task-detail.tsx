@@ -1,6 +1,7 @@
 import { formatDateTime, formatDate } from '#lib/format';
 import { Skeleton } from '#components/ui/skeleton';
 import {matchesObservation} from '../../shared/result-comparison.js';
+import {shownInActivity} from '../../shared/task-activity.js';
 import { mockSettingsAvailable } from '../../app-plugins/nocoreach-mock/client/index.js';
 import { localizeWorkSnapshots } from './playbook-snapshot';
 import { reportDate } from './task-detail/material-notices.js';
@@ -37,7 +38,7 @@ import {Outlet,useLocation,useNavigate,useSearchParams} from 'react-router';
 import {createUuid,useNavigationGuard,usePageBreadcrumb} from '@nocobase/app-client';
 import {Comparison} from './results/comparison.js';
 import {nocobaseClient as api,NocoReachHttpError} from "#lib/nocoreach-api";
-import {BookOpen,CirclePlay,Lock,Archive,ArchiveRestore,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitMerge,Globe,Search,ExternalLink,Users,Square,Undo2,Loader2,MoreHorizontal,Code2,ChevronRight,TriangleAlert,CircleCheck,Sparkles,CircleAlert,Hand,Clock} from 'lucide-react';
+import {BookOpen,CirclePlay,Lock,Archive,ArchiveRestore,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitMerge,Globe,Search,ExternalLink,Users,Square,Undo2,Loader2,MoreHorizontal,Code2,ChevronRight,TriangleAlert,CircleCheck,Sparkles,CircleAlert,Hand,Clock,ChartLine} from 'lucide-react';
 import {ActorAvatar} from '#components/reach/actor';
 import {Tag} from '#components/reach/tag';
 import {InfoTip} from '#components/reach/info-tip';
@@ -658,10 +659,7 @@ function EffectRow({r,observeFrom}:{r:EffectResult;observeFrom?:string}){
  return <li className={cn(text.body,'flex flex-col items-start gap-1')} data-c={r.conclusion}><span>{effectLine(r,observeFrom)}</span><Button variant="link" size="sm" className="h-auto font-normal p-0" onClick={()=>setOpen(v=>!v)}>{open?$t('common.collapse'):$t('taskDetail.seeNumbers')}</Button>
   {open&&<div className="nr-td-effect-detail"><Comparison result={r} observeFrom={observeFrom}/>{(!r.coverage||!matchesObservation(r,observeFrom))&&<Reveal label={$t('results.legacy')}><p>{r.conclusion} · {r.change===null?'—':`${r.change*100}%`}</p><p className="text-muted-foreground">{$tj('taskDetail.beforeGoingLiveAfter',{0:range(r.baseline),1:range(r.after)})}</p><table><tbody>{rows.map(([k,[b,a],u])=><tr key={k}><th>{k}</th><td>{b}{u}</td><td>→</td><td>{a}{u}</td></tr>)}</tbody></table></Reveal>}</div>}</li>;
 }
-const eventIcons:Record<string,ReactNode>={merged:<GitMerge/>,live:<Globe/>,notSeen:<AlertCircle/>,retryMerge:<RotateCcw/>,markMerged:<GitMerge/>,confirmLive:<Globe/>,waitLonger:<RotateCcw/>,startTask:<CirclePlay/>,runSucceeded:<FileText/>,approveStage:<Check/>,editStageOutput:<Pencil/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setAgent:<Bot/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<BookOpen/>,revertRelease:<Undo2/>,snoozeTask:<Clock/>,snoozeChanged:<Clock/>,unsnoozeTask:<Clock/>,snoozeEnded:<Clock/>,snoozeDue:<Clock/>,cancelTask:<Archive/>,archiveTask:<Archive/>,unarchiveTask:<ArchiveRestore/>};
-// Run bookkeeping that only matters when something goes wrong; the stage card shows the current failure and
-// Technical details keeps every run.
-const QUIET=new Set(['runQueued','runFailed','flowWaiting']);
+const eventIcons:Record<string,ReactNode>={merged:<GitMerge/>,live:<Globe/>,notSeen:<AlertCircle/>,retryMerge:<RotateCcw/>,markMerged:<GitMerge/>,confirmLive:<Globe/>,waitLonger:<RotateCcw/>,startTask:<CirclePlay/>,runSucceeded:<FileText/>,approveStage:<Check/>,editStageOutput:<Pencil/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setAgent:<Bot/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<BookOpen/>,revertRelease:<Undo2/>,snoozeTask:<Clock/>,snoozeChanged:<Clock/>,unsnoozeTask:<Clock/>,snoozeEnded:<Clock/>,snoozeDue:<Clock/>,cancelTask:<Archive/>,archiveTask:<Archive/>,unarchiveTask:<ArchiveRestore/>,effect:<ChartLine/>};
 const RECENT=8;
 // Release events in the owner's words rather than in pull-request terms.
 const getPlainEvents=():Record<string,string>=>({merged:$t('taskDetail.eventPublished'),markMerged:$t('taskDetail.publishedManually'),retryMerge:$t('taskDetail.eventPublishAgain'),prClosed:$t('taskDetail.unpublishedClosed'),revertOpened:$t('taskDetail.undoPrepared')});
@@ -683,7 +681,7 @@ function ActivityCard({data,update,busy,members,membersLoaded,error,onFailed}:{d
  const review=!done&&!closed&&allowed&&stage?.kind==='review'&&out&&!out.rejectedAt?{stageKey:stage.key,artifactId:out.id}:undefined;
  // Who reads a note: the run that starts the task, the step's next run, or, with only publishing left, no run (it is recorded).
  const hint=review?$t('taskDetail.writeFeedbackAfterSendRedoes',{0:executor}):!w.flow?$t('taskDetail.leaveNoteBeforeStart',{0:executor,1:$t('taskDetail.changeEnglishVersionKeepTechnical')}):stage?.kind==='release'||stage?.kind==='publish'?$t('taskDetail.leaveNoteRecorded'):$t('taskDetail.leaveNoteNextRunReads',{0:executor});
- const rows=(w.history||[]).map((e,i)=>({e,i,t:QUIET.has(e.action)?null:eventText(e,nameOf,executor,w.snooze)})).filter(x=>x.t).sort((a,b)=>String(a.e.at).localeCompare(String(b.e.at))||a.i-b.i);
+ const rows=(w.history||[]).map((e,i)=>({e,i,t:shownInActivity(e)?eventText(e,nameOf,executor,w.snooze,w.observation?.results):null})).filter(x=>x.t).sort((a,b)=>String(a.e.at).localeCompare(String(b.e.at))||a.i-b.i);
  const shown=all?rows:rows.slice(-RECENT),hidden=rows.length-shown.length;
  async function send(){const d=review?await update('requestStageChanges',{...review,comment:message}):await update('comment',{comment:message});if(d)clearMessage();else onFailed();}
  const composer=(!done&&!closed)||Boolean(message);

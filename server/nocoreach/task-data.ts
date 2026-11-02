@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { systemMessageText } from '../../shared/i18n/messages.js';
+import { lastActivityAt } from '../../shared/task-activity.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 
 // What the local Agent and the online AI know about each other's side (2026-10-08 user decision, see
@@ -70,10 +71,11 @@ class TaskData{
    pages:{items:pages.slice(0,100).map(r=>({url:r.page,views:r.views,sessions:r.sessions,conversions:r.conversions})),truncated:pages.length>100},
    audit:{items:(audit?.issues||[]).slice(0,100).map(i=>({title:i.title,severity:i.severity,pages:(i.pages||[]).slice(0,20).map(p=>typeof p==='string'?p:p.url)})),truncated:(audit?.issues||[]).length>100}};
  }
- // The daily analysis: the tasks of the last 30 days, and any still under observation.
+ // The daily analysis: the tasks active in the last 30 days (by the latest activity the task page shows), and any
+ // still under observation.
  async recent(project,now=Date.now()){
   const since=new Date(now-30*DAY).toISOString();
-  return (await this.tasks(project)).filter(t=>String(t.updatedAt||t.createdAt||'')>=since||t.evidence?.work?.flow?.stages?.[t.evidence.work.stageIndex||0]?.kind==='observe').slice(0,30)
+  return (await this.tasks(project)).filter(t=>(lastActivityAt(t)||'')>=since||t.evidence?.work?.flow?.stages?.[t.evidence.work.stageIndex||0]?.kind==='observe').slice(0,30)
    .map(t=>{const w=t.evidence?.work;return {no:t.evidence?.no?`T-${t.evidence.no}`:null,title:t.title,playbook:w?.playbook?.name||null,page:w?.page?.url||null,state:taskState(t,w),effects:effectLines(w),opportunity:t.evidence?.insight?.id||null};});}
 }
 export { TaskData, effectLines, taskState, pathOf };

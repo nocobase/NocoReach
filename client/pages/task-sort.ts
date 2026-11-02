@@ -9,6 +9,7 @@ import {
 import { stepOf } from './task-list-model';
 import { taskAgentOf, type AgentStatus } from './task-agents';
 import { timestamp } from '../../shared/timestamps';
+import { lastActivityAt } from '../../shared/task-activity';
 
 // Tasks list sorting (2026-10-29 user request: every column sorts, as the Keywords tables do). The sort lives in the URL
 // (`sort`, `order`) like the other tables'. A column's values follow what it shows on each tab: Current step is the
@@ -33,6 +34,7 @@ export type SortableTask = {
   title: string;
   status?: string;
   updatedAt: string;
+  createdAt?: string;
   evidence?: { work?: Work; no?: number; createdBy?: { name?: string } };
 };
 
@@ -145,11 +147,13 @@ function value(
       return owner(t) || null;
     case 'executor':
       return (agents ? taskAgentOf(w, agents)?.name : w?.agentName) || null;
+    // Updated is the task's latest activity, the time the column shows (shared/task-activity.ts).
     case 'updated':
-      return time(t.updatedAt);
+      return time(lastActivityAt(t));
   }
 }
 
+type Keyed<T> = { row: T; v: string | number | null; at: number | null };
 export function sortTasks<T extends SortableTask>(
   rows: readonly T[],
   { sort, order }: { sort: TaskSortKey; order: TaskOrder },
@@ -161,20 +165,20 @@ export function sortTasks<T extends SortableTask>(
     typeof x === 'number' && typeof y === 'number'
       ? x - y
       : words.compare(String(x), String(y));
-  // Ties keep the latest update first, then the newest task.
-  const tie = (a: T, b: T) =>
-    (time(b.updatedAt) ?? 0) - (time(a.updatedAt) ?? 0) || b.id - a.id;
+  // Ties keep the latest activity first, then the newest task.
+  const tie = (a: Keyed<T>, b: Keyed<T>) =>
+    (b.at ?? 0) - (a.at ?? 0) || b.row.id - a.row.id;
   return rows
-    .map((row) => ({ row, v: value(row, sort, scope, agents) }))
+    .map((row) => ({
+      row,
+      v: value(row, sort, scope, agents),
+      at: time(lastActivityAt(row)),
+    }))
     .sort((a, b) => {
       if (a.v === null || b.v === null)
-        return a.v === null && b.v === null
-          ? tie(a.row, b.row)
-          : a.v === null
-            ? 1
-            : -1;
+        return a.v === null && b.v === null ? tie(a, b) : a.v === null ? 1 : -1;
       const c = compare(a.v, b.v);
-      return (order === 'asc' ? c : -c) || tie(a.row, b.row);
+      return (order === 'asc' ? c : -c) || tie(a, b);
     })
     .map((k) => k.row);
 }

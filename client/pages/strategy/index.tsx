@@ -45,6 +45,7 @@ import type { StrategyState } from './model';
 import { refreshNavBadges } from '#components/app-shell/nav-badges';
 import { useMe } from '../me';
 import { isWaitingTask } from '../task-waiting';
+import { latestActivityFirst } from '../../../shared/task-activity.js';
 import {
   handOff,
   handOffResult,
@@ -269,12 +270,11 @@ function Insights({
       }
     });
   const { mine } = useMe();
-  // Waiting for you: a step to review, or a handed-off task to start (2026-10-08) — only the tasks you own.
-  const waiting = tasks
-    .filter((t) => isWaitingTask(t, mine))
-    .sort((a, b) =>
-      String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')),
-    );
+  // Waiting for you: a step to review, or a handed-off task to start (2026-10-08) — only the tasks you own, the latest
+  // activity first.
+  const waiting = latestActivityFirst(
+    tasks.filter((t) => isWaitingTask(t, mine)),
+  );
   const waitingFor = (w?: Work) => {
     if (!w?.flow) return $t('strategy.waitingStart');
     const st = localizeWorkSnapshots(w).flow!.stages[w.stageIndex || 0];
