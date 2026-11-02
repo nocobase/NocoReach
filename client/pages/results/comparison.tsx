@@ -92,7 +92,7 @@ export function Comparison({
                     {['ctr', 'position'].includes(metric)
                       ? '—'
                       : v.percent !== null
-                        ? `${number(v.percent)}%`
+                        ? signedPercent(v.percent)
                         : v.before === 0
                           ? $t('results.zeroBaseline')
                           : '—'}

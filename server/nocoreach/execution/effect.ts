@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { systemMessageText } from '../../../shared/i18n/messages.js';
-import { FLAT_BELOW, JUDGED_METRICS, complete } from '../../../shared/result-comparison.js';
+import { FLAT_BELOW, JUDGED_METRICS, complete, lacking } from '../../../shared/result-comparison.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 // Effect observation (SPEC §8): on day 7 and day 28 after a change went live, the page's search and visit numbers
 // after going live are compared with the same number of days before. Only the change is described, never its cause.
@@ -64,12 +64,20 @@ export function pageNumbers(parts: Partition[], pages: string[], range: Range) {
   });
   return { range, pages: rows, gscDays: all.gscDays, ga4Days: all.ga4Days };
 }
-const pct = (n: number) => `${n > 0 ? '+' : ''}${Math.round(n * 100)}%`;
+const count = (n: number) => n.toLocaleString('en-US');
+// How much it changed, as the pages write it (client/pages/effect-model.ts changeText): "↑ 208%", "↓ 9.8%", from nothing "↑ 240".
+function changeText(before: number, after: number) {
+  const arrow = after > before ? '↑ ' : after < before ? '↓ ' : '';
+  if (!before) return arrow + count(Math.abs(after - before));
+  const percent = Math.abs((after - before) / before * 100);
+  return `${arrow}${percent.toLocaleString('en-US', { maximumFractionDigits: percent < 10 ? 1 : 0 })}%`;
+}
+const METRIC_NAMES = { clicks: 'common.searchClicks', impressions: 'common.searchImpressions', views: 'common.viewCount' } as const;
 export const EFFECT_RULE = 2;
 type Judgment = Pick<EffectResult, 'primary' | 'change' | 'conclusion' | 'notes' | 'rule'>;
 // The first metric with enough data decides (JUDGED_METRICS: search clicks, then search impressions, then views; 2026-11-02 user
 // decision, as clicks alone or else views left almost every change “not enough data”). Missing days rule a source out, as before.
-// When no metric qualifies the note says why, in the numbers the reader can check.
+// When no metric qualifies the note says why, in the numbers the reader can check, as Results and the task page write it.
 export function judge(r: Omit<EffectResult, keyof Judgment>): Judgment {
   const result = r as EffectResult;
   for (const { metric, source, enough, floor } of JUDGED_METRICS) {
@@ -81,14 +89,9 @@ export function judge(r: Omit<EffectResult, keyof Judgment>): Judgment {
     const conclusion: Conclusion = Math.abs(now - before) >= floor && (change === null || Math.abs(change) >= FLAT_BELOW) ? (now > before ? 'up' : 'down') : 'flat';
     return { primary: metric, change, conclusion, notes: [], rule: EFFECT_RULE };
   }
-  const notes: string[] = [];
-  if (!r.gsc && !r.ga4) notes.push(systemMessageText('effect.noSearchTrafficDataPage'));
-  else {
-    const little = ([['gsc', 'impressions', 'common.impressions'], ['ga4', 'views', 'common.views']] as const).filter(([source, metric]) => r[source]?.[metric] && complete(result, source));
-    if (!little.length) notes.push(systemMessageText('effect.tooManyMissingDaysJudge'));
-    for (const [source, metric, label] of little) { const [b, a] = (r[source] as Record<string, [number, number]>)[metric]; notes.push(systemMessageText('messages.tooLittleTotalJudge', { 0: systemMessageText(label), 1: b + a })); }
-  }
-  return { primary: null, change: null, conclusion: 'insufficient', notes, rule: EFFECT_RULE };
+  const l = lacking(result), totals = JUDGED_METRICS.filter(({ metric }) => l[metric] !== undefined).map(({ metric }) => `${systemMessageText(METRIC_NAMES[metric])} ${count(l[metric])}`);
+  const note = totals.length ? systemMessageText('effect.tooLittleTotals', { 0: r.day, 1: totals.join('、') }) : systemMessageText(l.missingDays ? 'effect.tooManyMissingDaysJudge' : 'effect.noSearchTrafficDataPage');
+  return { primary: null, change: null, conclusion: 'insufficient', notes: [note], rule: EFFECT_RULE };
 }
 export function compare(day: number, from: string, pages: string[], parts: Partition[], computedAt: string): EffectResult {
   const { baseline, after } = windows(from, day), b = totals(parts, pages, baseline), a = totals(parts, pages, after);
@@ -113,11 +116,12 @@ export function rejudge(r: EffectResult): EffectResult {
   const { notes, ...judgment } = judge(r);
   return { ...r, ...judgment, notes: [...notes, ...(r.notes || []).filter(note => !old.has(note))] };
 }
-const METRIC_NAMES = { clicks: 'common.searchClicks', impressions: 'common.searchImpressions', views: 'common.viewCount' } as const;
 export const conclusionLabels: Record<Conclusion, string> = { insufficient: systemMessageText('effect.notEnoughData'), flat: systemMessageText('effect.noClearChange'), up: systemMessageText('effect.up'), down: systemMessageText('effect.down') };
+// A checkpoint in one line, worded as the task page writes it (effect-model.ts effectLine), for the Agent's and the daily
+// analysis's task summaries (task-data.ts): "Day 7: Up · Search impressions 170 → 524 · ↑ 208%", in Chinese.
 export function summary(r: EffectResult) {
-  if (r.conclusion === 'insufficient' || !r.primary) return systemMessageText('common.dayNotEnoughData', { 0: r.day });
-  const [b, a] = r.primary === 'views' ? r.ga4!.views : r.gsc![r.primary];
-  if (r.change === null) return systemMessageText('results.absoluteSummary', { 0: r.day, 1: conclusionLabels[r.conclusion], 2: b, 3: a, 4: a - b });
-  return systemMessageText('messages.day', { 0: r.day, 1: conclusionLabels[r.conclusion], 2: systemMessageText(METRIC_NAMES[r.primary]), 3: b, 4: a, 5: pct(r.change) });
+  const pair = r.primary === 'views' ? r.ga4?.views : r.primary ? r.gsc?.[r.primary] : undefined;
+  if (r.conclusion === 'insufficient' || !r.primary || !pair) return systemMessageText('common.dayNotEnoughData', { 0: r.day });
+  const [b, a] = pair;
+  return systemMessageText('effect.dayLine', { 0: r.day, 1: conclusionLabels[r.conclusion], 2: systemMessageText(METRIC_NAMES[r.primary]), 3: count(b), 4: count(a), 5: changeText(b, a) });
 }

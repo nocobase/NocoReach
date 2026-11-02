@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { lastActivityAt } from '../../shared/task-activity.js';
+import { summary } from './execution/effect.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 
 // What the local Agent and the online AI know about each other's side (2026-10-08 user decision, see
@@ -13,12 +14,8 @@ const pathOf=u=>{let p;try{p=new URL(String(u)).pathname;}catch{p=String(u||'').
 const hostOf=u=>{try{return new URL(String(u)).hostname.toLowerCase().replace(/^www\./,'');}catch{return '';}};
 // GA4 rows carry `host` and GSC rows a full URL; rows without a host (older syncs) match any site.
 const samePage=(url,page,host)=>{const h=host?String(host).toLowerCase().replace(/^www\./,''):hostOf(page),own=hostOf(url);return pathOf(page)===pathOf(url)&&(!h||!own||h===own);};
-const CONCLUSION={up:systemMessageText('effect.up'),down:systemMessageText('effect.down'),flat:systemMessageText('common.flat'),insufficient:systemMessageText('effect.notEnoughData')};
-// One line per effect checkpoint (day 7, day 28), as the task page shows them, naming the metric it was judged by.
-function effectLines(w){return ((w?.observation?.results)||[]).map(r=>{
- if(r.conclusion==='insufficient'||!r.primary||r.change==null)return systemMessageText('common.dayNotEnoughData', { 0: r.day });
- const [b,a]=r.primary==='views'?(r.ga4?.views||[]):(r.gsc?.[r.primary]||[]),p=Math.round(r.change*100);
- return systemMessageText('effect.day', { 0: r.day, 1: CONCLUSION[r.conclusion]||r.conclusion, 2: ({clicks:'搜索点击',impressions:'搜索曝光',views:'浏览量'})[r.primary]||r.primary, 3: b, 4: a, 5: p>0?'+':'', 6: p });});}
+// One line per effect checkpoint (day 7, day 28), worded as the task page writes it (execution/effect.ts summary).
+function effectLines(w){return ((w?.observation?.results)||[]).map(summary);}
 // Where a task stands, in a few words.
 function taskState(task,w){
  if(!w)return '还没开始';if(w.cancelledAt)return systemMessageText('common.closed');if(w.revert&&w.revert.state!=='failed')return '已撤回';

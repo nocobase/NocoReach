@@ -543,19 +543,20 @@ test('effect observation: day 7 and day 28 compare the page with the days before
  const page=['https://www.example.com/docs/install'];
  let r=compare(7,'2026-09-10',page,parts([10,15],[50,50]),'t');
  assert.equal(r.primary,'clicks');assert.deepEqual(r.gsc.clicks,[70,105]);assert.deepEqual(r.gsc.position,[9,7]);assert.deepEqual(r.ga4.views,[350,350]);assert.equal(r.conclusion,'up');assert.equal(r.change,0.5);
- assert.equal(summary(r),'第 7 天：上升，搜索点击 70 → 105（+50%）');
+ assert.equal(summary(r),'第 7 天：上升 · 搜索点击 70 → 105 · ↑ 50%','worded as the task page writes it');
+ assert.equal(summary(compare(7,'2026-09-10',page,parts([0,10],[50,50]),'t')),'第 7 天：上升 · 搜索点击 0 → 70 · ↑ 70','from nothing before: the count it rose to');
  assert.equal(compare(7,'2026-09-10',page,parts([10,11],[50,50]),'t').conclusion,'flat','10% is no clear change');
  // The first metric with enough data decides (2026-11-02): search clicks (40 in both windows together), then search
  // impressions (200), then views (40); under 15% or under the metric's floor (10, 50, 10) is no clear change.
  const all=days('2026-09-03',15);
  r=compare(7,'2026-09-10',page,parts([1,2],[50,70],all,[100,70]),'t');assert.equal(r.primary,'impressions','few clicks: impressions decide');assert.deepEqual(r.gsc.impressions,[700,490]);assert.equal(r.conclusion,'down');assert.equal(r.change,-0.3);assert.equal(r.rule,2);
- assert.equal(summary(r),'第 7 天：下降，搜索曝光 700 → 490（-30%）');
+ assert.equal(summary(r),'第 7 天：下降 · 搜索曝光 700 → 490 · ↓ 30%');
  assert.equal(compare(7,'2026-09-10',page,parts([1,2],[50,70],all,[100,106]),'t').conclusion,'flat','6% more impressions is no clear change');
  assert.equal(compare(7,'2026-09-10',page,parts([1,2],[50,50],all,[30,38]),'t').conclusion,'up','210 → 266 impressions: 27% and 56 more');
  assert.equal(compare(7,'2026-09-10',page,parts([1,2],[50,50],all,[30,36]),'t').conclusion,'flat','210 → 252 impressions: 20% but under 50 more');
  r=compare(7,'2026-09-10',page,parts([1,2],[50,70],all,[10,15]),'t');assert.equal(r.primary,'views','few clicks and impressions: views decide');assert.equal(r.conclusion,'up');
  r=compare(7,'2026-09-10',page,parts([1,2],[2,3],all,[10,15]),'t');assert.equal(r.conclusion,'insufficient','too little of all three');assert.equal(r.primary,null);
- assert.deepEqual(r.notes,['曝光太少（共 175 次），不做判断','浏览太少（共 35 次），不做判断'],'the notes give the totals there were');
+ assert.deepEqual(r.notes,['上线前后 7 天搜索点击 21、搜索曝光 175、浏览量 35，太少判断不了'],'the note gives the totals there were, as Results writes them');
  r=compare(7,'2026-09-10',page,parts([10,15],[50,50],days('2026-09-03',9)),'t');assert.equal(r.conclusion,'insufficient');assert.ok(r.notes.some(n=>/缺/.test(n)),'missing days are named');
  r=compare(7,'2026-09-10',['https://www.example.com/no-data'],parts([10,15],[50,50]),'t');assert.equal(r.conclusion,'insufficient');
 });

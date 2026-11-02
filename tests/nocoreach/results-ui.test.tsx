@@ -178,7 +178,7 @@ const board = (overrides: object = {}) => ({
       before: null,
       after: null,
       percent: null,
-      lacking: { day: 7, impressions: 35, views: 6 },
+      lacking: { day: 7, clicks: 19, impressions: 35, views: 6 },
       nextDay: 28,
       nextDate: '2026-11-22',
     },
@@ -242,7 +242,7 @@ it('shows the work of the period: counts, page totals, each change and what need
   ).toHaveClass('text-nr-ink-red');
   expect(bar(change('T-9 · Add internal links'))).not.toBeNull();
   expect(change('T-10 · Add examples')).toHaveTextContent(
-    /Not enough data: Only 35 search impressions and 6 views in the 7 days before and after going live, too few to judge · Day 28 around Nov 22/,
+    /Not enough data: Search clicks 19, Search impressions 35, Views 6 in the 7 days before and after going live, too few to judge · Day 28 result around Nov 22/,
   );
   expect(bar(change('T-10 · Add examples'))).toBeNull();
   // A result opens its drawer over the dashboard, keeping the period.

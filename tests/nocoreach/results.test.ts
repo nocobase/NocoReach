@@ -566,7 +566,11 @@ describe('results dashboard', () => {
       status: 'insufficient',
       metric: null,
       before: null,
-      lacking: { day: 7, impressions: 140 },
+    });
+    expect(change('2')?.lacking).toEqual({
+      day: 7,
+      clicks: 14,
+      impressions: 140,
     });
     expect(board.counts).toMatchObject({ up: 1, down: 0, insufficient: 1 });
     // Days missing, or no data at all.

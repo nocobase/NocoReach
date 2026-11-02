@@ -57,30 +57,30 @@ export function safeConclusion(
     : 'insufficient';
 }
 /**
- * Why a result has too little to judge: the two windows' totals of search impressions and views where every day is
- * covered, so the reader sees how little there was; otherwise whether days are missing or there is no data at all.
+ * Why a result has too little to judge: the two windows' totals of search clicks, search impressions and views where
+ * every day is covered, so the reader sees how little there was; otherwise whether days are missing or there is no data.
  */
 export type Lacking = {
   day: number;
+  clicks?: number;
   impressions?: number;
   views?: number;
   missingDays?: boolean;
 };
 export function lacking(result: EffectResult): Lacking {
-  const total = (source: 'gsc' | 'ga4', metric: 'impressions' | 'views') => {
+  const total = (source: 'gsc' | 'ga4', metric: EffectMetric) => {
     const pair = (
       result[source] as Record<string, [number, number]> | undefined
     )?.[metric];
     return pair && complete(result, source) ? pair[0] + pair[1] : undefined;
   };
-  const impressions = total('gsc', 'impressions'),
-    views = total('ga4', 'views');
-  if (impressions !== undefined || views !== undefined)
-    return {
-      day: result.day,
-      ...(impressions !== undefined ? { impressions } : {}),
-      ...(views !== undefined ? { views } : {}),
-    };
+  const totals = Object.fromEntries(
+    JUDGED_METRICS.map(({ metric, source }) => [
+      metric,
+      total(source, metric),
+    ]).filter(([, value]) => value !== undefined),
+  ) as Pick<Lacking, EffectMetric>;
+  if (Object.keys(totals).length) return { day: result.day, ...totals };
   return {
     day: result.day,
     ...(result.gsc || result.ga4 ? { missingDays: true } : {}),

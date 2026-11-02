@@ -4,7 +4,11 @@ import { afterEach, expect, it } from 'vitest';
 import { setDictionary } from '../../client/i18n';
 import { eventText } from '../../client/pages/playbook-model';
 import { effectChip } from '../../client/pages/task-list-model';
-import { effectSummary } from '../../client/pages/effect-model';
+import {
+  effectLine,
+  effectSummary,
+  lackingText,
+} from '../../client/pages/effect-model';
 import type { EffectResult } from '../../client/pages/effect-model';
 import english from '../../shared/i18n/en.json';
 import {
@@ -65,6 +69,12 @@ it('the effect reading is a line in Activity, in the words of the status chip', 
     conclusion: 'up',
     primary: 'clicks',
     change: 0.26,
+    gsc: {
+      clicks: [100, 126],
+      impressions: [900, 950],
+      ctr: [0, 0],
+      position: [9, 8],
+    },
   });
   const line = (note: string) =>
     eventText(
@@ -78,21 +88,35 @@ it('the effect reading is a line in Activity, in the words of the status chip', 
     who: 'System',
     text: 'recorded the day 7 result: not enough data',
   });
-  expect(line('28')?.text).toBe('recorded the day 28 result: Clicks ↑ 26%');
+  expect(line('28')?.text).toBe(
+    'recorded the day 28 result: Search clicks ↑ 26%',
+  );
   expect(effectChip(day7).text).toBe('Day 7: not enough data');
   expect(effectChip(day28)).toEqual({
-    text: 'Day 28: Clicks ↑ 26%',
+    text: 'Day 28: Search clicks ↑ 26%',
     tone: 'green',
   });
   expect(
-    effectSummary(effect({ conclusion: 'flat', primary: 'views', change: 0 })),
+    effectSummary(
+      effect({
+        conclusion: 'flat',
+        primary: 'views',
+        change: 0,
+        ga4: { views: [100, 100], conversions: [0, 0] },
+      }),
+    ),
   ).toBe('no clear change');
   expect(
     effectChip(
-      effect({ conclusion: 'down', primary: 'views', change: -0.104 }),
+      effect({
+        conclusion: 'down',
+        primary: 'views',
+        change: -0.104,
+        ga4: { views: [125, 112], conversions: [0, 0] },
+      }),
     ),
   ).toEqual({ text: 'Day 7: Views ↓ 10%', tone: 'red' });
-  // Judged by search impressions (2026-11-02), and from nothing before: the count it rose to.
+  // Judged by search impressions (2026-11-02) and named in full, as on every page; from nothing before, the count it rose to.
   const t33 = effect({
     conclusion: 'down',
     primary: 'impressions',
@@ -105,7 +129,7 @@ it('the effect reading is a line in Activity, in the words of the status chip', 
     },
   });
   expect(effectChip(t33)).toEqual({
-    text: 'Day 7: Impressions ↓ 29%',
+    text: 'Day 7: Search impressions ↓ 29%',
     tone: 'red',
   });
   expect(
@@ -122,14 +146,43 @@ it('the effect reading is a line in Activity, in the words of the status chip', 
         },
       }),
     ),
-  ).toBe('Impressions ↑ 240');
+  ).toBe('Search impressions ↑ 240');
   setDictionary(null);
   expect(
     eventText({ action: 'effect', note: '7' }, () => '', 'Agent', null, [t33])
       ?.text,
-  ).toBe('记录了第 7 天结果：曝光 ↓ 29%');
+  ).toBe('记录了第 7 天结果：搜索曝光 ↓ 29%');
   expect(line('7')?.text).toBe('记录了第 7 天结果：数据不足');
-  expect(effectChip(day28).text).toBe('第 28 天：点击 ↑ 26%');
+  expect(effectChip(day28).text).toBe('第 28 天：搜索点击 ↑ 26%');
+});
+
+it('a result is written the same on the task page as in Results: full metric names, "↑ 208%", every total', () => {
+  const t34 = effect({
+    conclusion: 'up',
+    primary: 'impressions',
+    change: 2.082,
+    gsc: {
+      clicks: [2, 1],
+      impressions: [170, 524],
+      ctr: [0, 0],
+      position: [22.9, 23.7],
+    },
+  });
+  setDictionary(english);
+  expect(effectLine(t34)).toBe(
+    'Day 7: Up · Search impressions 170 → 524 · ↑ 208%',
+  );
+  expect(lackingText({ day: 7, clicks: 19, impressions: 35, views: 6 })).toBe(
+    'Search clicks 19, Search impressions 35, Views 6 in the 7 days before and after going live, too few to judge',
+  );
+  setDictionary(null);
+  expect(effectLine(t34)).toBe('第 7 天：上升 · 搜索曝光 170 → 524 · ↑ 208%');
+  expect(lackingText({ day: 7, clicks: 19, impressions: 35, views: 6 })).toBe(
+    '上线前后 7 天搜索点击 19、搜索曝光 35、浏览量 6，太少判断不了',
+  );
+  expect(lackingText({ day: 7, missingDays: true })).toBe(
+    '缺的天数太多，不做判断',
+  );
 });
 
 it('the latest activity is the last line Activity shows, not the last write', () => {

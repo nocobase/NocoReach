@@ -85,7 +85,7 @@ it('says what there was when nothing had enough data, and lists no numbers', () 
   );
   expect(
     screen.getByText(
-      'Not enough data: Only 35 search impressions and 6 views in the 7 days before and after going live, too few to judge',
+      'Not enough data: Search clicks 1, Search impressions 35, Views 6 in the 7 days before and after going live, too few to judge',
     ),
   ).toBeInTheDocument();
   expect(screen.queryByRole('listitem')).not.toBeInTheDocument();

@@ -48,7 +48,7 @@ import { ClippedLink } from './clipped-link.js';
 import { ResultsLoadError } from './states.js';
 import { ResultTag } from './status-tag.js';
 import { FoundBy } from '../found-by.js';
-import { lackingText, metricName } from '../effect-model.js';
+import { changeText, lackingText, metricName } from '../effect-model.js';
 import {
   FLAT_BELOW,
   JUDGED_METRICS,
@@ -220,15 +220,12 @@ const formatNumber = (value: number) =>
   value.toLocaleString(getCurrentLocale(), { maximumFractionDigits: 1 });
 const taskLabel = (item: { taskNo: number | null; title: string }) =>
   `${item.taskNo ? `T-${item.taskNo} · ` : ''}${item.title}`;
-const nextCheck = (
-  item: {
-    nextDay: number | null;
-    nextDate: string | null;
-  },
-  key = 'results.board.nextCheck',
-) =>
+const nextCheck = (item: {
+  nextDay: number | null;
+  nextDate: string | null;
+}) =>
   item.nextDay && item.nextDate
-    ? $t(key, {
+    ? $t('results.board.nextCheck', {
         0: shortDate(item.nextDate),
         1: item.nextDay,
       })
@@ -406,7 +403,7 @@ function ChangeBar({ change }: { change: BoardChange }) {
                   0: lackingText(change.lacking),
                 })
               : resultStatus(change.status),
-            nextCheck(change, 'results.board.nextLook'),
+            nextCheck(change),
           ]
             .filter(Boolean)
             .join(' · ')}
@@ -433,10 +430,7 @@ function ChangeBar({ change }: { change: BoardChange }) {
           0: metricName(change.metric!),
           1: formatNumber(change.before!),
           2: formatNumber(change.after!),
-          3:
-            change.percent !== null
-              ? signedPercent(change.percent)
-              : signed(difference),
+          3: changeText(change.before!, change.after!),
           4: change.day,
         })
       : '',
