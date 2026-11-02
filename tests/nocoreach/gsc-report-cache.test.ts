@@ -230,6 +230,31 @@ it('reads a report still holding days after the final cutoff again after six hou
   expect(upstream).toHaveBeenCalledTimes(12);
 });
 
+it('reads a range ending on the final cutoff once more after a day, as Google may publish that day late', async () => {
+  const { plugin, views, upstream } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const day = 24 * 60 * 60 * 1000;
+  const { cutoff } = historyBounds(plugin, '1');
+  const range = { ...window, end: cutoff };
+  const first = await views.searchBreakdown('1', range);
+  expect(first.cacheExpiresAt).toBe(Date.now() + day);
+  expect(upstream).toHaveBeenCalledTimes(6);
+  // A rolling range is asked for under a new window every day, so within the day this costs it nothing.
+  vi.setSystemTime(Date.now() + day - 1);
+  expect(await views.searchBreakdown('1', range)).not.toHaveProperty('savedAt');
+  expect(upstream).toHaveBeenCalledTimes(6);
+  vi.setSystemTime(Date.now() + 1);
+  expect(await views.searchBreakdown('1', range)).toMatchObject({
+    refreshing: true,
+  });
+  await views.reports.settled();
+  expect(upstream).toHaveBeenCalledTimes(12);
+  // By then the range ends before the cutoff, so its days are final.
+  const final = await views.searchBreakdown('1', range);
+  expect(final.cacheExpiresAt).toBe(Date.now() + GOOGLE_SAVED_REPORT_MS);
+  expect(upstream).toHaveBeenCalledTimes(12);
+});
+
 it('expires partial dimensions after five minutes and does not cache total failures', async () => {
   const { plugin, views, upstream, state } = await fixture();
   vi.useFakeTimers({ toFake: ['Date'] });

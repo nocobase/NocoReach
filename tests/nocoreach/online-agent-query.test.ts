@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { GoogleReportCache } from '../../server/nocoreach/google-report-cache';
 import {
   QUERY_SOURCES,
   queryDataTool,
@@ -1092,4 +1093,57 @@ it('reads indexing only once checked, and reports errors without internals', asy
   await expect(
     midway.execute({ source: 'forum' }, new AbortController().signal),
   ).rejects.toMatchObject({ status: 403 });
+});
+
+it('a table read after the summary waits for its own period, not a saved copy of the last one', async () => {
+  const cache = new GoogleReportCache();
+  let cutoff = day(1);
+  const search = (id: string, v: Row) =>
+    cache.load(
+      id,
+      ['search', cutoff, v.details === true],
+      async () => ({
+        connected: true,
+        cutoff,
+        window: { ...window, end: cutoff },
+        queries: {
+          rows: [
+            {
+              key: `read for ${cutoff}`,
+              clicks: 1,
+              impressions: 1,
+              ctr: 1,
+              position: 1,
+            },
+          ],
+          total: 1,
+        },
+      }),
+      undefined,
+      (value, _expiresAt, saved) => ({ ...value, ...saved }),
+      v.details === true ? { family: ['search', 'details'] } : {},
+    );
+  const { sources } = fixture();
+  const tool = queryDataTool({
+    sources: {
+      ...sources,
+      dataViews: { ...sources.dataViews, search },
+    } as QuerySources,
+    projectId: '7',
+    authorize: async () => {},
+    allowed: async () => true,
+    link: (path) => path,
+    site: 'example.test',
+  });
+  const ask = async () =>
+    (await tool.execute(
+      { source: 'search', table: 'queries' },
+      new AbortController().signal,
+    )) as Answer;
+  await ask();
+  await cache.settled();
+  cutoff = day(0);
+  const answer = await ask();
+  expect(answer.period?.end).toBe(day(0));
+  expect(answer.rows?.[0]?.key).toBe(`read for ${day(0)}`);
 });

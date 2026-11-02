@@ -84,7 +84,7 @@ export class GoogleReportCache {
   private memoryBytes = 0;
   private pending = new Map<string, Promise<Entry>>();
   private reads = new Map<string, Promise<Entry[]>>();
-  private failures = new Map<string, number>();
+  private failures = new Map<string, { at: number; reason?: string }>();
   private writes = new Map<string, Promise<void>>();
 
   constructor(
@@ -119,10 +119,11 @@ export class GoogleReportCache {
       return present(structuredClone(held.value) as T, held.expiresAt);
     if (held && !freshReads.getStore()) {
       const refreshing = this.refresh(projectId, key, family, fetcher, ttl);
+      const reason = refreshing ? undefined : this.failures.get(key)?.reason;
       return present(
         structuredClone(held.value) as T,
         Date.now() + GOOGLE_SAVED_COPY_RETRY_MS,
-        { refreshing, savedAt: held.at },
+        { refreshing, savedAt: held.at, ...(reason ? { reason } : {}) },
       );
     }
     const entry = await this.start(projectId, key, family, fetcher, ttl);
@@ -153,7 +154,8 @@ export class GoogleReportCache {
   }
 
   // A failed read keeps the copy and waits the partial-report delay, so a dead token or a quota error is not asked again
-  // on every read of the page. Returns whether a new report is on its way.
+  // on every read of the page. Its reason goes to the page, by the rule the data views' errors follow: a message with a
+  // status was written for people. Returns whether a new report is on its way.
   private refresh<T>(
     projectId: string,
     key: string,
@@ -163,15 +165,18 @@ export class GoogleReportCache {
   ): boolean {
     if (this.pending.has(key)) return true;
     const failed = this.failures.get(key);
-    if (failed !== undefined && Date.now() - failed < GOOGLE_PARTIAL_CACHE_MS)
+    if (failed && Date.now() - failed.at < GOOGLE_PARTIAL_CACHE_MS)
       return false;
     void waitForFresh(() =>
       this.start(projectId, key, family, fetcher, ttl),
     ).then(
       () => this.failures.delete(key),
-      () => {
+      (error: { status?: number; message?: string } | undefined) => {
         if (this.failures.size >= MAX_MEMORY) this.failures.clear();
-        this.failures.set(key, Date.now());
+        this.failures.set(key, {
+          at: Date.now(),
+          reason: error?.status ? error.message : undefined,
+        });
       },
     );
     return true;

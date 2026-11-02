@@ -1387,8 +1387,10 @@ async function answer(
   const table = q.table ?? names[0];
   if (!names.includes(table))
     return { ...head, error: 'unknownTable', tables: names };
+  // A table is read only when asked for, so after `source.read` returned: it needs its own scope, or it answers from a
+  // saved copy that may hold another window than the `period` stated beside it.
   const got = read.tables[table],
-    value = typeof got === 'function' ? await got() : got,
+    value = typeof got === 'function' ? await waitForFresh(got) : got,
     t: Table = Array.isArray(value) ? { rows: value } : value;
   let rows = t.rows,
     filtered = false;

@@ -13,7 +13,12 @@ import {
   GOOGLE_REFRESH_POLLS,
   isGoogleReportKey,
   savedCopyAt,
+  savedCopyNote,
 } from '../../shared/google-cache.js';
+import {
+  systemMessageKey,
+  systemMessageText,
+} from '../../shared/i18n/messages';
 import {
   GA4_HISTORY_CACHE_MS,
   GA4_PARTIAL_CACHE_MS,
@@ -179,6 +184,33 @@ it('says when the report shown was saved, and nothing while it is current', () =
   expect(container.querySelector('[data-saved-report]')?.textContent).toMatch(
     /14/,
   );
+});
+
+it('says why a report could not be replaced, in words the page can translate', () => {
+  // The server writes these in its default language; the note finds them again by their key.
+  for (const key of [
+    'dataViews.googleAuthorizationExpiredAuthorizeAgain',
+    'dataViews.ga4PropertyAccessDenied',
+  ])
+    expect(systemMessageKey(systemMessageText(key))).toBe(key);
+  const reason = systemMessageText(
+    'dataViews.googleAuthorizationExpiredAuthorizeAgain',
+  );
+  const { container } = render(<SavedReportNote at={1} reason={reason} />);
+  expect(container.querySelector('[data-saved-report]')?.textContent).toContain(
+    reason,
+  );
+  expect(
+    savedCopyNote(
+      { refreshing: true, savedAt: 1, reason: 'still being read' },
+      { refreshing: false, savedAt: 2 },
+      { refreshing: false, savedAt: 3, reason: 'refused' },
+    ),
+  ).toEqual({ at: 2, reason: 'refused' });
+  expect(savedCopyNote(undefined, { refreshing: true, savedAt: 1 })).toEqual({
+    at: undefined,
+    reason: undefined,
+  });
 });
 
 it('names when a report was saved only once it is no longer being replaced', () => {

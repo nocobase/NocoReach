@@ -64,7 +64,7 @@ export type Report = Partial<SavedCopy> & {
   /** Channels, pages and landing pages with both periods, for where a change came from (drivers.ts). */
   changes?: ChangeTables;
 };
-export type RowDetail = {
+export type RowDetail = Partial<SavedCopy> & {
   connected: boolean;
   cacheExpiresAt?: number;
   window?: Window;

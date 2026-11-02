@@ -131,6 +131,40 @@ it('answers an expired report from its copy without waiting, and marks the copy'
   expect(read).toHaveBeenCalledTimes(1);
 });
 
+it('gives the page the reason a new read failed, when it was written for people', async () => {
+  const { cache } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  await cache.load('1', ['a'], async () => ({ users: 1 }));
+  await cache.load('1', ['b'], async () => ({ users: 1 }));
+  vi.setSystemTime(Date.now() + GA4_HISTORY_CACHE_MS);
+  const load = (key: string, error: Error) =>
+    cache.load(
+      '1',
+      [key],
+      (): Promise<{ users: number }> => Promise.reject(error),
+      undefined,
+      showCopy,
+    );
+  const refused = Object.assign(new Error('Authorize Google again'), {
+    status: 502,
+  });
+  const internal = new Error('socket hang up');
+  // The first answer only knows that a new report is on its way.
+  expect(await load('a', refused)).not.toHaveProperty('reason');
+  await load('b', internal);
+  await vi.waitFor(async () =>
+    expect(await load('a', refused)).toMatchObject({
+      users: 1,
+      refreshing: false,
+      reason: 'Authorize Google again',
+    }),
+  );
+  await vi.waitFor(async () =>
+    expect(await load('b', internal)).toMatchObject({ refreshing: false }),
+  );
+  expect(await load('b', internal)).not.toHaveProperty('reason');
+});
+
 it('keeps the copy when a new read fails and waits before asking again', async () => {
   const { cache } = await fixture();
   vi.useFakeTimers({ toFake: ['Date'] });

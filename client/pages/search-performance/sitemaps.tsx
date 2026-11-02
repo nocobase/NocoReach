@@ -1,4 +1,4 @@
-import { googleLocalFreshness } from '../../../shared/google-cache.js';
+import { googleLocalFreshness, savedCopyNote, type SavedCopy } from '../../../shared/google-cache.js';
 import { $t, $tj } from "#i18n";
 // 搜索表现 · 站点地图 (?view=sitemaps, 2026-10-14, user request: everything Search Console's API offers, in NocoReach's
 // own style): the sitemaps submitted to Search Console (Sitemaps API, read when the page asks and kept six hours) with
@@ -17,7 +17,7 @@ import { DataTableTabs } from "#components/seo/data-table-toolbar";
 import { SortableHeader } from "#components/seo/sortable-header";
 import { StatTile } from "#components/seo/stat-tile";
 import { NotesTip } from "#components/reach/info-tip";
-import { EmptyState, ListSkeleton, LoadError } from "#components/reach/states";
+import { EmptyState, ListSkeleton, LoadError, SavedReportNote } from "#components/reach/states";
 import { Tag, type Tone } from "#components/reach/tag";
 import { safeLink } from "../analytics";
 import { DetailDrawer } from "../detail-drawer";
@@ -29,7 +29,7 @@ type Entry = { path: string; type: string | null; isIndex: boolean; isPending: b
 type Sitemap = Entry & { children?: Entry[] };
 type Row = (Sitemap & { status: Exclude<State, "unsubmitted"> }) | { path: string; status: "unsubmitted"; checked: number; indexed: number };
 type State = "success" | "error" | "warning" | "pending" | "unsubmitted";
-type SitemapsView = { connected: boolean; site?: string; readAt?: string; sitemaps?: Sitemap[]; unsubmitted?: { path: string; checked: number; indexed: number }[] };
+type SitemapsView = Partial<SavedCopy> & { connected: boolean; site?: string; readAt?: string; sitemaps?: Sitemap[]; unsubmitted?: { path: string; checked: number; indexed: number }[] };
 
 const TABS = ["all", "problems", "unsubmitted"] as const;
 const num = (v: number) => formatCount(v);
@@ -73,6 +73,7 @@ export function SitemapsView({ projectId, property, tab, onTab }: { projectId: n
   const shown = rows.filter((r) => current === "all" || (current === "unsubmitted" ? r.status === "unsubmitted" : r.status === "error" || r.status === "warning"));
   return (
     <>
+      <SavedReportNote {...savedCopyNote(view)} />
       <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground" data-sitemaps-status="">
         <span>{$t('searchSitemaps.statusLine', { 0: view.site, 1: formatDateTime(view.readAt) })}</span>
         <NotesTip notes={[...(view.site ? [$t('searchSitemaps.noteProperty', { 0: view.site })] : []), $t('searchSitemaps.noteSource'), $t('searchSitemaps.noteUnsubmitted'), $t('searchSitemaps.noteIndexed')]} />

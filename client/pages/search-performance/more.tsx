@@ -4,7 +4,7 @@ import {
   ChartArea as Area,
   ChartLine as Line,
 } from '#components/reach/chart-legend';
-import { googleHistoryFreshness, type SavedCopy } from '../../../shared/google-cache.js';
+import { googleHistoryFreshness, savedCopyNote, type SavedCopy } from '../../../shared/google-cache.js';
 import { $t } from "#i18n";
 // Search performance › Performance, the parts beyond the totals: Country / region, Device and Search appearance (read
 // from Search Console when the page asks), Rising, Falling and New (Search Console Insights' trending queries and pages),
@@ -22,7 +22,7 @@ import { TablePagination } from "#components/seo/table-pagination";
 import { SortableHeader } from "#components/seo/sortable-header";
 import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { InfoTip } from "#components/reach/info-tip";
-import { InlineError, ListSkeleton } from "#components/reach/states";
+import { InlineError, ListSkeleton, SavedReportNote } from "#components/reach/states";
 import { safeLink } from "../analytics";
 import { DetailDrawer } from "../detail-drawer";
 import { countryName } from "../countries";
@@ -38,7 +38,7 @@ export type Breakdown = Partial<SavedCopy> & { connected: boolean; countries: Br
 export type MoverRow = { key: string; clicks: number; previousClicks: number; change: number; impressions: number; previousImpressions: number; position: number | null; previousPosition: number | null };
 export type Movers = { rising: MoverRow[]; falling: MoverRow[]; fresh: MoverRow[] };
 type TrendPoint = { date: string; clicks: number | null; impressions: number | null; ctr: number | null; position: number | null; previousDate: string; previousClicks: number | null; previousImpressions: number | null; previousCtr: number | null; previousPosition: number | null };
-type RowDetail = { connected: boolean; trend: TrendPoint[]; related: { key: string; clicks: number; impressions: number; ctr: number; position: number }[] };
+type RowDetail = Partial<SavedCopy> & { connected: boolean; trend: TrendPoint[]; related: { key: string; clicks: number; impressions: number; ctr: number; position: number }[] };
 // What the page knows about the report it shows, for the requests it makes on its own.
 export type Scope = { projectId: number; property?: string; compare?: boolean; window: Window; country?: string; filters: Record<string, unknown> };
 
@@ -160,6 +160,7 @@ export function RowDrawer({ scope, dimension, rowKey, figures, metric, onClose }
   const page = dimension === "page" && safeLink(rowKey) ? safeLink(rowKey)! : null;
   return (
     <DetailDrawer open onClose={onClose} title={`${dimension === "page" ? $t('common.page') : $t('common.query')} · ${rowKey}`} description={$t('common.range', { 0: formatDate(scope.window.start), 1: formatDate(scope.window.end) })}>
+      <SavedReportNote {...savedCopyNote(data)} />
       {page ? <a className="nr-link mb-3 inline-flex items-center gap-1 break-all" href={page} target="_blank" rel="noreferrer">{rowKey}<ArrowUpRight className="size-3.5" /></a> : null}
       {figures ? (
         <table className="w-full text-sm" data-row-figures="">

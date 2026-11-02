@@ -14,8 +14,12 @@ export const GOOGLE_REFRESH_POLL_MS = 5 * 1000;
 export const GOOGLE_REFRESH_POLLS = 30;
 
 // Set on a report answered from its saved copy: `refreshing` while a new one is being read; a copy without it could not
-// be replaced for now, which the page says.
-export type SavedCopy = { refreshing: boolean; savedAt: number };
+// be replaced for now, which the page says, with the `reason` when one was written for people.
+export type SavedCopy = {
+  refreshing: boolean;
+  savedAt: number;
+  reason?: string;
+};
 
 export function savedCopyAt(
   ...reports: (Partial<SavedCopy> | null | undefined)[]
@@ -24,6 +28,18 @@ export function savedCopyAt(
     .filter((report) => report?.savedAt && !report.refreshing)
     .map((report) => report!.savedAt!);
   return stuck.length ? Math.min(...stuck) : undefined;
+}
+
+// What `SavedReportNote` says of the reports on a page: when the oldest was saved and why it could not be replaced.
+export function savedCopyNote(
+  ...reports: (Partial<SavedCopy> | null | undefined)[]
+): { at?: number; reason?: string } {
+  return {
+    at: savedCopyAt(...reports),
+    reason: reports.find(
+      (report) => report?.savedAt && !report.refreshing && report.reason,
+    )?.reason,
+  };
 }
 
 export function googleCacheExpiry(value: {
