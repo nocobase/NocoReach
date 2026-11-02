@@ -3,7 +3,7 @@ import {
   TrendChart,
   ChartArea as Area,
 } from '#components/reach/chart-legend';
-import { googleLocalFreshness, googleCacheExpiry } from '../../../shared/google-cache.js';
+import { googleLocalFreshness, googleCacheExpiry, savedCopyAt, type SavedCopy } from '../../../shared/google-cache.js';
 import { $t, $tj, $legacyText } from "#i18n";
 import { usePageTab } from '#hooks/use-page-tab';
 // 搜索表现: ported from every-app/open-seo db8bde1 src/client/features/search-performance/ (SearchPerformancePage,
@@ -27,7 +27,7 @@ import { Copy, Download, Save, SearchCheck } from "lucide-react";
 import { toast } from "#lib/toast";
 import { cn } from "#lib/utils";
 import { PageContainer, PageHeader } from "#components/reach/page";
-import { EmptyState, LoadError, ListSkeleton } from "#components/reach/states";
+import { EmptyState, LoadError, ListSkeleton, SavedReportNote } from "#components/reach/states";
 import { Button } from "#components/ui/button";
 import { Card } from "#components/ui/card";
 import { Input } from "#components/ui/input";
@@ -65,7 +65,7 @@ type Filter = { operator: "contains" | "equals"; expression: string };
 type DimensionRow = { key: string; clicks: number; impressions: number; ctr: number; position: number };
 type StrikingRow = { query: string; page: string; clicks: number; impressions: number; position: number };
 type TrendPoint = { date: string; clicks: number | null; impressions: number | null; ctr?: number | null; position?: number | null; previousDate: string; previousClicks: number | null; previousImpressions: number | null; previousCtr?: number | null; previousPosition?: number | null };
-export type SearchReport = {
+export type SearchReport = Partial<SavedCopy> & {
   connected: boolean;
   coverage?: { earliest?: string; current: CoveragePeriod; previous: CoveragePeriod | null };
   history?: { jobs: { id: string; status: string; startDate: string; endDate: string }[]; scheduleEnabled: boolean };
@@ -207,6 +207,7 @@ export default function SearchPerformancePage() {
         : view === "sitemaps" ? (project ? <SitemapsView property={project.searchConsoleProperty} projectId={project.id} tab={params.get("list")} onTab={(t) => update({ list: t })} /> : null)
         : <>
       <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:formatDate(w.start),1:formatDate(w.end)}) : report?.complete && report.previousComplete ? $t('common.comparedPreviousDaysDataThrough',{0:formatDate(w.start),1:formatDate(w.end),2:w.days,3:formatDate(report?.cutoff)}) : $t('searchHistory.rangeSummary',{0:formatDate(w.start),1:formatDate(w.end),2:formatDate(report?.cutoff)})) : undefined} />
+      <SavedReportNote at={savedCopyAt(report, details, breakdown)} />
       {loadError ? <LoadError title={$t('searchPerformance.notLoadSearchData')} message={loadError} onRetry={() => window.location.reload()} /> : null}
       {!report && !loadError ? <ListSkeleton rows={6} /> : null}
       {report && !report.connected ? (

@@ -18,10 +18,12 @@ function matcher(filter){if(!filter?.expression)return ()=>true;const e=String(f
 function readFilter(v){if(!v||typeof v!=='object')return null;const expression=String(v.expression||'').trim().slice(0,4096);if(!expression)return null;return {operator:v.operator==='equals'?'equals':'contains',expression};}
 
 // Sum the per-day query × page rows of the window into one row per pair, keeping the impression-weighted position.
-function pairs(days,filters={}){const q=matcher(filters.queryFilter),p=matcher(filters.pageFilter),out=new Map();
- for(const rows of days)for(const r of rows||[]){if(!r||!q(r.keyword)||!p(r.page))continue;const k=JSON.stringify([r.keyword,r.page]);let o=out.get(k);if(!o){o={keyword:r.keyword,page:r.page,clicks:0,impressions:0,weight:0};out.set(k,o);}
-  o.clicks+=Number(r.clicks)||0;o.impressions+=Number(r.impressions)||0;o.weight+=(Number(r.position)||0)*(Number(r.impressions)||0);}
- return [...out.values()].map(({weight,...o})=>({...o,position:o.impressions?weight/o.impressions:0}));}
+// `pairSum` adds one day at a time, so a caller reading large days one by one holds only the sums.
+function pairSum(filters={}){const q=matcher(filters.queryFilter),p=matcher(filters.pageFilter),out=new Map();
+ return {add(rows){for(const r of rows||[]){if(!r||!q(r.keyword)||!p(r.page))continue;const k=JSON.stringify([r.keyword,r.page]);let o=out.get(k);if(!o){o={keyword:r.keyword,page:r.page,clicks:0,impressions:0,weight:0};out.set(k,o);}
+  o.clicks+=Number(r.clicks)||0;o.impressions+=Number(r.impressions)||0;o.weight+=(Number(r.position)||0)*(Number(r.impressions)||0);}},
+  rows(){return [...out.values()].map(({weight,...o})=>({...o,position:o.impressions?weight/o.impressions:0}));}};}
+function pairs(days,filters={}){const sum=pairSum(filters);for(const rows of days)sum.add(rows);return sum.rows();}
 
 function dimension(rows,key){const out=new Map();for(const r of rows){const k=key==='page'?r.page:r.keyword;if(!k)continue;let o=out.get(k);if(!o){o={key:k,clicks:0,impressions:0,weight:0};out.set(k,o);}o.clicks+=r.clicks;o.impressions+=r.impressions;o.weight+=r.position*r.impressions;}
  const list=[...out.values()].map(({weight,...o})=>({...o,ctr:o.impressions?o.clicks/o.impressions:0,position:o.impressions?weight/o.impressions:0})).sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions);
@@ -51,4 +53,4 @@ function ranks(rows,keywords){const want=new Set(keywords.map(k=>String(k).toLow
  for(const k of Object.keys(out)){const o=out[k];out[k]={clicks:o.clicks,impressions:o.impressions,position:o.weight/o.impressions,page:o.page};}
  return out;}
 
-export { ranks, totals, matcher, readFilter, pairs, dimension, striking, movers, TABLE_LIMIT, STRIKING_MIN, STRIKING_MAX, MOVERS_LIMIT };
+export { ranks, totals, matcher, readFilter, pairSum, pairs, dimension, striking, movers, TABLE_LIMIT, STRIKING_MIN, STRIKING_MAX, MOVERS_LIMIT };

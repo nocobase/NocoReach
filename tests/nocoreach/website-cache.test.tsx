@@ -6,8 +6,14 @@ import {
   screen,
 } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { SavedReportNote } from '../../client/components/reach/states';
 import { usePolled } from '../../client/pages/data-website/use-polled';
-import { isGoogleReportKey } from '../../shared/google-cache.js';
+import {
+  GOOGLE_REFRESH_POLL_MS,
+  GOOGLE_REFRESH_POLLS,
+  isGoogleReportKey,
+  savedCopyAt,
+} from '../../shared/google-cache.js';
 import {
   GA4_HISTORY_CACHE_MS,
   GA4_PARTIAL_CACHE_MS,
@@ -91,6 +97,100 @@ afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.restoreAllMocks();
+});
+
+function Copy() {
+  const { data } = useFreshData<{
+    users: number;
+    refreshing?: boolean;
+    savedAt?: number;
+  }>('data-view:website:copy', copyFetcher, {
+    staleTime: GA4_HISTORY_CACHE_MS,
+  });
+  return <p>{data ? `users ${data.users}` : 'loading'}</p>;
+}
+const copyFetcher =
+  vi.fn<
+    () => Promise<{ users: number; refreshing?: boolean; savedAt?: number }>
+  >();
+
+it('reads again while the server replaces a saved copy, then stops', async () => {
+  copyFetcher
+    .mockReset()
+    .mockResolvedValueOnce({ users: 1, refreshing: true, savedAt: 1 })
+    .mockResolvedValueOnce({ users: 1, refreshing: true, savedAt: 1 })
+    .mockResolvedValue({ users: 2 });
+  render(
+    <WorkspaceCacheProvider>
+      <Copy />
+    </WorkspaceCacheProvider>,
+  );
+  await flush();
+  expect(screen.getByText('users 1')).toBeTruthy();
+  expect(copyFetcher).toHaveBeenCalledTimes(1);
+  await act(async () => vi.advanceTimersByTime(GOOGLE_REFRESH_POLL_MS));
+  await flush();
+  expect(copyFetcher).toHaveBeenCalledTimes(2);
+  // The copy stays on screen while it is read again.
+  expect(screen.getByText('users 1')).toBeTruthy();
+  await act(async () => vi.advanceTimersByTime(GOOGLE_REFRESH_POLL_MS));
+  await flush();
+  expect(screen.getByText('users 2')).toBeTruthy();
+  expect(copyFetcher).toHaveBeenCalledTimes(3);
+  await act(async () => vi.advanceTimersByTime(GOOGLE_REFRESH_POLL_MS * 3));
+  await flush();
+  expect(copyFetcher).toHaveBeenCalledTimes(3);
+});
+
+it('gives up reading again when the copy is not replaced, instead of asking for ever', async () => {
+  copyFetcher
+    .mockReset()
+    .mockResolvedValue({ users: 1, refreshing: true, savedAt: 1 });
+  render(
+    <WorkspaceCacheProvider>
+      <Copy />
+    </WorkspaceCacheProvider>,
+  );
+  await flush();
+  for (let i = 0; i < GOOGLE_REFRESH_POLLS + 5; i++) {
+    await act(async () => vi.advanceTimersByTime(GOOGLE_REFRESH_POLL_MS));
+    await flush();
+  }
+  expect(copyFetcher).toHaveBeenCalledTimes(GOOGLE_REFRESH_POLLS + 1);
+});
+
+it('leaves other responses with a refreshing field alone', async () => {
+  copyFetcher.mockReset().mockResolvedValue({ users: 1, refreshing: true });
+  render(
+    <WorkspaceCacheProvider>
+      <Copy />
+    </WorkspaceCacheProvider>,
+  );
+  await flush();
+  await act(async () => vi.advanceTimersByTime(GOOGLE_REFRESH_POLL_MS * 3));
+  await flush();
+  expect(copyFetcher).toHaveBeenCalledTimes(1);
+});
+
+it('says when the report shown was saved, and nothing while it is current', () => {
+  const { container, rerender } = render(<SavedReportNote />);
+  expect(container.querySelector('[data-saved-report]')).toBeNull();
+  rerender(<SavedReportNote at={Date.UTC(2026, 9, 14, 12)} />);
+  expect(container.querySelector('[data-saved-report]')?.textContent).toMatch(
+    /14/,
+  );
+});
+
+it('names when a report was saved only once it is no longer being replaced', () => {
+  expect(savedCopyAt({ refreshing: true, savedAt: 5 })).toBeUndefined();
+  expect(savedCopyAt({ refreshing: false, savedAt: 5 })).toBe(5);
+  expect(savedCopyAt(undefined, {}, null)).toBeUndefined();
+  expect(
+    savedCopyAt(
+      { refreshing: false, savedAt: 9 },
+      { refreshing: false, savedAt: 5 },
+    ),
+  ).toBe(5);
 });
 
 it('reuses historical reports on navigation, expires them, and still forces an explicit reload', async () => {

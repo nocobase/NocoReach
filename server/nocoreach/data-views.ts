@@ -14,7 +14,7 @@ import * as hnSource from './hackernews-source.js';
 import * as __google_client from './google-client.js';
 import { WebsiteReport } from './website-report.js';
 import { GoogleReportCache } from './google-report-cache.js';
-import { GOOGLE_HISTORY_CACHE_MS, GOOGLE_PARTIAL_CACHE_MS } from '../../shared/google-cache.js';
+import { GOOGLE_HISTORY_CACHE_MS, GOOGLE_PARTIAL_CACHE_MS, GOOGLE_SAVED_REPORT_MS } from '../../shared/google-cache.js';
 import { githubView } from './github-view.js';
 import { downloadsView } from './downloads-view.js';
 // Data views (SPEC §5 数据分析): one time range across all connected sources; each source keeps its own cutoff.
@@ -22,6 +22,9 @@ const DAY=86400000;
 const iso=t=>new Date(t).toISOString().slice(0,10);
 const add=(d,n)=>iso(Date.parse(d+'T00:00:00Z')+n*DAY);
 const days=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/DAY)+1;
+const dayOf=v=>v instanceof Date?v.toISOString().slice(0,10):String(v||'').slice(0,10);
+// The longest stretch of synced query × page days read for a report: both 90-day periods. Longer ones ask Search Console.
+const MAX_STORED_PAIR_DAYS=200;
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 // Same page identity as task effects: host without www, path without a trailing slash.
 const pageKey=u=>{try{const x=new URL(u);return `${x.host.toLowerCase().replace(/^www\./,'')}${x.pathname.replace(/\/+$/,'')||'/'}`;}catch{return '';}};
@@ -41,7 +44,7 @@ function series(rows,field,w){const by=new Map(rows.map(r=>[r.date,r[field]]));c
 // (website-report.ts, `period`), and each page row carries the Search Console queries that landed on it in the range.
 // The page explains the numbers itself; `missing` names the reports GA4 did not return.
 async function websiteView(snaps,range,period,from,to){const get=k=>snaps.find(s=>s.key===k)?.payload,web=get('history-web')||[],end=get('project')?.end||web.map(r=>r.date).sort().at(-1);if(!end||!web.length)return {connected:true,cutoff:null};
- const w=windowFor(end,range,from,to,firstDate(web)),report=await period(range==='custom'||range==='all'?{...w,explicitEnd:true}:w);
+ const w=windowFor(end,range,from,to,firstDate(web)),report=await period(range==='custom'||range==='all'?{...w,explicitEnd:true}:w,end);
  const pathOf=u=>{try{return new URL(u).pathname.replace(/\/+$/,'')||'/';}catch{return String(u||'').split('?')[0].replace(/\/+$/,'')||'/';}};
  const queries=new Map();for(const q of get(`queries-${range}`)||[]){const k=pathOf(q.page);if(!queries.has(k))queries.set(k,[]);queries.get(k).push({keyword:q.keyword,clicks:q.clicks,impressions:q.impressions,position:q.position});}
  if(report.tables.page)report.tables.page=report.tables.page.map(p=>({...p,queries:(queries.get(pathOf(p.key))||[]).sort((a,b)=>b.impressions-a.impressions).slice(0,8)}));
@@ -106,7 +109,9 @@ class DataViews{
  localReports: GoogleReportCache;
  constructor(plugin){this.p=plugin;this.ga4=new WebsiteReport(plugin);this.reports=new GoogleReportCache(plugin.db,'gsc-reports');this.localReports=new GoogleReportCache(plugin.db,'google-local-reports');this.tokenPending=new Map();}
  scope(id,link: LegacyRecord): unknown[]{return [link.get('gscSiteUrl'),link.get('authorizedAt'),this.p.network?.mockCacheKey?.('google',String(id))];}
- report(id,identity,read){return this.reports.load(String(id),identity,read,value=>value.connected===false||value.cutoff===null?0:value.partial?GOOGLE_PARTIAL_CACHE_MS:GOOGLE_HISTORY_CACHE_MS,(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));}
+ // Search Console's final days do not change: a report that ends by the final cutoff stays good for as long as it is kept.
+ lifetime(id,w){return w&&w.end<=historyBounds(this.p,id).cutoff?GOOGLE_SAVED_REPORT_MS:GOOGLE_HISTORY_CACHE_MS;}
+ report(id,identity,read,w){return this.reports.load(String(id),identity,read,value=>value.connected===false||value.cutoff===null?0:value.partial?GOOGLE_PARTIAL_CACHE_MS:this.lifetime(id,w),(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}));}
  // Share only concurrent token refreshes; never retain credentials or cross transaction/mock scopes.
  token(id,scope){if(!scope||this.p.db?.transactionContext?.())return this.p.token(id);const key=JSON.stringify([String(id),...scope]);let pending=this.tokenPending.get(key);if(!pending){pending=Promise.resolve().then(()=>this.p.token(id)).finally(()=>this.tokenPending.delete(key));this.tokenPending.set(key,pending);}return pending;}
  async fresh(id,source,cutoff){try{return await this.p.sync.fresh(id,source,cutoff);}catch{return [];}}
@@ -169,7 +174,7 @@ class DataViews{
  // A report read directly from Search Console: a country (the synced rows keep none), filters or the details.
  async searchLive(id: string | number,site: string,w: SearchWindow,{country,filters,details=false}: {country?: string | null;filters: SearchFilters;details?: boolean},base,scope: unknown[]){const groups=liveGroups(country,filters);
   const {earliest}=historyBounds(this.p,id),dims=['query','page'],ask=(body: GscQuery)=>body.endDate<earliest?Promise.resolve([]):this.gscQuery(id,site,{...body,startDate:body.startDate>earliest?body.startDate:earliest,...(groups.length?{dimensionFilterGroups:groups}:{})},scope);
-  const {byDate,dimensions,cacheExpiresAt}=await this.reports.load(String(id),['live',...scope,w,country,filters,details,5],async()=>{const [byDate,byPair,byPrevious]=await Promise.all([ask({startDate:w.all?w.start:w.previousStart,endDate:w.end,dimensions:['date']}),details?ask({startDate:w.start,endDate:w.end,dimensions:dims}):Promise.resolve([]),w.all||!details||w.previousStart<earliest?Promise.resolve([]):ask({startDate:w.previousStart,endDate:w.previousEnd,dimensions:dims})]);const pairsOf=(list: GscRow[])=>list.map(r=>({keyword:r.keys[0],page:r.keys[1],clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0}));const rows=pairsOf(byPair),previousRows=pairsOf(byPrevious);return {byDate,dimensions:{striking:sp.striking(rows),queries:sp.dimension(rows,'query'),pages:sp.dimension(rows,'page'),movers:w.all?null:{query:sp.movers(rows,previousRows,'query'),page:sp.movers(rows,previousRows,'page')}}};},undefined,(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));
+  const {byDate,dimensions,cacheExpiresAt,refreshing,savedAt}=await this.reports.load(String(id),['live',...scope,w,country,filters,details,5],async()=>{const [byDate,byPair,byPrevious]=await Promise.all([ask({startDate:w.all?w.start:w.previousStart,endDate:w.end,dimensions:['date']}),details?ask({startDate:w.start,endDate:w.end,dimensions:dims}):Promise.resolve([]),w.all||!details||w.previousStart<earliest?Promise.resolve([]):ask({startDate:w.previousStart,endDate:w.previousEnd,dimensions:dims})]);const pairsOf=(list: GscRow[])=>list.map(r=>({keyword:r.keys[0],page:r.keys[1],clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0}));const rows=pairsOf(byPair),previousRows=pairsOf(byPrevious);return {byDate,dimensions:{striking:sp.striking(rows),queries:sp.dimension(rows,'query'),pages:sp.dimension(rows,'page'),movers:w.all?null:{query:sp.movers(rows,previousRows,'query'),page:sp.movers(rows,previousRows,'page')}}};},()=>this.lifetime(id,w),(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}));
   const dayRows=byDate.map(r=>({date:r.keys[0],clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0}));
   // Coverage belongs to this actual upstream query, independent of local web history.
   const by=new Map(dayRows.map(r=>[r.date,r]));
@@ -177,13 +182,16 @@ class DataViews{
   const complete=cur.length===days(w.start,w.end),previousComplete=!w.all&&prev.length===days(w.previousStart,w.previousEnd),comparable=complete&&previousComplete;
   const queried=[];for(let date=[w.all?w.start:w.previousStart,earliest].sort().at(-1);date<=w.end;date=add(date,1))queried.push({date,payload:by.has(date)?[by.get(date)]:[]});
   const trend=trendOf(w,d=>by.get(d)||null).map(p=>comparable?p:{...p,previousClicks:null,previousImpressions:null,previousCtr:null,previousPosition:null});
-  return {complete,previousComplete,coverage:{current:historyCoverage(queried,String(w.start),String(w.end)),previous:w.all?null:historyCoverage(queried,String(w.previousStart),String(w.previousEnd))},totals:sp.totals(cur),previous:comparable?sp.totals(prev):null,trend,...(details?dimensions:{}),movers:details&&comparable?dimensions.movers:null,pairDays:cur.length,live:true,cacheExpiresAt};}
+  return {complete,previousComplete,coverage:{current:historyCoverage(queried,String(w.start),String(w.end)),previous:w.all?null:historyCoverage(queried,String(w.previousStart),String(w.previousEnd))},totals:sp.totals(cur),previous:comparable?sp.totals(prev):null,trend,...(details?dimensions:{}),movers:details&&comparable?dimensions.movers:null,pairDays:cur.length,live:true,cacheExpiresAt,...(savedAt?{refreshing,savedAt}:{})};}
  // 搜索表现 page: totals, daily trend and the three tables for one window, read from the synced partitions.
  // Synced versions invalidate local aggregation; live Google requests retain their own query-scoped cache.
  async search(id: string | number,v: SearchRequest){let link,snapKey;try{[link,{key:snapKey}]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshotKey(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const filters={queryFilter:sp.readFilter(v.queryFilter),pageFilter:sp.readFilter(v.pageFilter)},country=/^[a-z]{3}$/.test(String(v.country||''))?String(v.country):null;
   const identity=['search',...this.scope(id,link),snapKey,String(v.range||'28'),String(v.from||''),String(v.to||''),filters,country,v.details===true,historyBounds(this.p,id).cutoff,5];
-  const value=await this.localReports.load(String(id),identity,()=>this.buildSearch(id,v,link,filters,country),value=>value.connected===false||value.cutoff===null?0:Math.min(GOOGLE_HISTORY_CACHE_MS,(value.cacheExpiresAt??Infinity)-Date.now()),(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));
+  // Reports that may have to ask Search Console answer a new day's window from the previous one while it is read; the
+  // default summary is built from the synced days and never waits for Google.
+  const upstream=Boolean(country||filters.queryFilter||filters.pageFilter||v.details===true);
+  const value=await this.localReports.load(String(id),identity,()=>this.buildSearch(id,v,link,filters,country),value=>value.connected===false||value.cutoff===null||value.refreshing?0:Math.min(GOOGLE_HISTORY_CACHE_MS,(value.cacheExpiresAt??Infinity)-Date.now()),(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}),upstream?{family:['search',...this.scope(id,link),String(v.range||'28'),String(v.from||''),String(v.to||''),filters,country,v.details===true]}:{});
   const preliminary=value.cutoff&&!value.filtered&&!value.country&&!value.live&&value.window?.end===value.cutoff?await this.fresh(id,'gsc',value.cutoff):[];
   const progress=!value.live&&value.window&&this.p.sync.historyJobs?await this.p.sync.historyJobs(id,String(link.get('gscSiteUrl')),String(value.window.all?value.window.start:value.window.previousStart),String(value.window.end)):[];
   return {...value,preliminary,history:{jobs:progress.map(j=>({id:j.id,status:String(j.get('status')),startDate:String(j.get('cursor')||j.get('startDate')),endDate:String(j.get('endDate')),errorCode:j.get('errorCode') as unknown})),scheduleEnabled:Boolean(link.get('scheduleEnabled'))}};}
@@ -191,7 +199,8 @@ class DataViews{
  async buildSearch(id: string | number,v: SearchRequest,link: LegacyRecord,filters: SearchFilters,country: string | null){let snaps: {key:string;payload?: {date:string}[]}[];try{snaps=await this.p.sync.snapshots(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const daily=snaps.find(s=>s.key==='history-search')?.payload||[],{cutoff,earliest}=historyBounds(this.p,id);
   const w=windowFor(cutoff,String(v.range||'28'),v.from,v.to,[firstDate(daily),earliest].filter(Boolean).sort()[0]),filtered=Boolean(filters.queryFilter||filters.pageFilter),site=String(link.get('gscSiteUrl'));
-  if(country||filtered||v.details===true){let live;try{live=await this.searchLive(id,site,w,{country,filters,details:v.details===true},null,this.scope(id,link));}catch(e){fail(e.code==='invalid_grant'?systemMessageText('dataViews.googleAuthorizationExpiredAuthorizeAgain'):systemMessageText('dataViews.notReadSearchConsoleData'),502);}
+  const stored=v.details===true&&!country&&!filtered?await this.storedPairs(id,site,w):null;
+  if(!stored&&(country||filtered||v.details===true)){let live;try{live=await this.searchLive(id,site,w,{country,filters,details:v.details===true},null,this.scope(id,link));}catch(e){fail(e.code==='invalid_grant'?systemMessageText('dataViews.googleAuthorizationExpiredAuthorizeAgain'):systemMessageText('dataViews.notReadSearchConsoleData'),502);}
    return {connected:true,cutoff,from:null,window:w,filtered,filters,country,...live};}
   const parts=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'overview',resource:site,date:partitionDates(w.all?w.start:w.previousStart,w.end,Boolean(w.all))},fields:['date','payload','updatedAt']});
   const valid=parts.map(p=>({date:String(p.get('date')),payload:p.get('payload') as unknown,updatedAt:p.get('updatedAt') as string | undefined})).filter((p): p is typeof p & {payload: {date:string;clicks:number;impressions:number;position:number}[]}=>validOverview(p.payload,p.date));
@@ -199,11 +208,21 @@ class DataViews{
   const complete=cur.length===days(w.start,w.end),previousComplete=!w.all&&prev.length===days(w.previousStart,w.previousEnd),comparable=complete&&previousComplete;
   const by=new Map(dayRows.map(r=>[r.date,r])),trend=trendOf(w,d=>by.get(d)||null).map(p=>comparable?p:{...p,previousClicks:null,previousImpressions:null,previousCtr:null,previousPosition:null});
   return {connected:true,cutoff,from:firstDate(dayRows),window:w,filtered,filters,country:null,complete,previousComplete,totals:sp.totals(cur),previous:comparable?sp.totals(prev):null,trend,
-   coverage:{earliest,current:historyCoverage(valid,String(w.start),String(w.end)),previous:w.all?null:historyCoverage(valid,String(w.previousStart),String(w.previousEnd))},movers:null};}
+   coverage:{earliest,current:historyCoverage(valid,String(w.start),String(w.end)),previous:w.all?null:historyCoverage(valid,String(w.previousStart),String(w.previousEnd))},movers:null,
+   ...(stored?{striking:sp.striking(stored.current),queries:sp.dimension(stored.current,'query'),pages:sp.dimension(stored.current,'page'),movers:comparable?{query:sp.movers(stored.current,stored.previous,'query'),page:sp.movers(stored.current,stored.previous,'page')}:null,pairDays:w.days}:{})};}
+ // The query × page rows of both periods from the synced days, summed a day at a time and giving way between days, as
+ // those days are large. Only when the sync holds every day of both: a history fill stores overview rows alone, so a
+ // recent project or a long range holds part of them and is read from Search Console, or its tables would come up short.
+ async storedPairs(id: string | number,site: string,w: SearchWindow){if(w.all||days(w.previousStart,w.end)>MAX_STORED_PAIR_DAYS)return null;
+  const repo=this.p.db.getRepository('nrSyncPartitions'),scope={projectId:id,source:'gsc',grain:'query_page',resource:site},wanted=partitionDates(w.previousStart,w.end).$in;
+  const held=new Set((await repo.find({filter:{...scope,date:{$in:wanted}},fields:['date']})).map(p=>dayOf(p.get('date'))));if(wanted.some(d=>!held.has(d)))return null;
+  const current=sp.pairSum(),previous=sp.pairSum();
+  for(const date of wanted){await new Promise(resolve=>setImmediate(resolve));const [part]=await repo.find({filter:{...scope,date:{$in:[date]}},fields:['date','payload']});(date>=w.start?current:previous).add(part?.get('payload'));}
+  return {current:current.rows(),previous:previous.rows()};}
  // GA4 history is cached by the actual query in WebsiteReport. Synced partition writes only refresh the local
  // Search Console enrichment, without invalidating an unchanged GA4 window or repeating its upstream reports.
  async website(id,v){let link,snaps;try{[link,snaps]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshots(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
-  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28';return websiteView(snaps,range,w=>this.ga4.period(id,link.get('ga4PropertyId'),w),v.from,v.to);}
+  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28';return websiteView(snaps,range,(w,cutoff)=>this.ga4.period(id,link.get('ga4PropertyId'),w,{cutoff,view:[range,String(v.from||''),String(v.to||'')]}),v.from,v.to);}
  // 访问 · one row's days (its detail), 今天 and 实时: read from GA4 when asked (website-report.ts keeps each a while).
  async websiteRow(id,v){let link,snaps;try{[link,snaps]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshots(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const get=k=>snaps.find(s=>s.key===k)?.payload,end=get('project')?.end||(get('history-web')||[]).map(r=>r.date).sort().at(-1);if(!end)return {connected:true,cutoff:null};
@@ -213,11 +232,11 @@ class DataViews{
  async websiteToday(id){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.today(id,link.get('ga4PropertyId'))};}
  async websiteRealtime(id){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.realtime(id,link.get('ga4PropertyId'))};}
  // Countries for the country filter: a live Search Console query, asked for on its own (the page does not wait for it)
- // and kept six hours per window.
+ // and saved per window.
  async searchCountries(id,v){if(!calendarDate(v.start)||!calendarDate(v.end)||v.start>v.end)fail(systemMessageText('dataViews.invalidDate'));let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {countries:[]};throw e;}
   const scope=this.scope(id,link);return this.report(id,['countries',...scope,v.start,v.end],async()=>{try{const rows=await this.gscQuery(id,link.get('gscSiteUrl'),{startDate:v.start,endDate:v.end,dimensions:['country'],rowLimit:250},scope);return {countries:rows.map(r=>({key:String(r.keys?.[0]||''),clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0})).filter(c=>c.key).sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions).slice(0,60)};}catch{return {countries:[],partial:true};}});}
  // 搜索表现 · 细分: countries, devices and search appearances of the report's window and the period before, read from
- // Search Console when the page asks (the synced rows keep none) and kept six hours.
+ // Search Console when the page asks (the synced rows keep none) and saved: see `lifetime`.
  async searchBreakdown(id: string | number,v: SearchRequest){const w=liveWindow(v);let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const filters={queryFilter:sp.readFilter(v.queryFilter),pageFilter:sp.readFilter(v.pageFilter)},country=/^[a-z]{3}$/.test(String(v.country||''))?String(v.country):null;
   const site=link.get('gscSiteUrl'),scope=this.scope(id,link);return this.report(id,['breakdown',...scope,w,filters,country,v.compare!==false,5],async()=>{
@@ -227,9 +246,9 @@ class DataViews{
    return cur.map(r=>({...r,ctr:r.impressions?r.clicks/r.impressions:0,previousClicks:prev?before.get(r.key)?.clicks??0:null,previousImpressions:prev?before.get(r.key)?.impressions??0:null})).sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions);};
   const [countries,devices,appearances]=await Promise.all(['country','device','searchAppearance'].map(part));
   if(!countries&&!devices&&!appearances)fail(failure?.code==='invalid_grant'?systemMessageText('dataViews.googleAuthorizationExpiredAuthorizeAgain'):systemMessageText('dataViews.notReadSearchConsoleData'),502);
-  return {connected:true,countries,devices,appearances,partial:Boolean(failure)};});}
+  return {connected:true,countries,devices,appearances,partial:Boolean(failure)};},w);}
  // 搜索表现 · one query or page: its days against the period before, and the pages it shows with (or the queries a page
- // shows for), read from Search Console when its row is opened and kept six hours.
+ // shows for), read from Search Console when its row is opened and saved: see `lifetime`.
  async searchRow(id: string | number,v: SearchRequest){const w=liveWindow(v),dimension=v.dimension==='page'?'page':'query',k=String(v.key||'').slice(0,4096),country=/^[a-z]{3}$/.test(String(v.country||''))?String(v.country):null;
   if(!k)fail(systemMessageText('dataViews.notReadSearchConsoleData'),400);
   let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
@@ -241,7 +260,11 @@ class DataViews{
   const by=new Map(byDate.map(r=>[r.keys[0],{clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0}]));
   const value={connected:true,dimension,key:k,trend:trendOf(w,d=>by.get(d)||null).map(p=>v.compare===false||w.previousStart<earliest?{...p,previousClicks:null,previousImpressions:null,previousCtr:null,previousPosition:null}:p),
    related:related.map(r=>({key:String(r.keys?.[0]||''),clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,ctr:r.impressions?(Number(r.clicks)||0)/Number(r.impressions):0,position:Number(r.position)||0})).filter(r=>r.key).sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions).slice(0,100)};
-  return value;});}
+  return value;},w);}
+ // What Search performance reads when it opens on its default range, ready before anyone asks (the sync's tick calls this).
+ async warm(id){const report=await this.search(id,{range:'28'});if(!report?.connected||!report.cutoff||!report.window)return;
+  await this.search(id,{range:'28',details:true});
+  await this.searchBreakdown(id,{...report.window,compare:Boolean(report.complete&&report.previousComplete)});}
  // The last 28 synced days of Search Console query × page rows, one row per pair, saved until the next sync; 本站排名
  // and 关键词 详情 read them.
  async pairRows(id){let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch(e){if(googleDisconnected(e))return {connected:false,cutoff:null,window:null,rows:[]};throw e;}
@@ -266,7 +289,6 @@ class DataViews{
   const first=snaps.filter(s=>['history-web','history-search'].includes(s.key)).flatMap(s=>s.payload||[]).map(r=>r.date).sort()[0];const w=windowFor(end,range,from,to,first),repo=this.p.db.getRepository('nrSyncPartitions'),dates=partitionDates(w.previousStart,w.end,Boolean(w.all));
   const read=(source,grain,resource)=>resource?repo.find({filter:{projectId:id,source,grain,resource,date:dates},fields:['date','payload']}):Promise.resolve([]);
   const [gscParts,ga4Parts]=await Promise.all([read('gsc','query_page',link.get('gscSiteUrl')),read('ga4','page',link.get('ga4PropertyId'))]);
-  const dayOf=v=>v instanceof Date?v.toISOString().slice(0,10):String(v||'').slice(0,10);
   const period=d=>d>=w.start&&d<=w.end?'current':d>=w.previousStart&&d<=w.previousEnd?'previous':null;
   const pathOf=v=>String(v||'').split(/[?#]/)[0].replace(/\/+$/,'')||'/',hostOf=v=>String(v||'').toLowerCase().replace(/^www\./,'');
   const days={gsc:{current:0,previous:0},ga4:{current:0,previous:0}},search=new Map(),web=new Map();

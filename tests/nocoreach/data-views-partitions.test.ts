@@ -92,7 +92,7 @@ async function fixture(path: NocoReachSchemaPath = 'fresh') {
   views.gscQuery = async (_id, _site, body) => body.dimensions[0] === 'date'
     ? daily.filter(r => r.date >= body.startDate && r.date <= body.endDate).map(r => ({ keys: [r.date], ...r }))
     : [{ keys: ['crm', url], clicks: 70, impressions: 700, position: 9 }];
-  return { views };
+  return { views, db };
 }
 
 it.each(paths)('reads filtered date ranges (%s)', async (path) => {
@@ -161,8 +161,34 @@ it.each(['2026-02-30', '2026-13-01', '2026-1-01', 'not-a-date'])(
   },
 );
 
+it.each(paths)(
+  'builds details from the synced days of this project, resource and grain alone, without Search Console (%s)',
+  async (path) => {
+    const { views } = await fixture(path);
+    const asked = vi.fn(async () => []);
+    views.gscQuery = asked;
+    const report = await views.search(projectId, {
+      range: '7',
+      details: true,
+    } as never);
+    expect(asked).not.toHaveBeenCalled();
+    expect(report).not.toHaveProperty('live');
+    expect(report.pairDays).toBe(7);
+    // Seven days of the fixture's one pair: the larger rows of another project, property or grain are not read.
+    const pair = report.queries.rows[0];
+    expect(report.queries.total).toBe(1);
+    expect(pair.key).toBe('crm');
+    expect(pair.clicks).toBeLessThan(2000);
+    expect(report.pages.rows[0].key).toBe(url);
+    expect(report.movers.query).toBeDefined();
+  },
+);
+
 it('reads details, breakdowns and one row directly from Search Console, for web search only', async () => {
-  const { views } = await fixture();
+  const { views, db } = await fixture();
+  await db.getRepository('nrSyncPartitions').destroy({
+    filter: { projectId, grain: 'query_page', date: dateAt(-1) },
+  });
   const asked: Record<string, unknown>[] = [];
   views.gscQuery = async (_id: string, _site: string, body: any) => {
     asked.push(body);

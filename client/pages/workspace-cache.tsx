@@ -14,6 +14,10 @@ import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/cli
 import { TaskDraftProvider } from './task-detail/drafts.js';
 import { PageSkeleton as SharedSkeleton } from '#components/reach/states';
 import { NocoReachHttpError } from '#lib/nocoreach-api';
+import {
+  GOOGLE_REFRESH_POLL_MS,
+  GOOGLE_REFRESH_POLLS,
+} from '../../shared/google-cache.js';
 
 // Both in-memory data and saved reports belong to the official cookie session and permission revision.
 type Entry = {
@@ -378,6 +382,24 @@ export function useFreshData<T>(
     (!key || (state.key === key && state.revision === revision))
       ? state
       : { data: key ? cache.peek<T>(key) : undefined, loading: !!key };
+  // A report the server answered from its saved copy while reading a new one: read it again shortly, with the copy on
+  // screen, so the new report replaces it without the person doing anything.
+  const shown = current.data as
+    { refreshing?: unknown; savedAt?: unknown } | undefined;
+  const copy = shown?.refreshing && shown.savedAt;
+  const replacing = Boolean(key && !current.loading && copy);
+  const settled = Boolean(key && !current.loading && !copy);
+  const pollsRef = useRef({ key, count: 0 });
+  useEffect(() => {
+    if (pollsRef.current.key !== key || settled)
+      pollsRef.current = { key, count: 0 };
+    if (!replacing || pollsRef.current.count >= GOOGLE_REFRESH_POLLS) return;
+    const timer = window.setTimeout(() => {
+      pollsRef.current.count += 1;
+      reload();
+    }, GOOGLE_REFRESH_POLL_MS);
+    return () => window.clearTimeout(timer);
+  }, [replacing, settled, key, reload]);
   return { ...current, loading: !!key && current.loading, reload, replace };
 }
 export function PageSkeleton({ title }: { title: string }) {

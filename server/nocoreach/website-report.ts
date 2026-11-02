@@ -17,6 +17,7 @@ import { aiProviders, calendarDateInTimeZone } from './google-sync.js';
 import { Ga4Requests } from './ga4-requests.js';
 import { Ga4ReportCache } from './ga4-report-cache.js';
 import { GA4_HISTORY_CACHE_MS, GA4_PARTIAL_CACHE_MS, GA4_TODAY_CACHE_MS, GA4_REALTIME_CACHE_MS } from '../../shared/ga4-cache.js';
+import { GOOGLE_SAVED_REPORT_MS } from '../../shared/google-cache.js';
 import type { LegacyDatabase } from './legacy/database.js';
 
 const DATA=GOOGLE_ENDPOINTS.analyticsData,MIN=60000,HOUR=3600000;
@@ -125,7 +126,8 @@ class WebsiteReport{
   this.zones.set(property,{at:Date.now(),zone,confirmed,ttl:ok?24*HOUR:5*MIN});return zone;}
 
  // The window `w` ends at the synced cutoff; the daily line goes on to yesterday, the days after the cutoff marked 初步.
- period(id:string|number,property:string,w:unknown){const now=businessNow(this.p,id,'google');return this.history.load(String(id),['period',...this.scope(id,property),w,new Date(now).toISOString().slice(0,10)],()=>this.readPeriod(id,property,w),value=>Math.min(value.complete===false||value.missing.length?GA4_PARTIAL_CACHE_MS:GA4_HISTORY_CACHE_MS,24*HOUR-now%(24*HOUR)),(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));}
+ // A new day's window is answered from the view's previous one while it is read, so the report keeps the window it holds.
+ period(id:string|number,property:string,w:unknown,{cutoff,view}:{cutoff?:string;view?:unknown[]}={}){const now=businessNow(this.p,id,'google');return this.history.load(String(id),['period',...this.scope(id,property),w,new Date(now).toISOString().slice(0,10)],async()=>{const {explicitEnd,...window}=w as {explicitEnd?:boolean};return {...await this.readPeriod(id,property,w),window,...(cutoff?{cutoff}:{})};},value=>Math.min(value.complete===false||value.missing.length?GA4_PARTIAL_CACHE_MS:GA4_HISTORY_CACHE_MS,24*HOUR-now%(24*HOUR)),(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}),view?{family:['period',...this.scope(id,property),...view]}:{});}
  async readPeriod(id,property,w){const both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],current=[range(w.start,w.end)];
   const names=Object.keys(TABLES),changeNames=Object.keys(CHANGES);
   const reports=await this.batch(id,property,[
@@ -152,7 +154,7 @@ class WebsiteReport{
  // One row of a table over the window: its days against the period before, and its totals for both (deduplicated users).
  async row(id,property,w,v){const table=String(v.table||''),t=TABLES[table];if(!t)fail(systemMessageText('dataViews.unknownGa4Report'),400);const dims=v.dims||{};
   const pairs=(ROW_KEYS[table]||t.dims).map(k=>{const x=dims[k];if(typeof x!=='string'||x.length>2000)fail(systemMessageText('dataViews.ga4RowMissing'),400);return [k,x];});
-  const dates=[w.start,w.end,w.previousStart,w.previousEnd,Boolean(w.all)];return this.history.load(String(id),['row',...this.scope(id,property),dates,table,pairs],()=>this.readRow(id,property,w,{table,pairs}),undefined,(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));}
+  const dates=[w.start,w.end,w.previousStart,w.previousEnd,Boolean(w.all)];return this.history.load(String(id),['row',...this.scope(id,property),dates,table,pairs],()=>this.readRow(id,property,w,{table,pairs}),()=>GOOGLE_SAVED_REPORT_MS,(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}));}
  async readRow(id,property,w,{table,pairs}){const t=TABLES[table];
   const metrics=t.metrics||SESSION,both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],filter=exact(pairs);
   const [daysReport,totalsReport]=await this.batch(id,property,[request(['date'],metrics,both,null,Math.max(1000,(w.days||Math.ceil((Date.parse(w.end)-Date.parse(w.start))/86400000)+1)*2),filter),request([],metrics,both,null,null,filter)]);

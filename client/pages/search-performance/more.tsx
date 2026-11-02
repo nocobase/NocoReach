@@ -4,7 +4,7 @@ import {
   ChartArea as Area,
   ChartLine as Line,
 } from '#components/reach/chart-legend';
-import { googleHistoryFreshness } from '../../../shared/google-cache.js';
+import { googleHistoryFreshness, type SavedCopy } from '../../../shared/google-cache.js';
 import { $t } from "#i18n";
 // Search performance › Performance, the parts beyond the totals: Country / region, Device and Search appearance (read
 // from Search Console when the page asks), Rising, Falling and New (Search Console Insights' trending queries and pages),
@@ -34,7 +34,7 @@ import { Delta } from '#components/reach/delta';
 export type Metric = "clicks" | "impressions" | "ctr" | "position";
 export type Window = { all?: boolean; start: string; end: string; previousStart: string; previousEnd: string };
 export type BreakdownRow = { key: string; clicks: number; impressions: number; ctr: number; position: number; previousClicks: number | null; previousImpressions: number | null };
-export type Breakdown = { connected: boolean; countries: BreakdownRow[] | null; devices: BreakdownRow[] | null; appearances: BreakdownRow[] | null };
+export type Breakdown = Partial<SavedCopy> & { connected: boolean; countries: BreakdownRow[] | null; devices: BreakdownRow[] | null; appearances: BreakdownRow[] | null };
 export type MoverRow = { key: string; clicks: number; previousClicks: number; change: number; impressions: number; previousImpressions: number; position: number | null; previousPosition: number | null };
 export type Movers = { rising: MoverRow[]; falling: MoverRow[]; fresh: MoverRow[] };
 type TrendPoint = { date: string; clicks: number | null; impressions: number | null; ctr: number | null; position: number | null; previousDate: string; previousClicks: number | null; previousImpressions: number | null; previousCtr: number | null; previousPosition: number | null };

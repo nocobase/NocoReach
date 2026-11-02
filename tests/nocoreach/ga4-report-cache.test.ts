@@ -10,6 +10,8 @@ import {
   legacyRecord,
 } from '../../server/nocoreach/legacy/database.js';
 import { Ga4ReportCache } from '../../server/nocoreach/ga4-report-cache.js';
+import { waitForFresh } from '../../server/nocoreach/google-report-cache.js';
+import { GOOGLE_SAVED_COPY_RETRY_MS } from '../../shared/google-cache.js';
 import { DataViews, windowFor } from '../../server/nocoreach/data-views.js';
 import {
   WebsiteReport,
@@ -56,12 +58,162 @@ it.each(nocoReachSchemaPaths)(
     expect(read).toHaveBeenCalledTimes(1);
     vi.setSystemTime(Date.now() + GA4_HISTORY_CACHE_MS - 3600000);
     read.mockResolvedValue({ users: 456 });
+    const restarted = new Ga4ReportCache(db);
+    // Past its lifetime the saved report answers at once while a new one is read.
+    expect(await restarted.load('1', key, read)).toEqual({ users: 123 });
+    expect(read).toHaveBeenCalledTimes(2);
+    await restarted.settled();
     expect(await new Ga4ReportCache(db).load('1', key, read)).toEqual({
       users: 456,
     });
     expect(read).toHaveBeenCalledTimes(2);
   },
 );
+
+const showCopy = (
+  value: { users: number },
+  cacheExpiresAt: number,
+  saved?: { refreshing: boolean; savedAt: number },
+) => ({ ...value, cacheExpiresAt, ...saved });
+
+it('answers an expired report from its copy without waiting, and marks the copy', async () => {
+  const { cache } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const savedAt = Date.now();
+  await cache.load('1', ['a'], async () => ({ users: 1 }));
+  vi.setSystemTime(savedAt + GA4_HISTORY_CACHE_MS);
+  const gate = Promise.withResolvers<{ users: number }>();
+  const read = vi.fn(() => gate.promise);
+  const copy = await cache.load('1', ['a'], read, undefined, showCopy);
+  expect(copy).toMatchObject({ users: 1, refreshing: true, savedAt });
+  expect(copy.cacheExpiresAt).toBe(Date.now() + GOOGLE_SAVED_COPY_RETRY_MS);
+  // A second reader joins the read under way.
+  await cache.load('1', ['a'], read, undefined, showCopy);
+  expect(read).toHaveBeenCalledTimes(1);
+  gate.resolve({ users: 2 });
+  await cache.settled();
+  const fresh = await cache.load('1', ['a'], read, undefined, showCopy);
+  expect(fresh).toMatchObject({ users: 2 });
+  expect(fresh).not.toHaveProperty('savedAt');
+  expect(read).toHaveBeenCalledTimes(1);
+});
+
+it('keeps the copy when a new read fails and waits before asking again', async () => {
+  const { cache } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  await cache.load('1', ['a'], async () => ({ users: 1 }));
+  vi.setSystemTime(Date.now() + GA4_HISTORY_CACHE_MS);
+  const read = vi.fn(async () => {
+    throw new Error('invalid_grant');
+  });
+  const load = () => cache.load('1', ['a'], read, undefined, showCopy);
+  expect(await load()).toMatchObject({ users: 1, refreshing: true });
+  await cache.settled();
+  await vi.waitFor(async () =>
+    expect(await load()).toMatchObject({ users: 1, refreshing: false }),
+  );
+  expect(read).toHaveBeenCalledTimes(1);
+  vi.setSystemTime(Date.now() + GA4_PARTIAL_CACHE_MS);
+  expect(await load()).toMatchObject({ users: 1, refreshing: true });
+  expect(read).toHaveBeenCalledTimes(2);
+});
+
+it('answers a new window from the same view, and only the same view', async () => {
+  const { db, cache } = await fixture();
+  const view = { family: ['period', 'range-28'] };
+  await cache.load(
+    '1',
+    ['period', '2026-10-01'],
+    async () => ({ users: 1 }),
+    undefined,
+    undefined,
+    view,
+  );
+  const gate = Promise.withResolvers<{ users: number }>();
+  const read = vi.fn(() => gate.promise);
+  const restarted = new Ga4ReportCache(db);
+  const next = () =>
+    restarted.load(
+      '1',
+      ['period', '2026-10-02'],
+      read,
+      undefined,
+      showCopy,
+      view,
+    );
+  expect(await next()).toMatchObject({ users: 1, refreshing: true });
+  gate.resolve({ users: 2 });
+  await restarted.settled();
+  expect(await next()).toMatchObject({ users: 2 });
+  const saved: unknown = (
+    await db
+      .getRepository('nrSnapshots')
+      .findOne({ filter: { key: 'ga4-reports:1' } })
+  )?.get('payload');
+  // The earlier window gave up its room.
+  expect((saved as { entries: unknown[] }).entries).toHaveLength(1);
+  // Another view or project waits for its own report.
+  const other = vi.fn(async () => ({ users: 3 }));
+  expect(
+    await restarted.load('1', ['period', 'x'], other, undefined, showCopy, {
+      family: ['period', 'range-90'],
+    }),
+  ).toMatchObject({ users: 3 });
+  expect(
+    await restarted.load(
+      '2',
+      ['period', 'y'],
+      other,
+      undefined,
+      showCopy,
+      view,
+    ),
+  ).toMatchObject({ users: 3 });
+  expect(other).toHaveBeenCalledTimes(2);
+});
+
+it('waits for a new report inside waitForFresh, as the tick and background builds do', async () => {
+  const { cache } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  await cache.load('1', ['a'], async () => ({ users: 1 }));
+  vi.setSystemTime(Date.now() + GA4_HISTORY_CACHE_MS);
+  const read = vi.fn(async () => ({ users: 2 }));
+  expect(await waitForFresh(() => cache.load('1', ['a'], read))).toEqual({
+    users: 2,
+  });
+  const failed = vi.fn(async () => {
+    throw new Error('quota');
+  });
+  vi.setSystemTime(Date.now() + GA4_HISTORY_CACHE_MS);
+  await expect(
+    waitForFresh(() => cache.load('1', ['a'], failed)),
+  ).rejects.toThrow('quota');
+});
+
+it('retires the copy when a new result cannot be kept, so reads stop answering from it', async () => {
+  const { db, cache } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  await cache.load('1', ['a'], async () => ({ rows: 'small' }));
+  vi.setSystemTime(Date.now() + GA4_HISTORY_CACHE_MS);
+  const large = vi.fn(async () => ({ rows: 'x'.repeat(2 * 1024 * 1024) }));
+  expect(await cache.load('1', ['a'], large)).toEqual({ rows: 'small' });
+  await cache.settled();
+  expect((await cache.load('1', ['a'], large)).rows).toHaveLength(
+    2 * 1024 * 1024,
+  );
+  expect(large).toHaveBeenCalledTimes(2);
+  expect(
+    (
+      (
+        await db
+          .getRepository('nrSnapshots')
+          .findOne({ filter: { key: 'ga4-reports:1' } })
+      )?.get('payload') as {
+        entries: unknown[];
+      }
+    ).entries,
+  ).toHaveLength(0);
+});
 
 it('isolates projects, properties, date ranges and simulated scopes, and bounds persisted entries', async () => {
   const { db, cache } = await fixture();

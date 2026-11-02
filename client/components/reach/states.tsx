@@ -2,6 +2,7 @@ import { $t } from "#i18n";
 import type {ReactElement,ReactNode} from 'react';
 import {AlertCircleIcon} from 'lucide-react';
 import {cn} from '#lib/utils';
+import {formatDateTime} from '#lib/format';
 import {Alert,AlertDescription,AlertTitle} from '#components/ui/alert';
 import {Button} from '#components/ui/button';
 import {Skeleton} from '#components/ui/skeleton';
@@ -20,6 +21,10 @@ export function LoadError({title,message,onRetry}:{title:string;message?:string;
  return <Alert variant="destructive"><AlertCircleIcon/><AlertTitle>{title}</AlertTitle><AlertDescription className="flex flex-wrap items-center gap-3">{message||$t('states.requestNotCompleteTryAgain')}{onRetry?<Button variant="outline" size="sm" onClick={onRetry}>{$t('common.retry')}</Button>:null}</AlertDescription></Alert>;
 }
 // Something on the page went wrong and needs a look (a failed check, an unanswered request): shown, not hidden in an ⓘ.
+// A report that could not be replaced for now: the numbers below are from when it was saved.
+export function SavedReportNote({at}:{at?:number}):ReactElement|null{
+  return at?<p className='text-xs text-muted-foreground' data-saved-report=''>{$t('common.savedReportShown',{0:formatDateTime(at)})}</p>:null;
+}
 export function InlineError({children,action}:{children:ReactNode;action?:ReactNode}):ReactElement{
  return <Alert variant="destructive"><AlertCircleIcon/><AlertDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">{children}{action}</AlertDescription></Alert>;
 }

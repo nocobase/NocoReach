@@ -8,6 +8,7 @@ import * as __signals from '../../server/nocoreach/signals.js';
 import * as __data_views from '../../server/nocoreach/data-views.js';
 import * as __site_content from '../../server/nocoreach/site-content.js';
 import * as __google_sync from '../../server/nocoreach/google-sync.js';
+import * as __report_cache from '../../server/nocoreach/google-report-cache.js';
 const test=__vitest_test;
 
 function setup(){
@@ -32,6 +33,18 @@ test('snapshots are reused until stored data changes',async()=>{
  add('ga4','overview','2026-09-28',[{date:'2026-09-28',views:12,sessions:6,conversions:0}],'2026-10-01T00:00:00Z');add('gsc','overview','2026-09-28',[{date:'2026-09-28',clicks:4,impressions:95}],'2026-10-01T00:00:00Z');
  const next=await sync.snapshots('1');assert.equal(calls.find,2);assert.notEqual(next,first);
  assert.equal(next.find(s=>s.key==='project').payload.end,'2026-09-28');
+});
+
+test('tick: readies Search performance at most every 15 minutes whatever came of it, and waits for new reports',async()=>{
+ vi.useFakeTimers({toFake:['Date']});
+ try{
+  const {sync}=setup();sync.step=async()=>false;sync.snapshots=async()=>[];sync.refreshFresh=async()=>{};
+  sync.repo=()=>({find:async()=>[{get:k=>k==='projectId'?'1':k==='nextSyncAt'?'2999-01-01T00:00:00Z':null}],findOne:async()=>null});
+  const waited=[],warm=vi.fn(async()=>{waited.push(await __report_cache.waitForFresh(async()=>'scope'));throw new Error('quota');});
+  sync.p.dataViews={search:async()=>({}),website:async()=>({}),warm};
+  await sync.tick();await sync.tick();assert.equal(warm.mock.calls.length,1,'a failure does not repeat every 15 seconds');assert.deepEqual(waited,['scope']);
+  vi.setSystemTime(Date.now()+15*60000);await sync.tick();assert.equal(warm.mock.calls.length,2);
+ }finally{vi.useRealTimers();}
 });
 
 test('concurrent requests share one build',async()=>{

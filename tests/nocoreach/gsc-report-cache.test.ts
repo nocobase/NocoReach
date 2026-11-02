@@ -9,7 +9,12 @@ import {
 import { DataViews, windowFor } from '../../server/nocoreach/data-views.js';
 import { SearchIndex } from '../../server/nocoreach/search-index.js';
 import {
+  historyBounds,
+  shiftDate,
+} from '../../server/nocoreach/search-history.js';
+import {
   GOOGLE_HISTORY_CACHE_MS,
+  GOOGLE_SAVED_REPORT_MS,
   GOOGLE_PARTIAL_CACHE_MS,
 } from '../../shared/google-cache.js';
 
@@ -181,9 +186,34 @@ it('persists GSC reports, empty countries and row details, preserves expiry and 
   expect(await restarted.searchRow('1', selection)).toEqual(detail);
   expect(await restarted.searchCountries('1', window)).toEqual(countries);
   expect(upstream).toHaveBeenCalledTimes(count);
+  // Final days do not change: a report over them does not expire with the others, however often it is read.
   vi.setSystemTime(Date.now() + 1);
-  await restarted.searchBreakdown('1', window);
+  expect(await restarted.searchBreakdown('1', window)).toEqual(duplicate);
+  expect(upstream).toHaveBeenCalledTimes(count);
+  vi.setSystemTime(Date.now() + GOOGLE_SAVED_REPORT_MS);
+  const later = new DataViews(plugin);
+  await later.searchBreakdown('1', window);
   expect(upstream).toHaveBeenCalledTimes(count + 6);
+});
+
+it('reads a report still holding days after the final cutoff again after six hours, answering from its copy', async () => {
+  const { plugin, views, upstream } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const { cutoff } = historyBounds(plugin, '1');
+  const open = {
+    ...window,
+    end: shiftDate(cutoff, 1),
+  };
+  const first = await views.searchBreakdown('1', open);
+  expect(first.cacheExpiresAt).toBe(Date.now() + GOOGLE_HISTORY_CACHE_MS);
+  expect(upstream).toHaveBeenCalledTimes(6);
+  vi.setSystemTime(Date.now() + GOOGLE_HISTORY_CACHE_MS);
+  const copy = await views.searchBreakdown('1', open);
+  expect(copy).toMatchObject({ refreshing: true, connected: true });
+  await views.reports.settled();
+  expect(upstream).toHaveBeenCalledTimes(12);
+  expect(await views.searchBreakdown('1', open)).not.toHaveProperty('savedAt');
+  expect(upstream).toHaveBeenCalledTimes(12);
 });
 
 it('expires partial dimensions after five minutes and does not cache total failures', async () => {
@@ -201,6 +231,12 @@ it('expires partial dimensions after five minutes and does not cache total failu
   expect(await restarted.searchBreakdown('1', window)).toEqual(partial);
   expect(upstream).toHaveBeenCalledTimes(6);
   vi.setSystemTime(Date.now() + GOOGLE_PARTIAL_CACHE_MS);
+  // The partial copy answers while the whole report is read.
+  expect(await restarted.searchBreakdown('1', window)).toMatchObject({
+    devices: null,
+    refreshing: true,
+  });
+  await restarted.reports.settled();
   expect((await restarted.searchBreakdown('1', window)).devices[0].clicks).toBe(
     10,
   );
@@ -351,6 +387,8 @@ it('persists submitted sitemaps while recomputing local inspection tallies, and 
   expect(upstream).toHaveBeenCalledTimes(2);
   state.fail = '';
   vi.setSystemTime(Date.now() + GOOGLE_PARTIAL_CACHE_MS);
+  expect(await restarted.sitemaps('1')).toMatchObject({ refreshing: true });
+  await restarted.reports.settled();
   const refreshed = await restarted.sitemaps('1');
   expect(refreshed.sitemaps[0].children).toHaveLength(1);
   expect(refreshed.cacheExpiresAt).toBe(Date.now() + GOOGLE_HISTORY_CACHE_MS);

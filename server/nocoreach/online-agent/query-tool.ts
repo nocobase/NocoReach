@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { OnlineTool } from '../../online-agent/executor.js';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { windowFor } from '../data-views.js';
+import { waitForFresh } from '../google-report-cache.js';
 import { keywordSummary, summary as termSummary } from '../trends-source.js';
 
 type Obj = Record<string, unknown>;
@@ -314,7 +315,7 @@ const SOURCES: Record<string, Source> = {
       if (!base.window) return noData(base.cutoff);
       const w = obj(base.window);
       let details: Promise<Obj> | undefined;
-      // The tables read Search Console for the window, as the page's tables do.
+      // The same tables as the page's: the synced days where they hold the window, otherwise Search Console.
       const detail = () =>
         (details ??= call(s, 'dataViews', 'search', q.id, {
           ...v,
@@ -1355,7 +1356,8 @@ async function answer(
       return { ...head, error: 'unsupportedRange', supported: source.ranges };
   } else if (q.from || q.range !== '28')
     notes.push('This source is not read for a period; the range was ignored.');
-  const read = await source.read(sources, q);
+  // A saved copy is for a page that replaces it a moment later. The agent answers once, so it waits for current reports.
+  const read = await waitForFresh(() => source.read(sources, q));
   if (read.connected === false) return { ...head, connected: false };
   const w = obj(read.window),
     period = w.start ? { start: w.start, end: w.end } : null,
