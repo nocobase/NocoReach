@@ -253,8 +253,9 @@ export function TaskTable({
                 <td className='overflow-hidden px-3 py-2.5'>
                   <Executor w={w} agents={agents} />
                 </td>
-                <td className='px-3 py-2.5 text-xs whitespace-nowrap text-muted-foreground tabular-nums'>
-                  {ago(lastActivityAt(t))}
+                {/* The smaller time shares the row's line height, so it sits on the same baseline as the other cells. */}
+                <td className='px-3 py-2.5 whitespace-nowrap text-muted-foreground tabular-nums'>
+                  <span className='text-xs'>{ago(lastActivityAt(t))}</span>
                 </td>
                 <td
                   className='px-1 py-2.5'
