@@ -1410,6 +1410,13 @@ const YOUTUBE_TOPICS = [
   'Onboarding new teammates: our checklist',
   'Internal tool builders compared (2026)',
 ];
+// Descriptions as creators write them; the data page shows them under the title.
+const YOUTUBE_DESCRIPTIONS = [
+  'Step by step, with the template from the video linked below. Chapters in the description.',
+  'The setup our team uses every week, and the questions we get about it most often.',
+  'Everything shown runs on a self-hosted install. Links to the docs are in the pinned comment.',
+  'A short walkthrough for people new to the tool, from an empty workspace to the first report.',
+];
 // A video tracked by ID is not among the search results (usually the project's own), so it gets a title of its own.
 const YOUTUBE_TRACKED = [
   'Product walkthrough: what changed this quarter',
@@ -1436,8 +1443,7 @@ function youtubeVideo(
       index % 3
     ],
     channel_id: `UC${fixtureHash(c, `youtube-channel:${index % 3}`).slice(0, 22)}`,
-    description:
-      'A fictional walkthrough of workspace templates, workflows and reports.',
+    description: YOUTUBE_DESCRIPTIONS[index % YOUTUBE_DESCRIPTIONS.length],
     views_count: views + (added(c) ? 275 : 0),
     timestamp: at(c, 1 + index * 2)
       .replace('T', ' ')
