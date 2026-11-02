@@ -56,6 +56,7 @@ import {
   ownDays,
   show,
   TABLE_LABELS,
+  trendPoints,
   visitorName,
   type MetricKey,
   type Report,
@@ -74,7 +75,19 @@ function notesOf(report: Report): string[] {
     $t('dataWebsite.usersDeduplicatedPeriod'),
     $t('dataWebsite.aiAssistantsBySourceName'),
     $t('dataWebsite.keyEventsFollowDefinitionGa'),
-    $t('dataWebsite.latestDaysPreliminary'),
+    ...(report.settledThrough &&
+    report.window &&
+    report.window.end > report.settledThrough
+      ? [$t('dataWebsite.latestDaysPreliminary')]
+      : []),
+    ...(report.queriesWindow
+      ? [
+          $t('dataWebsite.pageQueriesFinalized', {
+            0: formatDate(report.queriesWindow.start),
+            1: formatDate(report.queriesWindow.end),
+          }),
+        ]
+      : []),
     ...(missing.length
       ? [
           $t('dataWebsite.ga4DidNotReturn', {
@@ -328,21 +341,12 @@ function ChangeDrivers({
 
 // The chosen figure per day against the same day of the period before; days GA4 is still processing are dotted.
 function TrendCard({ report, metric }: { report: Report; metric: MetricKey }) {
-  const m = METRICS[metric],
-    settled = report.settledThrough ?? report.cutoff!;
-  const days = ownDays(report.window, report.daily, report.previousDaily);
-  const points = days.current.map((d, i) => {
-    const before = days.previous[i];
-    const value = m.of(d);
-    return {
-      date: d.date,
-      value: d.date <= settled ? value : null,
-      fresh: d.date >= settled ? value : null,
-      previous: before ? m.of(before) : null,
-      previousDate: before?.date ?? '',
-    };
-  });
-  const fresh = points.some((p) => p.date > settled);
+  const m = METRICS[metric];
+  const { points, fresh } = trendPoints(
+    ownDays(report.window, report.daily, report.previousDaily),
+    m.of,
+    report.settledThrough ?? report.cutoff,
+  );
   if (points.filter((p) => p.value !== null || p.fresh !== null).length < 2)
     return null;
   const axis = (v: number) =>

@@ -38,18 +38,22 @@ function windowFor(end,range,from,to,first){if(range==='all'){const start=calend
 function metric(rows,field,w){const inWin=(a,b)=>rows.filter(r=>r.date>=a&&r.date<=b&&Number.isFinite(r[field]));const cur=inWin(w.start,w.end),prev=inWin(w.previousStart,w.previousEnd);const sum=l=>l.reduce((s,r)=>s+r[field],0);const complete=cur.length===days(w.start,w.end),prevComplete=!w.all&&prev.length===days(w.previousStart,w.previousEnd);const value=cur.length?sum(cur):null,previous=prevComplete?sum(prev):null;return {value,previous,complete,change:complete&&previous?(value-previous)/previous:null};}
 function series(rows,field,w){const by=new Map(rows.map(r=>[r.date,r[field]]));const out=[];for(let d=w.start;d<=w.end;d=add(d,1))out.push({date:d,value:by.has(d)&&Number.isFinite(by.get(d))?by.get(d):null});return out;}
 // GA4 can take 24 to 48 hours to process a day, so Traffic marks its last two days as still changing.
+// The page notes and the chart tip say "two days" in every locale (dataWebsite.latestDaysPreliminary).
 const GA4_PROCESSING_DAYS=2;
 // Traffic reads GA4 live, so its window ends yesterday instead of waiting for the synced cutoff.
 const trafficEnd=(synced,yesterday)=>calendarDate(yesterday)&&yesterday>synced?yesterday:synced;
 // Traffic (GA4): the window ends yesterday in the property's time zone; the numbers come live from GA4
 // (website-report.ts, `period`), and each page row carries the Search Console queries that landed on it in the range.
-// The page explains the numbers itself; `missing` names the reports GA4 did not return.
-async function websiteView(snaps,range,period,from,to,yesterday){const get=k=>snaps.find(s=>s.key===k)?.payload,web=get('history-web')||[],synced=get('project')?.end||web.map(r=>r.date).sort().at(-1);if(!synced||!web.length)return {connected:true,cutoff:null};const end=trafficEnd(synced,yesterday);
+// Those queries are synced, finalized data for the same range ending at the synced cutoff; `queriesWindow` names it.
+// The days after `settledThrough` are still being processed by GA4. `yesterdayOf` is asked only once there is data,
+// since it may wait on the GA4 Admin API. The page explains the numbers itself; `missing` names the reports GA4 did not return.
+async function websiteView(snaps,range,period,from,to,yesterdayOf){const get=k=>snaps.find(s=>s.key===k)?.payload,web=get('history-web')||[],synced=get('project')?.end||web.map(r=>r.date).sort().at(-1);if(!synced||!web.length)return {connected:true,cutoff:null};
+ const yesterday=await yesterdayOf?.(),end=trafficEnd(synced,yesterday),settled=calendarDate(yesterday)?add(yesterday,-GA4_PROCESSING_DAYS):end;
  const w=windowFor(end,range,from,to,firstDate(web)),report=await period(w);
  const pathOf=u=>{try{return new URL(u).pathname.replace(/\/+$/,'')||'/';}catch{return String(u||'').split('?')[0].replace(/\/+$/,'')||'/';}};
- const queries=new Map();for(const q of get(`queries-${range}`)||[]){const k=pathOf(q.page);if(!queries.has(k))queries.set(k,[]);queries.get(k).push({keyword:q.keyword,clicks:q.clicks,impressions:q.impressions,position:q.position});}
+ const searched=get(`queries-${range}`)||[],queries=new Map();for(const q of searched){const k=pathOf(q.page);if(!queries.has(k))queries.set(k,[]);queries.get(k).push({keyword:q.keyword,clicks:q.clicks,impressions:q.impressions,position:q.position});}
  if(report.tables.page)report.tables.page=report.tables.page.map(p=>({...p,queries:(queries.get(pathOf(p.key))||[]).sort((a,b)=>b.impressions-a.impressions).slice(0,8)}));
- return {connected:true,cutoff:end,settledThrough:add(end,-GA4_PROCESSING_DAYS),from:firstDate(web),window:w,...report};}
+ return {connected:true,cutoff:end,settledThrough:settled<end?settled:end,queriesWindow:searched.length?{start:windowFor(synced,range).start,end:synced}:null,from:firstDate(web),window:w,...report};}
 function firstDate(rows){return rows.map(r=>r.date).sort()[0]||null;}
 // Search Console filters for a country and the query and page filters. Search performance reads web search only
 // (2026-10-22: the other search types were dropped from the page; the sync reads web search only too).
@@ -207,11 +211,13 @@ class DataViews{
  // GA4 history is cached by the actual query in WebsiteReport. Synced partition writes only refresh the local
  // Search Console enrichment, without invalidating an unchanged GA4 window or repeating its upstream reports.
  async website(id,v){let link,snaps;try{[link,snaps]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshots(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
-  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28';const property=link.get('ga4PropertyId');return websiteView(snaps,range,w=>this.ga4.period(id,property,w),v.from,v.to,await this.ga4.yesterday(id,property));}
+  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28';const property=link.get('ga4PropertyId');return websiteView(snaps,range,w=>this.ga4.period(id,property,w),v.from,v.to,()=>this.ga4.yesterday(id,property));}
  // 访问 · one row's days (its detail), 今天 and 实时: read from GA4 when asked (website-report.ts keeps each a while).
  async websiteRow(id,v){let link,snaps;try{[link,snaps]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshots(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const get=k=>snaps.find(s=>s.key===k)?.payload,synced=get('project')?.end||(get('history-web')||[]).map(r=>r.date).sort().at(-1);if(!synced)return {connected:true,cutoff:null};
-  const end=trafficEnd(synced,await this.ga4.yesterday(id,link.get('ga4PropertyId'))),cutoff=v.cutoff===undefined?end:v.cutoff,first=firstDate(get('history-web')||[]);if(!calendarDate(cutoff)||cutoff>end||(first&&cutoff<first))fail(systemMessageText('dataViews.invalidDate'));
+  // The cutoff is the one on the user's report. It is checked against the latest day that is yesterday anywhere (UTC+14),
+  // not a new zone lookup, which another instance or a failed lookup may resolve a day earlier.
+  const latest=add(iso(businessNow(this.p,id,'google')+14*3600000),-1),cutoff=v.cutoff===undefined?trafficEnd(synced,await this.ga4.yesterday(id,link.get('ga4PropertyId'))):v.cutoff,first=firstDate(get('history-web')||[]);if(!calendarDate(cutoff)||cutoff>trafficEnd(synced,latest)||(first&&cutoff<first))fail(systemMessageText('dataViews.invalidDate'));
   const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28',w=windowFor(cutoff,range,v.from,v.to,first);
   return {connected:true,cutoff,window:w,...await this.ga4.row(id,link.get('ga4PropertyId'),w,{table:String(v.table||''),dims:v.dims&&typeof v.dims==='object'?v.dims:{}})};}
  async websiteToday(id){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.today(id,link.get('ga4PropertyId'))};}

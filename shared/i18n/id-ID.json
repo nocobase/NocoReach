@@ -5647,6 +5647,7 @@
   "dataWebsite.usersDeduplicatedPeriod": "Pengguna dihitung tanpa duplikasi selama periode yang dipilih, seperti dalam laporan GA4; jumlah pengguna dari semua baris tabel bisa melebihi total",
   "dataWebsite.aiAssistantsBySourceName": "Asisten AI dikenali berdasarkan nama sumber (ChatGPT, Perplexity, dan lainnya); GA4 menghitungnya dalam saluran Rujukan dan saluran lainnya",
   "dataWebsite.latestDaysPreliminary": "Data dua hari terakhir masih bisa berubah selama GA4 memprosesnya: ditampilkan dengan garis titik-titik di grafik dan dihitung dalam angka di atas, sehingga perbandingannya bisa sedikit lebih rendah",
+  "dataWebsite.pageQueriesFinalized": "Kueri pencarian halaman adalah data final Search Console untuk {0} sampai {1}, sehingga berakhir beberapa hari sebelum angka trafik",
   "dataWebsite.ga4DidNotReturn": "GA4 tidak mengembalikan: {0}",
   "dataWebsite.metricPerDay": "{0} per hari",
   "dataWebsite.trendHowToRead": "Klik angka di atas untuk mengganti garis ini. Garis putus-putus menunjukkan hari yang sama pada periode sebelumnya{0}.",

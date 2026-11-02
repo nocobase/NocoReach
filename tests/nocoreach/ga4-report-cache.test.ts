@@ -199,6 +199,7 @@ it('reuses GA4 history after sync changes while rebuilding current Search Consol
   }));
   const views = new DataViews(host);
   views.ga4.readPeriod = read;
+  views.ga4.yesterday = vi.fn(async () => '2026-10-10');
   const first = await views.website('1', { range: '7' });
   snaps = snippets('after');
   const next = await views.website('1', { range: '7' });
@@ -207,6 +208,7 @@ it('reuses GA4 history after sync changes while rebuilding current Search Consol
   expect(next.tables.page[0].queries[0].keyword).toBe('after');
   const restarted = new DataViews(host);
   restarted.ga4.readPeriod = read;
+  restarted.ga4.yesterday = views.ga4.yesterday;
   await restarted.website('1', { range: '7' });
   expect(read).toHaveBeenCalledTimes(1);
   expect(host.sync.snapshotKey).not.toHaveBeenCalled();
@@ -298,6 +300,9 @@ it.each([
   'keeps $range row details on the cached report window after sync advances and rejects invalid cutoffs',
   async (range) => {
     const { db } = await fixture();
+    // 2026-10-11 is yesterday in UTC+14, the latest day any zone can have finished; 2026-10-12 is not.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-12T05:00:00Z'));
     let end = '2026-10-10';
     const views = new DataViews({
       db,

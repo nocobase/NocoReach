@@ -137,16 +137,22 @@ test('访问 view: window at the cutoff, Search Console queries on their page ro
  assert.deepEqual(asked,windowFor(end,'7'));assert.equal(v.cutoff,end);
  assert.deepEqual(v.tables.page[0].queries.map(q=>q.keyword),['docker','install nocobase'],'most seen first, trailing slash ignored');
  assert.deepEqual(v.missing,['city']);
- assert.equal((await websiteView([{key:'history-web',payload:[]}],'28',()=>{throw new Error('not asked');})).cutoff,null);
+ const later=await websiteView(snaps,'7',async()=>({tables:{page:[]},missing:[]}),undefined,undefined,async()=>'2026-09-30');
+ assert.deepEqual(later.queriesWindow,{start:windowFor(end,'7').start,end},'the queries keep the synced range while the traffic reaches yesterday');
+ assert.equal((await websiteView(snaps,'custom',async()=>({tables:{},missing:[]}),'2026-09-25','2026-09-27')).queriesWindow,null,'no synced queries for a custom range');
+ assert.equal((await websiteView([{key:'history-web',payload:[]}],'28',()=>{throw new Error('not asked');},undefined,undefined,()=>{throw new Error('no zone lookup without data');})).cutoff,null);
 });
 
 test('Traffic window ends yesterday, ahead of the synced cutoff, with the last two days unsettled',async()=>{
  const synced='2026-09-27',snaps=[{key:'project',payload:{end:synced}},{key:'history-web',payload:[{date:'2026-09-20'},{date:synced}]}];
  let asked;const period=async w=>{asked=w;return {tables:{},missing:[]};};
- const v=await websiteView(snaps,'7',period,undefined,undefined,'2026-09-30');
+ const v=await websiteView(snaps,'7',period,undefined,undefined,async()=>'2026-09-30');
  assert.deepEqual(asked,windowFor('2026-09-30','7'));assert.equal(v.cutoff,'2026-09-30');assert.equal(v.settledThrough,'2026-09-28');
- await websiteView(snaps,'custom',period,'2026-09-25','2026-09-30','2026-09-30');
+ await websiteView(snaps,'custom',period,'2026-09-25','2026-09-30',async()=>'2026-09-30');
  assert.equal(asked.end,'2026-09-30','a custom range can reach yesterday');
+ const behind=await websiteView(snaps,'7',period,undefined,undefined,async()=>'2026-09-27');
+ assert.equal(behind.cutoff,synced);assert.equal(behind.settledThrough,'2026-09-25','only the days GA4 is still processing are unsettled');
+ assert.equal((await websiteView(snaps,'7',period)).settledThrough,synced,'no yesterday: the synced days are all settled');
 });
 
 test('yesterday follows the property time zone, not UTC',async()=>{
@@ -154,6 +160,24 @@ test('yesterday follows the property time zone, not UTC',async()=>{
  const {g}=fake(()=>({}));
  g.timeZone=async()=>'America/Los_Angeles';assert.equal(await g.yesterday('1','123'),'2026-10-29');
  g.timeZone=async()=>'Asia/Shanghai';assert.equal(await g.yesterday('1','123'),'2026-10-30');
+});
+
+test('yesterday after a failed zone lookup ends on a day already over everywhere, and does not wait on a known zone',async()=>{
+ vi.useFakeTimers({now:new Date('2026-10-31T02:00:00Z')});
+ const {g}=fake(()=>({}));
+ g.zones.set('123',{at:Date.now(),zone:'UTC',confirmed:false,ttl:300000});
+ assert.equal(await g.yesterday('1','123'),'2026-10-29','UTC-12 is still on 10-30, the day under way in Los Angeles');
+ let lookups=0;g.timeZone=async()=>{lookups++;return 'Asia/Shanghai';};
+ g.zones.set('123',{at:Date.now()-86400001,zone:'America/Los_Angeles',confirmed:true,ttl:86400000});
+ assert.equal(await g.yesterday('1','123'),'2026-10-29','the known zone is used while it is looked up again');assert.equal(lookups,1);
+});
+
+test('a period is kept until midnight in the zone its window ends in',async()=>{
+ vi.useFakeTimers({now:new Date('2026-10-31T06:00:00Z')});
+ const {g}=fake(()=>({}));g.readPeriod=async()=>({tables:{},missing:[]});
+ g.zones.set('123',{at:Date.now(),zone:'America/Los_Angeles',confirmed:true,ttl:86400000});
+ const v=await g.period('1','123',windowFor('2026-10-30','7'));
+ assert.equal(v.cacheExpiresAt,Date.parse('2026-10-31T07:00:00Z'),'23:00 in Los Angeles: an hour left, not six');
 });
 
 test('all-time daily reports increase the row limit and omit previous data',async()=>{

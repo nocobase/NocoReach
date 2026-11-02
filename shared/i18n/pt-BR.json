@@ -5565,6 +5565,7 @@
   "dataWebsite.usersDeduplicatedPeriod": "Cada usuário é contado uma única vez no período selecionado, como nos relatórios do GA4; a soma dos usuários nas linhas da tabela supera o total",
   "dataWebsite.aiAssistantsBySourceName": "Os assistentes de IA são identificados pelo nome da origem (ChatGPT, Perplexity e outros); o GA4 os contabiliza em Referência e em outros canais",
   "dataWebsite.latestDaysPreliminary": "Os dois últimos dias ainda podem mudar enquanto o GA4 processa os dados: aparecem pontilhados no gráfico e entram nos números acima, por isso a comparação pode ficar um pouco baixa",
+  "dataWebsite.pageQueriesFinalized": "As consultas de busca de uma página são dados finais do Search Console de {0} a {1}, por isso terminam alguns dias antes dos números de tráfego",
   "dataWebsite.ga4DidNotReturn": "O GA4 não retornou: {0}",
   "dataWebsite.metricPerDay": "{0} por dia",
   "dataWebsite.trendHowToRead": "Clique em uma métrica acima para alterar esta linha. A linha tracejada representa o dia correspondente do período anterior{0}.",

@@ -73,6 +73,7 @@ import {
   regionName,
   show,
   special,
+  trendPoints,
   type MetricKey,
   type Report,
   type Row,
@@ -703,13 +704,11 @@ function RowDrawer({
   const w = report.window!;
   const now = data?.totals?.current ?? row,
     before = data?.totals?.previous ?? null;
-  const days = ownDays(data?.window ?? w, data?.daily, data?.previousDaily);
-  const points = days.current.map((d, i) => ({
-    date: d.date,
-    value: METRICS[main].of(d),
-    previous: days.previous[i] ? METRICS[main].of(days.previous[i]) : null,
-    previousDate: days.previous[i]?.date ?? '',
-  }));
+  const { points, fresh } = trendPoints(
+    ownDays(data?.window ?? w, data?.daily, data?.previousDaily),
+    METRICS[main].of,
+    report.settledThrough,
+  );
   return (
     <DetailDrawer
       open
@@ -855,6 +854,17 @@ function RowDrawer({
                 strokeDasharray='4 4'
                 dot={false}
               />
+              {fresh ? (
+                <Line
+                  isAnimationActive={false}
+                  type='linear'
+                  dataKey='fresh'
+                  name={$t('dataWebsite.preliminaryData')}
+                  stroke='var(--chart-3)'
+                  strokeDasharray='2 3'
+                  dot={false}
+                />
+              ) : null}
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -864,6 +874,14 @@ function RowDrawer({
           <h3 className='mt-5 mb-1 text-sm font-semibold'>
             {$t('dataWebsite.relatedSearchQueries')}
           </h3>
+          {row.queries?.length && report.queriesWindow ? (
+            <p className='mb-2 text-xs text-muted-foreground'>
+              {$t('dataWebsite.pageQueriesFinalized', {
+                0: formatDate(report.queriesWindow.start),
+                1: formatDate(report.queriesWindow.end),
+              })}
+            </p>
+          ) : null}
           {row.queries?.length ? (
             <table className='w-full text-sm'>
               <thead>

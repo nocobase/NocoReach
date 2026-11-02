@@ -149,6 +149,8 @@ function fixture() {
         return {
           connected: true,
           cutoff: day(0),
+          settledThrough: day(2),
+          queriesWindow: { start: day(30), end: day(3) },
           window,
           totals: { current: { sessions: 5000 }, previous: { sessions: 4200 } },
           daily: daily(() => ({ sessions: 180 })),
@@ -935,6 +937,10 @@ it('filters, sorts and ranges reach the source the way its page asks', async () 
     source: 'reddit',
     error: 'needsFromBeforeTo',
   });
+  expect((await ask({ source: 'traffic' })).notes).toEqual([
+    `GA4 is still processing the days after ${day(2)}: they are counted and may still rise, so comparisons with the previous period can read low.`,
+    `The page table's queries are Search Console's finalized data for ${day(30)} to ${day(3)}, which ends before dataThrough.`,
+  ]);
   expect(await ask({ source: 'traffic', table: 'nothing' })).toMatchObject({
     error: 'unknownTable',
     tables: expect.arrayContaining(['page', 'channel']),

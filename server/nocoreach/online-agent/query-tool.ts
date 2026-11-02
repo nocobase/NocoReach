@@ -432,15 +432,32 @@ const SOURCES: Record<string, Source> = {
       tables.daily = list(v.daily);
       for (const name of ['page', 'landing', 'channel'])
         tables[`${name}_changes`] = list(changes[name]).map(changeRow);
+      const text = (x: unknown) => (typeof x === 'string' && x ? x : null),
+        settled = text(v.settledThrough),
+        through = text(obj(v.window).end),
+        searched = obj(v.queriesWindow),
+        searchedFrom = text(searched.start),
+        searchedTo = text(searched.end);
       return {
         dataThrough: v.cutoff,
-        settledThrough: v.settledThrough ?? null,
         window: v.window,
         summary: {
           totals: v.totals ?? null,
           complete: v.complete ?? null,
           missing: v.missing ?? [],
         },
+        notes: [
+          ...(settled && through && through > settled
+            ? [
+                `GA4 is still processing the days after ${settled}: they are counted and may still rise, so comparisons with the previous period can read low.`,
+              ]
+            : []),
+          ...(searchedFrom && searchedTo
+            ? [
+                `The page table's queries are Search Console's finalized data for ${searchedFrom} to ${searchedTo}, which ends before dataThrough.`,
+              ]
+            : []),
+        ],
         tables,
       };
     },

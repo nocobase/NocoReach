@@ -13,7 +13,7 @@
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { businessNow } from './business-clock.js';
 import { GOOGLE_ENDPOINTS, googleJson, jsonRequest } from './google-client.js';
-import { aiProviders, calendarDateInTimeZone } from './google-sync.js';
+import { aiProviders, calendarDateInTimeZone, resolveGa4SyncRange } from './google-sync.js';
 import { Ga4Requests } from './ga4-requests.js';
 import { Ga4ReportCache } from './ga4-report-cache.js';
 import { GA4_HISTORY_CACHE_MS, GA4_PARTIAL_CACHE_MS, GA4_TODAY_CACHE_MS, GA4_REALTIME_CACHE_MS } from '../../shared/ga4-cache.js';
@@ -66,8 +66,11 @@ function changeRows(name,report){const c=CHANGES[name],by=new Map();
  for(const r of rowsOf(report)){const k=name==='channel'?r[c.dim]:pathKey(r[c.dim]);if(!by.has(k))by.set(k,{key:k,current:{},previous:{}});const o=by.get(k)[r.dateRange==='previous'?'previous':'current'];for(const [f,v] of Object.entries(values(r)))o[f]=(o[f]||0)+v;}
  const size=r=>Math.max(...Object.values(r.current),...Object.values(r.previous),0);
  return [...by.values()].sort((a,b)=>size(b)-size(a)).slice(0,CHANGE_KEEP);}
-// A day (YYYY-MM-DD) within a range; no end means up to now.
-const inWindow=(date:string,from:string,to?:string)=>date>=from&&(!to||date<=to);
+// A day (YYYY-MM-DD) within a range.
+const inWindow=(date:string,from:string,to:string)=>date>=from&&date<=to;
+// Milliseconds from `now` to the next midnight in `zone` (UTC when the zone is unknown to Intl).
+function untilMidnight(zone:string,now:number){let clock;try{clock=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(now)).map(p=>[p.type,p.value]));}catch{return 24*HOUR-now%(24*HOUR);}
+ return 24*HOUR-((Number(clock.hour)*60+Number(clock.minute))*60+Number(clock.second))*1000-now%1000;}
 const range=(startDate,endDate,name)=>({startDate,endDate,...(name?{name}:{})});
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0;};
 function rowsOf(report){const dims=(report?.dimensionHeaders||[]).map(h=>h.name),mets=(report?.metricHeaders||[]).map(h=>h.name);
@@ -124,10 +127,17 @@ class WebsiteReport{
   catch(e){ok=false;zone=hit?.zone||'UTC';confirmed=Boolean(hit?.confirmed);this.p.app?.logger?.warn('NocoReach GA4 time zone lookup failed',{message:e?.message,code:e?.code,status:e?.status});}
   this.zones.set(property,{at:Date.now(),zone,confirmed,ttl:ok?24*HOUR:5*MIN});return zone;}
 
- // Yesterday in the property's time zone: the last full day GA4 can report, and the end of every Traffic window.
- async yesterday(id:string|number,property:string){const zone=await this.timeZone(id,property),today=calendarDateInTimeZone(zone,new Date(businessNow(this.p,id,'google')));return new Date(Date.parse(today+'T00:00:00Z')-24*HOUR).toISOString().slice(0,10);}
- // The totals, the daily line and the tables all cover the window `w`.
- period(id:string|number,property:string,w:unknown){const now=businessNow(this.p,id,'google');return this.history.load(String(id),['period',...this.scope(id,property),w,new Date(now).toISOString().slice(0,10)],()=>this.readPeriod(id,property,w),value=>Math.min(value.complete===false||value.missing.length?GA4_PARTIAL_CACHE_MS:GA4_HISTORY_CACHE_MS,24*HOUR-now%(24*HOUR)),(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));}
+ // The zone Traffic's windows end in: the property's own unless the lookup failed with none confirmed, then UTC-12,
+ // the last zone to finish a day, so the window may end a day early but never on a day still under way.
+ endZone(property:string,zone=this.zones.get(property)?.zone){return this.zones.get(property)?.confirmed===false?'Etc/GMT+12':zone||'UTC';}
+ // Yesterday in that zone: the last full day GA4 can report, and the end of every Traffic window. A zone already
+ // looked up is used even past its time while a new lookup runs, so the page waits on the Admin API only the first time.
+ async yesterday(id:string|number,property:string){const hit=this.zones.get(property);if(hit&&Date.now()-hit.at>=hit.ttl)void this.timeZone(id,property).catch(()=>{});
+  const zone=this.endZone(property,hit?hit.zone:await this.timeZone(id,property)),now=new Date(businessNow(this.p,id,'google'));
+  try{return resolveGa4SyncRange({},zone,now).targetEnd;}catch{return resolveGa4SyncRange({},'Etc/GMT+12',now).targetEnd;}}
+ // The totals, the daily line and the tables all cover the window `w`, kept until midnight where it ends, when
+ // yesterday moves on and the same range names other days.
+ period(id:string|number,property:string,w:unknown){const now=businessNow(this.p,id,'google');return this.history.load(String(id),['period',...this.scope(id,property),w],()=>this.readPeriod(id,property,w),value=>Math.min(value.complete===false||value.missing.length?GA4_PARTIAL_CACHE_MS:GA4_HISTORY_CACHE_MS,untilMidnight(this.endZone(property),now)),(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));}
  async readPeriod(id,property,w){const both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],current=[range(w.start,w.end)];
   const names=Object.keys(TABLES),changeNames=Object.keys(CHANGES);
   const reports=await this.batch(id,property,[
@@ -141,7 +151,7 @@ class WebsiteReport{
   const daily=rowsOf(dailyReport).map(r=>({period:r.dateRange,date:`${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)}`,...values(r)}));
   // With two date ranges and the date dimension GA4 answers every day of both ranges for each range, zeros outside
   // it: keep each range's own days, or the line runs over the other period's days at zero (UI review 2026-10-21).
-  const out={totals:{current:totals.current||null,previous:totals.previous||null},daily:daily.filter(r=>r.period==='current'&&inWindow(r.date,w.start)).map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),
+  const out={totals:{current:totals.current||null,previous:totals.previous||null},daily:daily.filter(r=>r.period==='current'&&inWindow(r.date,w.start,w.end)).map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),
    previousDaily:daily.filter(r=>r.period==='previous'&&inWindow(r.date,w.previousStart,w.previousEnd)).map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),tables:{},missing:[],complete:reports.every(Boolean)};
   names.forEach((n,i)=>{if(tables[i])out.tables[n]=tableRows(n,tables[i]);else out.missing.push(n);});
   // A change report GA4 refuses only leaves that part out of the explanation.
