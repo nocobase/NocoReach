@@ -129,7 +129,9 @@ export default function DataBilibili() {
     setBusy(true);
     try {
       const next = await bilibiliRequest<BilibiliStatus>(project.id, 'sync');
-      if (next.lastRun?.ok)
+      // A read the busy collector turned away is queued and retried in about ten minutes.
+      if (next.queued) toast.info(() => $t('collectorQueue.title'));
+      else if (next.lastRun?.ok)
         toast.success(() => $t('bilibili.bilibiliCollectionCompleted'));
       else if (next.lastRun?.partial)
         toast.info(() => $t('bilibili.verifiablePartialResultsSaved'));

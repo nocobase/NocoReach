@@ -82,7 +82,11 @@ export async function sourceStatuses(
           : 'lastSync' in state
             ? state.lastSync
             : null;
-      if (attempt?.ok === false) {
+      // A collector busy with another read is not a failure: the read is retried, or waits for the next one.
+      if (
+        attempt?.ok === false &&
+        !('errorCode' in attempt && attempt.errorCode === 'busy')
+      ) {
         out[source.source] = { state: 'error' };
         continue;
       }

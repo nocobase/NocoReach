@@ -95,6 +95,8 @@ function setup(overrides: Partial<BilibiliAdapter> = {}) {
     },
     network: { bind: vi.fn() },
     project: vi.fn(async () => ({ id: '1' })),
+    projectIds: vi.fn(async () => ['1']),
+    app: { logger: { warn: vi.fn() } },
   };
   return {
     service: new BilibiliSource(host as never, adapter),
@@ -136,11 +138,24 @@ it('validates bounded terms, exact IDs, canonical URLs and expected revision wit
     terms: ['中', '-topic', 'nocobase'],
     bvids: [BV1],
   });
+  // Up to five terms, as YouTube takes; daily reading is switched with the same save.
+  expect(
+    bilibiliConfig({
+      collectorId: 'local',
+      revision: null,
+      terms: 'one,two,three,four,five',
+      autoSync: false,
+    }),
+  ).toMatchObject({
+    terms: ['one', 'two', 'three', 'four', 'five'],
+    autoSync: false,
+  });
   for (const value of [
     {},
     { terms: '' },
     { terms: 'a'.repeat(81) },
-    { terms: 'one,two,three,four' },
+    { terms: 'one,two,three,four,five,six' },
+    { terms: 'valid', autoSync: 'yes' },
     { terms: 'a\u0000b' },
     { bvids: `http://127.0.0.1/video/${BV1}` },
     { bvids: 'https://b23.tv/abc' },
@@ -1064,3 +1079,149 @@ it.each(['null', 'failed', 'legacy'] as const)(
     ).toBe(oldAt);
   },
 );
+
+// Daily reading and a busy collector (2026-11-02).
+const later = (minutes: number) => Date.now() + minutes * 60000;
+it('turns daily reading on by default and switches it without a new revision', async () => {
+  const { service } = setup();
+  const first = await connect(service);
+  expect(first).toMatchObject({ autoSync: true, automatic: true });
+  expect(Date.parse(first.nextSyncAt!)).toBeLessThanOrEqual(Date.now());
+  const off = await connect(service, {
+    revision: first.revision,
+    autoSync: false,
+  });
+  expect(off).toMatchObject({
+    autoSync: false,
+    nextSyncAt: null,
+    revision: first.revision,
+  });
+  // Changing the terms keeps the switch.
+  const changed = await connect(service, {
+    revision: first.revision,
+    terms: 'NocoBase,Appsmith',
+  });
+  expect(changed.autoSync).toBe(false);
+  expect(changed.revision).not.toBe(first.revision);
+});
+it('queues a read the busy collector turned away, retries it three times without counting a failure, then waits for the next day', async () => {
+  const search = vi.fn(async () => {
+    throw new BilibiliError('busy');
+  });
+  const { service } = setup({ search });
+  await connect(service);
+  const queued = await service.sync('1');
+  expect(queued).toMatchObject({
+    queued: { retries: 1 },
+    lastRun: null,
+    failures: 0,
+    pausedCode: null,
+  });
+  expect(Date.parse(queued.queued!.retryAt)).toBeGreaterThan(later(9));
+  expect(queued.nextSyncAt).toBe(queued.queued!.retryAt);
+  // The tick leaves it alone until the retry is due.
+  await service.tick();
+  expect(search).toHaveBeenCalledTimes(1);
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    for (const retries of [2, 3]) {
+      vi.setSystemTime(later(11));
+      await service.tick();
+      expect((await service.status('1')).queued?.retries).toBe(retries);
+    }
+    vi.setSystemTime(later(11));
+    await service.tick();
+    const done = await service.status('1');
+    expect(search).toHaveBeenCalledTimes(4);
+    expect(done).toMatchObject({
+      queued: null,
+      failures: 0,
+      pausedCode: null,
+      lastRun: { ok: false, errorCode: 'busy' },
+    });
+    // The next attempt is the next day's read, not another retry.
+    expect(done.nextSyncAt!.slice(0, 10)).not.toBe(done.lastRun!.at.slice(0, 10));
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it('pauses daily reading after three reads in a row got nothing through, and a read that gets through resumes it', async () => {
+  const search = vi.fn(async () => {
+    throw new BilibiliError('collector_unreachable');
+  });
+  const { service } = setup({ search });
+  await connect(service);
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    for (const failures of [1, 2]) {
+      const failed = await service.sync('1');
+      expect(failed).toMatchObject({ failures, pausedCode: null });
+      // Not a refusal by Bilibili: the shared backoff tries again the same day.
+      expect(Date.parse(failed.nextSyncAt!)).toBeLessThan(later(70));
+      vi.setSystemTime(later(70));
+    }
+    const paused = await service.sync('1');
+    expect(paused).toMatchObject({
+      failures: 3,
+      pausedCode: 'collector_unreachable',
+      nextSyncAt: null,
+      autoSync: true,
+    });
+    vi.setSystemTime(later(24 * 60));
+    await service.tick();
+    expect(search).toHaveBeenCalledTimes(3);
+  } finally {
+    vi.useRealTimers();
+  }
+  search.mockImplementation(async () => batch());
+  expect(await service.sync('1')).toMatchObject({
+    failures: 0,
+    pausedCode: null,
+    lastRun: { ok: true },
+  });
+});
+it('waits for the next day after Bilibili refuses a read', async () => {
+  const { service } = setup({
+    search: async () => {
+      throw new BilibiliError('security_block');
+    },
+  });
+  await connect(service);
+  const refused = await service.sync('1');
+  expect(refused.failures).toBe(1);
+  expect(refused.nextSyncAt!.slice(0, 10)).not.toBe(
+    refused.lastRun!.at.slice(0, 10),
+  );
+});
+it('reads each connected project once a day from the tick and skips one switched off', async () => {
+  const search = vi.fn(async () => batch());
+  const { service, host } = setup({ search });
+  host.projectIds.mockResolvedValue(['1', '2']);
+  await connect(service);
+  const other = await connect(service, {}, '2');
+  await connect(service, { revision: other.revision, autoSync: false }, '2');
+  await service.tick();
+  expect(search).toHaveBeenCalledTimes(1);
+  expect((await service.status('1')).lastRun?.ok).toBe(true);
+  expect((await service.status('2')).lastRun).toBeNull();
+  // Read today already.
+  await service.tick();
+  expect(search).toHaveBeenCalledTimes(1);
+});
+it('clearing the saved videos pauses daily reading and forgets a queued retry', async () => {
+  const search = vi.fn(async () => batch());
+  const { service } = setup({ search });
+  await connect(service);
+  await service.sync('1');
+  search.mockRejectedValueOnce(new BilibiliError('busy'));
+  const queued = await service.sync('1');
+  expect(queued.queued).not.toBeNull();
+  const cleared = await service.clear('1', queued.revision);
+  expect(cleared).toMatchObject({ autoSync: false, queued: null, total: 0 });
+});
+it('reports when recording started and the earliest find', async () => {
+  const { service } = setup();
+  await connect(service);
+  const read = await service.sync('1');
+  expect(read.recordingSince).toBe(read.recent[0]?.firstSeenAt);
+});

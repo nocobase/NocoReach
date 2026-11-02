@@ -109,10 +109,15 @@ export default function DataXiaohongshu() {
     if (!project || !data) return;
     setBusy(true);
     try {
-      await xiaohongshuRequest(project.id, 'search', {
-        revision: data.revision,
-      });
-      toast.success(() => $t('xiaohongshu.xiaohongshuNotesCollectedSaved'));
+      const next = await xiaohongshuRequest<{ queued: object | null }>(
+        project.id,
+        'search',
+        { revision: data.revision },
+      );
+      // A read the busy collector turned away is queued and retried in about ten minutes.
+      if (next.queued) toast.info(() => $t('collectorQueue.title'));
+      else
+        toast.success(() => $t('xiaohongshu.xiaohongshuNotesCollectedSaved'));
     } catch (e) {
       toast.error(() =>
         e instanceof Error

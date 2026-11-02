@@ -154,11 +154,20 @@ export const CONNECT_SOURCES: readonly ConnectSource[] = [
     ],
     via: 'browser',
   },
-  { id: 'bilibili', name: 'Bilibili', needs: [], via: 'browser' },
+  {
+    id: 'bilibili',
+    name: 'Bilibili',
+    needs: ['collectorConnection.needCollector', 'youtube.needTerms'],
+    via: 'browser',
+  },
   {
     id: 'xiaohongshu',
-    name: 'dataSources.xiaohongshuBrowserCollection',
-    needs: [],
+    name: 'collectorPage.xiaohongshu',
+    needs: [
+      'collectorConnection.needCollector',
+      'xiaohongshu.needBrowser',
+      'xiaohongshu.needQuery',
+    ],
     via: 'browser',
   },
   {
@@ -207,13 +216,13 @@ export type StatusInput = {
     connected: boolean;
     configured: boolean;
     verifiedAt: string | null;
-    lastRun?: { ok: boolean } | null;
+    lastRun?: { ok: boolean; errorCode?: string | null } | null;
   } | null;
   xiaohongshu?: {
     configured: boolean;
     connected: boolean;
     verifiedAt?: string | null;
-    lastRun?: { ok: boolean } | null;
+    lastRun?: { ok: boolean; errorCode?: string | null } | null;
   } | null;
   packages?: { connected: boolean } | null;
   hackernews?: { connected: boolean } | null;
@@ -248,16 +257,10 @@ export type StatusInput = {
 
 /** A source's state, derived only from saved connection state, never assumed. */
 export function connectionState(id: string, input: StatusInput): SourceState {
-  if (id === 'bilibili') {
-    const b = input.bilibili;
-    return b && !b.configured
-      ? 'needs-admin'
-      : !b?.connected
-        ? 'ready'
-        : b.verifiedAt && b.lastRun?.ok
-          ? 'connected'
-          : 'partial';
-  }
+  // A collector source with its search terms saved is connected, as YouTube is; a read that fails is a Data health
+  // problem (Bilibili) or the panel's notice (Xiaohongshu, read by hand). Without a collector the panel takes one.
+  if (id === 'bilibili' || id === 'xiaohongshu')
+    return input[id]?.connected ? 'connected' : 'ready';
   const g = input.google;
   if (id === 'gsc' || id === 'ga4') {
     if (!g) return 'ready';
@@ -313,15 +316,6 @@ export function connectionState(id: string, input: StatusInput): SourceState {
   if (id === 'trends') return input.trends?.connected ? 'connected' : 'ready';
   if (id === 'competitors')
     return input.competitors?.connected ? 'connected' : 'ready';
-  if (id === 'xiaohongshu') {
-    const x = input.xiaohongshu;
-    if (x === undefined) return 'pending';
-    if (!x) return 'attention';
-    if (!x.configured) return 'unconfigured';
-    if (!x.connected) return 'ready';
-    if (x.lastRun && !x.lastRun.ok) return 'attention';
-    return x.verifiedAt && x.lastRun?.ok ? 'done' : 'pending';
-  }
   if (id === 'social') return input.x?.connected ? 'connected' : 'ready';
   if (id === 'discord' || id === 'slack')
     return input.chat?.[id]?.connected ? 'connected' : 'ready';

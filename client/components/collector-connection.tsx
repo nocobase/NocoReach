@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/client';
 import { $t, useNocoReachLocale } from '#i18n';
@@ -21,6 +28,14 @@ import {
   FieldError,
 } from '#components/ui/field';
 import { Alert, AlertDescription } from '#components/ui/alert';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '#components/ui/dialog';
 import { Skeleton } from '#components/ui/skeleton';
 import type { CollectorPlatform } from '#lib/collector-platforms';
 
@@ -37,8 +52,19 @@ interface Props {
   onClose?: () => void;
   onSavingChange: (savingRef: boolean) => void;
   disabled?: boolean;
+  /** `row`: once a collector is set, one line with its address and Change, which opens the form in a dialog. */
+  layout?: 'card' | 'row';
+  /** Shown after the address in the row, such as that reads get through. */
+  health?: ReactNode;
 }
 const normalize = (value: string) => value.trim().replace(/\/$/, '');
+const hostOf = (value: string) => {
+  try {
+    return new URL(value).host;
+  } catch {
+    return value;
+  }
+};
 function validUrl(value: string) {
   try {
     const u = new URL(normalize(value));
@@ -81,6 +107,8 @@ function ConnectionForm({
   onSavingChange,
   onClose,
   disabled = false,
+  layout = 'card',
+  health,
 }: Props & { sessionId: string }) {
   const { refresh } = useAuthentication();
   useNocoReachLocale();
@@ -89,6 +117,7 @@ function ConnectionForm({
   const [url, setUrl] = useState('');
   const [token, setToken] = useState('');
   const [editing, setEditing] = useState(false);
+  const [dialog, setDialog] = useState(false);
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
@@ -280,6 +309,7 @@ function ConnectionForm({
       setUrl(value.url);
       setToken('');
       setSubmitted(false);
+      setDialog(false);
       toast.success(() => $t('collectorConnection.saved'));
       if (value.revision !== data.revision) callbacksRef.current.onSaved();
     } catch (e) {
@@ -312,145 +342,229 @@ function ConnectionForm({
       void load(signal, data?.revision);
   };
   const formDisabled = disabled || busy || loading || blocked || stale;
+  const description = $t(
+    data?.source === 'mock'
+      ? 'collectorConnection.mockSource'
+      : 'collectorConnection.description',
+  );
+  const body = (
+    <>
+      {error && (
+        <Alert variant='destructive'>
+          <AlertDescription>
+            {$t(error)}
+            {error === 'collectorConnection.projectMissing' && onClose ? (
+              <Button variant='outline' onClick={onClose} disabled={disabled}>
+                {$t('collectorConnection.close')}
+              </Button>
+            ) : null}
+            {error === 'common.sessionExpiredSignAgain' ? (
+              <a className='nr-link' href={api.resolveUrl('/login')}>
+                {$t('common.signAgain')}
+              </a>
+            ) : !blocked && (!data || stale) ? (
+              <Button
+                type='button'
+                variant='outline'
+                onClick={retry}
+                disabled={disabled || loading}
+              >
+                {$t(stale ? 'collectorConnection.reload' : 'common.retry')}
+              </Button>
+            ) : null}
+          </AlertDescription>
+        </Alert>
+      )}
+      {loading ? (
+        <div
+          role='status'
+          aria-label={$t('common.loadingLoading')}
+          className='grid gap-4'
+        >
+          <Skeleton className='h-8' />
+          <Skeleton className='h-8' />
+        </div>
+      ) : null}
+      {data?.source === 'project' ? (
+        <p className='text-sm text-muted-foreground'>
+          {$t('collectorConnection.projectSource')}
+        </p>
+      ) : null}
+      {data?.source === 'deployment' && !editing ? (
+        <div className='flex flex-wrap items-center justify-between gap-2'>
+          <p>{$t('collectorConnection.deploymentSource')}</p>
+          <Button
+            variant='outline'
+            disabled={formDisabled}
+            onClick={() => {
+              setEditing(true);
+              setTimeout(() => urlRef.current?.focus(), 0);
+            }}
+          >
+            {$t('collectorConnection.enterAddress')}
+          </Button>
+        </div>
+      ) : null}
+      {data && editing ? (
+        <form
+          id={`${id}-form`}
+          onSubmit={(event) => {
+            void save(event);
+          }}
+          className='grid gap-4'
+        >
+          <Field data-invalid={!!urlError}>
+            <FieldLabel htmlFor={`${id}-url`}>
+              {$t('collectorConnection.url')} *
+            </FieldLabel>
+            <Input
+              ref={urlRef}
+              id={`${id}-url`}
+              value={url}
+              onChange={(e) => {
+                setUrl(e.target.value);
+                setFieldError((old) => ({ ...old, url: '' }));
+              }}
+              disabled={formDisabled}
+              aria-required
+              aria-invalid={!!urlError}
+              aria-describedby={urlError ? `${id}-url-error` : undefined}
+              placeholder={$t('collectorConnection.urlPlaceholder')}
+              maxLength={2048}
+            />
+            {urlError && (
+              <FieldError id={`${id}-url-error`}>{$t(urlError)}</FieldError>
+            )}
+          </Field>
+          <Field data-invalid={!!tokenError}>
+            <FieldLabel htmlFor={`${id}-token`}>
+              {$t('collectorConnection.token')}
+              {tokenRequired ? ' *' : ''}
+            </FieldLabel>
+            <Input
+              ref={tokenRef}
+              id={`${id}-token`}
+              type='password'
+              autoComplete='new-password'
+              value={token}
+              onChange={(e) => {
+                setToken(e.target.value);
+                setFieldError((old) => ({ ...old, token: '' }));
+              }}
+              disabled={formDisabled}
+              aria-required={tokenRequired}
+              aria-invalid={!!tokenError}
+              aria-describedby={
+                tokenError ? `${id}-token-error` : `${id}-token-help`
+              }
+              placeholder={$t('collectorConnection.tokenPlaceholder')}
+              maxLength={256}
+            />
+            <FieldDescription id={`${id}-token-help`}>
+              {$t(
+                data.hasToken
+                  ? 'collectorConnection.tokenSaved'
+                  : 'collectorConnection.tokenHelp',
+              )}
+            </FieldDescription>
+            {tokenError && (
+              <FieldError id={`${id}-token-error`}>{$t(tokenError)}</FieldError>
+            )}
+          </Field>
+        </form>
+      ) : null}
+    </>
+  );
+  const discard = () => {
+    setEditing(data?.source === 'project');
+    setToken('');
+    setUrl(data?.source === 'project' ? data.url : '');
+    setSubmitted(false);
+    setFieldError({ url: '', token: '' });
+    // Cancelling the draft must not hide an unresolved conflict or access error.
+    if (!blocked && !stale) setError('');
+  };
+  const saveButton = (
+    <Button type='submit' form={`${id}-form`} disabled={formDisabled}>
+      {$t(busy ? 'common.saving' : 'common.save')}
+    </Button>
+  );
+  // A collector in place folds to one row; its form opens in a dialog. Without one the form stays open on the page.
+  if (layout === 'row' && data && data.source !== 'none' && !dialog && !error)
+    return (
+      <section
+        className='nr-guide-connected flex items-center justify-between gap-3'
+        data-collector-row
+      >
+        <p className='min-w-0 truncate'>
+          <span className='mr-2 text-muted-foreground'>
+            {$t('collectorConnection.row')}
+          </span>
+          {data.source === 'project'
+            ? hostOf(data.url)
+            : $t(
+                data.source === 'mock'
+                  ? 'collectorConnection.mockShort'
+                  : 'collectorConnection.deploymentShort',
+              )}
+          {health}
+        </p>
+        {data.source !== 'mock' ? (
+          <Button
+            size='sm'
+            variant='ghost'
+            disabled={disabled || busy || loading}
+            onClick={() => {
+              setEditing(true);
+              setDialog(true);
+            }}
+          >
+            {$t('common.modify')}
+          </Button>
+        ) : null}
+      </section>
+    );
+  if (layout === 'row' && dialog)
+    return (
+      <Dialog
+        open
+        onOpenChange={(open) => {
+          if (!open && !busy) {
+            discard();
+            setDialog(false);
+          }
+        }}
+      >
+        <DialogContent className='sm:max-w-lg'>
+          <DialogHeader>
+            <DialogTitle>{$t('collectorConnection.title')}</DialogTitle>
+            <DialogDescription>{description}</DialogDescription>
+          </DialogHeader>
+          <div className='grid gap-4'>{body}</div>
+          <DialogFooter>
+            <Button
+              variant='outline'
+              disabled={busy}
+              onClick={() => {
+                discard();
+                setDialog(false);
+              }}
+            >
+              {$t('common.cancel')}
+            </Button>
+            {data && editing ? saveButton : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
   return (
     <Card size='sm' className='shrink-0'>
       <CardHeader>
         <CardTitle>{$t('collectorConnection.title')}</CardTitle>
-        <CardDescription>
-          {$t(
-            data?.source === 'mock'
-              ? 'collectorConnection.mockSource'
-              : 'collectorConnection.description',
-          )}
-        </CardDescription>
+        <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className='grid gap-4' hidden={data?.source === 'mock'}>
-        {error && (
-          <Alert variant='destructive'>
-            <AlertDescription>
-              {$t(error)}
-              {error === 'collectorConnection.projectMissing' && onClose ? (
-                <Button variant='outline' onClick={onClose} disabled={disabled}>
-                  {$t('collectorConnection.close')}
-                </Button>
-              ) : null}
-              {error === 'common.sessionExpiredSignAgain' ? (
-                <a className='nr-link' href={api.resolveUrl('/login')}>
-                  {$t('common.signAgain')}
-                </a>
-              ) : !blocked && (!data || stale) ? (
-                <Button
-                  type='button'
-                  variant='outline'
-                  onClick={retry}
-                  disabled={disabled || loading}
-                >
-                  {$t(stale ? 'collectorConnection.reload' : 'common.retry')}
-                </Button>
-              ) : null}
-            </AlertDescription>
-          </Alert>
-        )}
-        {loading ? (
-          <div
-            role='status'
-            aria-label={$t('common.loadingLoading')}
-            className='grid gap-4'
-          >
-            <Skeleton className='h-8' />
-            <Skeleton className='h-8' />
-          </div>
-        ) : null}
-        {data?.source === 'project' ? (
-          <p className='text-sm text-muted-foreground'>
-            {$t('collectorConnection.projectSource')}
-          </p>
-        ) : null}
-        {data?.source === 'deployment' && !editing ? (
-          <div className='flex flex-wrap items-center justify-between gap-2'>
-            <p>{$t('collectorConnection.deploymentSource')}</p>
-            <Button
-              variant='outline'
-              disabled={formDisabled}
-              onClick={() => {
-                setEditing(true);
-                setTimeout(() => urlRef.current?.focus(), 0);
-              }}
-            >
-              {$t('collectorConnection.enterAddress')}
-            </Button>
-          </div>
-        ) : null}
-        {data && editing ? (
-          <form
-            id={`${id}-form`}
-            onSubmit={(event) => {
-              void save(event);
-            }}
-            className='grid gap-4'
-          >
-            <Field data-invalid={!!urlError}>
-              <FieldLabel htmlFor={`${id}-url`}>
-                {$t('collectorConnection.url')} *
-              </FieldLabel>
-              <Input
-                ref={urlRef}
-                id={`${id}-url`}
-                value={url}
-                onChange={(e) => {
-                  setUrl(e.target.value);
-                  setFieldError((old) => ({ ...old, url: '' }));
-                }}
-                disabled={formDisabled}
-                aria-required
-                aria-invalid={!!urlError}
-                aria-describedby={urlError ? `${id}-url-error` : undefined}
-                placeholder={$t('collectorConnection.urlPlaceholder')}
-                maxLength={2048}
-              />
-              {urlError && (
-                <FieldError id={`${id}-url-error`}>{$t(urlError)}</FieldError>
-              )}
-            </Field>
-            <Field data-invalid={!!tokenError}>
-              <FieldLabel htmlFor={`${id}-token`}>
-                {$t('collectorConnection.token')}
-                {tokenRequired ? ' *' : ''}
-              </FieldLabel>
-              <Input
-                ref={tokenRef}
-                id={`${id}-token`}
-                type='password'
-                autoComplete='new-password'
-                value={token}
-                onChange={(e) => {
-                  setToken(e.target.value);
-                  setFieldError((old) => ({ ...old, token: '' }));
-                }}
-                disabled={formDisabled}
-                aria-required={tokenRequired}
-                aria-invalid={!!tokenError}
-                aria-describedby={
-                  tokenError ? `${id}-token-error` : `${id}-token-help`
-                }
-                placeholder={$t('collectorConnection.tokenPlaceholder')}
-                maxLength={256}
-              />
-              <FieldDescription id={`${id}-token-help`}>
-                {$t(
-                  data.hasToken
-                    ? 'collectorConnection.tokenSaved'
-                    : 'collectorConnection.tokenHelp',
-                )}
-              </FieldDescription>
-              {tokenError && (
-                <FieldError id={`${id}-token-error`}>
-                  {$t(tokenError)}
-                </FieldError>
-              )}
-            </Field>
-          </form>
-        ) : null}
+        {body}
       </CardContent>
       {data && editing ? (
         <CardFooter className='justify-end gap-2'>
@@ -458,22 +572,12 @@ function ConnectionForm({
             <Button
               variant='ghost'
               disabled={disabled || busy || loading}
-              onClick={() => {
-                setEditing(false);
-                setToken('');
-                setUrl('');
-                setSubmitted(false);
-                setFieldError({ url: '', token: '' });
-                // Cancelling the draft must not hide an unresolved conflict or access error.
-                if (!blocked && !stale) setError('');
-              }}
+              onClick={discard}
             >
               {$t('common.cancel')}
             </Button>
           )}
-          <Button type='submit' form={`${id}-form`} disabled={formDisabled}>
-            {$t(busy ? 'common.saving' : 'common.save')}
-          </Button>
+          {saveButton}
         </CardFooter>
       ) : null}
     </Card>
