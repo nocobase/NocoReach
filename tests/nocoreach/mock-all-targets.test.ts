@@ -310,6 +310,8 @@ describe('all connector targets use raw synthetic protocols', () => {
     ).result.video;
     expect(info).toMatchObject({ id: 'Supabase001' });
     realistic(info!.title);
+    // Not a copy of a search result's title, which would list the same title twice.
+    expect(found.map((v) => v.title)).not.toContain(info!.title);
     expect(info!.likes).toBeGreaterThan(0);
   });
 });
