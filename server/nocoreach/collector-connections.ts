@@ -11,7 +11,7 @@ import type { LegacyDatabase } from './legacy/database.js';
 import type { LegacyApp } from './legacy/app.js';
 import type { LegacyContext } from './legacy/context.js';
 
-const platformSchema = z.enum(['xiaohongshu', 'bilibili', 'youtube']);
+const platformSchema = z.enum(['xiaohongshu', 'bilibili']);
 export type CollectorPlatform = z.infer<typeof platformSchema>;
 export type CollectorResolver = Pick<CollectorConnections, 'allowed'>;
 export type ResolvedCollector = BrowserCollectorConfig & {

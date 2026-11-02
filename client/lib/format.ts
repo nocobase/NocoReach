@@ -143,6 +143,16 @@ export function formatCount(
   });
 }
 
+/** A large count shortened the locale's way from ten thousand up (12K in English); smaller ones as formatCount. */
+export function formatCompact(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return EMPTY;
+  if (Math.abs(value) < 10_000) return formatCount(value);
+  return value.toLocaleString(getCurrentLocale(), {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  });
+}
+
 /** A share given as a ratio (0.462): "46.2%", always with the same decimals so a column of them lines up ("7.0%"). */
 export function formatPercent(
   ratio: number | null | undefined,

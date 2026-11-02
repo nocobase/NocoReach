@@ -1,465 +1,383 @@
+// @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
-import { YouTubeSource } from '../../server/nocoreach/youtube-source.js';
+import { YouTubeError } from '../../server/nocoreach/youtube-provider.js';
+import { migrated } from '../../server/nocoreach/youtube-source.js';
 import {
-  YouTubeError,
-  type Video,
-} from '../../server/nocoreach/youtube-provider.js';
-import { OutboundNetwork } from '../../server/nocoreach/outbound-network.js';
-import { DataHealth } from '../../server/nocoreach/data-health.js';
-import { ProxyProfiles } from '../../server/nocoreach/proxy-profiles.js';
+  details,
+  found,
+  videoKey,
+  youtubeFixture,
+} from './fixtures/youtube.js';
 
-const ID = 'Im69kzhpR3I';
-const video = (id = ID): Video => ({
-  id,
-  url: `https://www.youtube.com/watch?v=${id}`,
-  title: 'Video',
-  description: '',
-  channel: 'Author',
-  publishedAt: '2026-10-10',
-  views: 10,
-  likes: null,
-  comments: null,
-  duration: 60,
-  fetchedAt: new Date().toISOString(),
-  provider: 'yt-dlp',
-  transcript: { status: 'missing', language: null, text: '', truncated: false },
-});
-function setup() {
-  const rows = new Map<string, { id: string; payload: unknown }>();
-  const repo = {
-    findOne: vi.fn(async ({ filter }: { filter: { key: string } }) => {
-      const row = rows.get(filter.key);
-      return row ? { id: row.id, get: () => row.payload } : null;
-    }),
-    update: vi.fn(
-      async ({
-        filterByTk,
-        values,
-      }: {
-        filterByTk: string;
-        values: { payload: unknown };
-      }) => {
-        rows.get(filterByTk)!.payload = values.payload;
-      },
-    ),
-    create: vi.fn(
-      async ({ values }: { values: { key: string; payload: unknown } }) => {
-        rows.set(values.key, { id: values.key, payload: values.payload });
-      },
-    ),
-  };
-  const saved = new Map<string, Record<string, unknown>>();
-  const wrap = (row: Record<string, unknown>) => ({
-    ...row,
-    get: (key: string) => row[key],
+const nextMonth = () => {
+  const now = new Date();
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+  ).toISOString();
+};
+const yesterday = () => new Date(Date.now() - 86400000 * 1.5).toISOString();
+
+describe('YouTube through DataForSEO', () => {
+  it('needs a verified DataForSEO connection before saving terms or reading', async () => {
+    const f = await youtubeFixture();
+    f.reader.ready.mockReturnValue(false);
+    await expect(
+      f.source.connect('1', { terms: 'NocoBase' }),
+    ).rejects.toMatchObject({ code: 'dataforseo_missing', status: 409 });
+    expect(await f.source.status('1')).toMatchObject({
+      configured: false,
+      dataforseo: false,
+      spend: null,
+      total: 0,
+    });
+    await f.source.tick();
+    expect(f.reader.search).not.toHaveBeenCalled();
   });
-  const videoRepo = {
-    findOne: async ({ filterByTk }: { filterByTk: string }) =>
-      saved.has(filterByTk) ? wrap(saved.get(filterByTk)!) : null,
-    create: async ({ values }: { values: Record<string, unknown> }) => {
-      saved.set(String(values.id), values);
-    },
-    update: async ({
-      filterByTk,
-      values,
-    }: {
-      filterByTk: string;
-      values: Record<string, unknown>;
-    }) => {
-      saved.set(filterByTk, { ...saved.get(filterByTk), ...values });
-    },
-    count: async ({ filter }: { filter: { projectId: string } }) =>
-      [...saved.values()].filter((row) => row.projectId === filter.projectId)
-        .length,
-    find: async ({
-      filter,
-      offset,
-      limit,
-    }: {
-      filter: { projectId: string };
-      offset: number;
-      limit: number;
-    }) =>
-      [...saved.values()]
-        .filter((row) => row.projectId === filter.projectId)
-        .slice(offset, offset + limit)
-        .map(wrap),
-    destroy: async ({ filter }: { filter: { projectId: string } }) => {
-      for (const [key, row] of saved)
-        if (row.projectId === filter.projectId) saved.delete(key);
-    },
-  };
-  const actions: Record<
-    string,
-    (ctx: unknown, next: () => Promise<void>) => Promise<void>
-  > = {};
-  const db = {
-    transactionContext: () => undefined,
-    getRepository: (name: string) =>
-      name === 'nrYouTubeVideos'
-        ? videoRepo
-        : name === 'users'
-          ? { findOne: async () => ({ id: 2, roles: [{ name: 'nr.member' }] }) }
-          : repo,
-    sequelize: {
-      transaction: async (fn: (tx: object) => unknown) => fn({}),
-      query: vi.fn(),
-    },
-  };
-  const profiles = new ProxyProfiles({ all: () => ({}), set: vi.fn() });
-  const network = new OutboundNetwork(profiles);
-  const host = {
-    collectors: { allowed: () => [] },
-    db,
-    network,
-    project: vi.fn(async () => ({ id: '1' })),
-    projectIds: vi.fn(async () => ['1', '2']),
-    app: {
+
+  it('searches each term, reads likes and comments once per new video, and keeps daily reading on', async () => {
+    const f = await youtubeFixture();
+    f.reader.search.mockImplementation(async (_id, term) => ({
+      ok: true,
+      videos:
+        term === 'NocoBase'
+          ? [found(1), found(2)]
+          : [found(2), found(3, { title: '' })],
+      costUsd: 0.002,
+    }));
+    const first = await f.connect('1', 'NocoBase\nAirtable alternative');
+    expect(f.reader.search.mock.calls.map((c) => c.slice(1))).toEqual([
+      ['NocoBase', true],
+      ['Airtable alternative', true],
+    ]);
+    expect(f.reader.details.mock.calls.map((c) => c[1])).toEqual([
+      videoKey(1),
+      videoKey(2),
+      videoKey(3),
+    ]);
+    expect(first).toMatchObject({
+      configured: true,
+      connected: true,
+      dataforseo: true,
+      autoSync: true,
+      terms: ['NocoBase', 'Airtable alternative'],
+      total: 3,
+      pendingDetails: 0,
+      pausedUntil: null,
+      spend: { monthUsd: 0.5, budgetUsd: 10 },
+      lastSync: {
+        ok: true,
+        missed: [],
+        found: 3,
+        added: 3,
+        costUsd: 0.022,
+      },
+    });
+    expect(first.recent).toHaveLength(3);
+    expect(first.nextSyncAt).not.toBeNull();
+    // Two terms a day, and before a week of history one new video a term a day.
+    expect(first.estimate).toMatchObject({ monthlyUsd: 0.48, readUsd: 0.004 });
+    const saved = await f.videos();
+    expect(saved.find((v) => v.id === videoKey(3))).toMatchObject({
+      title: 'Video 3',
+      likes: 30,
+      comments: 3,
+      provider: 'dataforseo',
+    });
+    // The next read searches again but does not read known videos' details again.
+    f.reader.details.mockClear();
+    f.reader.search.mockResolvedValue({
+      ok: true,
+      videos: [found(1, { views: 999, title: '' })],
+      costUsd: 0.002,
+    });
+    const second = await f.sync();
+    expect(f.reader.details).not.toHaveBeenCalled();
+    expect(second.lastSync).toMatchObject({
+      found: 1,
+      added: 0,
+      costUsd: 0.004,
+    });
+    expect((await f.videos()).find((v) => v.id === videoKey(1))).toMatchObject({
+      title: 'Video 1',
+      views: 999,
+      likes: 10,
+      firstSeenAt: saved.find((v) => v.id === videoKey(1))!.firstSeenAt,
+    });
+  });
+
+  it('reads tracked videos on every read and counts them in the estimate', async () => {
+    const f = await youtubeFixture();
+    const status = await f.connect('1', 'NocoBase', {
+      videoUrls: `https://youtu.be/${videoKey(9)}`,
+    });
+    expect(status.videoUrls).toEqual([
+      `https://www.youtube.com/watch?v=${videoKey(9)}`,
+    ]);
+    expect(f.reader.details.mock.calls[0][1]).toBe(videoKey(9));
+    f.reader.details.mockClear();
+    const again = await f.sync();
+    expect(f.reader.details.mock.calls.map((c) => c[1])).toEqual([videoKey(9)]);
+    expect(again.total).toBe(3);
+    expect(again.estimate.readUsd).toBe(0.008);
+    expect(again.estimate.monthlyUsd).toBe(0.42);
+  });
+
+  it('keeps the other terms when one times out, and says which one', async () => {
+    const f = await youtubeFixture();
+    f.reader.search.mockImplementation(async (_id, term) =>
+      term === 'Slow term'
+        ? { ok: false, missed: 'timeout', costUsd: 0 }
+        : { ok: true, videos: [found(1)], costUsd: 0.002 },
+    );
+    const status = await f.connect('1', 'NocoBase\nSlow term');
+    expect(status.lastSync).toMatchObject({
+      ok: true,
+      missed: [{ term: 'Slow term', reason: 'timeout' }],
+    });
+    expect(status.total).toBe(1);
+    // A read where no term gets through fails, and keeps what was saved.
+    f.reader.search.mockResolvedValue({
+      ok: false,
+      missed: 'timeout',
+      costUsd: 0,
+    });
+    const failed = await f.sync();
+    expect(failed.lastSync).toMatchObject({
+      ok: false,
+      code: 'timeout',
+      errors: [new YouTubeError('timeout').message],
+    });
+    expect(failed.total).toBe(1);
+  });
+
+  it('stops at the month’s budget, keeps what it read, and resumes next month or when the budget is raised', async () => {
+    const f = await youtubeFixture();
+    f.reader.search.mockImplementation(async (_id, term) => {
+      if (term === 'Second') throw new YouTubeError('budget_exceeded');
+      return { ok: true, videos: [found(1), found(2)], costUsd: 0.002 };
+    });
+    const status = await f.connect('1', 'First\nSecond');
+    expect(f.reader.search).toHaveBeenCalledTimes(2);
+    expect(f.reader.details).not.toHaveBeenCalled();
+    expect(status).toMatchObject({
+      total: 2,
+      pendingDetails: 2,
+      pausedUntil: nextMonth(),
+      nextSyncAt: nextMonth(),
+      lastSync: { ok: true, found: 2, added: 2 },
+    });
+    // A day later the budget is still used up: the daily read waits.
+    await f.store('1', {
+      ...(await f.stored()),
+      lastSync: { ...status.lastSync, at: yesterday() },
+    });
+    f.reader.search.mockClear();
+    f.reader.spend.mockResolvedValue({ monthUsd: 10, budgetUsd: 10 });
+    await f.source.tick();
+    expect(f.reader.search).not.toHaveBeenCalled();
+    // Raised: the daily read runs, reads the waiting videos and lifts the pause.
+    f.reader.spend.mockResolvedValue({ monthUsd: 10, budgetUsd: 20 });
+    f.reader.search.mockResolvedValue({ ok: true, videos: [], costUsd: 0.002 });
+    await f.source.tick();
+    expect(f.reader.search.mock.calls.map((c) => c[2])).toEqual([false, false]);
+    expect(f.reader.details.mock.calls.map((c) => c[1])).toEqual([
+      videoKey(1),
+      videoKey(2),
+    ]);
+    expect(await f.source.status('1')).toMatchObject({
+      pendingDetails: 0,
+      pausedUntil: null,
+      lastSync: { ok: true },
+    });
+    // A read the budget refuses outright fails and pauses as well.
+    f.reader.search.mockRejectedValue(new YouTubeError('budget_exceeded'));
+    expect(await f.sync()).toMatchObject({
+      pausedUntil: nextMonth(),
+      lastSync: { ok: false, code: 'budget_exceeded' },
+    });
+  });
+
+  it('counts a term DataForSEO refused against that term only', async () => {
+    const f = await youtubeFixture();
+    f.reader.search.mockImplementation(async (_id, term) =>
+      term === 'Refused'
+        ? { ok: false, missed: 'failed', costUsd: 0 }
+        : { ok: true, videos: [found(1)], costUsd: 0.002 },
+    );
+    f.reader.details.mockResolvedValue({ ok: false, costUsd: 0 });
+    const status = await f.connect('1', 'Refused\nNocoBase');
+    expect(status.lastSync).toMatchObject({
+      ok: true,
+      missed: [{ term: 'Refused', reason: 'failed' }],
+    });
+    // The video whose details were not read waits for the next read.
+    expect(status.pendingDetails).toBe(1);
+    expect((await f.videos())[0]).toMatchObject({ views: 100, likes: null });
+  });
+
+  it('turns daily reading off and on without reading again', async () => {
+    const f = await youtubeFixture();
+    const first = await f.connect();
+    f.reader.search.mockClear();
+    const off = await f.connect('1', 'NocoBase', { autoSync: false });
+    expect(f.reader.search).not.toHaveBeenCalled();
+    expect(off).toMatchObject({ autoSync: false, nextSyncAt: null });
+    expect(off.lastSync).toEqual(first.lastSync);
+    await f.store('1', {
+      ...(await f.stored()),
+      lastSync: { ...first.lastSync, at: yesterday() },
+    });
+    await f.source.tick();
+    expect(f.reader.search).not.toHaveBeenCalled();
+    expect(
+      (await f.connect('1', 'NocoBase', { autoSync: true })).autoSync,
+    ).toBe(true);
+    expect(f.reader.search).not.toHaveBeenCalled();
+    await f.source.tick();
+    expect(f.reader.search).toHaveBeenCalledTimes(1);
+  });
+
+  it('carries over terms, tracked videos and saved videos from the Collector reader', async () => {
+    const f = await youtubeFixture();
+    await f.library.save('1', [
+      {
+        ...details(1, { views: 5, likes: 4, comments: 3 }),
+        fetchedAt: '2026-10-20T00:00:00.000Z',
+        provider: 'yt-dlp',
+        transcript: {
+          status: 'manual',
+          language: 'en',
+          text: 'Caption the Collector read',
+          truncated: false,
+        },
+      },
+    ]);
+    await f.store('1', {
+      revision: 'legacy',
+      configured: true,
+      terms: ['NocoBase'],
+      videoIds: [videoKey(7)],
+      autoSync: false,
+      verifiedAt: '2026-10-20T00:00:00.000Z',
+      fetchedAt: '2026-10-28T00:00:00.000Z',
+      analysisVideoIds: [videoKey(1)],
+      lastSync: {
+        at: '2026-10-29T00:00:00.000Z',
+        ok: false,
+        errors: ['Collector could not read YouTube'],
+        attempts: 3,
+        lastSuccessAt: '2026-10-28T00:00:00.000Z',
+        code: 'collector_unreachable',
+        needsAttention: true,
+      },
+    });
+    expect(await f.source.status('1')).toMatchObject({
+      configured: true,
+      connected: true,
+      autoSync: true,
+      terms: ['NocoBase'],
+      videoUrls: [`https://www.youtube.com/watch?v=${videoKey(7)}`],
+      lastSync: null,
+      total: 1,
+    });
+    // Saved terms make YouTube connected only while DataForSEO is verified.
+    f.reader.ready.mockReturnValueOnce(false);
+    expect((await f.source.status('1')).connected).toBe(false);
+    await f.source.tick();
+    expect(f.reader.search).toHaveBeenCalledWith('1', 'NocoBase', false);
+    expect(f.reader.details.mock.calls.map((c) => c[1])).toEqual([
+      videoKey(7),
+      videoKey(2),
+    ]);
+    const saved = await f.videos();
+    expect(saved.map((v) => v.id)).toEqual([
+      videoKey(1),
+      videoKey(2),
+      videoKey(7),
+    ]);
+    expect(saved[0]).toMatchObject({
+      provider: 'dataforseo',
+      views: 100,
+      likes: 4,
+      comments: 3,
+      firstSeenAt: '2026-10-20T00:00:00.000Z',
+      transcript: { text: 'Caption the Collector read' },
+    });
+    expect((await f.stored())?.engine).toBe('dataforseo');
+    // A disconnected Collector state stays off.
+    expect(
+      migrated({
+        revision: 'r',
+        configured: false,
+        terms: [],
+        videoIds: [],
+        autoSync: true,
+        verifiedAt: null,
+        fetchedAt: null,
+        lastSync: null,
+      }),
+    ).toMatchObject({ autoSync: false, engine: 'dataforseo' });
+  });
+
+  it('rejects stale saves, disconnects and clears, and keeps saved videos on disconnect', async () => {
+    const f = await youtubeFixture();
+    const status = await f.connect();
+    await expect(
+      f.source.connect('1', { terms: 'Other', revision: 'stale' }),
+    ).rejects.toMatchObject({ code: 'config_changed' });
+    await expect(
+      f.source.clear('1', { revision: 'stale' }),
+    ).rejects.toMatchObject({ code: 'config_changed' });
+    const off = await f.source.disconnect('1', { revision: status.revision });
+    expect(off).toMatchObject({
+      configured: false,
+      terms: [],
+      autoSync: false,
+      total: 2,
+      nextSyncAt: null,
+    });
+    await expect(f.source.sync('1')).rejects.toMatchObject({
+      code: 'invalid_input',
+    });
+    expect(await f.source.analysisData('1')).toEqual([]);
+  });
+
+  it('registers the actions for signed-in project members only', async () => {
+    const f = await youtubeFixture();
+    const actions: Record<
+      string,
+      (ctx: unknown, next: () => Promise<void>) => Promise<void>
+    > = {};
+    Object.assign(f.host.app, {
       resourceManager: {
         define: ({ actions: registered }: { actions: typeof actions }) =>
           Object.assign(actions, registered),
       },
       acl: { allow: vi.fn() },
-      logger: { warn: vi.fn() },
-    },
-  };
-  const reader = {
-    search: vi.fn(async () => [ID]),
-    video: vi.fn(async (id: string) => video(id)),
-  };
-  const source = new YouTubeSource(
-    host as unknown as ConstructorParameters<typeof YouTubeSource>[0],
-    reader,
-  );
-  const context = (
-    action: string,
-    values: object = {},
-    role = 'root',
-    authenticated = true,
-  ) => ({
-    auth: authenticated ? { user: { id: '1' } } : undefined,
-    state: { currentRoles: [role] },
-    db,
-    action: {
-      resourceName: 'nrYouTube',
-      actionName: action,
-      params: { values: { projectId: '1', ...values } },
-    },
-    set: vi.fn(),
-    throw: (status: number, message: string) => {
-      throw Object.assign(new Error(message), { status });
-    },
-    body: null,
-  });
-  return { source, reader, rows, repo, host, actions, context, network };
-}
-async function connect(s: ReturnType<typeof setup>, extra: object = {}) {
-  await s.source.connect('1', { terms: 'NocoBase', ...extra });
-  await s.source.settled('1');
-  return s.source.status('1');
-}
-
-describe('YouTube source lifecycle', () => {
-  it('passes project scope and distinct request IDs for every search and video', async () => {
-    const s = setup();
-    await connect(s);
-    const search = s.reader.search.mock.calls[0] as unknown as [
-      string,
-      AbortSignal,
-      { projectId: string; requestId: string },
-    ];
-    const detail = s.reader.video.mock.calls[0] as unknown as [
-      string,
-      AbortSignal,
-      { projectId: string; requestId: string },
-    ];
-    expect(search[0]).toBe('NocoBase');
-    expect(search[2]).toEqual({
-      projectId: '1',
-      requestId: expect.stringMatching(/^[0-9a-f-]{36}$/),
     });
-    expect(detail[2].projectId).toBe('1');
-    expect(detail[2].requestId).not.toBe(search[2].requestId);
-  });
-  it('uses Collector by default and preserves existing data when migration config is missing', async () => {
-    const s = setup();
-    const original = await connect(s, { autoSync: true });
-    const fetch = vi.spyOn(s.network, 'fetchCollector');
-    const production = new YouTubeSource(
-      s.host as unknown as ConstructorParameters<typeof YouTubeSource>[0],
-    );
-    await production.sync('1');
-    await production.settled('1');
-    const status = await production.status('1');
-    expect(status.videos).toEqual(original.videos);
-    expect(status.lastSync).toMatchObject({
-      ok: false,
-      code: 'collector_not_configured',
-      needsAttention: true,
-    });
-    expect(status.nextSyncAt).toBeNull();
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it('remains unconnected until an actual read succeeds, supports empty results, defaults to manual', async () => {
-    const s = setup();
-    let resolve!: (v: string[]) => void;
-    s.reader.search.mockImplementationOnce(
-      () => new Promise((r) => (resolve = r)),
-    );
-    const first = await s.source.connect('1', { terms: 'NocoBase' });
-    expect(first).toMatchObject({
-      configured: true,
-      connected: false,
-      syncing: true,
-      autoSync: false,
-    });
-    resolve([]);
-    await s.source.settled('1');
-    expect(await s.source.status('1')).toMatchObject({
-      connected: true,
-      total: 0,
-      syncing: false,
-      analyticsAvailable: false,
-    });
-    await s.source.tick();
-    expect(s.reader.search).toHaveBeenCalledTimes(1);
-  });
-  it('records real results, provenance, caption failures, and optional daily schedule', async () => {
-    const s = setup();
-    s.reader.video.mockResolvedValue({
-      ...video(),
-      transcript: {
-        status: 'failed',
-        text: '',
-        language: 'en',
-        truncated: false,
-        errorCode: 'network_error',
-      },
-    });
-    const st = await connect(s, { autoSync: true });
-    expect(st).toMatchObject({
-      connected: true,
-      total: 1,
-      autoSync: true,
-      lastSync: { ok: true, errors: [expect.stringContaining('字幕')] },
-    });
-    expect(st.nextSyncAt).toBeTruthy();
-    expect(st.videos[0]).toMatchObject({
-      views: 10,
-      likes: null,
-      provider: 'yt-dlp',
-    });
-    await s.source.tick();
-    expect(s.reader.search).toHaveBeenCalledTimes(1);
-  });
-  it('retains last good data on network failure and stops automatic retries on access denial', async () => {
-    const s = setup();
-    const original = await connect(s, { autoSync: true });
-    s.reader.search.mockRejectedValueOnce(new YouTubeError('access_denied'));
-    await s.source.sync('1');
-    await s.source.settled('1');
-    const failed = await s.source.status('1');
-    expect(failed.videos).toEqual(original.videos);
-    expect(failed.lastSync).toMatchObject({
-      ok: false,
-      code: 'access_denied',
-      needsAttention: true,
-    });
-    expect(failed.nextSyncAt).toBeNull();
-    await s.source.tick();
-    expect(s.reader.search).toHaveBeenCalledTimes(2);
-  });
-  it('deduplicates repeated syncs and scopes concurrent projects through the network context', async () => {
-    const s = setup();
-    const projects: string[] = [];
-    s.reader.search.mockImplementation(async () => {
-      s.network.selected('youtube');
-      projects.push('scoped');
-      return [ID];
-    });
-    await Promise.all([
-      s.source.connect('1', { terms: 'Project one' }),
-      s.source.connect('2', { terms: 'Project two' }),
+    f.source.register(vi.fn());
+    expect(Object.keys(actions).sort()).toEqual([
+      'cancel',
+      'clear',
+      'connect',
+      'disconnect',
+      'report',
+      'status',
+      'sync',
     ]);
-    await Promise.all([s.source.settled('1'), s.source.settled('2')]);
-    expect(projects).toHaveLength(2);
-    let resolve!: (v: string[]) => void;
-    s.reader.search.mockImplementationOnce(
-      () => new Promise((r) => (resolve = r)),
-    );
-    const current = await s.source.sync('1');
-    const repeated = await s.source.sync('1');
-    expect(repeated.runId).toBe(current.runId);
-    resolve([]);
-    await s.source.settled('1');
-    expect(s.reader.search).toHaveBeenCalledTimes(3);
-  });
-  it('matches cancellation to runId, stops work, pauses automation and retains prior data', async () => {
-    const s = setup();
-    const old = await connect(s, { autoSync: true });
-    s.reader.search.mockImplementationOnce(
-      (_term: string, signal: AbortSignal) =>
-        new Promise((_resolve, reject) =>
-          signal.addEventListener(
-            'abort',
-            () => reject(new YouTubeError('cancelled')),
-            { once: true },
-          ),
-        ),
-    );
-    const running = await s.source.sync('1');
     await expect(
-      s.source.cancel('1', { runId: 'stale' }),
-    ).rejects.toMatchObject({ code: 'config_changed' });
-    const after = await s.source.cancel('1', { runId: running.runId });
-    expect(after).toMatchObject({
-      autoSync: false,
-      syncing: false,
-      lastSync: { code: 'cancelled' },
-    });
-    expect(after.videos).toEqual(old.videos);
-    await s.source.tick();
-    expect(s.reader.search).toHaveBeenCalledTimes(2);
-  });
-  it('rejects stale saves/disconnects and retains records when conditions change', async () => {
-    const s = setup();
-    const old = await connect(s);
-    await expect(
-      s.source.connect('1', { terms: 'Different' }),
-    ).rejects.toMatchObject({ code: 'config_changed' });
-    await expect(
-      s.source.disconnect('1', { revision: 'old' }),
-    ).rejects.toMatchObject({ code: 'config_changed' });
-    s.reader.search.mockRejectedValueOnce(new YouTubeError('network_error'));
-    await s.source.connect('1', { terms: 'Different', revision: old.revision });
-    await s.source.settled('1');
-    const changed = await s.source.status('1');
-    expect(changed).toMatchObject({
-      connected: false,
-      total: 1,
-      terms: ['Different'],
-    });
-    await s.source.disconnect('1', { revision: changed.revision });
-    expect(await s.source.status('1')).toMatchObject({
-      configured: false,
-      connected: false,
-      total: 1,
-    });
-  });
-  it('retains old saved content and stops in-flight work on shutdown', async () => {
-    const s = setup();
-    await connect(s);
-    const row = s.rows.get('youtube:1')!;
-    row.payload = {
-      ...(row.payload as object),
-      fetchedAt: '2000-01-01T00:00:00Z',
-    };
-    expect(await s.source.status('1')).toMatchObject({
-      connected: true,
-      total: 1,
-    });
-    await s.source.stop();
-    await expect(s.source.sync('1')).rejects.toMatchObject({
-      code: 'cancelled',
-    });
-  });
-  it.each(['tool_error', 'upstream_error', 'access_denied'] as const)(
-    'pauses automatic retries for %s and reports the same in data health',
-    async (code) => {
-      const s = setup();
-      await connect(s, { autoSync: true });
-      s.reader.search.mockRejectedValueOnce(new YouTubeError(code));
-      await s.source.sync('1');
-      await s.source.settled('1');
-      const failed = await s.source.status('1');
-      expect(failed.lastSync).toMatchObject({ code, needsAttention: true });
-      expect(failed.nextSyncAt).toBeNull();
-      const health = await new DataHealth({
-        youtube: s.source,
-        link: async () => null,
-        env: () => '',
-      }).list('1');
-      expect(health.items[0].message).toContain('请手动重试');
-      expect(health.items[0].message).not.toContain('将自动重试');
-      await s.source.tick();
-      expect(s.reader.search).toHaveBeenCalledTimes(2);
-    },
-  );
-  it('re-reads a terminal result when an in-flight status captured a stale snapshot', async () => {
-    const s = setup();
-    let complete!: (v: string[]) => void;
-    s.reader.search.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          complete = resolve;
-        }),
-    );
-    await s.source.connect('1', { terms: 'NocoBase' });
-    const payload = structuredClone(s.rows.get('youtube:1')!.payload);
-    let release!: () => void;
-    s.repo.findOne.mockImplementationOnce(async () => {
-      await new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      return { id: 'youtube:1', get: () => payload };
-    });
-    const pending = s.source.status('1');
-    complete([]);
-    await s.source.settled('1');
-    release();
-    expect(await pending).toMatchObject({
-      syncing: false,
-      connected: true,
-      lastSync: { ok: true },
-    });
-  });
-  it('prevents a disconnect and initial sync state read from launching detached work', async () => {
-    const s = setup();
-    const old = await connect(s);
-    const payload = structuredClone(s.rows.get('youtube:1')!.payload);
-    let release!: () => void;
-    s.repo.findOne.mockImplementationOnce(async () => {
-      await new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      return { id: 'youtube:1', get: () => payload };
-    });
-    const syncing = s.source.sync('1');
-    const disconnecting = s.source.disconnect('1', { revision: old.revision });
-    await Promise.resolve();
-    await expect(s.source.sync('1')).rejects.toMatchObject({
-      code: 'config_changed',
-    });
-    release();
-    await Promise.all([syncing, disconnecting]);
-    expect(await s.source.status('1')).toMatchObject({
-      configured: false,
-      syncing: false,
-    });
-    expect(s.reader.search).toHaveBeenCalledTimes(1);
-  });
-  it('registers actual handlers and enforces authentication/admin permissions', async () => {
-    const s = setup();
-    s.source.register();
-    await expect(
-      s.actions.status(s.context('status', {}, 'root', false), async () => {}),
+      actions.status(
+        {
+          state: { currentRoles: ['root'] },
+          action: { params: { values: { projectId: '1' } } },
+          db: f.db,
+          set: vi.fn(),
+          throw: (status: number, message: string) => {
+            throw Object.assign(new Error(message), { status });
+          },
+        },
+        async () => {},
+      ),
     ).rejects.toMatchObject({ status: 401 });
-    // Assigned NocoReach member; status remains available, management is admin-only.
-    s.rows.set('nr-members', {
-      id: 'nr-members',
-      payload: { users: { '1': 'member' } },
-    });
-    for (const action of ['connect', 'sync', 'cancel', 'disconnect', 'clear'])
-      await expect(
-        s.actions[action](s.context(action, {}, 'member'), async () => {}),
-      ).rejects.toMatchObject({ status: 403 });
-    const ctx = s.context('status', {}, 'member');
-    await s.actions.status(ctx, async () => {});
-    expect(ctx.body).toMatchObject({ connected: false });
-    const admin = s.context('connect', { terms: 'NocoBase' });
-    await s.actions.connect(admin, async () => {});
-    await s.source.settled('1');
-    expect(await s.source.status('1')).toMatchObject({ connected: true });
   });
 });

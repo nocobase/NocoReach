@@ -1,4 +1,4 @@
-import { $t } from '#i18n';
+import { $t, getCurrentLocale } from '#i18n';
 // YouTube (社区): public videos found by the project's terms and links, counted by publication date,
 // with the same parts as the other 社区 pages (collector-content.tsx).
 import { useMemo, useState } from 'react';
@@ -9,7 +9,7 @@ import { toast } from '#lib/toast';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { PageContainer, PageHeader } from '#components/reach/page';
 import { EmptyState, LoadError } from '#components/reach/states';
-import { NotesTip } from '#components/reach/info-tip';
+import { InfoTip, NotesTip } from '#components/reach/info-tip';
 import { Button } from '#components/ui/button';
 import { useProject } from './reach-data';
 import { RangePicker } from './range-picker';
@@ -41,7 +41,6 @@ import { HandOffBar } from './hand-off-bar';
 import { discussionsDraft } from './seo-hand-off';
 import {
   youtubeErrorMessage,
-  youtubeMessage,
   youtubeRequest,
   type YouTubeStatus,
   type YouTubeVideo,
@@ -49,7 +48,7 @@ import {
 import './data-views.css';
 import { formatDate, formatDateTime } from '#lib/format';
 
-type Report = Omit<YouTubeStatus, 'page' | 'pageSize'> & CollectorReport;
+type Report = YouTubeStatus & CollectorReport & { videos: YouTubeVideo[] };
 
 const time = (value: string | null | undefined) => formatDateTime(value);
 const summary = (v: YouTubeVideo) =>
@@ -143,7 +142,7 @@ export default function DataYouTube() {
     }
   };
   const settings = () => navigate('/connections?source=youtube');
-  const hasData = Boolean(data && (data.connected || data.total > 0));
+  const hasData = Boolean(data && (data.configured || data.total > 0));
   return (
     <PageContainer className='nr-data-page'>
       <PageHeader
@@ -161,7 +160,7 @@ export default function DataYouTube() {
           ) : undefined
         }
         actions={
-          data?.connected && canSync ? (
+          data?.configured && data.dataforseo && canSync ? (
             <RefreshButton
               busy={running}
               label={running ? $t('youtube.reading') : $t('common.updateNow')}
@@ -208,16 +207,46 @@ export default function DataYouTube() {
       ) : null}
       {data && hasData ? (
         <>
-          <p className='nr-footnote break-words'>
-            {data.terms.length
-              ? $t('common.searchTermValue', { 0: data.terms.join('、') })
-              : null}
-            {data.terms.length && data.fetchedAt ? ' · ' : null}
-            {data.fetchedAt
-              ? $t('youtube.sourceRetrieved', { 0: time(data.fetchedAt) })
-              : null}
-          </p>
-          {!data.connected ? (
+          {/* Where the videos come from in one line; a read that fails shows in Data sources › Data health. */}
+          {data.configured ? (
+            <p className='nr-footnote flex flex-wrap items-center gap-x-1 break-words'>
+              <span>
+                {[
+                  $t('common.searchTermValue', {
+                    0:
+                      data.terms.length > 1
+                        ? $t('youtube.termsAndMore', {
+                            0: data.terms[0],
+                            1: data.terms.length,
+                          })
+                        : data.terms[0],
+                  }),
+                  $t(
+                    data.autoSync
+                      ? 'youtube.autoRead'
+                      : 'youtube.manualReading',
+                  ),
+                  ...(data.fetchedAt
+                    ? [
+                        $t('youtube.sourceRetrieved', {
+                          0: time(data.fetchedAt),
+                        }),
+                      ]
+                    : []),
+                ].join(' · ')}
+              </span>
+              <InfoTip>
+                <p>
+                  {$t('youtube.sourceInfo', {
+                    0: new Intl.ListFormat(getCurrentLocale()).format(
+                      data.terms,
+                    ),
+                  })}
+                </p>
+              </InfoTip>
+            </p>
+          ) : null}
+          {!data.configured ? (
             <p role='status' className='nr-footnote'>
               {$t('collectorPage.disconnectedKept')}
             </p>
@@ -226,16 +255,6 @@ export default function DataYouTube() {
             <p role='status' className='nr-footnote'>
               {$t('youtube.resultsUpdating')}
             </p>
-          ) : null}
-          {data.lastSync && !data.lastSync.ok ? (
-            <div role='alert' className='nr-error'>
-              {(data.lastSync.errors.length
-                ? data.lastSync.errors
-                : [$t('youtube.lastReadFailed')]
-              ).map((message) => (
-                <p key={message}>{youtubeMessage(message)}</p>
-              ))}
-            </div>
           ) : null}
           <ReportMetrics kpis={data.kpis} />
           <CollectorTrendCard trend={data.trend} matched={data.matched} />

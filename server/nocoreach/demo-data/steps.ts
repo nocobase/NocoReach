@@ -548,8 +548,9 @@ async function connectSources(
     [
       'media',
       async () => {
-        // The demo's browser collector answers for the three media platforms.
-        for (const platform of ['bilibili', 'xiaohongshu', 'youtube'] as const)
+        // The demo's browser collector answers for Bilibili and Xiaohongshu; YouTube is searched through the
+        // DataForSEO connection the keywords step verified.
+        for (const platform of ['bilibili', 'xiaohongshu'] as const)
           await p.collectors.save(id, platform, {
             revision: 0,
             url: collectorUrl(spec.domain),

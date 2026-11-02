@@ -1,32 +1,49 @@
-import { formatDateTime } from '#lib/format';
+import {
+  formatCompact,
+  formatCount,
+  formatDate,
+  formatDateTime,
+} from '#lib/format';
 import { confirmCollectorClear } from '#lib/collector-clear';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/client';
 import {
-  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
   useRef,
   useState,
+  type ReactNode,
 } from 'react';
-import {
-  keepPreviousData,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
-import { useNavigate } from 'react-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router';
 import { $t, getCurrentLocale, useNocoReachLocale } from '#i18n';
 import { nocobaseClient as api, NocoReachHttpError } from '#lib/nocoreach-api';
 import { toast } from '#lib/toast';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { Button } from '#components/ui/button';
-import { Label } from '#components/ui/label';
+import { Switch } from '#components/ui/switch';
 import { Textarea } from '#components/ui/textarea';
-import { Checkbox } from '#components/ui/checkbox';
 import { Alert, AlertDescription } from '#components/ui/alert';
 import { Skeleton } from '#components/ui/skeleton';
+import { Spinner } from '#components/ui/spinner';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '#components/ui/dialog';
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from '#components/ui/field';
+import { chipClass } from '#components/reach/chip';
 import { confirmAction, type ConfirmAsk } from '#components/reach/confirm';
+import { safeLink } from './analytics';
+import { sentences } from './task-detail/failure-model';
 
 export type { YouTubeStatus } from './youtube-api';
 import {
@@ -35,6 +52,14 @@ import {
   youtubeErrorMessage,
   type YouTubeStatus,
 } from './youtube-api';
+
+// YouTube (2026-11-02): searched through the project's DataForSEO connection, like Reddit discussions. The drawer
+// says what is read and what it costs, then holds the search terms, the videos found lately, daily reading and Read
+// now; Change opens the terms and tracked videos in a dialog. The proxy switch (passed in as `network`) sits above the
+// links to the data and the destructive actions, which close the drawer.
+const MAX_TERMS = 5;
+const MAX_VIDEOS = 5;
+
 function ErrorMessage({
   error,
   retry,
@@ -68,16 +93,24 @@ function ErrorMessage({
     </Alert>
   );
 }
+
 export function YouTubeConnect({
   projectId,
   onChange,
   readOnly = false,
-  refreshKey = 0,
+  suggested,
+  network,
+  onOpenSource,
 }: {
   projectId: number;
   onChange: () => void;
   readOnly?: boolean;
-  refreshKey?: number;
+  /** Offered as the first search term (the project's name). */
+  suggested?: string;
+  /** The connection's proxy switch, shown above the drawer's closing links. */
+  network?: ReactNode;
+  /** Opens another source's drawer: DataForSEO, to connect it or change its budget. */
+  onOpenSource?: (id: string) => void;
 }) {
   useNocoReachLocale();
   const { session, isPending } = useAuthentication();
@@ -98,36 +131,40 @@ export function YouTubeConnect({
       projectId={projectId}
       onChange={onChange}
       readOnly={readOnly}
-      refreshKey={refreshKey}
+      suggested={suggested}
+      network={network}
+      onOpenSource={onOpenSource}
     />
   );
 }
+
+type Action = 'connect' | 'sync' | 'disconnect' | 'clear';
+
 function YouTubePanel({
   ownerKey,
   sessionId,
   projectId,
   onChange,
   readOnly,
-  refreshKey,
+  suggested,
+  network,
+  onOpenSource,
 }: {
   ownerKey: string;
   sessionId: string;
   projectId: number;
   onChange: () => void;
   readOnly: boolean;
-  refreshKey: number;
+  suggested?: string;
+  network?: ReactNode;
+  onOpenSource?: (id: string) => void;
 }) {
   const { refresh } = useAuthentication();
-  const navigate = useNavigate();
   const { can: connectAllowed } = useBusinessAccess(
     'nrYouTube.connect',
     projectId,
   );
   const { can: syncAllowed } = useBusinessAccess('nrYouTube.sync', projectId);
-  const { can: cancelAllowed } = useBusinessAccess(
-    'nrYouTube.cancel',
-    projectId,
-  );
   const { can: disconnectAllowed } = useBusinessAccess(
     'nrYouTube.disconnect',
     projectId,
@@ -135,13 +172,11 @@ function YouTubePanel({
   const { can: clearAllowed } = useBusinessAccess('nrYouTube.clear', projectId);
   const canConnect = !readOnly && connectAllowed;
   const canSync = !readOnly && syncAllowed;
-  const canCancel = !readOnly && cancelAllowed;
   const canDisconnect = !readOnly && disconnectAllowed;
   const canClear = !readOnly && clearAllowed;
-  const accessRef = useRef({
+  const accessRef = useRef<Record<Action, boolean>>({
     connect: canConnect,
     sync: canSync,
-    cancel: canCancel,
     disconnect: canDisconnect,
     clear: canClear,
   });
@@ -151,24 +186,19 @@ function YouTubePanel({
     accessRef.current = {
       connect: canConnect,
       sync: canSync,
-      cancel: canCancel,
       disconnect: canDisconnect,
       clear: canClear,
     };
-  }, [canConnect, canSync, canCancel, canDisconnect, canClear]);
+  }, [canConnect, canSync, canDisconnect, canClear]);
   const client = useQueryClient();
-  const [page, setPage] = useState(1);
-  const queryRoot = ['nocoreach', 'youtube', ownerKey];
-  const queryKey = [...queryRoot, page];
-  const [editing, setEditing] = useState<YouTubeStatus | null>(null),
+  const queryKey = ['nocoreach', 'youtube', ownerKey];
+  const [editing, setEditing] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>(null);
   const query = useQuery({
     queryKey,
-    queryFn: ({ signal }) =>
-      youtubeRequest(projectId, 'status', { page }, signal),
+    queryFn: ({ signal }) => youtubeRequest(projectId, 'status', {}, signal),
     retry: false,
-    placeholderData: keepPreviousData,
     refetchOnWindowFocus: !busy,
     refetchOnReconnect: !busy,
     refetchInterval: (q) => (!busy && q.state.data?.syncing ? 2000 : false),
@@ -189,8 +219,9 @@ function YouTubePanel({
     }
   }, [query.data?.lastSync?.at, onChange]);
   async function run(
-    action: 'connect' | 'sync' | 'cancel' | 'disconnect' | 'clear',
-    values: object = {},
+    action: Action,
+    values: object,
+    done: string,
     confirmation?: Omit<ConfirmAsk, 'signal'>,
   ) {
     const owner = ownerRef.current;
@@ -214,7 +245,7 @@ function YouTubePanel({
       )
         return;
       if (!active()) return;
-      await client.cancelQueries({ queryKey: queryRoot });
+      await client.cancelQueries({ queryKey });
       if (!active()) return;
       const state = await youtubeRequest(
         projectId,
@@ -224,30 +255,12 @@ function YouTubePanel({
         sessionId,
       );
       if (!active()) return;
-      await client.cancelQueries({ queryKey: queryRoot });
+      await client.cancelQueries({ queryKey });
       if (!active()) return;
-      await client.invalidateQueries({
-        queryKey: queryRoot,
-        refetchType: 'none',
-      });
-      if (!active()) return;
-      client.setQueryData([...queryRoot, 1], state);
-      setPage(1);
-      setEditing(null);
+      client.setQueryData(queryKey, state);
+      setEditing(false);
       onChange();
-      toast.success(() =>
-        $t(
-          action === 'connect'
-            ? 'youtube.settingsSaved'
-            : action === 'disconnect'
-              ? 'youtube.disconnected'
-              : action === 'clear'
-                ? 'youtube.deletedSaved'
-                : action === 'cancel'
-                  ? 'youtube.readsPaused'
-                  : 'youtube.readingStarted',
-        ),
-      );
+      toast.success(() => $t(done));
     } catch (e) {
       // An obsolete owner must never refresh authentication or close a newer dialog.
       if (!active()) return;
@@ -266,60 +279,8 @@ function YouTubePanel({
       }
     }
   }
-  const edit = useCallback(
-    async (collectorChanged = false) => {
-      const owner = ownerRef.current;
-      if (
-        pendingRef.current ||
-        (!collectorChanged && !accessRef.current.connect) ||
-        !owner ||
-        owner.signal.aborted
-      )
-        return;
-      pendingRef.current = true;
-      setBusy(true);
-      setError(null);
-      const root = ['nocoreach', 'youtube', ownerKey];
-      const key = [...root, page];
-      try {
-        await client.cancelQueries({ queryKey: collectorChanged ? root : key });
-        if (owner.signal.aborted) return;
-        const latest = await youtubeRequest(projectId, 'status', { page });
-        if (owner.signal.aborted) return;
-        await client.cancelQueries({ queryKey: collectorChanged ? root : key });
-        if (collectorChanged) {
-          await client.invalidateQueries({
-            queryKey: root,
-            refetchType: 'none',
-          });
-        }
-        if (!owner.signal.aborted) {
-          client.setQueryData(key, latest);
-          // Only the saved snapshot changes; the mounted form retains its draft.
-          setEditing((current) =>
-            collectorChanged && !current ? null : latest,
-          );
-        }
-      } catch (e) {
-        if (!owner.signal.aborted) setError(e);
-      } finally {
-        if (!owner.signal.aborted) {
-          pendingRef.current = false;
-          setBusy(false);
-        }
-      }
-    },
-    [client, ownerKey, page, projectId],
-  );
-  const refreshedKeyRef = useRef(refreshKey);
-  useEffect(() => {
-    if (busy || refreshedKeyRef.current === refreshKey) return;
-    refreshedKeyRef.current = refreshKey;
-    void Promise.resolve().then(() => edit(true));
-  }, [busy, edit, refreshKey]);
-  // A collector refresh can cancel the initial query without settling its status.
   if (error && !query.data)
-    return <ErrorMessage error={error} retry={() => void edit(true)} />;
+    return <ErrorMessage error={error} retry={() => void query.refetch()} />;
   if (query.isPending)
     return (
       <div
@@ -337,375 +298,545 @@ function YouTubePanel({
     );
   const state = query.data;
   if (!state) return null;
-  const form = canConnect
-    ? editing || (!state.configured ? state : null)
-    : null;
+  const save = (values: {
+    terms: string[];
+    videoUrls: string[];
+    autoSync: boolean;
+  }) =>
+    run(
+      'connect',
+      { ...values, revision: state.revision },
+      'youtube.settingsSaved',
+    );
   return (
     <div data-youtube-connection className='grid min-w-0 gap-4'>
-      {error ? (
-        <ErrorMessage error={error} retry={() => void edit(true)} />
+      {error && !editing ? (
+        <ErrorMessage error={error} retry={() => void query.refetch()} />
       ) : null}
       {query.isError ? (
         <ErrorMessage error={query.error} retry={() => void query.refetch()} />
       ) : null}
-      <p className='text-sm text-muted-foreground'>
-        {$t('youtube.publicResearchScope')}
-      </p>
-      {form ? (
-        <YouTubeForm
-          initial={form}
-          busy={busy}
-          editing={Boolean(editing)}
-          onCancel={() => {
-            setEditing(null);
-            setError(null);
-          }}
-          onSave={async (values) => {
-            const changed =
-              JSON.stringify([values.terms.trim(), values.videoUrls.trim()]) !==
-              JSON.stringify([
-                form.terms.join('\n'),
-                form.videoUrls.join('\n'),
-              ]);
-            await run(
-              'connect',
-              { ...values, revision: form.revision },
-              form.total > 0 && changed
-                ? {
-                    title: () => $t('youtube.replaceCriteriaTitle'),
-                    description: () => $t('youtube.criteriaChangeHelp'),
-                    action: () => $t('projectKnowledge.replace'),
-                  }
-                : undefined,
-            );
-          }}
-        />
-      ) : (
-        <>
-          {state.configured ? (
-            <>
-              <p className='break-words text-sm'>
-                {[...state.terms, ...state.videoUrls].join(' · ')}
-              </p>
-              <p className='text-sm text-muted-foreground'>
-                {state.autoSync
-                  ? $t('youtube.dailyReadingEnabled')
-                  : $t('youtube.manualReading')}
-                {state.fetchedAt
-                  ? $t('dataChat.lastRead', {
-                      0: formatDateTime(state.fetchedAt),
-                    })
-                  : ''}
-              </p>
-              {state.syncing ? (
-                <p role='status'>{$t('youtube.readingBackgroundHelp')}</p>
-              ) : null}
-              {state.lastSync?.errors.length ? (
-                <Alert variant='destructive'>
-                  <AlertDescription>
-                    {state.lastSync.errors.map((message) => (
-                      <p key={message}>{youtubeMessage(message)}</p>
-                    ))}
-                  </AlertDescription>
-                </Alert>
-              ) : null}
-              {!readOnly ? (
-                <div className='flex flex-wrap gap-2'>
-                  {state.syncing
-                    ? canCancel && (
-                        <Button
-                          variant='outline'
-                          disabled={busy}
-                          onClick={() =>
-                            void run('cancel', { runId: state.runId })
-                          }
-                        >
-                          {$t('youtube.pauseReads')}
-                        </Button>
-                      )
-                    : canSync && (
-                        <Button
-                          disabled={busy}
-                          onClick={() => void run('sync')}
-                        >
-                          {busy ? $t('common.working') : $t('common.readNow')}
-                        </Button>
-                      )}
-                  {canConnect && (
-                    <Button
-                      variant='outline'
-                      disabled={busy || state.syncing}
-                      onClick={() => void edit()}
-                    >
-                      {$t('common.modify')}
-                    </Button>
-                  )}
-                  {canDisconnect && (
-                    <Button
-                      variant='ghost'
-                      disabled={busy}
-                      onClick={() =>
-                        void run(
-                          'disconnect',
-                          { revision: state.revision },
-                          {
-                            title: () => $t('youtube.disconnectTitle'),
-                            description: () => $t('youtube.disconnectHelp'),
-                            action: () => $t('common.disconnect'),
-                          },
-                        )
-                      }
-                    >
-                      {$t('common.disconnect')}
-                    </Button>
-                  )}
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <p>{$t('youtube.adminSetupRequired')}</p>
-          )}
-        </>
-      )}
-      {!editing ? (
-        <>
-          <p className='text-sm text-muted-foreground'>
-            {$t('youtube.researchLimits')}
-          </p>
-          <p className='text-sm text-muted-foreground'>
-            {state.total
-              ? $t('collectorPage.savedSummary', {
-                  0: state.total.toLocaleString(getCurrentLocale()),
-                })
-              : $t('youtube.savedVideosSummary', { 0: 0 })}
-          </p>
-          {state.total > 0 ? (
-            <div className='flex flex-wrap gap-2'>
+      <Problem
+        state={state}
+        canOpen={!readOnly && Boolean(onOpenSource)}
+        onOpenSource={onOpenSource}
+      />
+      {state.configured ? (
+        <section
+          className='nr-guide-connected grid gap-3'
+          aria-label={$t('youtube.searchTerms')}
+        >
+          <div className='flex items-center justify-between gap-2'>
+            <h3 className='!mb-0'>{$t('youtube.searchTerms')}</h3>
+            {canConnect ? (
               <Button
+                size='sm'
                 variant='outline'
-                onClick={() => void navigate('/data/youtube')}
+                disabled={busy || state.syncing}
+                onClick={() => {
+                  setError(null);
+                  setEditing(true);
+                }}
               >
-                {$t('collectorPage.viewData')}
+                {$t('common.modify')}
               </Button>
-              {canClear ? (
-                <Button
-                  variant='ghost'
-                  disabled={busy || state.syncing}
-                  onClick={() =>
-                    void run('clear', { revision: state.revision })
-                  }
-                >
-                  {$t('collectorClear.action')}
-                </Button>
-              ) : null}
-            </div>
-          ) : state.syncing ? (
-            <p className='text-sm text-muted-foreground'>
-              {$t('youtube.resultsUpdating')}
+            ) : null}
+          </div>
+          <div className='flex flex-wrap gap-1.5'>
+            {state.terms.map((term) => (
+              <span key={term} className={chipClass}>
+                {term}
+              </span>
+            ))}
+          </div>
+          {state.videoUrls.length ? (
+            <p className='text-muted-foreground'>
+              {$t('youtube.trackedVideos', { 0: state.videoUrls.length })}
             </p>
           ) : null}
-        </>
+          {state.total > 0 ? (
+            <p className='text-muted-foreground'>
+              {$t('youtube.videosRecorded', {
+                0: formatCount(state.total),
+                1: state.recordingSince
+                  ? $t('common.recordingSince', {
+                      0: formatDate(state.recordingSince, { withYear: true }),
+                    })
+                  : '',
+              })}
+            </p>
+          ) : null}
+          {state.syncing ? (
+            <p role='status' className='flex items-center gap-2'>
+              <Spinner />
+              {$t('youtube.readingProgress')}
+            </p>
+          ) : null}
+          {state.recent.length ? (
+            <div>
+              <p className='nr-guide-subtitle !mt-1'>
+                {$t('youtube.recentVideos')}
+              </p>
+              <ul className='grid gap-1'>
+                {state.recent.map((video) => (
+                  <li key={video.id} className='flex min-w-0 gap-1'>
+                    <a
+                      className='nr-link min-w-0 truncate'
+                      href={safeLink(video.url)}
+                      target='_blank'
+                      rel='noreferrer'
+                    >
+                      {video.title || video.url}
+                    </a>
+                    <span className='shrink-0 text-muted-foreground'>
+                      {video.publishedAt
+                        ? ` · ${formatDate(video.publishedAt)}`
+                        : ''}
+                      {video.views !== null
+                        ? ` · ${$t('youtube.viewsCount', { 0: formatCompact(video.views) })}`
+                        : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          <div className='flex items-center justify-between gap-3 pt-1'>
+            <label className='flex min-w-0 items-center gap-2'>
+              <Switch
+                checked={state.autoSync}
+                disabled={!canConnect || busy || state.syncing}
+                onCheckedChange={(next) =>
+                  void run(
+                    'connect',
+                    {
+                      terms: state.terms,
+                      videoUrls: state.videoUrls,
+                      autoSync: next,
+                      revision: state.revision,
+                    },
+                    next ? 'youtube.autoReadOn' : 'youtube.autoReadOff',
+                  )
+                }
+              />
+              <span>
+                {$t('youtube.autoRead')}
+                {state.fetchedAt ? (
+                  <span className='text-muted-foreground'>
+                    {' · '}
+                    {$t('youtube.sourceRetrieved', {
+                      0: formatDateTime(state.fetchedAt),
+                    })}
+                  </span>
+                ) : null}
+              </span>
+            </label>
+            {canSync ? (
+              <Button
+                size='sm'
+                variant='outline'
+                disabled={busy || state.syncing || !state.dataforseo}
+                onClick={() => void run('sync', {}, 'youtube.readingStarted')}
+              >
+                {state.syncing
+                  ? $t('youtube.readingShort')
+                  : $t('common.readNow')}
+              </Button>
+            ) : null}
+          </div>
+          <Estimate state={state} />
+        </section>
+      ) : state.dataforseo ? (
+        <section className='nr-guide-connected flex items-center justify-between gap-3'>
+          <div className='min-w-0'>
+            <h3>{$t('youtube.searchTerms')}</h3>
+            <p className='text-muted-foreground'>
+              {canConnect
+                ? $t('youtube.noTermsYet')
+                : $t('youtube.adminSetupRequired')}
+            </p>
+          </div>
+          {canConnect ? (
+            <Button
+              onClick={() => {
+                setError(null);
+                setEditing(true);
+              }}
+            >
+              {$t('youtube.addTerms')}
+            </Button>
+          ) : null}
+        </section>
       ) : null}
+      {network}
+      {state.total > 0 || (state.configured && canDisconnect) ? (
+        <div className='flex flex-wrap items-center justify-between gap-2'>
+          {state.total > 0 ? (
+            <Link to='/data/youtube' className='nr-link text-sm'>
+              {$t('collectorPage.viewData')}
+            </Link>
+          ) : (
+            <span />
+          )}
+          <div className='flex flex-wrap gap-1'>
+            {canClear && state.total > 0 ? (
+              <Button
+                size='sm'
+                variant='ghost'
+                disabled={busy || state.syncing}
+                onClick={() =>
+                  void run(
+                    'clear',
+                    { revision: state.revision },
+                    'youtube.deletedSaved',
+                  )
+                }
+              >
+                {$t('collectorClear.action')}
+              </Button>
+            ) : null}
+            {canDisconnect && state.configured ? (
+              <Button
+                size='sm'
+                variant='ghost'
+                disabled={busy}
+                onClick={() =>
+                  void run(
+                    'disconnect',
+                    { revision: state.revision },
+                    'youtube.disconnected',
+                    {
+                      title: () => $t('youtube.disconnectTitle'),
+                      description: () => $t('youtube.disconnectHelp'),
+                      action: () => $t('common.disconnect'),
+                    },
+                  )
+                }
+              >
+                {$t('common.disconnect')}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+      <Dialog
+        open={editing}
+        onOpenChange={(open) => {
+          if (!open && !busy) {
+            setEditing(false);
+            setError(null);
+          }
+        }}
+      >
+        {/* Made anew each time it opens, from the saved terms (or the project's name for the first one). */}
+        {editing ? (
+          <TermsForm
+            state={state}
+            suggested={suggested}
+            busy={busy}
+            error={error}
+            onCancel={() => {
+              setEditing(false);
+              setError(null);
+            }}
+            onSave={(terms, videoUrls) =>
+              void save({
+                terms,
+                videoUrls,
+                autoSync: state.configured ? state.autoSync : true,
+              })
+            }
+          />
+        ) : null}
+      </Dialog>
     </div>
   );
 }
-function youtubeFormErrors(terms: string, videoUrls: string) {
-  const lines = (value: string) =>
+
+const quoted = (terms: string[]) =>
+  new Intl.ListFormat(getCurrentLocale()).format(terms.map((t) => `“${t}”`));
+
+/** What stops or limits reading, most pressing first, with what to do about it. */
+function Problem({
+  state,
+  canOpen,
+  onOpenSource,
+}: {
+  state: YouTubeStatus;
+  canOpen: boolean;
+  onOpenSource?: (id: string) => void;
+}) {
+  const box = (title: string, body: ReactNode, action?: ReactNode) => (
+    <section className='nr-guide-step !mt-0 grid gap-1' role='status'>
+      <h3 className='!mb-0'>{title}</h3>
+      <div className='text-muted-foreground'>{body}</div>
+      {action ? <div className='mt-2'>{action}</div> : null}
+    </section>
+  );
+  const open = (label: string) =>
+    canOpen ? (
+      <Button
+        size='sm'
+        variant='outline'
+        onClick={() => onOpenSource?.('keywords')}
+      >
+        {label}
+      </Button>
+    ) : undefined;
+  if (!state.dataforseo)
+    return box(
+      $t('youtube.dataforseoMissingTitle'),
+      $t('youtube.dataforseoMissing'),
+      open($t('youtube.goConnectDataforseo')),
+    );
+  if (state.pausedUntil)
+    return box(
+      $t('youtube.budgetPausedTitle'),
+      $t('youtube.budgetPaused', {
+        0: state.spend?.monthUsd.toFixed(2) ?? '—',
+        1: state.spend?.budgetUsd ?? '—',
+        2: formatDate(state.pausedUntil),
+      }),
+      open($t('youtube.adjustBudget')),
+    );
+  const last = state.lastSync;
+  if (!last || state.syncing) return null;
+  const retry = $t(
+    state.autoSync ? 'youtube.retryTomorrow' : 'youtube.retryManually',
+  );
+  if (!last.ok)
+    return box(
+      $t('youtube.lastReadFailedTitle'),
+      <>
+        {(last.errors.length ? last.errors : [$t('youtube.requestFailed')]).map(
+          (message) => (
+            <p key={message}>{youtubeMessage(message)}</p>
+          ),
+        )}
+        <p>{retry}</p>
+      </>,
+    );
+  const missed = last.missed ?? [];
+  if (!missed.length) return null;
+  const others = state.terms.length - missed.length;
+  const terms = quoted(missed.map((m) => m.term));
+  return box(
+    $t(
+      missed.length === 1
+        ? 'youtube.termMissedTitle'
+        : 'youtube.termsMissedTitle',
+    ),
+    <p>
+      {sentences(
+        others > 0
+          ? $t(
+              missed.every((m) => m.reason === 'timeout')
+                ? 'youtube.termsTimedOut'
+                : 'youtube.termsFailed',
+              { 0: terms, 1: others },
+            )
+          : $t('youtube.termsMissedOnly', { 0: terms }),
+        retry,
+      )}
+    </p>,
+  );
+}
+
+const estimateUsd = (value: number) =>
+  value < 0.1 ? value.toFixed(2) : value.toFixed(1);
+
+/** What daily reading costs a month at the current terms, against this month's DataForSEO spending. */
+function Estimate({ state }: { state: YouTubeStatus }) {
+  if (!state.spend || !state.dataforseo) return null;
+  const used = state.spend.monthUsd.toFixed(2),
+    budget = state.spend.budgetUsd;
+  const tracked = state.videoUrls.length;
+  return (
+    <p className='text-muted-foreground'>
+      {!state.autoSync
+        ? $t('youtube.estimateManual', {
+            0: state.estimate.readUsd.toFixed(3),
+            1: used,
+            2: budget,
+          })
+        : tracked
+          ? $t('youtube.estimateTracked', {
+              0: state.terms.length,
+              1: tracked,
+              2: estimateUsd(state.estimate.monthlyUsd),
+              3: used,
+              4: budget,
+            })
+          : $t('youtube.estimate', {
+              0: state.terms.length,
+              1: estimateUsd(state.estimate.monthlyUsd),
+              2: used,
+              3: budget,
+            })}
+    </p>
+  );
+}
+
+const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
+function isVideo(value: string) {
+  if (VIDEO_ID.test(value)) return true;
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol !== 'https:' ||
+      url.username ||
+      url.password ||
+      url.port ||
+      !['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'].includes(
+        url.hostname,
+      )
+    )
+      return false;
+    const candidate =
+      url.hostname === 'youtu.be'
+        ? url.pathname.slice(1)
+        : url.pathname === '/watch'
+          ? url.searchParams.get('v')
+          : /^\/(shorts|live)\//.test(url.pathname)
+            ? url.pathname.split('/')[2]
+            : '';
+    return Boolean(candidate && VIDEO_ID.test(candidate));
+  } catch {
+    return false;
+  }
+}
+const lines = (value: string) => [
+  ...new Set(
     value
       .split('\n')
       .map((line) => line.trim())
-      .filter(Boolean);
-  const keywords = lines(terms),
-    urls = lines(videoUrls);
-  const isVideo = (value: string) => {
-    const id = /^[A-Za-z0-9_-]{11}$/;
-    if (id.test(value)) return true;
-    try {
-      const url = new URL(value);
-      if (
-        url.protocol !== 'https:' ||
-        url.username ||
-        url.password ||
-        url.port ||
-        ![
-          'youtube.com',
-          'www.youtube.com',
-          'm.youtube.com',
-          'youtu.be',
-        ].includes(url.hostname)
-      )
-        return false;
-      const candidate =
-        url.hostname === 'youtu.be'
-          ? url.pathname.slice(1)
-          : url.pathname === '/watch'
-            ? url.searchParams.get('v')
-            : /^\/(shorts|live)\//.test(url.pathname)
-              ? url.pathname.split('/')[2]
-              : '';
-      return Boolean(candidate && id.test(candidate));
-    } catch {
-      return false;
-    }
-  };
+      .filter(Boolean),
+  ),
+];
+function formErrors(terms: string[], urls: string[]) {
   return {
-    terms:
-      !keywords.length && !urls.length
-        ? $t('youtube.criteriaRequired')
-        : keywords.length > 2 ||
-            keywords.some(
-              (term) =>
-                term.length < 2 ||
-                term.length > 80 ||
-                [...term].some(
-                  (character) =>
-                    character.charCodeAt(0) < 32 ||
-                    character.charCodeAt(0) === 127,
-                ),
-            )
-          ? $t('youtube.invalidKeywords')
-          : '',
+    terms: !terms.length
+      ? $t('youtube.termsRequired')
+      : terms.length > MAX_TERMS ||
+          terms.some(
+            (term) =>
+              term.length < 2 ||
+              term.length > 80 ||
+              [...term].some(
+                (c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127,
+              ),
+          )
+        ? $t('youtube.invalidKeywords')
+        : '',
     videoUrls:
-      urls.length > 5
+      urls.length > MAX_VIDEOS
         ? $t('youtube.videoLimit')
         : urls.some((url) => !isVideo(url))
           ? $t('youtube.invalidVideo')
           : '',
   };
 }
-function YouTubeForm({
-  initial,
+
+function TermsForm({
+  state,
+  suggested,
   busy,
-  editing,
+  error,
   onSave,
   onCancel,
 }: {
-  initial: YouTubeStatus;
+  state: YouTubeStatus;
+  suggested?: string;
   busy: boolean;
-  editing: boolean;
-  onSave: (values: {
-    terms: string;
-    videoUrls: string;
-    autoSync: boolean;
-  }) => Promise<void>;
+  error: unknown;
+  onSave: (terms: string[], videoUrls: string[]) => void;
   onCancel: () => void;
 }) {
-  const [terms, setTerms] = useState(initial.terms.join('\n')),
-    [videoUrls, setVideoUrls] = useState(initial.videoUrls.join('\n')),
-    [autoSync, setAutoSync] = useState(initial.autoSync),
+  const id = useId();
+  const [terms, setTerms] = useState(
+      state.terms.length ? state.terms.join('\n') : (suggested ?? ''),
+    ),
+    [videoUrls, setVideoUrls] = useState(state.videoUrls.join('\n')),
     [submitted, setSubmitted] = useState(false);
-  const id = useId(),
-    termsRef = useRef<HTMLTextAreaElement>(null),
-    videosRef = useRef<HTMLTextAreaElement>(null),
-    savingRef = useRef(false),
-    editFocusMovedRef = useRef(false);
-  useEffect(() => {
-    // The Change trigger unmounts when the fresh edit form arrives. Hand focus
-    // to its first field once; later saves/errors must not interrupt typing.
-    if (editing && !busy && !editFocusMovedRef.current) {
-      editFocusMovedRef.current = true;
-      // Respect a newer focus choice made while the status request was pending.
-      if (document.activeElement === document.body) termsRef.current?.focus();
-    }
-  }, [editing, busy]);
   // Validate derived values without normalizing the controlled draft (including IME text).
   const errors = submitted
-    ? youtubeFormErrors(terms, videoUrls)
+    ? formErrors(lines(terms), lines(videoUrls))
     : { terms: '', videoUrls: '' };
   return (
-    <form
-      className='grid gap-4'
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (busy || savingRef.current) return;
-        const nextErrors = youtubeFormErrors(terms, videoUrls);
-        setSubmitted(true);
-        if (nextErrors.terms || nextErrors.videoUrls) {
-          (nextErrors.terms ? termsRef : videosRef).current?.focus();
-          return;
-        }
-        savingRef.current = true;
-        void onSave({ terms, videoUrls, autoSync }).finally(() => {
-          savingRef.current = false;
-        });
-      }}
-    >
-      <div className='grid gap-2'>
-        <Label htmlFor={`${id}-terms`}>{$t('youtube.keywords')}</Label>
-        <Textarea
-          id={`${id}-terms`}
-          ref={termsRef}
-          aria-invalid={Boolean(errors.terms) || undefined}
-          aria-describedby={`${id}-help${errors.terms ? ` ${id}-terms-error` : ''}`}
-          value={terms}
-          disabled={busy}
-          maxLength={200}
-          placeholder={$t('youtube.keywordPlaceholder')}
-          onChange={(e) => setTerms(e.target.value)}
-        />
-        {errors.terms ? (
-          <p
-            id={`${id}-terms-error`}
-            role='alert'
-            className='text-sm text-destructive'
-          >
-            {errors.terms}
-          </p>
-        ) : null}
-      </div>
-      <div className='grid gap-2'>
-        <Label htmlFor={`${id}-videos`}>{$t('youtube.videoLinks')}</Label>
-        <Textarea
-          id={`${id}-videos`}
-          ref={videosRef}
-          aria-invalid={Boolean(errors.videoUrls) || undefined}
-          aria-describedby={`${id}-help${errors.videoUrls ? ` ${id}-videos-error` : ''}`}
-          value={videoUrls}
-          disabled={busy}
-          maxLength={3000}
-          placeholder='https://www.youtube.com/watch?v=…'
-          onChange={(e) => setVideoUrls(e.target.value)}
-        />
-        {errors.videoUrls ? (
-          <p
-            id={`${id}-videos-error`}
-            role='alert'
-            className='text-sm text-destructive'
-          >
-            {errors.videoUrls}
-          </p>
-        ) : null}
-      </div>
-      <p id={`${id}-help`} className='text-sm text-muted-foreground'>
-        {$t('youtube.criteriaRequiredHelp')}
-      </p>
-      <div className='flex items-center gap-2'>
-        <Checkbox
-          id={`${id}-daily`}
-          checked={autoSync}
-          disabled={busy}
-          onCheckedChange={(value) => setAutoSync(Boolean(value))}
-        />
-        <Label htmlFor={`${id}-daily`}>{$t('youtube.dailyReading')}</Label>
-      </div>
-      <p className='text-sm text-muted-foreground'>
-        {$t('youtube.dailyReadingHelp')}
-      </p>
-      <div className='flex flex-wrap justify-end gap-2'>
-        {editing ? (
-          <Button
-            type='button'
-            variant='outline'
+    <DialogContent className='flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-lg'>
+      <DialogHeader>
+        <DialogTitle>
+          {$t(
+            state.configured
+              ? 'youtube.editTermsTitle'
+              : 'youtube.addTermsTitle',
+          )}
+        </DialogTitle>
+      </DialogHeader>
+      <form
+        id={`${id}-form`}
+        className='-mx-4 flex min-h-0 flex-col gap-5 overflow-y-auto px-4 pb-1'
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (busy) return;
+          setSubmitted(true);
+          const next = formErrors(lines(terms), lines(videoUrls));
+          if (next.terms || next.videoUrls) return;
+          onSave(lines(terms), lines(videoUrls));
+        }}
+      >
+        <Field data-invalid={Boolean(errors.terms) || undefined}>
+          <FieldLabel htmlFor={`${id}-terms`}>
+            {$t('youtube.keywords')}
+          </FieldLabel>
+          <Textarea
+            id={`${id}-terms`}
+            autoFocus
+            aria-invalid={Boolean(errors.terms) || undefined}
+            value={terms}
             disabled={busy}
-            onClick={onCancel}
-          >
-            {$t('common.cancel')}
-          </Button>
-        ) : null}
-        <Button type='submit' disabled={busy}>
-          {busy ? $t('common.saving') : $t('youtube.saveAndRead')}
+            maxLength={500}
+            placeholder={$t('youtube.keywordPlaceholder')}
+            onChange={(e) => setTerms(e.target.value)}
+          />
+          {errors.terms ? (
+            <FieldError>{errors.terms}</FieldError>
+          ) : (
+            <FieldDescription>{$t('youtube.termsHelp')}</FieldDescription>
+          )}
+        </Field>
+        <Field data-invalid={Boolean(errors.videoUrls) || undefined}>
+          <FieldLabel htmlFor={`${id}-videos`}>
+            {$t('youtube.trackedVideosLabel')}
+          </FieldLabel>
+          <Textarea
+            id={`${id}-videos`}
+            aria-invalid={Boolean(errors.videoUrls) || undefined}
+            value={videoUrls}
+            disabled={busy}
+            maxLength={3000}
+            placeholder='https://www.youtube.com/watch?v=…'
+            onChange={(e) => setVideoUrls(e.target.value)}
+          />
+          {errors.videoUrls ? (
+            <FieldError>{errors.videoUrls}</FieldError>
+          ) : (
+            <FieldDescription>
+              {$t('youtube.trackedVideosHelp')}
+            </FieldDescription>
+          )}
+        </Field>
+        {error ? <ErrorMessage error={error} /> : null}
+      </form>
+      <DialogFooter>
+        <Button variant='outline' disabled={busy} onClick={onCancel}>
+          {$t('common.cancel')}
         </Button>
-      </div>
-    </form>
+        <Button type='submit' form={`${id}-form`} disabled={busy}>
+          {busy && <Spinner data-icon='inline-start' />}
+          {$t(state.configured ? 'common.save' : 'youtube.saveAndRead')}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
   );
 }

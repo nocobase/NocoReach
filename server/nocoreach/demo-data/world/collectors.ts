@@ -1,15 +1,15 @@
 import type { Media } from './script/media.js';
 import { DAY, body, json, text } from './kit.js';
-import { worldFor, type World, type WorldProject } from './world.js';
+import type { World } from './world.js';
 
-/** The browser collector a demo project is connected to; it answers for Xiaohongshu, Bilibili and YouTube. */
+/** The browser collector a demo project is connected to; it answers for Xiaohongshu and Bilibili. */
 export const collectorUrl = (domain: string): string =>
   `https://collector.${domain}`;
 export const COLLECTOR_TOKEN = 'demo-only-collector-token-never-live-000000';
 
 const iso = (t: number) => new Date(t).toISOString();
 
-function published(world: World, item: Media, index: number): number {
+export function published(world: World, item: Media, index: number): number {
   const at =
     world.now -
     item.age * DAY -
@@ -18,7 +18,7 @@ function published(world: World, item: Media, index: number): number {
 }
 
 /** A media item's counts keep growing a little each day after it was published, so later reads see change. */
-function grown(world: World, value: number, item: Media): number {
+export function grown(world: World, value: number, item: Media): number {
   const days = Math.max(1, item.age);
   return Math.round(
     value *
@@ -32,24 +32,10 @@ const bvid = (world: World, index: number) =>
     .hash(`bv:${index}`)
     .replace(/[^0-9a-zA-Z]/g, '')
     .slice(0, 9)}`;
-const youtubeId = (world: World, index: number) =>
-  Buffer.from(world.seeded.hash(`yt:${index}`), 'hex')
-    .toString('base64url')
-    .slice(0, 11);
 const noteId = (world: World, index: number) =>
   world.seeded.hash(`xhs:${index}`).slice(0, 24);
 
-/** Links to the videos searches do not reach, which the demo follows by link. */
-export function followedVideos(project: WorldProject): string[] {
-  const world = worldFor(project, Date.now());
-  return world.youtube
-    .slice(5, 10)
-    .map(
-      (_, i) => `https://www.youtube.com/watch?v=${youtubeId(world, i + 5)}`,
-    );
-}
-
-/** Answers the browser collector protocol (v1): health, search and video for the three media platforms. */
+/** Answers the browser collector protocol (v1): health, search and video for Xiaohongshu and Bilibili. */
 export function collector(
   world: World,
   u: URL,
@@ -73,7 +59,7 @@ export function collector(
   };
   if (
     b.protocolVersion !== 1 ||
-    !['xiaohongshu', 'bilibili', 'youtube'].includes(platform)
+    !['xiaohongshu', 'bilibili'].includes(platform)
   )
     return json({ ...envelope, ok: false, errorCode: 'invalid_input' });
   const collectedAt = iso(world.now);
@@ -150,53 +136,6 @@ export function collector(
         ...envelope,
         collectedAt,
         item: meta(world.bilibili[index], index, 'video_metadata'),
-      });
-    }
-  }
-  if (platform === 'youtube') {
-    if (kind === 'search') {
-      const found = pick(world.youtube.slice(0, 5)).slice(
-        0,
-        Math.min(5, Number(b.limit) || 5),
-      );
-      return json({
-        ...envelope,
-        collectedAt,
-        items: found.map(({ index }) => ({ id: youtubeId(world, index) })),
-      });
-    }
-    if (kind === 'video') {
-      const index = world.youtube.findIndex(
-        (_, i) => youtubeId(world, i) === text(b.videoId),
-      );
-      if (index < 0)
-        return json({ ...envelope, ok: false, errorCode: 'not_found' });
-      const item = world.youtube[index];
-      const id = youtubeId(world, index);
-      return json({
-        ...envelope,
-        collectedAt,
-        item: {
-          id,
-          url: `https://www.youtube.com/watch?v=${id}`,
-          title: world.text(item.title),
-          description: item.description ? world.text(item.description) : '',
-          channel: item.channel ?? world.site.name,
-          publishedAt: iso(published(world, item, index)).slice(0, 10),
-          views: grown(world, item.views, item),
-          likes: grown(world, item.likes, item),
-          comments: grown(world, item.comments, item),
-          duration: item.duration ?? 600,
-          fetchedAt: collectedAt,
-          provider: 'yt-dlp',
-          // Production collection is metadata-only.
-          transcript: {
-            status: 'missing',
-            language: null,
-            text: '',
-            truncated: false,
-          },
-        },
       });
     }
   }

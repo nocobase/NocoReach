@@ -287,16 +287,6 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
         });
         await p.chat.runs.wait(id);
       });
-    await phase('youtube', async () => {
-      const state = await p.youtube.state(id);
-      await p.youtube.connect(id, {
-        terms: [product.name],
-        videoUrls: ['https://www.youtube.com/watch?v=NocoBloom01'],
-        revision: state?.revision ?? null,
-        autoSync: false,
-      });
-      await p.youtube.settled(id);
-    });
     await phase('bilibili', async () => {
       const state = await p.bilibili!.state(id);
       await p.bilibili!.connect(id, {
@@ -400,6 +390,18 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
     await phase('reddit', async () => {
       await p.reddit.connect(id, { terms: [product.name] });
       await p.reddit.runs.wait(id);
+    });
+    // YouTube is searched through DataForSEO, so it follows the connection's check. The editorial demo renames
+    // NocoBloom in saved data, so the tracked video's ID leaves it out to stay a valid 11-character ID.
+    await phase('youtube', async () => {
+      const state = await p.youtube.state(id);
+      await p.youtube.connect(id, {
+        terms: [product.name],
+        videoUrls: ['https://www.youtube.com/watch?v=DemoVideo01'],
+        revision: state?.revision ?? null,
+        autoSync: false,
+      });
+      await p.youtube.settled(id);
     });
     await phase('trends', async () => {
       await p.trends.connect(id, { product: product.name, locationCode: 0 });

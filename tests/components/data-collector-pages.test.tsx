@@ -246,6 +246,7 @@ it('keeps saved Bilibili videos readable after disconnecting, without turning un
 const youtube = {
   configured: true,
   connected: true,
+  dataforseo: true,
   syncing: false,
   runId: null,
   revision: 'v1',
@@ -293,6 +294,10 @@ it('shows YouTube provenance without captions, and offers reading only with the 
     youtube.videos[0].url,
   );
   expect(screen.getByText(/播放 10 · 点赞 — · 评论 —/)).toBeVisible();
+  // Where the videos come from, in one line.
+  expect(
+    screen.getByText(/^搜索词：NocoBase · 手动读取 · 更新于/),
+  ).toBeVisible();
   expect(screen.queryByText('Actual transcript')).not.toBeInTheDocument();
   expect(screen.queryByText('字幕')).not.toBeInTheDocument();
   await waitFor(() =>

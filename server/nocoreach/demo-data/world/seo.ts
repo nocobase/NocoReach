@@ -13,6 +13,7 @@ import { LIGHTHOUSE, TRENDS } from './script/market.js';
 import { TOPIC_WORDS } from './script/search.js';
 import type { Research, AiQuestion } from './script/types.js';
 import type { World } from './world.js';
+import { youtubeSerp } from './youtube.js';
 
 type Keyword = Research & { topic: string };
 
@@ -836,6 +837,9 @@ export function dataforseo(
       return page(found);
     return undefined;
   }
+  const youtube = youtubeSerp(world, operation, b);
+  if (youtube)
+    return wrap(youtube, operation.includes('video_info') ? 0.006 : 0.002);
   if (/^serp\/google\/organic\/live\/(advanced|regular)$/.test(operation)) {
     const keyword = text(b.keyword);
     const rows = keyword.includes('site:reddit.com')

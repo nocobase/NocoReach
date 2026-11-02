@@ -960,41 +960,50 @@ test('Bilibili real connect/search/video normalization persists usable videos an
   verifyNetwork();
 });
 
-test('YouTube real runner/caption normalization persists transcripts, avoids OS processes and retains old data on malformed and cancellation', async ({
+test('YouTube reads simulated DataForSEO searches through the production source and keeps saved videos when a read fails', async ({
   testApp,
 }) => {
   const { call, plugin, id, configure } = await setup(testApp);
   const verifyNetwork = denyNetwork();
+  // YouTube is read through the project's DataForSEO connection.
+  await data(call('nrYouTube', 'connect', { terms: ['NocoBloom'] }), 409);
+  await configureSeo(call);
   await data(
     call('nrYouTube', 'connect', {
       terms: ['NocoBloom'],
       videoUrls: ['https://www.youtube.com/watch?v=NocoBloom01'],
       revision: null,
-      autoSync: false,
     }),
   );
   await plugin.youtube.settled(id);
   const first = await data(call('nrYouTube', 'status'));
   expect(first).toMatchObject({
     connected: true,
+    dataforseo: true,
+    autoSync: true,
     syncing: false,
-    analyticsAvailable: false,
+    lastSync: { ok: true, missed: [] },
   });
   expect(first.total).toBeGreaterThan(0);
-  expect(JSON.stringify(first.videos)).toContain('NocoBloom');
-  const original = first.videos;
+  // Simulated DataForSEO answers bill nothing; the read still reports its spend against the month's budget.
+  expect(first.lastSync.costUsd).toBe(0);
+  expect(first.spend).toMatchObject({ monthUsd: 0 });
+  expect(first.recent.length).toBeGreaterThan(0);
+  expect(first.recent[0].title).toBeTruthy();
+  const report = (await data(call('nrYouTube', 'report', { range: 'all' })))
+    .videos;
+  expect(report.some((v: { likes: number | null }) => v.likes !== null)).toBe(
+    true,
+  );
   await configure('malformed');
   await data(call('nrYouTube', 'sync'));
   await plugin.youtube.settled(id);
-  expect((await data(call('nrYouTube', 'status'))).videos).toEqual(original);
-  await configure('slow-cancel');
-  await data(call('nrYouTube', 'sync'));
-  const active = await data(call('nrYouTube', 'status'));
-  expect(active.syncing).toBe(true);
-  await configure('newdata');
-  await data(call('nrYouTube', 'cancel', { runId: 'wrong-run' }), 409);
-  await data(call('nrYouTube', 'cancel', { runId: active.runId }));
-  expect((await data(call('nrYouTube', 'status'))).videos).toEqual(original);
+  const failed = await data(call('nrYouTube', 'status'));
+  expect(failed.lastSync.ok).toBe(false);
+  expect(failed.total).toBe(first.total);
+  expect(
+    (await data(call('nrYouTube', 'report', { range: 'all' }))).videos,
+  ).toEqual(report);
   verifyNetwork();
 });
 
@@ -1929,8 +1938,8 @@ for (const target of [
     await plugin.youtube.settled(id);
     const youtube = await data(call('nrYouTube', 'status'));
     expect(youtube.total).toBeGreaterThan(0);
-    expect(JSON.stringify(youtube.videos)).toContain(target.name);
-    expect(JSON.stringify(youtube.videos)).not.toContain('NocoBloom');
+    expect(JSON.stringify(youtube.recent)).toContain(target.name);
+    expect(JSON.stringify(youtube.recent)).not.toContain('NocoBloom');
     covered.add('youtube');
 
     const authorized = await call('nrGoogle', 'authorize');

@@ -1,19 +1,18 @@
 // @vitest-environment node
-import { fileURLToPath } from 'node:url';
-import { createTestDatabase } from '@nocobase/app-testing/server';
-import { SnowflakeIdGenerator } from '@nocobase/snowflake';
 import { expect, it, onTestFinished, vi } from 'vitest';
-import { LegacyDatabase } from '../../server/nocoreach/legacy/database.js';
-import { OutboundNetwork } from '../../server/nocoreach/outbound-network.js';
-import { ProxyProfiles } from '../../server/nocoreach/proxy-profiles.js';
-import {
-  YouTubeError,
-  type Video,
-} from '../../server/nocoreach/youtube-provider.js';
-import {
+import type { Video } from '../../server/nocoreach/youtube-provider.js';
+import { YouTubeError } from '../../server/nocoreach/youtube-provider.js';
+import type {
+  DetailsResult,
   YouTubeSource,
-  type YouTubeState,
+  YouTubeState,
 } from '../../server/nocoreach/youtube-source.js';
+import {
+  details,
+  found,
+  videoKey,
+  youtubeFixture,
+} from './fixtures/youtube.js';
 
 function deferred<T = void>() {
   let resolve!: (value: T) => void;
@@ -23,74 +22,44 @@ function deferred<T = void>() {
   return { promise, resolve };
 }
 
-const video = (title: string): Video => ({
-  id: 'Im69kzhpR3I',
-  url: 'https://www.youtube.com/watch?v=Im69kzhpR3I',
-  title,
-  description: '',
-  channel: 'Test channel',
-  publishedAt: null,
-  views: 0,
-  likes: null,
-  comments: null,
-  duration: 60,
-  fetchedAt: new Date().toISOString(),
-  provider: 'yt-dlp',
-  transcript: { status: 'missing', language: null, text: '', truncated: false },
+const result = (title: string): DetailsResult => ({
+  ok: true,
+  video: details(1, { title }),
+  costUsd: 0.006,
 });
 
 async function fixture(deadline?: AbortSignal) {
-  const testDb = await createTestDatabase({
-    migrations: [
-      {
-        packageName: 'nocoreach',
-        directory: fileURLToPath(
-          new URL('../../database/main/migrations', import.meta.url),
-        ),
-      },
-    ],
-  });
-  onTestFinished(() => testDb.destroy());
+  const f = await youtubeFixture();
   // This regression exercises SQLite's real single-connection queue, not a
   // replacement transaction function or an in-memory repository.
-  expect(testDb.dialect).toBe('sqlite');
-  const db = new LegacyDatabase(
-    testDb.database,
-    new SnowflakeIdGenerator({ workerId: 0 }),
-  );
-  const network = new OutboundNetwork(
-    new ProxyProfiles({ all: () => ({}), set: vi.fn() }),
-  );
-  const result = deferred<Video>();
-  const reader = {
-    search: vi.fn(async () => ['Im69kzhpR3I']),
-    video: vi.fn(async (_id: string, _signal: AbortSignal) =>
-      video('LAST GOOD RESULT'),
-    ),
-  };
-  const source = new YouTubeSource(
-    {
-      collectors: { allowed: () => [] },
-      db,
-      network,
-      app: { logger: { warn: vi.fn() } },
-      project: async () => ({ id: '1' }),
-      projectIds: async () => ['1'],
-    } as unknown as ConstructorParameters<typeof YouTubeSource>[0],
-    reader,
-  );
-  onTestFinished(async () => {
-    result.resolve(video('TEST CLEANUP'));
-    await source.stop();
-    await network.close();
+  expect(f.dialect).toBe('sqlite');
+  const { source, reader } = f;
+  reader.search.mockResolvedValue({
+    ok: true,
+    videos: [found(1)],
+    costUsd: 0.002,
   });
-  await source.connect('1', { terms: 'NocoBase', autoSync: true });
-  await source.settled('1');
-  const before = (await source.status('1'))!;
-  const reading = deferred<AbortSignal>();
-  reader.video.mockImplementationOnce((_id: string, signal: AbortSignal) => {
-    reading.resolve(signal);
-    return result.promise;
+  reader.details.mockResolvedValue(result('LAST GOOD RESULT'));
+  // The video is tracked, so every read reads its details after the searches and the saved-video lookup.
+  await f.connect('1', 'NocoBase', { autoSync: true, videoUrls: videoKey(1) });
+  const stored = async () => {
+    const videos = await f.connection
+      .repository('nrYouTubeVideos')
+      .findMany({ filter: { projectId: '1' } });
+    return {
+      ...(await f.stored())!,
+      videos: videos.map((v) => v.payload as Video),
+    };
+  };
+  const before = await stored();
+  // The next read waits for the video's details until the test releases the result.
+  const pending = deferred<DetailsResult>();
+  const reading = deferred();
+  // Release a read a failed test left waiting, before the source stops (later hooks run first).
+  onTestFinished(() => pending.resolve(result('TEST CLEANUP')));
+  reader.details.mockImplementationOnce(() => {
+    reading.resolve();
+    return pending.promise;
   });
   const timeout = deadline
     ? vi.spyOn(AbortSignal, 'timeout').mockReturnValueOnce(deadline)
@@ -101,20 +70,8 @@ async function fixture(deadline?: AbortSignal) {
   } finally {
     timeout?.mockRestore();
   }
-  const signal = await reading.promise;
-  const stored = async () => {
-    const row = await testDb.connection.repository('nrSnapshots').findOne({
-      filter: { key: 'youtube:1' },
-    });
-    const videos = await testDb.connection
-      .repository('nrYouTubeVideos')
-      .findMany({ filter: { projectId: '1' } });
-    return {
-      ...(row!.payload as YouTubeState),
-      videos: videos.map((v) => v.payload as Video),
-    };
-  };
-  return { ...testDb, db, source, before, result, signal, running, stored };
+  await reading.promise;
+  return { ...f, before, result: pending, running, stored };
 }
 
 async function queueSave(f: Awaited<ReturnType<typeof fixture>>) {
@@ -142,10 +99,9 @@ async function queueSave(f: Awaited<ReturnType<typeof fixture>>) {
       });
     });
   try {
-    f.result.resolve(video('CANCELLED NEW RESULT'));
+    f.result.resolve(result('CANCELLED NEW RESULT'));
     await requested.promise;
     expect(entered).toBe(false);
-    expect(f.signal.aborted).toBe(false);
   } catch (error) {
     release.resolve();
     await blocker;
@@ -176,7 +132,6 @@ it.each(['cancel', 'stop', 'timeout'] as const)(
             ? f.source.cancel('1', { runId: f.running.runId })
             : f.source.stop();
       }
-      expect(f.signal.aborted).toBe(true);
     } finally {
       await release();
       await cancellation;
@@ -217,7 +172,8 @@ it('commits a queued batch and success together when it is not cancelled', async
     ok: true,
     lastSuccessAt: stored.fetchedAt,
   });
-  expect(stored.verifiedAt).toBe(stored.fetchedAt);
+  // The first successful read verified the source; later reads keep that time.
+  expect(stored.verifiedAt).toBe(f.before.verifiedAt);
   expect(stored.autoSync).toBe(true);
   expect(stored.revision).toBe(f.before.revision);
 });
@@ -245,7 +201,7 @@ it('rejects cancellation after the real write begins and commits one consistent 
     },
   );
   let cancelling: Promise<void> | undefined;
-  f.result.resolve(video('COMMITTED NEW RESULT'));
+  f.result.resolve(result('COMMITTED NEW RESULT'));
   try {
     const uncommitted = await written.promise;
     expect(uncommitted.videos[0].title).toBe('COMMITTED NEW RESULT');
@@ -262,7 +218,6 @@ it('rejects cancellation after the real write begins and commits one consistent 
       },
     );
     await Promise.resolve();
-    expect(f.signal.aborted).toBe(false);
     expect(outcome).toMatchObject({ code: 'config_changed', status: 409 });
     await cancelling;
   } finally {
@@ -299,12 +254,12 @@ it('rolls back both new data and success when the real result transaction fails'
           ...(row!.payload as YouTubeState),
           videos: videos.map((v) => v.payload as Video),
         };
-        throw new YouTubeError('network_error');
+        throw new YouTubeError('upstream_error');
       },
     },
   );
   try {
-    f.result.resolve(video('ROLLED BACK RESULT'));
+    f.result.resolve(result('ROLLED BACK RESULT'));
     await f.source.settled('1');
   } finally {
     unsubscribe();
@@ -317,7 +272,7 @@ it('rolls back both new data and success when the real result transaction fails'
   expect(stored.verifiedAt).toBe(f.before.fetchedAt);
   expect(stored.lastSync).toMatchObject({
     ok: false,
-    code: 'network_error',
+    code: 'upstream_error',
     lastSuccessAt: f.before.lastSync!.lastSuccessAt,
   });
 });

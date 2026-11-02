@@ -73,6 +73,7 @@ function view(connected = true): YouTubeStatus {
   return {
     configured: connected,
     connected,
+    dataforseo: true,
     syncing: false,
     runId: null,
     revision: '641664cf-f741-4e91-b9dd-854b88ed1570',
@@ -80,11 +81,15 @@ function view(connected = true): YouTubeStatus {
     videoUrls: [],
     autoSync: false,
     fetchedAt: null,
-    page: 1,
-    pageSize: 20,
-    videos: [],
     total: 1,
+    recordingSince: null,
+    recent: [],
+    pendingDetails: 0,
+    pausedUntil: null,
+    spend: { monthUsd: 0, budgetUsd: 5 },
+    estimate: { monthlyUsd: 0, readUsd: 0, searchUsd: 0.002, videoUsd: 0.006 },
     lastSync: null,
+    nextSyncAt: null,
   };
 }
 function SessionControls() {
@@ -178,19 +183,10 @@ async function openClear() {
 async function confirm(dialog: HTMLElement) {
   fireEvent.click(
     within(dialog).getByRole('button', {
-      name: /^(断开|替换|确认清理)$/,
+      name: /^(断开|确认清理)$/,
     }),
   );
   await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
-}
-async function openReplacement() {
-  fireEvent.click(await screen.findByRole('button', { name: '修改' }));
-  const field = await screen.findByRole('textbox', { name: 'YouTube 搜索词' });
-  fireEvent.change(field, {
-    target: { value: `Replacement ${network.session.session.id}` },
-  });
-  fireEvent.click(screen.getByRole('button', { name: '保存并读取' }));
-  return screen.findByRole('alertdialog');
 }
 const sessionConflict = () =>
   new NocoReachHttpError('Session changed', 409, {
@@ -212,13 +208,9 @@ afterEach(async () => {
   await act(async () => cleanup());
 });
 
-for (const operation of ['disconnect', 'connect', 'clear'] as const) {
-  const openIntent =
-    operation === 'disconnect'
-      ? openDisconnect
-      : operation === 'clear'
-        ? openClear
-        : openReplacement;
+// Saving search terms asks no confirmation; disconnecting and clearing do.
+for (const operation of ['disconnect', 'clear'] as const) {
+  const openIntent = operation === 'disconnect' ? openDisconnect : openClear;
   for (const transition of [
     'new-account',
     'same-account-new-session',

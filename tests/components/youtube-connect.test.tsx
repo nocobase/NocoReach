@@ -1,18 +1,10 @@
-import { I18nRuntime } from '@nocobase/i18n';
-import locales from '../../client/locales';
-import { connectLocale } from '../../client/i18n';
-import { toast } from '../../client/lib/toast';
-import chinese from '../../shared/i18n/zh.json';
-import { youtubeSystemErrors } from '../../client/lib/youtube-errors';
-import { translateSystemError } from '../../client/i18n';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
-  act,
   cleanup,
-  fireEvent,
   render as renderBase,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import type { ReactElement } from 'react';
@@ -22,17 +14,14 @@ import {
   YouTubeConnect,
   type YouTubeStatus,
 } from '../../client/pages/youtube-connect';
-import {
-  nocobaseClient as api,
-  NocoReachHttpError,
-} from '../../client/lib/nocoreach-api';
+import { nocobaseClient as api } from '../../client/lib/nocoreach-api';
 import { confirmAction } from '../../client/components/reach/confirm';
 import { setDictionary } from '../../client/i18n';
 import en from '../../shared/i18n/en.json';
-import { HealthPanel } from '../../client/pages/data-health';
 import { getCatalog, sourceState } from '../../client/pages/data-sources';
 
-// The panels link to their data pages, so they render inside a router.
+// YouTube's drawer (2026-11-02): read through DataForSEO by search term. The panels link to the data page, so they
+// render inside a router.
 const render = (ui: ReactElement) => renderBase(ui, { wrapper: MemoryRouter });
 
 const auth = vi.hoisted(() => ({
@@ -61,10 +50,11 @@ vi.mock('../../client/components/reach/confirm', () => ({
   confirmAction: vi.fn(async () => true),
 }));
 vi.mock('../../client/lib/toast', () => ({ toast: { success: vi.fn() } }));
-const ID = 'Im69kzhpR3I';
+
 const empty: YouTubeStatus = {
   configured: false,
   connected: false,
+  dataforseo: true,
   syncing: false,
   runId: null,
   revision: null,
@@ -72,46 +62,51 @@ const empty: YouTubeStatus = {
   videoUrls: [],
   autoSync: false,
   fetchedAt: null,
-  page: 1,
-  pageSize: 20,
-  videos: [],
   total: 0,
+  recordingSince: null,
+  recent: [],
+  pendingDetails: 0,
+  pausedUntil: null,
+  spend: { monthUsd: 3.12, budgetUsd: 10 },
+  estimate: { monthlyUsd: 0, readUsd: 0, searchUsd: 0.002, videoUsd: 0.006 },
   lastSync: null,
+  nextSyncAt: null,
 };
+const video = (n: number, title: string, views: number) => ({
+  id: `video00000${n}`,
+  url: `https://www.youtube.com/watch?v=video00000${n}`,
+  title,
+  channel: 'NocoBase',
+  publishedAt: `2026-10-${20 + n}`,
+  firstSeenAt: '2026-11-02T08:03:00Z',
+  views,
+});
 const active: YouTubeStatus = {
   ...empty,
   configured: true,
   connected: true,
   revision: 'v1',
-  terms: ['NocoBase'],
-  fetchedAt: '2026-10-10T13:00:00Z',
-  total: 1,
-  lastSync: { at: '2026-10-10T13:00:00Z', ok: true, errors: [] },
-  videos: [
-    {
-      id: ID,
-      url: `https://www.youtube.com/watch?v=${ID}`,
-      title: 'Tutorial',
-      description: 'Public description',
-      channel: 'Channel',
-      publishedAt: '2026-10-09',
-      views: 10,
-      likes: null,
-      comments: null,
-      fetchedAt: '2026-10-10T13:00:00Z',
-      transcript: {
-        status: 'manual',
-        language: 'en',
-        text: 'Actual transcript',
-        truncated: false,
-      },
-    },
+  terms: ['NocoBase', 'NocoBase tutorial', 'open source no-code'],
+  autoSync: true,
+  fetchedAt: '2026-11-02T08:03:00Z',
+  total: 31,
+  recordingSince: '2026-10-11T08:00:00Z',
+  recent: [
+    video(1, 'Build an internal CRM with NocoBase in 20 minutes', 12300),
+    video(2, 'NocoBase vs Appsmith', 3410),
   ],
+  estimate: {
+    monthlyUsd: 0.72,
+    readUsd: 0.006,
+    searchUsd: 0.002,
+    videoUsd: 0.006,
+  },
+  lastSync: { at: '2026-11-02T08:03:00Z', ok: true, errors: [], missed: [] },
+  nextSyncAt: '2026-11-03T00:00:00Z',
 };
 beforeEach(() => {
   auth.session = { user: { id: 'admin-a' }, session: { id: 'session-a' } };
   auth.isPending = false;
-  auth.revision = 0;
   auth.refresh.mockReset();
   authorization.can.mockReset().mockResolvedValue(true);
   setDictionary(null);
@@ -127,918 +122,248 @@ function setup(props: Partial<Parameters<typeof YouTubeConnect>[0]> = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
-  const element = (refreshKey = props.refreshKey) => (
+  return render(
     <QueryClientProvider client={client}>
-      <YouTubeConnect
-        projectId={1}
-        onChange={() => {}}
-        {...props}
-        refreshKey={refreshKey}
-      />
-    </QueryClientProvider>
-  );
-  const result = render(element());
-  return {
-    ...result,
-    refreshCollector: (key: number) => result.rerender(element(key)),
-  };
-}
-it('saves keyword configuration without API keys, defaults to manual and blocks invalid empty input', async () => {
-  vi.mocked(api.action).mockResolvedValue(empty);
-  setup();
-  const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: '保存并读取' }));
-  expect(api.action).toHaveBeenCalledTimes(1);
-  const terms = screen.getByLabelText('YouTube 搜索词');
-  expect(terms).toHaveFocus();
-  expect(terms).toHaveAttribute('aria-invalid', 'true');
-  expect(terms.getAttribute('aria-describedby')).toContain(
-    screen.getByRole('alert').id,
-  );
-  expect(screen.getByRole('alert')).toHaveTextContent(
-    '请填写搜索词或 YouTube 视频链接',
-  );
-  await user.type(terms, 'NocoBase');
-  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  expect(terms).not.toHaveAttribute('aria-invalid');
-  vi.mocked(api.action).mockResolvedValue({
-    ...empty,
-    configured: true,
-    syncing: true,
-    runId: 'run1',
-    revision: 'v1',
-    terms: ['NocoBase'],
-  });
-  await user.click(screen.getByRole('button', { name: '保存并读取' }));
-  await waitFor(() =>
-    expect(api.action).toHaveBeenCalledWith(
-      'nrYouTube',
-      'connect',
-      expect.objectContaining({
-        body: {
-          projectId: 1,
-          terms: 'NocoBase',
-          videoUrls: '',
-          autoSync: false,
-          revision: null,
-        },
-      }),
-    ),
-  );
-  expect(
-    await screen.findByRole('button', { name: '停止并暂停自动读取' }),
-  ).toBeVisible();
-  expect(screen.queryByLabelText('API Key')).not.toBeInTheDocument();
-});
-it('links read-only members to the saved videos on the data page', async () => {
-  vi.mocked(api.action).mockResolvedValue(active);
-  setup({ readOnly: true });
-  expect(await screen.findByRole('button', { name: '查看数据' })).toBeVisible();
-  expect(
-    screen.queryByRole('button', { name: '修改' }),
-  ).not.toBeInTheDocument();
-  expect(
-    screen.queryByRole('button', { name: '立即读取' }),
-  ).not.toBeInTheDocument();
-});
-it.each([
-  ['connect', '保存并读取'],
-  ['sync', '立即读取'],
-  ['cancel', '停止并暂停自动读取'],
-  ['disconnect', '断开'],
-  ['clear', '清理已获取数据'],
-])(
-  'exposes only the granted YouTube %s operation and submits the matching action',
-  async (allowed, label) => {
-    authorization.can.mockImplementation(
-      async ({ resource, action }) =>
-        resource.type === 'nocoreach' &&
-        resource.id === '1' &&
-        action === `nrYouTube.${allowed}`,
-    );
-    vi.mocked(api.action).mockResolvedValue(
-      allowed === 'connect'
-        ? empty
-        : {
-            ...active,
-            syncing: allowed === 'cancel',
-            runId: allowed === 'cancel' ? 'running-collection' : null,
-          },
-    );
-    setup();
-    const button = await screen.findByRole('button', {
-      name: label,
-      exact: true,
-    });
-    for (const other of [
-      '保存并读取',
-      '立即读取',
-      '停止并暂停自动读取',
-      '修改',
-      '断开',
-      '清理已获取数据',
-    ]) {
-      if (other !== label)
-        expect(
-          screen.queryByRole('button', { name: other, exact: true }),
-        ).not.toBeInTheDocument();
-    }
-    if (allowed === 'connect')
-      await userEvent.type(screen.getByLabelText('YouTube 搜索词'), 'NocoBase');
-    else {
-      expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: '查看数据' })).toBeVisible();
-    }
-    await userEvent.click(button);
-    await waitFor(() =>
-      expect(
-        vi
-          .mocked(api.action)
-          .mock.calls.filter(([, action]) => action !== 'status')
-          .map(([resource, action]) => [resource, action]),
-      ).toEqual([['nrYouTube', allowed]]),
-    );
-    expect(api.action).toHaveBeenCalledWith(
-      'nrYouTube',
-      allowed,
-      expect.objectContaining({
-        body: expect.objectContaining({ projectId: 1 }),
-      }),
-    );
-  },
-);
-it('requires confirmation before replacing cached criteria and sends the latest revision', async () => {
-  vi.mocked(api.action).mockResolvedValue(active);
-  setup();
-  const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: '修改' }));
-  const input = await screen.findByLabelText('YouTube 搜索词');
-  await user.clear(input);
-  await user.type(input, 'New keyword');
-  vi.mocked(confirmAction).mockResolvedValueOnce(false);
-  await user.click(screen.getByRole('button', { name: '保存并读取' }));
-  expect(confirmAction).toHaveBeenCalledWith(
-    expect.objectContaining({
-      description: expect.any(Function),
-      signal: expect.any(AbortSignal),
-    }),
-  );
-  expect(api.action).toHaveBeenCalledTimes(2);
-  expect(input).toHaveValue('New keyword');
-  await user.click(screen.getByRole('button', { name: '保存并读取' }));
-  await waitFor(() =>
-    expect(api.action).toHaveBeenCalledWith(
-      'nrYouTube',
-      'connect',
-      expect.objectContaining({
-        body: expect.objectContaining({ revision: 'v1', terms: 'New keyword' }),
-      }),
-    ),
-  );
-});
-it('keeps entered values after a rejected save and can cancel editing', async () => {
-  vi.mocked(api.action).mockResolvedValue(active);
-  setup();
-  const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: '修改' }));
-  const input = await screen.findByLabelText('YouTube 搜索词');
-  await user.clear(input);
-  await user.type(input, 'Changed');
-  vi.mocked(api.action).mockRejectedValueOnce(
-    new NocoReachHttpError('YouTube 配置已被修改，请重新打开后重试', 409, {}),
-  );
-  await user.click(screen.getByRole('button', { name: '保存并读取' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    chinese['youtube.configChanged'],
-  );
-  expect(input).toHaveValue('Changed');
-  await user.click(screen.getByRole('button', { name: '取消' }));
-  expect(screen.getByRole('button', { name: '修改' })).toBeVisible();
-});
-it('retains criteria and daily-reading drafts after a collector refresh and submits its latest revision', async () => {
-  vi.mocked(api.action).mockResolvedValue(active);
-  const result = setup();
-  const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: '修改' }));
-  const terms = await screen.findByLabelText('YouTube 搜索词');
-  const videos = screen.getByLabelText('指定 YouTube 视频');
-  await user.clear(terms);
-  await user.type(terms, 'Draft keyword');
-  await user.type(videos, `https://youtu.be/${ID}`);
-  await user.click(screen.getByRole('checkbox'));
-  vi.mocked(api.action).mockRejectedValueOnce(new TypeError('Failed to fetch'));
-  result.refreshCollector(1);
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    '网络请求未完成，请检查网络连接后重试。',
-  );
-  expect(terms).toHaveValue('Draft keyword');
-  vi.mocked(api.action).mockResolvedValue({
-    ...active,
-    revision: 'v2',
-    connected: false,
-    fetchedAt: null,
-    lastSync: null,
-  });
-  await user.click(screen.getByRole('button', { name: '重试' }));
-  await waitFor(() => expect(api.action).toHaveBeenCalledTimes(4));
-  await waitFor(() =>
-    expect(screen.getByRole('button', { name: '保存并读取' })).toBeEnabled(),
-  );
-  expect(screen.getByLabelText('YouTube 搜索词')).toBe(terms);
-  expect(terms).toHaveValue('Draft keyword');
-  expect(videos).toHaveValue(`https://youtu.be/${ID}`);
-  expect(screen.getByRole('checkbox')).toBeChecked();
-  await user.click(screen.getByRole('button', { name: '保存并读取' }));
-  await waitFor(() =>
-    expect(api.action).toHaveBeenCalledWith(
-      'nrYouTube',
-      'connect',
-      expect.objectContaining({
-        body: expect.objectContaining({
-          revision: 'v2',
-          terms: 'Draft keyword',
-          videoUrls: `https://youtu.be/${ID}`,
-          autoSync: true,
-        }),
-      }),
-    ),
-  );
-});
-it('recovers when a collector refresh cancels the initial query and then fails', async () => {
-  const initial = Promise.withResolvers<YouTubeStatus>();
-  vi.mocked(api.action)
-    .mockImplementationOnce(() => initial.promise)
-    .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-    .mockResolvedValue({ ...empty, terms: ['Recovered keyword'] });
-  const result = setup();
-  const user = userEvent.setup();
-  await waitFor(() => expect(api.action).toHaveBeenCalledTimes(1));
-  expect(await screen.findByRole('status')).toBeVisible();
-  result.refreshCollector(1);
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    '网络请求未完成，请检查网络连接后重试。',
-  );
-  expect(screen.queryByRole('status')).not.toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: '重试' }));
-  expect(await screen.findByLabelText('YouTube 搜索词')).toHaveValue(
-    'Recovered keyword',
-  );
-  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  await act(async () => initial.resolve(empty));
-});
-it('cancel sends the current runId and pauses automatically; disconnect carries revision', async () => {
-  vi.mocked(api.action).mockResolvedValue({
-    ...active,
-    syncing: true,
-    runId: 'current-run',
-  });
-  setup();
-  const user = userEvent.setup();
-  await user.click(
-    await screen.findByRole('button', { name: '停止并暂停自动读取' }),
-  );
-  await waitFor(() =>
-    expect(api.action).toHaveBeenCalledWith(
-      'nrYouTube',
-      'cancel',
-      expect.objectContaining({ body: { projectId: 1, runId: 'current-run' } }),
-    ),
-  );
-  await user.click(screen.getByRole('button', { name: '断开' }));
-  await waitFor(() =>
-    expect(api.action).toHaveBeenCalledWith(
-      'nrYouTube',
-      'disconnect',
-      expect.objectContaining({ body: { projectId: 1, revision: 'v1' } }),
-    ),
-  );
-});
-it.each([401, 403, 404])(
-  'handles HTTP %s without a blind retry button',
-  async (status) => {
-    vi.mocked(api.action).mockRejectedValue(
-      new NocoReachHttpError('request failed', status, {}),
-    );
-    setup();
-    expect(await screen.findByRole('alert')).toBeVisible();
-    expect(
-      screen.queryByRole('button', { name: '重试' }),
-    ).not.toBeInTheDocument();
-    if (status === 401)
-      expect(screen.getByRole('link', { name: '重新登录' })).toHaveAttribute(
-        'href',
-        '/main/login',
-      );
-  },
-);
-it('renders English form, scope and validation text', async () => {
-  setDictionary(en);
-  vi.mocked(api.action).mockResolvedValue(empty);
-  setup();
-  const user = userEvent.setup();
-  expect(await screen.findByLabelText('YouTube keywords')).toBeVisible();
-  expect(
-    screen.getByText(
-      'Public content research; does not include channel-owner Analytics',
-    ),
-  ).toBeVisible();
-  await user.click(screen.getByRole('button', { name: 'Save and read' }));
-  expect(screen.getByRole('alert')).toHaveTextContent(
-    'Enter keywords or a YouTube video link.',
-  );
-  expect(screen.getByLabelText('YouTube keywords')).toHaveFocus();
-});
-it('catalog status distinguishes configuration, verified data and partial failure', () => {
-  const source = getCatalog().find((s) => s.id === 'youtube')!;
-  expect(sourceState(source, {})).toBe('ready');
-  expect(
-    sourceState(source, { youtube: { configured: true, connected: false } }),
-  ).toBe('partial');
-  expect(
-    sourceState(source, {
-      youtube: {
-        configured: true,
-        connected: true,
-        lastSync: { ok: true, errors: [] },
-      },
-    }),
-  ).toBe('connected');
-  expect(
-    sourceState(source, {
-      youtube: {
-        configured: true,
-        connected: true,
-        lastSync: { ok: true, errors: ['captions failed'] },
-      },
-    }),
-  ).toBe('partial');
-});
-
-it('does not let an earlier status response hide a newly started run', async () => {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
-  });
-  vi.mocked(api.action).mockResolvedValue(active);
-  render(
-    <QueryClientProvider client={client}>
-      <YouTubeConnect projectId={1} onChange={() => {}} />
+      <YouTubeConnect projectId={1} onChange={() => {}} {...props} />
     </QueryClientProvider>,
   );
-  await screen.findByRole('button', { name: '立即读取' });
-  let resolve!: (state: YouTubeStatus) => void;
-  vi.mocked(api.action).mockImplementationOnce(
-    () =>
-      new Promise((r) => {
-        resolve = r;
-      }),
-  );
-  let refetch!: Promise<void>;
-  act(() => {
-    refetch = client.refetchQueries({ queryKey: ['nocoreach', 'youtube'] });
-  });
-  await waitFor(() => expect(resolve).toBeTypeOf('function'));
-  vi.mocked(api.action).mockResolvedValue({
-    ...active,
-    syncing: true,
-    runId: 'new-run',
-  });
-  await userEvent
-    .setup()
-    .click(screen.getByRole('button', { name: '立即读取' }));
-  await screen.findByRole('button', { name: '停止并暂停自动读取' });
-  await act(async () => {
-    resolve(active);
-    await refetch;
-  });
+}
+const request = (action: string) =>
+  vi
+    .mocked(api.action)
+    .mock.calls.filter(
+      ([resource, name]) => resource === 'nrYouTube' && name === action,
+    );
+
+it('asks for DataForSEO first and opens its drawer', async () => {
+  vi.mocked(api.action).mockResolvedValue({ ...empty, dataforseo: false });
+  const onOpenSource = vi.fn();
+  setup({ onOpenSource });
+  expect(await screen.findByText('DataForSEO 还没接入')).toBeVisible();
   expect(
-    screen.getByRole('button', { name: '停止并暂停自动读取' }),
+    screen.getByText(
+      'YouTube 通过 DataForSEO 读取，先在“数据接入”接好 DataForSEO 再填搜索词。',
+    ),
   ).toBeVisible();
-  client.clear();
+  expect(screen.queryByRole('button', { name: '填写搜索词' })).toBeNull();
+  await userEvent.click(
+    screen.getByRole('button', { name: '去接入 DataForSEO' }),
+  );
+  expect(onOpenSource).toHaveBeenCalledWith('keywords');
 });
 
-it('checks the project-scoped YouTube sync grant before exposing health retry', async () => {
-  authorization.can.mockResolvedValue(false);
-  vi.mocked(api.action).mockResolvedValue({
-    checkedAt: '',
-    items: [
-      {
-        id: 'youtube',
-        name: 'YouTube',
-        state: 'warning',
-        message: 'YouTube 上次读取失败，请手动重试',
-        lastSuccessAt: null,
-        dataThrough: null,
-        nextSyncAt: null,
-        retry: { resource: 'nrYouTube', action: 'sync', body: {} },
-      },
-    ],
-  });
-  const view = render(
-    <HealthPanel projectId={1} reloadKey={0} onChange={() => {}} />,
-  );
-  // The source shows in the attention list and in the sync table below it.
-  await screen.findAllByText('YouTube');
+it('adds search terms in a dialog, offering the project name, and reads at once with daily reading on', async () => {
+  vi.mocked(api.action).mockResolvedValue(empty);
+  setup({ suggested: 'Acme' });
+  const user = userEvent.setup();
   expect(
-    screen.queryByRole('button', { name: '重试' }),
-  ).not.toBeInTheDocument();
-  // The grant check runs in an effect that may settle after the health rows render.
+    await screen.findByText('还没有填写搜索词，填写后开始读取。'),
+  ).toBeVisible();
+  await user.click(screen.getByRole('button', { name: '填写搜索词' }));
+  const dialog = await screen.findByRole('dialog', {
+    name: '填写 YouTube 搜索词',
+  });
+  const terms = within(dialog).getByLabelText('YouTube 搜索词');
+  expect(terms).toHaveValue('Acme');
+  await user.clear(terms);
+  await user.click(within(dialog).getByRole('button', { name: '保存并读取' }));
+  expect(within(dialog).getByText('请至少填写一个搜索词')).toBeVisible();
+  await user.type(terms, 'Acme{Enter}Acme tutorial');
+  await user.type(
+    within(dialog).getByLabelText('单独跟踪的视频（可选）'),
+    'https://example.com/video',
+  );
+  await user.click(within(dialog).getByRole('button', { name: '保存并读取' }));
+  expect(request('connect')).toHaveLength(0);
+  await user.clear(within(dialog).getByLabelText('单独跟踪的视频（可选）'));
+  vi.mocked(api.action).mockResolvedValue({ ...active, syncing: true });
+  await user.click(within(dialog).getByRole('button', { name: '保存并读取' }));
   await waitFor(() =>
-    expect(authorization.can).toHaveBeenCalledWith({
-      resource: { type: 'nocoreach', id: '1' },
-      action: 'nrYouTube.sync',
+    expect(request('connect')[0][2]).toMatchObject({
+      body: {
+        projectId: 1,
+        terms: ['Acme', 'Acme tutorial'],
+        videoUrls: [],
+        autoSync: true,
+        revision: null,
+      },
+      headers: { 'X-NocoReach-Confirmation-Session': 'session-a' },
     }),
   );
-  authorization.can.mockImplementation(
-    async ({ resource, action }) =>
-      resource.id === '1' && action === 'nrYouTube.sync',
-  );
-  auth.revision++;
-  view.rerender(
-    <HealthPanel projectId={1} reloadKey={0} onChange={() => {}} />,
-  );
-  expect(await screen.findByRole('button', { name: '重试' })).toBeVisible();
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  expect(
+    screen.getByText('正在读取，通常需要一两分钟，可以关闭面板稍后查看。'),
+  ).toBeVisible();
 });
 
-it('clears a missing-criteria error when a valid video is provided instead', async () => {
-  vi.mocked(api.action).mockResolvedValue(empty);
-  setup();
-  const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: '保存并读取' }));
-  await user.type(
-    screen.getByLabelText('指定 YouTube 视频'),
-    `https://youtu.be/${ID}`,
-  );
-  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  expect(screen.getByLabelText('YouTube 搜索词')).toHaveValue('');
-});
-it('focuses the first invalid field and clears only corrected field errors', async () => {
-  vi.mocked(api.action).mockResolvedValue(empty);
-  setup();
-  const user = userEvent.setup();
-  const terms = await screen.findByLabelText('YouTube 搜索词');
-  const videos = screen.getByLabelText('指定 YouTube 视频');
-  await user.type(terms, 'x');
-  await user.type(videos, 'https://example.com/not-youtube');
-  await user.click(screen.getByRole('button', { name: '保存并读取' }));
-  expect(terms).toHaveFocus();
-  expect(screen.getAllByRole('alert')).toHaveLength(2);
-  await user.clear(terms);
-  await user.type(terms, 'NocoBase');
-  expect(screen.getAllByRole('alert')).toHaveLength(1);
-  expect(terms).toHaveFocus();
-  await user.click(screen.getByRole('button', { name: '保存并读取' }));
-  expect(videos).toHaveFocus();
-  expect(videos.getAttribute('aria-describedby')).toContain(
-    screen.getByRole('alert').id,
-  );
-  await user.clear(videos);
-  await user.type(videos, ID);
-  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  expect(api.action).toHaveBeenCalledTimes(1);
-});
-it('preserves raw multiline IME draft text while clearing corrected validation', async () => {
-  vi.mocked(api.action).mockResolvedValue(empty);
-  setup();
-  const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: '保存并读取' }));
-  const terms = screen.getByLabelText('YouTube 搜索词');
-  fireEvent.compositionStart(terms);
-  fireEvent.change(terms, { target: { value: '  中文关键词  \n第二行' } });
-  fireEvent.compositionEnd(terms, { data: '中文关键词' });
-  expect(terms).toHaveValue('  中文关键词  \n第二行');
-  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-});
-
-it('focuses the fresh edit form only after the latest configuration arrives and again on reopening', async () => {
+it('shows the terms, recently found videos, daily reading and what it costs', async () => {
   vi.mocked(api.action).mockResolvedValue(active);
   setup();
-  const user = userEvent.setup();
-  const change = await screen.findByRole('button', { name: '修改' });
-  let resolve!: (state: YouTubeStatus) => void;
-  vi.mocked(api.action).mockImplementationOnce(
-    () =>
-      new Promise((r) => {
-        resolve = r;
-      }),
-  );
-  change.focus();
-  await user.keyboard('{Enter}');
-  expect(screen.queryByLabelText('YouTube 搜索词')).not.toBeInTheDocument();
-  expect(change).toBeDisabled();
-  await act(async () => {
-    resolve({ ...active, revision: 'latest', terms: ['Latest keyword'] });
-  });
-  const terms = await screen.findByLabelText('YouTube 搜索词');
-  expect(terms).toHaveValue('Latest keyword');
-  expect(terms).toHaveFocus();
-  await user.click(screen.getByRole('button', { name: '取消' }));
-  expect(screen.queryByLabelText('YouTube 搜索词')).not.toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: '修改' }));
-  expect(await screen.findByLabelText('YouTube 搜索词')).toHaveFocus();
-});
-it('does not move focus back to the first edit field after input changes or a rejected save', async () => {
-  vi.mocked(api.action).mockResolvedValue(active);
-  setup();
-  const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: '修改' }));
-  const terms = await screen.findByLabelText('YouTube 搜索词');
-  expect(terms).toHaveFocus();
-  const refocus = vi.spyOn(terms, 'focus');
-  const videos = screen.getByLabelText('指定 YouTube 视频');
-  await user.type(videos, ID);
-  expect(videos).toHaveFocus();
-  fireEvent.compositionStart(videos);
-  fireEvent.change(videos, { target: { value: `  ${ID}  ` } });
-  fireEvent.compositionEnd(videos, { data: ID });
-  vi.mocked(api.action).mockRejectedValueOnce(
-    new NocoReachHttpError('YouTube 配置已被修改，请重新打开后重试', 409, {}),
-  );
-  await user.click(screen.getByRole('button', { name: '保存并读取' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    chinese['youtube.configChanged'],
-  );
-  expect(videos).toHaveValue(`  ${ID}  `);
-  expect(refocus).not.toHaveBeenCalled();
-});
-it('does not focus an edit form after its panel unmounts while status is pending', async () => {
-  vi.mocked(api.action).mockResolvedValue(active);
-  const view = setup();
-  const user = userEvent.setup();
-  let resolve!: (state: YouTubeStatus) => void;
-  const change = await screen.findByRole('button', { name: '修改' });
-  vi.mocked(api.action).mockImplementationOnce(
-    () =>
-      new Promise((r) => {
-        resolve = r;
-      }),
-  );
-  await user.click(change);
-  view.unmount();
-  const outside = document.createElement('button');
-  outside.textContent = 'Outside panel';
-  document.body.append(outside);
-  outside.focus();
-  try {
-    await act(async () => {
-      resolve({ ...active, terms: ['Late response'] });
-    });
-    expect(outside).toHaveFocus();
-    expect(screen.queryByLabelText('YouTube 搜索词')).not.toBeInTheDocument();
-  } finally {
-    outside.remove();
-  }
-});
-it('does not apply late editing focus across a project switch', async () => {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
-  });
-  vi.mocked(api.action).mockResolvedValue(active);
-  const renderProject = (projectId: number) => (
-    <QueryClientProvider client={client}>
-      <YouTubeConnect projectId={projectId} onChange={() => {}} />
-    </QueryClientProvider>
-  );
-  const view = render(renderProject(1));
-  const user = userEvent.setup();
-  const change = await screen.findByRole('button', { name: '修改' });
-  let resolve!: (state: YouTubeStatus) => void;
-  vi.mocked(api.action).mockImplementationOnce(
-    () =>
-      new Promise((r) => {
-        resolve = r;
-      }),
-  );
-  await user.click(change);
-  vi.mocked(api.action).mockResolvedValue({
-    ...active,
-    revision: 'project-two',
-    terms: ['Project two'],
-  });
-  view.rerender(renderProject(2));
-  const currentChange = await screen.findByRole('button', { name: '修改' });
-  currentChange.focus();
-  await act(async () => {
-    resolve({ ...active, terms: ['Late project one'] });
-  });
-  expect(currentChange).toHaveFocus();
-  expect(screen.queryByLabelText('YouTube 搜索词')).not.toBeInTheDocument();
-  client.clear();
-});
-
-it('keeps a newer focus choice while the latest edit request completes', async () => {
-  vi.mocked(api.action).mockResolvedValue(active);
-  setup();
-  const user = userEvent.setup();
-  const change = await screen.findByRole('button', { name: '修改' });
-  let resolve!: (state: YouTubeStatus) => void;
-  vi.mocked(api.action).mockImplementationOnce(
-    () =>
-      new Promise((r) => {
-        resolve = r;
-      }),
-  );
-  await user.click(change);
-  const outside = document.createElement('button');
-  outside.textContent = 'Outside panel';
-  document.body.append(outside);
-  outside.focus();
-  try {
-    await act(async () => {
-      resolve(active);
-    });
-    expect(await screen.findByLabelText('YouTube 搜索词')).toHaveValue(
-      'NocoBase',
-    );
-    expect(outside).toHaveFocus();
-  } finally {
-    outside.remove();
-  }
-});
-it('does not mount or focus an edit form when fetching the latest settings fails', async () => {
-  vi.mocked(api.action).mockResolvedValue(active);
-  setup();
-  const user = userEvent.setup();
-  const change = await screen.findByRole('button', { name: '修改' });
-  vi.mocked(api.action).mockRejectedValueOnce(
-    new NocoReachHttpError('YouTube 请求未完成，请重试', 502, {}),
-  );
-  await user.click(change);
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'YouTube 请求未完成',
-  );
-  expect(screen.queryByLabelText('YouTube 搜索词')).not.toBeInTheDocument();
-  expect(change).toBeEnabled();
-});
-
-it('updates validation, in-flight errors and confirmation copy without replacing the draft', async () => {
-  vi.mocked(api.action).mockResolvedValue(empty);
-  setup();
-  const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: '保存并读取' }));
-  await act(async () => setDictionary(en));
-  expect(screen.getByRole('alert')).toHaveTextContent(
-    en['youtube.criteriaRequired'],
-  );
-  const input = screen.getByLabelText(en['youtube.keywords']);
-  await user.type(input, '分析。任务。');
-  const pending = Promise.withResolvers<YouTubeStatus>();
-  vi.mocked(api.action).mockImplementationOnce(() => pending.promise);
-  await user.click(
-    screen.getByRole('button', { name: en['youtube.saveAndRead'] }),
-  );
-  await act(async () => setDictionary(null));
-  await act(async () =>
-    pending.reject(
-      new NocoReachHttpError('already translated', 409, {
-        error: { message: 'YouTube 配置已被修改，请重新打开后重试' },
-      }),
+  const box = await screen.findByRole('region', { name: '搜索词' });
+  for (const term of active.terms)
+    expect(within(box).getByText(term)).toBeVisible();
+  expect(
+    within(box).getByText(/^已记录 31 个视频 · 从 .*2026.* 开始记录$/),
+  ).toBeVisible();
+  expect(
+    within(box).getByRole('link', {
+      name: 'Build an internal CRM with NocoBase in 20 minutes',
+    }),
+  ).toHaveAttribute('href', active.recent[0].url);
+  expect(within(box).getByText(/1\.2万 次播放/)).toBeVisible();
+  expect(within(box).getByText(/3,410 次播放/)).toBeVisible();
+  expect(within(box).getByRole('switch')).toBeChecked();
+  expect(
+    within(box).getByText(
+      '按现在 3 个搜索词，预计每月约 $0.7，计入 DataForSEO 每月预算（本月已用 $3.12 / $10）。',
     ),
+  ).toBeVisible();
+  expect(screen.getByRole('link', { name: '查看数据' })).toHaveAttribute(
+    'href',
+    '/data/youtube',
   );
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    chinese['youtube.configChanged'],
-  );
-  expect(input).toHaveValue('分析。任务。');
-  await act(async () => setDictionary(en));
-  expect(screen.getByRole('alert')).toHaveTextContent(
-    en['youtube.configChanged'],
-  );
-  expect(input).toHaveValue('分析。任务。');
+  // Nothing about collectors or tool versions.
+  expect(screen.queryByText(/采集器|工具版本|字幕/)).toBeNull();
 });
 
-it.each([false, true])(
-  'localizes a network failure while retaining saved results (English: %s)',
-  async (english) => {
-    if (english) setDictionary(en);
-    vi.mocked(api.action).mockResolvedValue(active);
-    setup();
-    const viewData = english ? en['collectorPage.viewData'] : '查看数据';
-    await screen.findByRole('button', { name: viewData });
-    vi.mocked(api.action).mockRejectedValueOnce(
-      new TypeError(
-        'Failed to fetch: https://example.test/?token=private-diagnostic',
-      ),
-    );
-    await userEvent.click(
-      screen.getByRole('button', {
-        name: english ? en['common.readNow'] : '立即读取',
-      }),
-    );
-    const chinese = '网络请求未完成，请检查网络连接后重试。';
-    const translated =
-      'The network request failed. Check your connection and try again.';
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      english ? translated : chinese,
-    );
-    expect(screen.getByRole('alert')).not.toHaveTextContent(
-      'private-diagnostic',
-    );
-    expect(screen.getByRole('button', { name: viewData })).toBeVisible();
-    await act(async () => setDictionary(english ? null : en));
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      english ? chinese : translated,
-    );
-  },
-);
+it('turns daily reading off and reads now', async () => {
+  vi.mocked(api.action).mockResolvedValue(active);
+  setup();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('switch'));
+  await waitFor(() =>
+    expect(request('connect')[0][2]).toMatchObject({
+      body: {
+        terms: active.terms,
+        videoUrls: [],
+        autoSync: false,
+        revision: 'v1',
+      },
+    }),
+  );
+  await user.click(screen.getByRole('button', { name: '立即读取' }));
+  await waitFor(() => expect(request('sync')).toHaveLength(1));
+});
 
-it('preserves unknown upstream text and stored content even when they match another translation key', async () => {
-  const raw = '分析。任务。';
+it('changes the terms and tracked videos in a dialog', async () => {
   vi.mocked(api.action).mockResolvedValue({
     ...active,
-    terms: [raw],
-    videos: [
-      {
-        ...active.videos[0]!,
-        title: raw,
-        description: raw,
-        channel: raw,
-        transcript: { ...active.videos[0]!.transcript, text: raw },
+    videoUrls: ['https://www.youtube.com/watch?v=Im69kzhpR3I'],
+  });
+  setup();
+  const user = userEvent.setup();
+  expect(await screen.findByText('另外单独跟踪 1 个视频')).toBeVisible();
+  await user.click(screen.getByRole('button', { name: '修改' }));
+  const dialog = await screen.findByRole('dialog', {
+    name: '修改 YouTube 搜索词',
+  });
+  expect(within(dialog).getByLabelText('YouTube 搜索词')).toHaveValue(
+    active.terms.join('\n'),
+  );
+  const videos = within(dialog).getByLabelText('单独跟踪的视频（可选）');
+  expect(videos).toHaveValue('https://www.youtube.com/watch?v=Im69kzhpR3I');
+  await user.type(videos, '{Enter}https://youtu.be/dQw4w9WgXcQ');
+  await user.click(within(dialog).getByRole('button', { name: '保存' }));
+  await waitFor(() =>
+    expect(request('connect')[0][2]).toMatchObject({
+      body: {
+        videoUrls: [
+          'https://www.youtube.com/watch?v=Im69kzhpR3I',
+          'https://youtu.be/dQw4w9WgXcQ',
+        ],
+        autoSync: true,
       },
-    ],
+    }),
+  );
+});
+
+it('says when the month’s budget is used up and when reading resumes', async () => {
+  vi.mocked(api.action).mockResolvedValue({
+    ...active,
+    pausedUntil: '2026-12-01T00:00:00.000Z',
+    spend: { monthUsd: 10, budgetUsd: 10 },
+  });
+  const onOpenSource = vi.fn();
+  setup({ onOpenSource });
+  expect(await screen.findByText('本月 DataForSEO 预算已用完')).toBeVisible();
+  expect(
+    screen.getByText(
+      /^已用 \$10\.00 \/ \$10，YouTube 本月暂停读取，.*12.*1.* 自动恢复；已有视频照常查看。$/,
+    ),
+  ).toBeVisible();
+  await userEvent.click(screen.getByRole('button', { name: '调整预算' }));
+  expect(onOpenSource).toHaveBeenCalledWith('keywords');
+});
+
+it('names the term that timed out and says the others were updated', async () => {
+  vi.mocked(api.action).mockResolvedValue({
+    ...active,
     lastSync: {
       ...active.lastSync!,
-      ok: false,
-      errors: [raw, 'YouTube 读取已取消'],
+      missed: [{ term: 'open source no-code', reason: 'timeout' }],
     },
   });
   setup();
-  expect(await screen.findByRole('alert')).toHaveTextContent(raw);
-  await act(async () => setDictionary(en));
-  expect(screen.getByRole('alert')).toHaveTextContent(raw);
-  expect(screen.getByRole('alert')).toHaveTextContent(en['youtube.cancelled']);
-  vi.mocked(api.action).mockRejectedValueOnce(
-    new NocoReachHttpError('wrong translated text', 502, {
-      error: { message: raw },
-    }),
-  );
-  await userEvent
-    .setup()
-    .click(screen.getByRole('button', { name: en['common.readNow'] }));
-  await waitFor(() => expect(screen.getAllByRole('alert')).toHaveLength(2));
-  for (const alert of screen.getAllByRole('alert'))
-    expect(alert).toHaveTextContent(raw);
+  expect(await screen.findByText('这次有一个词没读到')).toBeVisible();
+  expect(
+    screen.getByText(
+      '“open source no-code”这次读取超时，其他 2 个词已更新。明天会照常再读，也可以点“立即读取”。',
+    ),
+  ).toBeVisible();
 });
 
-it.each(['project', 'session', 'revision', 'pending', 'readOnly'] as const)(
-  'cancels a replacement intent on %s changes before dispatching its write',
-  async (change) => {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
-    const onChange = vi.fn();
-    const renderPanel = (projectId = 1, readOnly = false) => (
-      <QueryClientProvider client={client}>
-        <YouTubeConnect
-          projectId={projectId}
-          readOnly={readOnly}
-          onChange={onChange}
-        />
-      </QueryClientProvider>
-    );
-    vi.mocked(api.action).mockResolvedValue({ ...active, lastSync: null });
-    const ui = render(renderPanel());
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: '修改' }));
-    const input = await screen.findByLabelText('YouTube 搜索词');
-    await user.clear(input);
-    await user.type(input, 'Replacement draft');
-    const intent = Promise.withResolvers<boolean>();
-    vi.mocked(confirmAction).mockImplementationOnce(() => intent.promise);
-    await user.click(screen.getByRole('button', { name: '保存并读取' }));
-    const signal = vi.mocked(confirmAction).mock.calls.at(-1)![0].signal!;
-    if (change === 'session')
-      auth.session = {
-        user: { id: 'admin-a' },
-        session: { id: 'new-session' },
-      };
-    if (change === 'revision') auth.revision++;
-    if (change === 'pending') auth.isPending = true;
-    ui.rerender(
-      renderPanel(change === 'project' ? 2 : 1, change === 'readOnly'),
-    );
-    expect(signal.aborted).toBe(true);
-    await act(async () => intent.resolve(true));
-    expect(
-      vi
-        .mocked(api.action)
-        .mock.calls.filter(([, action]) => action === 'connect'),
-    ).toHaveLength(0);
-    expect(onChange).not.toHaveBeenCalled();
-  },
-);
-
-it('translates the same owned YouTube errors in health summaries and preserves unknown text', async () => {
-  const english = (await import('../../shared/i18n/en.json')).default as Record<
-    string,
-    string
-  >;
-  setDictionary(english);
-  for (const message of youtubeSystemErrors) {
-    expect(english[message]).toBeTruthy();
-    expect(translateSystemError(message)).toBe(english[message]);
-    expect(translateSystemError(chinese[message])).toBe(english[message]);
-  }
-  expect(translateSystemError('分析。任务。')).toBe('分析。任务。');
-  setDictionary(null);
-  for (const message of youtubeSystemErrors)
-    expect(translateSystemError(message)).toBe(chinese[message]);
-});
-
-it('shows saved videos while disconnected and keeps delete confirmation optional until accepted', async () => {
+it('shows a failed read plainly, in English too', async () => {
   vi.mocked(api.action).mockResolvedValue({
     ...active,
-    configured: false,
-    connected: false,
+    autoSync: false,
+    lastSync: {
+      at: '2026-11-02T08:03:00Z',
+      ok: false,
+      errors: ['这次通过 DataForSEO 读取 YouTube 超时。'],
+      code: 'timeout',
+    },
   });
+  setDictionary(en);
   setup();
-  expect(await screen.findByRole('button', { name: '查看数据' })).toBeVisible();
-  expect(screen.getByRole('textbox', { name: 'YouTube 搜索词' })).toBeVisible();
-  vi.mocked(confirmAction).mockResolvedValueOnce(false);
-  const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '清理已获取数据' }));
   expect(
-    vi.mocked(api.action).mock.calls.some(([, action]) => action === 'clear'),
-  ).toBe(false);
-  vi.mocked(api.action).mockResolvedValue({
-    ...empty,
-    revision: 'after-clear',
-  });
-  await user.click(screen.getByRole('button', { name: '清理已获取数据' }));
-  await waitFor(() =>
-    expect(api.action).toHaveBeenCalledWith(
-      'nrYouTube',
-      'clear',
-      expect.objectContaining({
-        body: { projectId: 1, revision: 'v1' },
-        headers: { 'X-NocoReach-Confirmation-Session': 'session-a' },
-      }),
-    ),
-  );
-  await waitFor(() =>
-    expect(
-      screen.queryByRole('button', { name: '查看数据' }),
-    ).not.toBeInTheDocument(),
-  );
+    await screen.findByText('The last read did not get through'),
+  ).toBeVisible();
+  expect(
+    screen.getByText('Reading YouTube through DataForSEO timed out this time.'),
+  ).toBeVisible();
+  expect(screen.getByText('Click "Read now" to try again.')).toBeVisible();
 });
 
-it('prevents deletion by a read-only member', async () => {
-  vi.mocked(api.action).mockResolvedValue({ ...active, total: 21 });
+it('lets read-only members see the terms and the data, without changing them', async () => {
+  vi.mocked(api.action).mockResolvedValue(active);
   setup({ readOnly: true });
-  await screen.findByRole('button', { name: '查看数据' });
-  expect(
-    screen.queryByRole('button', { name: '清理已获取数据' }),
-  ).not.toBeInTheDocument();
+  expect(await screen.findByRole('link', { name: '查看数据' })).toBeVisible();
+  for (const name of ['修改', '立即读取', '清理已获取数据', '断开'])
+    expect(screen.queryByRole('button', { name })).toBeNull();
+  expect(screen.getByRole('switch')).toHaveAttribute('data-disabled');
 });
 
-it.each([
-  ['connect', 'youtube.saveAndRead', 'youtube.settingsSaved'],
-  ['disconnect', 'common.disconnect', 'youtube.disconnected'],
-  ['clear', 'collectorClear.action', 'youtube.deletedSaved'],
-  ['cancel', 'youtube.pauseReads', 'youtube.readsPaused'],
-  ['sync', 'common.readNow', 'youtube.readingStarted'],
-] as const)(
-  'keeps the %s success toast bilingual after the request completes',
-  async (action, buttonKey, toastKey) => {
-    const runtime = new I18nRuntime({
-      defaultLocale: 'en-US',
-      locales: ['en-US', 'zh-CN'],
-      applicationNamespace: 'nocoreach',
-    });
-    runtime.registerApplicationNamespace('nocoreach', locales);
-    await runtime.init();
-    const disconnect = connectLocale(runtime);
-    vi.mocked(toast.success).mockClear();
-    try {
-      vi.mocked(api.action).mockResolvedValue(
-        action === 'connect'
-          ? empty
-          : { ...active, syncing: action === 'cancel', runId: 'current-run' },
-      );
-      setup();
-      const user = userEvent.setup();
-      const button = await screen.findByRole('button', { name: en[buttonKey] });
-      if (action === 'connect')
-        await user.type(
-          screen.getByLabelText(en['youtube.keywords']),
-          'NocoBase',
-        );
-      await user.click(button);
-      await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
-      expect(
-        vi
-          .mocked(api.action)
-          .mock.calls.some(([, operation]) => operation === action),
-      ).toBe(true);
-      const message = vi.mocked(toast.success).mock.calls[0][0];
-      expect(typeof message).toBe('function');
-      if (typeof message !== 'function')
-        throw new Error('Expected a deferred localized toast');
-      expect(message()).toBe(en[toastKey]);
-      await act(() => runtime.changeLanguage('zh-CN'));
-      expect(message()).toBe(chinese[toastKey]);
-      await act(() => runtime.changeLanguage('en-US'));
-      expect(message()).toBe(en[toastKey]);
-    } finally {
-      disconnect();
-    }
-  },
-);
+it('confirms before disconnecting and sends the current revision', async () => {
+  vi.mocked(api.action).mockResolvedValue(active);
+  setup();
+  await userEvent.click(await screen.findByRole('button', { name: '断开' }));
+  expect(confirmAction).toHaveBeenCalledOnce();
+  await waitFor(() =>
+    expect(request('disconnect')[0][2]).toMatchObject({
+      body: { projectId: 1, revision: 'v1' },
+    }),
+  );
+});
+
+it('shows the card as connected once search terms are saved', () => {
+  const source = getCatalog().find((s) => s.id === 'youtube')!;
+  expect(sourceState(source, {})).toBe('ready');
+  expect(sourceState(source, { youtube: { configured: false } })).toBe('ready');
+  expect(sourceState(source, { youtube: { configured: true } })).toBe(
+    'connected',
+  );
+  expect(source.guide?.needs).toEqual([
+    '已接入的 DataForSEO',
+    '搜索词，例如 NocoBase（最多 5 个）',
+  ]);
+});

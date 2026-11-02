@@ -59,6 +59,9 @@ vi.mock('../../client/components/collector-connection', () => ({
 vi.mock('../../client/pages/youtube-connect', () => ({
   YouTubeConnect: () => null,
 }));
+vi.mock('../../client/pages/xiaohongshu-connect', () => ({
+  XiaohongshuConnect: () => null,
+}));
 vi.mock('../../client/pages/reach-data', () => ({
   useProject: () => ({
     project: { id: 1, name: 'Example', domains: ['example.com'] },
@@ -255,7 +258,7 @@ describe('NocoReach language integration', () => {
     const user = userEvent.setup();
     render(
       <I18nProvider runtime={i18n}>
-        <MemoryRouter initialEntries={['/?source=youtube']}>
+        <MemoryRouter initialEntries={['/?source=xiaohongshu']}>
           <NavigationGuardProvider>
             <Routes>
               <Route path='/' element={<SourceConnections />} />

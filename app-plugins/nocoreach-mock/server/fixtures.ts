@@ -87,6 +87,8 @@ export const FIXTURE_COVERAGE = Object.freeze({
       'backlinks/history',
       'serp/google/organic/live/advanced',
       'serp/google/organic/live/regular',
+      'serp/youtube/organic/live/advanced',
+      'serp/youtube/video_info/live/advanced',
       'keywords_data/google_ads/keywords_for_keywords/live',
       'keywords_data/google_trends/explore/live',
       'ai_optimization/llm_mentions/aggregated_metrics',
@@ -1393,6 +1395,52 @@ function keywordRows(
     },
   );
 }
+const YOUTUBE_TOPICS = [
+  'team workspace from templates',
+  'GitHub and Slack workflows',
+  'a weekly growth report',
+  'the new automation templates',
+  'permissions for a support team',
+  'importing customer data',
+  'a self-hosted setup',
+  'reporting blocks in ten minutes',
+  'an internal CRM',
+  'issue triage with a template',
+  'onboarding new teammates',
+  'comparing internal tool builders',
+];
+// Fictional YouTube videos: NocoBloom01… for the fixture product, hashed IDs for a configured project, so one
+// project's videos never appear in another's results. Any valid ID can be read for details (a tracked video).
+const youtubeId = (c: FixtureContext, index: number): string =>
+  c.project
+    ? fixtureHash(c, `youtube:${index}`).slice(0, 11)
+    : `NocoBloom${String(index + 1).padStart(2, '0')}`;
+function youtubeVideo(
+  c: FixtureContext,
+  index: number,
+  id = youtubeId(c, index),
+) {
+  const views = 800 + fixtureNumber(c, `youtube-views:${index}`, 24_000);
+  return {
+    video_id: id,
+    title: `${fixtureProduct(c).name}: ${YOUTUBE_TOPICS[index % YOUTUBE_TOPICS.length]}`,
+    url: `https://www.youtube.com/watch?v=${id}`,
+    channel_name:
+      index % 3 ? 'FlowGrove Academy' : `${fixtureProduct(c).name} Team`,
+    channel_id: `UC${fixtureHash(c, `youtube-channel:${index % 3}`).slice(0, 22)}`,
+    description: projectText(
+      c,
+      'A fictional walkthrough of NocoBloom templates, workflows and reports.',
+    ),
+    views_count: views + (added(c) ? 275 : 0),
+    timestamp: at(c, 1 + index * 2)
+      .replace('T', ' ')
+      .replace(/\.\d+Z$/, ' +00:00'),
+    publication_date: `${1 + index * 2} days ago`,
+    duration_time_seconds: 240 + index * 37,
+    is_shorts: false,
+  };
+}
 const seoTarget = (b: ObjectValue, c: FixtureContext): string =>
   string(b.target, string(b.target1, fixtureProduct(c).domain));
 function dataforseo(
@@ -1735,6 +1783,49 @@ function dataforseo(
       se_results_count: rows.length,
       check_url: `https://www.google.com/search?q=${encodeURIComponent(string(b.keyword))}`,
     });
+  }
+  if (operation === 'serp/youtube/organic/live/advanced') {
+    const term = string(b.keyword);
+    // Terms share some videos, as related searches do.
+    const start = fixtureNumber(c, `youtube-term:${term.toLowerCase()}`, 4);
+    const rows = Array.from(
+      { length: Math.min(size(c, 8), integer(b.block_depth, 20), 20) },
+      (_, i) => ({
+        type: 'youtube_video',
+        rank_group: i + 1,
+        rank_absolute: i + 1,
+        ...youtubeVideo(c, (start + i) % YOUTUBE_TOPICS.length),
+      }),
+    );
+    return result(rows, {
+      keyword: term,
+      se_domain: 'youtube.com',
+      check_url: `https://www.youtube.com/results?search_query=${encodeURIComponent(term)}`,
+    });
+  }
+  if (operation === 'serp/youtube/video_info/live/advanced') {
+    const id = string(b.video_id);
+    if (!/^[A-Za-z0-9_-]{11}$/.test(id)) return result([]);
+    const known = Array.from(
+      { length: YOUTUBE_TOPICS.length },
+      (_, i) => i,
+    ).find((i) => youtubeId(c, i) === id);
+    const index =
+      known ??
+      parseInt(createHash('sha256').update(id).digest('hex').slice(0, 4), 16) %
+        YOUTUBE_TOPICS.length;
+    const video = youtubeVideo(c, index, id);
+    return result([
+      {
+        type: 'youtube_video_info',
+        rank_group: 1,
+        rank_absolute: 1,
+        ...video,
+        likes_count: Math.round(video.views_count / 28),
+        comments_count: Math.round(video.views_count / 190),
+        subscribers_count: 4_200 + index * 13,
+      },
+    ]);
   }
   const lab = operation.match(
     /^dataforseo_labs\/google\/(related_keywords|keyword_suggestions|keyword_ideas|keyword_overview|domain_rank_overview|historical_rank_overview|ranked_keywords|relevant_pages|domain_intersection)\/live$/,

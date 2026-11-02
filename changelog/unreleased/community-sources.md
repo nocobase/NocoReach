@@ -1,0 +1,7 @@
+## YouTube: read through DataForSEO instead of a collector
+
+- Data sources › YouTube reads YouTube through the project's DataForSEO connection, like Reddit discussions: no collector, address or token. Each of up to 5 search terms is searched once a day (about $0.002 a search, first page, by relevance), and each newly found video is read once more for likes and comments (about $0.006 a video). Videos tracked by link (up to 5) are read on every read. Daily reading is on by default; Read now reads at once.
+- Spending counts against the DataForSEO monthly budget. The drawer shows the estimated monthly cost and this month's spend; when the budget runs out, YouTube pauses until the 1st of next month or until the budget is raised, and says so.
+- A search term that times out or fails leaves the other terms' results in place, and the drawer names it. "Tool version" wording and the collector error banner on Community › YouTube are gone; its source line reads the terms, daily reading and the update time.
+- YouTube's "sort by upload date" is not sent: YouTube stopped honouring it in January 2026, so searches are by relevance.
+- Existing search terms, tracked videos and saved videos carry over; saved videos merge by video ID and keep captions read earlier. Daily reading turns on for configured projects. The YouTube collector path, its yt-dlp provider and the YouTube collector connection are removed; the proxy switch for YouTube is DataForSEO's.
