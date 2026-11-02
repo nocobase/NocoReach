@@ -7636,5 +7636,6 @@
   "repos.moves": "{0} 现在归 {1}，保存后改归这个仓库。",
   "repos.limitPaths": "只允许改部分目录（可选）",
   "repos.saveAndCheck": "保存并检查",
-  "repos.checkNow": "检查"
+  "repos.checkNow": "检查",
+  "navSources.addedToMenu": "已加到菜单：{0}"
 }

@@ -7636,5 +7636,6 @@
   "repos.moves": "{0} saat ini ditangani {1}; menyimpan akan memindahkannya ke repositori ini.",
   "repos.limitPaths": "Izinkan perubahan hanya di beberapa folder (opsional)",
   "repos.saveAndCheck": "Simpan dan periksa",
-  "repos.checkNow": "Periksa"
+  "repos.checkNow": "Periksa",
+  "navSources.addedToMenu": "Ditambahkan ke menu: {0}"
 }

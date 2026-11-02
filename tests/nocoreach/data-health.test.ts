@@ -68,8 +68,30 @@ test('menu: which sources are connected, each from its saved state; unreadable o
   siteContent:{state:async()=>({sites:[{origin:'https://x'}]})},github:{state:async()=>({repo:'o/r',status:'disconnected'})},packages:{state:async()=>{throw new Error('down');}},
   community:{state:async()=>({origin:'https://f',status:'active'})},hackernews:{state:async()=>null},reddit:{state:async()=>({terms:['x'],status:'active'})},
   xSource:{state:async()=>({terms:['x'],status:'disconnected'})},chat:{state:async()=>({discord:{status:'active'},slack:{status:'disconnected'}})},trends:{state:async()=>({terms:['a']})},aiSearch:{d4s:{config:()=>({verifiedAt:'t'})}}};
- assert.deepEqual(await new DataHealth(p).connected('1'),{ga4:true,gsc:false,site:true,github:false,packages:false,discourse:true,hackernews:false,reddit:true,x:false,discord:true,slack:false,trends:true,dataforseo:true});
+ assert.deepEqual(await new DataHealth(p).connected('1'),{ga4:false,gsc:false,site:true,github:false,packages:false,discourse:true,hackernews:false,reddit:true,x:false,discord:true,slack:false,trends:true,dataforseo:true,competitors:false,keywords:false,xiaohongshu:false,bilibili:false,youtube:false});
+ // Google counts for both pages once both the GA4 property and the Search Console site are chosen.
+ const both=await new DataHealth({...p,link:async()=>({get:k=>({ga4PropertyId:'p1',gscSiteUrl:'sc-domain:x',status:'active'})[k]})}).connected('1');assert.equal(both.ga4,true);assert.equal(both.gsc,true);
  const none=await new DataHealth({link:async()=>null,env:()=>''}).connected('1');assert.ok(Object.values(none).every(v=>v===false));
+});
+
+test('menu: a disconnected source whose page still shows its saved data counts until the data is cleared',async()=>{
+ const {DataHealth}=__data_health;
+ const collector=(connected,total)=>({status:async()=>({connected,total})});
+ const p={link:async()=>null,env:()=>'',
+  // Bilibili disconnected with videos saved, Xiaohongshu disconnected and cleared, YouTube connected before its first videos.
+  bilibili:collector(false,12),xiaohongshu:collector(false,0),youtube:collector(true,0),
+  // GitHub disconnected with its history kept: its page asks to connect again, so it does not count.
+  github:{state:async()=>({repo:'o/r',status:'disconnected',daily:{'2026-10-01':{stars:3}}})},
+  competitors:{state:async()=>({list:[{id:'c1'}]})},
+  // Keywords without Search Console or DataForSEO: saved keywords keep it.
+  keywordService:{candidates:()=>({count:async()=>2})},rankTracking:{state:async()=>null}};
+ const sources=await new DataHealth(p).connected('1');
+ assert.equal(sources.bilibili,true);assert.equal(sources.xiaohongshu,false);assert.equal(sources.youtube,true);
+ assert.equal(sources.github,false);assert.equal(sources.competitors,true);assert.equal(sources.keywords,true);
+ const tracked=await new DataHealth({...p,keywordService:{candidates:()=>({count:async()=>0})},rankTracking:{state:async()=>({keywords:[{id:'k'}]})}}).connected('1');
+ assert.equal(tracked.keywords,true);
+ const broken=await new DataHealth({...p,bilibili:{status:async()=>{throw new Error('down');}}}).connected('1');
+ assert.equal(broken.bilibili,false);
 });
 
 test('Reddit health keeps historical success and business cutoff after failure',async()=>{

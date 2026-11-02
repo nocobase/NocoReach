@@ -14,6 +14,7 @@ import {confirmAction} from '#components/reach/confirm';
 import {Reveal} from '#components/reach/reveal';
 import {Tag} from '#components/reach/tag';
 import {InfoTip,WithInfo} from '#components/reach/info-tip';
+import {refreshNavBadges} from '#components/app-shell/nav-badges';
 type State={configured:boolean;authorized:boolean;redirectUri:string|null;syncEnabled:boolean;ga4PropertyName?:string|null;connection:null|{accountEmail:string;status:string;ga4PropertyId?:string;gscSiteUrl?:string}};
 type Resources={analytics:{id:string;name:string}[];searchConsole:{id:string;name:string}[]};
 const getCallbackErrors = (): Record<string,string> => ({network_timeout:$t('google.serverTimedOutConnectingGoogle'),network_unreachable:$t('google.serverCannotReachGoogleCheck'),state_expired:$t('google.authorizationSessionNoLongerValid'),authorization_denied:$t('google.googleNotApproveAuthorizationCheck'),initiator_access_denied:$t('google.initiatorAccessDenied'),missing_token:$t('google.googleNotReturnCompleteOffline'),missing_permissions:$t('google.authorizationLacksReadAccessAnalytics'),invalid_grant:$t('google.googleAuthorizationCodeExpiredAlready'),invalid_client:$t('google.googleRejectedClientAskAdmin'),google_api_error:$t('google.googleApiReturnedErrorTry'),save_failed:$t('google.notSaveGoogleAuthorizationAsk'),callback_failed:$t('google.authorizationCallbackFailedAskAdmin')});
@@ -31,7 +32,8 @@ export function GoogleConnection({projectId}:{projectId:string}){
  // The callback NocoReach answers on NocoBase 3 (server/routes/nocoreach.ts), under this deployment's base path.
  const base=window.location.origin,redirectUri=new URL(resolveAppUrl('/api/nocoreach/nrGoogle/callback'),base).href;
  async function request<T>(action:string,body:object={},headers?:Record<string,string>){return api.action<T>('nrGoogle',action,{method:'POST',body:{projectId,...body},headers,unwrap:'data'});}
- async function load(){setState(await request<State>('status'));}
+ // Connecting or choosing a property can add Traffic, Search performance and Keywords to the menu.
+ async function load(){setState(await request<State>('status'));refreshNavBadges();}
  useEffect(()=>{void load().catch(e=>setError(() => ($legacyText(String(e)))));},[projectId]);
  async function run(fn:()=>Promise<void>){setBusy(true);setError('');setNotice('');try{await fn();await load();}catch(e){setError(() => ($legacyText(String(e))));}finally{setBusy(false);}}
  // Start the pickers on the resources this project uses now, so a change only touches the one being replaced.

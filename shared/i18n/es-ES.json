@@ -7636,5 +7636,6 @@
   "repos.moves": "{0} lo atiende ahora {1}; al guardar pasa a este repositorio.",
   "repos.limitPaths": "Permitir cambios solo en algunas carpetas (opcional)",
   "repos.saveAndCheck": "Guardar y comprobar",
-  "repos.checkNow": "Comprobar"
+  "repos.checkNow": "Comprobar",
+  "navSources.addedToMenu": "Añadido al menú: {0}"
 }
