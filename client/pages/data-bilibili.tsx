@@ -48,7 +48,7 @@ import {
   type BilibiliVideo,
 } from './bilibili-api';
 import './data-views.css';
-import { formatDateTime } from '#lib/format';
+import { formatDateTime, joinList } from '#lib/format';
 
 type Report = Omit<BilibiliStatus, 'recent'> &
   CollectorReport & { videos: BilibiliVideo[] };
@@ -221,12 +221,12 @@ export default function DataBilibili() {
         <>
           <p className='nr-footnote break-words'>
             {$t('common.searchTermValue', {
-              0: data.terms.join('、') || '—',
+              0: joinList(data.terms) || '—',
             })}{' '}
             ·{' '}
             {data.bvids.length ? (
               <>
-                {$t('bilibili.trackedVideos', { 0: data.bvids.join('、') })}{' '}
+                {$t('bilibili.trackedVideos', { 0: joinList(data.bvids) })}{' '}
                 ·{' '}
               </>
             ) : null}

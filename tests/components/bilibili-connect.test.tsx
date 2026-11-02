@@ -1011,7 +1011,7 @@ it('keeps search terms literal while translating collection status', async () =>
   ).toBeVisible();
   expect(
     screen.getByText(
-      new RegExp(`${enDictionary['common.searchTerm']}：正在读取…`),
+      new RegExp(`${enDictionary['common.searchTerm']}: 正在读取…`),
     ),
   ).toBeVisible();
 });

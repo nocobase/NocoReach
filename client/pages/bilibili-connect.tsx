@@ -1,4 +1,4 @@
-import { formatDateTime } from '#lib/format';
+import { formatDateTime, joinList, labelValue } from '#lib/format';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import {
   useCallback,
@@ -719,9 +719,15 @@ function BilibiliPanel({
               </Badge>
             </div>
             <p className='break-words text-sm'>
-              {$t('common.searchTerm')}：{state.terms.join('、') || '—'}
+              {labelValue(
+                $t('common.searchTerm'),
+                joinList(state.terms) || '—',
+              )}
               <br />
-              {$t('bilibili.bvIdsVideoLinks')}：{state.bvids.join('、') || '—'}
+              {labelValue(
+                $t('bilibili.bvIdsVideoLinks'),
+                joinList(state.bvids) || '—',
+              )}
             </p>
             <p className='text-sm text-muted-foreground'>
               {$t('bilibili.lastSuccessfulCollection', {

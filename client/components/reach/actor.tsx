@@ -3,6 +3,7 @@ import type {ReactElement} from 'react';
 import {Bot,Cog,Monitor,Sparkles,Zap} from 'lucide-react';
 import {Avatar,AvatarFallback} from '#components/ui/avatar';
 import {cn} from '#lib/utils';
+import {parenthetical,withDetail} from '#lib/format';
 import {initials} from '#pages/task-list-model';
 // The one avatar for people, agents and the system (NocoSolution frontend standard §S5.1, as NpActorAvatar in
 // nocobase/NocoProject): a person is round with initials, an agent (Agent, Online AI) a rounded square in solid agent
@@ -17,13 +18,13 @@ export function ActorAvatar({type,name,size='sm',showName=false,decorative=true,
  const icon=size==='xs'?'size-2.5':size==='sm'?'size-3.5':'size-4';
  const avatar=<Avatar size={size==='default'?'default':'sm'} data-actor={type}
   className={cn(size==='xs'&&'size-4',type==='agent'&&'rounded-md after:rounded-md',type==='system'&&'after:border-dashed after:border-muted-foreground/50',!showName&&className)}
-  {...(decorative||showName?{'aria-hidden':true}:{role:'img','aria-label':`${name??'—'}（${getKind()[type]}）`})} title={name??undefined}>
+  {...(decorative||showName?{'aria-hidden':true}:{role:'img','aria-label':withDetail(name??'—',getKind()[type])})} title={name??undefined}>
   <AvatarFallback className={cn('font-medium text-foreground/80',size==='xs'&&'text-[0.5rem]',type==='agent'&&'rounded-md bg-agent text-background',type==='system'&&'bg-transparent text-muted-foreground')}>
    {type==='agent'?<Bot className={icon} aria-hidden="true"/>:type==='system'?<Cog className={icon} aria-hidden="true"/>:<span aria-hidden="true">{initials(name??'')||'?'}</span>}
   </AvatarFallback>
  </Avatar>;
  if(!showName)return avatar;
- return <span className={cn('inline-flex max-w-full min-w-0 items-center gap-1.5',className)}>{avatar}<span className="truncate" title={name??undefined}>{name??'—'}</span><span className="sr-only">（{getKind()[type]}）</span></span>;
+ return <span className={cn('inline-flex max-w-full min-w-0 items-center gap-1.5',className)}>{avatar}<span className="truncate" title={name??undefined}>{name??'—'}</span><span className="sr-only">{parenthetical(getKind()[type])}</span></span>;
 }
 // What the AI wrote or suggested gets a small violet sparkle beside it (§S4.1 来源标记).
 export function AiMark({label=$t('actor.aiGenerated'),className}:{label?:string;className?:string}):ReactElement{

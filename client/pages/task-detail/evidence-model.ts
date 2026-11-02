@@ -1,4 +1,5 @@
 import { $t, $legacyText } from '#i18n';
+import { joinList } from '#lib/format';
 import type { ResultSource } from '../results/types.js';
 import type { TaskData } from '../task-execution-types.js';
 import { taskSignals } from '../../../shared/opportunity-parts.js';
@@ -33,7 +34,7 @@ export const getSourceNames = (): Record<string, string> => ({
   trends: 'Google Trends',
   competitors: $t('common.competitorActivity'),
   x: 'X',
-  'discord-slack': 'Discord、Slack',
+  'discord-slack': joinList(['Discord', 'Slack']),
   discord: 'Discord',
   slack: 'Slack',
   rank: $t('common.rankTracking'),

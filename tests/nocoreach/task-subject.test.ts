@@ -59,7 +59,7 @@ it('a hand-off names its subject without an action, in the interface language', 
       { title: 'A', objective: 'a', brief: 'a', subject: 'x' },
       { title: 'B', objective: 'b', brief: 'b', subject: 'y' },
     ]).subject,
-  ).toBe('x；y');
+  ).toBe('x; y');
   expect(
     combineDrafts([
       { title: 'A', objective: 'a', brief: 'a', subject: 'x' },

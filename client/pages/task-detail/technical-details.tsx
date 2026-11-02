@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { GitMerge, GitPullRequest, Undo2 } from 'lucide-react';
 import { $t, $tj } from '#i18n';
+import { joinList } from '#lib/format';
 import {
   Dialog,
   DialogContent,
@@ -68,7 +69,7 @@ export function PrCard({ pr }: { pr: PullRequestInfo }) {
               {$t('taskDetail.outsideScope')}
             </dt>
             <dd className='break-all text-destructive'>
-              {pr.outOfScope.join('、')}
+              {joinList(pr.outOfScope)}
             </dd>
           </>
         ) : null}

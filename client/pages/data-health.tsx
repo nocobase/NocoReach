@@ -8,7 +8,7 @@ import {dailyScheduleTime} from '#lib/schedule-time';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {Button} from '#components/ui/button';
 import {confirmAction} from '#components/reach/confirm';
-import {formatDateTime} from '#lib/format';
+import {formatDateTime, joinList} from '#lib/format';
 import {InfoTip} from '#components/reach/info-tip';
 import {SourceLogo} from '#components/reach/source-logo';
 import {help} from './glossary';
@@ -32,7 +32,7 @@ export const needsAttention=(item:HealthItem)=>item.state==='failing'||item.stat
 // A server from before the classification sends no `fix`: a row with a retry is retried as before.
 const fixOf=(item:HealthItem):HealthFix|undefined=>item.fix??(item.retry?'retry':undefined);
 // A list of source names in the interface language: Chinese and Japanese use the enumeration comma.
-export const sourceList=(names:string[])=>names.join(/^(zh|ja)/i.test(getCurrentLocale())?'、':', ');
+export const sourceList=(names:string[])=>joinList(names);
 type RetryRun={status:'running'|'started'|'failed';error?:string};
 // The Data health tab (2026-10-22): the count and Retry all, the rows needing attention with the action that fits each
 // failure, then every source's sync status. Retry all runs only the rows a plain retry can help and the person may
@@ -89,4 +89,4 @@ function RetryAccess({projectId,item,onAccess}:{projectId:number;item:HealthItem
 }
 // Overview reminder: only sources that have failed for more than a day, with a link to fix them.
 export function HealthAlert({projectId}:{projectId:number}){const navigate=useNavigate();const [items,setItems]=useState<HealthItem[]>([]);useEffect(()=>{void loadHealth(projectId).then(h=>setItems(h.items.filter(i=>i.state==='failing'))).catch(()=>undefined);},[projectId]);
- if(!items.length)return null;return <p role="alert" className="nr-error nr-health-alert">{$tj('dataHealth.failedSyncOverDayOpportunities',{0:items.map(i=>healthText(i.name,i.nameText)).join('、')})}<Button variant="outline" size="sm" onClick={()=>navigate('/connections?tab=health')}>{$t('dataHealth.fix')}</Button></p>;}
+ if(!items.length)return null;return <p role="alert" className="nr-error nr-health-alert">{$tj('dataHealth.failedSyncOverDayOpportunities',{0:joinList(items.map(i=>healthText(i.name,i.nameText)))})}<Button variant="outline" size="sm" onClick={()=>navigate('/connections?tab=health')}>{$t('dataHealth.fix')}</Button></p>;}

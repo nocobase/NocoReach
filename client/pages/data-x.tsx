@@ -23,7 +23,7 @@ import { AllCheck, RowCheck, useTickedList, type Selection } from "#components/r
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
 import { InfoTip, NotesTip } from "#components/reach/info-tip";
-import { formatDate, formatDateTime } from '#lib/format';
+import { formatDate, formatDateTime, joinList } from '#lib/format';
 
 type Post = { id: string; text: string; createdAt: string; url: string; metrics: { likes: number; reposts: number; replies: number; quotes: number; views: number | null } };
 type View = { connected: boolean; terms?: string[]; handle?: string; window?: { start: string; end: string; days: number }; lastRun?: { at: string; ok: boolean; errors: string[]; capped: boolean } | null; spend?: { usd: number; posts: number; cap: number }; kpis?: Metric[]; series?: { date: string; value: number | null }[]; notes?: string[]; top?: Post[]; latest?: Post[] };
@@ -71,7 +71,7 @@ export default function DataX() {
       {view && !view.connected ? <EmptyState icon={<AtSign />} title={$t('dataX.onceXConnectedPostsMentioning')} description={$t('dataX.needsOwnXApiPaid')} action={<Button onClick={() => navigate("/connections?source=social")}>{$t('dataX.connectX')}</Button>} /> : null}
       {view?.connected ? (
         <>
-          <p className="nr-footnote">{$tj('dataX.searchTerm',{0:view.terms!.join("、"),1:view.handle ? $t('common.excluding',{0:view.handle}) : "",2:view.lastRun ? $t('common.lastSearched',{0:formatDateTime(view.lastRun.at)}) : ""})}</p>
+          <p className="nr-footnote">{$tj('dataX.searchTerm',{0:joinList(view.terms!),1:view.handle ? $t('common.excluding',{0:view.handle}) : "",2:view.lastRun ? $t('common.lastSearched',{0:formatDateTime(view.lastRun.at)}) : ""})}</p>
           <div className={metricGrid(view.kpis!.length + 1)}>
             {view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}
             <Card className="gap-1 p-4" data-metric={$t('dataX.spentMonth')}><p className="text-xs text-muted-foreground">{$t('dataX.spentMonthEstimated')}</p><p className="text-2xl font-semibold tabular-nums">${sp!.usd.toFixed(2)}<span className="text-sm font-normal text-muted-foreground"> / ${sp!.cap}</span></p><p className="text-xs text-muted-foreground">{$tj('dataX.read',{0:sp!.posts.toLocaleString(getCurrentLocale())})}</p></Card>

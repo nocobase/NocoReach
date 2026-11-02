@@ -6,7 +6,7 @@ import {
   type ReactElement,
 } from 'react';
 import { Loader2, ListFilter } from 'lucide-react';
-import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from '#i18n';
+import { useMessageState, $t, $tj, $legacyText } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { toast } from '#lib/toast';
 import { PageContainer, PageHeader, Section } from '#components/reach/page';
@@ -32,7 +32,7 @@ import { SchemeManager, AddRule } from './analysis-rules/schemes';
 import type { Rule, Settings, View } from './analysis-rules/types';
 import { PageAiEntry } from '../online-agent/page-entry';
 import { usePageChange } from '../online-agent/page-changes';
-import { formatDateTime } from '#lib/format';
+import { formatDateTime, joinList } from '#lib/format';
 
 const call = <T,>(action: string, projectId: number, body: object = {}) =>
   api.action<T>('nrAnalysisRules', action, {
@@ -287,7 +287,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
   const enabledSources = groups.filter((g) =>
     view?.rules.some((r) => r.source === g && r.enabled),
   );
-  const coverage = [
+  const coverage = joinList([
     ...coverageAreas
       .filter(([, sources]) =>
         enabledSources.some((source) =>
@@ -303,7 +303,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
     )
       ? [$t('analysisRules.scope.other')]
       : []),
-  ].join(getCurrentLocale().startsWith('zh') ? '、' : ', ');
+  ]);
   const last = view?.last;
   return (
     <PageContainer className='nr-page'>

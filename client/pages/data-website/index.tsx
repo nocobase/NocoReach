@@ -4,7 +4,7 @@ import {
   ChartArea as Area,
   ChartLine as Line,
 } from '#components/reach/chart-legend';
-import { $t, $tj, getCurrentLocale, isChinese } from '#i18n';
+import { $t, $tj, getCurrentLocale } from '#i18n';
 import {
   GA4_HISTORY_CACHE_MS,
   GA4_PARTIAL_CACHE_MS,
@@ -65,7 +65,7 @@ import {
   type Row,
 } from './model';
 import '../data-views.css';
-import { formatDate } from '#lib/format';
+import { formatDate, joinEntries, joinList, joinSentences } from '#lib/format';
 import { Tag } from '#components/reach/tag';
 
 const RANGES = defaultRanges;
@@ -81,9 +81,7 @@ function notesOf(report: Report): string[] {
     ...(missing.length
       ? [
           $t('dataWebsite.ga4DidNotReturn', {
-            0: missing
-              .map((n) => $t(TABLE_LABELS[n]))
-              .join(isChinese() ? '、' : ', '),
+            0: joinList(missing.map((n) => $t(TABLE_LABELS[n]))),
           }),
         ]
       : []),
@@ -324,7 +322,7 @@ function ChangeDrivers({
   // What moved the figure is a finding, not a warning: plain text under the figures (UI review 2026-10-21).
   return (
     <p className='text-sm' data-change-drivers=''>
-      {parts.join(isChinese() ? '' : ' ')}
+      {joinSentences(parts)}
     </p>
   );
 }
@@ -487,7 +485,10 @@ function qualityText(i: QualityIssue): [string, string, string] {
         0: channelName(i.channel),
       }),
       i.gained
-        ? `${detail}${isChinese() ? '' : ' '}${$t('dataWebsite.qualityGained', { 0: count(i.gained) })}`
+        ? joinSentences([
+            detail,
+            $t('dataWebsite.qualityGained', { 0: count(i.gained) }),
+          ])
         : detail,
       $t('dataWebsite.qualityLowEngagementFix'),
     ];
@@ -497,8 +498,8 @@ function qualityText(i: QualityIssue): [string, string, string] {
       $t('dataWebsite.qualityKeyEventRateTitle', { 0: pct(i.rate) }),
       i.events.length
         ? $t('dataWebsite.qualityKeyEventSuspects', {
-            0: i.events
-              .map((e) =>
+            0: joinEntries(
+              i.events.map((e) =>
                 $t(
                   e.reason === 'pageView'
                     ? 'dataWebsite.qualityKeyEventPageView'
@@ -507,8 +508,8 @@ function qualityText(i: QualityIssue): [string, string, string] {
                       : 'dataWebsite.qualityKeyEventDominant',
                   { 0: e.name, 1: pct(e.share) },
                 ),
-              )
-              .join(isChinese() ? '；' : '; '),
+              ),
+            ),
           })
         : $t('dataWebsite.qualityKeyEventRateDetail'),
       $t('dataWebsite.qualityKeyEventRateFix'),

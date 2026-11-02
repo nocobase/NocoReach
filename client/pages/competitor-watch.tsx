@@ -1,6 +1,6 @@
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { decodeHtmlNumericReference } from '../../shared/html-entities.js';
-import { type Message, useMessageState, $t, $tj, $legacyText, isChinese } from "#i18n";
+import { type Message, useMessageState, $t, $tj, $legacyText } from "#i18n";
 // 竞品动态 (竞品 › 动态, and its panel in 数据接入): up to five competitors looked at once a week for free — new pages in their
 // sitemaps, GitHub releases and stars. Picked updates go to the Agent as one 竞品对比 task. AI 识别 names candidates
 // (websites and repositories checked) to tick; it runs by itself while the list is empty.
@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { competitorEventsDraft } from "./seo-hand-off";
 import {confirmAction} from "#components/reach/confirm";
-import { formatCount, formatDate, formatDateTime, formatSigned } from '#lib/format';
+import { formatCount, formatDate, formatDateTime, formatSigned, joinList } from '#lib/format';
 import { ConnectionError } from '#components/connection-error';
 
 export type Competitor = { id: string; name: string; site: string; repo: string; addedAt: string; checkedAt: string | null; pages: number | null; stars: number | null; week: number | null; latestRelease: { name: string; tag: string; url: string; publishedAt: string } | null; errors: string[]; noSitemap?: boolean };
@@ -186,7 +186,7 @@ export function CompetitorWatchTab({ projectId, onListChange }: { projectId: num
         <div className="flex flex-wrap gap-2">{view.list.length < view.max ? <>{canSuggest&&<Button size="sm" variant="outline" onClick={() => setSuggesting(true)}><Sparkles data-icon="inline-start" />{$t('competitorWatch.aiDetect')}</Button>}{canAdd&&<Button size="sm" variant="outline" onClick={() => setAdding(true)}><Plus data-icon="inline-start" />{$t('common.addCompetitor')}</Button>}</> : null}{canCheck&&<HeaderActions><RefreshButton busy={busy || Boolean(view.checking)} label={busy ? $t('competitorWatch.checking') : $t('common.updateNow')} onClick={() => void check()} /></HeaderActions>}</div>
       </div>
       {/* The same reason on several cards is said once, above them, with the way to fix it (UI review 2026-10-21). */}
-      {[...new Set(view.list.flatMap((c) => c.errors))].map((e) => <ConnectionError key={e} message={$t('competitorWatch.notReadFor', { 0: view.list.filter((c) => c.errors.includes(e)).map((c) => c.name).join(isChinese() ? "、" : ", "), 1: $legacyText(e) })} />)}
+      {[...new Set(view.list.flatMap((c) => c.errors))].map((e) => <ConnectionError key={e} message={$t('competitorWatch.notReadFor', { 0: joinList(view.list.filter((c) => c.errors.includes(e)).map((c) => c.name)), 1: $legacyText(e) })} />)}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{view.list.map((c) => <CompetitorCard key={c.id} c={c} projectId={projectId} onRemove={() => void remove(c)} onSaved={() => void load()} />)}</div>
       <Card className="gap-0 py-0">
         <div className="flex items-center gap-3 border-b border-border px-4 py-2"><Checkbox checked={view.events.length > 0 && chosen.length === view.events.length} indeterminate={chosen.length > 0 && chosen.length < view.events.length} disabled={!view.events.length} onCheckedChange={(on) => setPicked(on ? Object.fromEntries(view.events.map((e) => [e.id, true])) : {})} aria-label={$t('common.select')} data-all-check="" /><h2 className="text-sm font-semibold">{$tj('competitorWatch.activityLast90Days',{0:chosen.length ? $t('competitorWatch.selected',{0:chosen.length}) : ""})}</h2></div>

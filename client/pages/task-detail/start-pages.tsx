@@ -291,7 +291,7 @@ export function RestNotice({
             <span>
               {tasks.map((t, i) => (
                 <span key={t.id}>
-                  {i ? $t('taskPages.separator') : ''}
+                  {i ? $t('common.listSeparator') : ''}
                   <Link className='nr-link' to={`/actions/${t.id}`}>
                     {t.no ? `T-${t.no}` : t.title}
                   </Link>

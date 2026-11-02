@@ -1,6 +1,7 @@
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { $t, $tj, getCurrentLocale, useMessageState } from '#i18n';
+import { joinList } from '#lib/format';
 import { cn } from '#lib/utils';
 import { Button } from '#components/ui/button';
 import { Checkbox } from '#components/ui/checkbox';
@@ -1008,9 +1009,7 @@ export function HandoffLanguage({
       </Select>
       <p className={text.muted}>
         {$t('articleTask.handoffLanguagesHelp', {
-          0: others
-            .map((l) => localeName(l, ui))
-            .join(ui.startsWith('zh') ? '、' : ', '),
+          0: joinList(others.map((l) => localeName(l, ui))),
         })}
       </p>
     </Field>
@@ -1167,9 +1166,7 @@ export function WhereField({
                 <SelectItem key={r.id} value={REPO_VALUE + r.id}>
                   <span className='min-w-0 flex-1 truncate'>{r.repo}</span>
                   <span className='max-w-48 truncate text-muted-foreground'>
-                    {r.urls.join(
-                      getCurrentLocale().startsWith('zh') ? '、' : ', ',
-                    )}
+                    {joinList(r.urls)}
                   </span>
                 </SelectItem>
               ))}

@@ -293,7 +293,7 @@ describe('NocoReach semantic-key translations', () => {
       '代理 Profile': '网络 Profile',
       '代理 Profile 已保存': '网络 Profile 已保存',
       '代理 Profile 已删除': '网络 Profile 已删除',
-      '删除代理 Profile': '删除网络 Profile',
+      '删除代理 Profile': '删除网络 Profile「{0}」？',
       '尚未添加代理 Profile': '尚未添加网络 Profile',
       '最多添加 50 个代理 Profile': '最多添加 50 个网络 Profile',
       '编辑代理 Profile': '编辑网络 Profile',
@@ -372,6 +372,10 @@ describe('NocoReach semantic-key translations', () => {
       // Every closed task can be reopened (2026-10-29), so closing no longer says the task cannot continue.
       '执行者会停下，没合并的 PR 会关掉（分支保留），之后不能接着做。':
         '执行者会停下，没合并的 PR 会关掉（分支保留）。之后可以重新打开，回到这一步。',
+      // Copy around a link or value takes it as a placeholder, so no language ends on Chinese punctuation (2026-11-02).
+      '用 DataForSEO 跑 Lighthouse，请先':
+        '用 DataForSEO 跑 Lighthouse，请先{0}。',
+      已收到目标响应: '已收到目标响应：{0} · HTTP {1} · {2} ms。',
       // Performance checks run anew on every click (2026-11-02); the rank tip names its Update now button.
       '一次检查一个页面，点了才查（约 $0.005，算进 DataForSEO 的月度预算）；同一页面、同一设备 30 天内直接打开上次的结果。':
         '一次检查一个页面，点了才查，每次约 $0.005，算进 DataForSEO 的月度预算。同一页面、同一设备 10 分钟内不重复检查。',

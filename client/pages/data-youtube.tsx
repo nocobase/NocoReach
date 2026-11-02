@@ -47,7 +47,7 @@ import {
   type YouTubeVideo,
 } from './youtube-api';
 import './data-views.css';
-import { formatDate, formatDateTime } from '#lib/format';
+import { formatDate, formatDateTime, joinList } from '#lib/format';
 
 type Report = Omit<YouTubeStatus, 'page' | 'pageSize'> & CollectorReport;
 
@@ -210,7 +210,7 @@ export default function DataYouTube() {
         <>
           <p className='nr-footnote break-words'>
             {data.terms.length
-              ? $t('common.searchTermValue', { 0: data.terms.join('、') })
+              ? $t('common.searchTermValue', { 0: joinList(data.terms) })
               : null}
             {data.terms.length && data.fetchedAt ? ' · ' : null}
             {data.fetchedAt
