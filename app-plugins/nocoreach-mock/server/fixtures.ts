@@ -1410,6 +1410,12 @@ const YOUTUBE_TOPICS = [
   'Onboarding new teammates: our checklist',
   'Internal tool builders compared (2026)',
 ];
+// A video tracked by ID is not among the search results (usually the project's own), so it gets a title of its own.
+const YOUTUBE_TRACKED = [
+  'Product walkthrough: what changed this quarter',
+  'Live Q&A with the team: questions from the community',
+  'Customer story: replacing five tools with one workspace',
+];
 // Fictional YouTube videos: NocoBloom01… for the fixture product, hashed IDs for a configured project, so one
 // project's videos never appear in another's results. Any valid ID can be read for details (a tracked video).
 const youtubeId = (c: FixtureContext, index: number): string =>
@@ -1810,11 +1816,17 @@ function dataforseo(
       { length: YOUTUBE_TOPICS.length },
       (_, i) => i,
     ).find((i) => youtubeId(c, i) === id);
-    const index =
-      known ??
-      parseInt(createHash('sha256').update(id).digest('hex').slice(0, 4), 16) %
-        YOUTUBE_TOPICS.length;
-    const video = youtubeVideo(c, index, id);
+    const hash = parseInt(
+      createHash('sha256').update(id).digest('hex').slice(0, 4),
+      16,
+    );
+    const index = known ?? hash % YOUTUBE_TOPICS.length;
+    const video = {
+      ...youtubeVideo(c, index, id),
+      ...(known === undefined && {
+        title: YOUTUBE_TRACKED[hash % YOUTUBE_TRACKED.length],
+      }),
+    };
     return result([
       {
         type: 'youtube_video_info',
