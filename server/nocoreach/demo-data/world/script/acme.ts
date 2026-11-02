@@ -356,10 +356,262 @@ export const ACME_PACKAGES: PackageLine = {
   ],
 };
 
+/** Search phrases authored for each page, in the supported Taiwan and US markets. */
+const SEARCH_TERMS: Record<string, PerLanguage<readonly string[]>> = {
+  '/': {
+    zh: ['專案管理軟體', '免費專案管理軟體', '如何選擇專案管理軟體'],
+    en: [
+      'project management software',
+      'free project management software',
+      'how to choose project management software',
+    ],
+  },
+  '/pricing': {
+    zh: ['Acme 價格', 'Acme 價格 方案比較', 'Acme 價格如何計算'],
+    en: [
+      'acme pricing',
+      'acme pricing for teams',
+      'how does acme pricing work',
+    ],
+  },
+  '/docs/import-excel': {
+    zh: ['Excel 匯入任務', 'Excel 匯入任務 日期格式', '如何用 Excel 匯入任務'],
+    en: [
+      'import tasks from excel',
+      'import tasks from excel with subtasks',
+      'how to import tasks from excel',
+    ],
+  },
+  '/compare/nimbus': {
+    zh: [
+      'Acme vs Nimbus',
+      'Acme vs Nimbus 功能比較',
+      'Acme vs Nimbus 如何選擇',
+    ],
+    en: [
+      'acme vs nimbus',
+      'acme vs nimbus for small teams',
+      'which is better acme vs nimbus',
+    ],
+  },
+  '/features/kanban': {
+    zh: ['專案看板', '專案看板 範例', '如何建立專案看板'],
+    en: [
+      'kanban boards',
+      'kanban boards for small teams',
+      'how to use kanban boards',
+    ],
+  },
+  '/features/timeline': {
+    zh: ['團隊排程', '團隊排程 工具', '如何安排團隊排程'],
+    en: [
+      'team scheduling',
+      'team scheduling tools',
+      'how to improve team scheduling',
+    ],
+  },
+  '/docs/guests': {
+    zh: ['專案訪客權限', '專案訪客權限 設定', '如何設定專案訪客權限'],
+    en: [
+      'project guest access',
+      'project guest access permissions',
+      'how to manage project guest access',
+    ],
+  },
+  '/docs/weekly-reports': {
+    zh: ['專案週報', '專案週報 範本', '如何撰寫專案週報'],
+    en: [
+      'project status reports',
+      'project status reports template',
+      'how to write project status reports',
+    ],
+  },
+  '/docs/notifications': {
+    zh: ['任務通知', '任務通知 設定', '如何關閉任務通知'],
+    en: [
+      'task notifications',
+      'task notifications settings',
+      'how to turn off task notifications',
+    ],
+  },
+  '/features/mobile': {
+    zh: ['手機任務管理', '手機任務管理 app', '如何用手機任務管理工具'],
+    en: [
+      'mobile task management',
+      'mobile task management apps',
+      'how to use mobile task management',
+    ],
+  },
+  '/templates': {
+    zh: ['專案範本', '專案範本 免費下載', '如何建立專案範本'],
+    en: [
+      'project templates',
+      'project templates free download',
+      'how to create project templates',
+    ],
+  },
+  '/features/workload': {
+    zh: ['工作量管理', '工作量管理 工具', '如何做好工作量管理'],
+    en: [
+      'workload management',
+      'workload management tools',
+      'how to improve workload management',
+    ],
+  },
+  '/docs/recurring-tasks': {
+    zh: ['重複任務', '重複任務 設定', '如何設定重複任務'],
+    en: [
+      'recurring tasks',
+      'recurring tasks with due dates',
+      'how to set up recurring tasks',
+    ],
+  },
+  '/docs/getting-started': {
+    zh: ['Acme 入門', 'Acme 入門 教學', 'Acme 入門如何開始'],
+    en: [
+      'acme getting started',
+      'acme getting started tutorial',
+      'what does acme getting started cover',
+    ],
+  },
+  '/docs/milestones': {
+    zh: ['專案里程碑', '專案里程碑 範例', '如何設定專案里程碑'],
+    en: [
+      'project milestones',
+      'project milestones examples',
+      'how to define project milestones',
+    ],
+  },
+  '/docs/project-handover': {
+    zh: ['專案交接', '專案交接 清單', '如何完成專案交接'],
+    en: [
+      'project handover',
+      'project handover checklist',
+      'how to plan a project handover',
+    ],
+  },
+  '/docs/time-tracking': {
+    zh: ['工時追蹤', '工時追蹤 工具', '如何使用工時追蹤'],
+    en: [
+      'time tracking',
+      'time tracking for projects',
+      'how to set up time tracking',
+    ],
+  },
+  '/features/calendar': {
+    zh: ['團隊行事曆', '團隊行事曆 共用', '如何共用團隊行事曆'],
+    en: [
+      'team calendar',
+      'team calendar sharing',
+      'how to share a team calendar',
+    ],
+  },
+  '/docs/comments': {
+    zh: ['任務留言', '任務留言 提及同事', '如何管理任務留言'],
+    en: [
+      'task comments',
+      'task comments with mentions',
+      'how to organize task comments',
+    ],
+  },
+  '/docs/archive': {
+    zh: ['專案封存', '專案封存 還原', '如何還原專案封存資料'],
+    en: [
+      'project archiving',
+      'project archiving and recovery',
+      'how does project archiving work',
+    ],
+  },
+  '/templates/sprint': {
+    zh: ['衝刺規劃', '衝刺規劃 範本', '如何進行衝刺規劃'],
+    en: [
+      'sprint planning',
+      'sprint planning templates',
+      'how to run sprint planning',
+    ],
+  },
+  '/docs/approvals': {
+    zh: ['專案審核', '專案審核 流程', '如何設定專案審核流程'],
+    en: [
+      'project approvals',
+      'project approvals workflow',
+      'how to manage project approvals',
+    ],
+  },
+  '/docs/integrations': {
+    zh: ['專案管理整合', '專案管理整合 Slack', '如何設定專案管理整合'],
+    en: [
+      'project management integrations',
+      'project management integrations with slack',
+      'how to configure project management integrations',
+    ],
+  },
+  '/docs/export': {
+    zh: ['任務匯出', '任務匯出 Excel', '如何將任務匯出成 Excel'],
+    en: [
+      'export project tasks',
+      'export project tasks to excel',
+      'how to export project tasks',
+    ],
+  },
+  '/blog/estimation': {
+    zh: ['任務估時', '任務估時 方法', '如何提高任務估時準確度'],
+    en: [
+      'task estimation',
+      'task estimation techniques',
+      'how to improve task estimation',
+    ],
+  },
+  '/features/portfolio': {
+    zh: ['專案組合管理', '專案組合管理 工具', '如何進行專案組合管理'],
+    en: [
+      'project portfolio management',
+      'project portfolio management tools',
+      'how to start project portfolio management',
+    ],
+  },
+  '/blog/retrospectives': {
+    zh: ['專案回顧', '專案回顧 範本', '如何主持專案回顧'],
+    en: [
+      'project retrospectives',
+      'project retrospectives templates',
+      'how to run project retrospectives',
+    ],
+  },
+  '/contact': {
+    zh: ['Acme 產品展示', 'Acme 產品展示 預約', '如何預約 Acme 產品展示'],
+    en: [
+      'acme product demo',
+      'acme product demo booking',
+      'how to book an acme product demo',
+    ],
+  },
+  '/showcase': {
+    zh: ['專案管理案例', '專案管理案例 行銷團隊', '如何參考專案管理案例'],
+    en: [
+      'project management examples',
+      'project management examples for marketing',
+      'where to find project management examples',
+    ],
+  },
+  '/changelog': {
+    zh: ['Acme 更新', 'Acme 更新 紀錄', '如何查看 Acme 更新'],
+    en: [
+      'acme updates',
+      'acme updates release notes',
+      'where to find acme updates',
+    ],
+  },
+  '/products/crm': {
+    zh: ['Acme CRM', 'Acme CRM 客戶管理', '如何使用 Acme CRM'],
+    en: ['acme crm', 'acme crm for sales teams', 'how to use acme crm'],
+  },
+};
+
 export const ACME_QUERIES: PerLanguage<Query[]> = {
   zh: [
     {
-      q: '项目管理软件',
+      q: '專案管理軟體',
       path: '/',
       impressions: 180,
       position: 6,
@@ -375,7 +627,7 @@ export const ACME_QUERIES: PerLanguage<Query[]> = {
       ctr: 0.5,
     },
     {
-      q: 'Excel 导入任务',
+      q: 'Excel 匯入任務',
       path: '/docs/import-excel',
       impressions: 63,
       position: 9.2,
@@ -424,12 +676,14 @@ for (const lang of ['zh', 'en'] as const) {
     })),
   );
   ACME_PAGES.forEach((p, i) => {
-    for (const [j, suffix] of (lang === 'zh'
-      ? ['指南', '模板', '常见问题']
-      : ['guide', 'template', 'common questions']
-    ).entries()) {
-      const keyword = `${lang === 'zh' ? '项目管理' : 'project management'} ${p.title[lang]} ${suffix}`;
+    for (const [j, keyword] of SEARCH_TERMS[p.path][lang].entries()) {
       const position = 6.4 + i * 0.45 + j * 3;
+      if (
+        ACME_RESEARCH[lang].some(
+          (k) => k.keyword.toLowerCase() === keyword.toLowerCase(),
+        )
+      )
+        continue;
       ACME_QUERIES[lang].push({
         q: keyword,
         path: p.path,

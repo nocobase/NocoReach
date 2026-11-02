@@ -19,6 +19,8 @@
 # demoMode:
 #   enabled: false
 #   quickSignIn: true
+#   # Keyword lookups persist their cache. Include it when overriding the default exceptions.
+#   allowCollections: [nrKeywordRuns]
 #   dailyReset:
 #     hour: 3
 #     minute: 0

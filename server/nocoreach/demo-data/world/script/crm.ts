@@ -353,6 +353,98 @@ export const CRM_PACKAGES: PackageLine = {
   ],
 };
 
+/** Search phrases authored for each page, in the supported Taiwan and US markets. */
+const SEARCH_TERMS: Record<string, PerLanguage<readonly string[]>> = {
+  '/docs/lead-routing': {
+    zh: ['線索分配', '線索分配 規則', '如何設定線索分配'],
+    en: ['lead routing', 'lead routing rules', 'how to set up lead routing'],
+  },
+  '/docs/quotes': {
+    zh: ['報價審核', '報價審核 流程', '如何設定報價審核'],
+    en: [
+      'quote approval',
+      'quote approval for discounts',
+      'how to manage quote approval',
+    ],
+  },
+  '/docs/permissions': {
+    zh: ['客戶資料權限', '客戶資料權限 設定', '如何設定客戶資料權限'],
+    en: [
+      'crm access control',
+      'crm access control permissions',
+      'how to configure crm access control',
+    ],
+  },
+  '/docs/follow-ups': {
+    zh: ['客戶跟進', '客戶跟進 提醒', '如何安排客戶跟進'],
+    en: [
+      'sales follow up',
+      'sales follow up reminders',
+      'how to automate sales follow up',
+    ],
+  },
+  '/docs/forecast': {
+    zh: ['銷售預測', '銷售預測 方法', '如何計算銷售預測'],
+    en: [
+      'sales forecasting',
+      'sales forecasting methods',
+      'how to improve sales forecasting',
+    ],
+  },
+  '/docs/handover': {
+    zh: ['客戶交接', '客戶交接 清單', '如何完成客戶交接'],
+    en: [
+      'account handover',
+      'account handover checklist',
+      'how to manage account handover',
+    ],
+  },
+  '/docs/renewals': {
+    zh: ['客戶續約', '客戶續約 提醒', '如何提高客戶續約率'],
+    en: [
+      'customer renewals',
+      'customer renewals checklist',
+      'how to manage customer renewals',
+    ],
+  },
+  '/features/mobile': {
+    zh: ['行動 CRM', '行動 CRM 拜訪紀錄', '如何使用行動 CRM'],
+    en: ['mobile crm', 'mobile crm visit notes', 'how to use mobile crm'],
+  },
+  '/features/reports': {
+    zh: ['銷售週報', '銷售週報 範本', '如何製作銷售週報'],
+    en: [
+      'weekly sales reports',
+      'weekly sales reports templates',
+      'how to build weekly sales reports',
+    ],
+  },
+  '/blog/lost-deals': {
+    zh: ['輸單分析', '輸單分析 範本', '如何進行輸單分析'],
+    en: [
+      'lost deal analysis',
+      'lost deal analysis templates',
+      'how to perform lost deal analysis',
+    ],
+  },
+  '/docs/email': {
+    zh: ['CRM 郵件同步', 'CRM 郵件同步 權限', '如何設定 CRM 郵件同步'],
+    en: [
+      'crm email sync',
+      'crm email sync permissions',
+      'how to configure crm email sync',
+    ],
+  },
+  '/docs/integrations': {
+    zh: ['CRM 訂單整合', 'CRM 訂單整合 重試', '如何設定 CRM 訂單整合'],
+    en: [
+      'crm order integration',
+      'crm order integration retries',
+      'how to configure crm order integration',
+    ],
+  },
+};
+
 export const CRM_QUERIES: PerLanguage<Query[]> = { zh: [], en: [] };
 export const CRM_RESEARCH: PerLanguage<(Research & { topic: string })[]> = {
   zh: [],
@@ -360,11 +452,7 @@ export const CRM_RESEARCH: PerLanguage<(Research & { topic: string })[]> = {
 };
 for (const lang of ['zh', 'en'] as const) {
   CRM_PAGES.forEach((p, i) => {
-    for (const [j, suffix] of (lang === 'zh'
-      ? ['指南', '模板', '常见问题']
-      : ['guide', 'template', 'common questions']
-    ).entries()) {
-      const keyword = `${lang === 'zh' ? 'CRM' : 'crm'} ${p.title[lang]} ${suffix}`;
+    for (const [j, keyword] of SEARCH_TERMS[p.path][lang].entries()) {
       const position = 6.4 + i * 0.75 + j * 3;
       CRM_QUERIES[lang].push({
         q: keyword,
