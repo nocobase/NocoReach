@@ -6,6 +6,8 @@ import type {
 import { demoContent } from './content.js';
 import { ACME_PAGES } from './acme-content.js';
 import { CRM_PAGES } from './crm-content.js';
+import { ACME_RESEARCH } from './world/script/acme.js';
+import { CRM_RESEARCH } from './world/script/crm.js';
 
 type Value = Record<string, unknown>;
 const object = (value: unknown): Value =>
@@ -479,44 +481,32 @@ function business(operation: string, input: Value, en: boolean): Value | null {
           ],
         ],
       ];
-      // Keywords built from a page of the site ("project management Team plans and seats guide") are explained by that
-      // page: its topic in the reader's language, its path, and whether the searcher is learning or choosing.
-      const pageOf = (k: string) =>
-        [...ACME_PAGES, ...CRM_PAGES].find((p) =>
-          k.includes(p.title.en.toLowerCase()),
-        );
+      // Explain authored searches through their page association rather than parsing page titles out of them.
+      const research = [...ACME_RESEARCH.en, ...CRM_RESEARCH.en];
       const byPage = (k: string, intent: string) => {
-        const p = pageOf(k);
+        const term = research.find(
+          (item) => item.keyword.toLowerCase() === k.toLowerCase(),
+        );
+        const p = (crm ? CRM_PAGES : ACME_PAGES).find(
+          (page) => page.path === term?.path,
+        );
         if (!p) return null;
         const topic = p.title.zh.split('：')[0],
-          title = p.title.en.split(':')[0],
-          choosing = intent === 'commercial' || intent === 'transactional';
-        return /common questions/.test(k)
+          title = p.title.en.split(':')[0];
+        if (/^(how|what|why|when|where|which|who)\b/i.test(k))
+          return [
+            `对“${topic}”有疑问的人，在 ${p.path} 补一段问答就能接住`,
+            `People with questions about ${title}; a Q&A on ${p.path} answers them`,
+          ];
+        return intent === 'commercial' || intent === 'transactional'
           ? [
-              `对“${topic}”有疑问的人，在 ${p.path} 补一段问答就能接住`,
-              `People with questions about ${title}; a Q&A on ${p.path} answers them`,
+              `正在比较“${topic}”的团队，在 ${p.path} 说明适用范围与限制`,
+              `Teams comparing ${title}; explain the scope and limits on ${p.path}`,
             ]
-          : /template/.test(k)
-            ? choosing
-              ? [
-                  `想直接套用“${topic}”的团队，给一份能改的模板`,
-                  `Teams ready to adopt ${title}; offer an editable template`,
-                ]
-              : [
-                  `在找“${topic}”参考做法的人，模板页给出现成例子`,
-                  `People looking for ${title} examples; a template shows one`,
-                ]
-            : /guide/.test(k)
-              ? choosing
-                ? [
-                    `选工具前先看“${topic}”怎么做，教程能顺带介绍 ${product}`,
-                    `People checking how ${title} works before choosing; a guide introduces ${product}`,
-                  ]
-                : [
-                    `在学“${topic}”怎么做的人，${p.path} 的步骤能直接回答`,
-                    `People learning ${title}; the steps on ${p.path} answer them`,
-                  ]
-              : null;
+          : [
+              `在学“${topic}”怎么做的人，${p.path} 的步骤能直接回答`,
+              `People learning ${title}; the steps on ${p.path} answer them`,
+            ];
       };
       const why = (k: string, position: number, intent = '') => {
         const [zh, en] =

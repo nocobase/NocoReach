@@ -44,7 +44,9 @@ export type DemoHost = Connections & {
   reddit: RedditSource;
   trends: TrendsSource;
   competitors: CompetitorWatch & { checking?: Promise<unknown> };
-  competitorResearch: CompetitorResearch;
+  competitorResearch: CompetitorResearch & {
+    running: Map<string, Promise<unknown>>;
+  };
   aiSearch: AiSearch;
   aiQuestions: AiQuestions;
   bilibili: BilibiliSource;
