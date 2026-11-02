@@ -1,9 +1,10 @@
-import { $t, $legacyText } from "#i18n";
+import { $t, $legacyText, getCurrentLocale } from "#i18n";
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {formatDate,formatDateTime} from '#lib/format';
 import {playbookForActions} from '../../shared/opportunity-parts.js';
 import {SYSTEM_PLAYBOOKS} from '../../shared/playbook-catalog.js';
 import {inPlaceLocales} from '../../shared/article-publishing.js';
+import {localeName} from './article-targets-api';
 // 做法 (SPEC §6.0), mirrored from plugins/connections/server/execution/playbook.ts and flow.ts.
 export type StageKind='agent'|'review'|'publish'|'release'|'observe';
 export type ChecklistItem={key:string;label:string;required:boolean};
@@ -81,6 +82,8 @@ export function eventText(e:{at?:string;action:string;note?:string;comment?:stri
   // A primary language approved before its translation (2026-10-24) says so instead of handing over.
   case 'approveStage':return {who:$t('common.you'),text:e.note==='translate'?$t('articleTask.approvedPrimary'):e.note==='update'?$t('articleTask.approvedPrimaryUpdate'):$t('playbook.approved',{0:s,1:e.note?$t('playbook.handedContinue',{0:e.note}):''})};
   case 'requestStageChanges':return {who:$t('common.you'),text:$t('playbook.requestedChanges',{0:e.comment||''})};
+  // Another primary language before it was approved (2026-10-30): the step wrote a new version in it.
+  case 'changePrimary':return {who:$t('common.you'),text:$t('playbook.primaryChanged',{0:localeName(e.note||'',getCurrentLocale())})};
   case 'editStageOutput':return {who:$t('common.you'),text:$t('playbook.editedContentDirectly')};
   case 'recordManual':return {who:$t('common.you'),text:$t('playbook.finishedThemselvesRecorded',{0:s})};
   // The system starts a step again once after NocoReach restarted under it (retryAfterRestart on the server).

@@ -1660,7 +1660,7 @@ test('translation: a new article, a source without text or nothing to translate 
 
 // Accept and start (2026-10-24): an accepted outline handed over to a blog post starts at once, as a new article on the
 // default target; a new docs page with no page to find its article waits for a person to pick one.
-async function acceptOutline(f, next) {
+async function acceptOutline(f, next, extra = {}) {
   await f.command('startTask', { playbookId: 'content-outline' });
   const { run } = await claim(f);
   expect(run.mode).toBe('plan');
@@ -1676,6 +1676,7 @@ async function acceptOutline(f, next) {
     artifactId: review(d).id,
     checked: ['facts'],
     next,
+    ...extra,
   });
 }
 
@@ -1716,6 +1717,133 @@ test('Accept and start: a new docs page with no article found from its page wait
   expect(d.related).toEqual([
     expect.objectContaining({ relation: 'next', state: 'todo' }),
   ]);
+});
+
+// 2026-10-30 (T-58): a hand-off wrote English first in a Chinese project, and the primary could not be changed.
+test('Accept and start: the primary is the project AI content language, or the one chosen with the hand-over', async () => {
+  let f = await fixture({ news: [] });
+  f.s.p.project = async () => ({
+    name: 'Synthetic',
+    writingStyle: 'Plain',
+    language: 'zh-CN',
+  });
+  let d = await acceptOutline(f, 'blog-post');
+  expect((await f.s.get('1', d.work.nextTaskId)).work.delivery.locales).toEqual(
+    ['zh', 'en', 'ja'],
+  );
+  let { run } = await claim(f);
+  expect(run.input.article.languages).toMatchObject({
+    primary: 'zh',
+    phase: 'primary',
+  });
+  f = await fixture({ news: [] });
+  f.s.p.project = async () => ({
+    name: 'Synthetic',
+    writingStyle: 'Plain',
+    language: 'zh-CN',
+  });
+  d = await acceptOutline(f, 'blog-post', {
+    nextLocales: ['ja', 'en', 'zh', 'not a locale!'],
+  });
+  const child = await f.s.get('1', d.work.nextTaskId);
+  expect(child.task.evidence.handoff.locales).toEqual(['ja', 'en', 'zh']);
+  expect(child.work.delivery.locales).toEqual(['ja', 'en', 'zh']);
+  ({ run } = await claim(f));
+  expect(run.input.article.languages).toMatchObject({ primary: 'ja' });
+});
+
+test('languages: the primary can change before it is approved, writing a new version in it; not once the translation started', async () => {
+  const f = await fixture();
+  await f.command('startTask', {
+    playbookId: 'blog-post',
+    delivery: { targetId: 'cms', locales: ['en', 'zh', 'ja'] },
+  });
+  let { run } = await claim(f);
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'English first. 中文草稿：新的文章正文',
+    article: {
+      slug: 'new-post',
+      locales: { en: { title: 'A new post', body: 'Body' } },
+      summary: 'New post',
+    },
+  });
+  let d = await f.view();
+  const stageKey = d.work.flow.stages[d.work.stageIndex].key,
+    artifactId = review(d).id;
+  await expect(
+    f.command('changePrimary', { stageKey, artifactId, locale: 'fr' }),
+  ).rejects.toMatchObject({ status: 400 });
+  await expect(
+    f.command('changePrimary', { stageKey, artifactId, locale: 'en' }),
+  ).rejects.toMatchObject({ status: 409 });
+  d = await f.command('changePrimary', {
+    stageKey,
+    artifactId,
+    locale: 'zh',
+    comment: 'Rewrite it in Chinese',
+  });
+  // The former primary stays, to be translated with the others once Chinese is approved.
+  expect(d.work.delivery.locales).toEqual(['zh', 'en', 'ja']);
+  expect(d.work.history.at(-1)).toMatchObject({
+    action: 'changePrimary',
+    note: 'zh',
+  });
+  expect(d.work.history.at(-1).comment).toBeUndefined();
+  expect(d.work.flow.stages[d.work.stageIndex].kind).toBe('agent');
+  ({ run } = await claim(f));
+  expect(run.input.article.languages).toMatchObject({
+    primary: 'zh',
+    others: ['en', 'ja'],
+    phase: 'primary',
+    write: ['zh'],
+  });
+  expect(run.input.feedback).toEqual(['Rewrite it in Chinese']);
+  // The version it replaces, notes included, goes to the Agent with the request.
+  expect(JSON.stringify(run.input)).toContain('中文草稿');
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'Chinese now',
+    article: {
+      slug: 'new-post',
+      locales: { zh: { title: '新文章', body: '新的文章正文' } },
+      summary: 'Chinese',
+    },
+  });
+  d = await f.view();
+  await f.command('approveStage', {
+    stageKey: d.work.flow.stages[d.work.stageIndex].key,
+    artifactId: review(d).id,
+    checked: [],
+  });
+  ({ run } = await claim(f));
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'Translated',
+    article: {
+      slug: 'new-post',
+      locales: {
+        en: { title: 'A new post', body: 'Body' },
+        ja: { title: '新しい記事', body: '本文' },
+      },
+      summary: 'Translated',
+    },
+  });
+  d = await f.view();
+  // The translation is under review: the primary was approved and cannot change any more.
+  await expect(
+    f.command('changePrimary', {
+      stageKey: d.work.flow.stages[d.work.stageIndex].key,
+      artifactId: review(d).id,
+      locale: 'en',
+    }),
+  ).rejects.toMatchObject({ status: 409 });
 });
 
 // Tasks carry their pages (2026-10-29): the start card reads where each one is changed, a start that leaves some to
