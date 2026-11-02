@@ -72,7 +72,7 @@ export default function SourceConnections(){const {project,error:projectError}=u
  const checkKey=projectId&&collectorPlatform&&unread&&canConfigureCollector&&canTestCollector?JSON.stringify([projectId,collectorPlatform,unread,collectorVersion]):'';
  const [collectorCheck,setCollectorCheck]=useState<{key:string;problem:string|null}|null>(null);
  useEffect(()=>{if(!checkKey)return;const [id,platform,collectorId]=JSON.parse(checkKey) as [number,'bilibili'|'xiaohongshu',string];let alive=true;
-  const checked=platform==='xiaohongshu'?xiaohongshuRequest(id,'test',{collectorId}).then(()=>null,(e:Error)=>xiaohongshuErrorMessage(e)):bilibiliRequest(id,'test',{collectorId}).then(()=>null,(e:Error)=>bilibiliErrorMessage(e));
+  const checked=(platform==='xiaohongshu'?xiaohongshuRequest(id,'test',{collectorId}):bilibiliRequest(id,'test',{collectorId})).then(()=>null,(e:Error)=>checkProblem(e,platform));
   void checked.then(problem=>{if(alive)setCollectorCheck({key:checkKey,problem});});return()=>{alive=false;};},[checkKey]);
  const collector=collectorPlatform?collectorHealth(collectorPlatform,status,collectorCheck?.key===checkKey&&checkKey?collectorCheck.problem:undefined):null;
  const savingOwnersRef = useRef(new Set<string>());
@@ -163,6 +163,9 @@ function met(need:string,status:StatusInput,id:string,collector:CollectorHealth|
 // and the tick then stands for a saved collector, as it does for someone who may not check it.
 const COLLECTOR_FAILURES=['collector_unreachable','collector_unauthorized','unsupported','tool_missing','browser_unavailable'];
 type CollectorHealth={ok:true}|{ok:false;problem:string};
+// A mock deployment pauses a project with no mock profile chosen; the check says so rather than show the code.
+function checkProblem(e:Error,platform:'bilibili'|'xiaohongshu'){const error=(e as {payload?:{error?:{reason?:string;message?:string}}}).payload?.error;const paused=[error?.reason,error?.message].some(code=>code==='NR_MOCK_PROFILE_REQUIRED'||code==='NR_MOCK_COLLECTOR_PROFILE_REQUIRED');
+ return paused?$t('networkProfiles.profileRequired'):platform==='xiaohongshu'?xiaohongshuErrorMessage(e):bilibiliErrorMessage(e);}
 function collectorHealth(platform:'bilibili'|'xiaohongshu',status:StatusInput,check:string|null|undefined):CollectorHealth|null{const s=status[platform];if(!s?.configured)return null;const code=s.lastRun?.errorCode??'';
  if(COLLECTOR_FAILURES.includes(code))return {ok:false,problem:platform==='xiaohongshu'?xiaohongshuRunMessage(code):bilibiliMessage(code)};
  if(s.verifiedAt||check===null)return {ok:true};

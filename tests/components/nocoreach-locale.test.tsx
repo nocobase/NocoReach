@@ -295,6 +295,12 @@ describe('NocoReach language integration', () => {
   it.each([
     [true, '连接正常', true],
     [false, '无法连接小红书采集器，请检查采集器是否运行', false],
+    // A mock deployment's project with no mock profile is paused; the row says so instead of the code.
+    [
+      'paused',
+      '请先选择模拟网络 Profile，再采集数据。此隔离部署不会回退到真实连接',
+      false,
+    ],
   ])(
     'checks a saved collector no read has gone through as its drawer opens; the row and the tick agree (answers: %s)',
     async (answers, text, ticked) => {
@@ -306,13 +312,16 @@ describe('NocoReach language integration', () => {
         if (resource === 'nrArticles') return { targets: [] };
         if (resource !== 'nrXiaohongshu') return original(resource);
         if (name === 'test') {
-          if (answers) return {};
+          if (answers === true) return {};
           throw Object.assign(new Error('unreachable'), {
-            status: 502,
+            status: answers ? 409 : 502,
             payload: {
-              error: {
-                message: '无法连接小红书采集器，请检查采集器是否运行。',
-              },
+              error: answers
+                ? {
+                    reason: 'NOCOREACH_409',
+                    message: 'NR_MOCK_PROFILE_REQUIRED',
+                  }
+                : { message: '无法连接小红书采集器，请检查采集器是否运行。' },
             },
           });
         }
