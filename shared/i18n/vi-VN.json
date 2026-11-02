@@ -5361,7 +5361,6 @@
   "taskSubject.activities": "hoạt động mới",
   "taskDetail.chooseAgentFirst": "Hãy chọn tác nhân AI cho tác vụ này trước.",
   "taskDetail.attachmentsDelivered": "Tác nhân AI cũng nhận được các tệp đính kèm này.",
-  "taskDetail.attachmentsReceived": "Tác nhân AI cũng đã nhận các tệp đính kèm này.",
   "taskDetail.lastFeedback": "Yêu cầu chỉnh sửa gần nhất: ",
   "taskDetail.visibleChanges": "Những gì người đọc thấy",
   "taskDetail.changedPart": "Phần đã thay đổi",

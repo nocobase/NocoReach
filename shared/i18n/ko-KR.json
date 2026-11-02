@@ -5306,7 +5306,6 @@
   "taskSubject.activities": "새 활동",
   "taskDetail.chooseAgentFirst": "먼저 이 작업을 수행할 에이전트를 선택하세요.",
   "taskDetail.attachmentsDelivered": "에이전트는 이러한 첨부 파일도 받습니다.",
-  "taskDetail.attachmentsReceived": "에이전트는 이러한 첨부 파일도 받았습니다.",
   "taskDetail.lastFeedback": "마지막 변경 요청: ",
   "taskDetail.visibleChanges": "독자들이 보는 것",
   "taskDetail.changedPart": "변경된 부분",

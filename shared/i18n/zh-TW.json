@@ -5279,7 +5279,6 @@
   "taskSubject.activities": "新動態",
   "taskDetail.chooseAgentFirst": "請先為任務選擇 Agent。",
   "taskDetail.attachmentsDelivered": "Agent 會一起收到這些附件。",
-  "taskDetail.attachmentsReceived": "Agent 一起收到了這些附件。",
   "taskDetail.lastFeedback": "上次的修改意見：",
   "taskDetail.visibleChanges": "讀者看到的變化",
   "taskDetail.changedPart": "改動的地方",

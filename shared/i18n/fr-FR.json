@@ -5279,7 +5279,6 @@
   "taskSubject.activities": "nouvelles activités",
   "taskDetail.chooseAgentFirst": "Choisissez d’abord un agent pour cette tâche.",
   "taskDetail.attachmentsDelivered": "L’agent reçoit également ces pièces jointes.",
-  "taskDetail.attachmentsReceived": "L’agent a également reçu ces pièces jointes.",
   "taskDetail.lastFeedback": "Dernière demande de modification : ",
   "taskDetail.visibleChanges": "Ce que voient les lecteurs",
   "taskDetail.changedPart": "Partie modifiée",

@@ -5307,7 +5307,6 @@
   "taskSubject.activities": "new activities",
   "taskDetail.chooseAgentFirst": "Choose an Agent for this task first.",
   "taskDetail.attachmentsDelivered": "The Agent receives these attachments too.",
-  "taskDetail.attachmentsReceived": "The Agent received these attachments too.",
   "taskDetail.lastFeedback": "Last change request: ",
   "taskDetail.visibleChanges": "What readers see",
   "taskDetail.changedPart": "Changed part",

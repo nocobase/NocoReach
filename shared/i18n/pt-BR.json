@@ -5279,7 +5279,6 @@
   "taskSubject.activities": "novidades",
   "taskDetail.chooseAgentFirst": "Primeiro, escolha um agente para esta tarefa.",
   "taskDetail.attachmentsDelivered": "O agente também recebe estes anexos.",
-  "taskDetail.attachmentsReceived": "O agente também recebeu estes anexos.",
   "taskDetail.lastFeedback": "Última solicitação de alteração: ",
   "taskDetail.visibleChanges": "O que os leitores veem",
   "taskDetail.changedPart": "Trecho alterado",

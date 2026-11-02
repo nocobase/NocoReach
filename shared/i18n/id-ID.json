@@ -5361,7 +5361,6 @@
   "taskSubject.activities": "aktivitas baru",
   "taskDetail.chooseAgentFirst": "Pilih Agen untuk tugas ini terlebih dahulu.",
   "taskDetail.attachmentsDelivered": "Agen juga menerima lampiran ini.",
-  "taskDetail.attachmentsReceived": "Agen juga telah menerima lampiran ini.",
   "taskDetail.lastFeedback": "Permintaan perubahan terakhir: ",
   "taskDetail.visibleChanges": "Yang dilihat pembaca",
   "taskDetail.changedPart": "Bagian yang diubah",

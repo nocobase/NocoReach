@@ -5279,7 +5279,6 @@
   "taskSubject.activities": "neue Aktivitäten",
   "taskDetail.chooseAgentFirst": "Wählen Sie zuerst einen Agenten für diese Aufgabe aus.",
   "taskDetail.attachmentsDelivered": "Der Agent erhält auch diese Anhänge.",
-  "taskDetail.attachmentsReceived": "Der Agent hat auch diese Anhänge erhalten.",
   "taskDetail.lastFeedback": "Letzter Änderungswunsch: ",
   "taskDetail.visibleChanges": "Was Leser sehen",
   "taskDetail.changedPart": "Geänderter Bereich",

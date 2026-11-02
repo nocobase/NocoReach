@@ -5279,7 +5279,6 @@
   "taskSubject.activities": "novedades",
   "taskDetail.chooseAgentFirst": "Primero elige un agente para esta tarea.",
   "taskDetail.attachmentsDelivered": "El agente también recibe estos archivos adjuntos.",
-  "taskDetail.attachmentsReceived": "El agente también recibió estos archivos adjuntos.",
   "taskDetail.lastFeedback": "Última petición de modificación: ",
   "taskDetail.visibleChanges": "Lo que ven los lectores",
   "taskDetail.changedPart": "Parte modificada",

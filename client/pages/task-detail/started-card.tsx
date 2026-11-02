@@ -164,8 +164,8 @@ export function StartedCard({
         </Field>
       )}
       {attachments && (
-        <Field label={$t('taskDetail.attachmentsReceived')}>
-          <TaskMedia projectId={projectId} taskId={taskId} />
+        <Field label={$t('manualTask.attachments')}>
+          <TaskMedia projectId={projectId} taskId={taskId} compact />
         </Field>
       )}
     </Card>
