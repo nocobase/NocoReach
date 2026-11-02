@@ -101,7 +101,7 @@ class DataHealth{
  // Which sources this project has connected, for the menu: one entry per source in CONNECTED_CHECKS (above).
  // Independent checks run together; shared reads and each source's connection rule stay in CONNECTED_CHECKS.
  async connected(id){const ctx=sharedReads(this.p,id);
-  return Object.fromEntries(await Promise.all(Object.entries(CONNECTED_CHECKS).map(async([key,check])=>{
+  return Object.fromEntries(await Promise.all(Object.entries(CONNECTED_CHECKS).map(async([key,check]):Promise<[string,boolean]>=>{
    try{return [key,Boolean(await check(this.p,id,ctx))];}catch{return [key,false];}
   })));}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('dataHealth.notLoadDataHealth'));}};
