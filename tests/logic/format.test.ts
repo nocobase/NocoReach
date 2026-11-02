@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { setDictionary } from '../../client/i18n';
 import {
+  countIn,
   formatChange,
   formatCompact,
   formatCompactIn,
@@ -68,6 +69,8 @@ describe('numbers and changes', () => {
     expect(formatCompact(16234)).toBe('1.6 万');
     expect(formatCompactIn('youtube.viewsCount', 16234)).toBe('1.6 万次播放');
     expect(formatCompactIn('youtube.viewsCount', 1735)).toBe('1,735 次播放');
+    expect(countIn('xiaohongshu.likesCount', '1.2 万')).toBe('1.2 万赞');
+    expect(countIn('xiaohongshu.likesCount', '10 万+')).toBe('10 万+ 赞');
     setDictionary(traditional, 'zh-TW');
     expect(formatCompactIn('youtube.viewsCount', 16234)).toBe('1.6 萬次播放');
     setDictionary(japanese, 'ja-JP');

@@ -1093,13 +1093,13 @@ it('lists the recently found notes with their likes, as counted or as the page s
     return link.closest('li')!;
   };
   expect(item('精确点赞')).toHaveTextContent(/03-01 · 1,234 赞$/);
-  expect(item('大量点赞')).toHaveTextContent(/^大量点赞 · 1\.2万 赞$/);
-  expect(item('页面点赞')).toHaveTextContent(/03-01 · 10万\+ 赞$/);
+  expect(item('大量点赞')).toHaveTextContent(/^大量点赞 · 1\.2 万赞$/);
+  expect(item('页面点赞')).toHaveTextContent(/03-01 · 10 万\+ 赞$/);
   expect(item('没有点赞')).toHaveTextContent(/^没有点赞$/);
   app.unmount();
   setDictionary(english);
   setup();
   expect(await screen.findByText('Recently found notes')).toBeVisible();
   expect(item('大量点赞')).toHaveTextContent(/^大量点赞 · 12\.3K likes$/);
-  expect(item('页面点赞')).toHaveTextContent(/· 10万\+ likes$/);
+  expect(item('页面点赞')).toHaveTextContent(/· 100K\+ likes$/);
 });

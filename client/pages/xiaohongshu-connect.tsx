@@ -1,9 +1,4 @@
-import {
-  formatCompact,
-  formatCount,
-  formatDate,
-  formatDateTime,
-} from '#lib/format';
+import { countIn, formatCount, formatDate, formatDateTime } from '#lib/format';
 import {
   useCallback,
   useEffect,
@@ -48,6 +43,7 @@ import { useBusinessAccess } from '#hooks/use-business-access';
 import { CollectorClear } from '#components/collector-clear';
 import { safeLink } from './analytics';
 import { sentences } from './task-detail/failure-model';
+import { shownLikes } from './collector-columns';
 
 // Xiaohongshu (2026-11-02): laid out as Bilibili's panel, but read by hand only, since frequent reads through the
 // signed-in account can get it limited. A read the busy collector turned away is queued and retried the same way.
@@ -529,8 +525,10 @@ export function XiaohongshuConnect({
       {busy === 'test' ? $t('common.checking') : $t('common.checkCollector')}
     </Button>
   ) : null;
-  const likes = (note: XiaohongshuView['recent'][number]) =>
-    note.likes !== null ? formatCompact(note.likes) : note.likesText;
+  const likes = (note: XiaohongshuView['recent'][number]) => {
+    const shown = shownLikes(note);
+    return shown === null ? null : countIn('xiaohongshu.likesCount', shown);
+  };
   return (
     <div className='grid gap-4' data-xiaohongshu-connect>
       {!form && errorState}
@@ -634,9 +632,7 @@ export function XiaohongshuConnect({
                       {note.estimatedPublishedAt
                         ? ` · ${formatDate(note.estimatedPublishedAt)}`
                         : ''}
-                      {likes(note)
-                        ? ` · ${$t('xiaohongshu.likesCount', { 0: likes(note) })}`
-                        : ''}
+                      {likes(note) ? ` · ${likes(note)}` : ''}
                     </span>
                   </li>
                 ))}

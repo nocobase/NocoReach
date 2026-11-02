@@ -1,5 +1,5 @@
 import {
-  formatCompact,
+  formatCompactIn,
   formatCount,
   formatDate,
   formatDateTime,
@@ -866,7 +866,7 @@ function BilibiliPanel({
                         ? ` · ${formatDate(video.publishedAt)}`
                         : ''}
                       {video.views !== null
-                        ? ` · ${$t('youtube.viewsCount', { 0: formatCompact(video.views) })}`
+                        ? ` · ${formatCompactIn('youtube.viewsCount', video.views)}`
                         : ''}
                     </span>
                   </li>

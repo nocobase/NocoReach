@@ -807,7 +807,7 @@ it.each([500, 0])(
           id: 'BV1MW421X7gM',
           title: 'Saved before the failed request',
           url: 'https://www.bilibili.com/video/BV1MW421X7gM',
-          views: 123,
+          views: 16234,
           likes: 0,
           comments: null,
           publishedAt: null,
@@ -855,7 +855,7 @@ it.each([500, 0])(
         name: 'Saved before the failed request',
       }),
     ).toHaveAttribute('href', 'https://www.bilibili.com/video/BV1MW421X7gM');
-    expect(within(box).getByText(/123 次播放/)).toBeVisible();
+    expect(within(box).getByText(/· 1\.6 万次播放/)).toBeVisible();
     expect(screen.getByRole('link', { name: '查看数据' })).toHaveAttribute(
       'href',
       '/data/bilibili',

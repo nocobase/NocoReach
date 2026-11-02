@@ -33,9 +33,9 @@ import {
 } from './collector-content';
 import {
   countColumn,
-  countText,
   dateColumn,
   retryable,
+  shownLikes,
   titleColumn,
 } from './collector-columns';
 import { HandOffBar } from './hand-off-bar';
@@ -47,24 +47,12 @@ import {
 } from './xiaohongshu-errors';
 import type { XiaohongshuNote, XiaohongshuView } from './xiaohongshu-connect';
 import './data-views.css';
-import { formatCompact, formatDate, formatDateTime } from '#lib/format';
+import { formatDate, formatDateTime } from '#lib/format';
 
 type Report = XiaohongshuView & CollectorReport & { notes: XiaohongshuNote[] };
 
-// Likes as the page showed them: a plain number with separators, and one the page shortened to ten-thousands (with "+"
-// for "or more") shortened the reader's way, as other counts are (12K in English); anything else as shown. Sorting
-// uses the parsed number on the server.
-const SHORTENED = /^(\d+(?:\.\d+)?)\s*([万萬亿億])(\+?)$/u;
-const likes = (note: XiaohongshuNote) => {
-  const text = note.likesText;
-  if (text && /^\d+$/.test(text)) return countText(note.likes ?? Number(text));
-  const short = text?.match(SHORTENED);
-  if (short)
-    return `${formatCompact(Number(short[1]) * ('万萬'.includes(short[2]) ? 1e4 : 1e8))}${short[3]}`;
-  return text ?? '—';
-};
 const summary = (note: XiaohongshuNote) =>
-  `${$t('xiaohongshu.displayedLikes', { 0: likes(note) })} · ${
+  `${$t('xiaohongshu.displayedLikes', { 0: shownLikes(note) ?? '—' })} · ${
     note.estimatedPublishedAt
       ? $t('xiaohongshu.estimatedPublicationDate', {
           0: formatDate(note.estimatedPublishedAt),
@@ -100,7 +88,11 @@ export default function DataXiaohongshu() {
         (note) => <TitleLink href={safeLink(note.url)}>{note.title}</TitleLink>,
         summary,
       ),
-      countColumn<XiaohongshuNote>('likes', $t('collectorView.likes'), likes),
+      countColumn<XiaohongshuNote>(
+        'likes',
+        $t('collectorView.likes'),
+        (note) => shownLikes(note) ?? '—',
+      ),
       dateColumn<XiaohongshuNote>(
         $t('collectorPage.estimatedPublished'),
         (note) => formatDate(note.estimatedPublishedAt),
