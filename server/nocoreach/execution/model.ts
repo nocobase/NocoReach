@@ -34,6 +34,9 @@ export type Work = {
   flowId?: string; flow?: FlowSnapshot; stageIndex?: number; note?: string; observeFrom?: string; release?: Release; cancelledAt?: string; cancelledBy?: string; archivedAt?: string; archivedBy?: string; snooze?: import('../../../shared/task-pending.js').TaskSnooze | null; prClose?: { number: number; state: 'closing' | 'closed' | 'failed'; error?: string }; revert?: { of: number; state: 'opening' | 'opened' | 'failed'; number?: number; url?: string; at?: string; error?: string }; observation?: { results: import('./effect').EffectResult[] };
   // The pages a task was started to change when it left some of its pages to other tasks (2026-10-29).
   pages?: string[];
+  // The pages the task was started with (2026-11-02), recorded by the start for its record on the task page: the
+  // pages above, else the task's pages then. Relinking the task's page afterwards leaves it. Older tasks have none.
+  startedPages?: string[];
   // The website repository the task changes, kept at its start (2026-10-29, shared/repo-routing.ts); null when it
   // changes none. Tasks started before then have none kept.
   repo?: import('../../../shared/repo-routing.js').TaskRepo | null;
