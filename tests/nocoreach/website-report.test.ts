@@ -183,12 +183,23 @@ test('callers at the same time share one zone lookup, and a failure keeps the zo
  assert.equal(await g.timeZone('1','123'),'Asia/Shanghai');assert.equal(g.zones.get('123').confirmed,true);assert.equal(g.zones.get('123').ttl,300000);
 });
 
-test('a period ended on a guessed zone is kept only as long as a partial report',async()=>{
+test('a period ended on a guessed zone tells the browser to ask again soon, without reading GA4 again',async()=>{
+ vi.useFakeTimers({now:new Date('2026-10-31T06:00:00Z')});
+ const {g}=fake(()=>({}));const read=vi.fn(async()=>({tables:{},missing:[]}));g.readPeriod=read;
+ g.zones.set('123',{at:Date.now(),zone:'UTC',confirmed:false,ttl:300000});
+ const w=windowFor('2026-10-29','7');
+ assert.equal((await g.period('1','123',w)).cacheExpiresAt,Date.now()+GA4_PARTIAL_CACHE_MS);
+ vi.setSystemTime(Date.now()+GA4_PARTIAL_CACHE_MS+60000);
+ assert.equal((await g.period('1','123',w)).cacheExpiresAt,Date.now()+GA4_PARTIAL_CACHE_MS);
+ assert.equal(read.mock.calls.length,1,'the stored copy keeps its own lifetime');
+});
+
+test('a stored period from another zone expires for the browser at this zone\'s midnight',async()=>{
  vi.useFakeTimers({now:new Date('2026-10-31T06:00:00Z')});
  const {g}=fake(()=>({}));g.readPeriod=async()=>({tables:{},missing:[]});
- g.zones.set('123',{at:Date.now(),zone:'UTC',confirmed:false,ttl:300000});
- const v=await g.period('1','123',windowFor('2026-10-29','7'));
- assert.equal(v.cacheExpiresAt,Date.now()+GA4_PARTIAL_CACHE_MS);
+ const w=windowFor('2026-10-30','7');await g.period('1','123',w);
+ g.zones.set('123',{at:Date.now(),zone:'America/Los_Angeles',confirmed:true,ttl:86400000});
+ assert.equal((await g.period('1','123',w)).cacheExpiresAt,Date.parse('2026-10-31T07:00:00Z'),'built under UTC, served in Los Angeles at 23:00');
 });
 
 test('a period is kept until midnight in the zone its window ends in',async()=>{

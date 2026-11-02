@@ -432,8 +432,7 @@ const SOURCES: Record<string, Source> = {
       tables.daily = list(v.daily);
       for (const name of ['page', 'landing', 'channel'])
         tables[`${name}_changes`] = list(changes[name]).map(changeRow);
-      const text = (x: unknown) => (typeof x === 'string' && x ? x : null),
-        settled = text(v.settledThrough),
+      const settled = text(v.settledThrough),
         through = text(obj(v.window).end),
         searched = obj(v.queriesWindow),
         searchedFrom = text(searched.start),

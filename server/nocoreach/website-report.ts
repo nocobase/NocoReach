@@ -122,7 +122,7 @@ class WebsiteReport{
    catch(e){if(!refused(e))this.explain(e);const out=[];for(const r of part)out.push(await one(r));return out;}}));
   return done.flat();}
  // The property's time zone, kept a day. A failed lookup keeps the last known zone (or UTC, unconfirmed) for five minutes
- // only, so one timeout does not leave 今天 on the wrong hours for a day. Callers at the same time share one lookup, so a
+ // only, so one timeout does not leave the Today card on the wrong hours for a day. Callers at the same time share one lookup, so a
  // late failure cannot overwrite a zone another lookup has just confirmed.
  timeZone(id,property){const hit=this.zones.get(property);if(hit&&Date.now()-hit.at<hit.ttl)return Promise.resolve(hit.zone);
   if(!this.zonePending.has(property))this.zonePending.set(property,this.lookupZone(id,property).finally(()=>this.zonePending.delete(property)));return this.zonePending.get(property);}
@@ -140,10 +140,13 @@ class WebsiteReport{
   const zone=this.endZone(property,hit?hit.zone:await this.timeZone(id,property)),now=new Date(businessNow(this.p,id,'google'));
   try{return resolveGa4SyncRange({},zone,now).targetEnd;}catch{return resolveGa4SyncRange({},'Etc/GMT+12',now).targetEnd;}}
  // The totals, the daily line and the tables all cover the window `w`, kept until midnight where it ends, when
- // yesterday moves on and the same range names other days. A window ended in UTC-12 because the zone is unconfirmed is
- // kept only as long as a partial report, so the browser (and other instances, through the stored cache) move to the
- // property's own yesterday once the lookup succeeds.
- period(id:string|number,property:string,w:unknown){const now=businessNow(this.p,id,'google'),guessed=this.zones.get(property)?.confirmed===false;return this.history.load(String(id),['period',...this.scope(id,property),w],()=>this.readPeriod(id,property,w),value=>Math.min(guessed||value.complete===false||value.missing.length?GA4_PARTIAL_CACHE_MS:GA4_HISTORY_CACHE_MS,untilMidnight(this.endZone(property),now)),(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));}
+ // yesterday moves on and the same range names other days. The browser keys the page by range, not by window, so the
+ // expiry it gets is cut to this instance's own midnight (a stored copy may come from another zone), and to five
+ // minutes while the zone is unconfirmed: it then asks again and moves to the property's own yesterday once the lookup
+ // succeeds. The stored copy itself keeps its lifetime, so a failing Admin API never makes the page re-read GA4.
+ period(id:string|number,property:string,w:unknown){const now=businessNow(this.p,id,'google'),guessed=this.zones.get(property)?.confirmed===false;
+  return this.history.load(String(id),['period',...this.scope(id,property),w],()=>this.readPeriod(id,property,w),value=>Math.min(value.complete===false||value.missing.length?GA4_PARTIAL_CACHE_MS:GA4_HISTORY_CACHE_MS,untilMidnight(this.endZone(property),now)),
+   (value,cacheExpiresAt)=>({...value,cacheExpiresAt:Math.min(cacheExpiresAt,Date.now()+(guessed?GA4_PARTIAL_CACHE_MS:untilMidnight(this.endZone(property),now)))}));}
  async readPeriod(id,property,w){const both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],current=[range(w.start,w.end)];
   const names=Object.keys(TABLES),changeNames=Object.keys(CHANGES);
   const reports=await this.batch(id,property,[
