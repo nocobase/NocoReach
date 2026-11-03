@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
@@ -241,6 +242,32 @@ it('isolates media by task and project, ignores stale results and retries failur
   view.rerender(<TaskMedia projectId={3} taskId='45' />);
   expect(screen.queryByText('retried.png')).toBeNull();
   await screen.findByText('next.png');
+});
+it('compact media fit in a field: document chips and thumbnails that open the preview, without a section of their own', async () => {
+  request.mockResolvedValueOnce({
+    data: [
+      record,
+      {
+        id: 'doc-1',
+        filename: 'prices.pdf',
+        mimeType: 'application/pdf',
+        size: 2048,
+        contentUrl: '/main/uploads/task-media/doc-1.pdf',
+      },
+    ],
+  });
+  render(<TaskMedia projectId={1} taskId='42' compact />);
+  const thumbnail = await screen.findByRole('button', {
+    name: 'Preview safe.png',
+  });
+  expect(screen.queryByText('Attachments')).toBeNull();
+  expect(screen.queryByText('Open file')).toBeNull();
+  expect(screen.getByText('prices.pdf')).toBeInTheDocument();
+  expect(within(thumbnail).getByRole('img', { name: 'safe.png' })).toHaveClass(
+    'h-32',
+  );
+  fireEvent.click(thumbnail);
+  expect(await screen.findByRole('dialog')).toBeInTheDocument();
 });
 const file = (type = 'image/png') =>
   new File(['fixture'], type.startsWith('video/') ? 'safe.webm' : 'safe.png', {

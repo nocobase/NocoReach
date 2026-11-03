@@ -31,14 +31,18 @@ test('request idempotency binds actor and payload, revision guards concurrency',
 test('cross-project and unauthenticated/non-admin routes fail before data access',async()=>{const f=fixture();await assert.rejects(f.s.get('2','1'),e=>e.status===404);f.s.register();const ctx=(user,roles,projectId='1')=>({auth:{user},state:{currentRoles:roles},action:{params:{values:{projectId,taskId:'1'}}},throw:(status,message)=>{throw Object.assign(Error(message),{status});}});await assert.rejects(f.routes.nrTaskWork.get(ctx(null,[]),async()=>{}),e=>e.status===401);await assert.rejects(f.routes.nrTaskWork.get(ctx({id:1},['member']),async()=>{}),e=>e.status===403);await assert.rejects(f.routes.nrTaskWork.get(ctx({id:1},['admin'],'2'),async()=>{}),e=>e.status===404);});
 
 
-test('four-column movement persists order without running AI or changing legacy evidence',async()=>{
+test('four-column movement changes the column only, without running AI or changing legacy evidence',async()=>{
  const f=fixture();f.state.nrTasks.push({id:2,projectId:'1',title:'Second',status:'待处理',evidence:{}});
  await f.command('moveWork',{state:'doing'});
  let d=await f.s.get('1','1');assert.equal(d.work.stage,'plan');assert.equal(d.work.boardState,'doing');assert.equal(d.runs.length,0);assert.equal(d.task.evidence.reason,'original');
- await f.command('moveWork',{state:'todo',beforeId:'2'});d=await f.s.get('1','1');assert.ok(d.work.sortOrder<2048);
+ assert.deepEqual(d.work.history.filter(e=>e.action==='moveWork').map(e=>[e.previous,e.note]),[['todo','doing']]);
+ // Each column runs newest activity first (2026-11-02), so a card has no place within one: an old client's position is
+ // ignored, and a move within its own column records nothing.
+ await f.command('moveWork',{state:'todo',beforeId:'2'});d=await f.s.get('1','1');assert.equal(d.work.boardState,'todo');assert.equal(d.work.sortOrder,undefined);
+ const revision=d.work.revision,moves=d.work.history.length;
+ await f.command('moveWork',{state:'todo',beforeId:'999'});d=await f.s.get('1','1');assert.equal(d.work.revision,revision);assert.equal(d.work.history.length,moves);
  await assert.rejects(f.command('moveWork',{state:'review'}),e=>e.status===409);
  await assert.rejects(f.command('moveWork',{state:'done',confirm:true}),e=>e.status===409);
- await assert.rejects(f.command('moveWork',{state:'todo',beforeId:'999'}),e=>e.status===409);
 });
 test('simple scope supports report completion without a fake publishing receipt',async()=>{
  const f=fixture();await f.command('startSimple',{scope:'Compare supplied evidence',kind:'research'});

@@ -63,6 +63,8 @@ export type StartContext = {
   language?: string | null;
   work: {
     page?: { url?: string } | null;
+    pages?: string[];
+    startedPages?: string[];
     article?: {
       targetId?: string;
       articleId?: string | null;
@@ -132,6 +134,16 @@ export function pageUrlsOf(data: StartContext): string[] {
     e.part ? undefined : e.insight?.target,
     ...cited,
   ]);
+}
+
+/**
+ * The pages a task was started with (2026-11-02), as the start recorded them (`work.startedPages`): the pages the
+ * start named, else the task's pages then, so relinking the task's page afterwards changes neither its record on the
+ * task page nor this. Before the start, and for a task started before the record, the pages it would start with now.
+ */
+export function startedPageUrls(data: StartContext): string[] {
+  const w = data.work;
+  return w.startedPages || (w.pages?.length ? w.pages : pageUrlsOf(data));
 }
 
 /** Each page the lookup read, or one standing for them all when it named only the article it found. */

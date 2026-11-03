@@ -180,6 +180,10 @@ const ZH_CN: DemoContent = {
 export const DEMO_LANGUAGES = ['zh-CN', 'en-US'] as const;
 export type DemoLanguage = (typeof DEMO_LANGUAGES)[number];
 
+/** Where the team writing in a language works, which places its records in office hours. */
+export const demoTimeZone = (language: string): string =>
+  language === 'en-US' ? 'America/Los_Angeles' : 'Asia/Shanghai';
+
 const localized = new Map<string, DemoContent>();
 
 export function demoContent(language: string): DemoContent {

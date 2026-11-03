@@ -19,6 +19,7 @@ import {
   type Placed,
 } from './task-agents';
 import type { WorkCard } from './work-board';
+import { lastActivityAt } from '../../shared/task-activity.js';
 
 // Tasks › By Agent (2026-10-21, after Studio's Agent view): a column per Agent the project can run tasks with, then
 // Unassigned. Each column has what the Agent is working on, what is next in line, and what waits for a person, with
@@ -107,11 +108,11 @@ function AgentColumn({
     queued = lane('queued').sort((a, b) =>
       String(a.t.updatedAt).localeCompare(String(b.t.updatedAt)),
     ),
-    // Waiting for you first, then the most recently changed.
+    // Waiting for you first, then the latest activity.
     waiting = lane('waiting').sort(
       (a, b) =>
         Number(b.mine) - Number(a.mine) ||
-        String(b.t.updatedAt).localeCompare(String(a.t.updatedAt)),
+        (lastActivityAt(b.t) ?? '').localeCompare(lastActivityAt(a.t) ?? ''),
     );
   const none = c.key === UNASSIGNED;
   const state: [Lane | 'idle', string] =

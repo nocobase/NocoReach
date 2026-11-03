@@ -23,5 +23,12 @@ export function effectItems(w:Partial<Work>){
  const from=new Date(w.observeFrom).toISOString().slice(0,10),results=((w as {observation?:{results:EffectResult[]}}).observation?.results)||[];
  return CHECKPOINTS.map(day=>({day,result:results.find(r=>r.day===day),expected:md(shift(from,day+3))}));
 }
+// The effect without its day, in a few words: "Clicks ↑ 26%", "not enough data", "no clear change". The status chip (task-list-model.ts
+// effectChip) and the effect's line in Activity (playbook-model.ts eventText) both read it, so the two say the same.
+export function effectSummary(r:EffectResult){
+ if(r.conclusion==='insufficient'||!r.primary||r.change===null)return $t('taskList.notEnoughData');
+ if(r.conclusion==='flat')return $t('taskList.noClearChange');
+ return $t('taskList.effectChange',{0:r.primary==='clicks'?$t('common.clicks'):$t('common.views'),1:r.change>=0?'↑':'↓',2:Math.round(Math.abs(r.change)*100)});
+}
 export const latestEffect=(w:Partial<Work>)=>{const items=effectItems(w),done=items.filter(i=>i.result);return done.length?done[done.length-1].result:undefined;};
 export {md as monthDay};

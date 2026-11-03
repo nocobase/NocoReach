@@ -1,6 +1,7 @@
 import { $t, $legacyText, getCurrentLocale } from "#i18n";
 import {nocobaseClient as api} from "#lib/nocoreach-api";
-import {formatDate,formatDateTime} from '#lib/format';
+import {EMPTY,formatDate,formatDateTime} from '#lib/format';
+import {effectSummary,type EffectResult} from './effect-model';
 import {playbookForActions} from '../../shared/opportunity-parts.js';
 import {SYSTEM_PLAYBOOKS} from '../../shared/playbook-catalog.js';
 import {inPlaceLocales} from '../../shared/article-publishing.js';
@@ -58,8 +59,9 @@ export const stageName=(s:Stage,w?:StepWork)=>translatingStage(s,w)?$t(inPlaceLo
 export const stageLabel=(s:Stage,w?:StepWork)=>s.kind==='review'?$t('common.yourAction',{0:stageName(s)}):s.kind==='agent'?`Agent ${stageName(s,w)}`:stageName(s);
 // Same rule as the server's defaultPlaybookId: the actions of the signals an opportunity cites.
 export const recommendedPlaybookId=(actions:(string|null)[])=>playbookForActions(actions);
-// What a task timeline says for each recorded event.
-export function eventText(e:{at?:string;action:string;note?:string;comment?:string;stageKey?:string},stageName:(key?:string)=>string,executor:string,snooze?:{at:string;until:string}|null):{who:string;text:string}|null{
+// What a task timeline says for each recorded event. Which events Activity shows is ACTIVITY_EVENTS in
+// shared/task-activity.ts, which also gives a task its latest activity time; each of them has words here.
+export function eventText(e:{at?:string;action:string;note?:string;comment?:string;stageKey?:string},stageName:(key?:string)=>string,executor:string,snooze?:{at:string;until:string}|null,effects?:EffectResult[]):{who:string;text:string}|null{
  const s=stageName(e.stageKey);
  const snoozeTime=()=>snooze&&snooze.at===e.at?formatDateTime(snooze.until):formatDate(e.note);
  switch(e.action){
@@ -102,6 +104,8 @@ export function eventText(e:{at?:string;action:string;note?:string;comment?:stri
   case 'simulatedRelease':return {who:$t('common.system'),text:$t('taskDetail.simulatedRelease')};
   case 'live':return {who:$t('common.system'),text:$t('playbook.sawChangeLiveStartedTracking',{0:e.note?`（${$legacyText(e.note)}）`:''})};
   case 'notSeen':return {who:$t('common.system'),text:$t('playbook.changeNotSeenLiveWithin')};
+  // A checkpoint's effect, read by the hourly observation (2026-11-02): in the words of the task's status chip.
+  case 'effect':{const r=effects?.find(x=>String(x.day)===e.note);return {who:$t('common.system'),text:$t('playbook.effectRecorded',{0:e.note||'',1:r?effectSummary(r):EMPTY})};}
   case 'retryMerge':return {who:$t('common.you'),text:$t('common.mergeAgain')};
   case 'markMerged':return {who:$t('common.you'),text:$t('playbook.mergedGithubThemselves')};
   case 'confirmLive':return {who:$t('common.you'),text:$t('common.confirmedLive')};

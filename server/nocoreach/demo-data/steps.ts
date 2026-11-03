@@ -880,6 +880,13 @@ function storyTask(
       );
       result.notes.push(content.observationNote);
       work.observation = { results: [result] };
+      // As the hourly observation does (service.ts observeEffects), the reading is a line in Activity.
+      work.history.push({
+        at: result.computedAt,
+        actor: 'system',
+        action: 'effect',
+        note: String(result.day),
+      });
     }
   }
   return {
