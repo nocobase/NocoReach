@@ -225,9 +225,16 @@ export class GoogleReportCache {
       return exact;
     }
     if (!family) return undefined;
-    return [...saved, ...this.memory.values()]
-      .filter((entry) => entry.family === family && copyable(entry))
-      .sort((a, b) => b.at - a.at)[0];
+    return (
+      [...saved, ...this.memory.values()]
+        // Another window's report is only ever a copy here, so its age decides, however long it lives for its own window.
+        .filter(
+          (entry) =>
+            entry.family === family &&
+            Date.now() - entry.at <= GOOGLE_SAVED_COPY_MAX_AGE_MS,
+        )
+        .sort((a, b) => b.at - a.at)[0]
+    );
   }
 
   private async build<T>(

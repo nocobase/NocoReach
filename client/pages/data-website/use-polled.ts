@@ -4,13 +4,15 @@ import {
   useWorkspaceCacheRevision,
 } from '../workspace-cache';
 
-// Navigation and visibility changes reuse the session cache. Failed reads also
-// wait one interval before retrying, so switching tabs cannot hammer a quota error.
+// Navigation and visibility changes reuse the session cache. Failed reads wait
+// `retryEvery` (one interval unless given) before retrying, so switching tabs
+// cannot hammer a quota error.
 export function usePolled<T>(
   key: string | null,
   fetcher: () => Promise<T>,
   every: number,
   expiresAt?: (value: T) => number | undefined,
+  retryEvery: number = every,
 ): { data?: T; error?: unknown } {
   const cache = useWorkspaceCache();
   const revision = useWorkspaceCacheRevision(key);
@@ -42,7 +44,7 @@ export function usePolled<T>(
       try {
         const data = await cache.load(key, () => fetcherRef.current(), false, {
           staleTime: every,
-          retryDelay: every,
+          retryDelay: retryEvery,
           expiresAt,
         });
         if (alive) setState({ cache, key, revision, data });
@@ -54,7 +56,7 @@ export function usePolled<T>(
         if (alive && document.visibilityState === 'visible')
           timer = window.setTimeout(
             onVisible,
-            cache.refreshAfter(key, every, every, expiresAt) || every,
+            cache.refreshAfter(key, every, retryEvery, expiresAt) || every,
           );
       }
     };
@@ -66,7 +68,7 @@ export function usePolled<T>(
       window.clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [cache, key, every, expiresAt, revision]);
+  }, [cache, key, every, expiresAt, retryEvery, revision]);
   return state.cache === cache &&
     state.key === key &&
     state.revision === revision

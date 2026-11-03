@@ -5791,7 +5791,7 @@
   "dataWebsite.todayNotProcessed": "GA4 還沒處理出今天的資料 · {0}",
   "dataWebsite.howTodayCounted": "今天的數字怎麼算",
   "dataWebsite.todayComparedSameHours": "和昨天、上週同一天比的都是 0 點到同一個鐘點，按 GA4 媒體資源的時區。GA4 處理資料有延遲，它最近算出的兩個小時還在補齊，所以數字和比較只到這兩個小時之前；圖上這兩個小時畫成虛線。",
-  "dataWebsite.realtimeLast30MinutesNote": "實時是 GA4 過去 30 分鐘的活躍使用者，每分鐘更新。GA4 的實時介面不提供訪客來源，所以來源用的是今天的標準資料，最近一兩個小時可能還沒算進來。",
+  "dataWebsite.realtimeLast30MinutesNote": "實時是 GA4 過去 30 分鐘的活躍使用者：卡片上的數字每半小時讀取一次，開啟詳情時每分鐘更新。GA4 的實時介面不提供訪客來源，所以來源用的是今天的標準資料，最近一兩個小時可能還沒算進來。",
   "dataWebsite.todayNotLoaded": "今天的資料沒有讀出來：{0}",
   "dataWebsite.realtimeNotLoaded": "實時資料沒有讀出來：{0}",
   "dataWebsite.realtimePartlyMissing": "部分實時資料沒有讀出來：{0}",

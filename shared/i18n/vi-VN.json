@@ -5873,7 +5873,7 @@
   "dataWebsite.todayNotProcessed": "GA4 chưa xử lý dữ liệu hôm nay · {0}",
   "dataWebsite.howTodayCounted": "Cách tính số liệu hôm nay",
   "dataWebsite.todayComparedSameHours": "So sánh với hôm qua và cùng thứ tuần trước trong khoảng từ nửa đêm đến cùng giờ, theo múi giờ của tài sản GA4. GA4 xử lý dữ liệu có độ trễ và vẫn đang bổ sung dữ liệu của hai giờ gần nhất, nên số liệu và phép so sánh dừng trước hai giờ đó; biểu đồ vẽ hai giờ này bằng nét đứt.",
-  "dataWebsite.realtimeLast30MinutesNote": "Dữ liệu thời gian thực là số người dùng đang hoạt động trong 30 phút qua của GA4, cập nhật mỗi phút. API thời gian thực của GA4 không có thông tin nguồn, nên nguồn được lấy từ dữ liệu tiêu chuẩn hôm nay và có thể còn thiếu một đến hai giờ gần nhất.",
+  "dataWebsite.realtimeLast30MinutesNote": "Dữ liệu thời gian thực là số người dùng đang hoạt động trong 30 phút qua của GA4. Con số trên thẻ được đọc mỗi nửa giờ, và mỗi phút khi đang mở chi tiết. API thời gian thực của GA4 không có thông tin nguồn, nên nguồn được lấy từ dữ liệu tiêu chuẩn hôm nay và có thể còn thiếu một đến hai giờ gần nhất.",
   "dataWebsite.todayNotLoaded": "Không thể tải dữ liệu hôm nay: {0}",
   "dataWebsite.realtimeNotLoaded": "Không thể tải dữ liệu thời gian thực: {0}",
   "dataWebsite.realtimePartlyMissing": "Không thể tải một phần dữ liệu thời gian thực: {0}",

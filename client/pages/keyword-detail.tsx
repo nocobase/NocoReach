@@ -735,6 +735,8 @@ function TrendSection({
         previousEnd: addDays(cutoff, -90),
         dimension: 'query',
         key: keyword.toLowerCase(),
+        // Always the 90 days up to the last synced one, so one day's copy may answer the next day's.
+        view: 'keyword-90',
       }
     : null;
   const row = useFreshData<RowDetail>(

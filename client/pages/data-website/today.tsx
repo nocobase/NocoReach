@@ -7,6 +7,7 @@ import { $t, getCurrentLocale } from '#i18n';
 import {
   GA4_TODAY_CACHE_MS,
   GA4_REALTIME_CACHE_MS,
+  GA4_REALTIME_IDLE_MS,
   ga4CacheExpiry,
 } from '../../../shared/ga4-cache.js';
 // 访问 · 今天 (2026-10-14 user request): GA4's last 30 minutes (实时) and today so far against yesterday and the same
@@ -98,8 +99,11 @@ export function TodayCard({
         body: { projectId },
         unwrap: 'data',
       }),
+    // Every minute only while the details are open; the card's figure says when it was read.
+    open ? GA4_REALTIME_CACHE_MS : GA4_REALTIME_IDLE_MS,
+    open ? ga4CacheExpiry : undefined,
+    // A failed read is tried again after a minute, as the details cannot be opened without a figure.
     GA4_REALTIME_CACHE_MS,
-    ga4CacheExpiry,
   );
   const t = today.data?.connected ? today.data : null;
   const r = live.data?.connected ? live.data : null;
@@ -153,6 +157,9 @@ export function TodayCard({
                 )}
               />
               {$t('dataWebsite.last30Minutes')}
+              {r ? (
+                <span data-realtime-read=''>· {formatTime(r.fetchedAt)}</span>
+              ) : null}
             </p>
             <p
               className='text-2xl leading-tight font-semibold tabular-nums'

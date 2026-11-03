@@ -5818,7 +5818,7 @@
   "dataWebsite.todayNotProcessed": "GA4에서는 아직 오늘의 데이터를 처리하지 않았습니다. · {0}",
   "dataWebsite.howTodayCounted": "오늘 지표의 집계 방식",
   "dataWebsite.todayComparedSameHours": "GA4 속성의 시간대를 기준으로 어제와 지난주 같은 요일의 자정부터 동일한 시각까지를 비교합니다. GA4의 데이터 처리에는 지연이 있으며 최근 2시간의 데이터는 아직 집계 중입니다. 따라서 위 지표와 비교에서는 해당 2시간을 제외하고, 차트에서는 파선으로 표시합니다.",
-  "dataWebsite.realtimeLast30MinutesNote": "실시간은 지난 30분 동안의 GA4 활성 사용자로, 1분마다 업데이트됩니다. GA4의 실시간 API에는 소스가 없으므로 소스는 오늘의 표준 데이터에서 가져오며 마지막 한두 시간이 누락될 수 있습니다.",
+  "dataWebsite.realtimeLast30MinutesNote": "실시간은 지난 30분 동안의 GA4 활성 사용자입니다. 카드의 숫자는 30분마다, 상세 정보를 연 동안에는 1분마다 읽어 옵니다. GA4의 실시간 API에는 소스가 없으므로 소스는 오늘의 표준 데이터에서 가져오며 마지막 한두 시간이 누락될 수 있습니다.",
   "dataWebsite.todayNotLoaded": "오늘의 데이터를 로드할 수 없습니다: {0}",
   "dataWebsite.realtimeNotLoaded": "실시간 데이터를 로드할 수 없습니다: {0}",
   "dataWebsite.realtimePartlyMissing": "일부 실시간 데이터를 로드할 수 없습니다: {0}",
