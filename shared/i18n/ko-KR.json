@@ -6662,6 +6662,7 @@
   "onlineAgent.toolOutputLimit": "도구가 너무 많은 자료를 반환했습니다. 질문의 범위를 좁히세요.",
   "onlineAgent.transcriptLimit": "이번 응답의 대화 기록이 허용된 크기를 초과했습니다. 질문의 범위를 좁혀 주세요.",
   "onlineAgent.stepLimit": "이번 응답에서 허용된 도구 실행 단계 수에 도달했습니다. 질문의 범위를 좁혀 주세요.",
+  "onlineAgent.answeredPartly": "이 답변은 데이터의 일부만을 근거로 합니다. 이번 답변에서 데이터를 조회할 수 있는 횟수의 상한에 도달했습니다. 나머지는 따로 질문해 주세요.",
   "onlineAgent.outputLimit": "이번 응답이 출력 한도를 초과했습니다. 질문의 범위를 좁혀 주세요.",
   "keywordDetail.aboutMarketData": "시장 데이터 정보",
   "keywordDetail.aboutMentions": "이 페이지 정보",

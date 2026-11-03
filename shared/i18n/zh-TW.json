@@ -6632,6 +6632,7 @@
   "onlineAgent.toolOutputLimit": "工具返回的資料過長，請縮小問題範圍。",
   "onlineAgent.transcriptLimit": "本輪記錄過長，已停止生成。請縮小問題範圍。",
   "onlineAgent.stepLimit": "本輪工具呼叫達到上限，請縮小問題範圍。",
+  "onlineAgent.answeredPartly": "這個回答只依據了部分資料：本輪查資料的次數已達上限。沒查到的部分可以單獨再問。",
   "onlineAgent.outputLimit": "本輪回答過長，已停止生成。請縮小問題範圍。",
   "keywordDetail.aboutMarketData": "關於市場資料",
   "keywordDetail.aboutMentions": "關於這些頁面",

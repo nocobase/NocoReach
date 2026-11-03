@@ -30,7 +30,9 @@ export type OnlineEvent =
       output: string;
       ok: boolean;
     }
-  | { type: 'usage'; model: string; usage: OnlineUsage };
+  | { type: 'usage'; model: string; usage: OnlineUsage }
+  /** The reply used all its tool steps and answered from what it had read, so the answer may be incomplete. */
+  | { type: 'partial'; reason: 'stepLimit' };
 export interface OnlineRun {
   id: string;
   agentId: string;
@@ -82,6 +84,12 @@ export const onlineRunPartial = (run: Pick<OnlineRun, 'events'>) =>
       (event.type === 'text' && event.text.trim()) ||
       event.type === 'toolResult',
   );
+/** Whether a finished reply answered from part of the data, having used all its tool steps. */
+export const onlineRunAnsweredPartly = (
+  run: Pick<OnlineRun, 'status' | 'events'>,
+) =>
+  run.status === 'completed' &&
+  run.events.some((event) => event.type === 'partial');
 /** A day's analysis on Insights, and the opportunity asked about, if any. */
 export interface OnlineInsightsSubject {
   kind: 'insights';

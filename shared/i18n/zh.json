@@ -6665,6 +6665,7 @@
   "onlineAgent.toolOutputLimit": "工具返回的资料过长，请缩小问题范围。",
   "onlineAgent.transcriptLimit": "本轮记录过长，已停止生成。请缩小问题范围。",
   "onlineAgent.stepLimit": "本轮工具调用达到上限，请缩小问题范围。",
+  "onlineAgent.answeredPartly": "这个回答只依据了部分数据：本轮查数据的次数已到上限。没查到的部分可以单独再问。",
   "onlineAgent.outputLimit": "本轮回答过长，已停止生成。请缩小问题范围。",
   "keywordDetail.aboutMarketData": "关于市场数据",
   "keywordDetail.aboutMentions": "关于这些页面",

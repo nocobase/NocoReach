@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { OnlineTool } from '../../online-agent/executor.js';
+import { toolInput } from '../../online-agent/errors.js';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { windowFor } from '../data-views.js';
 import { keywordSummary, summary as termSummary } from '../trends-source.js';
@@ -1505,7 +1506,7 @@ export function queryDataTool({
     inputSchema: z.toJSONSchema(input),
     async execute(args, signal) {
       await authorize();
-      const v = input.parse(args);
+      const v = toolInput(input, args);
       if (
         Boolean(v.from) !== Boolean(v.to) ||
         (v.from && v.to && v.from > v.to)

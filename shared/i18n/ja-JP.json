@@ -6632,6 +6632,7 @@
   "onlineAgent.toolOutputLimit": "ツールが返した情報量が多すぎます。質問の範囲を絞ってください。",
   "onlineAgent.transcriptLimit": "今回のやり取りが会話記録の上限を超えました。質問の範囲を絞ってください。",
   "onlineAgent.stepLimit": "今回のやり取りがツール実行回数の上限に達しました。質問の範囲を絞ってください。",
+  "onlineAgent.answeredPartly": "この回答はデータの一部のみに基づいています。今回の回答でデータを参照できる回数の上限に達しました。残りは別途お尋ねください。",
   "onlineAgent.outputLimit": "今回のやり取りが出力量の上限を超えました。質問の範囲を絞ってください。",
   "keywordDetail.aboutMarketData": "市場データについて",
   "keywordDetail.aboutMentions": "これらのページについて",

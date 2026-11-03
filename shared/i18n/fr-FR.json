@@ -6632,6 +6632,7 @@
   "onlineAgent.toolOutputLimit": "L’outil a renvoyé trop de contenu. Restreignez votre question.",
   "onlineAgent.transcriptLimit": "Cet échange a dépassé la limite de transcription. Restreignez votre question.",
   "onlineAgent.stepLimit": "Cet échange a atteint la limite d’appels d’outils. Restreignez votre question.",
+  "onlineAgent.answeredPartly": "Cette réponse ne porte que sur une partie des données : la réponse a atteint sa limite de consultations de données. Posez une question à part pour le reste.",
   "onlineAgent.outputLimit": "Cet échange a dépassé la limite de sortie. Restreignez votre question.",
   "keywordDetail.aboutMarketData": "À propos des données de marché",
   "keywordDetail.aboutMentions": "À propos de ces pages",

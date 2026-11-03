@@ -6632,6 +6632,7 @@
   "onlineAgent.toolOutputLimit": "A ferramenta retornou material demais. Restrinja o escopo da pergunta.",
   "onlineAgent.transcriptLimit": "Esta interação excedeu o limite do registro da conversa. Restrinja o escopo da pergunta.",
   "onlineAgent.stepLimit": "Esta interação atingiu o limite de chamadas de ferramentas. Restrinja o escopo da pergunta.",
+  "onlineAgent.answeredPartly": "Esta resposta se baseia apenas em parte dos dados: a resposta atingiu o limite de consultas de dados. Pergunte sobre o restante separadamente.",
   "onlineAgent.outputLimit": "Esta interação excedeu o limite de saída. Restrinja o escopo da pergunta.",
   "keywordDetail.aboutMarketData": "Sobre os dados de mercado",
   "keywordDetail.aboutMentions": "Sobre estas páginas",

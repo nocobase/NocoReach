@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { OnlineTool } from '../../online-agent/executor.js';
+import { inputIssues, toolInput } from '../../online-agent/errors.js';
 import { applyRuleChanges } from '../analysis-rules-proposal.js';
 import { customRuleInput } from '../custom-analysis-rules.js';
 import { pageData } from './web-tool.js';
@@ -209,7 +210,7 @@ export function analysisRulesTools({
       inputSchema: z.toJSONSchema(readInput),
       async execute(args) {
         await authorize();
-        const input = readInput.parse(args);
+        const input = toolInput(readInput, args);
         if (!(await allowed('nrAnalysisRules', 'view')))
           return { accessDenied: true };
         const current = await view(input.schemeId);
@@ -227,7 +228,7 @@ export function analysisRulesTools({
       async execute(args) {
         await authorize();
         const input = proposeInput.safeParse(args);
-        if (!input.success) return rejected(input.error.message.slice(0, 2000));
+        if (!input.success) return rejected(inputIssues(input.error));
         const { changes, newRule, editRule } = input.data;
         const kinds = [changes, newRule, editRule].filter(Boolean).length;
         if (kinds !== 1)

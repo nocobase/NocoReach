@@ -6665,6 +6665,7 @@
   "onlineAgent.toolOutputLimit": "The tool returned too much material. Narrow your question.",
   "onlineAgent.transcriptLimit": "This turn exceeded the transcript limit. Narrow your question.",
   "onlineAgent.stepLimit": "This turn reached the tool step limit. Narrow your question.",
+  "onlineAgent.answeredPartly": "This answer covers only part of the data: the reply reached its limit of data lookups. Ask about the rest separately.",
   "onlineAgent.outputLimit": "This turn exceeded the output limit. Narrow your question.",
   "keywordDetail.aboutMarketData": "About market data",
   "keywordDetail.aboutMentions": "About these pages",

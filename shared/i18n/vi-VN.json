@@ -6722,6 +6722,7 @@
   "onlineAgent.toolOutputLimit": "Công cụ trả về quá nhiều tài liệu. Vui lòng thu hẹp câu hỏi.",
   "onlineAgent.transcriptLimit": "Lượt này đã vượt giới hạn bản ghi trò chuyện. Vui lòng thu hẹp câu hỏi.",
   "onlineAgent.stepLimit": "Lượt này đã đạt giới hạn số bước gọi công cụ. Vui lòng thu hẹp câu hỏi.",
+  "onlineAgent.answeredPartly": "Câu trả lời này chỉ dựa trên một phần dữ liệu: câu trả lời đã đạt giới hạn số lần tra cứu dữ liệu. Hãy hỏi riêng về phần còn lại.",
   "onlineAgent.outputLimit": "Lượt này đã vượt giới hạn đầu ra. Vui lòng thu hẹp câu hỏi.",
   "keywordDetail.aboutMarketData": "Về dữ liệu thị trường",
   "keywordDetail.aboutMentions": "Về các trang này",
