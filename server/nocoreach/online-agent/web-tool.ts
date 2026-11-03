@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import type { NocoReachRuntime } from '../../providers/nocoreach.js';
-import { OnlineAgentError } from '../../online-agent/errors.js';
+import { OnlineAgentError, toolInput } from '../../online-agent/errors.js';
 import type { OnlineTool } from '../../online-agent/executor.js';
 import { download, plain } from '../public-sources.js';
 const input = z.strictObject({
-  url: z.url().max(2000),
+  url: z
+    .url({ protocol: /^https$/, error: 'must be a public https:// address' })
+    .max(2000),
   offset: z.number().int().min(0).default(0),
 });
 export const pageData = (value: unknown, offset: number) => {
@@ -31,7 +33,7 @@ export function publicPageTool(
     async execute(args) {
       signal.throwIfAborted();
       await authorize();
-      const value = input.parse(args);
+      const value = toolInput(input, args);
       if (!/^https:\/\//.test(value.url))
         throw new OnlineAgentError('invalidUrl');
       if (!pages.has(value.url)) {

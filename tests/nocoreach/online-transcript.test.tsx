@@ -4,6 +4,7 @@ import { setDictionary } from '../../client/i18n';
 import { OnlineTranscript } from '../../client/online-agent/transcript.js';
 import { OnlineError } from '../../client/online-agent/controls.js';
 import { OnlineApiError } from '../../client/online-agent/api.js';
+import { toolLabel } from '../../client/online-agent/tool-cards.js';
 import type { OnlineRun } from '../../shared/online-agent.js';
 
 const run: OnlineRun = {
@@ -72,6 +73,24 @@ test('streamed Markdown stays intact and tool calls pair with collapsed results 
   rerender(<OnlineTranscript run={{ ...run, events }} />);
   expect(JSON.stringify(events)).toBe(before);
   expect(screen.getAllByText('开始')).toHaveLength(1);
+});
+
+test('every chat tool is named in words under an answer, never by its tool name', () => {
+  for (const name of [
+    'project_data',
+    'read_page',
+    'daily_analysis',
+    'task_list',
+    'task_get',
+    'task_execute',
+    'query_data',
+    'analysis_rules',
+    'propose_rule_changes',
+    'propose_keyword_run',
+  ])
+    expect(toolLabel(name)).not.toBe(name);
+  expect(toolLabel('query_data')).toBe('查询数据');
+  expect(toolLabel('task_execute')).toBe('启动或重试任务');
 });
 
 test.each([
@@ -184,6 +203,42 @@ test('a reply that stopped partway says why in one quiet line and offers Continu
     />,
   );
   expect(screen.getByText(/中断后继续过 1 次/)).toBeInTheDocument();
+});
+
+test('an answer given after the tool steps ran out says it covers part of the data, with nothing to click', () => {
+  const events: OnlineRun['events'] = [
+    {
+      type: 'toolCall',
+      id: 'tool-1',
+      name: 'task_list',
+      args: { scope: 'accessible' },
+    },
+    {
+      type: 'toolResult',
+      id: 'tool-1',
+      name: 'task_list',
+      output: '{"items":[]}',
+      ok: true,
+    },
+    { type: 'text', text: '前 50 个任务里没有重复。' },
+    { type: 'partial', reason: 'stepLimit' },
+  ];
+  const onContinue = vi.fn();
+  const { rerender } = render(
+    <OnlineTranscript
+      run={{ ...run, events, output: '前 50 个任务里没有重复。' }}
+      onContinue={onContinue}
+    />,
+  );
+  expect(screen.getByText('前 50 个任务里没有重复。')).toBeVisible();
+  expect(screen.getByRole('status')).toHaveTextContent(
+    '这个回答只依据了部分数据：本轮查数据的次数已到上限。没查到的部分可以单独再问。',
+  );
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.queryByRole('button', { name: '继续' })).toBeNull();
+  // While it is still answering, the line waits for the answer to finish.
+  rerender(<OnlineTranscript run={{ ...run, status: 'running', events }} />);
+  expect(screen.queryByText(/只依据了部分数据/)).toBeNull();
 });
 
 test('a request that gets no answer says NocoReach cannot be reached, not to check its configuration', () => {

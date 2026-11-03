@@ -10,6 +10,7 @@ import {
   GA4_PARTIAL_CACHE_MS,
   ga4CacheExpiry,
 } from '../../../shared/ga4-cache.js';
+import { savedCopyNote } from '../../../shared/google-cache.js';
 // 访问 (网站与产品, GA4), rebuilt 2026-10-14 after GA4's own reports (user request: show everything GA4 has). From the
 // top: 今天 (实时 and today against yesterday and last week, today.tsx), the range, GA4's eight figures (a figure picks
 // the line below it), where sessions come from (channels with AI 助手, new and returning visitors, devices) and the
@@ -28,7 +29,12 @@ import {
 } from 'recharts';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { PageContainer, PageHeader } from '#components/reach/page';
-import { EmptyState, ListSkeleton, LoadError } from '#components/reach/states';
+import {
+  EmptyState,
+  ListSkeleton,
+  LoadError,
+  SavedReportNote,
+} from '#components/reach/states';
 import { NotesTip, InfoTip, WithInfo } from '#components/reach/info-tip';
 import { Button } from '#components/ui/button';
 import { Card } from '#components/ui/card';
@@ -104,7 +110,7 @@ export default function DataWebsite() {
     () =>
       api.action<Report>('nrDataViews', 'website', {
         method: 'POST',
-        body: { projectId: project!.id, ...r },
+        body: { projectId: project!.id, ...r, acceptSaved: true },
         unwrap: 'data',
       }),
     {
@@ -149,6 +155,7 @@ export default function DataWebsite() {
             : undefined
         }
       />
+      <SavedReportNote {...savedCopyNote(report)} />
       {/* The date range sits right under the header, as on every data page; Today follows it (UI review 2026-10-22). */}
       {report?.connected ? (
         <TodayCard

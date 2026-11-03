@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { systemMessageText } from '../../../shared/i18n/messages.js';
+import { canonicalUrl, pageKey, type PageIdentity } from '../../../shared/page-identity.js';
 import { FLAT_BELOW, JUDGED_METRICS, complete, lacking } from '../../../shared/result-comparison.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 // Effect observation (SPEC §8): on day 7 and day 28 after a change went live, the page's search and visit numbers
@@ -28,13 +29,16 @@ export const CHECKPOINTS = [7, 28];
 const DAY = 86400000;
 export const shift = (date: string, n: number) => new Date(Date.parse(date + 'T00:00:00Z') + n * DAY).toISOString().slice(0, 10);
 export const dateOf = (iso: string) => new Date(iso).toISOString().slice(0, 10);
-// Same page whatever the scheme, trailing slash, query or fragment; GA4 reports paths only.
-export function pageKey(u: string) { try { const x = new URL(u); return `${x.host.toLowerCase().replace(/^www\./, '')}${x.pathname.replace(/\/+$/, '') || '/'}`; } catch { return ''; } }
+// Same page whatever the scheme, trailing slash, query or fragment, and whatever address the project's page identity
+// gives it (shared/page-identity.ts); GA4 reports paths, with their host once synced since hosts were kept.
+export { pageKey };
 export function pathKey(u: string) { try { return new URL(u).pathname.replace(/\/+$/, '') || '/'; } catch { return (u.split(/[?#]/)[0].replace(/\/+$/, '') || '/'); } }
 // The go-live day itself is left out: baseline is the `day` days before it, after is the `day` days after it.
 export function windows(from: string, day: number) { return { baseline: { start: shift(from, -day), end: shift(from, -1) }, after: { start: shift(from, 1), end: shift(from, day) } }; }
-export function totals(parts: Partition[], pages: string[], range: Range): Totals {
-  const urls = new Set(pages.map(pageKey).filter(Boolean)), paths = new Set(pages.map(pathKey));
+export function totals(parts: Partition[], pages: string[], range: Range, identity?: PageIdentity | null): Totals {
+  const urls = new Set(pages.map(u => pageKey(u, identity)).filter(Boolean)), paths = new Set(pages.map(u => pathKey(canonicalUrl(u, identity))));
+  // A GA4 row with its host reads as that address, so another address of the page counts too; one without, by its path.
+  const ga4Path = (host: unknown, page: unknown) => { const path = typeof page === 'string' ? page : ''; return pathKey(typeof host === 'string' && host ? canonicalUrl(`https://${host}${path}`, identity) : path); };
   const t: Totals = { clicks: 0, impressions: 0, weight: 0, views: 0, conversions: 0, gscDays: 0, ga4Days: 0 };
   const gscDays = new Set<string>(), ga4Days = new Set<string>();
   for (const p of parts) {
@@ -44,10 +48,10 @@ export function totals(parts: Partition[], pages: string[], range: Range): Total
     if (!p.payload.every(row => row && typeof row.page === 'string' && row.page && fields.every(key => typeof row[key] === 'number' && Number.isFinite(row[key]) && row[key] >= 0))) continue;
     if (p.source === 'gsc' && p.grain === 'query_page') {
       gscDays.add(p.date);
-      for (const r of p.payload || []) if (urls.has(pageKey(String(r.page || '')))) { t.clicks += Number(r.clicks) || 0; t.impressions += Number(r.impressions) || 0; t.weight += (Number(r.position) || 0) * (Number(r.impressions) || 0); }
+      for (const r of p.payload || []) if (urls.has(pageKey(String(r.page || ''), identity))) { t.clicks += Number(r.clicks) || 0; t.impressions += Number(r.impressions) || 0; t.weight += (Number(r.position) || 0) * (Number(r.impressions) || 0); }
     } else if (p.source === 'ga4' && p.grain === 'page') {
       ga4Days.add(p.date);
-      for (const r of p.payload || []) if (paths.has(pathKey(String(r.page || '')))) { t.views += Number(r.views) || 0; t.conversions += Number(r.conversions) || 0; }
+      for (const r of p.payload || []) if (paths.has(ga4Path(r.host, r.page))) { t.views += Number(r.views) || 0; t.conversions += Number(r.conversions) || 0; }
     }
   }
   t.gscDays = gscDays.size; t.ga4Days = ga4Days.size;
@@ -56,10 +60,10 @@ export function totals(parts: Partition[], pages: string[], range: Range): Total
 const round = (n: number, d = 1) => Math.round(n * 10 ** d) / 10 ** d;
 const position = (t: Totals) => (t.impressions ? round(t.weight / t.impressions) : 0);
 /** Each page's numbers over a window, for the task page before a change goes live (2026-10-22). */
-export function pageNumbers(parts: Partition[], pages: string[], range: Range) {
-  const all = totals(parts, pages, range), gsc = all.gscDays > 0, ga4 = all.ga4Days > 0;
+export function pageNumbers(parts: Partition[], pages: string[], range: Range, identity?: PageIdentity | null) {
+  const all = totals(parts, pages, range, identity), gsc = all.gscDays > 0, ga4 = all.ga4Days > 0;
   const rows: PageNumbers[] = pages.map(page => {
-    const t = totals(parts, [page], range);
+    const t = totals(parts, [page], range, identity);
     return { page, ...(gsc ? { clicks: t.clicks, position: position(t) } : {}), ...(ga4 ? { views: t.views } : {}) };
   });
   return { range, pages: rows, gscDays: all.gscDays, ga4Days: all.ga4Days };
@@ -93,13 +97,13 @@ export function judge(r: Omit<EffectResult, keyof Judgment>): Judgment {
   const note = totals.length ? systemMessageText('effect.tooLittleTotals', { 0: r.day, 1: totals.join('、') }) : systemMessageText(l.missingDays ? 'effect.tooManyMissingDaysJudge' : 'effect.noSearchTrafficDataPage');
   return { primary: null, change: null, conclusion: 'insufficient', notes: [note], rule: EFFECT_RULE };
 }
-export function compare(day: number, from: string, pages: string[], parts: Partition[], computedAt: string): EffectResult {
-  const { baseline, after } = windows(from, day), b = totals(parts, pages, baseline), a = totals(parts, pages, after);
+export function compare(day: number, from: string, pages: string[], parts: Partition[], computedAt: string, identity?: PageIdentity | null): EffectResult {
+  const { baseline, after } = windows(from, day), b = totals(parts, pages, baseline, identity), a = totals(parts, pages, after, identity);
   const hasGsc = b.gscDays + a.gscDays > 0, hasGa4 = b.ga4Days + a.ga4Days > 0;
   const gsc = hasGsc ? { clicks: [b.clicks, a.clicks] as [number, number], impressions: [b.impressions, a.impressions] as [number, number], ctr: [b.impressions ? round(b.clicks / b.impressions * 100) : 0, a.impressions ? round(a.clicks / a.impressions * 100) : 0] as [number, number], position: [b.impressions ? round(b.weight / b.impressions) : 0, a.impressions ? round(a.weight / a.impressions) : 0] as [number, number] } : undefined;
   const ga4 = hasGa4 ? { views: [b.views, a.views] as [number, number], conversions: [b.conversions, a.conversions] as [number, number] } : undefined;
   const byPage: PageChange[] | undefined = pages.length > 1 ? pages.map(page => {
-    const pb = totals(parts, [page], baseline), pa = totals(parts, [page], after);
+    const pb = totals(parts, [page], baseline, identity), pa = totals(parts, [page], after, identity);
     return { page, ...(hasGsc ? { clicks: [pb.clicks, pa.clicks] as [number, number], impressions: [pb.impressions, pa.impressions] as [number, number], position: [position(pb), position(pa)] as [number, number] } : {}), ...(hasGa4 ? { views: [pb.views, pa.views] as [number, number] } : {}) };
   }) : undefined;
   const measured = { day, baseline, after, pages, ...(byPage ? { byPage } : {}), ...(gsc ? { gsc } : {}), ...(ga4 ? { ga4 } : {}), computedAt, coverage: { gsc: { baselineDays: b.gscDays, afterDays: a.gscDays }, ga4: { baselineDays: b.ga4Days, afterDays: a.ga4Days } } };

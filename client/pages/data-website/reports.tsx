@@ -49,7 +49,12 @@ import { TablePagination } from '#components/seo/table-pagination';
 import { SortableHeader } from '#components/seo/sortable-header';
 import { useHandOffSource } from '#components/reach/hand-off-slot';
 import { WithInfo } from '#components/reach/info-tip';
-import { ListSkeleton, InlineError } from '#components/reach/states';
+import {
+  ListSkeleton,
+  InlineError,
+  SavedReportNote,
+} from '#components/reach/states';
+import { savedCopyNote } from '../../../shared/google-cache.js';
 import { Tag } from '#components/reach/tag';
 import { Delta } from '#components/reach/delta';
 import { formatDate, formatPercent } from '#lib/format';
@@ -684,6 +689,7 @@ function RowDrawer({
           cutoff: report.cutoff,
           table: view.table,
           dims: row.dims,
+          acceptSaved: true,
         },
         unwrap: 'data',
       }),
@@ -746,6 +752,7 @@ function RowDrawer({
         ) : undefined
       }
     >
+      <SavedReportNote {...savedCopyNote(data)} />
       {isPage && safeLink(page) ? (
         <a
           className='nr-link mb-3 inline-flex items-center gap-1 break-all'

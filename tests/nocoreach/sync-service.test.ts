@@ -8,6 +8,7 @@ import * as __signals from '../../server/nocoreach/signals.js';
 import * as __data_views from '../../server/nocoreach/data-views.js';
 import * as __site_content from '../../server/nocoreach/site-content.js';
 import * as __google_sync from '../../server/nocoreach/google-sync.js';
+import * as __report_cache from '../../server/nocoreach/google-report-cache.js';
 const test=__vitest_test;
 
 function setup(){
@@ -32,6 +33,75 @@ test('snapshots are reused until stored data changes',async()=>{
  add('ga4','overview','2026-09-28',[{date:'2026-09-28',views:12,sessions:6,conversions:0}],'2026-10-01T00:00:00Z');add('gsc','overview','2026-09-28',[{date:'2026-09-28',clicks:4,impressions:95}],'2026-10-01T00:00:00Z');
  const next=await sync.snapshots('1');assert.equal(calls.find,2);assert.notEqual(next,first);
  assert.equal(next.find(s=>s.key==='project').payload.end,'2026-09-28');
+});
+
+function tickFixture(){
+ const {sync}=setup();sync.step=async()=>false;sync.snapshots=async()=>[];sync.refreshFresh=async()=>{};
+ sync.repo=()=>({find:async()=>[{get:k=>k==='projectId'?'1':k==='nextSyncAt'?'2999-01-01T00:00:00Z':null}],findOne:async()=>null});
+ const website=vi.fn(async()=>({complete:true,missing:[]})),warm=vi.fn(async()=>({partial:false}));
+ sync.p.dataViews={search:async()=>({}),website,warm};
+ return {sync,website,warm};
+}
+const HOURS=3600000;
+test('tick: a breakdown Google refuses in part is read ahead again after six hours, not every 15 minutes',async()=>{
+ vi.useFakeTimers({toFake:['Date']});
+ try{
+  const {sync,warm}=tickFixture();warm.mockResolvedValue({partial:true});
+  await sync.tick();assert.equal(warm.mock.calls.length,1);
+  vi.setSystemTime(Date.now()+6*HOURS-1);await sync.tick();assert.equal(warm.mock.calls.length,1,'not through the 15-minute check');
+  vi.setSystemTime(Date.now()+1);await sync.tick();assert.equal(warm.mock.calls.length,2);
+  warm.mockResolvedValue({partial:false});
+  vi.setSystemTime(Date.now()+6*HOURS);await sync.tick();assert.equal(warm.mock.calls.length,3);
+  vi.setSystemTime(Date.now()+15*60000);await sync.tick();assert.equal(warm.mock.calls.length,4,'a whole report goes back to every 15 minutes');
+ }finally{vi.useRealTimers();}
+});
+test('tick: a Traffic report GA4 refuses in part waits six hours, a whole one is asked for each tick, a failure waits 15 minutes',async()=>{
+ vi.useFakeTimers({toFake:['Date']});
+ try{
+  const {sync,website}=tickFixture();
+  await sync.tick();await sync.tick();assert.equal(website.mock.calls.length,2,'a whole report answers from memory, and a moved window is noticed at once');
+  website.mockResolvedValue({complete:false,missing:['city']});
+  await sync.tick();await sync.tick();assert.equal(website.mock.calls.length,3);
+  vi.setSystemTime(Date.now()+6*HOURS-1);await sync.tick();assert.equal(website.mock.calls.length,3,'not each time its five minutes end');
+  vi.setSystemTime(Date.now()+1);website.mockResolvedValue({complete:true,missing:['city']});await sync.tick();assert.equal(website.mock.calls.length,4,'a table left out counts too');
+  await sync.tick();assert.equal(website.mock.calls.length,4);
+  vi.setSystemTime(Date.now()+6*HOURS);website.mockRejectedValue(new Error('quota'));await sync.tick();assert.equal(website.mock.calls.length,5);
+  vi.setSystemTime(Date.now()+15*60000-1);await sync.tick();assert.equal(website.mock.calls.length,5);
+  vi.setSystemTime(Date.now()+1);await sync.tick();assert.equal(website.mock.calls.length,6);
+ }finally{vi.useRealTimers();}
+});
+test('tick: readies Search performance at most every 15 minutes even after a failure, and waits for new reports',async()=>{
+ vi.useFakeTimers({toFake:['Date']});
+ try{
+  const {sync}=setup();sync.step=async()=>false;sync.snapshots=async()=>[];sync.refreshFresh=async()=>{};
+  sync.repo=()=>({find:async()=>[{get:k=>k==='projectId'?'1':k==='nextSyncAt'?'2999-01-01T00:00:00Z':null}],findOne:async()=>null});
+  const waited=[],warm=vi.fn(async()=>{waited.push(await __report_cache.waitForFresh(async()=>'scope'));throw new Error('quota');});
+  sync.p.dataViews={search:async()=>({}),website:async()=>({}),warm};
+  await sync.tick();await sync.tick();assert.equal(warm.mock.calls.length,1,'a failure does not repeat every 15 seconds');assert.deepEqual(waited,['scope']);
+  vi.setSystemTime(Date.now()+15*60000);await sync.tick();assert.equal(warm.mock.calls.length,2);
+ }finally{vi.useRealTimers();}
+});
+
+test('tick: a project nobody opened lately has only Traffic read ahead, every six days and a few a tick, without counting as opened',async()=>{
+ vi.useFakeTimers({toFake:['Date']});
+ try{
+  const {sync}=setup();sync.step=async()=>false;sync.snapshots=async()=>[];sync.refreshFresh=async()=>{};
+  const ids=['1','2','3','4','5'];
+  sync.repo=()=>({find:async()=>ids.map(id=>({get:k=>k==='projectId'?id:k==='nextSyncAt'?'2999-01-01T00:00:00Z':k==='authorizedAt'?'2026-01-01T00:00:00Z':null})),findOne:async()=>null});
+  const opened=new Set(),search=vi.fn(async()=>({})),website=vi.fn(async()=>({complete:true,missing:[]})),warm=vi.fn(async()=>({partial:false})),noteRead=vi.fn(),recentlyRead=vi.fn(async id=>opened.has(id));
+  sync.p.dataViews={search,website,warm,recentlyRead,noteRead};
+  const readFor=id=>website.mock.calls.filter(c=>c[0]===id).length;
+  await sync.tick();
+  assert.equal(search.mock.calls.length,5,'every summary, from the synced days');assert.equal(website.mock.calls.length,3,'three idle projects a tick');assert.equal(warm.mock.calls.length,0);
+  assert.deepEqual(recentlyRead.mock.calls[0],['1','2026-01-01T00:00:00Z']);
+  await sync.tick();assert.equal(website.mock.calls.length,5);
+  await sync.tick();assert.equal(website.mock.calls.length,5,'not again within six days');
+  assert.equal(noteRead.mock.calls.length,0,'reading ahead does not count as opening');
+  // Someone opens project 2: it is read ahead as an opened project at once.
+  opened.add('2');await sync.tick();assert.equal(readFor('2'),2);assert.equal(warm.mock.calls.length,1);
+  vi.setSystemTime(Date.now()+6*86400000-1);await sync.tick();assert.equal(readFor('1'),1);
+  vi.setSystemTime(Date.now()+1);await sync.tick();assert.equal(readFor('1'),2,'six days, inside the seven a copy may be shown');
+ }finally{vi.useRealTimers();}
 });
 
 test('concurrent requests share one build',async()=>{

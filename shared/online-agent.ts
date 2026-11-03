@@ -30,7 +30,9 @@ export type OnlineEvent =
       output: string;
       ok: boolean;
     }
-  | { type: 'usage'; model: string; usage: OnlineUsage };
+  | { type: 'usage'; model: string; usage: OnlineUsage }
+  /** The reply used all its tool steps and answered from what it had read, so the answer may be incomplete. */
+  | { type: 'partial'; reason: 'stepLimit' };
 export interface OnlineRun {
   id: string;
   agentId: string;
@@ -57,6 +59,8 @@ export interface OnlineRun {
   revision: number;
   /** Each time the owner continued this reply after it stopped partway, and why it had stopped. */
   continued?: { at: string; after: string }[];
+  /** The interface language the turn was sent in: tools name playbooks and states in it. */
+  locale?: string;
 }
 /**
  * Why a reply may stop partway through no fault of the question: it stalled, ran out of time, NocoReach restarted, a
@@ -82,6 +86,12 @@ export const onlineRunPartial = (run: Pick<OnlineRun, 'events'>) =>
       (event.type === 'text' && event.text.trim()) ||
       event.type === 'toolResult',
   );
+/** Whether a finished reply answered from part of the data, having used all its tool steps. */
+export const onlineRunAnsweredPartly = (
+  run: Pick<OnlineRun, 'status' | 'events'>,
+) =>
+  run.status === 'completed' &&
+  run.events.some((event) => event.type === 'partial');
 /** A day's analysis on Insights, and the opportunity asked about, if any. */
 export interface OnlineInsightsSubject {
   kind: 'insights';

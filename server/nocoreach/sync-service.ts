@@ -9,7 +9,14 @@ import { GOOGLE_ENDPOINTS, jsonRequest, googleJson } from './google-client.js';
 import { datesBetween, historyBounds, intervals, validDate, validOverview } from './search-history.js';
 import { secretKey } from './policy.js';
 import { shift, compact, buildSnapshots } from './sync-data.js';
+import { waitForFresh } from './google-report-cache.js';
+import { GOOGLE_SAVED_COPY_MAX_AGE_MS } from '../../shared/google-cache.js';
 const FRESH_MS=3*3600000;
+// As long as a whole report lived before saved copies; a person opening the page still retries sooner.
+const PARTIAL_RETRY_MS=6*60*60*1000;
+// Traffic's default view of a project nobody opens is read this often, a day inside the age a saved copy may be shown,
+// so whoever opens it next sees it at once; a few such projects a tick, as after a deploy every project is one.
+const IDLE_READ_MS=GOOGLE_SAVED_COPY_MAX_AGE_MS-86400000,IDLE_READS_PER_TICK=3;
 const active=['queued','running','retrying'];
 // Cached results are shared between requests; freezing makes any accidental mutation fail loudly instead of corrupting later responses.
 const deepFreeze=v=>{if(v&&typeof v==='object'&&!Object.isFrozen(v)){Object.freeze(v);for(const x of Object.values(v))deepFreeze(x);}return v;};
@@ -213,8 +220,20 @@ class SyncService{
   // Rebuild here after new data lands (and once after a restart) so page requests find it ready.
   // …and the default 搜索表现 and 访问 views (28 days), saved, so opening the page after new data or a restart is immediate.
   // 访问 asks GA4 live, so a failed build waits 15 minutes before the tick tries again.
-  for(const id of new Set(links.map(l=>String(l.get('projectId'))))){await this.snapshots(id).catch(()=>{});await this.p.dataViews?.search(id,{range:'28'}).catch(()=>{});
-   const webTried=this.webTried=this.webTried||new Map();if(Date.now()-(webTried.get(id)||0)>=15*60000)await this.p.dataViews?.website(id,{range:'28'}).then(()=>webTried.delete(id),()=>webTried.set(id,Date.now()));}
+  // A project nobody has opened lately is not read ahead: its summary comes from the synced days, but Traffic and the
+  // breakdowns ask Google. These wait for the new report instead of taking its saved copy, as the tick is what has to read it.
+  // Search performance's tables and breakdowns join them at most every 15 minutes, as they change once a day. A report Google
+  // refuses in part keeps a short lifetime so that a person opening it soon gets another try, but the tick would read it
+  // again each time that ends, all day, if Google goes on refusing the same part: it waits PARTIAL_RETRY_MS instead.
+  let idleReads=0;
+  for(const id of new Set(links.map(l=>String(l.get('projectId'))))){await this.snapshots(id).catch(()=>{});await waitForFresh(()=>this.p.dataViews?.search(id,{range:'28'})).catch(()=>{});
+   const active=!this.p.dataViews?.recentlyRead||await this.p.dataViews.recentlyRead(id,links.find(l=>String(l.get('projectId'))===id)?.get('authorizedAt'));
+   // An idle project's next read waits IDLE_READ_MS, unless someone opens it meanwhile.
+   const webNext=this.webNext=this.webNext||new Map(),next=webNext.get(id);
+   if((!next||Date.now()>=next.at||(active&&next.idle))&&(active||idleReads<IDLE_READS_PER_TICK)){if(!active)idleReads++;
+    await waitForFresh(()=>this.p.dataViews?.website(id,{range:'28'})).then(r=>{if(r?.complete===false||r?.missing?.length)webNext.set(id,{at:Date.now()+PARTIAL_RETRY_MS});else if(active)webNext.delete(id);else webNext.set(id,{at:Date.now()+IDLE_READ_MS,idle:true});},()=>webNext.set(id,{at:Date.now()+15*60000}));}
+   if(!active)continue;
+   const searchNext=this.searchNext=this.searchNext||new Map();if(Date.now()>=(searchNext.get(id)||0)){searchNext.set(id,Date.now()+15*60000);await waitForFresh(()=>this.p.dataViews?.warm?.(id)).then(r=>{if(r?.partial)searchNext.set(id,Date.now()+PARTIAL_RETRY_MS);},()=>{});}}
   for(const id of new Set(links.map(l=>String(l.get('projectId'))))){if(Date.now()>=deadline+20000)break;const at=Math.max(this.freshTried?.get(id)||0,Date.parse((await this.repo('nrSnapshots').findOne({filter:{key:`google-fresh:${id}`}}))?.get('payload')?.fetchedAt||'')||0);if(Date.now()-at<FRESH_MS)continue;
    // A failed read (often the network) is tried again after 15 minutes rather than three hours.
    (this.freshTried=this.freshTried||new Map()).set(id,Date.now());try{await this.refreshFresh(id);}catch(e){this.freshTried.set(id,Date.now()-FRESH_MS+15*60000);this.p.app.logger.warn('NocoReach preliminary Google data skipped',{code:safeError(e)});}}

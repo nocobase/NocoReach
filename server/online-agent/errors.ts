@@ -1,3 +1,5 @@
+import type { z } from 'zod';
+
 export class OnlineAgentError extends Error {
   constructor(
     readonly code: string,
@@ -5,6 +7,36 @@ export class OnlineAgentError extends Error {
   ) {
     super(code);
   }
+}
+
+/**
+ * Tool arguments that failed the tool's schema. The executor tells the model which field broke which rule, so it can
+ * fix the call instead of guessing; every other tool failure stays generic.
+ */
+export class ToolInputError extends Error {}
+
+/** A schema's issues as the model reads them: `field: rule` for the first few, shortened. */
+export function inputIssues(error: z.ZodError) {
+  const issues = error.issues
+    .slice(0, 5)
+    .map(
+      (issue) =>
+        `${issue.path.map(String).join('.') || 'input'}: ${issue.message.slice(0, 200)}`,
+    );
+  const more = error.issues.length - issues.length;
+  return `${issues.join('; ')}${more > 0 ? `; and ${more} more` : ''}`;
+}
+
+/** A tool's arguments parsed with its schema; on failure, a `ToolInputError` naming the fields to fix. */
+export function toolInput<T extends z.ZodType>(
+  schema: T,
+  args: unknown,
+): z.output<T> {
+  const parsed = schema.safeParse(args);
+  if (parsed.success) return parsed.data;
+  throw new ToolInputError(
+    `Invalid input: ${inputIssues(parsed.error)}. Fix these fields and call the tool again.`,
+  );
 }
 
 // The gateway's `ModelError` codes. `config` is the only one that is about the model's configuration.

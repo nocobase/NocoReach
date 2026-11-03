@@ -1,6 +1,7 @@
 import { $t, getCurrentLocale } from '#i18n';
 import { formatCount, formatDuration, formatPercent } from '#lib/format';
 import type { ChangeTables } from './drivers';
+import type { SavedCopy } from '../../../shared/google-cache.js';
 // 访问 (GA4): the shapes the server answers with (server/nocoreach/website-report.ts), the metrics as GA4 names and
 // computes them, and how dimension values read in the page's language.
 
@@ -50,7 +51,7 @@ export type Window = {
   previousEnd: string;
 };
 export type Day = Values & { date: string };
-export type Report = {
+export type Report = Partial<SavedCopy> & {
   connected: boolean;
   cacheExpiresAt?: number;
   cutoff?: string | null;
@@ -63,7 +64,7 @@ export type Report = {
   /** Channels, pages and landing pages with both periods, for where a change came from (drivers.ts). */
   changes?: ChangeTables;
 };
-export type RowDetail = {
+export type RowDetail = Partial<SavedCopy> & {
   connected: boolean;
   cacheExpiresAt?: number;
   window?: Window;

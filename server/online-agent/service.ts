@@ -189,8 +189,11 @@ export class OnlineAgentService {
       )
     ).sort((a, b) => a.sequence - b.sequence);
   }
-  /** Initial messages and follow-ups share one transaction and one idempotency check. */
-  async send(ownerId: string, input: MessageInput) {
+  /**
+   * Initial messages and follow-ups share one transaction and one idempotency check. `locale` is the sender's interface
+   * language, kept on the turn for the names its tools give.
+   */
+  async send(ownerId: string, input: MessageInput, locale?: string) {
     const environment = await this.environmentModel();
     const target =
       'conversationId' in input
@@ -255,6 +258,7 @@ export class OnlineAgentService {
         usage: { inputTokens: 0, outputTokens: 0 },
         error: null,
         revision: 0,
+        ...(locale ? { locale } : {}),
       };
       await this.records.create('run', run, context);
       if (conversation)
