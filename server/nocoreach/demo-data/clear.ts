@@ -102,6 +102,7 @@ export const PROJECT_VARIABLES = [
   'NOREACH_X_TOKEN_',
   'NOREACH_COLLECTOR_bilibili_',
   'NOREACH_COLLECTOR_xiaohongshu_',
+  // Demos imported before 2026-11-02 also saved a YouTube Collector.
   'NOREACH_COLLECTOR_youtube_',
 ] as const;
 

@@ -107,10 +107,6 @@ function ProxySwitch({
   const loadError = network.error || selections.error;
   if (!loadError && !(network.data?.proxy && selections.data)) return null;
   const choice = selections.data?.[connection];
-  // YouTube is read through a Collector and never takes the default proxy. Only an explicit choice left from before
-  // shows here, so it can be turned off.
-  const youtube = connection === 'youtube';
-  if (youtube && !loadError && (!choice || choice === DIRECT)) return null;
   const on = choice !== DIRECT;
   const name = $t(connectionLabels[connection] ?? connection);
   async function toggle(next: boolean) {
@@ -153,9 +149,7 @@ function ProxySwitch({
           <div className='min-w-0'>
             <p className='text-sm font-medium'>{$t('network.useProxy')}</p>
             <p className='mt-1 text-sm text-muted-foreground'>
-              {$t(
-                youtube ? 'network.youtubeProxyHelp' : 'network.useProxyHelp',
-              )}
+              {$t('network.useProxyHelp')}
               {connection === 'google' &&
                 ` ${$t('connectionNetwork.ga4SearchConsoleShare')}`}
               {connection === 'github' &&

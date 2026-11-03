@@ -161,7 +161,13 @@ export const CONNECT_SOURCES: readonly ConnectSource[] = [
     needs: [],
     via: 'browser',
   },
-  { id: 'youtube', name: 'YouTube', needs: [], via: 'browser' },
+  {
+    id: 'youtube',
+    name: 'YouTube',
+    needs: ['dataSources.connectedDataforseo', 'youtube.needTerms'],
+    via: 'browser',
+    requires: 'keywords',
+  },
   {
     id: 'discord',
     name: 'Discord',
@@ -196,11 +202,7 @@ export type SourceState =
 
 /** The saved state of each connection, as the status actions of the Data sources page answer it. */
 export type StatusInput = {
-  youtube?: {
-    configured: boolean;
-    connected: boolean;
-    lastSync?: { ok: boolean; errors?: string[] } | null;
-  } | null;
+  youtube?: { configured: boolean } | null;
   bilibili?: {
     connected: boolean;
     configured: boolean;
@@ -300,16 +302,9 @@ export function connectionState(id: string, input: StatusInput): SourceState {
         ? 'partial'
         : 'connected';
   }
-  if (id === 'youtube') {
-    const y = input.youtube;
-    return y?.connected
-      ? (y.lastSync && !y.lastSync.ok) || y.lastSync?.errors?.length
-        ? 'partial'
-        : 'connected'
-      : y?.configured
-        ? 'partial'
-        : 'ready';
-  }
+  // Saved search terms make YouTube connected; a read that fails is a Data health problem, shown on the card.
+  if (id === 'youtube')
+    return input.youtube?.configured ? 'connected' : 'ready';
   if (id === 'packages')
     return input.packages?.connected ? 'connected' : 'ready';
   if (id === 'mentions')

@@ -17,16 +17,23 @@ export interface YouTubeVideo {
   metricFetchedAt?: Record<'views' | 'likes' | 'comments', string | null>;
   transcriptFetchedAt?: string | null;
   transcriptRefreshFailed?: boolean;
-  transcript: {
-    status: 'manual' | 'automatic' | 'missing' | 'failed';
-    language: string | null;
-    text: string;
-    truncated: boolean;
-  };
+}
+/** A video the last reads found first, for the drawer's short list. */
+export interface YouTubeRecent {
+  id: string;
+  url: string;
+  title: string;
+  channel: string;
+  publishedAt: string | null;
+  firstSeenAt: string;
+  views: number | null;
 }
 export interface YouTubeStatus {
   configured: boolean;
+  /** DataForSEO is verified and search terms are saved. */
   connected: boolean;
+  /** DataForSEO is connected and verified; YouTube is searched through it. */
+  dataforseo: boolean;
   syncing: boolean;
   runId: string | null;
   revision: string | null;
@@ -34,11 +41,31 @@ export interface YouTubeStatus {
   videoUrls: string[];
   autoSync: boolean;
   fetchedAt: string | null;
-  page: number;
-  pageSize: number;
-  videos: YouTubeVideo[];
   total: number;
-  lastSync: { at: string; ok: boolean; errors: string[] } | null;
+  recordingSince: string | null;
+  recent: YouTubeRecent[];
+  pendingDetails: number;
+  /** The month's DataForSEO budget is used up: daily reads resume on this day. */
+  pausedUntil: string | null;
+  /** Search terms missed on three daily reads in a row; a single miss is read again the next day. */
+  repeatedMisses: string[];
+  spend: { monthUsd: number; budgetUsd: number } | null;
+  estimate: {
+    monthlyUsd: number;
+    searchUsd: number;
+    videoUsd: number;
+  };
+  lastSync: {
+    at: string;
+    ok: boolean;
+    errors: string[];
+    code?: string;
+    missed?: { term: string; reason: 'timeout' | 'failed' }[];
+    found?: number;
+    added?: number;
+    costUsd?: number;
+  } | null;
+  nextSyncAt: string | null;
 }
 export const youtubeRequest = (
   projectId: number,

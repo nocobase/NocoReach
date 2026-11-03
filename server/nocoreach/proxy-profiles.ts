@@ -38,8 +38,8 @@ const connectionSchema = z.enum(CONNECTIONS);
 export const DIRECT = 'direct';
 /** Browser collectors use their own host's network and never take a live proxy. */
 const COLLECTORS: readonly Connection[] = ['bilibili', 'xiaohongshu'];
-/** Read through a Collector host, so the default proxy never applies. An explicit YouTube choice is kept: it still
- * raises the Collector migration guidance until an administrator turns it off. */
+/** Read through a Collector host, so the default proxy never applies. YouTube was too until 2026-11-02; it is now
+ * searched through DataForSEO, and its entry stays only so stored choices still parse. */
 const VIA_COLLECTOR: readonly Connection[] = [...COLLECTORS, 'youtube'];
 const KEY = 'NOREACH_PROXY_PROFILES';
 const invalid = (message: string, status = 400): never => {

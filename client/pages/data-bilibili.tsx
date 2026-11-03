@@ -25,6 +25,7 @@ import {
   CollectorBody,
   CollectorGroupsCard,
   CollectorSkeleton,
+  CollectorSourceLine,
   CollectorTable,
   CollectorTrendCard,
   TitleLink,
@@ -34,7 +35,6 @@ import {
   countText,
   dateColumn,
   retryable,
-  shortDate,
   titleColumn,
 } from './collector-columns';
 import { HandOffBar } from './hand-off-bar';
@@ -102,12 +102,7 @@ export default function DataBilibili() {
           countText(v[key]),
         ),
       ),
-      dateColumn<BilibiliVideo>(
-        $t('collectorPage.publishedDate'),
-        published,
-        (v) =>
-          $t('collectorPage.collectedShort', { 0: shortDate(v.collectedAt) }),
-      ),
+      dateColumn<BilibiliVideo>($t('collectorPage.publishedDate'), published),
     ],
     [],
   );
@@ -219,21 +214,18 @@ export default function DataBilibili() {
       ) : null}
       {data && hasData ? (
         <>
-          <p className='nr-footnote break-words'>
-            {$t('common.searchTermValue', {
-              0: joinList(data.terms) || '—',
-            })}{' '}
-            ·{' '}
-            {data.bvids.length ? (
-              <>
-                {$t('bilibili.trackedVideos', { 0: joinList(data.bvids) })}{' '}
-                ·{' '}
-              </>
-            ) : null}
-            {$t('bilibili.lastSuccessfulCollection', {
-              0: stamp(data.verifiedAt),
-            })}
-          </p>
+          <CollectorSourceLine
+            parts={[
+              $t('common.searchTermValue', {
+                0: joinList(data.terms) || '—',
+              }),
+              data.bvids.length > 0 &&
+                $t('bilibili.trackedVideos', { 0: joinList(data.bvids) }),
+              $t('bilibili.lastSuccessfulCollection', {
+                0: stamp(data.verifiedAt),
+              }),
+            ]}
+          />
           {!data.connected ? (
             <p role='status' className='nr-footnote'>
               {$t('collectorPage.disconnectedKept')}

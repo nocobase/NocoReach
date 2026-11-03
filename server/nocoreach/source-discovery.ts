@@ -169,7 +169,10 @@ class SourceDiscovery{
       if (
         (f.source === 'social' && active(x) && x?.terms?.length) ||
         (f.source === 'reddit' && active(reddit) && reddit?.terms?.length) ||
-        (f.source === 'youtube' && youtube?.verifiedAt && youtube?.fetchedAt)
+        (f.source === 'youtube' &&
+          youtube &&
+          youtube.configured !== false &&
+          youtube.terms?.length)
       )
         connection = { status: 'connected' };
       return { ...f, connection };

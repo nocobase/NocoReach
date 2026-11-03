@@ -4,7 +4,7 @@ import { $t, $tj, $legacyText, getCurrentLocale, useMessageState } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { toast } from '#lib/toast';
 import { cn } from '#lib/utils';
-import { formatDate, joinList } from '#lib/format';
+import { formatCompact, formatDate, joinList } from '#lib/format';
 import { chipClass } from '#components/reach/chip';
 import { Segmented } from '#components/reach/segmented';
 import { Button } from '#components/ui/button';
@@ -81,19 +81,9 @@ const call = <T,>(projectId: number, action: string, body: object = {}) =>
   });
 /**
  * A month's searches added up, as the volume column writes them below ten thousand (6,500) and compactly in the reader's
- * language above (186K in English, in ten-thousands in Chinese).
+ * language above (186K in English, in ten-thousands in Chinese), as every other shortened count (formatCompact).
  */
-const total = (n: number) => {
-  if (n < 10000) return metric(n);
-  const locale = getCurrentLocale(),
-    text = new Intl.NumberFormat(locale, {
-      notation: 'compact',
-      maximumFractionDigits: 1,
-    }).format(n);
-  return locale.startsWith('zh')
-    ? text.replace(/(\d)([万亿])/u, '$1 $2')
-    : text;
-};
+const total = (n: number) => (n < 10000 ? metric(n) : formatCompact(n));
 const strong = (v: ReactNode) => (
   <span className='font-medium text-foreground tabular-nums'>{v}</span>
 );

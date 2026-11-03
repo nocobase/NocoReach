@@ -213,3 +213,46 @@ test('the sync table says how often each source runs and links the daily analysi
     await within(row('每日分析')).findByRole('link', { name: '修改时间' }),
   ).toHaveAttribute('href', '/schedules');
 });
+
+test('a used-up YouTube budget says the day reading resumes, in each language, and offers no setting or retry', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-12T00:00:00Z'));
+  const paused = item('youtube', 'YouTube', {
+    state: 'warning',
+    fix: 'wait',
+    message:
+      'DataForSEO 本月预算已用完，可以调高预算，或等 2026-12-01 自动恢复',
+    messageText: {
+      key: 'youtube.budgetPausedHealth',
+      params: { 0: { date: '2026-12-01T00:00:00.000Z' } },
+    },
+  });
+  action.mockResolvedValue({
+    checkedAt: new Date().toISOString(),
+    items: [paused],
+  });
+  const runtime = new I18nRuntime({
+    defaultLocale: 'zh-CN',
+    locales: ['en-US', 'zh-CN'],
+    applicationNamespace: 'nocoreach',
+  });
+  runtime.registerApplicationNamespace('nocoreach', locales);
+  await runtime.init();
+  disconnect = connectLocale(runtime);
+  render(
+    <I18nProvider runtime={runtime}>
+      <MemoryRouter>
+        <HealthPanel projectId={1} reloadKey={0} onChange={() => {}} />
+      </MemoryRouter>
+    </I18nProvider>,
+  );
+  const row = await screen.findByText(/可以调高预算，或等 12-01 自动恢复/);
+  const line = row.closest('[data-health-row]')!;
+  expect(line).toHaveAttribute('data-fix', 'wait');
+  expect(within(line as HTMLElement).queryByRole('button')).toBeNull();
+  expect(line).not.toHaveTextContent($t('dataHealth.settingsFirst'));
+  await act(() => runtime.changeLanguage('en-US'));
+  expect(line).toHaveTextContent(
+    'raise the budget, or reading resumes on Dec 1',
+  );
+});

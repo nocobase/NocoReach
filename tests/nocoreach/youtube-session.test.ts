@@ -28,7 +28,12 @@ test('requires the current request session for YouTube replacement and disconnec
   });
   const youtube = runtime.plugin.youtube as YouTubeSource;
   Object.assign(youtube, {
-    reader: { search: async () => [], video: vi.fn() },
+    reader: {
+      ready: () => true,
+      search: async () => ({ ok: true, videos: [], costUsd: 0 }),
+      details: vi.fn(),
+      spend: async () => ({ monthUsd: 0, budgetUsd: 5 }),
+    },
   });
   await youtube.connect('1', { terms: 'Synthetic', revision: null });
   await youtube.settled('1');

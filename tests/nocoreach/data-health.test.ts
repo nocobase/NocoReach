@@ -144,3 +144,19 @@ test('each row needing attention says what fixes it: retry, change a setting, ch
  assert.equal(items.rank.fix,'verify');assert.deepEqual(items.rank.retry,{resource:'nrRankTracking',action:'check',body:{retryUncertain:true}});assert.match(items.rank.message,/DataForSEO 后台核对/);
  assert.equal(items.site,undefined);assert.equal(items.github.fix,undefined,'a healthy row asks for nothing');
 });
+test('YouTube: one missed term is a grey note, three daily misses in a row need attention, a used-up budget waits for its date',async()=>{
+ const t=new Date(Date.now()-H).toISOString();
+ const status=extra=>({configured:true,dataforseo:true,syncing:false,autoSync:true,terms:['NocoBase','Slow term'],total:12,fetchedAt:t,nextSyncAt:null,pausedUntil:null,repeatedMisses:[],lastSync:{at:t,ok:true,errors:[],attempts:0,lastSuccessAt:t,missed:[{term:'Slow term',reason:'timeout'}]},...extra});
+ const row=async extra=>(await new DataHealth({env:()=>'',link:async()=>null,youtube:{status:async()=>status(extra)}}).list('1')).items.find(i=>i.id==='youtube');
+ const once=await row({});
+ assert.equal(once.state,'healthy');assert.equal(once.fix,undefined);
+ assert.equal(once.note,'每天在 YouTube 搜 NocoBase、Slow term，已记录 12 个视频 · 这次没读到：“Slow term”，明天会再读');
+ assert.deepEqual(once.noteText.params[1],{key:'youtube.termsMissedNote',params:{0:'“Slow term”'}});
+ const repeated=await row({repeatedMisses:['Slow term']});
+ assert.equal(repeated.state,'warning');assert.equal(repeated.message,'“Slow term”连续 3 天没读到');assert.equal(repeated.note,'每天在 YouTube 搜 NocoBase、Slow term，已记录 12 个视频');
+ // No setting fixes a used-up budget and a retry would be refused: the row says when it resumes and offers nothing.
+ const paused=await row({pausedUntil:'2026-12-01T00:00:00.000Z'});
+ assert.equal(paused.state,'warning');assert.equal(paused.fix,'wait');
+ assert.equal(paused.message,'DataForSEO 本月预算已用完，可以调高预算，或等 2026-12-01 自动恢复');
+ assert.deepEqual(paused.messageText,{key:'youtube.budgetPausedHealth',params:{0:{date:'2026-12-01T00:00:00.000Z'}}});
+});
