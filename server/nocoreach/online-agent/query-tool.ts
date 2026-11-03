@@ -4,7 +4,7 @@ import { toolInput } from '../../online-agent/errors.js';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { windowFor } from '../data-views.js';
 import { waitForFresh } from '../google-report-cache.js';
-import { withGa4RetryDeadline } from '../website-report.js';
+import { FIRST_TABLES, withGa4RetryDeadline } from '../website-report.js';
 import { keywordSummary, summary as termSummary } from '../trends-source.js';
 
 // The reply stops after 90 seconds without output and a tool call gives none, so GA4's 429 retries stop within this.
@@ -438,6 +438,16 @@ const SOURCES: Record<string, Source> = {
       const tables: Record<string, TableSource> = {},
         reports = obj(v.tables),
         changes = obj(v.changes);
+      // The rest of the page's tables are read on their own (`websiteTables`), as the page reads them, and only when asked.
+      let rest: Promise<Obj> | undefined;
+      const more = () =>
+        (rest ??= (async () => {
+          if (!(await q.allowed('nrDataViews', 'websiteTables')))
+            throw new QueryError('accessDenied');
+          return obj(
+            await call(s, 'dataViews', 'websiteTables', q.id, rangeOf(q)),
+          );
+        })());
       for (const name of [
         'page',
         'landing',
@@ -453,10 +463,17 @@ const SOURCES: Record<string, Source> = {
         'browser',
         'os',
       ])
-        tables[name] = list(reports[name]).map(flatten);
+        tables[name] =
+          FIRST_TABLES.includes(name) || name in reports
+            ? list(reports[name]).map(flatten)
+            : async () => list(obj((await more()).tables)[name]).map(flatten);
       tables.daily = list(v.daily);
       for (const name of ['page', 'landing', 'channel'])
-        tables[`${name}_changes`] = list(changes[name]).map(changeRow);
+        tables[`${name}_changes`] =
+          name === 'channel' || name in changes
+            ? list(changes[name]).map(changeRow)
+            : async () =>
+                list(obj((await more()).changes)[name]).map(changeRow);
       const settled = text(v.settledThrough),
         through = text(obj(v.window).end),
         searched = obj(v.queriesWindow),

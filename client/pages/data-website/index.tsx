@@ -78,8 +78,10 @@ import { Tag } from '#components/reach/tag';
 const RANGES = defaultRanges;
 
 // How the numbers are counted, and which reports GA4 left out this time.
-function notesOf(report: Report): string[] {
-  const missing = report.missing ?? [];
+function notesOf(report: Report, rest?: Report): string[] {
+  const missing = [
+    ...new Set([...(report.missing ?? []), ...(rest?.missing ?? [])]),
+  ];
   return [
     $t('dataWebsite.usersDeduplicatedPeriod'),
     $t('dataWebsite.aiAssistantsBySourceName'),
@@ -134,6 +136,32 @@ export default function DataWebsite() {
   );
   const w = report?.window;
   const ready = Boolean(report?.connected && report.cutoff && report.totals);
+  // The tables behind the tabs and the pages behind a change are read once the page shows, not ahead
+  // (website-report.ts, `periodTables`), so they are asked for as soon as the figures are there, before any tab is opened.
+  const { data: rest, error: restError } = useFreshData<Report>(
+    project && valid && ready
+      ? `data-view:website-tables:${project.id}:${project.analyticsPropertyId}:${project.searchConsoleProperty}:${JSON.stringify(r)}`
+      : null,
+    () =>
+      api.action<Report>('nrDataViews', 'websiteTables', {
+        method: 'POST',
+        body: { projectId: project!.id, ...r, acceptSaved: true },
+        unwrap: 'data',
+      }),
+    {
+      staleTime: GA4_HISTORY_CACHE_MS,
+      retryDelay: GA4_PARTIAL_CACHE_MS,
+      expiresAt: ga4CacheExpiry,
+    },
+  );
+  // Pages explain a change only when they cover the same days as the figures; a copy of another window waits for its new one.
+  const explained =
+    ready &&
+    rest?.changes &&
+    rest.window?.start === w?.start &&
+    rest.window?.end === w?.end
+      ? { ...report!, changes: { ...report!.changes, ...rest.changes } }
+      : report;
   const issues = ready ? qualityIssues(report!) : [];
   const suspect = suspectChannels(issues);
   const keyEventRateSuspect = issues.some((i) => i.kind === 'highKeyEventRate');
@@ -144,7 +172,7 @@ export default function DataWebsite() {
   return (
     <PageContainer className='nr-data-page'>
       <PageHeader
-        info={ready ? <NotesTip notes={notesOf(report!)} /> : null}
+        info={ready ? <NotesTip notes={notesOf(report!, rest)} /> : null}
         title={$t('dataWebsite.traffic')}
         description={$t('dataWebsite.visitorsSourcesPagesEvents')}
       />
@@ -168,7 +196,7 @@ export default function DataWebsite() {
             : undefined
         }
       />
-      <SavedReportNote {...savedCopyNote(report)} />
+      <SavedReportNote {...savedCopyNote(report, ready ? rest : undefined)} />
       {/* The date range sits right under the header, as on every data page; Today follows it (UI review 2026-10-22). */}
       {report?.connected ? (
         <TodayCard
@@ -256,7 +284,11 @@ export default function DataWebsite() {
           </div>
           {/* The change sentence and the notes about the same figure read as one block; nothing when both are empty. */}
           <div className='flex flex-col gap-2 empty:hidden'>
-            <ChangeDrivers report={report!} metric={metric} suspect={suspect} />
+            <ChangeDrivers
+              report={explained!}
+              metric={metric}
+              suspect={suspect}
+            />
             <QualityNotes issues={issuesFor(issues, metric)} />
           </div>
           <TrendCard key={metric} report={report!} metric={metric} />
@@ -266,6 +298,8 @@ export default function DataWebsite() {
           </div>
           <ReportCard
             report={report!}
+            rest={rest}
+            restError={restError}
             range={r}
             projectId={project?.id}
             propertyId={project?.analyticsPropertyId}

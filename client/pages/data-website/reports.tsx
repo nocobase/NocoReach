@@ -323,12 +323,17 @@ const pct = (v: number | null) => formatPercent(v);
 
 export function ReportCard({
   report,
+  rest,
+  restError,
   range,
   projectId,
   propertyId,
   toUrl,
 }: {
   report: Report;
+  /** The other tables (`websiteTables`), asked for once the page shows. */
+  rest?: Report;
+  restError?: unknown;
   range: Range;
   projectId?: number;
   propertyId?: string;
@@ -355,7 +360,22 @@ export function ReportCard({
     setParams(p, { replace: true });
     setQuery('');
   };
-  const all = report.tables?.[view.table];
+  // The page's first tables come with its report; the others with `rest`, which may hold another window for a moment, so
+  // the table, its dates and its rows' details follow whichever holds it.
+  const holder =
+    report.tables?.[view.table] !== undefined ||
+    report.missing?.includes(view.table)
+      ? report
+      : rest
+        ? {
+            ...report,
+            tables: rest.tables,
+            window: rest.window ?? report.window,
+            cutoff: rest.cutoff ?? report.cutoff,
+            queriesWindow: rest.queriesWindow ?? report.queriesWindow,
+          }
+        : undefined;
+  const all = holder?.tables?.[view.table];
   const rows = useMemo(
     () =>
       (all ?? [])
@@ -365,7 +385,7 @@ export function ReportCard({
         ),
     [all, view, query],
   );
-  const w = report.window!;
+  const w = (holder ?? report).window!;
   const period = $t('common.range', {
     0: formatDate(w.start),
     1: formatDate(w.end),
@@ -430,7 +450,19 @@ export function ReportCard({
           </TabsTrigger>
         ))}
       </DataTableTabs>
-      {all === undefined ? (
+      {!holder ? (
+        <div className='px-4 py-6' data-tables-loading=''>
+          {restError ? (
+            <InlineError>
+              {restError instanceof Error
+                ? restError.message
+                : $t('common.tryAgainLater')}
+            </InlineError>
+          ) : (
+            <ListSkeleton rows={6} />
+          )}
+        </div>
+      ) : all === undefined ? (
         <div className='px-4 py-6'>
           <InlineError>{$t('dataWebsite.tableNotReturned')}</InlineError>
         </div>
@@ -440,7 +472,7 @@ export function ReportCard({
           tab={tab}
           view={view}
           rows={rows}
-          report={report}
+          report={holder}
           filtered={Boolean(query)}
           onClear={() => setQuery('')}
           onOpen={setOpen}
@@ -449,12 +481,12 @@ export function ReportCard({
           toUrl={toUrl}
         />
       )}
-      {open ? (
+      {open && holder ? (
         <RowDrawer
           row={open}
           view={view}
           columns={tab.columns}
-          report={report}
+          report={holder}
           range={range}
           projectId={projectId}
           propertyId={propertyId}

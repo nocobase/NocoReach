@@ -2,7 +2,7 @@
 // 访问 (GA4) read live: website-report.ts against canned GA4 Data API and Realtime API responses.
 import { test, vi, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
-import { WebsiteReport, TABLES } from '../../server/nocoreach/website-report.js';
+import { WebsiteReport, TABLES, FIRST_TABLES, REST_TABLES } from '../../server/nocoreach/website-report.js';
 import { websiteView, windowFor } from '../../server/nocoreach/data-views.js';
 import { GA4_PARTIAL_CACHE_MS } from '../../shared/ga4-cache.js';
 
@@ -12,7 +12,7 @@ const report=(dims,metrics,rows)=>({dimensionHeaders:dims.map(name=>({name})),me
 const fake=answer=>{const calls=[],warnings=[];const g=new WebsiteReport({token:async()=>'t',app:{logger:{warn:(m,x)=>warnings.push([m,x])}}});g.timeZone=async()=>'UTC';g.post=async(id,property,method,body)=>{calls.push({method,body});return answer(method,body);};return {g,calls,warnings};};
 const dimsOf=r=>r.dimensions.map(d=>d.name).join(',');
 
-test('period: deduplicated totals for both periods, the daily line, every table; pages merged by path; AI sources marked',async()=>{
+test('period: deduplicated totals for both periods, the daily line and the first tables; the other tables apart; pages merged by path; AI sources marked',async()=>{
  const w=windowFor('2026-10-10','7');
  const answer=(dims,r)=>{const m=r.metrics.map(x=>x.name);
   if(dims==='sessionDefaultChannelGroup'&&r.dateRanges.length===2)return report(['sessionDefaultChannelGroup','dateRange'],m,[[['Organic Search','current'],[60,50,3,20,40]],[['Organic Search','previous'],[90,70,5,30,55]],[['Referral','previous'],[10,8,0,2,6]]]);
@@ -26,19 +26,26 @@ test('period: deduplicated totals for both periods, the daily line, every table;
   return report(r.dimensions.map(d=>d.name),m,[]);};
  const {g,calls}=fake((method,body)=>method==='batchRunReports'?{reports:body.requests.map(r=>answer(dimsOf(r),r))}:null);
  const v=await g.period('1','123',w);
- assert.equal(calls.length,4,'18 reports in four batches');
+ assert.equal(calls.length,2,'the first eight reports in one round of two batches');
+ assert.deepEqual(calls.map(c=>c.body.requests.length),[5,3]);
  assert.deepEqual(calls[0].body.requests[0].dateRanges,[{startDate:w.start,endDate:w.end,name:'current'},{startDate:w.previousStart,endDate:w.previousEnd,name:'previous'}]);
  assert.equal(calls[0].body.requests[1].dateRanges[0].endDate,w.end,'the line covers the same days as the totals');
  assert.equal(v.totals.current.users,100);assert.equal(v.totals.previous.sessions,120);assert.equal(v.totals.current.keyEventRate,0.08);
  assert.deepEqual(v.daily.map(r=>r.date),['2026-10-04','2026-10-05']);assert.deepEqual(v.previousDaily.map(r=>r.date),['2026-09-28']);
- const changeRequests=calls.flatMap(c=>c.body.requests).filter(r=>r.dateRanges.length===2&&r.dimensions.length===1&&r.dimensions[0].name!=='date');
- assert.deepEqual(changeRequests.map(dimsOf),['sessionDefaultChannelGroup','pagePath','landingPagePlusQueryString'],'channels, pages and landing pages read for both periods');
+ const changeRequests=c=>c.flatMap(c=>c.body.requests).filter(r=>r.dateRanges.length===2&&r.dimensions.length===1&&r.dimensions[0].name!=='date');
+ assert.deepEqual(changeRequests(calls).map(dimsOf),['sessionDefaultChannelGroup'],'channels read for both periods with the figures');
  assert.deepEqual(v.changes.channel,[{key:'Organic Search',current:{users:40,newUsers:20,sessions:50,views:60,keyEvents:3},previous:{users:55,newUsers:30,sessions:70,views:90,keyEvents:5}},{key:'Referral',current:{},previous:{users:6,newUsers:2,sessions:8,views:10,keyEvents:0}}]);
- assert.deepEqual(v.changes.page,[{key:'/docs',current:{views:310,keyEvents:2},previous:{views:200,keyEvents:1}}],'/docs and /docs/ are one page');
- assert.deepEqual(v.changes.landing,[{key:'/',current:{sessions:25,newUsers:5},previous:{sessions:30,newUsers:6}}],'a landing page with a query string is its path');
- assert.deepEqual(Object.keys(v.tables).sort(),Object.keys(TABLES).sort());assert.deepEqual(v.missing,[]);
- assert.deepEqual(v.tables.page.map(p=>[p.key,p.title,p.views,p.users]),[['/docs','Docs',320,55],['/','Home',100,40]],'one row per path, titled by its most viewed title');
+ assert.deepEqual(Object.keys(v.tables).sort(),[...FIRST_TABLES].sort());assert.deepEqual(v.missing,[]);assert.equal(v.complete,true);
  assert.deepEqual(v.tables.sourceMedium.map(r=>r.ai||null),[null,'ChatGPT','Perplexity']);assert.equal(v.ai,undefined,'the AI share is GA4\'s own AI Assistant channel');
+ const t=await g.periodTables('1','123',w),later=calls.slice(2);
+ assert.deepEqual(later.map(c=>c.body.requests.length),[5,4,1],'the other ten reports, read apart');
+ assert.deepEqual(changeRequests(later).map(dimsOf),['pagePath','landingPagePlusQueryString'],'pages and landing pages read for both periods');
+ assert.deepEqual(t.changes.page,[{key:'/docs',current:{views:310,keyEvents:2},previous:{views:200,keyEvents:1}}],'/docs and /docs/ are one page');
+ assert.deepEqual(t.changes.landing,[{key:'/',current:{sessions:25,newUsers:5},previous:{sessions:30,newUsers:6}}],'a landing page with a query string is its path');
+ assert.deepEqual(Object.keys(t.tables).sort(),[...REST_TABLES].sort());assert.deepEqual(t.missing,[]);assert.equal(t.complete,true);
+ assert.deepEqual([...FIRST_TABLES,...REST_TABLES].sort(),Object.keys(TABLES).sort(),'every table is in one part');
+ assert.equal(t.totals,undefined,'the figures come with the first part only');
+ assert.deepEqual(t.tables.page.map(p=>[p.key,p.title,p.views,p.users]),[['/docs','Docs',320,55],['/','Home',100,40]],'one row per path, titled by its most viewed title');
 });
 
 test('period: a report GA4 refuses is left out on its own and named; other failures fail the page',async()=>{

@@ -156,17 +156,31 @@ function fixture() {
           totals: { current: { sessions: 5000 }, previous: { sessions: 4200 } },
           daily: daily(() => ({ sessions: 180 })),
           tables: {
+            channel: many(8, (i) => ({
+              key: `ch${i}`,
+              dims: { sessionDefaultChannelGroup: `Channel ${i}` },
+              sessions: 100 - i,
+            })),
+          },
+          changes: {},
+          missing: [],
+          complete: true,
+        };
+      },
+      // The rest of the page's tables, read apart (website-report.ts, `periodTables`).
+      async websiteTables(id, v) {
+        note('websiteTables', v);
+        return {
+          connected: true,
+          cutoff: day(0),
+          window,
+          tables: {
             page: many(300, (i) => ({
               key: `/docs/${i}`,
               dims: { pagePath: `/docs/${i}` },
               title: `Doc ${i}`,
               views: 3000 - i,
               queries: many(8, (j) => ({ keyword: `kw ${j}`, clicks: j })),
-            })),
-            channel: many(8, (i) => ({
-              key: `ch${i}`,
-              dims: { sessionDefaultChannelGroup: `Channel ${i}` },
-              sessions: 100 - i,
             })),
           },
           changes: {
@@ -1191,4 +1205,28 @@ it('gives up after 75 seconds on a read someone else started, before the reply s
   } finally {
     vi.useRealTimers();
   }
+});
+
+it('reads the rest of Traffic’s tables only when one of them is asked for, once, and with its own permission', async () => {
+  const { ask, calls } = setup();
+  const rest = () => calls.filter(([name]) => name === 'websiteTables');
+  const channels = await ask({ source: 'traffic', table: 'channel' });
+  expect(channels.rows).toHaveLength(8);
+  expect(rest()).toHaveLength(0);
+  const pages = await ask({ source: 'traffic', table: 'page', range: '7' });
+  expect(pages).toMatchObject({ total: 300, nextOffset: 20 });
+  expect(pages.rows![0]).toMatchObject({ key: '/docs/0', pagePath: '/docs/0' });
+  expect(rest()).toHaveLength(1);
+  expect(rest()[0][1]).toEqual({ range: '7' });
+  expect(
+    (await ask({ source: 'traffic', table: 'page_changes' })).rows![0],
+  ).toMatchObject({ key: '/docs/0', views: 10, previousViews: 20 });
+  const denied = setup(['nrDataViews.websiteTables']);
+  expect(await denied.ask({ source: 'traffic', table: 'country' })).toEqual({
+    source: 'traffic',
+    accessDenied: true,
+  });
+  expect(
+    (await denied.ask({ source: 'traffic', table: 'channel' })).rows,
+  ).toHaveLength(8);
 });

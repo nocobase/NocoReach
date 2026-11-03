@@ -599,16 +599,16 @@ it('isolates projects, properties, date ranges and simulated scopes, and bounds 
   ])
     await cache.load(project, [property, scope, date], read);
   expect(read).toHaveBeenCalledTimes(5);
-  for (let i = 0; i < 34; i++) await cache.load('1', ['row', i], read);
+  for (let i = 0; i < 50; i++) await cache.load('1', ['row', i], read);
   const payload: unknown = (
     await db
       .getRepository('nrSnapshots')
       .findOne({ filter: { key: 'ga4-reports:1' } })
   )?.get('payload');
   expect(payload).toMatchObject({ entries: expect.any(Array) });
-  expect((payload as { entries: unknown[] }).entries).toHaveLength(32);
+  expect((payload as { entries: unknown[] }).entries).toHaveLength(48);
   await new Ga4ReportCache(db).load('2', ['123', 'a', '2026-10-10'], read);
-  expect(read).toHaveBeenCalledTimes(39);
+  expect(read).toHaveBeenCalledTimes(55);
 });
 
 it('shares in-flight builds, merges concurrent cache writes and returns independent response objects', async () => {
@@ -730,6 +730,18 @@ it('reuses GA4 history after sync changes while rebuilding current Search Consol
   expect(read).toHaveBeenCalledTimes(1);
   expect(first.tables.page[0].queries[0].keyword).toBe('before');
   expect(next.tables.page[0].queries[0].keyword).toBe('after');
+  // The page table now comes with the other tables, read apart; it gets the same queries.
+  const others = vi.fn(async () => ({
+    tables: { page: [{ key: '/docs' }] },
+    changes: {},
+    missing: [],
+  }));
+  views.ga4.readTables = others;
+  const rest = await views.websiteTables('1', { range: '7' });
+  expect(rest.tables.page[0].queries[0].keyword).toBe('after');
+  expect(rest.window).toEqual(next.window);
+  expect(others).toHaveBeenCalledTimes(1);
+  expect(read).toHaveBeenCalledTimes(1);
   const restarted = new DataViews(host);
   restarted.ga4.readPeriod = read;
   restarted.ga4.yesterday = views.ga4.yesterday;
@@ -751,6 +763,71 @@ it('reuses GA4 history after sync changes while rebuilding current Search Consol
     connected: false,
   });
   expect(read).toHaveBeenCalledTimes(1);
+});
+
+it("keeps Traffic's two parts apart: a new day answers each from its own copy, and neither retires the other", async () => {
+  const { db } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-16T12:00:00Z'));
+  type W = { end: string };
+  const first = vi.fn(async (_id: string, _property: string, w: W) => ({
+    totals: {},
+    tables: { channel: [{ key: w.end }] },
+    missing: [],
+  }));
+  const others = vi.fn(async (_id: string, _property: string, w: W) => ({
+    tables: { page: [{ key: w.end }] },
+    missing: [],
+  }));
+  const open = (service: WebsiteReport) =>
+    Object.assign(service, { readPeriod: first, readTables: others });
+  const day = (end: string) => ({
+    start: '2026-09-20',
+    end,
+    previousStart: '2026-08-23',
+    previousEnd: '2026-09-19',
+  });
+  const view = { view: ['28', '', ''] };
+  const service = open(new WebsiteReport({ db }));
+  await service.period('1', '123', day('2026-10-15'), view);
+  await service.periodTables('1', '123', day('2026-10-15'), view);
+  // The next day, after a restart: each part answers from its own copy of the previous window while it is read.
+  vi.setSystemTime(new Date('2026-10-17T12:00:00Z'));
+  const restarted = open(new WebsiteReport({ db }));
+  const a = await restarted.period('1', '123', day('2026-10-16'), view);
+  const b = await restarted.periodTables('1', '123', day('2026-10-16'), view);
+  expect([a.window.end, a.refreshing, a.tables.channel[0].key]).toEqual([
+    '2026-10-15',
+    true,
+    '2026-10-15',
+  ]);
+  expect([b.window.end, b.refreshing, b.tables.page[0].key]).toEqual([
+    '2026-10-15',
+    true,
+    '2026-10-15',
+  ]);
+  await restarted.history.settled();
+  expect(first).toHaveBeenCalledTimes(2);
+  expect(others).toHaveBeenCalledTimes(2);
+  // Each new window replaced its own part's old one, and only that.
+  const payload = (
+    await db
+      .getRepository('nrSnapshots')
+      .findOne({ filter: { key: 'ga4-reports:1' } })
+  )?.get('payload') as { entries: { value: { window: W } }[] };
+  expect(payload.entries.map((e) => e.value.window.end)).toEqual([
+    '2026-10-16',
+    '2026-10-16',
+  ]);
+  const later = open(new WebsiteReport({ db }));
+  expect(
+    (await later.period('1', '123', day('2026-10-16'), view)).tables,
+  ).toEqual({ channel: [{ key: '2026-10-16' }] });
+  expect(
+    (await later.periodTables('1', '123', day('2026-10-16'), view)).tables,
+  ).toEqual({ page: [{ key: '2026-10-16' }] });
+  expect(first).toHaveBeenCalledTimes(2);
+  expect(others).toHaveBeenCalledTimes(2);
 });
 
 it('persists row details and a period report across a restart, reading the period again at midnight where its window ends', async () => {
