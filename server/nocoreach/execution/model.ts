@@ -23,6 +23,8 @@ export type PullRequestInfo = { url: string; number: number; branch: string; hea
 // Article releases (article-flow.ts) publish to a target instead of merging: publishing, then exporting when the target
 // exports to a repository, then verifying; publish_failed, publish_conflict and export_late wait for a person.
 export type Release = { state: 'simulated' | 'merging' | 'merge_failed' | 'verifying' | 'not_seen' | 'live' | 'publishing' | 'publish_failed' | 'publish_conflict' | 'exporting' | 'export_late'; article?: any; pr?: { number: number; url: string; headSha: string }; note: string; pages: string[]; verifyText?: string; error?: string; mergedAt?: string; mergeSha?: string; checks?: number; lastCheckAt?: string; nextCheckAt?: string; deadline?: string; liveAt?: string; reason?: string };
+// sortOrder is a board position from before 2026-11-02, when each column came to run newest activity first; it is no
+// longer written or read and stays only on tasks moved before then.
 export type Work = {
   schemaVersion: 2; boardState?: BoardState; sortOrder?: number; simple?: boolean; kind?: 'content' | 'research'; contentId?: string; revision: number; stage: string; plan: Plan | null; planVersion: number; approvedPlanVersion?: number;
   step: number; results: (Artifact | null)[]; history: any[]; operations: string[]; receipt: any; verification: any;
