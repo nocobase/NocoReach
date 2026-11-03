@@ -201,7 +201,7 @@ it('coalesces today and row reads independently and reuses their completed cache
   expect(f.calls).toHaveLength(2);
 });
 
-it('asks GA4 again twice after a 429, waiting a little each time, then fails; other errors fail at once', async () => {
+it('asks GA4 again three times after a 429, waiting outside the queue, then fails; other errors fail at once', async () => {
   vi.useFakeTimers();
   const warn = vi.fn();
   const service = new WebsiteReport({ app: { logger: { warn } } } as never);
@@ -217,25 +217,38 @@ it('asks GA4 again twice after a 429, waiting a little each time, then fails; ot
       code: 'google_api_error',
     },
   );
-  internals.json = vi
-    .fn()
-    .mockRejectedValueOnce(busy)
-    .mockRejectedValueOnce(busy)
-    .mockResolvedValue({ rows: [] });
-  const answered = service.post('1', '123', 'runReport', { a: 1 });
-  await vi.advanceTimersByTimeAsync(RETRY_429_MS[0] - 1);
-  expect(internals.json).toHaveBeenCalledTimes(1);
-  await vi.advanceTimersByTimeAsync(1 + RETRY_429_MS[1]);
-  expect(await answered).toEqual({ rows: [] });
+  const nine = { requests: Array(9).fill({}) };
+  // The batch is refused twice; anything else is answered.
+  let refusals = 2;
+  internals.json = vi.fn(
+    async (_id: string, _url: string, init: { body: string }) => {
+      if (JSON.parse(init.body).requests && refusals-- > 0) throw busy;
+      return { rows: [] };
+    },
+  );
+  const answered = service.post('1', '123', 'batchRunReports', nine);
+  await vi.advanceTimersByTimeAsync(1);
+  // While it waits, its nine slots are free for the property's other reads.
+  expect(await service.post('1', '123', 'runReport', { other: 1 })).toEqual({
+    rows: [],
+  });
+  await vi.advanceTimersByTimeAsync(RETRY_429_MS[0] - 2);
+  expect(internals.json).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(2);
   expect(internals.json).toHaveBeenCalledTimes(3);
+  await vi.advanceTimersByTimeAsync(RETRY_429_MS[1]);
+  expect(await answered).toEqual({ rows: [] });
+  expect(internals.json).toHaveBeenCalledTimes(4);
   expect(warn).toHaveBeenCalledTimes(2);
   internals.json = vi.fn().mockRejectedValue(busy);
   const failed = service
     .post('1', '123', 'runReport', { b: 1 })
     .catch((e: unknown) => e);
-  await vi.advanceTimersByTimeAsync(RETRY_429_MS[0] + RETRY_429_MS[1]);
+  await vi.advanceTimersByTimeAsync(
+    RETRY_429_MS.reduce((total, wait) => total + wait, 0),
+  );
   expect(await failed).toBe(busy);
-  expect(internals.json).toHaveBeenCalledTimes(3);
+  expect(internals.json).toHaveBeenCalledTimes(4);
   const refused = Object.assign(new Error('Invalid dimension'), {
     status: 400,
     code: 'google_api_error',
