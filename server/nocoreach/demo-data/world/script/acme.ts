@@ -298,11 +298,71 @@ export const ACME_REDDIT: Thread[] = ACME_STORIES.slice(0, 10).map((_, i) => ({
   age: 2 + i * 3,
   traffic: 45 + i * 18,
 }));
-export const ACME_MEDIA: Media[] = ACME_STORIES.slice(0, 15).map((s, i) => ({
-  title: t(
-    `Acme 实操：${ACME_DISCUSSIONS[i].title.zh}`,
-    `Acme workshop: ${ACME_DISCUSSIONS[i].title.en}`,
+// Video and note titles as creators write them: the subject first, the product named only where a viewer would.
+const ACME_MEDIA_TITLES = [
+  t(
+    '导入 240 行任务，负责人和截止日期一个不丢',
+    'Importing 240 tasks without losing owners or due dates',
   ),
+  t(
+    '十人交付团队用 Acme 管项目，一个月真实体验',
+    'A month running a ten-person delivery team on Acme',
+  ),
+  t(
+    '十二人加三位客户，Acme 方案怎么选最划算',
+    'Choosing an Acme plan for 12 members and 3 client guests',
+  ),
+  t(
+    'Acme 和 Nimbus 跨团队交付对比，看完再选',
+    'Acme vs Nimbus for cross-team delivery: an honest comparison',
+  ),
+  t(
+    '看板卡在评审列？三步理顺在制品限制',
+    'Stuck in review? Fixing work-in-progress limits in three steps',
+  ),
+  t(
+    '上游晚了两天，发布日为什么没动：依赖设置详解',
+    'Why the release date did not move: task dependencies explained',
+  ),
+  t(
+    '邀请客户进项目之前，先把这几个权限设好',
+    'Set these permissions before inviting clients to a project',
+  ),
+  t(
+    '任务做了很多，客户却看不到进展？周报这样写',
+    'Clients cannot see progress? A weekly report that shows it',
+  ),
+  t(
+    '取消关注还收到提醒？通知设置一次讲清',
+    'Still getting alerts after unfollowing? Notification settings explained',
+  ),
+  t(
+    '工地现场用手机传照片和记录，实拍演示',
+    'Field notes and photo uploads on mobile, filmed on site',
+  ),
+  t(
+    '活动模板怎么改：示例任务删哪些、留哪些',
+    'Trimming the event template: which sample tasks to keep',
+  ),
+  t(
+    '一个人跨三个项目，团队负荷到底怎么看',
+    'Reading team workload when one person spans three projects',
+  ),
+  t(
+    '节假日跳过周会，后面的重复会议会不会被取消',
+    'Skipping a holiday meeting without cancelling the series',
+  ),
+  t(
+    '第一次用 Acme：先建项目还是先拉人？',
+    'First week with Acme: create the project or invite people first?',
+  ),
+  t(
+    '客户推迟验收，原来的承诺日期怎么保留',
+    'Keeping the original commitment date when a client delays sign-off',
+  ),
+];
+export const ACME_MEDIA: Media[] = ACME_STORIES.slice(0, 15).map((s, i) => ({
+  title: ACME_MEDIA_TITLES[i],
   description: s.brief,
   age: 2 + i * 3,
   views: 1840 + i * 1387,

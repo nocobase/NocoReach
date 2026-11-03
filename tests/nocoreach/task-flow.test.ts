@@ -446,6 +446,17 @@ test('people and page: owner changes between runs, collaborators and linked page
  d=await f.command('linkPage',{url:''});assert.equal(d.work.page,undefined);
 });
 
+test('the start records the pages it was started with: relinking the task\'s page afterwards leaves them',async()=>{
+ const f=fixture(),install='https://example.com/docs/install',blog='https://example.com/blog/x';
+ f.state.nrSnapshots.push({id:9002,key:'site-content:1',payload:{pages:[{url:install,title:'Install',type:'docs'},{url:blog,title:'X',type:'blog'}]}});
+ await f.command('linkPage',{url:install});
+ let d=await f.command('startTask',{playbookId:'optimize-page'});const started=d.work.startedPages;
+ assert.equal(started[0],install);assert.ok(!started.includes(blog));
+ d=await f.command('linkPage',{url:blog});assert.deepEqual(d.work.page,{url:blog,title:'X'});
+ assert.deepEqual(d.work.startedPages,started,'the related page changes, the pages it was started with stay');
+ assert.deepEqual((await f.s.pagePlaces('1','1',false)).pages.map(p=>p.url),started,'its record on the task page reads them');
+});
+
 test('roles: on a task with an owner, other members can only leave a message; the owner and 管理员 do the steps',async()=>{
  const f=fixture();f.state.users.push({id:2,nickname:'Lin'},{id:3,nickname:'Mia'});
  for(const user of f.state.users.filter(user=>[2,3].includes(user.id)))user.roles=[{name:'nr.member'}];

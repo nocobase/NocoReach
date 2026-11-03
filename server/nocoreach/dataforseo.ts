@@ -18,6 +18,25 @@ const RECENT_MS=10*60000;
 const error=(message,status=409)=>{throw new VisibilityError(message,status);};
 // What a run counts against the budget: its billed cost, or the reservation while the cost is unknown.
 const spent=r=>Number(r.get('costUsd')||0)+Number(r.get('reservedUsd')||0);
+// The outcome of one live SERP task (Reddit's Google search, YouTube's search and video details), by DataForSEO's
+// documented codes (appendix/errors and live-endpoint guidance): retry only explicit terminal errors with an explicit
+// zero cost for our single-task request, and never infer billing from text. `page` is the task's one result page when
+// `valid`; "No Search Results" (40102) is a valid, empty answer. `reason` names a redditDiagnostic message.
+function liveTask(raw){const task=raw?.tasks?.[0],cost=Number.isFinite(raw?.cost)&&raw.cost>=0?raw.cost:null;
+ const providerCode=Number.isInteger(raw?.status_code)?raw.status_code:null,taskCode=Number.isInteger(task?.status_code)?task.status_code:null;
+ const taskId=typeof task?.id==='string'&&/^[a-zA-Z0-9_-]{1,128}$/.test(task.id)?task.id:null;
+ const code=providerCode===20000?taskCode:providerCode;
+ const retryable=[40103,50000,50303,50401,50402].includes(code)&&cost===0;
+ let reason=retryable?'temporary':code===40100||code===40104?'credentials':[40200,40203,40210].includes(code)?'providerBudget':code>=40400&&code<40600?'parameters':'providerFailure';
+ const empty=providerCode===20000&&taskCode===40102;
+ const success=providerCode===20000&&taskCode===20000;
+ const page=task?.result?.[0];
+ const valid=Array.isArray(raw?.tasks)&&raw.tasks.length===1&&(empty||(success&&Array.isArray(task.result)&&task.result.length===1&&page&&
+  (Array.isArray(page.items)||(page.items===null&&page.items_count===0))));
+ const uncertain=!Number.isInteger(providerCode)||(providerCode===20000&&!Number.isInteger(taskCode))||[20100,40601,40602].includes(code)||(success&&!valid)||(!success&&!empty&&cost===null);
+ if(uncertain)reason='uncertain';
+ const diagnostic={providerCode,taskCode,taskId,reason:valid?'success':reason,retryable:!uncertain&&retryable,billing:cost===null?'unknown':'known'};
+ return {valid,empty,page:valid&&!empty?page:null,taskId,cost,status:valid?'completed':uncertain?'unknown':'failed',reason,diagnostic};}
 class DataForSeo{
  constructor(p,kinds){this.p=p;this.p.network?.bind(this,['check', 'run', 'inspectRun'], 'dataforseo');this.kinds=kinds;}
  kind(name){const k=this.kinds[name];if(!k)error(systemMessageText('aiSearch.unsupportedQueryType'),400);return k;}
@@ -101,4 +120,4 @@ class DataForSeo{
   return {runId:String(row.id),localStatus:row.get('status'),matches,complete:(task.result||[]).length<1000};
  }
 }
-export { DataForSeo, REUSE_MS, RECENT_MS, key };
+export { DataForSeo, REUSE_MS, RECENT_MS, key, liveTask };

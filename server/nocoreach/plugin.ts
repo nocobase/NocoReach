@@ -11,7 +11,7 @@ import { OutboundNetwork, unreachableOf } from './outbound-network.js';
 import type { MockHost } from '../../app-plugins/nocoreach-mock/server/types.js';
 import type { LegacyDatabase } from './legacy/database.js';
 import type { MockEngine } from '../../app-plugins/nocoreach-mock/server/engine.js';
-import { createMockXiaohongshuAdapter, createMockBilibiliAdapter, createMockYouTubeProvider } from './mock-collectors.js';
+import { createMockXiaohongshuAdapter, createMockBilibiliAdapter } from './mock-collectors.js';
 import { mockBrowserCollectors } from '../../app-plugins/nocoreach-mock/server/collectors.js';
 import { SyncService } from './sync-service.js';
 import { googleOAuthCallback } from './google-oauth-callback.js';
@@ -146,14 +146,14 @@ export class Connections{
   this.community=new CommunitySource(this);this.community.register();
   this.packages=new PackagesSource(this);this.packages.register();
   this.collectors=new CollectorConnections(this.variables,this.db,this.browserCollectors,this.mock?.enabled??false);this.collectors.register(this);
-  this.youtube=new YouTubeSource(this,this.mock?.enabled?createMockYouTubeProvider(()=>this.network.mockContext('youtube')):undefined);this.youtube.register(windowFor);
+  // YouTube reads through DataForSEO (2026-11-02), which simulated mode answers like Reddit's searches.
+  this.youtube=new YouTubeSource(this);this.youtube.register(windowFor);
   this.hackernews=new HackerNewsSource(this);this.hackernews.register();
   this.bilibili=new BilibiliSource(this,this.mock?.enabled?createMockBilibiliAdapter(id=>this.network.mockContext('bilibili',id)):undefined);this.bilibili.register(windowFor);
   this.xiaohongshu=new XiaohongshuSource(this,this.mock?.enabled?createMockXiaohongshuAdapter(id=>this.network.mockContext('xiaohongshu',id)):undefined);this.xiaohongshu.register(windowFor);
   this.network.bind(this.xiaohongshu,['test','search'],'xiaohongshu');
   this.collectors.attach('xiaohongshu',this.xiaohongshu,['connect','test','search','disconnect']);
   this.collectors.attach('bilibili',this.bilibili,['connect','test','sync','disconnect']);
-  this.collectors.attach('youtube',this.youtube,['connect','sync','disconnect','clear']);
   this.reddit=new RedditSource(this);this.reddit.register(windowFor);
   this.trends=new TrendsSource(this);this.trends.register();
   this.competitors=new CompetitorWatch(this);this.competitors.register();

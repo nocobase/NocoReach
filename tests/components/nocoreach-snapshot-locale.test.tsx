@@ -86,10 +86,10 @@ function task(id = 'tech-fix'): TaskData {
     agent: { repo: null, online: false },
   };
 }
-// The playbook's name is in the Playbook row of the task's properties column (2026-10-22), not the steps.
+// The playbook's name is in the Playbook field of what the task was started with (2026-11-02), not the steps.
 const playbookCell = () =>
-  [...document.querySelectorAll('aside dt')].find((dt) =>
-    ['Playbook', '做法'].includes(dt.textContent || ''),
+  [...document.querySelectorAll('[data-started-card] span')].find((label) =>
+    ['Playbook', '做法'].includes(label.textContent || ''),
   )?.nextElementSibling;
 
 async function setup(data: TaskData, locale: 'zh-CN' | 'en-US' = 'en-US') {

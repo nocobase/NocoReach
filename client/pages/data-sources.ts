@@ -38,7 +38,7 @@ export const getCatalog = (): CatalogSource[] => ([
  {id:'social',category:'community',name:'X',detects:$t('dataSources.postsXMentioningProductDaily'),priority:'P2',availability:'available',guide:{intro:$t('dataSources.xSetupHelp'),needs:needsOf('social')}},
  {id:'bilibili',category:'community',name:'Bilibili',detects:$t('dataSources.publicVideoSearchSummariesSelected'),priority:'P2',availability:'available'},
  {id:'xiaohongshu',category:'community',name:$t('dataSources.xiaohongshuBrowserCollection'),detects:$t('dataSources.productNotesFoundAuthorizedBrowser'),priority:'P2',availability:'available'},
- {id:'youtube',category:'community',name:'YouTube',detects:$t('youtube.contentDescription'),priority:'P1',availability:'available'},
+ {id:'youtube',category:'community',name:'YouTube',detects:$t('youtube.contentDescription'),priority:'P1',availability:'available',guide:{intro:$t('youtube.setupIntro'),needs:needsOf('youtube')}},
  {id:'discord',category:'community',name:'Discord',detects:$t('dataSources.discordDescription'),priority:'P2',availability:'available',guide:{intro:$t('dataSources.discordSetupHelp'),needs:needsOf('discord')}},
  {id:'slack',category:'community',name:'Slack',detects:$t('dataSources.slackDescription'),priority:'P2',availability:'available',guide:{intro:$t('dataSources.slackSetupHelp'),needs:needsOf('slack')}},
 ]);

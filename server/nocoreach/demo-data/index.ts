@@ -8,7 +8,7 @@ import type { UserManagementService } from '@nocobase/app-plugin-users/server/to
 import { demoAnswers } from './answers.js';
 import { migrateDemoIdentityEmails } from './identities.js';
 import { clearAllBusinessData } from './clear-all.js';
-import { DEMO_LANGUAGES, demoContent } from './content.js';
+import { DEMO_LANGUAGES, demoContent, demoTimeZone } from './content.js';
 import type { Connections } from '../plugin.js';
 import type { DemoHost } from './host.js';
 import { generateNocoReachSamples } from './samples.js';
@@ -76,8 +76,7 @@ export function createNocoReachDemo(
   return {
     id: 'nocoreach',
     languages: DEMO_LANGUAGES,
-    timeZone: (language) =>
-      language === 'en-US' ? 'America/Los_Angeles' : 'Asia/Shanghai',
+    timeZone: demoTimeZone,
     accounts: demoAccounts,
     generate: async (context) => {
       await migrateDemoIdentityEmails(host.db.access!.database, users);

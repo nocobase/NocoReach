@@ -295,11 +295,71 @@ export const CRM_REDDIT: Thread[] = CRM_STORIES.slice(0, 10).map((s, i) => ({
   age: 2 + i * 3,
   traffic: 45 + i * 18,
 }));
-export const CRM_MEDIA: Media[] = CRM_STORIES.slice(0, 15).map((s, i) => ({
-  title: t(
-    `Acme CRM 实操：${QUESTIONS[i].zh}`,
-    `Acme CRM workshop: ${QUESTIONS[i].en}`,
+// Video and note titles as creators write them: the subject first, the product named only where a viewer would.
+const CRM_MEDIA_TITLES = [
+  t(
+    '1,280 行客户表有 86 条重复，先合并再导入',
+    'Merging 86 duplicates before importing 1,280 accounts',
   ),
+  t(
+    '销售请假时，新线索自动分给替补的规则',
+    'Routing new leads automatically when a rep is on leave',
+  ),
+  t(
+    '一个商机五个人五种阶段？统一销售阶段的做法',
+    'One deal, five stage choices: aligning your sales stages',
+  ),
+  t(
+    '报价改到第三版，怎样避免发出旧附件',
+    'Quote version three: never send the old attachment again',
+  ),
+  t(
+    '临时帮同事跟进客户，权限怎么给才安全',
+    'Covering for a colleague without opening all their accounts',
+  ),
+  t(
+    '客户说下月再联系：这样暂停本周提醒',
+    'Pausing follow-up reminders until next month',
+  ),
+  t(
+    '托管方案包含哪些：迁移和培训实测',
+    'What the hosted plan includes: migration and training, tested',
+  ),
+  t(
+    '预测金额和签约金额对不上？一次讲明白',
+    'Why forecast value differs from signed contracts',
+  ),
+  t(
+    '五个销售从表格迁到 Acme CRM，先配这几样',
+    'Five reps leaving spreadsheets: what to set up first in Acme CRM',
+  ),
+  t(
+    '转交客户以后，旧负责人名下的跟进怎么处理',
+    'Handing over accounts without stranding open follow-ups',
+  ),
+  t(
+    '续约前九十天要确认的五件事',
+    'Five things to confirm ninety days before renewal',
+  ),
+  t(
+    '外出拜访网络差，先存文字再补照片',
+    'Saving visit notes first on a weak connection',
+  ),
+  t(
+    '本月新增商机按什么时间算？报表口径说明',
+    'Counting new deals this month: creation time or stage entry?',
+  ),
+  t(
+    '输单原因只写“价格贵”？这样区分预算和需求',
+    'Splitting “too expensive” loss notes into budget and fit',
+  ),
+  t(
+    '连接个人邮箱以后，谁能看到客户邮件',
+    'Who can read customer emails after connecting a mailbox',
+  ),
+];
+export const CRM_MEDIA: Media[] = CRM_STORIES.slice(0, 15).map((s, i) => ({
+  title: CRM_MEDIA_TITLES[i],
   description: s.brief,
   age: 2 + i * 3,
   views: 1840 + i * 1387,

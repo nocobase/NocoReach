@@ -95,7 +95,7 @@ export class DemoProjects implements DemoUpstream {
     url: string | URL,
     init: RequestInit = {},
   ): Promise<Response> {
-    return this.configuration
+    return this.configuration?.enabled
       ? this.configuration.invokeMock<Response>('nocoreach.sources', {
           projectId,
           url,

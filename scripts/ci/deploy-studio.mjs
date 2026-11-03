@@ -80,18 +80,8 @@ export function parseEnvelope(text) {
   return envelope.result.data;
 }
 export function deploymentApp(env) {
-  const appId = env.STUDIO_APP_ID ?? 'nocoreach';
-  assert(
-    ['nocoreach', 'nocoreach-demo', 'reach'].includes(appId),
-    'Unsupported Studio application',
-  );
-  if (appId === 'nocoreach-demo')
-    assert.equal(
-      env.GITHUB_EVENT_NAME,
-      'workflow_dispatch',
-      'Demo deployment requires manual dispatch',
-    );
-  return appId;
+  assert.equal(env.STUDIO_APP_ID, 'reach', 'Unsupported Studio application');
+  return env.STUDIO_APP_ID;
 }
 export function validateConfig(env) {
   deploymentApp(env);
@@ -126,9 +116,9 @@ export function validateConfig(env) {
 }
 export function deploymentSource(env) {
   if (env.STUDIO_RELEASE_TAG || env.STUDIO_RELEASE_SHA) {
+    deploymentApp(env);
     assert(
-      deploymentApp(env) === 'reach' &&
-        env.GITHUB_EVENT_NAME === 'workflow_dispatch' &&
+      env.GITHUB_EVENT_NAME === 'workflow_dispatch' &&
         env.GITHUB_REF === 'refs/heads/main',
       'A release workflow may pass a Solutions source only from main',
     );
@@ -145,11 +135,8 @@ export function deploymentSource(env) {
   return { ref: env.GITHUB_REF, sha: env.GITHUB_SHA };
 }
 export function validateRelease(env, version, execute = execFileSync) {
+  deploymentApp(env);
   const source = deploymentSource(env);
-  assert(
-    ['nocoreach', 'reach'].includes(deploymentApp(env)),
-    'Release tags can only deploy nocoreach or reach',
-  );
   assert(
     ['push', 'workflow_dispatch'].includes(env.GITHUB_EVENT_NAME),
     'Release deployment requires a tag push or manual dispatch',
@@ -258,7 +245,7 @@ function diagnosticId(value) {
     ? value
     : '[unavailable]';
 }
-export function deploymentState(data, appId, releaseId, deploymentId) {
+function deploymentState(data, appId, releaseId, deploymentId) {
   assert.equal(data.appId, appId, 'Wrong deployment app');
   assert.equal(data.releaseId, releaseId, 'Wrong deployment release');
   if (data.status === 'succeeded') return 'succeeded';
@@ -445,19 +432,8 @@ async function main() {
       validateRelease(process.env, version);
       if (releaseOnly) return;
     }
-    assert(
-      deploymentApp(process.env) !== 'reach' || releaseRef,
-      'Solutions deployment requires a verified release tag',
-    );
+    assert(releaseRef, 'Solutions deployment requires a verified release tag');
     validateConfig(process.env);
-    assert(
-      releaseRef ||
-        process.env.GITHUB_REF === 'refs/heads/main' ||
-        (deploymentApp(process.env) === 'nocoreach-demo' &&
-          process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' &&
-          process.env.GITHUB_REF?.startsWith('refs/heads/demo/')),
-      'Deploy only from main or a verified release tag; demo branches require manual demo deployment',
-    );
     if (process.argv.includes('--check-config')) return;
     const sha = execFileSync('git', ['rev-parse', 'HEAD'], {
       encoding: 'utf8',

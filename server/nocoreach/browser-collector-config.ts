@@ -21,6 +21,7 @@ export const browserCollectorSchema = z
         return false;
       }
     }),
+    // 'youtube' stays accepted so existing configurations still load; YouTube reads through DataForSEO since 2026-11-02.
     platforms: z.array(z.enum(['xiaohongshu', 'bilibili', 'youtube'])).min(1),
     token: z
       .string()

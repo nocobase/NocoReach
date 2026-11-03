@@ -25,7 +25,7 @@ import { STARTS_KEY, restartOf, withStart } from './restarts.js';
 import { reopening } from '../../../shared/task-reopen.js';
 import { datesBetween } from '../search-history.js';
 import { taskStanding } from '../../../shared/task-pending.js';
-import { defaultDelivery, deliveryPlan, distinctPages, lookupMatters, pagesToStart, pageUrlsOf, startAgent, startBlockers } from '../../../shared/task-start.js';
+import { defaultDelivery, deliveryPlan, distinctPages, lookupMatters, pagesToStart, pageUrlsOf, startAgent, startBlockers, startedPageUrls } from '../../../shared/task-start.js';
 import { prRepo, routeRepo, startedRepo, taskRepo, type TaskRepo } from '../../../shared/repo-routing.js';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
 // Roles and what only 管理员 may change live with the server code (server/policy.js); the same relative path works from
@@ -740,6 +740,7 @@ export class TaskService {
           if (!pages.length || pages.some(u => !own.has(pageKey(u)))) return fail(systemMessageText('taskPages.notOwnPages'), 409);
           w.pages = pages;
         }
+        w.startedPages = startedPageUrls({ task, work: w });
         if (!w.humanOwnerId) { await this.member(actor, tx); w.humanOwnerId = actor; w.humanOwnerName = actorName; }
         w.stage = 'flow'; w.step = 0; w.results = []; event.note = p.name;
         await followPlaybook(p);
@@ -1242,12 +1243,14 @@ export class TaskService {
     return all.filter(p => !term || `${p.url} ${p.title || ''}`.toLowerCase().includes(term)).slice(0, 20).map(p => ({ url: String(p.url), title: String(p.title || ''), type: String(p.type || '') }));
   }
   // Where each of a task's pages is changed (2026-10-29), for its start card: the article a publishing target holds it
-  // in, or none, a page of the site itself; with its title in Website content. Read-only.
-  async pagePlaces(project: string, taskId: string) {
-    const task = await this.task(project, taskId), urls = pageUrlsOf({ task, work: projectWork(task) });
+  // in, or none, a page of the site itself; with its title in Website content. Read-only. Without `match` only the
+  // titles are read, for the start's record once the task has started (2026-11-02): of the pages it was started with,
+  // and the targets are not asked.
+  async pagePlaces(project: string, taskId: string, match = true) {
+    const task = await this.task(project, taskId), work = projectWork(task), urls = match ? pageUrlsOf({ task, work }) : startedPageUrls({ task, work });
     if (!urls.length) return { article: null, unchecked: false, pages: [] };
     const s = await this.snapshot(`site-content:${project}`), titles = new Map<string, string>((Array.isArray(s?.pages) ? s.pages : []).map((p: any) => [pageKey(p.url), String(p.title || '').slice(0, 300)]));
-    const found = await this.lookupPages(project, urls);
+    const found = match ? await this.lookupPages(project, urls) : { article: null, unchecked: false, pages: urls.map(url => ({ url })) };
     return { ...found, pages: found.pages.map(p => ({ ...p, ...(titles.get(pageKey(p.url)) ? { title: titles.get(pageKey(p.url)) } : {}) })) };
   }
   // The article lookup of every page; a lookup that fails leaves each page unchecked.
@@ -1281,7 +1284,7 @@ export class TaskService {
     this.p.app.acl.allow('nrPlaybooks', ['list', 'save', 'copy', 'remove', 'restore', 'draft'], 'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrAgent', actions: { status: wrap(async (p, v, c) => this.agents.status(p, undefined, String(c.auth.user.id), { seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), saveDefault: wrap((p, v, c) => this.agents.saveDefault(p, v, String(c.auth.user.id))), repos: wrap(p => this.repoView(p)), saveRepo: wrap(async (p, v) => (await this.agents.saveRepo(p, v), this.repoView(p))), removeRepo: wrap(async (p, v) => (await this.agents.removeRepo(p, v), this.repoView(p))), checkRepo: wrap(async (p, v, c) => (await this.agents.checkRepo(p, v, String(c.auth.user.id)), this.repoView(p))) } });
     this.p.app.acl.allow('nrAgent', ['status', 'saveDefault', 'repos', 'saveRepo', 'removeRepo', 'checkRepo'], 'loggedIn');
-    this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { results: wrap((p,v)=>listResults(this,p,v)), result: wrap((p,v)=>readResult(this,p,v)), board: wrap((p,v)=>resultBoard(this,p,v)), get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), numbers: wrap((p, v) => this.numbers(p, String(v.taskId))), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)), pagePlaces: wrap((p, v) => this.pagePlaces(p, String(v.taskId))) } });
+    this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { results: wrap((p,v)=>listResults(this,p,v)), result: wrap((p,v)=>readResult(this,p,v)), board: wrap((p,v)=>resultBoard(this,p,v)), get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), numbers: wrap((p, v) => this.numbers(p, String(v.taskId))), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)), pagePlaces: wrap((p, v) => this.pagePlaces(p, String(v.taskId), v.match !== false)) } });
     this.p.app.acl.allow('nrTaskWork', ['results', 'result', 'board', 'get', 'numbers', 'advance', 'members', 'list', 'pages', 'pagePlaces'], 'loggedIn');
   }
 }

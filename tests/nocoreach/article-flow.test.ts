@@ -1894,6 +1894,23 @@ test('task pages: each page is read as an article or a page of the site, with it
   expect(run.input.pagesToChange).toEqual([pricing, missing]);
 });
 
+test('task pages: the titles alone are read without asking the publishing targets, for a started task', async () => {
+  const f = await fixture();
+  f.state.nrTasks[0].evidence = { pages: [pricing, hello] };
+  f.state.nrSnapshots.push({
+    id: 902,
+    key: 'site-content:1',
+    payload: { pages: [{ url: pricing, title: 'Pricing' }] },
+  });
+  const match = vi.spyOn(f.s.p.articleTargets, 'match');
+  expect(await f.s.pagePlaces('1', '1', false)).toEqual({
+    article: null,
+    unchecked: false,
+    pages: [{ url: pricing, title: 'Pricing' }, { url: hello }],
+  });
+  expect(match).not.toHaveBeenCalled();
+});
+
 test('task pages: the tasks split off a task are listed as its siblings, with their pages', async () => {
   const f = await fixture();
   f.state.nrTasks[0].evidence = { proposalId: 'p1', pages: [pricing, hello] };

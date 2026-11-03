@@ -153,7 +153,7 @@ it('shows the proxy in plain words and how each data source of the project is re
   ).not.toBeChecked();
   expect(screen.getAllByRole('switch')).toHaveLength(11);
   // The collector note is in the page's info tip, not under the table.
-  expect(screen.queryByText(/YouTube、Bilibili、小红书由采集器/)).toBeNull();
+  expect(screen.queryByText(/Bilibili、小红书由采集器/)).toBeNull();
   // Nothing is checked until asked.
   expect(screen.getAllByText('未检查')).toHaveLength(11);
   expect(calls('testConnection')).toHaveLength(0);
@@ -421,23 +421,26 @@ it('turns the default proxy off and on for one connection in this project', asyn
   );
 });
 
-it('shows a YouTube switch only for an explicit proxy left from before, so it can be turned off', async () => {
+it('gives YouTube the shared DataForSEO switch', async () => {
   vi.mocked(proxyRequest).mockImplementation(async (action) => {
     if (action === 'capabilities') return live;
     if (action === 'network') return { proxy: saved };
-    if (action === 'selections') return { youtube: saved.id };
-    if (action === 'select') return { youtube: 'direct' };
+    if (action === 'selections') return {};
+    if (action === 'select') return { dataforseo: 'direct' };
     throw new Error(`unexpected ${action}`);
   });
   const user = userEvent.setup();
   setup(<ConnectionNetwork projectId={1} source='youtube' />);
   const toggle = await screen.findByRole('switch', { name: '经过代理' });
-  expect(screen.getByText(/YouTube 通过采集器读取/)).toBeVisible();
+  expect(toggle).toBeChecked();
+  expect(
+    screen.getByText(/Reddit、AI 搜索和 YouTube 共用 DataForSEO 出口/),
+  ).toBeVisible();
   await user.click(toggle);
   await waitFor(() =>
     expect(proxyRequest).toHaveBeenCalledWith('select', {
       projectId: '1',
-      connection: 'youtube',
+      connection: 'dataforseo',
       profileId: 'direct',
     }),
   );
@@ -446,13 +449,6 @@ it('shows a YouTube switch only for an explicit proxy left from before, so it ca
 it.each([
   ['without a proxy', 'site', { proxy: null }, {}],
   ['for browser collectors', 'bilibili', { proxy: saved }, {}],
-  ['for YouTube without an explicit proxy', 'youtube', { proxy: saved }, {}],
-  [
-    'for YouTube turned off',
-    'youtube',
-    { proxy: saved },
-    { youtube: 'direct' },
-  ],
 ])('shows no switch %s', async (_case, source, network, selections) => {
   vi.mocked(proxyRequest).mockImplementation(async (action) => {
     if (action === 'capabilities') return live;
