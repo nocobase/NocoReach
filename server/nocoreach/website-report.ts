@@ -82,12 +82,14 @@ const CHANGE_KEEP=500;
 // source / medium) come from these; the other tables and the pages behind a change are read with `periodTables`.
 const FIRST_TABLES=['channel','newVsReturning','device','event','sourceMedium'];
 const REST_TABLES=Object.keys(TABLES).filter(n=>!FIRST_TABLES.includes(n));
-const FIRST_CHANGES=['channel'],REST_CHANGES=Object.keys(CHANGES).filter(n=>!FIRST_CHANGES.includes(n));
+const REST_CHANGES=Object.keys(CHANGES).filter(n=>n!=='channel');
+// A report over both periods, keeping the current one's rows: Channel's table and the channels behind a change are one read.
+const currentOf=report=>{const i=(report?.dimensionHeaders||[]).findIndex(h=>h.name==='dateRange');return i<0?report:{...report,rows:(report.rows||[]).filter(r=>r.dimensionValues?.[i]?.value==='current')};};
 // One row per value with its current and previous figures; the largest in either period first. A page is its path:
 // GA4 counts /cn and /cn/ (and a landing page with each query string) apart, which would split one page's change.
 const pathKey=v=>{const p=String(v).split(/[?#]/)[0].replace(/\/+$/,'');return p||(String(v).startsWith('/')?'/':String(v));};
 function changeRows(name,report){const c=CHANGES[name],by=new Map();
- for(const r of rowsOf(report)){const k=name==='channel'?r[c.dim]:pathKey(r[c.dim]);if(!by.has(k))by.set(k,{key:k,current:{},previous:{}});const o=by.get(k)[r.dateRange==='previous'?'previous':'current'];for(const [f,v] of Object.entries(values(r)))o[f]=(o[f]||0)+v;}
+ for(const r of rowsOf(report)){const k=name==='channel'?r[c.dim]:pathKey(r[c.dim]);if(!by.has(k))by.set(k,{key:k,current:{},previous:{}});const o=by.get(k)[r.dateRange==='previous'?'previous':'current'];for(const [f,v] of Object.entries(values(Object.fromEntries(c.metrics.filter(m=>m in r).map(m=>[m,r[m]])))))o[f]=(o[f]||0)+v;}
  const size=r=>Math.max(...Object.values(r.current),...Object.values(r.previous),0);
  return [...by.values()].sort((a,b)=>size(b)-size(a)).slice(0,CHANGE_KEEP);}
 // A day (YYYY-MM-DD) within a range.
@@ -189,19 +191,22 @@ class WebsiteReport{
   return this.history.load(String(id),[part,...this.scope(id,property),w],async()=>({...await read(),window:w,...(cutoff?{cutoff}:{}),...(settledThrough?{settledThrough}:{})}),value=>{const left=untilMidnight(this.endZone(property),now),since=24*HOUR-left;return value.complete===false||value.missing.length?Math.min(GA4_PARTIAL_CACHE_MS,left):since<(MORNING_READ_HOUR-1)*HOUR?MORNING_READ_HOUR*HOUR-since:left;},
    (value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt:Math.min(cacheExpiresAt,Date.now()+(guessed?GA4_PARTIAL_CACHE_MS:untilMidnight(this.endZone(property),now))),...saved}),view?{family:[part,...this.scope(id,property),...view]}:{});}
  async readPeriod(id,property,w){const both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')];
+  const others=FIRST_TABLES.filter(n=>n!=='channel');
   const reports=await this.batch(id,property,[
    request([],SESSION,both),
    request(['date'],SESSION,both,null,Math.max(1000,(w.days||Math.ceil((Date.parse(w.end)-Date.parse(w.start))/86400000)+1)*2)),
-   ...this.tableRequests(w,FIRST_TABLES,FIRST_CHANGES),
+   request(TABLES.channel.dims,SESSION,both,'sessions',CHANGES.channel.limit),
+   ...this.tableRequests(w,others,[]),
   ]);
-  const [totalsReport,dailyReport,...rest]=reports;if(!totalsReport)fail(systemMessageText('dataViews.ga4ReadFailed'),502);
+  const [totalsReport,dailyReport,channels,...rest]=reports;if(!totalsReport)fail(systemMessageText('dataViews.ga4ReadFailed'),502);
   const totals=Object.fromEntries(rowsOf(totalsReport).map(r=>[r.dateRange,values(r)]));
   const daily=rowsOf(dailyReport).map(r=>({period:r.dateRange,date:`${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)}`,...values(r)}));
   // With two date ranges and the date dimension GA4 answers every day of both ranges for each range, zeros outside
   // it: keep each range's own days, or the line runs over the other period's days at zero (UI review 2026-10-21).
   const out={totals:{current:totals.current||null,previous:totals.previous||null},daily:daily.filter(r=>r.period==='current'&&inWindow(r.date,w.start,w.end)).map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),
    previousDaily:daily.filter(r=>r.period==='previous'&&inWindow(r.date,w.previousStart,w.previousEnd)).map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),
-   ...this.tablesOf(w,FIRST_TABLES,FIRST_CHANGES,rest),complete:reports.every(Boolean)};
+   ...this.tablesOf(w,others,[],rest),complete:reports.every(Boolean)};
+  if(channels){out.tables.channel=tableRows('channel',currentOf(channels));if(!w.all)out.changes.channel=changeRows('channel',channels);}else out.missing.unshift('channel');
   if(w.all){out.totals.previous=null;out.previousDaily=[];}
   return out;}
  async readTables(id,property,w){const reports=await this.batch(id,property,this.tableRequests(w,REST_TABLES,REST_CHANGES));
