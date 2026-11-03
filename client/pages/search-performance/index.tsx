@@ -3,7 +3,7 @@ import {
   TrendChart,
   ChartArea as Area,
 } from '#components/reach/chart-legend';
-import { googleLocalFreshness, googleCacheExpiry, savedCopyNote, type SavedCopy } from '../../../shared/google-cache.js';
+import { googleLocalFreshness, googleCacheExpiry, reportView, savedCopyNote, type SavedCopy } from '../../../shared/google-cache.js';
 import { $t, $tj, $legacyText } from "#i18n";
 import { usePageTab } from '#hooks/use-page-tab';
 // 搜索表现: ported from every-app/open-seo db8bde1 src/client/features/search-performance/ (SearchPerformancePage,
@@ -154,7 +154,7 @@ export default function SearchPerformancePage() {
   const tableWindow = details?.window ?? w;
   // 国家/地区, 设备 and 搜索结果呈现 come on their own (live Search Console queries), so the report never waits for them;
   // the countries also fill the country menu.
-  const scope: Scope | null = project && !custom && view === 'performance' && showDetails && w && report?.cutoff ? { projectId: project.id, property: project.searchConsoleProperty, compare: Boolean(report.complete && report.previousComplete), window: { all: w.all, start: w.start, end: w.end, previousStart: w.previousStart, previousEnd: w.previousEnd }, country, filters } : null;
+  const scope: Scope | null = project && !custom && view === 'performance' && showDetails && w && report?.cutoff ? { projectId: project.id, property: project.searchConsoleProperty, compare: Boolean(report.complete && report.previousComplete), window: { all: w.all, start: w.start, end: w.end, previousStart: w.previousStart, previousEnd: w.previousEnd }, country, filters, view: reportView(range) } : null;
   // The tables' own report says which period they hold, as it can differ from the summary's: they end at the last synced
   // day until the day's sync lands, and a saved copy holds the window it was read for. A table row opens on that period.
   const rowScope: Scope | null = scope && tableWindow ? { ...scope, compare: Boolean(details?.complete && details.previousComplete), window: { all: tableWindow.all, start: tableWindow.start, end: tableWindow.end, previousStart: tableWindow.previousStart, previousEnd: tableWindow.previousEnd } } : scope;

@@ -4,6 +4,9 @@ import { toolInput } from '../../online-agent/errors.js';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { windowFor } from '../data-views.js';
 import { waitForFresh } from '../google-report-cache.js';
+import { withGa4RetryDeadline } from '../website-report.js';
+// The reply stops after 90 seconds without output and a tool call gives none, so GA4's 429 retries stop within this.
+const GA4_RETRY_WINDOW_MS = 45_000;
 import { keywordSummary, summary as termSummary } from '../trends-source.js';
 
 type Obj = Record<string, unknown>;
@@ -1360,7 +1363,10 @@ async function answer(
   } else if (q.from || q.range !== '28')
     notes.push('This source is not read for a period; the range was ignored.');
   // A saved copy is for a page that replaces it a moment later. The agent answers once, so it waits for current reports.
-  const read = await waitForFresh(() => source.read(sources, q));
+  const deadline = Date.now() + GA4_RETRY_WINDOW_MS;
+  const read = await withGa4RetryDeadline(deadline, () =>
+    waitForFresh(() => source.read(sources, q)),
+  );
   if (read.connected === false) return { ...head, connected: false };
   const w = obj(read.window),
     period = w.start ? { start: w.start, end: w.end } : null,
@@ -1391,7 +1397,10 @@ async function answer(
   // A table is read only when asked for, so after `source.read` returned: it needs its own scope, or it answers from a
   // saved copy that may hold another window than the `period` stated beside it.
   const got = read.tables[table],
-    value = typeof got === 'function' ? await waitForFresh(got) : got,
+    value =
+      typeof got === 'function'
+        ? await withGa4RetryDeadline(deadline, () => waitForFresh(got))
+        : got,
     t: Table = Array.isArray(value) ? { rows: value } : value;
   let rows = t.rows,
     filtered = false;

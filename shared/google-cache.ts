@@ -13,9 +13,22 @@ export const GOOGLE_SAVED_COPY_RETRY_MS = 30 * 1000;
 // read ahead often enough to keep Traffic's default view within it.
 export const GOOGLE_SAVED_COPY_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 // How often a page reads again while the server is reading a new report, and how many times before it stops asking:
-// 150 seconds, past the slowest report (Traffic's four GA4 batches at 30 seconds each). Each read only answers from memory.
+// 240 seconds, past the slowest report (Traffic's two GA4 rounds, each up to 30 seconds and asked again three times
+// after a 429, waiting 100 seconds in all). Each read only answers from memory.
 export const GOOGLE_REFRESH_POLL_MS = 5 * 1000;
-export const GOOGLE_REFRESH_POLLS = 30;
+export const GOOGLE_REFRESH_POLLS = 48;
+
+// The view a page asks a breakdown or a row for: its range, or a custom range's own dates. Only a request naming one
+// may be answered from another window's copy, and only from the same view's.
+export function reportView(range: {
+  range?: string;
+  from?: string;
+  to?: string;
+}): string {
+  return range.range === 'custom'
+    ? `custom:${range.from ?? ''}:${range.to ?? ''}`
+    : String(range.range ?? '28');
+}
 
 // Set on a report answered from its saved copy: `refreshing` while a new one is being read; a copy without it could not
 // be replaced for now, which the page says, with the `reason` when one was written for people.

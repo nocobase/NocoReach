@@ -411,6 +411,27 @@ describe('访问', () => {
     }
   });
 
+  it("names in a row's detail the period its figures are from, when it shows the previous day's report", async () => {
+    const original = action.getMockImplementation()!;
+    action.mockImplementation(
+      async (resource: string, name: string, ...args: unknown[]) => {
+        const value = await original(resource, name, ...args);
+        return name === 'websiteRow'
+          ? {
+              ...(value as object),
+              window: { start: '2026-09-03', end: '2026-09-09' },
+              refreshing: true,
+              savedAt: Date.now(),
+            }
+          : value;
+      },
+    );
+    renderPage('/website?tab=geo');
+    await userEvent.click(await screen.findByRole('button', { name: '美国' }));
+    const drawer = await screen.findByRole('dialog');
+    expect(drawer.textContent).toContain('09-03 至 09-09');
+  });
+
   it('does not reuse a previous GA4 property after changing the project connection', async () => {
     const { router } = renderPage();
     await screen.findByText('今天浏览量');

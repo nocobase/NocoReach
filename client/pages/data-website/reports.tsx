@@ -724,8 +724,8 @@ function RowDrawer({
       onClose={onClose}
       title={`${$t(view.label)} · ${view.text(row)}`}
       description={$t('dataWebsite.ga4', {
-        0: formatDate(w.start),
-        1: formatDate(w.end),
+        0: formatDate((data?.window ?? w).start),
+        1: formatDate((data?.window ?? w).end),
       })}
       actions={
         isPage && projectId ? (
