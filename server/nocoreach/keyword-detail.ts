@@ -5,6 +5,7 @@ import { markets, languages } from './keyword-policy.js';
 import { projectId, requireAccess } from './policy.js';
 import { DataForSeo } from './dataforseo.js';
 import { hash as candidateKey } from './research-helpers.js';
+import { pageIdentity, pageKey } from '../../shared/page-identity.js';
 // 关键词 详情 (2026-10-15 user choice, after Ahrefs' Keywords Explorer): one page for a keyword in one market, opened from
 // every list of 关键词. `site` is free and answers at once: the saved record, the weekly rank checks with that week's
 // top 10 (already paid for), the site's pages Search Console shows for the keyword and its other queries sharing the
@@ -86,7 +87,8 @@ class KeywordDetail{
    else if(words.length&&words.every(w=>q.includes(w))){const o=byQuery.get(q)||{query:r.keyword,clicks:0,impressions:0,weight:0,page:r.page,best:r.position};o.clicks+=r.clicks;o.impressions+=r.impressions;o.weight+=r.position*r.impressions;if(r.position<o.best){o.best=r.position;o.page=r.page;}byQuery.set(q,o);}}
   const avg=({weight,best,...o})=>({...o,position:o.impressions?weight/o.impressions:null});
   const pages=[...byPage.values()].map(avg).sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions).slice(0,20);
-  const key=u=>{try{const x=new URL(u);return bare(x.host)+x.pathname.replace(/\/+$/,'');}catch{return '';}},shown=new Set(pages.map(p=>key(p.url)));
+  // A site page already listed at another address of it (shared/page-identity.ts) is not mentioned again.
+  const identity=pageIdentity(content),key=u=>pageKey(u,identity),shown=new Set(pages.map(p=>key(p.url)));
   const mentions=(content?.pages||[]).filter(p=>{const text=`${p.title||''} ${decodeURIComponent(String(p.url||'')).replace(/[-_/]+/g,' ')}`.toLowerCase();return words.length&&words.every(w=>text.includes(w))&&!shown.has(key(p.url));})
    .slice(0,10).map(p=>({url:p.url,title:str(p.title,200)||null}));
   return {keyword:m.keyword,market:{locationCode:m.locationCode,language:m.language},dataforseo:this.connected(id),

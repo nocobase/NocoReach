@@ -356,7 +356,7 @@ function StartCard({data,list,pick,setPick,update,reload,busy,projectId,taskId,o
   </Field>
   {changes&&(picking?<PagePicker data={data} projectId={projectId} taskId={taskId} allowed={allowed} busy={busy} onPage={url=>void update('linkPage',{url})} onArticle={(targetId,articleId)=>void link(targetId,articleId)} onChange={()=>setChoosing(true)}/>
    :(articleChoice||split.pages.length>0)&&<DeliverySummary data={data} choice={current} finding={finding} notice={notice} allowed={allowed} busy={busy} translate={translate} pages={split.pages} changeable={articleChoice} hidePlace={showWhere} onChange={()=>setChoosing(true)}>
-    {plan.ready&&split.rest.length>0&&<RestNotice rest={split.rest} related={data.related} allowed={allowed} busy={busy||splitting} error={splitError} onSplit={groups=>void splitOff(groups)}/>}
+    {plan.ready&&split.rest.length>0&&<RestNotice rest={split.rest} related={data.related} identity={data.pageIdentity} allowed={allowed} busy={busy||splitting} error={splitError} onSplit={groups=>void splitOff(groups)}/>}
    </DeliverySummary>)}
   {/* Changes go to (2026-10-30 user decision, merging #322 and #324): with more than one place a change can go, the
       select follows the page list and replaces its line; while the card asks which page, the page decides first. */}

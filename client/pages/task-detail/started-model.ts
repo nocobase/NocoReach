@@ -79,9 +79,12 @@ export function startedDelivery(data: TaskData) {
 
 /** Whether the task's related page is one the start's record already shows as a page to change. */
 export function relatedPageShown(data: TaskData) {
-  const key = pageKey(data.work.page?.url);
+  const key = pageKey(data.work.page?.url, data.pageIdentity);
   return Boolean(
-    key && startedDelivery(data)?.pages.some((p) => pageKey(p.url) === key),
+    key &&
+    startedDelivery(data)?.pages.some(
+      (p) => pageKey(p.url, data.pageIdentity) === key,
+    ),
   );
 }
 
