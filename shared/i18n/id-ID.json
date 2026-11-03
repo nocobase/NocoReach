@@ -6665,6 +6665,8 @@
   "onlineAgent.readPage": "Baca halaman web",
   "onlineAgent.readRules": "Baca aturan analisis",
   "onlineAgent.proposeRules": "Usulkan perubahan aturan",
+  "onlineAgent.queryData": "Kueri data",
+  "onlineAgent.runTask": "Mulai atau ulangi tugas",
   "onlineAgent.suggestions": "Pertanyaan yang disarankan",
   "onlineAgent.status.queued": "Dalam antrean",
   "onlineAgent.status.running": "Berjalan",

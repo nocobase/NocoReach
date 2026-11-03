@@ -6575,6 +6575,8 @@
   "onlineAgent.readPage": "ウェブページを読み取る",
   "onlineAgent.readRules": "分析ルールを読み取る",
   "onlineAgent.proposeRules": "ルールの変更を提案する",
+  "onlineAgent.queryData": "データを照会",
+  "onlineAgent.runTask": "タスクを開始または再試行",
   "onlineAgent.suggestions": "質問の例",
   "onlineAgent.status.queued": "待機中",
   "onlineAgent.status.running": "実行中",

@@ -59,6 +59,8 @@ export interface OnlineRun {
   revision: number;
   /** Each time the owner continued this reply after it stopped partway, and why it had stopped. */
   continued?: { at: string; after: string }[];
+  /** The interface language the turn was sent in: tools name playbooks and states in it. */
+  locale?: string;
 }
 /**
  * Why a reply may stop partway through no fault of the question: it stalled, ran out of time, NocoReach restarted, a

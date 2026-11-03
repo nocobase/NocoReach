@@ -6605,6 +6605,8 @@
   "onlineAgent.readPage": "웹페이지 읽기",
   "onlineAgent.readRules": "분석 규칙 읽기",
   "onlineAgent.proposeRules": "규칙 변경 제안",
+  "onlineAgent.queryData": "데이터 조회",
+  "onlineAgent.runTask": "작업 시작 또는 재시도",
   "onlineAgent.suggestions": "추천 질문",
   "onlineAgent.status.queued": "대기 중",
   "onlineAgent.status.running": "실행 중",

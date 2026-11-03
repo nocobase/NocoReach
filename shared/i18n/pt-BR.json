@@ -6575,6 +6575,8 @@
   "onlineAgent.readPage": "Ler página da web",
   "onlineAgent.readRules": "Ler regras de análise",
   "onlineAgent.proposeRules": "Propor uma alteração de regras",
+  "onlineAgent.queryData": "Consultar dados",
+  "onlineAgent.runTask": "Iniciar ou tentar novamente uma tarefa",
   "onlineAgent.suggestions": "Perguntas sugeridas",
   "onlineAgent.status.queued": "Na fila",
   "onlineAgent.status.running": "Em execução",

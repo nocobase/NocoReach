@@ -6575,6 +6575,8 @@
   "onlineAgent.readPage": "讀取網頁",
   "onlineAgent.readRules": "讀取分析規則",
   "onlineAgent.proposeRules": "提出規則修改",
+  "onlineAgent.queryData": "查詢資料",
+  "onlineAgent.runTask": "啟動或重試任務",
   "onlineAgent.suggestions": "可以這樣問",
   "onlineAgent.status.queued": "排隊中",
   "onlineAgent.status.running": "執行中",

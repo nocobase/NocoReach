@@ -184,7 +184,16 @@ test('online conversations are durable, idempotent, owner-scoped and cancellable
     projectId: null,
     text: 'Original question',
   };
-  const created = await post(admin, '/onlineAgents/conversations', input);
+  // The turn keeps the language it was sent in; the task tools name playbooks and states in it.
+  const created = await admin.fetch('/onlineAgents/conversations', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      origin: 'http://localhost',
+      'accept-language': 'zh-CN',
+    },
+    body: JSON.stringify(input),
+  });
   expect(created.status).toBe(200);
   const conversation = ((await created.json()) as { data: OnlineConversation })
     .data;
@@ -206,6 +215,7 @@ test('online conversations are durable, idempotent, owner-scoped and cancellable
     status: 'completed',
     output: 'Complete answer',
     usage: { inputTokens: 7, outputTokens: 9 },
+    locale: 'zh-CN',
   });
   expect(stream).toHaveBeenCalledOnce();
   const credentials = {

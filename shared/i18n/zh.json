@@ -6608,6 +6608,8 @@
   "onlineAgent.readPage": "读取网页",
   "onlineAgent.readRules": "读取分析规则",
   "onlineAgent.proposeRules": "提出规则修改",
+  "onlineAgent.queryData": "查询数据",
+  "onlineAgent.runTask": "启动或重试任务",
   "onlineAgent.suggestions": "可以这样问",
   "onlineAgent.status.queued": "排队中",
   "onlineAgent.status.running": "执行中",

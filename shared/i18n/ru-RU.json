@@ -6605,6 +6605,8 @@
   "onlineAgent.readPage": "Читать веб-страницу",
   "onlineAgent.readRules": "Читать правила анализа",
   "onlineAgent.proposeRules": "Предложить изменение правила",
+  "onlineAgent.queryData": "Запрос данных",
+  "onlineAgent.runTask": "Запустить или повторить задачу",
   "onlineAgent.suggestions": "Предлагаемые вопросы",
   "onlineAgent.status.queued": "В очереди",
   "onlineAgent.status.running": "Выполняется",

@@ -4,6 +4,7 @@ import { setDictionary } from '../../client/i18n';
 import { OnlineTranscript } from '../../client/online-agent/transcript.js';
 import { OnlineError } from '../../client/online-agent/controls.js';
 import { OnlineApiError } from '../../client/online-agent/api.js';
+import { toolLabel } from '../../client/online-agent/tool-cards.js';
 import type { OnlineRun } from '../../shared/online-agent.js';
 
 const run: OnlineRun = {
@@ -72,6 +73,24 @@ test('streamed Markdown stays intact and tool calls pair with collapsed results 
   rerender(<OnlineTranscript run={{ ...run, events }} />);
   expect(JSON.stringify(events)).toBe(before);
   expect(screen.getAllByText('开始')).toHaveLength(1);
+});
+
+test('every chat tool is named in words under an answer, never by its tool name', () => {
+  for (const name of [
+    'project_data',
+    'read_page',
+    'daily_analysis',
+    'task_list',
+    'task_get',
+    'task_execute',
+    'query_data',
+    'analysis_rules',
+    'propose_rule_changes',
+    'propose_keyword_run',
+  ])
+    expect(toolLabel(name)).not.toBe(name);
+  expect(toolLabel('query_data')).toBe('查询数据');
+  expect(toolLabel('task_execute')).toBe('启动或重试任务');
 });
 
 test.each([

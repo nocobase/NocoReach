@@ -13,6 +13,7 @@ import {
 import { OnlineAgentError, toolInput } from '../../online-agent/errors.js';
 import { publicPageTool, pageData } from './web-tool.js';
 import { taskTools } from './task-tools.js';
+import { taskNames } from './task-names.js';
 import { queryDataTool, type QuerySources } from './query-tool.js';
 import { keywordRunTool, type KeywordRunSource } from './keyword-tool.js';
 import { memoryForAI } from '../execution/memory.js';
@@ -54,7 +55,14 @@ export function createNocoReachOnlineHost(
         });
     };
     await authorizeDemo();
-    const tools: OnlineTool[] = taskTools(host, run, authorize, basePath);
+    // A turn sent before turns kept their language names things in English.
+    const tools: OnlineTool[] = taskTools(
+      host,
+      run,
+      authorize,
+      basePath,
+      await taskNames(run.locale ?? 'en-US'),
+    );
     let opened = '';
     if (run.projectId) {
       const projectId = run.projectId;

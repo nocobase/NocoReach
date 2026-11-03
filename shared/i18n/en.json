@@ -6608,6 +6608,8 @@
   "onlineAgent.readPage": "Read webpage",
   "onlineAgent.readRules": "Read analysis rules",
   "onlineAgent.proposeRules": "Propose a rule change",
+  "onlineAgent.queryData": "Query data",
+  "onlineAgent.runTask": "Start or retry a task",
   "onlineAgent.suggestions": "Suggested questions",
   "onlineAgent.status.queued": "Queued",
   "onlineAgent.status.running": "Running",

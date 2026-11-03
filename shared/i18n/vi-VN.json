@@ -6665,6 +6665,8 @@
   "onlineAgent.readPage": "Đọc trang web",
   "onlineAgent.readRules": "Đọc quy tắc phân tích",
   "onlineAgent.proposeRules": "Đề xuất thay đổi quy tắc",
+  "onlineAgent.queryData": "Truy vấn dữ liệu",
+  "onlineAgent.runTask": "Bắt đầu hoặc thử lại nhiệm vụ",
   "onlineAgent.suggestions": "Câu hỏi gợi ý",
   "onlineAgent.status.queued": "Đang chờ",
   "onlineAgent.status.running": "Đang chạy",

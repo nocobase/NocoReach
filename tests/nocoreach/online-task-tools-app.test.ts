@@ -13,6 +13,7 @@ import { createStandaloneServer } from '../../server/standalone.js';
 import { nocoReachToken } from '../../server/providers/nocoreach.js';
 import { createNocoReachOnlineHost } from '../../server/nocoreach/online-agent/host.js';
 import type { OnlineRun } from '../../shared/online-agent.js';
+import { SYSTEM_PLAYBOOKS, stagesFor } from '../../shared/playbook-catalog.js';
 import { discoverAgents } from './runner-fixture.js';
 
 vi.setConfig({ testTimeout: 120000, hookTimeout: 120000 });
@@ -267,6 +268,7 @@ test("task_list reads a project conversation's tasks in one call, with their pag
       ownerId: user.id,
       projectId,
       instructions: '',
+      locale: 'zh-CN',
     } as OnlineRun,
     signal,
   );
@@ -298,8 +300,9 @@ test("task_list reads a project conversation's tasks in one call, with their pag
     title: 'Optimize page: install guide',
     url: `/actions/${first.id}?projectId=${projectId}`,
     state: 'todo',
-    stage: 'plan',
+    stateName: '待处理',
     playbookId: 'optimize-page',
+    playbook: '优化现有页面',
     ownerName: 'Duplicate finder',
     pages: [page],
     opportunity: 'O-12',
@@ -334,7 +337,10 @@ test("task_list reads a project conversation's tasks in one call, with their pag
 
   const closed = await call('task_list', { status: 'closed' });
   expect(closed.items.map((item: { no: string }) => item.no)).toEqual(['T-3']);
-  expect(closed.items[0].state).toBe('closed');
+  expect(closed.items[0]).toMatchObject({
+    state: 'closed',
+    stateName: '已关闭',
+  });
   const everywhere: { title: string }[] = [];
   let read: { projectId: string }[] = [];
   for (let offset: number | null = 0; offset !== null;) {
@@ -389,6 +395,152 @@ test("task_list reads a project conversation's tasks in one call, with their pag
   expect(await call('propose_rule_changes', { changes: [] })).toMatchObject({
     rejected: true,
     reason: expect.stringMatching(/^changes: /),
+  });
+});
+
+test("task tools name playbooks, steps and states as the task page does, in the turn's language", async ({
+  testApp,
+}) => {
+  await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const container = testApp.application.container;
+  const host = container.resolve(nocoReachToken);
+  await host.ready;
+  const user = await container.resolve(userAdministrationServiceToken).create({
+    email: 'online-names@example.test',
+    password: 'test-password-123',
+    name: 'Name reader',
+  });
+  await container.resolve(authorizationToken).permissionSets.assign({
+    permissionSet: 'nr.member',
+    subject: { type: 'user', id: user.id },
+  });
+  const project = await host.plugin.projects.create({
+    name: 'Names',
+    domain: 'names.example.test',
+  });
+  const projectId = String(project.id);
+  await host.legacy.db.access!.joinCreatedProject(user.id, projectId);
+  const builtIn = SYSTEM_PLAYBOOKS.find((p) => p.id === 'optimize-page')!;
+  // A started task keeps the playbook it started with: the built-in as it was, or a copy someone edited.
+  const started = (edited: boolean) => {
+    const stages = stagesFor(builtIn).map((stage) =>
+      edited ? { ...stage, name: `${stage.name} (ours)` } : stage,
+    );
+    const name = edited ? 'Our page rewrite' : builtIn.name;
+    return {
+      stage: 'flow',
+      stageIndex: 1,
+      flow: { id: builtIn.id, name, version: 3, system: true, edited, stages },
+      playbook: {
+        id: builtIn.id,
+        name,
+        kind: builtIn.kind,
+        version: 3,
+        next: [],
+        system: true,
+        edited,
+      },
+    };
+  };
+  const tasks: Record<string, string> = {};
+  for (const [no, extra] of [
+    [1, {}],
+    [2, started(false)],
+    [3, started(true)],
+    [4, { playbookId: 'removed-playbook' }],
+  ] as const) {
+    const task = await host.plugin.db.getRepository('nrTasks').create({
+      values: {
+        projectId,
+        taskKey: randomUUID(),
+        title: `Task ${no}`,
+        status: '待处理',
+        evidence: {
+          createdBy: { id: user.id },
+          no,
+          work: {
+            schemaVersion: 2,
+            revision: 0,
+            stage: 'plan',
+            plan: null,
+            planVersion: 0,
+            step: 0,
+            results: [],
+            history: [],
+            operations: [],
+            receipt: null,
+            verification: null,
+            playbookId: 'optimize-page',
+            humanOwnerId: user.id,
+            ...extra,
+          },
+        },
+      },
+    });
+    tasks[`T-${no}`] = String(task.id);
+  }
+  const signal = new AbortController().signal;
+  const read = async (locale?: string) => {
+    const context = await createNocoReachOnlineHost(() => host, '')(
+      {
+        id: randomUUID(),
+        ownerId: user.id,
+        projectId,
+        instructions: '',
+        ...(locale ? { locale } : {}),
+      } as OnlineRun,
+      signal,
+    );
+    const call = async (name: string, input: unknown): Promise<any> =>
+      context.tools.find((tool) => tool.name === name)!.execute(input, signal);
+    const list = await call('task_list', { scope: 'accessible' });
+    return {
+      item: (no: string) =>
+        list.items.find((item: { no: string }) => item.no === no),
+      get: (no: string) => call('task_get', { projectId, taskId: tasks[no] }),
+    };
+  };
+
+  const english = await read('en-US');
+  expect(english.item('T-1')).toMatchObject({
+    state: 'todo',
+    stateName: 'To do',
+    playbookId: 'optimize-page',
+    playbook: 'Improve existing page',
+  });
+  expect(english.item('T-1')).not.toHaveProperty('step');
+  expect(english.item('T-2')).toMatchObject({
+    state: 'review',
+    stateName: 'Needs you',
+    playbook: 'Improve existing page',
+    step: 'Review',
+  });
+  // An edited copy keeps its own words.
+  expect(english.item('T-3')).toMatchObject({
+    playbook: 'Our page rewrite',
+    step: '审核 (ours)',
+  });
+  expect(english.item('T-4')).toMatchObject({
+    playbookId: 'removed-playbook',
+    playbook: null,
+  });
+  expect(await english.get('T-2')).toMatchObject({
+    state: 'review',
+    stateName: 'Needs you',
+    stageKey: 'review',
+    stageName: 'Review',
+    playbook: 'Improve existing page',
+  });
+  // A language loaded on demand.
+  const traditional = await read('zh-TW');
+  expect(traditional.item('T-1')).toMatchObject({
+    stateName: '待處理',
+    playbook: '最佳化現有頁面',
+  });
+  expect(traditional.item('T-2')).toMatchObject({ step: '審核' });
+  // A turn sent before turns kept their language.
+  expect((await read()).item('T-1')).toMatchObject({
+    playbook: 'Improve existing page',
   });
 });
 
