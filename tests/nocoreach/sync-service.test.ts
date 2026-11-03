@@ -35,12 +35,15 @@ test('snapshots are reused until stored data changes',async()=>{
  assert.equal(next.find(s=>s.key==='project').payload.end,'2026-09-28');
 });
 
-function tickFixture(){
+function tickFixture(opened={lately:false}){
  const {sync}=setup();sync.step=async()=>false;sync.snapshots=async()=>[];sync.refreshFresh=async()=>{};
  sync.repo=()=>({find:async()=>[{get:k=>k==='projectId'?'1':k==='nextSyncAt'?'2999-01-01T00:00:00Z':null}],findOne:async()=>null});
- const website=vi.fn(async()=>({complete:true,missing:[]})),warm=vi.fn(async()=>({partial:false}));
- sync.p.dataViews={search:async()=>({}),website,warm};
- return {sync,website,warm};
+ const website=vi.fn(async()=>({complete:true,missing:[]})),warm=vi.fn(async()=>({partial:false})),scopes=[];
+ // How the tick read Traffic: ahead (a held report answers whatever its age) or waiting for a new one.
+ // Opened in the last three days; in the last one only when `opened.lately`.
+ const recentlyRead=vi.fn(async(_id,_at,within)=>within?opened.lately:true);
+ sync.p.dataViews={search:async()=>({}),website:(...a)=>{scopes.push(__report_cache.readsAhead()?'ahead':__report_cache.readsFresh()?'fresh':'saved');return website(...a);},warm,recentlyRead};
+ return {sync,website,warm,scopes};
 }
 const HOURS=3600000;
 test('tick: a breakdown Google refuses in part is read ahead again after six hours, not every 15 minutes',async()=>{
@@ -58,7 +61,7 @@ test('tick: a breakdown Google refuses in part is read ahead again after six hou
 test('tick: a Traffic report GA4 refuses in part waits six hours, a whole one is asked for each tick, a failure waits 15 minutes',async()=>{
  vi.useFakeTimers({toFake:['Date']});
  try{
-  const {sync,website}=tickFixture();
+  const {sync,website,scopes}=tickFixture();
   await sync.tick();await sync.tick();assert.equal(website.mock.calls.length,2,'a whole report answers from memory, and a moved window is noticed at once');
   website.mockResolvedValue({complete:false,missing:['city']});
   await sync.tick();await sync.tick();assert.equal(website.mock.calls.length,3);
@@ -68,6 +71,21 @@ test('tick: a Traffic report GA4 refuses in part waits six hours, a whole one is
   vi.setSystemTime(Date.now()+6*HOURS);website.mockRejectedValue(new Error('quota'));await sync.tick();assert.equal(website.mock.calls.length,5);
   vi.setSystemTime(Date.now()+15*60000-1);await sync.tick();assert.equal(website.mock.calls.length,5);
   vi.setSystemTime(Date.now()+1);await sync.tick();assert.equal(website.mock.calls.length,6);
+  // The retry of a part refused failed: 15 minutes later it is read again, not taken back as the refused report.
+  website.mockResolvedValue({complete:true,missing:[]});vi.setSystemTime(Date.now()+15*60000);await sync.tick();assert.equal(website.mock.calls.length,7);
+  await sync.tick();assert.equal(website.mock.calls.length,8);
+  // A whole report's read that fails waits 15 minutes and is read ahead again.
+  website.mockRejectedValue(new Error('quota'));await sync.tick();vi.setSystemTime(Date.now()+15*60000);await sync.tick();assert.equal(website.mock.calls.length,10);
+  // A whole report is read ahead, so a held one answers however old; a part refused is read again after six hours.
+  assert.deepEqual(scopes,['ahead','ahead','ahead','fresh','fresh','fresh','fresh','ahead','ahead','ahead']);
+ }finally{vi.useRealTimers();}
+});
+test('tick: Traffic of a project opened in the last day waits for a new report, so the night\'s one is read again in the morning',async()=>{
+ vi.useFakeTimers({toFake:['Date']});
+ try{
+  const opened={lately:true},{sync,website,scopes}=tickFixture(opened);
+  await sync.tick();opened.lately=false;await sync.tick();
+  assert.equal(website.mock.calls.length,2);assert.deepEqual(scopes,['fresh','ahead'],'opened in the last day, then only in the last three');
  }finally{vi.useRealTimers();}
 });
 test('tick: readies Search performance at most every 15 minutes even after a failure, and waits for new reports',async()=>{
@@ -160,6 +178,15 @@ test('初步数据: Google\'s last days are read as daily totals with fresh data
  assert.deepEqual(card.preliminary,{from:'2026-10-01',through:'2026-10-02',days:2,totals:{clicks:8,impressions:90}});assert.equal(withFresh({id:'gsc'},[],['clicks']).preliminary,undefined);
 });
 
+test('the preliminary read keeps the GA4 property time zone on the project',async()=>{
+ const store=[],links={ga4PropertyId:'123',gscSiteUrl:'sc-domain:example.com',status:'active'};let project={id:1,analyticsPropertyId:'123',searchConsoleProperty:'sc-domain:example.com'};
+ const snaps={findOne:async({filter})=>{const r=store.find(x=>x.key===filter.key);return r&&{id:r.id,get:k=>r[k]};},create:async({values})=>{store.push({id:store.length+1,...values});},update:async({filterByTk,values})=>{Object.assign(store.find(x=>x.id===filterByTk),values);}};
+ const asked=[];const plugin={link:async()=>({id:1,get:k=>links[k]}),env:()=>'secret',project:async()=>project,projects:{update:async(id,fn)=>{project=await fn(project);}},token:async()=>'t',googleJson:async(id,url)=>{asked.push(String(url));return {timeZone:'Asia/Shanghai',displayName:'site'};},db:{getRepository:()=>snaps,sequelize:{transaction:fn=>fn({}),query:async()=>[[{}]]}}};
+ const sync=new SyncService(plugin);sync.collector=()=>({batches:[],async syncGsc(){},async syncGa4(){}});
+ await sync.refreshFresh('1');
+ assert.ok(asked.some(u=>u.endsWith('/properties/123')));assert.equal(project.analyticsPropertyTimeZone,'Asia/Shanghai');assert.equal(project.analyticsPropertyName,'site');
+});
+
 function switchSetup(){
  const links={ga4PropertyId:'123',gscSiteUrl:'sc-domain:example.com',status:'active',lastSyncAt:'2026-09-30T00:00:00Z',scheduleEnabled:true};let project={id:1,analyticsPropertyId:'123',searchConsoleProperty:'sc-domain:example.com'};
  const rec=v=>({id:v.id,get:k=>v[k],toJSON:()=>({...v})});
@@ -189,11 +216,12 @@ test('changing resources keeps their data apart: unfinished jobs of the old ones
  assert.deepEqual(status.coverage,[{source:'ga4',availableThrough:'2026-09-20'},{source:'gsc',availableThrough:'2026-09-26'}]);
 });
 
-test('the GA4 property name is kept on the project when chosen, and filled in by a sync for earlier projects',async()=>{
+test('the GA4 property name and time zone are kept on the project, filled in by a sync for earlier projects',async()=>{
  const {sync,project}=switchSetup();
- await sync.rememberPropertyName('1','999','Other');assert.equal(project().analyticsPropertyName,undefined);
- await sync.rememberPropertyName('1','123','website');assert.equal(project().analyticsPropertyName,'website');
- await sync.select('1','123','sc-domain:example.com');assert.equal(project().analyticsPropertyName,'website');
- await sync.select('1','456','sc-domain:example.com','Docs');assert.equal(project().analyticsPropertyName,'Docs');
+ await sync.rememberProperty('1','999',{displayName:'Other',timeZone:'Europe/Paris'});assert.equal(project().analyticsPropertyName,undefined);assert.equal(project().analyticsPropertyTimeZone,undefined);
+ await sync.rememberProperty('1','123',{displayName:'website',timeZone:'Asia/Shanghai'});assert.equal(project().analyticsPropertyName,'website');assert.equal(project().analyticsPropertyTimeZone,'Asia/Shanghai');
+ await sync.rememberProperty('1','123',{});assert.equal(project().analyticsPropertyTimeZone,'Asia/Shanghai','details without them change nothing');
+ await sync.select('1','123','sc-domain:example.com');assert.equal(project().analyticsPropertyName,'website');assert.equal(project().analyticsPropertyTimeZone,'Asia/Shanghai');
+ await sync.select('1','456','sc-domain:example.com','Docs');assert.equal(project().analyticsPropertyName,'Docs');assert.equal(project().analyticsPropertyTimeZone,'','another property drops the old zone');
  await sync.select('1','789','sc-domain:example.com');assert.equal(project().analyticsPropertyName,'');
 });

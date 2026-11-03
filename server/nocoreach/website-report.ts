@@ -3,7 +3,8 @@
 // and pages). Read live from the GA4 Data API instead of the synced days: users counted over a period are deduplicated
 // by GA4, while adding up synced days counts a person once per day. Three parts, each cached:
 // - period: the totals, the daily line and the report tables (流量获取, 着陆页, 页面, 事件, 地区, 技术) for a window that
-//   ends at the synced cutoff, like the other data pages; persisted until the day's sync moves its window, so read once a day.
+//   ends yesterday in the property's time zone; kept until midnight there, when yesterday moves on, except that a report
+//   read in the night is read again in the morning, once GA4 has most of yesterday (MORNING_READ_HOUR).
 // - today: today so far against yesterday and the same weekday last week up to the same hour, per hour, and today's
 //   sources (GA4's standard data, which lags; the realtime API has no source dimension). Ten minutes.
 // - realtime: the last 30 minutes from the Realtime API — users, per minute, pages, countries, cities, devices, events.
@@ -14,7 +15,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { businessNow } from './business-clock.js';
 import { GOOGLE_ENDPOINTS, googleJson, jsonRequest } from './google-client.js';
-import { aiProviders, calendarDateInTimeZone } from './google-sync.js';
+import { aiProviders, calendarDateInTimeZone, resolveGa4SyncRange } from './google-sync.js';
 import { Ga4Requests } from './ga4-requests.js';
 import { Ga4ReportCache } from './ga4-report-cache.js';
 import { GA4_HISTORY_CACHE_MS, GA4_PARTIAL_CACHE_MS, GA4_TODAY_CACHE_MS, GA4_REALTIME_CACHE_MS } from '../../shared/ga4-cache.js';
@@ -22,10 +23,6 @@ import { GOOGLE_SAVED_REPORT_MS } from '../../shared/google-cache.js';
 import type { LegacyDatabase } from './legacy/database.js';
 
 const DATA=GOOGLE_ENDPOINTS.analyticsData,MIN=60000,HOUR=3600000;
-// How long a period report lasts while its window stays put. The sync moves the window about every 24 hours and that is
-// when the report is read; this only bounds a sync that has stopped. Exactly a day would end a few seconds before the
-// next sync lands and read the same window once more first.
-const PERIOD_MS=30*HOUR;
 // GA4 answers 429 when the property's ten concurrent requests or its hourly tokens are used up, by this app's nine and
 // by anything else using the property. A request is asked again three times, after these waits, before it fails. It
 // waits outside the queue, so other reads of the property go on meanwhile.
@@ -37,6 +34,12 @@ const withGa4RetryDeadline=<T,>(deadline:number,read:()=>Promise<T>):Promise<T>=
 // GA4's standard reports fill in an hour over the next couple of hours: the last two hours it has data for are still
 // partial (on Studio, 63 and 10 views against 119 and 188 the day before), so 今天 compares only the hours before them.
 const SETTLING_HOURS=2;
+// Traffic's window ends yesterday, which GA4 is still filling in just after midnight. A period report read before this
+// hour in the property's zone lives until it, so the next visit reads yesterday again nearly whole; a later one lasts until
+// midnight. A read in the hour before it already has most of yesterday and lasts until midnight too, rather than minutes.
+// The sync tick reads it again at this hour only for a project opened in the last day (sync-service.ts), so the
+// morning's first visit sees yesterday whole: twice a day for a project in use, once for one nobody opens.
+const MORNING_READ_HOUR=6;
 const fail=(message,status)=>{throw Object.assign(new Error(message),{status});};
 // Google's own words for a failed request (its status and message), short enough to show on the page.
 const googleReason=e=>e?.code==='google_api_error'&&e.message?`${e.status?`HTTP ${e.status} · `:''}${String(e.message)}`.slice(0,300):'';
@@ -80,8 +83,13 @@ function changeRows(name,report){const c=CHANGES[name],by=new Map();
  for(const r of rowsOf(report)){const k=name==='channel'?r[c.dim]:pathKey(r[c.dim]);if(!by.has(k))by.set(k,{key:k,current:{},previous:{}});const o=by.get(k)[r.dateRange==='previous'?'previous':'current'];for(const [f,v] of Object.entries(values(r)))o[f]=(o[f]||0)+v;}
  const size=r=>Math.max(...Object.values(r.current),...Object.values(r.previous),0);
  return [...by.values()].sort((a,b)=>size(b)-size(a)).slice(0,CHANGE_KEEP);}
-// A day (YYYY-MM-DD) within a range; no end means up to now.
-const inWindow=(date:string,from:string,to?:string)=>date>=from&&(!to||date<=to);
+// A day (YYYY-MM-DD) within a range.
+const inWindow=(date:string,from:string,to:string)=>date>=from&&date<=to;
+// Whether `zone` names a time zone Intl knows.
+const knownZone=(zone:unknown):zone is string=>{if(typeof zone!=='string'||!zone)return false;try{new Intl.DateTimeFormat('en-US',{timeZone:zone});return true;}catch{return false;}};
+// Milliseconds from `now` to the next midnight in `zone` (UTC when the zone is unknown to Intl).
+function untilMidnight(zone:string,now:number){let clock;try{clock=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(now)).map(p=>[p.type,p.value]));}catch{return 24*HOUR-now%(24*HOUR);}
+ return 24*HOUR-((Number(clock.hour)*60+Number(clock.minute))*60+Number(clock.second))*1000-now%1000;}
 const range=(startDate,endDate,name)=>({startDate,endDate,...(name?{name}:{})});
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0;};
 function rowsOf(report){const dims=(report?.dimensionHeaders||[]).map(h=>h.name),mets=(report?.metricHeaders||[]).map(h=>h.name);
@@ -102,6 +110,7 @@ function tableRows(name,report){const t=TABLES[name];const rows=rowsOf(report);
 class WebsiteReport{
  requests=new Ga4Requests();
  tokenPending=new Map<string|number,Promise<string>>();
+ zonePending=new Map<string,Promise<string>>();
  tokens=new Map<string|number,{at:number;token:string}>();
  history:Ga4ReportCache;
  constructor(plugin){this.p=plugin;this.history=new Ga4ReportCache((plugin as {db?:LegacyDatabase}).db,'ga4-reports',(plugin as {app?:{logger?:{warn(message:string,meta?:Record<string,unknown>):void}}}).app?.logger);this.zones=new Map();this.todayCache=new Map();this.liveCache=new Map();}
@@ -135,22 +144,44 @@ class WebsiteReport{
    catch(e){if(!refused(e))this.explain(e);const out=[];for(const r of part)out.push(await one(r));return out;}}));
   return done.flat();}
  // The property's time zone, kept a day. A failed lookup keeps the last known zone (or UTC, unconfirmed) for five minutes
- // only, so one timeout does not leave 今天 on the wrong hours for a day.
- async timeZone(id,property){const hit=this.zones.get(property);if(hit&&Date.now()-hit.at<hit.ttl)return hit.zone;let zone='UTC',confirmed=true,ok=true;
+ // only, so one timeout does not leave the Today card on the wrong hours for a day. Callers at the same time share one lookup, so a
+ // late failure cannot overwrite a zone another lookup has just confirmed. With none known yet (after a restart), the zone
+ // the GA4 sync kept on the project answers at once: a page with a saved report does not wait on the Admin API, and an
+ // Admin API failing then cannot end Traffic's windows in UTC-12 and replace that report with a day-short one.
+ timeZone(id,property){const hit=this.zones.get(property);if(hit&&Date.now()-hit.at<hit.ttl)return Promise.resolve(hit.zone);
+  if(!this.zonePending.has(property))this.zonePending.set(property,(hit?this.lookupZone(id,property):this.savedZone(id,property).then(zone=>zone||this.lookupZone(id,property))).finally(()=>this.zonePending.delete(property)));return this.zonePending.get(property);}
+ // The zone kept on the project for this property (sync-service.ts, `rememberProperty`), trusted for a day like a lookup.
+ async savedZone(id,property){let project;try{project=await this.p.project?.(id);}catch{return '';}
+  const zone=String(project?.analyticsPropertyId)===String(property)?project?.analyticsPropertyTimeZone:'';if(!knownZone(zone))return '';
+  this.zones.set(property,{at:Date.now(),zone,confirmed:true,ttl:24*HOUR});return zone;}
+ async lookupZone(id,property){let zone='UTC',confirmed=true,ok=true;
   try{zone=(await this.json(id,`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${property}`,{...jsonRequest(await this.token(id)),signal:AbortSignal.timeout(20000)})).timeZone||'UTC';}
-  catch(e){ok=false;zone=hit?.zone||'UTC';confirmed=Boolean(hit?.confirmed);this.p.app?.logger?.warn('NocoReach GA4 time zone lookup failed',{message:e?.message,code:e?.code,status:e?.status});}
+  catch(e){ok=false;const known=this.zones.get(property);zone=known?.zone||'UTC';confirmed=Boolean(known?.confirmed);this.p.app?.logger?.warn('NocoReach GA4 time zone lookup failed',{message:e?.message,code:e?.code,status:e?.status});}
   this.zones.set(property,{at:Date.now(),zone,confirmed,ttl:ok?24*HOUR:5*MIN});return zone;}
 
- // The window `w` ends at the synced cutoff; the daily line goes on to yesterday, the days after the cutoff marked 初步.
- // A new day's window is answered from the view's previous one while it is read, so the report keeps the window it holds.
- // Keyed by the window alone: the days at the end of the line that GA4 is still filling in are read with the window's
- // new report, so they can be up to a day behind, rather than reading all its reports again at midnight for them.
- period(id:string|number,property:string,w:unknown,{cutoff,view}:{cutoff?:string;view?:unknown[]}={}){return this.history.load(String(id),['period',...this.scope(id,property),w],async()=>{const {explicitEnd,...window}=w as {explicitEnd?:boolean};return {...await this.readPeriod(id,property,w),window,...(cutoff?{cutoff}:{})};},value=>value.complete===false||value.missing.length?GA4_PARTIAL_CACHE_MS:PERIOD_MS,(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}),view?{family:['period',...this.scope(id,property),...view]}:{});}
+ // The zone Traffic's windows end in: the property's own unless the lookup failed with none confirmed, then UTC-12,
+ // the last zone to finish a day, so the window may end a day early but never on a day still under way.
+ endZone(property:string,zone=this.zones.get(property)?.zone){return this.zones.get(property)?.confirmed===false?'Etc/GMT+12':zone||'UTC';}
+ // Yesterday in that zone: the last full day GA4 can report, and the end of every Traffic window. A zone already
+ // looked up is used even past its time while a new lookup runs, so the page waits on the Admin API only the first time.
+ async yesterday(id:string|number,property:string){const hit=this.zones.get(property);if(hit&&Date.now()-hit.at>=hit.ttl)void this.timeZone(id,property).catch(()=>{});
+  const zone=this.endZone(property,hit?hit.zone:await this.timeZone(id,property)),now=new Date(businessNow(this.p,id,'google'));
+  try{return resolveGa4SyncRange({},zone,now).targetEnd;}catch{return resolveGa4SyncRange({},'Etc/GMT+12',now).targetEnd;}}
+ // The totals, the daily line and the tables all cover the window `w`, which ends yesterday: GA4 is still processing its
+ // last two days, so a report read in the night is read again at MORNING_READ_HOUR, and any lasts at most until midnight
+ // where it ends, when yesterday moves on and the same range names other days. The browser keys the page by range, not by window, so the expiry it gets
+ // is cut to this instance's own midnight (a stored copy may come from another zone), and to five minutes while the zone
+ // is unconfirmed: it then asks again and moves to the property's own yesterday once the lookup succeeds. A new day's
+ // window is answered from the view's previous one while it is read, so the report keeps the window it holds, and the
+ // `settledThrough` of the day it was read: its days after that were still being processed when GA4 gave them.
+ period(id:string|number,property:string,w:unknown,{cutoff,settledThrough,view}:{cutoff?:string;settledThrough?:string;view?:unknown[]}={}){const now=businessNow(this.p,id,'google'),guessed=this.zones.get(property)?.confirmed===false;
+  return this.history.load(String(id),['period',...this.scope(id,property),w],async()=>({...await this.readPeriod(id,property,w),window:w,...(cutoff?{cutoff}:{}),...(settledThrough?{settledThrough}:{})}),value=>{const left=untilMidnight(this.endZone(property),now),since=24*HOUR-left;return value.complete===false||value.missing.length?Math.min(GA4_PARTIAL_CACHE_MS,left):since<(MORNING_READ_HOUR-1)*HOUR?MORNING_READ_HOUR*HOUR-since:left;},
+   (value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt:Math.min(cacheExpiresAt,Date.now()+(guessed?GA4_PARTIAL_CACHE_MS:untilMidnight(this.endZone(property),now))),...saved}),view?{family:['period',...this.scope(id,property),...view]}:{});}
  async readPeriod(id,property,w){const both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],current=[range(w.start,w.end)];
   const names=Object.keys(TABLES),changeNames=Object.keys(CHANGES);
   const reports=await this.batch(id,property,[
    request([],SESSION,both),
-   request(['date'],SESSION,[range(w.start,w.explicitEnd?w.end:'yesterday','current'),range(w.previousStart,w.previousEnd,'previous')],null,Math.max(1000,(w.days||Math.ceil((Date.parse(w.end)-Date.parse(w.start))/86400000)+1)*2)),
+   request(['date'],SESSION,[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],null,Math.max(1000,(w.days||Math.ceil((Date.parse(w.end)-Date.parse(w.start))/86400000)+1)*2)),
    ...names.map(n=>{const t=TABLES[n];return request(t.dims,t.metrics||SESSION,current,t.order||'sessions',t.limit);}),
    ...changeNames.map(n=>{const c=CHANGES[n];return request([c.dim],c.metrics,both,c.order,c.limit);}),
   ]);
@@ -159,7 +190,7 @@ class WebsiteReport{
   const daily=rowsOf(dailyReport).map(r=>({period:r.dateRange,date:`${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)}`,...values(r)}));
   // With two date ranges and the date dimension GA4 answers every day of both ranges for each range, zeros outside
   // it: keep each range's own days, or the line runs over the other period's days at zero (UI review 2026-10-21).
-  const out={totals:{current:totals.current||null,previous:totals.previous||null},daily:daily.filter(r=>r.period==='current'&&inWindow(r.date,w.start)).map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),
+  const out={totals:{current:totals.current||null,previous:totals.previous||null},daily:daily.filter(r=>r.period==='current'&&inWindow(r.date,w.start,w.end)).map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),
    previousDaily:daily.filter(r=>r.period==='previous'&&inWindow(r.date,w.previousStart,w.previousEnd)).map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),tables:{},missing:[],complete:reports.every(Boolean)};
   names.forEach((n,i)=>{if(tables[i])out.tables[n]=tableRows(n,tables[i]);else out.missing.push(n);});
   // A change report GA4 refuses only leaves that part out of the explanation.
@@ -170,10 +201,12 @@ class WebsiteReport{
   return out;}
 
  // One row of a table over the window: its days against the period before, and its totals for both (deduplicated users).
+ // Like the period report, it keeps the `settledThrough` of the day it was read.
  async row(id,property,w,v){const table=String(v.table||''),t=TABLES[table];if(!t)fail(systemMessageText('dataViews.unknownGa4Report'),400);const dims=v.dims||{};
   const pairs=(ROW_KEYS[table]||t.dims).map(k=>{const x=dims[k];if(typeof x!=='string'||x.length>2000)fail(systemMessageText('dataViews.ga4RowMissing'),400);return [k,x];});
-  const dates=[w.start,w.end,w.previousStart,w.previousEnd,Boolean(w.all)];// A new window answers from the same row's previous one while it is read, so the row keeps the window it holds.
-  return this.history.load(String(id),['row',...this.scope(id,property),dates,table,pairs],async()=>{const {explicitEnd,...window}=w as {explicitEnd?:boolean};return {...await this.readRow(id,property,w,{table,pairs}),window};},()=>v.settled===true?GOOGLE_SAVED_REPORT_MS:GA4_HISTORY_CACHE_MS,(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}),Array.isArray(v.view)?{family:['row',...this.scope(id,property),table,pairs,...v.view,Math.round((Date.parse(w.end)-Date.parse(w.start))/86400000)+1,Boolean(w.all)]}:{});}
+  const dates=[w.start,w.end,w.previousStart,w.previousEnd,Boolean(w.all)];// A new window answers from the same row's previous one while it is read, so the row keeps the window it holds,
+  // and the `settledThrough` of the day it was read.
+  return this.history.load(String(id),['row',...this.scope(id,property),dates,table,pairs],async()=>({...await this.readRow(id,property,w,{table,pairs}),window:w,...(v.settledThrough?{settledThrough:v.settledThrough}:{})}),()=>v.settled===true?GOOGLE_SAVED_REPORT_MS:GA4_HISTORY_CACHE_MS,(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}),Array.isArray(v.view)?{family:['row',...this.scope(id,property),table,pairs,...v.view,Math.round((Date.parse(w.end)-Date.parse(w.start))/86400000)+1,Boolean(w.all)]}:{});}
  async readRow(id,property,w,{table,pairs}){const t=TABLES[table];
   const metrics=t.metrics||SESSION,both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],filter=exact(pairs);
   const [daysReport,totalsReport]=await this.batch(id,property,[request(['date'],metrics,both,null,Math.max(1000,(w.days||Math.ceil((Date.parse(w.end)-Date.parse(w.start))/86400000)+1)*2),filter),request([],metrics,both,null,null,filter)]);

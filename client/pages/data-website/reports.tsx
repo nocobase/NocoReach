@@ -80,6 +80,7 @@ import {
   regionName,
   show,
   special,
+  trendPoints,
   type MetricKey,
   type Report,
   type Row,
@@ -716,13 +717,11 @@ function RowDrawer({
   });
   const now = data?.totals?.current ?? row,
     before = data?.totals?.previous ?? null;
-  const days = ownDays(w, data?.daily, data?.previousDaily);
-  const points = days.current.map((d, i) => ({
-    date: d.date,
-    value: METRICS[main].of(d),
-    previous: days.previous[i] ? METRICS[main].of(days.previous[i]) : null,
-    previousDate: days.previous[i]?.date ?? '',
-  }));
+  const { points, fresh } = trendPoints(
+    ownDays(w, data?.daily, data?.previousDaily),
+    METRICS[main].of,
+    data?.settledThrough ?? report.settledThrough,
+  );
   return (
     <DetailDrawer
       open
@@ -751,6 +750,7 @@ function RowDrawer({
                     : null,
                 ),
                 row.queries ?? [],
+                report.queriesWindow,
               )
             }
           />
@@ -870,6 +870,17 @@ function RowDrawer({
                 strokeDasharray='4 4'
                 dot={false}
               />
+              {fresh ? (
+                <Line
+                  isAnimationActive={false}
+                  type='linear'
+                  dataKey='fresh'
+                  name={$t('dataWebsite.preliminaryData')}
+                  stroke='var(--chart-3)'
+                  strokeDasharray='2 3'
+                  dot={false}
+                />
+              ) : null}
             </TrendChart>
           </ResponsiveContainer>
         </div>
@@ -879,6 +890,14 @@ function RowDrawer({
           <h3 className='mt-5 mb-1 text-sm font-semibold'>
             {$t('dataWebsite.relatedSearchQueries')}
           </h3>
+          {row.queries?.length && report.queriesWindow ? (
+            <p className='mb-2 text-xs text-muted-foreground'>
+              {$t('dataWebsite.pageQueriesFinalized', {
+                0: formatDate(report.queriesWindow.start),
+                1: formatDate(report.queriesWindow.end),
+              })}
+            </p>
+          ) : null}
           {row.queries?.length ? (
             <table className='w-full text-sm'>
               <thead>

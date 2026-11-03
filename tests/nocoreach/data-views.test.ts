@@ -78,13 +78,17 @@ test('website custom ranges have distinct cached reports and row details use the
  const plugin={sync:{link:async()=>({get:()=> '123'}),snapshotKey:async()=>({key:'one'}),snapshots:async()=>snapshots}};
  const views=new DataViews(plugin);const asked=[];
  views.ga4.period=async(_id,_property,w)=>{asked.push(w);return {tables:{},missing:[]};};
- views.ga4.row=async(_id,_property,w)=>({queried:w});
+ views.ga4.row=async(_id,_property,w)=>({queried:w});views.ga4.yesterday=async()=>'2026-09-30';
  const a=await views.website('1',{range:'custom',from:'2026-08-01',to:'2026-08-07'});
  const b=await views.website('1',{range:'custom',from:'2026-08-08',to:'2026-08-14'});
  assert.equal(a.window.start,'2026-08-01');assert.equal(b.window.start,'2026-08-08');assert.equal(asked.length,2);
  const detail=await views.websiteRow('1',{range:'custom',from:'2026-08-01',to:'2026-08-07'});
  assert.deepEqual(detail.window,a.window);
  const all=await views.website('1',{range:'all'});assert.equal(all.window.start,'2026-01-01');assert.equal(all.window.all,true);
+ views.ga4.yesterday=async()=>'2026-09-29';
+ const row=await views.websiteRow('1',{range:'7',cutoff:'2026-09-30'});
+ assert.equal(row.window.end,'2026-09-30','the report\'s cutoff stands when this lookup resolves an earlier yesterday');
+ await assert.rejects(views.websiteRow('1',{range:'7',cutoff:'2099-01-01'}),e=>e.status===400);
 });
 
 test('content all/custom detail respects the shared list cutoff when sources end on different days',async()=>{

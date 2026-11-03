@@ -76,6 +76,14 @@ export const waitForFresh = async <T>(read: () => Promise<T> | T): Promise<T> =>
   freshReads.run(true, read);
 /** Whether reads here wait for a new report rather than take a saved copy. */
 export const readsFresh = (): boolean => Boolean(freshReads.getStore());
+// Reads ahead of people: a report held for the same identity answers even past its lifetime, and only a report with
+// none (a copy from its family does not count) is read, waiting as in `waitForFresh`. The sync tick readies Traffic's
+// new window this way once, and leaves reading it again for freshness to the visits that show it.
+const aheadReads = new AsyncLocalStorage<boolean>();
+export const readAhead = async <T>(read: () => Promise<T> | T): Promise<T> =>
+  aheadReads.run(true, () => waitForFresh(read));
+/** Whether reads here take the report held for their identity whatever its age. */
+export const readsAhead = (): boolean => Boolean(aheadReads.getStore());
 const copyable = (entry: Entry): boolean =>
   entry.expiresAt > Date.now() ||
   Date.now() - entry.at <= GOOGLE_SAVED_COPY_MAX_AGE_MS;
@@ -129,7 +137,10 @@ export class GoogleReportCache {
     // A copy older than GOOGLE_SAVED_COPY_MAX_AGE_MS is not shown: the reader waits for the new report instead.
     const held = found && copyable(found) ? found : undefined;
     // Each caller may enrich its own response with synced Search Console rows.
-    if (held?.key === key && held.expiresAt > Date.now())
+    if (
+      held?.key === key &&
+      (held.expiresAt > Date.now() || aheadReads.getStore())
+    )
       return present(structuredClone(held.value) as T, held.expiresAt);
     if (held && !freshReads.getStore()) {
       const refreshing = this.refresh(projectId, key, family, fetcher, ttl);

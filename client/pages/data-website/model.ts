@@ -55,6 +55,9 @@ export type Report = Partial<SavedCopy> & {
   connected: boolean;
   cacheExpiresAt?: number;
   cutoff?: string | null;
+  settledThrough?: string | null;
+  /** The days of the Search Console queries on page rows: synced, finalized data that ends before `cutoff`. */
+  queriesWindow?: { start: string; end: string } | null;
   window?: Window;
   totals?: { current: Values | null; previous: Values | null };
   daily?: Day[];
@@ -67,6 +70,8 @@ export type Report = Partial<SavedCopy> & {
 export type RowDetail = Partial<SavedCopy> & {
   connected: boolean;
   cacheExpiresAt?: number;
+  /** Days after this one were still being processed by GA4 when the row was read. */
+  settledThrough?: string | null;
   window?: Window;
   daily?: Day[];
   previousDaily?: Day[];
@@ -261,6 +266,29 @@ export function ownDays(
     previous: (previousDaily ?? []).filter(
       (d) => d.date >= window.previousStart && d.date <= window.previousEnd,
     ),
+  };
+}
+// One figure per day against the same day of the period before. Days after `settled` are still being processed by
+// GA4: they go to `fresh`, drawn dotted, which starts on the last settled day so the two lines meet.
+export function trendPoints(
+  days: { current: Day[]; previous: Day[] },
+  of: (v: Values) => number | null,
+  settled: string | null | undefined,
+) {
+  const points = days.current.map((d, i) => {
+    const before = days.previous[i],
+      value = of(d);
+    return {
+      date: d.date,
+      value: !settled || d.date <= settled ? value : null,
+      fresh: settled && d.date >= settled ? value : null,
+      previous: before ? of(before) : null,
+      previousDate: before?.date ?? '',
+    };
+  });
+  return {
+    points,
+    fresh: Boolean(settled) && points.some((p) => p.date > settled!),
   };
 }
 export const change = (now: number | null, before: number | null) =>

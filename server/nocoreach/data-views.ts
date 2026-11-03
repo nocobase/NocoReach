@@ -14,7 +14,6 @@ import * as hnSource from './hackernews-source.js';
 import * as __google_client from './google-client.js';
 import { WebsiteReport } from './website-report.js';
 import { GoogleReportCache, waitForFresh } from './google-report-cache.js';
-import { calendarDateInTimeZone } from './google-sync.js';
 import { GOOGLE_HISTORY_CACHE_MS, GOOGLE_PARTIAL_CACHE_MS, GOOGLE_SAVED_REPORT_MS, reportView } from '../../shared/google-cache.js';
 import { githubView } from './github-view.js';
 import { downloadsView } from './downloads-view.js';
@@ -32,7 +31,9 @@ const dayOf=v=>v instanceof Date?v.toISOString().slice(0,10):String(v||'').slice
 const viewFamily=(kind,parts,v,w)=>typeof v.view==='string'&&v.view?[kind,...parts,v.view.slice(0,200),days(w.start,w.end),w.all===true]:undefined;
 // The longest stretch of synced query × page days read for a report: both 90-day periods. Longer ones ask Search Console.
 const MAX_STORED_PAIR_DAYS=200;
-// GA4 goes on processing a day for about two days after it ends; a report over later days is not kept as settled.
+// GA4 goes on processing a day for about two days after it ends; a report over later days is not kept as settled, and
+// Traffic marks those days as still changing. The page notes and the chart tip say "two days" in every locale
+// (dataWebsite.latestDaysPreliminary).
 const GA4_PROCESSING_DAYS=2;
 // The most query × page rows a report holds per period, read from Search Console or summed from the synced days: a long
 // tail that differs by day would otherwise grow the sums well past a gigabyte.
@@ -58,15 +59,21 @@ function windowFor(end,range,from,to,first){if(range==='all'){const start=calend
 // Sums need every day of the window present; otherwise the value is shown with its coverage, never as a comparison.
 function metric(rows,field,w){const inWin=(a,b)=>rows.filter(r=>r.date>=a&&r.date<=b&&Number.isFinite(r[field]));const cur=inWin(w.start,w.end),prev=inWin(w.previousStart,w.previousEnd);const sum=l=>l.reduce((s,r)=>s+r[field],0);const complete=cur.length===days(w.start,w.end),prevComplete=!w.all&&prev.length===days(w.previousStart,w.previousEnd);const value=cur.length?sum(cur):null,previous=prevComplete?sum(prev):null;return {value,previous,complete,change:complete&&previous?(value-previous)/previous:null};}
 function series(rows,field,w){const by=new Map(rows.map(r=>[r.date,r[field]]));const out=[];for(let d=w.start;d<=w.end;d=add(d,1))out.push({date:d,value:by.has(d)&&Number.isFinite(by.get(d))?by.get(d):null});return out;}
-// 访问 (GA4): the window ends at the project cutoff, like the other data pages; the numbers come live from GA4
+// Traffic reads GA4 live, so its window ends yesterday instead of waiting for the synced cutoff.
+const trafficEnd=(synced,yesterday)=>calendarDate(yesterday)&&yesterday>synced?yesterday:synced;
+// Traffic (GA4): the window ends yesterday in the property's time zone; the numbers come live from GA4
 // (website-report.ts, `period`), and each page row carries the Search Console queries that landed on it in the range.
-// The page explains the numbers itself; `missing` names the reports GA4 did not return.
-async function websiteView(snaps,range,period,from,to){const get=k=>snaps.find(s=>s.key===k)?.payload,web=get('history-web')||[],end=get('project')?.end||web.map(r=>r.date).sort().at(-1);if(!end||!web.length)return {connected:true,cutoff:null};
- const w=windowFor(end,range,from,to,firstDate(web)),report=await period(range==='custom'||range==='all'?{...w,explicitEnd:true}:w,end);
+// Those queries are synced, finalized data for the same range ending at the synced cutoff; `queriesWindow` names it.
+// The days after `settledThrough` are still being processed by GA4; a saved report answered meanwhile brings the one of
+// the day it was read. `yesterdayOf` is asked only once there is data, since it may wait on the GA4 Admin API. The page
+// explains the numbers itself; `missing` names the reports GA4 did not return.
+async function websiteView(snaps,range,period,from,to,yesterdayOf){const get=k=>snaps.find(s=>s.key===k)?.payload,web=get('history-web')||[],synced=get('project')?.end||web.map(r=>r.date).sort().at(-1);if(!synced||!web.length)return {connected:true,cutoff:null};
+ const yesterday=await yesterdayOf?.(),end=trafficEnd(synced,yesterday),settled=calendarDate(yesterday)?add(yesterday,-GA4_PROCESSING_DAYS):end;
+ const w=windowFor(end,range,from,to,firstDate(web)),report=await period(w,end,settled);
  const pathOf=u=>{try{return new URL(u).pathname.replace(/\/+$/,'')||'/';}catch{return String(u||'').split('?')[0].replace(/\/+$/,'')||'/';}};
- const queries=new Map();for(const q of get(`queries-${range}`)||[]){const k=pathOf(q.page);if(!queries.has(k))queries.set(k,[]);queries.get(k).push({keyword:q.keyword,clicks:q.clicks,impressions:q.impressions,position:q.position});}
+ const searched=get(`queries-${range}`)||[],queries=new Map();for(const q of searched){const k=pathOf(q.page);if(!queries.has(k))queries.set(k,[]);queries.get(k).push({keyword:q.keyword,clicks:q.clicks,impressions:q.impressions,position:q.position});}
  if(report.tables.page)report.tables.page=report.tables.page.map(p=>({...p,queries:(queries.get(pathOf(p.key))||[]).sort((a,b)=>b.impressions-a.impressions).slice(0,8)}));
- return {connected:true,cutoff:end,from:firstDate(web),window:w,...report};}
+ return {connected:true,cutoff:end,settledThrough:settled,queriesWindow:searched.length?{start:windowFor(synced,range).start,end:synced}:null,from:firstDate(web),window:w,...report};}
 function firstDate(rows){return rows.map(r=>r.date).sort()[0]||null;}
 // Search Console filters for a country and the query and page filters. Search performance reads web search only
 // (2026-10-22: the other search types were dropped from the page; the sync reads web search only too).
@@ -260,15 +267,19 @@ class DataViews{
  // GA4 history is cached by the actual query in WebsiteReport. Synced partition writes only refresh the local
  // Search Console enrichment, without invalidating an unchanged GA4 window or repeating its upstream reports.
  async website(id,v){let link,snaps;try{[link,snaps]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshots(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
-  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28';return websiteView(snaps,range,(w,cutoff)=>this.ga4.period(id,link.get('ga4PropertyId'),w,{cutoff,view:[range,String(v.from||''),String(v.to||'')]}),v.from,v.to);}
+  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28';const property=link.get('ga4PropertyId');return websiteView(snaps,range,(w,cutoff,settledThrough)=>this.ga4.period(id,property,w,{cutoff,settledThrough,view:[range,String(v.from||''),String(v.to||'')]}),v.from,v.to,()=>this.ga4.yesterday(id,property));}
  // 访问 · one row's days (its detail), 今天 and 实时: read from GA4 when asked (website-report.ts keeps each a while).
  async websiteRow(id,v){let link,snaps;try{[link,snaps]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshots(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
-  const get=k=>snaps.find(s=>s.key===k)?.payload,end=get('project')?.end||(get('history-web')||[]).map(r=>r.date).sort().at(-1);if(!end)return {connected:true,cutoff:null};
-  const cutoff=v.cutoff===undefined?end:v.cutoff,first=firstDate(get('history-web')||[]);if(!calendarDate(cutoff)||cutoff>end||(first&&cutoff<first))fail(systemMessageText('dataViews.invalidDate'));
+  const get=k=>snaps.find(s=>s.key===k)?.payload,synced=get('project')?.end||(get('history-web')||[]).map(r=>r.date).sort().at(-1);if(!synced)return {connected:true,cutoff:null};
+  // The cutoff is the one on the user's report. It is checked against the latest day that is yesterday anywhere (UTC+14),
+  // not a new zone lookup, which another instance or a failed lookup may resolve a day earlier.
+  const property=link.get('ga4PropertyId'),yesterday=await this.ga4.yesterday(id,property);
+  const latest=add(iso(businessNow(this.p,id,'google')+14*3600000),-1),cutoff=v.cutoff===undefined?trafficEnd(synced,yesterday):v.cutoff,first=firstDate(get('history-web')||[]);if(!calendarDate(cutoff)||cutoff>trafficEnd(synced,latest)||(first&&cutoff<first))fail(systemMessageText('dataViews.invalidDate'));
   const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28',w=windowFor(cutoff,range,v.from,v.to,first);
-  // A row is kept as long as a report over final days only while GA4 has finished every day of its window.
-  const settled=w.end<=add(calendarDateInTimeZone('America/Los_Angeles',new Date(businessNow(this.p,id,'google'))),-1-GA4_PROCESSING_DAYS);
-  return {connected:true,cutoff,window:w,...await this.ga4.row(id,link.get('ga4PropertyId'),w,{table:String(v.table||''),dims:v.dims&&typeof v.dims==='object'?v.dims:{},settled,view:[range,String(v.from||''),String(v.to||'')]})};}
+  // A row is kept as long as a report over final days only while GA4 has finished every day of its window. Its chart
+  // dots the days after `settledThrough`, which a saved row keeps from the day it was read.
+  const settledThrough=calendarDate(yesterday)?add(yesterday,-GA4_PROCESSING_DAYS):null,settled=Boolean(settledThrough)&&w.end<=settledThrough;
+  return {connected:true,cutoff,window:w,settledThrough,...await this.ga4.row(id,property,w,{table:String(v.table||''),dims:v.dims&&typeof v.dims==='object'?v.dims:{},settled,...(settledThrough?{settledThrough}:{}),view:[range,String(v.from||''),String(v.to||'')]})};}
  async websiteToday(id){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.today(id,link.get('ga4PropertyId'))};}
  async websiteRealtime(id){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.realtime(id,link.get('ga4PropertyId'))};}
  // Countries for the country filter: a live Search Console query, asked for on its own (the page does not wait for it)
@@ -312,9 +323,10 @@ class DataViews{
  // at most hourly, as a restart must not forget it; a demo's refused write leaves the memory copy working.
  noteRead(id){const key=String(id),now=Date.now(),last=this.readAt.get(key)||0;this.readAt.set(key,now);if(now-last<3600000||this.p.db?.transactionContext?.())return;void this.saveRead(key,now);}
  async saveRead(id,at){try{const repo=this.p.db.getRepository('nrSnapshots'),key=`report-reads:${id}`,row=await repo.findOne({filter:{key}}),payload={at:new Date(at).toISOString()};if(row)await repo.update({filter:{key},values:{payload}});else await repo.create({values:{key,payload}});}catch{/* the memory copy still works */}}
- // A project connected in the same days counts as read, so its first open does not have to wait either.
- async recentlyRead(id,authorizedAt){const key=String(id);if(!this.readAt.has(key)){let at=0;try{at=Date.parse((await this.p.db.getRepository('nrSnapshots').findOne({filter:{key:`report-reads:${key}`}}))?.get('payload')?.at||'')||0;}catch{at=0;}if(!this.readAt.has(key))this.readAt.set(key,at);}
-  return Date.now()-Math.max(this.readAt.get(key)||0,Date.parse(authorizedAt||'')||0)<WARM_READ_WINDOW_MS;}
+ // A project connected in the same days counts as read, so its first open does not have to wait either. `within` narrows
+ // the days (the tick's morning read of Traffic asks about the last one).
+ async recentlyRead(id,authorizedAt,within=WARM_READ_WINDOW_MS){const key=String(id);if(!this.readAt.has(key)){let at=0;try{at=Date.parse((await this.p.db.getRepository('nrSnapshots').findOne({filter:{key:`report-reads:${key}`}}))?.get('payload')?.at||'')||0;}catch{at=0;}if(!this.readAt.has(key))this.readAt.set(key,at);}
+  return Date.now()-Math.max(this.readAt.get(key)||0,Date.parse(authorizedAt||'')||0)<within;}
  // The last 28 synced days of Search Console query × page rows, one row per pair, saved until the next sync; 本站排名
  // and 关键词 详情 read them.
  async pairRows(id){let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch(e){if(googleDisconnected(e))return {connected:false,cutoff:null,window:null,rows:[]};throw e;}

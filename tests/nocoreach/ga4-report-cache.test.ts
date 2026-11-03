@@ -10,7 +10,10 @@ import {
   legacyRecord,
 } from '../../server/nocoreach/legacy/database.js';
 import { Ga4ReportCache } from '../../server/nocoreach/ga4-report-cache.js';
-import { waitForFresh } from '../../server/nocoreach/google-report-cache.js';
+import {
+  readAhead,
+  waitForFresh,
+} from '../../server/nocoreach/google-report-cache.js';
 import {
   GOOGLE_SAVED_COPY_MAX_AGE_MS,
   GOOGLE_SAVED_COPY_RETRY_MS,
@@ -80,45 +83,95 @@ const showCopy = (
   saved?: { refreshing: boolean; savedAt: number },
 ) => ({ ...value, cacheExpiresAt, ...saved });
 
-it('reads the Traffic report once a day, when the sync moves its window, not again at midnight', async () => {
+it('reads a Traffic window twice a day when people open it, and once when only the tick readies it', async () => {
   const { db } = await fixture();
   vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime('2026-10-20T20:00:00Z');
   const report = new WebsiteReport({ db });
   const read = vi.fn(async () => ({ tables: {}, missing: [], complete: true }));
   (report as { readPeriod: unknown }).readPeriod = read;
-  const w = windowFor('2026-10-17', '28');
-  const first = await report.period('1', '123', w, {
-    cutoff: '2026-10-17',
-    view: ['28'],
-  });
-  expect(first.cacheExpiresAt).toBe(Date.now() + 30 * 3600000);
-  expect(first).toMatchObject({ window: w, cutoff: '2026-10-17' });
-  // Past UTC midnight, the same window is the same report.
-  vi.setSystemTime('2026-10-21T19:59:00Z');
+  const at = (time: string) => vi.setSystemTime(`2026-10-20T${time}:00Z`);
+  const w = windowFor('2026-10-19', '28');
+  const options = { cutoff: '2026-10-19', view: ['28'] };
+  // Just after midnight the sync tick readies the new window; GA4 is still filling in yesterday, so the report lives
+  // until the morning.
+  at('00:05');
+  const first = await readAhead(() => report.period('1', '123', w, options));
+  expect(first.cacheExpiresAt).toBe(Date.parse('2026-10-20T06:00:00Z'));
+  expect(first).toMatchObject({ window: w, cutoff: '2026-10-19' });
+  // The tick does not read it again for that: nobody is looking.
+  at('06:01');
   expect(
-    await report.period('1', '123', w, { view: ['28'] }),
+    await readAhead(() => report.period('1', '123', w, options)),
   ).not.toHaveProperty('savedAt');
   expect(read).toHaveBeenCalledTimes(1);
-  // The day's sync moves the window: one read, answered from the copy meanwhile.
-  vi.setSystemTime('2026-10-21T20:00:00Z');
-  const next = windowFor('2026-10-18', '28');
-  expect(await report.period('1', '123', next, { view: ['28'] })).toMatchObject(
-    { refreshing: true, window: w },
-  );
+  // The first visit after the morning shows the copy while yesterday is read again, nearly whole; that one lasts until
+  // midnight.
+  at('09:00');
+  expect(await report.period('1', '123', w, options)).toMatchObject({
+    refreshing: true,
+  });
   await report.history.settled();
   expect(read).toHaveBeenCalledTimes(2);
-  // A sync that has stopped leaves the window put; the report is still read again after 30 hours.
-  vi.setSystemTime(Date.now() + 30 * 3600000);
-  expect(await report.period('1', '123', next, { view: ['28'] })).toMatchObject(
-    { refreshing: true },
+  expect((await report.period('1', '123', w, options)).cacheExpiresAt).toBe(
+    Date.parse('2026-10-21T00:00:00Z'),
   );
-  await report.history.settled();
-  expect(read).toHaveBeenCalledTimes(3);
+  at('15:00');
+  await report.period('1', '123', w, options);
+  await readAhead(() => report.period('1', '123', w, options));
+  expect(read).toHaveBeenCalledTimes(2);
   // A report GA4 answered in part is still read again soon.
-  read.mockResolvedValue({ tables: {}, missing: ['city'], complete: false });
-  const partial = await report.period('1', '123', windowFor('2026-10-17', '7'));
+  read.mockResolvedValueOnce({
+    tables: {},
+    missing: ['city'],
+    complete: false,
+  });
+  const partial = await report.period('1', '123', windowFor('2026-10-19', '7'));
   expect(partial.cacheExpiresAt).toBe(Date.now() + GA4_PARTIAL_CACHE_MS);
+  expect(read).toHaveBeenCalledTimes(3);
+  // At the next midnight the tick reads the new window and waits for it: the previous day's copy does not count.
+  vi.setSystemTime('2026-10-21T00:05:00Z');
+  const next = windowFor('2026-10-20', '28');
+  expect(
+    await readAhead(() => report.period('1', '123', next, options)),
+  ).toMatchObject({ window: next });
+  expect(read).toHaveBeenCalledTimes(4);
+  // A read in the hour before the morning has most of yesterday already, so it lasts until midnight.
+  vi.setSystemTime('2026-10-21T04:59:00Z');
+  expect(
+    (await report.period('1', '123', windowFor('2026-10-20', '90')))
+      .cacheExpiresAt,
+  ).toBe(Date.parse('2026-10-21T06:00:00Z'));
+  vi.setSystemTime('2026-10-21T05:00:00Z');
+  expect(
+    (await report.period('1', '123', windowFor('2026-10-20', '7')))
+      .cacheExpiresAt,
+  ).toBe(Date.parse('2026-10-22T00:00:00Z'));
+});
+
+it('reads a Traffic window again in the morning for a project opened in the last day, so its first visit sees it whole', async () => {
+  const { db } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const report = new WebsiteReport({ db });
+  const read = vi.fn(async () => ({ tables: {}, missing: [], complete: true }));
+  (report as { readPeriod: unknown }).readPeriod = read;
+  const w = windowFor('2026-10-19', '28');
+  const options = { cutoff: '2026-10-19', view: ['28'] };
+  // The tick reads such a project with waitForFresh: the new window at midnight, and again once the night's report ends.
+  vi.setSystemTime('2026-10-20T00:05:00Z');
+  await waitForFresh(() => report.period('1', '123', w, options));
+  vi.setSystemTime('2026-10-20T05:30:00Z');
+  await waitForFresh(() => report.period('1', '123', w, options));
+  expect(read).toHaveBeenCalledTimes(1);
+  vi.setSystemTime('2026-10-20T06:00:15Z');
+  await waitForFresh(() => report.period('1', '123', w, options));
+  expect(read).toHaveBeenCalledTimes(2);
+  // The morning's visit is answered by that report, which lasts until midnight.
+  vi.setSystemTime('2026-10-20T09:00:00Z');
+  const visit = await report.period('1', '123', w, options);
+  expect(visit).not.toHaveProperty('refreshing');
+  expect(visit.cacheExpiresAt).toBe(Date.parse('2026-10-21T00:00:00Z'));
+  await waitForFresh(() => report.period('1', '123', w, options));
+  expect(read).toHaveBeenCalledTimes(2);
 });
 
 it('shows no copy older than seven days: the reader waits for a new report, and the snapshot lets it go', async () => {
@@ -269,36 +322,95 @@ it('keeps a GA4 row as long as final days only when GA4 has finished every day o
   const recent = await report.row('1', '123', windowFor('2026-10-19', '7'), {
     table: 'page',
     dims: { pagePath: '/recent' },
+    settledThrough: '2026-10-17',
   });
   expect(recent.cacheExpiresAt).toBe(Date.now() + GA4_HISTORY_CACHE_MS);
+  // The row keeps the days GA4 was still processing when it was read, as its chart dots them.
+  vi.setSystemTime('2026-10-21T01:00:00Z');
+  expect(
+    await report.row('1', '123', windowFor('2026-10-19', '7'), {
+      table: 'page',
+      dims: { pagePath: '/recent' },
+      settledThrough: '2026-10-18',
+    }),
+  ).toMatchObject({ settledThrough: '2026-10-17' });
+  await report.history.settled();
 });
 
-it('decides a Traffic row is settled from the days GA4 may still be processing', async () => {
+it("answers a new day's Traffic window from the copy with the days it had unsettled when read", async () => {
+  const { db } = await fixture();
   vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime('2026-10-20T12:00:00Z');
+  vi.setSystemTime('2026-10-20T09:00:00Z');
+  const report = new WebsiteReport({ db });
+  (report as { readPeriod: unknown }).readPeriod = vi.fn(async () => ({
+    tables: {},
+    missing: [],
+    complete: true,
+  }));
+  const w = windowFor('2026-10-19', '28');
+  expect(
+    await report.period('1', '123', w, {
+      cutoff: '2026-10-19',
+      settledThrough: '2026-10-17',
+      view: ['28'],
+    }),
+  ).toMatchObject({ settledThrough: '2026-10-17' });
+  vi.setSystemTime('2026-10-21T00:05:00Z');
+  const next = windowFor('2026-10-20', '28');
+  const options = {
+    cutoff: '2026-10-20',
+    settledThrough: '2026-10-18',
+    view: ['28'],
+  };
+  expect(await report.period('1', '123', next, options)).toMatchObject({
+    refreshing: true,
+    window: w,
+    settledThrough: '2026-10-17',
+  });
+  await report.history.settled();
+  expect(await report.period('1', '123', next, options)).toMatchObject({
+    window: next,
+    settledThrough: '2026-10-18',
+  });
+});
+
+it('decides a Traffic row is settled from the days GA4 may still be processing, in the property zone', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  // Los Angeles is still on the 19th, so its yesterday is the 18th; in the property's zone yesterday is the 19th, and GA4
+  // is still processing it and the 18th.
+  vi.setSystemTime('2026-10-20T05:00:00Z');
   for (const [end, settled] of [
     ['2026-10-17', true],
     ['2026-10-18', false],
+    ['2026-10-19', false],
   ] as const) {
-    const daily = [{ date: '2026-09-01' }, { date: end }];
+    const daily = [{ date: '2026-09-01' }, { date: '2026-10-17' }];
     const views = new DataViews({
       sync: {
         link: async () =>
           legacyRecord({ ga4PropertyId: '123', gscSiteUrl: 'sc-domain:x' }),
         snapshots: async () => [
-          { key: 'project', payload: { end } },
+          { key: 'project', payload: { end: '2026-10-17' } },
           { key: 'history-web', payload: daily },
         ],
       },
     } as never);
+    const ga4 = (
+      views as unknown as { ga4: { row: unknown; yesterday: unknown } }
+    ).ga4;
     const row = vi.fn(async () => ({ daily: [], totals: {} }));
-    (views as unknown as { ga4: { row: unknown } }).ga4.row = row;
+    ga4.row = row;
+    ga4.yesterday = async () => '2026-10-19';
     await views.websiteRow('1', {
       range: '7',
+      cutoff: end,
       table: 'page',
       dims: { pagePath: '/a' },
     } as never);
-    expect((row.mock.calls[0] as unknown[])[3]).toMatchObject({ settled });
+    expect((row.mock.calls[0] as unknown[])[3]).toMatchObject({
+      settled,
+      settledThrough: '2026-10-17',
+    });
   }
 });
 
@@ -611,6 +723,7 @@ it('reuses GA4 history after sync changes while rebuilding current Search Consol
   }));
   const views = new DataViews(host);
   views.ga4.readPeriod = read;
+  views.ga4.yesterday = vi.fn(async () => '2026-10-10');
   const first = await views.website('1', { range: '7' });
   snaps = snippets('after');
   const next = await views.website('1', { range: '7' });
@@ -619,6 +732,7 @@ it('reuses GA4 history after sync changes while rebuilding current Search Consol
   expect(next.tables.page[0].queries[0].keyword).toBe('after');
   const restarted = new DataViews(host);
   restarted.ga4.readPeriod = read;
+  restarted.ga4.yesterday = views.ga4.yesterday;
   await restarted.website('1', { range: '7' });
   expect(read).toHaveBeenCalledTimes(1);
   expect(host.sync.snapshotKey).not.toHaveBeenCalled();
@@ -639,7 +753,7 @@ it('reuses GA4 history after sync changes while rebuilding current Search Consol
   expect(read).toHaveBeenCalledTimes(1);
 });
 
-it('persists row details and keeps a period report across midnight until its window moves or 30 hours pass', async () => {
+it('persists row details and a period report across a restart, reading the period again at midnight where its window ends', async () => {
   const { db } = await fixture();
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-10-16T23:30:00Z'));
@@ -660,17 +774,18 @@ it('persists row details and keeps a period report across midnight until its win
   const restarted = new WebsiteReport({ db });
   restarted.readPeriod = period;
   restarted.readRow = row;
+  vi.setSystemTime(new Date('2026-10-16T23:45:00Z'));
+  await restarted.period('1', '123', window);
+  await restarted.row('1', '123', window, selection);
+  expect(period).toHaveBeenCalledTimes(1);
+  expect(row).toHaveBeenCalledTimes(1);
+  // Past midnight where the window ends, yesterday has moved on: the period is read again, the row still lives.
   vi.setSystemTime(new Date('2026-10-17T00:01:00Z'));
   await restarted.period('1', '123', window);
   await restarted.row('1', '123', window, selection);
-  // The days still being filled in at the end of the line are read again with the window's next report, which the
-  // day's sync brings; only a sync that has stopped leaves it to the 30-hour bound.
-  expect(period).toHaveBeenCalledTimes(1);
-  expect(row).toHaveBeenCalledTimes(1);
-  vi.setSystemTime(new Date('2026-10-16T23:30:00Z').getTime() + 30 * 3600000);
-  await restarted.period('1', '123', window);
   await restarted.history.settled();
   expect(period).toHaveBeenCalledTimes(2);
+  expect(row).toHaveBeenCalledTimes(1);
 });
 
 it.each(['daily', 'change'])(
@@ -716,6 +831,9 @@ it.each([
   'keeps $range row details on the cached report window after sync advances and rejects invalid cutoffs',
   async (range) => {
     const { db } = await fixture();
+    // 2026-10-11 is yesterday in UTC+14, the latest day any zone can have finished; 2026-10-12 is not.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-12T05:00:00Z'));
     let end = '2026-10-10';
     const views = new DataViews({
       db,
@@ -729,6 +847,7 @@ it.each([
         ],
       },
     });
+    views.ga4.yesterday = vi.fn(async () => end);
     views.ga4.readPeriod = vi.fn(async () => ({ tables: {}, missing: [] }));
     const read = vi.fn(async () => ({ daily: [], totals: {} }));
     views.ga4.readRow = read;
