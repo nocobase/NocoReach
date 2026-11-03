@@ -380,6 +380,37 @@ describe('访问', () => {
     }
   });
 
+  it('tries realtime again after a minute when it failed, though the card otherwise reads it every half hour', async () => {
+    const original = action.getMockImplementation()!;
+    let failures = 1;
+    action.mockImplementation(
+      (resource: string, name: string, ...args: unknown[]) => {
+        if (name === 'websiteRealtime' && failures-- > 0)
+          return Promise.reject(new Error('quota exceeded'));
+        return original(resource, name, ...args);
+      },
+    );
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderPage();
+      await screen.findByText('今天浏览量');
+      const reads = () =>
+        action.mock.calls.filter(([, name]) => name === 'websiteRealtime')
+          .length;
+      await waitFor(() => expect(reads()).toBe(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(61 * 1000);
+      });
+      expect(reads()).toBe(2);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5 * 60000);
+      });
+      expect(reads()).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not reuse a previous GA4 property after changing the project connection', async () => {
     const { router } = renderPage();
     await screen.findByText('今天浏览量');
