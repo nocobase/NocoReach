@@ -60,7 +60,7 @@ const listing = z
       .enum(['open', 'closed'])
       .optional()
       .describe(
-        'open: not finished (todo, doing, review, snoozed); closed: done or closed. Omit for both.',
+        'Narrow to open tasks (not finished: todo, doing, review, snoozed) or closed ones (done or closed). Omit for both.',
       ),
     includeArchived: z.boolean().default(false),
     offset: z.number().int().min(0).default(0),
