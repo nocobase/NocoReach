@@ -1,7 +1,10 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { afterEach, expect, it, vi } from 'vitest';
 import { Ga4Requests } from '../../server/nocoreach/ga4-requests.js';
-import { WebsiteReport } from '../../server/nocoreach/website-report.js';
+import {
+  RETRY_429_MS,
+  WebsiteReport,
+} from '../../server/nocoreach/website-report.js';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -196,4 +199,51 @@ it('coalesces today and row reads independently and reuses their completed cache
   expect(f.calls).toHaveLength(2);
   await read();
   expect(f.calls).toHaveLength(2);
+});
+
+it('asks GA4 again twice after a 429, waiting a little each time, then fails; other errors fail at once', async () => {
+  vi.useFakeTimers();
+  const warn = vi.fn();
+  const service = new WebsiteReport({ app: { logger: { warn } } } as never);
+  const internals = service as unknown as {
+    token: () => Promise<string>;
+    json: ReturnType<typeof vi.fn>;
+  };
+  internals.token = async () => 'token';
+  const busy = Object.assign(
+    new Error('Exhausted concurrent requests quota.'),
+    {
+      status: 429,
+      code: 'google_api_error',
+    },
+  );
+  internals.json = vi
+    .fn()
+    .mockRejectedValueOnce(busy)
+    .mockRejectedValueOnce(busy)
+    .mockResolvedValue({ rows: [] });
+  const answered = service.post('1', '123', 'runReport', { a: 1 });
+  await vi.advanceTimersByTimeAsync(RETRY_429_MS[0] - 1);
+  expect(internals.json).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(1 + RETRY_429_MS[1]);
+  expect(await answered).toEqual({ rows: [] });
+  expect(internals.json).toHaveBeenCalledTimes(3);
+  expect(warn).toHaveBeenCalledTimes(2);
+  internals.json = vi.fn().mockRejectedValue(busy);
+  const failed = service
+    .post('1', '123', 'runReport', { b: 1 })
+    .catch((e: unknown) => e);
+  await vi.advanceTimersByTimeAsync(RETRY_429_MS[0] + RETRY_429_MS[1]);
+  expect(await failed).toBe(busy);
+  expect(internals.json).toHaveBeenCalledTimes(3);
+  const refused = Object.assign(new Error('Invalid dimension'), {
+    status: 400,
+    code: 'google_api_error',
+  });
+  internals.json = vi.fn().mockRejectedValue(refused);
+  await expect(service.post('1', '123', 'runReport', { c: 1 })).rejects.toBe(
+    refused,
+  );
+  expect(internals.json).toHaveBeenCalledTimes(1);
+  vi.useRealTimers();
 });
