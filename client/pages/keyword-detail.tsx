@@ -1,4 +1,9 @@
 import {
+  ChartLegend,
+  TrendChart,
+  ChartLine as Line,
+} from '#components/reach/chart-legend';
+import {
   getCurrentLocale,
   $t,
   $tj,
@@ -18,8 +23,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Legend,
-  Line,
   LineChart,
   ResponsiveContainer,
   Tooltip,
@@ -32,7 +35,12 @@ import { toast } from '#lib/toast';
 import { cn } from '#lib/utils';
 import { RouteChildPage } from '#components/route-child-page';
 import { PageContainer, PageHeader, Section } from '#components/reach/page';
-import { InlineError, LoadError } from '#components/reach/states';
+import {
+  InlineError,
+  LoadError,
+  SavedReportNote,
+} from '#components/reach/states';
+import { savedCopyNote, type SavedCopy } from '../../shared/google-cache.js';
 import { InfoTip, WithInfo } from '#components/reach/info-tip';
 import { Tag } from '#components/reach/tag';
 import { Button } from '#components/ui/button';
@@ -170,7 +178,10 @@ type TrendPoint = {
   clicks: number | null;
   impressions: number | null;
 };
-type RowDetail = { connected: boolean; trend: TrendPoint[] };
+type RowDetail = Partial<SavedCopy> & {
+  connected: boolean;
+  trend: TrendPoint[];
+};
 
 const DAY = 86400000;
 const addDays = (d: string, n: number) =>
@@ -731,7 +742,7 @@ function TrendSection({
     () =>
       api.action<RowDetail>('nrDataViews', 'searchRow', {
         method: 'POST',
-        body: body!,
+        body: { ...body!, acceptSaved: true },
         unwrap: 'data',
       }),
   );
@@ -805,6 +816,7 @@ function TrendSection({
               {$t('keywordDetail.siteDaysHelp')}
             </InfoTip>
           </h3>
+          <SavedReportNote {...savedCopyNote(row.data)} />
           {!gsc ? (
             <Skeleton className='h-48' />
           ) : !gsc.connected || !cutoff ? (
@@ -822,7 +834,8 @@ function TrendSection({
           ) : (
             <div className='nr-chart-box'>
               <ResponsiveContainer width='100%' height={200}>
-                <LineChart
+                <TrendChart
+                  as={LineChart}
                   data={days}
                   margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
                 >
@@ -847,7 +860,7 @@ function TrendSection({
                     allowDecimals={false}
                   />
                   <Tooltip />
-                  <Legend />
+                  <ChartLegend order={['impressions', 'clicks']} />
                   <Line
                     yAxisId='i'
                     isAnimationActive={false}
@@ -866,7 +879,7 @@ function TrendSection({
                     stroke='var(--chart-1)'
                     dot={false}
                   />
-                </LineChart>
+                </TrendChart>
               </ResponsiveContainer>
             </div>
           )}

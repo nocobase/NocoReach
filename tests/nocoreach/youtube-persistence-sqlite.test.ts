@@ -1,40 +1,19 @@
 // @vitest-environment node
-import { fileURLToPath } from 'node:url';
-import {
-  createTestDatabase,
-  describeMigration,
-} from '@nocobase/app-testing/server';
-import { SnowflakeIdGenerator } from '@nocobase/snowflake';
+import { describeMigration } from '@nocobase/app-testing/server';
 import { expect, it, onTestFinished, vi } from 'vitest';
-import { LegacyDatabase } from '../../server/nocoreach/legacy/database.js';
-import { OutboundNetwork } from '../../server/nocoreach/outbound-network.js';
-import { ProxyProfiles } from '../../server/nocoreach/proxy-profiles.js';
 import { YouTubeSource } from '../../server/nocoreach/youtube-source.js';
+import type { Video } from '../../server/nocoreach/youtube-provider.js';
 import {
-  YouTubeError,
-  type Video,
-} from '../../server/nocoreach/youtube-provider.js';
+  details,
+  found,
+  migrations,
+  videoKey as id,
+  youtubeFixture,
+} from './fixtures/youtube.js';
 
-const migrations = [
-  {
-    packageName: 'nocoreach',
-    directory: fileURLToPath(
-      new URL('../../database/main/migrations', import.meta.url),
-    ),
-  },
-];
-const id = (n: number) => `video${String(n).padStart(6, '0')}`;
+/** A video the earlier Collector reader (yt-dlp) saved, with captions. */
 const video = (n: number, at = '2020-01-01T00:00:00.000Z'): Video => ({
-  id: id(n),
-  url: `https://www.youtube.com/watch?v=${id(n)}`,
-  title: `Video ${n}`,
-  description: 'Synthetic research data',
-  channel: 'Test channel',
-  publishedAt: null,
-  views: n,
-  likes: n,
-  comments: n,
-  duration: 60,
+  ...details(n, { views: n, likes: n, comments: n, publishedAt: null }),
   fetchedAt: at,
   provider: 'yt-dlp',
   transcript: {
@@ -44,85 +23,42 @@ const video = (n: number, at = '2020-01-01T00:00:00.000Z'): Video => ({
     truncated: false,
   },
 });
-async function fixture() {
-  const testDb = await createTestDatabase({ migrations });
-  onTestFinished(() => testDb.destroy());
-  const db = new LegacyDatabase(
-    testDb.database,
-    new SnowflakeIdGenerator({ workerId: 0 }),
-  );
-  const network = new OutboundNetwork(
-    new ProxyProfiles({ all: () => ({}), set: vi.fn() }),
-  );
-  const reader = {
-    search: vi.fn(async () => [id(1), id(2)]),
-    video: vi.fn(async (key: string) => video(Number(key.slice(5)))),
-  };
-  const host = {
-    collectors: { allowed: () => [] },
-    db,
-    network,
-    project: async () => ({}),
-    projectIds: async () => ['1', '2'],
-    app: { logger: { warn: vi.fn() } },
-  } as unknown as ConstructorParameters<typeof YouTubeSource>[0];
-  const source = new YouTubeSource(host, reader);
-  onTestFinished(async () => {
-    await source.stop();
-    await network.close();
-  });
-  const connect = async (project = '1', terms = 'Original criteria') => {
-    const current = await source.status(project);
-    await source.connect(project, {
-      terms,
-      revision: current.revision,
-      autoSync: true,
-    });
-    await source.settled(project);
-    return source.status(project);
-  };
-  const sync = async () => {
-    await source.sync('1');
-    await source.settled('1');
-    return source.status('1');
-  };
-  return { ...testDb, db, network, host, reader, source, connect, sync };
-}
 
-it('appends discoveries, merges valid metrics, preserves first-seen and caption provenance, and survives disconnect/restart', async () => {
-  const f = await fixture();
-  const first = await f.connect();
-  f.reader.search.mockResolvedValue([id(2), id(3)]);
-  f.reader.video.mockImplementation(async (key) => ({
-    ...video(Number(key.slice(5)), '2026-10-12T12:00:00.000Z'),
-    views: null,
-    likes: 0,
-    comments: null,
-    transcript: {
-      status: 'failed',
-      language: null,
-      text: '',
-      truncated: false,
-    },
+it('appends discoveries, merges valid metrics, keeps first-seen times and captions, and survives disconnect and restart', async () => {
+  const f = await youtubeFixture();
+  await f.library.save('1', [video(2)]);
+  await f.connect();
+  const first = await f.videos();
+  expect(first.map((v) => v.id)).toEqual([id(1), id(2)]);
+  // Video 2 was saved already, so only video 1's likes and comments are read.
+  expect(f.reader.details.mock.calls.map((c) => c[1])).toEqual([id(1)]);
+  expect(first[1]).toMatchObject({
+    views: 200,
+    likes: 2,
+    comments: 2,
+    firstSeenAt: '2020-01-01T00:00:00.000Z',
+    metricFetchedAt: { likes: '2020-01-01T00:00:00.000Z' },
+    transcript: { text: 'Previously read caption' },
+    transcriptFetchedAt: '2020-01-01T00:00:00.000Z',
+    provider: 'dataforseo',
+  });
+  f.reader.search.mockResolvedValue({
+    ok: true,
+    videos: [found(2, { views: null }), found(3)],
+    costUsd: 0.002,
+  });
+  f.reader.details.mockImplementation(async (_id, key) => ({
+    ok: true,
+    video: details(Number(key.slice(5)), { likes: 0, comments: null }),
+    costUsd: 0.006,
   }));
   const second = await f.sync();
   expect(second.total).toBe(3);
-  const existing = second.videos.find((v) => v.id === id(2))!;
-  expect(existing).toMatchObject({
-    views: 2,
-    likes: 0,
-    comments: 2,
-    firstSeenAt: first.videos.find((v) => v.id === id(2))!.firstSeenAt,
-    metricFetchedAt: {
-      views: '2020-01-01T00:00:00.000Z',
-      likes: '2026-10-12T12:00:00.000Z',
-    },
-    transcript: { text: 'Previously read caption' },
-    transcriptRefreshFailed: true,
-    transcriptFetchedAt: '2020-01-01T00:00:00.000Z',
-  });
-  f.reader.search.mockResolvedValue([]);
-  expect((await f.connect('1', 'Entirely different criteria')).total).toBe(3);
+  const after = await f.videos();
+  expect(after[1]).toMatchObject({ views: 200, likes: 2, comments: 2 });
+  expect(after[2]).toMatchObject({ likes: 0, comments: null });
+  f.reader.search.mockResolvedValue({ ok: true, videos: [], costUsd: 0.002 });
+  expect((await f.connect('1', 'Entirely different terms')).total).toBe(3);
   const current = await f.source.status('1');
   await f.source.disconnect('1', { revision: current.revision });
   await f.source.stop();
@@ -133,70 +69,54 @@ it('appends discoveries, merges valid metrics, preserves first-seen and caption 
     autoSync: false,
     total: 3,
   });
-  expect(
-    (await restarted.status('1')).videos.find((v) => v.id === id(1)),
-  ).toEqual(first.videos.find((v) => v.id === id(1)));
+  expect((await f.videos())[0]).toEqual(after[0]);
   await expect(restarted.sync('1')).rejects.toMatchObject({
     code: 'invalid_input',
   });
 });
 
-it('keeps a whole prior batch when an update fails after the first fetched video', async () => {
-  const f = await fixture();
-  const first = await f.connect();
-  f.reader.video.mockImplementation(async (key) => {
-    if (key === id(2)) throw new YouTubeError('network_error');
-    return { ...video(1), views: 999 };
+it('keeps every saved video when a read gets nothing through', async () => {
+  const f = await youtubeFixture();
+  await f.connect();
+  const before = await f.videos();
+  f.reader.search.mockResolvedValue({
+    ok: false,
+    missed: 'failed',
+    costUsd: 0,
   });
-  expect((await f.sync()).videos).toEqual(first.videos);
+  await f.sync();
+  expect(await f.videos()).toEqual(before);
   expect((await f.source.status('1')).lastSync).toMatchObject({
     ok: false,
-    code: 'network_error',
+    code: 'upstream_error',
   });
 });
 
-it('paginates saved records deterministically and deletes only the confirmed project while pausing reads', async () => {
-  const f = await fixture();
+it('clears only the confirmed project and pauses its daily reading', async () => {
+  const f = await youtubeFixture();
   await f.connect('2');
-  for (let batch = 0; batch < 3; batch++) {
-    f.reader.search.mockResolvedValue(
-      Array.from({ length: 15 }, (_, i) => id(batch * 15 + i + 1)),
-    );
-    if (!batch) await f.connect();
-    else await f.sync();
-  }
-  const pages = await Promise.all(
-    [1, 2, 3].map((page) => f.source.status('1', page)),
-  );
-  expect(pages.map((p) => p.videos.length)).toEqual([20, 20, 5]);
-  expect(new Set(pages.flatMap((p) => p.videos.map((v) => v.id))).size).toBe(
-    45,
-  );
-  expect(pages[0].total).toBe(45);
-  expect((await f.source.status('1', 999)).page).toBe(3);
-  await expect(f.source.status('1', -1)).rejects.toMatchObject({
-    code: 'invalid_input',
-  });
+  const status = await f.connect();
   await expect(
     f.source.clear('1', { revision: 'stale' }),
   ).rejects.toMatchObject({ code: 'config_changed' });
-  const cleared = await f.source.clear('1', { revision: pages[0].revision });
+  const cleared = await f.source.clear('1', { revision: status.revision });
   expect(cleared).toMatchObject({
     total: 0,
     configured: true,
     autoSync: false,
+    recent: [],
   });
-  expect(cleared.revision).not.toBe(pages[0].revision);
+  expect(cleared.revision).not.toBe(status.revision);
   expect((await f.source.status('2')).total).toBe(2);
   await expect(
-    f.source.clear('1', { revision: pages[0].revision }),
+    f.source.clear('1', { revision: status.revision }),
   ).rejects.toMatchObject({ code: 'config_changed' });
   await f.migrate(migrations);
   expect((await f.source.status('1')).total).toBe(0);
 });
 
-it('does not expire or write saved records when parallel readers join or roll back a SQLite transaction', async () => {
-  const f = await fixture();
+it('does not write when parallel status reads join or roll back a SQLite transaction', async () => {
+  const f = await youtubeFixture();
   const before = await f.connect();
   const writes = vi.fn();
   const unsubscribe = f.connection.onRepositoryMutation(
@@ -211,15 +131,15 @@ it('does not expire or write saved records when parallel readers join or roll ba
         f.source.status('1'),
         f.source.status('1'),
       ]);
-      expect(statuses.map((s) => s.videos)).toEqual([
-        before.videos,
-        before.videos,
+      expect(statuses.map((s) => s.recent)).toEqual([
+        before.recent,
+        before.recent,
       ]);
       throw rollback;
     }),
   ).rejects.toBe(rollback);
   expect(writes).not.toHaveBeenCalled();
-  expect((await f.source.status('1')).videos).toEqual(before.videos);
+  expect((await f.source.status('1')).recent).toEqual(before.recent);
 });
 
 describeMigration('202610120001_persist_youtube_videos', {
@@ -262,58 +182,26 @@ describeMigration('202610120001_persist_youtube_videos', {
   },
 });
 
-it('analysis reads only the current discovery batch and never another project or disconnected library', async () => {
-  const f = await fixture();
+it('analysis reads only the current read and never another project or a disconnected library', async () => {
+  const f = await youtubeFixture();
   await f.connect('1');
   expect((await f.source.analysisData('1')).map((v) => v.id).sort()).toEqual([
     id(1),
     id(2),
   ]);
   expect(await f.source.analysisData('2')).toEqual([]);
-  f.reader.search.mockResolvedValue([id(3)]);
-  await f.connect('1', 'Changed criteria');
+  f.reader.search.mockResolvedValue({
+    ok: true,
+    videos: [found(3)],
+    costUsd: 0.002,
+  });
+  await f.connect('1', 'Changed terms');
   expect((await f.source.status('1')).total).toBe(3);
   expect((await f.source.analysisData('1')).map((v) => v.id)).toEqual([id(3)]);
   await f.source.disconnect('1', {
     revision: (await f.source.status('1')).revision,
   });
   expect(await f.source.analysisData('1')).toEqual([]);
-});
-
-it('orders publication dates across database pages, places unknowns last and preserves dates on refresh', async () => {
-  const f = await fixture();
-  const { YouTubeLibrary } =
-    await import('../../server/nocoreach/youtube-library.js');
-  const library = new YouTubeLibrary(f.db);
-  await library.save(
-    '1',
-    Array.from({ length: 45 }, (_, i) => ({
-      ...video(
-        i + 1,
-        `2026-09-${String(28 - (i % 28)).padStart(2, '0')}T00:00:00.000Z`,
-      ),
-      publishedAt:
-        i < 2
-          ? null
-          : `2026-10-${String(Math.ceil((i - 1) / 2)).padStart(2, '0')}`,
-    })),
-  );
-  const pages = await Promise.all(
-    [1, 2, 3].map((page) => library.list('1', page)),
-  );
-  const ids = pages.flatMap((page) => page.videos.map((v) => v.id));
-  const expected = Array.from({ length: 43 }, (_, i) => i + 3)
-    .sort((a, b) => Math.ceil((b - 2) / 2) - Math.ceil((a - 2) / 2) || a - b)
-    .concat([1, 2])
-    .map(id);
-  expect(ids).toEqual(expected);
-  await library.save('1', [video(45)]);
-  expect((await library.list('1')).videos[0]).toMatchObject({
-    id: id(45),
-    publishedAt: '2026-10-22',
-  });
-  await library.save('1', [{ ...video(45), publishedAt: '2026-10-01' }]);
-  expect((await library.list('1')).videos[0].id).toBe(id(43));
 });
 
 describeMigration('202610170001_youtube_publication_order', {
@@ -357,18 +245,13 @@ describeMigration('202610170001_youtube_publication_order', {
   },
 });
 
-it('does not restore an invalid legacy publication date after migration cleared its projection', async () => {
-  const f = await fixture();
-  const { YouTubeLibrary } =
-    await import('../../server/nocoreach/youtube-library.js');
-  const library = new YouTubeLibrary(f.db);
-  await library.save('1', [
+it('keeps publication dates on refresh and does not restore an invalid legacy one', async () => {
+  const f = await youtubeFixture();
+  await f.library.save('1', [
     video(1),
     { ...video(2), publishedAt: '2020-01-01' },
   ]);
-  const previous = (await library.list('1')).videos.find(
-    (v) => v.id === id(1),
-  )!;
+  const [previous] = await f.library.byIds('1', [id(1)]);
   // The publication migration deliberately leaves legacy payloads intact.
   await f.db.getRepository('nrYouTubeVideos').update({
     filterByTk: `1:${id(1)}`,
@@ -378,10 +261,9 @@ it('does not restore an invalid legacy publication date after migration cleared 
       publishedAtKnown: false,
     },
   });
-  await library.save('1', [video(1)]);
-  const result = await library.list('1');
-  expect(result.videos.map((v) => v.id)).toEqual([id(2), id(1)]);
-  expect(result.videos[1].publishedAt).toBeNull();
+  await f.library.save('1', [video(1), video(2)]);
+  const result = await f.library.byIds('1', [id(1), id(2)]);
+  expect(result.map((v) => v.publishedAt)).toEqual([null, '2020-01-01']);
   const stored = await f.db
     .getRepository('nrYouTubeVideos')
     .findOne({ filterByTk: `1:${id(1)}` });
@@ -390,32 +272,30 @@ it('does not restore an invalid legacy publication date after migration cleared 
 });
 
 it('reports every saved video of a large library and returns full records for the requested page only', async () => {
-  const f = await fixture();
-  const { YouTubeLibrary } =
-    await import('../../server/nocoreach/youtube-library.js');
+  const f = await youtubeFixture();
   // @ts-expect-error The server modules are plain JavaScript under ts-nocheck.
   const { windowFor } = await import('../../server/nocoreach/data-views.js');
-  const library = new YouTubeLibrary(f.db);
   // More than one summary batch (500 rows), and another project's record.
-  await library.save(
+  await f.library.save(
     '1',
     Array.from({ length: 501 }, (_, i) => ({
       ...video(i + 1),
       publishedAt: `2026-0${1 + (i % 9)}-15`,
     })),
   );
-  await library.save('2', [video(9999)]);
+  await f.library.save('2', [video(9999)]);
   const report = await f.source.report(
     '1',
     { range: 'all', limit: 3 },
     windowFor,
   );
   expect(report.matched).toBe(501);
+  expect(report.total).toBe(501);
   expect(report.kpis.find((k) => k.key === 'total')?.value).toBe(501);
   expect(report.kpis.find((k) => k.key === 'views')?.value).toBe(
     (501 * 502) / 2,
   );
   expect(report.videos).toHaveLength(3);
   expect(report.videos.every((v) => v.publishedAt === '2026-09-15')).toBe(true);
-  expect(report.videos[0].transcript.text).toBe('Previously read caption');
+  expect(report.videos[0].transcript?.text).toBe('Previously read caption');
 });

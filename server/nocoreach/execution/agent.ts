@@ -6,6 +6,8 @@ import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { fail, text } from './model';
 import { TASK_SUBJECT } from './agents-runtime';
 import { AGENT_FAILURE_GROUP } from '../../../shared/run-failure.js';
+import { repoUrlKey, repoUrlsInput } from '../../../shared/repo-routing.js';
+import { randomUUID } from 'node:crypto';
 
 type Attention = 'toolLogin' | 'quota' | 'model' | 'setup' | 'missingTool' | 'toolSignIn';
 // Failures that last until someone acts: signs the coding tool in, tops up its quota, picks a model the account has or
@@ -19,11 +21,28 @@ const NEEDS_ATTENTION: Record<string, Attention> = {
 const AGENT_ATTENTION: Record<string, Attention> = Object.fromEntries(Object.entries(AGENT_FAILURE_GROUP).filter(([, group]) => group === 'missingTool' || group === 'toolSignIn'));
 const HEALTH_RUNS = 10;
 
-export type RepoConfig = { repo: string; baseBranch: string; allowedPaths: string[]; contentCheck: boolean };
-export type AgentDoc = { revision: number; agentId: string | null; repo: RepoConfig | null };
+// Website source repositories (2026-10-29, shared/repo-routing.ts): each serves some of the site's addresses (`urls`)
+// and keeps its latest check (`check`). A project connected before then has one repository (`repo`), read as
+// serving every address of the project's website.
+export type RepoCheck = {
+  at: string;
+  /** The repository and its base branch as GitHub answered; unknown when GitHub could not be asked. */
+  repo: 'ok' | 'missing' | 'unknown';
+  branch: 'ok' | 'missing' | 'unknown';
+  /** Whether the project's Agent had a runner online, the computer that pushes. */
+  runner: 'online' | 'offline';
+  /** GitHub's own words when it could not be asked. */
+  detail?: string;
+};
+export type RepoConfig = { id: string; repo: string; baseBranch: string; allowedPaths: string[]; contentCheck: boolean; urls: string[]; check?: RepoCheck | null };
+export type AgentDoc = { revision: number; agentId: string | null; repos: RepoConfig[] };
+type LegacyDoc = Omit<AgentDoc, 'repos'> & { repos?: RepoConfig[]; repo?: Omit<RepoConfig, 'id' | 'urls'> | null };
+/** The id the one repository of a project connected before 2026-10-29 keeps. */
+export const FIRST_REPO_ID = 'website';
+const MAX_REPOS = 10;
 const REPO = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
 const BRANCH = /^(?!-)(?!.*\.\.)[A-Za-z0-9_./-]{1,100}$/;
-export function repoInput(v: any): RepoConfig {
+export function repoInput(v: any): Omit<RepoConfig, 'id' | 'check'> {
   const repo = text(v?.repo, 300).replace(/^(https?:\/\/)?(www\.)?github\.com\//i, '').replace(/[?#].*$/, '').replace(/\/+$/, '').replace(/\.git$/i, '');
   if (!REPO.test(repo)) return fail(systemMessageText('agent.enterGithubRepositoryLinkExample'));
   const baseBranch = typeof v?.baseBranch === 'string' ? v.baseBranch.trim() : '';
@@ -31,14 +50,16 @@ export function repoInput(v: any): RepoConfig {
   if (v?.allowedPaths !== undefined && (!Array.isArray(v.allowedPaths) || v.allowedPaths.length > 20)) return fail(systemMessageText('agent.up20FoldersAllowedChanges'));
   const allowedPaths = [...new Set<string>((v?.allowedPaths || []).map((p: unknown) => text(p, 200).replace(/^\/+|\/+$/g, '')))];
   if (allowedPaths.some(p => p.split('/').some(x => !x || x === '.' || x === '..') || /[\x00-\x1f\\:*?]/.test(p))) return fail(systemMessageText('agent.foldersRelativePathsInsideRepository'));
-  return { repo, baseBranch, allowedPaths, contentCheck: v?.contentCheck !== false };
+  const urls = repoUrlsInput(v?.urls);
+  if (!urls) return fail(systemMessageText('agent.invalidRepositoryUrls'));
+  return { repo, baseBranch, allowedPaths, contentCheck: v?.contentCheck !== false, urls };
 }
 export function allowedPath(cfg: Pick<RepoConfig, 'allowedPaths'>, file: string) {
   return !cfg.allowedPaths.length || cfg.allowedPaths.some(p => file === p || file.startsWith(p + '/'));
 }
 
 interface AgentHost {
-  p: { agents: Agents };
+  p: { agents: Agents; github?: { gh(path: string, token?: string): Promise<unknown>; token?(project: string): string } };
   key(kind: string, project: string, task: string, id?: string): string;
   snapshot(key: string, tx?: LegacyTransaction): Promise<unknown>;
   put(key: string, value: unknown, tx: LegacyTransaction): Promise<void>;
@@ -49,7 +70,17 @@ export class AgentStore {
   constructor(private readonly s: AgentHost) {}
   key(project: string) { return `nr-task-agent:${project}`; }
   async doc(project: string, tx?: LegacyTransaction): Promise<AgentDoc> {
-    return (await this.s.snapshot(this.key(project), tx) as AgentDoc | null) || { revision: 0, agentId: null, repo: null };
+    const d = await this.s.snapshot(this.key(project), tx) as LegacyDoc | null;
+    if (!d) return { revision: 0, agentId: null, repos: [] };
+    if (Array.isArray(d.repos)) return d as AgentDoc;
+    const { repo, ...rest } = d;
+    return { ...rest, repos: repo ? [{ id: FIRST_REPO_ID, ...repo, allowedPaths: repo.allowedPaths || [], contentCheck: repo.contentCheck !== false, urls: await this.siteUrls(project, tx) }] : [] };
+  }
+  /** The addresses of the project's website (Website content), as a repository serves them. */
+  async siteUrls(project: string, tx?: LegacyTransaction) {
+    const s = await this.s.snapshot(`site-content:${project}`, tx) as { sites?: { origin?: string }[]; origin?: string } | null;
+    const origins = Array.isArray(s?.sites) ? s.sites.map(x => x?.origin) : [s?.origin];
+    return [...new Set(origins.map(repoUrlKey).filter((u): u is string => Boolean(u)))];
   }
   async status(project: string, taskAgentId?: string, actor?: string, viewer?: { seesMachines: boolean }) {
     const d = await this.doc(project), agents = this.s.p.agents;
@@ -127,6 +158,69 @@ export class AgentStore {
       d.agentId = v.agentId === null ? null : (await this.taskAgent(v.agentId, actor, tx)).id;
     });
   }
-  saveRepo(project: string, v: any) { const repo = repoInput(v); return this.change(project, v, d => { d.repo = repo; }); }
-  removeRepo(project: string, v: any) { return this.change(project, v, d => { d.repo = null; }); }
+  /** Adds a repository, or edits the one `v.id` names. An address it serves is moved from the repository that had it. */
+  async saveRepo(project: string, v: any) {
+    const input = repoInput(v), id = typeof v?.id === 'string' && v.id ? v.id : null;
+    return this.change(project, v, d => {
+      const current = id ? d.repos.find(r => r.id === id) : undefined;
+      if (id && !current) return fail(systemMessageText('agent.repositoryRemovedRefresh'), 409);
+      if (d.repos.some(r => r.id !== id && r.repo.toLowerCase() === input.repo.toLowerCase())) return fail(systemMessageText('agent.repositoryAlreadyConnected', { 0: input.repo }), 409);
+      if (!current && d.repos.length >= MAX_REPOS) return fail(systemMessageText('agent.up10Repositories'), 409);
+      for (const r of d.repos) if (r !== current) r.urls = r.urls.filter(u => !input.urls.includes(u));
+      // A check holds for the repository and branch it looked at.
+      const check = current && current.repo === input.repo && current.baseBranch === input.baseBranch ? current.check ?? null : null;
+      if (current) Object.assign(current, input, { check });
+      else d.repos.push({ id: randomUUID(), ...input, check: null });
+    });
+  }
+  /** New tasks no longer change it; tasks already started keep it, and their pull requests stay as they are. */
+  async removeRepo(project: string, v: { revision: number; id?: unknown }) {
+    return this.change(project, v, d => {
+      const id = typeof v?.id === 'string' && v.id ? v.id : d.repos.length === 1 ? d.repos[0].id : null;
+      if (!d.repos.some(r => r.id === id)) return fail(systemMessageText('agent.repositoryRemovedRefresh'), 409);
+      d.repos = d.repos.filter(r => r.id !== id);
+    });
+  }
+  /**
+   * Whether the Agent can write to a repository: GitHub is asked whether it and its base branch exist (with the
+   * project's GitHub token when there is one, so a private repository is found), and whether the project's Agent has a
+   * runner online, the computer that pushes with its own GitHub sign-in. The Agents plugin runs nothing on a runner
+   * without a model, so the push itself is shown by the latest pull request the Agent opened there. The result is kept
+   * with its time and does not change the settings' revision.
+   */
+  async checkRepo(project: string, v: { id?: unknown }, actor: string) {
+    const target = (await this.doc(project)).repos.find(r => r.id === v?.id);
+    if (!target) return fail(systemMessageText('agent.repositoryRemovedRefresh'), 409);
+    const check = await this.probe(project, target, actor);
+    return this.s.lock(project, 'agent', async tx => {
+      const d = await this.doc(project, tx), r = d.repos.find(x => x.id === target.id);
+      if (r && r.repo === target.repo && r.baseBranch === target.baseBranch) {
+        r.check = check;
+        await this.s.put(this.key(project), d, tx);
+      }
+      return d;
+    });
+  }
+  // Outside any business transaction: GitHub and the Agents plugin are read here.
+  private async probe(project: string, r: RepoConfig, actor: string): Promise<RepoCheck> {
+    const gh = this.s.p.github, token = gh?.token?.(project) || undefined;
+    let detail: string | undefined;
+    const ask = async (path: string): Promise<RepoCheck['repo']> => {
+      if (!gh) return 'unknown';
+      try { await gh.gh(path, token); return 'ok'; }
+      catch (first) {
+        let e = first as { status?: number; message?: string } | undefined;
+        // A token that stopped working must not hide a public repository.
+        if (e?.status === 401 && token) { try { await gh.gh(path); return 'ok'; } catch (again) { e = again as typeof e; } }
+        if (e?.status === 404) return 'missing';
+        detail = String(e?.message || '').slice(0, 300) || undefined;
+        return 'unknown';
+      }
+    };
+    const repo = await ask(`/repos/${r.repo}`);
+    const branch = repo === 'ok' ? await ask(`/repos/${r.repo}/branches/${encodeURIComponent(r.baseBranch)}`) : 'unknown';
+    const s = await this.status(project, undefined, actor);
+    const online = s.agentId ? s.online : s.options.some(o => o.online);
+    return { at: new Date().toISOString(), repo, branch, runner: online ? 'online' : 'offline', ...(detail ? { detail } : {}) };
+  }
 }

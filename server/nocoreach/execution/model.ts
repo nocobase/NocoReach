@@ -23,6 +23,8 @@ export type PullRequestInfo = { url: string; number: number; branch: string; hea
 // Article releases (article-flow.ts) publish to a target instead of merging: publishing, then exporting when the target
 // exports to a repository, then verifying; publish_failed, publish_conflict and export_late wait for a person.
 export type Release = { state: 'simulated' | 'merging' | 'merge_failed' | 'verifying' | 'not_seen' | 'live' | 'publishing' | 'publish_failed' | 'publish_conflict' | 'exporting' | 'export_late'; article?: any; pr?: { number: number; url: string; headSha: string }; note: string; pages: string[]; verifyText?: string; error?: string; mergedAt?: string; mergeSha?: string; checks?: number; lastCheckAt?: string; nextCheckAt?: string; deadline?: string; liveAt?: string; reason?: string };
+// sortOrder is a board position from before 2026-11-02, when each column came to run newest activity first; it is no
+// longer written or read and stays only on tasks moved before then.
 export type Work = {
   schemaVersion: 2; boardState?: BoardState; sortOrder?: number; simple?: boolean; kind?: 'content' | 'research'; contentId?: string; revision: number; stage: string; plan: Plan | null; planVersion: number; approvedPlanVersion?: number;
   step: number; results: (Artifact | null)[]; history: any[]; operations: string[]; receipt: any; verification: any;
@@ -30,6 +32,14 @@ export type Work = {
   humanOwnerId?: string; humanOwnerName?: string; collaborators?: { id: string; name: string }[]; page?: { url: string; title: string }; latestRun?: { id: string; status: string }; legacyStatus?: string;
   // Flow tasks (stage 'flow'): the chosen flow before start, its snapshot after start, the current stage and the person's note to the AI.
   flowId?: string; flow?: FlowSnapshot; stageIndex?: number; note?: string; observeFrom?: string; release?: Release; cancelledAt?: string; cancelledBy?: string; archivedAt?: string; archivedBy?: string; snooze?: import('../../../shared/task-pending.js').TaskSnooze | null; prClose?: { number: number; state: 'closing' | 'closed' | 'failed'; error?: string }; revert?: { of: number; state: 'opening' | 'opened' | 'failed'; number?: number; url?: string; at?: string; error?: string }; observation?: { results: import('./effect').EffectResult[] };
+  // The pages a task was started to change when it left some of its pages to other tasks (2026-10-29).
+  pages?: string[];
+  // The pages the task was started with (2026-11-02), recorded by the start for its record on the task page: the
+  // pages above, else the task's pages then. Relinking the task's page afterwards leaves it. Older tasks have none.
+  startedPages?: string[];
+  // The website repository the task changes, kept at its start (2026-10-29, shared/repo-routing.ts); null when it
+  // changes none. Tasks started before then have none kept.
+  repo?: import('../../../shared/repo-routing.js').TaskRepo | null;
   // The playbook chosen before start, its snapshot after start, and the tasks linked by a hand-over.
   playbookId?: string; playbook?: PlaybookSnapshot; prevTaskId?: string; nextTaskId?: string;
   // Article delivery: the article linked before start, and the choice frozen at start (article-flow.ts).

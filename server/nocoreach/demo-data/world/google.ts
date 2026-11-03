@@ -3,6 +3,7 @@ import {
   WorldUnsupported,
   body,
   daysBetween,
+  integer,
   isDay,
   json,
   list,
@@ -30,7 +31,7 @@ type Fact = {
 };
 
 function aggregate(
-  rows: Fact[],
+  rows: Iterable<Fact>,
   dimensions: string[],
   metrics: string[],
 ): Fact[] {
@@ -207,23 +208,24 @@ function pageHabit(path: string) {
   return { engaged: 1, views: 1, seconds: 1, converts: 1 };
 }
 
-function visitFact(
-  world: World,
-  date: string,
-  visit: Visit,
-  index: number,
-): Fact {
-  const { sources, regions, devices } = world.analytics;
+/** A visit with what it drew: the counts every report of its day reads. */
+type Drawn = Visit & {
+  engaged: number;
+  users: number;
+  keyEvents: number;
+  views: number;
+  seconds: number;
+  scroll: number;
+};
+
+function draw(world: World, date: string, visit: Visit, index: number): Drawn {
+  const { sources, devices } = world.analytics;
   const source = sources[visit.source];
-  const page = world.site.pages[visit.page];
-  const region = regions[visit.region];
-  const device = devices[visit.device];
-  const [os, , browsers] = device.systems[visit.system];
-  const habit = pageHabit(page.path);
+  const habit = pageHabit(world.site.pages[visit.page].path);
   const s = world.seeded;
   const key = `${date}:${index}`;
   const n = visit.sessions;
-  const mobile = device.category === 'mobile' ? 0.9 : 1;
+  const mobile = devices[visit.device].category === 'mobile' ? 0.9 : 1;
   const engagedRate = Math.min(
     0.95,
     0.6 *
@@ -233,68 +235,210 @@ function visitFact(
       (visit.returning ? 1.15 : 1),
   );
   const engaged = Math.min(n, s.round(`eng:${key}`, n * engagedRate));
-  const users = Math.max(1, s.round(`users:${key}`, n * 0.87));
-  const keyEvents = s.round(
-    `key:${key}`,
-    n * 0.016 * habit.converts * (source.converts ?? 1),
-  );
   const views = Math.max(n, s.round(`pv:${key}`, n * 2.1 * habit.views));
-  const seconds = Math.round(
-    engaged * 74 * habit.seconds * s.jitter(`sec:${key}`, 0.25),
-  );
-  const scroll = s.round(`scroll:${key}`, views * 0.45);
-  const title = world.text(page.title);
-  const channel = source.channel;
-  const campaign =
+  return {
+    ...visit,
+    engaged,
+    users: Math.max(1, s.round(`users:${key}`, n * 0.87)),
+    keyEvents: s.round(
+      `key:${key}`,
+      n * 0.016 * habit.converts * (source.converts ?? 1),
+    ),
+    views,
+    seconds: Math.round(
+      engaged * 74 * habit.seconds * s.jitter(`sec:${key}`, 0.25),
+    ),
+    scroll: s.round(`scroll:${key}`, views * 0.45),
+  };
+}
+
+// A day's drawn visits in columns, about 36 bytes a visit instead of a few hundred for objects, so a world can keep
+// its history and every report of a day reads the same draws without drawing again.
+const PLACES = [
+  'source',
+  'page',
+  'region',
+  'city',
+  'device',
+  'system',
+  'browser',
+] as const;
+const COUNTS = [
+  'sessions',
+  'engaged',
+  'users',
+  'keyEvents',
+  'views',
+  'seconds',
+  'scroll',
+] as const;
+type VisitDay = { length: number; places: Uint8Array; counts: Uint32Array };
+
+function visitDay(world: World, date: string): VisitDay {
+  return world.daily('ga4-visits', date, () => {
+    const visits = world.visitsOn(date);
+    const width = PLACES.length + 1;
+    const places = new Uint8Array(visits.length * width);
+    const counts = new Uint32Array(visits.length * COUNTS.length);
+    visits.forEach((visit, i) => {
+      const drawn = draw(world, date, visit, i);
+      PLACES.forEach((field, f) => {
+        if (drawn[field] > 0xff)
+          throw new Error(`Too many demo ${field}s for a visit column`);
+        places[i * width + f] = drawn[field];
+      });
+      places[i * width + PLACES.length] = drawn.returning ? 1 : 0;
+      COUNTS.forEach((field, f) => {
+        counts[i * COUNTS.length + f] = drawn[field];
+      });
+    });
+    return { length: visits.length, places, counts };
+  });
+}
+
+/** Reads visit `i` of a day into `into`, which is reused so reading a day allocates nothing per visit. */
+function readVisit(day: VisitDay, i: number, into: Drawn): Drawn {
+  const width = PLACES.length + 1;
+  PLACES.forEach((field, f) => {
+    into[field] = day.places[i * width + f];
+  });
+  into.returning = day.places[i * width + PLACES.length] === 1;
+  COUNTS.forEach((field, f) => {
+    into[field] = day.counts[i * COUNTS.length + f];
+  });
+  return into;
+}
+
+/** A date as reports name it. */
+type ReportDay = { world: World; date: string; key: string; weekday: string };
+const reportDay = (world: World, date: string): ReportDay => ({
+  world,
+  date,
+  key: date.replaceAll('-', ''),
+  weekday: String(new Date(`${date}T00:00:00Z`).getUTCDay()),
+});
+
+function campaign(source: World['analytics']['sources'][number]): string {
+  return (
     source.campaign ??
-    (channel === 'Direct'
+    (source.channel === 'Direct'
       ? '(direct)'
       : source.medium === 'organic'
         ? '(organic)'
-        : '(referral)');
-  const dateKey = date.replaceAll('-', '');
+        : '(referral)')
+  );
+}
+
+// Each dimension of a visit; `hour`, `dateHour` and `eventName` come from splitting a visit (`byHour`, `events`).
+const VISIT_DIMENSIONS: Record<string, (v: Drawn, day: ReportDay) => string> = {
+  date: (_, day) => day.key,
+  dayOfWeek: (_, day) => day.weekday,
+  sessionDefaultChannelGroup: (v, { world }) =>
+    world.analytics.sources[v.source].channel,
+  firstUserDefaultChannelGroup: (v, { world }) =>
+    world.analytics.sources[v.source].channel,
+  sessionSource: (v, { world }) => world.analytics.sources[v.source].source,
+  sessionMedium: (v, { world }) => world.analytics.sources[v.source].medium,
+  sessionSourceMedium: (v, { world }) => {
+    const source = world.analytics.sources[v.source];
+    return `${source.source} / ${source.medium}`;
+  },
+  sessionCampaignName: (v, { world }) =>
+    campaign(world.analytics.sources[v.source]),
+  country: (v, { world }) => world.analytics.regions[v.region].country,
+  countryId: (v, { world }) => world.analytics.regions[v.region].countryId,
+  city: (v, { world }) => world.analytics.regions[v.region].cities[v.city][0],
+  language: (v, { world }) => world.analytics.regions[v.region].language,
+  languageCode: (v, { world }) =>
+    world.analytics.regions[v.region].languageCode,
+  deviceCategory: (v, { world }) => world.analytics.devices[v.device].category,
+  operatingSystem: (v, { world }) =>
+    world.analytics.devices[v.device].systems[v.system][0],
+  browser: (v, { world }) =>
+    world.analytics.devices[v.device].systems[v.system][2][v.browser][0],
+  newVsReturning: (v) => (v.returning ? 'returning' : 'new'),
+  hostName: (_, { world }) => world.project.domain,
+  pagePath: (v, { world }) => world.site.pages[v.page].path,
+  pagePathPlusQueryString: (v, { world }) => world.site.pages[v.page].path,
+  pageTitle: (v, { world }) => world.text(world.site.pages[v.page].title),
+  landingPage: (v, { world }) => world.site.pages[v.page].path,
+  landingPagePlusQueryString: (v, { world }) => world.site.pages[v.page].path,
+  pageReferrer: (v, { world }) =>
+    world.analytics.sources[v.source].referrer ?? '',
+};
+
+const VISIT_METRICS: Record<string, (v: Drawn) => number> = {
+  sessions: (v) => v.sessions,
+  engagedSessions: (v) => v.engaged,
+  activeUsers: (v) => v.users,
+  totalUsers: (v) => v.users,
+  newUsers: (v) => (v.returning ? 0 : v.users),
+  keyEvents: (v) => v.keyEvents,
+  conversions: (v) => v.keyEvents,
+  keySessions: (v) => Math.min(v.sessions, v.keyEvents),
+  eventCount: (v) => v.views + v.sessions + v.engaged + v.scroll + v.keyEvents,
+  userEngagementDuration: (v) => v.seconds,
+  screenPageViews: (v) => v.views,
+  __scroll: (v) => v.scroll,
+};
+
+function visitFact(v: Drawn, day: ReportDay): Fact {
   return {
-    dimensions: {
-      date: dateKey,
-      dayOfWeek: String(new Date(`${date}T00:00:00Z`).getUTCDay()),
-      sessionDefaultChannelGroup: channel,
-      firstUserDefaultChannelGroup: channel,
-      sessionSource: source.source,
-      sessionMedium: source.medium,
-      sessionSourceMedium: `${source.source} / ${source.medium}`,
-      sessionCampaignName: campaign,
-      country: region.country,
-      countryId: region.countryId,
-      city: region.cities[visit.city][0],
-      language: region.language,
-      languageCode: region.languageCode,
-      deviceCategory: device.category,
-      operatingSystem: os,
-      browser: browsers[visit.browser][0],
-      newVsReturning: visit.returning ? 'returning' : 'new',
-      hostName: world.project.domain,
-      pagePath: page.path,
-      pagePathPlusQueryString: page.path,
-      pageTitle: title,
-      landingPage: page.path,
-      landingPagePlusQueryString: page.path,
-      pageReferrer: source.referrer ?? '',
-    },
-    metrics: {
-      sessions: n,
-      engagedSessions: engaged,
-      activeUsers: users,
-      totalUsers: users,
-      newUsers: visit.returning ? 0 : users,
-      keyEvents,
-      conversions: keyEvents,
-      keySessions: Math.min(n, keyEvents),
-      eventCount: views + n + engaged + scroll + keyEvents,
-      userEngagementDuration: seconds,
-      screenPageViews: views,
-      __scroll: scroll,
-    },
+    dimensions: Object.fromEntries(
+      Object.entries(VISIT_DIMENSIONS).map(([d, value]) => [d, value(v, day)]),
+    ),
+    metrics: Object.fromEntries(
+      Object.entries(VISIT_METRICS).map(([m, value]) => [m, value(v)]),
+    ),
   };
+}
+
+/**
+ * `aggregate` over the days' visits read straight from their columns, building only the dimensions asked for and
+ * those `keep` filters on. Rows come out in the same order.
+ */
+function tally(
+  world: World,
+  days: string[],
+  dimensions: string[],
+  metrics: string[],
+  keep: (fact: Fact) => boolean,
+  filtered: string[],
+): Fact[] {
+  const grouped = new Map<string, Fact>();
+  const values = dimensions.map((d) => VISIT_DIMENSIONS[d]);
+  const tests = filtered.map((d) => [d, VISIT_DIMENSIONS[d]] as const);
+  const counts = metrics.map((m) => VISIT_METRICS[m]);
+  const visit = {} as Drawn;
+  for (const date of days) {
+    const day = reportDay(world, date);
+    const visits = visitDay(world, date);
+    for (let i = 0; i < visits.length; i++) {
+      readVisit(visits, i, visit);
+      if (tests.length) {
+        const shown = Object.fromEntries(
+          tests.map(([d, value]) => [d, value?.(visit, day) ?? '']),
+        );
+        if (!keep({ dimensions: shown, metrics: {} })) continue;
+      }
+      const selected = values.map((value) => value?.(visit, day) ?? '');
+      const key = selected.join('\u0000');
+      let into = grouped.get(key);
+      if (!into) {
+        into = {
+          dimensions: Object.fromEntries(
+            dimensions.map((d, k) => [d, selected[k]]),
+          ),
+          metrics: Object.fromEntries(metrics.map((m) => [m, 0])),
+        };
+        grouped.set(key, into);
+      }
+      counts.forEach((count, k) => {
+        into.metrics[metrics[k]] += count?.(visit) ?? 0;
+      });
+    }
+  }
+  return [...grouped.values()];
 }
 
 function byHour(
@@ -397,14 +541,20 @@ function ratios(row: Fact): void {
   m.screenPageViewsPerSession = sessions ? m.screenPageViews / sessions : 0;
 }
 
-function ga4Response(
+/** A report's rows in their requested order and its totals, before `offset` and `limit` select a page. */
+type Ga4Table = {
+  dim: string[];
+  met: string[];
+  rows: Fact[];
+  totals: Fact[];
+};
+
+function ga4Table(
   dim: string[],
   met: string[],
   rows: Fact[],
   b: Json,
-  kind: string,
-): Json {
-  const sorted = ga4Order(rows, b);
+): Ga4Table {
   const totals = aggregate(
     rows,
     [],
@@ -420,6 +570,14 @@ function ga4Response(
     ],
   );
   totals.forEach(ratios);
+  return { dim, met, rows: ga4Order(rows, b), totals };
+}
+
+function ga4Response(
+  { dim, met, rows, totals }: Ga4Table,
+  b: Json,
+  kind: string,
+): Json {
   const value = (m: string, v: number) =>
     RATIOS.has(m) ? String(Number(v.toFixed(6))) : String(Math.round(v));
   return {
@@ -432,7 +590,7 @@ function ga4Response(
           ? 'TYPE_SECONDS'
           : 'TYPE_INTEGER',
     })),
-    rows: slice(sorted, b.offset, b.limit, 10_000).map((r) => ({
+    rows: slice(rows, b.offset, b.limit, 10_000).map((r) => ({
       dimensionValues: dim.map((d) => ({ value: r.dimensions[d] ?? '' })),
       metricValues: met.map((m) => ({ value: value(m, r.metrics[m] ?? 0) })),
     })),
@@ -454,7 +612,29 @@ function ga4Response(
   };
 }
 
+// Pages read GA4 live and a sync pages through each report, so a table is computed once for all its pages. Tables
+// up to this size stay for the hour; a larger one only until its last page is read.
+const RETAINED_REPORT_ROWS = 2_000;
+
 function ga4Report(world: World, b: Json): Json {
+  const { offset, limit: _limit, ...request } = b;
+  const { date, hour } = world.local();
+  const key = `ga4:${date}:${hour}:${JSON.stringify(request)}`;
+  const table = world.answer(
+    key,
+    () => computeGa4Table(world, request),
+    (t) => t.rows.length <= RETAINED_REPORT_ROWS,
+  );
+  const response = ga4Response(table, b, 'analyticsData#runReport');
+  if (
+    table.rows.length > RETAINED_REPORT_ROWS &&
+    integer(offset) + (response.rows as unknown[]).length >= table.rows.length
+  )
+    world.forget(key);
+  return response;
+}
+
+function computeGa4Table(world: World, b: Json): Ga4Table {
   const dim = names(b.dimensions);
   const met = names(b.metrics);
   const ranges = list(b.dateRanges).map(object);
@@ -466,7 +646,8 @@ function ga4Report(world: World, b: Json): Json {
   if (ranges.length > 4)
     throw new WorldUnsupported('more than four GA4 date ranges');
   const keep = b.dimensionFilter ? ga4Filter(b.dimensionFilter) : () => true;
-  const fields = new Set([...dim, ...filterFields(b.dimensionFilter)]);
+  const filtered = filterFields(b.dimensionFilter);
+  const fields = new Set([...dim, ...filtered]);
   const { date: today, hour } = world.local();
   const named = ranges.length > 1;
   const wanted = [
@@ -483,31 +664,43 @@ function ga4Report(world: World, b: Json): Json {
     const start = ga4Day(world, range.startDate ?? '28daysAgo');
     const end = ga4Day(world, range.endDate ?? 'yesterday');
     const days = daysBetween(start, end < today ? end : today);
-    const facts: Fact[] = [];
-    for (const date of days) {
-      const daily = world.memo(`ga4-facts:${date}`, () =>
-        world
-          .visitsOn(date)
-          .map((visit, i) => visitFact(world, date, visit, i)),
-      );
-      daily.forEach((fact, i) => {
-        let split: Fact[] = [fact];
-        if (fields.has('hour') || fields.has('dateHour'))
-          split = split.flatMap((f) =>
-            byHour(
-              world,
-              f,
-              date,
-              date === today ? hour : 24,
-              `h:${date}:${i}`,
-            ),
-          );
-        if (fields.has('eventName')) split = split.flatMap(events);
-        for (const f of split) if (keep(f)) facts.push(f);
-      });
+    // Splitting visits by hour or event needs each visit's fact, one at a time so nothing accumulates across days;
+    // every other report adds up the columns directly.
+    function* facts(): Generator<Fact> {
+      const visit = {} as Drawn;
+      for (const date of days) {
+        const day = reportDay(world, date);
+        const visits = visitDay(world, date);
+        for (let i = 0; i < visits.length; i++) {
+          const fact = visitFact(readVisit(visits, i, visit), day);
+          const hourly =
+            fields.has('hour') || fields.has('dateHour')
+              ? byHour(
+                  world,
+                  fact,
+                  date,
+                  date === today ? hour : 24,
+                  `h:${date}:${i}`,
+                )
+              : [fact];
+          for (const hourFact of hourly) {
+            const expanded = fields.has('eventName')
+              ? events(hourFact)
+              : [hourFact];
+            for (const row of expanded) if (keep(row)) yield row;
+          }
+        }
+      }
     }
+    const expands = ['hour', 'dateHour', 'eventName'].some((f) =>
+      fields.has(f),
+    );
     const name = text(range.name) || `date_range_${r}`;
-    return aggregate(facts, dim, wanted).map((row) => ({
+    return (
+      expands
+        ? aggregate(facts(), dim, wanted)
+        : tally(world, days, dim, wanted, keep, filtered)
+    ).map((row) => ({
       dimensions: named
         ? { ...row.dimensions, dateRange: name }
         : row.dimensions,
@@ -515,13 +708,7 @@ function ga4Report(world: World, b: Json): Json {
     }));
   });
   rows.forEach(ratios);
-  return ga4Response(
-    named ? [...dim, 'dateRange'] : dim,
-    met,
-    rows,
-    b,
-    'analyticsData#runReport',
-  );
+  return ga4Table(named ? [...dim, 'dateRange'] : dim, met, rows, b);
 }
 
 // GA4 Realtime: the last 30 minutes, per minute, page, place and device.
@@ -622,9 +809,7 @@ function ga4Realtime(world: World, b: Json): Json {
     });
   }
   return ga4Response(
-    dim,
-    met,
-    aggregate(facts, dim, met),
+    ga4Table(dim, met, aggregate(facts, dim, met), b),
     b,
     'analyticsData#runRealtimeReport',
   );

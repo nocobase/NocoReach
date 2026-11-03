@@ -10,6 +10,12 @@ import {
   legacyRecord,
 } from '../../server/nocoreach/legacy/database.js';
 import { Ga4ReportCache } from '../../server/nocoreach/ga4-report-cache.js';
+import { waitForFresh } from '../../server/nocoreach/google-report-cache.js';
+import {
+  GOOGLE_SAVED_COPY_MAX_AGE_MS,
+  GOOGLE_SAVED_COPY_RETRY_MS,
+  GOOGLE_SAVED_REPORT_MS,
+} from '../../shared/google-cache.js';
 import { DataViews, windowFor } from '../../server/nocoreach/data-views.js';
 import {
   WebsiteReport,
@@ -56,12 +62,376 @@ it.each(nocoReachSchemaPaths)(
     expect(read).toHaveBeenCalledTimes(1);
     vi.setSystemTime(Date.now() + GA4_HISTORY_CACHE_MS - 3600000);
     read.mockResolvedValue({ users: 456 });
+    const restarted = new Ga4ReportCache(db);
+    // Past its lifetime the saved report answers at once while a new one is read.
+    expect(await restarted.load('1', key, read)).toEqual({ users: 123 });
+    expect(read).toHaveBeenCalledTimes(2);
+    await restarted.settled();
     expect(await new Ga4ReportCache(db).load('1', key, read)).toEqual({
       users: 456,
     });
     expect(read).toHaveBeenCalledTimes(2);
   },
 );
+
+const showCopy = (
+  value: { users: number },
+  cacheExpiresAt: number,
+  saved?: { refreshing: boolean; savedAt: number },
+) => ({ ...value, cacheExpiresAt, ...saved });
+
+it('reads the Traffic report again after six hours, as its last days keep changing, and at the latest at midnight', async () => {
+  const { db } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime('2026-10-20T09:00:00Z');
+  const report = new WebsiteReport({ db });
+  const read = vi.fn(async () => ({ tables: {}, missing: [], complete: true }));
+  (report as { readPeriod: unknown }).readPeriod = read;
+  const w = windowFor('2026-10-19', '28');
+  const first = await report.period('1', '123', w, {
+    cutoff: '2026-10-19',
+    view: ['28'],
+  });
+  expect(first.cacheExpiresAt).toBe(Date.now() + GA4_HISTORY_CACHE_MS);
+  expect(first).toMatchObject({ window: w, cutoff: '2026-10-19' });
+  vi.setSystemTime(Date.now() + GA4_HISTORY_CACHE_MS - 1);
+  expect(
+    await report.period('1', '123', w, { view: ['28'] }),
+  ).not.toHaveProperty('savedAt');
+  expect(read).toHaveBeenCalledTimes(1);
+  // A report GA4 answered in part is still read again soon.
+  read.mockResolvedValue({ tables: {}, missing: ['city'], complete: false });
+  const partial = await report.period('1', '123', windowFor('2026-10-19', '7'));
+  expect(partial.cacheExpiresAt).toBe(Date.now() + GA4_PARTIAL_CACHE_MS);
+  // Past its six hours the copy answers while a new report is read.
+  read.mockResolvedValue({ tables: {}, missing: [], complete: true });
+  vi.setSystemTime('2026-10-20T22:00:00Z');
+  expect(await report.period('1', '123', w, { view: ['28'] })).toMatchObject({
+    refreshing: true,
+  });
+  await report.history.settled();
+  expect(read).toHaveBeenCalledTimes(3);
+  // Read late in the day, it lasts only until midnight, when yesterday moves on.
+  const late = await report.period('1', '123', w, { view: ['28'] });
+  expect(late.cacheExpiresAt).toBe(Date.parse('2026-10-21T00:00:00Z'));
+  // The next day's window is answered from this one while it is read.
+  vi.setSystemTime('2026-10-21T00:05:00Z');
+  const next = windowFor('2026-10-20', '28');
+  expect(await report.period('1', '123', next, { view: ['28'] })).toMatchObject(
+    { refreshing: true, window: w },
+  );
+  await report.history.settled();
+  expect(read).toHaveBeenCalledTimes(4);
+});
+
+it('shows no copy older than seven days: the reader waits for a new report, and the snapshot lets it go', async () => {
+  const { db, cache } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  await cache.load('1', ['a'], async () => ({ users: 1 }));
+  await cache.load(
+    '1',
+    ['view', 'old'],
+    async () => ({ users: 1 }),
+    undefined,
+    undefined,
+    { family: ['view'] },
+  );
+  // A report over final days is still fresh, however old.
+  await cache.load(
+    '1',
+    ['final'],
+    async () => ({ users: 1 }),
+    () => GOOGLE_SAVED_REPORT_MS,
+  );
+  vi.setSystemTime(Date.now() + GOOGLE_SAVED_COPY_MAX_AGE_MS + 1);
+  const restarted = new Ga4ReportCache(db);
+  const read = vi.fn(async () => ({ users: 2 }));
+  expect(
+    await restarted.load('1', ['a'], read, undefined, showCopy),
+  ).toMatchObject({ users: 2 });
+  expect(
+    await restarted.load('1', ['a'], read, undefined, showCopy),
+  ).not.toHaveProperty('savedAt');
+  expect(
+    await restarted.load('1', ['view', 'new'], read, undefined, showCopy, {
+      family: ['view'],
+    }),
+  ).toMatchObject({ users: 2 });
+  expect(read).toHaveBeenCalledTimes(2);
+  const final = vi.fn(async () => ({ users: 3 }));
+  expect(await restarted.load('1', ['final'], final)).toEqual({ users: 1 });
+  expect(final).not.toHaveBeenCalled();
+  const saved = (
+    (
+      await db
+        .getRepository('nrSnapshots')
+        .findOne({ filter: { key: 'ga4-reports:1' } })
+    )?.get('payload') as {
+      entries: unknown[];
+    }
+  ).entries;
+  expect(saved).toHaveLength(3);
+});
+
+it('logs a background read that failed, which no request reports', async () => {
+  const { db } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const warn = vi.fn();
+  const cache = new Ga4ReportCache(db, undefined, { warn });
+  await cache.load('1', ['a'], async () => ({ users: 1 }));
+  vi.setSystemTime(Date.now() + GA4_HISTORY_CACHE_MS);
+  await cache.load('1', ['a'], async () => {
+    throw Object.assign(new Error('invalid_grant'), {
+      code: 'invalid_grant',
+      status: 409,
+    });
+  });
+  await cache.settled();
+  await vi.waitFor(() =>
+    expect(warn).toHaveBeenCalledWith(
+      'NocoReach report refresh failed',
+      expect.objectContaining({
+        namespace: 'ga4-reports',
+        projectId: '1',
+        status: 409,
+        code: 'invalid_grant',
+      }),
+    ),
+  );
+});
+
+it('keeps a GA4 row as long as final days only when GA4 has finished every day of its window', async () => {
+  const { db } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime('2026-10-20T12:00:00Z');
+  const report = new WebsiteReport({ db });
+  (report as { readRow: unknown }).readRow = vi.fn(async () => ({
+    daily: [],
+    totals: {},
+  }));
+  const dims = { pagePath: '/a' };
+  const settled = await report.row('1', '123', windowFor('2026-10-17', '7'), {
+    table: 'page',
+    dims,
+    settled: true,
+  });
+  expect(settled.cacheExpiresAt).toBe(Date.now() + GOOGLE_SAVED_REPORT_MS);
+  const recent = await report.row('1', '123', windowFor('2026-10-19', '7'), {
+    table: 'page',
+    dims,
+  });
+  expect(recent.cacheExpiresAt).toBe(Date.now() + GA4_HISTORY_CACHE_MS);
+});
+
+it('decides a Traffic row is settled from the days GA4 may still be processing, in the property zone', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  // Los Angeles is still on the 19th, so its yesterday is the 18th; in the property's zone yesterday is the 19th, and GA4
+  // is still processing it and the 18th.
+  vi.setSystemTime('2026-10-20T05:00:00Z');
+  for (const [end, settled] of [
+    ['2026-10-17', true],
+    ['2026-10-18', false],
+    ['2026-10-19', false],
+  ] as const) {
+    const daily = [{ date: '2026-09-01' }, { date: '2026-10-17' }];
+    const views = new DataViews({
+      sync: {
+        link: async () =>
+          legacyRecord({ ga4PropertyId: '123', gscSiteUrl: 'sc-domain:x' }),
+        snapshots: async () => [
+          { key: 'project', payload: { end: '2026-10-17' } },
+          { key: 'history-web', payload: daily },
+        ],
+      },
+    } as never);
+    const ga4 = (
+      views as unknown as { ga4: { row: unknown; yesterday: unknown } }
+    ).ga4;
+    const row = vi.fn(async () => ({ daily: [], totals: {} }));
+    ga4.row = row;
+    ga4.yesterday = async () => '2026-10-19';
+    await views.websiteRow('1', {
+      range: '7',
+      cutoff: end,
+      table: 'page',
+      dims: { pagePath: '/a' },
+    } as never);
+    expect((row.mock.calls[0] as unknown[])[3]).toMatchObject({ settled });
+  }
+});
+
+it('answers an expired report from its copy without waiting, and marks the copy', async () => {
+  const { cache } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const savedAt = Date.now();
+  await cache.load('1', ['a'], async () => ({ users: 1 }));
+  vi.setSystemTime(savedAt + GA4_HISTORY_CACHE_MS);
+  const gate = Promise.withResolvers<{ users: number }>();
+  const read = vi.fn(() => gate.promise);
+  const copy = await cache.load('1', ['a'], read, undefined, showCopy);
+  expect(copy).toMatchObject({ users: 1, refreshing: true, savedAt });
+  expect(copy.cacheExpiresAt).toBe(Date.now() + GOOGLE_SAVED_COPY_RETRY_MS);
+  // A second reader joins the read under way.
+  await cache.load('1', ['a'], read, undefined, showCopy);
+  expect(read).toHaveBeenCalledTimes(1);
+  gate.resolve({ users: 2 });
+  await cache.settled();
+  const fresh = await cache.load('1', ['a'], read, undefined, showCopy);
+  expect(fresh).toMatchObject({ users: 2 });
+  expect(fresh).not.toHaveProperty('savedAt');
+  expect(read).toHaveBeenCalledTimes(1);
+});
+
+it('gives the page the reason a new read failed, when it was written for people', async () => {
+  const { cache } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  await cache.load('1', ['a'], async () => ({ users: 1 }));
+  await cache.load('1', ['b'], async () => ({ users: 1 }));
+  vi.setSystemTime(Date.now() + GA4_HISTORY_CACHE_MS);
+  const load = (key: string, error: Error) =>
+    cache.load(
+      '1',
+      [key],
+      (): Promise<{ users: number }> => Promise.reject(error),
+      undefined,
+      showCopy,
+    );
+  const refused = Object.assign(new Error('Authorize Google again'), {
+    status: 502,
+  });
+  const internal = new Error('socket hang up');
+  // The first answer only knows that a new report is on its way.
+  expect(await load('a', refused)).not.toHaveProperty('reason');
+  await load('b', internal);
+  await vi.waitFor(async () =>
+    expect(await load('a', refused)).toMatchObject({
+      users: 1,
+      refreshing: false,
+      reason: 'Authorize Google again',
+    }),
+  );
+  await vi.waitFor(async () =>
+    expect(await load('b', internal)).toMatchObject({ refreshing: false }),
+  );
+  expect(await load('b', internal)).not.toHaveProperty('reason');
+});
+
+it('keeps the copy when a new read fails and waits before asking again', async () => {
+  const { cache } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  await cache.load('1', ['a'], async () => ({ users: 1 }));
+  vi.setSystemTime(Date.now() + GA4_HISTORY_CACHE_MS);
+  const read = vi.fn(async () => {
+    throw new Error('invalid_grant');
+  });
+  const load = () => cache.load('1', ['a'], read, undefined, showCopy);
+  expect(await load()).toMatchObject({ users: 1, refreshing: true });
+  await cache.settled();
+  await vi.waitFor(async () =>
+    expect(await load()).toMatchObject({ users: 1, refreshing: false }),
+  );
+  expect(read).toHaveBeenCalledTimes(1);
+  vi.setSystemTime(Date.now() + GA4_PARTIAL_CACHE_MS);
+  expect(await load()).toMatchObject({ users: 1, refreshing: true });
+  expect(read).toHaveBeenCalledTimes(2);
+});
+
+it('answers a new window from the same view, and only the same view', async () => {
+  const { db, cache } = await fixture();
+  const view = { family: ['period', 'range-28'] };
+  await cache.load(
+    '1',
+    ['period', '2026-10-01'],
+    async () => ({ users: 1 }),
+    undefined,
+    undefined,
+    view,
+  );
+  const gate = Promise.withResolvers<{ users: number }>();
+  const read = vi.fn(() => gate.promise);
+  const restarted = new Ga4ReportCache(db);
+  const next = () =>
+    restarted.load(
+      '1',
+      ['period', '2026-10-02'],
+      read,
+      undefined,
+      showCopy,
+      view,
+    );
+  expect(await next()).toMatchObject({ users: 1, refreshing: true });
+  gate.resolve({ users: 2 });
+  await restarted.settled();
+  expect(await next()).toMatchObject({ users: 2 });
+  const saved: unknown = (
+    await db
+      .getRepository('nrSnapshots')
+      .findOne({ filter: { key: 'ga4-reports:1' } })
+  )?.get('payload');
+  // The earlier window gave up its room.
+  expect((saved as { entries: unknown[] }).entries).toHaveLength(1);
+  // Another view or project waits for its own report.
+  const other = vi.fn(async () => ({ users: 3 }));
+  expect(
+    await restarted.load('1', ['period', 'x'], other, undefined, showCopy, {
+      family: ['period', 'range-90'],
+    }),
+  ).toMatchObject({ users: 3 });
+  expect(
+    await restarted.load(
+      '2',
+      ['period', 'y'],
+      other,
+      undefined,
+      showCopy,
+      view,
+    ),
+  ).toMatchObject({ users: 3 });
+  expect(other).toHaveBeenCalledTimes(2);
+});
+
+it('waits for a new report inside waitForFresh, as the tick and background builds do', async () => {
+  const { cache } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  await cache.load('1', ['a'], async () => ({ users: 1 }));
+  vi.setSystemTime(Date.now() + GA4_HISTORY_CACHE_MS);
+  const read = vi.fn(async () => ({ users: 2 }));
+  expect(await waitForFresh(() => cache.load('1', ['a'], read))).toEqual({
+    users: 2,
+  });
+  const failed = vi.fn(async () => {
+    throw new Error('quota');
+  });
+  vi.setSystemTime(Date.now() + GA4_HISTORY_CACHE_MS);
+  await expect(
+    waitForFresh(() => cache.load('1', ['a'], failed)),
+  ).rejects.toThrow('quota');
+});
+
+it('retires the copy when a new result cannot be kept, so reads stop answering from it', async () => {
+  const { db, cache } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  await cache.load('1', ['a'], async () => ({ rows: 'small' }));
+  vi.setSystemTime(Date.now() + GA4_HISTORY_CACHE_MS);
+  const large = vi.fn(async () => ({ rows: 'x'.repeat(2 * 1024 * 1024) }));
+  expect(await cache.load('1', ['a'], large)).toEqual({ rows: 'small' });
+  await cache.settled();
+  expect((await cache.load('1', ['a'], large)).rows).toHaveLength(
+    2 * 1024 * 1024,
+  );
+  expect(large).toHaveBeenCalledTimes(2);
+  expect(
+    (
+      (
+        await db
+          .getRepository('nrSnapshots')
+          .findOne({ filter: { key: 'ga4-reports:1' } })
+      )?.get('payload') as {
+        entries: unknown[];
+      }
+    ).entries,
+  ).toHaveLength(0);
+});
 
 it('isolates projects, properties, date ranges and simulated scopes, and bounds persisted entries', async () => {
   const { db, cache } = await fixture();
@@ -229,7 +599,7 @@ it('reuses GA4 history after sync changes while rebuilding current Search Consol
   expect(read).toHaveBeenCalledTimes(1);
 });
 
-it('persists row details and rolls relative historical queries over on the next business day', async () => {
+it('persists row details and a period report across a restart, reading the period again at midnight where its window ends', async () => {
   const { db } = await fixture();
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-10-16T23:30:00Z'));
@@ -250,9 +620,16 @@ it('persists row details and rolls relative historical queries over on the next 
   const restarted = new WebsiteReport({ db });
   restarted.readPeriod = period;
   restarted.readRow = row;
+  vi.setSystemTime(new Date('2026-10-16T23:45:00Z'));
+  await restarted.period('1', '123', window);
+  await restarted.row('1', '123', window, selection);
+  expect(period).toHaveBeenCalledTimes(1);
+  expect(row).toHaveBeenCalledTimes(1);
+  // Past midnight where the window ends, yesterday has moved on: the period is read again, the row still lives.
   vi.setSystemTime(new Date('2026-10-17T00:01:00Z'));
   await restarted.period('1', '123', window);
   await restarted.row('1', '123', window, selection);
+  await restarted.history.settled();
   expect(period).toHaveBeenCalledTimes(2);
   expect(row).toHaveBeenCalledTimes(1);
 });

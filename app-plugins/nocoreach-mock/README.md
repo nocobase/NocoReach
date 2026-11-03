@@ -22,12 +22,9 @@ NocoBase 3 的 NocoReach 演示/测试伴随插件。默认关闭，用项目相
 nocoreachMock:
   enabled: true
   environment: test # 仅允许 test 或 demo
-agents:
-  vectors:
-    store: false
 ```
 
-前两项也可用 `NOCOREACH_MOCK_ENABLED=true` 和 `NOCOREACH_MOCK_ENVIRONMENT=test` 设置。不能用 `NODE_ENV` 代替环境声明，真实 Agent 可独立配置；NocoReach 始终允许 Online Agent 执行，旧配置中的 `agents.server.enabled: false` 不再限制执行，无需手动调整。向量存储可按需配置。
+前两项也可用 `NOCOREACH_MOCK_ENABLED=true` 和 `NOCOREACH_MOCK_ENVIRONMENT=test` 设置。不能用 `NODE_ENV` 代替环境声明，真实 Agent 可独立配置；NocoReach 始终允许 Online Agent 执行，旧配置中的 `agents.server.enabled: false` 不再限制执行，无需手动调整。Agents 2 已移除向量存储，请删除旧配置中的 `agents.vectors`；只接受无实际作用的 `store: false`，其他值会使启动失败。
 
 通知只能启用 `provider: in-app` 通道。删除其他通道或设为 `enabled: false`；`jobs.default`、`scheduler.jobs` 和 `notification.jobs` 均使用内置进程内 memory，或显式选择已定义的 `adapter: memory` 配置，不能选择共享 Redis 队列；未使用的 Redis 配置可保留。宿主在任何插件工作者启动前校验这些条件，禁止外部通知发送/测试发送，保留收件箱通知与已读/未读操作。
 
@@ -65,7 +62,7 @@ NocoReach 宿主首次启用时拒绝已有业务数据或凭据。引擎给数�
 
 An off-by-default NocoBase 3 companion plugin for dedicated NocoReach demo/test deployments. It replaces upstream I/O with project-aware synthetic responses (legacy snapshots retain the NocoBloom catalog) while preserving real authentication, parsers, validation, jobs and persistence. It has no live fallback. Unknown targets, unavailable projects and unsupported operations fail closed.
 
-Use a fresh database and separate storage. Enable mock mode with an explicit demo/test environment. NocoReach always allows Online execution, ignoring the retired agents.server.enabled=false override through its application provider; configure vectors as needed. Only enabled in-app notification channels are allowed. Selected jobs.default, scheduler.jobs and notification.jobs must resolve to process-local memory; absent selectors use built-in memory and unused Redis definitions are allowed. External sends/test sends are blocked; inbox delivery and read-state controls remain available. NocoReach's host rejects existing business data/credentials on first activation and checks the permanent dataset marker before workers boot. A marked database cannot restart live. Use another clean database rather than removing its marker.
+Use a fresh database and separate storage. Enable mock mode with an explicit demo/test environment. NocoReach always allows Online execution, ignoring the retired agents.server.enabled=false override through its application provider. Agents 2 removed the vector store, so delete any active agents.vectors setting. Only enabled in-app notification channels are allowed. Selected jobs.default, scheduler.jobs and notification.jobs must resolve to process-local memory; absent selectors use built-in memory and unused Redis definitions are allowed. External sends/test sends are blocked; inbox delivery and read-state controls remain available. NocoReach's host rejects existing business data/credentials on first activation and checks the permanent dataset marker before workers boot. A marked database cannot restart live. Use another clean database rather than removing its marker.
 
 Register the Server plugin, resolve mockEngineToken and attach authenticated host storage/project/access adapters, including the mandatory first-activation assertPristine check. The Client factory takes {page, parent?, navigation?}. NocoReach uses createMockIndicator(host), requiring only status UI, access context and a read-only status request. The standalone createMockUi(host) export remains compatible for hosts without Profile integration; its settings UI is not assembled by the application. In NocoReach, use Settings → Network profiles at /proxy-profiles, prefixed by the application base path; the legacy route redirects there. The host must install early dataset, worker and external-execution guards; package registration alone does not protect arbitrary hosts. Wrap operations in run(projectId, fn), route requests through the engine and inject media fixture dependencies into real production adapters. Never replace global fetch. Persist credential-free capture(projectId) snapshots across queue/process boundaries and restore with runSnapshot; bind them to actual internal jobs, never browser-supplied snapshots.
 

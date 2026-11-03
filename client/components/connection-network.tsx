@@ -52,7 +52,10 @@ export function ConnectionNetwork({
     queryKey: [...proxyKey, 'capabilities'],
     queryFn: () => proxyRequest<ProfileCapabilities>('capabilities'),
   });
-  if (!connection) return null;
+  // Browser collectors use their own host's network in every deployment; in a mock one they follow the
+  // project's mock profile, so they have no card to choose one.
+  if (!connection || ['bilibili', 'xiaohongshu'].includes(connection))
+    return null;
   // A mock deployment keeps choosing a profile per connection; a live one only turns the default proxy off.
   if (capabilities.data?.mockEnabled)
     return (
@@ -102,15 +105,9 @@ function ProxySwitch({
   });
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>(null);
-  // Browser collectors use their own host's network.
-  if (['bilibili', 'xiaohongshu'].includes(connection)) return null;
   const loadError = network.error || selections.error;
   if (!loadError && !(network.data?.proxy && selections.data)) return null;
   const choice = selections.data?.[connection];
-  // YouTube is read through a Collector and never takes the default proxy. Only an explicit choice left from before
-  // shows here, so it can be turned off.
-  const youtube = connection === 'youtube';
-  if (youtube && !loadError && (!choice || choice === DIRECT)) return null;
   const on = choice !== DIRECT;
   const name = $t(connectionLabels[connection] ?? connection);
   async function toggle(next: boolean) {
@@ -153,9 +150,7 @@ function ProxySwitch({
           <div className='min-w-0'>
             <p className='text-sm font-medium'>{$t('network.useProxy')}</p>
             <p className='mt-1 text-sm text-muted-foreground'>
-              {$t(
-                youtube ? 'network.youtubeProxyHelp' : 'network.useProxyHelp',
-              )}
+              {$t('network.useProxyHelp')}
               {connection === 'google' &&
                 ` ${$t('connectionNetwork.ga4SearchConsoleShare')}`}
               {connection === 'github' &&
@@ -213,7 +208,6 @@ function NetworkChoice({
     queryFn: () => proxyRequest<ProfileCapabilities>('capabilities'),
   });
   const mockEnvironment = capabilities.data?.mockEnabled === true;
-  const collector = ['bilibili', 'xiaohongshu'].includes(connection);
   const directLabel = $t(
     mockEnvironment
       ? 'networkProfiles.paused'
@@ -262,7 +256,6 @@ function NetworkChoice({
       setBusy(false);
     }
   }
-  if (collector && capabilities.data && !mockEnvironment) return null;
   return (
     // The connection drawer is a scrollable flex column. Keep the card at its
     // content height so its overflow-hidden frame cannot clip the form.
@@ -351,11 +344,7 @@ function NetworkChoice({
               </SelectContent>
             </Select>
             <p className='text-sm text-muted-foreground'>
-              {$t(
-                collector
-                  ? 'networkProfiles.mediaNetwork'
-                  : 'connectionNetwork.proxyFailuresNeverFallBack',
-              )}
+              {$t('connectionNetwork.proxyFailuresNeverFallBack')}
             </p>
             {changed && (
               <p role='status' className='text-sm text-muted-foreground'>

@@ -44,7 +44,7 @@ const test = createAppTest({
       environment: 'test',
       initializeData: false,
     },
-    agents: { server: { enabled: false }, vectors: { store: false } },
+    agents: { server: { enabled: false } },
     nocoreach: { publicDns: '' },
   },
 });

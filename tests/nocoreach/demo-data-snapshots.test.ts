@@ -16,6 +16,8 @@ const SHARED_SNAPSHOTS = new Set([
 // cannot silently be excluded. Signals and command IDs live inside their owning project's snapshot.
 const NON_SNAPSHOT_PREFIXES = new Set([
   'demo', // Simulated runtime run ID; the persisted row remains nr-task-run.
+  'page', // An opportunity's place (`page:<host/path>`), kept on a task's `evidence.part` and its proposal.
+  'task', // Proposal group of a task handed off without an opportunity (`task:<id>`), kept inside the strategy snapshot.
   'ai-answer',
   'ai-share',
   'ai-uncited',

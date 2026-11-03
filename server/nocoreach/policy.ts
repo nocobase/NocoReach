@@ -30,7 +30,7 @@ const ADMIN_ONLY={
   nrXiaohongshu:['connect','test','search','cancel','disconnect','clear'],
  nrReddit:['connect','disconnect'],nrX:['connect','disconnect'],nrTrends:['connect','disconnect'],
  nrSiteContent:['discover','confirm','remove','refresh'],nrDiscovery:['discover','connections'],nrKeywords:['configure','disconnect'],
- nrAgent:['saveDefault','saveRepo','removeRepo'],
+ nrAgent:['saveDefault','saveRepo','removeRepo','checkRepo'],
  nrOnlineAI:['setModel'],
  nrArticles:['saveTarget','removeTarget','setDefaultTarget','savePlaybookTargets','testTarget'],
  nrPlaybooks:['save','copy','remove','restore','draft'],

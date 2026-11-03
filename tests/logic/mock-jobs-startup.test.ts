@@ -28,7 +28,7 @@ function runtime(
 ): AppRuntimeContext {
   const values: Record<string, unknown> = {
     nocoreachMock: { enabled: true, environment: 'test' },
-    agents: { server: { enabled: false }, vectors: { store: false } },
+    agents: { server: { enabled: false } },
     // This independent memory selection must not conceal unsafe business workers.
     notification: { jobs: 'memory' },
     jobs,

@@ -26,7 +26,6 @@ const test = createAppTest({
       environment: 'test',
       initializeData: false,
     },
-    agents: { vectors: { store: false } },
   },
 });
 

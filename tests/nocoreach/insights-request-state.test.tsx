@@ -61,6 +61,8 @@ vi.mock('../../client/pages/me', () => ({
 }));
 vi.mock('../../client/components/app-shell/nav-badges', () => ({
   refreshNavBadges: vi.fn(),
+  // Sources not read yet: links into data pages stay as they are.
+  useNavSources: () => null,
 }));
 
 const requests = { tasks, metrics: vi.fn(), summary: vi.fn() };
@@ -520,3 +522,47 @@ it.each([401, 403, 404])(
     expect(screen.getByText('12,345')).toBeInTheDocument();
   },
 );
+
+it('defers tasks until the state and reads each dependency once', async () => {
+  const state = deferred<unknown>();
+  const answer = action.getMockImplementation()!;
+  action.mockImplementation(
+    (resource: string, operation: string, options: never) =>
+      resource === 'nrStrategy' && operation === 'state'
+        ? state.promise
+        : answer(resource, operation, options),
+  );
+  tasks.mockResolvedValue(values.tasks);
+  requests.metrics.mockResolvedValue(values.metrics);
+  requests.summary.mockResolvedValue(values.summary);
+  await setup();
+  // Small reads start with state; the task payload waits for Insights to mount.
+  await waitFor(() => {
+    expect(tasks).not.toHaveBeenCalled();
+    expect(requests.summary).toHaveBeenCalledTimes(1);
+    expect(requests.metrics).toHaveBeenCalledTimes(1);
+  });
+  await act(async () =>
+    state.resolve({ revision: 1, goal: null, proposals: [] }),
+  );
+  await screen.findByText(known.summary, { exact: false });
+  await screen.findByText(known.metrics);
+  // Insights takes over the requests started for it instead of sending them again.
+  expect(tasks).toHaveBeenCalledTimes(1);
+  expect(requests.summary).toHaveBeenCalledTimes(1);
+  expect(requests.metrics).toHaveBeenCalledTimes(1);
+});
+
+it('reads again when the state fails and its retry succeeds', async () => {
+  const answer = action.getMockImplementation()!;
+  action.mockImplementationOnce(() =>
+    Promise.reject(new Error('state unavailable')),
+  );
+  action.mockImplementation(answer);
+  requests.summary.mockResolvedValue(values.summary);
+  await setup();
+  await userEvent.click(await screen.findByRole('button', { name: 'Reload' }));
+  await screen.findByText(known.summary, { exact: false });
+  // One read for the failed attempt, one for the retry the page shows: never an answer older than the retry.
+  expect(requests.summary).toHaveBeenCalledTimes(2);
+});

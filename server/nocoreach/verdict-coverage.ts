@@ -13,6 +13,7 @@ import {
 import { taskStanding, type TaskWork } from '../../shared/task-pending.js';
 import { mergeCards, withoutIgnored } from './opportunity-board.js';
 import { ownSignalIds } from '../../shared/opportunity-parts.js';
+import { pageKey, type PageIdentity } from '../../shared/page-identity.js';
 
 /** A task as read from nrTasks: its number, state and the pages it is about. */
 export type CoverTask = {
@@ -33,19 +34,9 @@ type Cover =
   | { kind: 'opportunity'; no?: number }
   | { kind: 'ignored' };
 
-// A page compared without scheme, `www.`, trailing slash, query or fragment.
-function pageOf(url: unknown) {
-  if (typeof url !== 'string') return '';
-  try {
-    const u = new URL(url.trim());
-    if (u.protocol !== 'https:' && u.protocol !== 'http:') return '';
-    return `${u.host.toLowerCase().replace(/^www\./, '')}${u.pathname.replace(/\/+$/, '')}`;
-  } catch {
-    return '';
-  }
-}
-// One of an opportunity's several tasks is about its own place only, not the opportunity's other pages.
-function taskPages(t: CoverTask) {
+// One of an opportunity's several tasks is about its own place only, not the opportunity's other pages. Pages compare
+// as the project's page identity says (shared/page-identity.ts).
+function taskPages(t: CoverTask, identity?: PageIdentity | null) {
   const e = t.evidence || {},
     ids = new Set<unknown>(ownSignalIds(e));
   return [
@@ -56,7 +47,7 @@ function taskPages(t: CoverTask) {
       .filter((s) => ids.has(s.key))
       .map((s) => s.url),
   ]
-    .map(pageOf)
+    .map((u) => pageKey(u, identity))
     .filter(Boolean);
 }
 const taskCover = (t: CoverTask | undefined, no?: number): Cover => {
@@ -76,8 +67,9 @@ function coverOf(
   s: Signal,
   state: StrategyState,
   tasks: CoverTask[],
+  identity?: PageIdentity | null,
 ): Cover | null {
-  const page = pageOf(s.url),
+  const page = pageKey(s.url, identity),
     byId = new Map(tasks.map((t) => [String(t.id), t]));
   for (const p of state.proposals || []) {
     const cites =
@@ -87,7 +79,7 @@ function coverOf(
       return taskCover(byId.get(String(p.taskId)), p.taskNo);
   }
   if (page) {
-    const t = tasks.find((x) => taskPages(x).includes(page));
+    const t = tasks.find((x) => taskPages(x, identity).includes(page));
     if (t) return taskCover(t);
   }
   let ignored = false;
@@ -96,7 +88,7 @@ function coverOf(
       (row.card.signalIds || []).includes(s.key) ||
       (Boolean(page) &&
         [row.card.target, ...citedSignals(row).map((x) => x.url)]
-          .map(pageOf)
+          .map((u) => pageKey(u, identity))
           .includes(page));
     if (!about) continue;
     const st = opportunityState(row, state);
@@ -185,6 +177,8 @@ export function settleVerdicts(
   now: string,
   uuid: () => string,
   locale = 'zh-CN',
+  /** Which of the project's addresses are one page (shared/page-identity.ts). */
+  identity?: PageIdentity | null,
 ): { skipped: string[]; raised: string[] } {
   const batch = state.insights,
     out = { skipped: [] as string[], raised: [] as string[] };
@@ -196,7 +190,7 @@ export function settleVerdicts(
   for (const s of batch.evidence.signals?.items || []) {
     const review = reviews[s.key];
     if (review?.verdict !== 'do' || cited.has(s.key)) continue;
-    const cover = coverOf(s, state, tasks);
+    const cover = coverOf(s, state, tasks, identity);
     if (cover) {
       reviews[s.key] = { verdict: 'skip', reason: reasonOf(cover, locale) };
       out.skipped.push(s.key);

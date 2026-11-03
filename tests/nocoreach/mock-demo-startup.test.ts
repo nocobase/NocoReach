@@ -46,7 +46,7 @@ const test = createAppTest({
     },
     secrets: { keys: [{ version: 1, key: randomBytes(32).toString('hex') }] },
     nocoreachMock: { enabled: true, environment: 'test' },
-    agents: { server: { enabled: false }, vectors: { store: false } },
+    agents: { server: { enabled: false } },
     nocoreach: { publicDns: '' },
   },
 });
@@ -143,7 +143,8 @@ test('demo catalog connects simulated sources, leaves publishing unconfigured an
     if (key === 'articles') {
       expect(data.targets).toEqual([]);
       input[key] = { targets: (data.targets as unknown[]).length };
-    } else input[key] = key === 'repo' ? data.repo : data;
+    } else if (key === 'repo') input.repos = data.repos;
+    else input[key] = data;
   }
   const states = Object.fromEntries(
     getCatalog()
@@ -151,14 +152,15 @@ test('demo catalog connects simulated sources, leaves publishing unconfigured an
       .map((source) => [source.id, sourceState(source, input as StatusInput)]),
   );
   expect(Object.keys(states).length).toBeGreaterThan(15);
+  // The docs have a repository of their own (2026-10-29): /docs pages go there, the rest to the website's.
+  expect(input.repos).toMatchObject([
+    { repo: 'nocobloom/nocobloom', urls: ['nocobloom.example'] },
+    { repo: 'nocobloom/docs', urls: ['nocobloom.example/docs'] },
+  ]);
+  // Xiaohongshu shows Connected once its search term is saved, as the other sources do (2026-11-02).
   for (const [source, state] of Object.entries(states))
     expect({ [source]: state }).toEqual({
-      [source]:
-        source === 'articles'
-          ? 'ready'
-          : source === 'xiaohongshu'
-            ? 'done'
-            : 'connected',
+      [source]: source === 'articles' ? 'ready' : 'connected',
     });
   expect(
     (input.google as { connection: { status: string } }).connection.status,
@@ -185,8 +187,13 @@ test('demo catalog connects simulated sources, leaves publishing unconfigured an
   await initializeMockDemo(runtime.plugin);
   const repository = (await snapshots.findOne({
     filter: { key: `nr-task-agent:${projectId}` },
-  }))!.get('payload') as { revision: number; repo: { repo: string } };
-  expect(repository.repo.repo).toBe('nocobloom/nocobloom');
+  }))!.get('payload') as {
+    revision: number;
+    repos: { repo: string; urls: string[] }[];
+  };
+  expect(repository.repos).toMatchObject([
+    { repo: 'nocobloom/nocobloom', urls: ['nocobloom.example'] },
+  ]);
   expect((await runtime.plugin.link(projectId))!.get('status')).toBe(
     'ready_for_sync',
   );
@@ -198,7 +205,7 @@ test('demo catalog connects simulated sources, leaves publishing unconfigured an
   await snapshots.update({
     filter: { key: `nr-task-agent:${projectId}` },
     values: {
-      payload: { revision: repository.revision + 1, agentId: null, repo: null },
+      payload: { revision: repository.revision + 1, agentId: null, repos: [] },
     },
   });
   await runtime.plugin.metadata(projectId, { status: 'disconnected' });
@@ -207,7 +214,7 @@ test('demo catalog connects simulated sources, leaves publishing unconfigured an
     (await snapshots.findOne({
       filter: { key: `nr-task-agent:${projectId}` },
     }))!.get('payload'),
-  ).toMatchObject({ repo: null });
+  ).toMatchObject({ repos: [] });
   expect((await runtime.plugin.link(projectId))!.get('status')).toBe(
     'disconnected',
   );

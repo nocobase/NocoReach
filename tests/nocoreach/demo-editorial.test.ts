@@ -48,7 +48,6 @@ const test = createAppTest({
       environment: 'demo',
       initializeData: false,
     },
-    agents: { vectors: { store: false } },
     nocoreach: { publicDns: '' },
   },
 });

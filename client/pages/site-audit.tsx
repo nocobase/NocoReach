@@ -21,8 +21,7 @@ import { Tabs, TabsList, TabsTrigger } from "#components/ui/tabs";
 import { DetailDrawer } from "./detail-drawer";
 import { useProject } from "./reach-data";
 import { safeLink } from "./analytics";
-import { type TaskDraft } from "./keyword-hand-off";
-import { subjectOf } from './task-subject';
+import { auditDraft, type Issue } from "./site-audit-draft";
 import { HandOffBar } from "./hand-off-bar";
 import { AllCheck, RowCheck, useHandOffSource, useSelection } from "#components/reach/hand-off-slot";
 import { PerformanceTab } from "./audit-performance";
@@ -31,8 +30,6 @@ import "./data-views.css";
 import { InfoTip } from "#components/reach/info-tip";
 import { formatDate } from '#lib/format';
 
-type AuditPage = { url: string; title: string; detail: string };
-type Issue = { type: string; severity: "critical" | "warning" | "notice"; title: string; description: string; job: "tech" | "content"; count: number; pages: AuditPage[] };
 type Report = { connected: boolean; total?: number; read?: number; pending?: number; oldestRead?: string | null; newestRead?: string | null; counts?: { critical: number; warning: number; notice: number }; issues?: Issue[] };
 const getSeverity = (): Record<Issue["severity"], { label: string; tone: Tone }> => ({ critical: { label: $t('siteAudit.critical'), tone: "red" }, warning: { label: $t('siteAudit.warning'), tone: "amber" }, notice: { label: $t('siteAudit.notice'), tone: "grey" } });
 const day = (v?: string | null) => formatDate(v);
@@ -116,13 +113,3 @@ export default function SiteAudit() {
 
 // The ticked issues become one task listing the affected pages; 技术修复 when the first is technical, 优化现有页面 for
 // content (changeable in the dialog).
-function auditDraft(issues: Issue[]): TaskDraft {
-  const one = issues.length === 1 ? issues[0] : null, per = Math.max(5, Math.floor(30 / issues.length));
-  const lines = issues.flatMap((issue) => { const pages = issue.pages.slice(0, per); return [...(one ? [] : [`## ${$legacyText(issue.title)}（${$tj('siteAudit.pageCount',{0:issue.count})}）`]), ...(one ? [$t('siteAudit.siteAuditFoundPages',{0:issue.count,1:$legacyText(issue.title)})] : []), $legacyText(issue.description), "", $t('siteAudit.affectedPages'), ...pages.map((p) => `- ${p.url}${p.detail ? `（${p.detail}）` : ""}`), ...(issue.count > pages.length ? [$t('siteAudit.morePagesSiteAudit',{0:issue.count - pages.length})] : []), ""]; });
-  return {
-    title: (one ? $t('siteAudit.fixPages',{0:one.count,1:$legacyText(one.title)}) : $t('siteAudit.fixSiteAuditIssues',{0:issues.length,1:issues.map((i) => $legacyText(i.title)).join("、")})).slice(0, 200),
-    subject: subjectOf($legacyText(issues[0].title), issues.length, 'issues').slice(0, 160),
-    objective: (one ? $t('siteAudit.pagesNoLongerIssue',{0:$legacyText(one.title)}) : $t('siteAudit.clearIssuesPages',{0:issues.map((i) => $legacyText(i.title)).join("、")})).slice(0, 1000),
-    brief: [...(one ? [] : [$t('siteAudit.issuesTickedSiteAudit',{0:issues.length}), ""]), ...lines, $t('siteAudit.evidenceSiteAuditChecksPages')].join("\n").slice(0, 20000),
-  };
-}

@@ -1,4 +1,10 @@
-import { googleHistoryFreshness } from '../../../shared/google-cache.js';
+import {
+  ChartLegend,
+  TrendChart,
+  ChartArea as Area,
+  ChartLine as Line,
+} from '#components/reach/chart-legend';
+import { googleHistoryFreshness, savedCopyNote, type SavedCopy } from '../../../shared/google-cache.js';
 import { $t } from "#i18n";
 // Search performance › Performance, the parts beyond the totals: Country / region, Device and Search appearance (read
 // from Search Console when the page asks), Rising, Falling and New (Search Console Insights' trending queries and pages),
@@ -7,7 +13,7 @@ import { $t } from "#i18n";
 import { useMemo, useState } from "react";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { ArrowUpRight } from "lucide-react";
-import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { cn } from "#lib/utils";
 import { Card } from "#components/ui/card";
@@ -16,7 +22,7 @@ import { TablePagination } from "#components/seo/table-pagination";
 import { SortableHeader } from "#components/seo/sortable-header";
 import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { InfoTip } from "#components/reach/info-tip";
-import { InlineError, ListSkeleton } from "#components/reach/states";
+import { InlineError, ListSkeleton, SavedReportNote } from "#components/reach/states";
 import { safeLink } from "../analytics";
 import { DetailDrawer } from "../detail-drawer";
 import { countryName } from "../countries";
@@ -28,11 +34,11 @@ import { Delta } from '#components/reach/delta';
 export type Metric = "clicks" | "impressions" | "ctr" | "position";
 export type Window = { all?: boolean; start: string; end: string; previousStart: string; previousEnd: string };
 export type BreakdownRow = { key: string; clicks: number; impressions: number; ctr: number; position: number; previousClicks: number | null; previousImpressions: number | null };
-export type Breakdown = { connected: boolean; countries: BreakdownRow[] | null; devices: BreakdownRow[] | null; appearances: BreakdownRow[] | null };
+export type Breakdown = Partial<SavedCopy> & { connected: boolean; countries: BreakdownRow[] | null; devices: BreakdownRow[] | null; appearances: BreakdownRow[] | null };
 export type MoverRow = { key: string; clicks: number; previousClicks: number; change: number; impressions: number; previousImpressions: number; position: number | null; previousPosition: number | null };
 export type Movers = { rising: MoverRow[]; falling: MoverRow[]; fresh: MoverRow[] };
 type TrendPoint = { date: string; clicks: number | null; impressions: number | null; ctr: number | null; position: number | null; previousDate: string; previousClicks: number | null; previousImpressions: number | null; previousCtr: number | null; previousPosition: number | null };
-type RowDetail = { connected: boolean; trend: TrendPoint[]; related: { key: string; clicks: number; impressions: number; ctr: number; position: number }[] };
+type RowDetail = Partial<SavedCopy> & { connected: boolean; trend: TrendPoint[]; related: { key: string; clicks: number; impressions: number; ctr: number; position: number }[] };
 // What the page knows about the report it shows, for the requests it makes on its own.
 export type Scope = { projectId: number; property?: string; compare?: boolean; window: Window; country?: string; filters: Record<string, unknown> };
 
@@ -56,7 +62,7 @@ const changeText = (now: number, before: number | null) => (before == null || !b
 const scopeBody = (s: Scope) => ({ projectId: s.projectId, compare: s.compare, ...s.window, ...(s.country ? { country: s.country } : {}), ...s.filters });
 
 export function useBreakdown(scope: Scope | null) {
-  return useFreshData<Breakdown>(scope ? `data-view:search-breakdown:${scope.projectId}:${JSON.stringify([scope.property,scopeBody(scope)])}` : null, () => api.action<Breakdown>("nrDataViews", "searchBreakdown", { method: "POST", body: scopeBody(scope!), unwrap: "data" }), googleHistoryFreshness);
+  return useFreshData<Breakdown>(scope ? `data-view:search-breakdown:${scope.projectId}:${JSON.stringify([scope.property,scopeBody(scope)])}` : null, () => api.action<Breakdown>("nrDataViews", "searchBreakdown", { method: "POST", body: { ...scopeBody(scope!), acceptSaved: true }, unwrap: "data" }), googleHistoryFreshness);
 }
 
 // Shares of clicks (of impressions where nothing was clicked), which add up across one dimension's rows.
@@ -147,13 +153,14 @@ export const slices = (kind: "country" | "device" | "appearance", rows: Breakdow
 // with (the queries a page shows for).
 export function RowDrawer({ scope, dimension, rowKey, figures, metric, onClose }: { scope: Scope; dimension: "query" | "page"; rowKey: string; figures?: { clicks: number; impressions: number; ctr: number; position: number | null }; metric: Metric; onClose: () => void }) {
   const body = { ...scopeBody(scope), dimension, key: rowKey };
-  const { data, error } = useFreshData<RowDetail>(`data-view:search-row:${scope.projectId}:${JSON.stringify([scope.property,body])}`, () => api.action<RowDetail>("nrDataViews", "searchRow", { method: "POST", body, unwrap: "data" }), googleHistoryFreshness);
+  const { data, error } = useFreshData<RowDetail>(`data-view:search-row:${scope.projectId}:${JSON.stringify([scope.property,body])}`, () => api.action<RowDetail>("nrDataViews", "searchRow", { method: "POST", body: { ...body, acceptSaved: true }, unwrap: "data" }), googleHistoryFreshness);
   const m: Metric = metric;
   const prevKey = `previous${m[0].toUpperCase()}${m.slice(1)}` as keyof TrendPoint;
   const points = (data?.trend ?? []).map((p) => ({ date: p.date, value: p[m], previous: p[prevKey] }));
   const page = dimension === "page" && safeLink(rowKey) ? safeLink(rowKey)! : null;
   return (
     <DetailDrawer open onClose={onClose} title={`${dimension === "page" ? $t('common.page') : $t('common.query')} · ${rowKey}`} description={$t('common.range', { 0: formatDate(scope.window.start), 1: formatDate(scope.window.end) })}>
+      <SavedReportNote {...savedCopyNote(data)} />
       {page ? <a className="nr-link mb-3 inline-flex items-center gap-1 break-all" href={page} target="_blank" rel="noreferrer">{rowKey}<ArrowUpRight className="size-3.5" /></a> : null}
       {figures ? (
         <table className="w-full text-sm" data-row-figures="">
@@ -164,14 +171,15 @@ export function RowDrawer({ scope, dimension, rowKey, figures, metric, onClose }
       {error ? <InlineError>{error instanceof Error ? error.message : $t('common.tryAgainLater')}</InlineError> : !data ? <ListSkeleton rows={3} /> : (
         <div className="nr-chart-box" data-row-line="">
           <ResponsiveContainer width="100%" height={200}>
-            <ComposedChart data={points} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
+            <TrendChart as={ComposedChart} data={points} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} minTickGap={28} fontSize={11} />
               <YAxis fontSize={11} width={48} reversed={m === "position"} allowDecimals={m !== "clicks" && m !== "impressions"} tickFormatter={(v: number) => (m === "ctr" ? `${Math.round(v * 100)}%` : String(v))} />
               <Tooltip formatter={(v) => showMetric(m, Number(v))} />
+              <ChartLegend order={['value', 'previous']} />
               <Area isAnimationActive={false} type="linear" dataKey="value" name={METRIC_LABEL[m]()} stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.1} connectNulls={false} />
               <Line isAnimationActive={false} type="linear" dataKey="previous" name={$t('searchPerformance.previousPeriodShort')} stroke="var(--muted-foreground)" strokeDasharray="4 4" dot={false} />
-            </ComposedChart>
+            </TrendChart>
           </ResponsiveContainer>
         </div>
       )}

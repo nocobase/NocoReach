@@ -1,8 +1,10 @@
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import {
+  lacking,
   safeConclusion,
   matchesObservation,
   metricValues,
+  sourceOf,
 } from '../../../shared/result-comparison.js';
 import { taskSource } from '../../../shared/task-source.js';
 import { CHECKPOINTS, shift } from './effect.js';
@@ -390,11 +392,7 @@ export async function resultBoard(
       const metric = item.latest?.primary ?? null,
         v =
           item.latest && metric
-            ? metricValues(
-                item.latest,
-                metric === 'clicks' ? 'gsc' : 'ga4',
-                metric,
-              )
+            ? metricValues(item.latest, sourceOf(metric), metric)
             : null;
       return {
         taskId: item.taskId,
@@ -407,6 +405,11 @@ export async function resultBoard(
         before: v?.before ?? null,
         after: v?.after ?? null,
         percent: v?.percent ?? null,
+        // Too little to judge: what there was, so the line can say why.
+        lacking:
+          item.latest && item.status === 'insufficient'
+            ? lacking(item.latest)
+            : null,
         nextDay: item.nextDay,
         nextDate: item.nextDate,
       };

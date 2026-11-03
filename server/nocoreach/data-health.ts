@@ -3,6 +3,8 @@ import { redditSchedule } from './reddit-schedule.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import type { ProjectRuns } from './project-runs.js';
 import type { YouTubeSource } from './youtube-source.js';
+import type { BilibiliSource } from './bilibili-source.js';
+import { BILIBILI_MESSAGES } from './bilibili-adapter.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { projectId, requireAccess } from './policy.js';
 import { nextAt, lastSuccess } from './sync-policy.js';
@@ -29,6 +31,41 @@ const googleCodes={network_timeout:systemMessageText('errors.networkTimeout'),ne
 // source's own words, since "will retry automatically" would not be true.
 function needs(h,last,flag,fix){return h.state!=='healthy'&&h.state!=='pending'&&last?.[flag]&&last.errors?.[0]?{...h,...text('message','{0}',{0:errorValue(last.errors[0])}),fix}:h;}
 function running(source:unknown,id:unknown){return (source as {runs?:ProjectRuns}|undefined)?.runs?.has(id);}
+// Which sources a project has connected, for the menu (2026-10-04, again 2026-11-02: a data page shows only once its
+// source is in; client/components/app-shell/nav-sources.tsx maps the pages to these keys). One check per key, so a
+// source's rule changes here alone. A source counts while its page has something to show; cheap reads of its saved
+// state, and a source that cannot be read counts as not connected.
+// The other pages go back to their prompt to connect after a disconnect, so a disconnect ends them.
+const on=x=>x&&x.status!=='disconnected';
+// Collector sources keep showing their saved data after a disconnect, until it is cleared, so they count until then.
+const collected=async(source,id)=>{const s=await source?.status(id);return s?.connected||s?.total>0;};
+// Reads more than one check needs, made once per call.
+function sharedReads(p,id){let google,chat;return {
+ // Traffic and Search performance read the one Google sync, which needs both the GA4 property and the Search Console
+ // site (sync-service.ts `link`); with one chosen, both pages still ask to finish connecting.
+ google:()=>google??=(async()=>{const link=await p.link(id).catch(()=>null);return Boolean(link&&p.env(__policy.secretKey(id))&&link.get('status')!=='disconnected'&&link.get('ga4PropertyId')&&link.get('gscSiteUrl'));})(),
+ chat:()=>chat??=p.chat?.state(id).catch(()=>null)};}
+const CONNECTED_CHECKS={
+ ga4:(p,id,ctx)=>ctx.google(),
+ gsc:(p,id,ctx)=>ctx.google(),
+ site:async(p,id)=>(await p.siteContent?.state(id))?.sites?.length,
+ github:async(p,id)=>{const g=await p.github?.state(id);return g?.repo&&on(g);},
+ packages:async(p,id)=>(await p.packages?.state(id))?.packages?.length,
+ discourse:async(p,id)=>{const c=await p.community?.state(id);return c?.origin&&on(c);},
+ hackernews:async(p,id)=>{const h=await p.hackernews?.state(id);return h?.terms?.length&&on(h);},
+ reddit:async(p,id)=>{const r=await p.reddit?.state(id);return r?.terms?.length&&on(r);},
+ x:async(p,id)=>{const x=await p.xSource?.state(id);return x?.terms?.length&&on(x);},
+ discord:async(p,id,ctx)=>(await ctx.chat())?.discord?.status==='active',
+ slack:async(p,id,ctx)=>(await ctx.chat())?.slack?.status==='active',
+ trends:async(p,id)=>{const t=await p.trends?.state(id);return t?.terms?.length&&on(t)||t?.keywords?.length;},
+ dataforseo:(p,id)=>p.aiSearch?.d4s?.config(id)?.verifiedAt,
+ competitors:async(p,id)=>(await p.competitors?.state(id))?.list?.length,
+ // Keywords also counts saved and tracked keywords, which its Saved and Rank tracking tabs list without any source.
+ keywords:async(p,id)=>await p.keywordService?.candidates().count({filter:{projectId:id}})||(await p.rankTracking?.state(id))?.keywords?.length,
+ xiaohongshu:(p,id)=>collected(p.xiaohongshu,id),
+ bilibili:(p,id)=>collected(p.bilibili,id),
+ youtube:(p,id)=>collected(p.youtube,id),
+};
 class DataHealth{
  constructor(plugin){this.p=plugin;}
  async google(id,now){const out=[];let status=null,link=null;try{link=await this.p.link(id);if(link&&this.p.env(__policy.secretKey(id)))status=await this.p.sync.status(id);}catch{status=null;}
@@ -41,10 +78,21 @@ class DataHealth{
   const site=await this.p.siteContent?.state(id);if(site?.sites?.length){const last=site.refresh||{at:site.sites.map(x=>x.confirmedAt).sort().at(-1),ok:true,lastSuccessAt:site.sites.map(x=>x.confirmedAt).sort().at(-1)};items.push({id:'site',...text('name','common.websiteContent'),...assess({lastSuccessAt:last.lastSuccessAt,attempt:last,now}),lastSuccessAt:last.lastSuccessAt,dataThrough:null,nextSyncAt:nextAt(site.refresh,now),...text('note','dataHealth.pagesDetailsRead',{0:site.pages.length,1:site.pages.filter(p=>p.fetchedAt).length}),retry:{resource:'nrSiteContent',action:'refresh',body:{}}});}
   const gh=await this.p.github?.state(id);if(gh?.repo&&gh.status!=='disconnected'){const last=gh.lastSync;items.push({id:'github',name:`GitHub ${gh.repo}`,...assess({lastSuccessAt:lastSuccess(last),attempt:last,now}),lastSuccessAt:lastSuccess(last),dataThrough:Object.keys(gh.daily||{}).sort().at(-1)||null,nextSyncAt:nextAt(last,now),retry:{resource:'nrGitHub',action:'sync',body:{}}});
    if(gh.token){const t=gh.token.error?{state:'failing',...text('message','{0}',{0:errorValue(gh.token.error)}),fix:'settings'}:assess({lastSuccessAt:lastSuccess(last),attempt:last&&{...last,errors:(last.errors||[]).filter(e=>e.startsWith('Traffic'))},now});items.push({id:'github-traffic',...text('name','GitHub Traffic'),...t,lastSuccessAt:lastSuccess(last),dataThrough:Object.keys(gh.traffic?.views||{}).sort().at(-1)||null,nextSyncAt:nextAt(last,now),...(gh.traffic?.since?text('note','dataHealth.archivingSince',{0:gh.traffic.since}):{note:''}),retry:{resource:'nrGitHub',action:'sync',body:{}}});}}
+  // Website source repositories (2026-10-29) are not synced; a check that found a base branch missing waits for a person
+  // to fix its settings. GitHub not seeing a repository may be a typo or a private one the server cannot see.
+  const ag=await this.p.taskExecution?.agents?.doc(id).catch(()=>null);if(ag?.repos?.length){const checked=ag.repos.filter(r=>r.check),branch=checked.filter(r=>r.check.branch==='missing'),unseen=checked.filter(r=>r.check.repo==='missing'),ok=checked.filter(r=>r.check.repo==='ok'&&r.check.branch==='ok').map(r=>r.check.at).sort().at(-1)||null;
+   items.push({id:'repo',...text('name','dataSources.websiteSourceGitRepository'),...(branch.length?{state:'failing',...text('message','dataHealth.repositoryBranchMissing',{0:branch.map(r=>`${r.repo} · ${r.baseBranch}`).join(', ')}),fix:'settings'}:unseen.length?{state:'warning',...text('message','dataHealth.repositoryNotFound',{0:unseen.map(r=>r.repo).join(', ')}),fix:'settings'}:checked.length?{state:'healthy',message:''}:{state:'pending',...text('message','dataHealth.repositoryNotChecked')}),lastSuccessAt:ok,dataThrough:null,nextSyncAt:null,cadence:'manual'});}
   const cm=await this.p.community?.state(id);if(cm?.origin&&cm.status!=='disconnected'){const last=cm.lastSync;items.push({id:'discourse',...(cm.title?{name:cm.title}:text('name','common.communityForum')),...(running(this.p.community,id)&&!last?{state:'pending',...text('message','dataHealth.firstSyncRunning')}:assess({lastSuccessAt:lastSuccess(last),attempt:last,now})),lastSuccessAt:lastSuccess(last),dataThrough:lastSuccess(last)?lastSuccess(last).slice(0,10):null,nextSyncAt:nextAt(last,now),...text('note','dataHealth.topicsSaved',{0:Object.keys(cm.topics||{}).length,1:cm.retainedFrom?{key:'dataHealth.retainedFromSuffix',params:{0:cm.retainedFrom}}:''}),retry:{resource:'nrCommunity',action:'sync',body:{}}});}
   const pk=await this.p.packages?.state(id);if(pk?.packages?.length){const last=pk.lastSync,dates=Object.values(pk.daily||{}).flatMap(d=>Object.keys(d)).sort();items.push({id:'packages',...text('name','common.downloads'),...(running(this.p.packages,id)&&!last?{state:'pending',...text('message','dataHealth.firstSyncRunning')}:assess({lastSuccessAt:lastSuccess(last),attempt:last,now})),lastSuccessAt:lastSuccess(last),dataThrough:dates.at(-1)||null,nextSyncAt:nextAt(last,now),note:pk.packages.map(p=>p.title||p.name).join('、'),retry:{resource:'nrPackages',action:'sync',body:{}}});}
   const hn=await this.p.hackernews?.state(id);if(hn?.terms?.length&&hn.status!=='disconnected'){const last=hn.lastSync;items.push({id:'hackernews',...text('name','common.hackerNewsMentions'),...(running(this.p.hackernews,id)&&!last?{state:'pending',...text('message','dataHealth.firstSyncRunning')}:assess({lastSuccessAt:lastSuccess(last),attempt:last,now})),lastSuccessAt:lastSuccess(last),dataThrough:lastSuccess(last)?lastSuccess(last).slice(0,10):null,nextSyncAt:nextAt(last,now),...text('note','dataHealth.searchingSaved',{0:hn.terms.join('、'),1:Object.keys(hn.mentions||{}).length,2:hn.retainedFrom?{key:'dataHealth.retainedFromSuffix',params:{0:hn.retainedFrom}}:''}),retry:{resource:'nrHackerNews',action:'sync',body:{}}});}
-  const yt=await (this.p as {youtube?: YouTubeSource}).youtube?.status(id as string);if(yt?.configured){const last=yt.lastSync,ok=lastSuccess(last) as string | null;items.push({id:'youtube',...text('name','YouTube'),...(yt.syncing?{state:'pending',...text('message','youtube.reading')}:(!yt.autoSync||last?.needsAttention)&&last&&!last.ok?{state:'warning',...text('message','youtube.lastReadFailed')}:assess({lastSuccessAt:ok,attempt:last,now})),lastSuccessAt:ok,dataThrough:yt.fetchedAt?.slice(0,10)||null,nextSyncAt:yt.nextSyncAt,...(yt.autoSync?{}:{cadence:'manual'}),...text('note','youtube.publicResearchScope'),retry:{resource:'nrYouTube',action:'sync',body:{}}});}
+  // YouTube is searched through DataForSEO: without it the row asks for the connection. With the month's budget used up
+  // it waits for the day reading resumes (the date is formatted in the browser), and no setting or retry is offered.
+  // A term that one read missed is read again the next day, so it stays a grey note; only a term missed on
+  // REPEATED_MISSES daily reads in a row (`repeatedMisses`) needs attention.
+  const yt=await (this.p as {youtube?: YouTubeSource}).youtube?.status(id as string);if(yt?.configured){const last=yt.lastSync,ok=lastSuccess(last) as string | null,quote=(terms:string[])=>terms.map(t=>`“${t}”`).join('、'),repeated=last?.ok?yt.repeatedMisses:[],missed=last?.ok?(last.missed||[]).map(m=>m.term).filter(t=>!repeated.includes(t)):[],note={key:'dataHealth.youtubeNote',params:{0:yt.terms.join('、'),1:yt.total}};items.push({id:'youtube',...text('name','YouTube'),...(yt.syncing?{state:'pending',...text('message','youtube.reading')}:!yt.dataforseo?{state:'failing',...text('message','youtube.dataforseoMissingTitle'),fix:'settings'}:yt.pausedUntil?{state:'warning',message:systemMessageText('youtube.budgetPausedHealth',{0:yt.pausedUntil.slice(0,10)}),messageText:{key:'youtube.budgetPausedHealth',params:{0:{date:yt.pausedUntil}}},fix:'wait'}:repeated.length?{state:'warning',...text('message','youtube.termsMissedRepeatedHealth',{0:quote(repeated)})}:assess({lastSuccessAt:ok,attempt:last,now})),lastSuccessAt:ok,dataThrough:yt.fetchedAt?.slice(0,10)||null,nextSyncAt:yt.nextSyncAt,...(yt.autoSync?{}:{cadence:'manual'}),...(missed.length?text('note','{0} · {1}',{0:note,1:{key:yt.autoSync?'youtube.termsMissedNote':'youtube.termsMissedHealth',params:{0:quote(missed)}}}):text('note',note.key,note.params)),retry:{resource:'nrYouTube',action:'sync',body:{}}});}
+  // Bilibili reads through a collector: a read the busy collector turned away waits for its retry and is not a problem;
+  // three reads in a row that got nothing through pause daily reading until one gets through.
+  const bl=await (this.p as {bilibili?: BilibiliSource}).bilibili?.status(id as string);if(bl?.connected){const last=bl.lastRun,ok=bl.verifiedAt,reason=(code:string|null)=>BILIBILI_MESSAGES[code as keyof typeof BILIBILI_MESSAGES]||systemMessageText('errors.unknownReason');items.push({id:'bilibili',...text('name','Bilibili'),...(bl.checking?{state:'pending',...text('message','bilibili.reading')}:bl.queued?{state:'pending',...text('message','collectorQueue.title')}:bl.pausedCode?{state:'failing',...text('message','bilibili.pausedHealth',{0:errorValue(reason(bl.pausedCode))})}:last?.errorCode==='busy'?{state:'warning',...text('message','collectorQueue.gaveUp')}:assess({lastSuccessAt:ok,attempt:last&&last.errorCode!=='cancelled'?{at:last.at,ok:last.ok||last.partial,errors:last.ok?[]:[reason(last.errorCode)]}:ok?{at:ok,ok:true}:null,now})),lastSuccessAt:ok,dataThrough:ok?.slice(0,10)||null,nextSyncAt:bl.nextSyncAt,...(bl.autoSync||bl.pausedCode?{}:{cadence:'manual'}),...(bl.terms.length?text('note',bl.autoSync||bl.pausedCode?'dataHealth.bilibiliDailyNote':'dataHealth.bilibiliNote',{0:bl.terms.join('、'),1:bl.total}):text('note','youtube.videosRecorded',{0:bl.total,1:''})),retry:{resource:'nrBilibili',action:'sync',body:{}}});}
   const rd=await this.p.reddit?.state(id);if(rd?.terms?.length&&rd.status!=='disconnected'){const last=rd.lastRun||null,ok=lastSuccess(last);items.push({id:'reddit',...text('name','dataSources.redditDiscussions'),...(running(this.p.reddit,id)&&!last?{state:'pending',...text('message','dataHealth.firstSearchRunning')}:assess({lastSuccessAt:ok,attempt:last,now})),lastSuccessAt:ok,dataThrough:rd.dataThrough||null,nextSyncAt:redditSchedule(rd).nextAt,...text('note','dataHealth.searchesGoogleWeeklyPostsRecorded',{0:rd.terms.join('、'),1:Object.keys(rd.posts||{}).length}),retry:{resource:'nrReddit',action:'check',body:{}}});}
   const tr=await this.p.trends?.state(id);if(tr?.terms?.length&&tr.status!=='disconnected'){const last=tr.lastRun,ok=tr.latest?.at||null;items.push({id:'trends',...text('name','dataTrends.trends'),...(running(this.p.trends,id)&&!last?{state:'pending',...text('message','dataHealth.firstCheckRunning')}:needs(assess({lastSuccessAt:ok,attempt:last,now}),last,'uncertain','verify')),lastSuccessAt:ok,dataThrough:tr.latest?.points?.at(-1)?.date||null,nextSyncAt:last?new Date(Date.parse(last.at)+7*86400000).toISOString():null,...text('note','dataHealth.checksGoogleTrendsWeekly',{0:tr.terms.join('、'),1:tr.keywords?.length?{key:'dataHealth.followingKeywords',params:{0:tr.keywords.length}}:''}),retry:last?.uncertain?{resource:'nrTrends',action:'retry',body:{}}:{resource:'nrTrends',action:'check',body:{}}});}
   else if(tr?.keywords?.length){const runs=tr.keywords.map(k=>k.lastRun).filter(Boolean).sort((a,b)=>String(b.at).localeCompare(String(a.at))),last=runs.find(r=>!r.ok)||runs[0]||null,ok=tr.keywords.map(k=>k.latest?.at).filter(Boolean).sort().at(-1)||null;
@@ -59,17 +107,10 @@ class DataHealth{
   // How often each runs on its own, for the Frequency column; a source with its own manual mode says so above.
   const weekly=new Set(['reddit','trends','competitors','rank']);for(const i of items){i.cadence??=weekly.has(i.id)?'weekly':'daily';if(i.state==='warning'||i.state==='failing'){if(!i.fix&&i.retry)i.fix='retry';}else delete i.fix;}
   const order={failing:0,warning:1,pending:2,healthy:3};return {checkedAt:new Date(now).toISOString(),items:items.sort((a,b)=>order[a.state]-order[b.state])};}
- // Which sources this project has connected, for the menu (2026-10-04: a data page shows only once its source is in).
- // Cheap reads of each source's saved state; a source that cannot be read counts as not connected.
- async connected(id){const safe=async fn=>{try{return Boolean(await fn());}catch{return false;}},on=x=>x&&x.status!=='disconnected';
-  const link=await this.p.link(id).catch(()=>null),google=Boolean(link&&this.p.env(__policy.secretKey(id))&&link.get('status')!=='disconnected');
-  const ch=await this.p.chat?.state(id).catch(()=>null);
-  return {ga4:google&&Boolean(link.get('ga4PropertyId')),gsc:google&&Boolean(link.get('gscSiteUrl')),
-   site:await safe(async()=>(await this.p.siteContent?.state(id))?.sites?.length),github:await safe(async()=>{const g=await this.p.github?.state(id);return g?.repo&&on(g);}),
-   packages:await safe(async()=>(await this.p.packages?.state(id))?.packages?.length),discourse:await safe(async()=>{const c=await this.p.community?.state(id);return c?.origin&&on(c);}),
-   hackernews:await safe(async()=>{const h=await this.p.hackernews?.state(id);return h?.terms?.length&&on(h);}),reddit:await safe(async()=>{const r=await this.p.reddit?.state(id);return r?.terms?.length&&on(r);}),
-   x:await safe(async()=>{const x=await this.p.xSource?.state(id);return x?.terms?.length&&on(x);}),discord:ch?.discord?.status==='active',slack:ch?.slack?.status==='active',
-   trends:await safe(async()=>{const t=await this.p.trends?.state(id);return Boolean(t?.terms?.length&&on(t)||t?.keywords?.length);}),dataforseo:Boolean(this.p.aiSearch?.d4s?.config(id)?.verifiedAt)};}
+ // Which sources this project has connected, for the menu: one entry per source in CONNECTED_CHECKS (above).
+ async connected(id){const ctx=sharedReads(this.p,id),out={};
+  for(const [key,check] of Object.entries(CONNECTED_CHECKS)){try{out[key]=Boolean(await check(this.p,id,ctx));}catch{out[key]=false;}}
+  return out;}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('dataHealth.notLoadDataHealth'));}};
   this.p.app.resourceManager.define({name:'nrHealth',actions:{list:wrap(id=>this.list(id)),connected:wrap(id=>this.connected(id))}});this.p.app.acl.allow('nrHealth',['list','connected'],'loggedIn');}
 }

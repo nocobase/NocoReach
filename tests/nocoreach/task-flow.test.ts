@@ -11,6 +11,7 @@ import { TaskService } from '../../server/nocoreach/execution/service.js';
 import { validateFlow, flowRunInput } from '../../server/nocoreach/execution/flow.js';
 import { SYSTEM_PLAYBOOKS, stagesFor, validatePlaybook, defaultPlaybookId, normalize } from '../../server/nocoreach/execution/playbook.js';
 import { repoInput, allowedPath } from '../../server/nocoreach/execution/agent.js';
+import { systemMessageText } from '../../shared/i18n/messages.js';
 import * as __playbook from '../../server/nocoreach/execution/playbook.js';
 import * as __members from '../../server/nocoreach/members.js';
 import * as __effect from '../../server/nocoreach/execution/effect.js';
@@ -21,9 +22,10 @@ const test=__vitest_test;
 const signals=[{key:'gsc-low-ctr:/a',action:'optimize'},{key:'community-gap:q',action:'create'},{key:'github-release',action:'distribute'},{key:'gsc-site-impressions',action:null}];
 function fixture(provider={prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>({content:'AI draft'})},evidence={reason:'original'}){
  const state={nrTasks:[{id:1,projectId:'1',title:'Synthetic task',brief:'Supplied evidence only',status:'待处理',evidence}],nrSnapshots:[],users:[{id:1,username:'tester',roles:[{name:'admin'}]}]};let sequence=100;
- const match=(r,filter={})=>Object.entries(filter).every(([k,v])=>v&&typeof v==='object'?v.$startsWith!==undefined&&String(r[k]).startsWith(v.$startsWith):String(r[k])===String(v));
+ const match=(r,filter={})=>Object.entries(filter).every(([k,v])=>v&&typeof v==='object'?v.$startsWith!==undefined?String(r[k]).startsWith(v.$startsWith):Array.isArray(v.$in)&&v.$in.map(String).includes(String(r[k])):String(r[k])===String(v));
+ const order=(rows,sort)=>{const keys=sort?[].concat(sort):[];return keys.length?[...rows].sort((a,b)=>{for(const key of keys){const desc=key.startsWith('-'),f=desc?key.slice(1):key,c=String(a[f]).localeCompare(String(b[f]),undefined,{numeric:true});if(c)return desc?-c:c;}return 0;}):rows;};
  const row=r=>r?{...r,get:k=>structuredClone(r[k]),toJSON:()=>structuredClone(r)}:null;
- const repo=name=>({findOne:async({filter,filterByTk})=>row(state[name].find(r=>filterByTk!==undefined?String(r.id)===String(filterByTk):match(r,filter))),find:async({filter,offset=0,limit=100})=>state[name].filter(r=>match(r,filter)).slice(offset,offset+limit).map(row),create:async({values})=>{const r={id:sequence++,...structuredClone(values)};state[name].push(r);return row(r);},update:async({filterByTk,values})=>{Object.assign(state[name].find(r=>String(r.id)===String(filterByTk)),structuredClone(values));}});
+ const repo=name=>({findOne:async({filter,filterByTk})=>row(state[name].find(r=>filterByTk!==undefined?String(r.id)===String(filterByTk):match(r,filter))),find:async({filter,offset=0,limit=100,sort})=>order(state[name].filter(r=>match(r,filter)),sort).slice(offset,offset+limit).map(row),create:async({values})=>{const r={id:sequence++,...structuredClone(values)};state[name].push(r);return row(r);},update:async({filterByTk,values})=>{Object.assign(state[name].find(r=>String(r.id)===String(filterByTk)),structuredClone(values));}});
  let tail=Promise.resolve();const routes={};
  const p={agents:fakeAgents(),project:async id=>{if(id!=='1')throw Object.assign(Error('project'),{status:404});return {name:'Synthetic',writingStyle:'Plain'};},db:{getRepository:repo,sequelize:{query:async()=>{},transaction:fn=>{const result=tail.then(async()=>{const old=structuredClone(state);try{const after=[];const value=await fn({connection:{},afterCommit:cb=>after.push(cb)});for(const cb of after)await cb();return value;}catch(e){Object.assign(state,old);throw e;}});tail=result.catch(()=>{});return result;}}},app:{resourceManager:{define:r=>routes[r.name]=r.actions},acl:{allow:()=>{}}}};
  const s=new TaskService(p,provider);
@@ -444,6 +446,17 @@ test('people and page: owner changes between runs, collaborators and linked page
  d=await f.command('linkPage',{url:''});assert.equal(d.work.page,undefined);
 });
 
+test('the start records the pages it was started with: relinking the task\'s page afterwards leaves them',async()=>{
+ const f=fixture(),install='https://example.com/docs/install',blog='https://example.com/blog/x';
+ f.state.nrSnapshots.push({id:9002,key:'site-content:1',payload:{pages:[{url:install,title:'Install',type:'docs'},{url:blog,title:'X',type:'blog'}]}});
+ await f.command('linkPage',{url:install});
+ let d=await f.command('startTask',{playbookId:'optimize-page'});const started=d.work.startedPages;
+ assert.equal(started[0],install);assert.ok(!started.includes(blog));
+ d=await f.command('linkPage',{url:blog});assert.deepEqual(d.work.page,{url:blog,title:'X'});
+ assert.deepEqual(d.work.startedPages,started,'the related page changes, the pages it was started with stay');
+ assert.deepEqual((await f.s.pagePlaces('1','1',false)).pages.map(p=>p.url),started,'its record on the task page reads them');
+});
+
 test('roles: on a task with an owner, other members can only leave a message; the owner and 管理员 do the steps',async()=>{
  const f=fixture();f.state.users.push({id:2,nickname:'Lin'},{id:3,nickname:'Mia'});
  for(const user of f.state.users.filter(user=>[2,3].includes(user.id)))user.roles=[{name:'nr.member'}];
@@ -537,14 +550,24 @@ test('effect observation: day 7 and day 28 compare the page with the days before
  assert.deepEqual(windows('2026-09-10',7),{baseline:{start:'2026-09-03',end:'2026-09-09'},after:{start:'2026-09-11',end:'2026-09-17'}});
  assert.equal(pageKey('https://www.example.com/docs/install/?a=1#x'),pageKey('http://example.com/docs/install'));
  const days=(start,n)=>Array.from({length:n},(_,i)=>new Date(Date.parse(start)+i*86400000).toISOString().slice(0,10));
- const parts=(clicks,views,dates=days('2026-09-03',15))=>dates.flatMap(d=>[{source:'gsc',grain:'query_page',date:d,payload:[{keyword:'install',page:'https://www.example.com/docs/install',clicks:d<'2026-09-10'?clicks[0]:clicks[1],impressions:100,position:d<'2026-09-10'?9:7},{keyword:'x',page:'https://www.example.com/other',clicks:99,impressions:999,position:1}]},{source:'ga4',grain:'page',date:d,payload:[{page:'/docs/install',views:d<'2026-09-10'?views[0]:views[1],conversions:1}]}]);
+ const parts=(clicks,views,dates=days('2026-09-03',15),impressions=[100,100])=>dates.flatMap(d=>[{source:'gsc',grain:'query_page',date:d,payload:[{keyword:'install',page:'https://www.example.com/docs/install',clicks:d<'2026-09-10'?clicks[0]:clicks[1],impressions:d<'2026-09-10'?impressions[0]:impressions[1],position:d<'2026-09-10'?9:7},{keyword:'x',page:'https://www.example.com/other',clicks:99,impressions:999,position:1}]},{source:'ga4',grain:'page',date:d,payload:[{page:'/docs/install',views:d<'2026-09-10'?views[0]:views[1],conversions:1}]}]);
  const page=['https://www.example.com/docs/install'];
  let r=compare(7,'2026-09-10',page,parts([10,15],[50,50]),'t');
  assert.equal(r.primary,'clicks');assert.deepEqual(r.gsc.clicks,[70,105]);assert.deepEqual(r.gsc.position,[9,7]);assert.deepEqual(r.ga4.views,[350,350]);assert.equal(r.conclusion,'up');assert.equal(r.change,0.5);
- assert.equal(summary(r),'第 7 天：上升，搜索点击 70 → 105（+50%）');
+ assert.equal(summary(r),'第 7 天：上升 · 搜索点击 70 → 105 · ↑ 50%','worded as the task page writes it');
+ assert.equal(summary(compare(7,'2026-09-10',page,parts([0,10],[50,50]),'t')),'第 7 天：上升 · 搜索点击 0 → 70 · ↑ 70','from nothing before: the count it rose to');
  assert.equal(compare(7,'2026-09-10',page,parts([10,11],[50,50]),'t').conclusion,'flat','10% is no clear change');
- r=compare(7,'2026-09-10',page,parts([1,2],[50,70]),'t');assert.equal(r.primary,'views','few clicks: views decide');assert.equal(r.conclusion,'up');
- assert.equal(compare(7,'2026-09-10',page,parts([1,2],[2,3]),'t').conclusion,'insufficient','too little of both');
+ // The first metric with enough data decides (2026-11-02): search clicks (40 in both windows together), then search
+ // impressions (200), then views (40); under 15% or under the metric's floor (10, 50, 10) is no clear change.
+ const all=days('2026-09-03',15);
+ r=compare(7,'2026-09-10',page,parts([1,2],[50,70],all,[100,70]),'t');assert.equal(r.primary,'impressions','few clicks: impressions decide');assert.deepEqual(r.gsc.impressions,[700,490]);assert.equal(r.conclusion,'down');assert.equal(r.change,-0.3);assert.equal(r.rule,2);
+ assert.equal(summary(r),'第 7 天：下降 · 搜索曝光 700 → 490 · ↓ 30%');
+ assert.equal(compare(7,'2026-09-10',page,parts([1,2],[50,70],all,[100,106]),'t').conclusion,'flat','6% more impressions is no clear change');
+ assert.equal(compare(7,'2026-09-10',page,parts([1,2],[50,50],all,[30,38]),'t').conclusion,'up','210 → 266 impressions: 27% and 56 more');
+ assert.equal(compare(7,'2026-09-10',page,parts([1,2],[50,50],all,[30,36]),'t').conclusion,'flat','210 → 252 impressions: 20% but under 50 more');
+ r=compare(7,'2026-09-10',page,parts([1,2],[50,70],all,[10,15]),'t');assert.equal(r.primary,'views','few clicks and impressions: views decide');assert.equal(r.conclusion,'up');
+ r=compare(7,'2026-09-10',page,parts([1,2],[2,3],all,[10,15]),'t');assert.equal(r.conclusion,'insufficient','too little of all three');assert.equal(r.primary,null);
+ assert.deepEqual(r.notes,['上线前后 7 天搜索点击 21、搜索曝光 175、浏览量 35，太少判断不了'],'the note gives the totals there were, as Results writes them');
  r=compare(7,'2026-09-10',page,parts([10,15],[50,50],days('2026-09-03',9)),'t');assert.equal(r.conclusion,'insufficient');assert.ok(r.notes.some(n=>/缺/.test(n)),'missing days are named');
  r=compare(7,'2026-09-10',['https://www.example.com/no-data'],parts([10,15],[50,50]),'t');assert.equal(r.conclusion,'insufficient');
 });
@@ -571,6 +594,27 @@ test('effect observation runs for finished tasks once the data covers the day, a
  await f.s.observeEffects();d=await f.view();assert.equal(d.work.observation.results.length,1,'computed once');
 });
 
+test('results judged by the earlier rule are judged again once, from their stored numbers, with no line in Activity',async()=>{
+ const f=fixture();f.state.nrSyncPartitions=[];
+ f.s.p.link=async()=>({get:k=>({gscSiteUrl:'sc-domain:example.com',ga4PropertyId:'p1'})[k]});
+ // T-33 and T-34 on Studio (day 7, 2026-11-01): too few views, so “not enough data” under clicks-or-else-views, while
+ // their search impressions fell and rose.
+ const stored=(views,impressions,notes)=>({day:7,baseline:{start:'2026-10-15',end:'2026-10-21'},after:{start:'2026-10-23',end:'2026-10-29'},pages:['https://www.example.com/a'],gsc:{clicks:[2,1],impressions,ctr:[0,0],position:[22.9,23.7]},ga4:{views,conversions:[0,0]},primary:'views',change:null,conclusion:'insufficient',notes,computedAt:'2026-11-01T09:09:59.451Z',coverage:{gsc:{baselineDays:7,afterDays:7},ga4:{baselineDays:7,afterDays:7}}});
+ const other='Another change also went live on this page on 2026-10-25';
+ f.state.nrTasks[0].evidence.work={...__model.projectWork(f.state.nrTasks[0]),stage:'done',observeFrom:'2026-10-22T10:03:36.435Z',observation:{results:[stored([4,7],[6071,4318],['浏览太少（共 11 次），不做判断',other])]}};
+ f.state.nrTasks.push({id:2,projectId:'1',title:'T-34',brief:'',status:'已完成',evidence:{work:{...__model.projectWork({}),stage:'done',observeFrom:'2026-10-22T10:03:36.435Z',observation:{results:[stored([22,17],[170,524],['浏览太少（共 39 次），不做判断'])]}}}});
+ await f.s.observeEffects();
+ const t33=f.state.nrTasks[0].evidence.work,t34=f.state.nrTasks[1].evidence.work,[r33]=t33.observation.results,[r34]=t34.observation.results;
+ assert.equal(r33.primary,'impressions');assert.equal(r33.conclusion,'down');assert.equal(r33.change,-0.289);assert.equal(r33.rule,2);
+ assert.equal(r34.primary,'impressions');assert.equal(r34.conclusion,'up');assert.equal(r34.change,2.082);
+ // The same checkpoint: windows, numbers and time; the old rule's note gives way, any other note stays.
+ assert.equal(r33.computedAt,'2026-11-01T09:09:59.451Z');assert.deepEqual(r33.after,{start:'2026-10-23',end:'2026-10-29'});assert.deepEqual(r33.ga4.views,[4,7]);
+ assert.deepEqual(r33.notes,[other]);assert.deepEqual(r34.notes,[]);
+ assert.equal(t33.history.length,0,'Activity gets no new line');
+ const revision=t33.revision;
+ await f.s.observeEffects();assert.equal(f.state.nrTasks[0].evidence.work.revision,revision,'once');
+});
+
 test('the task page reads each page\'s numbers: the latest 28 days before going live, the 28 days before it after',async()=>{
  const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>({content:'AI draft'})},{insight:{target:'https://www.example.com/docs/start/'}});f.state.nrSyncPartitions=[];
  f.state.nrSnapshots.push({id:9301,key:'site-content:1',payload:{pages:[{url:'https://www.example.com/docs/install',title:'安装',type:'docs'}]}});
@@ -586,9 +630,12 @@ test('the task page reads each page\'s numbers: the latest 28 days before going 
  assert.deepEqual(n.pages,[{page:'https://www.example.com/docs/install',clicks:56,position:8,views:140},{page:'https://www.example.com/docs/start/',clicks:28,position:20,views:0}]);
  f.state.nrTasks[0].evidence.work.observeFrom='2026-09-01T08:00:00Z';
  n=await f.s.numbers('1','1');assert.equal(n.live,true);assert.deepEqual(n.range,{start:'2026-08-04',end:'2026-08-31'});assert.equal(n.pages[0].clicks,44,'only the days with data before going live');
+ // Reading the days gives way to other requests (SQLite answers synchronously): one waiting meanwhile is served first.
+ const order=[];const reading=f.s.numbers('1','1').then(()=>order.push('numbers'));setImmediate(()=>order.push('other request'));await reading;
+ assert.deepEqual(order,['other request','numbers']);
 });
 
-test('cancel and archive: a cancelled task stops, its PR is closed by the Agent, late results never apply; archive hides and restores',async()=>{
+test('cancel and archive: a cancelled task stops, its PR is closed by the Agent, late results never apply; archive hides and reopen resumes',async()=>{
  const f=fixture();const me=await selectAgent(f);
  await f.s.agents.saveRepo('1',{repo:'estheryo/website-test',baseBranch:'main',revision:1});
  let d=await f.command('startTask',{playbookId:'optimize-page'});let c=await claim(f);
@@ -601,7 +648,7 @@ test('cancel and archive: a cancelled task stops, its PR is closed by the Agent,
  await finish(f,{taskId:'1',runId:c.run.id,ok:true});d=await f.view();assert.equal(d.work.prClose.state,'closed');
  d=await f.command('archiveTask');assert.ok(d.work.archivedAt);
  await assert.rejects(f.command('linkPage',{url:''}),e=>e.status===409&&/归档/.test(e.message));
- d=await f.command('unarchiveTask');assert.equal(d.work.archivedAt,undefined);assert.ok(d.work.cancelledAt,'restoring does not reopen a cancelled task');
+ d=await f.command('unarchiveTask');assert.equal(d.work.archivedAt,undefined);assert.equal(d.work.cancelledAt,undefined,'reopening a stopped task resumes it (2026-10-29)');assert.equal((await f.stage()).key,'build','its withdrawn change is made again');
 });
 
 test('cancelling stops a running Agent and its late result is kept only as a candidate; not-started tasks archive directly',async()=>{
@@ -1057,4 +1104,78 @@ test('a snooze comes back in the daily analysis time zone, read before the task 
   f.s.p.analysis = { workflow: async () => { assert.equal(locked, false, 'outside the lock'); return { get: () => ({ timezone: 'America/Los_Angeles' }) }; } };
   const d = await f.command('snoozeTask', { day: '2099-11-11' });
   assert.equal(d.work.snooze.until, '2099-11-11T17:00:00.000Z');
+});
+
+// Website source in several repositories (2026-10-29, shared/repo-routing.ts).
+const legacyRepo={revision:1,agentId:'shared-agent',repo:{repo:'org/site',baseBranch:'main',allowedPaths:[],contentCheck:true}};
+const sites=f=>f.state.nrSnapshots.push({id:900,key:'site-content:1',payload:{sites:[{origin:'https://www.example.com'},{origin:'https://docs.example.com'}],pages:[]}});
+test('repositories: a project with one repository keeps it, serving every address of its website',async()=>{
+ const f=fixture();sites(f);
+ await f.s.lock('1','agent',tx=>f.s.put('nr-task-agent:1',legacyRepo,tx));
+ let doc=await f.s.agents.doc('1');
+ assert.deepEqual(doc.repos,[{id:'website',repo:'org/site',baseBranch:'main',allowedPaths:[],contentCheck:true,urls:['www.example.com','docs.example.com']}]);
+ // An address belongs to one repository: the second takes the docs from the first.
+ doc=await f.s.agents.saveRepo('1',{revision:1,repo:'org/docs',baseBranch:'main',urls:['https://docs.example.com/']});
+ assert.deepEqual(doc.repos.map(r=>[r.repo,r.urls]),[['org/site',['www.example.com']],['org/docs',['docs.example.com']]]);
+ const stored=f.state.nrSnapshots.find(r=>r.key==='nr-task-agent:1').payload;
+ assert.equal(stored.repo,undefined,'saved in the new shape');assert.equal(stored.repos.length,2);
+ await assert.rejects(f.s.agents.saveRepo('1',{revision:doc.revision,repo:'https://github.com/org/site',baseBranch:'main'}),e=>e.status===409,'one entry per repository');
+ await assert.rejects(f.s.agents.saveRepo('1',{revision:doc.revision,repo:'org/x',baseBranch:'main',urls:['not an address']}),e=>e.status===400);
+ doc=await f.s.agents.saveRepo('1',{revision:doc.revision,id:'website',repo:'org/site',baseBranch:'main',urls:['www.example.com','docs.example.com']});
+ assert.deepEqual(doc.repos.map(r=>r.urls),[['www.example.com','docs.example.com'],[]],'editing moves an address back');
+ doc=await f.s.agents.removeRepo('1',{revision:doc.revision,id:doc.repos[1].id});
+ assert.deepEqual(doc.repos.map(r=>r.repo),['org/site']);
+ await assert.rejects(f.s.agents.removeRepo('1',{revision:doc.revision,id:'gone'}),e=>e.status===409);
+});
+test('repositories: a task changes the one serving its page, kept from its start for every later step',async()=>{
+ const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>({content:'x'})},{page:'https://docs.example.com/guide/start'});
+ await selectAgent(f);
+ let doc=await f.s.agents.saveRepo('1',{revision:1,repo:'org/site',baseBranch:'main',urls:['www.example.com']});
+ doc=await f.s.agents.saveRepo('1',{revision:doc.revision,repo:'org/docs',baseBranch:'main',allowedPaths:['content'],urls:['docs.example.com']});
+ const docs=doc.repos[1];
+ let d=await f.view();
+ assert.equal(d.agent.repo.repo,'org/docs','the start card shows where it goes');assert.deepEqual(d.agent.repos.map(r=>r.repo),['org/site','org/docs']);
+ d=await f.command('startTask',{playbookId:'optimize-page'});
+ assert.deepEqual(d.work.repo,{id:docs.id,repo:'org/docs',baseBranch:'main',allowedPaths:['content'],contentCheck:true});
+ let c=await claim(f);assert.equal(c.run.input.repo.repo,'org/docs');
+ // Settings changed afterwards do not move a started task: its pull request has to be in the repository it was given.
+ doc=await f.s.agents.removeRepo('1',{revision:doc.revision,id:docs.id});
+ assert.equal((await f.view()).agent.repo.repo,'org/docs');
+ await assert.rejects(finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'changed',pr:{url:'https://github.com/org/site/pull/7',number:7,branch:'nocoreach/task-1',headSha:'abc1234',files:[]}}),e=>e.status===400);
+ await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'changed',pr:{url:'https://github.com/org/docs/pull/7',number:7,branch:'nocoreach/task-1',headSha:'abc1234',files:[{path:'content/a.md',additions:1,deletions:0}]}});
+ d=await f.view();assert.equal(output(d).pr.url,'https://github.com/org/docs/pull/7');assert.deepEqual(output(d).pr.outOfScope,[]);
+});
+test('repositories: pages served by none of several, or by different ones, need a person to choose',async()=>{
+ const f=fixture(undefined,{page:'https://forum.example.com/t/1'});
+ await selectAgent(f);
+ let doc=await f.s.agents.saveRepo('1',{revision:1,repo:'org/site',baseBranch:'main',urls:['www.example.com']});
+ doc=await f.s.agents.saveRepo('1',{revision:doc.revision,repo:'org/docs',baseBranch:'main',urls:['docs.example.com']});
+ assert.equal((await f.view()).agent.repo,null);
+ await assert.rejects(f.command('startTask',{playbookId:'optimize-page'}),e=>e.status===409&&e.message===systemMessageText('taskExecution.chooseTaskRepository'));
+ await assert.rejects(f.command('startTask',{playbookId:'optimize-page',repoId:'gone'}),e=>e.status===409);
+ const d=await f.command('startTask',{playbookId:'optimize-page',repoId:doc.repos[0].id});
+ assert.equal(d.work.repo.repo,'org/site');const c=await claim(f);assert.equal(c.run.input.repo.repo,'org/site');
+ // An analysis that changes nothing needs none.
+ const g=fixture(undefined,{page:'https://forum.example.com/t/1'});await selectAgent(g);
+ doc=await g.s.agents.saveRepo('1',{revision:1,repo:'org/site',baseBranch:'main',urls:['www.example.com']});
+ await g.s.agents.saveRepo('1',{revision:doc.revision,repo:'org/docs',baseBranch:'main',urls:['docs.example.com']});
+ assert.equal((await g.command('startTask',{playbookId:'change-research'})).work.repo,null);
+});
+test('repositories: a check asks GitHub for the repository and branch and says whether a runner is online',async()=>{
+ const f=fixture();await selectAgent(f);const asked=[];
+ f.s.p.github={token:()=> 'ghp_token',gh:async(path,token)=>{asked.push([path,token]);if(path==='/repos/org/site'||path==='/repos/org/site/branches/main')return {};if(path==='/repos/org/flaky')throw Object.assign(Error('GitHub is unreachable'),{status:502});throw Object.assign(Error('Not Found'),{status:404});}};
+ let doc=await f.s.agents.saveRepo('1',{revision:1,repo:'org/site',baseBranch:'main'});
+ doc=await f.s.agents.checkRepo('1',{id:doc.repos[0].id},'1');
+ assert.deepEqual(asked,[['/repos/org/site','ghp_token'],['/repos/org/site/branches/main','ghp_token']]);
+ assert.deepEqual({...doc.repos[0].check,at:undefined},{at:undefined,repo:'ok',branch:'ok',runner:'online'});
+ assert.equal(doc.revision,2,'a check leaves the settings revision as it was');
+ f.s.p.agents.agent.online=false;
+ doc=await f.s.agents.saveRepo('1',{revision:doc.revision,id:doc.repos[0].id,repo:'org/site',baseBranch:'release'});
+ assert.equal(doc.repos[0].check,null,'another branch needs a new check');
+ doc=await f.s.agents.checkRepo('1',{id:doc.repos[0].id},'1');
+ assert.deepEqual([doc.repos[0].check.repo,doc.repos[0].check.branch,doc.repos[0].check.runner],['ok','missing','offline']);
+ doc=await f.s.agents.saveRepo('1',{revision:doc.revision,repo:'org/flaky',baseBranch:'main'});
+ doc=await f.s.agents.checkRepo('1',{id:doc.repos[1].id},'1');
+ assert.deepEqual([doc.repos[1].check.repo,doc.repos[1].check.branch,doc.repos[1].check.detail],['unknown','unknown','GitHub is unreachable']);
+ await assert.rejects(f.s.agents.checkRepo('1',{id:'gone'},'1'),e=>e.status===409);
 });

@@ -64,6 +64,11 @@
           "description": "Просмотр сервисов моделей и доступных в них моделей без доступа к ключам."
         }
       }
+    },
+    "runnerConversation": {
+      "title": "Диалог: {{title}}",
+      "other": "Чужой диалог",
+      "untitled": "Новый диалог"
     }
   },
   "@nocobase/app-plugin-authz-default-access": {

@@ -7,8 +7,8 @@ import { demoModeRoutes } from '@nocobase/app-plugin-demo-mode/client';
 // NocoReach access independently.
 // Old addresses that moved redirect as they did before.
 //
-// Not carried over yet (docs/PORT-PLAN.md): hiding a data page until its source is connected, and the counts on 机会
-// and 任务 in the menu.
+// A data page is in the menu once its source is connected (client/components/app-shell/nav-sources.tsx); its address
+// opens it either way, with the page's own prompt to connect.
 import {
   AtSign,
   Clock,

@@ -14,6 +14,7 @@ import {InfoTip,WithInfo} from '#components/reach/info-tip';
 import {help} from './glossary';
 import {useUnsavedWarning} from './reach-data';
 import {keywordRequest,type KeywordConnectionState,type Spend} from './keyword-api';
+import {refreshNavBadges} from '#components/app-shell/nav-badges';
 export function KeywordConnection({projectId}:{projectId:number}){
  const {can:canConfigure}=useBusinessAccess('nrKeywords.configure',projectId);
  const {can:canCheck}=useBusinessAccess('nrKeywords.check',projectId);
@@ -21,7 +22,8 @@ export function KeywordConnection({projectId}:{projectId:number}){
  const {can:canDisconnect}=useBusinessAccess('nrKeywords.disconnect',projectId);
  const navigate=useNavigate();const [state,setState]=useState<KeywordConnectionState>(),[spend,setSpend]=useState<Spend>(),[login,setLogin]=useState(''),[password,setPassword]=useState(''),[budget,setBudget]=useState('5'),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[notice,setNotice]=useMessageState(''),[editing,setEditing]=useState(false),[budgetOpen,setBudgetOpen]=useState(false);
  useUnsavedWarning(Boolean(login||password));
- async function load(){const s=await keywordRequest<KeywordConnectionState>('status');setState(s);setBudget(String(s.monthlyBudgetUsd));void keywordRequest<Spend>('spend').then(setSpend).catch(()=>undefined);}
+ // A checked DataForSEO login can add Keywords, Competitors, Site audit and AI search to the menu.
+ async function load(){const s=await keywordRequest<KeywordConnectionState>('status');setState(s);refreshNavBadges();setBudget(String(s.monthlyBudgetUsd));void keywordRequest<Spend>('spend').then(setSpend).catch(()=>undefined);}
  useEffect(()=>{void load().catch(e=>setError(() => ($legacyText(String(e)))));},[setError]);
  async function run(fn:()=>Promise<void>){setBusy(true);setError('');setNotice('');try{await fn();await load();}catch(e){setError(() => ($legacyText(String(e))));}finally{setBusy(false);}}
  return <section className="nr-panel" id="dataforseo"><div className="nr-panel-title"><h2>{$t('keyword.dataforseoKeywordsCompetitorsAiSearch')}</h2><Tag tone={state?.verifiedAt?'green':state?.configured?'amber':'grey'} dot>{state?.verifiedAt?$t('keyword.verified'):state?.configured?$t('common.notVerified'):$t('keyword.notConnected')}</Tag></div><p>{$t('keyword.usedResearchMarketSearchDemand')}</p>{error&&<ConnectionError message={error}/>}{notice&&<p role="status" className="nr-success">{notice}</p>}

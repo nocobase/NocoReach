@@ -50,7 +50,7 @@ export const networkKey = [...proxyKey, 'network'];
 /** A project's choice that keeps one connection off the default proxy. */
 export const DIRECT = 'direct';
 /** Settings › Network lists the connections the default proxy can carry, in this order, with what each one covers.
- * YouTube, Bilibili and Xiaohongshu are read through collectors and never take it. */
+ * Bilibili and Xiaohongshu are read through collectors and never take it; YouTube goes through DataForSEO. */
 export const networkSources: readonly {
   connection: string;
   name: string;
@@ -115,7 +115,8 @@ export const proxyRequest = <T>(action: string, body: object = {}) =>
 // Catalog entries share the actual upstream connection, not their display name.
 export const sourceConnection: Record<string, string> = {
   ga4: 'google',
-  youtube: 'youtube',
+  // YouTube is searched through DataForSEO (2026-11-02) and shares its connection.
+  youtube: 'dataforseo',
   bilibili: 'bilibili',
   xiaohongshu: 'xiaohongshu',
   gsc: 'google',

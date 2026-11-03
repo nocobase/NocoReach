@@ -579,10 +579,12 @@ test('a Git-only edit of the article blocks publishing until it is taken into th
 test('a blog post goes to the default target, and the task page marks it', async () => {
   const f = await fixture();
   const targets = f.s.p.articleTargets;
-  // A target view carries hasSecret and capabilities; the saved settings must not.
-  const { hasSecret, capabilities, ...cms } = targets.list('1').targets[0];
+  // A target view carries hasSecret, capabilities and its latest check; the saved settings must not.
+  const { hasSecret, capabilities, check, ...cms } =
+    targets.list('1').targets[0];
   void hasSecret;
   void capabilities;
+  void check;
   await targets.save('1', {
     revision: 1,
     secret: 'cms-key',
@@ -1658,7 +1660,7 @@ test('translation: a new article, a source without text or nothing to translate 
 
 // Accept and start (2026-10-24): an accepted outline handed over to a blog post starts at once, as a new article on the
 // default target; a new docs page with no page to find its article waits for a person to pick one.
-async function acceptOutline(f, next) {
+async function acceptOutline(f, next, extra = {}) {
   await f.command('startTask', { playbookId: 'content-outline' });
   const { run } = await claim(f);
   expect(run.mode).toBe('plan');
@@ -1674,6 +1676,7 @@ async function acceptOutline(f, next) {
     artifactId: review(d).id,
     checked: ['facts'],
     next,
+    ...extra,
   });
 }
 
@@ -1713,5 +1716,230 @@ test('Accept and start: a new docs page with no article found from its page wait
   expect(child.runs).toEqual([]);
   expect(d.related).toEqual([
     expect.objectContaining({ relation: 'next', state: 'todo' }),
+  ]);
+});
+
+// 2026-10-30 (T-58): a hand-off wrote English first in a Chinese project, and the primary could not be changed.
+test('Accept and start: the primary is the project AI content language, or the one chosen with the hand-over', async () => {
+  let f = await fixture({ news: [] });
+  f.s.p.project = async () => ({
+    name: 'Synthetic',
+    writingStyle: 'Plain',
+    language: 'zh-CN',
+  });
+  let d = await acceptOutline(f, 'blog-post');
+  expect((await f.s.get('1', d.work.nextTaskId)).work.delivery.locales).toEqual(
+    ['zh', 'en', 'ja'],
+  );
+  let { run } = await claim(f);
+  expect(run.input.article.languages).toMatchObject({
+    primary: 'zh',
+    phase: 'primary',
+  });
+  f = await fixture({ news: [] });
+  f.s.p.project = async () => ({
+    name: 'Synthetic',
+    writingStyle: 'Plain',
+    language: 'zh-CN',
+  });
+  d = await acceptOutline(f, 'blog-post', {
+    nextLocales: ['ja', 'en', 'zh', 'not a locale!'],
+  });
+  const child = await f.s.get('1', d.work.nextTaskId);
+  expect(child.task.evidence.handoff.locales).toEqual(['ja', 'en', 'zh']);
+  expect(child.work.delivery.locales).toEqual(['ja', 'en', 'zh']);
+  ({ run } = await claim(f));
+  expect(run.input.article.languages).toMatchObject({ primary: 'ja' });
+});
+
+test('languages: the primary can change before it is approved, writing a new version in it; not once the translation started', async () => {
+  const f = await fixture();
+  await f.command('startTask', {
+    playbookId: 'blog-post',
+    delivery: { targetId: 'cms', locales: ['en', 'zh', 'ja'] },
+  });
+  let { run } = await claim(f);
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'English first. 中文草稿：新的文章正文',
+    article: {
+      slug: 'new-post',
+      locales: { en: { title: 'A new post', body: 'Body' } },
+      summary: 'New post',
+    },
+  });
+  let d = await f.view();
+  const stageKey = d.work.flow.stages[d.work.stageIndex].key,
+    artifactId = review(d).id;
+  await expect(
+    f.command('changePrimary', { stageKey, artifactId, locale: 'fr' }),
+  ).rejects.toMatchObject({ status: 400 });
+  await expect(
+    f.command('changePrimary', { stageKey, artifactId, locale: 'en' }),
+  ).rejects.toMatchObject({ status: 409 });
+  d = await f.command('changePrimary', {
+    stageKey,
+    artifactId,
+    locale: 'zh',
+    comment: 'Rewrite it in Chinese',
+  });
+  // The former primary stays, to be translated with the others once Chinese is approved.
+  expect(d.work.delivery.locales).toEqual(['zh', 'en', 'ja']);
+  expect(d.work.history.at(-1)).toMatchObject({
+    action: 'changePrimary',
+    note: 'zh',
+  });
+  expect(d.work.history.at(-1).comment).toBeUndefined();
+  expect(d.work.flow.stages[d.work.stageIndex].kind).toBe('agent');
+  ({ run } = await claim(f));
+  expect(run.input.article.languages).toMatchObject({
+    primary: 'zh',
+    others: ['en', 'ja'],
+    phase: 'primary',
+    write: ['zh'],
+  });
+  expect(run.input.feedback).toEqual(['Rewrite it in Chinese']);
+  // The version it replaces, notes included, goes to the Agent with the request.
+  expect(JSON.stringify(run.input)).toContain('中文草稿');
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'Chinese now',
+    article: {
+      slug: 'new-post',
+      locales: { zh: { title: '新文章', body: '新的文章正文' } },
+      summary: 'Chinese',
+    },
+  });
+  d = await f.view();
+  await f.command('approveStage', {
+    stageKey: d.work.flow.stages[d.work.stageIndex].key,
+    artifactId: review(d).id,
+    checked: [],
+  });
+  ({ run } = await claim(f));
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: 'Translated',
+    article: {
+      slug: 'new-post',
+      locales: {
+        en: { title: 'A new post', body: 'Body' },
+        ja: { title: '新しい記事', body: '本文' },
+      },
+      summary: 'Translated',
+    },
+  });
+  d = await f.view();
+  // The translation is under review: the primary was approved and cannot change any more.
+  await expect(
+    f.command('changePrimary', {
+      stageKey: d.work.flow.stages[d.work.stageIndex].key,
+      artifactId: review(d).id,
+      locale: 'en',
+    }),
+  ).rejects.toMatchObject({ status: 409 });
+});
+
+// Tasks carry their pages (2026-10-29): the start card reads where each one is changed, a start that leaves some to
+// other tasks names the ones it changes, and the tasks split off for the rest are its siblings.
+const hello = 'https://www.example.com/en/blog/hello',
+  pricing = 'https://www.example.com/pricing',
+  missing = 'https://www.example.com/en/blog/missing';
+
+test('task pages: each page is read as an article or a page of the site, with its title; a start names the pages it keeps', async () => {
+  const f = await fixture();
+  f.state.nrTasks[0].evidence = { pages: [pricing, hello, missing] };
+  f.state.nrSnapshots.push({
+    id: 900,
+    key: 'site-content:1',
+    payload: { pages: [{ url: pricing, title: 'Pricing' }] },
+  });
+  const places = await f.s.pagePlaces('1', '1');
+  expect(places.article).toMatchObject({ targetId: 'cms', articleId: '7' });
+  expect(places.unchecked).toBe(false);
+  // A page no target's pattern reads costs no request; one it reads but has no article is the site's own.
+  expect(places.pages).toEqual([
+    { url: pricing, title: 'Pricing' },
+    {
+      url: hello,
+      article: expect.objectContaining({ articleId: '7', slug: 'hello' }),
+    },
+    { url: missing },
+  ]);
+  await expect(
+    f.command('startTask', {
+      playbookId: 'optimize-page',
+      pages: ['https://www.example.com/elsewhere'],
+    }),
+  ).rejects.toMatchObject({ status: 409 });
+  await f.s.agents.saveRepo('1', {
+    repo: 'org/site',
+    baseBranch: 'main',
+    revision: 1,
+  });
+  const d = await f.command('startTask', {
+    playbookId: 'optimize-page',
+    pages: [pricing, missing],
+  });
+  expect(d.work.pages).toEqual([pricing, missing]);
+  const task = f.state.nrTasks[0];
+  expect(f.s.numberPages(task, d.work)).toEqual([pricing, missing]);
+  const { run } = await claim(f);
+  expect(run.input.pagesToChange).toEqual([pricing, missing]);
+});
+
+test('task pages: the titles alone are read without asking the publishing targets, for a started task', async () => {
+  const f = await fixture();
+  f.state.nrTasks[0].evidence = { pages: [pricing, hello] };
+  f.state.nrSnapshots.push({
+    id: 902,
+    key: 'site-content:1',
+    payload: { pages: [{ url: pricing, title: 'Pricing' }] },
+  });
+  const match = vi.spyOn(f.s.p.articleTargets, 'match');
+  expect(await f.s.pagePlaces('1', '1', false)).toEqual({
+    article: null,
+    unchecked: false,
+    pages: [{ url: pricing, title: 'Pricing' }, { url: hello }],
+  });
+  expect(match).not.toHaveBeenCalled();
+});
+
+test('task pages: the tasks split off a task are listed as its siblings, with their pages', async () => {
+  const f = await fixture();
+  f.state.nrTasks[0].evidence = { proposalId: 'p1', pages: [pricing, hello] };
+  f.state.nrTasks.push({
+    id: 2,
+    projectId: '1',
+    title: 'Improve the hello post',
+    brief: 'b',
+    status: '待处理',
+    evidence: { no: 2, proposalId: 'p2', page: hello, pages: [hello] },
+  });
+  f.state.nrSnapshots.push({
+    id: 901,
+    key: 'strategy:1',
+    payload: {
+      proposals: [
+        { id: 'p2', taskId: 2, group: 'p1' },
+        { id: 'p1', taskId: 1 },
+      ],
+    },
+  });
+  expect((await f.view()).related).toEqual([
+    expect.objectContaining({ id: 2, relation: 'sibling', pages: [hello] }),
+  ]);
+  expect((await f.s.get('1', '2')).related).toEqual([
+    expect.objectContaining({
+      id: 1,
+      relation: 'sibling',
+      pages: [pricing, hello],
+    }),
   ]);
 });

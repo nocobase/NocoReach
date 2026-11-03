@@ -68,8 +68,30 @@ test('menu: which sources are connected, each from its saved state; unreadable o
   siteContent:{state:async()=>({sites:[{origin:'https://x'}]})},github:{state:async()=>({repo:'o/r',status:'disconnected'})},packages:{state:async()=>{throw new Error('down');}},
   community:{state:async()=>({origin:'https://f',status:'active'})},hackernews:{state:async()=>null},reddit:{state:async()=>({terms:['x'],status:'active'})},
   xSource:{state:async()=>({terms:['x'],status:'disconnected'})},chat:{state:async()=>({discord:{status:'active'},slack:{status:'disconnected'}})},trends:{state:async()=>({terms:['a']})},aiSearch:{d4s:{config:()=>({verifiedAt:'t'})}}};
- assert.deepEqual(await new DataHealth(p).connected('1'),{ga4:true,gsc:false,site:true,github:false,packages:false,discourse:true,hackernews:false,reddit:true,x:false,discord:true,slack:false,trends:true,dataforseo:true});
+ assert.deepEqual(await new DataHealth(p).connected('1'),{ga4:false,gsc:false,site:true,github:false,packages:false,discourse:true,hackernews:false,reddit:true,x:false,discord:true,slack:false,trends:true,dataforseo:true,competitors:false,keywords:false,xiaohongshu:false,bilibili:false,youtube:false});
+ // Google counts for both pages once both the GA4 property and the Search Console site are chosen.
+ const both=await new DataHealth({...p,link:async()=>({get:k=>({ga4PropertyId:'p1',gscSiteUrl:'sc-domain:x',status:'active'})[k]})}).connected('1');assert.equal(both.ga4,true);assert.equal(both.gsc,true);
  const none=await new DataHealth({link:async()=>null,env:()=>''}).connected('1');assert.ok(Object.values(none).every(v=>v===false));
+});
+
+test('menu: a disconnected source whose page still shows its saved data counts until the data is cleared',async()=>{
+ const {DataHealth}=__data_health;
+ const collector=(connected,total)=>({status:async()=>({connected,total})});
+ const p={link:async()=>null,env:()=>'',
+  // Bilibili disconnected with videos saved, Xiaohongshu disconnected and cleared, YouTube connected before its first videos.
+  bilibili:collector(false,12),xiaohongshu:collector(false,0),youtube:collector(true,0),
+  // GitHub disconnected with its history kept: its page asks to connect again, so it does not count.
+  github:{state:async()=>({repo:'o/r',status:'disconnected',daily:{'2026-10-01':{stars:3}}})},
+  competitors:{state:async()=>({list:[{id:'c1'}]})},
+  // Keywords without Search Console or DataForSEO: saved keywords keep it.
+  keywordService:{candidates:()=>({count:async()=>2})},rankTracking:{state:async()=>null}};
+ const sources=await new DataHealth(p).connected('1');
+ assert.equal(sources.bilibili,true);assert.equal(sources.xiaohongshu,false);assert.equal(sources.youtube,true);
+ assert.equal(sources.github,false);assert.equal(sources.competitors,true);assert.equal(sources.keywords,true);
+ const tracked=await new DataHealth({...p,keywordService:{candidates:()=>({count:async()=>0})},rankTracking:{state:async()=>({keywords:[{id:'k'}]})}}).connected('1');
+ assert.equal(tracked.keywords,true);
+ const broken=await new DataHealth({...p,bilibili:{status:async()=>{throw new Error('down');}}}).connected('1');
+ assert.equal(broken.bilibili,false);
 });
 
 test('Reddit health keeps historical success and business cutoff after failure',async()=>{
@@ -121,4 +143,31 @@ test('each row needing attention says what fixes it: retry, change a setting, ch
  assert.equal(items.competitors.fix,'settings');assert.match(items.competitors.message,/没有找到 sitemap/);assert.doesNotMatch(items.competitors.message,/自动重试/);
  assert.equal(items.rank.fix,'verify');assert.deepEqual(items.rank.retry,{resource:'nrRankTracking',action:'check',body:{retryUncertain:true}});assert.match(items.rank.message,/DataForSEO 后台核对/);
  assert.equal(items.site,undefined);assert.equal(items.github.fix,undefined,'a healthy row asks for nothing');
+});
+test('Bilibili: a queued read is not a problem, paused daily reading is, and switching it off reads by hand',async()=>{
+ const t=new Date(Date.now()-H).toISOString();
+ const base={connected:true,checking:false,verifiedAt:t,terms:['NocoBase'],total:26,autoSync:true,queued:null,pausedCode:null,nextSyncAt:new Date(Date.now()+H).toISOString(),lastRun:{at:t,ok:true,errorCode:null,partial:false}};
+ const row=async state=>(await new DataHealth({env:()=>'',link:async()=>null,bilibili:{status:async()=>state}}).list('1')).items.find(i=>i.id==='bilibili');
+ const healthy=await row(base);assert.equal(healthy.state,'healthy');assert.equal(healthy.cadence,'daily');assert.equal(healthy.note,'每天在 Bilibili 搜 NocoBase，已记录 26 个视频');assert.deepEqual(healthy.retry,{resource:'nrBilibili',action:'sync',body:{}});
+ const queued=await row({...base,queued:{retries:1,retryAt:base.nextSyncAt}});assert.equal(queued.state,'pending');assert.match(queued.message,/已排队/);
+ const paused=await row({...base,autoSync:false,pausedCode:'security_block',lastRun:{at:t,ok:false,errorCode:'security_block',partial:false}});assert.equal(paused.state,'failing');assert.match(paused.message,/连续 3 次没有读到.*Bilibili 要求验证/);assert.doesNotMatch(paused.message,/本次读取已停止/);assert.equal(paused.fix,'retry');assert.equal(paused.cadence,'daily');assert.match(paused.note,/^每天在 Bilibili 搜/);
+ const partial=await row({...base,lastRun:{at:t,ok:false,errorCode:'timeout',partial:true}});assert.equal(partial.state,'warning');assert.match(partial.message,/部分数据未更新/);
+ const manual=await row({...base,autoSync:false});assert.equal(manual.cadence,'manual');assert.equal(manual.note,'在 Bilibili 搜 NocoBase，已记录 26 个视频');
+ assert.equal(await row({...base,connected:false}),undefined);
+});
+test('YouTube: one missed term is a grey note, three daily misses in a row need attention, a used-up budget waits for its date',async()=>{
+ const t=new Date(Date.now()-H).toISOString();
+ const status=extra=>({configured:true,dataforseo:true,syncing:false,autoSync:true,terms:['NocoBase','Slow term'],total:12,fetchedAt:t,nextSyncAt:null,pausedUntil:null,repeatedMisses:[],lastSync:{at:t,ok:true,errors:[],attempts:0,lastSuccessAt:t,missed:[{term:'Slow term',reason:'timeout'}]},...extra});
+ const row=async extra=>(await new DataHealth({env:()=>'',link:async()=>null,youtube:{status:async()=>status(extra)}}).list('1')).items.find(i=>i.id==='youtube');
+ const once=await row({});
+ assert.equal(once.state,'healthy');assert.equal(once.fix,undefined);
+ assert.equal(once.note,'每天在 YouTube 搜 NocoBase、Slow term，已记录 12 个视频 · 这次没读到：“Slow term”，明天会再读');
+ assert.deepEqual(once.noteText.params[1],{key:'youtube.termsMissedNote',params:{0:'“Slow term”'}});
+ const repeated=await row({repeatedMisses:['Slow term']});
+ assert.equal(repeated.state,'warning');assert.equal(repeated.message,'“Slow term”连续 3 天没读到');assert.equal(repeated.note,'每天在 YouTube 搜 NocoBase、Slow term，已记录 12 个视频');
+ // No setting fixes a used-up budget and a retry would be refused: the row says when it resumes and offers nothing.
+ const paused=await row({pausedUntil:'2026-12-01T00:00:00.000Z'});
+ assert.equal(paused.state,'warning');assert.equal(paused.fix,'wait');
+ assert.equal(paused.message,'DataForSEO 本月预算已用完，可以调高预算，或等 2026-12-01 自动恢复');
+ assert.deepEqual(paused.messageText,{key:'youtube.budgetPausedHealth',params:{0:{date:'2026-12-01T00:00:00.000Z'}}});
 });

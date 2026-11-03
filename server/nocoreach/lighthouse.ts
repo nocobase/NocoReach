@@ -3,11 +3,14 @@ import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { projectId, requireAccess } from './policy.js';
 import { VisibilityError } from './research-helpers.js';
-import { DataForSeo } from './dataforseo.js';
+import { DataForSeo, RECENT_MS } from './dataforseo.js';
 // 性能检查 (Lighthouse) on 审计: after every-app/open-seo db8bde1 src/server/lib/dataforseo/lighthouse.ts and
-// lighthouseStoredPayload.ts (MIT). One page at a time and only when asked, on the shared DataForSEO layer (monthly budget,
-// the same page and device reused for 30 days, an uncertain run never retried); a run waits up to 90 s because Lighthouse
-// loads the page in a browser. Only the scores, the main metrics and the failing checks are kept, not the multi-MB report.
+// lighthouseStoredPayload.ts (MIT). One page at a time and only when asked, on the shared DataForSEO layer (monthly
+// budget, an uncertain run never retried automatically); a run waits up to 90 s because Lighthouse loads the page in a
+// browser. Only the scores, the main metrics and the failing checks are kept, not the multi-MB report. A check is what
+// someone clicks after changing the site, so the same page and device is reused only for RECENT_MS (10 minutes),
+// against a second click (2026-11-02: the 30-day default reopened a 10-26 result instead of checking again); the page
+// says when it is reused.
 const error=(message,status=400)=>{throw new VisibilityError(message,status);};
 const CATEGORIES=['performance','accessibility','best-practices','seo'];
 const METRICS=[['largest-contentful-paint','LCP'],['cumulative-layout-shift','CLS'],['total-blocking-time','TBT'],['first-contentful-paint','FCP'],['speed-index','Speed Index'],['interactive','TTI'],['server-response-time',systemMessageText('lighthouse.serverResponse')]];
@@ -31,7 +34,7 @@ function result(raw,spec){const task=raw?.tasks?.[0],cost=Number.isFinite(raw?.c
  issues.sort((a,b)=>(a.severity==='high'?0:1)-(b.severity==='high'?0:1)||(b.savingsMs||0)-(a.savingsMs||0)||a.score-b.score);
  return {status:'completed',errorCode:null,costUsd:cost,result:{url:spec.url,finalUrl:String(r.finalUrl||r.requestedUrl||spec.url).slice(0,2000),strategy:spec.strategy,version:r.lighthouseVersion||null,scores,metrics,issues:issues.slice(0,30)}};}
 class Lighthouse{
- constructor(p){this.p=p;this.d4s=new DataForSeo(p,{lighthouse:{specification,result}});}
+ constructor(p){this.p=p;this.d4s=new DataForSeo(p,{lighthouse:{specification,result,reuseMs:RECENT_MS}});}
  async status(id){const site=await this.p.siteContent?.state(id).catch(()=>null),project=await this.p.project(id);
   return {connected:Boolean(this.d4s.config(id)?.verifiedAt),suggested:site?.sites?.[0]?.origin?`${site.sites[0].origin}/`:project.domains?.[0]?`https://${String(project.domains[0]).replace(/^https?:\/\//,'').replace(/\/.*$/,'')}/`:''};}
  run(id,v){return this.d4s.run(id,'lighthouse',v);}
@@ -44,4 +47,4 @@ class Lighthouse{
   const actions={status:wrap(id=>this.status(id)),run:wrap((id,v)=>this.run(id,v)),list:wrap(id=>this.list(id)),getRun:wrap((id,v)=>this.getRun(id,v))};
   this.p.app.resourceManager.define({name:'nrLighthouse',actions});this.p.app.acl.allow('nrLighthouse',Object.keys(actions),'loggedIn');}
 }
-export { Lighthouse, specification, result };
+export { Lighthouse, specification, result, RECENT_MS };

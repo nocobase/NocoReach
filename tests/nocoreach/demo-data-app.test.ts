@@ -28,6 +28,11 @@ import { rowsFor, opportunityState } from '../../shared/strategy-pending';
 import { recentlyEnded, verdictsOf } from '../../client/pages/strategy/watch';
 
 vi.setConfig({ testTimeout: 300000, hookTimeout: 300000 });
+// The demo's synthetic traffic is keyed by calendar date while its observation windows sit a set number of days before
+// today, so which conclusion a measured task reaches moves from day to day (Acme CRM's flat task read "up" on 2026-10-30).
+// Fix the day so every outcome stays covered; the clock still advances, so timeouts and timestamps behave as usual.
+vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true });
+vi.setSystemTime(new Date('2026-10-29T12:00:00Z'));
 // Play the demo Agent's runs back without the pauses a visitor sees.
 process.env.NOCOREACH_DEMO_AGENT_PACE = '0';
 const createDemoTest = (enabled = true) =>
@@ -49,7 +54,6 @@ const createDemoTest = (enabled = true) =>
         initialAdmin: { ...DEFAULT_ADMIN_CREDENTIALS, name: 'Demo data admin' },
       },
       secrets: { keys: [{ version: 1, key: randomBytes(32).toString('hex') }] },
-      agents: { vectors: { store: false } },
       nocoreach: { publicDns: '' },
       demoMode: { enabled },
     },
@@ -419,21 +423,6 @@ describe('read-only demo lifecycle', () => {
         }),
       });
     expect((await knowledge()).status).toBe(400);
-    const configuration = (
-      await (await admin.fetch('/demoMode/configuration')).json()
-    ).data;
-    const configured = await admin.fetch(
-      '/demoMode/configuration/collections',
-      {
-        method: 'PUT',
-        headers: json,
-        body: JSON.stringify({
-          expectedRevision: configuration.revision,
-          value: ['nrSnapshots', 'nrKeywordRuns'],
-        }),
-      },
-    );
-    expect(configured.status).toBe(200);
     // Read-looking keyword endpoints persist provider results in the query cache.
     const keywordInput = {
       projectId,
@@ -463,6 +452,21 @@ describe('read-only demo lifecycle', () => {
     expect(serp.items).toHaveLength(10);
     expect((await keywordDetail('market')).overview).toEqual(market.overview);
 
+    const configuration = (
+      await (await admin.fetch('/demoMode/configuration')).json()
+    ).data;
+    const configured = await admin.fetch(
+      '/demoMode/configuration/collections',
+      {
+        method: 'PUT',
+        headers: json,
+        body: JSON.stringify({
+          expectedRevision: configuration.revision,
+          value: ['nrSnapshots'],
+        }),
+      },
+    );
+    expect(configured.status).toBe(200);
     const added = await knowledge();
     expect(added.status).toBe(200);
     const tasks = await runtime.plugin.db
@@ -697,6 +701,65 @@ test('imports the demo through the API and clears all business data while preser
   };
   expect(data.skipped).toEqual([]);
   const { main, second } = data.projects;
+
+  for (const projectId of [main, second]) {
+    const saved = await runtime.plugin.keywordService.saved(projectId);
+    expect(saved.items.length).toBeGreaterThan(30);
+    const ranks = await runtime.plugin.dataViews.ranks(projectId, {
+      keywords: saved.items.map((keyword) => keyword.keyword),
+    });
+    for (const keyword of saved.items) {
+      expect(keyword.market).toEqual({ locationCode: 2158, language: 'zh-TW' });
+      const body = { projectId, keyword: keyword.keyword, ...keyword.market };
+      const detail = async (action: string) => {
+        const response = await admin.fetch(
+          `/nocoreach/nrKeywordDetail/${action}`,
+          { method: 'POST', headers: json, body: JSON.stringify(body) },
+        );
+        expect(response.status).toBe(200);
+        return (await response.json()).data;
+      };
+      const market = await detail('market');
+      expect(market.overview.status).toBe('ready');
+      expect(market.overview.item).toMatchObject({
+        volume: keyword.metrics.volume,
+        difficulty: keyword.metrics.difficulty,
+        cpc: keyword.metrics.cpc,
+      });
+      expect(market.overview.item.monthlySearches).toHaveLength(12);
+      for (const group of ['related', 'matching', 'questions'])
+        expect(
+          market.related[group].length,
+          `${keyword.keyword}: ${group}`,
+        ).toBeGreaterThan(0);
+      const site = await detail('site');
+      expect(site.gsc.queries.length).toBeGreaterThan(0);
+      expect(site.gsc.pages.length).toBeGreaterThan(0);
+      const rank = ranks.ranks[keyword.keyword.toLowerCase()];
+      expect(site.gsc.pages[0].position).toBeCloseTo(rank.position, 6);
+      const serp = await detail('serp');
+      expect(serp.status).toBe('ready');
+      expect(serp.items).toHaveLength(10);
+    }
+    const tracking = await runtime.plugin.rankTracking.status(projectId);
+    expect(tracking.keywords).toHaveLength(6);
+    for (const keyword of tracking.keywords) {
+      expect(keyword.latest.position).toBeGreaterThan(0);
+      expect(keyword.history).toHaveLength(4);
+    }
+    const trends = await runtime.plugin.trends.state(projectId);
+    expect(trends.keywords).toHaveLength(3);
+    for (const keyword of trends.keywords) {
+      expect(keyword.lastRun.ok).toBe(true);
+      expect(keyword.latest.points.length).toBeGreaterThan(0);
+    }
+    const competitors = await runtime.plugin.competitorResearch.view(projectId);
+    expect(competitors.market).toEqual({
+      locationCode: 2158,
+      language: 'zh-TW',
+    });
+    expect(competitors.sites.length).toBeGreaterThan(0);
+  }
 
   // Both projects must reach the same business surfaces with their own content.
   for (const [id, name, domain, count] of [
@@ -1203,6 +1266,31 @@ test('imports the demo through the API and clears all business data while preser
       payload: '{}',
     },
   });
+  // More than one cleanup page, with retained messages between stale ones on every page.
+  const inbox = Array.from({ length: 450 }, (_, index) => ({
+    id: `inbox-cleanup-${String(index).padStart(4, '0')}`,
+    kind: (['demo', 'task', 'other'] as const)[index % 3],
+  }));
+  for (const { id, kind } of inbox)
+    await connection.repository('notificationInAppItems').createOne({
+      values: {
+        id,
+        deliveryId: randomUUID(),
+        notificationId:
+          kind === 'demo' ? `nocoreach-demo-${id.slice(-4)}` : randomUUID(),
+        userId: 'test-owner',
+        title: id,
+        body: id,
+        actionUrl: null,
+        readAt: null,
+        createdAt,
+        updatedAt: createdAt,
+        target:
+          kind === 'task'
+            ? { type: 'route', path: `/actions/${id}` }
+            : { type: 'route', path: '/settings' },
+      },
+    });
   const clearRequest = () =>
     admin.fetch('/demoMode/data/clear', {
       method: 'POST',
@@ -1242,6 +1330,16 @@ test('imports the demo through the API and clears all business data while preser
     name: string;
   }[];
   expect(remaining).toEqual([]);
+  expect(
+    (
+      await connection.query
+        .selectFrom('notificationInAppItems')
+        .select(['id'])
+        .where('id', 'like', 'inbox-cleanup-%')
+        .orderBy('id', 'asc')
+        .execute<{ id: string }>()
+    ).map(({ id }) => id),
+  ).toEqual(inbox.filter(({ kind }) => kind === 'other').map(({ id }) => id));
   expect(await disk.exists(fileKey)).toBe(false);
   expect(await disk.exists(chatFileKey)).toBe(false);
   for (const table of [

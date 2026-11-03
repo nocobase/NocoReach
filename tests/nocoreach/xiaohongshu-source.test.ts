@@ -102,8 +102,10 @@ function fixture(adapter?: XiaohongshuAdapter) {
     app: {
       resourceManager: { define: resources.define.bind(resources) },
       acl: { allow: resources.allow.bind(resources) },
+      logger: { warn: vi.fn() },
     },
     network: { fetchCollector: vi.fn() },
+    projectIds: vi.fn(async () => ['1']),
   };
   const goodAdapter: XiaohongshuAdapter = adapter ?? {
     health: vi.fn(async () => ({
@@ -599,4 +601,50 @@ it('retains Collector latest order independently of estimated dates and note IDs
       ),
     ),
   });
+});
+
+it('queues a read the busy collector turned away, retries it from the tick three times, then reports it', async () => {
+  const f = fixture();
+  await connect(f);
+  await f.call('search', { revision: 1 });
+  vi.mocked(f.adapter.search).mockRejectedValue(new XiaohongshuError('busy'));
+  // Not an error for the person who clicked: the read waits for its retry and keeps the last outcome.
+  const queued = await f.call('search', { revision: 1 });
+  expect(queued).toMatchObject({
+    queued: { retries: 1 },
+    lastRun: { ok: true },
+    total: 1,
+  });
+  await f.source.tick();
+  expect(f.adapter.search).toHaveBeenCalledTimes(2);
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    for (const retries of [2, 3]) {
+      vi.setSystemTime(Date.now() + 11 * 60000);
+      await f.source.tick();
+      expect((await f.call('status')).queued).toMatchObject({ retries });
+    }
+    vi.setSystemTime(Date.now() + 11 * 60000);
+    await f.source.tick();
+  } finally {
+    vi.useRealTimers();
+  }
+  expect(f.adapter.search).toHaveBeenCalledTimes(5);
+  expect(await f.call('status')).toMatchObject({
+    queued: null,
+    lastRun: { ok: false, errorCode: 'busy' },
+  });
+  // Nothing else is read on its own.
+  await f.source.tick();
+  expect(f.adapter.search).toHaveBeenCalledTimes(5);
+});
+
+it('lists the notes found lately and when recording started', async () => {
+  const f = fixture();
+  await connect(f);
+  const view = await f.call('search', { revision: 1 });
+  expect(view.recent).toEqual([
+    expect.objectContaining({ title: '产品介绍', likesText: '1.2万' }),
+  ]);
+  expect(view.recordingSince).toEqual(expect.any(String));
 });

@@ -10,6 +10,7 @@ import type { LegacyApp } from './legacy/app.js';
 import type { LegacyContext } from './legacy/context.js';
 import type { LegacyDatabase, LegacyTransaction } from './legacy/database.js';
 import type { OutboundNetwork } from './outbound-network.js';
+import { nextAt } from './sync-policy.js';
 import {
   BilibiliError,
   bilibiliConfig,
@@ -23,6 +24,12 @@ import {
 const MAX_VIDEOS = 500;
 const MAX_SEARCH_DETAILS = 20;
 const DETAIL_TIMEOUT_MS = 10_000;
+// A collector busy with another read is not a failure: the read waits about ten minutes and tries again, at most three
+// times, and after that the next daily read tries. Three reads in a row that got nothing through pause daily reading
+// until a read gets through again.
+const BUSY_RETRY_MS = 10 * 60000;
+const BUSY_RETRIES = 3;
+const PAUSE_AFTER = 3;
 const metrics = ['views', 'likes', 'comments'] as const;
 interface Provenance {
   kind: 'search' | 'video';
@@ -54,12 +61,25 @@ interface LastRun {
   capped: boolean;
   partial: boolean;
 }
+interface Queued {
+  /** Retries made or waiting, including this one. */
+  retries: number;
+  retryAt: string;
+}
 interface State extends BilibiliConfig {
   revision: string;
   connected: boolean;
   videos: Record<string, BilibiliVideo>;
   lastRun: LastRun | null;
   verifiedAt: string | null;
+  /** Daily reading; saved before 2026-11-02 without it, which means on. */
+  autoSync?: boolean;
+  /** A read the busy collector turned away, waiting for its retry. */
+  queued?: Queued | null;
+  /** Reads in a row that got nothing through. */
+  failures?: number;
+  /** Why daily reading paused, once `failures` reached three; the pause also set `autoSync` off. */
+  pausedCode?: BilibiliErrorCode | null;
 }
 interface Host {
   collectors: CollectorResolver;
@@ -67,6 +87,27 @@ interface Host {
   app: LegacyApp;
   network: OutboundNetwork;
   project(id: string): Promise<unknown>;
+  projectIds(): Promise<(string | number)[]>;
+}
+// Bilibili turning a read away is not retried the same day (docs/BILIBILI-COLLECTOR.md); the next daily read tries.
+const REFUSALS: readonly string[] = [
+  'security_block',
+  'login_required',
+  'rate_limited',
+];
+/** When the next daily read is due: the next day after a read or a refusal, sooner after another failure. */
+function dailyAt(state: State) {
+  const last = state.lastRun;
+  if (!last) return Date.now();
+  const failures = state.failures ?? 0;
+  const soon = failures > 0 && !REFUSALS.includes(last.errorCode ?? '');
+  return Date.parse(
+    nextAt(
+      soon
+        ? { at: last.at, ok: false, attempts: failures }
+        : { at: last.at, ok: true },
+    ),
+  );
 }
 interface Operation {
   id: string;
@@ -78,6 +119,7 @@ export class BilibiliSource {
   private readonly clearing = new Set<string>();
   private readonly writes = new Map<string, Promise<unknown>>();
   private readonly generations = new Map<string, number>();
+  private ticking = false;
   private changed(id: string) {
     this.generations.set(id, (this.generations.get(id) ?? 0) + 1);
   }
@@ -106,6 +148,9 @@ export class BilibiliSource {
             revision: randomUUID(),
             verifiedAt: null,
             lastRun: null,
+            queued: null,
+            failures: 0,
+            pausedCode: null,
           }
         : null,
     );
@@ -180,7 +225,7 @@ export class BilibiliSource {
       throw new BilibiliError('conflict');
   }
   async connect(id: string, values: unknown) {
-    const { revision, ...config } = bilibiliConfig(values);
+    const { revision, autoSync, ...config } = bilibiliConfig(values);
     this.collector(id, config.collectorId);
     let changed = false;
     await this.serialize(id, () =>
@@ -190,15 +235,30 @@ export class BilibiliSource {
           old?.connected &&
           JSON.stringify([old.collectorId, old.terms, old.bvids]) ===
             JSON.stringify([config.collectorId, config.terms, config.bvids]);
-        if (same) return old;
+        // Switching daily reading keeps the revision, so a read under way still saves what it found. Switching it
+        // back on after a pause starts the failure count afresh.
+        if (same)
+          return autoSync === undefined || autoSync === (old.autoSync !== false)
+            ? old
+            : {
+                ...old,
+                autoSync,
+                failures: autoSync ? 0 : old.failures,
+                pausedCode: null,
+              };
         changed = true;
         return {
           ...config,
           revision: randomUUID(),
           connected: true,
+          autoSync:
+            autoSync ?? (old?.connected ? old.autoSync !== false : true),
           videos: old?.videos || {},
           lastRun: null,
           verifiedAt: null,
+          queued: null,
+          failures: 0,
+          pausedCode: null,
         };
       }),
     );
@@ -215,6 +275,7 @@ export class BilibiliSource {
               revision: randomUUID(),
               connected: false,
               verifiedAt: null,
+              queued: null,
             }
           : null;
       }),
@@ -237,6 +298,11 @@ export class BilibiliSource {
                 videos: {},
                 lastRun: null,
                 verifiedAt: null,
+                // As for YouTube: clearing pauses daily reading, so the next day does not refill it unasked.
+                autoSync: false,
+                queued: null,
+                failures: 0,
+                pausedCode: null,
               }
             : null;
         }),
@@ -423,6 +489,26 @@ export class BilibiliSource {
             (detailFailure ||
               ['unconfirmed_empty', 'not_found'].includes(failure.code));
           const usable = (!failure || partial) && found.length > 0;
+          const busy = !usable && failure?.code === 'busy';
+          const retries = cur.queued?.retries ?? 0;
+          if (busy && retries < BUSY_RETRIES)
+            return {
+              ...cur,
+              queued: {
+                retries: retries + 1,
+                retryAt: new Date(Date.now() + BUSY_RETRY_MS).toISOString(),
+              },
+            };
+          const failures = usable ? 0 : (cur.failures ?? 0) + (busy ? 0 : 1);
+          // Three failures in a row switch daily reading off and say why; a read that gets through switches it back
+          // on. Someone who switched it off themselves reads by hand, and their failures pause nothing.
+          const pause =
+            !usable &&
+            !busy &&
+            failures >= PAUSE_AFTER &&
+            (cur.autoSync !== false || !!cur.pausedCode);
+          const errorCode =
+            failure?.code || (!usable ? 'unconfirmed_empty' : null);
           const all = { ...cur.videos };
           const current = new Map<string, BilibiliVideo>();
           let added = 0;
@@ -481,11 +567,19 @@ export class BilibiliSource {
             ...cur,
             videos: Object.fromEntries(kept.map((v) => [v.id, v])),
             verifiedAt: usable ? at : cur.verifiedAt,
+            queued: null,
+            failures,
+            pausedCode: usable
+              ? null
+              : pause
+                ? errorCode
+                : (cur.pausedCode ?? null),
+            autoSync:
+              usable && cur.pausedCode ? true : pause ? false : cur.autoSync,
             lastRun: {
               at,
               ok: !failure && usable,
-              errorCode:
-                failure?.code || (!usable ? 'unconfirmed_empty' : null),
+              errorCode,
               retryAt:
                 failure?.code === 'rate_limited'
                   ? new Date(Date.now() + 60000).toISOString()
@@ -511,6 +605,7 @@ export class BilibiliSource {
               return cur;
             return {
               ...cur,
+              queued: null,
               lastRun: {
                 at: new Date().toISOString(),
                 ok: false,
@@ -555,8 +650,17 @@ export class BilibiliSource {
     }
     const available = allowed.some((c) => c.id === state?.collectorId);
     const videos = Object.values(state?.videos || {});
+    const connected = !!state?.connected && available;
+    const daily = connected && state?.autoSync !== false;
+    const queued = connected ? (state?.queued ?? null) : null;
+    // A pause switches daily reading off; its reason stays until a read gets through or daily reading is back on.
+    const pausedCode = connected ? (state?.pausedCode ?? null) : null;
+    const since = videos.reduce<string | null>(
+      (min, v) => (!min || v.firstSeenAt < min ? v.firstSeenAt : min),
+      null,
+    );
     return {
-      connected: !!state?.connected && available,
+      connected,
       configured: allowed.length > 0,
       revision: state?.revision || null,
       collectors: allowed.map(({ id: collectorId, name, nameKey }) => ({
@@ -572,9 +676,19 @@ export class BilibiliSource {
       requestId: op?.id || null,
       total: videos.length,
       lastRun: state?.lastRun || null,
+      autoSync: daily,
+      queued,
+      pausedCode,
+      failures: connected ? (state?.failures ?? 0) : 0,
+      nextSyncAt:
+        queued?.retryAt ??
+        (daily && !pausedCode && state
+          ? new Date(Math.max(dailyAt(state), Date.now())).toISOString()
+          : null),
+      recordingSince: since,
       coverage: 'first_page_only' as const,
       mode: 'browser-collector' as const,
-      automatic: false,
+      automatic: daily,
       network: 'collector_browser' as const,
       recent: videos
         .sort(publicationOrder)
@@ -634,6 +748,38 @@ export class BilibiliSource {
         fromEarlierConfig: v.configRevision !== state?.revision,
       })),
     };
+  }
+  /** The cron's tick: a queued retry once it is due, then each project's daily read. */
+  async tick() {
+    if (this.ticking) return;
+    this.ticking = true;
+    try {
+      for (const value of await this.p.projectIds()) {
+        const id = String(value);
+        try {
+          const state = await this.state(id);
+          if (!state || this.isCollectorBusy(id)) continue;
+          const status = this.describe(id, state);
+          if (!status.connected) continue;
+          const now = Date.now();
+          const due = state.queued
+            ? Date.parse(state.queued.retryAt) <= now
+            : status.autoSync && !status.pausedCode && dailyAt(state) <= now;
+          if (
+            !due ||
+            (state.lastRun?.retryAt && Date.parse(state.lastRun.retryAt) > now)
+          )
+            continue;
+          await this.sync(id);
+        } catch {
+          this.p.app.logger.warn('NocoReach Bilibili tick failed', {
+            projectId: id,
+          });
+        }
+      }
+    } finally {
+      this.ticking = false;
+    }
   }
   stop() {
     for (const op of this.operations.values()) op.controller.abort();

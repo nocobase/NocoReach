@@ -24,8 +24,18 @@ vi.mock('../../client/lib/nocoreach-api', async (original) => ({
 }));
 const initial = {
   revision: 2,
-  repo: { repo: 'team/site', baseBranch: 'main', allowedPaths: [] },
-  options: [],
+  sites: [],
+  repos: [
+    {
+      id: 'site',
+      repo: 'team/site',
+      baseBranch: 'main',
+      allowedPaths: [],
+      urls: [],
+      check: null,
+      lastPr: null,
+    },
+  ],
 };
 function RepoPage() {
   useNocoReachLocale();
@@ -59,13 +69,14 @@ test('official repository form keeps drafts while its load and save errors chang
     'Could not load repository settings.',
   );
   await user.click(screen.getByRole('button', { name: 'Retry' }));
+  await user.click(await screen.findByRole('button', { name: 'Edit' }));
   const repository = await screen.findByRole('textbox', {
     name: 'Repository link',
   });
   await user.clear(repository);
   await user.type(repository, 'team/my-draft');
   action.mockRejectedValueOnce(new Error('offline'));
-  await user.click(screen.getByRole('button', { name: 'Save repository' }));
+  await user.click(screen.getByRole('button', { name: 'Save and check' }));
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'The operation failed. Please retry.',
   );

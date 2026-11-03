@@ -238,12 +238,23 @@ describe('NocoReach semantic-key translations', () => {
       '需要你提供：': '需要准备',
       // Opportunities expire 14 days after the last analysis that raised them, not at the next one.
       '已过期：最新的分析没有再提出': '已过期：{0} 天内的分析都没有再提出',
-      // Metadata-only collection no longer reads captions; historical aliases remain valid.
+      // YouTube is read through DataForSEO by search term every day (2026-11-02); historical aliases remain valid.
       '每词最多 5 条结果，合计最多 15 个视频；不代表完整搜索结果。字幕优先人工，再自动，最多保留 30,000 字符。':
         '每词最多 5 条结果，每次合计最多 15 个视频；不代表完整或最新搜索结果。仅获取视频信息和公开播放、点赞、评论数据，不读取字幕。',
       '每词最多 5 条结果，每次合计最多 15 个视频；不代表完整或最新搜索结果。字幕优先人工，再自动，最多保留 30,000 字符。':
-        '每词最多 5 条结果，每次合计最多 15 个视频；不代表完整或最新搜索结果。仅获取视频信息和公开播放、点赞、评论数据，不读取字幕。',
-      '相关视频的内容、公开互动计数和可用字幕': '相关视频的信息和公开互动计数',
+        '每个搜索词每天读一次 YouTube 搜索结果第一页（最多 20 个视频，按相关度排序），较新的视频可能不在里面。播放、点赞、评论是读取那一刻的数字。',
+      '相关视频的内容、公开互动计数和可用字幕':
+        '按搜索词每天找 YouTube 上的相关视频，记录播放、点赞和评论数',
+      '请填写 YouTube 视频链接，或每行一个搜索词':
+        '请填写 1–5 个搜索词，每行一个；视频链接可不填',
+      'YouTube 读取超时，已停止本次请求，请缩小范围后重试':
+        '这次通过 DataForSEO 读取 YouTube 超时。',
+      'YouTube 读取失败，自动读取已暂停；请检查工具版本后手动重试':
+        'DataForSEO 这次没有返回 YouTube 结果。',
+      '最多填写 2 个搜索词，每个 2–80 字符，且不能包含控制字符':
+        '最多填写 5 个搜索词，每个 2–80 字符，且不能包含控制字符',
+      '关键词、排名、Trends、Reddit 和 AI 搜索共用 DataForSEO 出口。':
+        '关键词、排名、Trends、Reddit、AI 搜索和 YouTube 共用 DataForSEO 出口。',
       // Collector connection setup moved into the platform panels.
       '请管理员按部署文档登记一次已授权的只读采集器，各项目即可选择。采集器必须能从 NocoReach 服务端访问；服务端的回环地址不代表你的电脑。':
         '请管理员在接入面板填写采集器地址和访问令牌。',
@@ -369,6 +380,22 @@ describe('NocoReach semantic-key translations', () => {
       // Change requests are written in Activity's message box (2026-10-28), and the Agent revises rather than redoes.
       '写修改意见，发送后{0}会按意见重做':
         '写修改意见，发送后 {0} 会按意见重新修改',
+      // Every closed task can be reopened (2026-10-29), so closing no longer says the task cannot continue.
+      '执行者会停下，没合并的 PR 会关掉（分支保留），之后不能接着做。':
+        '执行者会停下，没合并的 PR 会关掉（分支保留）。之后可以重新打开，回到这一步。',
+      // Bilibili takes up to five search terms, as YouTube does (2026-11-02).
+      '请选择可用的采集器，并填写最多 3 个搜索词（各 1–80 字）或 5 个有效 BV 号。':
+        '请选择可用的采集器，并填写最多 5 个搜索词（各 1–80 字）或 5 个有效 BV 号。',
+      // A refused Bilibili read no longer adds that it stopped: the notice above it already says nothing was read (2026-11-02).
+      'Bilibili 要求验证或拒绝了访问，本次读取已停止。':
+        'Bilibili 要求验证或拒绝了访问。',
+      'Bilibili 要求登录，本次读取已停止。请管理员检查采集器所选模式。':
+        'Bilibili 要求登录。请管理员检查采集器所选模式。',
+      // Performance checks run anew on every click (2026-11-02); the rank tip names its Update now button.
+      '一次检查一个页面，点了才查（约 $0.005，算进 DataForSEO 的月度预算）；同一页面、同一设备 30 天内直接打开上次的结果。':
+        '一次检查一个页面，点了才查，每次约 $0.005，算进 DataForSEO 的月度预算。同一页面、同一设备 10 分钟内不重复检查。',
+      '“立即检查”6 天内查过的直接用那次结果，不重复收费。名次是那一刻的 Google 结果，和 Search Console 的平均排名会有出入。':
+        '“立即更新”6 天内查过的直接用那次结果，不重复收费。名次是那一刻的 Google 结果，和 Search Console 的平均排名会有出入。',
     };
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(

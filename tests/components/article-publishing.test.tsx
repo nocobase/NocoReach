@@ -8,7 +8,15 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { NocoReachHttpError } from '../../client/lib/nocoreach-api';
+import {
+  NocoReachHttpError,
+  nocobaseClient,
+} from '../../client/lib/nocoreach-api';
+import { MemoryRouter } from 'react-router';
+import {
+  PagePicker,
+  RestNotice,
+} from '../../client/pages/task-detail/start-pages';
 import { ArticleTargetsConnect } from '../../client/pages/article-targets-connect';
 import {
   articleLanguages,
@@ -26,7 +34,11 @@ import {
 import {
   DeliveryDialog,
   DeliverySummary,
+  HandoffLanguage,
+  PrimaryLanguage,
+  WhereField,
 } from '../../client/pages/task-detail/article-start';
+import { handoffTarget } from '../../client/pages/task-detail/article-model';
 import {
   conflictHeading,
   defaultDelivery,
@@ -726,6 +738,66 @@ it('marks the default target and makes another one the default from its menu', a
   ).not.toBeInTheDocument();
 });
 
+// The same status card as a website repository (2026-10-29): whether the target answers, kept with its time, and the
+// article a task last published there.
+it("shows each target's latest check and last published article, and checks it again in place", async () => {
+  const at = new Date().toISOString();
+  const cms = {
+    ...target,
+    id: 'cms',
+    name: 'NocoBase CMS',
+    baseUrl: 'https://cms.example.com',
+    hasSecret: true,
+    pages: { en: 'https://www.example.com/blog/{slug}' },
+    fields: { id: 'id', slug: 'slug', version: 'updatedAt', locales: {} },
+    check: null,
+  };
+  vi.mocked(articleRequest).mockImplementation(async (action: string) => {
+    if (action === 'targets')
+      return {
+        revision: 3,
+        defaultTargetId: 'cms',
+        targets: [cms],
+        published: {
+          cms: {
+            slug: 'open-source-crm',
+            title: 'Open source CRM guide',
+            at,
+            taskId: '9',
+          },
+        },
+      };
+    if (action === 'testTarget')
+      return {
+        ok: false,
+        code: 'unauthorized',
+        check: { at, ok: false, code: 'unauthorized' },
+      };
+    throw new Error(action);
+  });
+  const user = userEvent.setup();
+  render(
+    <ArticleTargetsConnect
+      projectId={1}
+      onChange={vi.fn()}
+      onSavingChange={vi.fn()}
+    />,
+  );
+  const card = within(
+    (await screen.findByText('NocoBase CMS')).closest(
+      '[data-target]',
+    ) as HTMLElement,
+  );
+  expect(card.getByText('Not checked')).toBeInTheDocument();
+  expect(card.getByText('https://cms.example.com')).toBeInTheDocument();
+  expect(
+    card.getByRole('link', { name: 'Open source CRM guide' }),
+  ).toHaveAttribute('href', 'https://www.example.com/blog/open-source-crm');
+  await user.click(card.getByRole('button', { name: 'Check' }));
+  expect(await card.findByText('Problem')).toBeInTheDocument();
+  expect(card.getByRole('button', { name: 'Check again' })).toBeInTheDocument();
+});
+
 // Several targets and per-playbook targets (design: storage/ui-workflow/article-multi-target/design.md).
 const panelTarget = (id: string, name: string) => ({
   ...target,
@@ -987,7 +1059,9 @@ it('chooses other targets in the Change dialog: the primary leaves them, a limit
       onSave={onSave}
     />,
   );
-  const dialog = screen.getByRole('dialog', { name: 'Choose article' });
+  const dialog = screen.getByRole('dialog', {
+    name: 'Choose where to make the change',
+  });
   expect(
     within(dialog).getByText(
       'Matched by address (slug): an existing article is updated, otherwise a new one is created.',
@@ -1051,7 +1125,9 @@ it('picks an existing article in the Change dialog: saved on the task at Save, n
       />,
     );
   show();
-  let dialog = screen.getByRole('dialog', { name: 'Choose article' });
+  let dialog = screen.getByRole('dialog', {
+    name: 'Choose where to make the change',
+  });
   expect(
     within(dialog).getByText('Selected: Workflow tools (workflow-tools)'),
   ).toBeInTheDocument();
@@ -1065,7 +1141,9 @@ it('picks an existing article in the Change dialog: saved on the task at Save, n
   cleanup();
   // Picking the article found from the page again keeps it for the start; another one is saved on the task.
   show();
-  dialog = screen.getByRole('dialog', { name: 'Choose article' });
+  dialog = screen.getByRole('dialog', {
+    name: 'Choose where to make the change',
+  });
   await user.click(within(dialog).getByRole('button', { name: 'Save' }));
   expect(link).not.toHaveBeenCalled();
   expect(onSave).toHaveBeenLastCalledWith({
@@ -1076,7 +1154,9 @@ it('picks an existing article in the Change dialog: saved on the task at Save, n
   });
   cleanup();
   show();
-  dialog = screen.getByRole('dialog', { name: 'Choose article' });
+  dialog = screen.getByRole('dialog', {
+    name: 'Choose where to make the change',
+  });
   await user.click(
     await within(dialog).findByRole('button', { name: /Open source CRM/ }),
   );
@@ -1200,10 +1280,14 @@ it('decides where the change goes from the page: the article found, the reposito
     mode: 'new',
     also: [],
   });
-  // Unless the playbook names a target, there is no repository, or the targets could not be asked: pick by hand.
+  // Without a repository connected too (2026-10-29): the card then says one is missing rather than asking for an
+  // article.
+  expect(defaultDelivery(d({}, false), 'optimize-page', none).target).toBe(
+    'repo',
+  );
+  // Unless the playbook names a target or the targets could not be asked: pick by hand.
   for (const [data2, f] of [
     [d({ 'optimize-page': 'news' }), none],
-    [d({}, false), none],
     [d(), { article: null, unchecked: true }],
     [d(), undefined],
   ] as const)
@@ -1287,7 +1371,7 @@ it('reads the page of a change handed off on its own, which has no opportunity',
   expect(pageUrlsOf(task({ insight: null, context }))).toEqual([]);
 });
 
-it('shows where the change goes in one line, with Change for the exceptions', async () => {
+it('shows the pages to change and, in one line, where they are changed, with Change for the exceptions', async () => {
   const d = {
     ...data,
     articleTargets: [target],
@@ -1301,26 +1385,38 @@ it('shows where the change goes in one line, with Change for the exceptions', as
     title: 'Workflow tools',
     url: 'https://www.example.com/blog/workflow-tools',
   };
-  const show = (choice: DeliveryChoice, finding = false) =>
+  const sitePages = [
+    { url: 'https://www.example.com/pricing', title: 'Pricing' },
+    { url: 'https://www.example.com/features', title: 'Features' },
+    { url: 'https://www.example.com/solutions/crm', title: 'CRM' },
+    { url: 'https://www.example.com/about' },
+  ];
+  const show = (
+    choice: DeliveryChoice,
+    { finding = false, pages = [] as { url: string; title?: string }[] } = {},
+  ) =>
     render(
       <DeliverySummary
         data={d}
         choice={choice}
         finding={finding}
+        pages={pages}
         allowed
         busy={false}
         onChange={onChange}
       />,
     );
+  // An article: its title opens it where readers see it, and the line names the CMS.
   const { unmount } = show({
     target: 'cms',
     mode: 'existing',
     also: [],
     article,
   });
-  expect(screen.getByText('Article to change')).toBeInTheDocument();
-  expect(screen.getByText('Found from the page address')).toBeInTheDocument();
-  // The title opens the article where readers see it.
+  expect(screen.getByText('Pages to change')).toBeInTheDocument();
+  expect(
+    screen.getByText('Blog post · Changed in NocoBase CMS'),
+  ).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Workflow tools' })).toHaveAttribute(
     'href',
     article.url,
@@ -1332,23 +1428,186 @@ it('shows where the change goes in one line, with Change for the exceptions', as
   await userEvent.setup().click(screen.getByRole('button', { name: 'Change' }));
   expect(onChange).toHaveBeenCalled();
   unmount();
-  show({ target: 'repo', mode: 'new', also: [] }).unmount();
+  // T-54: pages of the site, the first three then "Show 1 more"; changed by pull request.
+  show({ target: 'repo', mode: 'new', also: [] }, { pages: sitePages });
+  expect(
+    screen.getByText("Site pages · Changed in the site's code by pull request"),
+  ).toBeInTheDocument();
+  expect(screen.getAllByRole('link')).toHaveLength(3);
+  await userEvent
+    .setup()
+    .click(screen.getByRole('button', { name: 'Show 1 more' }));
+  expect(screen.getByRole('link', { name: '/about' })).toHaveAttribute(
+    'href',
+    'https://www.example.com/about',
+  );
+  expect(screen.queryByText('Languages', { exact: false })).toBeNull();
+  cleanup();
   show({ target: 'cms', mode: 'new', also: [] });
   expect(screen.getByText('Publishes to NocoBase CMS')).toBeInTheDocument();
   cleanup();
-  // Still to be picked: the line says so and Choose article opens the dialog.
-  show({ target: 'cms', mode: 'existing', also: [] });
+  // Still to be picked: the pages stay listed, the line says why and Choose article opens the dialog.
+  show(
+    { target: 'cms', mode: 'existing', also: [] },
+    { pages: sitePages.slice(0, 1) },
+  );
   expect(screen.getByText('Pick the article to change')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Pricing' })).toBeInTheDocument();
   await userEvent
     .setup()
     .click(screen.getByRole('button', { name: 'Choose article' }));
   expect(onChange).toHaveBeenCalledTimes(2);
   cleanup();
-  show({ target: 'cms', mode: 'existing', also: [] }, true);
+  show({ target: 'cms', mode: 'existing', also: [] }, { finding: true });
   expect(
-    screen.getByText('Finding the article for this page…'),
+    screen.getByText('Finding where these pages are changed…'),
   ).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
+});
+
+it('asks which page to change when the task names none, searching site pages and blog posts together', async () => {
+  const d = {
+    ...data,
+    task: { id: 5, title: 'T', brief: '', evidence: {} },
+    articleTargets: [
+      { ...target, pages: { en: 'https://www.example.com/blog/{slug}' } },
+    ],
+    work: {},
+  } as unknown as TaskData;
+  const fetch = vi.spyOn(nocobaseClient, 'action').mockResolvedValue([
+    { url: 'https://www.example.com/pricing', title: 'Pricing' },
+    // Also an article: listed once, as the article.
+    {
+      url: 'https://www.example.com/blog/workflow-tools',
+      title: 'Workflow tools',
+    },
+  ] as never);
+  vi.mocked(searchArticles).mockResolvedValue([
+    { id: '9', slug: 'workflow-tools', title: 'Workflow tools' },
+  ]);
+  const onPage = vi.fn(),
+    onArticle = vi.fn(),
+    onChange = vi.fn();
+  render(
+    <PagePicker
+      data={d}
+      projectId={1}
+      taskId='5'
+      allowed
+      busy={false}
+      onPage={onPage}
+      onArticle={onArticle}
+      onChange={onChange}
+    />,
+  );
+  const user = userEvent.setup();
+  await user.click(
+    screen.getByRole('textbox', { name: 'Which page to change?' }),
+  );
+  const pricing = await screen.findByRole('button', { name: /Pricing/ });
+  expect(pricing).toHaveTextContent('Site page');
+  const post = screen.getByRole('button', { name: /Workflow tools/ });
+  expect(post).toHaveTextContent('Blog post');
+  expect(
+    screen.getAllByRole('button', { name: /Workflow tools/ }),
+  ).toHaveLength(1);
+  await user.click(pricing);
+  expect(onPage).toHaveBeenCalledWith('https://www.example.com/pricing');
+  await user.click(post);
+  expect(onArticle).toHaveBeenCalledWith('cms', '9');
+  await user.click(
+    screen.getByRole('button', { name: 'Choose where to make the change' }),
+  );
+  expect(onChange).toHaveBeenCalled();
+  fetch.mockRestore();
+});
+
+it('names the pages left to other tasks: Create separate tasks for them, then the tasks they are in', async () => {
+  const hello = {
+    targetId: 'cms',
+    articleId: '7',
+    slug: 'hello',
+    title: 'Hello',
+    url: 'https://www.example.com/blog/hello',
+  };
+  const rest = [
+    { url: hello.url, article: hello },
+    // Another address of the same post: one article.
+    { url: 'https://www.example.com/en/blog/hello', article: hello },
+    {
+      url: 'https://www.example.com/blog/gone',
+      guess: { targetId: 'cms', slug: 'gone' },
+    },
+  ];
+  const onSplit = vi.fn();
+  const view = render(
+    <MemoryRouter>
+      <RestNotice rest={rest} allowed busy={false} onSplit={onSplit} />
+    </MemoryRouter>,
+  );
+  expect(
+    screen.getByText('Other blog posts (2) are not in this task'),
+  ).toBeInTheDocument();
+  await userEvent
+    .setup()
+    .click(screen.getByRole('button', { name: 'Create separate tasks' }));
+  expect(onSplit).toHaveBeenCalledWith([
+    {
+      pages: [hello.url, 'https://www.example.com/en/blog/hello'],
+      subject: 'Hello',
+    },
+    { pages: ['https://www.example.com/blog/gone'], subject: 'gone' },
+  ]);
+  view.unmount();
+  render(
+    <MemoryRouter>
+      <RestNotice
+        rest={[...rest, { url: 'https://www.example.com/pricing' }]}
+        related={[
+          {
+            id: 55,
+            no: 55,
+            title: 'Hello',
+            relation: 'sibling',
+            state: 'todo',
+            pages: [hello.url],
+          },
+          {
+            id: 56,
+            no: 56,
+            title: 'Gone',
+            relation: 'sibling',
+            state: 'todo',
+            pages: ['https://www.example.com/blog/gone/'],
+          },
+          {
+            id: 57,
+            no: 57,
+            title: 'Pricing',
+            relation: 'sibling',
+            state: 'todo',
+            pages: ['https://www.example.com/pricing'],
+          },
+        ]}
+        allowed
+        busy={false}
+        onSplit={onSplit}
+      />
+    </MemoryRouter>,
+  );
+  expect(
+    screen.queryByRole('button', { name: 'Create separate tasks' }),
+  ).toBeNull();
+  expect(
+    screen.getByText(
+      /Other blog posts \(2\) and site pages \(1\) are changed in/,
+    ),
+  ).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'T-55' })).toHaveAttribute(
+    'href',
+    '/actions/55',
+  );
+  expect(screen.getAllByRole('link')).toHaveLength(3);
 });
 
 it('links a saved article through its target page patterns, preferring the task page, and lists other targets', () => {
@@ -1714,4 +1973,205 @@ it('an article picked by hand for a translation has its languages read, and a on
       true,
     ).ready,
   ).toBe(false);
+});
+
+// The primary language (2026-10-30, T-58): chosen with a hand-over, and changed on the review card until approved.
+it('offers the primary language with a hand-over and on the review card until it is approved', async () => {
+  const cms = { ...target, locales: ['en', 'zh', 'ja'] };
+  const d = (delivery: object) =>
+    ({
+      ...data,
+      articleTargets: [cms],
+      articlePlaybookTargets: { 'new-doc': 'repo' },
+      work: { delivery },
+    }) as unknown as TaskData;
+  const pending = d({
+    kind: 'article',
+    targetId: 'cms',
+    locales: ['en', 'zh', 'ja'],
+  });
+  expect(
+    handoffTarget(pending, { id: 'blog-post', kind: 'build' }, false)?.id,
+  ).toBe('cms');
+  expect(
+    handoffTarget(pending, { id: 'new-doc', kind: 'build' }, false),
+  ).toBeNull();
+  expect(
+    handoffTarget(pending, { id: 'keyword-research', kind: 'plan' }, false),
+  ).toBeNull();
+  const onPick = vi.fn();
+  const user = userEvent.setup();
+  render(
+    <HandoffLanguage
+      id='next'
+      all={['en', 'zh', 'ja']}
+      primary='zh'
+      busy={false}
+      onChange={onPick}
+    />,
+  );
+  expect(
+    screen.getByText(
+      'The primary language is written first; once you approve it, the agent translates it into English, Japanese, then everything is published together.',
+    ),
+  ).toBeInTheDocument();
+  cleanup();
+  const onChange = vi.fn();
+  const { rerender } = render(
+    <PrimaryLanguage data={pending} busy={false} allowed onChange={onChange} />,
+  );
+  await user.click(screen.getByRole('combobox'));
+  await user.click(await screen.findByRole('option', { name: 'Chinese' }));
+  expect(onChange).toHaveBeenCalledWith('zh');
+  // Approved and being translated: no longer offered.
+  rerender(
+    <PrimaryLanguage
+      data={d({
+        kind: 'article',
+        targetId: 'cms',
+        locales: ['en', 'zh'],
+        translateFrom: { artifactId: 'a' },
+      })}
+      busy={false}
+      allowed
+      onChange={onChange}
+    />,
+  );
+  expect(screen.queryByRole('combobox')).toBeNull();
+});
+
+// With the Changes go to select below it (2026-10-30 user decision, merging #322 and #324), the summary keeps the
+// pages and leaves out the line saying where they are changed; an article keeps Change for its other choices.
+it('leaves the place line to the Changes go to select and keeps the pages', async () => {
+  const d = {
+    ...data,
+    articleTargets: [target],
+    work: {},
+  } as unknown as TaskData;
+  const pages = [
+    { url: 'https://www.example.com/pricing', title: 'Pricing' },
+    { url: 'https://www.example.com/features', title: 'Features' },
+  ];
+  const show = (choice: DeliveryChoice) =>
+    render(
+      <DeliverySummary
+        data={d}
+        choice={choice}
+        finding={false}
+        pages={pages}
+        hidePlace
+        allowed
+        busy={false}
+        onChange={() => {}}
+      />,
+    );
+  const { unmount } = show({ target: 'repo', mode: 'new', also: [] });
+  expect(screen.getByText('Pages to change')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Pricing' })).toBeInTheDocument();
+  expect(
+    screen.queryByText(
+      "Site pages · Changed in the site's code by pull request",
+    ),
+  ).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
+  unmount();
+  show({
+    target: 'cms',
+    mode: 'existing',
+    also: [],
+    article: {
+      targetId: 'cms',
+      articleId: '9',
+      slug: 'workflow-tools',
+      title: 'Workflow tools',
+      url: 'https://www.example.com/blog/workflow-tools',
+    },
+  });
+  expect(
+    screen.getByRole('link', { name: 'Workflow tools' }),
+  ).toBeInTheDocument();
+  expect(screen.queryByText('Blog post · Changed in NocoBase CMS')).toBeNull();
+  expect(screen.getByRole('button', { name: 'Change' })).toBeInTheDocument();
+});
+
+// Changes go to (2026-10-29): the website repositories and the publishing targets in one select, the repository
+// serving the task's pages preselected.
+it('offers the repositories and targets where a change goes, picking the repository by the page', async () => {
+  const repos = [
+    {
+      id: 'site',
+      repo: 'org/site',
+      baseBranch: 'main',
+      allowedPaths: [],
+      urls: ['www.example.com'],
+    },
+    {
+      id: 'docs',
+      repo: 'org/docs',
+      baseBranch: 'main',
+      allowedPaths: [],
+      urls: ['docs.example.com', 'www.example.com/docs'],
+    },
+  ];
+  const d = (page: string) =>
+    ({
+      ...data,
+      articleTargets: [target],
+      task: { evidence: { page } },
+      work: {},
+      agent: { repo: null, repos },
+    }) as unknown as TaskData;
+  const onChange = vi.fn();
+  const user = userEvent.setup();
+  const { rerender } = render(
+    <WhereField
+      data={d('https://www.example.com/docs/start')}
+      choice={{ target: 'repo', mode: 'new', also: [] }}
+      playbookId='optimize-page'
+      allowed
+      busy={false}
+      onChange={onChange}
+    />,
+  );
+  expect(screen.getByRole('combobox')).toHaveTextContent('org/docs · PR');
+  expect(
+    screen.getByText('Picked by the page www.example.com/docs/start'),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole('combobox'));
+  const menu = within(await screen.findByRole('listbox'));
+  expect(menu.getByText('Website source (opens a PR)')).toBeInTheDocument();
+  expect(menu.getByText('Publishing targets')).toBeInTheDocument();
+  await user.click(menu.getByRole('option', { name: /NocoBase CMS/ }));
+  expect(onChange).toHaveBeenLastCalledWith({
+    target: 'cms',
+    mode: 'existing',
+    also: [],
+  });
+  // Pages no repository serves: the person picks one.
+  rerender(
+    <WhereField
+      data={d('https://forum.example.com/t/1')}
+      choice={{ target: 'repo', mode: 'new', also: [] }}
+      playbookId='optimize-page'
+      allowed
+      busy={false}
+      onChange={onChange}
+    />,
+  );
+  expect(screen.getByRole('combobox')).toHaveTextContent('Choose a repository');
+  expect(
+    screen.getByText("No repository serves this task's pages; choose one."),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole('combobox'));
+  await user.click(
+    within(await screen.findByRole('listbox')).getByRole('option', {
+      name: /org\/site/,
+    }),
+  );
+  expect(onChange).toHaveBeenLastCalledWith({
+    target: 'repo',
+    mode: 'new',
+    also: [],
+    repoId: 'site',
+  });
 });

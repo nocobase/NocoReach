@@ -74,7 +74,7 @@ class InsightSummary{
   return items;}
  async site(id){const items=[];
   const report=await this.safe(()=>this.p.audit?.report(id));
-  if(report?.connected&&report.read){const c=report.counts||{},critical=(report.issues||[]).filter(i=>i.severity==='critical');items.push({...rows(critical,i=>({key:i.type,title:i.title,meta:systemMessageText('messages.pagesEG', { 0: n(i.count), 1: (i.pages||[]).slice(0,2).map(x=>x.url).join('；') }),tag:{tone:'red',text:systemMessageText('siteAudit.critical')},url:i.pages?.[0]?.url||null})),handOff:{playbookId:'tech-fix',title:'修复网站审计的严重问题：{0}'},key:'audit',text:systemMessageText('insightSummary.criticalAuditIssuesValue'),values:[n(c.critical)],source:systemMessageText('analysisRules.siteAudit'),detail:systemMessageText('messages.plusWarningsNoticesAffectedPages', { 0: n(c.warning), 1: n(c.notice) }),to:'/audit',group:'handle',tone:c.critical?'red':c.warning?'amber':'green'});}
+  if(report?.connected&&report.read){const c=report.counts||{},critical=(report.issues||[]).filter(i=>i.severity==='critical');items.push({...rows(critical,i=>({key:i.type,title:i.title,meta:systemMessageText('messages.pagesEG', { 0: n(i.count), 1: (i.pages||[]).slice(0,2).map(x=>x.url).join('；') }),tag:{tone:'red',text:systemMessageText('siteAudit.critical')},url:i.pages?.[0]?.url||null,pages:(i.pages||[]).slice(0,30).map(x=>x.url)})),handOff:{playbookId:'tech-fix',title:'修复网站审计的严重问题：{0}'},key:'audit',text:systemMessageText('insightSummary.criticalAuditIssuesValue'),values:[n(c.critical)],source:systemMessageText('analysisRules.siteAudit'),detail:systemMessageText('messages.plusWarningsNoticesAffectedPages', { 0: n(c.warning), 1: n(c.notice) }),to:'/audit',group:'handle',tone:c.critical?'red':c.warning?'amber':'green'});}
   return items;}
  async community(id){const items=[],now=businessNow(this.p,id),since7=new Date(now-7*DAY).toISOString(),since14=new Date(now-14*DAY).toISOString();
   const cm=await this.safe(()=>this.p.community?.state(id));
@@ -98,7 +98,7 @@ class InsightSummary{
   for(const s of computeAll(inputs,config).ranked){const rule=ruleOf(s.key,catalog);if(RULE_LINES[rule])(by[rule]||=[]).push(s);}
   for(const [rule,list] of Object.entries(by)){const {area,group,to,playbook}=RULE_LINES[rule],meta=catalog.find(r=>r.id===rule)||RULES.find(r=>r.id===rule),label=meta?.label||rule;
    (areas[area]||=[]).push({key:`rule-${rule}`,group,text:label,values:[n(list.reduce((t,s)=>t+(s.count||1),0))],source:SOURCE_NAME[meta?.source]||meta?.source||'',detail:meta?.description||'',to,handOff:{playbookId:playbook,title:`${label}：{0}`},
-    ...rows(list,s=>({key:s.key,title:s.title,meta:s.facts?.[0],url:s.url||null,tag:s.chip}))});}
+    ...rows(list,s=>({key:s.key,title:s.title,meta:s.facts?.[0],url:s.url||null,...(s.key.startsWith('audit-')&&Array.isArray(s.evidence)?{pages:s.evidence.slice(0,30)}:{}),tag:s.chip}))});}
   return areas;}
  // Volumes the metric cards have no room for (they show five, and search, visits, key events and new stars come first):
  // Hacker News mentions and new Reddit posts in the last 7 days and downloads in the last 28, each against the period

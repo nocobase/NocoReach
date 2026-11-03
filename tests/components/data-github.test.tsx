@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react';
 // GitHub page (client/pages/data-github/), 我们的仓库 rebuilt 2026-10-14 in the shape of 访问. The page is fed what the
 // real view (server/nocoreach/github-view.ts) builds from a small repository history, so the two stay in step.
 import { render, screen, waitFor, within } from '@testing-library/react';
@@ -13,6 +14,18 @@ import { addCommit, addIssue } from '../../server/nocoreach/github-source.js';
 import { githubView } from '../../server/nocoreach/github-view.js';
 // @ts-expect-error The server modules are plain JavaScript under ts-nocheck.
 import { windowFor } from '../../server/nocoreach/data-views.js';
+
+vi.mock('recharts', async (original) => {
+  const actual = await original<typeof import('recharts')>();
+  return {
+    ...actual,
+    ResponsiveContainer: ({ children }: { children: ReactElement }) => (
+      <actual.ResponsiveContainer width={600} height={260}>
+        {children}
+      </actual.ResponsiveContainer>
+    ),
+  };
+});
 
 const { action } = vi.hoisted(() => ({ action: vi.fn() }));
 vi.mock('#lib/nocoreach-api', () => ({ nocobaseClient: { action } }));
@@ -393,5 +406,32 @@ describe('GitHub', () => {
         '贡献者、提交、Issue、PR 和版本发布的历史，需要在数据接入中填写 token 后补全。',
       ),
     ).toBeTruthy();
+  });
+  it('starts a newly selected metric with every series visible', async () => {
+    renderPage();
+    await ready();
+    const chart = document.querySelector('[data-trend]') as HTMLElement;
+    const legend = within(chart).getAllByRole('listitem');
+    expect(legend.length).toBeGreaterThanOrEqual(2);
+    const buttons = legend.map((item) => within(item).getByRole('button'));
+    for (const button of buttons) await userEvent.click(button);
+    expect(
+      buttons.every(
+        (button) => button.getAttribute('aria-pressed') === 'false',
+      ),
+    ).toBe(true);
+    await userEvent.click(
+      within(tile('commits')).getByRole('button', { name: '提交' }),
+    );
+    const next = document.querySelector(
+      '[data-trend="commits"]',
+    ) as HTMLElement;
+    const visible = within(next)
+      .getAllByRole('listitem')
+      .map((item) => within(item).getByRole('button'));
+    expect(visible.length).toBeGreaterThanOrEqual(2);
+    expect(
+      visible.every((button) => button.getAttribute('aria-pressed') === 'true'),
+    ).toBe(true);
   });
 });

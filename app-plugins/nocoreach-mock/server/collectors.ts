@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import type { MockRunContext } from './types.js';
-import { fixtureProduct, projectText } from './fixtures.js';
 
 type Platform = 'xiaohongshu' | 'bilibili';
 type CollectorKind = 'health' | 'search' | 'video';
@@ -19,29 +18,6 @@ export interface MockCollectorTransport {
     init: RequestInit,
   ): Promise<Response>;
 }
-export type MockYouTubeRunner = (
-  target: string,
-  mode: 'search' | 'video',
-  options: { signal: AbortSignal },
-) => Promise<unknown>;
-export interface MockYouTubeDependencies {
-  runner: MockYouTubeRunner;
-  readCaption(input: string, signal: AbortSignal): Promise<{ text: string }>;
-}
-export type MockMediaErrorCode =
-  | 'cancelled'
-  | 'timeout'
-  | 'access_denied'
-  | 'upstream_error'
-  | 'invalid_response'
-  | 'invalid_input'
-  | 'unavailable';
-export class MockMediaError extends Error {
-  constructor(readonly code: MockMediaErrorCode) {
-    super(`Mock media ${code}`);
-  }
-}
-const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 
 /** Fictional public identities stay stable across runs, retries and scenario changes. */
 export const MOCK_MEDIA = Object.freeze({
@@ -57,25 +33,31 @@ export const MOCK_MEDIA = Object.freeze({
     'BV1NB411c7m3',
     'BV1NB411c7m4',
   ]),
-  youtube: Object.freeze([
-    'NocoBloom01',
-    'NocoBloom02',
-    'NocoBloom03',
-    'NocoBloom04',
-  ]),
 });
-const titles = [
-  'NocoBloom: 从模板搭建团队工作台',
-  'NocoBloom: 串联 GitHub 与 Slack 工作流',
-  'NocoBloom: 做一张每周增长报表',
-  'NocoBloom: 新版自动化模板体验',
-];
-const descriptions = [
-  '用 NocoBloom 的模板整理客户资料，建立团队协作工作台。',
-  '将 GitHub issue 变成团队任务，在 Slack 中协作跟进。',
-  '连接产品数据，建立每周增长报表并分享给团队。',
-  '新版模板让新成员更快完成上手流程，保留清晰的人工审核步骤。',
-];
+// Titles as people write them on each platform, without the product's name in front, so the search term finds
+// them by subject as a real search does.
+const titles = {
+  bilibili: [
+    '10 分钟从模板搭一个团队工作台',
+    '把 GitHub 和 Slack 工作流串起来，实测一周',
+    '每周增长报表怎么做？完整流程演示',
+    '新版自动化模板上手体验',
+    '给客服团队配权限，一步步演示',
+    '自托管部署全流程（Docker 版）',
+    '零代码搭一个内部 CRM',
+    '内部工具搭建平台横评：五款对比',
+  ],
+  xiaohongshu: [
+    '打工人效率神器｜10 分钟搭好团队工作台',
+    'GitHub + Slack 自动同步，周报再也不用手抄',
+    '每周增长复盘模板分享，直接套用',
+    '新版自动化模板真香，附上手笔记',
+    '小团队客服权限这样配，省心很多',
+    '自己部署一套协作工具，踩坑记录',
+    '零代码搭客户管理表，销售同事都说好用',
+    '五款内部工具平台对比，选型前必看',
+  ],
+} as const;
 
 export function mockBrowserCollectorConfig(
   projectId?: string,
@@ -133,11 +115,11 @@ function published(context: Readonly<MockRunContext>, index: number) {
   at.setUTCSeconds(0, 0);
   return at.toISOString();
 }
-function title(index: number, context: MockRunContext) {
-  return projectText(
-    context,
-    titles[index] ?? `NocoBloom: 团队工作流示例 ${index + 1}`,
-  );
+// A longer search (the pagination scenario) continues the series: "（2）" and so on after the first round.
+function title(platform: Platform, index: number) {
+  const list = titles[platform];
+  const round = Math.floor(index / list.length);
+  return `${list[index % list.length]}${round ? `（${round + 1}）` : ''}`;
 }
 function id(
   platform: keyof typeof MOCK_MEDIA,
@@ -149,17 +131,13 @@ function id(
       .update(`${context.projectId}:${context.seed}:${platform}:${index}`)
       .digest();
     if (platform === 'xiaohongshu') return hash.toString('hex').slice(0, 24);
-    if (platform === 'bilibili')
-      return `BV1${hash.toString('hex').slice(0, 9)}`;
-    return hash.toString('base64url').slice(0, 11);
+    return `BV1${hash.toString('hex').slice(0, 9)}`;
   }
   return (
     MOCK_MEDIA[platform][index] ??
     (platform === 'xiaohongshu'
       ? `64b10b1000000000${(index + 1).toString(16).padStart(8, '0')}`
-      : platform === 'bilibili'
-        ? `BV1NB411${(index + 1).toString(36).padStart(4, '0')}`
-        : `NocoBloom${String(index + 1).padStart(2, '0')}`)
+      : `BV1NB411${(index + 1).toString(36).padStart(4, '0')}`)
   );
 }
 function indexOf(
@@ -167,10 +145,7 @@ function indexOf(
   value: string,
   context: Readonly<MockRunContext>,
 ) {
-  return Array.from(
-    { length: count(context, platform === 'youtube' ? 5 : 20) },
-    (_, index) => index,
-  ).find(
+  return Array.from({ length: count(context, 20) }, (_, index) => index).find(
     (index) =>
       id(platform, index, context) === value ||
       MOCK_MEDIA[platform][index] === value,
@@ -178,16 +153,13 @@ function indexOf(
 }
 
 function requestedIndex(
-  platform: 'bilibili' | 'youtube',
+  platform: 'bilibili',
   value: string,
   context: MockRunContext,
 ): number | undefined {
   const known = indexOf(platform, value, context);
   if (known !== undefined) return known;
-  const valid =
-    platform === 'youtube'
-      ? VIDEO_ID.test(value)
-      : /^BV[0-9A-Za-z]{10}$/.test(value);
+  const valid = /^BV[0-9A-Za-z]{10}$/.test(value);
   return context.project && valid
     ? createHash('sha256').update(value).digest().readUInt16BE(0) % 20
     : undefined;
@@ -278,7 +250,7 @@ export function mockCollectorTransport(
           mode === 'empty'
             ? []
             : Array.from({ length: count(context, 20) }, (_, index) => ({
-                title: title(index, context),
+                title: title(platform, index),
                 url: `https://www.xiaohongshu.com/explore/${id(platform, index, context)}?xsec_source=pc_search`,
                 // Preserve upstream lossy count formats and let the real normalizer decide certainty.
                 likes:
@@ -296,7 +268,7 @@ export function mockCollectorTransport(
         completeness: 'search_summary' | 'video_metadata',
       ) => ({
         bvid: id(platform, index, context),
-        title: title(index, context),
+        title: title(platform, index),
         views: metric(context, index),
         likes: Math.floor(metric(context, index) / 50),
         comments: Math.floor(metric(context, index) / 300),
@@ -328,104 +300,4 @@ export function mockCollectorTransport(
       });
     },
   };
-}
-
-export function mockYouTubeDependencies(
-  snapshot: MockRunContext,
-): MockYouTubeDependencies {
-  const context = freezeMockCollectorContext(snapshot);
-  const runner: MockYouTubeRunner = async (target, mode, { signal }) => {
-    if (signal.aborted) throw new MockMediaError('cancelled');
-    const selectedScenario = scenario(context);
-    if (selectedScenario === 'slowcancel') {
-      await untilAborted(signal).catch(() => {
-        throw new MockMediaError('cancelled');
-      });
-    }
-    if (selectedScenario === 'timeout') throw new MockMediaError('timeout');
-    if (['loginexpired', '429'].includes(selectedScenario))
-      throw new MockMediaError('access_denied');
-    if (selectedScenario === 'error')
-      throw new MockMediaError('upstream_error');
-    if (selectedScenario === 'malformed')
-      return { entries: 'invalid mock entries', id: null, title: 17 };
-    if (
-      !['normal', 'newdata', 'empty', 'pagination'].includes(selectedScenario)
-    )
-      throw new MockMediaError('invalid_response');
-    if (mode === 'search') {
-      if (!/^ytsearch5:.{2,80}$/u.test(target))
-        throw new MockMediaError('invalid_input');
-      return {
-        _type: 'playlist',
-        entries:
-          selectedScenario === 'empty'
-            ? []
-            : Array.from({ length: count(context, 5) }, (_, index) => ({
-                id: id('youtube', index, context),
-                title: title(index, context),
-              })),
-      };
-    }
-    const match = target.match(
-      /^https:\/\/www\.youtube\.com\/watch\?v=([A-Za-z0-9_-]{11})$/,
-    );
-    if (!match) throw new MockMediaError('invalid_input');
-    const videoId = match[1];
-    const index = requestedIndex('youtube', videoId, context);
-    if (selectedScenario === 'empty' || index === undefined)
-      throw new MockMediaError('unavailable');
-    const manual = index % 2 === 0;
-    return {
-      id: videoId,
-      title: title(index, context),
-      description: `${projectText(context, descriptions[index] ?? descriptions[0])}\n合成测试项目：${fixtureProduct(context).origin}/`,
-      channel: `${fixtureProduct(context).name} Studio（虚构演示频道）`,
-      channel_id: context.project
-        ? `UC${createHash('sha256').update(`${context.projectId}:${context.seed}:channel`).digest('base64url').slice(0, 22)}`
-        : 'UCNocoBloomFictionalDemo01',
-      upload_date: published(context, index).slice(0, 10).replace(/-/g, ''),
-      duration: 180 + index * 45,
-      view_count: metric(context, index),
-      like_count: Math.floor(metric(context, index) / 50),
-      comment_count: Math.floor(metric(context, index) / 300),
-      [manual ? 'subtitles' : 'automatic_captions']: {
-        'zh-Hans': [
-          {
-            ext: manual ? 'json3' : 'vtt',
-            url: `https://www.youtube.com/api/timedtext?v=${videoId}&fmt=${manual ? 'json3' : 'vtt'}`,
-          },
-        ],
-      },
-    };
-  };
-  const readCaption = async (input: string, signal: AbortSignal) => {
-    if (signal.aborted) throw new MockMediaError('cancelled');
-    const url = new URL(input);
-    const videoId = url.searchParams.get('v') ?? '';
-    const index = requestedIndex('youtube', videoId, context);
-    if (
-      url.origin !== 'https://www.youtube.com' ||
-      url.pathname !== '/api/timedtext' ||
-      !VIDEO_ID.test(videoId) ||
-      index === undefined
-    )
-      throw new MockMediaError('invalid_response');
-    const lines = [
-      `<b>${title(index, context).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</b>`,
-      projectText(context, descriptions[index] ?? descriptions[0]),
-      'GitHub &amp; Slack 与每周报表共享同一份团队数据。',
-    ];
-    return {
-      text:
-        url.searchParams.get('fmt') === 'json3'
-          ? JSON.stringify({
-              events: [...lines, lines.at(-1)].map((line) => ({
-                segs: [{ utf8: line }],
-              })),
-            })
-          : `WEBVTT\n\n${lines.map((line, position) => `${position + 1}\n00:00:0${position}.000 --> 00:00:0${position + 1}.000\n${line}\n`).join('\n')}`,
-    };
-  };
-  return { runner, readCaption };
 }

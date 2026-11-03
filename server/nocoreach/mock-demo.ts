@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { DEMO_PRODUCT } from './demo-content.js';
 import { installEditorialDemo } from './demo-install.js';
+import { backdateYouTube } from './demo-data/youtube-history.js';
 import {
   FIXTURE_PRODUCT,
   fixtureCatalog,
@@ -80,7 +81,8 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
   )?.get('payload') as Progress;
   if (
     progress?.completed.includes('complete') &&
-    progress.completed.includes('connection-defaults')
+    progress.completed.includes('connection-defaults') &&
+    progress.completed.includes('docs-repository')
   ) {
     await installEditorialDemo(host, progress.projectId, progress.clock);
     return;
@@ -143,19 +145,35 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
   await phase('connection-defaults', async () => {
     const doc = await p.taskExecution.agents.doc(id);
     // A nonzero revision records an explicit choice, including removing a repository.
-    if (!doc.repo && doc.revision === 0)
+    if (!doc.repos.length && doc.revision === 0)
       await p.taskExecution.agents.saveRepo(id, {
         revision: doc.revision,
         repo: product.repository,
         baseBranch: 'main',
         allowedPaths: ['docs', 'website'],
         contentCheck: true,
+        urls: [new URL(product.origin).host],
       });
     const link = await p.db
       .getRepository('nrGoogleLinks')
       .findOne({ filter: { projectId: id } });
     if (link?.status === 'active' && link.ga4PropertyId && link.gscSiteUrl)
       await p.metadata(id, { status: 'ready_for_sync' });
+  });
+  // Website source in two repositories (2026-10-29): the docs have their own, so a task on a /docs page goes there and
+  // any other page to the website's. Added only beside the repository the demo connected, never over a person's choice.
+  await phase('docs-repository', async () => {
+    const doc = await p.taskExecution.agents.doc(id);
+    if (doc.repos.length !== 1 || doc.repos[0].repo !== product.repository)
+      return;
+    await p.taskExecution.agents.saveRepo(id, {
+      revision: doc.revision,
+      repo: `${product.repository.split('/')[0]}/docs`,
+      baseBranch: 'main',
+      allowedPaths: [],
+      contentCheck: true,
+      urls: [`${new URL(product.origin).host}/docs`],
+    });
   });
   if (progress.completed.includes('complete')) {
     await installEditorialDemo(host, id, progress.clock);
@@ -270,16 +288,6 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
         });
         await p.chat.runs.wait(id);
       });
-    await phase('youtube', async () => {
-      const state = await p.youtube.state(id);
-      await p.youtube.connect(id, {
-        terms: [product.name],
-        videoUrls: ['https://www.youtube.com/watch?v=NocoBloom01'],
-        revision: state?.revision ?? null,
-        autoSync: false,
-      });
-      await p.youtube.settled(id);
-    });
     await phase('bilibili', async () => {
       const state = await p.bilibili!.state(id);
       await p.bilibili!.connect(id, {
@@ -383,6 +391,20 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
     await phase('reddit', async () => {
       await p.reddit.connect(id, { terms: [product.name] });
       await p.reddit.runs.wait(id);
+    });
+    // YouTube is searched through DataForSEO, so it follows the connection's check. The editorial demo renames
+    // NocoBloom in saved data, so the tracked video's ID leaves it out to stay a valid 11-character ID.
+    await phase('youtube', async () => {
+      const state = await p.youtube.state(id);
+      await p.youtube.connect(id, {
+        terms: [product.name],
+        videoUrls: ['https://www.youtube.com/watch?v=DemoVideo01'],
+        revision: state?.revision ?? null,
+        autoSync: false,
+      });
+      await p.youtube.settled(id);
+      // As if read for the past four weeks, not first saved just now.
+      await backdateYouTube(p.db, id);
     });
     await phase('trends', async () => {
       await p.trends.connect(id, { product: product.name, locationCode: 0 });

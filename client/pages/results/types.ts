@@ -1,4 +1,5 @@
 import type { EffectResult } from '../effect-model.js';
+import type { Lacking } from '../../../shared/result-comparison.js';
 import type { TaskSource } from '../../../shared/task-source.js';
 export type { ResultSource } from '../../../shared/result-source.js';
 // Results lists only tasks with an outcome (server/nocoreach/execution/result-view.ts `hasOutcome`): live, the
@@ -50,10 +51,11 @@ export type BoardChange = {
   liveDate: string | null;
   status: string;
   day: number | null;
-  metric: 'clicks' | 'views' | null;
+  metric: NonNullable<EffectResult['primary']> | null;
   before: number | null;
   after: number | null;
   percent: number | null;
+  lacking: Lacking | null;
   nextDay: number | null;
   nextDate: string | null;
 };

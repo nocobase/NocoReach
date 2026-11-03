@@ -1,9 +1,12 @@
 import { $t } from '#i18n';
+import { collectorDocs } from '#lib/collector-platforms';
 import {connectSource,connectionState,type SourceState,type StatusInput} from '../../shared/connect-sources.js';
 export type {SourceState,StatusInput};
 // Data source catalog (SPEC §11). Planned sources are listed for transparency but cannot be connected.
 export type Availability='available'|'soon'|'planned';
-export type CatalogSource={id:string;category:SourceCategory;name:string;detects:string;priority:'P0'|'P1'|'P2';availability:Availability;guide?:{intro:string;needs:string[]}};
+// `prerequisite` is what a source needs before it can be connected at all, said on its card (2026-11-02: the collector
+// sources). In the panel a need may carry a `hint` and a link, keyed by the need's text, and `limits` says what is not read.
+export type CatalogSource={id:string;category:SourceCategory;name:string;detects:string;prerequisite?:string;priority:'P0'|'P1'|'P2';availability:Availability;guide?:{intro:string;needs:string[];hints?:Record<string,{text:string;href?:string}>;limits?:string}};
 // Same groups as the data menu (2026-10-04): each source sits where its data is viewed (GitHub Discussions on the GitHub
 // page, Search Console on Search performance). The first group holds what the Agent writes to rather than reads from:
 // the website repository it opens PRs against and the blog CMS it publishes approved articles to. It comes first
@@ -25,7 +28,7 @@ export const getCatalog = (): CatalogSource[] => ([
  {id:'github-traffic',category:'site',name:'GitHub Traffic',detects:$t('dataSources.repositoryViewsClonesSitesRefer'),priority:'P0',availability:'available',guide:{intro:$t('dataSources.githubTrafficSetupHelp'),needs:needsOf('github-traffic')}},
  {id:'github-discussions',category:'site',name:'GitHub Discussions',detects:$t('dataSources.frequentQuestionsTopicsRepositoryDiscussions'),priority:'P1',availability:'available',guide:{intro:$t('dataSources.githubDiscussionsHelp'),needs:needsOf('github-discussions')}},
  {id:'packages',category:'site',name:$t('dataSources.npmPypiDockerHubDownloads'),detects:$t('dataSources.realAdoptionTrendCloserActual'),priority:'P1',availability:'available',guide:{intro:$t('dataSources.packagesSetupHelp'),needs:needsOf('packages')}},
- {id:'repo',category:'agent',name:$t('dataSources.websiteSourceGitRepository'),detects:$t('dataSources.agentChangesContentRepositoryOpens'),priority:'P0',availability:'available',guide:{intro:$t('dataSources.repositorySetupHelp'),needs:needsOf('repo')}},
+ {id:'repo',category:'agent',name:$t('dataSources.websiteSourceGitRepository'),detects:$t('dataSources.agentChangesSiteInRepositories'),priority:'P0',availability:'available',guide:{intro:$t('dataSources.repositoriesSetupHelp'),needs:needsOf('repo')}},
  {id:'articles',category:'agent',name:$t('dataSources.articlePublishing'),detects:$t('dataSources.articlePublishingDetects'),priority:'P0',availability:'available',guide:{intro:$t('dataSources.articlePublishingIntro'),needs:needsOf('articles')}},
  {id:'gsc',category:'search',name:'Google Search Console',detects:$t('dataSources.pagesLowCtrRankingsClose'),priority:'P0',availability:'available',guide:{intro:$t('dataSources.iLlWalkThroughGoogle'),needs:needsOf('gsc')}},
  {id:'keywords',category:'search',name:$t('dataSources.dataforseoKeywordsCompetitorsAiSearch'),detects:$t('dataSources.searchVolumeDifficultyResultsKeyword'),priority:'P1',availability:'available',guide:{intro:$t('dataSources.dataforseoSetupHelp'),needs:needsOf('keywords')}},
@@ -36,9 +39,9 @@ export const getCatalog = (): CatalogSource[] => ([
  {id:'mentions',category:'community',name:$t('common.hackerNewsMentions'),detects:$t('dataSources.whereProductDiscussedHowMuch'),priority:'P1',availability:'available',guide:{intro:$t('dataSources.hackerNewsSetupHelp'),needs:needsOf('mentions')}},
  {id:'reddit',category:'community',name:$t('dataSources.redditDiscussions'),detects:$t('dataSources.whichRedditPostsTalkAbout'),priority:'P1',availability:'available',guide:{intro:$t('dataSources.redditSetupHelp'),needs:needsOf('reddit')}},
  {id:'social',category:'community',name:'X',detects:$t('dataSources.postsXMentioningProductDaily'),priority:'P2',availability:'available',guide:{intro:$t('dataSources.xSetupHelp'),needs:needsOf('social')}},
- {id:'bilibili',category:'community',name:'Bilibili',detects:$t('dataSources.publicVideoSearchSummariesSelected'),priority:'P2',availability:'available'},
- {id:'xiaohongshu',category:'community',name:$t('dataSources.xiaohongshuBrowserCollection'),detects:$t('dataSources.productNotesFoundAuthorizedBrowser'),priority:'P2',availability:'available'},
- {id:'youtube',category:'community',name:'YouTube',detects:$t('youtube.contentDescription'),priority:'P1',availability:'available'},
+ {id:'bilibili',category:'community',name:'Bilibili',detects:$t('bilibili.description'),prerequisite:$t('bilibili.prerequisite'),priority:'P2',availability:'available',guide:{intro:$t('bilibili.setupHelp'),needs:needsOf('bilibili'),hints:{[$t('collectorConnection.needCollector')]:{text:$t('bilibili.needCollectorHint'),href:collectorDocs.bilibili}},limits:$t('bilibili.limits')}},
+ {id:'xiaohongshu',category:'community',name:$t('collectorPage.xiaohongshu'),detects:$t('xiaohongshu.description'),prerequisite:$t('xiaohongshu.prerequisite'),priority:'P2',availability:'available',guide:{intro:$t('xiaohongshu.setupHelp'),needs:needsOf('xiaohongshu'),hints:{[$t('collectorConnection.needCollector')]:{text:$t('xiaohongshu.needCollectorHint'),href:collectorDocs.xiaohongshu},[$t('xiaohongshu.needBrowser')]:{text:$t('xiaohongshu.needBrowserHint')}},limits:$t('xiaohongshu.limits')}},
+ {id:'youtube',category:'community',name:'YouTube',detects:$t('youtube.contentDescription'),priority:'P1',availability:'available',guide:{intro:$t('youtube.setupIntro'),needs:needsOf('youtube')}},
  {id:'discord',category:'community',name:'Discord',detects:$t('dataSources.discordDescription'),priority:'P2',availability:'available',guide:{intro:$t('dataSources.discordSetupHelp'),needs:needsOf('discord')}},
  {id:'slack',category:'community',name:'Slack',detects:$t('dataSources.slackDescription'),priority:'P2',availability:'available',guide:{intro:$t('dataSources.slackSetupHelp'),needs:needsOf('slack')}},
 ]);

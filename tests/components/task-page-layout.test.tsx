@@ -501,8 +501,12 @@ test('the start card finds the article from the task page and links it as the ta
             },
           ],
         });
-      if (resource === 'nrArticles' && command === 'match')
-        return Promise.resolve({ article, unchecked: false });
+      if (resource === 'nrTaskWork' && command === 'pagePlaces')
+        return Promise.resolve({
+          article,
+          unchecked: false,
+          pages: [{ url: article.url, article }],
+        });
       if (resource === 'nrTaskWork' && command === 'advance') {
         commands.push(init!.body!);
         const revision = Number(init!.body!.revision) + 1;
@@ -518,12 +522,15 @@ test('the start card finds the article from the task page and links it as the ta
   expect(
     await screen.findByRole('link', { name: 'Top Workflow Automation Tools' }),
   ).toHaveAttribute('href', article.url);
-  expect(screen.getByText('要修改的文章')).toBeTruthy();
+  // 2026-10-29: the pages to change, and one line for where they are changed.
+  expect(screen.getByText('要改的页面')).toBeTruthy();
+  expect(screen.getByText('博客文章 · 在 NocoBase CMS 里改')).toBeTruthy();
   expect(screen.queryByLabelText('发布到')).toBeNull();
   expect(
-    action.mock.calls.find(([r, c]) => r === 'nrArticles' && c === 'match')?.[2]
-      .body.urls,
-  ).toEqual([article.url]);
+    action.mock.calls.find(
+      ([r, c]) => r === 'nrTaskWork' && c === 'pagePlaces',
+    )?.[2].body,
+  ).toMatchObject({ taskId: '1' });
   await userEvent
     .setup()
     .click(screen.getByRole('button', { name: '确定开始执行' }));
@@ -542,6 +549,113 @@ test('the start card finds the article from the task page and links it as the ta
   expect(commands[1].delivery).toBeUndefined();
   // No separate note at the start (2026-10-24): instructions go in the activity's message box.
   expect(commands[1]).not.toHaveProperty('note');
+});
+
+// Site pages with one website repository, then with two (2026-10-30 user decision, merging #322 and #324): the pages
+// to change are always listed; with one repository a line says where they are changed, with more than one place the
+// Changes go to select replaces that line.
+function sitePagesTask(repos: { id: string; urls: string[] }[]): TaskData {
+  const pages = [
+    'https://www.nocobase.com/pricing',
+    'https://www.nocobase.com/features',
+  ];
+  return {
+    task: {
+      id: 35,
+      title: '重复的页面描述',
+      brief: '7 个页面共用同一个描述',
+      evidence: { no: 35, pages },
+    },
+    work: {
+      revision: 2,
+      stage: 'plan',
+      plan: null,
+      planVersion: 0,
+      step: 0,
+      results: [],
+      history: [],
+      humanOwnerId: '1',
+      humanOwnerName: 'Super Admin',
+    },
+    runs: [],
+    artifacts: [],
+    reviews: [],
+    playbookDefault: 'optimize-page',
+    agent: {
+      // As the server sends it: the repository serving the task's pages (startedRepo).
+      repo: {
+        id: 'site',
+        repo: 'nocobase/site',
+        baseBranch: 'main',
+        allowedPaths: [],
+      },
+      repos: repos.map((r) => ({
+        ...r,
+        repo: `nocobase/${r.id}`,
+        baseBranch: 'main',
+        allowedPaths: [],
+      })),
+      online: true,
+      agentId: 'codex',
+      options: [{ id: 'codex', name: 'codex' }],
+    },
+  } as unknown as TaskData;
+}
+test('the start card lists the pages, with one line for one repository and Changes go to for several', async () => {
+  action.mockImplementation((resource: string, command: string) => {
+    if (resource === 'nrPlaybooks')
+      return Promise.resolve({ playbooks: [OPTIMIZE] });
+    // Pages of the site itself: none of them is an article. It answers a little later, as the server does, so the
+    // card first lists the pages by address while it looks them up.
+    if (resource === 'nrTaskWork' && command === 'pagePlaces')
+      return new Promise((resolve) =>
+        setTimeout(
+          () =>
+            resolve({
+              article: null,
+              unchecked: false,
+              pages: [
+                { url: 'https://www.nocobase.com/pricing', title: 'Pricing' },
+                { url: 'https://www.nocobase.com/features', title: 'Features' },
+              ],
+            }),
+          50,
+        ),
+      );
+    return Promise.resolve([]);
+  });
+  const { unmount } = mount(
+    sitePagesTask([{ id: 'site', urls: ['www.nocobase.com'] }]),
+    '/actions/35',
+  );
+  expect(
+    await screen.findAllByRole('link', { name: /Pricing|Features/ }),
+  ).toHaveLength(2);
+  expect(screen.getByText('要改的页面')).toBeTruthy();
+  expect(screen.getByText('网站页面 · 改网站代码，提 PR')).toBeTruthy();
+  expect(screen.queryByText('改到哪')).toBeNull();
+  unmount();
+  mount(
+    sitePagesTask([
+      { id: 'site', urls: ['www.nocobase.com'] },
+      { id: 'docs', urls: ['docs.nocobase.com'] },
+    ]),
+    '/actions/35',
+  );
+  expect(
+    await screen.findAllByRole('link', { name: /Pricing|Features/ }),
+  ).toHaveLength(2);
+  expect(screen.getByText('要改的页面')).toBeTruthy();
+  // The select says it once: no line under the list, and no second Change.
+  expect(screen.queryByText('网站页面 · 改网站代码，提 PR')).toBeNull();
+  expect(screen.getByText('改到哪')).toBeTruthy();
+  expect(screen.getByRole('combobox', { name: '改到哪' })).toHaveTextContent(
+    'nocobase/site · PR',
+  );
+  expect(
+    screen.getByText('按页面 www.nocobase.com/pricing 自动选的'),
+  ).toBeTruthy();
+  expect(screen.getByRole('button', { name: '确定开始执行' })).toBeEnabled();
 });
 
 test('before the start, the message box is where the instructions go', () => {
@@ -628,21 +742,18 @@ test('Change opens a dialog and the card keeps its one-line summary', async () =
   });
   mount(savedArticleTask(), '/actions/33');
   const title = '5 Best Tools for Building Workflow Automation';
-  // In the header and on the start card, both to the public page.
+  // On the start card, to the public page; Properties no longer repeats the article (2026-11-02).
   await vi.waitFor(() =>
     expect(
       screen
         .getAllByRole('link', { name: new RegExp(title) })
         .map((l) => l.getAttribute('href')),
-    ).toEqual([
-      'https://www.nocobase.com/en/blog/workflow-automation-tools',
-      'https://www.nocobase.com/en/blog/workflow-automation-tools',
-    ]),
+    ).toEqual(['https://www.nocobase.com/en/blog/workflow-automation-tools']),
   );
 
   const card = screen.getByRole('region', { name: '等你处理' });
   await user.click(within(card).getByRole('button', { name: '更改' }));
-  const dialog = await screen.findByRole('dialog', { name: '选择文章' });
+  const dialog = await screen.findByRole('dialog', { name: '更改改动方式' });
   expect(within(dialog).getByLabelText('发布到')).toHaveValue('cms');
   expect(within(dialog).getByRole('radio', { name: '已有文章' })).toBeChecked();
   expect(dialog).toHaveTextContent(
@@ -652,11 +763,14 @@ test('Change opens a dialog and the card keeps its one-line summary', async () =
   expect(within(card).queryByLabelText('发布到')).toBeNull();
   await user.click(within(dialog).getByRole('radio', { name: '新文章' }));
   await user.click(within(dialog).getByRole('button', { name: '保存' }));
-  expect(screen.queryByRole('dialog', { name: '选择文章' })).toBeNull();
+  expect(screen.queryByRole('dialog', { name: '更改改动方式' })).toBeNull();
   expect(within(card).getByText('发布到 NocoBase CMS')).toBeTruthy();
 });
 
-test('the properties column lists owner, Agent, playbook, source, article, page and start, with the article in full', async () => {
+// 2026-11-02 user decision (ui-references/task-brief-2026-11-02/brief-after-start-b.png): once the task starts, what the
+// start card held stays on the left, read-only, and Properties no longer repeats the playbook, article or repository.
+const STARTED = '开始时交给 Agent 的内容';
+function articleStarted() {
   const data = pageChange();
   data.work.article = {
     targetId: 'cms',
@@ -665,49 +779,191 @@ test('the properties column lists owner, Agent, playbook, source, article, page 
     title: 'Top 11 Open Source No-Code Tools in 2026',
     sourceKey: null,
   };
-  data.work.page = { url: 'https://www.nocobase.com/ja', title: '' };
+  data.work.delivery = {
+    kind: 'article',
+    targetId: 'cms',
+    articleId: '7',
+    sourceKey: null,
+    also: [{ targetId: 'docs', articleId: null, sourceKey: null }],
+    locales: ['zh', 'en', 'ja'],
+  };
   data.articleTargets = [
     {
       id: 'cms',
       name: 'NocoBase CMS',
       kind: 'nocobase-api',
-      locales: ['en'],
+      locales: ['en', 'zh', 'ja'],
       capabilities: { concurrency: 'check-before-write' },
       pages: { en: 'https://www.nocobase.com/en/blog/{slug}' },
     },
+    {
+      id: 'docs',
+      name: 'Docs CMS',
+      kind: 'nocobase-api',
+      locales: ['en'],
+      capabilities: { concurrency: 'check-before-write' },
+    },
   ];
+  return data;
+}
+
+test('the properties column lists source, owner, Agent, the page it tracks and the start', async () => {
+  const data = articleStarted();
+  data.work.page = { url: 'https://www.nocobase.com/ja', title: '' };
   mount(data);
   const column = screen.getByRole('complementary', { name: '属性' });
   const value = (label: string) =>
     within(column).getByText(label, { selector: 'dt' }).nextElementSibling!;
   expect(value('负责人')).toHaveTextContent('Super Admin');
   expect(value('Agent')).toHaveTextContent('codex');
-  expect(value('做法')).toHaveTextContent('优化现有页面');
   // Found by the AI from opportunity O-16, kept apart from the owner.
   expect(value('来源')).toHaveTextContent(/Found by AI\s*·\s*O-16/);
   expect(value('来源')).toHaveTextContent('每日分析');
   expect(
     within(value('来源')).getByRole('button', { name: 'O-16' }),
   ).toBeVisible();
-  expect(
-    within(value('文章')).getByRole('link', {
-      name: 'Top 11 Open Source No-Code Tools in 2026',
-    }),
-  ).toHaveAttribute(
-    'href',
-    'https://www.nocobase.com/en/blog/top-open-source-no-code-tools',
-  );
+  // A related page other than the one the task changes stays.
   expect(within(value('关联页面')).getByRole('link')).toHaveAttribute(
     'href',
     'https://www.nocobase.com/ja',
   );
   expect(value('开始于')).toHaveTextContent('10');
+  for (const moved of ['做法', '文章', '仓库'])
+    expect(within(column).queryByText(moved, { selector: 'dt' })).toBeNull();
   // The header keeps the title and its menu only; the steps no longer repeat the playbook's name.
   const header = screen.getByRole('heading', { level: 1 }).closest('header')!;
   expect(header).not.toHaveTextContent('Super Admin');
   expect(screen.getByRole('list', { name: '进度' })).not.toHaveTextContent(
     '优化现有页面',
   );
+});
+
+test('a started article keeps its brief, playbook, article with its languages and targets on the left, read-only', async () => {
+  mount(articleStarted());
+  const started = screen.getByRole('region', { name: STARTED });
+  expect(started).toHaveTextContent(
+    'Agent 收到的任务说明行动目标：恢复 /ja 首页的自然搜索点击量',
+  );
+  expect(started).toHaveTextContent('做法优化现有页面 · 查看步骤');
+  expect(
+    within(started).getByRole('link', {
+      name: 'Top 11 Open Source No-Code Tools in 2026',
+    }),
+  ).toHaveAttribute(
+    'href',
+    'https://www.nocobase.com/en/blog/top-open-source-no-code-tools',
+  );
+  expect(started).toHaveTextContent('/en/blog/top-open-source-no-code-tools');
+  expect(started.querySelector('[data-delivery-languages]')).toHaveTextContent(
+    /^语言：中文（主） · 英语 · 日语$/,
+  );
+  expect(started.querySelector('[data-started-where]')).toHaveTextContent(
+    'NocoBase CMS、Docs CMS · 直接发布',
+  );
+  // Read-only: nothing to choose or change, and it sits under the card for now, above Activity.
+  expect(within(started).queryByRole('combobox')).toBeNull();
+  expect(within(started).queryByRole('button', { name: '更改' })).toBeNull();
+  const now = screen.getByRole('region', { name: '等你处理' });
+  const activity = screen.getByRole('region', { name: '动态' });
+  expect(
+    now.compareDocumentPosition(started) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(
+    started.compareDocumentPosition(activity) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});
+
+test('a started change of the site names its pages and the repository kept at the start; View steps shows the steps it started with', async () => {
+  const user = userEvent.setup();
+  const data = pageChange();
+  data.work.page = {
+    url: 'https://www.nocobase.com/ja',
+    title: 'NocoBase 日本語',
+  };
+  mount(data);
+  const started = screen.getByRole('region', { name: STARTED });
+  expect(
+    within(started).getByRole('link', { name: 'NocoBase 日本語' }),
+  ).toHaveAttribute('href', 'https://www.nocobase.com/ja');
+  expect(started.querySelector('[data-started-where]')).toHaveTextContent(
+    'nocobase/site · PR',
+  );
+  expect(
+    within(started).getByRole('link', { name: 'nocobase/site' }),
+  ).toHaveAttribute('href', 'https://github.com/nocobase/site');
+  // The related page is the page it changes, so Properties leaves it out.
+  const column = screen.getByRole('complementary', { name: '属性' });
+  expect(within(column).queryByText('关联页面', { selector: 'dt' })).toBeNull();
+  await user.click(within(started).getByRole('button', { name: '查看步骤' }));
+  const drawer = await screen.findByRole('dialog', { name: '优化现有页面' });
+  const steps = within(drawer).getByRole('list', { name: '步骤' });
+  expect(steps).toHaveTextContent('修改');
+  expect(steps).toHaveTextContent('看效果并发布');
+});
+
+test('relinking the related page after the start leaves the pages it was started with; Properties names the new page', async () => {
+  const data = pageChange();
+  data.work.startedPages = ['https://www.nocobase.com/ja'];
+  data.work.page = {
+    url: 'https://www.nocobase.com/pricing',
+    title: 'Pricing',
+  };
+  mount(data);
+  const started = screen.getByRole('region', { name: STARTED });
+  const pages = started.querySelector('[data-start-pages]') as HTMLElement;
+  expect(
+    within(pages)
+      .getAllByRole('link')
+      .map((a) => a.getAttribute('href')),
+  ).toEqual(['https://www.nocobase.com/ja']);
+  expect(within(started).queryByRole('link', { name: 'Pricing' })).toBeNull();
+  const column = screen.getByRole('complementary', { name: '属性' });
+  expect(
+    within(column).getByText('关联页面', { selector: 'dt' }),
+  ).toBeInTheDocument();
+  expect(
+    within(column).getByRole('link', { name: '/pricing' }),
+  ).toHaveAttribute('href', 'https://www.nocobase.com/pricing');
+});
+
+test('a task handed over from a document names the document as what the Agent received', async () => {
+  const data = pageChange();
+  data.task.evidence = {
+    ...data.task.evidence,
+    handoff: {
+      playbook: '竞品内容调研',
+      content: '## 结论\n\n竞品的文档比我们多三个检查点。',
+    },
+  };
+  mount(data);
+  const started = screen.getByRole('region', { name: STARTED });
+  expect(started).toHaveTextContent(
+    '“竞品内容调研”交付的文档结论 竞品的文档比我们多三个检查点。',
+  );
+  // Short: no Expand.
+  expect(within(started).queryByRole('button', { name: '展开' })).toBeNull();
+});
+
+test('what the task was started with stays once it is closed, and is not shown before the start', async () => {
+  const user = userEvent.setup();
+  const data = pageChange();
+  data.task.brief = Array.from(
+    { length: 5 },
+    (_, i) => `第 ${i + 1} 段说明`,
+  ).join('\n');
+  data.work.cancelledAt = '2026-10-14T02:00:00Z';
+  mount(data);
+  const started = screen.getByRole('region', { name: STARTED });
+  await user.click(within(started).getByRole('button', { name: '展开' }));
+  expect(within(started).getByRole('button', { name: '收起' })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
+  cleanup();
+  mount(savedArticleTask(), '/actions/33');
+  await screen.findByRole('button', { name: '确定开始执行' });
+  expect(screen.queryByRole('region', { name: STARTED })).toBeNull();
 });
 
 test('Performance lists each page: the latest 28 days before going live, then day 7 or 28 before and after', async () => {

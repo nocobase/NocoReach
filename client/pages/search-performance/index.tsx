@@ -1,4 +1,9 @@
-import { googleLocalFreshness, googleCacheExpiry } from '../../../shared/google-cache.js';
+import {
+  ChartLegend,
+  TrendChart,
+  ChartArea as Area,
+} from '#components/reach/chart-legend';
+import { googleLocalFreshness, googleCacheExpiry, savedCopyNote, type SavedCopy } from '../../../shared/google-cache.js';
 import { $t, $tj, $legacyText } from "#i18n";
 import { usePageTab } from '#hooks/use-page-tab';
 // 搜索表现: ported from every-app/open-seo db8bde1 src/client/features/search-performance/ (SearchPerformancePage,
@@ -17,12 +22,12 @@ import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Copy, Download, Save, SearchCheck } from "lucide-react";
 import { toast } from "#lib/toast";
 import { cn } from "#lib/utils";
 import { PageContainer, PageHeader } from "#components/reach/page";
-import { EmptyState, LoadError, ListSkeleton } from "#components/reach/states";
+import { EmptyState, LoadError, ListSkeleton, SavedReportNote } from "#components/reach/states";
 import { Button } from "#components/ui/button";
 import { Card } from "#components/ui/card";
 import { Input } from "#components/ui/input";
@@ -60,7 +65,7 @@ type Filter = { operator: "contains" | "equals"; expression: string };
 type DimensionRow = { key: string; clicks: number; impressions: number; ctr: number; position: number };
 type StrikingRow = { query: string; page: string; clicks: number; impressions: number; position: number };
 type TrendPoint = { date: string; clicks: number | null; impressions: number | null; ctr?: number | null; position?: number | null; previousDate: string; previousClicks: number | null; previousImpressions: number | null; previousCtr?: number | null; previousPosition?: number | null };
-export type SearchReport = {
+export type SearchReport = Partial<SavedCopy> & {
   connected: boolean;
   coverage?: { earliest?: string; current: CoveragePeriod; previous: CoveragePeriod | null };
   history?: { jobs: { id: string; status: string; startDate: string; endDate: string }[]; scheduleEnabled: boolean };
@@ -132,7 +137,7 @@ export default function SearchPerformancePage() {
   const custom = !validRange(range);
   const { data: report, error, reload } = useFreshData<SearchReport>(
     project && !custom && view === 'performance' ? `data-view:search:v4:${project.id}:${JSON.stringify([project.searchConsoleProperty, range, filters, country])}` : null,
-    () => api.action<SearchReport>("nrDataViews", "search", { method: "POST", body: { projectId: project!.id, ...range, ...filters, ...(country ? { country } : {}) }, unwrap: "data" }),
+    () => api.action<SearchReport>("nrDataViews", "search", { method: "POST", body: { projectId: project!.id, ...range, ...filters, ...(country ? { country } : {}), acceptSaved: true }, unwrap: "data" }),
     { ...googleLocalFreshness, expiresAt: googleCacheExpiry },
   );
   // The query, page and breakdown details load with the page (UI review 2026-10-21) instead of behind a button; they are
@@ -141,19 +146,23 @@ export default function SearchPerformancePage() {
   const showDetails = true;
   const { data: details, error: detailsError } = useFreshData<SearchReport>(
     project && !custom && view === 'performance' && showDetails ? `data-view:search-details:${selectedDetailsKey}` : null,
-    () => api.action<SearchReport>('nrDataViews', 'search', { method: 'POST', body: { projectId: project!.id, ...range, ...filters, country, details: true }, unwrap: 'data' }),
+    () => api.action<SearchReport>('nrDataViews', 'search', { method: 'POST', body: { projectId: project!.id, ...range, ...filters, country, details: true, acceptSaved: true }, unwrap: 'data' }),
     { ...googleLocalFreshness, expiresAt: googleCacheExpiry },
   );
   const tableReport = showDetails ? details : undefined;
   const w = report?.window;
+  const tableWindow = details?.window ?? w;
   // 国家/地区, 设备 and 搜索结果呈现 come on their own (live Search Console queries), so the report never waits for them;
   // the countries also fill the country menu.
   const scope: Scope | null = project && !custom && view === 'performance' && showDetails && w && report?.cutoff ? { projectId: project.id, property: project.searchConsoleProperty, compare: Boolean(report.complete && report.previousComplete), window: { all: w.all, start: w.start, end: w.end, previousStart: w.previousStart, previousEnd: w.previousEnd }, country, filters } : null;
+  // The tables' own report says which period they hold, as it can differ from the summary's: they end at the last synced
+  // day until the day's sync lands, and a saved copy holds the window it was read for. A table row opens on that period.
+  const rowScope: Scope | null = scope && tableWindow ? { ...scope, compare: Boolean(details?.complete && details.previousComplete), window: { all: tableWindow.all, start: tableWindow.start, end: tableWindow.end, previousStart: tableWindow.previousStart, previousEnd: tableWindow.previousEnd } } : scope;
   const { data: breakdown, error: breakdownError } = useBreakdown(scope);
   const countries = (breakdown?.countries ?? []).map((c) => ({ key: c.key, clicks: c.clicks }));
   const loadError = projectError || (error ? (error instanceof Error ? error.message : $t('searchPerformance.notLoadSearchDataTry')) : "");
   const openRow = useCallback((dimension: "query" | "page", key: string, figures?: { clicks: number; impressions: number; ctr: number; position: number | null }) => setOpen({ dimension, key, figures }), []);
-  const moverRows = report?.complete && report.previousComplete && tableReport?.movers ? (by === "page" ? tableReport.movers.page : tableReport.movers.query)?.[tab === "falling" ? "falling" : tab === "fresh" ? "fresh" : "rising"] ?? [] : [];
+  const moverRows = tableReport?.movers ? (by === "page" ? tableReport.movers.page : tableReport.movers.query)?.[tab === "falling" ? "falling" : tab === "fresh" ? "fresh" : "rising"] ?? [] : [];
   const sliceRows = slice === "date"
     ? (report?.trend ?? []).map((p) => ({ key: p.date, name: p.date, clicks: p.clicks, impressions: p.impressions, ctr: p.ctr ?? null, position: p.position ?? null, previousClicks: p.previousClicks }))
     : slices(slice, slice === "country" ? breakdown?.countries : slice === "device" ? breakdown?.devices : breakdown?.appearances);
@@ -161,7 +170,9 @@ export default function SearchPerformancePage() {
 
   const exportTab = () => {
     if (!report?.connected || !w) return;
-    const stamp = $t('searchPerformance.dateRange',{0:formatDate(w.start),1:formatDate(w.end)});
+    // Country, device and appearance rows follow the summary's window; every other tab is one of the tables.
+    const held = tab === "slices" ? w : tableWindow ?? w;
+    const stamp = $t('searchPerformance.dateRange',{0:formatDate(held.start),1:formatDate(held.end)});
     const metricsHead = [$t('common.clicks'), $t('common.impressions'), $t('common.ctr'), $t('common.position')];
     const ok =
       tab === "striking"
@@ -178,19 +189,19 @@ export default function SearchPerformancePage() {
     if (!ok) toast.error(() => ($t('searchPerformance.noDataExport')));
   };
   const handOffMovers = async (rows: MoverRow[]) => {
-    if (!project || !w || !rows.length) return;
+    if (!project || !tableWindow || !rows.length) return;
     const list = rows.map((r) => ({ key: r.key, clicks: r.clicks, impressions: r.impressions, ctr: r.impressions ? r.clicks / r.impressions : 0, position: r.position ?? 0 }));
-    if (by === "page") { const p = list.map((r) => ({ page: r.key, clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })); setHanding({ draft: pageDraft(p, w), page: p.length === 1 ? p[0].page : undefined }); return; }
+    if (by === "page") { const p = list.map((r) => ({ page: r.key, clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })); setHanding({ draft: pageDraft(p, tableWindow), page: p.length === 1 ? p[0].page : undefined }); return; }
     const ranks = await rankRequest(project.id, list.map((r) => r.key)).catch(() => undefined);
     const q = list.map((r) => ({ query: r.key, page: ranks?.ranks?.[r.key.toLowerCase().trim()]?.page ?? null, clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
-    setHanding({ draft: queryDraft(q, w), page: mainPage(q) });
+    setHanding({ draft: queryDraft(q, tableWindow), page: mainPage(q) });
   };
   const [handing, setHanding] = useState<{ draft: TaskDraft; page?: string }>();
 
   // No nr-page class: its legacy table and input rules are unlayered and would override the ported table.
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={view === "performance" && report?.totals ? <NotesTip notes={[...notesOf(report), ...coverageNotes(report), ...(w ? [$t('searchHistory.detailsScope', { 0: formatDate(w.start), 1: formatDate(w.end) })] : [])]} /> : undefined} title={$t('common.searchPerformance')} description={$t('searchPerformance.pageSummary')} />
+      <PageHeader info={view === "performance" && report?.totals ? <NotesTip notes={[...notesOf(report), ...coverageNotes(report), ...(tableWindow ? [$t('searchHistory.detailsScope', { 0: formatDate(tableWindow.start), 1: formatDate(tableWindow.end) })] : [])]} /> : undefined} title={$t('common.searchPerformance')} description={$t('searchPerformance.pageSummary')} />
       <Tabs value={view} onValueChange={(v) => chooseView(String(v))}>
         <TabsList variant="line" className="h-auto! justify-start">
           <TabsTrigger value="performance">{$t('searchPerformance.viewPerformance')}</TabsTrigger>
@@ -202,6 +213,7 @@ export default function SearchPerformancePage() {
         : view === "sitemaps" ? (project ? <SitemapsView property={project.searchConsoleProperty} projectId={project.id} tab={params.get("list")} onTab={(t) => update({ list: t })} /> : null)
         : <>
       <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:formatDate(w.start),1:formatDate(w.end)}) : report?.complete && report.previousComplete ? $t('common.comparedPreviousDaysDataThrough',{0:formatDate(w.start),1:formatDate(w.end),2:w.days,3:formatDate(report?.cutoff)}) : $t('searchHistory.rangeSummary',{0:formatDate(w.start),1:formatDate(w.end),2:formatDate(report?.cutoff)})) : undefined} />
+      <SavedReportNote {...savedCopyNote(report, details, breakdown)} />
       {loadError ? <LoadError title={$t('searchPerformance.notLoadSearchData')} message={loadError} onRetry={() => window.location.reload()} /> : null}
       {!report && !loadError ? <ListSkeleton rows={6} /> : null}
       {report && !report.connected ? (
@@ -217,7 +229,7 @@ export default function SearchPerformancePage() {
         <>
           {project ? <SearchHistory key={String(project.id)} projectId={project.id} property={project.searchConsoleProperty} report={report} reload={reload} /> : null}
           <TotalsCards report={report} metric={metric} onMetric={(m) => update({ metric: m === "clicks" ? undefined : m })} />
-          <TrendCard report={report} metric={metric} />
+          <TrendCard key={metric} report={report} metric={metric} />
           {showDetails && !tableReport && !detailsError ? <ListSkeleton rows={4} /> : null}
           {showDetails && detailsError ? <LoadError title={$t('searchHistory.detailsFailed')} message={$t('searchHistory.detailsFailed')} onRetry={() => window.location.reload()} /> : null}
           {showDetails && tableReport ? <>
@@ -253,12 +265,12 @@ export default function SearchPerformancePage() {
               />
             ) : null}
             {tab === "striking" ? (
-              <StrikingTable key={JSON.stringify(filters)} projectId={project?.id} period={report.window!} rows={tableReport?.striking ?? []} isFiltered={activeFilters > 0} onClearFilters={() => update({ q: undefined, qm: undefined, pg: undefined, pm: undefined })} onOpen={(r) => openRow("query", r.query, { clicks: r.clicks, impressions: r.impressions, ctr: r.impressions ? r.clicks / r.impressions : 0, position: r.position })} />
+              <StrikingTable key={JSON.stringify(filters)} projectId={project?.id} period={tableWindow!} rows={tableReport?.striking ?? []} isFiltered={activeFilters > 0} onClearFilters={() => update({ q: undefined, qm: undefined, pg: undefined, pm: undefined })} onOpen={(r) => openRow("query", r.query, { clicks: r.clicks, impressions: r.impressions, ctr: r.impressions ? r.clicks / r.impressions : 0, position: r.position })} />
             ) : tab === "queries" || tab === "pages" ? (
               <DimensionTable
                 key={tab + JSON.stringify(filters)}
                 projectId={project?.id}
-                period={report.window!}
+                period={tableWindow!}
                 data={(tab === "pages" ? tableReport?.pages : tableReport?.queries) ?? { rows: [], total: 0 }}
                 dimension={tab === "pages" ? "pages" : "queries"}
                 isFiltered={activeFilters > 0}
@@ -276,7 +288,7 @@ export default function SearchPerformancePage() {
             )}
           </Card>
           </> : null}
-          {open && scope ? <RowDrawer scope={scope} dimension={open.dimension} rowKey={open.key} figures={open.figures} metric={metric} onClose={() => setOpen(null)} /> : null}
+          {open && rowScope ? <RowDrawer scope={rowScope} dimension={open.dimension} rowKey={open.key} figures={open.figures} metric={metric} onClose={() => setOpen(null)} /> : null}
           {handing && project ? <HandOff projectId={project.id} draft={handing.draft} page={handing.page} onClose={() => setHanding(undefined)} /> : null}
         </>
       ) : null}
@@ -352,15 +364,16 @@ function TrendCard({ report, metric }: { report: SearchReport; metric: Metric })
       <div className="flex items-center gap-1"><h2 className="text-sm font-semibold">{$tj('searchPerformance.daily',{0:label})}</h2><InfoTip label={$t('common.howReadChart')}>{$tj('searchPerformance.solidLineSelectedPeriodDashed',{0:fresh.length ? $t('searchPerformance.preliminaryDataDottedLineGoogle',{0:formatDate(fresh[0].date),1:fresh.length > 1 ? $t('searchPerformance.rangeEnd',{0:formatDate(fresh.at(-1)!.date)}) : ""}) : ""})}{" "}{$t('searchPerformance.clickFigureToSwitch')}</InfoTip></div>
       <div className="nr-chart-box">
         <ResponsiveContainer width="100%" height={240}>
-          <AreaChart data={data} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+          <TrendChart as={AreaChart} data={data} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} minTickGap={32} fontSize={11} />
             <YAxis allowDecimals={metric === "ctr" || metric === "position"} reversed={metric === "position"} fontSize={11} width={48} tickFormatter={(v: number) => (metric === "ctr" ? `${(v * 100).toFixed(0)}%` : String(v))} />
             <Tooltip formatter={(v) => showMetric(metric, Number(v))} labelFormatter={(d, p) => (p?.[0]?.payload?.previousDate ? $t('searchPerformance.previous',{0:d,1:p[0].payload.previousDate}) : $t('searchPerformance.preliminaryMetric',{0:d}))} />
+            <ChartLegend order={['value', 'previous', 'fresh']} />
             <Area isAnimationActive={false} type="linear" dataKey="value" name={$t('searchPerformance.period',{0:label})} stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.1} />
             <Area isAnimationActive={false} type="linear" dataKey="previous" name={$t('searchPerformance.previousPeriod',{0:label})} stroke="var(--muted-foreground)" strokeDasharray="5 4" fill="none" />
             {fresh.length ? <Area isAnimationActive={false} type="linear" dataKey="fresh" name={$t('searchPerformance.preliminaryPrefix',{0:label})} stroke="var(--chart-3)" strokeDasharray="2 3" fill="var(--chart-3)" fillOpacity={0.04} connectNulls={false} /> : null}
-          </AreaChart>
+          </TrendChart>
         </ResponsiveContainer>
       </div>
     </Card>

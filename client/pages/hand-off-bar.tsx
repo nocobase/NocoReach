@@ -10,11 +10,12 @@ import { TableBulkActionBar } from "#components/seo/table-bulk-action-bar";
 import { useHandOffSources, type HandOffDraft, type HandOffSource } from "#components/reach/hand-off-slot";
 import { DraftHandOffDialog } from "./keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
+import { distinctPages } from '../../shared/task-start.js';
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 export function combineDrafts(drafts: HandOffDraft[]): HandOffDraft {
   if (drafts.length === 1) return drafts[0];
-  const subjects = drafts.map((d) => d.subject).filter(Boolean);
-  return { title: clip(drafts.map((d) => d.title).join('；'), 200), ...(subjects.length === drafts.length ? { subject: clip(subjects.join('；'), 160) } : {}), objective: clip(drafts.map((d) => d.objective).join('；'), 1000), brief: clip(drafts.map((d) => d.brief).join("\n\n"), 20000) };
+  const subjects = drafts.map((d) => d.subject).filter(Boolean), pages = distinctPages(drafts.flatMap((d) => d.pages || []));
+  return { title: clip(drafts.map((d) => d.title).join('；'), 200), ...(subjects.length === drafts.length ? { subject: clip(subjects.join('；'), 160) } : {}), ...(pages.length ? { pages } : {}), objective: clip(drafts.map((d) => d.objective).join('；'), 1000), brief: clip(drafts.map((d) => d.brief).join("\n\n"), 20000) };
 }
 // Once per data page, at the end of its frame; nothing shows until a row is ticked.
 export function HandOffBar({ projectId }: { projectId?: number }): ReactElement | null {

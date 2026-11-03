@@ -199,7 +199,7 @@ export class ArticleFlow {
     // task started before, or by a client that sends none) the Agent writes every language at once, as it always did.
     const locales = Array.isArray(choice?.locales) ? [...new Set<string>(choice.locales.filter((l: unknown) => typeof l === 'string' && target.locales.includes(l)))] : [];
     w.delivery = { kind: 'article', targetId: target.id, articleId: linked ? w.article.articleId || null : null, sourceKey: linked ? w.article.sourceKey || null : null, ...(also.length ? { also } : {}), ...(locales.length ? { locales } : {}) };
-    if (translate) await this.startTranslation(w, target, locales, translate, tx);
+    if (translate) await this.startTranslation(w, target, locales, translate, tx, (await this.s.p.project(project).catch(() => null))?.language);
   }
   /**
    * A translation (2026-10-25): the linked article as it is published stands in for an approved primary version, so the
@@ -207,12 +207,12 @@ export class ArticleFlow {
    * `locales` is the source first, then the languages to write; without it, the source is the target's first language
    * the article has, translated into the ones it lacks (all others when it lacks none).
    */
-  private async startTranslation(w: Work, target: any, locales: string[], { by, at }: { by: string; at: string }, tx: any) {
+  private async startTranslation(w: Work, target: any, locales: string[], { by, at }: { by: string; at: string }, tx: any, language?: string | null) {
     const d = w.delivery!;
     const source: ArticleSnapshot | null = d.articleId && d.sourceKey ? await this.s.snapshot(d.sourceKey, tx) : null;
     if (!source) return fail(systemMessageText('articles.translateNeedsArticle'), 409);
     const present = articleLocales(source),
-      fallback = translationDefault(target.locales, present);
+      fallback = translationDefault(target.locales, present, undefined, language);
     const from = locales[0] || fallback.from,
       to = locales.length ? locales.slice(1) : fallback.to;
     if (!present.includes(from)) return fail(systemMessageText('articles.translateNoSource'), 409);

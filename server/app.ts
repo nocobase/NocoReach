@@ -5,6 +5,7 @@ import { CachingProvider } from '@nocobase/app-server/caching';
 import { DriveProvider } from '@nocobase/app-server/drive';
 import { IdGeneratorProvider } from '@nocobase/app-server/id-generator';
 import { MailerProvider } from '@nocobase/app-server/mailer';
+import { demoEffectsGuard } from '@nocobase/app-plugin-demo-mode/server';
 import {
   LoggingProvider,
   requestLoggingMiddleware,
@@ -72,6 +73,18 @@ export function createApp(runtime: AppRuntimeContext): Application {
   app.addHttpMiddleware(requestLoggingMiddleware);
   app.addHttpMiddleware(sessionHttpMiddleware);
   app.addHttpMiddleware(i18nHttpMiddleware);
+  // These write nothing, so the database guard never sees them, and a public demo must not call what a visitor names.
+  // Chat, the Demo Agent and read requests do not use them; business AI answers in process.
+  app.addHttpMiddleware(
+    demoEffectsGuard({
+      paths: [
+        '/api/agents/discoverModels',
+        '/api/agents/checkConnection',
+        '/api/agents/checkModel',
+        '/api/mail/*',
+      ],
+    }),
+  );
   app.addRoutes(healthCheckApiRoutes);
   app.addRoutes(accessGuard);
   // The generic Agents retry cannot recreate a NocoReach task's business snapshot.

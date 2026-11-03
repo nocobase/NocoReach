@@ -9,6 +9,7 @@ import {Button} from '#components/ui/button';
 import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuSeparator,DropdownMenuTrigger} from '#components/ui/dropdown-menu';
 import {getWorkColumns,workState,closeCommand,canReopen,closedWhen,isClosed,type BoardState,type Work} from './task-execution-types';
 import {stepOf,executorOf,getExecutorNames,ago} from './task-list-model';
+import {lastActivityAt} from '../../shared/task-activity.js';
 import {taskAgentOf,type AgentStatus} from './task-agents';
 import {FoundBy} from './found-by';
 import {TaskStatusTag} from './task-status-tag';
@@ -19,6 +20,8 @@ import {localizeWorkSnapshots} from './playbook-snapshot';
 import {stageName} from './playbook-model';
 import { EMPTY, formatDateTime } from '#lib/format';
 import {useMe} from './me';
+import {SortableHeader} from '#components/seo/sortable-header';
+import type {TaskOrder,TaskSortKey} from './task-sort';
 // A task someone else owns: a 成员 can open and read it, but not drag, move or close it (its owner and 管理员 can; 2026-10-09).
 function useEditable(){const {can}=useMe();return (t:WorkCard)=>can(t.evidence?.work?.humanOwnerId||t.evidence?.createdBy?.id);}
 export type WorkCard={id:number;title:string;brief:string;status:string;updatedAt:string;createdAt?:string;taskKey?:string;evidence?:{work?:Work;keyword?:string;no?:number;insight?:{id?:string;no?:number};createdBy?:{id?:string;name?:string}}};
@@ -39,38 +42,40 @@ function Executor({w,agents}:{w?:Work;agents?:AgentStatus}){
   <span className="truncate">{a.name}</span><span className="sr-only">{a.online?$t('taskDetail.agentOnline'):$t('taskDetail.agentOffline')}</span></span>;}
 const StatusTag=({t}:{t:WorkCard})=><TaskStatusTag work={t.evidence?.work} status={t.status}/>;
 function StepCell({w,muted='—'}:{w?:Work;muted?:string}){const s=stepOf(w);if(!s)return <span className="text-muted-foreground">{muted}</span>;return s.tone?<Tag tone={s.tone}>{s.text}</Tag>:<span className="truncate text-muted-foreground">{s.text}</span>;}
-function Menu({t,busy,moves,onMove,onAction}:{t:WorkCard;busy?:boolean;moves?:{col:BoardState;siblings:WorkCard[]};onMove?:(t:WorkCard,state:BoardState,beforeId?:number)=>void;onAction?:Action}){
- const w=t.evidence?.work,index=moves?moves.siblings.findIndex(x=>x.id===t.id):-1,close=onAction&&closeCommand(w),reopen=onAction&&canReopen(w);
- if(!moves&&!close&&!reopen)return null;
+// The card menu moves a card to another column only: each column keeps its own order (newest activity first).
+function Menu({t,busy,col,onMove,onAction}:{t:WorkCard;busy?:boolean;col?:BoardState;onMove?:(t:WorkCard,state:BoardState)=>void;onAction?:Action}){
+ const w=t.evidence?.work,move=col?onMove:undefined,close=onAction&&closeCommand(w),reopen=onAction&&canReopen(w);
+ if(!move&&!close&&!reopen)return null;
  return <DropdownMenu><DropdownMenuTrigger render={<Button size="icon-sm" variant="ghost" aria-label={$t('common.moreActions',{0:t.title})} disabled={busy} onClick={e=>e.stopPropagation()}/>}><MoreHorizontal/></DropdownMenuTrigger><DropdownMenuContent align="end">
   {close&&<DropdownMenuItem onClick={()=>onAction!(t,'close')}>{$t('common.closeTask')}</DropdownMenuItem>}
   {reopen&&<DropdownMenuItem onClick={()=>onAction!(t,'reopen')}>{$t('common.reopen')}</DropdownMenuItem>}
-  {moves&&onMove&&<>{close&&<DropdownMenuSeparator/>}{Object.entries(getWorkColumns()).filter(([k])=>k!==moves.col).map(([k,v])=><DropdownMenuItem key={k} onClick={()=>onMove(t,k as BoardState)}>{$tj('workBoard.move',{0:v})}</DropdownMenuItem>)}
-   <DropdownMenuSeparator/><DropdownMenuItem disabled={index===0} onClick={()=>onMove(t,moves.col,moves.siblings[index-1]?.id)}>{$t('common.moveUp')}</DropdownMenuItem><DropdownMenuItem disabled={index===moves.siblings.length-1} onClick={()=>onMove(t,moves.col,moves.siblings[index+2]?.id)}>{$t('common.moveDown')}</DropdownMenuItem></>}
+  {move&&<>{close&&<DropdownMenuSeparator/>}{Object.entries(getWorkColumns()).filter(([k])=>k!==col).map(([k,v])=><DropdownMenuItem key={k} onClick={()=>move(t,k as BoardState)}>{$tj('workBoard.move',{0:v})}</DropdownMenuItem>)}</>}
  </DropdownMenuContent></DropdownMenu>;
 }
-// Board: four columns (待处理 · 进行中 · 待确认 · 已完成) of current tasks; drag or use the card menu to move. Moving never
-// starts AI or publishes, and closing is only in the menu (dragging must not stop a running executor).
-export function WorkBoard({tasks:visible,busy,list,agents,onMove,onOpen,onAction,olderDone=0,onOlderDone}:{tasks:WorkCard[];busy:boolean;list:boolean;agents?:AgentStatus;onMove:(task:WorkCard,state:BoardState,beforeId?:number)=>void;onOpen:(id:number)=>void;onAction?:Action;/** Finished tasks the Done column leaves to the list (board-done.ts), and the way there. */olderDone?:number;onOlderDone?:()=>void}):ReactElement{
+// Board: four columns (To do · In progress · Needs you · Done) of current tasks, each newest activity first in the order the
+// tasks come (2026-11-02 user decision: every column by time, so cards are not reordered by hand). Drag a card to another
+// column or use its menu to move it. Moving never starts AI or publishes, and closing is only in the menu (dragging must
+// not stop a running executor).
+export function WorkBoard({tasks:visible,busy,list,agents,onMove,onOpen,onAction,olderDone=0,onOlderDone}:{tasks:WorkCard[];busy:boolean;list:boolean;agents?:AgentStatus;onMove:(task:WorkCard,state:BoardState)=>void;onOpen:(id:number)=>void;onAction?:Action;/** Finished tasks the Done column leaves to the list (board-done.ts), and the way there. */olderDone?:number;onOlderDone?:()=>void}):ReactElement{
  const [drag,setDrag]=useState<number|null>(null),[over,setOver]=useState(''),editable=useEditable();
  const state=(t:WorkCard)=>workState(t.evidence?.work,t.status);
- function move(t:WorkCard,target:BoardState,beforeId?:number){setDrag(null);setOver('');onMove(t,target,beforeId);}
- function drop(target:BoardState,before?:number){const t=visible.find(t=>t.id===drag);if(t)move(t,target,before);}
- function card(t:WorkCard){const w=t.evidence?.work,col=state(t),siblings=visible.filter(x=>state(x)===col),s=stepOf(w),mine=editable(t);
+ const dragged=visible.find(t=>t.id===drag);
+ function move(t:WorkCard,target:BoardState){setDrag(null);setOver('');if(state(t)!==target)onMove(t,target);}
+ function drop(target:BoardState){if(dragged)move(dragged,target);}
+ function card(t:WorkCard){const w=t.evidence?.work,col=state(t),s=stepOf(w),mine=editable(t);
   return <article key={t.id} data-task-id={t.id} draggable={!busy&&mine} data-locked={mine?undefined:''}
-   className={cn('flex flex-col gap-2',mine&&'cursor-grab','rounded-lg border bg-card p-3 text-card-foreground transition-colors hover:border-ring',over===String(t.id)&&'border-t-2 border-t-primary')}
-   onDragStart={e=>{if(!mine){e.preventDefault();return;}setDrag(t.id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',String(t.id));}} onDragEnd={()=>{setDrag(null);setOver('');}}
-   onDragOver={e=>{if(drag!==null&&!busy){e.preventDefault();e.stopPropagation();setOver(String(t.id));}}} onDrop={e=>{e.preventDefault();e.stopPropagation();drop(col,t.id);}}>
+   className={cn('flex flex-col gap-2',mine&&'cursor-grab','rounded-lg border bg-card p-3 text-card-foreground transition-colors hover:border-ring')}
+   onDragStart={e=>{if(!mine){e.preventDefault();return;}setDrag(t.id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',String(t.id));}} onDragEnd={()=>{setDrag(null);setOver('');}}>
    <div className="flex min-w-0 items-center gap-2"><No t={t}/><FoundBy source={taskSource(t)} className="ml-auto"/></div>
    <h3 className="-mt-1.5 m-0 text-sm font-medium leading-snug"><button type="button" className="line-clamp-3 text-left hover:underline" onClick={()=>onOpen(t.id)}>{t.title}</button></h3>
    {s&&(s.tone?<Tag tone={s.tone}>{s.text}</Tag>:<span className="text-xs text-muted-foreground">{s.text}</span>)}
-   <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"><Avatar name={ownerOf(t)}/><span className="min-w-0 flex-1"><Executor w={w} agents={agents}/></span><span className="shrink-0">{ago(t.updatedAt)}</span>
-    {mine?<Menu t={t} busy={busy} moves={{col,siblings}} onMove={move} onAction={onAction}/>:null}</div>
+   <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"><Avatar name={ownerOf(t)}/><span className="min-w-0 flex-1"><Executor w={w} agents={agents}/></span><span className="shrink-0">{ago(lastActivityAt(t))}</span>
+    {mine?<Menu t={t} busy={busy} col={col} onMove={move} onAction={onAction}/>:null}</div>
   </article>;}
  if(list)return <div className="flex flex-col gap-2">{visible.map(card)}</div>;
  return <div className="relative grid gap-3 overflow-x-auto pb-1 [grid-template-columns:repeat(4,minmax(15rem,1fr))]" aria-label={$t('workBoard.taskBoard')}>{(Object.keys(getWorkColumns()) as BoardState[]).map(key=>{const cards=visible.filter(t=>state(t)===key);
   return <section key={key} aria-label={getWorkColumns()[key]} className={cn('flex min-w-0 flex-col gap-2 rounded-lg bg-muted/50 p-2',over===key&&'ring-2 ring-primary')}
-   onDragOver={e=>{if(drag!==null&&!busy){e.preventDefault();setOver(key);}}} onDrop={e=>{e.preventDefault();drop(key);}}>
+   onDragOver={e=>{if(dragged&&!busy&&state(dragged)!==key){e.preventDefault();setOver(key);}}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null))setOver(o=>o===key?'':o);}} onDrop={e=>{e.preventDefault();drop(key);}}>
    <header className="flex items-center gap-2 px-1 py-1 text-sm font-medium"><span aria-hidden="true" className={cn('size-2 rounded-full',dot[key])}/><h2 className="m-0 text-sm font-medium">{getWorkColumns()[key]}</h2><span className="text-xs font-normal text-muted-foreground tabular-nums">{cards.length}</span></header>
    {cards.map(card)}{!cards.length&&<p className="px-1 py-4 text-center text-xs text-muted-foreground">{$t('workBoard.noTasks')}</p>}
    {key==='done'&&olderDone>0&&onOlderDone&&<button type='button' className='self-start px-1 py-1 text-left text-xs text-muted-foreground hover:text-foreground hover:underline' onClick={onOlderDone}>{$t('workBoard.olderDone',{0:olderDone})}</button>}
@@ -82,6 +87,8 @@ export function TaskTable({
   closed = false,
   snoozed = false,
   agents,
+  sort,
+  onSort,
   onOpen,
   onAction,
 }: {
@@ -90,10 +97,29 @@ export function TaskTable({
   /** Snoozed (2026-10-28): what each waits for and the day it comes back, in place of its status and current step. */
   snoozed?: boolean;
   agents?: AgentStatus;
+  /** The column the rows are sorted by (task-sort.ts); every header sorts when `onSort` is given. */
+  sort?: { sort: TaskSortKey; order: TaskOrder };
+  onSort?: (key: TaskSortKey) => void;
   onOpen: (id: number) => void;
   onAction?: Action;
 }): ReactElement {
   const editable = useEditable();
+  const columns: [TaskSortKey, string][] = [
+    ['no', $t('common.identifier')],
+    ['title', $t('common.title')],
+    ['status', snoozed ? $t('taskSnooze.reason') : $t('common.status')],
+    [
+      'step',
+      snoozed
+        ? $t('taskSnooze.until')
+        : closed
+          ? $t('workBoard.whenClosed')
+          : $t('workBoard.currentStep'),
+    ],
+    ['owner', $t('common.owner')],
+    ['executor', $t('common.executor')],
+    ['updated', $t('workBoard.updated')],
+  ];
   // Keep all columns on wide containers; task-table.css prioritizes the title and actions below that.
   return (
     <div
@@ -118,21 +144,32 @@ export function TaskTable({
         </colgroup>
         <thead data-slot='table-header' className='text-xs text-muted-foreground'>
           <tr>
-            {[
-              $t('common.identifier'),
-              $t('common.title'),
-              snoozed ? $t('taskSnooze.reason') : $t('common.status'),
-              snoozed
-                ? $t('taskSnooze.until')
-                : closed
-                  ? $t('workBoard.whenClosed')
-                  : $t('workBoard.currentStep'),
-              $t('common.owner'),
-              $t('common.executor'),
-              $t('workBoard.updated'),
-            ].map((h) => (
-              <th key={h} className='px-3 py-2 text-left font-medium'>
-                {h === $t('common.executor') ? (
+            {columns.map(([key, h]) => (
+              <th
+                key={key}
+                className='px-3 py-2 text-left font-medium'
+                aria-sort={
+                  sort
+                    ? sort.sort === key
+                      ? sort.order === 'asc'
+                        ? 'ascending'
+                        : 'descending'
+                      : 'none'
+                    : undefined
+                }
+              >
+                {/* As the Keywords tables (2026-10-29): what Executor means shows on hover rather than in an ⓘ. */}
+                {sort && onSort ? (
+                  <SortableHeader
+                    label={h}
+                    help={key === 'executor' ? undefined : false}
+                    column={{
+                      getIsSorted: () =>
+                        sort.sort === key ? sort.order : false,
+                      getToggleSortingHandler: () => () => onSort(key),
+                    }}
+                  />
+                ) : key === 'executor' ? (
                   <WithInfo help={help(h)}>{h}</WithInfo>
                 ) : (
                   h
@@ -216,8 +253,9 @@ export function TaskTable({
                 <td className='overflow-hidden px-3 py-2.5'>
                   <Executor w={w} agents={agents} />
                 </td>
-                <td className='px-3 py-2.5 text-xs whitespace-nowrap text-muted-foreground tabular-nums'>
-                  {ago(t.updatedAt)}
+                {/* The smaller time shares the row's line height, so it sits on the same baseline as the other cells. */}
+                <td className='px-3 py-2.5 whitespace-nowrap text-muted-foreground tabular-nums'>
+                  <span className='text-xs'>{ago(lastActivityAt(t))}</span>
                 </td>
                 <td
                   className='px-1 py-2.5'

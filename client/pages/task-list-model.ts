@@ -4,17 +4,16 @@ import {stageName} from './playbook-model';
 import { timestamp } from '../../shared/timestamps';
 import { $t } from '#i18n';
 import type {Tone} from '#components/reach/tag';
-import {closedLabel,type BoardState,type Work} from './task-execution-types';
-import {effectItems,effectPages,latestEffect,type EffectResult} from './effect-model';
+import {closedLabel,restartOf,type BoardState,type Work} from './task-execution-types';
+import {effectItems,effectPages,effectSummary,latestEffect,type EffectResult} from './effect-model';
+import {safeConclusion} from '../../shared/result-comparison.js';
 // The task list (SPEC §5 任务, as NocoProject's issue list): status, the current step, owner, executor and update time.
 export const stateTone:Record<BoardState,Tone>={todo:'grey',doing:'blue',review:'violet',done:'green'};
 export type Step={text:string;tone?:Tone};
 const effectTone:Record<EffectResult['conclusion'],Tone>={up:'green',down:'red',flat:'grey',insufficient:'grey'};
-// The effect in a few characters: "第 7 天：点击 ↑ 26%".
+// The effect in a few words, on the board card and in the list: "Day 7: Search clicks ↑ 26%".
 export function effectChip(r:EffectResult):Step{
- if(r.conclusion==='insufficient'||!r.primary||r.change===null)return {text:$t('common.dayNotEnoughData',{0:r.day}),tone:'grey'};
- if(r.conclusion==='flat')return {text:$t('taskList.dayNoClearChange',{0:r.day}),tone:'grey'};
- return {text:$t('taskList.day',{0:r.day,1:r.primary==='clicks'?$t('common.clicks'):$t('common.views'),2:r.change>=0?'↑':'↓',3:Math.round(Math.abs(r.change)*100)}),tone:effectTone[r.conclusion]};
+ return {text:$t('taskList.dayResult',{0:r.day,1:effectSummary(r)}),tone:effectTone[safeConclusion(r)]};
 }
 // "当前一步": what waits for you (amber), who is working (plain), or what the change did after going live.
 export function stepOf(w?:Work):Step|null{
@@ -29,6 +28,7 @@ export function stepOf(w?:Work):Step|null{
  }
  if(!w.flow||w.stage==='done'||!st)return null;
  if(st.kind==='agent'){const who='Agent',run=w.latestRun?.status;
+  if(restartOf(w))return {text:$t('taskList.waitingRestart'),tone:'amber'};
   if(run==='failed')return {text:$t('taskList.runFailed',{0:who}),tone:'red'};
   if(run==='queued')return {text:$t('taskList.waitingAgentPickUp')};
   return {text:$t('taskList.executorActivity',{0:who,1:stageName(st,w)})};}

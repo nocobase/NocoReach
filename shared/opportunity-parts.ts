@@ -1,4 +1,7 @@
+import { pageKey, type PageIdentity } from './page-identity.js';
 import type { Opportunity, Signal } from './strategy-model.js';
+
+export { pageKey };
 
 // One opportunity, several tasks (2026-10-22 user decision, after T-34 changed one of the six pages O-43 cited): handing
 // off an opportunity proposes one task per place to change. A place is each page a cited change asks to improve or fix
@@ -41,22 +44,15 @@ export function playbookForActions(actions: (string | null | undefined)[]) {
   return actions.length ? 'change-research' : 'optimize-page';
 }
 
-/** A page whatever the scheme, `www.`, trailing slash, query or fragment; empty for anything but http(s). */
-export function pageKey(url: unknown) {
-  if (typeof url !== 'string') return '';
-  try {
-    const u = new URL(url.trim());
-    if (u.protocol !== 'https:' && u.protocol !== 'http:') return '';
-    return `${u.host.toLowerCase().replace(/^www\./, '')}${u.pathname.replace(/\/+$/, '') || '/'}`;
-  } catch {
-    return '';
-  }
-}
-
-/** Every place an opportunity's cited changes point to, in the order the opportunity cites them. */
+/**
+ * Every place an opportunity's cited changes point to, in the order the opportunity cites them. With the project's
+ * page identity (shared/page-identity.ts), addresses of one page are one place, named by the page's own address when
+ * a change cites it.
+ */
 export function partsOf(
   card: Pick<Opportunity, 'signalIds'>,
   signals: Pick<Signal, 'key' | 'url' | 'action'>[],
+  identity?: PageIdentity | null,
 ): OpportunityPart[] {
   const byKey = new Map(signals.map((s) => [s.key, s])),
     parts = new Map<string, OpportunityPart & { actions: string[] }>();
@@ -68,7 +64,7 @@ export function partsOf(
         s.action === 'technical' ||
         s.action === 'distribute') &&
       !s.key.startsWith('audit-')
-        ? pageKey(s.url)
+        ? pageKey(s.url, identity)
         : '';
     const key =
       s.action === 'reply'
@@ -86,13 +82,17 @@ export function partsOf(
       playbookId: '',
       actions: [],
     };
-    // An announcement names the release it is about when one is cited, otherwise the first page.
+    // An announcement names the release it is about when one is cited, otherwise the first page; a page goes by its
+    // own address once a change cites that one.
     if (
       page &&
       (!part.url ||
         (key === 'announce' &&
           /\/releases\//.test(String(s.url)) &&
-          !/\/releases\//.test(part.url)))
+          !/\/releases\//.test(part.url)) ||
+        (key !== 'announce' &&
+          pageKey(part.url) !== page &&
+          pageKey(s.url) === page))
     )
       part.url = String(s.url).trim();
     if (!part.signalIds.includes(s.key)) part.signalIds.push(s.key);
@@ -111,8 +111,9 @@ export function partsOf(
 export function splitOf(
   card: Pick<Opportunity, 'signalIds'>,
   signals: Pick<Signal, 'key' | 'url' | 'action'>[],
+  identity?: PageIdentity | null,
 ) {
-  const parts = partsOf(card, signals);
+  const parts = partsOf(card, signals, identity);
   return parts.length > 1 ? parts : [];
 }
 

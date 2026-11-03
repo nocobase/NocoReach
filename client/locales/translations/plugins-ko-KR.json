@@ -613,7 +613,8 @@
       "MODEL_SERVICE_NOT_FOUND": "더 이상 존재하지 않습니다.",
       "SCOPE_NOT_FOUND": "더 이상 존재하지 않습니다.",
       "INVALID_INPUT": "일부 값이 유효하지 않습니다.",
-      "SECRETS_KEY_MISSING": "변수를 저장하거나 표시할 수 없습니다. 서버에 비밀 키가 없습니다. 관리자에게 애플리케이션 구성에서 secrets.keys를 설정하도록 요청하세요."
+      "SECRETS_KEY_MISSING": "변수를 저장하거나 표시할 수 없습니다. 서버에 비밀 키가 없습니다. 관리자에게 애플리케이션 구성에서 secrets.keys를 설정하도록 요청하세요.",
+      "boundRunnerIncompatible": "이 실행 환경에서는 선택한 에이전트를 실행할 수 없습니다. 실행 환경을 전환하거나 새 대화를 시작하세요."
     },
     "command": {
       "copy": "복사",
@@ -755,6 +756,16 @@
         "showDisabled": "비활성화 항목 표시",
         "hideDisabled": "비활성화 항목 숨기기"
       }
+    },
+    "goodAtTemplates": {
+      "fill": "템플릿으로 채우기",
+      "design": "설계 및 검토",
+      "large": "대규모 구현",
+      "review": "코드 리뷰 및 CI",
+      "routine": "일반 구현",
+      "small": "작은 변경",
+      "explanation": "설명 및 제안",
+      "undo": "실행 취소"
     },
     "agentTypes": {
       "label": "에이전트 유형",
@@ -1274,7 +1285,12 @@
         "runsEmpty": "아직 실행 기록이 없습니다.",
         "runsFailed": "실행을 로드할 수 없습니다.",
         "readOnly": "소유자만 변경할 수 있습니다.",
-        "owner": "소유자 {{name}}"
+        "owner": "소유자 {{name}}",
+        "runsTotal": "실행 {{count}}건",
+        "runsPagination": "실행 기록 페이지 이동",
+        "runsPrevious": "이전",
+        "runsNext": "다음",
+        "runsPage": "{{page}} / {{pageCount}} 페이지"
       },
       "status": {
         "updatePending": "Runner 업데이트 대기 중",

@@ -101,7 +101,15 @@ test('saves sealed project connections over authenticated routes, reloads them a
   expect(await invalid.json()).toMatchObject({
     error: { metadata: { key: 'collectorConnection.invalidUrl' } },
   });
-  for (const platform of ['xiaohongshu', 'bilibili', 'youtube']) {
+  // YouTube is read through DataForSEO since 2026-11-02 and takes no collector.
+  const youtube = await call('nrCollectors', 'save', {
+    platform: 'youtube',
+    revision: 0,
+    url,
+    token,
+  });
+  expect(youtube.status).toBe(400);
+  for (const platform of ['xiaohongshu', 'bilibili'] as const) {
     const saved = await call('nrCollectors', 'save', {
       platform,
       revision: 0,
@@ -114,10 +122,8 @@ test('saves sealed project connections over authenticated routes, reloads them a
       data: { source: 'project', revision: 1, url, hasToken: true },
     });
     expect(JSON.stringify(body)).not.toContain(token);
-    expect(
-      runtime.plugin.collectors.allowed('1', platform as 'youtube')[0].url,
-    ).toBe(url);
-    if (platform !== 'youtube') {
+    expect(runtime.plugin.collectors.allowed('1', platform)[0].url).toBe(url);
+    {
       const resource =
         platform === 'xiaohongshu' ? 'nrXiaohongshu' : 'nrBilibili';
       const response = await call(resource, 'status');
@@ -146,7 +152,7 @@ test('saves sealed project connections over authenticated routes, reloads them a
   const rows = stored.filter((row) =>
     String(row.name).startsWith('NOREACH_COLLECTOR_'),
   );
-  expect(rows).toHaveLength(3);
+  expect(rows).toHaveLength(2);
   for (const row of rows) {
     expect(row.secret).toBe(true);
     expect(String(row.value)).not.toContain(token);
@@ -284,7 +290,7 @@ test('saves sealed project connections over authenticated routes, reloads them a
       },
       body: JSON.stringify({
         projectId,
-        platform: 'youtube',
+        platform: 'bilibili',
         revision: 1,
         url,
         token,

@@ -12,6 +12,8 @@ export const RETAINED_SNAPSHOTS = [
   'nr-skill',
 ] as const;
 
+const CLEANUP_BATCH_SIZE = 200;
+
 const TERMINAL_RUNS = ['completed', 'failed', 'cancelled'];
 const EXECUTION_TABLES = [
   'agConversationMessages',
@@ -84,18 +86,23 @@ export async function clearAllBusinessData(
 
   // Keep metadata until its blob is removed, so partial filesystem failures remain retryable.
   for (const [index, table] of ['nrTaskMedia', 'agChatAttachments'].entries()) {
-    const media = await database
-      .query()
-      .selectFrom(table)
-      .select(['id', 'disk', 'key'])
-      .execute<{ id: string; disk: string; key: string }>();
-    for (const file of media) {
-      await drive.use(file.disk).delete(file.key);
-      await database
+    while (true) {
+      const media = await database
         .query()
-        .deleteFrom(table)
-        .where('id', '=', file.id)
-        .execute();
+        .selectFrom(table)
+        .select(['id', 'disk', 'key'])
+        .orderBy('id', 'asc')
+        .limit(CLEANUP_BATCH_SIZE)
+        .execute<{ id: string; disk: string; key: string }>();
+      if (!media.length) break;
+      for (const file of media) {
+        await drive.use(file.disk).delete(file.key);
+        await database
+          .query()
+          .deleteFrom(table)
+          .where('id', '=', file.id)
+          .execute();
+      }
     }
     await progress(0.05 + 0.25 * (index + 1));
   }
@@ -111,25 +118,6 @@ export async function clearAllBusinessData(
   // Reported before the transaction: the lifecycle records progress in its own writes, which would wait for it.
   await progress(0.6);
 
-  // Inbox messages about the cleared work: the demo's own and every message that links to a task, which is gone now.
-  const messages = await database
-    .query()
-    .selectFrom('notificationInAppItems')
-    .select(['id', 'notificationId', 'target'])
-    .execute<{ id: string; notificationId: string; target: unknown }>();
-  const stale = messages
-    .filter(({ notificationId, target }) => {
-      const value = (
-        typeof target === 'string' ? JSON.parse(target) : target
-      ) as { path?: unknown } | null;
-      const path = typeof value?.path === 'string' ? value.path : '';
-      return (
-        notificationId.startsWith(DEMO_NOTIFICATION) ||
-        path.startsWith('/actions/')
-      );
-    })
-    .map(({ id }) => id);
-
   // These are set-based deletions, including rows whose old project no longer exists.
   // Keep framework identities, global Agent/Runner/model/network configuration and migration history.
   await database.transaction(async (connection) => {
@@ -141,11 +129,40 @@ export async function clearAllBusinessData(
       .execute();
     for (const table of EXECUTION_TABLES)
       await connection.query.deleteFrom(table).allowAllRows().execute();
-    if (stale.length)
-      await connection.query
-        .deleteFrom('notificationInAppItems')
-        .where('id', 'in', stale)
-        .execute();
+    // Keyset paging bounds memory and SQL parameters, including retained messages between stale ones.
+    let after: string | undefined;
+    while (true) {
+      let query = connection.query
+        .selectFrom('notificationInAppItems')
+        .select(['id', 'notificationId', 'target'])
+        .orderBy('id', 'asc')
+        .limit(CLEANUP_BATCH_SIZE);
+      if (after !== undefined) query = query.where('id', '>', after);
+      const messages = await query.execute<{
+        id: string;
+        notificationId: string;
+        target: unknown;
+      }>();
+      if (!messages.length) break;
+      after = messages[messages.length - 1].id;
+      const stale = messages
+        .filter(({ notificationId, target }) => {
+          const value = (
+            typeof target === 'string' ? JSON.parse(target) : target
+          ) as { path?: unknown } | null;
+          const path = typeof value?.path === 'string' ? value.path : '';
+          return (
+            notificationId.startsWith(DEMO_NOTIFICATION) ||
+            path.startsWith('/actions/')
+          );
+        })
+        .map(({ id }) => id);
+      if (stale.length)
+        await connection.query
+          .deleteFrom('notificationInAppItems')
+          .where('id', 'in', stale)
+          .execute();
+    }
     let snapshots = connection.query.deleteFrom('nrSnapshots');
     for (const namespace of RETAINED_SNAPSHOTS)
       snapshots = snapshots

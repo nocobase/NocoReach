@@ -1,9 +1,11 @@
-import { $t, $legacyText } from "#i18n";
+import { $t, $legacyText, getCurrentLocale } from "#i18n";
 import {nocobaseClient as api} from "#lib/nocoreach-api";
-import {formatDate,formatDateTime} from '#lib/format';
+import {EMPTY,formatDate,formatDateTime} from '#lib/format';
+import {effectSummary,type EffectResult} from './effect-model';
 import {playbookForActions} from '../../shared/opportunity-parts.js';
 import {SYSTEM_PLAYBOOKS} from '../../shared/playbook-catalog.js';
 import {inPlaceLocales} from '../../shared/article-publishing.js';
+import {localeName} from './article-targets-api';
 // 做法 (SPEC §6.0), mirrored from plugins/connections/server/execution/playbook.ts and flow.ts.
 export type StageKind='agent'|'review'|'publish'|'release'|'observe';
 export type ChecklistItem={key:string;label:string;required:boolean};
@@ -57,8 +59,9 @@ export const stageName=(s:Stage,w?:StepWork)=>translatingStage(s,w)?$t(inPlaceLo
 export const stageLabel=(s:Stage,w?:StepWork)=>s.kind==='review'?$t('common.yourAction',{0:stageName(s)}):s.kind==='agent'?`Agent ${stageName(s,w)}`:stageName(s);
 // Same rule as the server's defaultPlaybookId: the actions of the signals an opportunity cites.
 export const recommendedPlaybookId=(actions:(string|null)[])=>playbookForActions(actions);
-// What a task timeline says for each recorded event.
-export function eventText(e:{at?:string;action:string;note?:string;comment?:string;stageKey?:string},stageName:(key?:string)=>string,executor:string,snooze?:{at:string;until:string}|null):{who:string;text:string}|null{
+// What a task timeline says for each recorded event. Which events Activity shows is ACTIVITY_EVENTS in
+// shared/task-activity.ts, which also gives a task its latest activity time; each of them has words here.
+export function eventText(e:{at?:string;action:string;note?:string;comment?:string;stageKey?:string},stageName:(key?:string)=>string,executor:string,snooze?:{at:string;until:string}|null,effects?:EffectResult[]):{who:string;text:string}|null{
  const s=stageName(e.stageKey);
  const snoozeTime=()=>snooze&&snooze.at===e.at?formatDateTime(snooze.until):formatDate(e.note);
  switch(e.action){
@@ -81,6 +84,8 @@ export function eventText(e:{at?:string;action:string;note?:string;comment?:stri
   // A primary language approved before its translation (2026-10-24) says so instead of handing over.
   case 'approveStage':return {who:$t('common.you'),text:e.note==='translate'?$t('articleTask.approvedPrimary'):e.note==='update'?$t('articleTask.approvedPrimaryUpdate'):$t('playbook.approved',{0:s,1:e.note?$t('playbook.handedContinue',{0:e.note}):''})};
   case 'requestStageChanges':return {who:$t('common.you'),text:$t('playbook.requestedChanges',{0:e.comment||''})};
+  // Another primary language before it was approved (2026-10-30): the step wrote a new version in it.
+  case 'changePrimary':return {who:$t('common.you'),text:$t('playbook.primaryChanged',{0:localeName(e.note||'',getCurrentLocale())})};
   case 'editStageOutput':return {who:$t('common.you'),text:$t('playbook.editedContentDirectly')};
   case 'recordManual':return {who:$t('common.you'),text:$t('playbook.finishedThemselvesRecorded',{0:s})};
   // The system starts a step again once after NocoReach restarted under it (retryAfterRestart on the server).
@@ -90,7 +95,8 @@ export function eventText(e:{at?:string;action:string;note?:string;comment?:stri
   case 'linkContent':return {who:$t('common.you'),text:$t('playbook.linkedPage')};
   case 'cancelTask':return {who:$t('common.you'),text:$t('playbook.closedTaskStoppedRun',{0:e.note?`：${$legacyText(e.note)}`:''})};
   case 'archiveTask':return e.note?{who:$t('common.system'),text:$t('playbook.closedTaskValue',{0:$legacyText(e.note)})}:{who:$t('common.you'),text:$t('playbook.closedTask')};
-  case 'unarchiveTask':return {who:$t('common.you'),text:$t('playbook.reopenedTask')};
+  // Reopened (2026-10-29): the step a task stopped halfway went back to.
+  case 'unarchiveTask':return {who:$t('common.you'),text:e.stageKey?$t('playbook.reopenedTaskAt',{0:s}):$t('playbook.reopenedTask')};
   case 'prClosed':return {who:$t('common.localAgent'),text:$t('playbook.closedBranchKept',{0:e.note||'PR'})};
   case 'merged':return {who:$t('common.localAgent'),text:$t('playbook.merged',{0:e.note||'PR'})};
   case 'revertRelease':return {who:$t('common.you'),text:$t('playbook.reverted',{0:e.note||$t('playbook.change')})};
@@ -98,6 +104,8 @@ export function eventText(e:{at?:string;action:string;note?:string;comment?:stri
   case 'simulatedRelease':return {who:$t('common.system'),text:$t('taskDetail.simulatedRelease')};
   case 'live':return {who:$t('common.system'),text:$t('playbook.sawChangeLiveStartedTracking',{0:e.note?`（${$legacyText(e.note)}）`:''})};
   case 'notSeen':return {who:$t('common.system'),text:$t('playbook.changeNotSeenLiveWithin')};
+  // A checkpoint's effect, read by the hourly observation (2026-11-02): in the words of the task's status chip.
+  case 'effect':{const r=effects?.find(x=>String(x.day)===e.note);return {who:$t('common.system'),text:$t('playbook.effectRecorded',{0:e.note||'',1:r?effectSummary(r):EMPTY})};}
   case 'retryMerge':return {who:$t('common.you'),text:$t('common.mergeAgain')};
   case 'markMerged':return {who:$t('common.you'),text:$t('playbook.mergedGithubThemselves')};
   case 'confirmLive':return {who:$t('common.you'),text:$t('common.confirmedLive')};

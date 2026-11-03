@@ -66,8 +66,9 @@ function view(connected = true): XiaohongshuView {
     lastRun: null,
     total: 0,
     running: null,
-    notes: [],
-    latestIds: [],
+    queued: null,
+    recent: [],
+    recordingSince: null,
   };
 }
 function SessionControls() {
@@ -136,6 +137,11 @@ function setup() {
   );
   return { client, authz };
 }
+/** The saved search term, as the panel lists it under Search terms. */
+const findTerm = (term: string) =>
+  waitFor(() =>
+    within(screen.getByRole('region', { name: '搜索词' })).getByText(term),
+  );
 async function openDisconnect() {
   await userEvent
     .setup()
@@ -204,7 +210,7 @@ for (const transition of [
           screen.getByRole('button', { name: 'Refresh official session' }),
         );
       }
-      await screen.findByText(`搜索词：${network.session.session.id}`);
+      await findTerm(network.session.session.id);
       const newDialog = await openDisconnect();
       const sessionReads = client.getSession.mock.calls.length;
       const requests = vi.mocked(xiaohongshuRequest).mock.calls.length;
@@ -250,7 +256,7 @@ it('still refreshes the official provider for a session conflict while the initi
   network.session = { user: { id: 'admin-b' }, session: { id: 'session-b' } };
   vi.mocked(xiaohongshuRequest).mockRejectedValueOnce(sessionConflict());
   await confirm(dialog);
-  await screen.findByText('搜索词：session-b');
+  await findTerm('session-b');
   expect(client.getSession).toHaveBeenCalledTimes(reads + 1);
   expect(screen.getByTestId('session')).toHaveTextContent('session-b');
   expect(changes).not.toHaveBeenCalled();

@@ -3,7 +3,8 @@
 // and pages). Read live from the GA4 Data API instead of the synced days: users counted over a period are deduplicated
 // by GA4, while adding up synced days counts a person once per day. Three parts, each cached:
 // - period: the totals, the daily line and the report tables (流量获取, 着陆页, 页面, 事件, 地区, 技术) for a window that
-//   ends yesterday in the property's time zone; persisted for six hours per query, independent of sync writes.
+//   ends yesterday in the property's time zone; read again after six hours while its last days are still being processed,
+//   and at the latest at midnight there, when yesterday moves on.
 // - today: today so far against yesterday and the same weekday last week up to the same hour, per hour, and today's
 //   sources (GA4's standard data, which lags; the realtime API has no source dimension). Ten minutes.
 // - realtime: the last 30 minutes from the Realtime API — users, per minute, pages, countries, cities, devices, events.
@@ -17,6 +18,7 @@ import { aiProviders, calendarDateInTimeZone, resolveGa4SyncRange } from './goog
 import { Ga4Requests } from './ga4-requests.js';
 import { Ga4ReportCache } from './ga4-report-cache.js';
 import { GA4_HISTORY_CACHE_MS, GA4_PARTIAL_CACHE_MS, GA4_TODAY_CACHE_MS, GA4_REALTIME_CACHE_MS } from '../../shared/ga4-cache.js';
+import { GOOGLE_SAVED_REPORT_MS } from '../../shared/google-cache.js';
 import type { LegacyDatabase } from './legacy/database.js';
 
 const DATA=GOOGLE_ENDPOINTS.analyticsData,MIN=60000,HOUR=3600000;
@@ -94,7 +96,7 @@ class WebsiteReport{
  zonePending=new Map<string,Promise<string>>();
  tokens=new Map<string|number,{at:number;token:string}>();
  history:Ga4ReportCache;
- constructor(plugin){this.p=plugin;this.history=new Ga4ReportCache((plugin as {db?:LegacyDatabase}).db);this.zones=new Map();this.todayCache=new Map();this.liveCache=new Map();}
+ constructor(plugin){this.p=plugin;this.history=new Ga4ReportCache((plugin as {db?:LegacyDatabase}).db,'ga4-reports',(plugin as {app?:{logger?:{warn(message:string,meta?:Record<string,unknown>):void}}}).app?.logger);this.zones=new Map();this.todayCache=new Map();this.liveCache=new Map();}
  // The project's Google connection (proxy profile or simulated upstream), the same one the sync uses.
  json(id,url,init){return googleJson(url,init,this.p.googleFetch?.(id));}
  // Access tokens last an hour; keep one for 45 minutes so the per-minute realtime view does not refresh it every time.
@@ -139,14 +141,15 @@ class WebsiteReport{
  async yesterday(id:string|number,property:string){const hit=this.zones.get(property);if(hit&&Date.now()-hit.at>=hit.ttl)void this.timeZone(id,property).catch(()=>{});
   const zone=this.endZone(property,hit?hit.zone:await this.timeZone(id,property)),now=new Date(businessNow(this.p,id,'google'));
   try{return resolveGa4SyncRange({},zone,now).targetEnd;}catch{return resolveGa4SyncRange({},'Etc/GMT+12',now).targetEnd;}}
- // The totals, the daily line and the tables all cover the window `w`, kept until midnight where it ends, when
- // yesterday moves on and the same range names other days. The browser keys the page by range, not by window, so the
- // expiry it gets is cut to this instance's own midnight (a stored copy may come from another zone), and to five
- // minutes while the zone is unconfirmed: it then asks again and moves to the property's own yesterday once the lookup
- // succeeds. The stored copy itself keeps its lifetime, so a failing Admin API never makes the page re-read GA4.
- period(id:string|number,property:string,w:unknown){const now=businessNow(this.p,id,'google'),guessed=this.zones.get(property)?.confirmed===false;
-  return this.history.load(String(id),['period',...this.scope(id,property),w],()=>this.readPeriod(id,property,w),value=>Math.min(value.complete===false||value.missing.length?GA4_PARTIAL_CACHE_MS:GA4_HISTORY_CACHE_MS,untilMidnight(this.endZone(property),now)),
-   (value,cacheExpiresAt)=>({...value,cacheExpiresAt:Math.min(cacheExpiresAt,Date.now()+(guessed?GA4_PARTIAL_CACHE_MS:untilMidnight(this.endZone(property),now)))}));}
+ // The totals, the daily line and the tables all cover the window `w`, which ends yesterday: GA4 is still processing its
+ // last two days, so the report is read again after six hours, and at the latest at midnight where it ends, when yesterday
+ // moves on and the same range names other days. The browser keys the page by range, not by window, so the expiry it gets
+ // is cut to this instance's own midnight (a stored copy may come from another zone), and to five minutes while the zone
+ // is unconfirmed: it then asks again and moves to the property's own yesterday once the lookup succeeds. A new day's
+ // window is answered from the view's previous one while it is read, so the report keeps the window it holds.
+ period(id:string|number,property:string,w:unknown,{cutoff,view}:{cutoff?:string;view?:unknown[]}={}){const now=businessNow(this.p,id,'google'),guessed=this.zones.get(property)?.confirmed===false;
+  return this.history.load(String(id),['period',...this.scope(id,property),w],async()=>({...await this.readPeriod(id,property,w),window:w,...(cutoff?{cutoff}:{})}),value=>Math.min(value.complete===false||value.missing.length?GA4_PARTIAL_CACHE_MS:GA4_HISTORY_CACHE_MS,untilMidnight(this.endZone(property),now)),
+   (value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt:Math.min(cacheExpiresAt,Date.now()+(guessed?GA4_PARTIAL_CACHE_MS:untilMidnight(this.endZone(property),now))),...saved}),view?{family:['period',...this.scope(id,property),...view]}:{});}
  async readPeriod(id,property,w){const both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],current=[range(w.start,w.end)];
   const names=Object.keys(TABLES),changeNames=Object.keys(CHANGES);
   const reports=await this.batch(id,property,[
@@ -173,7 +176,7 @@ class WebsiteReport{
  // One row of a table over the window: its days against the period before, and its totals for both (deduplicated users).
  async row(id,property,w,v){const table=String(v.table||''),t=TABLES[table];if(!t)fail(systemMessageText('dataViews.unknownGa4Report'),400);const dims=v.dims||{};
   const pairs=(ROW_KEYS[table]||t.dims).map(k=>{const x=dims[k];if(typeof x!=='string'||x.length>2000)fail(systemMessageText('dataViews.ga4RowMissing'),400);return [k,x];});
-  const dates=[w.start,w.end,w.previousStart,w.previousEnd,Boolean(w.all)];return this.history.load(String(id),['row',...this.scope(id,property),dates,table,pairs],()=>this.readRow(id,property,w,{table,pairs}),undefined,(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));}
+  const dates=[w.start,w.end,w.previousStart,w.previousEnd,Boolean(w.all)];return this.history.load(String(id),['row',...this.scope(id,property),dates,table,pairs],()=>this.readRow(id,property,w,{table,pairs}),()=>v.settled===true?GOOGLE_SAVED_REPORT_MS:GA4_HISTORY_CACHE_MS,(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}));}
  async readRow(id,property,w,{table,pairs}){const t=TABLES[table];
   const metrics=t.metrics||SESSION,both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],filter=exact(pairs);
   const [daysReport,totalsReport]=await this.batch(id,property,[request(['date'],metrics,both,null,Math.max(1000,(w.days||Math.ceil((Date.parse(w.end)-Date.parse(w.start))/86400000)+1)*2),filter),request([],metrics,both,null,null,filter)]);

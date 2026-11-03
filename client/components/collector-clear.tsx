@@ -16,6 +16,7 @@ type Props = {
   disabled: boolean;
   onCleared: () => void | Promise<void>;
   errorMessage: (error: Error) => string;
+  size?: 'sm';
 };
 
 export function CollectorClear(props: Props) {
@@ -48,6 +49,7 @@ function ClearButton({
   disabled,
   onCleared,
   errorMessage,
+  size,
   sessionId,
 }: Props & { sessionId: string }) {
   useNocoReachLocale();
@@ -103,6 +105,7 @@ function ClearButton({
     <Button
       type='button'
       variant='ghost'
+      size={size}
       disabled={disabled || busy}
       title={disabled ? $t('collectorClear.waitForCollection') : undefined}
       onClick={() => void clear()}

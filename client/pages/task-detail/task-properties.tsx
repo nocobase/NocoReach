@@ -18,13 +18,14 @@ import {
 } from '#components/ui/dropdown-menu';
 import type { TaskData } from '../task-execution-types';
 import { AgentMenu } from './agent-menu';
-import { articlePageUrl } from './article-page';
+import { relatedPageShown } from './started-model';
 import { entryTitleKey, taskSource, type TaskSource } from '../task-source';
 import { TaskStandingTag } from '../task-status-tag';
 
 // The task's properties in their own card (2026-10-22 user request, as the sidebar of a Linear, Jira or GitHub issue):
 // one label and value per row, so the header keeps only what to read. In the right column from 1280px, in two columns
-// below that, one column on phones. Rows without a value are left out.
+// below that, one column on phones. Rows without a value are left out. What the task was started with (its playbook,
+// article or pages, and repository) is in the start's record on the left (started-card.tsx, 2026-11-02), not here.
 
 type Member = { id: string; name: string };
 
@@ -94,11 +95,6 @@ export function TaskProperties({
     <ActorAvatar type='user' name={assigned} size='xs' />
   ) : null;
   const collaborators = w.collaborators || [],
-    playbook = w.flow ? w.playbook?.name || w.flow.name : '',
-    article = w.article?.articleId ? w.article : undefined,
-    articleUrl = article
-      ? articlePageUrl(data, article.targetId, article.slug)
-      : '',
     started = w.history.find((h) => h.action === 'startTask')?.at;
   const insight = taskSource(data.task).insight;
   const owner =
@@ -185,29 +181,8 @@ export function TaskProperties({
             </span>
           </Row>
         )}
-        {playbook && <Row label={$t('common.playbook')}>{playbook}</Row>}
-        {article && (
-          <Row label={$t('articleTask.article')}>
-            {articleUrl ? (
-              <a
-                className='nr-link'
-                href={articleUrl}
-                target='_blank'
-                rel='noreferrer'
-                title={article.slug}
-              >
-                {article.title || article.slug}
-                <ExternalLink
-                  className='ml-1 inline size-3 align-baseline'
-                  aria-hidden='true'
-                />
-              </a>
-            ) : (
-              <span title={article.slug}>{article.title || article.slug}</span>
-            )}
-          </Row>
-        )}
-        {w.page && (
+        {/* Left out once the start's record shows the same page among the pages to change. */}
+        {w.page && !relatedPageShown(data) && (
           <Row label={$t('common.relatedPage')}>
             <a
               className='nr-link break-all'
@@ -311,19 +286,22 @@ function RelatedTasks({
       </h3>
       {group($t('taskDetail.relatedPrev'), prev, 'prev')}
       {group(
-        $tj('taskDetail.relatedSame', {
-          0: opportunity ? (
-            <button
-              type='button'
-              className='nr-link'
-              onClick={() => onOpportunity(opportunity.id)}
-            >
-              {opportunity.label || $t('common.opportunity')}
-            </button>
-          ) : (
-            $t('common.opportunity')
-          ),
-        }),
+        // Tasks split off for pages in another place (2026-10-29) without an opportunity share the hand-off instead.
+        !opportunity && same.every((r) => r.pages)
+          ? $t('taskPages.relatedSplit')
+          : $tj('taskDetail.relatedSame', {
+              0: opportunity ? (
+                <button
+                  type='button'
+                  className='nr-link'
+                  onClick={() => onOpportunity(opportunity.id)}
+                >
+                  {opportunity.label || $t('common.opportunity')}
+                </button>
+              ) : (
+                $t('common.opportunity')
+              ),
+            }),
         same,
         'same',
       )}
