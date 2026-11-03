@@ -689,6 +689,7 @@ function RowDrawer({
           cutoff: report.cutoff,
           table: view.table,
           dims: row.dims,
+          acceptSaved: true,
         },
         unwrap: 'data',
       }),

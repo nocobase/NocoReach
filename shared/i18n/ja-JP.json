@@ -3844,6 +3844,7 @@
   "taskExecution.confirmWorkDoneMovingNot": "作業が完了したことを確認してください。移動するだけでは公開されません",
   "common.tryAgainLater": "しばらくしてから再試行してください",
   "common.savedReportShown": "新しいレポートを読み込めなかったため、{0} に保存したレポートを表示しています。",
+  "common.savedReportUpdating": "新しいレポートを読み込み中のため、{0} に保存したレポートを表示しています。",
   "taskExecution.waitCurrentRunFinishBefore": "現在の実行が完了してから、作業状態を変更してください",
   "projectSwitcher.askAdminCreateProjectFirst": "管理者にプロジェクトの作成を依頼し、作成後にこのページを再読み込みしてください。",
   "me.askAdminPickRoleSettings": "管理者に「設定 · メンバー」でロールの割り当てを依頼し、その後このページを再読み込みしてください。",

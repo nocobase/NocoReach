@@ -3926,6 +3926,7 @@
   "taskExecution.confirmWorkDoneMovingNot": "Vui lòng xác nhận công việc đã hoàn tất; di chuyển không xuất bản nội dung",
   "common.tryAgainLater": "Vui lòng thử lại sau",
   "common.savedReportShown": "Không đọc được báo cáo mới; đây là báo cáo đã lưu vào {0}.",
+  "common.savedReportUpdating": "Đang hiển thị báo cáo đã lưu vào {0} trong khi đọc báo cáo mới.",
   "taskExecution.waitCurrentRunFinishBefore": "Vui lòng chờ lần chạy hiện tại kết thúc rồi mới thay đổi trạng thái công việc",
   "projectSwitcher.askAdminCreateProjectFirst": "Vui lòng nhờ quản trị viên tạo dự án trước, rồi tải lại trang này.",
   "me.askAdminPickRoleSettings": "Vui lòng nhờ quản trị viên chọn vai trò cho bạn trong Cài đặt · Thành viên, rồi tải lại trang này.",

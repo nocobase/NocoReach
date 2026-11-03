@@ -110,7 +110,7 @@ export default function DataWebsite() {
     () =>
       api.action<Report>('nrDataViews', 'website', {
         method: 'POST',
-        body: { projectId: project!.id, ...r },
+        body: { projectId: project!.id, ...r, acceptSaved: true },
         unwrap: 'data',
       }),
     {

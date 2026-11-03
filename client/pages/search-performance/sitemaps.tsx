@@ -55,7 +55,7 @@ const tally = (r: { checked: number; indexed: number }) => (r.checked ? `${num(r
 
 export function SitemapsView({ projectId, property, tab, onTab }: { projectId: number; property?: string; tab: string | null; onTab: (t?: string) => void }) {
   const navigate = useNavigate();
-  const { data: view, error, reload } = useFreshData<SitemapsView>(`data-view:search-sitemaps:${projectId}:${property || ''}`, () => api.action<SitemapsView>("nrSearchIndex", "sitemaps", { method: "POST", body: { projectId }, unwrap: "data" }), googleLocalFreshness);
+  const { data: view, error, reload } = useFreshData<SitemapsView>(`data-view:search-sitemaps:${projectId}:${property || ''}`, () => api.action<SitemapsView>("nrSearchIndex", "sitemaps", { method: "POST", body: { projectId, acceptSaved: true }, unwrap: "data" }), googleLocalFreshness);
   const [open, setOpen] = useState<Row | null>(null);
   const rows: Row[] = useMemo(() => [...(view?.sitemaps ?? []).map((s) => ({ ...s, status: stateOf(s) })), ...(view?.unsubmitted ?? []).map((u) => ({ ...u, status: "unsubmitted" as const }))], [view]);
   if (error) return <LoadError title={$t('searchSitemaps.notLoaded')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} onRetry={reload} />;

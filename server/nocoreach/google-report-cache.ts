@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import {
   GOOGLE_HISTORY_CACHE_MS,
   GOOGLE_PARTIAL_CACHE_MS,
+  GOOGLE_SAVED_COPY_MAX_AGE_MS,
   GOOGLE_SAVED_COPY_RETRY_MS,
   GOOGLE_SAVED_REPORT_MS,
   type SavedCopy,
@@ -57,8 +58,10 @@ function entries(payload: unknown): Entry[] {
         typeof entry.expiresAt === 'number' &&
         Number.isFinite(entry.expiresAt) &&
         entry.at <= Date.now() &&
-        // Past its lifetime a report is still the copy answered while a new one is read.
-        entry.at > Date.now() - GOOGLE_SAVED_REPORT_MS &&
+        // Past its lifetime a report is still the copy answered while a new one is read, for as long as a copy may be
+        // shown; after that it only takes room.
+        (entry.expiresAt > Date.now() ||
+          entry.at > Date.now() - GOOGLE_SAVED_COPY_MAX_AGE_MS) &&
         entry.expiresAt <= entry.at + GOOGLE_SAVED_REPORT_MS &&
         'value' in entry
       );
@@ -71,6 +74,11 @@ function entries(payload: unknown): Entry[] {
 const freshReads = new AsyncLocalStorage<boolean>();
 export const waitForFresh = async <T>(read: () => Promise<T> | T): Promise<T> =>
   freshReads.run(true, read);
+/** Whether reads here wait for a new report rather than take a saved copy. */
+export const readsFresh = (): boolean => Boolean(freshReads.getStore());
+const copyable = (entry: Entry): boolean =>
+  entry.expiresAt > Date.now() ||
+  Date.now() - entry.at <= GOOGLE_SAVED_COPY_MAX_AGE_MS;
 
 /**
  * Completed Google reports shared by authorized project readers and retained across restarts. A report past its lifetime
@@ -90,6 +98,10 @@ export class GoogleReportCache {
   constructor(
     private readonly database?: LegacyDatabase,
     private readonly namespace = 'ga4-reports',
+    // A read in the background fails where no request sees it, so it is logged here.
+    private readonly logger?: {
+      warn(message: string, meta?: Record<string, unknown>): void;
+    },
   ) {}
 
   async load<T>(
@@ -112,8 +124,10 @@ export class GoogleReportCache {
           .update(JSON.stringify([1, projectId, 'family', ...options.family]))
           .digest('hex')
       : undefined;
-    const held =
+    const found =
       this.memory.get(key) ?? (await this.nearest(projectId, key, family));
+    // A copy older than GOOGLE_SAVED_COPY_MAX_AGE_MS is not shown: the reader waits for the new report instead.
+    const held = found && copyable(found) ? found : undefined;
     // Each caller may enrich its own response with synced Search Console rows.
     if (held?.key === key && held.expiresAt > Date.now())
       return present(structuredClone(held.value) as T, held.expiresAt);
@@ -171,7 +185,16 @@ export class GoogleReportCache {
       this.start(projectId, key, family, fetcher, ttl),
     ).then(
       () => this.failures.delete(key),
-      (error: { status?: number; message?: string } | undefined) => {
+      (
+        error: { status?: number; code?: string; message?: string } | undefined,
+      ) => {
+        this.logger?.warn('NocoReach report refresh failed', {
+          namespace: this.namespace,
+          projectId,
+          status: error?.status,
+          code: error?.code,
+          message: error?.message,
+        });
         if (this.failures.size >= MAX_MEMORY) this.failures.clear();
         this.failures.set(key, {
           at: Date.now(),
@@ -203,7 +226,7 @@ export class GoogleReportCache {
     }
     if (!family) return undefined;
     return [...saved, ...this.memory.values()]
-      .filter((entry) => entry.family === family)
+      .filter((entry) => entry.family === family && copyable(entry))
       .sort((a, b) => b.at - a.at)[0];
   }
 

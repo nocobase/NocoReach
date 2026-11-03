@@ -1,6 +1,6 @@
 import { $legacyText, $t } from "#i18n";
 import type {ReactElement,ReactNode} from 'react';
-import {AlertCircleIcon} from 'lucide-react';
+import {AlertCircleIcon,LoaderCircle} from 'lucide-react';
 import {cn} from '#lib/utils';
 import {formatDateTime} from '#lib/format';
 import {Alert,AlertDescription,AlertTitle} from '#components/ui/alert';
@@ -21,10 +21,12 @@ export function LoadError({title,message,onRetry}:{title:string;message?:string;
  return <Alert variant="destructive"><AlertCircleIcon/><AlertTitle>{title}</AlertTitle><AlertDescription className="flex flex-wrap items-center gap-3">{message||$t('states.requestNotCompleteTryAgain')}{onRetry?<Button variant="outline" size="sm" onClick={onRetry}>{$t('common.retry')}</Button>:null}</AlertDescription></Alert>;
 }
 // Something on the page went wrong and needs a look (a failed check, an unanswered request): shown, not hidden in an ⓘ.
-// A report that could not be replaced for now: the numbers below are from when it was saved, and the reason says what to
-// do about it (reconnect Google, ask for access to the property).
-export function SavedReportNote({at,reason}:{at?:number;reason?:string}):ReactElement|null{
-  return at?<p className='text-xs text-muted-foreground' data-saved-report=''>{$t('common.savedReportShown',{0:formatDateTime(at)})}{reason?` ${$legacyText(reason)}`:null}</p>:null;
+// The numbers below are from a saved report. While a new one is read the note says so, so a figure that changes a moment
+// later is not a surprise; once it could not be replaced the reason says what to do (reconnect Google, ask for access).
+export function SavedReportNote({at,reason,refreshing}:{at?:number;reason?:string;refreshing?:boolean}):ReactElement|null{
+  if(!at)return null;
+  if(refreshing)return <p role='status' className='flex items-center gap-1.5 text-xs text-muted-foreground' data-saved-report='updating'><LoaderCircle className='size-3 animate-spin' aria-hidden='true'/>{$t('common.savedReportUpdating',{0:formatDateTime(at)})}</p>;
+  return <p className='text-xs text-muted-foreground' data-saved-report=''>{$t('common.savedReportShown',{0:formatDateTime(at)})}{reason?` ${$legacyText(reason)}`:null}</p>;
 }
 export function InlineError({children,action}:{children:ReactNode;action?:ReactNode}):ReactElement{
  return <Alert variant="destructive"><AlertCircleIcon/><AlertDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">{children}{action}</AlertDescription></Alert>;

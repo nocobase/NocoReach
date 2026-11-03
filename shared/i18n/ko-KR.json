@@ -3872,6 +3872,7 @@
   "taskExecution.confirmWorkDoneMovingNot": "작업이 완료되었는지 확인하세요. 이동해도 아무것도 게시되지 않습니다.",
   "common.tryAgainLater": "나중에 다시 시도해 보세요",
   "common.savedReportShown": "새 보고서를 읽지 못해 {0}에 저장된 보고서를 표시합니다.",
+  "common.savedReportUpdating": "새 보고서를 읽는 동안 {0}에 저장된 보고서를 표시합니다.",
   "taskExecution.waitCurrentRunFinishBefore": "작업 상태를 변경하기 전에 현재 실행이 완료될 때까지 기다리세요.",
   "projectSwitcher.askAdminCreateProjectFirst": "관리자에게 먼저 프로젝트를 생성해 달라고 요청한 후 이 페이지를 다시 로드하세요.",
   "me.askAdminPickRoleSettings": "관리자에게 설정 · 회원에서 역할을 선택해 달라고 요청한 후 이 페이지를 다시 로드하세요.",

@@ -137,7 +137,7 @@ export default function SearchPerformancePage() {
   const custom = !validRange(range);
   const { data: report, error, reload } = useFreshData<SearchReport>(
     project && !custom && view === 'performance' ? `data-view:search:v4:${project.id}:${JSON.stringify([project.searchConsoleProperty, range, filters, country])}` : null,
-    () => api.action<SearchReport>("nrDataViews", "search", { method: "POST", body: { projectId: project!.id, ...range, ...filters, ...(country ? { country } : {}) }, unwrap: "data" }),
+    () => api.action<SearchReport>("nrDataViews", "search", { method: "POST", body: { projectId: project!.id, ...range, ...filters, ...(country ? { country } : {}), acceptSaved: true }, unwrap: "data" }),
     { ...googleLocalFreshness, expiresAt: googleCacheExpiry },
   );
   // The query, page and breakdown details load with the page (UI review 2026-10-21) instead of behind a button; they are
@@ -146,7 +146,7 @@ export default function SearchPerformancePage() {
   const showDetails = true;
   const { data: details, error: detailsError } = useFreshData<SearchReport>(
     project && !custom && view === 'performance' && showDetails ? `data-view:search-details:${selectedDetailsKey}` : null,
-    () => api.action<SearchReport>('nrDataViews', 'search', { method: 'POST', body: { projectId: project!.id, ...range, ...filters, country, details: true }, unwrap: 'data' }),
+    () => api.action<SearchReport>('nrDataViews', 'search', { method: 'POST', body: { projectId: project!.id, ...range, ...filters, country, details: true, acceptSaved: true }, unwrap: 'data' }),
     { ...googleLocalFreshness, expiresAt: googleCacheExpiry },
   );
   const tableReport = showDetails ? details : undefined;

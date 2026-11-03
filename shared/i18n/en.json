@@ -3872,6 +3872,7 @@
   "taskExecution.confirmWorkDoneMovingNot": "Confirm the work is done; moving it doesn't publish anything",
   "common.tryAgainLater": "Try again later",
   "common.savedReportShown": "Couldn't read a new report, so this is the one saved on {0}.",
+  "common.savedReportUpdating": "Showing the report saved on {0} while a new one is read.",
   "taskExecution.waitCurrentRunFinishBefore": "Wait for the current run to finish before changing the work state",
   "projectSwitcher.askAdminCreateProjectFirst": "Ask an admin to create a project first, then reload this page.",
   "me.askAdminPickRoleSettings": "Ask an admin to pick a role for you in Settings · Members, then reload this page.",

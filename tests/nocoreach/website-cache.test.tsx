@@ -112,7 +112,11 @@ function Copy() {
   }>('data-view:website:copy', copyFetcher, {
     staleTime: GA4_HISTORY_CACHE_MS,
   });
-  return <p>{data ? `users ${data.users}` : 'loading'}</p>;
+  return (
+    <p data-refreshing={String(Boolean(data?.refreshing))}>
+      {data ? `users ${data.users}` : 'loading'}
+    </p>
+  );
 }
 const copyFetcher =
   vi.fn<
@@ -157,11 +161,16 @@ it('gives up reading again when the copy is not replaced, instead of asking for 
     </WorkspaceCacheProvider>,
   );
   await flush();
+  const shown = () =>
+    screen.getByText('users 1').getAttribute('data-refreshing');
+  expect(shown()).toBe('true');
   for (let i = 0; i < GOOGLE_REFRESH_POLLS + 5; i++) {
     await act(async () => vi.advanceTimersByTime(GOOGLE_REFRESH_POLL_MS));
     await flush();
   }
   expect(copyFetcher).toHaveBeenCalledTimes(GOOGLE_REFRESH_POLLS + 1);
+  // After the last read it shows as a copy that could not be replaced, not as one still being replaced.
+  expect(shown()).toBe('false');
 });
 
 it('leaves other responses with a refreshing field alone', async () => {
@@ -208,9 +217,19 @@ it('says why a report could not be replaced, in words the page can translate', (
     ),
   ).toEqual({ at: 2, reason: 'refused' });
   expect(savedCopyNote(undefined, { refreshing: true, savedAt: 1 })).toEqual({
-    at: undefined,
-    reason: undefined,
+    at: 1,
+    refreshing: true,
   });
+  expect(savedCopyNote(undefined, {})).toEqual({});
+});
+
+it('says the report shown is a saved one while a new one is read', () => {
+  const { container } = render(
+    <SavedReportNote at={Date.UTC(2026, 9, 14, 12)} refreshing />,
+  );
+  const note = container.querySelector('[data-saved-report="updating"]');
+  expect(note?.getAttribute('role')).toBe('status');
+  expect(note?.textContent).toMatch(/14/);
 });
 
 it('names when a report was saved only once it is no longer being replaced', () => {

@@ -3926,6 +3926,7 @@
   "taskExecution.confirmWorkDoneMovingNot": "Konfirmasikan bahwa pekerjaan sudah selesai; memindahkannya tidak menerbitkan apa pun",
   "common.tryAgainLater": "Coba lagi nanti",
   "common.savedReportShown": "Laporan baru tidak dapat dibaca; yang ditampilkan adalah laporan yang disimpan pada {0}.",
+  "common.savedReportUpdating": "Menampilkan laporan yang disimpan pada {0} sambil membaca laporan baru.",
   "taskExecution.waitCurrentRunFinishBefore": "Tunggu eksekusi saat ini selesai sebelum mengubah status pekerjaan",
   "projectSwitcher.askAdminCreateProjectFirst": "Minta admin membuat proyek terlebih dahulu, lalu muat ulang halaman ini.",
   "me.askAdminPickRoleSettings": "Minta admin memilih peran Anda di Pengaturan · Anggota, lalu muat ulang halaman ini.",

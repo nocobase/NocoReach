@@ -11,7 +11,11 @@ import {
 } from '../../server/nocoreach/legacy/database.js';
 import { Ga4ReportCache } from '../../server/nocoreach/ga4-report-cache.js';
 import { waitForFresh } from '../../server/nocoreach/google-report-cache.js';
-import { GOOGLE_SAVED_COPY_RETRY_MS } from '../../shared/google-cache.js';
+import {
+  GOOGLE_SAVED_COPY_MAX_AGE_MS,
+  GOOGLE_SAVED_COPY_RETRY_MS,
+  GOOGLE_SAVED_REPORT_MS,
+} from '../../shared/google-cache.js';
 import { DataViews, windowFor } from '../../server/nocoreach/data-views.js';
 import {
   WebsiteReport,
@@ -115,6 +119,134 @@ it('reads the Traffic report once a day, when the sync moves its window, not aga
   read.mockResolvedValue({ tables: {}, missing: ['city'], complete: false });
   const partial = await report.period('1', '123', windowFor('2026-10-17', '7'));
   expect(partial.cacheExpiresAt).toBe(Date.now() + GA4_PARTIAL_CACHE_MS);
+});
+
+it('shows no copy older than seven days: the reader waits for a new report, and the snapshot lets it go', async () => {
+  const { db, cache } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  await cache.load('1', ['a'], async () => ({ users: 1 }));
+  await cache.load(
+    '1',
+    ['view', 'old'],
+    async () => ({ users: 1 }),
+    undefined,
+    undefined,
+    { family: ['view'] },
+  );
+  // A report over final days is still fresh, however old.
+  await cache.load(
+    '1',
+    ['final'],
+    async () => ({ users: 1 }),
+    () => GOOGLE_SAVED_REPORT_MS,
+  );
+  vi.setSystemTime(Date.now() + GOOGLE_SAVED_COPY_MAX_AGE_MS + 1);
+  const restarted = new Ga4ReportCache(db);
+  const read = vi.fn(async () => ({ users: 2 }));
+  expect(
+    await restarted.load('1', ['a'], read, undefined, showCopy),
+  ).toMatchObject({ users: 2 });
+  expect(
+    await restarted.load('1', ['a'], read, undefined, showCopy),
+  ).not.toHaveProperty('savedAt');
+  expect(
+    await restarted.load('1', ['view', 'new'], read, undefined, showCopy, {
+      family: ['view'],
+    }),
+  ).toMatchObject({ users: 2 });
+  expect(read).toHaveBeenCalledTimes(2);
+  const final = vi.fn(async () => ({ users: 3 }));
+  expect(await restarted.load('1', ['final'], final)).toEqual({ users: 1 });
+  expect(final).not.toHaveBeenCalled();
+  const saved = (
+    (
+      await db
+        .getRepository('nrSnapshots')
+        .findOne({ filter: { key: 'ga4-reports:1' } })
+    )?.get('payload') as {
+      entries: unknown[];
+    }
+  ).entries;
+  expect(saved).toHaveLength(3);
+});
+
+it('logs a background read that failed, which no request reports', async () => {
+  const { db } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const warn = vi.fn();
+  const cache = new Ga4ReportCache(db, undefined, { warn });
+  await cache.load('1', ['a'], async () => ({ users: 1 }));
+  vi.setSystemTime(Date.now() + GA4_HISTORY_CACHE_MS);
+  await cache.load('1', ['a'], async () => {
+    throw Object.assign(new Error('invalid_grant'), {
+      code: 'invalid_grant',
+      status: 409,
+    });
+  });
+  await cache.settled();
+  await vi.waitFor(() =>
+    expect(warn).toHaveBeenCalledWith(
+      'NocoReach report refresh failed',
+      expect.objectContaining({
+        namespace: 'ga4-reports',
+        projectId: '1',
+        status: 409,
+        code: 'invalid_grant',
+      }),
+    ),
+  );
+});
+
+it('keeps a GA4 row as long as final days only when GA4 has finished every day of its window', async () => {
+  const { db } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime('2026-10-20T12:00:00Z');
+  const report = new WebsiteReport({ db });
+  (report as { readRow: unknown }).readRow = vi.fn(async () => ({
+    daily: [],
+    totals: {},
+  }));
+  const dims = { pagePath: '/a' };
+  const settled = await report.row('1', '123', windowFor('2026-10-17', '7'), {
+    table: 'page',
+    dims,
+    settled: true,
+  });
+  expect(settled.cacheExpiresAt).toBe(Date.now() + GOOGLE_SAVED_REPORT_MS);
+  const recent = await report.row('1', '123', windowFor('2026-10-19', '7'), {
+    table: 'page',
+    dims,
+  });
+  expect(recent.cacheExpiresAt).toBe(Date.now() + GA4_HISTORY_CACHE_MS);
+});
+
+it('decides a Traffic row is settled from the days GA4 may still be processing', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime('2026-10-20T12:00:00Z');
+  for (const [end, settled] of [
+    ['2026-10-17', true],
+    ['2026-10-18', false],
+  ] as const) {
+    const daily = [{ date: '2026-09-01' }, { date: end }];
+    const views = new DataViews({
+      sync: {
+        link: async () =>
+          legacyRecord({ ga4PropertyId: '123', gscSiteUrl: 'sc-domain:x' }),
+        snapshots: async () => [
+          { key: 'project', payload: { end } },
+          { key: 'history-web', payload: daily },
+        ],
+      },
+    } as never);
+    const row = vi.fn(async () => ({ daily: [], totals: {} }));
+    (views as unknown as { ga4: { row: unknown } }).ga4.row = row;
+    await views.websiteRow('1', {
+      range: '7',
+      table: 'page',
+      dims: { pagePath: '/a' },
+    } as never);
+    expect((row.mock.calls[0] as unknown[])[3]).toMatchObject({ settled });
+  }
 });
 
 it('answers an expired report from its copy without waiting, and marks the copy', async () => {

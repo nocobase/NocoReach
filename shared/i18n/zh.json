@@ -3872,6 +3872,7 @@
   "taskExecution.confirmWorkDoneMovingNot": "请确认工作完成；移动不会发布内容",
   "common.tryAgainLater": "请稍后再试",
   "common.savedReportShown": "暂时读不到新报告，这里显示的是 {0} 保存的报告。",
+  "common.savedReportUpdating": "正在读取新报告，当前显示的是 {0} 保存的报告。",
   "taskExecution.waitCurrentRunFinishBefore": "请等待当前执行结束，再调整工作状态",
   "projectSwitcher.askAdminCreateProjectFirst": "请管理员先创建项目，建好后刷新这一页。",
   "me.askAdminPickRoleSettings": "请管理员在“设置 · 成员”里给你选角色，选好后刷新这一页。",

@@ -742,7 +742,7 @@ function TrendSection({
     () =>
       api.action<RowDetail>('nrDataViews', 'searchRow', {
         method: 'POST',
-        body: body!,
+        body: { ...body!, acceptSaved: true },
         unwrap: 'data',
       }),
   );

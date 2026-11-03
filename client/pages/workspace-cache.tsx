@@ -4,6 +4,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -390,17 +391,37 @@ export function useFreshData<T>(
   const replacing = Boolean(key && !current.loading && copy);
   const settled = Boolean(key && !current.loading && !copy);
   const pollsRef = useRef({ key, count: 0 });
+  // After the last read the copy is shown as one that could not be replaced, rather than as still being replaced.
+  const [gaveUp, setGaveUp] = useState<string | null>(null);
   useEffect(() => {
     if (pollsRef.current.key !== key || settled)
       pollsRef.current = { key, count: 0 };
-    if (!replacing || pollsRef.current.count >= GOOGLE_REFRESH_POLLS) return;
+    if (!replacing) return;
+    const last = pollsRef.current.count >= GOOGLE_REFRESH_POLLS;
     const timer = window.setTimeout(() => {
+      if (last) {
+        setGaveUp(key);
+        return;
+      }
       pollsRef.current.count += 1;
       reload();
     }, GOOGLE_REFRESH_POLL_MS);
     return () => window.clearTimeout(timer);
   }, [replacing, settled, key, reload]);
-  return { ...current, loading: !!key && current.loading, reload, replace };
+  const data = useMemo(
+    () =>
+      gaveUp === key && copy && current.data
+        ? ({ ...(current.data as object), refreshing: false } as T)
+        : current.data,
+    [gaveUp, key, copy, current.data],
+  );
+  return {
+    ...current,
+    data,
+    loading: !!key && current.loading,
+    reload,
+    replace,
+  };
 }
 export function PageSkeleton({ title }: { title: string }) {
   return <SharedSkeleton title={title} />;

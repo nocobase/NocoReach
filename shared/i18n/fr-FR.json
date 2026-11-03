@@ -3844,6 +3844,7 @@
   "taskExecution.confirmWorkDoneMovingNot": "Confirmez que le travail est terminé ; le déplacer ne publie rien",
   "common.tryAgainLater": "Réessayez plus tard",
   "common.savedReportShown": "Impossible de lire un nouveau rapport ; voici celui enregistré le {0}.",
+  "common.savedReportUpdating": "Voici le rapport enregistré le {0}, pendant la lecture d’un nouveau rapport.",
   "taskExecution.waitCurrentRunFinishBefore": "Attendez la fin de l’exécution en cours avant de modifier l’état du travail",
   "projectSwitcher.askAdminCreateProjectFirst": "Demandez d’abord à un administrateur de créer un projet, puis rechargez cette page.",
   "me.askAdminPickRoleSettings": "Demandez à un administrateur de vous attribuer un rôle dans Paramètres · Membres, puis rechargez cette page.",

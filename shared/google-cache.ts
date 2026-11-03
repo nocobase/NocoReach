@@ -8,6 +8,10 @@ export const GOOGLE_PROGRESS_CACHE_MS = 30 * 1000;
 export const GOOGLE_SAVED_REPORT_MS = 90 * 24 * 60 * 60 * 1000;
 // A saved copy answered while a new report is read counts as fresh for the browser only this long.
 export const GOOGLE_SAVED_COPY_RETRY_MS = 30 * 1000;
+// The oldest saved copy shown while a new report is read. An older one is not shown: the page waits for the new report,
+// as numbers weeks old that change a few seconds later read worse than a short wait. Projects nobody opens are still
+// read ahead often enough to keep Traffic's default view within it.
+export const GOOGLE_SAVED_COPY_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 // How often a page reads again while the server is reading a new report, and how many times before it stops asking:
 // 150 seconds, past the slowest report (Traffic's four GA4 batches at 30 seconds each). Each read only answers from memory.
 export const GOOGLE_REFRESH_POLL_MS = 5 * 1000;
@@ -30,16 +34,25 @@ export function savedCopyAt(
   return stuck.length ? Math.min(...stuck) : undefined;
 }
 
-// What `SavedReportNote` says of the reports on a page: when the oldest was saved and why it could not be replaced.
+// What `SavedReportNote` says of the reports on a page: a copy that could not be replaced comes first, with when it was
+// saved and why; otherwise a copy still being replaced, with when it was saved.
 export function savedCopyNote(
   ...reports: (Partial<SavedCopy> | null | undefined)[]
-): { at?: number; reason?: string } {
-  return {
-    at: savedCopyAt(...reports),
-    reason: reports.find(
-      (report) => report?.savedAt && !report.refreshing && report.reason,
-    )?.reason,
-  };
+): { at?: number; reason?: string; refreshing?: boolean } {
+  const stuck = savedCopyAt(...reports);
+  if (stuck !== undefined)
+    return {
+      at: stuck,
+      reason: reports.find(
+        (report) => report?.savedAt && !report.refreshing && report.reason,
+      )?.reason,
+    };
+  const replacing = reports
+    .filter((report) => report?.savedAt && report.refreshing)
+    .map((report) => report!.savedAt!);
+  return replacing.length
+    ? { at: Math.min(...replacing), refreshing: true }
+    : {};
 }
 
 export function googleCacheExpiry(value: {

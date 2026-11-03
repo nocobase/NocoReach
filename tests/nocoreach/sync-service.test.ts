@@ -82,16 +82,26 @@ test('tick: readies Search performance at most every 15 minutes even after a fai
  }finally{vi.useRealTimers();}
 });
 
-test('tick: a project nobody opened lately keeps its summary but reads nothing from Google ahead of time',async()=>{
- const {sync}=setup();sync.step=async()=>false;sync.snapshots=async()=>[];sync.refreshFresh=async()=>{};
- sync.repo=()=>({find:async()=>[{get:k=>k==='projectId'?'1':k==='nextSyncAt'?'2999-01-01T00:00:00Z':k==='authorizedAt'?'2026-01-01T00:00:00Z':null}],findOne:async()=>null});
- const search=vi.fn(async()=>({})),website=vi.fn(async()=>({})),warm=vi.fn(async()=>{}),recentlyRead=vi.fn(async()=>false);
- sync.p.dataViews={search,website,warm,recentlyRead};
- await sync.tick();
- assert.equal(search.mock.calls.length,1);assert.equal(website.mock.calls.length,0);assert.equal(warm.mock.calls.length,0);
- assert.deepEqual(recentlyRead.mock.calls[0],['1','2026-01-01T00:00:00Z']);
- recentlyRead.mockResolvedValue(true);await sync.tick();
- assert.equal(website.mock.calls.length,1);assert.equal(warm.mock.calls.length,1);
+test('tick: a project nobody opened lately has only Traffic read ahead, every six days and a few a tick, without counting as opened',async()=>{
+ vi.useFakeTimers({toFake:['Date']});
+ try{
+  const {sync}=setup();sync.step=async()=>false;sync.snapshots=async()=>[];sync.refreshFresh=async()=>{};
+  const ids=['1','2','3','4','5'];
+  sync.repo=()=>({find:async()=>ids.map(id=>({get:k=>k==='projectId'?id:k==='nextSyncAt'?'2999-01-01T00:00:00Z':k==='authorizedAt'?'2026-01-01T00:00:00Z':null})),findOne:async()=>null});
+  const opened=new Set(),search=vi.fn(async()=>({})),website=vi.fn(async()=>({complete:true,missing:[]})),warm=vi.fn(async()=>({partial:false})),noteRead=vi.fn(),recentlyRead=vi.fn(async id=>opened.has(id));
+  sync.p.dataViews={search,website,warm,recentlyRead,noteRead};
+  const readFor=id=>website.mock.calls.filter(c=>c[0]===id).length;
+  await sync.tick();
+  assert.equal(search.mock.calls.length,5,'every summary, from the synced days');assert.equal(website.mock.calls.length,3,'three idle projects a tick');assert.equal(warm.mock.calls.length,0);
+  assert.deepEqual(recentlyRead.mock.calls[0],['1','2026-01-01T00:00:00Z']);
+  await sync.tick();assert.equal(website.mock.calls.length,5);
+  await sync.tick();assert.equal(website.mock.calls.length,5,'not again within six days');
+  assert.equal(noteRead.mock.calls.length,0,'reading ahead does not count as opening');
+  // Someone opens project 2: it is read ahead as an opened project at once.
+  opened.add('2');await sync.tick();assert.equal(readFor('2'),2);assert.equal(warm.mock.calls.length,1);
+  vi.setSystemTime(Date.now()+6*86400000-1);await sync.tick();assert.equal(readFor('1'),1);
+  vi.setSystemTime(Date.now()+1);await sync.tick();assert.equal(readFor('1'),2,'six days, inside the seven a copy may be shown');
+ }finally{vi.useRealTimers();}
 });
 
 test('concurrent requests share one build',async()=>{

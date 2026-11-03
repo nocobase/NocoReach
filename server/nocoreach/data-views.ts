@@ -13,7 +13,8 @@ import * as pkgs from './packages-source.js';
 import * as hnSource from './hackernews-source.js';
 import * as __google_client from './google-client.js';
 import { WebsiteReport } from './website-report.js';
-import { GoogleReportCache } from './google-report-cache.js';
+import { GoogleReportCache, waitForFresh } from './google-report-cache.js';
+import { calendarDateInTimeZone } from './google-sync.js';
 import { GOOGLE_HISTORY_CACHE_MS, GOOGLE_PARTIAL_CACHE_MS, GOOGLE_SAVED_REPORT_MS } from '../../shared/google-cache.js';
 import { githubView } from './github-view.js';
 import { downloadsView } from './downloads-view.js';
@@ -25,6 +26,8 @@ const days=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/DAY)+1;
 const dayOf=v=>v instanceof Date?v.toISOString().slice(0,10):String(v||'').slice(0,10);
 // The longest stretch of synced query × page days read for a report: both 90-day periods. Longer ones ask Search Console.
 const MAX_STORED_PAIR_DAYS=200;
+// GA4 goes on processing a day for about two days after it ends; a report over later days is not kept as settled.
+const GA4_PROCESSING_DAYS=2;
 // The most query × page rows a report holds per period, read from Search Console or summed from the synced days: a long
 // tail that differs by day would otherwise grow the sums well past a gigabyte.
 const MAX_PAIR_ROWS=100000;
@@ -117,7 +120,7 @@ class DataViews{
  p: Connections & {db: LegacyDatabase;sync: SyncService};
  reports: GoogleReportCache;
  localReports: GoogleReportCache;
- constructor(plugin){this.p=plugin;this.ga4=new WebsiteReport(plugin);this.reports=new GoogleReportCache(plugin.db,'gsc-reports');this.localReports=new GoogleReportCache(plugin.db,'google-local-reports');this.tokenPending=new Map();this.readAt=new Map();}
+ constructor(plugin){this.p=plugin;this.ga4=new WebsiteReport(plugin);this.reports=new GoogleReportCache(plugin.db,'gsc-reports',plugin.app?.logger);this.localReports=new GoogleReportCache(plugin.db,'google-local-reports',plugin.app?.logger);this.tokenPending=new Map();this.readAt=new Map();}
  scope(id,link: LegacyRecord): unknown[]{return [link.get('gscSiteUrl'),link.get('authorizedAt'),this.p.network?.mockCacheKey?.('google',String(id))];}
  // Search Console's final days do not change, but Google can publish them days after the cutoff, and nothing in a report
  // tells a late day from one without data (breakdowns have no dates, filtered tables often miss days). So a report stays
@@ -256,7 +259,9 @@ class DataViews{
   const get=k=>snaps.find(s=>s.key===k)?.payload,end=get('project')?.end||(get('history-web')||[]).map(r=>r.date).sort().at(-1);if(!end)return {connected:true,cutoff:null};
   const cutoff=v.cutoff===undefined?end:v.cutoff,first=firstDate(get('history-web')||[]);if(!calendarDate(cutoff)||cutoff>end||(first&&cutoff<first))fail(systemMessageText('dataViews.invalidDate'));
   const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28',w=windowFor(cutoff,range,v.from,v.to,first);
-  return {connected:true,cutoff,window:w,...await this.ga4.row(id,link.get('ga4PropertyId'),w,{table:String(v.table||''),dims:v.dims&&typeof v.dims==='object'?v.dims:{}})};}
+  // A row is kept as long as a report over final days only while GA4 has finished every day of its window.
+  const settled=w.end<=add(calendarDateInTimeZone('America/Los_Angeles',new Date(businessNow(this.p,id,'google'))),-1-GA4_PROCESSING_DAYS);
+  return {connected:true,cutoff,window:w,...await this.ga4.row(id,link.get('ga4PropertyId'),w,{table:String(v.table||''),dims:v.dims&&typeof v.dims==='object'?v.dims:{},settled})};}
  async websiteToday(id){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.today(id,link.get('ga4PropertyId'))};}
  async websiteRealtime(id){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.realtime(id,link.get('ga4PropertyId'))};}
  // Countries for the country filter: a live Search Console query, asked for on its own (the page does not wait for it)
@@ -348,7 +353,10 @@ class DataViews{
   for(const r of ga4Parts){const o=day(r.get('date'));o.views=0;for(const x of r.get('payload')||[])if(norm(x.page)===norm(path))o.views+=Number(x.views)||0;}
   const daily=[];for(let d=w.start;d<=w.end;d=add(d,1))daily.push(byDay.get(d)||{date:d});
   return {connected:true,window:w,gscCutoff:gscEnd,ga4Cutoff:ga4End,daily};});}
- register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('dataViews.notLoadDataTryAgain'));}};
+ register(){
+  // Only a page that says it shows a saved copy (`acceptSaved`) gets one while a new report is read. API keys, scripts and
+  // the command line wait for the new report and see its failure, as they did before saved copies.
+  const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);const read=()=>fn(id,v,ctx);ctx.body=v.acceptSaved===true?await read():await waitForFresh(read);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('dataViews.notLoadDataTryAgain'));}};
   this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),search:wrap((id,v)=>{this.noteRead(id);return this.search(id,v);}),website:wrap((id,v)=>{this.noteRead(id);return this.website(id,v);}),websiteRow:wrap((id,v)=>this.websiteRow(id,v)),websiteToday:wrap(id=>this.websiteToday(id)),websiteRealtime:wrap(id=>this.websiteRealtime(id)),searchCountries:wrap((id,v)=>this.searchCountries(id,v)),searchBreakdown:wrap((id,v)=>this.searchBreakdown(id,v)),searchRow:wrap((id,v)=>this.searchRow(id,v)),ranks:wrap((id,v)=>this.ranks(id,v)),page:wrap((id,v)=>this.page(id,v)),github:wrap((id,v)=>this.github(id,v)),community:wrap((id,v)=>this.community(id,v)),downloads:wrap((id,v)=>this.downloads(id,v)),hackernews:wrap((id,v)=>this.hackernews(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','search','website','websiteRow','websiteToday','websiteRealtime','searchCountries','searchBreakdown','searchRow','ranks','page','github','community','downloads','hackernews'],'loggedIn');}
 }
 export { websiteView, withFresh, redditCard, DataViews, packagesCard, hackernewsCard, windowFor, metric, series, netChange, starRows, githubCard, communityCard, contentCard, gscCard };

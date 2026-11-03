@@ -3844,6 +3844,7 @@
   "taskExecution.confirmWorkDoneMovingNot": "Confirma que el trabajo está terminado; moverlo no publica nada",
   "common.tryAgainLater": "Vuelve a intentarlo más tarde",
   "common.savedReportShown": "No se pudo leer un informe nuevo; se muestra el guardado el {0}.",
+  "common.savedReportUpdating": "Se muestra el informe guardado el {0} mientras se lee uno nuevo.",
   "taskExecution.waitCurrentRunFinishBefore": "Espera a que termine la ejecución actual antes de cambiar el estado del trabajo",
   "projectSwitcher.askAdminCreateProjectFirst": "Pide a un administrador que cree un proyecto y después vuelve a cargar esta página.",
   "me.askAdminPickRoleSettings": "Pide a un administrador que te asigne un rol en Configuración · Miembros y después vuelve a cargar esta página.",

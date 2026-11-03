@@ -4,6 +4,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { createNocoReachTestDatabase } from '../fixtures/nocoreach-database.js';
 import { LegacyDatabase } from '../../server/nocoreach/legacy/database.js';
 import { DataViews } from '../../server/nocoreach/data-views.js';
+import { SearchIndex } from '../../server/nocoreach/search-index.js';
+import { readsFresh } from '../../server/nocoreach/google-report-cache.js';
 
 vi.mock('../../server/nocoreach/policy.js', async (original) => ({
   ...(await original<typeof import('../../server/nocoreach/policy.js')>()),
@@ -104,4 +106,46 @@ it('counts only a person opening Search performance or Traffic, not internal rea
   expect(views.readAt.has('1')).toBe(true);
   await actions.website(request('2'), async () => {});
   expect(views.readAt.has('2')).toBe(true);
+});
+
+it('answers from a saved copy only for a page that says it shows one; API keys and scripts wait for a new report', async () => {
+  const { plugin } = await fixture();
+  const actions: Record<
+    string,
+    (ctx: unknown, next: () => Promise<void>) => Promise<void>
+  > = {};
+  const host = {
+    ...(plugin as object),
+    project: async () => ({}),
+    app: {
+      resourceManager: {
+        define: (d: { actions: typeof actions }) =>
+          Object.assign(actions, d.actions),
+      },
+      acl: { allow() {} },
+    },
+  };
+  const views = new DataViews(plugin);
+  (views as unknown as { p: unknown }).p = host;
+  const seen: boolean[] = [];
+  vi.spyOn(views, 'search').mockImplementation(async () => {
+    seen.push(readsFresh());
+    return {} as never;
+  });
+  views.register();
+  const request = (values: Record<string, unknown>) => ({
+    action: { params: { values: { projectId: '1', ...values } } },
+  });
+  await actions.search(request({ acceptSaved: true }), async () => {});
+  await actions.search(request({}), async () => {});
+  expect(seen).toEqual([false, true]);
+  const index = new SearchIndex(host as never);
+  vi.spyOn(index, 'sitemaps').mockImplementation(async () => {
+    seen.push(readsFresh());
+    return {} as never;
+  });
+  index.register();
+  await actions.sitemaps(request({ acceptSaved: true }), async () => {});
+  await actions.sitemaps(request({}), async () => {});
+  expect(seen.slice(2)).toEqual([false, true]);
 });

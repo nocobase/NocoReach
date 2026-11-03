@@ -62,7 +62,7 @@ const changeText = (now: number, before: number | null) => (before == null || !b
 const scopeBody = (s: Scope) => ({ projectId: s.projectId, compare: s.compare, ...s.window, ...(s.country ? { country: s.country } : {}), ...s.filters });
 
 export function useBreakdown(scope: Scope | null) {
-  return useFreshData<Breakdown>(scope ? `data-view:search-breakdown:${scope.projectId}:${JSON.stringify([scope.property,scopeBody(scope)])}` : null, () => api.action<Breakdown>("nrDataViews", "searchBreakdown", { method: "POST", body: scopeBody(scope!), unwrap: "data" }), googleHistoryFreshness);
+  return useFreshData<Breakdown>(scope ? `data-view:search-breakdown:${scope.projectId}:${JSON.stringify([scope.property,scopeBody(scope)])}` : null, () => api.action<Breakdown>("nrDataViews", "searchBreakdown", { method: "POST", body: { ...scopeBody(scope!), acceptSaved: true }, unwrap: "data" }), googleHistoryFreshness);
 }
 
 // Shares of clicks (of impressions where nothing was clicked), which add up across one dimension's rows.
@@ -153,7 +153,7 @@ export const slices = (kind: "country" | "device" | "appearance", rows: Breakdow
 // with (the queries a page shows for).
 export function RowDrawer({ scope, dimension, rowKey, figures, metric, onClose }: { scope: Scope; dimension: "query" | "page"; rowKey: string; figures?: { clicks: number; impressions: number; ctr: number; position: number | null }; metric: Metric; onClose: () => void }) {
   const body = { ...scopeBody(scope), dimension, key: rowKey };
-  const { data, error } = useFreshData<RowDetail>(`data-view:search-row:${scope.projectId}:${JSON.stringify([scope.property,body])}`, () => api.action<RowDetail>("nrDataViews", "searchRow", { method: "POST", body, unwrap: "data" }), googleHistoryFreshness);
+  const { data, error } = useFreshData<RowDetail>(`data-view:search-row:${scope.projectId}:${JSON.stringify([scope.property,body])}`, () => api.action<RowDetail>("nrDataViews", "searchRow", { method: "POST", body: { ...body, acceptSaved: true }, unwrap: "data" }), googleHistoryFreshness);
   const m: Metric = metric;
   const prevKey = `previous${m[0].toUpperCase()}${m.slice(1)}` as keyof TrendPoint;
   const points = (data?.trend ?? []).map((p) => ({ date: p.date, value: p[m], previous: p[prevKey] }));

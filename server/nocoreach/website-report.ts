@@ -16,7 +16,7 @@ import { GOOGLE_ENDPOINTS, googleJson, jsonRequest } from './google-client.js';
 import { aiProviders, calendarDateInTimeZone } from './google-sync.js';
 import { Ga4Requests } from './ga4-requests.js';
 import { Ga4ReportCache } from './ga4-report-cache.js';
-import { GA4_PARTIAL_CACHE_MS, GA4_TODAY_CACHE_MS, GA4_REALTIME_CACHE_MS } from '../../shared/ga4-cache.js';
+import { GA4_HISTORY_CACHE_MS, GA4_PARTIAL_CACHE_MS, GA4_TODAY_CACHE_MS, GA4_REALTIME_CACHE_MS } from '../../shared/ga4-cache.js';
 import { GOOGLE_SAVED_REPORT_MS } from '../../shared/google-cache.js';
 import type { LegacyDatabase } from './legacy/database.js';
 
@@ -95,7 +95,7 @@ class WebsiteReport{
  tokenPending=new Map<string|number,Promise<string>>();
  tokens=new Map<string|number,{at:number;token:string}>();
  history:Ga4ReportCache;
- constructor(plugin){this.p=plugin;this.history=new Ga4ReportCache((plugin as {db?:LegacyDatabase}).db);this.zones=new Map();this.todayCache=new Map();this.liveCache=new Map();}
+ constructor(plugin){this.p=plugin;this.history=new Ga4ReportCache((plugin as {db?:LegacyDatabase}).db,'ga4-reports',(plugin as {app?:{logger?:{warn(message:string,meta?:Record<string,unknown>):void}}}).app?.logger);this.zones=new Map();this.todayCache=new Map();this.liveCache=new Map();}
  // The project's Google connection (proxy profile or simulated upstream), the same one the sync uses.
  json(id,url,init){return googleJson(url,init,this.p.googleFetch?.(id));}
  // Access tokens last an hour; keep one for 45 minutes so the per-minute realtime view does not refresh it every time.
@@ -160,7 +160,7 @@ class WebsiteReport{
  // One row of a table over the window: its days against the period before, and its totals for both (deduplicated users).
  async row(id,property,w,v){const table=String(v.table||''),t=TABLES[table];if(!t)fail(systemMessageText('dataViews.unknownGa4Report'),400);const dims=v.dims||{};
   const pairs=(ROW_KEYS[table]||t.dims).map(k=>{const x=dims[k];if(typeof x!=='string'||x.length>2000)fail(systemMessageText('dataViews.ga4RowMissing'),400);return [k,x];});
-  const dates=[w.start,w.end,w.previousStart,w.previousEnd,Boolean(w.all)];return this.history.load(String(id),['row',...this.scope(id,property),dates,table,pairs],()=>this.readRow(id,property,w,{table,pairs}),()=>GOOGLE_SAVED_REPORT_MS,(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}));}
+  const dates=[w.start,w.end,w.previousStart,w.previousEnd,Boolean(w.all)];return this.history.load(String(id),['row',...this.scope(id,property),dates,table,pairs],()=>this.readRow(id,property,w,{table,pairs}),()=>v.settled===true?GOOGLE_SAVED_REPORT_MS:GA4_HISTORY_CACHE_MS,(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}));}
  async readRow(id,property,w,{table,pairs}){const t=TABLES[table];
   const metrics=t.metrics||SESSION,both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],filter=exact(pairs);
   const [daysReport,totalsReport]=await this.batch(id,property,[request(['date'],metrics,both,null,Math.max(1000,(w.days||Math.ceil((Date.parse(w.end)-Date.parse(w.start))/86400000)+1)*2),filter),request([],metrics,both,null,null,filter)]);
