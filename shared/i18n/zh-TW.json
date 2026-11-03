@@ -233,6 +233,8 @@
   "dataforseo.invalidApiCredentialFormat": "API 憑證格式不正確",
   "projectKnowledge.agent": "Agent 交付",
   "taskDetail.whatAgentReceive": "Agent 會收到的任務說明",
+  "taskDetail.givenAtStart": "開始時交給 Agent 的內容",
+  "taskDetail.whatAgentReceived": "Agent 收到的任務說明",
   "playbook.agentChange": "Agent 修改",
   "strategy.agentMakesChangeFirstNothing": "Agent 先改好，你看過效果才會發布",
   "strategy.agentWritesReview": "Agent 寫好後由你審核",

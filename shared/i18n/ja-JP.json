@@ -233,6 +233,8 @@
   "dataforseo.invalidApiCredentialFormat": "API認証情報の形式が無効です",
   "projectKnowledge.agent": "エージェントから",
   "taskDetail.whatAgentReceive": "エージェントに渡す情報",
+  "taskDetail.givenAtStart": "開始時にエージェントに渡した内容",
+  "taskDetail.whatAgentReceived": "エージェントに渡した情報",
   "playbook.agentChange": "エージェントによる変更",
   "strategy.agentMakesChangeFirstNothing": "エージェントが先に変更を加えます。結果を確認するまで公開されません",
   "strategy.agentWritesReview": "エージェントが作成し、あなたがレビューします",

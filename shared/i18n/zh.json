@@ -233,6 +233,8 @@
   "dataforseo.invalidApiCredentialFormat": "API 凭据格式不正确",
   "projectKnowledge.agent": "Agent 交付",
   "taskDetail.whatAgentReceive": "Agent 会收到的任务说明",
+  "taskDetail.givenAtStart": "开始时交给 Agent 的内容",
+  "taskDetail.whatAgentReceived": "Agent 收到的任务说明",
   "playbook.agentChange": "Agent 修改",
   "strategy.agentMakesChangeFirstNothing": "Agent 先改好，你看过效果才会发布",
   "strategy.agentWritesReview": "Agent 写好后由你审核",

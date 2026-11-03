@@ -233,6 +233,8 @@
   "dataforseo.invalidApiCredentialFormat": "Format kredensial API tidak valid",
   "projectKnowledge.agent": "Dari agen",
   "taskDetail.whatAgentReceive": "Yang akan diterima agen",
+  "taskDetail.givenAtStart": "Diberikan ke agen saat mulai",
+  "taskDetail.whatAgentReceived": "Yang diterima agen",
   "playbook.agentChange": "Perubahan oleh agen",
   "strategy.agentMakesChangeFirstNothing": "Agen membuat perubahan terlebih dahulu; tidak ada yang dipublikasikan sampai Anda melihat hasilnya",
   "strategy.agentWritesReview": "Agen menulis, Anda meninjau",

@@ -233,6 +233,8 @@
   "dataforseo.invalidApiCredentialFormat": "El formato de las credenciales de la API no es válido",
   "projectKnowledge.agent": "Entregado por el agente",
   "taskDetail.whatAgentReceive": "Instrucciones que recibirá el agente",
+  "taskDetail.givenAtStart": "Entregado al agente al iniciar",
+  "taskDetail.whatAgentReceived": "Instrucciones que recibió el agente",
   "playbook.agentChange": "Modificación del agente",
   "strategy.agentMakesChangeFirstNothing": "El agente realiza el cambio primero; no se publica nada hasta que hayas visto el resultado",
   "strategy.agentWritesReview": "El agente redacta el contenido y tú lo revisas",

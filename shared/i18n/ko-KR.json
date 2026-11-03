@@ -233,6 +233,8 @@
   "dataforseo.invalidApiCredentialFormat": "잘못된 API 자격 증명 형식",
   "projectKnowledge.agent": "에이전트가 작성",
   "taskDetail.whatAgentReceive": "에이전트에게 전달할 내용",
+  "taskDetail.givenAtStart": "시작할 때 에이전트에게 전달한 내용",
+  "taskDetail.whatAgentReceived": "에이전트에게 전달한 내용",
   "playbook.agentChange": "에이전트 변경",
   "strategy.agentMakesChangeFirstNothing": "에이전트가 먼저 변경합니다. 결과를 보기 전까지는 아무것도 게시되지 않습니다.",
   "strategy.agentWritesReview": "에이전트가 작성하면 직접 검토하세요",

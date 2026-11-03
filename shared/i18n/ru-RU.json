@@ -233,6 +233,8 @@
   "dataforseo.invalidApiCredentialFormat": "Неверный формат учетных данных API.",
   "projectKnowledge.agent": "От агента",
   "taskDetail.whatAgentReceive": "Что получит агент",
+  "taskDetail.givenAtStart": "Передано агенту при запуске",
+  "taskDetail.whatAgentReceived": "Что получил агент",
   "playbook.agentChange": "Изменения с помощью агента",
   "strategy.agentMakesChangeFirstNothing": "Сначала агент вносит изменения. Они не публикуются, пока вы не проверите результат.",
   "strategy.agentWritesReview": "Агент пишет, вы проверяете",
