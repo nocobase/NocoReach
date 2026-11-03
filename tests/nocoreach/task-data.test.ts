@@ -23,11 +23,11 @@ function fixture(){
 }
 test('the Agent\'s data summary of the page: search, top queries, visits, audit, tracked keywords, earlier tasks with effect',async()=>{
  const text=await fixture().forRun('1',{url:'https://example.com/docs/install',taskId:3});
- assert.deepEqual(text.split('\n'),['数据截至 2026-10-05，来自 NocoReach 已同步的数据，只用于参考。','搜索（近 28 天）：点击 40，曝光 1,500，点击率 2.7%，平均排名 7.0','主要搜索词：nocobase install（曝光 1,000，点击 30，第 6.0 位）；docker compose nocobase（曝光 500，点击 10，第 9.0 位）','访问（近 28 天）：浏览 3,200，关键事件 12','网站审计里这页的问题：标题重复（警告）','排名跟踪：nocobase install 第 5 位（上次 7）','这页以前的任务：T-2 改安装页标题（已上线，正在观察效果；第 7 天：上升，搜索点击 40 → 52（+30%））']);
+ assert.deepEqual(text.split('\n'),['数据截至 2026-10-05，来自 NocoReach 已同步的数据，只用于参考。','搜索（近 28 天）：点击 40，曝光 1,500，点击率 2.7%，平均排名 7.0','主要搜索词：nocobase install（曝光 1,000，点击 30，第 6.0 位）；docker compose nocobase（曝光 500，点击 10，第 9.0 位）','访问（近 28 天）：浏览 3,200，关键事件 12','网站审计里这页的问题：标题重复（警告）','排名跟踪：nocobase install 第 5 位（上次 7）','这页以前的任务：T-2 改安装页标题（已上线，正在观察效果；第 7 天：上升 · 搜索点击 40 → 52 · ↑ 30%）']);
  const site=await fixture().forRun('1',{});assert.match(site,/全站搜索（近 28 天）：点击 3,214，曝光 956,147（前 28 天点击 3,100/);assert.match(site,/访问最多的页面：example\.com\/docs\/install（浏览 3,200）；docs\.example\.com\/docs\/install（浏览 70）/);
 });
 test('the daily analysis\'s recent tasks: the last 30 days, where each stands and its effect',async()=>{
- const r=await fixture().recent('1');assert.deepEqual(r.map(t=>t.no),['T-3','T-2']);assert.equal(r[1].state,'已上线，正在观察效果');assert.deepEqual(r[1].effects,['第 7 天：上升，搜索点击 40 → 52（+30%）']);
+ const r=await fixture().recent('1');assert.deepEqual(r.map(t=>t.no),['T-3','T-2']);assert.equal(r[1].state,'已上线，正在观察效果');assert.deepEqual(r[1].effects,['第 7 天：上升 · 搜索点击 40 → 52 · ↑ 30%']);
  assert.equal(taskState({},{cancelledAt:'x'}),'已关闭');assert.equal(taskState({},{stage:'flow',flow:{stages:[{name:'看方案',kind:'review'}]},stageIndex:0}),'进行中：看方案');assert.deepEqual(effectLines({observation:{results:[{day:28,conclusion:'insufficient'}]}}),['第 28 天：数据不足']);
 });
 test('a page on a host GA4 does not track takes no host-less GA4 row, which belongs to another site',async()=>{
