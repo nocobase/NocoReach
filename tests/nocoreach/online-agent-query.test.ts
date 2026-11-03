@@ -1230,3 +1230,46 @@ it('reads the rest of Traffic’s tables only when one of them is asked for, onc
     (await denied.ask({ source: 'traffic', table: 'channel' })).rows,
   ).toHaveLength(8);
 });
+
+it('reads the rest of Traffic’s tables beside the summary when the table asked for is one of them, and names one GA4 left out', async () => {
+  const { sources, calls } = fixture();
+  const views = sources.dataViews as Record<
+    string,
+    (...args: unknown[]) => Promise<Row>
+  >;
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const tool = queryDataTool({
+    sources: {
+      ...sources,
+      dataViews: {
+        ...views,
+        website: async (...args: unknown[]) => {
+          await held;
+          return views.website(...args);
+        },
+        websiteTables: async (...args: unknown[]) => ({
+          ...(await views.websiteTables(...args)),
+          missing: ['country'],
+        }),
+      },
+    } as QuerySources,
+    projectId: '7',
+    authorize: async () => {},
+    allowed: async () => true,
+    link: (path) => path,
+  });
+  const ask = (args: Row) =>
+    tool.execute(args, new AbortController().signal) as Promise<Answer>;
+  // Pages, the default table, is in the rest: it is asked for before the summary arrives.
+  const pages = ask({ source: 'traffic' });
+  await vi.waitFor(() =>
+    expect(calls.some(([name]) => name === 'websiteTables')).toBe(true),
+  );
+  release();
+  expect((await pages).rows).toHaveLength(20);
+  expect(await ask({ source: 'traffic', table: 'country' })).toEqual({
+    source: 'traffic',
+    error: 'notReturned',
+  });
+});

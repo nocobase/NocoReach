@@ -108,6 +108,7 @@ export function isGoogleReportKey(
   }
   return [
     'data-view:website',
+    'data-view:website-tables',
     'data-view:website-row',
     'today',
     'live',

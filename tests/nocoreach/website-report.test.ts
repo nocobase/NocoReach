@@ -56,6 +56,10 @@ test('period: a report GA4 refuses is left out on its own and named; other failu
  const {g,warnings}=fake((method,body)=>{if(method==='batchRunReports')throw Object.assign(new Error('Field combination invalid'),{status:400,code:'google_api_error'});
   if(dimsOf(body)==='eventName')throw Object.assign(new Error('Incompatible'),{status:400,code:'google_api_error'});return report(body.dimensions.map(d=>d.name),body.metrics.map(m=>m.name),[]);});
  const v=await g.period('1','123',w);assert.deepEqual(v.missing,['event']);assert.equal(v.tables.event,undefined);assert.ok(warnings.some(([m])=>m==='NocoReach GA4 report left out'));
+ // Channel's table and the channels behind a change are one report: refused, both are left out, and the rest stays.
+ const channels=fake((method,body)=>{if(method==='batchRunReports')throw Object.assign(new Error('Field combination invalid'),{status:400,code:'google_api_error'});
+  if(dimsOf(body)==='sessionDefaultChannelGroup')throw Object.assign(new Error('Incompatible'),{status:400,code:'google_api_error'});return report(body.dimensions.map(d=>d.name),body.metrics.map(m=>m.name),[]);}).g;
+ const c=await channels.period('1','123',w);assert.deepEqual(c.missing,['channel']);assert.equal(c.tables.channel,undefined);assert.equal(c.changes.channel,undefined);assert.ok(c.tables.device);assert.equal(c.complete,false);
  const expired=fake(()=>{throw Object.assign(new Error('expired'),{status:400,code:'invalid_grant'});}).g;
  await assert.rejects(expired.period('1','123',w),e=>e.status===409&&/重新授权/.test(e.message));
  const denied=fake(()=>{throw Object.assign(new Error('forbidden'),{status:403,code:'google_api_error'});}).g;

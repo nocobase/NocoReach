@@ -361,7 +361,10 @@ export function ReportCard({
     setQuery('');
   };
   // The page's first tables come with its report; the others with `rest`, which may hold another window for a moment, so
-  // the table, its dates and its rows' details follow whichever holds it.
+  // the table, its dates and its rows' details follow whichever holds it, and its shares need the totals of its own days.
+  const sameDays =
+    rest?.window?.start === report.window?.start &&
+    rest?.window?.end === report.window?.end;
   const holder =
     report.tables?.[view.table] !== undefined ||
     report.missing?.includes(view.table)
@@ -373,6 +376,7 @@ export function ReportCard({
             window: rest.window ?? report.window,
             cutoff: rest.cutoff ?? report.cutoff,
             queriesWindow: rest.queriesWindow ?? report.queriesWindow,
+            totals: sameDays ? report.totals : undefined,
           }
         : undefined;
   const all = holder?.tables?.[view.table];

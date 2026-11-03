@@ -188,6 +188,22 @@ interface Source {
   read(s: QuerySources, q: Query): Promise<Read>;
 }
 const NOT_CONNECTED: Read = { connected: false, tables: {} };
+// Traffic's report tables, Pages first as on the page.
+const TRAFFIC_TABLES = [
+  'page',
+  'landing',
+  'channel',
+  'sourceMedium',
+  'campaign',
+  'event',
+  'country',
+  'city',
+  'language',
+  'device',
+  'newVsReturning',
+  'browser',
+  'os',
+];
 const noData = (dataThrough: unknown): Read => ({
   dataThrough: dataThrough ?? null,
   tables: {},
@@ -432,13 +448,8 @@ const SOURCES: Record<string, Source> = {
     access: ['nrDataViews', 'website'],
     ranges: WEB_RANGES,
     async read(s, q) {
-      const v = obj(await call(s, 'dataViews', 'website', q.id, rangeOf(q)));
-      if (v.connected === false) return NOT_CONNECTED;
-      if (!v.cutoff) return noData(null);
-      const tables: Record<string, TableSource> = {},
-        reports = obj(v.tables),
-        changes = obj(v.changes);
-      // The rest of the page's tables are read on their own (`websiteTables`), as the page reads them, and only when asked.
+      // The rest of the page's tables are read on their own (`websiteTables`), as the page reads them, and only when one
+      // is asked for: at once, beside the summary, when the table asked for (Pages by default) is one of them.
       let rest: Promise<Obj> | undefined;
       const more = () =>
         (rest ??= (async () => {
@@ -448,32 +459,38 @@ const SOURCES: Record<string, Source> = {
             await call(s, 'dataViews', 'websiteTables', q.id, rangeOf(q)),
           );
         })());
-      for (const name of [
-        'page',
-        'landing',
-        'channel',
-        'sourceMedium',
-        'campaign',
-        'event',
-        'country',
-        'city',
-        'language',
-        'device',
-        'newVsReturning',
-        'browser',
-        'os',
-      ])
+      const asked = q.table ?? TRAFFIC_TABLES[0];
+      if (
+        (TRAFFIC_TABLES.includes(asked) && !FIRST_TABLES.includes(asked)) ||
+        asked === 'page_changes' ||
+        asked === 'landing_changes'
+      )
+        void more().catch(() => {});
+      const v = obj(await call(s, 'dataViews', 'website', q.id, rangeOf(q)));
+      if (v.connected === false) return NOT_CONNECTED;
+      if (!v.cutoff) return noData(null);
+      const tables: Record<string, TableSource> = {},
+        reports = obj(v.tables),
+        changes = obj(v.changes),
+        // A table GA4 left out says so, rather than reading as no traffic.
+        later = async (part: 'tables' | 'changes', name: string) => {
+          const r = await more();
+          if (Array.isArray(r.missing) && r.missing.includes(name))
+            throw new QueryError('notReturned');
+          return list(obj(r[part])[name]);
+        };
+      for (const name of TRAFFIC_TABLES)
         tables[name] =
           FIRST_TABLES.includes(name) || name in reports
             ? list(reports[name]).map(flatten)
-            : async () => list(obj((await more()).tables)[name]).map(flatten);
+            : async () => (await later('tables', name)).map(flatten);
       tables.daily = list(v.daily);
+      // The whole period has no period before it, so no changes.
       for (const name of ['page', 'landing', 'channel'])
         tables[`${name}_changes`] =
-          name === 'channel' || name in changes
+          name === 'channel' || name in changes || obj(v.window).all === true
             ? list(changes[name]).map(changeRow)
-            : async () =>
-                list(obj((await more()).changes)[name]).map(changeRow);
+            : async () => (await later('changes', name)).map(changeRow);
       const settled = text(v.settledThrough),
         through = text(obj(v.window).end),
         searched = obj(v.queriesWindow),

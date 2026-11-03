@@ -486,6 +486,12 @@ describe('访问', () => {
     expect(
       action.mock.calls.filter(([, name]) => name === 'website'),
     ).toHaveLength(2);
+    // Page rows' queries come with the other tables, so they are read again too.
+    await waitFor(() =>
+      expect(
+        action.mock.calls.filter(([, name]) => name === 'websiteTables'),
+      ).toHaveLength(2),
+    );
     for (const name of ['websiteToday', 'websiteRealtime'])
       expect(
         action.mock.calls.filter(([, actionName]) => actionName === name),
@@ -527,6 +533,7 @@ describe('访问', () => {
       const { router } = renderPage();
       await screen.findByText('今天浏览量');
       const relatedKeys = [
+        'website-tables',
         'search',
         'search-breakdown',
         'search-row',
@@ -587,7 +594,15 @@ describe('访问', () => {
       );
       if (mutation === 'disconnect')
         expect(screen.queryByText('今天浏览量')).toBeNull();
-      else await screen.findByText('今天浏览量');
+      else {
+        await screen.findByText('今天浏览量');
+        // The other tables are read again too, not kept from the old connection.
+        await waitFor(() =>
+          expect(
+            action.mock.calls.filter(([, name]) => name === 'websiteTables'),
+          ).toHaveLength(2),
+        );
+      }
     },
   );
 
