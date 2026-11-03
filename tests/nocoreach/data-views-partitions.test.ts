@@ -218,6 +218,90 @@ it.each([
   },
 );
 
+it('does not take a last day the sync stored empty as held, as Google may not have published it', async () => {
+  const { views, db } = await fixture();
+  const partitions = db.getRepository('nrSyncPartitions');
+  const empty = (offset: number) =>
+    partitions.update({
+      filter: {
+        projectId,
+        source: 'gsc',
+        resource: site,
+        grain: { $in: ['overview', 'query_page'] },
+        date: dateAt(offset),
+      },
+      values: { payload: [] },
+    });
+  await empty(0);
+  const asked = vi.fn(async () => []);
+  views.gscQuery = asked;
+  const report = await views.search(projectId, {
+    range: '7',
+    details: true,
+  } as never);
+  expect(asked).not.toHaveBeenCalled();
+  expect(report).not.toHaveProperty('live');
+  expect(report.window.end).toBe(dateAt(-1));
+  expect(report.complete).toBe(true);
+  expect(report.movers).not.toBeNull();
+  // A reader that states the period gets that period, from Google.
+  const exact = await views.search(projectId, {
+    range: '7',
+    details: true,
+    exactWindow: true,
+  } as never);
+  expect(exact).toMatchObject({ live: true });
+  expect(exact.window.end).toBe(dateAt(0));
+});
+
+it('still builds the tables over a quiet day further back in the window', async () => {
+  const { views, db } = await fixture();
+  await db.getRepository('nrSyncPartitions').update({
+    filter: {
+      projectId,
+      source: 'gsc',
+      resource: site,
+      grain: { $in: ['overview', 'query_page'] },
+      date: dateAt(-2),
+    },
+    values: { payload: [] },
+  });
+  const asked = vi.fn(async () => []);
+  views.gscQuery = asked;
+  const report = await views.search(projectId, {
+    range: '7',
+    details: true,
+  } as never);
+  expect(asked).not.toHaveBeenCalled();
+  expect(report).not.toHaveProperty('live');
+  expect(report.window.end).toBe(dateAt(0));
+});
+
+it('takes an empty last day as a real one once the sync has stopped reading it again', async () => {
+  const { views, db } = await fixture();
+  await db.getRepository('nrSyncPartitions').update({
+    filter: {
+      projectId,
+      source: 'gsc',
+      resource: site,
+      grain: { $in: ['overview', 'query_page'] },
+      date: dateAt(-9),
+    },
+    values: { payload: [] },
+  });
+  const asked = vi.fn(async () => []);
+  views.gscQuery = asked;
+  const report = await views.search(projectId, {
+    range: 'custom',
+    from: dateAt(-15),
+    to: dateAt(-9),
+    details: true,
+  } as never);
+  expect(asked).not.toHaveBeenCalled();
+  expect(report).not.toHaveProperty('live');
+  expect(report.window.end).toBe(dateAt(-9));
+});
+
 it('reads Search Console when more days are missing than a sync can be behind, or for a custom range', async () => {
   const { views, db } = await fixture();
   for (const offset of [0, -1, -2])

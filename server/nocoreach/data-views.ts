@@ -28,6 +28,8 @@ const MAX_STORED_PAIR_DAYS=200;
 // How far a report's window may run ahead of the synced days and still have its tables built from them: the daily sync
 // runs every 24 hours from when it last ran, so it lands up to a day after the final cutoff moves.
 const PENDING_SYNC_DAYS=2;
+// The daily sync reads the cutoff and the six days before it again, as Google can publish them late.
+const SYNC_REREAD_DAYS=6;
 // A project nobody opened for this long is not read ahead of time; its saved reports still answer when someone returns.
 const WARM_READ_WINDOW_MS=3*DAY;
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -114,11 +116,12 @@ class DataViews{
  localReports: GoogleReportCache;
  constructor(plugin){this.p=plugin;this.ga4=new WebsiteReport(plugin);this.reports=new GoogleReportCache(plugin.db,'gsc-reports');this.localReports=new GoogleReportCache(plugin.db,'google-local-reports');this.tokenPending=new Map();this.readAt=new Map();}
  scope(id,link: LegacyRecord): unknown[]{return [link.get('gscSiteUrl'),link.get('authorizedAt'),this.p.network?.mockCacheKey?.('google',String(id))];}
- // Search Console's final days do not change: a report that ends before the final cutoff stays good for as long as it is
- // kept. The cutoff's own day may not be published yet, and nothing in a report tells a late day from one without data
- // (breakdowns have no dates, filtered tables often miss days), so a report ending on it is read again after a day. A
- // rolling range has a new window by then, so this costs it no read; only a fixed range reads once more.
- lifetime(id,w){if(!w)return GOOGLE_HISTORY_CACHE_MS;const {cutoff}=historyBounds(this.p,id);return w.end<cutoff?GOOGLE_SAVED_REPORT_MS:w.end===cutoff?DAY:GOOGLE_HISTORY_CACHE_MS;}
+ // Search Console's final days do not change, but Google can publish them days after the cutoff, and nothing in a report
+ // tells a late day from one without data (breakdowns have no dates, filtered tables often miss days). So a report stays
+ // good for as long as it is kept only once its days are older than the sync reads again; until then it is read again
+ // after a day. A rolling range has a new window by then, so this costs it no read; a fixed range reads at most once a
+ // day when it is opened, answering from its copy meanwhile.
+ lifetime(id,w){if(!w)return GOOGLE_HISTORY_CACHE_MS;const {cutoff}=historyBounds(this.p,id);return w.end<add(cutoff,-SYNC_REREAD_DAYS)?GOOGLE_SAVED_REPORT_MS:w.end<=cutoff?DAY:GOOGLE_HISTORY_CACHE_MS;}
  report(id,identity,read,w){return this.reports.load(String(id),identity,read,value=>value.connected===false||value.cutoff===null?0:value.partial?GOOGLE_PARTIAL_CACHE_MS:this.lifetime(id,w),(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}));}
  // Share only concurrent token refreshes; never retain credentials or cross transaction/mock scopes.
  token(id,scope){if(!scope||this.p.db?.transactionContext?.())return this.p.token(id);const key=JSON.stringify([String(id),...scope]);let pending=this.tokenPending.get(key);if(!pending){pending=Promise.resolve().then(()=>this.p.token(id)).finally(()=>this.tokenPending.delete(key));this.tokenPending.set(key,pending);}return pending;}
@@ -227,10 +230,15 @@ class DataViews{
  // those days are large. Only when the sync holds every day of both: a history fill stores overview rows alone, so a
  // recent project or a long range holds part of them and is read from Search Console, or its tables would come up short.
  async lastPairDay(id: string | number,site: string,cutoff: string){const dates=[];for(let i=PENDING_SYNC_DAYS;i>=0;i--)dates.push(add(cutoff,-i));
-  const held=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:{$in:dates}},fields:['date']});return held.map(p=>dayOf(p.get('date'))).sort().at(-1)||null;}
+  const [held,published]=await Promise.all([this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:{$in:dates}},fields:['date']}),this.publishedDays(id,site,dates)]);return held.map(p=>dayOf(p.get('date'))).filter(d=>published.has(d)).sort().at(-1)||null;}
+ // The sync stores a day Google has not published yet as an empty partition, so while the sync still reads a day again,
+ // a table ending on it needs totals on it. A quiet day further back in the window, or older than that, is a real one.
+ async publishedDays(id: string | number,site: string,dates: string[]){const parts=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'overview',resource:site,date:{$in:dates}},fields:['date','payload']});
+  return new Set(parts.filter(p=>{const payload=p.get('payload');return Array.isArray(payload)&&payload.length>0;}).map(p=>dayOf(p.get('date'))));}
  async storedPairs(id: string | number,site: string,w: SearchWindow){if(w.all||days(w.previousStart,w.end)>MAX_STORED_PAIR_DAYS)return null;
   const repo=this.p.db.getRepository('nrSyncPartitions'),scope={projectId:id,source:'gsc',grain:'query_page',resource:site},wanted=partitionDates(w.previousStart,w.end).$in;
   const held=new Set((await repo.find({filter:{...scope,date:{$in:wanted}},fields:['date']})).map(p=>dayOf(p.get('date'))));if(wanted.some(d=>!held.has(d)))return null;
+  if(String(w.end)>=add(historyBounds(this.p,id).cutoff,-SYNC_REREAD_DAYS)&&!(await this.publishedDays(id,site,[String(w.end)])).has(String(w.end)))return null;
   const current=sp.pairSum(),previous=sp.pairSum();
   for(const date of wanted){await new Promise(resolve=>setImmediate(resolve));const [part]=await repo.find({filter:{...scope,date:{$in:[date]}},fields:['date','payload']});(date>=w.start?current:previous).add(part?.get('payload'));}
   return {current:current.rows(),previous:previous.rows()};}

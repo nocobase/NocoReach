@@ -230,9 +230,10 @@ it('reads a report still holding days after the final cutoff again after six hou
   expect(upstream).toHaveBeenCalledTimes(12);
 });
 
-it('reads a range ending on the final cutoff once more after a day, as Google may publish that day late', async () => {
+it('reads a range near the final cutoff again each day until the sync no longer reads its days, as Google may publish late', async () => {
   const { plugin, views, upstream } = await fixture();
   vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime('2026-10-20T19:00:00Z');
   const day = 24 * 60 * 60 * 1000;
   const { cutoff } = historyBounds(plugin, '1');
   const range = { ...window, end: cutoff };
@@ -249,10 +250,18 @@ it('reads a range ending on the final cutoff once more after a day, as Google ma
   });
   await views.reports.settled();
   expect(upstream).toHaveBeenCalledTimes(12);
-  // By then the range ends before the cutoff, so its days are final.
+  // Its days are still within the sync's seven, so it lives another day.
+  const next = await views.searchBreakdown('1', range);
+  expect(next.cacheExpiresAt).toBe(Date.now() + day);
+  expect(upstream).toHaveBeenCalledTimes(12);
+  vi.setSystemTime(Date.now() + 6 * day);
+  await views.searchBreakdown('1', range);
+  await views.reports.settled();
+  expect(upstream).toHaveBeenCalledTimes(18);
+  // Now the sync no longer reads them: they are final.
   const final = await views.searchBreakdown('1', range);
   expect(final.cacheExpiresAt).toBe(Date.now() + GOOGLE_SAVED_REPORT_MS);
-  expect(upstream).toHaveBeenCalledTimes(12);
+  expect(upstream).toHaveBeenCalledTimes(18);
 });
 
 it('expires partial dimensions after five minutes and does not cache total failures', async () => {
