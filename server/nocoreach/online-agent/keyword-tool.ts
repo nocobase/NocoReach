@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { OnlineTool } from '../../online-agent/executor.js';
+import { toolInput } from '../../online-agent/errors.js';
 import { keywordsFocus } from '../../../shared/keyword-subject.js';
 import type { KeywordRunProposal } from '../../../shared/keyword-run.js';
 
@@ -71,7 +72,7 @@ export function keywordRunTool(
     inputSchema: z.toJSONSchema(input),
     async execute(args) {
       await authorize();
-      const v = input.parse(args);
+      const v = toolInput(input, args);
       if (!(await allowed('nrKeywordSuggest', 'suggest')))
         return { accessDenied: true };
       try {
