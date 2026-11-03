@@ -5,9 +5,13 @@ import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { windowFor } from '../data-views.js';
 import { waitForFresh } from '../google-report-cache.js';
 import { withGa4RetryDeadline } from '../website-report.js';
+import { keywordSummary, summary as termSummary } from '../trends-source.js';
+
 // The reply stops after 90 seconds without output and a tool call gives none, so GA4's 429 retries stop within this.
 const GA4_RETRY_WINDOW_MS = 45_000;
-import { keywordSummary, summary as termSummary } from '../trends-source.js';
+// A read someone else started (a page's background refresh, the sync tick) has no such deadline, and the agent may join
+// it: the answer gives up first and that read carries on for whoever started it.
+const ANSWER_WITHIN_MS = 75_000;
 
 type Obj = Record<string, unknown>;
 type Reader = {
@@ -82,6 +86,20 @@ class QueryError extends Error {
   ) {
     super(code);
   }
+}
+
+function inTime<T>(work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    work,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new QueryError('timedOut')),
+        ANSWER_WITHIN_MS,
+      );
+      timer.unref?.();
+    }),
+  ]).finally(() => clearTimeout(timer));
 }
 
 const obj = (v: unknown): Obj =>
@@ -1528,7 +1546,7 @@ export function queryDataTool({
       )
         return { source: v.source, error: 'needsFromBeforeTo' };
       const q: Query = { ...v, id: projectId, site, allowed };
-      const out = await answer(v.source, q, sources, link).catch(
+      const out = await inTime(answer(v.source, q, sources, link)).catch(
         (error: unknown) => {
           signal.throwIfAborted();
           if (error instanceof QueryError)

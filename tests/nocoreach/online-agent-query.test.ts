@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { GoogleReportCache } from '../../server/nocoreach/google-report-cache';
 import {
   QUERY_SOURCES,
@@ -1146,4 +1146,43 @@ it('a table read after the summary waits for its own period, not a saved copy of
   const answer = await ask();
   expect(answer.period?.end).toBe(day(0));
   expect(answer.rows?.[0]?.key).toBe(`read for ${day(0)}`);
+});
+
+it('gives up after 75 seconds on a read someone else started, before the reply stops waiting', async () => {
+  const { sources } = fixture();
+  let started = 0;
+  const tool = queryDataTool({
+    sources: {
+      ...sources,
+      dataViews: {
+        ...sources.dataViews,
+        // A page's background refresh still waiting on GA4: it has no deadline of the agent's.
+        search: () => {
+          started++;
+          return new Promise(() => {});
+        },
+      },
+    } as QuerySources,
+    projectId: '7',
+    authorize: async () => {},
+    allowed: async () => true,
+    link: (path) => path,
+  });
+  vi.useFakeTimers();
+  try {
+    let answer: Answer | undefined;
+    void (
+      tool.execute(
+        { source: 'search', table: 'queries' },
+        new AbortController().signal,
+      ) as Promise<Answer>
+    ).then((a) => (answer = a));
+    await vi.advanceTimersByTimeAsync(74_000);
+    expect(started).toBe(1);
+    expect(answer).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(answer).toEqual({ source: 'search', error: 'timedOut' });
+  } finally {
+    vi.useRealTimers();
+  }
 });

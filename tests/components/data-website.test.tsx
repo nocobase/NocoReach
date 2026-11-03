@@ -430,6 +430,9 @@ describe('访问', () => {
     await userEvent.click(await screen.findByRole('button', { name: '美国' }));
     const drawer = await screen.findByRole('dialog');
     expect(drawer.textContent).toContain('09-03 至 09-09');
+    expect(
+      drawer.querySelector('[data-row-figures] thead')!.textContent,
+    ).toContain('09-03 至 09-09');
   });
 
   it('does not reuse a previous GA4 property after changing the project connection', async () => {
