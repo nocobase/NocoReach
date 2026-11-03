@@ -1943,3 +1943,232 @@ test('task pages: the tasks split off a task are listed as its siblings, with th
     }),
   ]);
 });
+
+// Images on a started task (2026-11-03): a stand-in for the task media store (manual-tasks.ts), with the person's
+// uploads linked to a task when a message or an edit uses them.
+function fakeTaskImages() {
+  const files = new Map<
+    string,
+    { name: string; bytes: Buffer; taskId: string | null }
+  >();
+  return {
+    files,
+    add(name: string) {
+      const id = randomUUID();
+      files.set(id, {
+        name,
+        bytes: Buffer.from(`bytes of ${name}`),
+        taskId: null,
+      });
+      return id;
+    },
+    linkImages: async (
+      _conn,
+      _actor,
+      _project,
+      taskId: string,
+      ids: string[],
+    ) =>
+      ids.map((id) => {
+        const file = files.get(id);
+        if (!file || (file.taskId && file.taskId !== taskId))
+          throw Object.assign(new Error('unavailable'), {
+            reason: 'TASK_IMAGE_UNAVAILABLE',
+          });
+        file.taskId = taskId;
+        return { id, name: file.name, ref: `/uploads/task-media/${id}.png` };
+      }),
+    forAgent: async (_conn, _project, taskId: string, ids: string[]) =>
+      ids.flatMap((id) => {
+        const file = files.get(id);
+        return file?.taskId === taskId
+          ? [
+              {
+                id,
+                name: file.name,
+                type: 'image/png',
+                size: file.bytes.length,
+                ext: 'png',
+                read: async () => file.bytes,
+              },
+            ]
+          : [];
+      }),
+  };
+}
+
+test('message images reach the run numbered; publishing uploads only the images the article shows, at their CMS address', async () => {
+  const f = await fixture();
+  const images = fakeTaskImages();
+  f.s.p.taskAttachments = images;
+  const circled = images.add('circled.png'),
+    workspace = images.add('nocobase-3-workspace.png');
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  const text =
+    'Image 1 circles a line to delete. Put Image 2 in the NocoBase 3 section.';
+  let d = await f.command('comment', {
+    comment: text,
+    imageIds: [circled, workspace],
+  });
+  const ref = (id: string) => `/uploads/task-media/${id}.png`;
+  expect(d.work.history.at(-1)).toMatchObject({
+    action: 'comment',
+    comment: text,
+    images: [
+      { id: circled, name: 'circled.png', ref: ref(circled) },
+      { id: workspace, name: 'nocobase-3-workspace.png', ref: ref(workspace) },
+    ],
+  });
+  expect(d.work.images).toEqual([circled, workspace]);
+  // At most ten images a message, each once, and only the person's own uploads that are still there.
+  for (const [imageIds, status] of [
+    [Array.from({ length: 11 }, () => randomUUID()), 400],
+    [[circled, circled], 400],
+    [['not-an-id'], 400],
+    [[randomUUID()], 409],
+  ] as const)
+    await expect(
+      f.command('comment', { comment: 'x', imageIds }),
+    ).rejects.toMatchObject({ status });
+
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  const { run } = await claim(f);
+  // The run reads the message with its images numbered as the text calls them.
+  expect(run.input.notes).toEqual([
+    {
+      text,
+      images: [
+        { number: 1, name: 'circled.png', ref: ref(circled) },
+        { number: 2, name: 'nocobase-3-workspace.png', ref: ref(workspace) },
+      ],
+    },
+  ]);
+  const body = `# 你好\n\nNocoBase 3 的工作台如下图所示。\n\n![NocoBase 3 工作台](${ref(workspace)})`;
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: '放了图 2。',
+    article: {
+      locales: { zh: { body } },
+      verifyText: 'NocoBase 3 的工作台如下图所示',
+    },
+  });
+  d = await f.view();
+  await f.command('approveStage', {
+    stageKey: d.work.flow.stages[d.work.stageIndex].key,
+    artifactId: review(d).id,
+    checked: [],
+  });
+  await f.settle();
+  d = await f.view();
+  expect(d.work.release.state).toBe('verifying');
+  // Only the image the article shows is uploaded, into the body field's storage; the screenshot pointing at a problem is not.
+  expect(
+    f.cms.state.uploads.map((u) => [
+      u.name,
+      u.type,
+      u.bytes.toString(),
+      u.params.get('attachmentField'),
+    ]),
+  ).toEqual([
+    [
+      'nocobase-3-workspace.png',
+      'image/png',
+      'bytes of nocobase-3-workspace.png',
+      'articles.content',
+    ],
+  ]);
+  const address =
+    'https://cms.example.com/storage/uploads/1-nocobase-3-workspace.png';
+  const write = f.cms.state.requests.filter((r) => r.action === 'update');
+  expect(write).toHaveLength(1);
+  expect(write[0].body).toEqual({
+    content_cn: `# 你好\n\nNocoBase 3 的工作台如下图所示。\n\n![NocoBase 3 工作台](${address})`,
+  });
+  expect(d.work.imageUrls).toEqual({ cms: { [workspace]: address } });
+});
+
+test('an image the CMS key may not upload stops publishing before the article; a retry uploads it once', async () => {
+  const f = await fixture();
+  const images = fakeTaskImages();
+  f.s.p.taskAttachments = images;
+  const shot = images.add('shot.png');
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('comment', { comment: 'Use Image 1.', imageIds: [shot] });
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  f.cms.state.uploadDenied = true;
+  await draftAndApprove(f, {
+    locales: {
+      zh: {
+        body: `# 你好\n\n新的截图放在这一段的下面。\n\n![截图](/uploads/task-media/${shot}.png)`,
+      },
+    },
+    verifyText: '新的截图放在这一段的下面',
+    summary: 'Added the screenshot',
+  });
+  let d = await f.view();
+  expect(d.work.release).toMatchObject({
+    state: 'publish_failed',
+    article: { error: 'image_upload_denied', errorStep: 'images' },
+  });
+  expect(f.cms.state.requests.some((r) => r.action === 'update')).toBe(false);
+  f.cms.state.uploadDenied = false;
+  await f.command('retryPublish', {
+    stageKey: d.work.flow.stages[d.work.stageIndex].key,
+  });
+  await f.settle();
+  d = await f.view();
+  expect(d.work.release.state).toBe('verifying');
+  expect(f.cms.state.uploads).toHaveLength(1);
+  // A retry after the upload reuses the address kept on the task.
+  expect(Object.values(d.work.imageUrls.cms)).toEqual([
+    'https://cms.example.com/storage/uploads/1-shot.png',
+  ]);
+});
+
+test('Edit directly: an image pasted into the body is linked when the edit is saved; one of another task is refused', async () => {
+  const f = await fixture();
+  const images = fakeTaskImages();
+  f.s.p.taskAttachments = images;
+  await f.command('linkArticle', { targetId: 'cms', articleId: '7' });
+  await f.command('startTask', { playbookId: 'optimize-page' });
+  const { run } = await claim(f);
+  await finish(f, {
+    taskId: '1',
+    runId: run.id,
+    ok: true,
+    content: '改了中文正文。',
+    article: { locales: { zh: { body: '# 你好\n\n第一版' } } },
+  });
+  let d = await f.view();
+  const stageKey = d.work.flow.stages[d.work.stageIndex].key;
+  const pasted = images.add('pasted.png'),
+    elsewhere = images.add('elsewhere.png');
+  images.files.get(elsewhere)!.taskId = '2';
+  const edit = (id: string) =>
+    f.command('editArticleDraft', {
+      stageKey,
+      artifactId: review(d).id,
+      article: {
+        locales: {
+          zh: {
+            body: `# 你好\n\n第二版正文由人工直接修改。\n\n![pasted](/uploads/task-media/${id}.png)`,
+          },
+        },
+        verifyText: '第二版正文由人工直接修改',
+      },
+    });
+  await expect(edit(elsewhere)).rejects.toMatchObject({ status: 409 });
+  d = await edit(pasted);
+  expect(images.files.get(pasted)!.taskId).toBe('1');
+  expect(d.work.images).toEqual([pasted]);
+  await f.command('approveStage', {
+    stageKey,
+    artifactId: review(d).id,
+    checked: [],
+  });
+  await f.settle();
+  expect((await f.view()).work.release.state).toBe('verifying');
+  expect(f.cms.state.uploads.map((u) => u.name)).toEqual(['pasted.png']);
+});

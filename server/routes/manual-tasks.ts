@@ -54,6 +54,8 @@ function creator(context: Pick<Context<AuthEnv>, 'get'>): TaskCreator {
 const mediaQuery = z.strictObject({
   projectId: z.string().regex(/^[1-9]\d{0,15}$/),
   requestId: z.uuid(),
+  /** A started task the image is for: a message's image or one pasted into Edit directly (images only). */
+  taskId: z.string().regex(/^\d+$/).optional(),
 });
 const fileParam = z.strictObject({ fileId: z.uuid() });
 
@@ -172,15 +174,19 @@ export const manualTaskRoutes = defineApiRoutes<Application>((app) => {
     '/nocoreachTasks/media',
     apiValidator('query', mediaQuery),
     async (context, next) => {
-      await service().authorize(
+      const query = context.req.valid('query');
+      await service().authorizeUpload(
         creator(context),
-        context.req.valid('query').projectId,
+        query.projectId,
+        query.taskId,
       );
       await next();
     },
     describeRoute({
       tags: ['NocoReach Tasks'],
       summary: 'Upload an image or video for a task draft',
+      description:
+        'With taskId, an image for a started task: sent with a message or pasted into Edit directly, which links it.',
       operationId: 'uploadManualTaskMedia',
       responses: {
         201: dataResponse(TaskMediaView),
@@ -212,6 +218,7 @@ export const manualTaskRoutes = defineApiRoutes<Application>((app) => {
             input.projectId,
             input.requestId,
             context.req.valid('form').file,
+            input.taskId,
           ),
         },
         201,

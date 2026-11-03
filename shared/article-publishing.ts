@@ -22,6 +22,8 @@ export type ArticleCapabilities = {
   update: boolean;
   concurrency: ArticleConcurrency;
   idempotency: 'native' | 'lookup';
+  /** Takes the images an article shows into its own file storage when publishing (2026-11-03). */
+  images: boolean;
 };
 export const ARTICLE_CAPABILITIES: Record<
   ArticleTargetKind,
@@ -32,18 +34,22 @@ export const ARTICLE_CAPABILITIES: Record<
     update: true,
     concurrency: 'check-before-write',
     idempotency: 'lookup',
+    // NocoBase's file manager: attachments:create, the request its Markdown editor sends for a pasted image.
+    images: true,
   },
   http: {
     search: true,
     update: true,
     concurrency: 'conditional',
     idempotency: 'native',
+    images: false,
   },
   'git-files': {
     search: true,
     update: true,
     concurrency: 'conditional',
     idempotency: 'lookup',
+    images: false,
   },
 };
 
