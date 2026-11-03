@@ -69,8 +69,13 @@ test('tick: a Traffic report GA4 refuses in part waits six hours, a whole one is
   vi.setSystemTime(Date.now()+6*HOURS);website.mockRejectedValue(new Error('quota'));await sync.tick();assert.equal(website.mock.calls.length,5);
   vi.setSystemTime(Date.now()+15*60000-1);await sync.tick();assert.equal(website.mock.calls.length,5);
   vi.setSystemTime(Date.now()+1);await sync.tick();assert.equal(website.mock.calls.length,6);
+  // The retry of a part refused failed: 15 minutes later it is read again, not taken back as the refused report.
+  website.mockResolvedValue({complete:true,missing:[]});vi.setSystemTime(Date.now()+15*60000);await sync.tick();assert.equal(website.mock.calls.length,7);
+  await sync.tick();assert.equal(website.mock.calls.length,8);
+  // A whole report's read that fails waits 15 minutes and is read ahead again.
+  website.mockRejectedValue(new Error('quota'));await sync.tick();vi.setSystemTime(Date.now()+15*60000);await sync.tick();assert.equal(website.mock.calls.length,10);
   // A whole report is read ahead, so a held one answers however old; a part refused is read again after six hours.
-  assert.deepEqual(scopes,['ahead','ahead','ahead','fresh','fresh','ahead']);
+  assert.deepEqual(scopes,['ahead','ahead','ahead','fresh','fresh','fresh','fresh','ahead','ahead','ahead']);
  }finally{vi.useRealTimers();}
 });
 test('tick: readies Search performance at most every 15 minutes even after a failure, and waits for new reports',async()=>{
