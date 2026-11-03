@@ -76,10 +76,10 @@ const showCopy = (
   saved?: { refreshing: boolean; savedAt: number },
 ) => ({ ...value, cacheExpiresAt, ...saved });
 
-it('reads the Traffic report when its day or window changes, not every six hours as well', async () => {
+it('reads the Traffic report once a day, when the sync moves its window, not again at midnight', async () => {
   const { db } = await fixture();
   vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime('2026-10-20T09:00:00Z');
+  vi.setSystemTime('2026-10-20T20:00:00Z');
   const report = new WebsiteReport({ db });
   const read = vi.fn(async () => ({ tables: {}, missing: [], complete: true }));
   (report as { readPeriod: unknown }).readPeriod = read;
@@ -88,25 +88,33 @@ it('reads the Traffic report when its day or window changes, not every six hours
     cutoff: '2026-10-17',
     view: ['28'],
   });
-  expect(first.cacheExpiresAt).toBe(Date.parse('2026-10-21T00:00:00Z'));
+  expect(first.cacheExpiresAt).toBe(Date.now() + 30 * 3600000);
   expect(first).toMatchObject({ window: w, cutoff: '2026-10-17' });
-  vi.setSystemTime('2026-10-20T20:00:00Z');
+  // Past UTC midnight, the same window is the same report.
+  vi.setSystemTime('2026-10-21T19:59:00Z');
   expect(
     await report.period('1', '123', w, { view: ['28'] }),
   ).not.toHaveProperty('savedAt');
   expect(read).toHaveBeenCalledTimes(1);
+  // The day's sync moves the window: one read, answered from the copy meanwhile.
+  vi.setSystemTime('2026-10-21T20:00:00Z');
+  const next = windowFor('2026-10-18', '28');
+  expect(await report.period('1', '123', next, { view: ['28'] })).toMatchObject(
+    { refreshing: true, window: w },
+  );
+  await report.history.settled();
+  expect(read).toHaveBeenCalledTimes(2);
+  // A sync that has stopped leaves the window put; the report is still read again after 30 hours.
+  vi.setSystemTime(Date.now() + 30 * 3600000);
+  expect(await report.period('1', '123', next, { view: ['28'] })).toMatchObject(
+    { refreshing: true },
+  );
+  await report.history.settled();
+  expect(read).toHaveBeenCalledTimes(3);
   // A report GA4 answered in part is still read again soon.
   read.mockResolvedValue({ tables: {}, missing: ['city'], complete: false });
   const partial = await report.period('1', '123', windowFor('2026-10-17', '7'));
   expect(partial.cacheExpiresAt).toBe(Date.now() + GA4_PARTIAL_CACHE_MS);
-  // The next day, or a sync moving the window, reads it again.
-  read.mockResolvedValue({ tables: {}, missing: [], complete: true });
-  vi.setSystemTime('2026-10-21T00:00:00Z');
-  expect(await report.period('1', '123', w, { view: ['28'] })).toMatchObject({
-    refreshing: true,
-  });
-  await report.history.settled();
-  expect(read).toHaveBeenCalledTimes(3);
 });
 
 it('answers an expired report from its copy without waiting, and marks the copy', async () => {
@@ -446,7 +454,7 @@ it('reuses GA4 history after sync changes while rebuilding current Search Consol
   expect(read).toHaveBeenCalledTimes(1);
 });
 
-it('persists row details and rolls relative historical queries over on the next business day', async () => {
+it('persists row details and keeps a period report across midnight until its window moves or 30 hours pass', async () => {
   const { db } = await fixture();
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-10-16T23:30:00Z'));
@@ -470,8 +478,14 @@ it('persists row details and rolls relative historical queries over on the next 
   vi.setSystemTime(new Date('2026-10-17T00:01:00Z'));
   await restarted.period('1', '123', window);
   await restarted.row('1', '123', window, selection);
-  expect(period).toHaveBeenCalledTimes(2);
+  // The days still being filled in at the end of the line are read again with the window's next report, which the
+  // day's sync brings; only a sync that has stopped leaves it to the 30-hour bound.
+  expect(period).toHaveBeenCalledTimes(1);
   expect(row).toHaveBeenCalledTimes(1);
+  vi.setSystemTime(new Date('2026-10-16T23:30:00Z').getTime() + 30 * 3600000);
+  await restarted.period('1', '123', window);
+  await restarted.history.settled();
+  expect(period).toHaveBeenCalledTimes(2);
 });
 
 it.each(['daily', 'change'])(

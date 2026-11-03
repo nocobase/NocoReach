@@ -6,4 +6,4 @@
 - Exports, hand-offs and a row's detail use the period the tables hold, and the online agent's tables always cover the period it states.
 - The scheduled sync readies the default range's tables and breakdowns too, so they are there before anyone opens the page, for projects someone has opened in the last three days or just connected. Other projects are not read ahead until someone opens them; their daily sync and the read of their preliminary days go on. A report Google refuses in part is read ahead at most every six hours, though a person opening it still retries sooner.
 - Until the day's sync lands, Search performance's tables end at the last synced day instead of asking Search Console, and the ⓘ names the period they cover. A day the sync found empty counts as not published yet when it would be the tables' last day.
-- Traffic's report is read at most twice a day instead of every six hours, so the preliminary days at the end of its line can lag by up to a day.
+- Traffic's report is read once a day, when the day's sync moves its date range, instead of every six hours, so the preliminary days at the end of its line can lag by up to a day.
