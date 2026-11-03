@@ -3,6 +3,7 @@ import type { OnlineTool } from '../../online-agent/executor.js';
 import { toolInput } from '../../online-agent/errors.js';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { windowFor } from '../data-views.js';
+import { waitForFresh } from '../google-report-cache.js';
 import { keywordSummary, summary as termSummary } from '../trends-source.js';
 
 type Obj = Record<string, unknown>;
@@ -315,11 +316,13 @@ const SOURCES: Record<string, Source> = {
       if (!base.window) return noData(base.cutoff);
       const w = obj(base.window);
       let details: Promise<Obj> | undefined;
-      // The tables read Search Console for the window, as the page's tables do.
+      // The same tables as the page's: the synced days where they hold the window, otherwise Search Console. The answer
+      // states the period beside them, so they must cover exactly that period even before the daily sync lands.
       const detail = () =>
         (details ??= call(s, 'dataViews', 'search', q.id, {
           ...v,
           details: true,
+          exactWindow: true,
         }).then(obj));
       const dimension = (key: string) => async () => {
         const d = obj((await detail())[key]);
@@ -1356,7 +1359,8 @@ async function answer(
       return { ...head, error: 'unsupportedRange', supported: source.ranges };
   } else if (q.from || q.range !== '28')
     notes.push('This source is not read for a period; the range was ignored.');
-  const read = await source.read(sources, q);
+  // A saved copy is for a page that replaces it a moment later. The agent answers once, so it waits for current reports.
+  const read = await waitForFresh(() => source.read(sources, q));
   if (read.connected === false) return { ...head, connected: false };
   const w = obj(read.window),
     period = w.start ? { start: w.start, end: w.end } : null,
@@ -1384,8 +1388,10 @@ async function answer(
   const table = q.table ?? names[0];
   if (!names.includes(table))
     return { ...head, error: 'unknownTable', tables: names };
+  // A table is read only when asked for, so after `source.read` returned: it needs its own scope, or it answers from a
+  // saved copy that may hold another window than the `period` stated beside it.
   const got = read.tables[table],
-    value = typeof got === 'function' ? await got() : got,
+    value = typeof got === 'function' ? await waitForFresh(got) : got,
     t: Table = Array.isArray(value) ? { rows: value } : value;
   let rows = t.rows,
     filtered = false;

@@ -4,7 +4,7 @@ import {
   ChartArea as Area,
   ChartLine as Line,
 } from '#components/reach/chart-legend';
-import { googleHistoryFreshness } from '../../../shared/google-cache.js';
+import { googleHistoryFreshness, savedCopyNote, type SavedCopy } from '../../../shared/google-cache.js';
 import { $t } from "#i18n";
 // Search performance › Performance, the parts beyond the totals: Country / region, Device and Search appearance (read
 // from Search Console when the page asks), Rising, Falling and New (Search Console Insights' trending queries and pages),
@@ -22,7 +22,7 @@ import { TablePagination } from "#components/seo/table-pagination";
 import { SortableHeader } from "#components/seo/sortable-header";
 import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { InfoTip } from "#components/reach/info-tip";
-import { InlineError, ListSkeleton } from "#components/reach/states";
+import { InlineError, ListSkeleton, SavedReportNote } from "#components/reach/states";
 import { safeLink } from "../analytics";
 import { DetailDrawer } from "../detail-drawer";
 import { countryName } from "../countries";
@@ -34,11 +34,11 @@ import { Delta } from '#components/reach/delta';
 export type Metric = "clicks" | "impressions" | "ctr" | "position";
 export type Window = { all?: boolean; start: string; end: string; previousStart: string; previousEnd: string };
 export type BreakdownRow = { key: string; clicks: number; impressions: number; ctr: number; position: number; previousClicks: number | null; previousImpressions: number | null };
-export type Breakdown = { connected: boolean; countries: BreakdownRow[] | null; devices: BreakdownRow[] | null; appearances: BreakdownRow[] | null };
+export type Breakdown = Partial<SavedCopy> & { connected: boolean; countries: BreakdownRow[] | null; devices: BreakdownRow[] | null; appearances: BreakdownRow[] | null };
 export type MoverRow = { key: string; clicks: number; previousClicks: number; change: number; impressions: number; previousImpressions: number; position: number | null; previousPosition: number | null };
 export type Movers = { rising: MoverRow[]; falling: MoverRow[]; fresh: MoverRow[] };
 type TrendPoint = { date: string; clicks: number | null; impressions: number | null; ctr: number | null; position: number | null; previousDate: string; previousClicks: number | null; previousImpressions: number | null; previousCtr: number | null; previousPosition: number | null };
-type RowDetail = { connected: boolean; trend: TrendPoint[]; related: { key: string; clicks: number; impressions: number; ctr: number; position: number }[] };
+type RowDetail = Partial<SavedCopy> & { connected: boolean; trend: TrendPoint[]; related: { key: string; clicks: number; impressions: number; ctr: number; position: number }[] };
 // What the page knows about the report it shows, for the requests it makes on its own.
 export type Scope = { projectId: number; property?: string; compare?: boolean; window: Window; country?: string; filters: Record<string, unknown> };
 
@@ -62,7 +62,7 @@ const changeText = (now: number, before: number | null) => (before == null || !b
 const scopeBody = (s: Scope) => ({ projectId: s.projectId, compare: s.compare, ...s.window, ...(s.country ? { country: s.country } : {}), ...s.filters });
 
 export function useBreakdown(scope: Scope | null) {
-  return useFreshData<Breakdown>(scope ? `data-view:search-breakdown:${scope.projectId}:${JSON.stringify([scope.property,scopeBody(scope)])}` : null, () => api.action<Breakdown>("nrDataViews", "searchBreakdown", { method: "POST", body: scopeBody(scope!), unwrap: "data" }), googleHistoryFreshness);
+  return useFreshData<Breakdown>(scope ? `data-view:search-breakdown:${scope.projectId}:${JSON.stringify([scope.property,scopeBody(scope)])}` : null, () => api.action<Breakdown>("nrDataViews", "searchBreakdown", { method: "POST", body: { ...scopeBody(scope!), acceptSaved: true }, unwrap: "data" }), googleHistoryFreshness);
 }
 
 // Shares of clicks (of impressions where nothing was clicked), which add up across one dimension's rows.
@@ -153,13 +153,14 @@ export const slices = (kind: "country" | "device" | "appearance", rows: Breakdow
 // with (the queries a page shows for).
 export function RowDrawer({ scope, dimension, rowKey, figures, metric, onClose }: { scope: Scope; dimension: "query" | "page"; rowKey: string; figures?: { clicks: number; impressions: number; ctr: number; position: number | null }; metric: Metric; onClose: () => void }) {
   const body = { ...scopeBody(scope), dimension, key: rowKey };
-  const { data, error } = useFreshData<RowDetail>(`data-view:search-row:${scope.projectId}:${JSON.stringify([scope.property,body])}`, () => api.action<RowDetail>("nrDataViews", "searchRow", { method: "POST", body, unwrap: "data" }), googleHistoryFreshness);
+  const { data, error } = useFreshData<RowDetail>(`data-view:search-row:${scope.projectId}:${JSON.stringify([scope.property,body])}`, () => api.action<RowDetail>("nrDataViews", "searchRow", { method: "POST", body: { ...body, acceptSaved: true }, unwrap: "data" }), googleHistoryFreshness);
   const m: Metric = metric;
   const prevKey = `previous${m[0].toUpperCase()}${m.slice(1)}` as keyof TrendPoint;
   const points = (data?.trend ?? []).map((p) => ({ date: p.date, value: p[m], previous: p[prevKey] }));
   const page = dimension === "page" && safeLink(rowKey) ? safeLink(rowKey)! : null;
   return (
     <DetailDrawer open onClose={onClose} title={`${dimension === "page" ? $t('common.page') : $t('common.query')} · ${rowKey}`} description={$t('common.range', { 0: formatDate(scope.window.start), 1: formatDate(scope.window.end) })}>
+      <SavedReportNote {...savedCopyNote(data)} />
       {page ? <a className="nr-link mb-3 inline-flex items-center gap-1 break-all" href={page} target="_blank" rel="noreferrer">{rowKey}<ArrowUpRight className="size-3.5" /></a> : null}
       {figures ? (
         <table className="w-full text-sm" data-row-figures="">

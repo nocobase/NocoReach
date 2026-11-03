@@ -35,7 +35,12 @@ import { toast } from '#lib/toast';
 import { cn } from '#lib/utils';
 import { RouteChildPage } from '#components/route-child-page';
 import { PageContainer, PageHeader, Section } from '#components/reach/page';
-import { InlineError, LoadError } from '#components/reach/states';
+import {
+  InlineError,
+  LoadError,
+  SavedReportNote,
+} from '#components/reach/states';
+import { savedCopyNote, type SavedCopy } from '../../shared/google-cache.js';
 import { InfoTip, WithInfo } from '#components/reach/info-tip';
 import { Tag } from '#components/reach/tag';
 import { Button } from '#components/ui/button';
@@ -173,7 +178,10 @@ type TrendPoint = {
   clicks: number | null;
   impressions: number | null;
 };
-type RowDetail = { connected: boolean; trend: TrendPoint[] };
+type RowDetail = Partial<SavedCopy> & {
+  connected: boolean;
+  trend: TrendPoint[];
+};
 
 const DAY = 86400000;
 const addDays = (d: string, n: number) =>
@@ -734,7 +742,7 @@ function TrendSection({
     () =>
       api.action<RowDetail>('nrDataViews', 'searchRow', {
         method: 'POST',
-        body: body!,
+        body: { ...body!, acceptSaved: true },
         unwrap: 'data',
       }),
   );
@@ -808,6 +816,7 @@ function TrendSection({
               {$t('keywordDetail.siteDaysHelp')}
             </InfoTip>
           </h3>
+          <SavedReportNote {...savedCopyNote(row.data)} />
           {!gsc ? (
             <Skeleton className='h-48' />
           ) : !gsc.connected || !cutoff ? (

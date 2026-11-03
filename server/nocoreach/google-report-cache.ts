@@ -1,8 +1,22 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
-import { GOOGLE_HISTORY_CACHE_MS } from '../../shared/google-cache.js';
+import {
+  GOOGLE_HISTORY_CACHE_MS,
+  GOOGLE_PARTIAL_CACHE_MS,
+  GOOGLE_SAVED_COPY_MAX_AGE_MS,
+  GOOGLE_SAVED_COPY_RETRY_MS,
+  GOOGLE_SAVED_REPORT_MS,
+  type SavedCopy,
+} from '../../shared/google-cache.js';
 import type { LegacyDatabase } from './legacy/database.js';
 
-type Entry = { key: string; at: number; expiresAt: number; value: unknown };
+type Entry = {
+  key: string;
+  family?: string;
+  at: number;
+  expiresAt: number;
+  value: unknown;
+};
 const MAX_SAVED = 32;
 const MAX_MEMORY = 128;
 const MAX_ENTRY_BYTES = 2 * 1024 * 1024;
@@ -44,25 +58,50 @@ function entries(payload: unknown): Entry[] {
         typeof entry.expiresAt === 'number' &&
         Number.isFinite(entry.expiresAt) &&
         entry.at <= Date.now() &&
-        entry.expiresAt > Date.now() &&
-        entry.expiresAt <= entry.at + GOOGLE_HISTORY_CACHE_MS &&
+        // Past its lifetime a report is still the copy answered while a new one is read, for as long as a copy may be
+        // shown; after that it only takes room.
+        (entry.expiresAt > Date.now() ||
+          entry.at > Date.now() - GOOGLE_SAVED_COPY_MAX_AGE_MS) &&
+        entry.expiresAt <= entry.at + GOOGLE_SAVED_REPORT_MS &&
         'value' in entry
       );
     }),
   );
 }
 
-/** Completed Google reports shared by authorized project readers and retained across restarts. */
+// Reads inside this scope wait for a new report instead of answering from a saved copy: what a background build reads
+// must be current, or the copy it saves would be old again.
+const freshReads = new AsyncLocalStorage<boolean>();
+export const waitForFresh = async <T>(read: () => Promise<T> | T): Promise<T> =>
+  freshReads.run(true, read);
+/** Whether reads here wait for a new report rather than take a saved copy. */
+export const readsFresh = (): boolean => Boolean(freshReads.getStore());
+const copyable = (entry: Entry): boolean =>
+  entry.expiresAt > Date.now() ||
+  Date.now() - entry.at <= GOOGLE_SAVED_COPY_MAX_AGE_MS;
+
+/**
+ * Completed Google reports shared by authorized project readers and retained across restarts. A report past its lifetime
+ * is answered at once from its saved copy while a new one is read in the background; only a report with no saved copy
+ * makes its reader wait for Google. `family` names the view a report belongs to whatever its dates, so a day's new window
+ * is answered from the previous one in the same way (the report says which window it holds).
+ */
 export class GoogleReportCache {
   private memory = new Map<string, Entry>();
   private memorySizes = new Map<string, number>();
   private memoryBytes = 0;
   private pending = new Map<string, Promise<Entry>>();
+  private reads = new Map<string, Promise<Entry[]>>();
+  private failures = new Map<string, { at: number; reason?: string }>();
   private writes = new Map<string, Promise<void>>();
 
   constructor(
     private readonly database?: LegacyDatabase,
     private readonly namespace = 'ga4-reports',
+    // A read in the background fails where no request sees it, so it is logged here.
+    private readonly logger?: {
+      warn(message: string, meta?: Record<string, unknown>): void;
+    },
   ) {}
 
   async load<T>(
@@ -70,7 +109,9 @@ export class GoogleReportCache {
     identity: unknown[],
     fetcher: () => Promise<T>,
     ttl: (value: T) => number = () => GOOGLE_HISTORY_CACHE_MS,
-    present: (value: T, expiresAt: number) => T = (value) => value,
+    present: (value: T, expiresAt: number, saved?: SavedCopy) => T = (value) =>
+      value,
+    options: { family?: unknown[] } = {},
   ): Promise<T> {
     // A transaction must neither await an outside build nor publish uncommitted state.
     if (this.database?.transactionContext?.())
@@ -78,49 +119,147 @@ export class GoogleReportCache {
     const key = createHash('sha256')
       .update(JSON.stringify([1, projectId, ...identity]))
       .digest('hex');
-    const cached = this.memory.get(key);
-    if (cached && cached.expiresAt > Date.now())
-      return present(structuredClone(cached.value) as T, cached.expiresAt);
+    const family = options.family
+      ? createHash('sha256')
+          .update(JSON.stringify([1, projectId, 'family', ...options.family]))
+          .digest('hex')
+      : undefined;
+    const found =
+      this.memory.get(key) ?? (await this.nearest(projectId, key, family));
+    // A copy older than GOOGLE_SAVED_COPY_MAX_AGE_MS is not shown: the reader waits for the new report instead.
+    const held = found && copyable(found) ? found : undefined;
+    // Each caller may enrich its own response with synced Search Console rows.
+    if (held?.key === key && held.expiresAt > Date.now())
+      return present(structuredClone(held.value) as T, held.expiresAt);
+    if (held && !freshReads.getStore()) {
+      const refreshing = this.refresh(projectId, key, family, fetcher, ttl);
+      const reason = refreshing ? undefined : this.failures.get(key)?.reason;
+      return present(
+        structuredClone(held.value) as T,
+        Date.now() + GOOGLE_SAVED_COPY_RETRY_MS,
+        { refreshing, savedAt: held.at, ...(reason ? { reason } : {}) },
+      );
+    }
+    const entry = await this.start(projectId, key, family, fetcher, ttl);
+    return present(structuredClone(entry.value) as T, entry.expiresAt);
+  }
+
+  /** Resolves once no report is being read in the background. */
+  async settled(): Promise<void> {
+    while (this.pending.size)
+      await Promise.allSettled([...this.pending.values()]);
+  }
+
+  private start<T>(
+    projectId: string,
+    key: string,
+    family: string | undefined,
+    fetcher: () => Promise<T>,
+    ttl: (value: T) => number,
+  ): Promise<Entry> {
     let pending = this.pending.get(key);
     if (!pending) {
-      pending = this.build(projectId, key, fetcher, ttl).finally(() =>
+      pending = this.build(projectId, key, family, fetcher, ttl).finally(() =>
         this.pending.delete(key),
       );
       this.pending.set(key, pending);
     }
-    // Each caller may enrich its own response with synced Search Console rows.
-    const entry = await pending;
-    return present(structuredClone(entry.value) as T, entry.expiresAt);
+    return pending;
+  }
+
+  // A failed read keeps the copy and waits the partial-report delay, so a dead token or a quota error is not asked again
+  // on every read of the page. Its reason goes to the page, by the rule the data views' errors follow: a message with a
+  // status was written for people. Returns whether a new report is on its way.
+  private refresh<T>(
+    projectId: string,
+    key: string,
+    family: string | undefined,
+    fetcher: () => Promise<T>,
+    ttl: (value: T) => number,
+  ): boolean {
+    if (this.pending.has(key)) return true;
+    const failed = this.failures.get(key);
+    if (failed && Date.now() - failed.at < GOOGLE_PARTIAL_CACHE_MS)
+      return false;
+    void waitForFresh(() =>
+      this.start(projectId, key, family, fetcher, ttl),
+    ).then(
+      () => this.failures.delete(key),
+      (
+        error: { status?: number; code?: string; message?: string } | undefined,
+      ) => {
+        this.logger?.warn('NocoReach report refresh failed', {
+          namespace: this.namespace,
+          projectId,
+          status: error?.status,
+          code: error?.code,
+          message: error?.message,
+        });
+        if (this.failures.size >= MAX_MEMORY) this.failures.clear();
+        this.failures.set(key, {
+          at: Date.now(),
+          reason: error?.status ? error.message : undefined,
+        });
+      },
+    );
+    return true;
+  }
+
+  // The report itself, or the latest of its family when this one was never read.
+  private async nearest(
+    projectId: string,
+    key: string,
+    family: string | undefined,
+  ): Promise<Entry | undefined> {
+    let reading = this.reads.get(projectId);
+    if (!reading) {
+      reading = this.read(projectId).finally(() =>
+        this.reads.delete(projectId),
+      );
+      this.reads.set(projectId, reading);
+    }
+    const saved = await reading;
+    const exact = this.memory.get(key) ?? saved.find((e) => e.key === key);
+    if (exact) {
+      this.remember(exact);
+      return exact;
+    }
+    if (!family) return undefined;
+    return [...saved, ...this.memory.values()]
+      .filter((entry) => entry.family === family && copyable(entry))
+      .sort((a, b) => b.at - a.at)[0];
   }
 
   private async build<T>(
     projectId: string,
     key: string,
+    family: string | undefined,
     fetcher: () => Promise<T>,
     ttl: (value: T) => number,
   ): Promise<Entry> {
-    const saved = (await this.read(projectId)).find(
-      (entry) => entry.key === key,
-    );
-    if (saved) {
-      this.remember(saved);
-      return saved;
-    }
     const value = await fetcher();
     const at = Date.now();
-    const entry = {
+    const entry: Entry = {
       key,
+      ...(family ? { family } : {}),
       at,
-      expiresAt:
-        at + Math.min(GOOGLE_HISTORY_CACHE_MS, Math.max(0, ttl(value))),
+      expiresAt: at + Math.min(GOOGLE_SAVED_REPORT_MS, Math.max(0, ttl(value))),
       value: structuredClone(value),
     };
-    // Oversized results still reach the caller, but never turn the shared snapshot into a large blob.
-    if (entry.expiresAt > at && bytes(entry) <= MAX_ENTRY_BYTES) {
-      this.remember(entry);
-      await this.save(projectId, entry);
-    }
+    // Oversized results still reach the caller, but never turn the shared snapshot into a large blob. A result that is
+    // not kept also retires the old copy, or every read would answer from it and ask for a new one again.
+    const kept = entry.expiresAt > at && bytes(entry) <= MAX_ENTRY_BYTES;
+    this.retire(key, family);
+    if (kept) this.remember(entry);
+    await this.save(projectId, key, family, kept ? entry : undefined);
     return entry;
+  }
+
+  private retire(key: string, family: string | undefined) {
+    this.forget(key);
+    if (!family) return;
+    for (const entry of [...this.memory.values()])
+      if (entry.family === family) this.forget(entry.key);
   }
 
   private forget(key: string) {
@@ -153,25 +292,35 @@ export class GoogleReportCache {
     }
   }
 
-  private async save(projectId: string, entry: Entry) {
+  private async save(
+    projectId: string,
+    key: string,
+    family: string | undefined,
+    entry: Entry | undefined,
+  ) {
     if (!this.database) return;
     const repository = this.database.getRepository('nrSnapshots');
     const write = (this.writes.get(projectId) ?? Promise.resolve()).then(
       async () => {
         try {
-          const key = `${this.namespace}:${projectId}`;
-          const row = await repository.findOne({ filter: { key } });
+          const snapshot = `${this.namespace}:${projectId}`;
+          const row = await repository.findOne({ filter: { key: snapshot } });
+          const old = entries(row?.get('payload'));
+          // The same view's earlier window is never asked for again, so it gives its room to the new one.
+          const others = old.filter(
+            (saved) =>
+              saved.key !== key && !(family && saved.family === family),
+          );
+          if (!entry && others.length === old.length) return;
           const payload = {
-            entries: bounded([
-              entry,
-              ...entries(row?.get('payload')).filter(
-                (saved) => saved.key !== entry.key,
-              ),
-            ]),
+            entries: bounded(entry ? [entry, ...others] : others),
           };
           if (row)
-            await repository.update({ filter: { key }, values: { payload } });
-          else await repository.create({ values: { key, payload } });
+            await repository.update({
+              filter: { key: snapshot },
+              values: { payload },
+            });
+          else await repository.create({ values: { key: snapshot, payload } });
         } catch {
           // The in-memory cache still works if durable storage is unavailable.
         }
