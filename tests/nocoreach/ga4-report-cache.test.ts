@@ -219,8 +219,56 @@ it('keeps a GA4 row as long as final days only when GA4 has finished every day o
   const recent = await report.row('1', '123', windowFor('2026-10-19', '7'), {
     table: 'page',
     dims,
+    settledThrough: '2026-10-17',
   });
   expect(recent.cacheExpiresAt).toBe(Date.now() + GA4_HISTORY_CACHE_MS);
+  // The row keeps the days GA4 was still processing when it was read, as its chart dots them.
+  vi.setSystemTime('2026-10-21T01:00:00Z');
+  expect(
+    await report.row('1', '123', windowFor('2026-10-19', '7'), {
+      table: 'page',
+      dims,
+      settledThrough: '2026-10-18',
+    }),
+  ).toMatchObject({ settledThrough: '2026-10-17' });
+  await report.history.settled();
+});
+
+it("answers a new day's Traffic window from the copy with the days it had unsettled when read", async () => {
+  const { db } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime('2026-10-20T09:00:00Z');
+  const report = new WebsiteReport({ db });
+  (report as { readPeriod: unknown }).readPeriod = vi.fn(async () => ({
+    tables: {},
+    missing: [],
+    complete: true,
+  }));
+  const w = windowFor('2026-10-19', '28');
+  expect(
+    await report.period('1', '123', w, {
+      cutoff: '2026-10-19',
+      settledThrough: '2026-10-17',
+      view: ['28'],
+    }),
+  ).toMatchObject({ settledThrough: '2026-10-17' });
+  vi.setSystemTime('2026-10-21T00:05:00Z');
+  const next = windowFor('2026-10-20', '28');
+  const options = {
+    cutoff: '2026-10-20',
+    settledThrough: '2026-10-18',
+    view: ['28'],
+  };
+  expect(await report.period('1', '123', next, options)).toMatchObject({
+    refreshing: true,
+    window: w,
+    settledThrough: '2026-10-17',
+  });
+  await report.history.settled();
+  expect(await report.period('1', '123', next, options)).toMatchObject({
+    window: next,
+    settledThrough: '2026-10-18',
+  });
 });
 
 it('decides a Traffic row is settled from the days GA4 may still be processing, in the property zone', async () => {
@@ -256,7 +304,10 @@ it('decides a Traffic row is settled from the days GA4 may still be processing, 
       table: 'page',
       dims: { pagePath: '/a' },
     } as never);
-    expect((row.mock.calls[0] as unknown[])[3]).toMatchObject({ settled });
+    expect((row.mock.calls[0] as unknown[])[3]).toMatchObject({
+      settled,
+      settledThrough: '2026-10-17',
+    });
   }
 });
 

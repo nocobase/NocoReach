@@ -100,13 +100,16 @@ class SyncService{
     for(const controller of this.freshFlights.get(id)||[])controller.abort();
    });
   });
-  await plugin.projects.update(id,cur=>({...cur,analyticsPropertyId:ga4,analyticsPropertyName:ga4Name||(cur.analyticsPropertyId===ga4?cur.analyticsPropertyName||'':''),searchConsoleProperty:gsc}));
+  await plugin.projects.update(id,cur=>({...cur,analyticsPropertyId:ga4,analyticsPropertyName:ga4Name||(cur.analyticsPropertyId===ga4?cur.analyticsPropertyName||'':''),analyticsPropertyTimeZone:cur.analyticsPropertyId===ga4?cur.analyticsPropertyTimeZone||'':'',searchConsoleProperty:gsc}));
   await plugin.metadata(id,{ga4PropertyId:ga4,gscSiteUrl:gsc,status:'ready_for_sync',...(changed&&link?{lastSyncAt:null}:{})});
   return {changed:Boolean(link)&&changed};
  }
- // The GA4 property's display name, kept on the project for the Google panel. Projects that chose their property before
- // names were kept get it from the property details each GA4 sync already reads. Never fails the sync.
- async rememberPropertyName(id,propertyId,name){if(!name)return;try{const p=await this.p.project(id);if(String(p.analyticsPropertyId)===String(propertyId)&&p.analyticsPropertyName!==name)await this.p.projects.update(id,cur=>String(cur.analyticsPropertyId)===String(propertyId)?{...cur,analyticsPropertyName:name}:cur);}catch{/* the name is cosmetic */}}
+ // The GA4 property's display name, kept on the project for the Google panel, and its time zone, which Traffic uses after
+ // a restart instead of waiting on the Admin API (website-report.ts, `timeZone`). Both come from the property details each
+ // GA4 sync and preliminary read already fetch, so projects that chose their property earlier get them too. Written only
+ // when they change; never fails the sync.
+ async rememberProperty(id,propertyId,property){const next={...(property?.displayName?{analyticsPropertyName:String(property.displayName)}:{}),...(property?.timeZone?{analyticsPropertyTimeZone:String(property.timeZone)}:{})};if(!Object.keys(next).length)return;
+  try{const p=await this.p.project(id);if(String(p.analyticsPropertyId)===String(propertyId)&&Object.entries(next).some(([k,v])=>p[k]!==v))await this.p.projects.update(id,cur=>String(cur.analyticsPropertyId)===String(propertyId)?{...cur,...next}:cur);}catch{/* the name is cosmetic and the zone a shortcut */}}
  async control(id: string | number,command: string){
   const plugin=this.p as Pick<Connections,'metadata'> & {db: LegacyDatabase};
   if(!['enable','disable','pause','resume','retry'].includes(command))throw Object.assign(new Error(systemMessageText('sync.invalidAction')),{status:400});
@@ -156,7 +159,7 @@ class SyncService{
    const covered=new Set(stored.filter(p=>validOverview(p.get('payload'),String(p.get('date')))).map(p=>String(p.get('date'))));
    const missing=intervals(datesBetween(cursor,end).filter(d=>!covered.has(d)));
    const token=missing.length?await this.p.token(id,signal):null;
-   let propertyTimeZone='UTC';if(source==='ga4'){const property=await (this.p.googleJson?this.p.googleJson.bind(this.p,id):googleJson)(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${job.get('resource')}`,{...jsonRequest(token),signal:AbortSignal.any([signal,AbortSignal.timeout(30000)])});propertyTimeZone=property.timeZone||'UTC';await this.rememberPropertyName(id,job.get('resource'),property.displayName);}
+   let propertyTimeZone='UTC';if(source==='ga4'){const property=await (this.p.googleJson?this.p.googleJson.bind(this.p,id):googleJson)(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${job.get('resource')}`,{...jsonRequest(token),signal:AbortSignal.any([signal,AbortSignal.timeout(30000)])});propertyTimeZone=property.timeZone||'UTC';await this.rememberProperty(id,job.get('resource'),property);}
    const fetcher=this.p.googleFetch?.(id)||fetch;
    const collector=this.collector({db:{sequelize:{transaction:fn=>fn(null)}},getAccessToken:async()=>token,fetcher:(url,init={})=>fetcher(url,{...init,signal:AbortSignal.any([signal,...(init.signal?[init.signal]:[])])}),propertyId:link.get('ga4PropertyId'),siteUrl:link.get('gscSiteUrl'),propertyTimeZone,reportTypes:source==='ga4'?['overview','source','page']:overviewOnly?['overview']:['overview','query_page'],searchTypes:['web'],dataState:'final'});
    for(const range of missing)await collector[source==='ga4'?'syncGa4':'syncGsc']({startDate:range.start,endDate:range.end});
@@ -199,7 +202,7 @@ class SyncService{
   try{return await this.collectFresh(id,controller.signal);}finally{flights.delete(controller);if(!flights.size)this.freshFlights.delete(key);}
  }
  async collectFresh(id,signal: AbortSignal){signal.throwIfAborted();const clock=(this.p as Connections).mock?.enabled?new Date((this.p as Connections).mock.context(String(id)).clock):new Date(),link=await this.link(id),token=await this.p.token(id,signal),la=calendarDateInTimeZone('America/Los_Angeles',clock),start=shift(la,-2);
-  let tz='UTC';try{tz=(await (this.p.googleJson?this.p.googleJson.bind(this.p,id):googleJson)(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${link.get('ga4PropertyId')}`,{...jsonRequest(token),signal:AbortSignal.any([signal,AbortSignal.timeout(30000)])})).timeZone||'UTC';}catch{tz='UTC';}
+  let tz='UTC';try{const property=await (this.p.googleJson?this.p.googleJson.bind(this.p,id):googleJson)(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${link.get('ga4PropertyId')}`,{...jsonRequest(token),signal:AbortSignal.any([signal,AbortSignal.timeout(30000)])});tz=property.timeZone||'UTC';await this.rememberProperty(id,link.get('ga4PropertyId'),property);}catch{tz='UTC';}
   signal.throwIfAborted();
   const out={fetchedAt:new Date().toISOString(),ga4Resource:link.get('ga4PropertyId'),gscResource:link.get('gscSiteUrl'),gsc:[],ga4:[]};
   for(const source of ['gsc','ga4']){const end=shift(calendarDateInTimeZone(source==='ga4'?tz:'America/Los_Angeles',clock),-1);if(end<start)continue;

@@ -59,11 +59,12 @@ const trafficEnd=(synced,yesterday)=>calendarDate(yesterday)&&yesterday>synced?y
 // Traffic (GA4): the window ends yesterday in the property's time zone; the numbers come live from GA4
 // (website-report.ts, `period`), and each page row carries the Search Console queries that landed on it in the range.
 // Those queries are synced, finalized data for the same range ending at the synced cutoff; `queriesWindow` names it.
-// The days after `settledThrough` are still being processed by GA4. `yesterdayOf` is asked only once there is data,
-// since it may wait on the GA4 Admin API. The page explains the numbers itself; `missing` names the reports GA4 did not return.
+// The days after `settledThrough` are still being processed by GA4; a saved report answered meanwhile brings the one of
+// the day it was read. `yesterdayOf` is asked only once there is data, since it may wait on the GA4 Admin API. The page
+// explains the numbers itself; `missing` names the reports GA4 did not return.
 async function websiteView(snaps,range,period,from,to,yesterdayOf){const get=k=>snaps.find(s=>s.key===k)?.payload,web=get('history-web')||[],synced=get('project')?.end||web.map(r=>r.date).sort().at(-1);if(!synced||!web.length)return {connected:true,cutoff:null};
  const yesterday=await yesterdayOf?.(),end=trafficEnd(synced,yesterday),settled=calendarDate(yesterday)?add(yesterday,-GA4_PROCESSING_DAYS):end;
- const w=windowFor(end,range,from,to,firstDate(web)),report=await period(w,end);
+ const w=windowFor(end,range,from,to,firstDate(web)),report=await period(w,end,settled);
  const pathOf=u=>{try{return new URL(u).pathname.replace(/\/+$/,'')||'/';}catch{return String(u||'').split('?')[0].replace(/\/+$/,'')||'/';}};
  const searched=get(`queries-${range}`)||[],queries=new Map();for(const q of searched){const k=pathOf(q.page);if(!queries.has(k))queries.set(k,[]);queries.get(k).push({keyword:q.keyword,clicks:q.clicks,impressions:q.impressions,position:q.position});}
  if(report.tables.page)report.tables.page=report.tables.page.map(p=>({...p,queries:(queries.get(pathOf(p.key))||[]).sort((a,b)=>b.impressions-a.impressions).slice(0,8)}));
@@ -259,17 +260,19 @@ class DataViews{
  // GA4 history is cached by the actual query in WebsiteReport. Synced partition writes only refresh the local
  // Search Console enrichment, without invalidating an unchanged GA4 window or repeating its upstream reports.
  async website(id,v){let link,snaps;try{[link,snaps]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshots(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
-  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28';const property=link.get('ga4PropertyId');return websiteView(snaps,range,(w,cutoff)=>this.ga4.period(id,property,w,{cutoff,view:[range,String(v.from||''),String(v.to||'')]}),v.from,v.to,()=>this.ga4.yesterday(id,property));}
+  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28';const property=link.get('ga4PropertyId');return websiteView(snaps,range,(w,cutoff,settledThrough)=>this.ga4.period(id,property,w,{cutoff,settledThrough,view:[range,String(v.from||''),String(v.to||'')]}),v.from,v.to,()=>this.ga4.yesterday(id,property));}
  // 访问 · one row's days (its detail), 今天 and 实时: read from GA4 when asked (website-report.ts keeps each a while).
  async websiteRow(id,v){let link,snaps;try{[link,snaps]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshots(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const get=k=>snaps.find(s=>s.key===k)?.payload,synced=get('project')?.end||(get('history-web')||[]).map(r=>r.date).sort().at(-1);if(!synced)return {connected:true,cutoff:null};
   // The cutoff is the one on the user's report. It is checked against the latest day that is yesterday anywhere (UTC+14),
   // not a new zone lookup, which another instance or a failed lookup may resolve a day earlier.
-  const latest=add(iso(businessNow(this.p,id,'google')+14*3600000),-1),cutoff=v.cutoff===undefined?trafficEnd(synced,await this.ga4.yesterday(id,link.get('ga4PropertyId'))):v.cutoff,first=firstDate(get('history-web')||[]);if(!calendarDate(cutoff)||cutoff>trafficEnd(synced,latest)||(first&&cutoff<first))fail(systemMessageText('dataViews.invalidDate'));
+  const property=link.get('ga4PropertyId'),yesterday=await this.ga4.yesterday(id,property);
+  const latest=add(iso(businessNow(this.p,id,'google')+14*3600000),-1),cutoff=v.cutoff===undefined?trafficEnd(synced,yesterday):v.cutoff,first=firstDate(get('history-web')||[]);if(!calendarDate(cutoff)||cutoff>trafficEnd(synced,latest)||(first&&cutoff<first))fail(systemMessageText('dataViews.invalidDate'));
   const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28',w=windowFor(cutoff,range,v.from,v.to,first);
-  // A row is kept as long as a report over final days only while GA4 has finished every day of its window.
-  const settled=w.end<=add(await this.ga4.yesterday(id,link.get('ga4PropertyId')),-GA4_PROCESSING_DAYS);
-  return {connected:true,cutoff,window:w,...await this.ga4.row(id,link.get('ga4PropertyId'),w,{table:String(v.table||''),dims:v.dims&&typeof v.dims==='object'?v.dims:{},settled})};}
+  // A row is kept as long as a report over final days only while GA4 has finished every day of its window. Its chart
+  // dots the days after `settledThrough`, which a saved row keeps from the day it was read.
+  const settledThrough=calendarDate(yesterday)?add(yesterday,-GA4_PROCESSING_DAYS):null,settled=Boolean(settledThrough)&&w.end<=settledThrough;
+  return {connected:true,cutoff,window:w,settledThrough,...await this.ga4.row(id,property,w,{table:String(v.table||''),dims:v.dims&&typeof v.dims==='object'?v.dims:{},settled,...(settledThrough?{settledThrough}:{})})};}
  async websiteToday(id){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.today(id,link.get('ga4PropertyId'))};}
  async websiteRealtime(id){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.realtime(id,link.get('ga4PropertyId'))};}
  // Countries for the country filter: a live Search Console query, asked for on its own (the page does not wait for it)

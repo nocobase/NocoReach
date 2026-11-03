@@ -70,6 +70,8 @@ export type Report = Partial<SavedCopy> & {
 export type RowDetail = Partial<SavedCopy> & {
   connected: boolean;
   cacheExpiresAt?: number;
+  /** Days after this one were still being processed by GA4 when the row was read. */
+  settledThrough?: string | null;
   window?: Window;
   daily?: Day[];
   previousDaily?: Day[];

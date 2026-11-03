@@ -160,6 +160,15 @@ test('初步数据: Google\'s last days are read as daily totals with fresh data
  assert.deepEqual(card.preliminary,{from:'2026-10-01',through:'2026-10-02',days:2,totals:{clicks:8,impressions:90}});assert.equal(withFresh({id:'gsc'},[],['clicks']).preliminary,undefined);
 });
 
+test('the preliminary read keeps the GA4 property time zone on the project',async()=>{
+ const store=[],links={ga4PropertyId:'123',gscSiteUrl:'sc-domain:example.com',status:'active'};let project={id:1,analyticsPropertyId:'123',searchConsoleProperty:'sc-domain:example.com'};
+ const snaps={findOne:async({filter})=>{const r=store.find(x=>x.key===filter.key);return r&&{id:r.id,get:k=>r[k]};},create:async({values})=>{store.push({id:store.length+1,...values});},update:async({filterByTk,values})=>{Object.assign(store.find(x=>x.id===filterByTk),values);}};
+ const asked=[];const plugin={link:async()=>({id:1,get:k=>links[k]}),env:()=>'secret',project:async()=>project,projects:{update:async(id,fn)=>{project=await fn(project);}},token:async()=>'t',googleJson:async(id,url)=>{asked.push(String(url));return {timeZone:'Asia/Shanghai',displayName:'site'};},db:{getRepository:()=>snaps,sequelize:{transaction:fn=>fn({}),query:async()=>[[{}]]}}};
+ const sync=new SyncService(plugin);sync.collector=()=>({batches:[],async syncGsc(){},async syncGa4(){}});
+ await sync.refreshFresh('1');
+ assert.ok(asked.some(u=>u.endsWith('/properties/123')));assert.equal(project.analyticsPropertyTimeZone,'Asia/Shanghai');assert.equal(project.analyticsPropertyName,'site');
+});
+
 function switchSetup(){
  const links={ga4PropertyId:'123',gscSiteUrl:'sc-domain:example.com',status:'active',lastSyncAt:'2026-09-30T00:00:00Z',scheduleEnabled:true};let project={id:1,analyticsPropertyId:'123',searchConsoleProperty:'sc-domain:example.com'};
  const rec=v=>({id:v.id,get:k=>v[k],toJSON:()=>({...v})});
@@ -189,11 +198,12 @@ test('changing resources keeps their data apart: unfinished jobs of the old ones
  assert.deepEqual(status.coverage,[{source:'ga4',availableThrough:'2026-09-20'},{source:'gsc',availableThrough:'2026-09-26'}]);
 });
 
-test('the GA4 property name is kept on the project when chosen, and filled in by a sync for earlier projects',async()=>{
+test('the GA4 property name and time zone are kept on the project, filled in by a sync for earlier projects',async()=>{
  const {sync,project}=switchSetup();
- await sync.rememberPropertyName('1','999','Other');assert.equal(project().analyticsPropertyName,undefined);
- await sync.rememberPropertyName('1','123','website');assert.equal(project().analyticsPropertyName,'website');
- await sync.select('1','123','sc-domain:example.com');assert.equal(project().analyticsPropertyName,'website');
- await sync.select('1','456','sc-domain:example.com','Docs');assert.equal(project().analyticsPropertyName,'Docs');
+ await sync.rememberProperty('1','999',{displayName:'Other',timeZone:'Europe/Paris'});assert.equal(project().analyticsPropertyName,undefined);assert.equal(project().analyticsPropertyTimeZone,undefined);
+ await sync.rememberProperty('1','123',{displayName:'website',timeZone:'Asia/Shanghai'});assert.equal(project().analyticsPropertyName,'website');assert.equal(project().analyticsPropertyTimeZone,'Asia/Shanghai');
+ await sync.rememberProperty('1','123',{});assert.equal(project().analyticsPropertyTimeZone,'Asia/Shanghai','details without them change nothing');
+ await sync.select('1','123','sc-domain:example.com');assert.equal(project().analyticsPropertyName,'website');assert.equal(project().analyticsPropertyTimeZone,'Asia/Shanghai');
+ await sync.select('1','456','sc-domain:example.com','Docs');assert.equal(project().analyticsPropertyName,'Docs');assert.equal(project().analyticsPropertyTimeZone,'','another property drops the old zone');
  await sync.select('1','789','sc-domain:example.com');assert.equal(project().analyticsPropertyName,'');
 });

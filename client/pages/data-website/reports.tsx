@@ -715,7 +715,7 @@ function RowDrawer({
   const { points, fresh } = trendPoints(
     ownDays(data?.window ?? w, data?.daily, data?.previousDaily),
     METRICS[main].of,
-    report.settledThrough,
+    data?.settledThrough ?? report.settledThrough,
   );
   return (
     <DetailDrawer

@@ -146,9 +146,11 @@ test('访问 view: window at the cutoff, Search Console queries on their page ro
 
 test('Traffic window ends yesterday, ahead of the synced cutoff, with the last two days unsettled',async()=>{
  const synced='2026-09-27',snaps=[{key:'project',payload:{end:synced}},{key:'history-web',payload:[{date:'2026-09-20'},{date:synced}]}];
- let asked;const period=async w=>{asked=w;return {tables:{},missing:[]};};
+ let asked,passed;const period=async(w,_cutoff,settled)=>{asked=w;passed=settled;return {tables:{},missing:[]};};
  const v=await websiteView(snaps,'7',period,undefined,undefined,async()=>'2026-09-30');
- assert.deepEqual(asked,windowFor('2026-09-30','7'));assert.equal(v.cutoff,'2026-09-30');assert.equal(v.settledThrough,'2026-09-28');
+ assert.deepEqual(asked,windowFor('2026-09-30','7'));assert.equal(v.cutoff,'2026-09-30');assert.equal(v.settledThrough,'2026-09-28');assert.equal(passed,'2026-09-28','the report keeps it');
+ const copy=await websiteView(snaps,'7',async()=>({tables:{},missing:[],window:windowFor('2026-09-29','7'),cutoff:'2026-09-29',settledThrough:'2026-09-27'}),undefined,undefined,async()=>'2026-09-30');
+ assert.equal(copy.cutoff,'2026-09-29');assert.equal(copy.settledThrough,'2026-09-27','a saved report keeps the days it had unsettled when read');
  await websiteView(snaps,'custom',period,'2026-09-25','2026-09-30',async()=>'2026-09-30');
  assert.equal(asked.end,'2026-09-30','a custom range can reach yesterday');
  const behind=await websiteView(snaps,'7',period,undefined,undefined,async()=>'2026-09-27');
@@ -181,6 +183,18 @@ test('callers at the same time share one zone lookup, and a failure keeps the zo
  assert.equal(await a,'Asia/Shanghai');await b;assert.equal(g.json.mock.calls.length,1,'one Admin API call');
  g.zones.set('123',{...g.zones.get('123'),at:0});g.json=vi.fn(async()=>{throw Object.assign(new Error('quota'),{status:429});});
  assert.equal(await g.timeZone('1','123'),'Asia/Shanghai');assert.equal(g.zones.get('123').confirmed,true);assert.equal(g.zones.get('123').ttl,300000);
+});
+
+test('after a restart the zone the sync kept on the project answers without waiting on the Admin API',async()=>{
+ vi.useFakeTimers({now:new Date('2026-10-31T01:00:00Z')});
+ const report=project=>{const g=new WebsiteReport({token:async()=>'t',project:async()=>{if(project instanceof Error)throw project;return project;}});g.json=vi.fn(async()=>({timeZone:'America/Los_Angeles'}));return g;};
+ const g=report({analyticsPropertyId:'123',analyticsPropertyTimeZone:'Asia/Shanghai'});
+ assert.equal(await g.yesterday('1','123'),'2026-10-30','Shanghai is on 10-31');assert.equal(g.json.mock.calls.length,0);
+ assert.equal(await g.timeZone('1','123'),'Asia/Shanghai');assert.equal(g.zones.get('123').confirmed,true);assert.equal(g.json.mock.calls.length,0,'kept a day like a lookup');
+ vi.setSystemTime(new Date('2026-11-01T01:00:01Z'));await g.timeZone('1','123');assert.equal(g.json.mock.calls.length,1,'then looked up again');
+ vi.setSystemTime(new Date('2026-10-31T01:00:00Z'));
+ for(const project of [{analyticsPropertyId:'456',analyticsPropertyTimeZone:'Asia/Shanghai'},{analyticsPropertyId:'123',analyticsPropertyTimeZone:'Mars/Olympus'},{analyticsPropertyId:'123'},Object.assign(new Error('gone'),{status:404})]){
+  const other=report(project);assert.equal(await other.yesterday('1','123'),'2026-10-29','no usable saved zone: Los Angeles, from the Admin API');assert.equal(other.json.mock.calls.length,1);}
 });
 
 test('a period ended on a guessed zone tells the browser to ask again soon, without reading GA4 again',async()=>{
