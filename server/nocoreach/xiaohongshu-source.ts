@@ -43,14 +43,21 @@ interface State {
   latestIds: string[];
   lastRun: Attempt | null;
   verifiedAt: string | null;
+  /** A read the busy collector turned away, waiting for its retry (retries made or waiting, including this one). */
+  queued?: { retries: number; retryAt: string } | null;
 }
 interface Plugin {
   collectors: CollectorResolver;
   db: Pick<LegacyDatabase, 'getRepository' | 'sequelize'>;
-  app: Pick<LegacyApp, 'resourceManager' | 'acl'>;
+  app: Pick<LegacyApp, 'resourceManager' | 'acl' | 'logger'>;
   network: OutboundNetwork;
   project(id: string): Promise<unknown>;
+  projectIds(): Promise<(string | number)[]>;
 }
+// As for Bilibili: a collector busy with another read is not a failure. The read waits about ten minutes and tries
+// again, at most three times; reading stays manual otherwise.
+const BUSY_RETRY_MS = 10 * 60000;
+const BUSY_RETRIES = 3;
 function fail(message: string, status = 400): never {
   throw Object.assign(new Error(message), { status });
 }
@@ -63,6 +70,7 @@ export class XiaohongshuSource {
   private readonly clearing = new Set<string>();
   private readonly adapter: XiaohongshuAdapter;
   private readonly generations = new Map<string, number>();
+  private ticking = false;
   private changed(id: string) {
     this.generations.set(id, (this.generations.get(id) ?? 0) + 1);
   }
@@ -94,6 +102,7 @@ export class XiaohongshuSource {
             verifiedAt: null,
             lastRun: null,
             latestIds: [],
+            queued: null,
           }
         : null,
     );
@@ -156,8 +165,9 @@ export class XiaohongshuSource {
       if (!isCollectorConnectionError(error, 'unreadable')) throw error;
     }
     const permitted = allowed.some((c) => c.id === state?.collectorId);
+    const connected = Boolean(state?.connected && permitted);
     return {
-      connected: Boolean(state?.connected && permitted),
+      connected,
       revision: state?.revision ?? 0,
       collectors: allowed.map(({ id: collectorId, name, nameKey }) => ({
         id: collectorId,
@@ -171,6 +181,21 @@ export class XiaohongshuSource {
       lastRun: state?.lastRun ?? null,
       total: state?.notes.length ?? 0,
       running: this.active.get(id)?.requestId ?? null,
+      queued: connected ? (state?.queued ?? null) : null,
+      // The notes the last searches found, newest first, and when the earliest saved note was first found.
+      recent: (state?.notes ?? []).slice(0, 5).map((note) => ({
+        id: note.id,
+        title: note.title,
+        url: note.url,
+        likes: note.likes,
+        likesText: note.likesText,
+        estimatedPublishedAt: note.estimatedPublishedAt,
+      })),
+      recordingSince: (state?.notes ?? []).reduce<string | null>(
+        (min, note) =>
+          !min || note.firstSeenAt < min ? note.firstSeenAt : min,
+        null,
+      ),
       mode: 'browser-search',
       automatic: false,
     };
@@ -298,6 +323,7 @@ export class XiaohongshuSource {
             .slice(0, 1000),
           latestIds: result.notes.map((n) => n.id),
           verifiedAt: result.collectedAt,
+          queued: null,
           lastRun: {
             at: result.collectedAt,
             ok: true,
@@ -308,21 +334,36 @@ export class XiaohongshuSource {
     } catch (error) {
       const code =
         error instanceof XiaohongshuError ? error.code : 'invalid_response';
-      await this.mutate(id, (state) =>
-        !state || state.revision !== current.revision
-          ? state
-          : {
-              ...state,
-              lastRun: {
-                at: new Date().toISOString(),
-                ok: false,
-                errorCode: code,
-              },
+      let queued = false;
+      await this.mutate(id, (state) => {
+        if (!state || state.revision !== current.revision) return state;
+        const retries = state.queued?.retries ?? 0;
+        // The collector turned the read away: it waits for a retry and keeps the last read's outcome.
+        if (code === 'busy' && retries < BUSY_RETRIES) {
+          queued = true;
+          return {
+            ...state,
+            queued: {
+              retries: retries + 1,
+              retryAt: new Date(Date.now() + BUSY_RETRY_MS).toISOString(),
             },
-      );
-      if (error instanceof XiaohongshuError) throw error;
-      if ((error as { status?: number }).status === 409) throw error;
-      throw new XiaohongshuError(code);
+          };
+        }
+        return {
+          ...state,
+          queued: null,
+          lastRun: {
+            at: new Date().toISOString(),
+            ok: false,
+            errorCode: code,
+          },
+        };
+      });
+      if (!queued) {
+        if (error instanceof XiaohongshuError) throw error;
+        if ((error as { status?: number }).status === 409) throw error;
+        throw new XiaohongshuError(code);
+      }
     } finally {
       if (this.active.get(id)?.requestId === requestId) {
         this.active.delete(id);
@@ -346,6 +387,7 @@ export class XiaohongshuSource {
               latestIds: [],
               lastRun: null,
               verifiedAt: null,
+              queued: null,
             }
           : null;
       });
@@ -367,11 +409,43 @@ export class XiaohongshuSource {
     await this.mutate(id, (state) => {
       this.expected(state, values.revision);
       return state
-        ? { ...state, connected: false, revision: state.revision + 1 }
+        ? {
+            ...state,
+            connected: false,
+            revision: state.revision + 1,
+            queued: null,
+          }
         : null;
     });
     this.active.get(id)?.controller.abort();
     return this.view(id);
+  }
+  /** The cron's tick: only a read the busy collector turned away is retried; there is no daily read. */
+  async tick() {
+    if (this.ticking) return;
+    this.ticking = true;
+    try {
+      for (const value of await this.p.projectIds()) {
+        const id = String(value);
+        try {
+          const state = await this.state(id);
+          if (
+            !state?.queued ||
+            this.isCollectorBusy(id) ||
+            Date.parse(state.queued.retryAt) > Date.now() ||
+            !this.describe(id, state).connected
+          )
+            continue;
+          await this.search(id, { revision: state.revision });
+        } catch {
+          this.p.app.logger.warn('NocoReach Xiaohongshu tick failed', {
+            projectId: id,
+          });
+        }
+      }
+    } finally {
+      this.ticking = false;
+    }
   }
   stop() {
     for (const entry of this.active.values()) entry.controller.abort();

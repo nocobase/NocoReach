@@ -16,10 +16,11 @@ export async function confirmCollectorClear(
     !(await confirmAction({
       title: () => $t('collectorClear.title', { 0: platform() }),
       description: () =>
+        // Clearing YouTube or Bilibili also pauses daily reading; Xiaohongshu is read by hand.
         $t(
-          resource === 'nrYouTube'
-            ? 'collectorClear.youtubeHelp'
-            : 'collectorClear.help',
+          resource === 'nrXiaohongshu'
+            ? 'collectorClear.help'
+            : 'collectorClear.youtubeHelp',
           { 0: platform() },
         ),
       action: () => $t('collectorClear.continue'),

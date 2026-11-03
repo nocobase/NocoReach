@@ -237,7 +237,9 @@ test.each(['automatic', 'retry', 'manual'])(
 test('data health localizes the same persisted default-model error without refetching', async () => {
   fixture.health = true;
   const runtime = await setup(true);
-  await screen.findByText(modelErrorEn, { exact: false });
+  // Data health joins the reason to " · Last success …", so it drops the closing full stop.
+  const healthEn = modelErrorEn.replace(/\.$/, '');
+  await screen.findByText(healthEn, { exact: false });
   const requestCount = action.mock.calls.length;
   for (const locale of ['zh-CN', 'en-US']) {
     await act(() => runtime.changeLanguage(locale));
@@ -245,7 +247,7 @@ test('data health localizes the same persisted default-model error without refet
       screen.getByRole('region', {
         name: locale === 'zh-CN' ? '数据健康' : 'Data health',
       }),
-    ).toHaveTextContent(locale === 'zh-CN' ? modelError : modelErrorEn);
+    ).toHaveTextContent(locale === 'zh-CN' ? modelError : healthEn);
   }
   expect(action.mock.calls.length).toBe(requestCount);
 });

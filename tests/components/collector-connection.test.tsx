@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { CollectorConnection } from '../../client/components/collector-connection';
 import {
@@ -301,4 +302,77 @@ it('disables reload while its request is pending', async () => {
   expect(api.action).toHaveBeenCalledTimes(2);
   await act(async () => finish(empty));
   expect(await screen.findByLabelText('采集器地址 *')).toBeEnabled();
+});
+it('folds a collector in place to one row whose Change opens the form in a dialog', async () => {
+  vi.mocked(api.action).mockResolvedValue({
+    revision: 1,
+    source: 'project',
+    url: `${url}/reach`,
+    hasToken: true,
+  });
+  render(
+    <CollectorConnection
+      projectId={1}
+      platform='bilibili'
+      layout='row'
+      health={<span> · 连接正常</span>}
+      {...callbacks}
+    />,
+  );
+  const row = await screen.findByText('collector.example');
+  expect(row.closest('[data-collector-row]')).toHaveTextContent(
+    '采集器collector.example · 连接正常',
+  );
+  // Collector sources have no network card; the row says where their network is managed.
+  expect(row.closest('[data-collector-row]')).toHaveTextContent(
+    '网络由采集器所在服务器管理',
+  );
+  expect(screen.queryByLabelText('采集器地址 *')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '修改' }));
+  const dialog = await screen.findByRole('dialog', { name: '采集器连接' });
+  expect(within(dialog).getByLabelText('采集器地址 *')).toHaveValue(
+    `${url}/reach`,
+  );
+  // Cancel discards the draft and folds back to the row.
+  fireEvent.change(within(dialog).getByLabelText('采集器地址 *'), {
+    target: { value: 'https://other.example' },
+  });
+  fireEvent.click(within(dialog).getByRole('button', { name: '取消' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  expect(screen.getByText('collector.example')).toBeVisible();
+  // A saved change closes the dialog and the row shows the new address.
+  fireEvent.click(screen.getByRole('button', { name: '修改' }));
+  const again = await screen.findByRole('dialog', { name: '采集器连接' });
+  expect(within(again).getByLabelText('采集器地址 *')).toHaveValue(
+    `${url}/reach`,
+  );
+  fireEvent.change(within(again).getByLabelText('采集器地址 *'), {
+    target: { value: 'https://other.example' },
+  });
+  fireEvent.change(within(again).getByLabelText('访问令牌 *'), {
+    target: { value: token },
+  });
+  vi.mocked(api.action).mockResolvedValueOnce({
+    revision: 2,
+    source: 'project',
+    url: 'https://other.example',
+    hasToken: true,
+  });
+  fireEvent.click(within(again).getByRole('button', { name: '保存' }));
+  await waitFor(() => expect(callbacks.onSaved).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  expect(await screen.findByText('other.example')).toBeVisible();
+});
+it('folds the mock collector to a row without Change', async () => {
+  vi.mocked(api.action).mockResolvedValue({ ...empty, source: 'mock' });
+  render(
+    <CollectorConnection
+      projectId={1}
+      platform='xiaohongshu'
+      layout='row'
+      {...callbacks}
+    />,
+  );
+  expect(await screen.findByText('模拟采集器')).toBeVisible();
+  expect(screen.queryByRole('button')).toBeNull();
 });

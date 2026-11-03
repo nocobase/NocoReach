@@ -383,6 +383,14 @@ describe('NocoReach semantic-key translations', () => {
       // Every closed task can be reopened (2026-10-29), so closing no longer says the task cannot continue.
       '执行者会停下，没合并的 PR 会关掉（分支保留），之后不能接着做。':
         '执行者会停下，没合并的 PR 会关掉（分支保留）。之后可以重新打开，回到这一步。',
+      // Bilibili takes up to five search terms, as YouTube does (2026-11-02).
+      '请选择可用的采集器，并填写最多 3 个搜索词（各 1–80 字）或 5 个有效 BV 号。':
+        '请选择可用的采集器，并填写最多 5 个搜索词（各 1–80 字）或 5 个有效 BV 号。',
+      // A refused Bilibili read no longer adds that it stopped: the notice above it already says nothing was read (2026-11-02).
+      'Bilibili 要求验证或拒绝了访问，本次读取已停止。':
+        'Bilibili 要求验证或拒绝了访问。',
+      'Bilibili 要求登录，本次读取已停止。请管理员检查采集器所选模式。':
+        'Bilibili 要求登录。请管理员检查采集器所选模式。',
       // Performance checks run anew on every click (2026-11-02); the rank tip names its Update now button.
       '一次检查一个页面，点了才查（约 $0.005，算进 DataForSEO 的月度预算）；同一页面、同一设备 30 天内直接打开上次的结果。':
         '一次检查一个页面，点了才查，每次约 $0.005，算进 DataForSEO 的月度预算。同一页面、同一设备 10 分钟内不重复检查。',

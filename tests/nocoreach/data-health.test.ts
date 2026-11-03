@@ -144,6 +144,17 @@ test('each row needing attention says what fixes it: retry, change a setting, ch
  assert.equal(items.rank.fix,'verify');assert.deepEqual(items.rank.retry,{resource:'nrRankTracking',action:'check',body:{retryUncertain:true}});assert.match(items.rank.message,/DataForSEO 后台核对/);
  assert.equal(items.site,undefined);assert.equal(items.github.fix,undefined,'a healthy row asks for nothing');
 });
+test('Bilibili: a queued read is not a problem, paused daily reading is, and switching it off reads by hand',async()=>{
+ const t=new Date(Date.now()-H).toISOString();
+ const base={connected:true,checking:false,verifiedAt:t,terms:['NocoBase'],total:26,autoSync:true,queued:null,pausedCode:null,nextSyncAt:new Date(Date.now()+H).toISOString(),lastRun:{at:t,ok:true,errorCode:null,partial:false}};
+ const row=async state=>(await new DataHealth({env:()=>'',link:async()=>null,bilibili:{status:async()=>state}}).list('1')).items.find(i=>i.id==='bilibili');
+ const healthy=await row(base);assert.equal(healthy.state,'healthy');assert.equal(healthy.cadence,'daily');assert.equal(healthy.note,'每天在 Bilibili 搜 NocoBase，已记录 26 个视频');assert.deepEqual(healthy.retry,{resource:'nrBilibili',action:'sync',body:{}});
+ const queued=await row({...base,queued:{retries:1,retryAt:base.nextSyncAt}});assert.equal(queued.state,'pending');assert.match(queued.message,/已排队/);
+ const paused=await row({...base,autoSync:false,pausedCode:'security_block',lastRun:{at:t,ok:false,errorCode:'security_block',partial:false}});assert.equal(paused.state,'failing');assert.match(paused.message,/连续 3 次没有读到.*Bilibili 要求验证/);assert.doesNotMatch(paused.message,/本次读取已停止/);assert.equal(paused.fix,'retry');assert.equal(paused.cadence,'daily');assert.match(paused.note,/^每天在 Bilibili 搜/);
+ const partial=await row({...base,lastRun:{at:t,ok:false,errorCode:'timeout',partial:true}});assert.equal(partial.state,'warning');assert.match(partial.message,/部分数据未更新/);
+ const manual=await row({...base,autoSync:false});assert.equal(manual.cadence,'manual');assert.equal(manual.note,'在 Bilibili 搜 NocoBase，已记录 26 个视频');
+ assert.equal(await row({...base,connected:false}),undefined);
+});
 test('YouTube: one missed term is a grey note, three daily misses in a row need attention, a used-up budget waits for its date',async()=>{
  const t=new Date(Date.now()-H).toISOString();
  const status=extra=>({configured:true,dataforseo:true,syncing:false,autoSync:true,terms:['NocoBase','Slow term'],total:12,fetchedAt:t,nextSyncAt:null,pausedUntil:null,repeatedMisses:[],lastSync:{at:t,ok:true,errors:[],attempts:0,lastSuccessAt:t,missed:[{term:'Slow term',reason:'timeout'}]},...extra});

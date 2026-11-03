@@ -446,25 +446,55 @@ it('gives YouTube the shared DataForSEO switch', async () => {
   );
 });
 
+it.each([['without a proxy', 'site', { proxy: null }, {}]])(
+  'shows no switch %s',
+  async (_case, source, network, selections) => {
+    vi.mocked(proxyRequest).mockImplementation(async (action) => {
+      if (action === 'capabilities') return live;
+      if (action === 'network') return network;
+      if (action === 'selections') return selections;
+      throw new Error(`unexpected ${action}`);
+    });
+    setup(
+      <>
+        <ConnectionNetwork projectId={1} source={source} />
+        <p>loaded</p>
+      </>,
+    );
+    // Settled once the proxy settings have been read.
+    await waitFor(() => expect(calls('network').length).toBeGreaterThan(0));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+  },
+);
+
 it.each([
-  ['without a proxy', 'site', { proxy: null }, {}],
-  ['for browser collectors', 'bilibili', { proxy: saved }, {}],
-])('shows no switch %s', async (_case, source, network, selections) => {
-  vi.mocked(proxyRequest).mockImplementation(async (action) => {
-    if (action === 'capabilities') return live;
-    if (action === 'network') return network;
-    if (action === 'selections') return selections;
-    throw new Error(`unexpected ${action}`);
-  });
-  setup(
-    <>
-      <ConnectionNetwork projectId={1} source={source} />
-      <p>loaded</p>
-    </>,
-  );
-  // Settled once the proxy settings have been read.
-  await waitFor(() => expect(calls('network').length).toBeGreaterThan(0));
-  await new Promise((r) => setTimeout(r, 50));
-  expect(screen.queryByRole('switch')).not.toBeInTheDocument();
-  expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-});
+  ['live', live],
+  ['mock', { mockEnabled: true, scenarios: ['normal'] }],
+])(
+  'shows no network card for browser collectors in a %s deployment',
+  async (_case, capabilities) => {
+    vi.mocked(proxyRequest).mockImplementation(async (action) => {
+      if (action === 'capabilities') return capabilities;
+      if (action === 'network') return { proxy: saved };
+      if (action === 'selections') return {};
+      if (action === 'list') return [];
+      throw new Error(`unexpected ${action}`);
+    });
+    setup(
+      <>
+        <ConnectionNetwork projectId={1} source='bilibili' />
+        <ConnectionNetwork projectId={1} source='xiaohongshu' />
+        <p>loaded</p>
+      </>,
+    );
+    await waitFor(() =>
+      expect(calls('capabilities').length).toBeGreaterThan(0),
+    );
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByText('网络出口')).not.toBeInTheDocument();
+  },
+);

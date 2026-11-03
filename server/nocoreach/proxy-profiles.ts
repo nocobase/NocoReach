@@ -512,8 +512,17 @@ export class ProxyProfiles {
   }
   // The project's choice for the connection; without one, the default proxy. Mock deployments never take the
   // default (an empty choice pauses there), and connections read through a Collector never take it either.
+  // Collector sources have no network card (2026-11-02), so in a mock deployment one without its own choice
+  // follows the mock profile the project chose for its other connections.
   private route(s: Settings, project: string, connection: Connection) {
-    const choice = s.selections[projectId(project)]?.[connection];
+    const choices = s.selections[projectId(project)];
+    const choice =
+      choices?.[connection] ??
+      (this.mockEnabled && COLLECTORS.includes(connection)
+        ? CONNECTIONS.map((c) => choices?.[c]).find(
+            (id) => s.profiles.find((p) => p.id === id)?.kind === 'mock',
+          )
+        : undefined);
     const id =
       choice === DIRECT
         ? undefined

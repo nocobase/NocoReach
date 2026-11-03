@@ -135,6 +135,28 @@ describe('Settings › Network: one default proxy', () => {
       profiles.select('1', { connection: 'github', profileId: DIRECT }),
     ).rejects.toMatchObject({ status: 409 });
   });
+
+  it("lets a mock deployment's collector sources follow the project's mock profile", async () => {
+    const { profiles } = fixture();
+    profiles.enableMockProfiles(true);
+    const mock = await profiles.save({
+      kind: 'mock',
+      name: 'Demo',
+      mock: {
+        scenario: 'normal',
+        seed: 'collectors',
+        clock: '2026-11-02T00:00:00Z',
+      },
+    });
+    // No choice anywhere: still paused, collectors included.
+    expect(profiles.resolve('1', 'bilibili')).toBeUndefined();
+    await profiles.select('1', { connection: 'github', profileId: mock.id });
+    // Collector sources have no network card, so they follow the project's mock profile; other connections do not.
+    expect(profiles.resolve('1', 'bilibili')?.id).toBe(mock.id);
+    expect(profiles.resolve('1', 'xiaohongshu')?.id).toBe(mock.id);
+    expect(profiles.resolve('1', 'site')).toBeUndefined();
+    expect(profiles.resolve('2', 'bilibili')).toBeUndefined();
+  });
 });
 
 describe('moving to the default proxy on upgrade', () => {
