@@ -5792,7 +5792,7 @@
   "dataWebsite.todayNotProcessed": "GA4は今日のデータをまだ処理していません · {0}",
   "dataWebsite.howTodayCounted": "今日の数値の集計方法",
   "dataWebsite.todayComparedSameHours": "GA4プロパティのタイムゾーンに基づき、午前0時から同じ時刻までのデータを昨日および先週の同じ曜日と比較します。GA4の処理には遅延があり、取得済みデータの最後の2時間分はまだ補完中です。そのため、数値と比較にはその2時間を含めず、グラフでは破線で表示します。",
-  "dataWebsite.realtimeLast30MinutesNote": "リアルタイムにはGA4の過去30分間のアクティブユーザーを表示し、毎分更新します。GA4のリアルタイムAPIは参照元を提供しないため、参照元には今日の標準データを使用します。直近1〜2時間分はまだ含まれていない場合があります。",
+  "dataWebsite.realtimeLast30MinutesNote": "リアルタイムにはGA4の過去30分間のアクティブユーザーを表示します。カードの数値は30分ごとに、詳細を開いている間は毎分読み込みます。GA4のリアルタイムAPIは参照元を提供しないため、参照元には今日の標準データを使用します。直近1〜2時間分はまだ含まれていない場合があります。",
   "dataWebsite.todayNotLoaded": "今日のデータを読み込めませんでした: {0}",
   "dataWebsite.realtimeNotLoaded": "リアルタイムデータを読み込めませんでした: {0}",
   "dataWebsite.realtimePartlyMissing": "一部のリアルタイムデータを読み込めませんでした: {0}",

@@ -709,11 +709,16 @@ function RowDrawer({
       )
     : '';
   const main = columns[0];
-  const w = report.window!;
+  // A saved copy may hold another window than the report's: its figures are labelled with its own dates.
+  const w = data?.window ?? report.window!;
+  const shownPeriod = $t('common.range', {
+    0: formatDate(w.start),
+    1: formatDate(w.end),
+  });
   const now = data?.totals?.current ?? row,
     before = data?.totals?.previous ?? null;
   const { points, fresh } = trendPoints(
-    ownDays(data?.window ?? w, data?.daily, data?.previousDaily),
+    ownDays(w, data?.daily, data?.previousDaily),
     METRICS[main].of,
     data?.settledThrough ?? report.settledThrough,
   );
@@ -768,7 +773,7 @@ function RowDrawer({
         <thead>
           <tr className='text-left text-xs text-muted-foreground'>
             <th className='py-1 font-medium' />
-            <th className='py-1 text-right font-medium'>{period}</th>
+            <th className='py-1 text-right font-medium'>{shownPeriod}</th>
             <th className='py-1 text-right font-medium'>
               {$t('dataWebsite.previousPeriod')}
             </th>

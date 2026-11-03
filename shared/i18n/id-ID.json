@@ -5874,7 +5874,7 @@
   "dataWebsite.todayNotProcessed": "GA4 belum memproses data hari ini · {0}",
   "dataWebsite.howTodayCounted": "Cara angka hari ini dihitung",
   "dataWebsite.todayComparedSameHours": "Data kemarin dan hari yang sama minggu lalu dibandingkan dari tengah malam hingga jam yang sama, dalam zona waktu properti GA4. GA4 memproses data dengan jeda dan masih melengkapi data dua jam terakhir yang tersedia, sehingga angka dan perbandingan hanya mencakup waktu sebelum dua jam tersebut; grafik menampilkan dua jam tersebut dengan garis putus-putus.",
-  "dataWebsite.realtimeLast30MinutesNote": "Data waktu nyata menunjukkan pengguna aktif GA4 dalam 30 menit terakhir, diperbarui setiap menit. API waktu nyata GA4 tidak menyediakan sumber, sehingga sumber diambil dari data standar hari ini, yang mungkin belum mencakup satu atau dua jam terakhir.",
+  "dataWebsite.realtimeLast30MinutesNote": "Data waktu nyata menunjukkan pengguna aktif GA4 dalam 30 menit terakhir. Angka di kartu dibaca setiap setengah jam, dan setiap menit saat detailnya terbuka. API waktu nyata GA4 tidak menyediakan sumber, sehingga sumber diambil dari data standar hari ini, yang mungkin belum mencakup satu atau dua jam terakhir.",
   "dataWebsite.todayNotLoaded": "Tidak dapat memuat data hari ini: {0}",
   "dataWebsite.realtimeNotLoaded": "Tidak dapat memuat data waktu nyata: {0}",
   "dataWebsite.realtimePartlyMissing": "Sebagian data waktu nyata tidak dapat dimuat: {0}",

@@ -11,6 +11,7 @@
 //   One minute.
 // A detail drawer reads one row's days on demand. Nothing here is written to the synced partitions. Every request goes
 // through the project's Google connection (`googleFetch`), so proxy profiles and simulated data apply as for the sync.
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { businessNow } from './business-clock.js';
 import { GOOGLE_ENDPOINTS, googleJson, jsonRequest } from './google-client.js';
@@ -22,6 +23,14 @@ import { GOOGLE_SAVED_REPORT_MS } from '../../shared/google-cache.js';
 import type { LegacyDatabase } from './legacy/database.js';
 
 const DATA=GOOGLE_ENDPOINTS.analyticsData,MIN=60000,HOUR=3600000;
+// GA4 answers 429 when the property's ten concurrent requests or its hourly tokens are used up, by this app's nine and
+// by anything else using the property. A request is asked again three times, after these waits, before it fails. It
+// waits outside the queue, so other reads of the property go on meanwhile.
+const RETRY_429_MS=[10000,30000,60000];
+// A reader that must answer within a time sets a deadline the waits may not pass: the online agent's reply stops after
+// 90 seconds without output. GA4's hourly token quota does not come back within these waits, so that 429 fails at once.
+const retryDeadline=new AsyncLocalStorage<number>();
+const withGa4RetryDeadline=<T,>(deadline:number,read:()=>Promise<T>):Promise<T>=>retryDeadline.run(deadline,read);
 // GA4's standard reports fill in an hour over the next couple of hours: the last two hours it has data for are still
 // partial (on Studio, 63 and 10 views against 119 and 188 the day before), so 今天 compares only the hours before them.
 const SETTLING_HOURS=2;
@@ -120,12 +129,15 @@ class WebsiteReport{
   this.p.app?.logger?.warn('NocoReach GA4 report failed',{message:e?.message,code:e?.code,status:e?.status});const reason=googleReason(e);
   fail(reason?systemMessageText('dataViews.ga4ReadFailedReason',{0:reason}):systemMessageText('dataViews.ga4ReadFailed'),502);}
  scope(id:string|number,property:string){const plugin=this.p as {network?:{mockCacheKey?:(connection:'google',projectId:string)=>string|undefined}};return [String(id),property,plugin.network?.mockCacheKey?.('google',String(id))];}
- async post(id,property,method,body){return this.requests.run(this.scope(id,property),property,method,body,async()=>{const token=await this.token(id);
+ async post(id,property,method,body){for(let attempt=0;;attempt++){try{return await this.requests.run(this.scope(id,property),property,method,body,async()=>{const token=await this.token(id);
   try{return await this.json(id,`${DATA}/properties/${property}:${method}`,{...jsonRequest(token,body),signal:AbortSignal.timeout(30000)});}
   catch(e){if(e?.code==='invalid_grant'||e?.status===401)this.tokens.delete(id);throw e;}});}
+  catch(e){const deadline=retryDeadline.getStore();if(e?.status!==429||/tokens/i.test(String(e?.message||''))||attempt>=RETRY_429_MS.length||(deadline!==undefined&&Date.now()+RETRY_429_MS[attempt]>deadline))throw e;
+   this.p.app?.logger?.warn('NocoReach GA4 rate limited, asking again',{property,method,attempt:attempt+1,message:e?.message});await new Promise(resolve=>{const timer=setTimeout(resolve,RETRY_429_MS[attempt]);timer.unref?.();});}}}
  // Up to five reports per call. A report GA4 refuses (an incompatible combination) is left out on its own, logged,
  // instead of failing the page.
- async batch(id,property,requests){const parts=[];for(let i=0;i<requests.length;i+=5)parts.push(requests.slice(i,i+5));
+ async batch(id,property,requests){// GA4 takes five reports a request and the lane runs nine at once, so reports go nine at a time, as five and four.
+  const parts=[];for(let i=0;i<requests.length;i+=9){const chunk=requests.slice(i,i+9);parts.push(chunk.slice(0,5));if(chunk.length>5)parts.push(chunk.slice(5));}
   const refused=e=>e?.status===400&&e?.code==='google_api_error';
   const one=async r=>{try{return await this.post(id,property,'runReport',r);}catch(x){if(!refused(x))this.explain(x);this.p.app?.logger?.warn('NocoReach GA4 report left out',{message:x?.message,dimensions:r.dimensions?.map(d=>d.name)});return null;}};
   const done=await Promise.all(parts.map(async part=>{try{const reports=(await this.post(id,property,'batchRunReports',{requests:part})).reports||[];return part.map((_,i)=>reports[i]||null);}
@@ -192,7 +204,9 @@ class WebsiteReport{
  // Like the period report, it keeps the `settledThrough` of the day it was read.
  async row(id,property,w,v){const table=String(v.table||''),t=TABLES[table];if(!t)fail(systemMessageText('dataViews.unknownGa4Report'),400);const dims=v.dims||{};
   const pairs=(ROW_KEYS[table]||t.dims).map(k=>{const x=dims[k];if(typeof x!=='string'||x.length>2000)fail(systemMessageText('dataViews.ga4RowMissing'),400);return [k,x];});
-  const dates=[w.start,w.end,w.previousStart,w.previousEnd,Boolean(w.all)];return this.history.load(String(id),['row',...this.scope(id,property),dates,table,pairs],async()=>({...await this.readRow(id,property,w,{table,pairs}),...(v.settledThrough?{settledThrough:v.settledThrough}:{})}),()=>v.settled===true?GOOGLE_SAVED_REPORT_MS:GA4_HISTORY_CACHE_MS,(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}));}
+  const dates=[w.start,w.end,w.previousStart,w.previousEnd,Boolean(w.all)];// A new window answers from the same row's previous one while it is read, so the row keeps the window it holds,
+  // and the `settledThrough` of the day it was read.
+  return this.history.load(String(id),['row',...this.scope(id,property),dates,table,pairs],async()=>({...await this.readRow(id,property,w,{table,pairs}),window:w,...(v.settledThrough?{settledThrough:v.settledThrough}:{})}),()=>v.settled===true?GOOGLE_SAVED_REPORT_MS:GA4_HISTORY_CACHE_MS,(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}),Array.isArray(v.view)?{family:['row',...this.scope(id,property),table,pairs,...v.view,Math.round((Date.parse(w.end)-Date.parse(w.start))/86400000)+1,Boolean(w.all)]}:{});}
  async readRow(id,property,w,{table,pairs}){const t=TABLES[table];
   const metrics=t.metrics||SESSION,both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],filter=exact(pairs);
   const [daysReport,totalsReport]=await this.batch(id,property,[request(['date'],metrics,both,null,Math.max(1000,(w.days||Math.ceil((Date.parse(w.end)-Date.parse(w.start))/86400000)+1)*2),filter),request([],metrics,both,null,null,filter)]);
@@ -256,4 +270,4 @@ class WebsiteReport{
    devices:devices.map(r=>({name:r.deviceCategory,users:r.activeUsers})),events:events.map(r=>({name:r.eventName,count:r.eventCount})),...(missing.length?{missing}:{})};
   value.cacheExpiresAt=Date.now()+GA4_REALTIME_CACHE_MS;this.liveCache.set(key,value);return value;}
 }
-export { WebsiteReport, TABLES, CHANGES, tableRows, changeRows, rowsOf, values };
+export { WebsiteReport, TABLES, CHANGES, tableRows, changeRows, rowsOf, values, RETRY_429_MS, withGa4RetryDeadline };
