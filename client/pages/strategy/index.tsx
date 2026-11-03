@@ -24,14 +24,22 @@ import {
   WaitingNote,
 } from './briefing';
 import { dayOf, conversationDayOf, feedOf } from './feed';
-import { Composer, InsightChatProvider } from './threads';
+import {
+  Composer,
+  InsightChatProvider,
+  insightThreads,
+  insightThreadsKey,
+} from './threads';
+import { EarlyRequests } from './early-requests';
+import { useOnlineApi } from '../../online-agent/api';
 import { useOptionalOnlineChat } from '../../online-agent/context';
 import { useChatPanel } from '@nocobase/app-plugin-agents/client/chat';
+import { createUuid } from '@nocobase/app-client';
 import { Link, useNavigate } from 'react-router';
 import { useCan } from '@nocobase/app-plugin-authorization/client';
 import { InfoTip } from '#components/reach/info-tip';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
-import { useFreshData } from '../workspace-cache';
+import { useFreshData, useWorkspaceCache } from '../workspace-cache';
 import { RequestBlock } from './request-block';
 import { AnalysisAlert } from './analysis-alert';
 import { PageContainer, PageHeader } from '#components/reach/page';
@@ -79,6 +87,30 @@ type Task = {
   updatedAt?: string;
   evidence?: { work?: Work; createdBy?: { id?: string } };
 };
+// What Insights reads besides its state. ProjectInsights starts these together with the state rather than after it;
+// Insights reads them with the same keys, requests and freshness.
+const insightTasksKey = (projectId: number) => `insights-tasks:${projectId}`;
+const insightTasks = (projectId: number) => taskRecords<Task>(projectId);
+const insightSummaryKey = (projectId: number) =>
+  `insights-summary:${projectId}`;
+const insightSummary = (projectId: number) =>
+  api.action<{ areas: Area[] }>('nrInsights', 'summary', {
+    method: 'POST',
+    body: { projectId },
+    unwrap: 'data',
+  });
+const insightOverviewKey = (projectId: number) =>
+  `data-view:overview:${projectId}:${JSON.stringify({ range: String(METRIC_DAYS), sameWindow: true })}`;
+const insightOverview = (projectId: number) =>
+  api.action<{ cards: SourceCard[]; window?: MetricWindow }>(
+    'nrDataViews',
+    'overview',
+    {
+      method: 'POST',
+      body: { projectId, range: String(METRIC_DAYS), sameWindow: true },
+      unwrap: 'data',
+    },
+  );
 // Insights (SPEC §5): the key numbers, then the daily analysis as a conversation: today's summary, the decisions
 // waiting and what else needs you, then the earlier days; Ask AI continues in the chat. The analysis runs on the
 // server (the daily workflow or Update analysis).
@@ -98,6 +130,10 @@ function ProjectInsights({ projectId }: { projectId: number }) {
   const [state, setState] = useState<StrategyState>(),
     [error, setError] = useMessageState(''),
     [attempt, setAttempt] = useState(0);
+  const cache = useWorkspaceCache(),
+    withChat = useOptionalOnlineChat() !== null,
+    [early] = useState(() => new EarlyRequests()),
+    startedRef = useRef('');
   useEffect(() => {
     let active = true;
     setError('');
@@ -112,30 +148,97 @@ function ProjectInsights({ projectId }: { projectId: number }) {
       active = false;
     };
   }, [projectId, attempt, setError]);
-  if (!state)
-    return error ? (
-      <PageContainer className='nr-page'>
-        <p role='alert'>{error}</p>
-        <Button onClick={() => setAttempt((n) => n + 1)}>
-          {$t('common.reload')}
-        </Button>
-      </PageContainer>
-    ) : (
-      <PageSkeleton title={$t('strategy.insights')} />
+  // Started right after the state, once per attempt: the overview through the cache as Insights reads it (it may still
+  // be fresh), the others handed to Insights' first read of each. The conversations start in EarlyThreads.
+  useEffect(() => {
+    const attemptKey = `${projectId}:${attempt}`;
+    if (startedRef.current === attemptKey) return;
+    startedRef.current = attemptKey;
+    // Keep the large task response behind state so their downloads do not compete.
+    early.start(cache, insightSummaryKey(projectId), () =>
+      insightSummary(projectId),
     );
-  return <Insights projectId={projectId} state={state} setState={setState} />;
+    cache
+      .load(
+        insightOverviewKey(projectId),
+        () => insightOverview(projectId),
+        false,
+        googleLocalFreshness,
+      )
+      .catch(() => undefined);
+  }, [projectId, attempt, cache, early]);
+  // Kept mounted in the same place while the state loads and after, so its request is not cancelled in between.
+  const threads = withChat ? (
+    <EarlyThreads projectId={projectId} attempt={attempt} early={early} />
+  ) : null;
+  if (!state)
+    return (
+      <>
+        {threads}
+        {error ? (
+          <PageContainer className='nr-page'>
+            <p role='alert'>{error}</p>
+            <Button onClick={() => setAttempt((n) => n + 1)}>
+              {$t('common.reload')}
+            </Button>
+          </PageContainer>
+        ) : (
+          <PageSkeleton title={$t('strategy.insights')} />
+        )}
+      </>
+    );
+  return (
+    <>
+      {threads}
+      <Insights
+        projectId={projectId}
+        state={state}
+        setState={setState}
+        early={early}
+      />
+    </>
+  );
+}
+// Starts the Insights conversations' request with the state where the chat is mounted, as InsightChatProvider reads
+// them. It renders nothing; like the provider's own, its request is cancelled when it unmounts.
+function EarlyThreads({
+  projectId,
+  attempt,
+  early,
+}: {
+  projectId: number;
+  attempt: number;
+  early: EarlyRequests;
+}) {
+  const cache = useWorkspaceCache(),
+    onlineApi = useOnlineApi(),
+    startedRef = useRef('');
+  useEffect(() => {
+    const attemptKey = `${projectId}:${attempt}`;
+    if (startedRef.current === attemptKey) return;
+    startedRef.current = attemptKey;
+    early.start(cache, insightThreadsKey(projectId), () =>
+      insightThreads(onlineApi, projectId),
+    );
+  }, [projectId, attempt, cache, onlineApi, early]);
+  return null;
 }
 function Insights({
   projectId,
   state,
   setState,
+  early,
 }: {
   projectId: number;
   state: StrategyState;
   setState: (s: StrategyState) => void;
+  early: EarlyRequests;
 }) {
-  const taskView = useFreshData(`insights-tasks:${projectId}`, () =>
-    taskRecords<Task>(projectId),
+  const cache = useWorkspaceCache();
+  const taskView = useFreshData(insightTasksKey(projectId), () =>
+    early.take(cache, insightTasksKey(projectId), () =>
+      insightTasks(projectId),
+    ),
   );
   const tasks = taskView.data ?? [];
   const [busy, setBusy] = useState(false),
@@ -153,7 +256,7 @@ function Insights({
   async function mutate(action: string, body: object) {
     const key = JSON.stringify([action, state.revision, body]);
     if (operationRef.current.key !== key)
-      operationRef.current = { key, id: crypto.randomUUID() };
+      operationRef.current = { key, id: createUuid() };
     return request<StrategyState>(projectId, action, {
       ...body,
       revision: state.revision,
@@ -285,26 +388,15 @@ function Insights({
       : $t('common.needsConfirmation');
   };
   const summaryView = useFreshData<{ areas: Area[] }>(
-    `insights-summary:${projectId}`,
+    insightSummaryKey(projectId),
     () =>
-      api.action<{ areas: Area[] }>('nrInsights', 'summary', {
-        method: 'POST',
-        body: { projectId },
-        unwrap: 'data',
-      }),
+      early.take(cache, insightSummaryKey(projectId), () =>
+        insightSummary(projectId),
+      ),
   );
   const overview = useFreshData<{ cards: SourceCard[]; window?: MetricWindow }>(
-    `data-view:overview:${projectId}:${JSON.stringify({ range: String(METRIC_DAYS), sameWindow: true })}`,
-    () =>
-      api.action<{ cards: SourceCard[]; window?: MetricWindow }>(
-        'nrDataViews',
-        'overview',
-        {
-          method: 'POST',
-          body: { projectId, range: String(METRIC_DAYS), sameWindow: true },
-          unwrap: 'data',
-        },
-      ),
+    insightOverviewKey(projectId),
+    () => insightOverview(projectId),
     googleLocalFreshness,
   );
   // When an analysis ends, the numbers, the situation and the tasks are read again with it.
@@ -514,7 +606,11 @@ function Insights({
         >
           {/* Questions asked from Insights read the chat's records, so only where the chat is mounted. */}
           {chat ? (
-            <InsightChatProvider projectId={projectId} day={analysisDay}>
+            <InsightChatProvider
+              projectId={projectId}
+              day={analysisDay}
+              early={early}
+            >
               {column}
             </InsightChatProvider>
           ) : (

@@ -60,6 +60,8 @@ Markdown links to same-origin task details (`/actions/:id`) and opportunities (`
 
 ## Backend and data
 
+For loading changes, follow [page performance measurements](PERFORMANCE.md) for snapshot restoration, separate timing boundaries and functional comparisons.
+
 Follow the application Skill references for [routes](../.agents/skills/nocobase-app-development/references/server-routes.md), [HTTP contracts](../.agents/skills/nocobase-app-development/references/http-api.md), [services](../.agents/skills/nocobase-app-development/references/services-and-jobs.md), and [data access](../.agents/skills/nocobase-app-development/references/database-and-data.md). Database APIs are documented in the [database Skill](../.agents/skills/nocobase-db/SKILL.md).
 
 ### Compatibility layer and authorization
