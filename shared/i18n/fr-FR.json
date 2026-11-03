@@ -5791,7 +5791,7 @@
   "dataWebsite.todayNotProcessed": "GA4 n’a pas encore traité les données d’aujourd’hui · {0}",
   "dataWebsite.howTodayCounted": "Calcul des chiffres d’aujourd’hui",
   "dataWebsite.todayComparedSameHours": "Les comparaisons avec hier et le même jour de la semaine dernière couvrent la période de minuit à la même heure, dans le fuseau horaire de la propriété GA4. GA4 traite les données avec un décalage et complète encore les deux dernières heures disponibles ; les chiffres et la comparaison s’arrêtent donc avant celles-ci. Le graphique représente ces deux heures en tirets.",
-  "dataWebsite.realtimeLast30MinutesNote": "Le temps réel correspond aux utilisateurs actifs de GA4 au cours des 30 dernières minutes, avec une mise à jour chaque minute. L’API en temps réel de GA4 ne fournit pas les sources ; celles-ci proviennent donc des données standard d’aujourd’hui, dont les dernières heures peuvent être absentes.",
+  "dataWebsite.realtimeLast30MinutesNote": "Le temps réel correspond aux utilisateurs actifs de GA4 au cours des 30 dernières minutes. Le chiffre de la carte est lu toutes les demi-heures, et chaque minute lorsque le détail est ouvert. L’API en temps réel de GA4 ne fournit pas les sources ; celles-ci proviennent donc des données standard d’aujourd’hui, dont les dernières heures peuvent être absentes.",
   "dataWebsite.todayNotLoaded": "Impossible de charger les données d’aujourd’hui : {0}",
   "dataWebsite.realtimeNotLoaded": "Impossible de charger les données en temps réel : {0}",
   "dataWebsite.realtimePartlyMissing": "Certaines données en temps réel n’ont pas pu être chargées : {0}",

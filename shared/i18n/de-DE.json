@@ -5791,7 +5791,7 @@
   "dataWebsite.todayNotProcessed": "GA4 hat die heutigen Daten noch nicht verarbeitet · {0}",
   "dataWebsite.howTodayCounted": "So werden die heutigen Zahlen ermittelt",
   "dataWebsite.todayComparedSameHours": "Der Vergleich mit gestern und demselben Wochentag der Vorwoche erfolgt jeweils von Mitternacht bis zur gleichen Uhrzeit in der Zeitzone der GA4-Property. GA4 verarbeitet Daten verzögert und ergänzt die letzten beiden verfügbaren Stunden noch. Deshalb enden die Kennzahlen und der Vergleich vor diesen beiden Stunden; im Diagramm werden sie gestrichelt dargestellt.",
-  "dataWebsite.realtimeLast30MinutesNote": "Die Echtzeitdaten zeigen die aktiven Nutzer der letzten 30 Minuten aus GA4 und werden jede Minute aktualisiert. Die Echtzeit-API von GA4 liefert keine Quellen. Diese stammen daher aus den heutigen Standarddaten, in denen die letzten ein bis zwei Stunden noch fehlen können.",
+  "dataWebsite.realtimeLast30MinutesNote": "Die Echtzeitdaten zeigen die aktiven Nutzer der letzten 30 Minuten aus GA4. Die Zahl auf der Karte wird jede halbe Stunde gelesen, bei geöffneten Details jede Minute. Die Echtzeit-API von GA4 liefert keine Quellen. Diese stammen daher aus den heutigen Standarddaten, in denen die letzten ein bis zwei Stunden noch fehlen können.",
   "dataWebsite.todayNotLoaded": "Die heutigen Daten konnten nicht geladen werden: {0}",
   "dataWebsite.realtimeNotLoaded": "Echtzeitdaten konnten nicht geladen werden: {0}",
   "dataWebsite.realtimePartlyMissing": "Einige Echtzeitdaten konnten nicht geladen werden: {0}",
