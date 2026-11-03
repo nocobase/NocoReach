@@ -38,7 +38,7 @@ it('counts reports inside batches, shares property limits across projects and pr
       ['1'],
       '123',
       'batchRunReports',
-      { requests: Array(5).fill({}) },
+      { requests: Array(9).fill({}) },
       async () => {
         seen.push(context.getStore());
         await release.promise;
@@ -131,7 +131,7 @@ it('coalesces whole realtime refreshes even when some parts have already finishe
   expect(f.calls).toHaveLength(14);
 });
 
-it('coalesces concurrent historical reports and never runs more than five core reports at once', async () => {
+it('coalesces concurrent historical reports and runs nine core reports at once, in batches of five and four', async () => {
   vi.useFakeTimers();
   const f = fixture();
   const window = {
@@ -147,7 +147,11 @@ it('coalesces concurrent historical reports and never runs more than five core r
   await vi.runAllTimersAsync();
   await results;
   expect(f.calls).toHaveLength(4);
-  expect(f.reportPeak()).toBe(5);
+  expect(
+    f.calls.map((c) => (c.body.requests as unknown[] | undefined)?.length),
+  ).toEqual([5, 4, 5, 4]);
+  // One fewer than GA4's ten, for what reaches it outside this queue.
+  expect(f.reportPeak()).toBe(9);
 });
 
 it('does not reuse realtime results after the simulated network scope changes', async () => {

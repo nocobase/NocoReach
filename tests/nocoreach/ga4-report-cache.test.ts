@@ -197,6 +197,55 @@ it('logs a background read that failed, which no request reports', async () => {
   );
 });
 
+it("answers a GA4 row on a new day's window from the same row's previous one, with the window it holds", async () => {
+  const { db } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime('2026-10-20T12:00:00Z');
+  const report = new WebsiteReport({ db });
+  const read = vi.fn(async () => ({
+    daily: [],
+    totals: { current: { users: 1 } },
+  }));
+  (report as { readRow: unknown }).readRow = read;
+  const dims = { pagePath: '/a' };
+  const first = await report.row('1', '123', windowFor('2026-10-16', '7'), {
+    table: 'page',
+    dims,
+    settled: true,
+  });
+  expect(first.window).toMatchObject({ end: '2026-10-16' });
+  const restarted = new WebsiteReport({ db });
+  (restarted as { readRow: unknown }).readRow = read;
+  const copy = await restarted.row('1', '123', windowFor('2026-10-17', '7'), {
+    table: 'page',
+    dims,
+    settled: true,
+  });
+  expect(copy).toMatchObject({
+    refreshing: true,
+    window: { end: '2026-10-16' },
+  });
+  await restarted.history.settled();
+  expect(read).toHaveBeenCalledTimes(2);
+  const other = await restarted.row('1', '123', windowFor('2026-10-17', '7'), {
+    table: 'page',
+    dims: { pagePath: '/b' },
+    settled: true,
+  });
+  expect(other).not.toHaveProperty('savedAt');
+  const longer = await restarted.row(
+    '1',
+    '123',
+    windowFor('2026-10-17', '28'),
+    {
+      table: 'page',
+      dims,
+      settled: true,
+    },
+  );
+  expect(longer).not.toHaveProperty('savedAt');
+});
+
 it('keeps a GA4 row as long as final days only when GA4 has finished every day of its window', async () => {
   const { db } = await fixture();
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -213,9 +262,10 @@ it('keeps a GA4 row as long as final days only when GA4 has finished every day o
     settled: true,
   });
   expect(settled.cacheExpiresAt).toBe(Date.now() + GOOGLE_SAVED_REPORT_MS);
+  // Another row, so the settled one above is not its copy.
   const recent = await report.row('1', '123', windowFor('2026-10-19', '7'), {
     table: 'page',
-    dims,
+    dims: { pagePath: '/recent' },
   });
   expect(recent.cacheExpiresAt).toBe(Date.now() + GA4_HISTORY_CACHE_MS);
 });

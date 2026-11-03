@@ -34,11 +34,11 @@ import { Delta } from '#components/reach/delta';
 export type Metric = "clicks" | "impressions" | "ctr" | "position";
 export type Window = { all?: boolean; start: string; end: string; previousStart: string; previousEnd: string };
 export type BreakdownRow = { key: string; clicks: number; impressions: number; ctr: number; position: number; previousClicks: number | null; previousImpressions: number | null };
-export type Breakdown = Partial<SavedCopy> & { connected: boolean; countries: BreakdownRow[] | null; devices: BreakdownRow[] | null; appearances: BreakdownRow[] | null };
+export type Breakdown = Partial<SavedCopy> & { connected: boolean; window?: { start: string; end: string }; countries: BreakdownRow[] | null; devices: BreakdownRow[] | null; appearances: BreakdownRow[] | null };
 export type MoverRow = { key: string; clicks: number; previousClicks: number; change: number; impressions: number; previousImpressions: number; position: number | null; previousPosition: number | null };
 export type Movers = { rising: MoverRow[]; falling: MoverRow[]; fresh: MoverRow[] };
 type TrendPoint = { date: string; clicks: number | null; impressions: number | null; ctr: number | null; position: number | null; previousDate: string; previousClicks: number | null; previousImpressions: number | null; previousCtr: number | null; previousPosition: number | null };
-type RowDetail = Partial<SavedCopy> & { connected: boolean; trend: TrendPoint[]; related: { key: string; clicks: number; impressions: number; ctr: number; position: number }[] };
+type RowDetail = Partial<SavedCopy> & { connected: boolean; window?: { start: string; end: string }; trend: TrendPoint[]; related: { key: string; clicks: number; impressions: number; ctr: number; position: number }[] };
 // What the page knows about the report it shows, for the requests it makes on its own.
 export type Scope = { projectId: number; property?: string; compare?: boolean; window: Window; country?: string; filters: Record<string, unknown> };
 
@@ -159,7 +159,7 @@ export function RowDrawer({ scope, dimension, rowKey, figures, metric, onClose }
   const points = (data?.trend ?? []).map((p) => ({ date: p.date, value: p[m], previous: p[prevKey] }));
   const page = dimension === "page" && safeLink(rowKey) ? safeLink(rowKey)! : null;
   return (
-    <DetailDrawer open onClose={onClose} title={`${dimension === "page" ? $t('common.page') : $t('common.query')} · ${rowKey}`} description={$t('common.range', { 0: formatDate(scope.window.start), 1: formatDate(scope.window.end) })}>
+    <DetailDrawer open onClose={onClose} title={`${dimension === "page" ? $t('common.page') : $t('common.query')} · ${rowKey}`} description={$t('common.range', { 0: formatDate((data?.window ?? scope.window).start), 1: formatDate((data?.window ?? scope.window).end) })}>
       <SavedReportNote {...savedCopyNote(data)} />
       {page ? <a className="nr-link mb-3 inline-flex items-center gap-1 break-all" href={page} target="_blank" rel="noreferrer">{rowKey}<ArrowUpRight className="size-3.5" /></a> : null}
       {figures ? (

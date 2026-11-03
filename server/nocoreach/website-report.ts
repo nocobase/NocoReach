@@ -116,7 +116,8 @@ class WebsiteReport{
   catch(e){if(e?.code==='invalid_grant'||e?.status===401)this.tokens.delete(id);throw e;}});}
  // Up to five reports per call. A report GA4 refuses (an incompatible combination) is left out on its own, logged,
  // instead of failing the page.
- async batch(id,property,requests){const parts=[];for(let i=0;i<requests.length;i+=5)parts.push(requests.slice(i,i+5));
+ async batch(id,property,requests){// GA4 takes five reports a request and the lane runs nine at once, so reports go nine at a time, as five and four.
+  const parts=[];for(let i=0;i<requests.length;i+=9){const chunk=requests.slice(i,i+9);parts.push(chunk.slice(0,5));if(chunk.length>5)parts.push(chunk.slice(5));}
   const refused=e=>e?.status===400&&e?.code==='google_api_error';
   const one=async r=>{try{return await this.post(id,property,'runReport',r);}catch(x){if(!refused(x))this.explain(x);this.p.app?.logger?.warn('NocoReach GA4 report left out',{message:x?.message,dimensions:r.dimensions?.map(d=>d.name)});return null;}};
   const done=await Promise.all(parts.map(async part=>{try{const reports=(await this.post(id,property,'batchRunReports',{requests:part})).reports||[];return part.map((_,i)=>reports[i]||null);}
@@ -160,7 +161,8 @@ class WebsiteReport{
  // One row of a table over the window: its days against the period before, and its totals for both (deduplicated users).
  async row(id,property,w,v){const table=String(v.table||''),t=TABLES[table];if(!t)fail(systemMessageText('dataViews.unknownGa4Report'),400);const dims=v.dims||{};
   const pairs=(ROW_KEYS[table]||t.dims).map(k=>{const x=dims[k];if(typeof x!=='string'||x.length>2000)fail(systemMessageText('dataViews.ga4RowMissing'),400);return [k,x];});
-  const dates=[w.start,w.end,w.previousStart,w.previousEnd,Boolean(w.all)];return this.history.load(String(id),['row',...this.scope(id,property),dates,table,pairs],()=>this.readRow(id,property,w,{table,pairs}),()=>v.settled===true?GOOGLE_SAVED_REPORT_MS:GA4_HISTORY_CACHE_MS,(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}));}
+  const dates=[w.start,w.end,w.previousStart,w.previousEnd,Boolean(w.all)];// A new window answers from the same row's previous one while it is read, so the row keeps the window it holds.
+  return this.history.load(String(id),['row',...this.scope(id,property),dates,table,pairs],async()=>{const {explicitEnd,...window}=w as {explicitEnd?:boolean};return {...await this.readRow(id,property,w,{table,pairs}),window};},()=>v.settled===true?GOOGLE_SAVED_REPORT_MS:GA4_HISTORY_CACHE_MS,(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}),{family:['row',...this.scope(id,property),table,pairs,Math.round((Date.parse(w.end)-Date.parse(w.start))/86400000)+1,Boolean(w.all)]});}
  async readRow(id,property,w,{table,pairs}){const t=TABLES[table];
   const metrics=t.metrics||SESSION,both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],filter=exact(pairs);
   const [daysReport,totalsReport]=await this.batch(id,property,[request(['date'],metrics,both,null,Math.max(1000,(w.days||Math.ceil((Date.parse(w.end)-Date.parse(w.start))/86400000)+1)*2),filter),request([],metrics,both,null,null,filter)]);

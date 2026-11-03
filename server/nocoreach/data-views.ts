@@ -25,6 +25,9 @@ const iso=t=>new Date(t).toISOString().slice(0,10);
 const add=(d,n)=>iso(Date.parse(d+'T00:00:00Z')+n*DAY);
 const days=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/DAY)+1;
 const dayOf=v=>v instanceof Date?v.toISOString().slice(0,10):String(v||'').slice(0,10);
+// What makes a new day's window the same view as yesterday's: its length and whether it is all of history. Breakdowns and
+// rows receive dates alone, so without it a 90-day report would answer, and evict, the 28-day one.
+const windowShape=w=>[days(w.start,w.end),w.all===true];
 // The longest stretch of synced query × page days read for a report: both 90-day periods. Longer ones ask Search Console.
 const MAX_STORED_PAIR_DAYS=200;
 // GA4 goes on processing a day for about two days after it ends; a report over later days is not kept as settled.
@@ -128,7 +131,9 @@ class DataViews{
  // after a day. A rolling range has a new window by then, so this costs it no read; a fixed range reads at most once a
  // day when it is opened, answering from its copy meanwhile.
  lifetime(id,w){if(!w)return GOOGLE_HISTORY_CACHE_MS;const {cutoff}=historyBounds(this.p,id);return w.end<add(cutoff,-SYNC_REREAD_DAYS)?GOOGLE_SAVED_REPORT_MS:w.end<=cutoff?DAY:GOOGLE_HISTORY_CACHE_MS;}
- report(id,identity,read,w){return this.reports.load(String(id),identity,read,value=>value.connected===false||value.cutoff===null?0:value.partial?GOOGLE_PARTIAL_CACHE_MS:this.lifetime(id,w),(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}));}
+ // `family` names the view whatever its dates, so a new window answers from the previous one while it is read; the report
+ // then carries the `window` it holds.
+ report(id,identity,read,w,family){return this.reports.load(String(id),identity,read,value=>value.connected===false||value.cutoff===null?0:value.partial?GOOGLE_PARTIAL_CACHE_MS:this.lifetime(id,w),(value,cacheExpiresAt,saved)=>({...value,cacheExpiresAt,...saved}),family?{family}:{});}
  // Share only concurrent token refreshes; never retain credentials or cross transaction/mock scopes.
  token(id,scope){if(!scope||this.p.db?.transactionContext?.())return this.p.token(id);const key=JSON.stringify([String(id),...scope]);let pending=this.tokenPending.get(key);if(!pending){pending=Promise.resolve().then(()=>this.p.token(id)).finally(()=>this.tokenPending.delete(key));this.tokenPending.set(key,pending);}return pending;}
  async fresh(id,source,cutoff){try{return await this.p.sync.fresh(id,source,cutoff);}catch{return [];}}
@@ -279,7 +284,7 @@ class DataViews{
    return cur.map(r=>({...r,ctr:r.impressions?r.clicks/r.impressions:0,previousClicks:prev?before.get(r.key)?.clicks??0:null,previousImpressions:prev?before.get(r.key)?.impressions??0:null})).sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions);};
   const [countries,devices,appearances]=await Promise.all(['country','device','searchAppearance'].map(part));
   if(!countries&&!devices&&!appearances)fail(failure?.code==='invalid_grant'?systemMessageText('dataViews.googleAuthorizationExpiredAuthorizeAgain'):systemMessageText('dataViews.notReadSearchConsoleData'),502);
-  return {connected:true,countries,devices,appearances,partial:Boolean(failure)};},w);
+  return {connected:true,countries,devices,appearances,partial:Boolean(failure),window:w};},w,['breakdown',...scope,filters,country,...windowShape(w)]);
   // The period before is always read: a page that may not compare yet (the sync has not landed) and one that can then
   // share one report instead of reading the same window twice a day.
   if(v.compare!==false)return value;const plain=rows=>rows&&rows.map(r=>({...r,previousClicks:null,previousImpressions:null}));return {...value,countries:plain(value.countries),devices:plain(value.devices),appearances:plain(value.appearances)};}
@@ -294,9 +299,9 @@ class DataViews{
   catch(e){fail(e.code==='invalid_grant'?systemMessageText('dataViews.googleAuthorizationExpiredAuthorizeAgain'):systemMessageText('dataViews.notReadSearchConsoleData'),502);}
   // Search Console leaves out days without impressions.
   const by=new Map(byDate.map(r=>[r.keys[0],{clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0}]));
-  const value={connected:true,dimension,key:k,trend:trendOf(w,d=>by.get(d)||null).map(p=>v.compare===false||w.previousStart<earliest?{...p,previousClicks:null,previousImpressions:null,previousCtr:null,previousPosition:null}:p),
+  const value={connected:true,dimension,key:k,window:w,trend:trendOf(w,d=>by.get(d)||null).map(p=>v.compare===false||w.previousStart<earliest?{...p,previousClicks:null,previousImpressions:null,previousCtr:null,previousPosition:null}:p),
    related:related.map(r=>({key:String(r.keys?.[0]||''),clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,ctr:r.impressions?(Number(r.clicks)||0)/Number(r.impressions):0,position:Number(r.position)||0})).filter(r=>r.key).sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions).slice(0,100)};
-  return value;},w);}
+  return value;},w,['row',...scope,dimension,k,country,filters,v.compare!==false,...windowShape(w)]);}
  // What Search performance reads when it opens on its default range, ready before anyone asks (the sync's tick calls this).
  async warm(id){const report=await this.search(id,{range:'28'});if(!report?.connected||!report.cutoff||!report.window)return;
   await this.search(id,{range:'28',details:true});
