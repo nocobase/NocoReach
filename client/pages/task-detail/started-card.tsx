@@ -80,9 +80,16 @@ export function StartedCard({
   const pages =
     delivery?.kind === 'site'
       ? site.map((p) => {
-          const key = pageKey(p.url),
-            linked = pageKey(w.page?.url) === key ? w.page?.title : '';
-          return { url: p.url, title: titles?.get(key) || linked || undefined };
+          // The server names the same addresses; the linked page may be another address of the page.
+          const linked =
+            pageKey(w.page?.url, data.pageIdentity) ===
+            pageKey(p.url, data.pageIdentity)
+              ? w.page?.title
+              : '';
+          return {
+            url: p.url,
+            title: titles?.get(pageKey(p.url)) || linked || undefined,
+          };
         })
       : delivery?.pages || [];
   const targetName = (id: string) =>

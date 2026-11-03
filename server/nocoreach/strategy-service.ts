@@ -15,6 +15,7 @@ import { projectId, requireAccess } from './policy.js';
 import { memoryForAI, MEMORY_SECTIONS } from './execution/memory.js';
 import { projectWork } from './execution/model.js';
 import { splitOf, pageKey } from '../../shared/opportunity-parts.js';
+import { pageIdentity } from '../../shared/page-identity.js';
 import { distinctPages, pageUrlsOf } from '../../shared/task-start.js';
 import { planOf, scopeText, taskPart } from './opportunity-hand-off.js';
 // Who created a task: it becomes the task's owner (2026-10-08).
@@ -115,19 +116,21 @@ class StrategyService{
   return this.mutate(id,v,async(state,transaction)=>{const now=new Date().toISOString(),items=board.withoutIgnored(state,board.mergeCards(state,cards,now,randomUUID));state.insightHistory ||= [];if(state.insights)state.insightHistory.unshift(state.insights);
    const signals=context.evidence.signals?.items||[];watch.enforceDeadlines(state,signalReviews,now);
    state.insights={generatedAt:now,evidence:context.evidence,items,sourceReviews:reviews,observations,signalReviews};
-   settleVerdicts(state,await this.coverTasks(id,transaction),now,randomUUID,localeOf(v));
+   settleVerdicts(state,await this.coverTasks(id,transaction),now,randomUUID,localeOf(v),await this.pageIdentity(id,transaction));
    watch.applyVerdicts(state,{signals,reviews:signalReviews,cards:state.insights.items,now,maxDays});watch.endMissing(state,{signals,missing:context.evidence.signals?.missing||[],now});});
  }
  // One change judged on request (洞察 › 最新变化 › 让 AI 现在判断) for an analysis made before every change got a verdict.
  async reviewSignal(id,v){const fallbackDays=(await this.p.analysisRules?.config(id).catch(()=>null))?.watchDays;return this.mutate(id,v,async(state,transaction)=>{const maxDays=state.insights?.evidence?.signals?.analysisSnapshot?.config?.watchDays??fallbackDays;const s=(state.insights?.evidence?.signals?.items||[]).find(x=>x.key===v.signalKey);if(!s)fail(systemMessageText('dailyAnalysis.changeNoLongerLatestAnalysis'),404);
   const now=new Date().toISOString(),got=watch.enforceDeadlines(state,reviewsOf([{key:s.key,verdict:v.verdict,reason:v.reason,waitingFor:v.waitingFor,decideBy:v.decideBy}],[s],[]),now),r=got[s.key];if(!r)fail(systemMessageText('strategy.incompleteVerdictFormat'));state.insights.signalReviews={...(state.insights.signalReviews||{}),[s.key]:r};
-  settleVerdicts(state,await this.coverTasks(id,transaction),now,randomUUID,localeOf(v));
+  settleVerdicts(state,await this.coverTasks(id,transaction),now,randomUUID,localeOf(v),await this.pageIdentity(id,transaction));
   watch.applyVerdicts(state,{signals:[s],reviews:{[s.key]:state.insights.signalReviews[s.key]},cards:state.insights.items||[],now,maxDays});});}
  // Several at once: the changes the analysis left without a verdict, filled in afterwards.
  async reviewSignals(id,v){const fallbackDays=(await this.p.analysisRules?.config(id).catch(()=>null))?.watchDays;return this.mutate(id,v,async(state,transaction)=>{const maxDays=state.insights?.evidence?.signals?.analysisSnapshot?.config?.watchDays??fallbackDays;const signals=state.insights?.evidence?.signals?.items||[];const now=new Date().toISOString(),known=state.insights?.signalReviews||{},got=reviewsOf((Array.isArray(v.reviews)?v.reviews:[]).map(r=>({key:r?.signalKey??r?.key,verdict:r?.verdict,reason:r?.reason,waitingFor:r?.waitingFor,decideBy:r?.decideBy})),signals,[]);
   for(const k of Object.keys(got))if(known[k])delete got[k];watch.enforceDeadlines(state,got,now);
-  if(state.insights){state.insights.signalReviews={...got,...known};settleVerdicts(state,await this.coverTasks(id,transaction),now,randomUUID,localeOf(v));
+  if(state.insights){state.insights.signalReviews={...got,...known};settleVerdicts(state,await this.coverTasks(id,transaction),now,randomUUID,localeOf(v),await this.pageIdentity(id,transaction));
    const settled=Object.fromEntries(Object.keys(got).map(k=>[k,state.insights.signalReviews[k]]));watch.applyVerdicts(state,{signals,reviews:settled,cards:state.insights.items||[],now,maxDays});}});}
+ // Which of the project's addresses are one page (shared/page-identity.ts), from what Website content read.
+ async pageIdentity(id,transaction){try{return pageIdentity((await this.repo().findOne({filter:{key:`site-content:${id}`},transaction}))?.get('payload'));}catch{return null;}}
  // The project's tasks, for what already covers a change (verdict-coverage.ts); none when they cannot be read.
  async coverTasks(id,transaction){try{return (await this.p.db.getRepository('nrTasks').find({filter:{projectId:id},limit:5000,transaction})).map(t=>t.toJSON?t.toJSON():t);}catch{return [];}}
  // 忽略 on a change judged worth doing that has no opportunity of its own (2026-10-08, user: those rows had 交给 Agent but
@@ -182,10 +185,10 @@ class StrategyService{
  // proposal or `task:<id>`); the task itself is not changed and, when it starts, names the pages it keeps.
  async splitTask(id,v,ctx){const source=await this.p.taskExecution.task(String(id),String(v.taskId)),e=source.evidence||{},w=projectWork(source);
   if(w.flow||w.plan||w.stage!=='plan'||w.cancelledAt||w.archivedAt)fail(systemMessageText('taskExecution.taskStarted'),409);
-  const own=new Set(pageUrlsOf({task:source,work:w}).map(pageKey)),groups=Array.isArray(v.groups)?v.groups:[];
-  const lists=groups.slice(0,10).map(g=>({pages:distinctPages(Array.isArray(g?.pages)?g.pages:[]),subject:subjectInput(g?.subject)}));
+  const identity=await this.pageIdentity(id),own=new Set(pageUrlsOf({task:source,work:w,pageIdentity:identity}).map(u=>pageKey(u,identity))),groups=Array.isArray(v.groups)?v.groups:[];
+  const lists=groups.slice(0,10).map(g=>({pages:distinctPages(Array.isArray(g?.pages)?g.pages:[],undefined,identity),subject:subjectInput(g?.subject)}));
   if(!lists.length||lists.length!==groups.length||lists.some(g=>!g.pages.length))fail(systemMessageText('strategy.checkInputLength'));
-  if(lists.some(g=>g.pages.some(u=>!own.has(pageKey(u)))))fail(systemMessageText('taskPages.notOwnPages'),409);
+  if(lists.some(g=>g.pages.some(u=>!own.has(pageKey(u,identity)))))fail(systemMessageText('taskPages.notOwnPages'),409);
   return this.mutate(id,v,async(state,transaction)=>{
    if(state.proposals.length+lists.length>100)fail(systemMessageText('strategy.currentPilotSavesUp100'),409);
    const from=state.proposals.find(p=>p.id===e.proposalId),group=from?(from.group||from.id):`task:${source.id}`,locale=ctx?.getCurrentLocale?.()||'zh-CN';
