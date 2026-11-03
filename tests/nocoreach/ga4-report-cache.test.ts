@@ -10,7 +10,10 @@ import {
   legacyRecord,
 } from '../../server/nocoreach/legacy/database.js';
 import { Ga4ReportCache } from '../../server/nocoreach/ga4-report-cache.js';
-import { waitForFresh } from '../../server/nocoreach/google-report-cache.js';
+import {
+  readAhead,
+  waitForFresh,
+} from '../../server/nocoreach/google-report-cache.js';
 import {
   GOOGLE_SAVED_COPY_MAX_AGE_MS,
   GOOGLE_SAVED_COPY_RETRY_MS,
@@ -80,48 +83,69 @@ const showCopy = (
   saved?: { refreshing: boolean; savedAt: number },
 ) => ({ ...value, cacheExpiresAt, ...saved });
 
-it('reads the Traffic report again after six hours, as its last days keep changing, and at the latest at midnight', async () => {
+it('reads a Traffic window twice a day when people open it, and once when only the tick readies it', async () => {
   const { db } = await fixture();
   vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime('2026-10-20T09:00:00Z');
   const report = new WebsiteReport({ db });
   const read = vi.fn(async () => ({ tables: {}, missing: [], complete: true }));
   (report as { readPeriod: unknown }).readPeriod = read;
+  const at = (time: string) => vi.setSystemTime(`2026-10-20T${time}:00Z`);
   const w = windowFor('2026-10-19', '28');
-  const first = await report.period('1', '123', w, {
-    cutoff: '2026-10-19',
-    view: ['28'],
-  });
-  expect(first.cacheExpiresAt).toBe(Date.now() + GA4_HISTORY_CACHE_MS);
+  const options = { cutoff: '2026-10-19', view: ['28'] };
+  // Just after midnight the sync tick readies the new window; GA4 is still filling in yesterday, so the report lives
+  // until the morning.
+  at('00:05');
+  const first = await readAhead(() => report.period('1', '123', w, options));
+  expect(first.cacheExpiresAt).toBe(Date.parse('2026-10-20T06:00:00Z'));
   expect(first).toMatchObject({ window: w, cutoff: '2026-10-19' });
-  vi.setSystemTime(Date.now() + GA4_HISTORY_CACHE_MS - 1);
+  // The tick does not read it again for that: nobody is looking.
+  at('06:01');
   expect(
-    await report.period('1', '123', w, { view: ['28'] }),
+    await readAhead(() => report.period('1', '123', w, options)),
   ).not.toHaveProperty('savedAt');
   expect(read).toHaveBeenCalledTimes(1);
-  // A report GA4 answered in part is still read again soon.
-  read.mockResolvedValue({ tables: {}, missing: ['city'], complete: false });
-  const partial = await report.period('1', '123', windowFor('2026-10-19', '7'));
-  expect(partial.cacheExpiresAt).toBe(Date.now() + GA4_PARTIAL_CACHE_MS);
-  // Past its six hours the copy answers while a new report is read.
-  read.mockResolvedValue({ tables: {}, missing: [], complete: true });
-  vi.setSystemTime('2026-10-20T22:00:00Z');
-  expect(await report.period('1', '123', w, { view: ['28'] })).toMatchObject({
+  // The first visit after the morning shows the copy while yesterday is read again, nearly whole; that one lasts until
+  // midnight.
+  at('09:00');
+  expect(await report.period('1', '123', w, options)).toMatchObject({
     refreshing: true,
   });
   await report.history.settled();
+  expect(read).toHaveBeenCalledTimes(2);
+  expect((await report.period('1', '123', w, options)).cacheExpiresAt).toBe(
+    Date.parse('2026-10-21T00:00:00Z'),
+  );
+  at('15:00');
+  await report.period('1', '123', w, options);
+  await readAhead(() => report.period('1', '123', w, options));
+  expect(read).toHaveBeenCalledTimes(2);
+  // A report GA4 answered in part is still read again soon.
+  read.mockResolvedValueOnce({
+    tables: {},
+    missing: ['city'],
+    complete: false,
+  });
+  const partial = await report.period('1', '123', windowFor('2026-10-19', '7'));
+  expect(partial.cacheExpiresAt).toBe(Date.now() + GA4_PARTIAL_CACHE_MS);
   expect(read).toHaveBeenCalledTimes(3);
-  // Read late in the day, it lasts only until midnight, when yesterday moves on.
-  const late = await report.period('1', '123', w, { view: ['28'] });
-  expect(late.cacheExpiresAt).toBe(Date.parse('2026-10-21T00:00:00Z'));
-  // The next day's window is answered from this one while it is read.
+  // At the next midnight the tick reads the new window and waits for it: the previous day's copy does not count.
   vi.setSystemTime('2026-10-21T00:05:00Z');
   const next = windowFor('2026-10-20', '28');
-  expect(await report.period('1', '123', next, { view: ['28'] })).toMatchObject(
-    { refreshing: true, window: w },
-  );
-  await report.history.settled();
+  expect(
+    await readAhead(() => report.period('1', '123', next, options)),
+  ).toMatchObject({ window: next });
   expect(read).toHaveBeenCalledTimes(4);
+  // A read in the hour before the morning has most of yesterday already, so it lasts until midnight.
+  vi.setSystemTime('2026-10-21T04:59:00Z');
+  expect(
+    (await report.period('1', '123', windowFor('2026-10-20', '90')))
+      .cacheExpiresAt,
+  ).toBe(Date.parse('2026-10-21T06:00:00Z'));
+  vi.setSystemTime('2026-10-21T05:00:00Z');
+  expect(
+    (await report.period('1', '123', windowFor('2026-10-20', '7')))
+      .cacheExpiresAt,
+  ).toBe(Date.parse('2026-10-22T00:00:00Z'));
 });
 
 it('shows no copy older than seven days: the reader waits for a new report, and the snapshot lets it go', async () => {

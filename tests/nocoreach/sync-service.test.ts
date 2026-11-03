@@ -38,9 +38,10 @@ test('snapshots are reused until stored data changes',async()=>{
 function tickFixture(){
  const {sync}=setup();sync.step=async()=>false;sync.snapshots=async()=>[];sync.refreshFresh=async()=>{};
  sync.repo=()=>({find:async()=>[{get:k=>k==='projectId'?'1':k==='nextSyncAt'?'2999-01-01T00:00:00Z':null}],findOne:async()=>null});
- const website=vi.fn(async()=>({complete:true,missing:[]})),warm=vi.fn(async()=>({partial:false}));
- sync.p.dataViews={search:async()=>({}),website,warm};
- return {sync,website,warm};
+ const website=vi.fn(async()=>({complete:true,missing:[]})),warm=vi.fn(async()=>({partial:false})),scopes=[];
+ // How the tick read Traffic: ahead (a held report answers whatever its age) or waiting for a new one.
+ sync.p.dataViews={search:async()=>({}),website:(...a)=>{scopes.push(__report_cache.readsAhead()?'ahead':__report_cache.readsFresh()?'fresh':'saved');return website(...a);},warm};
+ return {sync,website,warm,scopes};
 }
 const HOURS=3600000;
 test('tick: a breakdown Google refuses in part is read ahead again after six hours, not every 15 minutes',async()=>{
@@ -58,7 +59,7 @@ test('tick: a breakdown Google refuses in part is read ahead again after six hou
 test('tick: a Traffic report GA4 refuses in part waits six hours, a whole one is asked for each tick, a failure waits 15 minutes',async()=>{
  vi.useFakeTimers({toFake:['Date']});
  try{
-  const {sync,website}=tickFixture();
+  const {sync,website,scopes}=tickFixture();
   await sync.tick();await sync.tick();assert.equal(website.mock.calls.length,2,'a whole report answers from memory, and a moved window is noticed at once');
   website.mockResolvedValue({complete:false,missing:['city']});
   await sync.tick();await sync.tick();assert.equal(website.mock.calls.length,3);
@@ -68,6 +69,8 @@ test('tick: a Traffic report GA4 refuses in part waits six hours, a whole one is
   vi.setSystemTime(Date.now()+6*HOURS);website.mockRejectedValue(new Error('quota'));await sync.tick();assert.equal(website.mock.calls.length,5);
   vi.setSystemTime(Date.now()+15*60000-1);await sync.tick();assert.equal(website.mock.calls.length,5);
   vi.setSystemTime(Date.now()+1);await sync.tick();assert.equal(website.mock.calls.length,6);
+  // A whole report is read ahead, so a held one answers however old; a part refused is read again after six hours.
+  assert.deepEqual(scopes,['ahead','ahead','ahead','fresh','fresh','ahead']);
  }finally{vi.useRealTimers();}
 });
 test('tick: readies Search performance at most every 15 minutes even after a failure, and waits for new reports',async()=>{

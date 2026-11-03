@@ -9,7 +9,7 @@ import { GOOGLE_ENDPOINTS, jsonRequest, googleJson } from './google-client.js';
 import { datesBetween, historyBounds, intervals, validDate, validOverview } from './search-history.js';
 import { secretKey } from './policy.js';
 import { shift, compact, buildSnapshots } from './sync-data.js';
-import { waitForFresh } from './google-report-cache.js';
+import { readAhead, waitForFresh } from './google-report-cache.js';
 import { GOOGLE_SAVED_COPY_MAX_AGE_MS } from '../../shared/google-cache.js';
 const FRESH_MS=3*3600000;
 // As long as a whole report lived before saved copies; a person opening the page still retries sooner.
@@ -231,10 +231,13 @@ class SyncService{
   let idleReads=0;
   for(const id of new Set(links.map(l=>String(l.get('projectId'))))){await this.snapshots(id).catch(()=>{});await waitForFresh(()=>this.p.dataViews?.search(id,{range:'28'})).catch(()=>{});
    const active=!this.p.dataViews?.recentlyRead||await this.p.dataViews.recentlyRead(id,links.find(l=>String(l.get('projectId'))===id)?.get('authorizedAt'));
-   // An idle project's next read waits IDLE_READ_MS, unless someone opens it meanwhile.
+   // An idle project's next read waits IDLE_READ_MS, unless someone opens it meanwhile. Traffic is read ahead once per
+   // window (`readAhead`): a report held for today's window answers whatever its age, and reading it again as GA4 fills in
+   // yesterday is left to the visits that show it (website-report.ts, MORNING_READ_HOUR). A report refused in part is
+   // retried with `waitForFresh`, which reads it again, since `readAhead` would take it back as it is.
    const webNext=this.webNext=this.webNext||new Map(),next=webNext.get(id);
    if((!next||Date.now()>=next.at||(active&&next.idle))&&(active||idleReads<IDLE_READS_PER_TICK)){if(!active)idleReads++;
-    await waitForFresh(()=>this.p.dataViews?.website(id,{range:'28'})).then(r=>{if(r?.complete===false||r?.missing?.length)webNext.set(id,{at:Date.now()+PARTIAL_RETRY_MS});else if(active)webNext.delete(id);else webNext.set(id,{at:Date.now()+IDLE_READ_MS,idle:true});},()=>webNext.set(id,{at:Date.now()+15*60000}));}
+    await (next?.partial?waitForFresh:readAhead)(()=>this.p.dataViews?.website(id,{range:'28'})).then(r=>{if(r?.complete===false||r?.missing?.length)webNext.set(id,{at:Date.now()+PARTIAL_RETRY_MS,partial:true});else if(active)webNext.delete(id);else webNext.set(id,{at:Date.now()+IDLE_READ_MS,idle:true});},()=>webNext.set(id,{at:Date.now()+15*60000}));}
    if(!active)continue;
    const searchNext=this.searchNext=this.searchNext||new Map();if(Date.now()>=(searchNext.get(id)||0)){searchNext.set(id,Date.now()+15*60000);await waitForFresh(()=>this.p.dataViews?.warm?.(id)).then(r=>{if(r?.partial)searchNext.set(id,Date.now()+PARTIAL_RETRY_MS);},()=>{});}}
   for(const id of new Set(links.map(l=>String(l.get('projectId'))))){if(Date.now()>=deadline+20000)break;const at=Math.max(this.freshTried?.get(id)||0,Date.parse((await this.repo('nrSnapshots').findOne({filter:{key:`google-fresh:${id}`}}))?.get('payload')?.fetchedAt||'')||0);if(Date.now()-at<FRESH_MS)continue;
