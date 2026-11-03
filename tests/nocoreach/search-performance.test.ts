@@ -77,6 +77,16 @@ test('search details: any synced day missing from either period reads Search Con
  const r=await dv.search('1',{range:'28',details:true});
  assert.equal(r.live,true);assert.ok(asked.some(b=>b.dimensions.join()==='query,page'));
 });
+test('search details: more pairs than a report holds reads Search Console, stopping at the day that goes over',async()=>{
+ const {dv,p,end}=views();const LIMIT=100000,repo=p.db.getRepository();let reads=0,size=LIMIT+1;
+ p.db.getRepository=()=>({...repo,find:async o=>{if(o.filter.grain!=='query_page')return repo.find(o);if(!o.fields.includes('payload'))return o.filter.date.$in.map(date=>({get:()=>date}));reads++;
+  const offset=reads*size,payload=Array.from({length:size},(_,i)=>({keyword:`q${offset+i}`,page:'https://x/a',clicks:1,impressions:1,position:1}));return [{get:k=>k==='payload'?payload:o.filter.date.$in[0]}];}});
+ const w=__data_views.windowFor(end,'7');
+ assert.equal(await dv.storedPairs('1','sc-domain:x',w),null);assert.equal(reads,1,'the first day over the limit ends the reading');
+ reads=0;size=Math.floor(LIMIT/7);const within=await dv.storedPairs('1','sc-domain:x',w);assert.equal(reads,14);assert.equal(within.current.length,size*7);assert.equal(within.previous.length,size*7);
+ reads=0;size=LIMIT+1;const asked=[];dv.gscQuery=async(_id,_site,body)=>{asked.push(body);return [];};
+ const r=await dv.search('1',{range:'7',details:true});assert.equal(r.live,true);assert.ok(asked.some(b=>b.dimensions.join()==='query,page'));
+});
 test('search details: a filter or a country reads Search Console; so does a range too long to add up by day',async()=>{
  const {dv}=views();const asked=vi.fn(async()=>[]);dv.gscQuery=asked;
  assert.equal((await dv.search('1',{range:'7',details:true,queryFilter:{operator:'contains',expression:'crm'}})).live,true);

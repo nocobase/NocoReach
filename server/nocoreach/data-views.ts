@@ -25,6 +25,9 @@ const days=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/DAY)+1;
 const dayOf=v=>v instanceof Date?v.toISOString().slice(0,10):String(v||'').slice(0,10);
 // The longest stretch of synced query × page days read for a report: both 90-day periods. Longer ones ask Search Console.
 const MAX_STORED_PAIR_DAYS=200;
+// The most query × page rows a report holds per period, read from Search Console or summed from the synced days: a long
+// tail that differs by day would otherwise grow the sums well past a gigabyte.
+const MAX_PAIR_ROWS=100000;
 // How far a report's window may run ahead of the synced days and still have its tables built from them: the daily sync
 // runs every 24 hours from when it last ran, so it lands up to a day after the final cutoff moves.
 const PENDING_SYNC_DAYS=2;
@@ -180,7 +183,7 @@ class DataViews{
   let startRow=0,rowLimit=body.rowLimit||25000;
   for(;;){let r: unknown;try{r=await g.googleJson(`${g.GOOGLE_ENDPOINTS.searchConsole}/sites/${encodeURIComponent(site)}/searchAnalytics/query`,g.jsonRequest(token,{type:'web',dataState:'final',aggregationType:'auto',...body,rowLimit,startRow}),this.p.googleFetch?.(id));}
    catch(e){if(e.code!=='response_too_large'||rowLimit<=1)throw e;rowLimit=Math.max(1,Math.floor(rowLimit/2));continue;}
-   const page=searchConsoleRows(r,body.dimensions);rows.push(...page);startRow+=page.length;if(page.length<rowLimit||rows.length>=100000)break;}
+   const page=searchConsoleRows(r,body.dimensions);rows.push(...page);startRow+=page.length;if(page.length<rowLimit||rows.length>=MAX_PAIR_ROWS)break;}
   return rows;}
  // A report read directly from Search Console: a country (the synced rows keep none), filters or the details.
  async searchLive(id: string | number,site: string,w: SearchWindow,{country,filters,details=false}: {country?: string | null;filters: SearchFilters;details?: boolean},base,scope: unknown[]){const groups=liveGroups(country,filters);
@@ -240,7 +243,9 @@ class DataViews{
   const held=new Set((await repo.find({filter:{...scope,date:{$in:wanted}},fields:['date']})).map(p=>dayOf(p.get('date'))));if(wanted.some(d=>!held.has(d)))return null;
   if(String(w.end)>=add(historyBounds(this.p,id).cutoff,-SYNC_REREAD_DAYS)&&!(await this.publishedDays(id,site,[String(w.end)])).has(String(w.end)))return null;
   const current=sp.pairSum(),previous=sp.pairSum();
-  for(const date of wanted){await new Promise(resolve=>setImmediate(resolve));const [part]=await repo.find({filter:{...scope,date:{$in:[date]}},fields:['date','payload']});(date>=w.start?current:previous).add(part?.get('payload'));}
+  for(const date of wanted){await new Promise(resolve=>setImmediate(resolve));const [part]=await repo.find({filter:{...scope,date:{$in:[date]}},fields:['date','payload']}),sum=date>=w.start?current:previous;sum.add(part?.get('payload'));
+   // Too many for one report: Search Console answers it with its own limit, as it did before these tables were summed.
+   if(sum.size()>MAX_PAIR_ROWS)return null;}
   return {current:current.rows(),previous:previous.rows()};}
  // GA4 history is cached by the actual query in WebsiteReport. Synced partition writes only refresh the local
  // Search Console enrichment, without invalidating an unchanged GA4 window or repeating its upstream reports.
@@ -290,7 +295,7 @@ class DataViews{
  // What Search performance reads when it opens on its default range, ready before anyone asks (the sync's tick calls this).
  async warm(id){const report=await this.search(id,{range:'28'});if(!report?.connected||!report.cutoff||!report.window)return;
   await this.search(id,{range:'28',details:true});
-  await this.searchBreakdown(id,report.window);}
+  return {partial:Boolean((await this.searchBreakdown(id,report.window))?.partial)};}
  // D: who has opened this project's reports lately decides whether they are read ahead of time. Kept in memory and saved
  // at most hourly, as a restart must not forget it; a demo's refused write leaves the memory copy working.
  noteRead(id){const key=String(id),now=Date.now(),last=this.readAt.get(key)||0;this.readAt.set(key,now);if(now-last<3600000||this.p.db?.transactionContext?.())return;void this.saveRead(key,now);}

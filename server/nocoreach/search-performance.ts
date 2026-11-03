@@ -22,6 +22,7 @@ function readFilter(v){if(!v||typeof v!=='object')return null;const expression=S
 function pairSum(filters={}){const q=matcher(filters.queryFilter),p=matcher(filters.pageFilter),out=new Map();
  return {add(rows){for(const r of rows||[]){if(!r||!q(r.keyword)||!p(r.page))continue;const k=JSON.stringify([r.keyword,r.page]);let o=out.get(k);if(!o){o={keyword:r.keyword,page:r.page,clicks:0,impressions:0,weight:0};out.set(k,o);}
   o.clicks+=Number(r.clicks)||0;o.impressions+=Number(r.impressions)||0;o.weight+=(Number(r.position)||0)*(Number(r.impressions)||0);}},
+  size(){return out.size;},
   rows(){return [...out.values()].map(({weight,...o})=>({...o,position:o.impressions?weight/o.impressions:0}));}};}
 function pairs(days,filters={}){const sum=pairSum(filters);for(const rows of days)sum.add(rows);return sum.rows();}
 

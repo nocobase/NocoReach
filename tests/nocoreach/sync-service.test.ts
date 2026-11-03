@@ -35,7 +35,42 @@ test('snapshots are reused until stored data changes',async()=>{
  assert.equal(next.find(s=>s.key==='project').payload.end,'2026-09-28');
 });
 
-test('tick: readies Search performance at most every 15 minutes whatever came of it, and waits for new reports',async()=>{
+function tickFixture(){
+ const {sync}=setup();sync.step=async()=>false;sync.snapshots=async()=>[];sync.refreshFresh=async()=>{};
+ sync.repo=()=>({find:async()=>[{get:k=>k==='projectId'?'1':k==='nextSyncAt'?'2999-01-01T00:00:00Z':null}],findOne:async()=>null});
+ const website=vi.fn(async()=>({complete:true,missing:[]})),warm=vi.fn(async()=>({partial:false}));
+ sync.p.dataViews={search:async()=>({}),website,warm};
+ return {sync,website,warm};
+}
+const HOURS=3600000;
+test('tick: a breakdown Google refuses in part is read ahead again after six hours, not every 15 minutes',async()=>{
+ vi.useFakeTimers({toFake:['Date']});
+ try{
+  const {sync,warm}=tickFixture();warm.mockResolvedValue({partial:true});
+  await sync.tick();assert.equal(warm.mock.calls.length,1);
+  vi.setSystemTime(Date.now()+6*HOURS-1);await sync.tick();assert.equal(warm.mock.calls.length,1,'not through the 15-minute check');
+  vi.setSystemTime(Date.now()+1);await sync.tick();assert.equal(warm.mock.calls.length,2);
+  warm.mockResolvedValue({partial:false});
+  vi.setSystemTime(Date.now()+6*HOURS);await sync.tick();assert.equal(warm.mock.calls.length,3);
+  vi.setSystemTime(Date.now()+15*60000);await sync.tick();assert.equal(warm.mock.calls.length,4,'a whole report goes back to every 15 minutes');
+ }finally{vi.useRealTimers();}
+});
+test('tick: a Traffic report GA4 refuses in part waits six hours, a whole one is asked for each tick, a failure waits 15 minutes',async()=>{
+ vi.useFakeTimers({toFake:['Date']});
+ try{
+  const {sync,website}=tickFixture();
+  await sync.tick();await sync.tick();assert.equal(website.mock.calls.length,2,'a whole report answers from memory, and a moved window is noticed at once');
+  website.mockResolvedValue({complete:false,missing:['city']});
+  await sync.tick();await sync.tick();assert.equal(website.mock.calls.length,3);
+  vi.setSystemTime(Date.now()+6*HOURS-1);await sync.tick();assert.equal(website.mock.calls.length,3,'not each time its five minutes end');
+  vi.setSystemTime(Date.now()+1);website.mockResolvedValue({complete:true,missing:['city']});await sync.tick();assert.equal(website.mock.calls.length,4,'a table left out counts too');
+  await sync.tick();assert.equal(website.mock.calls.length,4);
+  vi.setSystemTime(Date.now()+6*HOURS);website.mockRejectedValue(new Error('quota'));await sync.tick();assert.equal(website.mock.calls.length,5);
+  vi.setSystemTime(Date.now()+15*60000-1);await sync.tick();assert.equal(website.mock.calls.length,5);
+  vi.setSystemTime(Date.now()+1);await sync.tick();assert.equal(website.mock.calls.length,6);
+ }finally{vi.useRealTimers();}
+});
+test('tick: readies Search performance at most every 15 minutes even after a failure, and waits for new reports',async()=>{
  vi.useFakeTimers({toFake:['Date']});
  try{
   const {sync}=setup();sync.step=async()=>false;sync.snapshots=async()=>[];sync.refreshFresh=async()=>{};
