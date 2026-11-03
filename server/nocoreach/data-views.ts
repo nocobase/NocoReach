@@ -316,9 +316,10 @@ class DataViews{
  // at most hourly, as a restart must not forget it; a demo's refused write leaves the memory copy working.
  noteRead(id){const key=String(id),now=Date.now(),last=this.readAt.get(key)||0;this.readAt.set(key,now);if(now-last<3600000||this.p.db?.transactionContext?.())return;void this.saveRead(key,now);}
  async saveRead(id,at){try{const repo=this.p.db.getRepository('nrSnapshots'),key=`report-reads:${id}`,row=await repo.findOne({filter:{key}}),payload={at:new Date(at).toISOString()};if(row)await repo.update({filter:{key},values:{payload}});else await repo.create({values:{key,payload}});}catch{/* the memory copy still works */}}
- // A project connected in the same days counts as read, so its first open does not have to wait either.
- async recentlyRead(id,authorizedAt){const key=String(id);if(!this.readAt.has(key)){let at=0;try{at=Date.parse((await this.p.db.getRepository('nrSnapshots').findOne({filter:{key:`report-reads:${key}`}}))?.get('payload')?.at||'')||0;}catch{at=0;}if(!this.readAt.has(key))this.readAt.set(key,at);}
-  return Date.now()-Math.max(this.readAt.get(key)||0,Date.parse(authorizedAt||'')||0)<WARM_READ_WINDOW_MS;}
+ // A project connected in the same days counts as read, so its first open does not have to wait either. `within` narrows
+ // the days (the tick's morning read of Traffic asks about the last one).
+ async recentlyRead(id,authorizedAt,within=WARM_READ_WINDOW_MS){const key=String(id);if(!this.readAt.has(key)){let at=0;try{at=Date.parse((await this.p.db.getRepository('nrSnapshots').findOne({filter:{key:`report-reads:${key}`}}))?.get('payload')?.at||'')||0;}catch{at=0;}if(!this.readAt.has(key))this.readAt.set(key,at);}
+  return Date.now()-Math.max(this.readAt.get(key)||0,Date.parse(authorizedAt||'')||0)<within;}
  // The last 28 synced days of Search Console query × page rows, one row per pair, saved until the next sync; 本站排名
  // and 关键词 详情 read them.
  async pairRows(id){let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch(e){if(googleDisconnected(e))return {connected:false,cutoff:null,window:null,rows:[]};throw e;}

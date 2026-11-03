@@ -35,12 +35,14 @@ test('snapshots are reused until stored data changes',async()=>{
  assert.equal(next.find(s=>s.key==='project').payload.end,'2026-09-28');
 });
 
-function tickFixture(){
+function tickFixture(opened={lately:false}){
  const {sync}=setup();sync.step=async()=>false;sync.snapshots=async()=>[];sync.refreshFresh=async()=>{};
  sync.repo=()=>({find:async()=>[{get:k=>k==='projectId'?'1':k==='nextSyncAt'?'2999-01-01T00:00:00Z':null}],findOne:async()=>null});
  const website=vi.fn(async()=>({complete:true,missing:[]})),warm=vi.fn(async()=>({partial:false})),scopes=[];
  // How the tick read Traffic: ahead (a held report answers whatever its age) or waiting for a new one.
- sync.p.dataViews={search:async()=>({}),website:(...a)=>{scopes.push(__report_cache.readsAhead()?'ahead':__report_cache.readsFresh()?'fresh':'saved');return website(...a);},warm};
+ // Opened in the last three days; in the last one only when `opened.lately`.
+ const recentlyRead=vi.fn(async(_id,_at,within)=>within?opened.lately:true);
+ sync.p.dataViews={search:async()=>({}),website:(...a)=>{scopes.push(__report_cache.readsAhead()?'ahead':__report_cache.readsFresh()?'fresh':'saved');return website(...a);},warm,recentlyRead};
  return {sync,website,warm,scopes};
 }
 const HOURS=3600000;
@@ -76,6 +78,14 @@ test('tick: a Traffic report GA4 refuses in part waits six hours, a whole one is
   website.mockRejectedValue(new Error('quota'));await sync.tick();vi.setSystemTime(Date.now()+15*60000);await sync.tick();assert.equal(website.mock.calls.length,10);
   // A whole report is read ahead, so a held one answers however old; a part refused is read again after six hours.
   assert.deepEqual(scopes,['ahead','ahead','ahead','fresh','fresh','fresh','fresh','ahead','ahead','ahead']);
+ }finally{vi.useRealTimers();}
+});
+test('tick: Traffic of a project opened in the last day waits for a new report, so the night\'s one is read again in the morning',async()=>{
+ vi.useFakeTimers({toFake:['Date']});
+ try{
+  const opened={lately:true},{sync,website,scopes}=tickFixture(opened);
+  await sync.tick();opened.lately=false;await sync.tick();
+  assert.equal(website.mock.calls.length,2);assert.deepEqual(scopes,['fresh','ahead'],'opened in the last day, then only in the last three');
  }finally{vi.useRealTimers();}
 });
 test('tick: readies Search performance at most every 15 minutes even after a failure, and waits for new reports',async()=>{

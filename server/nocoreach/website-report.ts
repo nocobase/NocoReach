@@ -28,7 +28,8 @@ const SETTLING_HOURS=2;
 // Traffic's window ends yesterday, which GA4 is still filling in just after midnight. A period report read before this
 // hour in the property's zone lives until it, so the next visit reads yesterday again nearly whole; a later one lasts until
 // midnight. A read in the hour before it already has most of yesterday and lasts until midnight too, rather than minutes.
-// So a project people open reads its window twice a day, and once when only the sync tick readies it (`readAhead`).
+// The sync tick reads it again at this hour only for a project opened in the last day (sync-service.ts), so the
+// morning's first visit sees yesterday whole: twice a day for a project in use, once for one nobody opens.
 const MORNING_READ_HOUR=6;
 const fail=(message,status)=>{throw Object.assign(new Error(message),{status});};
 // Google's own words for a failed request (its status and message), short enough to show on the page.

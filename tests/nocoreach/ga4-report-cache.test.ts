@@ -148,6 +148,32 @@ it('reads a Traffic window twice a day when people open it, and once when only t
   ).toBe(Date.parse('2026-10-22T00:00:00Z'));
 });
 
+it('reads a Traffic window again in the morning for a project opened in the last day, so its first visit sees it whole', async () => {
+  const { db } = await fixture();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const report = new WebsiteReport({ db });
+  const read = vi.fn(async () => ({ tables: {}, missing: [], complete: true }));
+  (report as { readPeriod: unknown }).readPeriod = read;
+  const w = windowFor('2026-10-19', '28');
+  const options = { cutoff: '2026-10-19', view: ['28'] };
+  // The tick reads such a project with waitForFresh: the new window at midnight, and again once the night's report ends.
+  vi.setSystemTime('2026-10-20T00:05:00Z');
+  await waitForFresh(() => report.period('1', '123', w, options));
+  vi.setSystemTime('2026-10-20T05:30:00Z');
+  await waitForFresh(() => report.period('1', '123', w, options));
+  expect(read).toHaveBeenCalledTimes(1);
+  vi.setSystemTime('2026-10-20T06:00:15Z');
+  await waitForFresh(() => report.period('1', '123', w, options));
+  expect(read).toHaveBeenCalledTimes(2);
+  // The morning's visit is answered by that report, which lasts until midnight.
+  vi.setSystemTime('2026-10-20T09:00:00Z');
+  const visit = await report.period('1', '123', w, options);
+  expect(visit).not.toHaveProperty('refreshing');
+  expect(visit.cacheExpiresAt).toBe(Date.parse('2026-10-21T00:00:00Z'));
+  await waitForFresh(() => report.period('1', '123', w, options));
+  expect(read).toHaveBeenCalledTimes(2);
+});
+
 it('shows no copy older than seven days: the reader waits for a new report, and the snapshot lets it go', async () => {
   const { db, cache } = await fixture();
   vi.useFakeTimers({ toFake: ['Date'] });
