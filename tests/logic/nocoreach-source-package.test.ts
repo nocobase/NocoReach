@@ -178,10 +178,11 @@ console.log(JSON.stringify({ commands, anonymous }));`,
   });
 });
 
-test('ships the YouTube Collector client and deployment instructions without local install requirements', async () => {
+test('ships the YouTube DataForSEO reader and collector deployment instructions without local install requirements', async () => {
   expect(files).not.toContain('requirements-youtube.txt');
+  expect(files).not.toContain('server/nocoreach/youtube-collector.ts');
   for (const file of [
-    'server/nocoreach/youtube-collector.ts',
+    'server/nocoreach/youtube-dataforseo.ts',
     'docs/YOUTUBE.md',
     'docs/COLLECTOR-CONNECTIONS.md',
     'docs/XIAOHONGSHU-COLLECTOR.md',
@@ -202,13 +203,13 @@ test('ships the YouTube Collector client and deployment instructions without loc
       'tsx',
       '--input-type=module',
       '--eval',
-      `const provider = await import('./server/nocoreach/youtube-provider.ts'); console.log(JSON.stringify({ id: provider.videoId('https://www.youtube.com/watch?v=Im69kzhpR3I'), factory: typeof provider.YouTubeProvider }));`,
+      `const provider = await import('./server/nocoreach/youtube-provider.ts'); const reader = await import('./server/nocoreach/youtube-dataforseo.ts'); console.log(JSON.stringify({ id: provider.videoId('https://www.youtube.com/watch?v=Im69kzhpR3I'), path: reader.youtubeSearch.specification({ term: 'NocoBase' }).path }));`,
     ],
     { cwd: unpacked, timeout: 10000 },
   );
   expect(JSON.parse(stdout)).toEqual({
     id: 'Im69kzhpR3I',
-    factory: 'function',
+    path: 'serp/youtube/organic/live/advanced',
   });
 });
 

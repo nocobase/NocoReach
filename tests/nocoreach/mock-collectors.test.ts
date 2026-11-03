@@ -1,11 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { spawn } from 'node:child_process';
-import { download } from '../../server/nocoreach/public-sources.js';
 import { parseBrowserCollectors } from '../../server/nocoreach/browser-collector-config.js';
 import {
   createMockXiaohongshuAdapter,
   createMockBilibiliAdapter,
-  createMockYouTubeProvider,
 } from '../../server/nocoreach/mock-collectors.js';
 import {
   mockBrowserCollectorConfig,
@@ -14,18 +11,6 @@ import {
   MOCK_MEDIA,
 } from '../../app-plugins/nocoreach-mock/server/collectors.js';
 import type { MockRunContext } from '../../app-plugins/nocoreach-mock/server/types.js';
-
-vi.mock('node:child_process', () => {
-  const spawn = vi.fn(() => {
-    throw new Error('A mock must not launch a real process');
-  });
-  return { spawn, default: { spawn } };
-});
-vi.mock('../../server/nocoreach/public-sources.js', () => ({
-  download: vi.fn(() => {
-    throw new Error('A mock must not download real captions');
-  }),
-}));
 
 const config = mockBrowserCollectorConfig('1');
 const request = (projectId = '1', signal?: AbortSignal) => ({
@@ -42,7 +27,6 @@ const context = (overrides: Partial<MockRunContext> = {}): MockRunContext => ({
   runId: 'fixture-run-one',
   ...overrides,
 });
-const signal = () => new AbortController().signal;
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -52,19 +36,15 @@ async function exerciseAll(snapshot: MockRunContext) {
   const config = mockBrowserCollectorConfig(snapshot.projectId);
   const xhs = createMockXiaohongshuAdapter(snapshot);
   const bili = createMockBilibiliAdapter(snapshot);
-  const youtube = createMockYouTubeProvider(snapshot);
   const input = request(snapshot.projectId);
-  const [notes, videos, youtubeIds] = await Promise.all([
+  const [notes, videos] = await Promise.all([
     xhs.search(config, { ...input, query: 'NocoBloom' }),
     bili.search(config, { ...input, query: 'NocoBloom' }),
-    youtube.search('NocoBloom', signal()),
   ]);
   return {
     notes,
     videos,
-    youtubeIds,
     detail: await bili.video(config, { ...input, bvid: videos.items[0].bvid }),
-    youtubeDetail: await youtube.video(youtubeIds[0], signal()),
   };
 }
 
@@ -133,39 +113,6 @@ describe('runtime mock collector boundaries', () => {
     expect(detail.items[0].likes).toBeGreaterThan(0);
   });
 
-  it('uses explicit YouTube runner/caption injection and real metadata/json3/VTT decoders without I/O', async () => {
-    const fetch = vi.fn(() => {
-      throw new Error('No real network');
-    });
-    vi.stubGlobal('fetch', fetch);
-    const youtube = createMockYouTubeProvider(context());
-    const ids = await youtube.search('NocoBloom', signal());
-    const [manual, automatic] = await Promise.all(
-      ids.slice(0, 2).map((id) => youtube.video(id, signal())),
-    );
-    expect(manual).toMatchObject({
-      id: ids[0],
-      url: `https://www.youtube.com/watch?v=${ids[0]}`,
-      provider: 'yt-dlp',
-      fetchedAt: context().clock,
-      publishedAt: '2026-10-11',
-      transcript: { status: 'manual', language: 'zh-Hans', truncated: false },
-    });
-    expect(manual.transcript.text).toContain('GitHub & Slack');
-    expect(manual.transcript.text).not.toMatch(/<b>|&amp;/);
-    expect(manual.transcript.text.split('\n')).toHaveLength(3);
-    expect(automatic.transcript).toMatchObject({
-      status: 'automatic',
-      language: 'zh-Hans',
-      truncated: false,
-    });
-    expect(automatic.transcript.text).not.toMatch(/WEBVTT|-->/);
-    await exerciseAll(context());
-    expect(fetch).not.toHaveBeenCalled();
-    expect(spawn).not.toHaveBeenCalled();
-    expect(download).not.toHaveBeenCalled();
-  });
-
   it('repeats identical snapshots deterministically and keeps stable IDs for new data', async () => {
     const first = await exerciseAll(context());
     const repeated = await exerciseAll(
@@ -177,8 +124,6 @@ describe('runtime mock collector boundaries', () => {
     );
     expect(next.notes.notes).toHaveLength(4);
     expect(next.videos.items).toHaveLength(4);
-    expect(next.youtubeIds).toHaveLength(4);
-    expect(next.youtubeIds.slice(0, 3)).toEqual(first.youtubeIds);
     expect(next.videos.items.slice(0, 3).map((item) => item.bvid)).toEqual(
       first.videos.items.map((item) => item.bvid),
     );
@@ -234,7 +179,6 @@ describe('runtime mock collector boundaries', () => {
     const result = await exerciseAll(context({ scenario: 'pagination' }));
     expect(result.notes.notes).toHaveLength(20);
     expect(result.videos.items).toHaveLength(20);
-    expect(result.youtubeIds).toHaveLength(5);
     const bili = createMockBilibiliAdapter(context({ scenario: 'pagination' }));
     const last = result.videos.items.at(-1)!;
     expect(
@@ -258,9 +202,6 @@ describe('runtime mock collector boundaries', () => {
       }),
     ).rejects.toMatchObject({ code: 'unconfirmed_empty' });
     await expect(
-      createMockYouTubeProvider(snapshot).search('NocoBloom', signal()),
-    ).resolves.toEqual([]);
-    await expect(
       createMockBilibiliAdapter(snapshot).video(config, {
         ...request(),
         bvid: MOCK_MEDIA.bilibili[0],
@@ -269,19 +210,14 @@ describe('runtime mock collector boundaries', () => {
   });
 
   it.each([
-    ['login-expired', 'login_required', 'login_required', 'access_denied'],
-    ['rate-limit', 'busy', 'busy', 'access_denied'],
-    ['timeout', 'timeout', 'timeout', 'timeout'],
-    ['malformed', 'invalid_response', 'invalid_response', 'invalid_response'],
-    [
-      'error',
-      'collector_unreachable',
-      'collector_unreachable',
-      'upstream_error',
-    ],
+    ['login-expired', 'login_required', 'login_required'],
+    ['rate-limit', 'busy', 'busy'],
+    ['timeout', 'timeout', 'timeout'],
+    ['malformed', 'invalid_response', 'invalid_response'],
+    ['error', 'collector_unreachable', 'collector_unreachable'],
   ] as const)(
     'passes %s through production error/envelope handling',
-    async (scenario, xhsCode, biliCode, youtubeCode) => {
+    async (scenario, xhsCode, biliCode) => {
       const snapshot = context({ scenario });
       await expect(
         createMockXiaohongshuAdapter(snapshot).search(config, {
@@ -295,9 +231,6 @@ describe('runtime mock collector boundaries', () => {
           query: 'NocoBloom',
         }),
       ).rejects.toMatchObject({ code: biliCode });
-      await expect(
-        createMockYouTubeProvider(snapshot).search('NocoBloom', signal()),
-      ).rejects.toMatchObject({ code: youtubeCode });
     },
   );
 
@@ -308,12 +241,6 @@ describe('runtime mock collector boundaries', () => {
         bvid: 'BV1NB411zzzz',
       }),
     ).rejects.toMatchObject({ code: 'not_found' });
-    await expect(
-      createMockYouTubeProvider(context()).video('Unknown0001', signal()),
-    ).rejects.toMatchObject({ code: 'unavailable' });
-    await expect(
-      createMockYouTubeProvider(context()).video('bad', signal()),
-    ).rejects.toMatchObject({ code: 'invalid_input' });
   });
 
   it('really waits for cancellation, cannot switch an in-flight run, and never completes late', async () => {
@@ -329,14 +256,6 @@ describe('runtime mock collector boundaries', () => {
         ...request('1', controller.signal),
         query: 'NocoBloom',
       }),
-      createMockYouTubeProvider(() => selected).search(
-        'NocoBloom',
-        controller.signal,
-      ),
-      createMockYouTubeProvider(() => selected).video(
-        MOCK_MEDIA.youtube[0],
-        controller.signal,
-      ),
     ].map((pending) => pending.then(completed, (error: unknown) => error));
     selected = context({ scenario: 'newdata', revision: 2 });
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -348,10 +267,12 @@ describe('runtime mock collector boundaries', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(completed).not.toHaveBeenCalled();
     expect(
-      await createMockYouTubeProvider(() => selected).search(
-        'NocoBloom',
-        signal(),
-      ),
+      (
+        await createMockBilibiliAdapter(() => selected).search(config, {
+          ...request(),
+          query: 'NocoBloom',
+        })
+      ).items,
     ).toHaveLength(4);
   });
 
@@ -369,12 +290,6 @@ describe('runtime mock collector boundaries', () => {
         ...request('1', controller.signal),
         query: 'NocoBloom',
       }),
-    ).rejects.toMatchObject({ code: 'cancelled' });
-    await expect(
-      createMockYouTubeProvider(context()).video(
-        MOCK_MEDIA.youtube[0],
-        controller.signal,
-      ),
     ).rejects.toMatchObject({ code: 'cancelled' });
   });
 });

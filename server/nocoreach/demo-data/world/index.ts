@@ -9,7 +9,8 @@ import { website } from './website.js';
 import { worldFor, type WorldProject } from './world.js';
 
 export { WorldUnsupported } from './kit.js';
-export { COLLECTOR_TOKEN, collectorUrl, followedVideos } from './collectors.js';
+export { COLLECTOR_TOKEN, collectorUrl } from './collectors.js';
+export { followedVideos } from './youtube.js';
 export type { WorldProject } from './world.js';
 
 const POST = (u: URL): boolean =>

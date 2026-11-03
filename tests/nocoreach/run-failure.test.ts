@@ -98,6 +98,29 @@ describe('why a task run failed', () => {
     );
   });
 
+  it('joins Chinese and Japanese text without a space wherever it ends, and drops stray spaces', () => {
+    // A sentence without a full stop, one ending in a closing quote or bracket, and a translation's trailing space.
+    expect(sentences('这次没读到', '明天会再读。')).toBe(
+      '这次没读到明天会再读。',
+    );
+    expect(sentences('可以点“立即读取”', '或者等明天。')).toBe(
+      '可以点“立即读取”或者等明天。',
+    );
+    expect(sentences('（本月已用 $3）', '明天再读。')).toBe(
+      '（本月已用 $3）明天再读。',
+    );
+    expect(sentences('更新されています。 ', ' 明日も取得します。')).toBe(
+      '更新されています。明日も取得します。',
+    );
+    // English keeps one space, also after a quote, and Korean keeps its spaces between sentences.
+    expect(sentences('Click “Read now”', 'to try again.')).toBe(
+      'Click “Read now” to try again.',
+    );
+    expect(sentences('읽지 못했습니다.', '내일 다시 읽습니다.')).toBe(
+      '읽지 못했습니다. 내일 다시 읽습니다.',
+    );
+  });
+
   it('names the coding tool when it is not signed in, which another coding tool avoids', () => {
     const latest = run('2');
     expect(failureOf(latest, data(latest, 'toolAuth'))).toMatchObject({

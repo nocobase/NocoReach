@@ -1,6 +1,6 @@
 import { $t } from '#i18n';
 
-const platforms = ['xiaohongshu', 'bilibili', 'youtube'] as const;
+const platforms = ['xiaohongshu', 'bilibili'] as const;
 
 export type CollectorPlatform = (typeof platforms)[number];
 

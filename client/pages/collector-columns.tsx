@@ -3,7 +3,6 @@ import { getCurrentLocale } from '#i18n';
 import type { ReactNode } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { SortableHeader } from '#components/seo/sortable-header';
-import { formatDate } from '#lib/format';
 
 /** A failed load offers Retry unless retrying cannot help: signed out, no access, or no such project. */
 export const retryable = (error: unknown) =>
@@ -17,8 +16,6 @@ export const retryable = (error: unknown) =>
 /** A count read from the platform; unknown stays "—", never 0. */
 export const countText = (value: number | null | undefined) =>
   typeof value === 'number' ? value.toLocaleString(getCurrentLocale()) : '—';
-export const shortDate = (value: string | null | undefined) =>
-  formatDate(value);
 
 const right = {
   headerClassName: 'hidden text-right md:table-cell',
@@ -47,11 +44,10 @@ export function countColumn<T>(
     meta: right,
   };
 }
-/** The publication column (`published`), with a muted second line such as when the record was collected. */
+/** The publication column (`published`); when each record was read is said once, on the page's source line. */
 export function dateColumn<T>(
   label: string,
   get: (row: T) => ReactNode,
-  sub?: (row: T) => ReactNode,
 ): ColumnDef<T> {
   return {
     id: 'published',
@@ -65,16 +61,7 @@ export function dateColumn<T>(
         help={false}
       />
     ),
-    cell: ({ row }) => (
-      <span className='flex flex-col items-end'>
-        <span>{get(row.original)}</span>
-        {sub ? (
-          <span className='text-xs text-muted-foreground'>
-            {sub(row.original)}
-          </span>
-        ) : null}
-      </span>
-    ),
+    cell: ({ row }) => get(row.original),
     meta: right,
   };
 }

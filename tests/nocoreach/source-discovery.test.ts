@@ -47,8 +47,8 @@ test('checklist: X, YouTube and Reddit are authorization findings for their own 
 test('card-backed social findings are connected once their card is set up, and new otherwise',async()=>{
  const read=async u=>u==='https://www.acme.dev'?{text:socialHome,type:'text/html'}:{text:'{}',type:'application/json'};
  const status=async states=>Object.fromEntries((await new SourceDiscovery(savedPlugin(states),read).discover('https://www.acme.dev','42')).items.filter(i=>['social','youtube','reddit','linkedin'].includes(i.source)).map(i=>[i.source,i.connection.status]));
- assert.deepEqual(await status({xSource:{terms:['acme']},reddit:{terms:['acme']},youtube:{verifiedAt:'2026-10-13',fetchedAt:'2026-10-13'}}),{social:'connected',youtube:'connected',reddit:'connected',linkedin:'new'});
- assert.deepEqual(await status({xSource:{terms:['acme'],status:'disconnected'},reddit:{terms:[]},youtube:{verifiedAt:'2026-10-13'}}),{social:'new',youtube:'new',reddit:'new',linkedin:'new'});
+ assert.deepEqual(await status({xSource:{terms:['acme']},reddit:{terms:['acme']},youtube:{terms:['acme']}}),{social:'connected',youtube:'connected',reddit:'connected',linkedin:'new'});
+ assert.deepEqual(await status({xSource:{terms:['acme'],status:'disconnected'},reddit:{terms:[]},youtube:{terms:['acme'],configured:false}}),{social:'new',youtube:'new',reddit:'new',linkedin:'new'});
  assert.deepEqual(await status({xSource:new Error('boom')}),{social:'new',youtube:'new',reddit:'new',linkedin:'new'});
 });
 test('checklist: packages on the page can be connected (first checked); Hacker News uses the site name and domain, unchecked',()=>{

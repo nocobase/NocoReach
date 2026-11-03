@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { setDictionary } from '../../client/i18n';
 import {
   formatChange,
+  formatCompact,
+  formatCompactIn,
   formatCount,
   formatDate,
   formatDateTime,
@@ -12,6 +14,8 @@ import {
   formatSigned,
 } from '../../client/lib/format';
 import english from '../../shared/i18n/en.json';
+import japanese from '../../shared/i18n/ja-JP.json';
+import traditional from '../../shared/i18n/zh-TW.json';
 
 const now = new Date(2026, 9, 21, 15, 0);
 
@@ -57,6 +61,21 @@ describe('numbers and changes', () => {
     expect(formatCount(null)).toBe('—');
     expect(formatPercent(0.462)).toBe('46.2%');
     expect(formatPercent(0.02)).toBe('2.0%');
+  });
+
+  it('shortens a large count the reader’s way, with the unit joining the word after it', () => {
+    expect(formatCompact(1735)).toBe('1,735');
+    expect(formatCompact(16234)).toBe('1.6 万');
+    expect(formatCompactIn('youtube.viewsCount', 16234)).toBe('1.6 万次播放');
+    expect(formatCompactIn('youtube.viewsCount', 1735)).toBe('1,735 次播放');
+    setDictionary(traditional, 'zh-TW');
+    expect(formatCompactIn('youtube.viewsCount', 16234)).toBe('1.6 萬次播放');
+    setDictionary(japanese, 'ja-JP');
+    expect(formatCompactIn('youtube.viewsCount', 16234)).toBe('再生 1.6万回');
+    expect(formatCompactIn('youtube.viewsCount', 1735)).toBe('再生 1,735 回');
+    setDictionary(english);
+    expect(formatCompact(16234)).toBe('16.2K');
+    expect(formatCompactIn('youtube.viewsCount', 16234)).toBe('16.2K views');
   });
 
   it('signs a difference with a true minus and leaves zero unsigned', () => {
