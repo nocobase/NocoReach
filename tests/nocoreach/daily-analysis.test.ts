@@ -7,6 +7,7 @@ import { DailyAnalysis, parseOutput, validInsight, buildInput, styleIssues, widt
 import { scheduledToday, retryable } from '../../server/nocoreach/daily-analysis.js';
 import * as __daily_analysis from '../../server/nocoreach/daily-analysis.js';
 import { ModelPreparationError } from '../../server/nocoreach/execution/provider.js';
+import { systemMessageText } from '../../shared/i18n/messages.js';
 const test=__vitest_test;
 // Stand-in for the host's workflow plugin package, only for the instruction registration test.
 const good={title:'改写快速开始标题',reason:'曝光 5,848，点击率只有 0.4%',observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',objective:'g',signalIds:['k']};
@@ -156,6 +157,9 @@ function judging({keys=['a','b'],judge=signals=>signals.map(s=>s.key)}={}){
  return h;}
 const at=iso=>vi.setSystemTime(new Date(iso));
 const refused=(status,text)=>e=>e.status===status&&text.test(e.message);
+// The error the call that failed answers with, as before holds: its own message and status, or the generic 502 text.
+const original=(status,message)=>e=>e.status===status&&e.message===message;
+const configurationText=new ModelPreparationError('model_configuration').message,generic=systemMessageText('dailyAnalysis.analysisNotCompleteTryAgain');
 
 test('judging calls for the same changes share one model call; one for another set waits for it',async()=>{
  const h=judging();let open;h.gate=new Promise(r=>{open=r;});
@@ -190,9 +194,10 @@ test('a set the model leaves unjudged is held for 30 minutes; a new change, a ne
 test('a transient failure is answered with its status and held for 2 minutes, then asked again',async()=>{
  vi.useFakeTimers({toFake:['Date']});
  try{at('2026-11-04T02:00:00Z');const h=judging();h.fail=Object.assign(new Error('connect ECONNREFUSED'),{code:'ECONNREFUSED'});
-  await assert.rejects(h.page(),refused(503,/Try again in 2 min\./));assert.equal(h.asked.length,1);
+  await assert.rejects(h.page(),original(502,generic),'the call that failed answers as before');assert.equal(h.asked.length,1);
   assert.equal(h.warned.length,1);assert.equal(h.warned[0].message,'NocoReach judging changes failed');assert.equal(h.warned[0].fields.retryable,true);assert.equal(h.warned[0].fields.retryInMinutes,2);
   assert.ok(!JSON.stringify(h.warned).includes('signals'),'the prompt is not logged');
+  await assert.rejects(h.page(),refused(503,/Try again in 2 min\./),'a later call is refused with the hold');
   at('2026-11-04T02:01:01Z');await assert.rejects(h.page({locale:'zh-CN'}),refused(503,/1 分钟后可以再试/));
   assert.equal(h.asked.length,1);assert.equal(h.warned.length,1,'a held failure is not logged again');
   h.fail=null;at('2026-11-04T02:02:00Z');assert.deepEqual(await h.page(),{judged:2});assert.equal(h.asked.length,2);
@@ -201,14 +206,18 @@ test('a transient failure is answered with its status and held for 2 minutes, th
 
 test('a failure that trying again soon would not cure is held for 30 minutes, until the model setup changes',async()=>{
  vi.useFakeTimers({toFake:['Date']});
- try{at('2026-11-04T02:00:00Z');const h=judging();h.fail=new ModelPreparationError('model_configuration');
-  await assert.rejects(h.page(),refused(409,/Try again in 30 min\./));assert.equal(h.warned[0].fields.retryable,false);
+ try{at('2026-11-04T02:00:00Z');const h=judging();h.fail=new ModelPreparationError('model_configuration');let open;h.gate=new Promise(r=>{open=r;});
+  // Polled by hand: vi.waitFor would move the faked clock.
+  const first=[h.page(),h.page()];while(h.reads<2||!h.asked.length)await new Promise(r=>setTimeout(r,1));await new Promise(r=>setTimeout(r,0));open();h.gate=null;
+  for(const call of first)await assert.rejects(call,original(409,configurationText),'the failed call and the one sharing it answer with the cause');
+  assert.equal(h.asked.length,1);assert.equal(h.warned.length,1);assert.equal(h.warned[0].fields.retryable,false);
+  await assert.rejects(h.page(),refused(409,/Try again in 30 min\./));
   at('2026-11-04T02:10:00Z');await assert.rejects(h.page(),refused(409,/Try again in 20 min\./));assert.equal(h.asked.length,1);assert.equal(h.warned.length,1);
   h.fail=null;h.setup.chat={modelService:'svc',model:'m2'};assert.deepEqual(await h.page(),{judged:2});assert.equal(h.asked.length,2,'a new default model is asked at once');
   // A call the model rejected (it may have been billed): held until its service's connection changes, or for 30 minutes.
   const g=judging();g.fail=Object.assign(new Error('rejected'),{name:'ModelError',code:'provider'});
-  await assert.rejects(g.page(),refused(502,/30 min/));at('2026-11-04T02:20:00Z');await assert.rejects(g.page(),refused(502,/20 min/));assert.equal(g.asked.length,1);
-  g.setup.apiKey='k2';await assert.rejects(g.page(),refused(502,/30 min/));assert.equal(g.asked.length,2,'a new key is tried at once');
+  await assert.rejects(g.page(),original(502,generic));at('2026-11-04T02:20:00Z');await assert.rejects(g.page(),refused(502,/20 min/));assert.equal(g.asked.length,1);
+  g.setup.apiKey='k2';await assert.rejects(g.page(),original(502,generic));assert.equal(g.asked.length,2,'a new key is tried at once');
   at('2026-11-04T02:50:00Z');await g.page().catch(()=>undefined);assert.equal(g.asked.length,3,'and again after 30 minutes');
   assert.equal(g.warned.length,3,'each real failure is logged once');
  }finally{vi.useRealTimers();}
@@ -216,7 +225,7 @@ test('a failure that trying again soon would not cure is held for 30 minutes, un
 
 test('the caller and the project are checked before a hold or a call in flight is looked at',async()=>{
  const h=judging();h.fail=new ModelPreparationError('model_configuration');
- await assert.rejects(h.page(),refused(409,/30 min/));const reads=h.reads;
+ await assert.rejects(h.page(),original(409,configurationText));await assert.rejects(h.page(),refused(409,/30 min/));const reads=h.reads;
  await assert.rejects(h.page({user:null}),e=>e.status===401);
  await assert.rejects(h.page({projectId:'x'}),e=>e.status===400);
  h.plugin.project=async()=>{throw Object.assign(new Error('no such project'),{status:404});};
@@ -225,7 +234,7 @@ test('the caller and the project are checked before a hold or a call in flight i
 });
 
 test('the analysis still judges what it left, whatever is held for Insights',async()=>{
- const h=judging();h.fail=new ModelPreparationError('model_configuration');await assert.rejects(h.page(),refused(409,/30 min/));
+ const h=judging();h.fail=new ModelPreparationError('model_configuration');await assert.rejects(h.page(),original(409,configurationText));
  h.fail=null;await assert.rejects(h.page(),refused(409,/30 min/),'held for Insights');
  const entry=await h.a.run('1','manual');assert.equal(entry.ok,true);assert.deepEqual(h.asked,[['a','b'],['a','b']],'the call after the analysis asks');
  assert.deepEqual(await h.page(),{judged:0});assert.equal(h.asked.length,2);

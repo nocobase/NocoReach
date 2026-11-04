@@ -203,9 +203,9 @@ class DailyAnalysis{
     else if(held&&!held.failure)return {judged:0};
     // A failure is held while the model setup is the one it failed with: fixing it lets the next visit ask at once.
     else if(held){if(await this.modelFingerprint(id)===held.fingerprint)throw this.judgeRefusal(held,locale);this.judgeHolds.delete(id);continue;}}
-   if(flight)return this.judgeAnswer(flight.operation,locale);
+   if(flight)return flight.operation;
    const entry={key,operation:null};entry.operation=this.judgeNow(id,state,missing,key).finally(()=>{if(this.judging.get(id)===entry)this.judging.delete(id);});this.judging.set(id,entry);
-   return this.judgeAnswer(entry.operation,locale);}}
+   return entry.operation;}}
  async judgeNow(id,state,missing,key){const strategy=this.p.strategy,b=state.insights,asked=new Set(missing.map(s=>s.key));let phase='prepare';const fingerprint=await this.modelFingerprint(id);
   try{const language=await this.language(id);
    const rules=b?.evidence?.signals?.analysisSnapshot?.config||await this.p.analysisRules?.config(id).catch(()=>null);
@@ -218,11 +218,11 @@ class DailyAnalysis{
    return {judged:r.reviews.length};
   }catch(e){const transient=retryable(e,phase),ms=transient?JUDGE_BACKOFF_MS:JUDGE_HOLD_MS,status=transient?503:Number.isInteger(e?.status)&&e.status>=400&&e.status<600?e.status:502;
    const held={key,until:Date.now()+ms,failure:true,status,fingerprint};this.holdJudgement(id,held);
-   // Logged once, by the call that failed; neither the prompt nor the model's answer is logged.
+   // Logged once, by the call that failed, which answers with its own error as before (so do the calls sharing it); only
+   // later calls are refused with the hold. Neither the prompt nor the model's answer is logged.
    this.p.app.logger?.warn?.('NocoReach judging changes failed',{projectId:id,phase,retryable:transient,retryInMinutes:ms/60000,name:e?.name,code:e?.code,status:e?.status,message:String(e?.message||'').slice(0,200)});
-   throw Object.assign(new Error(String(e?.message||'')),{cause:e,judgeHold:held});}}
- judgeAnswer(operation,locale){return operation.catch(e=>{throw e?.judgeHold?this.judgeRefusal(e.judgeHold,locale):e;});}
- // A held failure: its status, and the minutes until the same set is asked about again.
+   throw e;}}
+ // A later call refused by a held failure: its status, and the minutes until the same set is asked about again.
  judgeRefusal(held,locale){return Object.assign(new Error(systemMessageText('dailyAnalysis.judgeRetryIn',{0:Math.max(1,Math.ceil((held.until-Date.now())/60000))},locale)),{status:held.status,retryAt:new Date(held.until).toISOString()});}
  holdJudgement(id,held){this.judgeHolds.delete(id);this.judgeHolds.set(id,held);if(this.judgeHolds.size>JUDGE_REMEMBERED)this.judgeHolds.delete(this.judgeHolds.keys().next().value);}
  // What the model call would go to, as a short hash: the simulated model's settings, or the system's default chat model
