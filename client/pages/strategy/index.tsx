@@ -490,6 +490,10 @@ function Insights({
     store.markJudged(key);
     void judgeMissing(projectId)
       .then(() => store.read())
+      .then((next) => {
+        // New verdicts change the Insights count.
+        if (next) refreshNavBadges();
+      })
       .catch(() => undefined);
   }, [projectId, analyzedAt, unjudged, taskDataAvailable, store]);
   const situation = (

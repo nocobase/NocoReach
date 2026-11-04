@@ -1,0 +1,6 @@
+## Menu counts and connected sources: read when they may have changed, not on every click
+
+- Every move between pages, every window focus and every minute read both the Opportunities and Tasks counts (`nrStrategy/badges`) and the connected sources that decide which data pages the menu lists (`nrHealth/connected`), and a move aborted the reads still in flight while the server went on with them. A page load followed by five moves and a focus within 15 s sent 14 reads; it now sends 2.
+- The sources are read on load, every minute, on focus once a minute has passed, and after a change; never on a move between pages. The counts are read on load, every minute and after a change; a move or a focus reads them only when no read is in flight and the last one is more than 15 s old, and keeps the counts on screen meanwhile.
+- A change made here (a connection, a decision, a task update) reads again at once even while an older read is in flight, and that older answer is never shown. Saving, tracking, following or removing keywords now updates the menu at once too, without reading the counts.
+- Another tab, another user, the CLI or the API still shows within about a minute, as before. Each read still passes the server's access check, and the state stays within the signed-in session.

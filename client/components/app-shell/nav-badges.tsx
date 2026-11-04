@@ -4,6 +4,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type PropsWithChildren,
 } from 'react';
@@ -64,7 +65,56 @@ const isSources = (value: unknown): value is NavSources =>
   !Array.isArray(value) &&
   Object.values(value as object).every((v) => typeof v === 'boolean');
 const EVENT = 'nocoreach:badges';
+const SOURCES_EVENT = 'nocoreach:nav-sources';
+/** After a write that changes the counts or the connected sources: reads both again at once. */
 export const refreshNavBadges = () => window.dispatchEvent(new Event(EVENT));
+/**
+ * After a write outside the connection forms that changes what `nrHealth:connected` checks (saved, tracked or followed
+ * keywords): reads the sources again at once, without the counts.
+ */
+export const refreshNavSources = () =>
+  window.dispatchEvent(new Event(SOURCES_EVENT));
+// Both are read again every minute; a focus reads the sources only when the last read settled longer ago than that.
+const EVERY_MINUTE = 60_000;
+// Counts read more recently than this are not read again on navigation or focus.
+const COUNTS_FRESH = 15_000;
+/**
+ * One endpoint's reads for the mounted project. `now` follows a write: it starts a read at once and fences off any read
+ * in flight, which began before the write, so that answer is never published whether it arrives first or last. `soon`
+ * is an ordinary trigger (navigation, focus, the interval): it joins a read in flight and skips one that settled less
+ * than `fresh` ms ago, whatever its outcome. A read in flight for a minute is presumed lost, so `soon` starts another.
+ * `read` publishes only while `current()` holds; `stop` (unmount, project or user change) ends that for every read.
+ */
+function reads(read: (current: () => boolean) => Promise<void>) {
+  let sequence = 0,
+    loading = false,
+    startedAt = 0,
+    settledAt = -Infinity;
+  const now = () => {
+    const request = ++sequence;
+    loading = true;
+    startedAt = Date.now();
+    void read(() => request === sequence)
+      .catch(() => undefined)
+      .finally(() => {
+        if (request !== sequence) return;
+        loading = false;
+        settledAt = Date.now();
+      });
+  };
+  return {
+    now,
+    soon(fresh: number) {
+      const at = Date.now();
+      if (loading ? at - startedAt < EVERY_MINUTE : at - settledAt < fresh)
+        return;
+      now();
+    },
+    stop() {
+      ++sequence;
+    },
+  };
+}
 export const badgeLabels: Record<keyof Counts, (n: number) => string> = {
   insights: (n) => $t('navBadges.insightsNeed', { 0: n }),
   opportunities: (n) => $t('navBadges.pendingOpportunities', { 0: n }),
@@ -153,56 +203,35 @@ function ProjectBadges({
     sources: remembered(userId, projectId),
     fresh: false,
   }));
+  // Set by the effect below for the mounted project; a route change calls it.
+  const navigatedRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!projectId) return;
-    let active = true;
-    let sequence = 0;
-    const controllers = new Set<AbortController>();
-    const load = async () => {
-      const request = ++sequence;
-      const controller = new AbortController();
-      controllers.add(controller);
+    const controller = new AbortController();
+    // This project's snapshot: another project's is replaced first, so neither read can publish into it.
+    const own = (
+      previous: Snapshot & { projectId: string | null },
+    ): Snapshot & { projectId: string | null } =>
+      previous.projectId === projectId
+        ? previous
+        : {
+            projectId,
+            status: 'loading',
+            counts: null,
+            sources: remembered(userId, projectId),
+            fresh: false,
+          };
+    const counts = reads(async (current) => {
       // Defer publication; the project-tagged snapshot hides old counts without remounting the shell.
       await Promise.resolve();
-      if (!active || request !== sequence) return;
-      // A refresh keeps ready counts on screen until the new ones arrive, so navigating does not blink the badges, and
-      // keeps the menu's sources whatever happened to the counts.
-      setSnapshot((previous) =>
-        previous.projectId !== projectId
-          ? {
-              projectId,
-              status: 'loading',
-              counts: null,
-              sources: remembered(userId, projectId),
-              fresh: false,
-            }
-          : previous.status === 'ready'
-            ? previous
-            : { ...previous, status: 'loading', counts: null },
-      );
-      void api
-        .action<NavSources>('nrHealth', 'connected', {
-          method: 'POST',
-          body: { projectId },
-          unwrap: 'data',
-          signal: controller.signal,
-        })
-        .then((sources) => {
-          if (!isSources(sources)) throw new Error('Invalid connected sources');
-          if (!active || request !== sequence) return;
-          remember(userId, projectId, sources);
-          setSnapshot((previous) => ({ ...previous, sources, fresh: true }));
-        })
-        // Not read: every page shows, as before the menu followed the sources, unless this visit already read them;
-        // then a failed refresh keeps that menu.
-        .catch(() => {
-          if (active && request === sequence)
-            setSnapshot((previous) =>
-              previous.fresh
-                ? previous
-                : { ...previous, sources: EVERYTHING, fresh: false },
-            );
-        });
+      if (!current()) return;
+      // A refresh keeps ready counts on screen until the new ones arrive, so it does not blink the badges.
+      setSnapshot((previous) => {
+        const base = own(previous);
+        return base.status === 'ready'
+          ? base
+          : { ...base, status: 'loading', counts: null };
+      });
       try {
         const value = await api.action<Counts>('nrStrategy', 'badges', {
           method: 'POST',
@@ -217,37 +246,89 @@ function ProjectBadges({
           )
         )
           throw new Error('Invalid navigation counts');
-        if (active && request === sequence)
+        if (current())
           setSnapshot((previous) => ({
             ...previous,
             status: 'ready',
             counts: value,
           }));
       } catch {
-        if (active && request === sequence)
+        if (current())
           setSnapshot((previous) => ({
             ...previous,
             status: 'error',
             counts: null,
           }));
-      } finally {
-        controllers.delete(controller);
       }
+    });
+    // The menu's sources are kept whatever happens to the counts.
+    const sources = reads(async (current) => {
+      try {
+        const value = await api.action<NavSources>('nrHealth', 'connected', {
+          method: 'POST',
+          body: { projectId },
+          unwrap: 'data',
+          signal: controller.signal,
+        });
+        if (!isSources(value)) throw new Error('Invalid connected sources');
+        if (!current()) return;
+        remember(userId, projectId, value);
+        setSnapshot((previous) => ({
+          ...own(previous),
+          sources: value,
+          fresh: true,
+        }));
+      } catch {
+        // Not read: every page shows, as before the menu followed the sources, unless this visit already read them;
+        // then a failed refresh keeps that menu.
+        if (current())
+          setSnapshot((previous) => {
+            const base = own(previous);
+            return base.fresh
+              ? base
+              : { ...base, sources: EVERYTHING, fresh: false };
+          });
+      }
+    });
+    // Mount, project or user change, and refreshNavBadges() after a write: both at once.
+    const refresh = () => {
+      counts.now();
+      sources.now();
     };
-    void load();
-    const timer = window.setInterval(() => void load(), 60000);
-    const refresh = () => void load();
+    const refreshSources = () => sources.now();
+    // The sources change only through writes, which send the events above, and through another tab, user, the CLI or
+    // the API, which the minute's read catches; navigation never reads them. Focus does after a minute, since a hidden
+    // tab's interval is throttled. The counts also change with the server's own work (runs, analysis), so navigation
+    // and focus read them once they are 15 s old.
+    const tick = () => {
+      counts.soon(0);
+      sources.soon(0);
+    };
+    const focused = () => {
+      counts.soon(COUNTS_FRESH);
+      sources.soon(EVERY_MINUTE);
+    };
+    navigatedRef.current = () => counts.soon(COUNTS_FRESH);
+    refresh();
+    const timer = window.setInterval(tick, EVERY_MINUTE);
     window.addEventListener(EVENT, refresh);
-    window.addEventListener('focus', refresh);
+    window.addEventListener(SOURCES_EVENT, refreshSources);
+    window.addEventListener('focus', focused);
     return () => {
-      active = false;
-      ++sequence;
-      controllers.forEach((controller) => controller.abort());
+      navigatedRef.current = null;
+      counts.stop();
+      sources.stop();
+      controller.abort();
       window.clearInterval(timer);
       window.removeEventListener(EVENT, refresh);
-      window.removeEventListener('focus', refresh);
+      window.removeEventListener(SOURCES_EVENT, refreshSources);
+      window.removeEventListener('focus', focused);
     };
-  }, [projectId, userId, pathname]);
+  }, [projectId, userId]);
+  // After the effect above, so on mount its reads are already in flight and this joins them.
+  useEffect(() => {
+    navigatedRef.current?.();
+  }, [pathname]);
   const current: Snapshot & { projectId: string | null } =
     projectId && snapshot.projectId === projectId
       ? snapshot

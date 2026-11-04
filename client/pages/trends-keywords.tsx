@@ -25,6 +25,7 @@ import { DetailDrawer } from "./detail-drawer";
 import { SectionHandOff } from "./section-hand-off";
 import { trendsDraft, type TrendQuery } from "./seo-hand-off";
 import { keywordRequest, type SavedKeyword } from "./keyword-api";
+import { refreshNavSources } from '#components/app-shell/nav-badges';
 import { formatDateTime } from '#lib/format';
 import { Delta } from '#components/reach/delta';
 
@@ -60,13 +61,13 @@ export function TrendKeywords({ projectId, view, onView, onRetry }: { projectId:
   const add = async (keyword: string) => {
     if (!keyword.trim()) return;
     setBusy(true); setError("");
-    try { onView(await call<KeywordWatch>(projectId, "addKeyword", { keyword })); setText(""); toast.success(() => ($t('trendsKeywords.followingRunningFirstCheck',{0:keyword.trim()}))); }
+    try { onView(await call<KeywordWatch>(projectId, "addKeyword", { keyword })); refreshNavSources(); setText(""); toast.success(() => ($t('trendsKeywords.followingRunningFirstCheck',{0:keyword.trim()}))); }
     catch (e) { setError(() => (e instanceof Error ? $legacyText(e.message) : $t('trendsKeywords.notAddedTryAgain'))); }
     finally { setBusy(false); }
   };
   const remove = async (k: WatchedKeyword) => {
     if (!(await confirmAction({ title: () => ($t('common.stopWatching',{0:k.keyword})), description: () => ($t('trendsKeywords.dataAlreadyCheckedDeletedToo')), action: 'common.remove' }))) return;
-    try { onView(await call<KeywordWatch>(projectId, "removeKeyword", { keywordId: k.id })); setOpenId(undefined); }
+    try { onView(await call<KeywordWatch>(projectId, "removeKeyword", { keywordId: k.id })); refreshNavSources(); setOpenId(undefined); }
     catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('trendsKeywords.notRemoved'))); }
   };
   const columns = useMemo<ColumnDef<WatchedKeyword>[]>(() => [
